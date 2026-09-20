@@ -30806,3 +30806,50 @@ It had been asked whether a failure named in a stale note — `TypeError: forwar
 **THE FAILURE IS NOT INSUFFICIENT CHECKING.** 7a's own summary is the sharpest statement of it: ***"I did not fail to check; I checked something that could not have come back the other way."*** More diligence applied to that grep produces the same answer.
 
 **PRACTICAL FORM.** Before reading an absence as a fix, make the site announce itself: a print at the site, a breakpoint, a counter, or — cheapest — confirm the program got PAST the site by observing something downstream of it. Where the program is known to die early, the honest verdict is **UNMEASURED**, and it is a different word from **FIXED**. `40e101c` leaves the confident wording visible and marked as the overclaim, which is the right treatment: the struck sentence is what tells the next reader the retirement was once believed.
+
+## A RELAY'S FRESHNESS IS A PROPERTY OF THE INTERVAL, NOT OF THE RECORD — SO NAME THE INTERVAL
+
+*Measured 2026-09-20 across three instances in one day, by the pxx coordinator and `franks-5b`, with
+the unifying framing and the remedy from `frankuser`. One subsystem — relaying — so it sits here
+rather than in CLAUDE.md.*
+
+Three things went stale between being recorded and being acted on. **Only the first is the kind
+anyone guards against:**
+
+1. **A line that was not deleted.** A naming question the owner had settled three times, still sitting
+   in a carried open-items list. Relayed a fourth time. **Ordinary staleness; caught by the seat whose
+   own comment was being cited.**
+2. **A caveat deliberately withheld.** The coordinator told a relay *"the windowed run is not yet
+   verified"*, the seat discharged it within the hour, and **the coordinator held the upgrade on the
+   correct reasoning that it carried no action for the principal.** The relay is not a mailbox — **it
+   reasons from what it is sent** — so the caveat became an outstanding requirement inside a priority
+   list, attached to work already done. It came back to its own author as a task.
+3. **A value invalidated by the seat being relayed to.** An SRAM figure, **correct when ruled on,
+   correct when recorded, correct when quoted** — and wrong by more than a factor of two by the time
+   it was forwarded, because the lane it was being forwarded to had removed a dead 64 KiB arena in the
+   interval. **No step in the chain was defective.**
+
+**"Check your facts" reaches none of the last two.** Re-reading the record **confirms** both: the
+caveat really was unverified when written, the number really was 125,832 when measured. **The decay is
+not in the record, it is in the interval between the record and the hand-over** — and a held-back item
+and a pushed-forward item decay identically, which is why they look like two problems and are one.
+
+> **A relay carries what was true when sent. The interval that matters is the one AFTER the record was
+> made.**
+
+**THE REMEDY IS NOT MORE CHECKING — IT IS TO STAMP THE HAND-OVER WITH ITS OWN VOLATILITY.** Name when
+it was true **and who is actively moving it**:
+
+- *"True as of 11:00, and 5b is actively moving this number"* — inoculates the figure. The recipient
+  knows to re-ask rather than to quote.
+- *"8e may discharge this within the hour"* — inoculates the caveat. The recipient does not build it
+  into a plan as a standing requirement.
+
+**A number or a caveat handed over without a volatility stamp is implicitly claimed to be stable**, and
+that claim is the thing that was never true. **The cost lands on whoever holds it next, who cannot see
+where it came from.**
+
+**And note the direction that hides instance 3: the correction was FAVOURABLE** — the real footprint
+was less than half what had been relayed. Per CLAUDE.md, **a number moving the way you wanted is the
+direction nobody queries**, so it would have been quoted with no instinct firing. **State the
+direction of a correction out loud rather than quietly substituting the better figure.**
