@@ -15,6 +15,12 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-variable-rm.sh\"",
             "timeout": 10,
             "statusMessage": "checking the rm rule"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-substitution-in-commit-message.sh\"",
+            "timeout": 10,
+            "statusMessage": "checking the commit-message rule"
           }
         ]
       }
