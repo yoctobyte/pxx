@@ -1,0 +1,66 @@
+# A name that differs from a class ONLY IN CASE is not that class.
+#
+# FindUClass folds case because Pascal does; Python does not. Two doors took the
+# folded match:
+#   - the ASSIGNMENT arm tested IsClassType (no exactness), where the expression
+#     arm has required PyIsExactCtorName since the receiver-versus-class bug —
+#     a sibling left behind;
+#   - the from-import binding took FindUClass(member) and bound the CLASS.
+# So `s = site(key)` CONSTRUCTED Site. With a wrong argument count that refused
+# with a diagnostic about the wrong callee ("missing argument for dataclass
+# field without default"); with a matching one it built the object SILENTLY —
+# `site("a", 5.0)` printed `a 5.0` where CPython raises TypeError. Live in
+# tuxspaceprogram's sites.py, walling mission.py and __main__.py.
+# bug-n-a-name-differing-from-a-class-only-in-case-is-resolved-as-that-class
+#
+# POSITIVE CONTROL: the same-file rows alone (a @dataclass Point beside a
+# def point) fail on stable_linux_amd64/default/pinned with "missing argument
+# for dataclass field without default". This whole file cannot be that control,
+# because the pin predates the package-import fix (8fbabc2c3) and dies at the
+# import before it reaches the case question at all -- a red for an unrelated
+# reason is not a control.
+from dataclasses import dataclass
+
+from nilpy_casecol.sites import site as get_site
+from nilpy_casecol.sites import site
+from nilpy_casecol.sites import Site
+from nilpy_casecol.sites import Box as Crate
+from nilpy_casecol import sites
+
+
+@dataclass
+class Point:
+    x: int
+    y: int
+
+
+def point(x: int) -> Point:
+    return Point(x, x * 2)
+
+
+# the ASSIGNMENT arm: a def whose name differs from a class only in case
+p = point(3)
+print(p.x, p.y)
+
+# ...and the EXPRESSION arm, which was already exact — both must agree
+print(point(4).y, Point(5, 6).x)
+
+# the class itself still constructs, by its own exact spelling
+q = Point(7, 8)
+print(q.x, q.y)
+
+# a from-import, aliased and un-aliased, of a FUNCTION whose module also
+# declares a class differing only in case
+a = get_site("a")
+b = site("a")
+c = sites.site("a")
+print(a.key, b.lat, c.key)
+
+# the class from that same module, by name, still constructs
+d = Site("z", 9.0)
+print(d.key, d.lat)
+
+# a genuine class ALIAS still constructs — PyIsExactCtorName matches the alias
+# text, which is what keeps `from M import Box as Crate` working
+e = Crate(11)
+print(e.n)

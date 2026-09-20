@@ -34452,9 +34452,22 @@ begin
       Next;
       rhsNode := PyMakeNone;
     end
-    else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
+    else if (CurTok.Kind = tkIdent) and PyIsExactCtorName(CurTok.SVal) and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
        (not PyCtorSuffixAhead) and PyCtorEndsRhs then
+      { EXACT, not IsClassType, which folds case — the same test the expression
+        arm has made since the receiver-versus-class bug, and this sibling was
+        left behind. `class Site` beside `def site()` is Python's commonest
+        naming convention, and `s = site(key)` CONSTRUCTED Site: with a wrong
+        argument count it refused with a diagnostic about the wrong callee
+        ("missing argument for dataclass field without default"), and with a
+        matching one it built the object SILENTLY — `site("a", 5.0)` printed
+        `a 5.0` where CPython raises TypeError. Live in tuxspaceprogram's
+        sites.py, walling mission.py and __main__.py.
+        IsClassType is FindUClassNonRecord with no exactness test, so this is a
+        strict narrowing of the same population, and class ALIASES still pass
+        because PyIsExactCtorName matches the alias text.
+        bug-n-an-assignment-constructs-a-class-whose-name-differs-only-in-case }
       { ...but `x = Cls().method(...)` is not a construction ASSIGNMENT: the
         construction is the RECEIVER. Leave it to the expression parser, whose
         factor path builds the construction and then applies the method suffix
@@ -46115,6 +46128,39 @@ begin
             PyIsStdlibMemberValue(LowerCase(dottedRoot), LowerCase(member), False);
 end;
 
+{ Does this unit declare `name`, spelled EXACTLY, as a routine or a
+  module-level variable? The companion question to UnitDeclaresClassExactly,
+  and asked for the same reason: Python is case-sensitive and our class lookup
+  is not.
+
+  `from .sites import site` beside `class Site` in the same module bound the
+  CLASS — FindUClass folds case, so it answered Site for site — and the
+  construction `site(key)` then built a dataclass instead of calling the
+  function. Python's commonest naming convention, `class Foo` beside
+  `def foo()`, and it is live in tuxspaceprogram (sites.py), where it walls
+  mission.py and __main__.py with "missing argument for dataclass field
+  without default": a diagnostic about the wrong callee entirely. Where the
+  arities happen to agree it would construct silently instead.
+  bug-n-a-from-import-of-a-function-binds-a-class-differing-only-in-case }
+function PyUnitHasRoutineOrVarExactly(const name: AnsiString; unitIdx: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if unitIdx < 0 then Exit;
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and StrEqual(Procs[i].Name, name) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  for i := 0 to SymCount - 1 do
+    if (SymUnitIdx[i] = unitIdx) and StrEqual(Syms[i].Name, name) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 { Bind `alias` to `<dottedRoot>.<member>` for THIS module, if the compiler
   provides it. Called from both from-import arms — the consumed-only one (sys,
   os, textwrap, select) and the resolvable-unit one (random), because which arm
@@ -46854,6 +46900,18 @@ begin
           if (impAlias <> impReal) or (CurrentUnitIdx >= 0) then
           begin
             aliasCi := FindUClass(impReal);
+            { ...but NOT a class that merely matches with the case folded away,
+              when this unit spells that name as a routine or a variable.
+              FindUClass folds case because Pascal does; Python does not, and
+              `class Foo` beside `def foo()` is its commonest convention. See
+              PyUnitHasRoutineOrVarExactly for the measured instance. The class
+              still wins when the unit does not declare the exact spelling as
+              anything else, so a genuinely case-insensitive match — which is
+              what every existing NilPy import relies on — is untouched. }
+            if (aliasCi >= 0) and
+               (not UnitDeclaresClassExactly(impReal, FindUnitOrAlias(impName))) and
+               PyUnitHasRoutineOrVarExactly(impReal, FindUnitOrAlias(impName)) then
+              aliasCi := -1;
             { An UN-aliased class needs neither arm: the registry would map the
               name onto the name it already has, and the assignment path cannot
               carry a class at all. }

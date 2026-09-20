@@ -29570,3 +29570,40 @@ The practical form: when a write-up contains a claim you did not run a command
 for, either run the command or mark the clause as unmeasured **in the same
 sentence**. A refuted line kept beside its probe teaches the next reader; a
 deleted one teaches nobody, which is why the refutation stayed in that ticket.
+
+## A PINNED CONTROL CAN GO RED FOR THE WRONG REASON — AND RED IS THE DIRECTION NOBODY INTERROGATES
+
+CLAUDE.md carries the PASS direction of this: verifying a fix under the pin can
+show a green that has nothing to do with your fix, because the pinned compiler
+is correctly older and the SOURCE branches on its age. This is the mirror, and
+it is the more dangerous half for one reason that is about the reader and not
+about the instrument: **a green invites suspicion and a red invites relief.**
+When a positive control fails, the feeling is "good, the control works" — and
+that is the moment nobody reads the message.
+
+Measured 2026-09-20. A fixture for a name-resolution fix (`class Site` beside
+`def site()`) was run against `stable_linux_amd64/default/pinned` as its
+positive control and went RED, as a control should. The message was
+`import: no unit named nilpy_casecol and no shim mimic_nilpy_casecol`: the pin
+predates the package-import fix landed the same evening (`8fbabc2c3`), so it
+died at the fixture's FIRST LINE and never reached the case question at all. It
+would have been red for a compiler with the bug fixed, a compiler with the bug
+present, and a compiler that had never heard of either. **A control that cannot
+distinguish those is not a control**, and it had exactly the shape of one.
+
+The real control was the same shape with the import removed — a dataclass
+beside a same-spelled-but-for-case def, in one file — which fails on the pin
+with the diagnostic the bug actually produces. Same fix, same fixture family,
+one line shorter, and it is the only version that separates the two compilers.
+
+**The check costs one read: does the pinned failure MESSAGE name the thing under
+test?** If it names an import, a missing unit, a syntax error or an unknown
+option, the control is reporting that the pin is old, which you already knew.
+This bites hardest exactly when a fleet is landing several fixes a night, since
+every fix you or a peer landed since the pin is another way for the old
+compiler to fail early — and the fixture that exercises TODAY'S work is the one
+most likely to trip over YESTERDAY'S.
+
+**So carry the control at the smallest shape that still fails for the right
+reason, and record in the fixture header WHY the fuller shape is not the
+control.** Otherwise the next reader deletes the small one as redundant.
