@@ -32038,6 +32038,18 @@ because you want to see everything. It is also the one redirection that
 makes development comfortable is the habit that guarantees this class survives
 to the guard.
 
+**THE TWO-DIRECTION CONTROL THAT SETTLES WHICH STREAM, in one pair** (frankz-e5,
+verified at HEAD after this section was written — my own check was
+one-directional and merely showed the message present):
+
+    ./pascal26 bad.pas out 2>/dev/null       -> message SURVIVES   (stderr discarded)
+    ./pascal26 bad.pas out 2>&1 >/dev/null   -> message GONE       (stdout discarded)
+
+**The second line is the discriminating one and the order matters:** `2>&1
+>/dev/null` sends stderr to the *current* stdout and only then discards stdout,
+so what remains is stderr alone. Seeing a message survive one redirection does
+not tell you which stream it came from; seeing it vanish under the other does.
+
 **PRACTICAL FORM, and it is one line:** when the guard will read a stream, run
 your validation **with the guard's exact redirection**, not a superset of it. If
 the guard says `2>log`, validate with `2>log`. Copy the row, do not paraphrase
