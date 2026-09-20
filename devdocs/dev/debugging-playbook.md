@@ -2166,7 +2166,59 @@ profiling being unavailable — the fleet was told it was, and it was wrong.
 
 **gdb SIGINT-sampling works.** It needs three non-obvious settings and
 **omitting any one yields zero samples with no error**, which reads exactly like
-"the program was not running". Recipe: `devdocs/dev/session-roster.md`.
+"the program was not running".
+
+**THE RECIPE POINTER WAS DEAD AND THE SETTINGS ARE NOW INLINE BELOW.** This
+line said *"Recipe: `devdocs/dev/session-roster.md`"* until 2026-09-20 and that
+file contains **zero occurrences of the string `gdb`** — the recipe went to
+`session-roster-history.md` (§ *"`perf` is dead here but PROFILES ARE NOT"*, and
+in full in `decided/decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`)
+in the 2026-08-31 roster split, and the pointer was never repaired. So the one
+section that tells you profiling is possible sent every reader to nothing, which
+is CLAUDE.md's *"a stale imperative can be obeyed by tooling while false in the
+world"* wearing its most expensive costume: **a pointer into a 212KB file fails
+SILENTLY, because a reader who greps and finds nothing concludes the recipe does
+not exist rather than that the pointer is wrong.**
+
+    set startup-with-shell off      # else the inferior is gdb's GRANDCHILD and
+                                    # your signals hit the shell
+    handle SIGINT stop nopass       # without nopass, `continue` re-delivers and
+                                    # the program dies after exactly one sample
+    # then alternate: printf "SAMPLE %#lx\n", $pc   with   continue
+
+**A FOURTH SETTING, AND IT IS THE ONE THAT LOOKS LIKE TIDINESS: NEVER ADD
+`noprint`.** Measured 2026-09-20 on the lekkerzeilen frame loop. `handle SIGUSR1
+stop nopass noprint` collects **zero samples with no error** — the gdb manual
+says `noprint` *"implies the nostop keyword as well"*, and gdb applies these
+left to right, so the trailing keyword **silently cancels the `stop` you wrote
+three words earlier.** It is the natural thing to add: the sampler prints one
+"Program received signal" banner per sample and you want the output clean.
+
+**Both controls, because the failure and the fix look identical from outside**
+— and they cost nothing, because the target can be `/bin/sleep`, which uses no
+CPU and so does not disturb whoever else is timing something on the box:
+
+    handle SIGUSR1 stop nopass            -> TAKEN=3      (positive)
+    handle SIGUSR1 stop nopass noprint    -> hangs, 0     (negative)
+
+**AND `interrupt` UNDER `run &` DOES NOT WORK IN BATCH MODE AT ALL** — 25
+attempts, `taken=0`, which is the same silent-zero signature and sends you
+looking at the program. A Python `sleep` inside a gdb script blocks **gdb's own
+event loop**, so the stop is never processed; pumping with `info threads` does
+not help. **Run it SYNCHRONOUSLY instead**: `gdb.execute("continue")` without
+`&` blocks until the inferior stops, so an external ticker (`sh -c 'while ...;
+do kill -USR1 <pid>; sleep 0.4; done'`) plus a plain loop of `continue` removes
+the event loop from the problem entirely. Get the pid from
+`gdb.selected_inferior().pid` after `starti`.
+
+**Use `starti`, not `start`, on a pxx-emitted binary**: `start` breaks on
+`main`, and a demo binary measured that day had **two** symbols named `main`.
+`starti` needs no symbol at all.
+
+**These three failures share one signature — zero samples, clean exit — with
+the three above them, which is now six.** Do not debug the program when a
+sampler returns nothing; debug the sampler, and keep a `/bin/sleep` positive
+control to tell the two apart in one second.
 
 **`objdump -d` on a binary built without `-g` disassembles nothing and exits
 0**, so any static instruction count over it silently reads zero. Same shape as
@@ -2202,6 +2254,22 @@ string incref (`incq -0x10(%rax)`), and a decref falling into `PXXFree`. So
 print the OFFSET with the name, and disassemble anything whose offset is not
 plausibly inside a body. This is the guard rule in its map-shaped form: the
 resolver cannot return "unknown".
+
+**RECURRED 2026-09-20 IN A DIFFERENT PROGRAM AND A DIFFERENT SUBSYSTEM, WHICH
+IS WHY THIS SECTION IS RIGHT AND NOT MERELY A WAR STORY.** Profiling the
+lekkerzeilen frame loop, **15 of 100 samples — the largest bucket — resolved to
+`_start`**, in a 2482-byte unnamed gap before `PXXHdrInit`. Same absurdity, same
+cause, found the same way: dumping the raw bytes at `vaddr - 0x400000` (a
+pxx-emitted ELF has **no sections at all**, so `objdump -d` prints an empty
+disassembly and exits 0 — the section above, arriving again) and disassembling
+them named the gap properly as a **variant tag dispatch**: compare the tag word
+against 6, 7, 10, 14 and `0x2000..0x2007`, call one of three helpers, then clear
+the two slot words. Retain/release/clear on variants — which was the finding,
+and it would have been reported as `_start` by anyone who trusted the resolver.
+**Carry an explicit MAXOFF and report anything past it as UNATTRIBUTED rather
+than crediting the symbol to its left**; that binary's map has gaps up to 483136
+bytes, so the resolver's confident wrong answer is available for half a megabyte
+of address space at a time.
 
 ### A sampling aggregator needs a positive control, because a regex that matches nothing still ranks
 
