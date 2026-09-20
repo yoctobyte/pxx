@@ -478,3 +478,35 @@ sits in an ESP object's .data after the literal split (test_emit_obj: 2624
 bytes) and what it is. That census comes before dispatch tables or float
 constants.
 
+
+## THE REMAINING LIST IS UNOWNED, 2026-09-20 — `owner: frankH` is attribution for the LANDED cuts
+
+The three cuts recorded in the summary (hosted RO segment, ESP-IDF `.rodata`,
+hosted RTTI/VMT) are mine and done. **I am in none of the REMAINING items and
+have not touched this ticket since 2026-09-19.** The header says
+`status: working` because the ticket is partly delivered, not because a seat is
+inside it — and a header that reads as a lock is how a peer ends up holding
+work. This note exists because that happened: franks-5b held on a relay saying I
+was live in a neighbouring file, and the header would have looked like
+corroboration.
+
+**Take any REMAINING item without asking me.** franks-5b is taking the per-item
+SRAM measurements with the instrument landed in `901a6bdb6`
+(`examples/esp32/nilpy-c3/build.sh sram`) and will write them in as a dated
+section. Measurements and moves are separable here: a measured ZERO retires an
+item, which is worth as much as a move.
+
+**THE ESP QUESTION PER ITEM IS REACHABILITY, NOT BYTE COUNT — and getting it
+wrong is a CRASH, not a regression.** The RTTI/VMT cut landed hosted-only on
+purpose: ESP objects deliberately keep class RTTI and Pascal VMTs in `.data`,
+because **an ISR reads a VMT through an instance with the flash cache off**. The
+same hazard applies to every REMAINING item an interrupt path can reach — prop/
+method arrays and dispatch tables especially. Establish that no ISR can reach a
+structure with the cache off BEFORE pricing its bytes.
+
+**Why the bytes are worth chasing at all, which was not measurable until today:**
+franks-5b's instrument puts a plain NilPy print demo at 178,008 B of data+bss
+against a 211,296 B free DRAM pool on the C3 — 84% of the remaining RAM — and
+`d39dfd9cc` tightens the companion bound to **zero SRAM from code removal**, not
+~1%. So on that profile static DATA PLACEMENT is the only lever there is, which
+is what this ticket's REMAINING list is.
