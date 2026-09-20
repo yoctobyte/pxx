@@ -12338,6 +12338,17 @@ test-core: $(COMPILER)
 	cmp $(TESTTMP)/test_socm_xt26 $(TESTTMP)/test_socm_s326
 	./$(COMPILER) test/test_esp_bare_managed.pas $(TESTTMP)/test_socm_oracle26
 	tools/expect_same.sh test_socm_oracle26 "$$($(TESTTMP)/test_socm_oracle26 | tr '\n' '|')" "local:in|copy:src:src|fin2:two|managed ok|"
+	# VARIANTS: the ORACLE ROW ONLY, and the missing bare rows are the finding.
+	# test_esp_bare_variant.pas is the value fixture for the variant half of the
+	# same ticket, written BEFORE the split so a split that compiles but reads
+	# the wrong half of a payload is a diff rather than a pass. It has no bare
+	# rows because bare cannot build it today -- it refuses at
+	# `variant unbox: VariantToInt64 builtin not loaded`, which is NOT the
+	# builtinheap span at all but the builtin-unit PULL being suppressed for
+	# TargetIsEspClass. Add the four bare rows in the commit that lands the
+	# split; until then this row pins the VALUES the split has to reproduce.
+	./$(COMPILER) test/test_esp_bare_variant.pas $(TESTTMP)/test_socv_oracle26
+	tools/expect_same.sh test_socv_oracle26 "$$($(TESTTMP)/test_socv_oracle26 | tr '\n' '|')" "arith:42|bits:8:14:6|str:abcdef:ab|cmp:1:1|copy:payload:0|variant ok|"
 	# ...and a float-free bare program must still pay NOTHING for it: the pull is
 	# on demand precisely because softfloat is ~54-64KB of flash. If this ever
 	# starts linking the unit, the scan has become unconditional.
