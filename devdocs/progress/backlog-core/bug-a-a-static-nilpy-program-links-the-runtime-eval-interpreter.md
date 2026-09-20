@@ -251,10 +251,40 @@ answered `PyClosureInvoke <- DROPPED` for the first fixture and
 for the second. Without it I would have shipped a green fixture that tested
 nothing.
 
-### Still open, and it is the next thing to price
+### A residual I recorded and then MEASURED AWAY — read this before quoting it
 
-`pyparser.inc` emits a direct call to `pyclosure_call_ptr` for a call through a
-**Callable field** (`pyclosure_is(field) ? pyclosure_call_ptr(...) : <defCall>`).
-That is a frontend-emitted edge, so it is rooted by the compiled program rather
-than by the hook, and any program using that shape links the evaluator again.
-Not measured here; the demo does not use it.
+I wrote here that `pyparser.inc`'s direct `pyclosure_call_ptr` emission for a
+call through a **Callable field** would root the evaluator again, because it is
+frontend-emitted and therefore outside the hook. **That was reasoning, not a
+measurement, and it is wrong.** The cut is one layer BELOW what the frontend
+emits: `pyclosure_call_ptr` calls `PyCallClosureBody`, not `PyClosureInvoke`.
+Probed 2026-09-20 with a Callable field holding a plain compiled def:
+
+```
+pyclosure_call_ptr  <- DROPPED
+ExecStatement       <- DROPPED
+ExecSuite           <- DROPPED
+```
+
+So the frontend edge keeps at most a 459-byte trampoline, never the evaluator.
+Nothing to file. Kept rather than deleted because the reasoning was plausible
+and the next reader will produce it again.
+
+### What actually dominates now, which is a DIFFERENT rung
+
+Same demo, after the hook, xtensa, biggest live bodies:
+
+```
+94665B  pyiter_has <- pyiter_drain <- pyseq_of_obj <- TPyFile.writelines <- [vmt/rtti slot]
+51743B  PyBoundFnCallvnMaskBody <- ... <- PyCallKey1 <- [@proc taken in unowned code]
+33071B  PyBoundPairCallKwBody   <- ... <- PyCallKey1 <- [@proc taken in unowned code]
+12161B  PyUserArithCallMeth <- pyiter_has <- ... <- TPyFile.writelines <- [vmt/rtti slot]
+```
+
+The top root is no longer the evaluator: it is **a VMT slot on `TPyFile`**,
+whose `writelines` drags 94 KB of iterator machinery into a program that never
+writes a file. That is
+[[feature-a-unreferenced-class-rtti-keeps-every-method-alive]], already a rung
+of the umbrella and now the largest single one, with a chain naming the method.
+The two `PyCallKey1` rows are the unconditional `PyIterCallHook` install and
+stay by design — see the note above on why lazy installation is not an option.

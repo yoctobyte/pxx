@@ -664,3 +664,26 @@ should decide deliberately whether the nil stays silent.
 Registry root removed in 5bde993c5 -- the one blocker is gone and the pass itself is now writable and unwritten. Parked rather than held: my group is closed and a ticket sitting in working/ with an owner who is not working it misroutes the next reader. Read the BUILT 2026-09-19 and PARKED 2026-09-18 sections in the body before starting; they name what is already closed (the --emit-obj edge, the registry's single consumer, the keying bug) so none of it is redone, and the silent DATAREF_DROP defect that whoever writes the pass will be editing anyway.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-20 (frankS) — this is now the LARGEST root in the ESP NilPy image, with a chain
+
+Once the eval() interpreter stopped being linked
+([[bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter]], −52%),
+`--dce-why` puts this rung at the top of what is left. xtensa,
+`examples/esp32/nilpy-c3`, `--dce`:
+
+```
+94665B  pyiter_has <- pyiter_drain <- pyseq_of_obj <- TPyFile.writelines <- [vmt/rtti slot]
+12161B  PyUserArithCallMeth <- pyiter_has <- ... <- TPyFile.writelines <- [vmt/rtti slot]
+10581B  pyvar_gt <- TPyList.sort <- [vmt/rtti slot]
+```
+
+**The useful new fact is the METHOD, not the total.** `TPyFile.writelines` is in
+the VMT because `TPyFile` has one; nothing calls it; it accepts any sequence, so
+it pulls `pyseq_of_obj` and the whole iterator-drain path behind it — 94 KB into
+a program that never opens a file. 149 bodies / 172,637 B are rooted
+`vmt/rtti slot` in that image, so this row is 55% of the class.
+
+That makes a per-METHOD criterion (a slot nothing can dispatch to) worth more
+here than a per-CLASS one, and `--dce-why=<name>` will name the dragger for any
+candidate in one command.
