@@ -966,3 +966,4 @@
 2026-09-20T14:39:15Z	borg	05a598d449f7d9eaf1090f759453e6b2b294ca22	AUTO-PIN DECLINED — HEAD is 2cbffe9ca012, not the tested 05a598d449f7
 2026-09-20T15:03:36Z	borg	8318e225854d0cb42263015b0e5e863092f3bbdd	WOULD PIN 8318e225854d — 7 red(s), none new, 7 inherited from the current pin, self-host clean, streak 5/2
 2026-09-20T15:03:36Z	borg	8318e225854d0cb42263015b0e5e863092f3bbdd	AUTO-PIN DECLINED — HEAD is ad4f4367a68d, not the tested 8318e225854d
+2026-09-20T15:27:07Z	borg	be5c85d93418f79a09556d56c6959cc7b468dae6	would NOT pin be5c85d93418 — 1 red(s) the current pin does not have, 7 inherited from the current pin: test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas
