@@ -31137,6 +31137,21 @@ coincidence.
 The seat knew a pin was the fix, knew pinning is the owner's call, and still had no event to react to.
 `stable_linux_amd64/default/VERSION` and `pin.log` are **one cheap read** and went unread all day.
 
+**THERE IS AN EVENT NOW — `464040956`, 2026-09-20.** `tools/sync.sh` snapshots `VERSION` before its
+first fetch, re-reads it at the end, and prints `sync: PIN MOVED — vN -> vM` on both arms (pushed, and
+up to date). It is the one tool every lane already runs on every landing, and it already does the pull
+that carries the pin, so the detector costs nobody a habit. Strictly additive and `|| true` on both
+reads — under `set -e` a bare `cat` of a file absent in a partial clone would kill every lane's sync,
+and **a report that can fail the tool it rides on is worse than no report.** Verified in both
+directions: a copy differing only in the before-value prints the notice at `rc=0`, the real run with
+the pin unmoved prints nothing.
+
+**So the sentence above is now about what a session CANNOT see unaided, not about what is unavailable**
+— and read it that way rather than deleting it, because the detector only fires on the pull. A seat
+that measures, sits on the result for three hours and never syncs is in exactly the old position. **The
+standing line below is the part that does not depend on tooling**, which is why it is stated separately
+and why it survives this fix.
+
 **So the standing line:** **any finding of the form "the pin cannot X" carries a half-life measured in
 hours, and must state the pin version it was measured against.** A claim about the pin with no version
 beside it **reads as durable and is not** — and this is the "name the interval" remedy from the
