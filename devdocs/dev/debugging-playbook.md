@@ -11722,6 +11722,70 @@ distinguishes is a mislabelled figure waiting to happen.** The linker branches
 on the `W` flag, so any SRAM question must be asked of the section table, which
 carries that flag, and never of a total that has already added across it.
 
+## CAPTURING OUTPUT TO READ ONE VALUE OUT OF IT MAKES YOU THE OWNER OF THE ERROR CHANNEL, AND THE FAILURE PATH IS CODE NOBODY HAS EVER RUN
+
+Measured 2026-09-20 on `examples/esp32/nilpy-c3/build.sh`, hours before the
+owner was due to pick up an ESP32 board. Running the demo script as documented,
+on its default compiler, produced **exit 1 and nothing else**. No error, no
+hint, nothing to search for.
+
+**The mechanism, and every step of it is reasonable on its own.**
+
+1. pxx writes its diagnostics to **stdout**, not stderr.
+2. `sram` mode needs one value out of the compile — the `ok: ... [code= data=
+   bss=]` line — so the script captures the compile's stdout into a variable:
+   `PXX_OUT="$("$PXX" ... )"`.
+3. A failing compile therefore writes its error **into the variable**.
+4. `set -e` fires on the non-zero exit — **before** the `printf` on the next
+   line that would have shown the variable.
+
+**So the success path and the failure path share one capture, and only one of
+them was designed.** The capture exists to serve the success path; it silently
+takes the failure path's only output channel with it. **A feature added to the
+success path disarmed the failure path**, and nothing about the change looked
+like it touched error handling.
+
+**The comment is the second half and it is the least visible form of
+comment-versus-code.** It read *"`set -e` still aborts here if the compile
+fails"* — **not wrong. True, and one clause short of the thing that bites.** It
+is accurate about the abort and silent about the abort discarding the
+diagnostic, so a reader checking it finds it correct and moves on. The usual
+rule catches a comment that DISAGREES with the code; this one agrees with it
+and still misleads.
+
+**Why it survived: the failure path is code nobody has ever executed.** The
+script had worked for as long as the pinned compiler could build the demos.
+Nothing exercises "what does this print when the compile fails" — not the
+tier, not a reviewer, not the author, because producing the failure requires
+deliberately breaking something. **A success path is run every day; a failure
+path is run the first time it is needed, by whoever needed it, usually under
+time pressure.** Here that would have been the owner, with a board in his hand.
+
+**The general form, well past shell:** whenever you capture or parse a
+program's output to extract a value, **you have taken over responsibility for
+its error channel**, whether or not you meant to. That applies to
+`subprocess.run(capture_output=True)`, a pipeline feeding `grep`, a CI step
+scraping a number out of a log, and any harness that reads a metric off a build.
+The value you wanted and the diagnostic you did not think about come down the
+same pipe.
+
+**What to do:**
+- **Run the failure path once, on purpose.** Point the script at something that
+  cannot work and read what a human gets. This costs a minute and is the only
+  thing that finds this class.
+- **Branch on the failure explicitly** rather than letting `set -e` handle it
+  (`if ! VAR="$(...)"; then print "$VAR"; ... fi`), so the captured output is
+  emitted on the path that needs it most.
+- **Check which stream the tool actually uses** before assuming stderr carries
+  errors — `cmd 2>/dev/null` versus `cmd 2>&1 >/dev/null` settles it in two
+  commands, and for pxx the answer is that errors go to **stdout**.
+- **When a failure is expected in a known configuration, say so in the failure
+  text**, with the way out. The message swallowed here was
+  *"target riscv32 (hosted linux): a heap arena needs mmap"* on a
+  `--platform=esp` build, recommending `--esp-profile=bare` — a dead end twice
+  over. Printing it unexplained would have been better than silence and still
+  bad.
+
 ## STORAGE RESERVED TO SILENCE A DIAGNOSTIC READS AS A FIX FOREVER, BECAUSE THE MESSAGE REALLY DOES STOP
 
 Measured 2026-09-20: **64 KiB of a microcontroller's SRAM, spent so a build
