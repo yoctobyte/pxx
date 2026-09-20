@@ -31883,7 +31883,22 @@ you how badly and an IDENTITY tells you WHETHER — and only the identity carrie
 about the mechanism.** Off-by-one is the natural failure mode of counting and has no analogue in
 "which specific row is absent". **Ask what the proposed mechanism says should be MISSING, by name, and
 go look.** Four reversals over one evening argued entirely about 24 versus 25 versus 27 versus 28; the
-sorted-order question was one command and was never asked. A question about window edges
+sorted-order question was one command and was never asked.
+
+**AND THE CLOSING LESSON, WHICH THE TWO SEATS INITIALLY GOT WRONG IN THE FLATTERING DIRECTION.** The
+first account said four reversals cost only one evening because neither seat spent a turn defending a
+position. **That is true and it is not the reason.** The narrower and more useful version, from the seat
+being credited: **every claim in dispute had a surviving artefact, and this repo keeps them** — one
+seat's saved log, the other's restorable commit, the guard's own `sorted()` call. **Four reversals with
+no artefact would have been four rounds of prose, both parties equally willing and none the wiser.**
+**The temperament is necessary; the ARTEFACT is what makes it pay.** A future pair that copies only the
+good manners gets a pleasant, confident, wrong answer — and faster, because nobody is arguing.
+
+**The practical form, since "keep artefacts" is too vague to act on:** before conceding or pressing a
+disputed point, ask **what still exists that would decide this** — a log you saved, a commit you can
+restore and re-run, a line in the instrument's own source. **If the answer is nothing, say so and stop
+the exchange there**, because every further round is two models producing agreement rather than
+information, and agreement is exactly what an unfalsifiable disagreement converges to. A question about window edges
 is precisely the question a trailing newline and an off-by-one window decide.
 
 **INDEPENDENTLY CONFIRMED FROM THE OTHER SEAT'S ARTEFACT, WHICH IS WHAT MAKES IT SAFE TO BANK:** the
