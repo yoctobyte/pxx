@@ -32319,3 +32319,54 @@ binary BEHAVE, never by proving a sha is an ancestor.**
 on disk, the tree can be pristine at origin's tip with a binary from another week, and **nothing in
 the working loop announces it.** Read the mtime or the sha before measuring, not after being
 contradicted.
+
+## DOCUMENTATION THAT AGREES WITH THE HYPOTHESIS YOU ARRIVED HOLDING TERMINATES THE SEARCH — AND IT DECAYS TOWARD CONFIRMING THE READER, NOT TOWARD STOPPING THEM
+
+CLAUDE.md already has the hazard-block case: *a stale WARNING decays silently, in the
+direction of doing nothing, for as long as it is trusted* — obeying one produces no signal,
+so nobody finds out it was wrong. **This is the mirror and it is worse, because it produces
+a CONFIDENT WRONG REPORT WITH AN HONEST CITATION ATTACHED.** Two instances, 2026-09-20,
+unrelated subsystems, different seats, neither found by remembering the rule.
+
+**INSTANCE 1 — a STALE comment agreeing with the hypothesis.** The owner suggested
+*"dicts not being search-optimized (lekkerzeilen is data heavy)"*. `TPyDict`'s header
+comment, `compiler/builtin/pylib.pas:326`, says exactly that: *"**v1 is a LINEAR SCAN** …
+this will want a hash … Tracked in feature-nilpy-dict."* **The feature was BUILT.**
+`TPyDict.indexof` (`:7493`) hashes — `PyVarHashKey`, `mask := FHashCap - 1`, linear probe —
+and the scan inside it is guarded by `if FHashCap = 0` with its own comment calling it
+defensive. **The field comment describing the hash sits THREE LINES BELOW the stale
+paragraph.** A reader checking *"is dict lookup slow"* meets the wrong answer first, and it
+is the answer they came for.
+
+**INSTANCE 2 — an ACCURATE comment whose DIRECTION was never checked.** Hunting siblings of
+three confirmed under-normalisation bugs, `PyDefUsedAsValue`'s header named the exact
+failure mode — `call_ind` jumping to the variant's tag word, called **fatal**. It was
+ranked top candidate on that. Four probes: no crash. **The comment is correct and documents
+the OPPOSITE direction** — over-normalisation (`bug-nilpy-import-name-forces-function-object-abi`),
+where the scan counts too MUCH. **Widening it would have CAUSED the documented bug.**
+
+    the three confirmed:  a MISS is a crash,       a false hit costs boxing
+    PyDefUsedAsValue:     a miss costs boxing,     a FALSE HIT is the crash
+
+**WHY BOTH SURVIVE REVIEW: the citation is real.** In 1 the comment is honestly written and
+merely old; in 2 it is accurate, current and precise. **Neither is a lie, so nothing about
+the prose looks wrong** — and the reader is not being careless, they are doing the correct
+thing of grepping for prior art before measuring. **The failure is that arriving with a
+hypothesis makes agreeing documentation read as corroboration rather than as a claim to
+check.**
+
+**DISCHARGE, two questions, both cheap:**
+1. **Read the CODE the comment describes, not only the comment** — in instance 1 the
+   refutation was three lines down.
+2. **Ask which DIRECTION a documented failure runs before counting it as support.** A
+   shape-match cannot carry direction, and direction is what decided instance 2.
+
+**PROMOTION: BANKED HERE, NOT PROMOTED TO CLAUDE.md, and the test said out loud.** It
+**passes** the file's literal bar — two independent subsystems, and it is a STRENGTHENING of
+the hazard-block paragraph rather than a neighbour, which that file prefers. It **fails**
+the harder bar this coordinator adopted 2026-09-20 on franks-5b's argument: *a file every
+session is charged for at startup should trace to the OWNER, not to two agents agreeing at
+the end of a long day.* **Both instances are one evening, two agents, and I am one of the
+two — I ranked instance 2 myself.** A coordinator promoting its own finding on the night it
+found it is how that file reached 72KB the first time. **If a third instance lands in a
+subsystem neither seat has touched, argue it up.**
