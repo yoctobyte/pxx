@@ -113,3 +113,43 @@ name-precedence patch.
 7a's control is worth keeping beside this: the renamed tree run under CPython
 gives the same 6.9 kn, so the rename did not change demo semantics and the two
 compilers' numbers are being compared on identical source.
+
+## PARKED 2026-09-20 by frankH, deliberately, with the fix specified
+
+Not blocked, not waiting on anyone, and not abandoned — parked because of the
+seat's own state, said plainly so nobody has to spend a turn asking.
+
+**What is done.** The diagnosis above, four probes including two negatives, and
+a fixture written and failing on exactly the right rows. The fixture lives in
+this session's scratchpad and does NOT survive a reboot, so its source is
+inline in this ticket; re-deriving it is twenty minutes, not an hour.
+
+**What is next, concretely.** `PyPropertySet` in `compiler/builtin/pylib.pas`,
+mirroring `PyPropertyGet` directly above it: find `__prop_set_<name>` in the
+instance RTTI, read the value parameter's kind from `TMethInfo.ParamKinds`
+(index 1 — index 0 is Self), and call the matching trampoline, returning False
+when the kind is not one of the served set exactly as the getter does. Call it
+from `pydynattr_set` BEFORE the shadow write, and from nothing else. The
+accessor types and `PyPropertyGet` are declared AFTER `pydynattr_set` in that
+file, so the setter needs a `forward` declaration rather than moving the type
+block. The read path needs no change at all.
+
+**Why parked rather than taken.** This is a change to the runtime attribute
+path — it is in every compiled program, and its failure mode is a silent wrong
+value, which is the class this ticket is about. The seat holding it had, in the
+preceding hour: recommended a workaround that its own diagnosis on the screen
+ruled out (the rename, refuted above); backgrounded a gate with `&` inside an
+already-backgrounded call and read the wrapper's exit code over the job's, a
+trap it had read the rule for the same evening; and censused a population of 91
+where the recorded one is 67. All three were caught and none reached a commit,
+which is the system working — and three in one stretch is a signal about the
+seat, not about the system. A fix here that PASSES and means something slightly
+different is the exact profile, and that is not a risk worth taking for a few
+hours' earlier landing.
+
+**For whoever takes it, including a later frankH.** Do not start from the
+mechanism, start from the fixture: build it, watch it fail on the three rows it
+should fail on, and only then write the setter. The row that passes `4.0` to a
+clamping setter is the one that separates "the setter ran and wrote elsewhere"
+from "the setter never ran" — keep it. And read the workaround section above
+before proposing any compile-time repair.
