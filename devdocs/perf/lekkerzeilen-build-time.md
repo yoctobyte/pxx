@@ -350,3 +350,56 @@ earlier tonight:** this delta is 8e's, not mine, and I have measured a RANGE of
 two commits rather than one. Which of the pair carries the 20% is not separated
 here — the widening alone would be expected to cost time, so the memoisation is
 plausibly worth more than 26.5 s on its own. That decomposition is unrun.
+
+---
+
+# ANSWERED: ~3,200 `PyFindSuiteIndent` calls PER DEFINITION, and it is a CONSTANT, not a pass
+
+The open question was: the inline arm compiles the identical definitions, so what
+does an import require that inlining does not? Measured by call count.
+
+| K (defs) | imported | inline | imported per def |
+|---|---|---|---|
+| 100 | 310,000 | 0 | 3,100 |
+| 200 | 630,000 | 20,000 | 3,150 |
+| 400 | **1,310,000** | 80,000 | **3,275** |
+
+**16.4x the calls for the identical 400 definitions**, and **per-definition is
+FLAT** — 3,100 / 3,150 / 3,275 across a 4x range. So the total is linear in module
+size and the defect is a **constant factor of ~3,200 calls per declaration**,
+not a per-declaration pass over the module.
+
+**That refutes frankb-8e's prediction, which was `a pass, not a constant`.** A
+pass per declaration would make the count quadratic and the per-def column rise
+4x; it does not move. Recorded as a refutation because it was offered as a
+falsifiable guess and it deserves to be resolved rather than quietly dropped.
+
+**Three thousand calls to locate one suite's indentation is not a tuning
+problem.** `PyFindSuiteIndent` is a correct, deliberately bounded scan
+(`pyparser.inc:39422`); nothing is wrong with the routine. Whatever drives it is
+asking the same structural question thousands of times per definition and
+discarding the answer. **Memoisation is the shape** — the same remedy 8e applied
+to `PyModuleGetattrsLiteral`, which bought 20.3% — and the inline arm proves the
+information is obtainable far more cheaply, because it is obtained far more
+cheaply there.
+
+**Still not established:** WHO calls it. Flat self-time and a call counter both
+answer "how much", never "from where". `PyFindSuiteIndent`'s callers include
+`PyInferHdrHi` sites at `:42514`/`:42766`, but 8e checked and `PyInferHdrHi` is
+set per definition globally rather than import-gated, so the import-conditional
+gate is somewhere else and finding it is the next step.
+
+## Method — and one instrument that does not work here
+
+**A source probe, reverted immediately.** A counter in `PyFindSuiteIndent`
+printing every 10,000th call; `git checkout HEAD -- compiler/pyparser.inc`
+afterwards, rebuilt, tree verified clean and the binary back to its HEAD sha.
+**Positive control asserted first:** the probe printed 8 lines on the inline arm,
+so a zero elsewhere would have meant zero calls and not a dead probe.
+
+**`gdb` breakpoint hit-counting FAILS on `compiler/pascal26` and fails by
+crashing.** `break *<addr>` + `ignore 1 100000000` gives
+`SIGSEGV at <addr>+0x1a` — the binary is statically linked with **no section
+header**, and patching `0xCC` into it corrupts the instruction stream rather than
+trapping. The tell is a segfault a few bytes past the breakpoint address. Use a
+source counter instead; it costs one ~40 s rebuild.
