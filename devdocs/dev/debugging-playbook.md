@@ -31838,6 +31838,31 @@ finding; `tail -25` of 28 does not. **The verdict inverted on the line that `$(.
 number in the refuting table was off by one in the same direction, which is why it looked internally
 consistent.
 
+**AND THE `24` THAT WAS LEFT OPEN IS NOW CLOSED, FROM THE ORIGINAL SEAT'S OWN SAVED LOG, AND IT IS THE
+SHARPEST INSTANCE OF THE EVENING.** The seat that first reported the truncation later "refuted itself"
+by counting **24** lines of guard output. Measured against the saved `make tools-devtest` log: the
+`tail -25` block is lines **85–109 = 25 lines**, a FULL window. The `24` came from counting **85–108**,
+which **excludes line 109 — the trailing blank the guard prints.** The same trailing newline, a third
+time, in a third instrument.
+
+**BOTH OF THAT SEAT'S COUNTS WERE BOUNDARY ERRORS AND ONLY THE FIRST ONE WAS RIGHT.** Its original
+"exactly 25" used window **84–108**, which *includes* the aggregate's own `FAIL:` echo and *excludes*
+the trailing blank — **two errors that cancelled to the correct number.** Its refutation used **85–108**:
+one error, uncancelled, and **the answer it produced destroyed a finding that was true.** The same
+three-line ambiguity — does the wrapper's echo count, does the trailing blank count — was resolved
+differently on each occasion, and **each time it landed on whatever the prevailing hypothesis needed.**
+
+**THE PART THAT DOES NOT APPEAR ANYWHERE ELSE IN THIS FILE: A BOUNDARY ERROR THAT DESTROYS A TRUE
+FINDING IS INVISIBLE, BECAUSE WITHDRAWING A FINDING LOOKS LIKE INTELLECTUAL HONESTY.** Every guard in
+this file watches for motivated reasoning that *supports* a claim. **Nobody audits a self-correction.**
+The seat wrote a fresh self-criticism explaining an error it had not made, banked it, and corrected a
+`done/` ticket into a false state — and each step felt more rigorous than the last. **A retraction is a
+claim and takes the same evidence as the finding it withdraws.** Recount before you recant.
+
+**Discharge for all three instances, one line: `wc -l < file`, never `echo "$var" | wc -l` and never a
+hand-picked line range — and write the boundary down BEFORE you count.** A question about window edges
+is precisely the question a trailing newline and an off-by-one window decide.
+
 **So "go back to the artefact" is necessary and NOT sufficient: go back to the artefact THE CONSUMER
 READS, through the SAME operator.** The consumer here is `tail -25` over a redirected file. A shell
 variable holding almost the same bytes is a different artefact for precisely the question being
