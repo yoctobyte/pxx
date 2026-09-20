@@ -1044,6 +1044,30 @@ test-nilpy: $(COMPILER)
 	@# callable; a pre-filled slot would pass either way.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_def_into_a_native_callback_slot.npy $(TESTTMP)/test_nilpy_cbthunk
 	$(TESTTMP)/test_nilpy_cbthunk | diff - test/test_nilpy_def_into_a_native_callback_slot.expected
+	# THE LAST SILENT MEMBER of that same family: a CAPTURING nested def handed
+	# to a procedural slot. Every sibling above either works or refuses by name;
+	# this one compiled with no diagnostic at all and left a SIGSEGV behind.
+	#
+	# THE ASSERTION IS ON THE DIAGNOSTIC AND IT HAS TO BE. Measured against
+	# PINNED v413 f94c2a7e2396d2be, which is SILENT here: it prints the exact
+	# same three lines and exits 0, because the fixture deliberately never calls
+	# through the slot. So a `diff` of the output PASSES on the unfixed compiler
+	# and could never have caught this -- a missing-diagnostic defect cannot
+	# fail a value check. Pinned names 0 of the 2 sites; fixed names both.
+	# BOTH STREAMS, and that is not belt-and-braces: pxx writes diagnostics to
+	# STDOUT. Redirecting only stderr leaves the log EMPTY and the grep below
+	# reports the defect on a compiler that does not have it. Measured after
+	# exactly that: this row was born red in the tier while passing standalone,
+	# because the standalone check used `2>&1` and a merged stream cannot
+	# distinguish which of the two carried the warning.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_capturing_nested_def_into_a_procedural_slot_is_refused_by_name.npy $(TESTTMP)/test_nilpy_capref >$(TESTTMP)/test_nilpy_capref.log 2>&1
+	@test -s $(TESTTMP)/test_nilpy_capref.log \
+	  || { echo "FAIL capref: the build log is EMPTY -- the grep below would report a missing warning without the compiler ever having spoken"; exit 1; }
+	@grep -c 'by_argument\.inner\|by_store\.inner' $(TESTTMP)/test_nilpy_capref.log | grep -qx 2 \
+	  || { echo "FAIL capref: a capturing nested def went into a procedural slot WITHOUT being named at both coercion sites -- that is the silent SIGSEGV this row exists for"; cat $(TESTTMP)/test_nilpy_capref.log; exit 1; }
+	@grep -q 'no_capture\.inner' $(TESTTMP)/test_nilpy_capref.log \
+	  && { echo "FAIL capref: the NON-capturing control was refused too -- the refusal is over-broad and the thunk path has been broken"; exit 1; } || true
+	$(TESTTMP)/test_nilpy_capref | diff - test/test_nilpy_a_capturing_nested_def_into_a_procedural_slot_is_refused_by_name.expected
 	# A run-time dispatched method call PAST FOUR ARGUMENTS. The entry points
 	# were an arity ladder, so a fifth argument was refused outright; pydyn_methl
 	# takes a TPyList and has no cap. The four-argument row is the control that

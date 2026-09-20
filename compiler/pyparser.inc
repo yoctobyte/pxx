@@ -27468,12 +27468,65 @@ end;
   with ProcSigCompatible, and a wrapper's all-Variant parameter list cannot
   match a native signature, so the wrapper declines itself. }
 function PyCarrierNamedProc(node: Integer): Integer;
-var a, callee: Integer;
+var a, callee, depth: Integer;
 begin
   PyCarrierNamedProc := -1;
   if (node < 0) or (ASTKind[node] <> AN_CALL) then Exit;
   callee := Integer(ASTIVal[node]);
   if (callee < 0) or (callee >= ProcCount) then Exit;
+  { A CAPTURING nested def is a FOURTH carrier spelling, and it is not one call
+    but a builder CHAIN. Measured 2026-09-20 by probing this line for callee
+    names -- the ticket had it as two layers and it is five:
+
+      pyvar_of_callable(pyboundfn_bind(pyboundfn_setsig(pyboundfn_setown(
+        pyboundfn_new(@<lifted proc>, 1, 1), 2), <sigref>), ...))
+
+    so descend, taking the first argument, and answer with the first
+    AN_PYSIGREF or AN_PROCADDR found at any level -- both carry the lifted
+    proc's index. Scoped to a `pyvar_of_callable` head ON PURPOSE: the three
+    spellings below reach their own walk untouched, so this can add an answer
+    and cannot change one.
+
+    NAMING IT IS THE WHOLE FIX AND IT GRANTS NO NEW CAPABILITY. A lambda lift
+    appends the captures as EXTRA PARAMETERS, so once named the routine fails
+    ProcSigCompatible on arity and PyDefFitsCallbackThunk's all-Variant test,
+    and the caller takes its existing REFUSAL arm with a reason. That is the
+    right answer: a procedural slot holds a bare code address and retains
+    nothing, so a thunk for a capturing def would have to reach lifted capture
+    state at run time and would outlive what it reads.
+
+    Until this, BOTH coercion sites asked this function first and skipped their
+    whole arm on -1, so one unrecognised spelling produced the identical
+    SILENCE at the argument site and the store site -- and the value still went
+    into the slot, where calling through it is a SIGSEGV with no diagnostic of
+    any kind. Every sibling (a Pascal routine, a top-level def, a bound method,
+    a def of the wrong arity) either works or refuses by name; this was the
+    last silent one.
+    bug-n-a-capturing-nested-def-into-a-procedural-slot-segfaults-with-no-diagnostic }
+  if callee = FindProc('pyvar_of_callable') then
+  begin
+    depth := 0;
+    while (depth < 8) and (node >= 0) and (ASTKind[node] = AN_CALL) do
+    begin
+      a := ASTLeft[node];
+      while a <> -1 do
+      begin
+        if (ASTLeft[a] >= 0) and
+           ((ASTKind[ASTLeft[a]] = AN_PYSIGREF) or
+            (ASTKind[ASTLeft[a]] = AN_PROCADDR)) then
+        begin
+          PyCarrierNamedProc := Integer(ASTIVal[ASTLeft[a]]);
+          Exit;
+        end;
+        a := ASTRight[a];
+      end;
+      a := ASTLeft[node];
+      if a = -1 then Exit;
+      node := ASTLeft[a];
+      Inc(depth);
+    end;
+    Exit;
+  end;
   if (callee <> FindProc('pybound_new_sig')) and
      (callee <> FindProc('pybound_new_star')) and
      (callee <> FindProc('pybound_new')) then Exit;

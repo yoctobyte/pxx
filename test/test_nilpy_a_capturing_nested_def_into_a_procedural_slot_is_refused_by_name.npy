@@ -1,0 +1,59 @@
+# A CAPTURING nested def handed to a procedural slot must be REFUSED BY NAME,
+# at both coercion sites. It used to be the one SILENT member of the family:
+# compiled with no diagnostic of any kind, the callable object went into the
+# slot, and calling through it was a SIGSEGV far from the cause.
+#
+# THIS IS A REFUSAL AND NOT A MISSING FEATURE. A procedural slot holds a bare
+# CODE ADDRESS and retains nothing. A lambda lift appends the captures as EXTRA
+# PARAMETERS, so a thunk for a capturing def would have to reach the lifted
+# capture state at run time and would outlive what it reads. Once the carrier
+# is merely NAMED, the routine fails ProcSigCompatible on arity and fails
+# PyDefFitsCallbackThunk's all-Variant test, and the existing refusal arm
+# fires with the reason. No new capability was added.
+#
+# WHY IT NEVER RUNS THE SLOT: it does not have to. The acceptance is the
+# DIAGNOSTIC, and calling through the slot is still a crash by design. Handing
+# the def over without calling it gives a fixture that both warns AND exits 0,
+# so the Makefile can assert the warning and the exit status together instead
+# of asserting on a core dump.
+#
+# THE FAMILY, so a later reader knows what this row is one of:
+#   a Pascal routine       -> works, its address is stored
+#   a top-level def        -> works, a $pycbthunk_ carries the slot signature
+#   a bound method         -> refused BY NAME, with the reason
+#   a def of wrong arity   -> refused BY NAME, with the reason
+#   a CAPTURING nested def -> THIS ROW; was silent, now refused by name
+#
+# bug-n-a-capturing-nested-def-into-a-procedural-slot-segfaults-with-no-diagnostic
+import 'cbslot.pas' as cb
+
+
+def by_argument(k):
+    def inner(a, b):
+        return a + b + k          # CAPTURES k -- lifted, arity becomes 3
+    cb.MkTwo(inner)               # the ARGUMENT coercion site
+    return 'argument-site-handed-over'
+
+
+def by_store(k):
+    def inner(a, b):
+        return a + b + k          # CAPTURES k
+    e = cb.MkEmpty()
+    e.two = inner                 # the STORE coercion site
+    return 'store-site-handed-over'
+
+
+# The POSITIVE CONTROL and it is the row that matters: the same shape with no
+# capture must keep WORKING, not merely keep quiet. It takes the thunk path,
+# so a fix that refused too broadly would show up here as a warning and a
+# wrong answer rather than as silence.
+def no_capture():
+    def inner(a, b):
+        return a + b              # captures nothing -- arity stays 2
+    s = cb.MkTwo(inner)
+    return cb.CallTwo(s)
+
+
+print(by_argument(5))
+print(by_store(5))
+print(no_capture())

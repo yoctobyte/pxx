@@ -31986,3 +31986,56 @@ had a number, an arithmetic derivation, a named mechanism and a moral about comp
 where the honest answer was a shrug. **An explanation more satisfying than the gap it fills is the one
 to replay**, because satisfaction is available to the receiver long before verification is, and a
 shrug is the shape a true answer often has.
+## VALIDATE A STREAM-READING GUARD WITH THE GUARD'S OWN REDIRECTION — `2>&1` WHILE DEVELOPING HIDES EVERY STDOUT-VERSUS-STDERR ASSUMPTION UNTIL THE GUARD RUNS FOR REAL
+
+*frankb-8e, 2026-09-20, Track N. One subsystem, so it sits here. An extension of
+"a guard that cannot fail is not a guard" from a direction that file does not
+cover: here the guard CAN fail, the positive control was real and drawn from the
+right population, and the VALIDATION METHOD was blind to the variable that broke
+it.*
+
+**WHAT HAPPENED.** A new tier row asserted that a compiler warning names two call
+sites, reading a log captured as:
+
+    ./pascal26 ... prog.npy out 2>$(TESTTMP)/capref.log
+
+**pxx writes diagnostics to STDOUT.** The log was empty, the grep counted zero,
+and the row reported the defect **on a compiler that does not have it** — born
+red, in a tier, after the fix was already correct.
+
+**THE PART WORTH THE SECTION IS THAT I HAD VERIFIED IT.** Standalone, before
+wiring, against both the fixed compiler and pinned, with a real differential —
+fixed names both sites, pinned names neither. That verification used:
+
+    ./pascal26 ... > log 2>&1
+
+**A merged stream cannot distinguish which of the two carried the warning.** The
+check was entirely correct *about the fixture* and structurally incapable of
+observing *the variable the guard depends on*. More care applied to that
+verification produces the same pass.
+
+> **The guard reads one channel. The validation read both, added together. They
+> agreed for every input, and disagreed about the only thing that mattered.**
+
+**WHY `2>&1` IS THE SPECIFIC TRAP.** It is what everyone types while iterating,
+because you want to see everything. It is also the one redirection that
+*destroys the distinction a stream-reading guard is built on*. So the habit that
+makes development comfortable is the habit that guarantees this class survives
+to the guard.
+
+**PRACTICAL FORM, and it is one line:** when the guard will read a stream, run
+your validation **with the guard's exact redirection**, not a superset of it. If
+the guard says `2>log`, validate with `2>log`. Copy the row, do not paraphrase
+it. And where it is cheap, **replay the committed row verbatim** rather than an
+equivalent — that is what caught this one on the second attempt.
+
+**AND ADD THE PRECONDITION, BECAUSE THE FAILURE MODE IS SILENT IN THE OTHER
+DIRECTION TOO.** An empty log makes a "the warning is missing" grep report a
+defect without the compiler ever having spoken. `test -s <log> || { echo FAIL
+...; exit 1; }`, branched — a comparison whose input was never proven to exist
+cannot fail honestly, in either direction.
+
+**RELATED.** This is the stream twin of *assert the PRECONDITION, not just the
+comparison*, and of *an assertion written from a REPORT of the code pins the
+report*: there the guard is written from the wrong source, here it is validated
+through the wrong aperture.
