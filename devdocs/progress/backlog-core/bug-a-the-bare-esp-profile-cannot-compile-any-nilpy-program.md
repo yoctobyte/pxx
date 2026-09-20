@@ -130,5 +130,22 @@ existed the whole time.*
    [[bug-a-the-nilpy-heap-arena-is-64-kib-of-dead-sram-on-the-esp-idf-profile]],
    which now proves the arena dead by REACHABILITY (`HeapMmap` survives
    `--no-dce` and is dropped by `--dce`) instead of by survival.
-3. **What would retire the size row:** a bare profile that maps code from flash,
-   or a NilPy runtime an order of magnitude smaller. Re-run the two-row table.
+3. **What would retire the size row — say it out loud, because as written it
+   reads permanent and it is not.** The number is not a fact about NilPy; it is
+   a fact about NilPy *under an assumption the next reader inherits silently*:
+   **a bare image executes entirely from SRAM.** Bare is one RWX IRAM region
+   with no flash mapping, so code, data and bss all compete for a few hundred
+   KiB. Three things would each make ~1.9 MB mean something different:
+
+   - **bare grows a flash-mapped text section** (what IDF already does) — then
+     only data+bss must fit, and the object's own figures say that is 88,656 +
+     89,352 B, which is a different conversation entirely;
+   - **the NilPy runtime stops being a ~2 MB fixed cost** — it is fixed *today*
+     because `pylib`/`pyeval` are pulled whole; anything that makes the pull
+     demand-driven changes the denominator, and the six-line program is the
+     measurement to re-run, not the demo;
+   - **a larger SoC** — every number here is `esp32c3`; the window is a
+     per-chip constant (`SocIramBase` to `ESP_BARE_STACK_TOP`), not a property
+     of the profile.
+
+   Re-run the two-row table and record the chip beside it.
