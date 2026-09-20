@@ -135,6 +135,10 @@ the field passes exist for, it works today, and it must still print its value.
 
 ## RESOLVED 2026-09-20 — frankb-8e
 
+Log: fixed and closed, commit `fb0c0af11` (the fix and the close are the
+same commit; the sha is the post-rebase one read off `tools/sync.sh` after
+the push, not a pre-push `log -1`, which this repo rebases away).
+
 Fixed in `PyMakeVariantFieldCall` (`compiler/pyparser.inc`), compiler
 `05e1d35cd993`, `converged after 1 round(s)`. The emission is the one this
 ticket specified, unchanged:
