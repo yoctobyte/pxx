@@ -7,10 +7,29 @@ status: new
 created: 2026-09-20
 found-by: frankS
 blocked-by: []
-summary: "RTTI_CLS_SIZE = 128 with the comment `all fields 8 bytes', and it is the same 128 on every target -- so on riscv32, xtensa, i386, arm32 and wasm32 every pointer field carries 4 bytes of padding. THE DIFFERENTIAL IS MEASURED, not inferred: PXXDBG=a.datamap reports `class RTTI headers 10240B' for the NilPy print demo compiled for x86-64 AND for riscv32 --platform=esp, byte-identical, 80 headers either way. On ESP that 10,240 B is SRAM, 8.1% of our 125,832 B, and roughly half of it is padding a 32-bit target cannot use. Pascal VMT slots are the same shape (`vmtN * 8' in pasparser_prog.inc) -- 1,848 B here, ~924 of it padding. It is a SIZE bug and not a correctness one: DataPutZeros zeroes the slot and the target is little-endian, so a 4-byte pointer read back as 8 is correctly zero-extended. THE LAYOUT IS SPELLED THREE TIMES and that is the real obstacle -- the emitter (rtti_emit.inc), `PXX_RTTI_*' in compiler/builtin/builtin.pas, and `RTTI_OFS_*' in lib/rtl/rtti.pas -- so narrowing the stride means changing three files that no test forces to agree. Ceiling, not estimate: up to ~5,120 B on this program, less if some fields must stay 8 bytes."
+summary: "NOT AN ESP TICKET -- IT IS EVERY 32-BIT TARGET, ALL FIVE: i386, arm32, riscv32, xtensa and wasm32. ESP is where it HURTS (SRAM is the scarce thing there) and not where it LIVES. RTTI_CLS_SIZE = 128 with the comment `all fields 8 bytes', and it is the same 128 on every target, so on all five every pointer field carries 4 bytes of padding. SAME CLASS AS [[bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets]], which is DONE and whose own title says "so SizeOf is wrong on all five 32-bit ones" -- a width hard-coded for 64 bits, correct on the host, wrong everywhere else, and structurally invisible because the dev loop, gate.sh quick and the pin all run on x86-64. That one was found by falsifying a wasm32 arm; this one by an ESP SRAM census. Two independent instruments, one class, so the class is live and under-sampled rather than closed. THE DIFFERENTIAL IS MEASURED, not inferred: PXXDBG=a.datamap reports `class RTTI headers 10240B' for the NilPy print demo compiled for x86-64 AND for riscv32 --platform=esp, byte-identical, 80 headers either way. On ESP that 10,240 B is SRAM, 8.1% of our 125,832 B, and roughly half of it is padding a 32-bit target cannot use. Pascal VMT slots are the same shape (`vmtN * 8' in pasparser_prog.inc) -- 1,848 B here, ~924 of it padding. It is a SIZE bug and not a correctness one: DataPutZeros zeroes the slot and the target is little-endian, so a 4-byte pointer read back as 8 is correctly zero-extended. THE LAYOUT IS SPELLED THREE TIMES and that is the real obstacle -- the emitter (rtti_emit.inc), `PXX_RTTI_*' in compiler/builtin/builtin.pas, and `RTTI_OFS_*' in lib/rtl/rtti.pas -- so narrowing the stride means changing three files that no test forces to agree. Ceiling, not estimate: up to ~5,120 B on this program, less if some fields must stay 8 bytes."
 ---
 
 # The RTTI blob is hard-sized to 64-bit fields, so half of it is padding on every 32-bit target
+
+## READ THE REACH BEFORE THE PRIO
+
+**Five targets carry this: i386, arm32, riscv32, xtensa, wasm32.** It was found
+on ESP and it is not an ESP defect. ESP is where it is *expensive* — SRAM is
+the scarce resource there and this blob sits in it — but an i386 or arm32 image
+carries the same padding and nobody has measured what it costs them. A seat
+scanning the queue and filing this under "ESP memory" is skipping a defect in
+their own target.
+
+**It is also not a new class.**
+[[bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets]] is the
+same animal and is **`done/`**: a width hard-coded for 64 bits, correct on the
+host, wrong on all five 32-bit targets, and structurally invisible because the
+dev loop, `gate.sh quick` and the pin all run on x86-64. That one was found by
+falsifying a wasm32 IR arm; this one by an ESP SRAM census. **Two unrelated
+instruments, one class, neither of them the one that would normally catch it** —
+which is evidence the class is live and under-sampled, not that it was closed
+in August.
 
 Found 2026-09-20 while categorising ESP SRAM under
 [[umbrella-an-esp32-image-is-as-small-as-it-can-be]]. It is on the owner's

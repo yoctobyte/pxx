@@ -11722,6 +11722,62 @@ distinguishes is a mislabelled figure waiting to happen.** The linker branches
 on the `W` flag, so any SRAM question must be asked of the section table, which
 carries that flag, and never of a total that has already added across it.
 
+## "TWO READINGS THAT FAIL THE SAME WAY ARE ONE READING" IS NOT MISSING — IT IS NOT FIRING, AND HERE IS WHAT THAT LOOKS LIKE THREE TIMES IN ONE DAY
+
+Measured 2026-09-20 (frankS). **This section proposes no rule.** CLAUDE.md
+already carries it, under the debugging section: *"a second source only counts
+if it FAILS DIFFERENTLY. Two readings that can go wrong the same way are one
+reading."* Its worked example is two sessions producing the same wrong count
+from different causes, with the agreement reading as corroboration.
+
+I hit it **three times in one day, through three different doors**, and the
+rule fired none of those times. A rule that is present, correct, twice-stated
+and inert at the moment of use is a different problem from a missing rule, and
+the useful thing to record is the SHAPE each instance wore — because in none of
+them did it look like "I am taking a second reading".
+
+**Door 1 — a stale relay agreeing with a stale header.** A coordinator relayed
+that a seat was live in a subsystem "this minute"; the ticket's own frontmatter
+said `status: working`. Two independent sources agreeing. The relay was 10
+minutes out of date and `status: working` meant *"partly delivered"*, not
+*"somebody is inside it"*. **Neither source was about the question**, and they
+agreed because both were about something adjacent.
+
+**Door 2 — a positive control agreeing with the instrument it did not test.**
+A 40,000-byte static array moved `bss` by +40,004 and the DRAM pool by −40,000
+exactly. Perfect agreement, and the array lands in `.bss`, which was the half
+that already worked. The two readings were the same reading: both said "memory
+appeared", neither said "the data figure is the right data figure".
+
+**Door 3 — the same wrong number by a different wrong route, which is the
+nastiest.** A survey said there were "exactly nine `RecordCodeRef*` call
+sites". A peer re-derived eleven and sent the enumeration rather than the
+number — the gap being two emitters that each record twice. I then re-derived
+it myself **and got nine again**, because my `grep -v` filter dropped two
+lines whose trailing comments contain a brace. Nine from counting emitters;
+nine from a broken filter. **Had the peer sent the bare number I would have
+answered "I get nine too" and been doubly wrong with a second source behind
+me.**
+
+**Why the rule does not fire.** It is phrased as advice about *taking* a second
+reading, so it arms when you notice yourself corroborating. In all three cases
+the second reading arrived on its own — a relay landed, a control passed, a
+re-run agreed — and **agreement does not feel like an act you are performing.**
+Nobody thinks "I am now corroborating"; they think "good, that matches".
+
+**The version that fires, because it is a question about the ARRIVAL and not
+about your intent:** when two things agree, ask *"what would make BOTH of these
+wrong at once?"* before asking whether either is right. In door 1 it is "both
+describe the ticket's neighbourhood, not its ownership". In door 2, "both
+measure `.bss`". In door 3, "both count something other than call expressions".
+Each is answerable in one sentence and each kills the corroboration.
+
+**And the corollary the peer supplied, which is worth as much: SEND THE
+ENUMERATION, NOT THE COUNT.** A bare "I get eleven" reads as a refutation of a
+correct finding and invites a re-derivation, which is exactly where door 3
+lives. The set is falsifiable in a way the number is not, and it cost one extra
+line.
+
 ## A SYMBOL CENSUS ANSWERS ABOUT SYMBOLS AND THE LINKER DECIDES ON RELOCATIONS — the two sets differ by exactly the thing you are measuring
 
 Measured 2026-09-20 (frankS), pricing `--dce` on the SRAM axis for
