@@ -30655,3 +30655,34 @@ open-items row.** All three are cheap to write, which is why they accumulate, an
 attention of the one person who already closed the matter. **When you record a settled decision,
 record it as settled — dated, attributed, with the re-opening condition named — and delete every
 hedge pointing back at its author.**
+
+## A RELOCATED BINARY HAS TWO RESOLUTION PATHS WITH DIFFERENT SCOPES, AND ONLY ONE HAS A CWD RESCUE
+
+*Measured 2026-09-20 by `frankb-8e` (Track N/B, lekkerzeilen blocker 03). One seat, one binary, one
+day — banked here rather than promoted, though it is an EXTENSION of a rule CLAUDE.md already carries
+rather than a neighbour of one.*
+
+A freshly fixed compiler **failed** a demo build at `heapq.heapify` while the **unfixed** one built
+clean. That is a perfect regression signature: new binary, new failure, old binary fine. **It was
+entirely an artefact of where the binary was sitting.** Identical bytes copied into `compiler/` built
+without complaint. The seat nearly reported its own fix as a regression; **anyone else would have
+reported it and been believed**, because the signature is exactly what a real regression looks like
+and the fix was the obvious suspect.
+
+**The cause is that there are TWO lookups, not one.** CLAUDE.md documents the **builtin** lookup for a
+binary run outside the repo root — including its nastiest arm, the silent substitution from a sibling
+checkout — and prescribes **running with the CWD at the repo root**. That guidance is correct and
+insufficient: **the RTL/library lookup is a SECOND search, scoped to the binary's OWN directory**
+(`./compiler/../lib/rtl/`), and it has **no CWD-relative last resort to fall through to.** A compiler
+sitting in a scratchpad therefore cannot see `mimic_heapq` **at all**, no matter what the CWD is.
+
+So the operational rule is one step stronger than the one everybody knows:
+
+> **Running from the repo root is not sufficient. The binary has to SIT in the checkout.** Copy it
+> into `compiler/` before you measure anything that resolves a library, and treat a build failure in
+> an unrelated RTL unit, from a relocated binary, as a location artefact until proven otherwise.
+
+**The generalisable half:** when a tool resolves two different KINDS of thing, do not assume one
+remedy covers both searches. **Ask what each lookup is scoped to and what each falls back to** — here
+one is anchored to the CWD and one to the executable's own directory, and a guidance line written
+about the first reads as though it governs the second.
