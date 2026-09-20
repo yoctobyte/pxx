@@ -210,3 +210,23 @@ that is a different claim from the one the row makes.
 **Also still confirmed by measurement, and unaffected:** the nested guard is correct on both compilers
 that exist today (tested with plain assignments in the arms, to avoid blocker 07's own trigger), so
 **`__pxx__` is a SIMPLIFICATION for lekkerzeilen and blocker 07 is the unblocker.**
+
+## THE GUARD IS NOT A HACK — IT IS PYTHON'S ONLY `#ifdef` (owner, 2026-09-20, relayed secondhand)
+
+His words, immediately after ruling out the stray-file case: *"plus, we only do so due to lack of
+`#define` and python's design. so, this is by design."*
+
+**`try: import X / except ImportError:` is not a workaround. It is the ONLY conditional-compilation
+mechanism the language offers** — C has a preprocessor, Python decides at import time and expects
+`ImportError` to be caught. So **`__pxx__` is pxx's `#ifdef PXX`, spelled the one way Python allows**,
+and NilPy resolving the guard at COMPILE time is pxx **honouring that intent rather than bending it**.
+
+**CONSEQUENCE 1 — the ergonomics objection is settled and should not be reopened.** This idiom has been
+called "the ctypes import hack" all week, by the owner himself among others. **Anyone calling it ugly
+is measuring it against a preprocessor Python does not have.** No cleverer mechanism is wanted; do not
+propose one, and do not rank a ticket on replacing it.
+
+**CONSEQUENCE 2 — it reframes blocker 07 and raises it.** If the guard is Python's conditional
+compilation, **a NESTED guard is nested conditional compilation, and compiling the dead arm is
+compiling code the program said not to compile.** That is a correctness bug in a **language feature**,
+not "an import shape we do not handle". The pxx-side ticket for 07 should carry that framing.
