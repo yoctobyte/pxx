@@ -4718,22 +4718,29 @@ begin
     places in this tree cite "esp32.md:70" and a doc line number is exactly the
     citation that goes stale without erroring -- it points somewhere. A section
     heading survives an edit above it.
-    bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile }
+    bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile
+
+    SUPERSEDED FOR THE IDF PROFILE, 2026-09-20, AND THE WHOLE POINT OF THE
+    PARAGRAPH ABOVE IS WHY THIS EDIT EXISTS AT ALL. The behaviour changed: on
+    ESP-IDF, Write now goes to PXXSysWrite -> the libc stdout stream (putchar
+    per byte; fd 1 is not a POSIX fd under IDF), so `WriteLn` PRINTS. It is
+    asserted by booting both chips and diffing UART against an x86-64 oracle
+    (test/test_esp_idf_writeln_end.pas, the test-esp-idf target).
+    So the IDF arm of this warning became FALSE -- and it is exactly the
+    failure it was written about, one turn later: a warning is written to STOP
+    a reader, it succeeds, and a reader who stops generates nothing that could
+    reveal it was wrong. It is removed rather than reworded, because there is
+    nothing left to warn about on that profile.
+    BARE IS UNCHANGED and still warns: no console, no libc, UART is MMIO in
+    user code. What would retire THAT arm is a bare console, not a measurement. }
   if (CurrentUnitIdx = -1) and (not EspWriteNoopWarned) and
-     (TargetPlatform = PLATFORM_ESP) then
+     (TargetPlatform = PLATFORM_ESP) and EspBareBoot then
   begin
     EspWriteNoopWarned := True;
-    if EspBareBoot then
-      Warn('write/writeln emits nothing on the bare ESP profile: there is no '
-        + 'console. Write to the UART from your own code (docs/targets/'
-        + 'esp32.md, "Mode 1: Bare metal"), or build a hosted image with '
-        + '--platform=posix.')
-    else
-      Warn('write/writeln emits nothing in an ESP-IDF object. The IDF console '
-        + 'is esp_rom_printf, which the IDF link resolves: declare it '
-        + '`external` and call it (docs/targets/esp32.md, "Mode 2: ESP-IDF '
-        + 'component"; examples/esp32/hello-c3 is a buildable example that '
-        + 'prints). Or build a hosted image with --platform=posix.');
+    Warn('write/writeln emits nothing on the bare ESP profile: there is no '
+      + 'console. Write to the UART from your own code (docs/targets/'
+      + 'esp32.md, "Mode 1: Bare metal"), or build a hosted image with '
+      + '--platform=posix.');
   end;
 
   if CurTok.Kind = tkLParen then

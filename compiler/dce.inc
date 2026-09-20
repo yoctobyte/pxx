@@ -102,7 +102,7 @@ function DceWhyName(code: Integer): AnsiString;
 begin
   case code of
     DCE_WHY_VMT:      DceWhyName := 'vmt/rtti slot';
-    DCE_WHY_PROCADDR: DceWhyName := '@proc taken';
+    DCE_WHY_PROCADDR: DceWhyName := '@proc taken in unowned code';
     DCE_WHY_IRAM:     DceWhyName := 'iram call fixup';
     DCE_WHY_INIT:     DceWhyName := 'unit initialization';
     DCE_WHY_ENTRY:    DceWhyName := 'entry stub call';
@@ -112,6 +112,7 @@ begin
     DCE_WHY_STUB:     DceWhyName := 'holds a stub target';
     DCE_WHY_FREECODE: DceWhyName := 'called from unowned code';
     DCE_WHY_CALL:     DceWhyName := 'called by';
+    DCE_WHY_PAEDGE:   DceWhyName := '@proc taken in a live body';
   else DceWhyName := 'unset';
   end;
 end;
@@ -256,18 +257,25 @@ procedure DceWhyChain(p: Integer; var line: AnsiString);
 { p's first root and the hops back to it: `PyHostCall <- CallBuiltin <- ... <-
   [@proc taken]`. Bounded at 8 hops because a chain is for reading, and a
   cycle here would be a bug in the mark order rather than in the program. }
-var hops, v: Integer;
+var hops, v: Integer; sep: AnsiString;
 begin
   line := '';
   hops := 0;
   v := p;
-  while (hops < 8) and (v >= 0) and (DceWhy[v] = DCE_WHY_CALL) and (DceVia[v] >= 0) do
+  { `<- X` is "X calls it"; `<- @X` is "X takes its address". Two different
+    claims, and the second is the weaker one -- an address taken is not a call
+    made -- so the chain has to spell which hop is which or it reads as a call
+    graph it is not. }
+  while (hops < 8) and (v >= 0) and (DceVia[v] >= 0)
+        and ((DceWhy[v] = DCE_WHY_CALL) or (DceWhy[v] = DCE_WHY_PAEDGE)) do
   begin
+    if DceWhy[v] = DCE_WHY_PAEDGE then sep := ' <- @' else sep := ' <- ';
     v := DceVia[v];
-    line := line + ' <- ' + Procs[v].Name;
+    line := line + sep + Procs[v].Name;
     Inc(hops);
   end;
-  if (v >= 0) and (DceWhy[v] = DCE_WHY_CALL) and (DceVia[v] >= 0) then
+  if (v >= 0) and (DceVia[v] >= 0)
+     and ((DceWhy[v] = DCE_WHY_CALL) or (DceWhy[v] = DCE_WHY_PAEDGE)) then
     line := line + ' <- ...'
   else if v >= 0 then
     line := line + ' <- [' + DceWhyName(DceWhy[v]) + ']';
@@ -339,6 +347,27 @@ begin
       Inc(slot);
     end;
   end;
+  { WHO TAKES EACH @proc ADDRESS. An @proc is an UNCONDITIONAL root -- the
+    argument is that an address in a table can be called from anywhere -- and
+    the owner of the taking SITE is what says whether that argument applies
+    here or whether the address is only ever taken by code this same pass is
+    about to delete. That is a question the pass can answer and the report
+    could not, so it prints it: `[unowned]` means an entry stub or the main
+    body, a name means a body, and a name that is itself DROPPED is an @proc
+    root installed by dead code. }
+  for i := 0 to ProcAddrFixCount - 1 do
+  begin
+    slot := DceOwnerOf(ProcAddrFix[i].CodePos);
+    if slot < 0 then
+      writeln(StdErr, 'dce-why:   @proc ', Procs[ProcAddrFix[i].ProcIdx].Name,
+              ' taken in [unowned code]')
+    else if DceLive[slot] then
+      writeln(StdErr, 'dce-why:   @proc ', Procs[ProcAddrFix[i].ProcIdx].Name,
+              ' taken in ', Procs[slot].Name)
+    else
+      writeln(StdErr, 'dce-why:   @proc ', Procs[ProcAddrFix[i].ProcIdx].Name,
+              ' taken in ', Procs[slot].Name, ' [DROPPED]');
+  end;
   { WHERE THE STUB TARGETS LAND, because `holds a stub target` is the one root
     kind that is about ADDRESSES rather than about a table, and it is the one
     that dominates a NilPy image. A target inside a body pins that body and
@@ -384,7 +413,7 @@ end;
 
 procedure DceRun;
 var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
-    why: AnsiString; src, dst: Integer;
+    why: AnsiString; src, dst: Integer; progressed: Boolean;
 begin
   if not DceEnabled then Exit;
   why := '';
@@ -482,10 +511,32 @@ begin
   DceWhyNow := DCE_WHY_VMT;
   i := 0;
   while i < MethodFixCount do begin DceMark(MethodFixups[i].ProcIdx); Inc(i); end;
-  { @proc: same argument }
+  { @proc: the same argument, BUT ONLY WHERE THE TAKING SITE IS NOT IN A BODY.
+    "an address in a table can be called from anywhere" is true of an address
+    that is actually WRITTEN somewhere; an `@proc` sitting in a body this same
+    pass is about to delete writes nothing, because the code that would store
+    it never runs. Rooting on it unconditionally is a claim about the SOURCE
+    when the pass has the answer about the IMAGE.
+    Measured 2026-09-20 on examples/esp32/nilpy-c3: the ONE site taking
+    @PyBodyTramp is inside EvalPyStmts, which DCE itself drops -- and that
+    single root was holding the whole runtime eval() tree live in a program
+    that never calls eval.
+    So an @proc inside a body is an EDGE (owner -> target), resolved in the
+    fixpoint below; only an @proc in code no body owns is a root here.
+    SOUNDNESS, and it rests on one thing: a body kept because something jumps
+    INTO it is marked live above, so its `@proc` sites have a live owner and
+    still root their targets. Without that loop this would leave a retained
+    body holding the address of a removed one. }
+  SetLength(DceProcAddrOwner, ProcAddrFixCount + 1);
   DceWhyNow := DCE_WHY_PROCADDR;
   i := 0;
-  while i < ProcAddrFixCount do begin DceMark(ProcAddrFix[i].ProcIdx); Inc(i); end;
+  while i < ProcAddrFixCount do
+  begin
+    owner := DceOwnerOf(ProcAddrFix[i].CodePos);
+    DceProcAddrOwner[i] := owner;
+    if owner < 0 then DceMark(ProcAddrFix[i].ProcIdx);
+    Inc(i);
+  end;
   DceWhyNow := DCE_WHY_IRAM;
   i := 0;
   while i < IramCallFixCount do begin DceMark(IramCallFix[i].ProcIdx); Inc(i); end;
@@ -605,17 +656,38 @@ begin
     backwards instead of shifting the array. }
 
   { --- reachability ------------------------------------------------------- }
-  DceWhyNow := DCE_WHY_CALL;
-  while DceWorkCount > 0 do
-  begin
-    Dec(DceWorkCount);
-    p := DceWork[DceWorkCount];
-    if p = 0 then a := 0 else a := DceEdgeHead[p - 1];
-    b := DceEdgeHead[p];
-    i := a;
-    DceViaNow := p;   { whoever this walk reaches was reached BY p }
-    while i < b do begin DceMark(DceEdgeTo[i]); Inc(i); end;
-  end;
+  { Two edge kinds, so two nested loops: the call walk drains its worklist,
+    then the @proc sweep asks whether any address-taking site has BECOME owned
+    by a live body, and anything it marks feeds the walk again. It terminates
+    because both only ever mark, never unmark, and there are finitely many
+    bodies. In practice it is two or three sweeps. }
+  repeat
+    DceWhyNow := DCE_WHY_CALL;
+    while DceWorkCount > 0 do
+    begin
+      Dec(DceWorkCount);
+      p := DceWork[DceWorkCount];
+      if p = 0 then a := 0 else a := DceEdgeHead[p - 1];
+      b := DceEdgeHead[p];
+      i := a;
+      DceViaNow := p;   { whoever this walk reaches was reached BY p }
+      while i < b do begin DceMark(DceEdgeTo[i]); Inc(i); end;
+    end;
+    progressed := False;
+    DceWhyNow := DCE_WHY_PAEDGE;
+    i := 0;
+    while i < ProcAddrFixCount do
+    begin
+      owner := DceProcAddrOwner[i];
+      if (owner >= 0) and DceLive[owner] and not DceLive[ProcAddrFix[i].ProcIdx] then
+      begin
+        DceViaNow := owner;
+        DceMark(ProcAddrFix[i].ProcIdx);
+        progressed := True;
+      end;
+      Inc(i);
+    end;
+  until not progressed;
 
   { --- removable ranges --------------------------------------------------- }
   DceRemCount := 0;

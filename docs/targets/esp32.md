@@ -116,6 +116,20 @@ procedure esp_rom_printf(fmt: string; v: Integer); external;
 procedure vTaskDelay(ticks: Integer); external;
 ```
 
+`writeln` and `readln` WORK on this profile (unlike the bare one, further
+down): they go through the libc stdout/stdin streams that ESP-IDF's console
+sets up, so ordinary Pascal I/O reaches the serial monitor. `esp_rom_printf`
+above remains available and is what IDF's own code uses; either is fine.
+
+Two consequences of using the STREAMS rather than a file descriptor, both of
+which the runtime is stuck with rather than choosing:
+
+- **End every line with a newline.** stdout is line-buffered, and a program
+  that ends leaves a partial final line unflushed.
+- `write(1, ...)` is NOT the console. Under IDF, fd 1 is not the console's
+  descriptor — the standard streams hold whatever fd `open()` returned — so
+  raw POSIX writes to 1 answer `EBADF` while the streams work.
+
 ## Code size and memory footprint
 
 Measured on **2026-08-30 with pinned `v393`** (empty program, `--esp-profile=bare`).

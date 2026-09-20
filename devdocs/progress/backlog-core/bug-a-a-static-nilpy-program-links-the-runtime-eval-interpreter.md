@@ -6,7 +6,7 @@ status: open
 found: 2026-09-20
 found-by: frankS
 blocked-by: []
-summary: "MEASURED, not estimated: after `--dce`, compiler/builtin/pyeval.pas is 624,684 B of a riscv32 ESP image's 2,074,812 (30.1%) and 681,868 B of xtensa's 1,736,175 (39.3%), for a program that never calls eval() or exec(). pyeval is a runtime tree-walking interpreter written for uforth's PYTHON-bodied words, and its own header says `NOT auto-used by NilPy yet`. Its single largest routine, PyHostCall, is 109,396 B by itself -- 5.3% of the whole image in one body. DCE drops only 13.7% of the unit (723,548 -> 624,684) against 30.7% of the image overall, so something ROOTS most of it rather than calling it: the suspects are the @proc / VMT / RTTI root classes (an address in a table is reachable from anywhere by construction) and pylib's hook variables that pyeval installs into. ANSWERED 2026-09-20 by `--dce-why`, built for this ticket: on xtensa the ENTIRE eval tree hangs off ONE @proc-taken root -- `PyHostCall <- PyFieldGet <- DoAssignment <- ExecStatement <- ExecSuite <- CallUserFn <- PyBodyTramp <- [@proc taken]` -- so the mechanism is a trampoline whose ADDRESS is in a table, not a call from NilPy code; 4 @proc roots hold 17,420 B directly and drag the rest through ordinary call edges. On riscv32 the same tree is rooted EARLIER and more coarsely: 819,480 B across 128 bodies are held because a stub target lands INSIDE them (143 stub targets, 139 inside a body, against xtensa's 4 and none), so that ISA cannot even see the @proc chain. The fix to design is therefore about PyBodyTramp's address being taken unconditionally, not about pyeval's size. Rung of umbrella-an-esp32-image-is-as-small-as-it-can-be: it is the single largest identified component of an ESP NilPy image after DCE."
+summary: "MEASURED, not estimated: after `--dce`, compiler/builtin/pyeval.pas is 624,684 B of a riscv32 ESP image's 2,074,812 (30.1%) and 681,868 B of xtensa's 1,736,175 (39.3%), for a program that never calls eval() or exec(). pyeval is a runtime tree-walking interpreter written for uforth's PYTHON-bodied words, and its own header says `NOT auto-used by NilPy yet`. Its single largest routine, PyHostCall, is 109,396 B by itself -- 5.3% of the whole image in one body. DCE drops only 13.7% of the unit (723,548 -> 624,684) against 30.7% of the image overall, so something ROOTS most of it rather than calling it: the suspects are the @proc / VMT / RTTI root classes (an address in a table is reachable from anywhere by construction) and pylib's hook variables that pyeval installs into. ANSWERED 2026-09-20 by `--dce-why`, built for this ticket: on xtensa the ENTIRE eval tree hangs off ONE @proc-taken root -- `PyHostCall <- PyFieldGet <- DoAssignment <- ExecStatement <- ExecSuite <- CallUserFn <- PyBodyTramp <- [@proc taken]` -- so the mechanism is a trampoline whose ADDRESS is in a table, not a call from NilPy code; 4 @proc roots hold 17,420 B directly and drag the rest through ordinary call edges. On riscv32 the same tree is rooted EARLIER and more coarsely: 819,480 B across 128 bodies are held because a stub target lands INSIDE them (143 stub targets, 139 inside a body, against xtensa's 4 and none), so that ISA cannot even see the @proc chain. PRICED 2026-09-20 and the @proc was a DECOY: the real root is pyeval's `initialization` doing `PyIterCallHook := @PyCallKey1`, an address that IS written by code that always runs, and PyCallKey1 reaches the interpreter through ONE arm -- `pyclosure_call1`, whose PyClosureInvoke saves the interpreter's own state and runs a body through ExecStatement. Removing that single arm drops xtensa live code 1,721,914 -> 824,155 B (-52%); removing the whole initialization drops it to 712,617 (-59%). riscv32 shows ZERO for both, because its stub-target rule roots the same bodies independently. The design is to route that arm through a hook installed by exec()/eval() -- the only two entries that can mint a closure -- so the pass can SEE that a program with no eval cannot reach it. Rung of umbrella-an-esp32-image-is-as-small-as-it-can-be: it is the single largest identified component of an ESP NilPy image after DCE."
 ---
 
 # A static NilPy program links the runtime's eval() interpreter
@@ -116,3 +116,83 @@ registry, pylib.pas:164-174) mean some of this may be genuinely reachable from
 NilPy code that uses closures or iterators -- which is most NilPy code. The
 measurement says 30-39% is LIVE; it does not yet say how much is REACHABLE.
 That distinction is the whole ticket.
+
+## 2026-09-20 (frankS) — PRICED TO ONE LINE, and it is not the @proc
+
+The `--dce-why` chain named `PyBodyTramp <- [@proc taken]`, so the first move
+was to ask whether that address needs taking. It does not — the one site is
+inside `EvalPyStmts`, which DCE itself drops.
+
+**That produced a real fix worth far less than it is worth knowing.** An
+`@proc` inside a body the same pass deletes **writes nothing**, because the
+code that would store the address never runs — so it is an **EDGE**
+(owner → target), not a root, and only an `@proc` in code no body owns roots
+anything. `"an address in a table can be called from anywhere"` is a claim
+about the SOURCE; the pass has the answer about the IMAGE.
+**The soundness argument rests on one thing, and it was already true:** a body
+kept because something jumps INTO it is marked live, so its `@proc` sites still
+root their targets. Without that, a retained body would hold the address of a
+removed one.
+The chain now spells `<- X` (X calls it) apart from `<- @X` (X takes its
+address), so a later reader cannot quote the weaker claim as the stronger one.
+
+**It bought 1,036 B.** That is the honest result of the lead: the `@proc` was a
+decoy, and the same report then named the real root.
+
+**The real root is `pyeval.pas`'s `initialization` section**, which runs in
+every program that links the unit:
+
+```pascal
+initialization
+  PyIterCallHook := @PyCallKey1;
+```
+
+That address IS written, by code that always runs, so the pass is right to root
+it. `PyCallKey1` then reaches the whole interpreter through ONE arm:
+
+```
+PyHostCall <- PyFieldGet <- DoAssignment <- ExecStatement
+           <- PyClosureInvoke <- pyclosure_call1 <- PyCallKey1
+           <- [@proc taken in unowned code]
+```
+
+**Both halves PRICED BY REMOVAL — a measurement, not a proposal.** Each
+removal breaks the program; they exist to price an edge. xtensa,
+`examples/esp32/nilpy-c3`, `--dce`:
+
+| tree | live code |
+| --- | --- |
+| HEAD | 1,721,914 B |
+| with the whole `initialization` removed | 712,617 B (**−1,009,297, −59%**) |
+| with ONLY `if pyclosure_is(key) then ... pyclosure_call1` removed | 824,155 B (**−897,759, −52%**) |
+
+So **one line of one dispatcher is 52% of the image.** Neither removal is a
+proposal — both break the program — they price the edge.
+
+**Why riscv32 shows nothing for either: 2,070,376 B both times.** Its
+stub-target rule roots 128 bodies independently, so the interpreter stays live
+whatever happens to this edge. Fix that ISA's rung separately
+([[bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program]]) or the
+win here will not appear there.
+
+### The design this points at, and the invariant it rests on
+
+`PyClosureInvoke` saves and restores the INTERPRETER's own state (`TkKind`,
+`TkText`, `Cur`, `LclN`, `FnN` ...) and runs a body through `ExecStatement`. A
+closure of that kind can only EXIST if `exec()`/`eval()` created it. So in a
+program that never calls either, `pyclosure_is(key)` is always False and the
+arm is dead — but it is dead in a way **only the program's behaviour knows and
+the pass cannot see**, which is precisely why it costs 897 KB.
+
+Give the pass something it CAN see: route that arm through a second hook
+(`PyClosureCallHook`, say) installed by `PyExecSrc`/`EvalPyStmts` — the only
+two entries that can mint a closure — instead of calling `pyclosure_call1`
+directly. `PyCallKey1` then references no interpreter, and the tree hangs off
+`exec()` where it belongs. The unconditional install of `PyIterCallHook`
+STAYS: it fixed a real bug
+(`bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload`)
+and lazy installation is what caused it.
+
+**LIVE, not REACHABLE, still.** Nothing above says the interpreter runs in this
+demo; it says the pass cannot prove it does not. The proposal is a way to make
+the proof structural rather than a claim.

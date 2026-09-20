@@ -2635,7 +2635,16 @@ end;
   The Pascal names are prefixed so they cannot shadow the Read/Write intrinsics.
   bug-a-nilpy-on-cross-targets-four-remaining-walls (a Python `print` on an
   ESP32 printed nothing: it lowers to IR_WRITE, which ended here). }
-{$ifdef PXX_PLATFORM_ESP}{$ifndef PXX_ESP_BARE}{$define PXX_IDF_STDIO}{$endif}{$endif}
+{ PXX_ESP_IDF, NOT `PXX_PLATFORM_ESP and not bare`. Those two read alike and
+  differ on exactly one configuration: `--platform=esp` on a HOSTED target,
+  which test_platform_defines builds on x86-64 to check the define set. There
+  is no IDF there to resolve `putchar`, so the spelling below decided whether
+  that program ran or died at startup with `undefined symbol: putchar`.
+  PXX_ESP_IDF is defined only for the ESP ISAs (paslexer.inc) and exists
+  because the HEAP arm made this identical mistake with `calloc` (tstate
+  test-core regression at b358) -- the guard was already written, in the right
+  place, and this arm used the other spelling. }
+{$ifdef PXX_ESP_IDF}{$define PXX_IDF_STDIO}{$endif}
 {$ifdef PXX_IDF_STDIO}
 function PXXIdfPosixRead(fd: Integer; buf: Pointer; count: Integer): Integer; cdecl; external name 'read';
 function PXXIdfPosixWrite(fd: Integer; buf: Pointer; count: Integer): Integer; cdecl; external name 'write';

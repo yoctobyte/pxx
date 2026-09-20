@@ -17750,6 +17750,14 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_const_before_ctor26 "$$($(TESTTMP)/test_const_before_ctor26)" "$$(printf '12\n112')"
 	./$(COMPILER) test/test_platform_defines.pas $(TESTTMP)/test_platform_defines_posix26
 	tools/expect_same.sh test_platform_defines_posix26 "$$($(TESTTMP)/test_platform_defines_posix26)" "$$(printf 'platform=posix\nfiles\nsockets\nthreads\ndynlib\nend')"
+	# THIS ROW IS ALSO THE `--platform=esp` ON A HOSTED TARGET GUARD, and that
+	# is not a curiosity: the platform axis and the ISA axis are independent,
+	# so `PXX_PLATFORM_ESP and not bare` and `PXX_ESP_IDF` read alike and
+	# differ on exactly this build. Anything in the RTL that declares an IDF
+	# symbol `external` must key on the SECOND spelling, or a hosted ELF dies
+	# at startup with `undefined symbol: <it>` -- calloc once (b358), putchar
+	# again on 2026-09-20. RUNNING the binary is what catches it; it compiles
+	# and links perfectly either way.
 	./$(COMPILER) --platform=esp test/test_platform_defines.pas $(TESTTMP)/test_platform_defines_esp26
 	tools/expect_same.sh test_platform_defines_esp26 "$$($(TESTTMP)/test_platform_defines_esp26)" "$$(printf 'platform=esp\nend')"
 	./$(COMPILER) -Itest/unitpath/posix test/test_unitpath.pas $(TESTTMP)/test_unitpath_posix26
@@ -24492,54 +24500,71 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test_set_in_64bit_element: qemu-xtensa absent, xtensa arm NOT verified ==="; \
 	fi
-	# WRITE/WRITELN ON THE TWO ESP PROFILES: the no-op is INTENDED on both, and
-	# the two backends must agree about it. They did not until b3adef718 --
+	# WRITE/WRITELN ON THE TWO ESP PROFILES: THEY DIFFER, AND THE TWO BACKENDS
+	# MUST AGREE ABOUT EACH. Bare drops it (no console, no libc, UART is MMIO in
+	# user code). IDF PRINTS it (PXXSysWrite -> the libc stdout stream). What
+	# this row really guards is that xtensa and riscv32 answer the same way on
+	# the same profile -- they did not until b3adef718, because
 	# ir_codegen_xtensa asked `TargetPlatform = PLATFORM_ESP` and
 	# ir_codegen_riscv32 asked `EspBareBoot`, which coincide for riscv32 (bare ->
-	# ESP, else POSIX) and do NOT for xtensa, which defaults to PLATFORM_ESP. So
-	# an xtensa IDF build dropped writeln and a riscv32 IDF build emitted the
-	# hosted path, whose helpers reach the kernel by `ecall` and trap on a chip.
+	# ESP, else POSIX) and do NOT for xtensa, which defaults to PLATFORM_ESP.
 	#
-	# THIS ROW DELIBERATELY DOES NOT ASSERT WHAT THE TICKET PRESCRIBED. Its
-	# "positive control for whoever takes it" says to assert empty and hello are
-	# NOT byte-identical "on any profile that claims to have a console", i.e.
-	# that IDF writeln gets routed to esp_rom_printf. The tree decided the other
-	# way, with evidence: PalBackendWrite REFUSES stdout/stderr on IDF, the docs
-	# name esp_rom_printf as the IDF idiom, and examples/esp32/hello-c3 ships it
-	# and prints on a real C3 under qemu. An assertion written from a
-	# PREDICTION pins the prediction, so this asserts the DECIDED behaviour --
-	# identical on both profiles -- and the warning is what makes it not silent.
+	# REWRITTEN 2026-09-20, AND THE HISTORY IS THE INTERESTING PART. This row
+	# used to assert that writeln is a NO-OP on BOTH profiles, and said so
+	# against the originating ticket, whose "positive control for whoever takes
+	# it" had PREDICTED the opposite -- empty and hello NOT byte-identical "on
+	# any profile that claims to have a console". The row was right to refuse a
+	# prediction: an assertion written from one pins the prediction. But the tree
+	# then DECIDED what that ticket predicted, on evidence the earlier decision
+	# did not have -- a Pascal program that WriteLns and then ends now boots on
+	# both chips with its UART matching an x86-64 oracle
+	# (test/test_esp_idf_writeln_end.pas, the test-esp-idf target).
+	# bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit
+	# So the row now pins the DECISION rather than either prediction, and it went
+	# RED the moment the behaviour moved, which is what it is for.
 	#
-	# THE POSITIVE CONTROL IS THE PIN and it fails three different ways:
-	# stable_linux_amd64/default/pinned gives riscv32 IDF 258788 vs 258828 (the
-	# +40 divergence), and emits NO warning on either profile, so every row below
-	# is red against it.
+	# THE WARNING IS HALF THE ASSERTION AND IT MOVED WITH THE BEHAVIOUR. Bare
+	# still warns. IDF must NOT warn any more: that message said writes emit
+	# nothing, which is now false, and a false warning is the expensive kind --
+	# it is written to STOP a reader, it succeeds, and a reader who stops
+	# generates nothing that could reveal it was wrong.
+	#
+	# THE PIN IS NOT A CONTROL FOR THIS ROW. stable_linux_amd64/default/pinned
+	# predates both decisions -- it drops writeln on xtensa IDF, emits on riscv32
+	# IDF, and warns on neither -- so it is red here for three reasons that have
+	# nothing to do with what the row asserts.
 	@printf 'program espe;\nbegin end.\n' > $(TESTTMP)/espnoop_empty.pas
 	@printf 'program esph;\nbegin WriteLn(%s); end.\n' "'hi'" > $(TESTTMP)/espnoop_hello.pas
-	@for combo in "xtensa --esp-profile=bare" "xtensa --platform=esp" "riscv32 --esp-profile=bare" "riscv32 --platform=esp"; do \
-	  set -- $$combo; a=$$1; pr=$$2; \
+	@for combo in "xtensa --esp-profile=bare noop" "xtensa --platform=esp prints" "riscv32 --esp-profile=bare noop" "riscv32 --platform=esp prints"; do \
+	  set -- $$combo; a=$$1; pr=$$2; want=$$3; \
 	  ./$(COMPILER) --target=$$a $$pr --emit-obj $(TESTTMP)/espnoop_empty.pas $(TESTTMP)/espnoop_e.o > $(TESTTMP)/espnoop_e.log 2>&1; \
 	  ./$(COMPILER) --target=$$a $$pr --emit-obj $(TESTTMP)/espnoop_hello.pas $(TESTTMP)/espnoop_h.o > $(TESTTMP)/espnoop_h.log 2>&1; \
-	  e=$$(grep -oE 'code=[0-9]+B +data=[0-9]+B' $(TESTTMP)/espnoop_e.log); \
-	  h=$$(grep -oE 'code=[0-9]+B +data=[0-9]+B' $(TESTTMP)/espnoop_h.log); \
-	  [ -n "$$e" ] || { echo "FAIL espnoop: $$a $$pr empty did not compile"; cat $(TESTTMP)/espnoop_e.log; exit 1; }; \
-	  [ "$$e" = "$$h" ] || { echo "FAIL espnoop: $$a $$pr writeln CHANGED the image -- empty[$$e] hello[$$h]; the two backends must agree that it is a no-op"; exit 1; }; \
-	  grep -q 'warning: write/writeln emits nothing' $(TESTTMP)/espnoop_h.log || { echo "FAIL espnoop: $$a $$pr dropped writeln SILENTLY -- no warning"; exit 1; }; \
+	  e=$$(grep -oE 'code=[0-9]+B' $(TESTTMP)/espnoop_e.log | tr -dc 0-9); \
+	  h=$$(grep -oE 'code=[0-9]+B' $(TESTTMP)/espnoop_h.log | tr -dc 0-9); \
+	  [ -n "$$e" -a -n "$$h" ] || { echo "FAIL espnoop: $$a $$pr did not compile -- no code= line, so nothing below could have been compared"; cat $(TESTTMP)/espnoop_e.log $(TESTTMP)/espnoop_h.log; exit 1; }; \
+	  if [ $$want = noop ]; then \
+	    [ "$$e" = "$$h" ] || { echo "FAIL espnoop: $$a $$pr writeln CHANGED the image -- empty[$$e] hello[$$h]; on BARE it must emit nothing, and the two backends must agree"; exit 1; }; \
+	    grep -q 'warning: write/writeln emits nothing' $(TESTTMP)/espnoop_h.log || { echo "FAIL espnoop: $$a $$pr dropped writeln SILENTLY -- no warning"; exit 1; }; \
+	  else \
+	    [ "$$h" -gt "$$e" ] || { echo "FAIL espnoop: $$a $$pr writeln emitted NOTHING -- empty[$$e] hello[$$h]; on IDF it must reach PXXSysWrite, and the two backends must agree"; exit 1; }; \
+	    if grep -q 'warning' $(TESTTMP)/espnoop_h.log; then echo "FAIL espnoop: $$a $$pr warned about a write that WORKS on this profile:"; grep warning $(TESTTMP)/espnoop_h.log; exit 1; fi; \
+	  fi; \
 	  if grep -q 'warning' $(TESTTMP)/espnoop_e.log; then echo "FAIL espnoop: $$a $$pr warned about a program containing no write at all"; exit 1; fi; \
 	done
-	@# ...and the warning must say something TRUE on each profile. One predicate
-	@# decides WHETHER to warn (TargetPlatform, since both drop it); the profile
-	@# decides WHAT TO SAY, because "there is no console" is a fact about BARE.
-	@# On IDF there is one -- esp_rom_printf, resolved by the IDF link. Until
-	@# 2026-09-19 both profiles got the bare text, so an IDF user was told their
-	@# chip had no console and pointed at a bullet headed "Notes for the bare
-	@# profile". True about the behaviour, false about the reason and the remedy.
+	@# ...and the BARE warning must say something TRUE. The profile decides what
+	@# to say, because "there is no console" is a fact about BARE.
+	@#
+	@# THE IDF HALF OF THIS CHECK IS GONE, 2026-09-20, AND IT IS WORTH SAYING WHY
+	@# rather than silently deleting three rows. It used to assert that the IDF
+	@# warning names esp_rom_printf -- the console an IDF object was told to use
+	@# because write/writeln emitted nothing there. Write WORKS on IDF now, so
+	@# there is nothing to warn about and the warning is removed; the loop above
+	@# asserts its ABSENCE, which is the stronger check, because a warning that
+	@# survived a behaviour change is exactly the stale hazard this row was
+	@# originally written about.
 	@./$(COMPILER) --target=xtensa --esp-profile=bare --emit-obj $(TESTTMP)/espnoop_hello.pas $(TESTTMP)/espnoop_b.o > $(TESTTMP)/espnoop_bare.log 2>&1
-	@./$(COMPILER) --target=xtensa --platform=esp --emit-obj $(TESTTMP)/espnoop_hello.pas $(TESTTMP)/espnoop_i.o > $(TESTTMP)/espnoop_idf.log 2>&1
 	@grep -q 'bare ESP profile: there is no console' $(TESTTMP)/espnoop_bare.log || { echo "FAIL espnoop: the bare warning no longer states the bare reason"; exit 1; }
-	@grep -q 'esp_rom_printf' $(TESTTMP)/espnoop_idf.log || { echo "FAIL espnoop: the IDF warning does not name esp_rom_printf, the console it does have"; exit 1; }
-	@if grep -q 'there is no console' $(TESTTMP)/espnoop_idf.log; then echo "FAIL espnoop: the IDF warning claims there is no console; on ESP-IDF there is one"; exit 1; fi
-	@echo "test-core: write/writeln is a no-op on both ESP profiles and both backends, warned once, and the warning names the right console for each profile"
+	@echo "test-core: writeln is a no-op on BARE (warned, with the bare reason) and PRINTS on IDF (unwarned), and the two backends agree on each"
 	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
 	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,
 	# so the declaration reserved ONE element and fixed the symbol's offset

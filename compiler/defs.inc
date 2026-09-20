@@ -225,7 +225,7 @@ const
     them, plus the two that are not roots at all. Reported by --dce-why. }
   DCE_WHY_UNSET    = 0;   { dead, or never marked }
   DCE_WHY_VMT      = 1;   { an address in a VMT / RTTI / interface table }
-  DCE_WHY_PROCADDR = 2;   { @proc taken somewhere }
+  DCE_WHY_PROCADDR = 2;   { @proc taken in code no body owns -- a true root }
   DCE_WHY_IRAM     = 3;   { an IRAM call fixup (ESP) }
   DCE_WHY_INIT     = 4;   { a unit initialization section }
   DCE_WHY_ENTRY    = 5;   { an entry stub's hand-patched call }
@@ -234,7 +234,8 @@ const
   DCE_WHY_EXPORT   = 8;   { --emit-obj: exported, so callers are outside }
   DCE_WHY_STUB     = 9;   { something jumps INTO this body's range }
   DCE_WHY_FREECODE = 10;  { called from code no body owns (entry, stubs, main) }
-  DCE_WHY_CALL     = 11;  { called by DceVia[p] -- the only non-root reason }
+  DCE_WHY_CALL     = 11;  { called by DceVia[p] }
+  DCE_WHY_PAEDGE   = 12;  { @proc taken INSIDE live body DceVia[p] -- not a root }
   { Absolute BSS-address fixups in one emitted image. The SELF-HOST build under
     --threadsafe is the high-water mark — every global reference in the compiler's
     own code costs one — so this grows with the compiler and had been sitting just
@@ -4576,6 +4577,9 @@ var
   DceCallOwner  : array of Integer;
   DceEdgeTo     : array of Integer;
   DceEdgeHead   : array of Integer;
+  { The body owning each ProcAddrFix SITE, computed once: an @proc inside a
+    live body is an edge, and only an @proc no body owns is a root. }
+  DceProcAddrOwner : array of Integer;
 
   { @proc: code-side `mov rax, imm64` placeholders patched at finalize with the
     absolute runtime address of an internal proc (entry + BodyAddr). }

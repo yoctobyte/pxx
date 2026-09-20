@@ -29289,3 +29289,114 @@ the reachability walk, so on riscv32 the `@proc` chain above is never the first
 reason for anything and the report is markedly less informative there. If a
 root report looks uninformative, check whether an earlier, coarser root rule is
 claiming everything first.
+
+## A SILENT INSTRUMENT AND A BROKEN ONE ARE THE SAME OUTPUT — AND OPTIMISATION CAN DELETE THE SUBJECT OUT FROM UNDER A CORRECT PROBE
+
+The guard-that-cannot-fail rules cover a probe that observes the wrong
+quantity, a control drawn from the wrong population, and a setup line that
+destroys the precondition. This is a fourth shape and the instrument is
+INNOCENT in it: the probe is correct, aimed correctly, and the SUBJECT stopped
+existing between the source and the thing being measured. The output is
+nothing, and nothing is also what a broken probe prints.
+
+Measured 2026-09-20, building the positive control for `--dce-why` (the DCE
+root report). The control needed a body reachable ONLY by a direct call:
+
+```pascal
+function RootedByCall(n: Integer): Integer;
+begin
+  Result := n * 7;          { flat }
+end;
+...
+WriteLn('call ', RootedByCall(6));
+```
+
+The program prints `call 42`. The report prints **nothing** for that name. Both
+are correct: at the default `-O` the body is INLINED, its only call site is
+gone, DCE drops the now-unreachable body, and a report about live bodies
+rightly does not mention a dead one. Written self-recursive, so the inliner
+will not take it, the identical probe reports
+`RootedByCall <- Driver <- [called from unowned code]`.
+
+**The cost is not the wasted run; it is the reading.** An empty result from a
+new instrument reads as "the instrument does not work yet", which is the one
+conclusion that sends you to debug working code. I spent the first pass looking
+at the filter.
+
+Two things fall out, and the second is the general one:
+
+- **Make a probe distinguish ABSENT from DEAD.** `--dce-why=<name>` now prints
+  `<name> <- DROPPED` for a matched-but-not-live body instead of staying quiet.
+  Silence then means only one thing: no body of that name exists at all.
+- **A fixture for a pass that runs AFTER another pass must survive that other
+  pass.** Anything you write to be observed downstream of the optimiser has to
+  be shaped so the optimiser leaves it there — self-recursive, address-taken,
+  behind a volatile-ish edge — and the fixture should SAY which optimisation it
+  is dodging and why, or the next person simplifies it back to the flat form
+  and gets a green empty run.
+
+`test/test_dce_why_root_report.pas` carries that comment, and the `test-quick`
+row asserts the chain for both of its bodies.
+
+## TWO SPELLINGS OF ONE PREDICATE THAT DIFFER ON EXACTLY ONE CONFIGURATION — IT COMPILES AND LINKS EITHER WAY, AND ONLY RUNNING IT FAILS
+
+`normalise-dont-special-case.md` says the sibling of a fixed arm is usually a
+SPELLING rather than a shape. This is that class at its narrowest and nastiest:
+two conditionals that mean the same thing on every configuration but one, in
+the same file, where the correct spelling **already existed** and had already
+been written for the identical mistake.
+
+Measured 2026-09-20, `compiler/builtin/builtinheap.pas`:
+
+```pascal
+{$ifdef PXX_PLATFORM_ESP}{$ifndef PXX_ESP_BARE}{$define PXX_IDF_STDIO}{$endif}{$endif}   { the stdio arm }
+{$ifdef PXX_ESP_IDF} ... {$endif}                                                        { the heap arm  }
+```
+
+`PXX_ESP_IDF` is defined only when the platform is ESP **and the ISA is an ESP
+ISA** (paslexer.inc). The two spellings agree on every ESP build and on every
+hosted build — and disagree on exactly one: **`--platform=esp` on a hosted
+target**, which `test/test_platform_defines.pas` builds on x86-64 to check the
+define set. There the stdio arm declared `putchar` `external` with no IDF to
+resolve it, and the program died at startup:
+
+```
+symbol lookup error: ... undefined symbol: putchar
+```
+
+**The heap arm had made the identical mistake with `calloc`** (tstate test-core
+regression at b358) and the guard written to fix it — `PXX_ESP_IDF` — was
+sitting in the same file, correctly named, for months. The second arm was
+written without grepping for it.
+
+Three things that make this class expensive out of proportion to its size:
+
+- **It compiles and it links.** An `external` declaration is a promise about
+  link time, and for a pxx ELF that promise is not checked until the dynamic
+  loader runs the binary. A build-only row is green; so is any row that checks
+  sizes or diagnostics. **Only RUNNING the binary can fail.**
+- **The failing configuration belongs to no obvious tier.** The platform axis
+  and the ISA axis are independent, so `--platform=esp` on x86-64 is neither an
+  ESP test nor a hosted one. Picking tiers by "which subsystem did I touch"
+  runs neither. Ask instead which CONFIGURATIONS the change can reach.
+- **Both spellings are locally correct and locally readable.** Nothing in the
+  stdio arm looks wrong; you have to know the other arm exists to see it.
+
+**AND THE WATCHER HAD ALREADY FILED IT, A DAY BEFORE I LOOKED.**
+`regression-test-core-test-platform-defines-2`, auto-filed by twatch
+2026-09-19T19:12Z against the range containing my own landing, sat in
+`devdocs/progress/backlog/` while I chose which tiers to run by which
+subsystems I had touched. The breadth instrument worked exactly as designed and
+the slow part was me walking past free information about my own commit. **After
+landing in a shared file, check what Track T has auto-filed against the range
+before running your own tiers** — it costs one `ls` of the backlog, it is
+already narrowed to a range, and it covers the configurations your own tier
+choice will not think of.
+
+The discharge is the same one the normalise rule gives and it is worth
+restating in predicate form: **before writing a guard, grep for the predicate
+that already means what you are about to spell out** — not for the feature, not
+for the construct, but for the OTHER ARM'S CONDITION. When you find it, use it
+rather than writing an equivalent; and when a guard exists, note in it what
+configuration it separates, because that is exactly what the next author needs
+and cannot see.

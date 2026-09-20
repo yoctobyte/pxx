@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: T
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_platform_defines_esp26 "$(/tmp/test_platform_defines_esp26)" "$(printf 'platform=esp\nend')"`. The job's own `src` (`test/test_platform_defines.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -47,3 +48,26 @@ expect_same: MISMATCH [test_platform_defines_esp26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## 2026-09-20 (frankS) — CAUSE FOUND AND FIXED
+
+Mine, from the ESP-IDF stdio work. `compiler/builtin/builtinheap.pas` gated the
+IDF stdio arm on `PXX_PLATFORM_ESP and not PXX_ESP_BARE`, where the heap arm in
+the same file already gated on `PXX_ESP_IDF` — which `paslexer.inc` defines only
+when the ISA is an ESP ISA as well. The two predicates agree on every ESP build
+and every hosted build, and differ on exactly one configuration: **`--platform=esp`
+on a HOSTED target**, which this very test builds on x86-64 to check the define
+set. There the arm declared `putchar` `external` with no IDF to resolve it, and
+the binary died at startup with `undefined symbol: putchar`.
+
+The identical mistake had already been made and guarded in the same file for
+`calloc` (the b358 regression this test also caught). Fixed by using the
+existing spelling, not by adding a third.
+
+Notable for the next reader: it COMPILES AND LINKS either way — only running the
+binary fails — and the failing configuration belongs to neither the ESP tier nor
+the hosted one, so a tier list chosen by "which subsystem did I touch" runs
+neither. Banked as a class in `devdocs/dev/debugging-playbook.md`.
+The row now carries a comment saying what it guards, so the next person to see
+it red does not have to rediscover which axis it is about.
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
