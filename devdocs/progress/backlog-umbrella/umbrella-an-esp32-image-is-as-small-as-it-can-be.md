@@ -284,6 +284,31 @@ data+bss (88,656 + 89,352 on riscv32) against a 211,296 B free pool. That is
 the number the ruling points at — 84% of the remaining DRAM is our static data,
 and `--dce` does not touch one byte of it.
 
+### WHAT WOULD RETIRE THE BOUND — and it is already spent
+
+The bound above is "a code rung pays SRAM only where it drops the LAST
+relocation to an SDK component". That is a testable condition, and it is
+cheaper than rebuilding a compiler at two historical commits, so it was asked
+of the object directly rather than of `357d13162` and `6c211e043` in turn.
+
+**After `--dce`, the external surface this object still relocates against is
+six names:** `calloc`, `free`, `fwrite`, `putchar`, `write`, `vTaskDelete`.
+Every one is newlib or FreeRTOS core that IDF's own startup requires with or
+without us — and that is measured, not argued: the `.dram0` diff between the
+two builds shows **lwIP as the ONLY component whose contribution changed**.
+Everything else is byte-for-byte identical, i.e. held by something other than
+our references.
+
+**So the bound is not "roughly 1%", it is "zero from here".** lwIP was the one
+SDK component this program pulled in by itself, `--dce` has already dropped it,
+and no further code-removal rung — including the two landed wins, which are
+strictly smaller levers of the same kind — has a last relocation left to drop.
+
+What would retire this: a program that legitimately reaches a *different* SDK
+component (a NilPy demo using sockets, files, WiFi or NVS) and a rung that
+stops it doing so. On THAT program the bound does not apply and the measurement
+must be retaken. It says nothing about the print demo.
+
 ### CORRECTION, same day, and it is this file's own rule catching its own author
 
 The paragraph above originally named
