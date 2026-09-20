@@ -31489,3 +31489,36 @@ narrow and easy to miss: commit, gate, push.
 **How it was found:** by running the checker directly after a green gate, noticing it reported **zero
 files added**, and recognising that as a statement about the population rather than about the tests.
 The gate had said PASS twice for a test neither run could see.
+
+**AND THE SAME CHECKER HAS A CENSUS MODE THAT ASKS THE STRONGER QUESTION — MEASURED 2026-09-20, THE
+COST OF ADOPTING IT IS TWO FILES.** Added by frankz-e5 because the section above leaves a reader with
+manual workarounds and no idea the real fix is that close. Drop `--since` and
+`tools/check_test_wiring.py` censuses the whole repo instead of the diff:
+
+    census mode             rc=1   4302 test subjects, 48 runners
+                                   2 NOT referenced by any build rule or tools/ script
+                                     test/thread_glibc_malloc_controls.pas
+                                     test/thread_glibc_malloc_two_threads.pas
+                                   43 PARKED against a live ticket [feature-target-wasm]
+                                   2 exemptions whose only reference is a tools/ script naming the path
+    --since origin/master   rc=0   the vacuous pass
+
+**So the answer to "how many lanes would suddenly start seeing rows they have been passing for
+months" is NONE — it is two files, both named, both pre-existing, neither anyone's work today.** That
+was the unmeasured thing standing between the manual workaround and a guard that works, and it is
+worth knowing that it is small: **an unmeasured blast radius reads as a fork of intent, and a measured
+one is a sequence.** Wire those two or list them in `test/UNWIRED.txt` with a reason **first** — switch
+the gate over before that and it is **born red for every seat**, which teaches that the row can be
+ignored and costs more than the gap does.
+
+**Note the two modes disagree today in the direction that matters: the repo genuinely has unwired
+tests RIGHT NOW and every gate in the fleet is printing PASS**, because the per-push question is the
+only one being asked. A guard can be simultaneously correct, green, and silent about a live instance
+of exactly what it was built to catch.
+
+**AND THE MEASUREMENT WALKED INTO THIS FILE'S OWN WRAPPER TRAP ON THE FIRST TRY.**
+`python3 tools/check_test_wiring.py | tail -25; echo "rc=$?"` printed **rc=0** — that is `tail`'s
+status. The checker's real census status is **1**. Third instance on this box the same day, in a seat
+that had read and relayed the other two within the hour. **Capture the process's own status before a
+pipe, and treat a status that agrees with what you were hoping for as the one to re-measure** — the
+friendly number is the one nobody queries.
