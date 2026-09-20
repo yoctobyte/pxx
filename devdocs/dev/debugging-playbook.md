@@ -31170,3 +31170,36 @@ belongs to.**
 **Note which direction the correction ran: FAVOURABLE.** The advice retired was *"you need an
 override"*; the truth is *"the default path works"*. Per the relay-freshness section, **a correction
 that makes things better is the one nobody queries**, so it must be stated as loudly as a regression.
+
+## A CORRECT REF-LEVEL CHECK MAKES THE NEXT PATH-READ FEEL VERIFIED — AND `fetch` STILL HAS NOT MOVED YOUR TREE
+
+*Measured 2026-09-20 by the pxx coordinator, verifying a peer's change to `tools/sync.sh`. An
+extension of CLAUDE.md's "`git fetch` MOVES REFS AND NOT YOUR TREE", in the one arrangement that makes
+the trap harder rather than easier to see.*
+
+The rule as written warns that a `find`, `grep` or `ls` **right after a `fetch`** reads the tree you
+had before. What it does not say is what happens when you do the **correct** thing first.
+
+The sequence was: `git fetch`, then `git merge-base --is-ancestor <sha> origin/master` on two commits
+— **both correct after a fetch, both returned true, both printed the real commit subjects** — and then
+`grep` for the new code in `tools/sync.sh`. **Zero hits.** The block was real, pushed, and an ancestor
+of `origin/master`; **the working tree simply did not have it**, because nothing had pulled.
+
+**The ref-level checks did not merely fail to prevent this. They supplied the confidence that carried
+it.** Two green verifications, naming the right commits, immediately before a read that answers about
+a different tree — so the natural reading of the empty grep is *"the peer described a change that is
+not in the file"*, which is an accusation, delivered with two corroborating checks behind it.
+
+> **Correct ref-level verification and a stale working tree coexist happily after a `fetch`, and the
+> correct half lends its credibility to the wrong half.** The rule's own list holds: ref-level checks
+> (`merge-base --is-ancestor`, `ls-tree origin/master`) are right after a fetch; **anything reading a
+> PATH is not.**
+
+**The tell is the shape of the answer, not anything about the checks: a ZERO.** `grep` printing
+nothing is the result least likely to prompt a second look, because it feels like the search worked
+and the world is empty. Applying the neighbouring rule — *when a search returns zero, ask what
+spelling the code would use if it did the thing* — the first candidate here is not a spelling at all:
+**ask what this would be if it were false, and the cheapest answer is "my tree is stale."**
+
+**Practically:** if a verification chain contains **both** a ref-level check and a path read, **pull
+between them**, and say which. A `fetch` earns you the right to reason about refs and nothing else.
