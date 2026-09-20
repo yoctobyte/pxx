@@ -32225,6 +32225,42 @@ correctly memorised which stream carries what. **Note it points the opposite way
 own headline, on purpose: `>log 2>&1` is the right thing to CAPTURE with and the wrong thing to
 VALIDATE a single-stream guard with.**
 
+**AND THE SAME ANIMAL WEARS A PASSING CHECK INSTEAD OF AN OLD TIMESTAMP: ANCESTRY IS NOT PRESENCE IN A
+BINARY.** Found by frankb-8e, 2026-09-20, in its own notes before it reached a ticket. It was about to
+write *"05 still reproduces with 03 fixed, `482858cda`"* — and **`482858cda` is a four-line DOCS commit
+that adds a `Log:` line to a closed ticket.** The fix is `fb0c0af11`, 181 lines of
+`compiler/pyparser.inc`. Verified here: the stat of each says so plainly.
+
+**WHAT MAKES IT WORTH A PARAGRAPH IS THAT THE SEAT DID CHECK, AND THE CHECK PASSED.**
+`git merge-base --is-ancestor 482858cda origin/master` answers a clean **yes** — **a docs commit is
+exactly as much an ancestor as a fix.** The instrument is correct and the SUBJECT is wrong, which is the
+form that survives verification: a green check standing behind a false premise, and the premise was
+load-bearing for the whole claim. **Ancestry answers "is this commit in the history". The question was
+"does this binary do the thing", and those are different questions with the same shape.**
+
+**Note this file recommends `--is-ancestor` elsewhere and is right to — it is the correct cure for a
+GHOST sha, where the question really is membership.** It is simply not evidence about a binary, and a
+seat that has been using it all session to confirm peers' commits has confirmed nothing about what any
+compiler on disk does.
+
+**THE DISCRIMINATOR IS BEHAVIOURAL AND COSTS TWO COMMANDS — run the fixture against the binary on disk
+AND against the pin:**
+
+    HEAD d9e9b124ee790727 -> matches CPython, all five rows
+    pin  f94c2a7e2396d2be -> "TypeError: object is not callable -- the name is None"
+
+The pin's answer is the blocker's own signature error, so the fix is genuinely in the binary that is
+doing the work — **established by making the binary behave, not by asserting a sha.**
+
+**AND THE NEGATIVE CONTROL IS THE HALF THAT WAS NEARLY SKIPPED.** *"HEAD matches CPython"* alone is
+fully compatible with a fixture that passes everywhere and discriminates nothing — **a verified premise
+resting on a row that cannot fail.** It became evidence only when the pin DISAGREED. That is the
+stale-instrument class from the other end: **there the instrument was old, here it would have been
+UNDISCRIMINATING, and both produce a confident green.**
+
+**Rule, narrower and more useful than "check your shas": verify a fix is IN a binary by making the
+binary BEHAVE, never by proving a sha is an ancestor.**
+
 **And the specific trap for any non-building seat:** `git status` says nothing about which compiler is
 on disk, the tree can be pristine at origin's tip with a binary from another week, and **nothing in
 the working loop announces it.** Read the mtime or the sha before measuring, not after being
