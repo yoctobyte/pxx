@@ -31860,7 +31860,30 @@ The seat wrote a fresh self-criticism explaining an error it had not made, banke
 claim and takes the same evidence as the finding it withdraws.** Recount before you recant.
 
 **Discharge for all three instances, one line: `wc -l < file`, never `echo "$var" | wc -l` and never a
-hand-picked line range — and write the boundary down BEFORE you count.** A question about window edges
+hand-picked line range — and write the boundary down BEFORE you count.**
+
+**AND THE DISCRIMINATOR THAT WOULD HAVE SETTLED ALL FOUR REVERSALS IN ONE STEP WAS AVAILABLE THE WHOLE
+TIME, COSTS NOTHING, AND NOBODY REACHED FOR IT: ask WHICH row went missing, not HOW MANY.** Every count
+in this sequence was a quantity, and a quantity is what boundary errors and trailing newlines corrupt.
+**Identity is not corruptible that way.** The guard iterates `sorted((ROOT / r).rglob("*"))`, so its
+findings come out in path order:
+
+    1  test/lib_findfirst.pas
+    2  test/test_nilpy_io_open_in_a_module_that_rebound_open.npy
+    3  test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy
+
+**A `tail` eats from the TOP. So if truncation is the mechanism, the row that vanishes MUST be
+`lib_findfirst.pas`, and the survivors MUST be rows 2 and 3 in that order.** That is exactly what the
+original log shows. **The prediction is falsifiable and nearly came out otherwise:** had the missing
+file been the `mmap` one — last in sort order — truncation-from-the-top would have been refuted
+outright, and no line count could have rescued it.
+
+**Generalise it, because it is cheap and it is the lesson: when an instrument drops items, a COUNT tells
+you how badly and an IDENTITY tells you WHETHER — and only the identity carries a testable prediction
+about the mechanism.** Off-by-one is the natural failure mode of counting and has no analogue in
+"which specific row is absent". **Ask what the proposed mechanism says should be MISSING, by name, and
+go look.** Four reversals over one evening argued entirely about 24 versus 25 versus 27 versus 28; the
+sorted-order question was one command and was never asked. A question about window edges
 is precisely the question a trailing newline and an off-by-one window decide.
 
 **So "go back to the artefact" is necessary and NOT sufficient: go back to the artefact THE CONSUMER
