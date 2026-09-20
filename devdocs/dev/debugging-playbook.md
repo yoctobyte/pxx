@@ -32420,6 +32420,29 @@ draws the INFERENCE, not only in the clause that quotes the row** — and when a
 condition is inert, notice that it is: **an inert label is the one that survives, so seeing one
 carried correctly is no evidence that the live one was.**
 
+**AND THE REASON TWO SEATS DREW THE SAME WRONG INFERENCE IS THE LABEL'S WORD, NOT THE ROW'S NUMBER —
+WHICH IS WHY NEITHER OF THEM WAS BEING CARELESS.** `lekkerzeilen-7a`, whose measurement it is, supplied
+the mechanism when it repaired the document (`8ca634f`): **on that box vsync is a 52–68 ms per-frame
+WAIT, not a 60 Hz ceiling.** *Above 60 with vsync on, therefore capped* is a **valid** inference from
+the word's ordinary meaning, and the ordinary meaning is false here — the same scene measures **14.6
+fps** with vsync ON, a quarter of the supposed cap. So the premise was supplied by the NOUN and the
+number merely triggered it. **A measurement label that names a mechanism inherits that mechanism's
+default semantics, and a reader completes the inference with the default** — this file's own *the name
+is not the thing*, arriving in a units label rather than in an identifier. **Where a condition behaves
+unlike its name, say what it IS beside the row** (*"vsync here is a wait, not a ceiling"*), because
+nobody audits a word they already know.
+
+**7a's two, recorded as 7a's.** First, the artefact rather than the readers: **where several
+independent readers make the same error on one row, suspect the ARTEFACT'S SHAPE before their
+diligence.** The refutation was already in its document — same scene, vsync ON, 14.6 — **three sections
+away from the row that invites the error, which is the same distance as not being there.** It moved the
+refutation inline, in terms, naming the two sessions that got it wrong. Second, from the receiving end:
+**verifying a relay's CONTENT and verifying its PROVENANCE are two different checks.** Told its own
+first-hand measurement was *"second-hand through franks-5b"*, it checked the quotes of its document
+against the document and did not check the claim about where they came from — *"I did one."* **The
+content check is the one that feels like diligence, and it cannot detect a misattribution of
+authorship.**
+
 
 ## DOCUMENTATION THAT AGREES WITH THE HYPOTHESIS YOU ARRIVED HOLDING TERMINATES THE SEARCH — AND IT DECAYS TOWARD CONFIRMING THE READER, NOT TOWARD STOPPING THEM
 
