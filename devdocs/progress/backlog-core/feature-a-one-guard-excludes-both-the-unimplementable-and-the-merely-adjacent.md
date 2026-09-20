@@ -127,3 +127,66 @@ routine across the table.
 variants — a fixture in the shape of `test/test_esp_bare_managed.pas` that
 asserts VALUES, so a split that compiles and then corrupts a payload is a diff
 rather than a pass. Build it before touching the span, not after.
+
+## THE SPAN IS THE SECOND WALL, NOT THE FIRST — MEASURED 2026-09-20, AND IT CORRECTS THE SECTION ABOVE
+
+The census above framed this as "split the variant span". **That is not where a
+bare Pascal variant program stops.** Written two hours earlier by me, from
+reading the span rather than from running a program, which is the whole reason
+the fixture exists.
+
+`test/test_esp_bare_variant.pas` on `--esp-profile=bare --target=riscv32`
+(identical on xtensa) refuses with:
+
+```
+pascal26:95: error: variant unbox: VariantToInt64 builtin not loaded
+```
+
+`VariantToInt64` is not in `builtinheap.pas` at all — it is in
+`compiler/builtin/builtin.pas`, **which has ZERO ESP directives in it.** The
+wall is `pasparser_prog.inc:1526`, where the builtin-unit pull is suppressed
+for `TargetIsEspClass`, with the comment *"those targets cannot compile the
+unit, and there a variant program fails at the call site instead."*
+
+**THAT PREMISE IS A COMMENT, SO IT GOT MEASURED RATHER THAN OBEYED** — the
+hazard-block rule. Three stubs, each one clearing the previous wall, restoring
+the tree between:
+
+| forced | next wall |
+| --- | --- |
+| `uses builtin` on bare | `StrFloat` → `PxxSciDigits17`, i.e. the excluded builtinheap span — **so the premise is TRUE, and the reason is float formatting, not anything about ESP** |
+| + the span stubbed | `this target has no FPU and the soft-float kernel __pxx_l2d is not linked` |
+| + `uses softfloat` in the program | **unchanged** — a program-level `uses` does not satisfy it, because the pull is ORDERED |
+
+The last row lands on `frontend_prologue.inc:157`:
+
+```pascal
+if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+   (not EspBareBoot) then
+  ParseUsesUnitAmbient('softfloat');
+```
+
+`PullSoftFloatBeforeBuiltinHeap`, whose own comment states the policy: *"bare
+stays on its own on-demand scan (no RTL, and ~54-64KB of flash a float-free MCU
+program must not pay)."*
+
+**SO THE CHAIN ENDS AT A DELIBERATE POLICY, NOT A DEFECT, AND THE TICKET
+CHANGES SHAPE.** Variants on bare is not a guard-splitting job. It is:
+`variant` → the builtin unit → float FORMATTING → softfloat → a named line that
+deliberately skips bare. **Splitting `PXXVarBinOp`'s double arm, which the
+section above proposed, would not have moved this at all** — the program never
+reaches `PXXVarBinOp`; it stops one layer up, in a different file, at a
+suppressed unit pull.
+
+**The one-sentence question is therefore NOT the one written above.** It is:
+**does a bare Pascal program that touches a variant pay the ~54-64 KB softfloat
+cost, or does `builtin.pas`'s float-formatting surface (`StrFloat` and its
+neighbours) get excluded so the rest of the unit is reachable without it?**
+
+**FIRST-FAILURE CAVEAT, AND IT IS LOAD-BEARING HERE:** each row above is the
+FIRST error after clearing the one before it. I stubbed rather than deepening a
+census, per the rule, and a stub answers *"what is next"*, never *"what is
+left"*. There may be further walls behind the softfloat one; nothing here says
+there are not. What is established is that the first three are these three, in
+this order, and that **none of them is the variant span the section above was
+about.**
