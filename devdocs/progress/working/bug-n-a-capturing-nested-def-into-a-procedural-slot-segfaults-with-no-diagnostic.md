@@ -2,9 +2,10 @@
 track: N
 prio: 40
 type: bug
-owner:
+owner: frankb-8e
 blocked-by: []
 summary: "MECHANISM: PyCarrierNamedProc answers -1 for the carrier shape a LIFTED nested def produces, so the coercion site's warn arm never fires and nothing is said at all. The value still goes into the procedural slot and calling through it is a SIGSEGV. SPRINGS whenever a def that captures enclosing state is handed by NAME to a procedural parameter. Unchanged behaviour -- identical on pin v412 and at HEAD -- and it is the SILENT member of a family whose other members now either work or refuse by name."
+status: working
 ---
 
 # A capturing nested def into a procedural slot segfaults with no diagnostic
