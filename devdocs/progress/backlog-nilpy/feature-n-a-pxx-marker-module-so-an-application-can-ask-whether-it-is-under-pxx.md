@@ -44,3 +44,28 @@ absence of ctypes, so implementing ctypes later cannot flip anything.
 ## Not pxx's to change
 
 The application-side edits in lekkerzeilen and TSP belong to those repos' seats.
+
+## ADDENDUM 2026-09-20 — the superglobal variant, and why the import wins
+
+The owner offered a simpler shape and then settled it himself (relayed by
+frankuser, secondhand): *"it could even be simpler by having pxx define a
+'superglobal' that we could just test.. (so just - if __HAS_PXX is not none: )..
+but the import hack is fine too, just make the name a bit more magic (dunders, or
+some other special chars)"*.
+
+**The import idiom with a dunder-ish name is the shape to build.** A bare
+superglobal is NOT symmetric: under CPython an undefined name raises `NameError`
+rather than evaluating to None, so `if __HAS_PXX is not None:` CRASHES there and the
+application needs a `try/except NameError` anyway — uglier than the import, and
+linters and type checkers flag the undefined name besides.
+`if globals().get('__PXX__'):` would work on both sides, **but that depends on NilPy
+supporting `globals()`, which is UNVERIFIED — do not quote it as available without
+measuring it.**
+
+**The exact spelling is still the owner's.** He asked for dunders or other special
+characters; `__pxx__` was a seat's suggestion, not his instruction.
+
+**The property that makes this cheap on the application side, and the reason he
+likes it:** pxx resolves the import at COMPILE time, so the CPython arm is never
+compiled. The application keeps its ctypes code exactly where it is and **pxx does
+not need to understand any of it.**
