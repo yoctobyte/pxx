@@ -127,3 +127,54 @@ silicon and only emulated in qemu. `make test-esp-idf` guards the qemu side.
 
 Still worth watching on hardware: qemu's systimer is not the S2/S3 silicon's, so
 a timer that works in emulation and not on the board would be new information.
+
+## 2026-09-20 — two open claims attached here rather than filed separately (frankS)
+
+Both belong to this ticket's existing acceptance rows and neither needs a page
+of its own. Attaching the evidence to the ticket that already called it.
+
+### 1. The UART verdict now has an instrument, and the instrument is unverified
+
+`tools/esp_flash.sh` gained `--project`, `--no-flash`, chip inference, a
+`main.expected` oracle and a `--project`-scoped IDF-log strip (`7d4f7ea33`), so
+the four NilPy demos have a route to a board with a real pass/hang verdict
+rather than a human reading scrollback. **Established before hardware: all four
+are OK in qemu against pin v413.**
+
+**WHAT IS NOT ESTABLISHED, AND IT IS THE WHOLE POINT OF THIS TICKET'S FIRST
+ACCEPTANCE ROW:** whether the log filter matches what real silicon emits. The
+filter was written against qemu output and the ROM/bootloader preamble differs
+on a physical part. **A filter tuned to qemu can strip a line the board prints
+and report a clean pass**, which is the failure this ticket exists to catch, so
+do not read the qemu greens as evidence about it. **The board is the only
+instrument**; say which one, and which chip, beside the first green.
+
+### 2. "A basic peripheral/ISR fires" IS A ROW THAT PASSES WHILE THE CONTRACT IS VIOLATED
+
+The acceptance above asks that an ISR *fire*. **Firing is necessary and is not
+sufficient, and the gap is not cosmetic.** The callback-ABI work has three
+consumers; frankb-8e took two and deliberately left ESP interrupts, because the
+contract there genuinely differs: **boxing ALLOCATES, and an allocation inside
+an interrupt handler is a latent crash with good latency numbers.** It does not
+fault on the tick that allocates. It faults later, somewhere else, on a heap
+another context was using — and every timing number collected in between looks
+correct, because the timing IS correct.
+
+**So a hardware run that prints `tick=1 … tick=5` and `done ticks=5 status=0`
+satisfies the row as written and says nothing about the contract.** This is the
+expected-value collision in this ticket's own acceptance: *if the machinery did
+nothing about allocation at all, would this row still pass?* Yes, every time.
+
+**The condition that springs it** is any callback path reaching an ISR context
+through a boxed value — not any particular demo, which is why this is stated as
+a mechanism rather than as a row that fires today. **What would settle it** is
+an assertion that observes the allocator rather than the output: a run with the
+ESP heap instrumented across the handler, asserting the allocation count is
+UNCHANGED across N ticks. That is a different assertion class from `expect_same`
+and cannot be reached by strengthening the tick comparison, in the same way a
+leak cannot fail a value check.
+
+**Ownership:** frankS holds this question and cannot close it — there is no
+board on this box, so it is the same honest kind of open as row 1. Not going
+near the ESP consumer of the callback ABI until there is silicon; no collision
+with 8e in either direction, confirmed through the coordinator.
