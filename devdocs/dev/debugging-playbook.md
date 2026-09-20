@@ -11757,6 +11757,25 @@ unrelated roles at once:
 trap does not apply to them would be wrong — **it fired at 5168 the whole time.**
 A frozen binary still reads today's units on either route.
 
+**AND WHICH ARM FIRES DEPENDS ON WHICH BINARY YOU RAN, SO THE "FALLBACK" IS THE
+NORMAL PATH FOR EVERY PINNED RUN.** The 5168 arm anchors the RTL at
+`ExeDir/../lib/rtl/`, which assumes the binary sits at `<root>/compiler/`. **The
+STABLE binary does not** — it lives at `<root>/stable_linux_amd64/<profile>/`,
+**two levels down** — so its `../lib/rtl` does not exist and the exe-dir arm
+misses every RTL unit. `pasparser_proc.inc` says so in its own comment, and says
+it went unnoticed in-repo **precisely because the CWD-relative fallbacks rescue
+it** (the escaped case is
+`bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path`:
+run the stable binary from any other directory and `uses SysUtils` silently
+resolves to nothing, then every symbol it should have supplied fails one by one,
+far from the cause). **So `PXX=pinned` — `runbin.sh`'s pinned mode, `gate.sh`,
+every `$(PXX_STABLE)` consumer — runs on the 5759 route as a matter of course.**
+Do not read "fallback" as "exotic": **both arms are ordinary, they differ by
+which binary you invoked, and both read the working tree.** The routine
+itself now probes for `sysutils.pas` and re-anchors a level higher rather than
+guessing the depth — done once, so every `rtldir`/`lcldir`/`asmdir` below is
+fixed together.
+
 **AND THE READ-SET IS WIDER THAN THE BUILD-SET, WHICH IS WHY NEITHER `make` NOR
 YOUR OWN DIFF ENUMERATES IT.** Two overlapping, non-identical sets at HEAD:
 
