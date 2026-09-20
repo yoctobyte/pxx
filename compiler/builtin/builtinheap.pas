@@ -3833,7 +3833,12 @@ begin
   end;
 end;
 
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
 { Forward only where the BODY exists — PXXClassFinalize is itself inside
   {$ifndef PXX_ESP}, so an unconditional forward left it unresolved on the
   ESP profile (test-emit-obj: "unresolved forward: PXXClassFinalize"). }
@@ -3967,7 +3972,7 @@ end;
 
 { PXXClassFinalize's forward used to sit here; it is declared in the
   interface now, with the rest of the code generator's entry points. }
-{$endif}
+{ (end of the formerly profile-gated span) }
 
 { Free an instance whichever population it belongs to: headered -> release
   (rc discipline), plain GetMem -> ordinary free. This is what the FreeMem
@@ -3994,9 +3999,14 @@ begin
     PXXObjRelease(p)
   else
   begin
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
     PXXClassFinalize(p);   { ESP has no class-layout finalizer to run }
-{$endif}
+{ (end of the formerly profile-gated span) }
     PXXFree(p);
   end;
 end;
@@ -4380,7 +4390,12 @@ begin
   else Result := 0;
 end;
 
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
 { Managed-element dynarray + record retain/release (strings/records/nested
   arrays). Not on ESP yet -- the ESP dynarray (above) is unmanaged-element only. }
 procedure PXXDynArrayIncRef(p: Pointer);
@@ -4511,7 +4526,9 @@ begin
         while i < len do
         begin
           itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+{$ifndef PXX_ESP}
           PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+{$endif}
           i := i + 1;
         end;
       end
@@ -4544,7 +4561,9 @@ begin
           while i < len do
           begin
             itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_ESP}
             PXXVarClear(itemAddr);
+{$endif}
             i := i + 1;
           end;
         end;
@@ -4612,7 +4631,9 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+{$ifndef PXX_ESP}
         PXXIntfAddRef(itemAddr, Int64(baseRecDesc));
+{$endif}
         i := i + 1;
       end;
     end
@@ -4630,7 +4651,9 @@ begin
         i := 0;
         while i < len do
         begin
+{$ifndef PXX_ESP}
           PXXPromoRetainOne(Pointer(Int64(arrData) + i * elSize));
+{$endif}
           i := i + 1;
         end;
       end;
@@ -4647,7 +4670,9 @@ begin
         while i < len do
         begin
           itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_ESP}
           PXXVarRetain(itemAddr);
+{$endif}
           i := i + 1;
         end;
       end;
@@ -4705,7 +4730,9 @@ begin
     while i < len do
     begin
       itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+{$ifndef PXX_ESP}
       PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+{$endif}
       i := i + 1;
     end;
   end
@@ -4739,7 +4766,9 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_ESP}
         PXXVarClear(itemAddr);
+{$endif}
         i := i + 1;
       end;
     end;
@@ -4807,7 +4836,11 @@ begin
              descriptors emit kind 5 that asymmetry becomes a double free on the
              SetLength survivor path — the same release-without-retain shape that
              made 9cb079528 segfault — so both halves land in one change. }
+{$ifndef PXX_ESP}
           PXXVarRetain(itemAddr);
+{$else}
+          itemAddr := itemAddr   { ESP: no variants; see the decl guard }
+{$endif}
         7: { Promo field — the mirror of the release arm's PXXStrDecRef, landing
              with it because a release without its retain destroys SetLength
              survivors instead of merely leaking them. }
@@ -4847,7 +4880,11 @@ begin
     typeRef := PInt32(memberPtr + 12)^;
     memberAddr := Pointer(Int64(recAddr) + offset);
     if kind = 4 then
+{$ifndef PXX_ESP}
       PXXIntfAddRef(memberAddr, typeRef)
+{$else}
+      memberAddr := memberAddr   { ESP: no COM interfaces; see the decl guard }
+{$endif}
     else if kind = 3 then
     begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
@@ -4890,7 +4927,11 @@ begin
     typeRef := PInt32(memberPtr + 12)^;
     memberAddr := Pointer(Int64(recAddr) + offset);
     if kind = 4 then
+{$ifndef PXX_ESP}
       PXXIntfRelease(memberAddr, typeRef)
+{$else}
+      memberAddr := memberAddr   { ESP: no COM interfaces; see the decl guard }
+{$endif}
     else if kind = 3 then
     begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
@@ -4967,7 +5008,11 @@ begin
         5: { Variant field: release any managed/object payload, recursing
              through PXXObjRelease's finalizer for a held container
              (feature-nilpy-object-reclamation) }
+{$ifndef PXX_ESP}
           PXXVarClear(itemAddr);
+{$else}
+          itemAddr := itemAddr   { ESP: no variants; see the decl guard }
+{$endif}
         6: { NilPy class-typed field: drop the instance's ref on its child
              (magic-guarded — a Pascal instance stored here no-ops) }
           PXXObjRelease(Pointer(PMachineWord(itemAddr)^));
@@ -5065,7 +5110,9 @@ begin
     begin
       offset := PInt32(memberPtr)^;
       typeRef := PInt32(memberPtr + 12)^;
+{$ifndef PXX_ESP}
       PXXIntfRelease(Pointer(Int64(inst) + offset), typeRef);
+{$endif}
       PMachineWord(Pointer(Int64(inst) + offset))^ := 0;
     end;
     memberPtr := memberPtr + 16;
@@ -5119,7 +5166,7 @@ begin
 
   PXXDynArrayReleaseDepth(arrData, depth, baseKind, baseRecDesc);
 end;
-{$endif}
+{ (end of the formerly profile-gated span) }
 
 { Forward byte copy (non-overlapping or dst < src). Used by cross backends that
   lack a single-instruction block move (e.g. ARM32) for whole-record copies. }
@@ -5174,7 +5221,12 @@ begin
   end;
 end;
 
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
 { SetLength for a depth-1 dynamic array. arrSlot = address of the handle slot;
   newLen = requested element count; desc = the array's layout descriptor
   (+4 elSize, +8 depth, +12 baseKind, +16 baseTypeRef). Allocates a fresh
@@ -5242,7 +5294,7 @@ begin
   PMachineWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayRelease(oldData, desc);
 end;
-{$endif}
+{ (end of the formerly profile-gated span) }
 
 { SetLength for a managed AnsiString. strSlot = address of the handle slot
   (holds the data pointer or nil); newLen = requested character count. Allocates

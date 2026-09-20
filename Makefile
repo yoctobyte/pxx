@@ -12278,6 +12278,24 @@ test-core: $(COMPILER)
 	tools/expect_same.sh esp-bare-riscv32-data-align8 "$$(( ( $$(sed -n 's/.* codeseg=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_rv.log) + 116 ) % 8 ))" "0"
 	./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_socf_oracle26
 	tools/expect_same.sh test_socf_oracle26 "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" "7|16|32|75|1234567|-32|65537|ESP BARE FLOAT OK|"
+	# MANAGED RECORDS on bare. Until 2026-09-20 every one of these shapes refused
+	# with `compiler error: PXXRecordRelease not found` -- not because anything
+	# was unimplementable, but because builtinheap.pas gated contiguous SPANS of
+	# source on the profile marker and the record/dynarray walks sat next to
+	# PXXStrLoadFile, which genuinely needs a filesystem. The thirteen bare rows
+	# above all avoid managed members, which is precisely why this never showed
+	# as a red: a suite that avoids the shape certifies its absence.
+	# The oracle row is the point -- a compile-only row cannot tell a working
+	# walk from one that compiles and corrupts a refcount.
+	# feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_managed.pas $(TESTTMP)/test_socm_rv26
+	./$(COMPILER) --esp-profile=bare --target=esp32c3 test/test_esp_bare_managed.pas $(TESTTMP)/test_socm_c326
+	cmp $(TESTTMP)/test_socm_rv26 $(TESTTMP)/test_socm_c326
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_managed.pas $(TESTTMP)/test_socm_xt26
+	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare_managed.pas $(TESTTMP)/test_socm_s326
+	cmp $(TESTTMP)/test_socm_xt26 $(TESTTMP)/test_socm_s326
+	./$(COMPILER) test/test_esp_bare_managed.pas $(TESTTMP)/test_socm_oracle26
+	tools/expect_same.sh test_socm_oracle26 "$$($(TESTTMP)/test_socm_oracle26 | tr '\n' '|')" "local:in|copy:src:src|fin2:two|managed ok|"
 	# ...and a float-free bare program must still pay NOTHING for it: the pull is
 	# on demand precisely because softfloat is ~54-64KB of flash. If this ever
 	# starts linking the unit, the scan has become unconditional.
