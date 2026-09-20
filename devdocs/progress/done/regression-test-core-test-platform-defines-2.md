@@ -70,4 +70,4 @@ the hosted one, so a tier list chosen by "which subsystem did I touch" runs
 neither. Banked as a class in `devdocs/dev/debugging-playbook.md`.
 The row now carries a comment saying what it guards, so the next person to see
 it red does not have to rediscover which axis it is about.
-- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ee5c84f46.
