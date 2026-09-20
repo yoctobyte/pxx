@@ -2729,11 +2729,64 @@ begin
   PyClosureAllocRow := c;
 end;
 
+{ THE ONE STATIC EDGE FROM CALLABLE DISPATCH INTO THE INTERPRETER, CUT ON
+  PURPOSE -- and the reason is a size one, measured, not a style one.
+
+  PyClosureInvoke IS the tree-walking interpreter: it saves and restores the
+  token buffer, the locals and the function table, and runs a body through
+  ExecStatement. Every `pyclosure_is(o)` arm below used to CALL it directly,
+  and those arms live in the routines a compiled NilPy program actually
+  reaches -- pyvar_callv0..4, PyCallKey1, pyclosure_call_ptr. So the pass saw
+  a static edge from ordinary callable dispatch into the whole evaluator, and
+  every NilPy program linked it. Measured 2026-09-20 on examples/esp32/nilpy-c3
+  (xtensa, --dce): cutting that one edge takes live code from 1,721,914 B to
+  827,330 B, 52% of the image, in a program that never evaluates anything.
+
+  THE INVARIANT THAT MAKES IT SAFE, and it is the whole design: a closure
+  object can ONLY come from PyMakeClosureObj, both of whose callers copy the
+  interpreter's live token buffer into a Closures[] row. So `pyclosure_is(p)`
+  can only be True if PyMakeClosureObj has run, and PyMakeClosureObj installs
+  the hook. A True predicate therefore implies a non-nil hook, and the nil arm
+  below is unreachable rather than merely unlikely.
+
+  WHAT THE PASS CAN NOW SEE, which is the point: a program that never mints an
+  interpreted closure never reaches this install, so nothing roots the
+  evaluator and it is dropped. A program that DOES -- the uforth
+  `define_word(native=lambda vm: ...)` idiom, where a lambda is stored into a
+  Callable FIELD, which the frontend lowers to pyclosure_src_new from the
+  body's SOURCE text -- reaches it and correctly pays. That is a reason the
+  PASS can check, in place of one only the program's behaviour knew.
+
+  NOT A LAZY HOOK OF THE PyIterCallHook KIND. That one was installed by
+  whoever happened to run first, which is what made
+  bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload
+  possible; it is installed unconditionally in this unit's initialization and
+  stays that way. This hook is installed at the moment the only object that
+  can reach it is created, which is an ordering nothing can race. }
+procedure PyClosureInvoke(cidx: Integer; args: TPyList; var res: Variant); forward;
+
+type
+  TPyClosureInvokeFn = procedure(cidx: Integer; args: TPyList; var res: Variant);
+var
+  PyClosureInvokeHook: TPyClosureInvokeFn;
+
+procedure PyCallClosureBody(cidx: Integer; args: TPyList; var res: Variant);
+begin
+  if PyClosureInvokeHook <> nil then PyClosureInvokeHook(cidx, args, res)
+  else res := pynone;   { unreachable -- see the invariant above }
+end;
+
+
 function PyMakeClosureObj(cidx: Int64): Pointer;
 var o: PClosureObj;
 begin
   PXXObjFinalizeHook := @PyObjFinalize;
   PyClosureFinalizeHook := @PyEvalClosureFree;
+  { The interpreter becomes reachable HERE and nowhere else. NOT in
+    pyboundfn_new beside the other two: a bound compiled fn is machine code
+    and needs no evaluator, and installing it there would root the tree for
+    every program that takes a nested def as a value. }
+  PyClosureInvokeHook := @PyClosureInvoke;
   o := PClosureObj(PXXObjAllocRaw2(SizeOf(TClosureObj)));
   o^.Magic := @PyClosureMagicMarker;
   o^.Cidx  := cidx;
@@ -5545,7 +5598,7 @@ begin
     if pyclosure_is(o) then
     begin
       args := TPyList.Create;
-      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      PyCallClosureBody(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
     else pyboundfn_callvn(o, pynone, pynone, pynone, 0, Result);
@@ -5701,7 +5754,7 @@ begin
     begin
       args := TPyList.Create;
       args.append(a0);
-      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      PyCallClosureBody(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
     else pyboundfn_callvn(o, a0, pynone, pynone, 1, Result);
@@ -5732,7 +5785,7 @@ begin
     begin
       args := TPyList.Create;
       args.append(a0); args.append(a1);
-      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      PyCallClosureBody(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
     else pyboundfn_callvn(o, a0, a1, pynone, 2, Result);
@@ -5771,7 +5824,7 @@ begin
     begin
       args := TPyList.Create;
       args.append(a0); args.append(a1); args.append(a2); args.append(a3);
-      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      PyCallClosureBody(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
       Exit;
     end;
@@ -5806,7 +5859,7 @@ begin
     begin
       args := TPyList.Create;
       args.append(a0); args.append(a1); args.append(a2);
-      PyClosureInvoke(PClosureObj(o)^.Cidx, args, Result);
+      PyCallClosureBody(PClosureObj(o)^.Cidx, args, Result);
       args.Free;
     end
     else pyboundfn_callvn(o, a0, a1, a2, 3, Result);
@@ -5845,7 +5898,7 @@ begin
   begin
     if pyclosure_is(o) then
     begin
-      PyClosureInvoke(PClosureObj(o)^.Cidx, args, res);
+      PyCallClosureBody(PClosureObj(o)^.Cidx, args, res);
       Exit;
     end;
     raise TypeError.Create('a compiled closure takes at most 3 arguments, got '
@@ -6195,7 +6248,7 @@ var args: TPyList;
 begin
   args := TPyList.Create;
   args.append(a0);
-  PyClosureInvoke(PClosureObj(NativeInt(PPyRec(@clv)^.Payload))^.Cidx, args, Result);
+  PyCallClosureBody(PClosureObj(NativeInt(PPyRec(@clv)^.Payload))^.Cidx, args, Result);
   args.Free;
 end;
 
@@ -6216,7 +6269,7 @@ var args: TPyList;
 begin
   args := TPyList.Create;
   args.append(a0);
-  PyClosureInvoke(PClosureObj(objptr)^.Cidx, args, Result);
+  PyCallClosureBody(PClosureObj(objptr)^.Cidx, args, Result);
   args.Free;
 end;
 
@@ -6546,7 +6599,7 @@ var args: TPyList; r: Variant;
 begin
   args := TPyList.Create;
   args.append(a0);
-  PyClosureInvoke(PClosureObj(objptr)^.Cidx, args, r);
+  PyCallClosureBody(PClosureObj(objptr)^.Cidx, args, r);
   args.Free;
   pyclosure_call_ptr := 0;
 end;

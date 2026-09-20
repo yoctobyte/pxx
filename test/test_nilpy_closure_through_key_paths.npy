@@ -1,0 +1,76 @@
+# Every route from ordinary callable dispatch into an INTERPRETED closure, in
+# one program -- the positive control for the PyClosureInvokeHook seam, which
+# is what lets a program that mints no such closure drop the whole tree-walking
+# evaluator (52% of the ESP NilPy image, measured 2026-09-20).
+#
+# THE SHAPE IS LOAD-BEARING AND IT IS NOT THE OBVIOUS ONE. Most NilPy lambdas
+# are LIFTED to compiled code and never touch the interpreter -- a fixture full
+# of `key=lambda w: len(w)` passes identically with the hook removed, which I
+# measured before writing this one. The lifter refuses exactly one thing: a
+# capture of a managed STRING that is a LOCAL or PARAM of the enclosing
+# function (bug-nilpy-lifted-lambda-cannot-capture-a-managed-string -- a string
+# handle cannot ride a bound slot). That refusal falls back to
+# pyclosure_src_new, which builds a pyeval closure from the body's SOURCE text.
+# So every lambda below closes over a string local, and `make_*` exists solely
+# to make that local a local. A module-level string is NOT enough: it resolves
+# as a global and the lambda lifts.
+#
+# WHY IT CAN FAIL. With the hook uninstalled, PyCallClosureBody returns None
+# rather than running the body, so each row still RUNS and prints a wrong
+# answer -- sorting by None, a min() over Nones. Verified by removing the
+# install and re-running: this file's output changes. A fixture whose lambdas
+# lift cannot fail that way, which is exactly why the first version of this
+# file was useless.
+#
+# Each row enters by a DIFFERENT door, because the seam has one call site per
+# door and a fixture that exercises one certifies the others:
+#   sorted(key=)              -> PyCallKey1
+#   min/max, key in a VAR     -> PyCallKey1 via PyIterCallHook (pylib cannot
+#                                see PyCallKey1 directly; keep that install
+#                                unconditional -- a lazy one was
+#                                bug-nilpy-min-max-with-a-key-held-in-a-variable)
+#   map()/filter()            -> pymap_call / pyfilter_call
+#   f(x) through a variable   -> pyvar_callv1
+
+def make_keyer():
+    # A string LOCAL. This is what stops the lambda being lifted.
+    sep = "|"
+    return lambda w: sep + str(len(w)) + sep + w
+
+
+def make_upper():
+    pad = ""
+    return lambda w: pad + w.upper()
+
+
+def make_longer_than(n):
+    mark = ""
+    return lambda w: len(mark + w) > n
+
+
+def make_doubler():
+    unit = ""
+    return lambda v: unit + v + v
+
+
+words = ["pear", "fig", "banana", "kiwi", "apple"]
+
+# 1. sorted with an interpreted closure as key, both directions
+keyer = make_keyer()
+print(sorted(words, key=keyer))
+print(sorted(words, key=keyer, reverse=True))
+
+# 2. min/max reaching the same closure from pylib, key held in a variable
+print(min(words, key=keyer), max(words, key=keyer))
+
+# 3. map and filter over an interpreted closure
+print(sorted(map(make_upper(), words)))
+print(sorted(filter(make_longer_than(3), words)))
+
+# 4. called directly through a variable
+twice = make_doubler()
+print(twice("ab"))
+
+# 5. a second closure minted after the first has been called, so the row is not
+#    just the first-ever closure working
+print(sorted(["dd", "c", "bbb"], key=make_keyer()))

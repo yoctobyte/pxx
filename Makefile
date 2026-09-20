@@ -905,6 +905,29 @@ test-nilpy: $(COMPILER)
 	# a lambda's DEFAULT-parameter captures (key=key) reach invoke time
 	./$(COMPILER) test/test_nilpy_lambda_capture.npy $(TESTTMP)/test_nilpy_lamcap26
 	tools/expect_same.sh test_nilpy_lamcap26.1 "$$($(TESTTMP)/test_nilpy_lamcap26)" "$$(printf '%b' '[4, 3, 2, 1]\n[1, 2, 3, 4]\n[4, 3, 2, 1]\n[1, 2, 3, 4]')"
+	# AN INTERPRETED CLOSURE REACHED THROUGH EVERY DISPATCH DOOR -- the positive
+	# control for the PyClosureInvokeHook seam, which is what lets a program that
+	# mints no pyeval closure drop the tree-walking evaluator entirely (52% of the
+	# ESP NilPy image, measured 2026-09-20 on examples/esp32/nilpy-c3, xtensa).
+	#
+	# THE FIXTURE'S SHAPE IS THE TEST. Most NilPy lambdas are LIFTED to compiled
+	# code and never reach the interpreter, so a file full of `key=lambda w:
+	# len(w)` passes IDENTICALLY with the hook removed -- measured, and it is why
+	# the first version of this fixture was worthless. The lifter refuses exactly
+	# one thing: a capture of a managed string that is a LOCAL of the enclosing
+	# function, which falls back to pyclosure_src_new. Every lambda in the file
+	# closes over one, and the `make_*` wrappers exist only to make that string a
+	# local -- a module-level string resolves as a global and the lambda lifts.
+	#
+	# NEGATIVE CONTROL, RUN: with the install removed from PyMakeClosureObj this
+	# program dies (rc=217, no output) instead of printing its lines. So the row
+	# can fail, and it fails on the one thing it is about.
+	#
+	# CPython IS THE ORACLE, computed here rather than pasted: every construct in
+	# the file is upward-compatible Python, so a pasted expectation would pin
+	# whatever we printed the day it was written.
+	./$(COMPILER) test/test_nilpy_closure_through_key_paths.npy $(TESTTMP)/test_nilpy_clokey26
+	tools/expect_same.sh test_nilpy_clokey26 "$$($(TESTTMP)/test_nilpy_clokey26)" "$$(python3 test/test_nilpy_closure_through_key_paths.npy)"
 	# a defaulted lambda parameter the CALLER supplies overrides the default, on
 	# BOTH lowerings — they are reached by body shape, not by signature
 	./$(COMPILER) test/test_nilpy_lambda_default_override.npy $(TESTTMP)/test_nilpy_lamdef26

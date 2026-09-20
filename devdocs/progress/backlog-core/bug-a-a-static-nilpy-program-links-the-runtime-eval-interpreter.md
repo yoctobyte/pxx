@@ -196,3 +196,65 @@ and lazy installation is what caused it.
 **LIVE, not REACHABLE, still.** Nothing above says the interpreter runs in this
 demo; it says the pass cannot prove it does not. The proposal is a way to make
 the proof structural rather than a claim.
+
+## 2026-09-20 (frankS) — BUILT. The hook is in, and the win is conditional by construction
+
+`PyClosureInvoke` is no longer called directly by anything. The eight
+dispatch-side call sites — `pyvar_callv0..4`, `pyvar_wide_prelude`,
+`pyclosure_call1`, `pyclosure_call_ptr` — go through `PyCallClosureBody`, which
+calls a hook that **`PyMakeClosureObj` installs**. That is the only place a
+closure object can come from, so:
+
+- a program that mints an interpreted closure reaches the install, roots the
+  evaluator, and correctly pays for it;
+- a program that does not never reaches it, and the evaluator is dropped.
+
+**Measured, same program and flags as the tables above:**
+
+| | before | after |
+| --- | --- | --- |
+| xtensa live code | 1,721,914 B | **827,330 B (−894,584, −52%)** |
+| xtensa object | 1,923,596 B | 990,656 B |
+| riscv32 live code | 2,070,376 B | 2,071,164 B (+788) |
+
+**riscv32 is unchanged and that is the predicted result, not a disappointment.**
+Its stub-target rule roots those bodies independently of any call edge; see
+[[bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program]]. Nobody
+may quote the 52% as an ESP-wide figure until that rung moves.
+
+**Today's `@proc` fix is a PREREQUISITE and not a coincidence.** The install
+line takes `@PyClosureInvoke` inside `PyMakeClosureObj`. Under the old rule
+that address rooted the evaluator unconditionally, from a body the pass was
+about to delete — the hook would have bought nothing.
+
+### What the control cost, and it is the part worth reading
+
+The obvious fixture does not test this. **Most NilPy lambdas are LIFTED to
+compiled code and never reach the interpreter**, so a file full of
+`key=lambda w: len(w)` passes *identically* with the hook removed — measured,
+not feared. The lifter refuses exactly one shape: a capture of a **managed
+string that is a LOCAL or param of the enclosing function**
+(`bug-nilpy-lifted-lambda-cannot-capture-a-managed-string`), which falls back
+to `pyclosure_src_new` and builds a closure from the body's source text. A
+module-level string is not enough — it resolves as a global and the lambda
+lifts.
+
+`test/test_nilpy_closure_through_key_paths.npy` is built on that shape and
+enters by every door (`sorted(key=)`, `min`/`max` with the key in a variable,
+`map`/`filter`, a direct call through a variable). Negative control run: with
+the install removed the program **dies, rc=217** rather than printing. CPython
+is the oracle, computed in the row rather than pasted.
+
+**The instrument found this in one command** — `--dce-why=pyclosureinvoke`
+answered `PyClosureInvoke <- DROPPED` for the first fixture and
+`PyClosureInvoke <- @PyMakeClosureObj <- pyclosure_src_new <- make_doubler`
+for the second. Without it I would have shipped a green fixture that tested
+nothing.
+
+### Still open, and it is the next thing to price
+
+`pyparser.inc` emits a direct call to `pyclosure_call_ptr` for a call through a
+**Callable field** (`pyclosure_is(field) ? pyclosure_call_ptr(...) : <defCall>`).
+That is a frontend-emitted edge, so it is rooted by the compiled program rather
+than by the hook, and any program using that shape links the evaluator again.
+Not measured here; the demo does not use it.
