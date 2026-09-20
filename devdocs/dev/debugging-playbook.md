@@ -32069,12 +32069,20 @@ PROPERTY OF THE MESSAGE KIND, NOT OF THE COMPILER.** Added by frankS 2026-09-20
 after measuring at HEAD, because a reader who adopts the simpler rule will break
 a row that is currently correct:
 
+Compiler `d9e9b124ee79` at `c2a9f67b5845`, and the cells are WHERE THE MESSAGE
+LANDS rather than byte counts, deliberately — see the provenance note below:
+
 | what | stdout | stderr |
 | --- | --- | --- |
-| `error:` on a bad source | **84 B** | 0 B |
-| `warning:` (unknown directive) | **239 B** | 0 B |
-| the `ok: <path> [code=…]` success line | **158 B** | 0 B |
-| the `--dce-why=` report | 158 B (the `ok:` line only) | **2380 B** |
+| `error:` on a bad source | **the message** | empty |
+| `warning:` (unknown directive) | **the message** | empty |
+| the `ok: <path> [code=…]` success line | **the line** | empty |
+| the `--dce-why=` report | `ok:` line only | **the whole report, 2380 B** |
+
+Corroborated from the other end by frankz-e5, independently and by a different
+route: `compiler/dce.inc:316` is `writeln(StdErr, 'dce-why: ...')`, and its
+`2380 B` for the report matches this measurement exactly from a different
+invocation.
 
 So **diagnostics go to stdout and a report requested by a flag goes to stderr**,
 and `Makefile:36157` greps `2>$(TESTTMP)/dcewhy_call.log` for
@@ -32094,16 +32102,41 @@ can infer from one neighbouring row.
 binary `d9e9b124ee790727`, fresh): a four-line `program p; WriteLn(1)` with
 `--dce-why=rootedbycall` gives **157 B stdout / 2421 B stderr**; a three-line
 program with an unknown `{$...}` directive gives **242 B stdout / 0 B stderr**.
-**Different byte counts from the table above because it is a different source
-file — a different population, not a disagreement**; both rows say the same
-thing about which stream carries what, which is the claim.
+**Different byte counts from the ones first published here because it is a
+different source file — a different population, not a disagreement**; both rows
+say the same thing about which stream carries what, which is the claim.
 
 **AND THE ROBUST DEFAULT IS TO CAPTURE BOTH: `>log 2>&1`.** The corrected row
 that came out of this incident does exactly that, so it is immune to the
 message-kind distinction entirely. Precision about the stream is what you need
 when you *cannot* capture both — when the guard must distinguish the streams, or
 when one of them is the thing under test. Reach for `>log 2>&1` first and spend
-the measurement only when a single stream is load-bearing.
+the measurement only when a single stream is load-bearing. **Note the asymmetry
+with this section's own headline, because they are not in tension:** `>log 2>&1`
+is the right thing for a guard to CAPTURE and the wrong thing to VALIDATE a
+single-stream guard with.
+
+**PROVENANCE, AND IT IS WHY THIS TABLE NO LONGER CARRIES BYTE COUNTS.** The first
+version of it was measured on a `compiler/pascal26` that predated
+`085c43903` — a compiler commit that had arrived in the same session's own pull.
+**`git status` says nothing about which binary is on disk**, so a tree at
+origin's tip carried a stale answer with nothing announcing it. Rebuilt
+(`converged after 1 round(s)`, `d9e9b124ee79`) and re-measured: **every stream
+verdict held and one number moved**, warning-path stdout 239 B → 242 B **on the
+identical source file**. The three bytes are in the `ok:` line's own
+`code=`/`codeseg=` figures, which are a property of the compiler that emitted
+them.
+
+**So a moved byte count in this section has TWO causes and they are worth telling
+apart**: a different SOURCE (8e's rows above, same binary) and a different
+BINARY (this row, same source). Neither is a disagreement about routing, and
+**that is the argument for not putting byte counts in the table at all** — an
+identity survives both a rebuild and a re-phrased fixture; a quantity survives
+neither. Tonight's own identity-over-quantity lesson landing on tonight's own
+table. The same evening's coordinator relayed a verification stamp from a
+seven-day-old binary for the same structural reason — **the seat that never
+builds is the seat whose binary is always stale, and its stamp travels
+furthest.**
 
 **RELATED.** This is the stream twin of *assert the PRECONDITION, not just the
 comparison*, and of *an assertion written from a REPORT of the code pins the
