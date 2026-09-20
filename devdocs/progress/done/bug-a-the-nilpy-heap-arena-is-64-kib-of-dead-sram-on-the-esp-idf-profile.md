@@ -190,4 +190,4 @@ region. The tell is `HeapMmap` surviving a `--dce` build; re-run that two-row
 table first.
 
 ## Log
-- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f028632c3.
