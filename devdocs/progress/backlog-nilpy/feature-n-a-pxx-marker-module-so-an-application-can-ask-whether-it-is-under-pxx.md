@@ -69,3 +69,47 @@ characters; `__pxx__` was a seat's suggestion, not his instruction.
 likes it:** pxx resolves the import at COMPILE time, so the CPython arm is never
 compiled. The application keeps its ctypes code exactly where it is and **pxx does
 not need to understand any of it.**
+
+## ADDENDUM 2026-09-20 — the three measurements, and the ticket is UNOWNED on purpose
+
+Measured by frankh (Track N) with no change to the tree; each is a compile of a
+probe against the HEAD compiler, and each answers a question this ticket had
+open. Nobody holds this ticket; these are here so whoever takes it starts from
+measurements rather than from the two predictions they replace.
+
+**1. The dead arm really is not compiled, and the bar was set deliberately
+high.** The probe's `except ImportError:` arm held `import ctypes` AND an
+expression the compiler cannot type at all. Neither reached the compiler: the
+build is clean and the binary runs. So the mechanism this whole ticket rests on
+is confirmed at the strength the application needs — the CPython arm may contain
+anything, and pxx does not need to understand a line of it.
+
+**2. `globals()` IS NOT SUPPORTED — `undefined variable (globals)`.** That
+retires the addendum's "UNVERIFIED — do not quote it as available without
+measuring it" and it retires the option with it: `if globals().get('__PXX__'):`
+was the only spelling under which a superglobal was symmetric across both
+compilers, and it does not compile. **So the superglobal shape has no symmetric
+spelling at all**, and the import idiom is not merely preferred, it is the only
+one of the two that works on both sides today. Adding `globals()` is a separate
+feature and should not be smuggled in as part of this one.
+
+**3. Arm order behaved correctly in all three arrangements I tried** — marker
+import first, marker import second, and with an `else:`. That is NOT a reason to
+drop the fixture requirement above. Three passing arrangements are the ones
+anybody writes; the requirement is that the fixture pin the position of the
+interesting import, and the two rows that matter are the ones where the LIVE arm
+is lexically FIRST, which is where CLAUDE.md's first-wins defects live. Keep
+that section as written.
+
+## Still the owner's, and unchanged by any of this
+
+The NAME and the CONTENT. He asked for dunders or other special characters;
+`__pxx__` remains a seat's suggestion and not his instruction. The one sentence
+that would settle the name is a goal sentence, not an implementation one:
+**should an application's pxx-check be something a third party could make TRUE
+on CPython by publishing a package of that name?** A claimable name says yes; a
+dunder-ish one says no.
+
+The application-side edits stay with lekkerzeilen's and TSP's own seats — the
+marker is NECESSARY but not SUFFICIENT, because each application still has to
+invert its own guard.

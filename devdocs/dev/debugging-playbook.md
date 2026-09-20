@@ -29817,3 +29817,62 @@ This is `normalise-dont-special-case.md`'s "the second path is the one that
 stays broken" arriving inside a SINGLE LOOP rather than across two files — which
 is why grepping for the other file would not have found it, and why the fixture
 did.
+## A DIAGNOSIS NAMES A ROUTE, AND THE PROBE THAT SUGGESTED IT USUALLY REPORTS ONLY THE DESTINATION
+
+Measured 2026-09-20, Track N, lekkerzeilen blocker 03. A field `self.wind`
+declared `(0.0, 0.0)` in `__init__` and re-assigned from an unresolvable call in
+a method was being claimed as that very call's callee, so the call went out
+through a tuple and the program died with `object is not callable`. `PXXDBG=
+n.flddecl` printed two rows for the field: `tk=6` (the tuple's class) and then
+`tk=22` (variant). Both rows were real and I read them correctly.
+
+The diagnosis I wrote from them was that **the unresolvable assignment WIDENED
+the field to a variant, and the widened field then satisfied the resolver's
+"a variant field is a callable field" fallback** — the statement's own failure
+to resolve manufacturing the evidence that resolved it, to itself. It is a good
+story, it fits every row of the probe, and I had the fix picked out: a sentinel
+in `UFldProcSig` marking a widened field so the fallback would skip it. Cheap,
+no new table, every consumer in the tree tests `>= 0`/`< 0`.
+
+**The control refuted it in one run.** Write the same class with
+`self.wind = None` in `__init__` — variant from the start, nothing widened, the
+widening arm never entered — and the program fails **identically**. The
+resolver's fallback claims any variant field of the name from any class and
+emits an unconditional hard cast to it; widening is one way to arrive there and
+not the interesting one. `self.wind = None` is the ordinary way to write that
+field, so the fix would have repaired the rarer spelling and left the commoner
+one, while the symptom vanished from the repro I had.
+
+**The probe reported the field's DESTINATION — that it ends up variant — and
+was silent about the ROUTE.** That is this file's own "every instrument that
+lies, lies by being correct about something else", arriving at the point where a
+diagnosis is written rather than where a number is quoted, and it is harder to
+see there: nothing in the output is wrong, and the invented part is the verb
+between two true readings. A mechanism sentence is exactly where an unmeasured
+clause hides, because the measured nouns on either side of it lend it their
+credibility.
+
+**The discharge is one run and it is not "re-read the probe".** Having named a
+mechanism, build the case where **the mechanism is absent and the symptom should
+still be possible**, and run it:
+
+- named widening → write the field variant from birth
+- named import order → give the two modules the same order and change something else
+- named a stale binary → run the same source through a binary that cannot be stale
+- named a first-wins table → put the correct entry first and check it still wins
+
+If the symptom survives, what you named is a CORRELATE of the real cause, and
+you found that out before writing the fix instead of after shipping it. If the
+symptom goes, you have a positive control for the mechanism itself, which the
+original failing case never was — the failing case is consistent with every
+story that fits it.
+
+The tell that you owe this run: the fix you are reaching for is **cheaper than
+the bug is old**. A one-sentinel fix for a defect that survived a real
+application's whole build is a claim that everyone before you looked at the
+wrong thing, and it is much more often a claim that you are looking at one
+spelling of it.
+
+Related: CLAUDE.md, "Do not ask 'is it verified' — ask 'what would this be if it
+were false', and go look at THAT" — of which this is the worked instance for a
+CAUSE rather than for a fact.
