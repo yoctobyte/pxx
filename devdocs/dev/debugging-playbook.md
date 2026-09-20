@@ -11761,6 +11761,31 @@ deliberately breaking something. **A success path is run every day; a failure
 path is run the first time it is needed, by whoever needed it, usually under
 time pressure.** Here that would have been the owner, with a board in his hand.
 
+**CHECKED AGAINST THE TREE 2026-09-20, AND THE LIVE INSTANCE IS A
+CONJUNCTION OF THREE THINGS, NOT ONE.** Five other scripts using the same
+capture idiom were read (`uses_sweep.sh`, `ok_line_means_a_file.sh`,
+`selfhost_stamp_devtest.sh`, `elf_reader_vs_readelf.sh`,
+`fpc_compiler_corpus_probe.sh`) and **none is an instance** — for four
+different reasons, each worth copying:
+
+| script | why it is safe |
+| --- | --- |
+| `ok_line_means_a_file.sh` | captures `2>&1`, tests `$?`, **prints the captured text on the failure branch**, and explicitly guards the empty-capture case (*"could not read code=/codeseg= off the ok: line — nothing was compared"*) |
+| `fpc_compiler_corpus_probe.sh` | redirects to a **file**, so the diagnostic survives on disk and is grepped |
+| `selfhost_stamp_devtest.sh` | asserts on the **content** of the captured text, with a positive control on each arm |
+| `elf_reader_vs_readelf.sh` | records `$?` at every capture |
+| `uses_sweep.sh` | captures no compiler invocation at all |
+
+**So the silent form needs all three: a diagnostic on stdout, a capture that
+takes it, AND `set -e`.** None of those five sets `-e` — and that is why a
+failed capture there surfaces as a content assertion failing loudly instead.
+**`set -e` is not incidental to the SILENCE, and an earlier draft of this
+section implied it was.** What it actually decides is *which* failure you get:
+**with it, silence; without it, the script continues holding an empty variable
+and reports a wrong answer.** The second is not better, only louder — and a
+positive control is what turns it from a false pass into a visible one, which
+is what all five have and the demo script did not.
+
 **The general form, well past shell:** whenever you capture or parse a
 program's output to extract a value, **you have taken over responsibility for
 its error channel**, whether or not you meant to. That applies to
@@ -11772,7 +11797,9 @@ same pipe.
 **What to do:**
 - **Run the failure path once, on purpose.** Point the script at something that
   cannot work and read what a human gets. This costs a minute and is the only
-  thing that finds this class.
+  thing that finds this class — a grep for the idiom returns five clean scripts
+  and one live bug with no way to tell them apart, because **the idiom is the
+  shape and the failure branch is the defect.**
 - **Branch on the failure explicitly** rather than letting `set -e` handle it
   (`if ! VAR="$(...)"; then print "$VAR"; ... fi`), so the captured output is
   emitted on the path that needs it most.
