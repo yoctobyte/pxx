@@ -32479,6 +32479,19 @@ draws the INFERENCE, not only in the clause that quotes the row** — and when a
 condition is inert, notice that it is: **an inert label is the one that survives, so seeing one
 carried correctly is no evidence that the live one was.**
 
+**AND THE SECOND SUBSYSTEM IS COST ESTIMATION, WHICH IS WHY THIS IS A MECHANISM AND NOT A PERF
+STORY.** Same evening, same seat, two hours after landing the paragraph above: relaying what porting
+an application's platform layer would cost, it quoted **~974 lines** — which is the LINE COUNT OF THE
+FILE, a figure that exists in this project's rules for an unrelated reason (a ticket had called that
+file *"a 39-line stub"* after it was rewritten). **A true measurement of a file, transplanted into a
+question it was never measured for.** The owner-facing seat measured the actual quantity: the two
+platform layers are the same design file-for-file and the per-file diffs are **27, 56, 40 and 202
+changed lines** — copy-and-adapt, not a thousand lines of new work. **So the number was out by roughly
+an order of magnitude in the direction that makes work look bigger**, and it had already been passed
+to the seat sizing that work. **A size is not a cost, a count is not an effort, and a line number is
+not a quantity of anything** — when a figure moves from the question it was measured for to a
+neighbouring one, it needs re-deriving and not re-quoting, however solid it was where it came from.
+
 **AND THE REASON TWO SEATS DREW THE SAME WRONG INFERENCE IS THE LABEL'S WORD, NOT THE ROW'S NUMBER —
 WHICH IS WHY NEITHER OF THEM WAS BEING CARELESS.** `lekkerzeilen-7a`, whose measurement it is, supplied
 the mechanism when it repaired the document (`8ca634f`): **on that box vsync is a 52–68 ms per-frame
