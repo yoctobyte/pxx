@@ -32809,3 +32809,69 @@ the false mechanism and told a third seat *"there is no scene where the work is 
 **So: "capped" is a MODEL and it needs measuring like anything else.** vsync is not a 60 Hz
 ceiling on this box; it is a 45–68 ms wait, three to four times what a 60 Hz ceiling would
 impose. The word smuggles in a mechanism, and the mechanism decides the magnitudes.
+
+## A RELOCATED BINARY RESOLVES *ENOUGH* TO FAIL LATER WITH A CREDIBLE DOMAIN ERROR — the fourth outcome, and it survives a bisect
+
+*franks-5b, 2026-09-20. Cost: a p90 ticket filed against an innocent peer's
+commit, and four people-hours across two seats at midnight.*
+
+CLAUDE.md documents three outcomes when a pxx binary cannot find its builtins:
+**loud** failure (`unit source not found`, rc=1), **silent substitution** from a
+sibling checkout, or correct. There is a fourth and it is the worst of them.
+
+**A binary in a scratchpad has NO `../lib/rtl`, no `builtin/` — `--where` marks
+every library root `[MISSING]`** — and falls through to the CWD-relative last
+resort. That fallback resolved **enough** to compile a 35-module program for
+**19 seconds** and then fail with:
+
+    pascal26:512: error: no member heapify came of the qualifier heapq
+      in: /home/neo/lekkerzeilen/lekkerzeilen/world.py
+
+**Real symbol, real file, real line, accurate domain language, deep in the
+run.** It does not read like a path problem. It reads like a compiler
+regression, and it was reported as one.
+
+**IT SURVIVES A BISECT, WHICH IS WHY IT EARNS A SECTION.** Every failing arm was
+the scratchpad copy; every passing arm — the "known-good" compiler, the parent
+build, the peer's own binary — was in-tree. The bisect was clean, repeatable and
+**measured the binary's LOCATION**. Proof is one line: the same sha
+`7e5bea1ba120c986` gives `ok:` in-tree and the error from a scratchpad copy of
+that identical file.
+
+**THE RULE IS WRITTEN AS A CWD RULE AND THE VARIABLE IS THE BINARY'S PATH.**
+That is why checking it does not help. CLAUDE.md says *"run every build with the
+CWD at the REPO ROOT"*; my CWD **was** the repo root. I verified the thing the
+rule names, correctly, and never looked at where the binary sat — because the
+rule gave me nothing to look at. **Roots resolve exe-dir-relative first.**
+
+**AND THE PRESERVED-BINARY ADVICE PUTS IT THERE.** *"Keep the previous binary
+rather than rebuilding it afterwards"* is correct and is in this file. Keeping it
+means copying it somewhere — and the natural somewhere is a scratchpad. **The
+A/B discipline creates the condition**, so the seats most careful about
+interleaved comparison are the ones exposed.
+
+**Two instruments that made it worse, both of them good instruments:**
+
+- **A control that varied TWO things.** Running another seat's compiler from my
+  root changed the compiler *and* the location together, so it could not
+  separate them — and it returned the expected answer, which ended the search.
+- **A byte-identical sha cross-check.** Building at the parent produced a binary
+  matching another seat's independent build exactly. That is strong evidence
+  **about the binary** and says nothing about where it ran, so it lent its
+  credibility to the unexamined half.
+
+**The discharge is one command and it is not "check your CWD":**
+
+    <the exact binary you are about to measure> --where | grep MISSING
+
+Run it on **each arm** of an A/B, because the arms can differ. A `[MISSING]`
+library root means the arm is not measuring what you think, whatever its sha
+says. **Print the binary's PATH beside its sha** — this file already says print
+the sha, and a sha cannot tell you where the file was.
+
+**What killed it was a peer refusing to act on a failure they could not
+reproduce.** Four green runs against my bisect, and rather than dismissing
+either side they asked for the sha, the `make` verb, the command and the CWD —
+and said *"what is left is which binary you ran"*. **That is the question, and
+the reporter is the one person structurally unable to ask it**, because the
+binary they ran is the one thing they are certain about.
