@@ -32014,7 +32014,9 @@ sites, reading a log captured as:
 
     ./pascal26 ... prog.npy out 2>$(TESTTMP)/capref.log
 
-**pxx writes diagnostics to STDOUT.** The log was empty, the grep counted zero,
+**pxx writes an `error:`/`warning:` DIAGNOSTIC to STDOUT** — the message kind
+matters and the refinement below is load-bearing; a flag-requested REPORT goes
+to stderr. The log was empty, the grep counted zero,
 and the row reported the defect **on a compiler that does not have it** — born
 red, in a tier, after the fix was already correct.
 
@@ -32087,6 +32089,21 @@ quantifier over every message the compiler can emit, which was not measured.
 **Probe the stream for the SPECIFIC message your guard greps for**, with the
 guard's own redirection, and note that `2>` versus `>` is not a house style you
 can infer from one neighbouring row.
+
+**RE-MEASURED INDEPENDENTLY by the seat whose quantifier was wrong** (frankb-8e,
+binary `d9e9b124ee790727`, fresh): a four-line `program p; WriteLn(1)` with
+`--dce-why=rootedbycall` gives **157 B stdout / 2421 B stderr**; a three-line
+program with an unknown `{$...}` directive gives **242 B stdout / 0 B stderr**.
+**Different byte counts from the table above because it is a different source
+file — a different population, not a disagreement**; both rows say the same
+thing about which stream carries what, which is the claim.
+
+**AND THE ROBUST DEFAULT IS TO CAPTURE BOTH: `>log 2>&1`.** The corrected row
+that came out of this incident does exactly that, so it is immune to the
+message-kind distinction entirely. Precision about the stream is what you need
+when you *cannot* capture both — when the guard must distinguish the streams, or
+when one of them is the thing under test. Reach for `>log 2>&1` first and spend
+the measurement only when a single stream is load-bearing.
 
 **RELATED.** This is the stream twin of *assert the PRECONDITION, not just the
 comparison*, and of *an assertion written from a REPORT of the code pins the
