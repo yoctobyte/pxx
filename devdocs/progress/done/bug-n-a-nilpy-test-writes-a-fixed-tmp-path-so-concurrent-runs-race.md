@@ -156,4 +156,4 @@ testmgr. Teaching it to require `TESTMGR_TMP` first is a Track T change and is
 not filed — say so before quoting a green from it.
 
 ## Log
-- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 778d63ad3.

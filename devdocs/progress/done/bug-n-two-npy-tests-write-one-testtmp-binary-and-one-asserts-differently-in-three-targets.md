@@ -133,4 +133,4 @@ saturation both this ticket and the 2026-08-28 one named is over, which is the
 part worth more than either repair.
 
 ## Log
-- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 778d63ad3.
