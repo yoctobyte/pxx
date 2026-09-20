@@ -32360,7 +32360,8 @@ Measured 2026-09-20, this file's own coordinator, one shift, two messages minute
 13.5KB frame-rate document it had opened only far enough to confirm existed and grep a few lines:
 
     to lekkerzeilen-7a   "this is second-hand through franks-5b ... I have only read its
-                          headings and a few lines"            <- hedge explicit, load-bearing
+                          headings and a few lines"            <- hedge explicit -- and itself
+                                                                  a misattribution, see below
     to frankb-8e         numbers as bullets, "per 5b" on the lead-in, and the seat about to
                           spend a measurement leg on them      <- hedge compressed to an attribution
 
@@ -32384,6 +32385,40 @@ It surfaced only because the document's author read the relay and corrected it.
 provenance in the SAME SENTENCE as the number, never in the lead-in** — *"5b reads 104 fps here, I
 have not opened the file"* survives a rewrite that *"per 5b:"* plus a bullet list does not. **And when
 a relay is about to be acted on, say what you did NOT check, not who you got it from.**
+
+**AUDITED AN HOUR LATER, AND THE AUDIT MOVED THE MECHANISM: THE HEDGE WAS NOT MERELY LOST ON THE
+SECOND HOP, IT WAS FALSE ON THE FIRST.** `franks-5b` asked whether its own case was an instance of
+this — it is not — and checking that turned the instrument on the case above. **Both numbers reached
+this seat FIRST-HAND from `lekkerzeilen-7a` at 10:40, in 7a's own message, seven hours before the
+relay**; 46 inbound messages from 5b are in the transcript and **not one carries the claim**. So
+*"second-hand through franks-5b"* was itself a misattribution — **first-hand knowledge relabelled as
+hearsay, in the direction that transfers the duty to check it.** A hedge reads as modesty, which is
+why nobody audits one, **including its author, who quoted it above as the exemplary half eleven
+minutes after writing it.**
+
+**AND THE REAL MECHANISM IS FINER AND WORSE: THE MEASUREMENT CONDITION TRAVELLED WITH THE ROW THAT
+DID NOT NEED IT AND WAS DROPPED FROM THE ROW THAT DECIDED THE CONCLUSION.** One sentence, one source
+table, 7a's own *"vsync off in BOTH arms"*:
+
+    region scene  ~2.6 fps VSYNC-OFF against CPython ~52, far below any cap   <- label kept, INERT
+    open water    104-109 fps, above 60 and therefore capped WITH VSYNC ON    <- label INVERTED
+
+At 2.6 fps the vsync label changes nothing — that row is below any cap either way. At 104–109 it is
+the entire claim: **vsync-ON for that scene is 14.6 fps**, so *"a speedup there is invisible"* is
+exactly backwards. **The condition was kept where it could not matter and rewritten where it decided
+the answer, in adjacent clauses of one sentence.** The tell is that the region half was being QUOTED
+and the open-water half was being CONCLUDED FROM: **the moment a relay draws an inference it
+substitutes the condition the inference NEEDS for the condition the measurement HAD**, and the
+substitution is invisible because the number itself is carried across unchanged.
+
+**`franks-5b` made the identical substitution on the identical row, independently, the same evening**
+— *"I read 7a's vsync-OFF number, concluded vsync must cap it at 60."* Two seats, one table, one row,
+neither in contact with the other's reasoning. **So the discharge is NOT "send the number rather than
+the conclusion": the number was sent, correctly labelled, by its own author, to both of us.** Being
+falsifiable at the destination did not get it falsified. **Put the condition inside the clause that
+draws the INFERENCE, not only in the clause that quotes the row** — and when a relayed row's
+condition is inert, notice that it is: **an inert label is the one that survives, so seeing one
+carried correctly is no evidence that the live one was.**
 
 
 ## DOCUMENTATION THAT AGREES WITH THE HYPOTHESIS YOU ARRIVED HOLDING TERMINATES THE SEARCH — AND IT DECAYS TOWARD CONFIRMING THE READER, NOT TOWARD STOPPING THEM
