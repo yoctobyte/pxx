@@ -31812,49 +31812,62 @@ cause was then proposed in its place: the aggregate pipes each failing guard thr
 guard printed findings first and a 22-line remedy after, and **the captured block was exactly 25
 lines**, so the third row had fallen off the top.
 
-**THAT SECOND CAUSE IS ALSO FALSE, AND ITS REFUTATION IS THE THIRD INSTANCE OF THIS SECTION'S OWN
-RULE IN ONE EVENING — the receiving seat replayed it instead of accepting it.** Measured at
-`383a817a4`: the `0ae279ae9` guard **and** all three offending sources restored into a tree and
-re-run give **27 lines**; `tail -25` drops lines 1 and 2, which are **the blank and the FAIL header**;
-**all three findings survive.** Rows start going at **four**, not three:
+**THAT CAUSE IS CORRECT. IT WAS REFUTED, THE REFUTATION WAS WRONG, THE AUTHOR OF THE CAUSE ACCEPTED
+THE REFUTATION AND WITHDREW A TRUE FINDING — AND THE REFUTATION WAS A REPLAY OF THE REAL ARTEFACT.**
+This is the fourth pass over one question in one evening and the only one that survives measurement.
 
-| findings | 1 | 2 | 3 | 4 | 5 |
-| --- | --- | --- | --- | --- | --- |
-| lines emitted | 25 | 26 | 27 | 28 | 29 |
-| surviving `tail -25` | 1 | 2 | 3 | 3 | 3 |
+`make tools-devtest` runs each guard as `python3 "$f" > $(TESTTMP)/tools_devtest.log 2>&1` and then
+`tail -25` of that FILE. Replayed at `0ae279ae9` — old guard, all three offending sources restored,
+output redirected to a file exactly as the recipe does it:
 
-**AND THE TELL THAT CARRIED IT IS UNFALSIFIABLE, WHICH IS THE PART WORTH KEEPING.** *"The captured
-block was exactly 25 lines"* is true **whenever this guard fails at all** — at one finding or at
-thirty — because the fixed remedy alone fills the window. It cannot come out any other way, so it
-confirms every hypothesis equally. That is this file's *"a guard that cannot fail"* wearing the
-clothes of corroborating evidence: **a truncated tail is a complete-looking report AND an untruncated
-one is indistinguishable from it.** A length that is forced by construction is not a measurement of
-what was lost.
+| findings | 1 | 2 | 3 | 4 |
+| --- | --- | --- | --- | --- |
+| lines in the log FILE | 26 | 27 | 28 | 29 |
+| findings surviving `tail -25` | 1 | 2 | **2** | 2 |
 
-**AND THE 25 WAS NOT EVEN READ OFF THE GUARD — IT WAS ASSEMBLED, BY PICKING THE COUNTING BOUNDARY THAT
-MADE THE HYPOTHESIS FIT.** Added by the author of the refuted cause, because it is the part the replay
-does not show and it is the mechanism of the error rather than its refutation. **The guard emitted 24
-lines.** `tail -25` over 24 lines returns all 24 and truncates nothing — **the log alone refutes the
-story, without any replay.** The seat reached 25 by counting the aggregate's own `FAIL: <script>` echo,
-a line the guard never printed, as part of the guard's output. **Nothing was miscounted; a boundary was
-chosen, and it was chosen after the hypothesis existed.**
+At three findings the log is 28 lines, `tail -25` drops lines 1–3 — the blank, the FAIL header **and
+the first finding row** — and the two survivors are exactly the two `.npy` files that were reported.
+`test/lib_findfirst.pas` is the row that went. **Rows start being lost at three.**
 
-**That is the distinct failure and it is not the same as the unfalsifiable tell above.** The tell being
-forced by construction means the number carries no information *to anyone*. This is narrower and
-nastier: **where a boundary is genuinely ambiguous — is the wrapper's echo part of the output? — a
-hypothesis already in hand silently settles the ambiguity in its own favour, and the resulting number
-feels read rather than constructed.** The tell that would have caught it is that **the answer landed
-exactly on the window size**, which is the expected-value collision this file warns about one more time:
-*if the machinery did nothing at all, would this row still pass?* Here the row did not merely pass — it
-produced the constant the hypothesis predicted. **When a count lands precisely on the threshold you were
-testing, recount from the artefact with the boundary written down FIRST.**
+**WHAT MADE THE REFUTATION WRONG IS ONE TRAILING NEWLINE, AND IT IS THE REUSABLE PART.** The refuting
+seat replayed the right script against the right sources at the right commit — and captured it as
+`out=$(python3 ...)` and re-emitted it with `printf '%s\n' "$out" | tail -25`. **Command substitution
+strips trailing newlines.** The guard's last `print(ADVICE)` emits a trailing blank line, so the
+reconstructed stream is **27 lines where the file is 28**. One line. `tail -25` of 27 keeps the first
+finding; `tail -25` of 28 does not. **The verdict inverted on the line that `$(...)` ate**, and every
+number in the refuting table was off by one in the same direction, which is why it looked internally
+consistent.
 
-**So the cause of two-versus-three is UNKNOWN and the slot is deliberately left empty.** Two
-explanations, both offered by people who were each right about something else, both withdrawn. The
-ordering repair landed anyway on its own merits — findings last, ending on a line carrying their
-count — because *every capture layer keeps the tail* is correct independently of whether it explains
-this miss. **Separating a good remedy from a wrong diagnosis is the move**; the remedy did not need
-the story to be true, and keeping them joined is what would have preserved the story.
+**So "go back to the artefact" is necessary and NOT sufficient: go back to the artefact THE CONSUMER
+READS, through the SAME operator.** The consumer here is `tail -25` over a redirected file. A shell
+variable holding almost the same bytes is a different artefact for precisely the question being
+asked — a question about **line counts and window boundaries** is the one question a trailing newline
+can decide. **Whenever the quantity under test is a length, a count or an offset, measure the file,
+not a capture of it**; `wc -l < file`, never `echo "$var" | wc -l`.
+
+**AND THE RECEIVED-CORRECTION FAILURE THEN RAN A FOURTH TIME, IN THE OTHER DIRECTION, WITH A BETTER
+DISGUISE THAN ANY OF THE FIRST THREE.** The author of the true cause accepted the false refutation
+within one message and retracted a correct finding — and did not merely accept it, but constructed a
+fresh self-criticism to explain their own supposed error (that they had counted the aggregate's
+`FAIL: <script>` echo into the guard's output to reach 25). **That self-criticism was reasoning from a
+premise that was never re-measured**, and it is now withdrawn with the refutation that prompted it.
+The outstanding number is a `24` in that seat's saved log which matches neither the file (28) nor any
+capture of it; it wants one `wc -l` against the raw log, which nobody has run.
+
+**The lever is this section's own, sharpened: an explanation more satisfying than the gap it fills is
+the one to replay — and a REPLAY is the most satisfying explanation there is.** It arrives with a
+table, a commit id, restored sources and the word "measured". Three of the four wrong answers this
+evening were caught by going back to an artefact, so by the fourth the move itself carried authority,
+and the one thing nobody checked was **which** artefact. **A method's track record is not evidence
+about its current application.**
+
+**So the cause of two-versus-three IS the truncation, as first stated.** The `.pas`-versus-`.npy`
+explanation was never measured and stays withdrawn; the replay that displaced the truncation story is
+withdrawn in turn. The ordering repair (`383a817a4` — findings last, ending on a line carrying their
+count) was landed while its own justification was believed refuted, on the general ground that *every
+capture layer keeps the tail*. **That turned out to be the right call for a reason worth naming: a
+remedy that stands on a general mechanism survives the collapse of the specific story it was proposed
+for, and a remedy that stands only on the story does not.** Keep them separable on purpose.
 
 **The seat nearly accepted the whole message**, because the correcting party was demonstrably right
 about the number, and because accepting a correction gracefully is what a good collaborator does.

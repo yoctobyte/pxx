@@ -303,28 +303,35 @@ def report(what, rows):
     log), and this script used to print its findings FIRST and then 22 lines of
     remedy, so the window held the remedy and only as many findings as fitted.
 
-    WHAT THAT COST AT THE THREE-FINDING MARK, MEASURED BY REPLAY rather than by
-    arithmetic — the old script and the three offending sources restored from
-    `0ae279ae9` and re-run: 27 lines, and `tail -25` drops lines 1 and 2, which
-    are the blank and the **FAIL header**. All three findings survived. So at
-    three rows the loss is the SENTENCE SAYING WHAT FAILED, not a row.
+    WHAT THAT COST AT THE THREE-FINDING MARK, MEASURED BY REPLAY -- the old
+    script and the three offending sources restored from `0ae279ae9`, run with
+    stdout REDIRECTED TO A FILE exactly as the recipe does it:
 
-    Where rows DO start going, measured the same way against the old script,
-    one synthetic offender added at a time:
+        findings                     1    2    3    4
+        lines in the log file       26   27   28   29
+        findings surviving tail -25  1    2    2    2
 
-        findings   1    2    3    4    5
-        lines     25   26   27   28   29
-        in tail    1    2    3    3    3
+    At three the log is 28 lines, `tail -25` drops the blank, the FAIL header
+    AND THE FIRST FINDING ROW, and the two survivors are the two later files.
+    test/lib_findfirst.pas is what went, and a census of that block duly
+    reported two offenders where there were three. Rows start being lost at
+    THREE.
 
-    Four. Not three, and the fourth is silent: the block still ends tidily on
-    the remedy's last line.
+    MEASURE THE FILE, NOT A CAPTURE OF IT. An earlier replay of this same
+    question used `out=$(python3 ...)` and `printf '%s\n' "$out" | tail -25`,
+    and got the opposite answer. Command substitution strips trailing newlines;
+    the final `print(ADVICE)` emits a trailing blank line; so the reconstructed
+    stream is 27 lines where the file is 28. `tail -25` of 27 keeps the first
+    finding and `tail -25` of 28 does not. ONE LINE INVERTED THE VERDICT, and
+    every row of that table was off by one in the same direction, which made it
+    look internally consistent. Whenever the quantity under test is a length,
+    a count or an offset, use `wc -l < file`, never `echo "$var" | wc -l`.
 
-    THE TELL IS THAT THERE IS NO TELL, and the trap is worse than that: a
-    `tail -25` block is EXACTLY 25 lines whenever this script fails at all —
-    one finding or thirty, because the fixed remedy alone is 24. So "my captured
-    block was exactly 25 lines" is not evidence that anything was dropped. It is
-    evidence only that the guard failed. A truncated tail is a complete-looking
-    report AND an untruncated one is indistinguishable from it.
+    THE TELL IS THAT THERE IS NO TELL: a truncated tail is a complete-looking
+    report. Nothing errors and nothing says "3 of 2 shown"; the block ends on a
+    tidy line because the remedy is fixed-length prose. Note also that the
+    block is EXACTLY 25 lines whenever this script fails at all, so its length
+    tells a reader only that it failed -- not that anything was dropped.
 
     THE DISCHARGE IS ORDER, NOT A BIGGER WINDOW. Every capture layer anyone
     wraps this in — tail, a terminal scrollback, a tstate excerpt — keeps the
