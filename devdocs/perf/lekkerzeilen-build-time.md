@@ -237,3 +237,75 @@ had written the same evening about fixed additive terms setting ceilings, and it
 is not there — `bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost` is in
 `done/` and stayed fixed. Recorded because a refuted hypothesis is worth exactly
 one line to the next person who has it.
+
+---
+
+# PROFILED — and my pre-registered hypothesis was refuted
+
+**Pre-registered before looking** (`scratchpad/PREREG.txt`, 20:18): the
+declaration-registration story would be CONFIRMED by >=25% of samples in
+symbol/declaration registration, and REFUTED by (a) >=25% in lexing or parsing,
+(b) >=25% in codegen/ELF, (c) no bucket above 10%, (d) >=25% UNATTRIBUTED.
+
+**Criterion (a) fired.** Registration accounts for essentially nothing; the mass
+is in reading and re-reading the module's tokens. Stated plainly because the
+whole point of writing it down first is not to reinterpret it afterwards.
+
+## The differential — same 400 defs, inline versus through one import
+
+Both arms: `tools/pxx_pc_sample.py` (frankb-8e), 100 samples, thread 1, flat
+self-time, compiler `2d692164aea6` with its own freshly emitted map.
+
+| symbol | imported (21.2 s) | inline (3.8 s) | absolute ratio |
+|---|---|---|---|
+| `GetTokenStrFromRaw` | **16%** = 3.39 s | 3% = 0.11 s | **~30x** |
+| `PyFindSuiteIndent` | **13%** = 2.76 s | **absent** | — |
+| `PXXAlloc` | 11% = 2.33 s | 6% = 0.23 s | ~10x |
+| `PXXFree` | 10% = 2.12 s | 5% = 0.19 s | ~11x |
+| `PyDefUsedAsValue` | 9% | 3% | ~17x |
+| `GetTokenStr` | 6% | 2% | ~17x |
+| distinct symbols | **20** | **46** | — |
+
+**The two arms have different SHAPES, not different sizes.** The inline profile
+is diffuse — 46 symbols, nothing above 11%, work spread across parse, IR and
+emit, which is what compiling 400 functions is supposed to look like. The
+imported profile collapses onto token-string extraction, suite scanning and the
+allocator: **`GetTokenStrFromRaw` + `GetTokenStr` + `PXXAlloc` + `PXXFree` = 43%
+of a run that is 5.6x longer.**
+
+**`PyFindSuiteIndent` at 13% against zero is the sharpest single signal**, and
+it is not a slow routine. `pyparser.inc:39422` is a bounded scan that stops at
+the end of the construct's header — deliberately so, per
+`bug-nilpy-def-body-scans-run-on-when-no-indent-is-found`. A cheap bounded scan
+taking 2.76 s means **it is being CALLED an enormous number of times. The count
+is the defect, not the walk.**
+
+## What is measured and what is inferred — the line matters here
+
+**MEASURED:** every number above; that the effect reproduces on a second
+compiler (`2d692164aea6`, 5.6x, against frankuser's 5.4x); that an unreferenced
+import costs the same as a used one; that emptying bodies saves 12%.
+
+**INFERRED, and NOT established:** that a whole-module inference or site-analysis
+pass runs over imported modules and drives those calls. It fits — `PyDefSiteMode`,
+`PyDefUsedAsValue`, `PyParamTypeFromSites` all surface in the imported arm, and
+`PyFindSuiteIndent`'s callers at `:42514` and `:42766` sit in `PyInferHdrHi` —
+but **flat self-time has no caller information at all**, so this is a hypothesis
+shaped like a conclusion. Anyone acting on it should confirm the call counts
+first.
+
+**The question that follows is sharp and cheap:** the inline arm compiles the
+identical 400 definitions. Whatever re-reads those tokens 30x is work the inline
+path does not need — so what does an import require that inlining does not?
+
+## Method notes worth keeping
+
+- **A map is only valid for the exact binary that emitted it and nothing in the
+  file records which.** The only map beside `compiler/pascal26` was
+  `pascal26-debug.map` dated **22 days earlier**; it would have resolved every
+  address and been wrong about all of them, with plausible pxx-internal names.
+  8e's tool refuses on it (exit 2) rather than running. I generated a fresh map
+  by building my OWN compiler — **not frankuser's, because `make` would have
+  replaced the binary another seat is using.**
+- **Profiling a different compiler answers a different question**, so the 13x was
+  re-measured on the compiler actually being profiled before any sample was taken.
