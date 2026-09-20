@@ -31388,6 +31388,27 @@ evidence for** — and, being a real observed error, it never reads as an assump
 
 **Re-derive a recorded symptom under YOUR configuration before you let it name the layer to work on.**
 
+**THE CHAIN, CONCRETELY, BECAUSE THE GENERAL FORM ABOVE IS NOT ENOUGH TO ACT ON.** The fixture stops
+at `variant unbox: VariantToInt64 builtin not loaded`. `VariantToInt64` is in
+`compiler/builtin/builtin.pas`; the census was of `compiler/builtin/builtinheap.pas`. The suppression
+is `pasparser_prog.inc:1526`. Stubbing each wall in turn, restoring the tree between:
+
+| forced | next wall |
+| --- | --- |
+| `uses builtin` on bare | `StrFloat` → `PxxSciDigits17`, i.e. the excluded span — **so the suppression's stated premise is TRUE**, and the reason is float formatting, not anything about the target |
+| + the span stubbed | `this target has no FPU and the soft-float kernel __pxx_l2d is not linked` |
+| + `uses softfloat` in the program | **unchanged** — the pull is ORDERED, at `frontend_prologue.inc:157`, which skips `EspBareBoot` deliberately so a float-free MCU program does not pay ~54-64 KB |
+
+**PRACTICALLY, AND IT IS ONE COMMAND:** before censusing a layer, **run the smallest real artefact and
+read the FIRST error.** If it names a symbol, `grep -rn` for which file DEFINES that symbol before
+assuming it lives in the layer you were about to study. Here that was one `grep` and it took seconds;
+the census took two hours and answered a different question correctly.
+
+**AND THE CENSUS WAS NOT WASTE, WHICH MATTERS OR THIS READS AS "DO NOT MEASURE".** Once the real chain
+was known, the per-routine table is exactly what the eventual decision needs and did not have to be
+retaken. **The defect was the ORDER, not the work** — it was done before anything had established
+which layer the question lived in.
+
 **AND THE INSTRUMENT FAILS THE SAME WAY WHEN YOU GO TO CHECK SOMEBODY.** Verifying the above, the
 coordinator's greps appeared to contradict two incidental claims — *"the routine is not in
 `builtinheap.pas`"* and *"`builtin.pas` has zero ESP directives"*. Both apparent contradictions were
