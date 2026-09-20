@@ -31203,3 +31203,61 @@ spelling the code would use if it did the thing* — the first candidate here is
 
 **Practically:** if a verification chain contains **both** a ref-level check and a path read, **pull
 between them**, and say which. A `fetch` earns you the right to reason about refs and nothing else.
+
+## A VERDICT THAT DOES NOT NAME WHAT IT COMPARED AGAINST GETS QUOTED AS THE STRONGER ONE
+
+Measured 2026-09-20 in `tools/esp_flash.sh` (`7d4f7ea33`), while giving the four NilPy ESP demos a
+route to real hardware.
+
+The script ended every successful run with one line:
+
+```
+esp_flash: OK — board output matches the x86-64 oracle (8 lines)
+```
+
+That sentence was true for the path it was written for — the bare form compiles the program natively,
+captures that, and diffs the board against it, which is a genuine differential against a second
+implementation. Adding `--project` gave the same line a second comparand: the project's checked-in
+`main/main.expected`. **Three different claims now printed identically.**
+
+| what was compared | what a pass witnesses |
+| --- | --- |
+| native x86-64 run | a differential against a second implementation of the same source |
+| `nilpy-c3` / `nilpy-s3` `main.expected` | a differential against **CPython**, since that file IS CPython's output for the program |
+| `nilpy-hw-*` `main.expected` | that the SDK timer callback fired and the Python loop saw it — the file is the program's **SPECIFICATION**, written by us |
+
+The third is worth having and **is not an oracle claim at all**: a specification cannot disagree with
+the implementation it was written from. But `OK — matches the x86-64 oracle` is what a reader would
+have copied into a ticket, and the strongest of the three readings is the one that travels.
+
+**THE GENERAL FORM, AND IT IS WHY THIS IS HERE RATHER THAN IN A COMMIT MESSAGE:**
+
+> **"OK" reads the same either way, and a verdict that does not say what it compared against gets
+> quoted as the stronger one.**
+
+**A TOOL IS THE WORST HOST FOR THIS, WHICH IS THE PART THAT MAKES IT WORTH A SECTION.** Everywhere
+else this file records the failure — a census whose population was never written down, a number
+quoted without its oracle, a caveat whose hedged half went unnamed — the over-claim is made by a
+person who at least saw the measurement. **A tool's verdict is quoted by people who never read its
+source**, and it is re-quoted every run, so a single imprecise sentence produces an unbounded number
+of over-claims with no author to interrogate. The `.expected`-versus-oracle distinction was fully
+documented in the script's header the whole time; **the header is not what gets pasted into the
+ticket.**
+
+**The repair is one variable and it belongs in the verdict line, not in the docs beside it:**
+
+```sh
+if [ -n "$PROJECT" ]; then WHAT="$(basename "$PROJ")/main/main.expected"
+else WHAT="the x86-64 oracle"; fi
+...
+echo "esp_flash: OK — board output matches $WHAT ($ORACLE_LINES lines)"
+```
+
+**The test to apply to any instrument you add a second mode to:** print its output for both modes side
+by side and ask whether the two sentences are distinguishable **without knowing which flags were
+passed.** If they are not, the weaker run is now producing the stronger claim, and the flags are not
+in the output that gets quoted.
+
+**Related and not the same:** *"record the METHOD beside the number, never the number alone"* is about
+a measurement you took. This is about a verdict a tool takes **for** you, where you may not have
+chosen the comparand at all — the mode did.
