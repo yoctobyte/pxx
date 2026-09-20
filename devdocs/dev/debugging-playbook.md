@@ -3331,6 +3331,70 @@ the weaker section; going to the source produced a section carrying the
 check worked" — a true reading, and exactly the one that teaches you to shrug at
 the third occurrence. The third occurrence is the contaminated binary.
 
+## A PARTIAL MATCH IS NOT PARTIAL EVIDENCE — it is full confidence for the part that agrees, spent on the part that does not
+
+Four instances on 2026-09-20, four subsystems, three seats, none of them looking
+for a pattern. Promoted here because the recurrence cleared the bar, not because
+any one of them is impressive.
+
+**The shape.** Two measurements of the same thing are compared. Some rows agree
+EXACTLY — not approximately, exactly — and the rest do not. The exact agreement
+is read as establishing the method, and the disagreeing rows are then treated as
+noise, as a tree difference, or as somebody else's problem. **The agreeing row
+supplies confidence that gets spent on the rows nobody then looks at.**
+
+It is more dangerous than total disagreement, which forces an investigation, and
+more dangerous than no comparison at all, which leaves the number naked and
+therefore challenged.
+
+### The four
+
+- **An exact hit on one of four files.** Comparing two platform layers, my
+  `diff | grep -c '^[<>]'` gave 30/67/41/217 against a relayed 27/56/40/202.
+  `_gl.py`'s 27 is *exactly* my one-sided `grep -c '^>'` count. I nearly wrote
+  "confirmed, they counted one side" — and `_sdl2.py` one-sided is **6** against
+  their 56. One row agreeing perfectly across two methods is what certifies a
+  set. (The real cause was found later and is a good ending, below.)
+- **A conservation identity over a closed accounting.** `enq − rem = delivered`
+  held for all 22 senders and was read as corroboration. It holds BY
+  CONSTRUCTION whenever the three counters are derived from one another,
+  whatever the layer under test did.
+- **A stale comment agreeing with the hypothesis under test.** The comment was
+  right about the thing it was written for and wrong about the code as it now
+  stands; agreeing with the hypothesis is what stopped it being read.
+- **A byterate assertion that multiplies two things that are the same thing.**
+  `framerate * blockAlign` asserted only on MONO clips, where
+  `blockAlign == sampwidth`. Breaking the multiplication deliberately left
+  61 of 61 rows green.
+
+### The question that separates them, and it is one sentence
+
+**What would this number be if the thing I am testing were broken?**
+
+If the answer is "the same", the fit is an identity wearing evidence's clothes
+and it is **zero** evidence, not weak evidence. The tell is not that it fits
+well — it is that **you cannot describe the world in which it fails.** A
+conservation law over derived counters cannot fail. A product of two equal
+quantities cannot distinguish its factors. A comment cannot disagree with a
+hypothesis it predates.
+
+### And the good ending, which is the standard to hold a refutation to
+
+The 27/56/40/202 row was not resolved by preference. Its command was
+`diff -u | grep -c '^[+-][^+-]'`, and `[^+-]` **requires a character after the
+sign** — so a changed BLANK line, a bare `+` or `-`, is silently dropped. On two
+checkouts neither original measurement came from, the two commands and the
+blank-line count sum exactly on all four files (30 = 27+3, 67 = 56+11,
+41 = 40+1, 217 = 202+15).
+
+**That is what licenses replacing a row instead of carrying both.** The standing
+rule — when a re-run disagrees, carry both numbers with what each measured — is
+for when you cannot say WHY. Here the second command **has** a failure mode, the
+failure mode was **exercised** on trees neither author touched, and it did not
+fail. Tree excluded, method identified, no residual. Absent all three, carry
+both rows.
+
+
 ## Ancestry is not existence: `--is-ancestor` cannot tell you a commit is a ghost
 
 Measured 2026-08-30, twice in one session, by two different agents.
@@ -14059,6 +14123,62 @@ pass?* A yes means the discriminating power lives somewhere nobody is guarding.
 
 (The CLAUDE.md sentence is the owner's to change; this is the playbook
 refinement, and a wording change there routes through Track U.)
+
+## TWO QUANTITIES THAT ARE EQUAL IN YOUR FIXTURE CANNOT BOTH BE TESTED BY IT — and the arrangement that separates them is never the one anyone writes
+
+Measured 2026-09-20 writing `lib/rtl/mimic_wave.pas`. The test had **61 rows,
+green under CPython, green under pxx at HEAD, green under the pin**, and the
+file pxx wrote was **byte-identical to CPython's own writer**. That is about as
+much corroboration as a shim ever gets. Then I broke the shim on purpose in two
+places and **61 of 61 stayed green.**
+
+### The two breaks, and why neither was caught
+
+**`byteRate := framerate * blockAlign` changed to `framerate * sampwidth`.**
+Both byterate rows were MONO clips — and on mono `blockAlign == sampwidth`, so
+the two expressions are the same number. The rows did not "nearly" catch it;
+they **cannot** catch it, for every mono input that will ever exist.
+
+**The RIFF chunk-pad skip deleted** (`if (csize and 1) <> 0 then Inc(ofs)`). The
+pad byte exists only after an ODD-sized chunk, and every chunk the fixture wrote
+was even-sized, because every writer emits even-sized chunks. The path was never
+entered. With the break and one chunk resized to seven bytes, the reader walks
+one byte off and loses the data chunk entirely — loud, once reached.
+
+### The generalisation, and it is a question you can actually ask
+
+**For each constant and each branch in the implementation, ask which input makes
+its value OBSERVABLE.** Where two quantities coincide on the inputs your fixture
+uses, no row over those inputs can distinguish them, however many rows there
+are. Mono collapses `blockAlign` onto `sampwidth`; even sizes collapse the pad
+branch out of existence; a square image collapses width onto height; a
+single-element container collapses first onto last; an identity element
+collapses a multiply onto its operand.
+
+This is **"the interesting element goes last"** in a different costume: the
+passing arrangements are not a sample, they are the population everyone writes.
+Mono and even-sized chunks are what every WAV example uses, so a fixture written
+the ordinary way certifies the bug.
+
+### And the round trip is the assertion that cannot fail for its own defect
+
+A shim that invents its own container format round-trips through itself
+**perfectly** — write, read back, every value matches — because both halves
+share the mistake. The only rows that can fail for that defect are the ones
+comparing bytes ON DISK against what the oracle's writer produces. Those rows
+are also what makes the claim cross-runtime from a single-runtime test:
+identical bytes for identical input means either runtime can read the other's
+file.
+
+### What actually found it
+
+Not review, and not more rows. **Breaking the implementation on purpose and
+re-running**, which took two minutes and is the one step that reports on the
+TEST rather than on the code. The rule "a guard that cannot fail is not a guard"
+is in CLAUDE.md and I had followed it — I had a positive control, drawn from the
+right population, reading the right quantity. **It was aimed at the rows I
+thought of.** A deliberate break is aimed at the rows I did not.
+
 
 ## A SHARED-MACHINERY CHANGE NEEDS A CORPUS PER FRONTEND, NOT PER TEST COUNT — and a discrimination control certifies the INSTRUMENT, never the SAMPLE FRAME
 

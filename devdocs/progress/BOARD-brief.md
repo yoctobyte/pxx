@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:31 unfinished:19 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:173 backlog-nilpy:186 backlog-tools:62 backlog-pascal:11 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3893 rejected:84`
+`urgent:1 working:31 unfinished:19 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:173 backlog-nilpy:185 backlog-tools:62 backlog-pascal:11 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3894 rejected:84`
 
 ## Held now (working/ — do not touch these files)
 
@@ -79,7 +79,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 562, ranked
+## Ready — top 30 of 561, ranked
 
 - `[p 90] [N]` bug-n-0c508e507-breaks-lekkerzeilen-heapq-resolution-and-the-memoisation-did-not-restore-it
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
@@ -112,4 +112,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce (unblocks 2)
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 2)
 
-_532 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_531 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

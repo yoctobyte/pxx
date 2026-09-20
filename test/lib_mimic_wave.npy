@@ -1,0 +1,261 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_wave.pas against CPython's real `wave`.
+
+A DIFFERENTIAL, not a spec: this file runs unmodified under CPython, where
+`import wave` finds the stdlib module, and every expectation below was read off
+CPython rather than typed from the RIFF documentation.
+
+WHY THE RAW HEADER BYTES ARE ASSERTED AND NOT JUST THE ROUND TRIP. A shim that
+invents its own container format round-trips through itself perfectly: write,
+read back, every value matches, every row green. That assertion cannot fail for
+the defect it is supposed to catch, because both halves share the mistake. The
+only rows that can are the ones comparing the bytes ON DISK against what
+CPython's own writer produces -- so the header is spelled out byte by byte
+below, and those rows are why this test exists. They are also what makes the
+claim cross-runtime from a single-runtime test: identical bytes for identical
+input means a file written by either is readable by the other.
+
+SAMPWIDTH IS NEVER ONLY 2. Two bytes per sample is the value a shim that
+recorded nothing would land on by accident (it is the commonest case and the
+one every example uses), so it cannot separate a working implementation from a
+blank one. Rows below run sampwidth 1, 2 and 4, and stereo as well as mono, and
+one clip with an ODD byte count so the RIFF pad byte is exercised -- the pad is
+not counted in the data chunk size and IS counted in the RIFF size, which is the
+classic way a writer produces a file every reader mis-parses one byte onward.
+
+THE UNKNOWN-CHUNK ROW IS THE OTHER ONE THAT CANNOT PASS BY ACCIDENT. A reader
+that assumes the canonical 44-byte layout reads a LIST chunk's contents as
+samples, which is not a crash and not a diagnostic -- it is noise where the
+audio should be. Real encoders emit those chunks, so a fixed offset works on
+every file a test writes and fails on every file a recorder produces.
+
+NOT ASSERTED, deliberately: `getmarkers`/`setmark` (absent from the shim on
+purpose -- pinning their absence would redden the day somebody adds them), and
+reading from an open file object rather than a path.
+"""
+import wave
+import array
+import os
+
+N = 0
+
+
+def chk(name, got, want):
+    global N
+    if got == want:
+        N = N + 1
+        print(name + "=ok")
+    else:
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+TMP = os.environ.get("TMPDIR", "/tmp")
+
+
+def path(n):
+    return TMP + "/pxx_mimic_wave_" + n + ".wav"
+
+
+def raw(p):
+    f = open(p, "rb")
+    b = f.read()
+    f.close()
+    return b
+
+
+def write_clip(p, nch, sw, rate, frames):
+    w = wave.open(p, "wb")
+    w.setnchannels(nch)
+    w.setsampwidth(sw)
+    w.setframerate(rate)
+    w.writeframes(frames)
+    w.close()
+
+
+# --- 16-bit mono, the ordinary case, and the header on disk ----------------
+p1 = path("mono16")
+samples = array.array("h", [0, 1000, -1000, 32767, -32768])
+write_clip(p1, 1, 2, 8000, samples.tobytes())
+
+b = raw(p1)
+chk("hdr.len", len(b), 54)
+chk("hdr.riff", b[0:4], b"RIFF")
+chk("hdr.riffsize", b[4:8], b"\x2e\x00\x00\x00")      # 36 + 10 payload
+chk("hdr.wave", b[8:12], b"WAVE")
+chk("hdr.fmt", b[12:16], b"fmt ")
+chk("hdr.fmtsize", b[16:20], b"\x10\x00\x00\x00")     # 16, PCM
+chk("hdr.pcm", b[20:22], b"\x01\x00")
+chk("hdr.channels", b[22:24], b"\x01\x00")
+chk("hdr.rate", b[24:28], b"\x40\x1f\x00\x00")        # 8000
+chk("hdr.byterate", b[28:32], b"\x80\x3e\x00\x00")    # 8000*1*2
+chk("hdr.blockalign", b[32:34], b"\x02\x00")
+chk("hdr.bits", b[34:36], b"\x10\x00")                # 16
+chk("hdr.data", b[36:40], b"data")
+chk("hdr.datasize", b[40:44], b"\x0a\x00\x00\x00")    # 5 frames * 2
+chk("hdr.payload", b[44:54], samples.tobytes())
+
+# --- and it reads back through the API -------------------------------------
+r = wave.open(p1, "rb")
+chk("r16.nchannels", r.getnchannels(), 1)
+chk("r16.sampwidth", r.getsampwidth(), 2)
+chk("r16.framerate", r.getframerate(), 8000)
+chk("r16.nframes", r.getnframes(), 5)
+chk("r16.comptype", r.getcomptype(), "NONE")
+chk("r16.compname", r.getcompname(), "not compressed")
+chk("r16.tell0", r.tell(), 0)
+got = array.array("h", r.readframes(5))
+chk("r16.values", [got[0], got[1], got[2], got[3], got[4]],
+    [0, 1000, -1000, 32767, -32768])
+chk("r16.tell5", r.tell(), 5)
+chk("r16.eof", len(r.readframes(5)), 0)
+r.rewind()
+chk("r16.rewound", r.tell(), 0)
+r.setpos(3)
+chk("r16.setpos", r.tell(), 3)
+tail = array.array("h", r.readframes(2))
+chk("r16.tailvalues", [tail[0], tail[1]], [32767, -32768])
+r.close()
+
+# --- getparams round-trips into setparams: TSP's scaled_copy shape ---------
+r = wave.open(p1, "rb")
+params = r.getparams()
+data = array.array("h", r.readframes(r.getnframes()))
+r.close()
+chk("params.nchannels", params.nchannels, 1)
+chk("params.sampwidth", params.sampwidth, 2)
+chk("params.framerate", params.framerate, 8000)
+chk("params.nframes", params.nframes, 5)
+chk("params.comptype", params.comptype, "NONE")
+
+halved = array.array("h", [0, 500, -500, 16383, -16384])
+p2 = path("halved")
+w = wave.open(p2, "wb")
+w.setparams(params)
+w.writeframes(halved.tobytes())
+w.close()
+chk("setparams.bytes", raw(p2)[0:44], raw(p1)[0:44])   # same header, same sizes
+back = wave.open(p2, "rb")
+d2 = array.array("h", back.readframes(back.getnframes()))
+back.close()
+chk("setparams.values", [d2[0], d2[1], d2[2], d2[3], d2[4]],
+    [0, 500, -500, 16383, -16384])
+
+# --- 8-bit stereo with an ODD frame count: the pad byte --------------------
+# 3 frames * 2 channels * 1 byte = 5 bytes of payload. The data chunk size is
+# 5 and the file carries a 6th zero byte that the RIFF size counts and the
+# data size does not.
+p3 = path("stereo8odd")
+write_clip(p3, 2, 1, 11025, bytes(bytearray([1, 2, 3, 4, 5, 6])))
+b3 = raw(p3)
+chk("pad.len", len(b3), 50)
+chk("pad.riffsize", b3[4:8], b"\x2a\x00\x00\x00")      # 36 + 6, even payload
+chk("pad.channels", b3[22:24], b"\x02\x00")
+chk("pad.bits", b3[34:36], b"\x08\x00")
+chk("pad.datasize", b3[40:44], b"\x06\x00\x00\x00")
+# STEREO IS THE ONLY PLACE byteRate AND blockAlign CAN BE WRONG SEPARATELY.
+# On mono, blockAlign == sampwidth, so rate*align and rate*sampwidth are the
+# same number and every mono row agrees with a writer that confuses them. A
+# negative control caught exactly that: both mono byterate rows stayed green
+# with the multiplication broken. 11025 * 2ch * 1byte = 22050.
+chk("pad.byterate", b3[28:32], b"\x22\x56\x00\x00")
+chk("pad.blockalign", b3[32:34], b"\x02\x00")
+r3 = wave.open(p3, "rb")
+chk("pad.nchannels", r3.getnchannels(), 2)
+chk("pad.sampwidth", r3.getsampwidth(), 1)
+chk("pad.framerate", r3.getframerate(), 11025)
+chk("pad.nframes", r3.getnframes(), 3)
+chk("pad.frames", r3.readframes(3), bytes(bytearray([1, 2, 3, 4, 5, 6])))
+r3.close()
+
+# --- 32-bit mono: sampwidth 4, so no row here can pass on a default --------
+p4 = path("mono32")
+w32 = array.array("i", [0, 70000, -70000])
+write_clip(p4, 1, 4, 48000, w32.tobytes())
+b4 = raw(p4)
+chk("w32.bits", b4[34:36], b"\x20\x00")                # 32
+chk("w32.blockalign", b4[32:34], b"\x04\x00")
+chk("w32.byterate", b4[28:32], b"\x00\xee\x02\x00")    # 48000*4 = 192000
+chk("w32.datasize", b4[40:44], b"\x0c\x00\x00\x00")
+r4 = wave.open(p4, "rb")
+chk("w32.sampwidth", r4.getsampwidth(), 4)
+chk("w32.nframes", r4.getnframes(), 3)
+g4 = array.array("i", r4.readframes(3))
+chk("w32.values", [g4[0], g4[1], g4[2]], [0, 70000, -70000])
+r4.close()
+
+# --- a LIST chunk between fmt and data -------------------------------------
+# Hand-built, because no writer here emits one and it is exactly what a real
+# encoder does. A reader using a fixed 44-byte offset returns the LIST chunk's
+# contents as audio: no crash, no diagnostic, just noise.
+p5 = path("withlist")
+body = bytearray()
+body.extend(b"fmt ")
+body.extend(bytearray([16, 0, 0, 0]))
+body.extend(bytearray([1, 0, 1, 0]))                   # PCM, 1 channel
+body.extend(bytearray([0x40, 0x1f, 0, 0]))             # 8000
+body.extend(bytearray([0x80, 0x3e, 0, 0]))             # byte rate
+body.extend(bytearray([2, 0, 16, 0]))                  # align 2, bits 16
+# AN ODD-SIZED LIST CHUNK, seven bytes, so the pad byte after it is exercised.
+# An even one cannot catch a reader that forgets the pad: the classic RIFF
+# off-by-one only fires on an odd chunk, and every chunk a writer here emits is
+# even. A negative control with the pad skip deleted stayed green until this
+# size became odd.
+body.extend(b"LIST")
+body.extend(bytearray([7, 0, 0, 0]))
+body.extend(b"INFOxxx")
+body.extend(bytearray([0]))                            # the pad, uncounted
+body.extend(b"data")
+body.extend(bytearray([4, 0, 0, 0]))
+body.extend(bytearray([0x10, 0x27, 0xf0, 0xd8]))       # 10000, -10000
+whole = bytearray()
+whole.extend(b"RIFF")
+n = len(body) + 4
+whole.extend(bytearray([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]))
+whole.extend(b"WAVE")
+whole.extend(body)
+f = open(p5, "wb")
+f.write(bytes(whole))
+f.close()
+
+r5 = wave.open(p5, "rb")
+chk("list.nchannels", r5.getnchannels(), 1)
+chk("list.sampwidth", r5.getsampwidth(), 2)
+chk("list.framerate", r5.getframerate(), 8000)
+chk("list.nframes", r5.getnframes(), 2)
+g5 = array.array("h", r5.readframes(2))
+chk("list.values", [g5[0], g5[1]], [10000, -10000])
+r5.close()
+
+# --- the context manager runs both halves ----------------------------------
+# __exit__ is load-bearing here rather than decorative: buffered writing means
+# a manager whose __exit__ never runs leaves NO FILE ON DISK at all.
+p6 = path("ctxmgr")
+with wave.open(p6, "wb") as w6:
+    w6.setnchannels(1)
+    w6.setsampwidth(2)
+    w6.setframerate(8000)
+    w6.writeframes(array.array("h", [7, -7]).tobytes())
+chk("ctx.exists", os.path.exists(p6), True)
+with wave.open(p6, "rb") as r6:
+    g6 = array.array("h", r6.readframes(r6.getnframes()))
+chk("ctx.values", [g6[0], g6[1]], [7, -7])
+chk("ctx.size", len(raw(p6)), 48)
+
+# --- a file that is not a WAV raises, rather than answering something ------
+p7 = path("notawav")
+f = open(p7, "wb")
+f.write(b"this is not a RIFF file, not at all, forty-four-plus bytes long ok")
+f.close()
+raised = False
+try:
+    wave.open(p7, "rb")
+except Exception:
+    raised = True
+chk("bad.raises", raised, True)
+
+for p in [p1, p2, p3, p4, p5, p6, p7]:
+    if os.path.exists(p):
+        os.remove(p)
+
+print("N=" + str(N))
+print("MIMIC-WAVE OK")

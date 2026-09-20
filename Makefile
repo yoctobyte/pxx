@@ -38290,6 +38290,34 @@ endif
 	# and the pinned compiler reads it the same way.
 	tools/expect_same.sh lib_mimic_heapq.1 "$$($(TESTTMP)/lib_mimic_heapq | grep -c '=ok')" "32"
 	tools/expect_same.sh lib_mimic_heapq.2 "$$($(TESTTMP)/lib_mimic_heapq | tail -1)" "MIMIC-HEAPQ OK"
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_wave.npy $(TESTTMP)/lib_mimic_wave
+	# wave -- uncompressed RIFF/WAVE, written because TSP's tsp/voice.py:29
+	# imports it UNGUARDED: unlike the ctypes imports in tsp/platform/ there is
+	# no try/except for the compiler to fold, so no application edit routes
+	# around it. Board: devdocs/dev/tsp-compile-wall-inventory-2026-09-20.md.
+	#
+	# THE ROWS THAT MATTER ARE THE RAW HEADER BYTES, NOT THE ROUND TRIP. A shim
+	# that invents its own container format round-trips through itself
+	# perfectly -- both halves share the mistake, so every value matches and
+	# every row is green. Only a comparison against the bytes CPython's own
+	# writer produces can fail for that defect, which is also what makes the
+	# claim cross-runtime from a single-runtime test.
+	#
+	# TWO ROWS EXIST BECAUSE A NEGATIVE CONTROL FOUND THEM MISSING, and both
+	# gaps were invisible by construction rather than by oversight.
+	# pad.byterate is asserted on the STEREO clip because on mono
+	# blockAlign == sampwidth, so rate*align and rate*sampwidth are the same
+	# number and a writer confusing them passes every mono row -- the control
+	# broke that multiplication and 61 of 61 stayed green. And the LIST chunk
+	# is SEVEN bytes, odd, because the RIFF pad byte only exists after an odd
+	# chunk and every chunk this test writes is even; with the pad skip deleted
+	# the reader walks one byte off and loses the data chunk entirely.
+	#
+	# Verified under the PIN as well as at HEAD, so this row is not inert
+	# waiting for a `make pin`: the shim is a source file in lib/rtl and the
+	# pinned compiler reads it the same way.
+	tools/expect_same.sh lib_mimic_wave.1 "$$($(TESTTMP)/lib_mimic_wave | grep -c '=ok')" "63"
+	tools/expect_same.sh lib_mimic_wave.2 "$$($(TESTTMP)/lib_mimic_wave | tail -1)" "MIMIC-WAVE OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_shutil.npy $(TESTTMP)/lib_mimic_shutil
 	# shutil -- get_terminal_size only, and the one shim here backed by a real
 	# ioctl (ansiterm.TerminalSize, TIOCGWINSZ) rather than by a constant.
