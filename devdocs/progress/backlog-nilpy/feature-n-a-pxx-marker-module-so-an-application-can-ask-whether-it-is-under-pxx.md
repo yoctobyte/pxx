@@ -175,38 +175,38 @@ guarded import fails on CPython exactly as the placeholder did, and a change of 
 edit in each application. **Do not re-litigate it on this ticket.** If the owner's own words come back
 naming a different string, the coordinator relays it and the two applications edit one token each.
 
-## THE SPELLING DOES NOT DELIVER THE PROPERTY — IT IS AN IMPLEMENTATION CONSTRAINT
+## A STRAY `__pxx__.py` IS NOT A REQUIREMENT — RULED OUT, DO NOT BUILD MACHINERY FOR IT
 
-**Measured by lekkerzeilen-7a 2026-09-20, relayed secondhand through frankuser; recorded in that
-repo's blocker 07 README at `315e6ce` (lekkerzeilen tree, NOT verifiable from a pxx checkout).**
+**OWNER RULING 2026-09-20 (relayed by frankuser, secondhand), overruling the constraint this section
+previously carried:** *"no. that is _not_ an issue. someone dropping a `__pxx__.py` would do so
+intentionally."*
 
-**With a real `__pxx__.py` file on the path, CPYTHON TOOK THE MARKER ARM and selected the native pxx
-backend. Wrong, and silent.**
+**I am making this edit on the RULE, not on the relay.** The same channel has a measured instance today
+of returning its own suggestion as an instruction, so a relayed instruction is not by itself enough to
+change a record — **but an existing standing rule already decides this one, and it decides it the same
+way.** CLAUDE.md: *on par with the language, not with weird edge cases where the programmer actually
+made a presumed error* — and **where an input is only produced by a deliberate act, matching it is not
+a goal; that is `rejected/` territory, never a requirement.** The ruling and the rule agree, so the
+edit stands whichever way the provenance falls.
 
-**This qualifies the owner's decision rather than contradicting it.** The fork he answered was *should a
-third party be able to make the check come out TRUE on ordinary CPython by publishing a package of that
-name?* — no. **The dunder spelling defeats a PUBLISHED PACKAGE, because `__pxx__` is not claimable on
-PyPI. It does nothing about a LOCAL FILE**, and a stray `__pxx__.py` anywhere importable flips CPython
-onto the native backend with no diagnostic. **So the property he asked for is delivered by the
-IMPLEMENTATION, not by the string** — and every Name argument in the sections above reasons from PyPI
-claimability, which is the narrower threat.
+**THE MEASUREMENT IS REAL AND STAYS; ONLY ITS STATUS CHANGES.** lekkerzeilen-7a, 2026-09-20 (lekkerzeilen
+`315e6ce`, not verifiable from a pxx checkout): with a real `__pxx__.py` on the path, CPython imported
+it and took the marker arm. **True, reproducible, and NOT A DEFECT** — a file of that name appears only
+because someone put it there.
 
-**CONSTRAINT ON WHOEVER IMPLEMENTS THIS: the marker must be something the COMPILER provides and CPython
-can never import.** If it is ever spellable as an ordinary file, the guarantee is gone. Note the
-protection cannot live in pxx: nothing pxx does can stop CPython importing a file that exists. It has
-to come from the marker not being file-shaped.
+**So the implementer is FREE: provide the marker whichever way is simplest, including a shape CPython
+could import if someone placed a file.** No un-importable-by-construction machinery. The earlier
+framing — that the guarantee had to be an implementation property rather than the spelling — **is
+withdrawn.**
 
-**POSITIVE CONTROL THIS WANTS, and it is drawn from the population the hazard is in:** a real file of
-that name present on the path must NOT satisfy the check under CPython. **A fixture that only tests the
-absent-file case passes whether or not the hazard exists** — the failure mode is a file being there,
-so the control has to put one there.
+**THE POSITIVE CONTROL IS THE ORDINARY ONE:** the check comes out **TRUE under pxx and FALSE under
+CPython, with no such file present**. A control that plants a file tests a case we have ruled out.
 
-**ALSO UNTESTED, and labelled as such rather than folded in:** the third row of 7a's trace — *a future
-pxx that ships the marker takes the first arm* — was exercised only by putting a real `__pxx__.py` on
-the path, **which is not how the marker will work.** pxx did take the first arm as predicted. Treat
-that row as UNTESTED, not confirmed.
+**WHAT SURVIVES FROM 7a's MEASUREMENT AND MUST STAY LABELLED:** the third row — *a future pxx that ships
+the marker takes the first arm* — is **UNTESTED**. The only way it could be exercised was with a real
+file on the path, **which is not how the marker will work**. pxx did take the first arm as predicted;
+that is a different claim from the one the row makes.
 
-**What IS confirmed by measurement (7a, same commit): the nested guard is correct on both compilers
-that exist today**, tested with plain assignments in the arms to avoid blocker 07's own trigger —
-CPython with no marker takes the ctypes arm, today's pxx with no marker takes the pxx arm. **So
-`__pxx__` is a SIMPLIFICATION for lekkerzeilen, not a prerequisite; blocker 07 is the unblocker.**
+**Also still confirmed by measurement, and unaffected:** the nested guard is correct on both compilers
+that exist today (tested with plain assignments in the arms, to avoid blocker 07's own trigger), so
+**`__pxx__` is a SIMPLIFICATION for lekkerzeilen and blocker 07 is the unblocker.**
