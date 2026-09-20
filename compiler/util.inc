@@ -429,6 +429,21 @@ end;
   previous is merged into it, so a run of literals is one range and the RW
   segment is not chopped into a piece per string. The block's own start is
   kept in RoEntryStart. See RoRangeStart. }
+{ Total bytes currently marked never-written. Summed rather than kept as a
+  running counter because RoRangeAppend MERGES a range that touches the
+  previous one, so an incrementing counter and the range table would disagree
+  the moment two literals are adjacent -- which is the common case. Only
+  a.datamap reads this. }
+function RoRangeBytes: Int64;
+var i: Integer;
+begin
+  Result := 0;   { Result, not the bare own name -- reading the own name of a
+                   parameterless function is a recursive CALL in this dialect
+                   and the compiler warns about exactly that. }
+  for i := 0 to RoRangeCount - 1 do
+    Result := Result + (RoRangeEnd[i] - RoRangeStart[i]);
+end;
+
 procedure RoRangeAdd(s, e: Integer);
 begin
   if e <= s then Exit;

@@ -8330,6 +8330,26 @@ var
   { seen = whole-array destinations; keep = the candidate rule accepts the RHS;
     refuse = the candidate rule would REFUSE it. refuse is the narrowing's cost
     and it is the only number this channel exists to produce. }
+  { a.datamap — where the DATA SEGMENT's bytes went, by category.
+
+    WHY IT EXISTS: an ESP image's SRAM is `.data` + `.bss`, and neither carries
+    OBJECT symbols in our objects, so `readelf` sees two anonymous lumps and
+    can attribute nothing. The read-only-segment ticket's REMAINING list (NilPy
+    VMTs, prop/method arrays, IMTs, dispatch tables, float constants) is
+    blocked on exactly this: "each after its own never-written measurement",
+    and nothing could take the measurement.
+
+    ACCOUNTED REGARDLESS OF RoRttiWanted, which is the point. On ESP
+    (`--emit-obj`) RoRttiWanted is FALSE by design — an ISR reads a VMT through
+    an instance with the flash cache off — so the RoRangeAdd calls do not run
+    and a census keyed on them would report zero for the very structures being
+    priced. These counters ask "how big is it", never "was it marked".
+
+    UNATTRIBUTED IS PRINTED AND IS THE USEFUL ROW: it is DataLen minus what the
+    noted sites claim, i.e. the part of the segment no category has named yet.
+    A census whose categories sum to the total is a census that has stopped
+    being able to surprise you. }
+  DataMapLit, DataMapRttiHdr, DataMapRttiArr, DataMapVmt : Int64;
   DbgWholeArrSeen, DbgWholeArrKeep, DbgWholeArrRefuse : Integer;
 
 { ===== a.derefwalk — arm census for ResolveDerefShapeAt ====================

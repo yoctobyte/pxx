@@ -36001,6 +36001,32 @@ test-quick: $(COMPILER)
 	# beautifully and answers wrongly fails here.
 	tools/expect_same.sh dce_why_root_report "$$($(TESTTMP)/dcewhy)" "$$(printf 'tag 2\ncall 42')"
 	@echo "=== test_dce_why_root_report: --dce-why names both known roots ==="
+	# THE SWEEP-THUNK ABI ASYMMETRY, which is what a 2.5x live-set gap between
+	# riscv32 and xtensa turned out to be. A managed-local sweep thunk lands
+	# INSIDE the body that calls it, so its CodeRef target is mid-body and
+	# DceRangeHoldsStub roots that body. TargetHasSweepThunk is false for
+	# WINDOWED xtensa -- sp is constant and a0 is the live return address, so a
+	# thunk has nowhere to put either -- and the sweep is inlined instead.
+	#
+	# THE TWO ARMS ARE EACH OTHER'S CONTROL, which is why both are asserted and
+	# not just the interesting one: identical counts would mean the instrument
+	# had stopped distinguishing them, and that failure prints as a pass if you
+	# only check the arm you expect to fire. Measured 2026-09-20: riscv32 and
+	# call0 xtensa each report 1 in-body target (inside F, +760 and +604);
+	# windowed reports 0.
+	# bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=call0"; do \
+	  n=$$(./$(COMPILER) $$t --dce --dce-why --platform=esp --no-signals \
+	        test/test_dce_sweep_thunk_abi.pas $(TESTTMP)/sweepabi.o 2>&1 \
+	        | sed -n 's/^dce-why: stub targets [0-9]*, of which \([0-9]*\) land inside a body.*/\1/p'); \
+	  [ "$$n" = 1 ] || { echo "sweep-thunk ABI: $$t reported $$n in-body stub targets, expected 1"; exit 1; }; \
+	done
+	@n=$$(./$(COMPILER) --target=xtensa --xtensa-abi=windowed --dce --dce-why \
+	       --platform=esp --no-signals test/test_dce_sweep_thunk_abi.pas \
+	       $(TESTTMP)/sweepabi.o 2>&1 \
+	       | sed -n 's/^dce-why: stub targets [0-9]*, of which \([0-9]*\) land inside a body.*/\1/p'); \
+	  [ "$$n" = 0 ] || { echo "sweep-thunk ABI: windowed xtensa reported $$n in-body stub targets, expected 0"; exit 1; }
+	@echo "=== test_dce_sweep_thunk_abi: the in-body stub target is the ABI's, not the ISA's ==="
 	# THE THREADS HERE COME FROM libc, and that is the row's whole content. A
 	# pthread never runs the __pxxclone stub that installs a per-thread TLS
 	# block, so it inherits the main thread's gs and shares its heap magazine --

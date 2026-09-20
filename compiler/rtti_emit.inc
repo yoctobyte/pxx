@@ -986,6 +986,10 @@ begin
         UClsRTTIOff[ci] := DataLen;
         DataPutZeros(RTTI_CLS_SIZE);
         if RoRttiWanted then RoRangeAdd(UClsRTTIOff[ci], DataLen);
+        { a.datamap — OUTSIDE the RoRttiWanted guard on purpose: on --emit-obj
+          that guard is false and the census would report zero for the
+          structure it exists to price. }
+        Inc(DataMapRttiHdr, DataLen - UClsRTTIOff[ci]);
       end;
     end;
 
@@ -1068,6 +1072,7 @@ begin
       begin
         firstOff := DataLen;
         DataPutZeros(propCount * RTTI_PROP_SIZE);
+        Inc(DataMapRttiArr, propCount * RTTI_PROP_SIZE);   { a.datamap }
         k := 0;
         for i := 0 to cnt - 1 do
           if UPropPub[base + i] = 1 then
@@ -1137,6 +1142,7 @@ begin
       begin
         firstOff := DataLen;
         DataPutZeros(ifaceCount * RTTI_IFACE_SIZE);
+        Inc(DataMapRttiArr, ifaceCount * RTTI_IFACE_SIZE);   { a.datamap }
         k := 0;
         for i := 0 to IMTCount - 1 do
           if IMTClass[i] = ci then

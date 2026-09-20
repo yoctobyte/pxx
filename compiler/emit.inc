@@ -1967,6 +1967,7 @@ begin
     (feature-opt-static-literal-blocks-should-never-be-written-to). The
     runtime's retain/release see MSTR_STATIC_RC and leave the block alone. }
   RoRangeAdd(entryStart, DataLen);
+  Inc(DataMapLit, DataLen - entryStart);           { a.datamap }
 
   Result := StrCount; Inc(StrCount);
 end;

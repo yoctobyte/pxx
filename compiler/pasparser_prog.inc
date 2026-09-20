@@ -560,6 +560,7 @@ begin
     Inc(DataLen);
   end;
   if RoRttiWanted then RoRangeAdd(vmtStart, DataLen);
+  Inc(DataMapVmt, DataLen - vmtStart);   { a.datamap -- outside the guard; see rtti_emit.inc }
 end;
 
 { Give TObject's row its four root METHODS, so a receiver statically typed

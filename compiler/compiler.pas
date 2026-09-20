@@ -3070,6 +3070,39 @@ begin
     emittedCode := CodePadStart
   else
     emittedCode := CodeLen;
+  { PXXDBG=a.datamap -- where the data segment's bytes went, by category.
+
+    NOT DERIVABLE FROM THE OBJECT. pxx emits FUNC symbols and section symbols
+    and no OBJECT symbols, so `readelf -s` on our .o sees `.data` and `.bss` as
+    two anonymous lumps and can attribute nothing inside them. On ESP those two
+    lumps ARE the SRAM cost, which is what makes the absence expensive:
+    feature-a-there-is-no-read-only-load-segment-...'s REMAINING list defers
+    every item "after its own never-written measurement", and this is the
+    measurement that was missing.
+
+    READ `data=` ON THE ok: LINE AS THE WHOLE SEGMENT, NOT AS SRAM. It is
+    .data AND .rodata; under --emit-obj the read-only part carries no W flag
+    and the IDF linker puts it in flash, so data+bss overstates ESP SRAM by
+    the entire read-only pool (measured 2026-09-20 on the NilPy print demo:
+    178,008 against 125,832, 42%). ro= below is that pool.
+
+    unattributed= IS THE ROW THAT MATTERS and it is deliberately not zero: it
+    is what no category has named yet. A census whose parts sum to the total
+    has stopped being able to surprise anyone. }
+  if PxxDbgEnabled('a.datamap') then
+  begin
+    WriteLn('PXXDBG a.datamap data=', DataLen, 'B  bss=', BSSSize, 'B');
+    WriteLn('PXXDBG a.datamap   string-literal pool  ', DataMapLit, 'B');
+    WriteLn('PXXDBG a.datamap   class RTTI headers   ', DataMapRttiHdr, 'B');
+    WriteLn('PXXDBG a.datamap   prop/meth + IMT arrs ', DataMapRttiArr, 'B');
+    WriteLn('PXXDBG a.datamap   Pascal VMTs          ', DataMapVmt, 'B');
+    WriteLn('PXXDBG a.datamap   unattributed         ',
+            DataLen - DataMapLit - DataMapRttiHdr - DataMapRttiArr - DataMapVmt, 'B');
+    { Counted regardless of RoRttiWanted, so this row says what IS read-only
+      and the rows above say how big each structure is -- two different
+      questions, and on --emit-obj the answers differ. }
+    WriteLn('PXXDBG a.datamap   of which marked ro   ', RoRangeBytes, 'B');
+  end;
   writeln('ok: ',outFile,'  [code=',emittedCode,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,'  codeseg=',CodeLen,'B]');
 end.
