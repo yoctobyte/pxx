@@ -85,14 +85,17 @@ if ! PXX_OUT="$("$PXX" $ISA ${PXX_EXTRA_FLAGS:-} --platform=esp --no-signals -Fu
     case "$PXX" in
       *stable_linux_amd64*)
         echo
-        echo "      That is the PINNED compiler, which is this script's default. A demo"
-        echo "      can be newer than the pin: as of 2026-09-20 none of the four NilPy"
-        echo "      demos builds under it, and the error it gives names --esp-profile=bare"
-        echo "      as the remedy, which is a DEAD END here (bare cannot compile NilPy at"
-        echo "      all, and would not fit in SRAM if it could). Build HEAD and retry:"
+        echo "      That is the PINNED compiler, which is this script's default, and a"
+        echo "      demo can be newer than the pin -- a NilPy demo needing a compiler fix"
+        echo "      that has landed but not yet been pinned fails exactly here. Build"
+        echo "      HEAD and retry:"
         echo
         echo "        make -C $REPO_ROOT compiler/pascal26"
         echo "        PXX=$REPO_ROOT/compiler/pascal26 ./build.sh ${1:-}"
+        echo
+        echo "      If the error above mentions 'a heap arena needs mmap' it is from a"
+        echo "      pin older than v413; ignore its --esp-profile=bare suggestion, which"
+        echo "      is a dead end (bare cannot compile NilPy at all)."
         ;;
     esac
   } >&2
