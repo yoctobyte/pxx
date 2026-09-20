@@ -271,3 +271,17 @@ The ESP demo stops polling: its timer callback is a `def` in `main.npy`, and
 Cheaper host-side proof first -- a def handed to a Pascal `procedural`
 parameter of a non-Variant signature, called from Pascal, returning the value
 the def computed.
+
+## Why this should not sink in the backlog (frankz-e5, 2026-09-20)
+
+Relayed secondhand by frankuser, not heard firsthand: **the owner is interested
+in this mechanism for a possible `ffsfs` demo** — a Python program handing a
+compiled routine to C as a callback. Recorded here because an unowned ticket
+with a ready next step is exactly what gets lost, and because a reader who
+knows a demo wants it will rank it differently from one who reads it as a
+frontend nicety.
+
+The next step is a one-sitting job for a rested seat: the argument path asks the
+`ProcSigCompatible`/thunk question and a **field assignment** does not.
+`RecFieldProcSig(rec, field)` already exists. The four-row table above is the
+measurement; nothing about the thunk changes.
