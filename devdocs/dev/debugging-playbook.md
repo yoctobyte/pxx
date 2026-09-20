@@ -31294,3 +31294,20 @@ other seat did, immediately** — because the other seat knows what the code act
 their own commit contained. **A zero is worth one sentence to whoever owns the thing you searched**,
 before it becomes a finding. That sentence cost ten seconds each time and would have cost three
 retractions.
+
+**THE INVERSE IS WORSE AND ARRIVED THE SAME DAY: A NON-ZERO FOR SOMETHING ABSENT.** A per-routine
+census of a 1292-line span scored one routine at **four float references**, which would have placed it
+on the float-coupled side of a split decision. **All four were two comment lines and two `forward;`
+declarations belonging to the NEXT routine** — a boundary scan attributing them upward. The routine's
+body has none; one command reading the lines moved it across the table. (Verified independently here:
+`PXXIntfFromVariant` at `builtinheap.pas:6212` has no float reference in its body.)
+
+**Same mechanism — the instrument answered honestly about its own pattern and not about the world —
+and the false-POSITIVE direction does not announce itself as a puzzle:**
+
+> **A zero makes you ask why. A four makes you write it down.**
+
+**And it was more credible than a raw grep would have been, because it was per-routine and
+tabulated.** Structure reads as care. **A count presented as a table has already been through
+somebody's judgement, so the next reader audits the conclusion and not the count** — which is exactly
+backwards when the tabulation is what introduced the error.
