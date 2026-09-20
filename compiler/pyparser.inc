@@ -18269,7 +18269,7 @@ function PyMethodUsedAsValue(const nm: AnsiString): Boolean;
   its base in step — both are normalised or neither is. A same-named ATTRIBUTE
   read elsewhere in the module normalises a method that did not need it; the cost
   is boxing, and the two passes still agree, so it stays correct. }
-var j: Integer;
+var j, ri, rlo, rhi: Integer;
 begin
   Result := False;
   if nm = '' then Exit;
@@ -18295,21 +18295,42 @@ begin
     Result := True;
     Exit;
   end;
-  j := 1;
-  while j < MainProgramTokCount do
+  { EVERY Python source range, not just the main program's tokens. The scan used
+    to walk 1..MainProgramTokCount, which is the MAIN FILE only, so a value read
+    living in an IMPORTED MODULE was invisible and the method kept its native
+    signature -- while pydynattr_get_v's bound-method arm binds mi^.Code through
+    pybound_new_star on the stated precondition that this function normalised it.
+    That precondition is not checkable there, so the failure was a jump to a
+    garbage code address rather than a diagnostic. Measured: the identical read
+    gives RetKind=22 (Variant) in the main file and RetKind=19 (Double) from a
+    module, and the module form SIGSEGVs.
+
+    PyPyRangeAt rather than TokCount, deliberately: it yields the main file plus
+    every appended .py/.npy module and SKIPS Pascal units. An unbounded scan once
+    met `parts.at(k)` in pylib.pas -- Pascal, one argument -- and wrongly vetoed
+    Grid.at's `z` (2026-09-15, token 68229). Same reasoning as PyTokBodyEnd
+    taking a `limit` because the class may sit in a module not yet reached.
+    bug-n-a-bare-read-of-a-method-as-a-value-yields-a-garbage-code-address }
+  ri := 0;
+  while PyPyRangeAt(ri, rlo, rhi) do
   begin
-    if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
-       CaseEqual(GetTokenStr(j), nm) then
+    j := rlo + 1;
+    while j < rhi do
     begin
-      { a CALL (`o.m(...)`) or an attribute STORE (`o.m = x`) is not a value read }
-      if (j + 1 >= MainProgramTokCount) or
-         (not (Tokens[j + 1].Kind in [tkLParen, tkAssign])) then
+      if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
+         CaseEqual(GetTokenStr(j), nm) then
       begin
-        Result := True;
-        Exit;
+        { a CALL (`o.m(...)`) or an attribute STORE (`o.m = x`) is not a value read }
+        if (j + 1 >= rhi) or
+           (not (Tokens[j + 1].Kind in [tkLParen, tkAssign])) then
+        begin
+          Result := True;
+          Exit;
+        end;
       end;
+      Inc(j);
     end;
-    Inc(j);
+    Inc(ri);
   end;
 end;
 

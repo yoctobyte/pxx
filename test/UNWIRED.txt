@@ -147,18 +147,3 @@ test/test_foreign_thread_exception_chain.pas  a libc pthread inherits its creato
 # declared in prepasserr_mid the same ladder answers correctly, so a two-unit
 # fixture would pass on the unfixed compiler and prove nothing.
 test/prepasserr_base.pas  fixture unit for test_p_a_prepass_cannot_raise_an_error_directive.pas: declares the type ONE UNIT FURTHER than the directive, which is the variable the test turns on; nothing runs it directly by design
-
-# --- FAILS AT HEAD ON PURPOSE: a banked repro, wired by the fix ---
-# This is the one exemption class where the entry is a COUNTDOWN rather than a
-# steady state, so it carries its wire-when condition explicitly. Wiring it
-# today would redden test-nilpy for every seat; deleting it would lose a
-# deterministic 4/4 repro that took five failed reductions to find.
-#
-# THE REASON THIS LINE EXISTS RATHER THAN JUST THE SOURCE HEADER: f09f6bcde
-# (2026-09-14) parked three sources with "wire all three in the commit that
-# fixes the PAL" written in a source header. The fixing commit landed the same
-# day and nobody wired them -- they sat for six days, and because tools-devtest
-# was already red, their red was unreportable and three further defects hid
-# behind the unchanging level. The instruction lived somewhere nothing scans.
-# The source header is kept too; this file is the copy a machine re-reads.
-test/test_nilpy_a_bare_read_of_a_method_crashes_when_a_call_site_takes_the_dynamic_path.npy  banked repro that FAILS at HEAD by design; wire it into test-nilpy in the commit that fixes bug-n-a-bare-read-of-a-method-as-a-value-yields-a-garbage-code-address, and delete this line in that same commit

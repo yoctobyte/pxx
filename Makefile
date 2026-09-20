@@ -2055,6 +2055,18 @@ test-nilpy: $(COMPILER)
 	# the fixture -- written in the passing order it would have certified the bug.
 	./$(COMPILER) test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy $(TESTTMP)/test_nilpy_callorder26
 	tools/expect_same.sh test_nilpy_callorder26 "$$($(TESTTMP)/test_nilpy_callorder26)" "$$(python3 test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy)"
+	# A bare READ of a method as a VALUE, off a receiver whose class is not
+	# known statically, where the read lives in an IMPORTED MODULE. The scan
+	# that normalises such a method to the all-variant ABI used to walk the
+	# MAIN FILE only, so the read was invisible, the method kept its native
+	# signature, and the bound-method binder jumped to a garbage code address.
+	# THE CALL SITE IN Craft.gusty IS LOAD-BEARING: it is what lets the return
+	# type be inferred as Double. Remove it and the method defaults to Variant
+	# and the bug cannot appear -- so a fixture without it passes on the
+	# UNFIXED compiler and proves nothing.
+	# Oracle is CPython on the same file, so nothing is restated here.
+	./$(COMPILER) -Futest test/test_nilpy_a_bare_read_of_a_method_crashes_when_a_call_site_takes_the_dynamic_path.npy $(TESTTMP)/test_nilpy_bareread26
+	tools/expect_same.sh test_nilpy_bareread26 "$$($(TESTTMP)/test_nilpy_bareread26)" "$$(cd test && python3 test_nilpy_a_bare_read_of_a_method_crashes_when_a_call_site_takes_the_dynamic_path.npy)"
 	# A @property SETTER runs when the receiver is UNANNOTATED, even though two
 	# unrelated classes declare a plain FIELD of the same name. The oracle is
 	# CPython on the same file, so nothing is restated here.

@@ -325,7 +325,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (185)
+## backlog-nilpy (184)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -333,7 +333,6 @@ _none_
 | addendum-the-property-warning-fires-on-the-safe-pair-and-is-silent-on-the-lethal-one | A | 50 | addendum | Addendum: the property warning fires on the SAFE pair and is silent on the lethal one | — |
 | bug-n-a-bare-import-of-a-c-header-only-name-builds-a-binary-that-cannot-exec | N | 50 | bug | `import strings` in a .npy resolves to /usr/include/strings.h, synthesises `libstrings.so` from the header's own file NAME, and emits a DT_NEEDED no loader can satisfy. Verified against the PINNED compiler (2026-09-10): the build succeeds, `readelf -d` shows `Shared library: [libstrings.so]`, and the program dies at exec with `cannot open shared object file`. At HEAD it is a compile error instead, because e53eff428's guard catches exactly this -- so the OBSERVABLE has already moved from silent-broken-binary to loud-refusal, and this row is about the remaining half: nothing should have emitted that DT_NEEDED in the first place. NOT a resolution bug: `strings` is DELIBERATELY absent from pasparser_proc.inc's curated bare-import list (an ordinary Pascal unit sharing a Python name, named there beside `classes` and `types`), so falling through to the host header is the documented behaviour. Six of the seven RTL/header name collisions on this box -- math, menu, netdb, png, regex, zlib -- resolve to the unit; `strings` is the one that reaches a header, which is why nobody hit this before. | feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym |
 | bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing | N | 35 | bug |  | — |
-| bug-n-a-bare-read-of-a-method-as-a-value-yields-a-garbage-code-address | N | 65 | bug | Reading a method as a VALUE off a receiver whose class is not known statically produces a carrier holding an address that is not code, and calling through it jumps into the ELF headers. It springs when the same attribute name ALSO appears at a call site that took the open-world dynamic-dispatch path; remove that call site and the identical read works. The call site warns and is correct, the read site emits no diagnostic at all, so the only two uses of one name are served by two mechanisms of which one is silent and wrong. | — |
 | bug-n-a-bare-tuple-returned-from-a-mimic-module-method-arrives-as-its-string-repr | N | 60 | bug | A BARE tuple returned from a method of a class in a mimic (lib/rtl) module arrives at the caller as a STRING holding the tuple's repr: type(r) is str and r == (a, b) is False. A tuple inside a returned LIST survives intact, and the identical code in a plain local module or inline is correct -- so this is the mimic-module return route, not tuples, not dict iteration, and not imports generally. Found as the single failing assertion (24 of 25) in test/lib_mimic_xml_sax_xmlreader.npy, which Track T auto-filed against an unrelated compiler-only sha. | — |
 | bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder | N | 45→70 | bug | `c & 12` where c reads as a VARIANT holding a user object never reaches __and__: it coerces the object to an int instead. Same for \|, ^, << and >>. This is what blocks the augmented halves &=, \|=, ^=, <<= and >>=. | — |
 | bug-n-a-builtin-function-is-not-a-first-class-value | N | 45 | bug | `call_it(print, x)` gives `error: undefined variable (print)` while `call_it(own_fn, x)` works -- a USER function is a value and a BUILTIN is not. Ordinary Python: a builtin passed as a callback. Three sites in lekkerzeilen's entry-point closure, all `announce=None if quiet else print`, which is what walls the demo at app.py:561. The conditional is not involved; a bare argument reproduces it. | — |
@@ -1105,9 +1104,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3892)
+## done (3893)
 
-3892 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3893 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (84)
 
@@ -1295,7 +1294,6 @@ _none_
 - [p 65] [U] decide-t-the-full-suite-hook-refuses-prose-about-the-suite (unblocks 5)
 - [p 65] [A] bug-a-a-hand-built-com-interface-cannot-be-called (unblocks 1)
 - [p 65] [A] bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
-- [p 65] [N] bug-n-a-bare-read-of-a-method-as-a-value-yields-a-garbage-code-address
 - [p 65] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 65] [N] bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
