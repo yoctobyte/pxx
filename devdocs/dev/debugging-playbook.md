@@ -11664,6 +11664,62 @@ as a hypothesis with a mechanism, which is worth more than the count, and the
 mechanism is the paragraph at the top: the consumer is the component the symptom
 certifies is running.
 
+## A SYMBOL CENSUS ANSWERS ABOUT SYMBOLS AND THE LINKER DECIDES ON RELOCATIONS — the two sets differ by exactly the thing you are measuring
+
+Measured 2026-09-20 (frankS), pricing `--dce` on the SRAM axis for
+[[umbrella-an-esp32-image-is-as-small-as-it-can-be]].
+
+`--dce` removed 921,476 B of code from a NilPy ESP-IDF object on riscv32
+(2,996,040 → 2,074,564) and the chip's free DRAM pool grew by **1,840 B**. Our
+object's `data=` and `bss=` were **byte-identical** in both builds, so the
+bytes had to be coming from the SDK side. The obvious question — which external
+references did the dead code stop making — was put to `readelf -s`:
+
+```
+UND symbols, no --dce : 38
+UND symbols, --dce    : 38
+```
+
+Identical. `lwip_socket`, `lwip_bind`, `lwip_recv` and five siblings present in
+**both** objects. Read literally, that says the dead code referenced nothing
+the live code does not, and therefore that the 1,840 B came from somewhere
+else. It is a correct, current, correctly-parameterised answer to a question
+nobody asked.
+
+**pxx's DCE drops procedure BODIES and never prunes the symbol table.** An UND
+entry is a *name the object might need*; it survives the removal of every
+instruction that used it. What the linker actually resolves — and what
+`--gc-sections` walks — is **relocations**. Ask that instead:
+
+```
+relocations naming the lwip socket symbols, no --dce : 5
+relocations naming the lwip socket symbols, --dce    : 0
+```
+
+There is the whole 1,840 B: with no relocation reaching lwIP's socket path, its
+static buffers (`sockets.c`, `nd6.c`, `ip.c`, `tcp_in.c`, `tcp_isn_default.c`)
+are garbage-collected, and IDF links `--gc-sections`.
+
+**The shape.** A symbol table is a *declaration* set and a relocation table is a
+*use* set. Every question of the form "will the linker keep X", "does this
+object still need Y", "did removing this code stop us depending on Z" is about
+USES, and the instrument everyone reaches for first is `nm` or `readelf -s`,
+which is about DECLARATIONS. The two sets agree on almost every object, which
+is what makes the disagreement invisible: they diverge *exactly* when something
+removed uses without removing declarations — i.e. precisely in the situation
+you built the census to measure.
+
+**What to run.** `readelf -rW <obj>` and count relocations against the name,
+not `readelf -sW`. If you want the set the linker will pull, that is the only
+one of the two tables it consults. And note the negative control this gives you
+for free: a symbol that is UND with **zero** relocations is a declaration the
+object no longer uses, which is a fact `nm` cannot express at all.
+
+Third independent instance of the general rule
+([[the-instrument-is-current-and-enumerates-a-set-that-cannot-contain-the-subject]]),
+and the first where both instruments read the *same file* — the population
+error is not in the target, it is in which of the file's own tables answers.
+
 ## A CORRECTED COUNT CAN STILL BE A COUNT OF THE WRONG POPULATION — fixing the instrument does not fix the question
 
 Measured 2026-09-02 (frankC), across the phase-2 shortstring conversion.
