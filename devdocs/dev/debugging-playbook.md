@@ -26698,6 +26698,37 @@ compile leaves the PREVIOUS test binary on disk, so running it prints a full set
 of plausible rows belonging to the earlier build. A waiter that watches for
 output, and a reader that trusts output, both need the producing step's own status.
 
+**AND THE NAMESPACE DOES NOT HAVE TO BE A PROCESS TABLE. IN A FLEET, `origin` IS
+ONE — AND A SEAT READS ITS OWN EFFECT AS SOMEBODY ELSE'S HEAD START.** frankz-e5,
+2026-09-20, flagged as unlisted by frankb-8e, which banked it in the logbook and
+noted it *"will recur in any fleet where a message causes a commit."* A seat
+relayed `census rc=1` to a peer, later saw `origin` ahead of `local` with the fix
+already in it, and concluded **the peer had got there first and its own relay had
+been stale.** The fix was **46 seconds downstream of its own message.** It then
+withdrew a correct finding and filed the whole thing under staleness — the
+failure mode it had been primed all evening to hunt.
+
+**A `pgrep` counts the observer because the observer is a process. Here the
+observer is a CAUSE**, and commit history records effects without recording who
+prompted them, so the same inversion arrives with no visible observer at all.
+**Everything the tree can tell you is silent on it:** `git show <sha>:<path>`
+answers *what was true at a commit* and can never answer *which commit someone
+was standing on when they spoke*.
+
+Facts verified here independently, from the object store: `0fbc009c2`
+**16:33:31**, `4c8558c32` **16:35:43**, a **132-second** window; at the first the
+fixture is present and `test/UNWIRED.txt` carries **zero** matching lines, so the
+census *must* have answered 1 there. **The relay's own send time is the one datum
+no tree holds** — it lives in the transcripts, and it is exactly the datum the
+dispute turns on.
+
+**So a relay's correctness is a claim about a MOMENT, and tree-state evidence
+cannot settle a timing dispute however solid it is about trees.** The instrument
+is `%cI` on both commits against the relay's own transcript timestamp — which
+every seat holds for every message it RECEIVES and neither party had thought to
+use. And before concluding a peer beat you to something: **check whether your own
+message is upstream of their commit.**
+
 ## THE PIN IS NOT A POSITIVE CONTROL FOR A `lib/rtl` CHANGE — IT IS THE SAME LIBRARY, NOT AN OLDER ONE
 
 Measured 2026-09-12 (frankuser), adding `tempfile.mkdtemp`. Confirmed
