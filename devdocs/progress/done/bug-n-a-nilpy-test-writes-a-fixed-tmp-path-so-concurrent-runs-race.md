@@ -8,7 +8,7 @@ blocked-by: []
 status: done
 owner: ""
 created: 2026-08-28
-summary: "MECHANISM, not a file: a test that spells a temp path as a RUNTIME literal cannot be privatized by the Makefile sweep or rewritten by testmgr, so concurrent testmgr runs on one box race over one file -- and this box routinely runs several clones at once. The condition that springs it is any test writing a literal path instead of the env chain TESTMGR_TMP -> TESTTMP -> /tmp. tools/testmgr_hardcoded_tmp_devtest.py is the guard and prints both the offending source and the remedy. THE ORIGINALLY CITED INSTANCE IS FIXED and this summary cited it for 23 days after: test_nilpy_class_named_like_an_rtl_record.npy (introduced f3422cd14) now takes the env chain at line 38 and the guard no longer names it. FIXED 2026-09-20 in 35841d247, and the recurrence was THREE sources, not the two measured on 09-20 -- the third is test/lib_findfirst.pas, a .pas, which is why a census reading this as a NilPy problem missed it: the guard globs compiled test sources of every frontend. The env chain ORDER is the part this ticket got wrong and a body note now records: TESTMGR_TMP must come FIRST, because testmgr launches a job through an allowlist (PXX_ TESTMGR_ LC_ QEMU_) that TESTTMP does not match, so the remedy the body prescribes passes the guard and still races. tools-devtest now prints 165 guard(s) green, zero red. Do not re-cite a firing row here; the recurrence is the point. Filed by Track T; T owns the tool, never the bug."
+summary: "MECHANISM, not a file: a test that spells a temp path as a RUNTIME literal cannot be privatized by the Makefile sweep or rewritten by testmgr, so concurrent testmgr runs on one box race over one file -- and this box routinely runs several clones at once. The condition that springs it is any test writing a literal path instead of the env chain TESTMGR_TMP -> TESTTMP -> /tmp. tools/testmgr_hardcoded_tmp_devtest.py is the guard and prints both the offending source and the remedy. THE ORIGINALLY CITED INSTANCE IS FIXED and this summary cited it for 23 days after: test_nilpy_class_named_like_an_rtl_record.npy (introduced f3422cd14) now takes the env chain at line 38 and the guard no longer names it. FIXED 2026-09-20 in 35841d247, and the recurrence was THREE sources, not the two measured on 09-20 -- the third is test/lib_findfirst.pas, a .pas, which is why a census reading this as a NilPy problem missed it: the guard globs compiled test sources of every frontend. The env chain ORDER is the part this ticket's own body got wrong -- TESTMGR_TMP must come FIRST, because testmgr launches a job through an allowlist (PXX_ TESTMGR_ LC_ QEMU_) that TESTTMP does not match, so the remedy the body prescribes would pass a presence check and still race. The GUARD already enforces that order and has since bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips (done); a same-day note here claiming otherwise is corrected in the body. tools-devtest now prints 165 guard(s) green, zero red. Do not re-cite a firing row here; the recurrence is the point. Filed by Track T; T owns the tool, never the bug."
 ---
 
 # What is wrong
@@ -157,3 +157,37 @@ not filed — say so before quoting a green from it.
 
 ## Log
 - 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 778d63ad3.
+
+## 2026-09-20 — CORRECTION, same day, same seat: the gap I just described is CLOSED, and I said so while holding the file that closes it (frankS)
+
+The note above ends *"Teaching it to require `TESTMGR_TMP` first is a Track T
+change and is not filed."* **Both halves are false.**
+
+It is BUILT. `tools/testmgr_hardcoded_tmp_devtest.py` carries a SECOND check —
+`ENV_READ_RE`, `KNOWN_ENV_ONLY` — whose header block states the allowlist
+argument in the same terms I wrote it in, and it enforces the ORDER, not merely
+the presence. Positive control, run before writing this: a scratch Pascal file
+under `test/` reading `GetEnvironmentVariable('TESTTMP')` with no
+`TESTMGR_TMP` arm makes it exit **1** and name the file; removing the file
+returns it to **0**. Five files are grandfathered in `KNOWN_ENV_ONLY` with
+their owning lane named, so it is a ratchet exactly like `KNOWN`.
+
+And it is FILED, and closed:
+`devdocs/progress/done/bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips.md`,
+cited by name in the guard's own comment block four lines above the regex.
+
+**What produced the error is worth more than the error.** I derived the
+allowlist fact correctly, from `testmgr`, and then narrated it as a discovery
+instead of grepping for whoever had it first — **within an hour of telling
+frankz-e5 that the lesson from their own correction was to grep for whoever
+already called the hazard, and to attach evidence to their ticket rather than
+write a new page.** Same failure, one layer in, in the text arguing for the
+remedy. The tell was available and I read past it: the guard PRINTS the ordered
+chain with the allowlist reasoning attached, and I quoted that output in this
+session while calling the check absent.
+
+So the sentence to distrust is not the measurement — the measurement was
+right — it is **"and nobody has built this"**, a quantifier over a population I
+never enumerated, arriving at the end of a paragraph whose earlier clauses were
+all verified. CLAUDE.md names exactly this ("THE CLAUSE TO GO MEASURE IS THE
+QUANTIFIER"); the checked half lent its credibility to the unchecked half.
