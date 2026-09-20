@@ -31665,3 +31665,87 @@ is worth changing is Track T's call and it is engineering, not a fork** — stat
 **NOT MEASURED, AND DELIBERATELY NOT CLAIMED:** whether the other opaque-shard rows in the same
 open-regression set (`optdiff#shard11/12`, `test-pascal-conformance#shard3/6`) have saturated the same
 way. They have the shape. One instance is measured; the class is a hypothesis until a second one is.
+
+**AND THE SATURATING GUARDS ARE NAMED, WHICH TURNS THE ABSTRACT FINDING INTO A SHORT, CONCRETE LIST.**
+Measured 2026-09-20, `make tools-devtest` at `0ae279ae9`. **The job's own verdict line, which is the
+one to quote:**
+
+    tools-devtest: 163 green, 2 RED -- tools/npy_cross_target_expectation_devtest.py
+                                       tools/testmgr_hardcoded_tmp_devtest.py
+
+**165 of the 166 files `tools/*devtest*.py` globs** (the Makefile `case` skips `bench_timing`).
+**FIVE distinct real defects sit behind those two reds, landed on at least three different days, and
+every one of them was invisible** — the tier reported the same unchanging `still_red` throughout:
+
+    FAIL t_no_cross_target_expectation_drift
+      test/test_nilpy_qualifier_vs_cproc.npy asserts different things in three targets
+      test-core:[25994]; test-nilpy:[2514]; test-threads:[7471]
+
+    FAIL t_no_new_binary_name_collision
+      test_nilpy_negzero26 — TWO sources compile to ONE $(TESTTMP) path
+      Makefile:2606  test/test_nilpy_negative_zero_repr.npy                     -> negzero26
+      Makefile:2708  test/test_nilpy_negating_a_variant_zero_keeps_its_sign.npy -> negzero26
+      ...diffed against DIFFERENT .expected files. The devtest's own words:
+      "the loser's assertion then runs the winner's program."
+
+    FAIL testmgr_hardcoded_tmp — two tests write OUTSIDE the managed temp dir
+      test/test_nilpy_io_open_in_a_module_that_rebound_open.npy   /tmp/test_nilpy_io_open.txt
+      test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy   /tmp/pxx_test_mmap_read_only.bin
+
+**THE COLLISION RULE WAS ADDED 2026-09-16 (`334680199`) — FOUR DAYS AFTER THE STREAK BEGAN, so it is
+not the cause; it is a defect the already-saturated job ABSORBED.** That is the mechanism showing its
+teeth: the job went red on 09-12, absorbed the unwired-test omission on 09-14, absorbed this collision
+on 09-16, and reported the identical `still_red` through all of it. **Saturation is not a one-off
+masking event — it is a job that has stopped being able to count.**
+
+**THE `/tmp` PAIR MATTERS MORE THAN IT LOOKS**, given this project's own measured outage: seven died on
+**inodes at 9% bytes-full**, and plexus's `/tmp` hit 99% with one orphaned scratchpad at 48% of the
+volume. **A test writing to a hardcoded `/tmp` path is outside the reaper's and the harness's
+accounting, and it is also a cross-run collision between two seats on one box.**
+
+**THE BINARY-NAME COLLISION IS THIS FILE'S OWN "A GUARD THAT CANNOT FAIL" CLASS, ARRIVING BY A ROUTE NONE OF THE
+EXISTING ENTRIES COVER** — not a wrong assertion, not a wrong population, but **two tests sharing an
+output path so that one test's assertion is executed against the other test's binary.** Renaming one
+is a one-word fix; finding it took a guard that had been shouting for eight days.
+
+**AND THE GUARD THAT SATURATED THE TIER IS A CORRECTLY-DESIGNED RATCHET DOING EXACTLY WHAT IT WAS
+BUILT TO DO.** Its own header (`bb78dbc3d`) says: *"Measured drift today is ZERO, which is what decides
+the shape: this is a RATCHET on a clean invariant, **not a report that arrives with a backlog and
+teaches everyone to scroll past it.** It fires on the first divergence."* **It fired on the first
+divergence, precisely as designed — and then the thing its author wrote that sentence to prevent
+happened anyway, by a route the author could not see from inside their own file: it reports through an
+opaque aggregate shard, so its red became a LEVEL, and that level then hid the next guard's red for six
+days.** A ratchet cannot protect itself from the reporting layer it is wired into. **Check what shard
+id your guard reports under, not only what it asserts.**
+
+**The bisect's `bad` for this streak, `e115014ceb5e`, is a ONE-LINE DOCS COMMIT** — *"record the shas
+the resolves landed as"*, one ticket file, one insertion. So twatch's *"bad touches NO buildable file:
+it is the tested upper bound, not a lead"* is **literally correct**, and the standing open-regression
+line has therefore been telling every seat to read past five real defects for eight days. **Nobody
+misread anything.** Every instrument in the chain was honest.
+
+**AND MY OWN STATED HYPOTHESIS WAS REFUTED, WHICH IS WHY IT WAS STATED FIRST.** I predicted, on the
+record before running anything, that the 09-12 red would also be an **omission** — the same signature
+as the unwired tests — and that *"a bisector cannot name either"*. **Wrong.** All five defects are
+COMMISSIONS: someone edited one copy of an expectation, someone reused a binary name, someone wrote a
+literal `/tmp` path. **So the label's real meaning is narrower and more useful than my story for it:**
+*"bad touches no buildable file"* is a statement about **the commit the watcher happened to SAMPLE**,
+not about the cause. T tests the newest testable commit rather than every one, so `bad` is the upper
+bound of a range, and whether that particular commit is docs-only is close to luck. **An omission
+produces this label; so does a perfectly ordinary edit that the sampler skipped over.** Do not read
+*"not a lead"* as evidence about the KIND of defect behind it.
+
+**THREE QUANTIFIERS IN THIS ONE INVESTIGATION WERE ESTIMATED RATHER THAN COUNTED, ALL THREE MINE, ALL
+THREE INSIDE THE TEXT CORRECTING ME FOR EXACTLY THAT.** *"the only one being asked"* (false — the
+census runs in limited+full); *"exactly one file fails"* (two); *"~80 guards"* (**166**). The first I
+struck above. **The second and third were written into this very block, one paragraph after I recorded
+what the habit costs.** The hedge is what saved them — I wrote *"a later FAIL would change the word
+exactly"* before the run finished, and it did. **Hedging the quantifier is not a substitute for
+counting it, but it is what makes the number recoverable when you were wrong**, and `ls tools/*devtest*.py
+| wc -l` costs nothing. **Knowing the rule, having just written the rule, and being the person
+correcting someone else for breaking the rule are all compatible with breaking it in the next
+paragraph.**
+
+**AND THE WRAPPER LIED AGAIN, ON THIS RUN, AFTER ALL OF THE ABOVE.** The background-task notification
+read `completed (exit code 0)`. **`make` really exited 2**, and the job's own line says
+`163 green, 2 RED`. Fourth instance on this box in one day. **Quote the verdict the job printed.**
