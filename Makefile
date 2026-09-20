@@ -2067,6 +2067,22 @@ test-nilpy: $(COMPILER)
 	# Oracle is CPython on the same file, so nothing is restated here.
 	./$(COMPILER) -Futest test/test_nilpy_a_bare_read_of_a_method_crashes_when_a_call_site_takes_the_dynamic_path.npy $(TESTTMP)/test_nilpy_bareread26
 	tools/expect_same.sh test_nilpy_bareread26 "$$($(TESTTMP)/test_nilpy_bareread26)" "$$(cd test && python3 test_nilpy_a_bare_read_of_a_method_crashes_when_a_call_site_takes_the_dynamic_path.npy)"
+	# THE SAME POPULATION BUG IN THE TWO SIBLINGS OF THE FUNCTION FIXED ABOVE.
+	# Three functions answer one question -- does this method need the
+	# function-object ABI -- and all three scanned the MAIN FILE only. Fixing
+	# the one whose ticket was open left the other two, each independently
+	# sufficient to SIGSEGV. These two rows are the computed and the literal
+	# spellings of `getattr` living in an IMPORTED MODULE.
+	#
+	# SEPARATE PROGRAMS ON PURPOSE: a computed getattr normalises EVERY method
+	# in range, so putting both shapes in one file lets the computed arm rescue
+	# the literal one and the literal row passes on the unfixed compiler.
+	# Both keep the Craft().gusty(e) call site for the reason given above, and
+	# both segfault (rc=139) on pin v413. Oracle is CPython on the same file.
+	./$(COMPILER) -Futest test/test_nilpy_a_computed_getattr_in_an_imported_module_normalises_the_method.npy $(TESTTMP)/test_nilpy_modgetattr_computed26
+	tools/expect_same.sh test_nilpy_modgetattr_computed26 "$$($(TESTTMP)/test_nilpy_modgetattr_computed26)" "$$(cd test && python3 test_nilpy_a_computed_getattr_in_an_imported_module_normalises_the_method.npy)"
+	./$(COMPILER) -Futest test/test_nilpy_a_literal_getattr_in_an_imported_module_normalises_the_method.npy $(TESTTMP)/test_nilpy_modgetattr_literal26
+	tools/expect_same.sh test_nilpy_modgetattr_literal26 "$$($(TESTTMP)/test_nilpy_modgetattr_literal26)" "$$(cd test && python3 test_nilpy_a_literal_getattr_in_an_imported_module_normalises_the_method.npy)"
 	# A @property SETTER runs when the receiver is UNANNOTATED, even though two
 	# unrelated classes declare a plain FIELD of the same name. The oracle is
 	# CPython on the same file, so nothing is restated here.

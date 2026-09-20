@@ -1,0 +1,15 @@
+# A computed getattr in an IMPORTED MODULE must still normalise the method to
+# the function-object ABI. It did not: the scan deciding this walked the main
+# file only, so the bound pair was built against a native signature and the
+# call through it jumped to a garbage code address (rc=139).
+#
+# KEEP THE CALL SITE. Craft().gusty(e) is what gives gust a concrete signature;
+# without it gust is already all-variant and this fixture passes on the broken
+# compiler.
+from nilpy_modgetattr.env import Environment, Craft
+from nilpy_modgetattr.dispatch_computed import fetch
+
+e = Environment()
+print("call:", Craft().gusty(e))
+m = fetch(e, "gu", "st")
+print("read:", m(4.0))

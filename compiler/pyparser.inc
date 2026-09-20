@@ -18149,7 +18149,7 @@ function PyModuleHasComputedGetattr: Boolean;
   and the very next token closes or separates it — `"zz" + "z"` starts with a
   string and is still computed.
   feature-nilpy-getattr-with-a-computed-attribute-name }
-var j, depth: Integer;
+var j, depth, ri, rlo, rhi: Integer;
 begin
   if PyComputedGetattrScanned then
   begin
@@ -18158,37 +18158,59 @@ begin
   end;
   PyComputedGetattrScanned := True;
   PyComputedGetattrSeen := False;
-  j := 0;
-  while j < MainProgramTokCount - 2 do
+  { EVERY Python source range, for the same reason PyMethodUsedAsValue needs it
+    and measured the same way. This walked 1..MainProgramTokCount -- the MAIN
+    FILE only -- so a computed `getattr` living in an IMPORTED MODULE answered
+    False, no method was normalised, and pydynattr_get_v's bound-method arm then
+    bound mi^.Code through pybound_new_star on a precondition that had not been
+    met. Not a diagnostic: a jump to a garbage code address.
+
+    THE POPULATION BUG WAS FIXED IN THE CALLER AND LEFT IN BOTH CALLEES. Three
+    functions answer one question -- should this method carry the function-object
+    ABI -- and all three scanned the main file only. Fixing the one whose ticket
+    was open left the other two, and each is independently sufficient to produce
+    the same SIGSEGV. Measured 2026-09-20: computed `getattr` in an imported
+    module, rc=139; literal `getattr(o, "gust")` in an imported module, rc=139;
+    both with a call site elsewhere that concretises the signature first. A
+    method that is already all-variant survives either way, which is why the
+    earlier probes passed and hid this.
+    bug-n-a-bare-read-of-a-method-as-a-value-yields-a-garbage-code-address }
+  ri := 0;
+  while PyPyRangeAt(ri, rlo, rhi) do
   begin
-    if (Tokens[j].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
-       (Tokens[j + 1].Kind = tkLParen) then
+    j := rlo;
+    while j < rhi - 2 do
     begin
-      { walk to the receiver's closing comma at depth 1 }
-      depth := 1;
-      Inc(j, 2);
-      while (j < MainProgramTokCount) and (depth > 0) do
+      if (Tokens[j].Kind = tkIdent) and
+         (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
+         (Tokens[j + 1].Kind = tkLParen) then
       begin
-        if Tokens[j].Kind = tkLParen then Inc(depth)
-        else if Tokens[j].Kind = tkRParen then Dec(depth)
-        else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+        { walk to the receiver's closing comma at depth 1 }
+        depth := 1;
+        Inc(j, 2);
+        while (j < rhi) and (depth > 0) do
         begin
-          if (j + 2 >= MainProgramTokCount) or
-             (Tokens[j + 1].Kind <> tkString) or
-             (not (Tokens[j + 2].Kind in [tkComma, tkRParen])) then
+          if Tokens[j].Kind = tkLParen then Inc(depth)
+          else if Tokens[j].Kind = tkRParen then Dec(depth)
+          else if (depth = 1) and (Tokens[j].Kind = tkComma) then
           begin
-            PyComputedGetattrSeen := True;
-            Result := True;
-            Exit;
+            if (j + 2 >= rhi) or
+               (Tokens[j + 1].Kind <> tkString) or
+               (not (Tokens[j + 2].Kind in [tkComma, tkRParen])) then
+            begin
+              PyComputedGetattrSeen := True;
+              Result := True;
+              Exit;
+            end;
+            Break;
           end;
-          Break;
+          Inc(j);
         end;
-        Inc(j);
+        Continue;
       end;
-      Continue;
+      Inc(j);
     end;
-    Inc(j);
+    Inc(ri);
   end;
   Result := PyComputedGetattrSeen;
 end;
@@ -18214,45 +18236,54 @@ function PyModuleGetattrsLiteral(const nm: AnsiString): Boolean;
   Same token rule as the parse and as the computed scan: the literal form is a
   string token whose very next token closes or separates the argument, so
   `"zz" + "z"` is not it. }
-var j, depth: Integer;
+var j, depth, ri, rlo, rhi: Integer;
 begin
   Result := False;
   if nm = '' then Exit;
-  j := 0;
-  while j < MainProgramTokCount - 2 do
+  { EVERY Python source range -- see the sibling above. This scanned the main
+    file only, so `getattr(o, "gust")` in an IMPORTED MODULE normalised nothing
+    and the bound pair was built against a native signature: rc=139, measured
+    2026-09-20. Independently sufficient to crash on its own. }
+  ri := 0;
+  while PyPyRangeAt(ri, rlo, rhi) do
   begin
-    if (Tokens[j].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
-       (Tokens[j + 1].Kind = tkLParen) then
+    j := rlo;
+    while j < rhi - 2 do
     begin
-      depth := 1;
-      Inc(j, 2);
-      while (j < MainProgramTokCount) and (depth > 0) do
+      if (Tokens[j].Kind = tkIdent) and
+         (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
+         (Tokens[j + 1].Kind = tkLParen) then
       begin
-        if Tokens[j].Kind = tkLParen then Inc(depth)
-        else if Tokens[j].Kind = tkRParen then Dec(depth)
-        else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+        depth := 1;
+        Inc(j, 2);
+        while (j < rhi) and (depth > 0) do
         begin
-          if (j + 2 < MainProgramTokCount) and
-             (Tokens[j + 1].Kind = tkString) and
-             (Tokens[j + 2].Kind in [tkComma, tkRParen]) and
-             CaseEqual(GetTokenStr(j + 1), nm) then
+          if Tokens[j].Kind = tkLParen then Inc(depth)
+          else if Tokens[j].Kind = tkRParen then Dec(depth)
+          else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+          begin
+            if (j + 2 < rhi) and
+               (Tokens[j + 1].Kind = tkString) and
+               (Tokens[j + 2].Kind in [tkComma, tkRParen]) and
+               CaseEqual(GetTokenStr(j + 1), nm) then
             { `Tokens` is TRawToken (SOffset/SLen), not TToken — there is no
               .SVal to read here, and GetTokenStr is the accessor the rest of
               this file uses. CaseEqual, matching the sibling loop below:
               over-normalising costs only boxing, under-normalising is the
               bug this function exists to prevent. }
-          begin
-            Result := True;
-            Exit;
+            begin
+              Result := True;
+              Exit;
+            end;
+            Break;
           end;
-          Break;
+          Inc(j);
         end;
-        Inc(j);
+        Continue;
       end;
-      Continue;
+      Inc(j);
     end;
-    Inc(j);
+    Inc(ri);
   end;
 end;
 
