@@ -309,3 +309,44 @@ path does not need — so what does an import require that inlining does not?
   replaced the binary another seat is using.**
 - **Profiling a different compiler answers a different question**, so the 13x was
   re-measured on the compiler actually being profiled before any sample was taken.
+
+---
+
+# CONTROLLED A/B for frankb-8e's decider work — and it is a 20% BUILD-TIME WIN
+
+Run at 8e's request because it would have been marking its own homework. **One
+tree, one CWD, both binaries in-tree under distinct names, only the compiler
+differs.** Each arm's `--where` checked for `MISSING` roots first and both report
+the same count, which is the discharge from the relocated-binary section below
+applied to its own author.
+
+| | `24c2f18de` (pre-widening) | HEAD (`0c508e507` + `1fbe6e104`) |
+|---|---|---|
+| `code=` | 12,047,464 B | 12,159,489 B (**+0.93%**) |
+| `data=` | 633,524 B | 633,716 B |
+| `procs=` | 11,594 | **11,594 — identical** |
+| compile, interleaved | 130.70 / 130.95 s | **104.15 / 104.19 s** |
+
+**Two independent results, and the second was unmeasured by anyone.**
+
+**Size: 8e's uncontrolled figures reproduce EXACTLY under control.** +0.93% with
+`procs` unchanged — so no wrappers were added and the growth is boxing inside
+bodies that already existed, which is what its ticket claims. It marked that
+comparison uncontrolled because its before-row came from another seat's build 44
+commits back; controlled, it lands on the same numbers.
+
+**Time: HEAD compiles lekkerzeilen 20.3% FASTER — 130.70 s to 104.15 s, min-of-N,
+interleaved, 26.5 s saved.** 8e predicted its memoisation would move my synthetic
+benchmark by **zero** and it did (0.2%, 400 plain defs, no classes). It never
+measured the class-heavy target, which is the only place the fix can act. **The
+memoisation more than repays the widening that prompted it.**
+
+**So the headline number for this lane moves: the demo now compiles in ~104 s at
+HEAD**, against the 125 s measured on `55f1ef09492b`. Both rows stand with their
+own populations; neither refutes the other.
+
+**Attribution stated because I nearly got it wrong in the other direction
+earlier tonight:** this delta is 8e's, not mine, and I have measured a RANGE of
+two commits rather than one. Which of the pair carries the 20% is not separated
+here — the widening alone would be expected to cost time, so the memoisation is
+plausibly worth more than 26.5 s on its own. That decomposition is unrun.
