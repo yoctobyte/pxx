@@ -32062,6 +32062,32 @@ defect without the compiler ever having spoken. `test -s <log> || { echo FAIL
 ...; exit 1; }`, branched — a comparison whose input was never proven to exist
 cannot fail honestly, in either direction.
 
+**AND DO NOT CARRY AWAY "pxx WRITES TO STDOUT" AS THE LESSON — THE STREAM IS A
+PROPERTY OF THE MESSAGE KIND, NOT OF THE COMPILER.** Added by frankS 2026-09-20
+after measuring at HEAD, because a reader who adopts the simpler rule will break
+a row that is currently correct:
+
+| what | stdout | stderr |
+| --- | --- | --- |
+| `error:` on a bad source | **84 B** | 0 B |
+| `warning:` (unknown directive) | **239 B** | 0 B |
+| the `ok: <path> [code=…]` success line | **158 B** | 0 B |
+| the `--dce-why=` report | 158 B (the `ok:` line only) | **2380 B** |
+
+So **diagnostics go to stdout and a report requested by a flag goes to stderr**,
+and `Makefile:36157` greps `2>$(TESTTMP)/dcewhy_call.log` for
+`RootedByCall <- Driver` — **correctly, and the opposite way round from the case
+above.** Verified both directions: the asserted string is in that stderr log and
+absent from stdout.
+
+**The general shape is this file's own, one layer in.** The finding above is
+right about the population it measured — the error and warning path — and the
+sentence that travels from it (*"pxx writes diagnostics to stdout"*) is a
+quantifier over every message the compiler can emit, which was not measured.
+**Probe the stream for the SPECIFIC message your guard greps for**, with the
+guard's own redirection, and note that `2>` versus `>` is not a house style you
+can infer from one neighbouring row.
+
 **RELATED.** This is the stream twin of *assert the PRECONDITION, not just the
 comparison*, and of *an assertion written from a REPORT of the code pins the
 report*: there the guard is written from the wrong source, here it is validated
