@@ -31511,10 +31511,16 @@ one is a sequence.** Wire those two or list them in `test/UNWIRED.txt` with a re
 the gate over before that and it is **born red for every seat**, which teaches that the row can be
 ignored and costs more than the gap does.
 
-**Note the two modes disagree today in the direction that matters: the repo genuinely has unwired
-tests RIGHT NOW and every gate in the fleet is printing PASS**, because the per-push question is the
-only one being asked. A guard can be simultaneously correct, green, and silent about a live instance
-of exactly what it was built to catch.
+**~~Note the two modes disagree today in the direction that matters: the repo genuinely has unwired
+tests RIGHT NOW and every gate in the fleet is printing PASS, because the per-push question is the
+only one being asked.~~ THAT SENTENCE IS MINE AND THE CLAUSE AFTER THE COMMA IS FALSE** — struck
+rather than deleted, because the way it is wrong is the point. The first half was measured. **"the
+only one being asked" was not measured at all:** the census runs in limited+full via `tools-devtest`,
+which `gate.sh:921` states in its own comment, in the file I had run and not read. **I had landed two
+sections about invented quantifiers earlier the same day.** The rule does not protect you from the
+rule — *the clause to go measure is the quantifier, not the verb beside it*, and mine was load-bearing:
+it turned "one gate asks the cheap half" into "nothing anywhere asks the expensive half", which is a
+claim about the whole fleet's instrumentation drawn from two commands in one checkout.
 
 **AND THE MEASUREMENT WALKED INTO THIS FILE'S OWN WRAPPER TRAP ON THE FIRST TRY.**
 `python3 tools/check_test_wiring.py | tail -25; echo "rc=$?"` printed **rc=0** — that is `tail`'s
@@ -31523,7 +31529,7 @@ that had read and relayed the other two within the hour. **Capture the process's
 pipe, and treat a status that agrees with what you were hoping for as the one to re-measure** — the
 friendly number is the one nobody queries.
 
-**THE TWO FILES IN THAT TABLE WERE WIRED THE SAME DAY (`f24ac2113`), SO CENSUS NOW EXITS 0 — read the
+**THE TWO FILES IN THAT TABLE WERE WIRED THE SAME DAY (`3d831675c`), SO CENSUS NOW EXITS 0 — read the
 rc=1 row as the measurement that prompted the fix, not as current state.** They had been held out on
 purpose while a bug was open and **their own headers said "wire all three in the commit that fixes the
 PAL"**; that commit landed the same day they were written and nobody did, because **the instruction
@@ -31552,3 +31558,54 @@ for **six days**. They were held out on purpose while a bug was open, and **thei
 Nobody wired them, because **the instruction lived in a source header and nothing scans one** — the
 census had been exiting 1 about them the whole time, in a tier nobody was reading. Re-measured before
 wiring rather than assumed: the former positive control now survives 5/5 where it aborted 5/5.
+
+## AN AGGREGATE JOB SATURATES: ONCE ONE MEMBER IS RED, A SECOND MEMBER GOING RED IS UNREPORTABLE
+
+Measured 2026-09-20 by frankz-e5, chasing a residual from the section above — *if a limited+full red
+reaches nobody, why?* **The answer is not that nobody read it. The tier ran, went red, and reported
+faithfully 183 times. It was structurally incapable of saying that anything had CHANGED.**
+
+**Oracle and population, so this is re-derivable:** `python3 tools/twatch.py --job-history
+'tools-devtest#00'` against the tstate archive as of 2026-09-20T13:04Z, 682 recorded runs all-time.
+
+| fact | value |
+| --- | --- |
+| current red streak began | `new_red` at **`e115014ceb5e`**, 2026-09-12T19:42:24Z |
+| consecutive `still_red` since | **182**, through 2026-09-20T12:51:32Z — **zero transitions in 8 days** |
+| the unwired test files landed | `f09f6bcde`, 2026-09-**14** — **two days INTO that streak** |
+| what twatch's status line says | *"open regression: tools-devtest#00 bad=e115014ceb5e (1 in range) — bad touches NO buildable file: it is the tested upper bound, not a lead"* |
+
+**`tools-devtest` is an AGGREGATE** (`Makefile:39272`): it loops `tools/*devtest*.py`, runs ~40 guards,
+and exits 1 if **any** of them fails. It reports under a single opaque shard, **`#00`**. So the moment
+one member is red, the job's observable state is pinned at red and **a second member breaking produces
+no new row, no transition, no name, and no notification.** The wiring census — a real guard, correctly
+wired, correctly firing — landed into a job that had already been saturated for two days, and was
+therefore **invisible for six, not because it was unread but because there was nothing new to read.**
+
+**THE LABEL FINISHES THE JOB.** twatch bisects to a `bad` commit; for a red whose cause is an
+**OMISSION** (a test added and never wired) there is no causing commit that touches a buildable file,
+so the bisect always lands on a non-lead and the row is permanently stamped *"the tested upper bound,
+not a lead"*. **That caveat is CORRECT and it reads as "ignore this."** A red caused by an omission is
+indistinguishable, to a bisector, from a flaky upper bound — so this class acquires a label that tells
+every seat to read past it, and the label is not wrong.
+
+**The tell, and it costs one command:** a job whose history is a long unbroken run of `still_red` is
+not reporting on its members any more — it is reporting on its worst member, once, forever.
+**`--job-history` prints the transitions; count them.** 182 rows and 0 transitions means the last 181
+runs carried exactly as much information as the first.
+
+**What discriminates, and it is already in the same status output:** the rows that DO name a cause
+carry a per-source identity — `test-core#src:test/test_set_in_64bit_element.pas`,
+`size-canary#src:tools/size_canary.py`, `lib-test#src:tools/crtl_reachability.py`. Those cannot
+saturate, because each source is its own job key. **`#00` is the shape to distrust**: a shard number
+where a subject name could have been.
+
+**Do not read this as "tools-devtest is broken".** It is doing exactly what it was written to do. The
+defect is in the REPORTING GRANULARITY of an aggregate: a target that fans out over N independent
+guards should key its result by the guard, or its red is a level rather than an event. **Whether that
+is worth changing is Track T's call and it is engineering, not a fork** — stated in goal terms it is
+*"should a tier be able to tell you that a NEW guard broke inside a job that was already broken?"*
+
+**NOT MEASURED, AND DELIBERATELY NOT CLAIMED:** whether the other opaque-shard rows in the same
+open-regression set (`optdiff#shard11/12`, `test-pascal-conformance#shard3/6`) have saturated the same
+way. They have the shape. One instance is measured; the class is a hypothesis until a second one is.
