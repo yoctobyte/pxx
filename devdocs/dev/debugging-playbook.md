@@ -3317,6 +3317,33 @@ if it were false.** For the range to be able to answer, `<mysha>` would have to
 be strictly behind `HEAD` — one `git rev-list --count <mysha>..HEAD`, or just
 read the unbounded log and look at the dates.
 
+**AND THE THIRD DOOR A GHOST COMES THROUGH IS A REBASE CONFLICT MARKER, WHICH NOBODY READS AS A
+CITATION.** Measured 2026-09-20. CLAUDE.md names two sources — a pre-push `git log -1`, and passing a
+sha to `resolve` — and both are things you go and fetch. **This one is handed to you, unbidden, in
+`git`'s own output:**
+
+```
+>>>>>>> f24ac2113 (test(A): wire the glibc-malloc thread repro and both controls, ...)
+```
+
+That sha is the **DOOMED, pre-rebase** id of the commit you are in the middle of replaying. The seat
+copied it into the prose it was writing while resolving the conflict, pushed, and the surviving commit
+was `3d831675c`. A peer caught it.
+
+**Three things make this worse than the `log -1` case**, and all three are about the moment rather than
+the command. **Your attention is on CONTENT** — you are merging two versions of a paragraph, not
+auditing identifiers. **The marker arrives with the right SUBJECT LINE attached**, so it reads as a
+resolved, verified reference rather than as a raw id. And **the commit genuinely exists in your local
+store**, so `git cat-file -t` says `commit` and every cheap check agrees with you; only
+`merge-base --is-ancestor <sha> origin/master`, run AFTER the push, separates it.
+
+**So the rule is the same one and its trigger is wider than stated: a sha is quotable only after it is
+on origin.** Anything git hands you DURING an operation that rewrites commits — a conflict marker, a
+`rebase --continue` line, a `[detached HEAD ...]` echo — names a commit that is about to stop existing.
+**Write the prose with the sha left out, push, then fill it in from `sync.sh`'s output**, which is what
+it prints for exactly this reason.
+
+
 ## A sha that EXISTS can still be the wrong sha for the question
 
 Distinct from the ghost family above, and more expensive. A ghost is a sha that
