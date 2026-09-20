@@ -1,0 +1,23 @@
+# os.environ[k] is the MAPPING SUBSCRIPT and is NOT os.environ.get(k): the
+# subscript raises KeyError for a name that is not set, where get answers None.
+# A program reads a REQUIRED setting with the subscript precisely so that a
+# missing name stops it; answering None there hands it a wrong value to carry.
+# The Makefile row sets PXX_ENVPROBE so the present-name rows are deterministic.
+import os
+
+print(os.environ["PXX_ENVPROBE"])
+print(len(os.environ["PXX_ENVPROBE"]))
+print(os.environ["PXX_ENVPROBE"] + "!")
+
+k = "PXX_ENV" + "PROBE"
+print(os.environ[k])
+
+# the difference that the arm exists for
+try:
+    v = os.environ["PXX_ENVPROBE_ABSENT"]
+    print("no raise: " + v)
+except KeyError as e:
+    print("KeyError")
+
+print(os.environ.get("PXX_ENVPROBE_ABSENT"))
+print(os.environ.get("PXX_ENVPROBE"))

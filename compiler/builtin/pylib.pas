@@ -1542,6 +1542,13 @@ function pyos_path_split(const p: AnsiString): TPyList;
 { os.path.normpath — collapse '.', '..' and repeated slashes, textually and
   without touching the filesystem, exactly as CPython's does. }
 function pyos_path_normpath(const p: AnsiString): AnsiString;
+{ os.path.relpath — the path to `p` as seen FROM `startDir`, computed
+  textually after both are made absolute and normalised, exactly as CPython's
+  POSIX implementation does. No filesystem access and no symlink resolution:
+  CPython's does not either, which is why its answer can name a path that does
+  not exist.
+  `start` defaults to the current directory, as it does in CPython. }
+function pyos_path_relpath(const p: AnsiString; const startDir: AnsiString = '.'): AnsiString;
 { os.path.getsize — st_size, raising the same FileNotFoundError pyos_stat does
   for a missing path rather than answering 0. }
 function pyos_path_getsize(const p: AnsiString): Int64;
@@ -1665,6 +1672,12 @@ function pyscalar_attr_missing(const tname: AnsiString; const attr: AnsiString):
 function pyos_startfile(const path: AnsiString): Integer;
 function pyos_environ_get(const name: AnsiString): Variant;
 function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
+{ os.environ[k] — the MAPPING SUBSCRIPT, which is NOT os.environ.get(k): the
+  subscript RAISES KeyError for a name that is not set, where get answers None.
+  Programs rely on exactly that difference — `os.environ["TSP_SETTINGS"]` is how
+  a required setting is read, and answering None there turns a missing
+  environment variable into a wrong value much further on. }
+function pyos_environ_getitem(const name: AnsiString): Variant;
 function pyos_getenv(const name: AnsiString): Variant;
 function pyos_getenv_d(const name: AnsiString; const dflt: Variant): Variant;
 { sys.stdin.read(n): read up to n bytes from fd 0, returned as a byte string.
@@ -13833,6 +13846,52 @@ begin
   else if Result = '' then Result := '.';
 end;
 
+function pyos_path_relpath(const p: AnsiString; const startDir: AnsiString = '.'): AnsiString;
+var pa, sa, seg: AnsiString;
+    pParts, sParts: array[0..255] of AnsiString;
+    pn, sn, i, st, common: Integer;
+begin
+  { both sides absolute and normalised first -- CPython does exactly this, and
+    it is what makes the answer independent of how either side was spelled }
+  pa := pyos_path_normpath(pyos_path_abspath(p));
+  sa := pyos_path_normpath(pyos_path_abspath(startDir));
+  pn := 0; st := 1;
+  for i := 1 to Length(pa) + 1 do
+    if (i > Length(pa)) or (pa[i] = '/') then
+    begin
+      seg := Copy(pa, st, i - st);
+      st := i + 1;
+      if seg = '' then Continue;
+      if pn <= High(pParts) then begin pParts[pn] := seg; Inc(pn); end;
+    end;
+  sn := 0; st := 1;
+  for i := 1 to Length(sa) + 1 do
+    if (i > Length(sa)) or (sa[i] = '/') then
+    begin
+      seg := Copy(sa, st, i - st);
+      st := i + 1;
+      if seg = '' then Continue;
+      if sn <= High(sParts) then begin sParts[sn] := seg; Inc(sn); end;
+    end;
+  common := 0;
+  while (common < pn) and (common < sn) and (pParts[common] = sParts[common]) do
+    Inc(common);
+  Result := '';
+  { one '..' per remaining segment of START, then what is left of P }
+  for i := common to sn - 1 do
+  begin
+    if Result <> '' then Result := Result + '/';
+    Result := Result + '..';
+  end;
+  for i := common to pn - 1 do
+  begin
+    if Result <> '' then Result := Result + '/';
+    Result := Result + pParts[i];
+  end;
+  { the same path as the start is '.', never the empty string }
+  if Result = '' then Result := '.';
+end;
+
 function pyos_path_getsize(const p: AnsiString): Int64;
 var stx: TPyStat;
 begin
@@ -13989,6 +14048,14 @@ var v: AnsiString; found: Boolean;
 begin
   v := PyEnvLookup(name, found);
   if found then pyos_environ_get_d := v else pyos_environ_get_d := dflt;
+end;
+
+function pyos_environ_getitem(const name: AnsiString): Variant;
+var v: AnsiString; found: Boolean;
+begin
+  v := PyEnvLookup(name, found);
+  if not found then PyKeyError(name);
+  pyos_environ_getitem := v;
 end;
 
 function pyos_getenv(const name: AnsiString): Variant;

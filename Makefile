@@ -4945,6 +4945,15 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_annfldcls26 | diff -u test/test_nilpy_a_field_from_an_annotated_parameter_keeps_the_class.expected -
 	./$(COMPILER) -Futest test/test_nilpy_a_name_differing_from_a_class_only_in_case_is_not_that_class.npy $(TESTTMP)/test_nilpy_casecol26
 	$(TESTTMP)/test_nilpy_casecol26 | diff -u test/test_nilpy_a_name_differing_from_a_class_only_in_case_is_not_that_class.expected -
+	# os.environ[k] — the MAPPING SUBSCRIPT, which raises KeyError where
+	# os.environ.get(k) answers None. PXX_ENVPROBE is set HERE so the
+	# present-name rows are deterministic; the absent name must stay unset.
+	# NOT $(TESTTMP)/test_nilpy_environ26 -- that path belongs to the
+	# test_nilpy_environ row above, and two rows sharing one output binary is a
+	# route by which a failed compile leaves the PREVIOUS row's binary in place
+	# for this row's diff to read.
+	./$(COMPILER) test/test_nilpy_os_environ_subscript_raises_where_get_answers_none.npy $(TESTTMP)/test_nilpy_environ_subscript26
+	PXX_ENVPROBE=hello $(TESTTMP)/test_nilpy_environ_subscript26 | diff -u test/test_nilpy_os_environ_subscript_raises_where_get_answers_none.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

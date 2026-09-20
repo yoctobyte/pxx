@@ -13829,7 +13829,15 @@ begin
       and why the error read `undefined variable (os)` rather than a missing
       member. feature-nilpy-stdlib-coverage-gaps-measured }
     Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') or
-              (nm = 'sep') or (nm = 'linesep') or (nm = 'altsep');
+              (nm = 'sep') or (nm = 'linesep') or (nm = 'altsep') or
+              { ...and the PATH-COMPONENT constants, which are the same kind of
+                thing again: an attribute rather than a call. Real code writes
+                os.path.join(HERE, os.pardir, "data"), so a missing os.pardir
+                walls a file that uses nothing else unusual -- and it walls it
+                with `undefined variable (os)`, a message about the MODULE,
+                which is what makes this family expensive to diagnose.
+                Measured in tuxspaceprogram (surface.py). }
+              (nm = 'pardir') or (nm = 'curdir') or (nm = 'extsep');
 end;
 
 function PyIsSysStreamAhead: Boolean;
@@ -13845,16 +13853,35 @@ begin
     Result := True;
     Exit;
   end;
+  { `from os import environ` then `environ[k]` — the same subscript through the
+    bare spelling, which spends ONE token, so the '[' is at TokPos. }
+  if (base = 'os') and (aliasMem = 'environ') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLBrack) then
+  begin
+    Result := True;
+    Exit;
+  end;
   if TokPos + 1 >= TokCount then Exit;
   if Tokens[TokPos].Kind <> tkDot then Exit;
   { through the module-alias root: `import os as o` makes o.getcwd() this door too }
   base := PyUnitAliasRootName(GetTokenStr(TokPos - 1));
   nm := LowerCase(GetTokenStr(TokPos + 1));
+  { os.environ[k] — the MAPPING SUBSCRIPT, and ONLY when a '[' follows. The
+    member is not a value door otherwise: `os.environ.get(...)` is a dotted
+    CALL and already resolves as one, and claiming os.environ here would take
+    that call's tokens away from it. So the lookahead is what distinguishes the
+    two spellings, not the member name. }
+  if (base = 'os') and (nm = 'environ') and (TokPos + 2 < TokCount) and
+     (Tokens[TokPos + 2].Kind = tkLBrack) then
+  begin
+    Result := True;
+    Exit;
+  end;
   Result := PyIsStdlibMemberValue(base, nm, True);
 end;
 
 function PyParseSysStream: Integer;
-var nm, base: AnsiString; procIdx: Integer;
+var nm, base: AnsiString; procIdx, keyNode, argNode: Integer;
 begin
   { Either spelling arrives here: the dotted one spends three tokens, the bare
     one (a from-imported name) spends one and takes its base from the alias.
@@ -13878,6 +13905,37 @@ begin
     nm := LowerCase(GetTokenStr(TokPos + 1));
     Next; Next; Next;            { base, '.', the member name }
   end;
+  if (base = 'os') and (nm = 'environ') and (CurTok.Kind = tkLBrack) then
+  begin
+    { os.environ[k]. NOT os.environ.get(k), and the difference is the reason
+      this arm exists: the subscript RAISES KeyError for a name that is not
+      set, where .get answers None. `return os.environ["TSP_SETTINGS"]` is how
+      a REQUIRED setting is read; answering None there would hand the program a
+      wrong value to carry, which is the silent direction. Measured in
+      tuxspaceprogram (settings.py), where the whole file walled on it with
+      `undefined variable (os)` — a message about the MODULE, the same
+      misleading shape the os.pardir family had.
+
+      A VALUE door, so it is reached before any of the constants below. }
+    procIdx := FindProc('pyos_environ_getitem');
+    if procIdx < 0 then
+      Error('Nil Python: pylib (pyos_environ_getitem) not loaded');
+    Next;                                { the '[' }
+    PyParseBoolExpr;
+    keyNode := CurASTNode;
+    if CurTok.Kind <> tkRBrack then
+      Error('Nil Python: expected ] after os.environ[');
+    Next;                                { the ']' }
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := keyNode;
+    ASTRight[argNode] := -1;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := procIdx;
+    ASTTk[Result] := Ord(Procs[procIdx].RetType);
+    ASTLeft[Result] := argNode;
+    LastExprTk := IntToTypeKind(ASTTk[Result]);
+    Exit;
+  end;
   if (base = 'os') and ((nm = 'sep') or (nm = 'linesep')) then
   begin
     { os.sep / os.linesep. Constants, like sys.platform above and with the same
@@ -13894,6 +13952,20 @@ begin
       ASTSOffset[Result] := StoredName(#10);
       ASTSLen[Result] := 1;
     end;
+    ASTTk[Result] := Ord(tyString);
+    LastExprTk := tyString;
+    Exit;
+  end;
+  if (base = 'os') and
+     ((nm = 'pardir') or (nm = 'curdir') or (nm = 'extsep')) then
+  begin
+    { POSIX spellings, beside os.sep for the same reason: one decision, and a
+      Windows target changes none of these three (CPython keeps '..', '.' and
+      '.' on Windows too — it is os.sep/altsep/linesep that move). }
+    Result := AllocNode(AN_STR_LIT);
+    if nm = 'pardir' then ASTSOffset[Result] := StoredName('..')
+    else ASTSOffset[Result] := StoredName('.');
+    if nm = 'pardir' then ASTSLen[Result] := 2 else ASTSLen[Result] := 1;
     ASTTk[Result] := Ord(tyString);
     LastExprTk := tyString;
     Exit;
@@ -14075,6 +14147,7 @@ begin
   else if dotted = 'os.path.splitext' then Result := 'pyos_path_splitext'
   else if dotted = 'os.path.split' then Result := 'pyos_path_split'
   else if dotted = 'os.path.normpath' then Result := 'pyos_path_normpath'
+  else if dotted = 'os.path.relpath' then Result := 'pyos_path_relpath'
   else if dotted = 'os.path.getsize' then Result := 'pyos_path_getsize'
   else if dotted = 'os.path.expanduser' then Result := 'pyos_path_expanduser'
   else if dotted = 'os.getcwd' then Result := 'pyos_getcwd'
