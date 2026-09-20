@@ -70,6 +70,22 @@ DENY = [
     ('git commit -m "restored ' + DOL + 'PATH handling"', "$NAME"),
     ('git commit -m "restored ' + DOL + '{PATH} handling"', "${NAME}"),
 
+    # PROSE THIS REPO ACTUALLY WRITES, measured across 4000 messages:
+    # $(PXX_STABLE) x83, $i x42, $PT x32, plus Pascal hex literals and
+    # compiler directives. Each is silently deleted by a double-quoted -m.
+    ('git commit -m "the loop index ' + DOL + 'i is never released"',
+     "$i -- 42 occurrences in real messages"),
+    ('git commit -m "freed bytes become ' + DOL + 'DD under heap debug"',
+     "Pascal hex literal, house prose"),
+
+    # ACCEPTED COST, asserted so a later reader does not mistake it for a bug:
+    # deliberate interpolation is refused although it is SAFE. Bash substitutes
+    # once at parse time and never re-evaluates what a variable expands to, so
+    # a backtick arriving inside a variable is inert. Refused anyway; see the
+    # hook header for why the trade is taken in this direction.
+    ('git commit -m "fix: ' + DOL + 'ticket_subject"',
+     "deliberate interpolation -- safe, refused, and that is the accepted cost"),
+
     # Long-form spelling of the flag.
     ('git commit --message "a ' + BT + 'token' + BT + ' here"', "--message"),
 
@@ -168,7 +184,9 @@ def main():
           % (total, len(DENY), len(ALLOW)))
     print("    NOT covered, asserted so nobody assumes it: %d heredoc case(s)"
           % len(NOT_COVERED))
-    print("    every deny-case is a message that really landed corrupted on origin/master")
+    print("    deny-cases: 4 shapes that really landed corrupted on origin/master,")
+    print("    plus prose forms measured in real messages, plus 1 ACCEPTED false")
+    print("    positive (deliberate interpolation, safe but refused -- see the header)")
     return 0
 
 

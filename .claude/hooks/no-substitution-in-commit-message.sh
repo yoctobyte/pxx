@@ -41,6 +41,38 @@
 # `$VAR`, and the reason that hook also refuses commit messages ABOUT the rm
 # rule. The guard runs UPSTREAM of the damage, not downstream.
 #
+# WHY THE $NAME AND $(...) ARMS EXIST -- MEASURED AFTERWARDS, NOT PREDICTED.
+# They were written from the mechanism, which is exactly the shape that pins a
+# prediction rather than the code, so the population was checked across 4000
+# commit messages on origin/master:
+#
+#   $(PXX_STABLE) x83   $(COMPILER) x19   $(TESTTMP) x6
+#   $i x42   $PT x32   $I x12   $error x7   $else x6   $LongInt x5
+#
+# THAT IS ORDINARY PROSE IN THIS REPO -- Pascal hex literals and compiler
+# directives ($DD, $Integer, $else), Makefile variables, shell fragments
+# being quoted inside an explanation. Every one of them, written into a
+# double-quoted message, is silently deleted. The population these arms protect
+# is an order of magnitude larger than the backtick one. All of the above
+# SURVIVED, meaning they were written with -F or single quotes; the hazard is
+# the first time someone writes the same prose the other way.
+#
+# THE COST, STATED SO IT IS ACCEPTED RATHER THAN DISCOVERED. Deliberate
+# interpolation into a message is refused too, and it is SAFE: bash substitutes
+# ONCE at parse time and never re-evaluates what a variable expands TO, so
+# content arriving through a variable stays literal. That is a genuine false
+# positive. It is accepted because the remedy is one flag; because a message
+# assembled from variables is precisely the kind that should be reviewable as a
+# file before it lands; and because the protected population is 200+ literal
+# dollars against an idiom this fleet rarely uses interactively.
+#
+# OUR OWN TOOLING IS UNAFFECTED IN BOTH DIRECTIONS, CHECKED. sync.sh:413 and
+# file-ticket.sh:126,133 interpolate deliberately and the hook never sees inside
+# a committed script -- it sees the script name, the same property that keeps
+# tools/*.sh clear of no-variable-rm.sh. And Makefile:36674, Makefile:36860 and
+# twatch.py:7217 print SINGLE-QUOTED instructions, which this guard allows, so
+# an agent copying its own tooling's advice is not refused by that tooling.
+#
 # THE REMEDY IS BETTER THAN THE THING IT REPLACES, WHICH IS WHY THERE IS NO ENV
 # ESCAPE. `git commit -F <file>`: no quoting rules at all, multi-line messages
 # without `$'\n'`, and the message is reviewable as a file before it lands.
