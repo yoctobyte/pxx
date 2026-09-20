@@ -4,7 +4,7 @@ prio: 55
 type: feature
 owner: frankb-8e
 blocked-by: []
-summary: "MECHANISM: a NilPy `def` is reachable only through a Python callable carrier and through `$pycallwrap_<pi>`, whose signature is all-Variant. A C or Pascal callback slot wants a routine whose ABI matches ITS declared signature, and no such entry point is emitted for a def, so there is nothing to take the address of. This SPRINGS wherever a def must be handed to code pxx did not generate -- an SDK callback, a qsort comparator, a signal handler. It is why examples/esp32/nilpy-hw-c3 keeps its timer callback in Pascal and POLLS a counter from Python."
+summary: "PARTLY DONE. A NilPy `def` compiles all-Variant -- by-reference Variant parameters, the result on the Variant hidden destination -- so it can never match a native procedural signature. `PyGetOrMakeCallbackThunk` now synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT's signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. That covers a procedural PARAMETER, including on an `external cdecl` routine. WHAT REMAINS, and it is what the ESP demo actually needs: the same def assigned to a procedural FIELD takes no such path and segfaults with NO diagnostic, because the coercion lives in PyCoerceCallableArgsIn, which sees arguments only. SPRINGS wherever a callable reaches native code through a field or a struct rather than an argument list. The ISR question -- boxing into Variants allocates -- is deliberately out of scope and needs its own contract."
 status: working
 ---
 
@@ -146,6 +146,123 @@ one def handed to two different callback slots needs two thunks, so the key
 must be **(realPi, target signature)**, and the queue currently carries only
 `PyPendLamWrapReal`. Either derive the name from the target's pi, or add a
 second parallel array.
+
+## MEASURED 2026-09-20 -- half the read was WRONG, and it returned garbage
+
+The sentence flagged above as "a READ of the code and not a measurement" --
+that `<target type> -> by-ref Variant` in and `Variant -> <target result>` out
+both come free -- **was right in one direction and wrong in the other**, and
+the wrong one produced a plausible wrong answer rather than a crash.
+
+Built the smallest thunk and read the IR before writing the feature, which is
+the only reason this was caught here instead of in a fixture:
+
+```
+1: load_sym a0 tk=1
+2: var_store tk=22        <- Integer -> by-ref Variant. INBOUND: free, as read.
+4: arg (address of it)
+14: call <the def> tk=22
+15: terminate             <- NO STORE. OUTBOUND: not free.
+```
+
+`PyCompileLambdaBody` creates `$pyresult` under `if Procs[procIdx].RetType =
+tyVariant`. A thunk returns the SLOT's type, so `RetSymIdx` stayed -1, the
+`AN_EXIT` that the `bStart = -1` path does build had nowhere to store,
+`EmitProcEpilog(-1)` emitted nothing, and the result register held whatever the
+call left. `ps.CallItFromPascal(k)` printed **1637568216** where CPython prints
+502 -- the failure this seam's own sibling comment warns about, and worse than
+the SIGSEGV it replaced.
+
+One arm beside that condition fixes it: a synthesized proc that IS a function
+and does NOT return Variant gets a result symbol of its own return type. The
+IR then ends `call <def> tk=22` / `call pyvar_to_int tk=13` / `store_sym
+$pyresult tk=1`, and the repro answers 502.
+
+**Blast radius checked rather than asserted, because it is shared machinery:**
+the three sibling synthesizers cannot reach the new arm. `$pycallwrap_` and
+`$pyboundretwrap_` return tyVariant and take the pre-existing arm;
+`$pyclonethunk_` is a PROCEDURE (`IsFunc` False).
+
+### Re-estimate
+
+Still small -- one synthesizer, one guard, one arm in the body compiler. The
+read being half wrong did not change the size, only the shape.
+
+## Two things the guard got right for the wrong reason, and one it got wrong
+
+- **Written from expectation, caught by reading the builder.** The "closes over
+  nothing" test was first written as `ASTKind[recvArg] = AN_NIL`.
+  `PyMakeFuncValueFor` actually builds the receiver as `AN_INT_LIT 0` typed
+  tyPointer. That guard would have refused every carrier and **silently
+  disabled the whole feature** -- born red, in the direction that produces no
+  signal at all. An assertion written from what a value *should* be pins the
+  expectation, not the code.
+- **A capturing nested def is excluded by CONSTRUCTION, not by the guard.** The
+  lambda lift appends captured state as extra parameters, so `outer.inner` has
+  3 params (`22 22 13`) against the slot's 2 and fails both the arity test and
+  the all-Variant test. The mechanism that makes it a closure is what makes it
+  fail -- a better exclusion than the one written by hand.
+- **A bound method is excluded by the guard**, via the live receiver, and keeps
+  the warning.
+
+## Four targets, not one -- this is an ABI feature and x86-64 is the blind spot
+
+A thunk exists entirely to bridge two calling conventions, so measuring it only
+on the host would be measuring the one target where the dev loop, `gate.sh
+quick` and the pin all already agree. Compiled and RUN under qemu, same
+fixture, same `.expected`:
+
+| target | result |
+| --- | --- |
+| x86-64 | matches |
+| i386 | matches |
+| aarch64 | matches |
+| arm32 | matches |
+
+i386 matters most of the four: 32-bit, a different `Double` return convention,
+and the row this fixture carries that answers `3.75` goes through it.
+
+## A pre-existing gap found here and deliberately NOT fixed
+
+A capturing nested def handed by name gets **no warning at all**:
+`PyCarrierNamedProc` answers -1 for that carrier shape, so the warn arm added
+in `8826e6aec` never fires. It segfaults identically on pin v412 and at HEAD,
+so it is unchanged behaviour and not introduced here. Recorded rather than
+absorbed into this ticket's scope.
+
+## WHERE THE ESP DEMO ACTUALLY BLOCKS -- measured 2026-09-20, and it is NOT
+## where this ticket first said
+
+Filed on the strength of `examples/esp32/nilpy-hw-c3/main/main.npy`'s header,
+which says *"an unannotated value arriving at an external Pointer parameter is
+taken as a data buffer, deliberately"*. That sentence is true and it is about a
+DIFFERENT shape than the one that blocks. Measured at HEAD rather than quoted:
+
+| a def reaches native code as... | today |
+| --- | --- |
+| a procedural PARAMETER, Pascal routine | works (thunk) |
+| a procedural PARAMETER on `external cdecl` | works (thunk) -- `$pycbthunk_<n>_<n>` minted, `ptypes 17 17` |
+| a bare `Pointer` parameter on `external` | taken as a DATA buffer, silently -- the header's sentence |
+| **a procedural FIELD** | **silent SIGSEGV** |
+
+`esptimer.pas` uses the last row, twice over: the user callback is the field
+`TEspTimer.OnElapsed: TTimerProc`, and it crosses to the SDK as the `Pointer`
+field `args.callback` of the struct handed to `esp_timer_create`
+(`args.callback := Pointer(t.OnElapsed)`).
+
+So the C-side crossing is NOT the wall this ticket assumed. The wall is that
+`PyCoerceCallableArgsIn` -- the one place a callable value is coerced -- sees
+ARGUMENTS ONLY. A field assignment never reaches it:
+
+```python
+s.two = two        # segfaults, no diagnostic
+cb.MkTwo(two)      # works
+```
+
+**NEXT STEP for this ticket**, and it is the same mechanism one door along:
+the field-assignment path needs the identical `ProcSigCompatible` / thunk
+decision the argument path now has. Nothing about the thunk changes; what
+changes is that a second site has to ask the question.
 
 ## Acceptance
 

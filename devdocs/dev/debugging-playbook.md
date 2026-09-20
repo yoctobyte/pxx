@@ -29460,3 +29460,68 @@ value at all. Do not check by reading the value back — a read against offset
 zero can return something plausible. And when a construct has an annotated and
 an unannotated spelling, **measure both**: the pair disagreeing, with the
 annotated one wrong, is this signature.
+## MEASURE THE SHAPE YOU ARE ABOUT TO ASSERT, NOT THE ONE THE SOURCE WAS WRITTEN ABOUT
+
+Three instances on 2026-09-20, one seat, three subsystems. **In every one the
+source sentence was ACCURATE.** That is the whole finding and it is why being
+careful does not catch it: a sentence describing a SHAPE gets read as
+describing the CASE in front of you, and nothing in the sentence marks the
+difference.
+
+The worked example, because it is the sharpest. A ticket was about to assert,
+from `examples/esp32/nilpy-hw-c3/main/main.npy`'s own header:
+
+> *"an unannotated value arriving at an external Pointer parameter is taken as
+> a data buffer, deliberately"*
+
+— and conclude that a NilPy `def` cannot reach C. The header is TRUE. The
+conclusion was false, and measuring the four shapes instead of quoting the one
+took two minutes:
+
+| a def reaches native code as... | actually |
+| --- | --- |
+| a procedural PARAMETER, Pascal routine | works |
+| a procedural PARAMETER on `external cdecl` | **works** — a thunk is minted, `ptypes 17 17` |
+| a bare `Pointer` parameter on `external` | data buffer, silent — *the header's row* |
+| a procedural FIELD | **silent SIGSEGV** |
+
+Same def, same signature, one door along: `cb.MkTwo(two)` works and
+`s.two = two` segfaults with no diagnostic. The C crossing that had been
+written off already worked; the wall was somewhere the source never mentioned
+because the source was not about walls.
+
+**The cost is directional and that is what makes it expensive.** The wrong
+assertion had reached a ticket summary as *"OPEN for the C side"* — the part
+everyone reads — which would have sent a seat to build C-frontend work nobody
+needed, and it had reached a coordinator's relay to the owner twice.
+
+**The discharge is one question, asked before the assertion and not after:**
+*is the shape I am about to claim the shape this sentence was written about?*
+If you cannot answer from the source, that is the measurement to go make, and
+it is nearly always cheaper than the sentence is expensive. Enumerate the
+neighbouring shapes in a table; the table is what exposes it, because a single
+row cannot disagree with itself.
+
+## A PIPELINE'S `$?` IS THE LAST COMMAND'S, AND A PROBE THAT CRASHED READS AS CLEAN
+
+`$BIN | head -2; echo "exit=$?"` answered **exit=0 with no output** for a
+binary that had died on SIGSEGV. `head` succeeded; `$?` is head's. The run was
+briefly recorded as a puzzle — "exited fine but printed nothing" — which is the
+worst reading, because it is interesting enough to think about and wrong.
+
+CLAUDE.md already has this rule for BACKGROUND jobs: *the wrapper's exit status
+is not the job's, grep the log for the verdict the job printed.* **This is the
+same rule arriving in a one-line shell pipeline, which is not where anyone
+looks for it** — the background-job rule reads as being about `&` and
+notifications, so a seat that knows it perfectly still writes `| head` and
+believes the number.
+
+Note the failure direction: it converts a CRASH into a CLEAN EXIT. A probe
+whose whole job is to reveal a segfault reports success, and the missing output
+looks like the program having nothing to say. Both halves point away from the
+truth.
+
+**Discharge:** run the subject bare when the exit code is the measurement
+(`$BIN; echo "exit=$?"`), or `set -o pipefail`, or capture to a file and read
+it afterwards. And treat "succeeded but printed nothing" as a suspicion about
+the instrument before it is a fact about the program.

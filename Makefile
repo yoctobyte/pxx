@@ -1008,6 +1008,15 @@ test-nilpy: $(COMPILER)
 	@# which is what makes the pair a control rather than two tests.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_function_into_a_procedural_parameter.npy $(TESTTMP)/test_nilpy_procslot26
 	tools/expect_same.sh test_nilpy_procslot26.1 "$$($(TESTTMP)/test_nilpy_procslot26)" "$$(printf 'wired   from pascal: 502\nwired   from nilpy:  502\nhanded  from pascal: 502\nhanded  from nilpy:  502\nelement from pascal: 502\nelement from nilpy:  502')"
+	@# A NilPy DEF into a native procedural slot, via the synthesized thunk that
+	@# carries the slot's signature. Rows 4 and 5 are the ones with teeth: ONE
+	@# def into an (Integer,Integer)->Integer slot AND a (Double,Double)->Double
+	@# one, both asserted. The thunk cache is keyed on the PAIR, unlike its three
+	@# siblings which key on the routine alone; with a def-keyed cache row 5 gets
+	@# row 4's thunk and is called with the wrong convention. Two slots of the
+	@# SAME shape would exercise none of that. Pin v412 segfaults on row 1.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_def_into_a_native_callback_slot.npy $(TESTTMP)/test_nilpy_cbthunk
+	$(TESTTMP)/test_nilpy_cbthunk | diff - test/test_nilpy_def_into_a_native_callback_slot.expected
 	# A run-time dispatched method call PAST FOUR ARGUMENTS. The entry points
 	# were an arity ladder, so a fifth argument was refused outright; pydyn_methl
 	# takes a TPyList and has no cap. The four-argument row is the control that

@@ -1,0 +1,53 @@
+# A NilPy `def` handed to a Pascal procedural slot has to arrive as a code
+# address with the SLOT's signature. A def compiles all-Variant -- every
+# parameter a by-reference Variant, the result on the Variant hidden
+# destination -- so it can never match one, and before this the carrier went
+# into the slot and calling through it was a SIGSEGV.
+#
+# Now a thunk carrying the slot's own signature is synthesized and ITS address
+# is stored. THE CACHE KEY IS THE PAIR (def, signature), which is what rows 4
+# and 5 exist for: `add` goes into an (Integer, Integer) -> Integer slot AND a
+# (Double, Double) -> Double one, and both are asserted. With a def-keyed cache
+# -- which is what all three sibling synthesizers correctly use, because THEIR
+# shape is a function of the routine alone -- row 5 would be handed row 4's
+# thunk and called with the wrong convention. Two slots of the SAME shape
+# would have tested nothing (frankh-c0's catch, 2026-09-20).
+#
+# Row 6 fills two differently-shaped slots in ONE call, so both thunks are
+# minted at a single site.
+#
+# Row 7 is the arm that must NOT be thunked: a bound method's carrier holds a
+# live receiver, and a procedural slot retains nothing, so a thunk there would
+# outlive what it reads. It keeps the warning -- a named refusal rather than a
+# dangling read -- and is not exercised by calling it.
+#
+# Oracle: CPython 3.14.4 on the same source with cbslot stubbed; every row
+# below is ordinary Python arithmetic.
+# feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback
+import 'cbslot.pas' as cb
+
+
+def two(a, b):
+    return a * 100 + b
+
+
+def one(a):
+    return a * 3
+
+
+def add(a, b):
+    return a + b
+
+
+# 1-3: one def per slot shape
+print(cb.CallTwo(cb.MkTwo(two)))
+print(cb.CallOne(cb.MkOne(one)))
+print(cb.CallDbl(cb.MkDbl(add)))
+
+# 4-5: ONE def, TWO different signatures -- the row the pair key is about
+print(cb.CallTwo(cb.MkTwo(add)))
+print(cb.CallDbl(cb.MkDbl(add)))
+
+# 6: two differently-shaped slots filled at one call site
+s = cb.FillTwoAndOne(two, one)
+print(cb.CallTwo(s), cb.CallOne(s))

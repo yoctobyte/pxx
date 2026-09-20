@@ -17178,6 +17178,133 @@ begin
   Result := thunkPi;
 end;
 
+{ Is this carrier a TOP-LEVEL def that a native-ABI thunk can stand in for?
+
+  Three things have to hold, and the third is the one with teeth.
+
+  1. `code` is a NilPy-source def: every parameter tyVariant, a function, and
+     not a pylib/pyeval routine (those already have native signatures and take
+     the direct-address arm above).
+  2. Its arity is the slot's. There is no defaulting across this boundary --
+     the caller is C or Pascal and passes exactly what it declares.
+  3. THE CARRIER RETAINS NOTHING. A procedural slot holds a bare code address
+     and owns no reference, so a thunk that had to read a live carrier at run
+     time would outlive what it reads. `PyMakeFuncValueFor` passes the receiver
+     as the carrier's SECOND argument and leaves it EMPTY for a plain function
+     value, so an empty receiver there IS the "closes over nothing" fact, read
+     off the AST rather than inferred. A bound method has a real receiver and
+     is declined here -- it keeps the warning, which is a named refusal instead
+     of a dangling read. (A CAPTURING nested def never reaches this test: the
+     lambda lift appends its captures as extra parameters, so it fails test 2
+     and the all-Variant half of test 1. The mechanism that makes it a closure
+     is what excludes it.)
+
+  Asked of the NODE and not only of the proc index, because 3 is a property of
+  the carrier and not of the routine: the same def can be handed over plainly
+  in one place and bound in another.
+  feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback }
+function PyDefFitsCallbackThunk(node, code, sigPi: Integer): Boolean;
+var i, a, recvArg, carrierPi: Integer;
+begin
+  Result := False;
+  if (code < 0) or (code >= ProcCount) then Exit;
+  if (sigPi < 0) or (sigPi >= ProcCount) then Exit;
+  if not Procs[code].IsFunc then Exit;
+  if ProcUnitIdx[code] >= 0 then Exit;            { pylib/pyeval, not a user def }
+  if Procs[code].ParamCount <> Procs[sigPi].ParamCount then Exit;
+  if Procs[code].ParamCount > MAX_PROC_PARAMS then Exit;
+  for i := 0 to Procs[code].ParamCount - 1 do
+    if Procs[code].Params[i].TypeKind <> tyVariant then Exit;
+  { The carrier must be the plain function-value form with a NIL receiver.
+    Spelled as PyMakeFuncValueFor actually builds it -- `AN_INT_LIT 0` typed
+    tyPointer, not an AN_NIL node -- because this guard's whole job is to read
+    a fact off the AST, and a guard written from what the nil "should" be would
+    have refused every carrier and quietly disabled the feature. Checked
+    against the builder, not assumed. }
+  if (node < 0) or (ASTKind[node] <> AN_CALL) then Exit;
+  carrierPi := Integer(ASTIVal[node]);
+  if carrierPi <> FindProc('pybound_new_sig') then Exit;
+  a := ASTLeft[node];
+  if a < 0 then Exit;
+  a := ASTRight[a];                                { argument 1 = the receiver }
+  if a < 0 then Exit;
+  recvArg := ASTLeft[a];
+  if recvArg < 0 then Exit;
+  if ASTKind[recvArg] <> AN_INT_LIT then Exit;
+  if ASTIVal[recvArg] <> 0 then Exit;
+  Result := True;
+end;
+
+{ A NATIVE-ABI ENTRY POINT for a NilPy `def`, shaped like the procedural
+  slot it is being handed to.
+
+  A def compiles all-Variant: every parameter is a by-REFERENCE Variant and the
+  result rides the Variant hidden-destination convention. A procedural
+  parameter declares its own shape -- `function(laden, room: Integer): Integer`
+  -- and ProcSigCompatible therefore refuses a def for it, correctly. Until
+  this, the coercion site could only warn and let the carrier go into the slot,
+  which is a SIGSEGV the moment anything calls through it.
+
+  Synthesizes (and caches by NAME, the way all three sibling synthesizers do) a
+  routine with the TARGET's signature whose body is `return REALDEF(a0, ...)`.
+  The hand-built bStart = -1 body builder already reads each parameter's type
+  from the synthesized proc's OWN row rather than assuming Variant (it had to,
+  for PyGetOrMakeBoundRetWrapper's class-typed receiver), so the ordinary
+  argument coercion turns each native parameter into the by-ref Variant the def
+  wants, and the ordinary return coercion turns the def's Variant back into the
+  slot's result type. No new runtime, and nothing here unboxes anything itself.
+
+  THE CACHE KEY IS THE PAIR, which is the one way this differs from its three
+  siblings. They key on the real proc alone and are right to: their signature
+  is a function of that proc. This one's is not -- the same def handed to two
+  differently-shaped slots needs two thunks -- so the name carries both indices
+  and FindProc gives per-pair caching for free. No parallel array is needed on
+  the pending-lambda queue, because the body builder recovers the shape from
+  the synthesized proc itself. (frankh-c0's correction, 2026-09-20: the name IS
+  the cache; I had expected to have to widen the queue.)
+
+  DELIBERATELY NOT HANDLED: anything whose thunk would have to reach a live
+  carrier at run time -- a closure, a bound method, a lambda over captures. A
+  slot holds a bare CODE address and retains nothing, so such a thunk would
+  outlive what it reads. Those still take the warning path, which is a named
+  refusal rather than a dangling read. Top-level defs close over nothing, so
+  the question does not arise for them.
+  feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback }
+function PyGetOrMakeCallbackThunk(realPi, sigPi: Integer): Integer;
+var thunkName: AnsiString; thunkPi, i, n: Integer;
+    pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
+    ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
+begin
+  Result := -1;
+  if (realPi < 0) or (realPi >= ProcCount) then Exit;
+  if (sigPi < 0) or (sigPi >= ProcCount) then Exit;
+  n := Procs[sigPi].ParamCount;
+  if (n < 0) or (n > MAX_PROC_PARAMS) then Exit;
+  { the def must take exactly as many arguments as the slot passes -- there is
+    no defaulting across this boundary, the caller is C or Pascal }
+  if Procs[realPi].ParamCount <> n then Exit;
+  thunkName := '$pycbthunk_' + AIntToStr(realPi) + '_' + AIntToStr(sigPi);
+  thunkPi := FindProc(thunkName);
+  if thunkPi >= 0 then begin Result := thunkPi; Exit; end;
+  for i := 0 to n - 1 do
+  begin
+    pnames[i] := 'a' + AIntToStr(i);
+    ptypes[i] := Procs[sigPi].Params[i].TypeKind;
+  end;
+  thunkPi := RegisterProc(thunkName, Procs[sigPi].IsFunc,
+                          Procs[sigPi].RetType, n, pnames, ptypes);
+  Procs[thunkPi].BodyAddr := -1;
+  if PyPendLamCount >= PY_MAX_NESTED then
+    Error('Nil Python: too many pending callable-value wrappers/lambdas');
+  PyPendLamTok[PyPendLamCount] := -1;    { sentinel: hand-built body, not parsed }
+  PyPendLamProc[PyPendLamCount] := thunkPi;
+  PyPendLamWrapReal[PyPendLamCount] := realPi;
+  PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
+  PyPendLamSelf[PyPendLamCount] := CurSelfClass;
+  Inc(PyPendLamCount);
+  Result := thunkPi;
+end;
+
 { The function-object VALUE for an ALREADY-RESOLVED proc. Split out of
   PyMakeFuncValue so a caller holding a proc index but no token to consume —
   the `from mod import f as g` alias desugar — builds the identical value
@@ -27025,7 +27152,7 @@ function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean;
   walk lines up with Procs[].Params either way: Self sits at slot 0 and is
   never tyPointer, so it is skipped by the test rather than by a special case. }
 var currArg, i, capSym, identNode, argSeq, tailArg, exprNode: Integer;
-    btPi, argN, code, wrapPi: Integer;
+    btPi, argN, code, wrapPi, thunkPi: Integer;
     lstCi, bytCi, cpaPi, tmpSym, asgn: Integer;
 begin
   Result := False;
@@ -27222,24 +27349,44 @@ begin
         ASTLeft[currArg] := exprNode;
         Result := True;
       end
+      else if (code >= 0) and
+              PyDefFitsCallbackThunk(ASTLeft[currArg], code,
+                ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i]) then
+      begin
+        { A NilPy `def`: its own signature is all-Variant and can never match a
+          native slot, so instead of the address of the def we take the address
+          of a THUNK carrying the slot's signature, whose body calls the def.
+          feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback }
+        thunkPi := PyGetOrMakeCallbackThunk(code,
+                     ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i]);
+        if thunkPi >= 0 then
+        begin
+          exprNode := AllocNode(AN_PROCADDR);
+          ASTIVal[exprNode] := thunkPi;
+          ASTTk[exprNode] := Ord(tyPointer);
+          ASTLeft[currArg] := exprNode;
+          Result := True;
+        end;
+      end
       else if (code >= 0) and (not PyTypingPass) then
-        { The shape this arm cannot serve: a callable whose compiled signature
-          is not the slot's, which a NilPy `def` always is (all-Variant). It
-          keeps exactly today's behaviour -- the carrier goes into the slot --
-          and today's behaviour is a SIGSEGV the moment anything calls through
-          it, measured identical on pin v412 and at HEAD.
+        { The shape neither arm above can serve: a callable whose compiled
+          signature is not the slot's AND which PyDefFitsCallbackThunk declines
+          to thunk -- a closure, a bound method, a lambda over captures, or an
+          arity that does not line up. It keeps exactly today's behaviour --
+          the carrier goes into the slot -- and today's behaviour is a SIGSEGV
+          the moment anything calls through it, measured identical on pin v412
+          and at HEAD.
 
           A warning and not a refusal, deliberately: a program that stores such
           a value and never calls it runs correctly today, and this arm cannot
-          tell that program from the one that crashes. The native-ABI thunk
-          that would make it work is the ESP demo's ticket, named here so the
-          message leads somewhere. }
+          tell that program from the one that crashes. }
         Warn('Nil Python: ' + Procs[code].Name + ' does not have the signature '
              + 'of procedural parameter ''' + Procs[procIdx].Params[i].Name
              + ''', so the callable object is stored rather than a code '
-             + 'address — calling through that slot will crash. A def compiles '
-             + 'all-Variant and needs a native-ABI thunk, which is not built '
-             + 'yet.');
+             + 'address — calling through that slot will crash. Only a '
+             + 'top-level def of matching arity gets a native-ABI thunk; a '
+             + 'closure or bound method would need the carrier kept alive, '
+             + 'which a bare code slot cannot do.');
     end;
     if (i < MAX_PROC_PARAMS) and
        (Procs[procIdx].Params[i].TypeKind = tyPointer) and
@@ -37272,6 +37419,56 @@ begin
     Procs[procIdx].RetSymIdx := idx;
     Syms[idx].Kind := skLocal;       { gates the prologue zero-init }
     if RetViaHiddenDest(tyVariant) then
+    begin
+      idx := AllocVar('', tyPointer);
+      ProcAggregateDestSym[procIdx] := idx;
+    end;
+  end
+  else if Procs[procIdx].IsFunc then
+  begin
+    { A SYNTHESIZED FUNCTION WHOSE RESULT IS NOT A VARIANT -- today only
+      PyGetOrMakeCallbackThunk's `$pycbthunk_<def>_<sig>`, which carries a
+      native procedural slot's signature.
+
+      The real defect is older than the thunk and frankh-c0 named it: this
+      result machinery was written when every synthesized proc returned a
+      Variant, and encoded that assumption as `RetType = tyVariant` where the
+      question it was asking is `IsFunc`. So this arm is not a special case for
+      the callback thunk -- it is the condition the original should have been.
+
+      MEASURED, not reasoned: without this arm the thunk compiled, ran, and
+      returned GARBAGE. The IR ended `call ... tk=22` then `terminate` with no
+      store -- AN_EXIT is built for this body (the bStart=-1 path falls into
+      the generic else), but it had nowhere to store, so EmitProcEpilog(-1)
+      emitted nothing and the result register held whatever the call left.
+      `ps.CallItFromPascal(k)` printed 1637568216 where CPython prints 502: a
+      plausible wrong answer rather than a crash, which is the worse failure
+      and exactly what this seam's sibling comment warns about.
+
+      The INBOUND half needed nothing -- the IR shows `var_store tk=22` boxing
+      each native parameter into the by-ref Variant the def wants, which is the
+      ordinary coercion a written call gets. So of the two directions, read in
+      ONE paragraph of reasoning and looking identical on paper, one was free
+      and one was not. That asymmetry is the argument for building the smallest
+      thunk and reading its IR rather than trusting a symmetric-looking read.
+
+      Scoped by construction rather than by intent, and ENUMERATED rather than
+      recalled -- the queue lists its own producers, which beat a list of
+      siblings written from memory. Every site that sets PyPendLamProc:
+
+        $pylam<n>          True,  tyVariant
+        $pyboundretwrap_   True,  tyVariant
+        $pycallwrap_       True,  tyVariant
+        $pyclonethunk_     False, tyUnknown   (a procedure)
+        $pycbthunk_        the slot's own IsFunc/RetType   <- only this one
+
+      So this arm is reachable by the callback thunk alone. Checked that way
+      because it is shared machinery and a miscount here is silent.
+      feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback }
+    idx := AllocVar('$pyresult', Procs[procIdx].RetType);
+    Procs[procIdx].RetSymIdx := idx;
+    Syms[idx].Kind := skLocal;       { gates the prologue zero-init }
+    if RetViaHiddenDest(Procs[procIdx].RetType) then
     begin
       idx := AllocVar('', tyPointer);
       ProcAggregateDestSym[procIdx] := idx;
