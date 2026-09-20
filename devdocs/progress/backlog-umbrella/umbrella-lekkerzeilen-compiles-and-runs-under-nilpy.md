@@ -13,7 +13,6 @@ blocked-by:
   - feature-n-the-module-docstring-is-consumed-and-discarded-so-doc-is-undefined
   - task-b-write-the-lekkerzeilen-pxx-platform-backend
   - feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments
-  - feature-nilpy-math-module-twelve-absent-names-measured
   - bug-n-os-environ-and-os-sep-are-not-values
   - feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack
   - decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package
@@ -21,7 +20,6 @@ blocked-by:
   - bug-a-a-nilpy-object-allocation-takes-no-heap-lock-on-x86-64-threadsafe
   - bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value
   - bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data
-  - bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers
   - bug-n-a-star-unpack-in-a-with-header-reads-its-own-temp-before-it-is-filled
   - bug-n-a-method-s-non-constant-default-is-none-when-the-call-is-inside-the-class
   - bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer
@@ -1354,3 +1352,54 @@ its owner, and it was caught only because the seat opened the file before starti
 and the mistake was reading this file's raw `blocked-by:` list instead** —
 CLAUDE.md already says the tooling beats reading a board, and an umbrella's edge
 list is a board. **Do not dispatch from this list; dispatch from `ready`.**
+
+## 2026-09-20 — ONE EDGE REMOVED, AND IT IS THE CASE THE 09-19 AUDIT EXONERATED THE RANKER FOR (frankb-8e)
+
+Removed: `bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers`. **18 -> 17 edges.** Kept as history in this note, which is where the 09-19 block asked such things to go.
+
+**THE 09-19 AUDIT ASKED WHETHER EACH EDGE'S TICKET IS CLOSED. IT NEVER ASKED WHETHER AN OPEN EDGE IS STILL TRUE.** Those are different questions and they have different victims. That block's own conclusion — *"the edges are not wrong as history ... and the RANKER is not fooled: `ready --track N` correctly omits every closed one. The damage is done to READERS"* — is correct for a CLOSED edge and **does not reach this one**, because this ticket is OPEN. The ranker therefore honoured the edge exactly as designed and handed a seat p40 work at **effective prio 90**, top of Track N, with `unblocks 1 ticket(s)` beside it. **The instrument the 09-19 block names as the one that was right the whole time — `tools/progress.sh next` — is the instrument that misdispatched here**, and it did so by reading this very list.
+
+**THE MECHANISM IS PARTIAL CLOSURE, WHICH NO STATUS TEST CAN SEE.** This ticket is two defects under one slug: shape (a), `alias.m()` where one class carries the name at class level and others carry it as an instance method — **that was lekkerzeilen's live wall (`gl.clear()`), and it was fixed on 2026-09-13 in `5445b96d8`** — and shape (b), two distinct classes both carrying one name at class level, which the ticket has said since that day *"nothing measured asks for it"*. **The edge was discharged by the fix and the ticket stayed open for the remainder, so `status: backlog` remained honest while the edge silently stopped being true.** A ticket that closes in halves passes every open/closed audit and keeps its edges.
+
+**THE SUMMARY WAS NOT THE PROBLEM, WHICH IS WHY THE EXISTING REMEDY MISSES IT.** CLAUDE.md's rule for part-closed tickets is to edit the SUMMARY in the same commit, and that was done here **exemplarily** — the summary leads with `SHAPE (a) IS FIXED, 2026-09-13` and says the remainder has no demand. It is the first thing a reader sees and it told me not to be here. **It is not what the ranker reads.** The ranker reads the EDGE, in a different file, owned by a different ticket, and no amount of honesty in the summary reaches it. So the rule needs its other half: **when you close the part of a ticket that earned it an umbrella edge, the edge is what you go and remove** — and the person who fixed shape (a) is the one holding the knowledge that the edge is spent.
+
+**Verified before removing, not inferred from the ticket's prose** — see the ticket's own `THE p40 SURVIVES AND THE PARAGRAPH ABOVE DOES NOT` block. `ast` census, 192 files at lekkerzeilen `587681a`, 192 parsed: the corpus **does** hold a shape-(b) pair (`identity` on `Mat4` and `Quat`) that the 09-13 census reported absent, and it still does not bite, because all eight call sites spell the class literally and neither class is ever aliased. **Re-add this edge the day something binds a two-carrier class to a name.**
+
+## 2026-09-20 — ATTEMPTED THE TARGET: THE WHOLE DEMO COMPILES CLEAN, AND THE OWNER'S BLOCKER 01 IS FIXED BUT INERT UNTIL PINNED (frankb-8e)
+
+**Attempted rather than triaged**, which is what this umbrella asks for. The edge audit that started it found two edges false; the build settles more than the audit could.
+
+**THE BUILD.** `compiler/pascal26` at `f94c2a7e2396d2be` (pxx HEAD `a852664bb`), CWD at the pxx repo root, exactly `runbin.sh`'s invocation:
+
+    ./compiler/pascal26 --threadsafe -dSDL_DISABLE_IMMINTRIN_H -dGL_GLEXT_PROTOTYPES \
+        /home/neo/lekkerzeilen/lekkerzeilen/__main__.py <out>
+
+**rc=0, ZERO errors, 83 warnings, binary emitted** — `code=12021473B data=633660B bss=226823164B procs=11589`. The import closure from `__main__.py` compiles end to end. 2m05s.
+
+**WHAT MOVED, ATTRIBUTED BEFORE BEING QUOTED.** `bin/build.log` from 2026-09-19 20:09 ends on one error — `pascal26:745: cannot infer the type of field self.chart_view`, the owner's **blocker 01** (`devdocs/pxx-blockers/01-field-from-qualified-float-const/`, filed `01d0fec` at 20:11). The demo source did **not** change: `self.chart_view = chart.VIEW` is still unannotated at `app.py:745`. Controlled directly — the pre-fix demo tree `a98958a`, exported with `git archive` so nothing in the live checkout moved, compiled with the SAME current compiler: **rc=0, clean.** Same source, different compiler, so **the repair is pxx-side and none of it is the demo's 25 commits since.**
+
+**THE OWNER'S OWN REPRO AND ITS CONTROLS, RUN AS HE WROTE THEM:**
+
+| dir | pinned `a6a2a1cc2278e1a9` | HEAD `f94c2a7e2396` |
+| --- | --- | --- |
+| `repro/` (`VIEW = 1700.0`) | **error**, his exact message | **builds, prints 1700** |
+| `control_int/` (`VIEW = 1700`) | builds | builds, 1700 |
+| `control_local/` (local, not a field) | builds | builds, 1700 |
+
+The pinned binary's sha is **the one his README records having measured with**, so the negative control is his instrument, not a lookalike — and the green is attributable rather than a row that cannot fail.
+
+**WHICH COMMIT FIXED IT IS NOT ESTABLISHED, AND IS NOT GUESSED HERE.** `45b8571d7` is the nearest by subject and its own message rules it out: it adds TUPLE and None arms to the module-global literal reader and says scalars were already known — `VIEW` is a scalar float. A case-fold theory (`class View` exists at `atlas.py:169`, and two case-folding fixes landed today) was tested and **discarded**: the repro is self-contained with its own `chart.py` and no such class, yet still reproduces on the pin. Range is `934f40376..a852664bb`. Left open rather than filled in with the plausible answer.
+
+**THE CONSEQUENCE THAT IS NOT ABOUT THIS TICKET: THE FIX IS INERT UNTIL PINNED.** `runbin.sh` already documents `PXX=pinned` as *"CURRENTLY BROKEN for this demo"* and defaults to the latest compiler for that reason; blocker 01 is now a second, independent row with the same shape, measured above. **The demo therefore builds only against a moving compiler in a working checkout** — which that script's own header calls out as a hazard (a mid-rebuild window gives a spray of errors and no window). Stated here because it is exactly the class CLAUDE.md names: a compiler fix a consumer depends on is inert until a pin carries it. **Whether to pin is the owner's call and is not being acted on from this seat.**
+
+**STILL NOT ESTABLISHED, and the distinction this umbrella has been careful about: COMPILES is not RUNS.** A clean build says nothing about frames. There are untracked `devdocs/pxx-blockers/pxx-frame-*.png` in the demo checkout dated today and a seat is live in that tree (HEAD moved `587681a -> 1d9fcff -> 4379db0` during this measurement), so the run half is being carried elsewhere and is not claimed here.
+
+### Second false edge removed in the same pass: the `math` ticket
+
+`feature-nilpy-math-module-twelve-absent-names-measured` — **17 -> 16 edges.** Same mechanism as the class-level one above: a real open ticket whose edge stopped being true, so `next` ranked a **p30** feature at **effective 90** and would have handed it to the next Track N seat as the top of the queue.
+
+Measured against the **39-module demo population** (`lekkerzeilen/**`, which is the denominator the "36 of 39" figure uses; `tools/` at 18 and `tests/` at 51 are outside it): **none of the fifteen still-absent names** — acosh asinh atanh cbrt dist erf erfc exp2 gamma lgamma log1p nextafter remainder sumprod ulp — **appears in the demo.** There is no `from math import` form in `lekkerzeilen/**` either, so the qualified-`math.` scan is complete rather than a sample.
+
+`math.dist` IS used, nine times, and **every one is in `tools/`** (`corridor.py` 6, `import_nl.py` 3) — an offline toolchain that nothing under `lekkerzeilen/` imports. **That is the whole reason this edge looked live**: a scan over `*.py` at the repo root finds `math.dist` and stops, and the population question decides the answer. The demo's actual math surface is sin/cos/radians/hypot/degrees/atan2/sqrt/floor/ceil/asin/tan/log/log10/isnan/exp/copysign/acos/isinf/atan — all present.
+
+**And the build above is the stronger statement:** the demo compiles with zero errors, so **no ticket blocks the COMPILES half of this umbrella today.** Every remaining edge is either about RUNS or is discharged and has not been re-checked. Re-add either of these two the day the measurement changes.

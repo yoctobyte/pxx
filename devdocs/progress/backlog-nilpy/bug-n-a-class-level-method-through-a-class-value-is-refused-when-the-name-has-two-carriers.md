@@ -15,7 +15,14 @@ summary: >
   cannot discriminate two classes. Row K of
   test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy asserts the
   refusal; CPython answers "A10" there. Nothing measured asks for it, which is why
-  this is back at 40.
+  this is back at 40 -- and that p40 was RE-MEASURED 2026-09-20 rather than
+  inherited: lekkerzeilen DOES carry the pair (`identity` on both Mat4 and Quat)
+  that the 09-13 census reported absent, and shape (b) still does not bite only
+  because all eight call sites spell the class LITERALLY. THE CONDITION THAT
+  SPRINGS THIS is a class reached as a VALUE -- one `M = Mat4` anywhere makes it a
+  live wall with no warning, because the two carriers already exist. Was also
+  carrying a FALSE effective prio of 90 until 2026-09-20 via a stale
+  umbrella-lekkerzeilen edge that shape (a) had already discharged.
 track: N
 type: bug
 prio: 40
@@ -209,6 +216,45 @@ live wall.
 
 The p40 is therefore correct and the corpus agrees with it. Recorded so nobody
 re-derives the question; the answer cost one message.
+
+## THE p40 SURVIVES AND THE PARAGRAPH ABOVE DOES NOT — re-measured 2026-09-20 (frankb-8e)
+
+**The verdict is right and the stated reason is not, which is the dangerous
+combination: a correct conclusion protects a broken instrument from review.**
+
+The paragraph above asks whether a second class declares a name **that `gl` also
+declares**. Shape (b) does not mention `gl`. `gl` is where shape (a) bit, so the
+question inherited shape (a)'s frame, and **a census filtered on the hypothesis's
+own subject cannot see an instance anywhere else** — which is precisely where the
+one instance is.
+
+Re-measured with `ast`, not grep, over **192 `*.py` files at lekkerzeilen
+`587681a` (2026-09-20), 192 parsed, 120 distinct names carried at class level**:
+
+| condition | rows |
+| --- | --- |
+| names with **>=2 distinct class-level carriers** (shape (b) NECESSARY condition) | **1** — `identity`, on `Mat4` and `Quat`, both `lekkerzeilen/math3d.py` |
+| of those, ever reached through a **class held as a value** (SUFFICIENT condition) | **0** |
+
+So the corpus **does** contain the pair frankh-30 reported absent, and shape (b)
+still does not bite, for a different reason than the one on record: **all eight
+`.identity(` call sites spell the class literally** (`Mat4.identity()`,
+`Quat.identity()` in `vessel.py`, `sim.py`, `app.py`, `math3d.py`), and neither
+class is ever bound to a name. This ticket's own opening says why that is
+decisive: *"spelled on the class LITERALLY is fine — that never reaches the
+dynamic path at all. It takes an alias to expose this."*
+
+**THE CONDITION THAT WOULD SPRING IT**, stated as a mechanism because a row
+decays and a mechanism does not: *any* two classes carrying one name at class
+level, where the call goes through a class **value** — an alias, a parameter, a
+dict lookup, a `backend = Mat4`-style selection. Today the corpus has the
+carriers and not the alias. A single `M = Mat4` added anywhere makes this p40
+ticket a live wall, and **nothing warns**, because the carriers are already
+there.
+
+**WHY THIS DID NOT CHANGE THE NUMBER:** p40 is still correct. It is recorded
+because the next reader re-deriving "is there demand" from the paragraph above
+would ask about `gl` again and get a clean answer about the wrong question.
 
 Sibling context: [[bug-n-a-class-reached-through-a-unit-alias-is-not-a-value]]
 and [[bug-n-a-from-imported-class-loses-its-methods-unless-it-is-renamed]] closed

@@ -30456,3 +30456,67 @@ correct check earns itself deleted (the cry-wolf rule, reached from a second
 direction: not a wrong baseline, but a correct control outliving what it
 demonstrates). The note's job is to tell the next reader **what to check
 first** — does `import math` compile at all — rather than what to conclude.
+
+## A CORPUS CENSUS RUN THROUGH THE BASE LANGUAGE'S PARSER IS BLIND TO EXACTLY THE DIALECT-SPECIFIC FILES, AND THE LOSS IS NOT RANDOM
+
+Measured 2026-09-20 (frankb-8e, Track N) while checking whether lekkerzeilen
+demands shape (b) of
+`bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers`.
+
+**The setting is a design decision, not an accident: NilPy is UPWARD compatible
+with CPython, one direction.** Accepting what CPython rejects is a feature. So a
+file in a NilPy corpus may legally hold syntax CPython refuses — here
+`import "/usr/include/SDL2/SDL.h"`, the C-header import.
+
+I wrote the census with Python's `ast` module, which is the right instrument for
+the question (a decorator has to be attached to the right function at the right
+nesting depth, which grep cannot see). One file raised `SyntaxError`. The census
+printed it and continued, which felt like diligence.
+
+| | files | parsed | distinct class-level names |
+| --- | --- | --- | --- |
+| plain `ast.parse` | 192 | 191 | **29** |
+| dialect forms neutralised, retry | 192 | **192** | **120** |
+
+**The one dropped file held 91 of the 120 names — 76% of the population.** It was
+`lekkerzeilen/platform/_pxx.py`, the pxx platform backend: the most
+dialect-specific file in the corpus, and the file the ticket was actually about
+(`gl.clear()` lives there).
+
+**THE HEADLINE NUMBER WAS IDENTICAL BOTH WAYS.** Names with two or more
+class-level carriers: **1** before recovery, **1** after. The broken instrument
+agreed with the fixed one, so nothing in the output invited a second look — the
+census was right by luck, and a seat who ran only the first version would have
+banked a correct answer from an instrument that could not see three quarters of
+its subject.
+
+**WHY THIS IS NOT ORDINARY SAMPLING LOSS, AND IT IS THE WHOLE POINT.** Dropping
+1 file in 192 sounds like 0.5% and reads as negligible. The exclusion is
+**correlated with the property under study**: the base parser refuses a file
+precisely *because* it uses the dialect's extensions, so the files it removes are
+the most dialect-specific ones — which is where any question about the dialect is
+most likely to be answered. The instrument does not lose a random half-percent;
+it targets the subject and removes it. This is the population rule
+("print the set your instrument enumerates and check the subject is IN it")
+arriving in the one shape where the instrument's blind spot is *defined by* the
+thing you are asking about.
+
+**The general form: whenever the instrument is the OTHER implementation's
+parser, loader or importer, its refusals are not noise — they are an index of
+exactly the extensions under study.** The oracle cannot read the dialect, and
+that is what makes it an oracle. Same shape for a `mimic_` module's surface
+scanned with CPython's `inspect`, for a Pascal corpus walked with FPC's parser
+where pxx accepts more, and for any `--mimic-fpc` census.
+
+**Remedy, and it is three lines:** make the unparseable set a **counted, loud**
+output rather than a skipped line (`STILL UNPARSED` is the last thing a census
+should print quietly); recover deliberately by neutralising the *known* dialect
+forms and re-running; and report the population **both ways**, because the
+difference between them is itself the measurement of how dialect-specific the
+corpus is. Here that difference — 29 against 120 — says three quarters of this
+corpus's class-level surface is in code CPython cannot read, which is a fact
+worth having on its own.
+
+**And the cheap positive control:** if neutralising the dialect forms does not
+change the population, the corpus holds no dialect-specific code — in which case
+ask whether it can answer your question at all.
