@@ -32351,6 +32351,41 @@ on disk, the tree can be pristine at origin's tip with a binary from another wee
 the working loop announces it.** Read the mtime or the sha before measuring, not after being
 contradicted.
 
+**AND A HEDGE ATTRITES ONE HOP AT A TIME, WHICH IS THE SAME SECTION'S TERRITORY BY A DIFFERENT
+MECHANISM — HERE THE RELAY IS HONESTLY QUALIFIED AND THE CONFIDENCE STILL RISES.** The case above is a
+relayer who verified on a stale instrument and stamped it. This one has no stamp and no stale
+instrument: **the hedge is written, correctly, to the first recipient, and is gone by the second.**
+
+Measured 2026-09-20, this file's own coordinator, one shift, two messages minutes apart. Relaying a
+13.5KB frame-rate document it had opened only far enough to confirm existed and grep a few lines:
+
+    to lekkerzeilen-7a   "this is second-hand through franks-5b ... I have only read its
+                          headings and a few lines"            <- hedge explicit, load-bearing
+    to frankb-8e         numbers as bullets, "per 5b" on the lead-in, and the seat about to
+                          spend a measurement leg on them      <- hedge compressed to an attribution
+
+**Two of the relayed numbers were wrong and one would have cost a leg.** *A relay that hedges to one
+recipient and not the next has not hedged.*
+
+**THE MECHANISM IS THE MESSAGE'S PURPOSE, NOT THE RELAYER'S CARE.** A hedge SURVIVES in a message
+whose subject is the claim's STATUS — asking a seat to confirm its own document, the hedge is the
+point of writing. It EVAPORATES in a message whose subject is what to DO — because **a qualifier does
+not help anyone act, so it compresses to an attribution phrase, and an attribution phrase reads as a
+citation rather than as a warning.** So the hedge is lost precisely on the hop into ACTION, which is
+the hop where it was finally going to matter. **The more actionable your message, the harder the hedge
+is to keep.**
+
+**AND IT LEAVES NO ARTEFACT, WHICH IS WHY IT IS NOT IN THIS FILE ALREADY.** A stale instrument leaves a
+wrong number someone can later re-measure. **A missing caveat leaves nothing at all** — the numbers
+were real, the attribution was present, every sentence was true, and there is nothing to grep for.
+It surfaced only because the document's author read the relay and corrected it.
+
+**Discharge, and it is one line because anything longer will itself be compressed: put the
+provenance in the SAME SENTENCE as the number, never in the lead-in** — *"5b reads 104 fps here, I
+have not opened the file"* survives a rewrite that *"per 5b:"* plus a bullet list does not. **And when
+a relay is about to be acted on, say what you did NOT check, not who you got it from.**
+
+
 ## DOCUMENTATION THAT AGREES WITH THE HYPOTHESIS YOU ARRIVED HOLDING TERMINATES THE SEARCH — AND IT DECAYS TOWARD CONFIRMING THE READER, NOT TOWARD STOPPING THEM
 
 CLAUDE.md already has the hazard-block case: *a stale WARNING decays silently, in the
