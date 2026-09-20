@@ -11722,6 +11722,60 @@ distinguishes is a mislabelled figure waiting to happen.** The linker branches
 on the `W` flag, so any SRAM question must be asked of the section table, which
 carries that flag, and never of a total that has already added across it.
 
+## AN INSTRUMENT AIMED AT AN ARTEFACT THAT CANNOT CONTAIN THE ANSWER — AND WHY ITS *NON-ANSWER* IS THE DANGEROUS VERDICT
+
+Measured 2026-09-20, twice in one evening, two seats, two subsystems, **same
+root and opposite verdicts.** Distinct from every instrument failure already in
+this file: not stale, not the wrong population, not a filter restating the
+hypothesis, not a contaminated probe. **Both instruments were current,
+correctly written and correctly executed. They were pointed at an artefact that
+does not contain the answer.**
+
+| | the question | what was searched | verdict | truth |
+| --- | --- | --- | --- | --- |
+| **A** | do the nine Pascal ESP demos print anything? | `grep WriteLn` over their sources | **zero across nine** — nine demos that flash into silence | all nine print, via `esp_rom_printf` declared `external`, because there is no console before IDF's init |
+| **B** | which scripts have the silent-capture bug? | `grep` for the capture idiom across `tools/` | *"the idiom is common and nothing in the tree says which instances are live"* | five candidates, **all five safe**, readable in ten minutes — the answer was in each script's failure branch |
+
+In A the searched spelling was not the one the code uses; in B the searched
+construct is the SHAPE and the defect is in the **failure branch**, which no
+grep for the shape reaches. Neither artefact could have produced the answer.
+
+**THE ASYMMETRY IS THE FINDING, AND IT IS ABOUT WHICH ERROR SURVIVES.**
+
+**A produced a confident FALSE ALARM. B produced a confident
+CANNOT-BE-DETERMINED.** A false alarm is *load-bearing*: it claims something,
+somebody eventually checks it, and it dies within the hour — A did, the same
+evening, because the claim was startling enough to verify. **A non-answer
+claims nothing, so nothing ever falsifies it.** It reads as rigour — *"I
+declined to publish a number I could not support"* is the behaviour this file
+spends pages asking for — and **nobody audits a non-answer.**
+
+**And it is not free.** B's cautious verdict would have left a class recorded as
+*open and common*, which **quietly taxes every future reader of those five
+scripts**: each one now looks like a suspect, forever, because a careful-sounding
+sentence said it might be. The cost is invisible, unbounded in time, and paid by
+people who will never know what it was for.
+
+**So: the hedge you are pleased with is the one to check.** Both of today's came
+from a sentence that read as careful standing in for a measurement that was
+cheap — ten minutes, in both cases, against the artefact that actually holds the
+answer.
+
+**What to do:**
+- **Before recording "cannot be determined", say what artefact WOULD contain
+  the answer**, and price reading it. If the price is minutes, the non-answer is
+  not rigour, it is the cheaper option wearing rigour's clothes.
+- **Audit non-answers the way you audit claims.** A finding gets challenged
+  because it asserts; a non-finding needs you to go looking for it, because it
+  never will be.
+- **Prefer the smaller true answer to the larger careful one.** "One instance,
+  fixed, the idiom is fine elsewhere" is worth more than "a common shape,
+  liveness unknown" — the first ends the question, the second charges rent.
+- **When a search returns ZERO, ask what spelling the code would use if it did
+  the thing** (this file's "grep for the other spelling's handler, not for the
+  feature", in its false-negative form). Both of today's zero-shaped answers
+  were wrong.
+
 ## CAPTURING OUTPUT TO READ ONE VALUE OUT OF IT MAKES YOU THE OWNER OF THE ERROR CHANNEL, AND THE FAILURE PATH IS CODE NOBODY HAS EVER RUN
 
 Measured 2026-09-20 on `examples/esp32/nilpy-c3/build.sh`, hours before the
