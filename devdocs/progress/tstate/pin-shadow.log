@@ -948,3 +948,4 @@
 2026-09-20T03:34:51Z	borg	d6ab05ec55b24cbc706ab24474104d374c3ea6bc	would NOT pin d6ab05ec55b2 — 1 red(s) the current pin does not have, 6 inherited from the current pin: test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas
 2026-09-20T04:41:32Z	borg	0dfa0d78d3f34c944be2aab3e9e394c385f23f5a	would NOT pin 0dfa0d78d3f3 — 1 red(s) the current pin does not have, 6 inherited from the current pin: test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas
 2026-09-20T05:44:27Z	borg	715577d0ce7271f5a0e3e4a3e94decb59e56079e	would NOT pin 715577d0ce72 — 1 red(s) the current pin does not have, 6 inherited from the current pin: test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas
+2026-09-20T08:08:43Z	borg	2723029f4125d239d97b3ad23eb456ddf9d1eeee	would NOT pin 2723029f4125 — 1 red(s) the current pin does not have, 6 inherited from the current pin: test-threads#src:test/test_tls_base.pas
