@@ -175,3 +175,36 @@ instance from a jump into the ELF headers to a message.** Not done here because
 it wants its own fixture and a decision about refuse-versus-coerce, and
 smuggling it into this commit would leave both unmeasured. Filed as the next
 piece of work on this mechanism.
+
+
+## Where this fix is reachable from (added 2026-09-20, same seat)
+
+**Pin v413 (`d79e66f07`) does not carry it**, nor the 03 fix (`fb0c0af11`) nor
+the 04 fix (`12806ea63`). So anything building with `$(PXX_STABLE)` — Track B/E
+by rule — gets the pre-fix compiler until the owner pins. **That is a sentence
+here, not a reason to wait: never wait for a pin, and a pin is his call.**
+
+**But the lekkerzeilen demo does NOT build against the pin, so it is not
+pin-gated.** `runbin.sh` defaults to `latest`, i.e.
+`$PXX_ROOT/compiler/pascal26`. The gap is different and sharper:
+**`PXX_ROOT` defaults to `/home/neo/frank-user`**, the owner's own checkout,
+and that checkout is at `d79e66f07` with a `compiler/pascal26` whose sha is
+`f94c2a7e2396d2be` — byte-identical to the pinned binary and carrying none of
+tonight's three fixes.
+
+**Measured rather than inferred**, the command he would type, same flags as the
+pair above, one variable changed:
+
+| `PXX_ROOT` | result |
+| --- | --- |
+| `/home/neo/frank-user` (his, the default) | `TypeError: object is not callable`, **rc=217** |
+| `/home/neo/frankB` (has the fixes) | sails, rc=0, 0.9 kn |
+
+That `TypeError` is blocker 03's signature error, and it is the same string the
+pinned binary produces on the 03 fixture — so the two instruments agree about
+which compiler he is running.
+
+**So the reach of every fix tonight is a `git pull` and a rebuild in HIS
+checkout, not a pin.** Nobody else can do it for him: that tree is his, and
+pulling or rebuilding in another seat's checkout is not a thing to do
+unasked.
