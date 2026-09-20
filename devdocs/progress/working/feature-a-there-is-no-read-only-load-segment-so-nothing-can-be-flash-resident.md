@@ -504,9 +504,32 @@ same hazard applies to every REMAINING item an interrupt path can reach — prop
 method arrays and dispatch tables especially. Establish that no ISR can reach a
 structure with the cache off BEFORE pricing its bytes.
 
-**Why the bytes are worth chasing at all, which was not measurable until today:**
-franks-5b's instrument puts a plain NilPy print demo at 178,008 B of data+bss
-against a 211,296 B free DRAM pool on the C3 — 84% of the remaining RAM — and
+**Why the bytes are worth chasing at all, which was not measurable until today.**
+franks-5b's instrument puts a plain NilPy print demo at **125,832 B of SRAM
+against a 211,296 B free DRAM pool on the C3 — 59.6%** — measured DOWNSTREAM of
+this ticket's ESP-IDF cut, with **53,576 B already in flash because of it**. And
 `d39dfd9cc` tightens the companion bound to **zero SRAM from code removal**, not
 ~1%. So on that profile static DATA PLACEMENT is the only lever there is, which
-is what this ticket's REMAINING list is.
+is what this REMAINING list is.
+
+**TWO ROWS, AND WHAT EACH ONE MEASURED — because a bare corrected number reads
+as a regression to whoever quotes the older one.** This section said **178,008 B
+/ 84%** for about ten minutes, sourced from me quoting franks-5b's first
+readout. That row measured the WHOLE DATA SEGMENT off the compiler's `ok:` line
+— `.data` AND `.rodata` together — and on the IDF profile `.rodata` carries no
+`W` flag and the linker flash-places it. So the old row counted 53,576 bytes
+that this ticket's own cut had already moved out of SRAM: it overstated our
+static data by 42% while under-crediting the thing that made it smaller.
+Corrected at source in `17d5714f8`, which reads the section table and the `W`
+flag the linker actually branches on, and prints the flash figure beside the
+SRAM one so the split cannot be assumed again.
+
+**The positive control passed throughout, and that is the part worth keeping.**
+It was a 40,000-byte static array: bss +40,004, pool −40,000, exact. A static
+array lands in `.bss`, and `.bss` was reported correctly by BOTH instruments —
+so the control moved the half that worked and was silent about the half that did
+not. **A passing control over a mislabelled number is worse than no control**,
+because it certifies the readout it does not touch. A large string literal would
+have split `.data` from `.rodata` in one compile. franks-5b banked the general
+form in the playbook: a positive control proves the readout it MOVES and no
+other.
