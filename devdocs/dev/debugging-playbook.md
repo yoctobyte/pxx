@@ -31876,8 +31876,19 @@ within one message and retracted a correct finding — and did not merely accept
 fresh self-criticism to explain their own supposed error (that they had counted the aggregate's
 `FAIL: <script>` echo into the guard's output to reach 25). **That self-criticism was reasoning from a
 premise that was never re-measured**, and it is now withdrawn with the refutation that prompted it.
-The outstanding number is a `24` in that seat's saved log which matches neither the file (28) nor any
-capture of it; it wants one `wc -l` against the raw log, which nobody has run.
+**The `24` is closed, and it is the same trailing newline a THIRD time.** Counted from that seat's own
+saved log: the `tail -25` block is lines 85–109, a full 25-line window, with line 84 being the
+Makefile's own `FAIL: <script>` echo. The `24` counted 85–108 and **excluded line 109, the trailing
+blank the guard prints** — the identical line that `$(...)` ate in the replay. It cross-checks against
+the file measured here independently: 28 lines in the log, so `tail -25` yields lines 4–28, which is
+25.
+
+**And the original `exactly 25` was right by cancellation, not by care:** it used 84–108 — *including*
+the wrapper's echo and *excluding* the trailing blank, two boundary errors that happened to sum to the
+correct number. The refutation used 85–108: one error, uncancelled. **One three-line ambiguity,
+resolved three different ways across one evening, landing each time on whichever hypothesis was in the
+room.** Write the boundary down BEFORE counting, and never count a hand-picked line range when
+`wc -l < file` is available.
 
 **The lever is this section's own, sharpened: an explanation more satisfying than the gap it fills is
 the one to replay — and a REPLAY is the most satisfying explanation there is.** It arrives with a
