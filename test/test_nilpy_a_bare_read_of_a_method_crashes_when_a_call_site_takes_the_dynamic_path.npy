@@ -1,0 +1,25 @@
+# NOT WIRED INTO test-nilpy: this fixture FAILS at HEAD. Wiring it would turn the
+# tier red for every seat. Wire it in the commit that fixes the bug.
+#
+# A bare READ of a method as a VALUE, off a receiver whose class is not known
+# statically, SIGSEGVs -- but only when a CALL site for the same name is also
+# present and took the dynamic-dispatch path. Remove Craft.gusty, changing
+# nothing else, and the read works. Deterministic 4/4 including setarch -R.
+#
+# THE ASYMMETRY IS THE FINDING: the call site WARNS ("no class declares a method
+# or callable field .gust()") and is correct; the read site emits NO diagnostic
+# and produces a code address that is not one. RIP lands at 0x4004ac -- inside
+# the ELF headers, not a null and not code -- so this is a garbage carrier, not
+# an unfilled slot.
+#
+# Sibling of lekkerzeilen blocker 05, NOT proven to be it: 05's RIP is 0x0.
+# bug-n-a-bare-read-of-a-method-as-a-value-yields-a-garbage-code-address
+from nilpy_bareread import traffic
+from nilpy_bareread.environment import Environment
+
+e = Environment()
+# The CALL form. This is the control: it must keep working, and it does.
+print("call: %s" % (traffic.Craft().gusty(e),))
+# The READ form. Same name, same receiver, value instead of a call.
+g = traffic.Reader().bare_gust(e)
+print("read: %s" % (g(4.0),))
