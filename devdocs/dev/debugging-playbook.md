@@ -7807,6 +7807,65 @@ count cannot see cache behaviour, port pressure or branch prediction. Take it wh
 the box is quiet, and stamp both numbers with the binary sha **and** the load
 average.
 
+## THE PARTY ADDING LOAD TO A SHARED BOX CANNOT PRICE IT — the price is denominated in someone else's noise floor
+
+Measured 2026-09-20, frankH and franks-5b, one box. I wanted to run 26 import
+probes while franks-5b held the box for a timing lane. I judged them *"light
+enough not to wait on"* and ran them. franks-5b then sent a HOLD: a leg had just
+finished and min-of-N repeats were starting.
+
+**The judgement was not merely wrong, it was not mine to make.** "Light enough"
+is a statement about the RESOLUTION OF SOMEBODY ELSE'S INSTRUMENT — how big a
+bump their estimator can see, how close their two arms are, how many repeats
+they have budgeted. I knew none of those and could not have. The person adding
+the load is structurally the worst-placed person in the exchange to price it.
+
+**The disclosure is the remedy, and it is cheap precisely because it does not
+require me to be right.** I told them the window and offered to have any
+overlapping repeat discarded. That converts a question I cannot answer into one
+they can answer in a sentence.
+
+### The part I would have got wrong on my own, and it is the useful half
+
+franks-5b's reply (their argument, recorded here with their permission):
+
+    R1  131.75   (no load sample)
+    R2  132.60   load1 3.73/4.65/4.87   runq 2/5/12
+    R3  132.75   load1 3.45/4.02/4.56   runq 2/5/12
+    R4  124.97   load1 2.40/3.08/3.54   runq 2/4/7
+
+**My probes could only INFLATE a run, and min-of-N discards inflated runs by
+construction.** The failure mode I was worried about — them chasing a spurious
+DIP — is the one this estimator cannot have, because contamination has a sign.
+R4 is both their fastest observation and their least-loaded one, which is the
+direction that makes sense; R2 and R3 carry the load and are exactly the
+observations min-of-N throws away.
+
+That is a stronger guarantee than "the load was small", and it does not depend
+on my probes being small. **It is also a fact about their estimator, which is
+the thing I did not have** — reinforcing rather than excusing the rule above.
+
+### The generalisation, and the test
+
+**Ask whether the estimator can ABSORB the contaminant, not whether the
+contaminant is small.** A minimum absorbs anything that only adds. A MEAN does
+not — the same probes would have moved a mean-of-four by seconds and left no
+tell. A ratio between two arms measured at different times absorbs nothing at
+all (see "INTERLEAVING CANCELS DRIFT, NOT DIFFERENTIAL SENSITIVITY"). So the
+same load is free, fatal or invisible depending on a choice you cannot see from
+outside.
+
+**The value of disclosing is in the holder being able to CHECK, not in the
+outcome.** Had the ordering come out the other way — fastest run at highest
+load — they would have had a genuine puzzle and no way to solve it, because
+they could not have reconstructed which window my probes fell in. The
+disclosure was worth sending on the branch where it turned out not to matter.
+
+**Do not ask "is this light enough to skip the message".** Send the window and
+let the holder decide; the message costs one turn and the reconstruction costs
+a run.
+
+
 ## A capability that exists and cannot be asked for costs you at the worst moment
 
 `compiler/asmtext_wasm.inc` could write a `.wat` — the text form of a wasm
