@@ -410,3 +410,4 @@
 2026-09-14T18:44:38Z  v410  c599e8546121892371b9f54ee662af2d817fca2c526a2057a861909f81cb6a97  06e40fb95b13af1d28b9ffebe028e26ab10dff26  fix(A): clear the handle's liveness word when a pthread-route thread exits
 2026-09-17T17:42:06Z  v411  bc884808fda583ef8e012c0c14bfba68e958a204c40d6d3e89be49c9eafec22c  9b8475d4e99e968a404b7fbe0b04dd37af430079  docs(goal,rules): record the owner's ESP refocus in the goal file, and correct the census clause — it answers the wrong question wrong
 2026-09-19T15:39:47Z  v412  a6a2a1cc2278e1a9577616abd2234a431c56f06204429a9963759d4235731e1b  934f403764656371727a86e6cfc80ba6ef3bfc02  tstate(borg): publish uncommitted state (borg.json)
+2026-09-20T10:29:28Z  v413  f94c2a7e2396d2beb141a072a619aa4bdf8298b3e158a7a1cf61c4137ec5c653  744284056e1e7a113c0268723983baba1f3830b2  tstate(borg): slow f37400a57126 done

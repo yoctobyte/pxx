@@ -870,6 +870,8 @@ type
     FStart: Int64;           { enumerate(xs, START) / RANGE next value }
     FStep: Int64;            { RANGE stride }
     FObj: TObject;           { the user iterator object (USEROBJ) }
+    FSeqLen: Pointer;        { SEQOBJ: the class's __len__ PMethInfo, or nil }
+    FSeqGet: Pointer;        { SEQOBJ: its __getitem__ PMethInfo }
     FBox: TPyList;           { the one-slot prefetch }
     FHas: Boolean;           { FBox holds a prefetched value }
     FEnd: Boolean;           { the source is exhausted — never restarts }
@@ -1540,6 +1542,13 @@ function pyos_path_split(const p: AnsiString): TPyList;
 { os.path.normpath — collapse '.', '..' and repeated slashes, textually and
   without touching the filesystem, exactly as CPython's does. }
 function pyos_path_normpath(const p: AnsiString): AnsiString;
+{ os.path.relpath — the path to `p` as seen FROM `startDir`, computed
+  textually after both are made absolute and normalised, exactly as CPython's
+  POSIX implementation does. No filesystem access and no symlink resolution:
+  CPython's does not either, which is why its answer can name a path that does
+  not exist.
+  `start` defaults to the current directory, as it does in CPython. }
+function pyos_path_relpath(const p: AnsiString; const startDir: AnsiString = '.'): AnsiString;
 { os.path.getsize — st_size, raising the same FileNotFoundError pyos_stat does
   for a missing path rather than answering 0. }
 function pyos_path_getsize(const p: AnsiString): Int64;
@@ -1663,6 +1672,12 @@ function pyscalar_attr_missing(const tname: AnsiString; const attr: AnsiString):
 function pyos_startfile(const path: AnsiString): Integer;
 function pyos_environ_get(const name: AnsiString): Variant;
 function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
+{ os.environ[k] — the MAPPING SUBSCRIPT, which is NOT os.environ.get(k): the
+  subscript RAISES KeyError for a name that is not set, where get answers None.
+  Programs rely on exactly that difference — `os.environ["TSP_SETTINGS"]` is how
+  a required setting is read, and answering None there turns a missing
+  environment variable into a wrong value much further on. }
+function pyos_environ_getitem(const name: AnsiString): Variant;
 function pyos_getenv(const name: AnsiString): Variant;
 function pyos_getenv_d(const name: AnsiString; const dflt: Variant): Variant;
 { sys.stdin.read(n): read up to n bytes from fd 0, returned as a byte string.
@@ -2620,6 +2635,7 @@ function pymath_isfinite(x: Double): Boolean;
   bug-nilpy-a-str-into-a-by-name-pylib-list-parameter-segfaults }
 function pymath_prod(const src: Variant): Variant;
 function pymath_fsum(const src: Variant): Double;
+function pymath_dist(const p, q: Variant): Double;
 function pymath_perm(n, k: Int64): Int64;
 { ---- random ------------------------------------------------------------
   `import random` had nothing behind it at all — `random.random()` was
@@ -5458,6 +5474,8 @@ end;
   user object needs it HERE, where the receiver has no static class. }
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
                           const dunder: AnsiString; var res: Variant): Boolean; forward;
+function PyUserArithCallMeth(selfObj: TObject; mi: PMethInfo; const otherV: Variant;
+                             var res: Variant): Boolean; forward;
 { ...and its arity-3 twin, for `obj[k] = v`. Same reason it is forward-declared
   here: pyvar_setitem needs it and it is defined far below. }
 function PyUserSetitemCall(selfObj: TObject; const k: Variant;
@@ -6423,6 +6441,8 @@ function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
   bug-nilpy-iterator-protocol-on-a-user-class }
 function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
                               var res: Variant): Boolean; forward;
+function PyUserObjNoArgMeth(o: TObject; mi: PMethInfo;
+                            var res: Variant): Boolean; forward;
 function PyUserObjHasDunder(o: TObject; const dunder: AnsiString): Boolean; forward;
 function PyUserObjIterable(o: TObject): Boolean; forward;   { __iter__ OR the old-style __getitem__ sequence protocol }
 { Is this object UNHASHABLE the way CPython means it — its class defines
@@ -8146,6 +8166,47 @@ begin
   Result := sum + c;
 end;
 
+{ math.dist(p, q) — the Euclidean distance between two points given as
+  sequences of the same length, which CPython refuses otherwise. Scaled by the
+  largest coordinate difference before squaring, so points far from the origin
+  (TSP's are barycentric metres, ~1e11) neither overflow nor lose the small
+  differences to the large squares; the squares are summed compensated, as
+  fsum does. The root is PyCxSqrt, not Sqrt: naming Sqrt here pulls `math`
+  into every NilPy program through the builtin auto-include scan, and its
+  names then shadow the user's (a local `e` became math's E) -- see the note
+  above PyCxSqrt. }
+function PyCxSqrt(x: Double): Double; forward;
+
+function pymath_dist(const p, q: Variant): Double;
+var i: Integer; lp, lq: TPyList; d, m, sum, c, t, v: Double;
+begin
+  lp := pylist_v(p);
+  lq := pylist_v(q);
+  if (lp = nil) or (lq = nil) then
+    raise TypeError.Create('dist(): expected two sequences of numbers');
+  if lp.count <> lq.count then
+    raise ValueError.Create('both points must have the same number of dimensions');
+  m := 0.0;
+  for i := 0 to lp.count - 1 do
+  begin
+    d := Abs(pyvar_to_float(lp.at(i)) - pyvar_to_float(lq.at(i)));
+    if d > m then m := d;
+  end;
+  if (m = 0.0) or (m <> m) or (m - m <> 0.0) then begin Result := m; Exit; end;
+  sum := 0.0;
+  c := 0.0;
+  for i := 0 to lp.count - 1 do
+  begin
+    d := (pyvar_to_float(lp.at(i)) - pyvar_to_float(lq.at(i))) / m;
+    v := d * d;
+    t := sum + v;
+    if Abs(sum) >= Abs(v) then c := c + ((sum - t) + v)
+    else c := c + ((v - t) + sum);
+    sum := t;
+  end;
+  Result := m * PyCxSqrt(sum + c);
+end;
+
 { math.perm(n, k) — ordered arrangements, n!/(n-k)!, computed as the falling
   factorial so no intermediate n! overflows on its way to a small answer. }
 function pymath_perm(n, k: Int64): Int64;
@@ -9604,10 +9665,42 @@ begin
   end;
 end;
 
+{ __bool__ and __len__ of `o`'s class, most-derived first for each, in ONE
+  walk of the chain: pyvar_to_bool asks both for every plain object it tests,
+  and two PyFindDunder walks cost +33% on `if x:` over 1000 plain objects
+  (0.85 -> 1.14 s min of 5, 2M tests). The `__` prefix test skips the
+  ordinary methods without a string compare. }
+procedure PyFindTruthDunders(o: TObject; var mb, ml: PMethInfo);
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
+begin
+  mb := nil;
+  ml := nil;
+  curr := GetInstanceRTTI(Pointer(o));
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+    begin
+      meths := curr^.MethsPtr;
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+      begin
+        if (Length(meths[i].NamePtr^) >= 7) and (meths[i].NamePtr^[1] = '_') and
+           (meths[i].NamePtr^[2] = '_') then
+        begin
+          if (mb = nil) and (meths[i].NamePtr^ = '__bool__') then mb := @meths[i]
+          else if (ml = nil) and (meths[i].NamePtr^ = '__len__') then ml := @meths[i];
+        end;
+      end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
 function pyvar_to_bool(const v: Variant): Boolean;
 var
   p: PPyVarRec;
   o: TObject;
+  dv: Variant;
+  mb, ml: PMethInfo;
 begin
   { Python truthiness -- TOTAL, never an error: 0, 0.0, '', None, and an EMPTY
     container are false. }
@@ -9628,7 +9721,20 @@ begin
     if o is TPyList then Result := TPyList(o).count > 0
     else if o is TPyDict then Result := TPyDict(o).count > 0
     else if o is TPyBytes then Result := TPyBytes(o).count > 0
-    else Result := p^.Payload <> 0;
+    { A user or RTL-shim class answers through __bool__, else __len__, which
+      is Python's order and the one the TYPED path already takes at compile
+      time (PyClassTruthyDunder). Without it `if x:` on a variant holding an
+      empty array.array, or a user class whose __len__ is 0, was True -- the
+      handle is never nil. pylen_v had the same one-arm gap. }
+    else
+    begin
+      PyFindTruthDunders(o, mb, ml);
+      if (mb <> nil) and PyUserObjNoArgMeth(o, mb, dv) then
+        Result := pyvar_to_bool(dv)
+      else if (ml <> nil) and PyUserObjNoArgMeth(o, ml, dv) then
+        Result := pyvar_to_int(dv) <> 0
+      else Result := p^.Payload <> 0;
+    end;
   end
   else
     Result := p^.Payload <> 0;
@@ -9683,6 +9789,7 @@ function pylen_v(const v: Variant): Int64;
 var
   p: PPyVarRec;
   o: TObject;
+  lv: Variant;
 begin
   p := PPyVarRec(@v);
   if p^.VType = 6 then
@@ -9703,6 +9810,14 @@ begin
     if o is TPyList then Result := TPyList(o).count
     else if o is TPyDict then Result := TPyDict(o).count
     else if o is TPyBytes then Result := TPyBytes(o).count
+    { A user or RTL-shim class declaring `__len__`. This is the helper len()
+      reaches whenever the value is a VARIANT -- an unannotated parameter, a
+      field the frontend could not type -- so `len(h.values)` for an
+      `array.array` field raised TypeError while `len(a)` on a typed local of
+      the same class answered. The for-loop's index walk (PYITER_K_SEQOBJ)
+      already asks the same dunder the same way. }
+    else if PyUserObjNoArgDunder(o, '__len__', lv) then
+      Result := pyvar_to_int(lv)
     else
     begin
       PyTypeError(p^.VType, 'an object with a length');
@@ -13731,6 +13846,52 @@ begin
   else if Result = '' then Result := '.';
 end;
 
+function pyos_path_relpath(const p: AnsiString; const startDir: AnsiString = '.'): AnsiString;
+var pa, sa, seg: AnsiString;
+    pParts, sParts: array[0..255] of AnsiString;
+    pn, sn, i, st, common: Integer;
+begin
+  { both sides absolute and normalised first -- CPython does exactly this, and
+    it is what makes the answer independent of how either side was spelled }
+  pa := pyos_path_normpath(pyos_path_abspath(p));
+  sa := pyos_path_normpath(pyos_path_abspath(startDir));
+  pn := 0; st := 1;
+  for i := 1 to Length(pa) + 1 do
+    if (i > Length(pa)) or (pa[i] = '/') then
+    begin
+      seg := Copy(pa, st, i - st);
+      st := i + 1;
+      if seg = '' then Continue;
+      if pn <= High(pParts) then begin pParts[pn] := seg; Inc(pn); end;
+    end;
+  sn := 0; st := 1;
+  for i := 1 to Length(sa) + 1 do
+    if (i > Length(sa)) or (sa[i] = '/') then
+    begin
+      seg := Copy(sa, st, i - st);
+      st := i + 1;
+      if seg = '' then Continue;
+      if sn <= High(sParts) then begin sParts[sn] := seg; Inc(sn); end;
+    end;
+  common := 0;
+  while (common < pn) and (common < sn) and (pParts[common] = sParts[common]) do
+    Inc(common);
+  Result := '';
+  { one '..' per remaining segment of START, then what is left of P }
+  for i := common to sn - 1 do
+  begin
+    if Result <> '' then Result := Result + '/';
+    Result := Result + '..';
+  end;
+  for i := common to pn - 1 do
+  begin
+    if Result <> '' then Result := Result + '/';
+    Result := Result + pParts[i];
+  end;
+  { the same path as the start is '.', never the empty string }
+  if Result = '' then Result := '.';
+end;
+
 function pyos_path_getsize(const p: AnsiString): Int64;
 var stx: TPyStat;
 begin
@@ -13887,6 +14048,14 @@ var v: AnsiString; found: Boolean;
 begin
   v := PyEnvLookup(name, found);
   if found then pyos_environ_get_d := v else pyos_environ_get_d := dflt;
+end;
+
+function pyos_environ_getitem(const name: AnsiString): Variant;
+var v: AnsiString; found: Boolean;
+begin
+  v := PyEnvLookup(name, found);
+  if not found then PyKeyError(name);
+  pyos_environ_getitem := v;
 end;
 
 function pyos_getenv(const name: AnsiString): Variant;
@@ -14658,7 +14827,7 @@ function pyiter_has(it: TPyIter): Boolean;
 var genStep: TPyGenStep; genCur: Pointer;   { PYITER_K_SLGEN }
     l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
-    lenv, idxv: Variant; nilo: TObject;   { PYITER_K_SEQOBJ's __len__ / __getitem__ }
+    lenv, idxv: Variant;   { PYITER_K_SEQOBJ's __len__ / __getitem__ }
     b0, b1: Integer;                { the str cursors' UTF-8 character span }
 begin
   Result := False;
@@ -14861,17 +15030,16 @@ begin
       that is not a Variant) RAISES rather than ending the walk: answering
       "exhausted" there would put back exactly the silent empty result this
       whole cursor exists to remove. }
-    if PyUserObjHasDunder(it.FObj, '__len__') then
+    if it.FSeqLen <> nil then
     begin
-      if not PyUserObjNoArgDunder(it.FObj, '__len__', lenv) then
+      if not PyUserObjNoArgMeth(it.FObj, PMethInfo(it.FSeqLen), lenv) then
       begin it.FEnd := True; Exit; end;
       if it.FPos >= PPyVarRec(@lenv)^.Payload then
       begin it.FEnd := True; Exit; end;
     end;
     idxv := pyvar_of_int(it.FPos);
-    nilo := nil;
     try
-      if not PyUserArithCall1(it.FObj, nilo, idxv, '__getitem__', pv) then
+      if not PyUserArithCallMeth(it.FObj, PMethInfo(it.FSeqGet), idxv, pv) then
         raise TypeError.Create('cannot iterate ''' + TObject(it.FObj).ClassName +
               ''' by index: its __getitem__ could not be called');
     except
@@ -15654,6 +15822,11 @@ begin
       Result.FKind := PYITER_K_SEQOBJ;
       Result.FPos := 0;
       Result.FObj := ito;
+      { Both methods found ONCE: the step below had looked each up by name
+        per element, three class-chain walks per item. The class of an
+        instance does not change under it, so the answer cannot go stale. }
+      Result.FSeqLen := PyFindDunder(GetInstanceRTTI(Pointer(ito)), '__len__');
+      Result.FSeqGet := PyFindDunder(GetInstanceRTTI(Pointer(ito)), '__getitem__');
       PXXObjRetain(Pointer(ito));
       Exit;
     end;
@@ -20780,15 +20953,25 @@ end;
 
 function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
                               var res: Variant): Boolean;
-var cls: PClassRTTI; mi: PMethInfo;
-    fv: TNoArgV; fo: TNoArgO; fi: TNoArgI; fs: TNoArgS; fb: TNoArgB; fd: TNoArgD;
-    ro: TObject;
+var cls: PClassRTTI;
 begin
   PyUserObjNoArgDunder := False;
   if o = nil then Exit;
   cls := GetInstanceRTTI(Pointer(o));
   if cls = nil then Exit;
-  mi := PyFindDunder(cls, dunder);
+  PyUserObjNoArgDunder := PyUserObjNoArgMeth(o, PyFindDunder(cls, dunder), res);
+end;
+
+{ The CALL half of PyUserObjNoArgDunder, for a caller that already holds the
+  method -- pyvar_to_bool finds __bool__ and __len__ in ONE walk of the class
+  chain and must not pay a second walk per name. False for a nil `mi` and for
+  any shape not declared below. }
+function PyUserObjNoArgMeth(o: TObject; mi: PMethInfo;
+                            var res: Variant): Boolean;
+var fv: TNoArgV; fo: TNoArgO; fi: TNoArgI; fs: TNoArgS; fb: TNoArgB; fd: TNoArgD;
+    ro: TObject;
+begin
+  PyUserObjNoArgMeth := False;
   if mi = nil then Exit;
   if mi^.Arity <> 1 then Exit;             { `self` only }
   if mi^.RetKind = 22 then
@@ -20810,7 +20993,7 @@ begin
       nothing above this line should change ownership because of it.
       bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides }
     if pyvar_is_objtag(res) then PXXObjRetain(pyvarobj(res));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 6 then
@@ -20819,7 +21002,7 @@ begin
     ro := fo(Pointer(o));
     if ro <> nil then PXXObjRetain(Pointer(ro));
     res := TObject(ro);
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if (mi^.RetKind = 13) or (mi^.RetKind = 1) or (mi^.RetKind = 15) or
@@ -20827,28 +21010,28 @@ begin
   begin
     fi := TNoArgI(mi^.Code);
     res := fi(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 23 then
   begin
     fs := TNoArgS(mi^.Code);
     res := fs(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 2 then
   begin
     fb := TNoArgB(mi^.Code);
     res := fb(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 19 then
   begin
     fd := TNoArgD(mi^.Code);
     res := fd(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
 end;
@@ -20959,17 +21142,7 @@ end;
 
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
                           const dunder: AnsiString; var res: Variant): Boolean;
-var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
-    fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
-    fb: TPyArithB; fo: TPyArithO;
-    pv: TPyArithPV; ps: TPyArithPS; pi_: TPyArithPI; pd: TPyArithPD;
-    pb: TPyArithPB; po: TPyArithPO;
-    dv: TPyArithDV; ds: TPyArithDS; di: TPyArithDI; dd: TPyArithDD;
-    db: TPyArithDB; dob: TPyArithDO;
-    iv: TPyArithIV; is_: TPyArithIS; ii: TPyArithII; id_: TPyArithID;
-    ib: TPyArithIB; io: TPyArithIO;
-    mode, ot: Integer; op: Pointer; od: Double; oi: Int64;
-    sres: AnsiString; ores: Pointer; r: PPyVarRec;
+var cls: PClassRTTI;
 begin
   PyUserArithCall1 := False;
   { `otherObj` is NOT required, and never was used: the only parameter shape
@@ -20983,7 +21156,29 @@ begin
   if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
-  mi := PyFindDunder(cls, dunder);
+  PyUserArithCall1 := PyUserArithCallMeth(selfObj, PyFindDunder(cls, dunder), otherV, res);
+end;
+
+{ The CALL half of PyUserArithCall1, for a caller that already holds the
+  method: the old-style sequence cursor (PYITER_K_SEQOBJ) finds __getitem__
+  once and calls it per element, where the name lookup had been 18% of
+  list(array.array). `selfObj` must already have passed the wrapper's
+  checks (not a list/dict/bytes, has RTTI); a nil `mi` declines. }
+function PyUserArithCallMeth(selfObj: TObject; mi: PMethInfo; const otherV: Variant;
+                             var res: Variant): Boolean;
+var pk: PInt64; rk: Int64;
+    fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
+    fb: TPyArithB; fo: TPyArithO;
+    pv: TPyArithPV; ps: TPyArithPS; pi_: TPyArithPI; pd: TPyArithPD;
+    pb: TPyArithPB; po: TPyArithPO;
+    dv: TPyArithDV; ds: TPyArithDS; di: TPyArithDI; dd: TPyArithDD;
+    db: TPyArithDB; dob: TPyArithDO;
+    iv: TPyArithIV; is_: TPyArithIS; ii: TPyArithII; id_: TPyArithID;
+    ib: TPyArithIB; io: TPyArithIO;
+    mode, ot: Integer; op: Pointer; od: Double; oi: Int64;
+    sres: AnsiString; ores: Pointer; r: PPyVarRec;
+begin
+  PyUserArithCallMeth := False;
   if mi = nil then Exit;
   if mi^.Arity <> 2 then Exit;
   if mi^.ParamKinds = nil then Exit;
@@ -21104,7 +21299,7 @@ begin
   end
   else
     Exit;
-  PyUserArithCall1 := True;
+  PyUserArithCallMeth := True;
 end;
 
 { Box an object handle as a VT_OBJECT variant, for handing the REFLECTED operand

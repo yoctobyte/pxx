@@ -2627,9 +2627,91 @@ end;
   positions -- false here for every string. Leaving it unset means "unknown",
   which is the honest answer and the one every consumer already handles. }
 
+{ ESP-IDF: the byte I/O primitives go through newlib's POSIX read/write, which
+  IDF's VFS services (fd 0/1/2 are the console UART). There is no kernel under
+  FreeRTOS, so the raw-syscall arms below would be an `ecall`/`syscall` trap
+  there -- a Guru Meditation, not an error return. BARE has neither newlib nor
+  a VFS and keeps its own story (no stdout; UART is MMIO in user code).
+  The Pascal names are prefixed so they cannot shadow the Read/Write intrinsics.
+  bug-a-nilpy-on-cross-targets-four-remaining-walls (a Python `print` on an
+  ESP32 printed nothing: it lowers to IR_WRITE, which ended here). }
+{ PXX_ESP_IDF, NOT `PXX_PLATFORM_ESP and not bare`. Those two read alike and
+  differ on exactly one configuration: `--platform=esp` on a HOSTED target,
+  which test_platform_defines builds on x86-64 to check the define set. There
+  is no IDF there to resolve `putchar`, so the spelling below decided whether
+  that program ran or died at startup with `undefined symbol: putchar`.
+  PXX_ESP_IDF is defined only for the ESP ISAs (paslexer.inc) and exists
+  because the HEAP arm made this identical mistake with `calloc` (tstate
+  test-core regression at b358) -- the guard was already written, in the right
+  place, and this arm used the other spelling. }
+{$ifdef PXX_ESP_IDF}{$define PXX_IDF_STDIO}{$endif}
+{$ifdef PXX_IDF_STDIO}
+function PXXIdfPosixRead(fd: Integer; buf: Pointer; count: Integer): Integer; cdecl; external name 'read';
+function PXXIdfPosixWrite(fd: Integer; buf: Pointer; count: Integer): Integer; cdecl; external name 'write';
+function PXXIdfPutchar(c: Integer): Integer; cdecl; external name 'putchar';
+function PXXIdfGetchar: Integer; cdecl; external name 'getchar';
+
+{ fd 0/1/2 ARE NOT POSIX FDS UNDER IDF. esp_libc's picolibc_init opens the
+  console and stores WHATEVER fd open() returned in its stdin/stdout streams,
+  so `write(1, ...)` finds no VFS entry and answers EBADF -- measured
+  2026-09-19 under gdb: esp_vfs_write(fd=1, "Aurora", 6) = -1 while IDF's own
+  log flushed to fd 0. So the standard streams go through the libc STREAMS,
+  by function only: putchar per byte. stdout is LINE-buffered, so a newline
+  flushes it. NOT fflush(NULL): this picolibc takes the lock of the NULL
+  stream (__flockfile) and load-faults -- measured the same evening. The one
+  gap is a final line with no newline, which stays in the buffer when the task
+  ends. Any other fd is a real VFS fd from open(). }
+function PXXIdfStdWrite(buf: Pointer; count: Integer): Integer;
+var i, r: Integer; p: PByte;
+begin
+  p := PByte(buf);
+  for i := 0 to count - 1 do
+  begin
+    r := PXXIdfPutchar(p[i]);
+    if r < 0 then begin Result := -1; Exit; end;
+  end;
+  Result := count;
+end;
+
+procedure PXXIdfVTaskDelete(task: Pointer); cdecl; external name 'vTaskDelete';
+
+{ The END of a program under IDF. app_main is a FreeRTOS task, not a process:
+  there is nothing to exit to, and the old ending -- a busy self-loop --
+  starves the idle task until the task watchdog and then the interrupt
+  watchdog fire and the chip REBOOTS, replaying the program (measured
+  2026-09-19). Deleting the calling task is exactly what IDF's own main_task
+  does when app_main returns. The codegen calls this by name, after the
+  finalizers and before its park, so the park stays as the fallback if this
+  unit is absent. (No flush: see PXXIdfStdWrite for why fflush(NULL) cannot
+  be used here.) }
+procedure PXXIdfTaskEnd;
+begin
+  PXXIdfVTaskDelete(nil);
+end;
+
+function PXXIdfStdRead(buf: Pointer; count: Integer): Integer;
+var n, c: Integer; p: PByte;
+begin
+  p := PByte(buf);
+  n := 0;
+  while n < count do
+  begin
+    c := PXXIdfGetchar;
+    if c < 0 then Break;            { EOF: what was read so far, 0 = EOF }
+    p[n] := Byte(c);
+    Inc(n);
+    if c = 10 then Break;           { a line at a time, as a tty read returns }
+  end;
+  Result := n;
+end;
+{$endif}
+
 function PXXSysRead(fd, buf, count: NativeInt): Int64;
 begin
-{$if defined(CPUX86_64)}
+{$if defined(PXX_IDF_STDIO)}
+  if fd = 0 then Result := PXXIdfStdRead(Pointer(buf), Integer(count))
+  else Result := PXXIdfPosixRead(Integer(fd), Pointer(buf), Integer(count));
+{$elseif defined(CPUX86_64)}
   Result := __pxxrawsyscall(0, fd, buf, count);
 {$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(3, fd, buf, count);
@@ -2671,7 +2753,10 @@ function PXXSysWrite(fd, buf, count: NativeInt): Int64;
 var iov: array[0..1] of Integer; nw: Integer;
 {$endif}
 begin
-{$if defined(CPU_WASM32)}
+{$if defined(PXX_IDF_STDIO)}
+  if (fd = 1) or (fd = 2) then Result := PXXIdfStdWrite(Pointer(buf), Integer(count))
+  else Result := PXXIdfPosixWrite(Integer(fd), Pointer(buf), Integer(count));
+{$elseif defined(CPU_WASM32)}
   { One iovec: [ptr, len]. WASI returns an ERRNO, not a byte count — the count
     is written to *nwritten — so the two are not interchangeable and a caller
     reading the return value as a length would get 0 on success. }
@@ -3748,7 +3833,12 @@ begin
   end;
 end;
 
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
 { Forward only where the BODY exists — PXXClassFinalize is itself inside
   {$ifndef PXX_ESP}, so an unconditional forward left it unresolved on the
   ESP profile (test-emit-obj: "unresolved forward: PXXClassFinalize"). }
@@ -3882,7 +3972,7 @@ end;
 
 { PXXClassFinalize's forward used to sit here; it is declared in the
   interface now, with the rest of the code generator's entry points. }
-{$endif}
+{ (end of the formerly profile-gated span) }
 
 { Free an instance whichever population it belongs to: headered -> release
   (rc discipline), plain GetMem -> ordinary free. This is what the FreeMem
@@ -3909,9 +3999,14 @@ begin
     PXXObjRelease(p)
   else
   begin
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
     PXXClassFinalize(p);   { ESP has no class-layout finalizer to run }
-{$endif}
+{ (end of the formerly profile-gated span) }
     PXXFree(p);
   end;
 end;
@@ -4295,7 +4390,12 @@ begin
   else Result := 0;
 end;
 
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
 { Managed-element dynarray + record retain/release (strings/records/nested
   arrays). Not on ESP yet -- the ESP dynarray (above) is unmanaged-element only. }
 procedure PXXDynArrayIncRef(p: Pointer);
@@ -4426,7 +4526,9 @@ begin
         while i < len do
         begin
           itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+{$ifndef PXX_ESP}
           PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+{$endif}
           i := i + 1;
         end;
       end
@@ -4459,7 +4561,9 @@ begin
           while i < len do
           begin
             itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_ESP}
             PXXVarClear(itemAddr);
+{$endif}
             i := i + 1;
           end;
         end;
@@ -4527,7 +4631,9 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+{$ifndef PXX_ESP}
         PXXIntfAddRef(itemAddr, Int64(baseRecDesc));
+{$endif}
         i := i + 1;
       end;
     end
@@ -4545,7 +4651,9 @@ begin
         i := 0;
         while i < len do
         begin
+{$ifndef PXX_ESP}
           PXXPromoRetainOne(Pointer(Int64(arrData) + i * elSize));
+{$endif}
           i := i + 1;
         end;
       end;
@@ -4562,7 +4670,9 @@ begin
         while i < len do
         begin
           itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_ESP}
           PXXVarRetain(itemAddr);
+{$endif}
           i := i + 1;
         end;
       end;
@@ -4620,7 +4730,9 @@ begin
     while i < len do
     begin
       itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+{$ifndef PXX_ESP}
       PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+{$endif}
       i := i + 1;
     end;
   end
@@ -4654,7 +4766,9 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_ESP}
         PXXVarClear(itemAddr);
+{$endif}
         i := i + 1;
       end;
     end;
@@ -4722,7 +4836,11 @@ begin
              descriptors emit kind 5 that asymmetry becomes a double free on the
              SetLength survivor path — the same release-without-retain shape that
              made 9cb079528 segfault — so both halves land in one change. }
+{$ifndef PXX_ESP}
           PXXVarRetain(itemAddr);
+{$else}
+          itemAddr := itemAddr   { ESP: no variants; see the decl guard }
+{$endif}
         7: { Promo field — the mirror of the release arm's PXXStrDecRef, landing
              with it because a release without its retain destroys SetLength
              survivors instead of merely leaking them. }
@@ -4762,7 +4880,11 @@ begin
     typeRef := PInt32(memberPtr + 12)^;
     memberAddr := Pointer(Int64(recAddr) + offset);
     if kind = 4 then
+{$ifndef PXX_ESP}
       PXXIntfAddRef(memberAddr, typeRef)
+{$else}
+      memberAddr := memberAddr   { ESP: no COM interfaces; see the decl guard }
+{$endif}
     else if kind = 3 then
     begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
@@ -4805,7 +4927,11 @@ begin
     typeRef := PInt32(memberPtr + 12)^;
     memberAddr := Pointer(Int64(recAddr) + offset);
     if kind = 4 then
+{$ifndef PXX_ESP}
       PXXIntfRelease(memberAddr, typeRef)
+{$else}
+      memberAddr := memberAddr   { ESP: no COM interfaces; see the decl guard }
+{$endif}
     else if kind = 3 then
     begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
@@ -4882,7 +5008,11 @@ begin
         5: { Variant field: release any managed/object payload, recursing
              through PXXObjRelease's finalizer for a held container
              (feature-nilpy-object-reclamation) }
+{$ifndef PXX_ESP}
           PXXVarClear(itemAddr);
+{$else}
+          itemAddr := itemAddr   { ESP: no variants; see the decl guard }
+{$endif}
         6: { NilPy class-typed field: drop the instance's ref on its child
              (magic-guarded — a Pascal instance stored here no-ops) }
           PXXObjRelease(Pointer(PMachineWord(itemAddr)^));
@@ -4980,7 +5110,9 @@ begin
     begin
       offset := PInt32(memberPtr)^;
       typeRef := PInt32(memberPtr + 12)^;
+{$ifndef PXX_ESP}
       PXXIntfRelease(Pointer(Int64(inst) + offset), typeRef);
+{$endif}
       PMachineWord(Pointer(Int64(inst) + offset))^ := 0;
     end;
     memberPtr := memberPtr + 16;
@@ -5034,7 +5166,7 @@ begin
 
   PXXDynArrayReleaseDepth(arrData, depth, baseKind, baseRecDesc);
 end;
-{$endif}
+{ (end of the formerly profile-gated span) }
 
 { Forward byte copy (non-overlapping or dst < src). Used by cross backends that
   lack a single-instruction block move (e.g. ARM32) for whole-record copies. }
@@ -5089,7 +5221,12 @@ begin
   end;
 end;
 
-{$ifndef PXX_ESP}
+{ NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
+  The individual arms that reach a COM interface, a variant or a NilPy promo
+  field ARE still profile-gated, because those SURFACES are excluded on an ESP
+  target; the walk that visits them is not. The unit header already states the
+  principle: none of these bodies is unimplementable on an ESP chip.
+  feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent }
 { SetLength for a depth-1 dynamic array. arrSlot = address of the handle slot;
   newLen = requested element count; desc = the array's layout descriptor
   (+4 elSize, +8 depth, +12 baseKind, +16 baseTypeRef). Allocates a fresh
@@ -5157,7 +5294,7 @@ begin
   PMachineWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayRelease(oldData, desc);
 end;
-{$endif}
+{ (end of the formerly profile-gated span) }
 
 { SetLength for a managed AnsiString. strSlot = address of the handle slot
   (holds the data pointer or nil); newLen = requested character count. Allocates
