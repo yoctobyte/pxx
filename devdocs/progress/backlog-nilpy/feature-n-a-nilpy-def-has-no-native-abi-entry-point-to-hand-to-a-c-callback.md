@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 85
 type: feature
 owner:
 blocked-by: []
@@ -285,3 +285,25 @@ The next step is a one-sitting job for a rested seat: the argument path asks the
 `ProcSigCompatible`/thunk question and a **field assignment** does not.
 `RecFieldProcSig(rec, field)` already exists. The four-row table above is the
 measurement; nothing about the thunk changes.
+
+## OWNER: ESP INTERRUPTS ARE A MUST-HAVE (2026-09-20, relayed by frankuser)
+
+His word, relayed secondhand and marked as such: **must-have, not a demo caveat.**
+Re-ranked 55 -> 85 on that basis; the number is his, not a seat's.
+
+`examples/esp32/nilpy-hw-c3` POLLS a counter today, and it polls because a NilPy
+`def` has no native-ABI entry point — this ticket.
+
+**ONE CAPABILITY, THREE CONSUMERS. Say so before anyone builds half of it twice:**
+1. **ESP interrupts** — the demo takes its timer callback in Python instead of polling.
+2. **The field site** — frankb-8e's `2b28c3302` did the argument path; a procedural
+   FIELD assignment still segfaults silently. `RecFieldProcSig(rec, field)` already
+   exists; the four-row table is above. Unowned, one sitting.
+3. **ffsfs** — a Python program handing a compiled routine to C as a callback
+   (recorded in `abb2ae020`, also secondhand).
+
+**The ISR half stays separate and is NOT this ticket**: boxing into Variants
+allocates, and an ISR that allocates is a latent crash with good latency numbers.
+A non-allocating restricted thunk (fixed arity, scalar-only, no Variant) is a
+different contract. Delivering THIS ticket does not by itself let the demo stop
+polling; the ISR path must be shown not to allocate.

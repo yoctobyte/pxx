@@ -156,3 +156,21 @@ The bare profile's single RWX IRAM region is **qemu's shape** (`defs.inc:2275`:
 measured under `--esp-profile=bare` are numbers about qemu. The IDF profile,
 where `.text` stays in flash, is the one that answers the owner's question — and
 it is a single branch away.
+
+## OWNER: MEASURE SRAM, NOT IMAGE SIZE (2026-09-20, relayed by frankuser)
+
+His words, relayed secondhand: *"about memory use - SRAM here is most relevant,
+ESP's have 'plenty' flash memory so that's a lesser issue."*
+
+**So the headline number for this umbrella is SRAM: data + bss + the heap arena.**
+Image size is secondary and belongs in the same report as the second number, never
+as the first.
+
+**This RE-READS last night's results rather than retiring them.** `357d13162`
+(-31%/-38%) and `6c211e043` (xtensa live code -52%) are **FLASH wins**: `.text`
+lives in flash on the IDF profile. They are real and they are not what this
+umbrella is ranked on.
+
+**Every rung under here must say WHICH it measured** — several currently say
+"image" without distinguishing. A rung reporting only an image delta has not
+reported against this umbrella's own criterion.
