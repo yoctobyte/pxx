@@ -32370,3 +32370,58 @@ the end of a long day.* **Both instances are one evening, two agents, and I am o
 two — I ranked instance 2 myself.** A coordinator promoting its own finding on the night it
 found it is how that file reached 72KB the first time. **If a third instance lands in a
 subsystem neither seat has touched, argue it up.**
+
+## A FIXED ADDITIVE TERM SETS A CEILING ON EVERY MULTIPLICATIVE OPTIMISATION, AND THE CEILING IS INVISIBLE IN THE HEADLINE NUMBER
+
+*frankS, 2026-09-20, from lekkerzeilen's `devdocs/perf/FRAME-RATE-2026-09-20.md` (7a's
+measurements; the derivation and the error below are mine). Three separate wrong readings
+of one document in one hour, by three seats, all of them about the same two rows.*
+
+**The setup, and it is completely ordinary:** a frame does W ms of your code and then waits
+D ms for something you do not control — a compositor swap, an fsync, a round trip, a lock.
+The reported number is `1000/(W+D)` and **D is nowhere in it.** Measured, same program, two
+scenes, by removing vsync:
+
+```
+arm              vsync-off  vsync-on   D (ms)
+region  pxx            391       436      45.0
+region  CPython         18      86.5      68.5
+open    pxx              9      66.5      57.5
+open    CPython          4      56.0      52.0
+```
+
+**Now take W to ZERO — an infinite speedup — and leave D:**
+
+```
+region pxx:  2.29 fps  ->  at most 22.2 fps  =  9.7x available
+open   pxx: 15.04 fps  ->  at most 17.4 fps  =  1.16x available
+```
+
+**Two scenes of one program, and in one of them every optimisation anyone could ever write
+is worth at most 16%.** Nothing about 15 fps says that. It is not slow, it is not capped,
+it is not near a refresh rate — it is 57.5 ms of wait wearing 9 ms of work.
+
+**COMPUTE `D` BEFORE YOU COMMIT TO A TARGET.** One subtraction: measure with the wait
+removed and with it present. Then `(W+D)/D` is the **most** any work you do can buy, and it
+is an upper bound you can hand someone before spending a week under it.
+
+**AND THE SAME `D` IS WHY A RATIO IS COMPRESSED EXACTLY WHERE THE ARMS DIFFER MOST.** A
+fixed term added to both arms dominates the fast one and vanishes into the slow one, so it
+drags the ratio toward 1 hardest when the gap is largest: this program's region gap reads
+**5.2x with the wait in and 21.7x with it out**, and the open-water gap 1.2x against 2.2x.
+Both numbers are honest and they answer different questions — *what is the user living
+with* takes the wait IN, *what does our compiler cost* takes it OUT. **A document holding
+both will be quoted wrongly unless every row says which.** It was, three times in an hour.
+
+**THE ERROR I MADE, because it is the one this shape invites.** I saw the vsync-OFF figure
+(104 fps), reasoned *"that is above 60, so vsync caps it and a speedup is invisible"*, and
+reported that — **while the vsync-ON measurement of the same scene, 14.6 fps, was in a
+table I had already read.** I inferred a number that had been measured. The conclusion came
+out accidentally right (a speedup there IS nearly invisible) for a **wrong reason**, which
+is worse than being wrong: the peer correcting me discarded the true conclusion along with
+the false mechanism and told a third seat *"there is no scene where the work is invisible"*.
+**A right answer resting on a wrong mechanism does not survive its own correction.**
+
+**So: "capped" is a MODEL and it needs measuring like anything else.** vsync is not a 60 Hz
+ceiling on this box; it is a 45–68 ms wait, three to four times what a 60 Hz ceiling would
+impose. The word smuggles in a mechanism, and the mechanism decides the magnitudes.
