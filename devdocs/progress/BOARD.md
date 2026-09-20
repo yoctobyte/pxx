@@ -320,7 +320,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (178)
+## backlog-nilpy (177)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -367,7 +367,6 @@ _none_
 | bug-n-a-module-level-instance-called-by-name-in-a-function-constructs-instead-of-calling | N | 58 | bug | > | — |
 | bug-n-a-nested-class-is-hoisted-to-module-scope-and-is-not-an-attribute-of-its-enclosing-class | N | 45 | bug | > | — |
 | bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race | N | 45 | bug | test_nilpy_class_named_like_an_rtl_record.npy opens, reads and os.remove()s /tmp/pxx_nilpy_rtlrec_probe.txt -- a fixed path chosen at RUNTIME, so the Makefile sweep cannot privatize it and testmgr cannot rewrite it. This box routinely runs several clones' testmgr at once, so one run can delete or overwrite another's probe file mid-test. Caught by tools/testmgr_hardcoded_tmp_devtest.py, which is RED on master today. Introduced by f3422cd14. Filed by Track T; T owns the tool, never the bug. | — |
-| bug-n-a-one-element-unpack-target-binds-nothing | N | 45 | bug | MECHANISM: the target scan that recognises an unpacking assignment requires TWO OR MORE targets, so a one-element target list is taken for an ordinary parenthesised expression and the name is never bound -- `(n,) = f()` is refused with `undefined variable (n)`. The AXIS IS ARITY, NOT PARENTHESES, and two controls separate them: the bare `a, = f()` fails identically with no parentheses anywhere, and `(b, c) = f()` compiles. CPython binds all three. Reached through the same PyParseUnpackAssign entry as 47841c55b. WHY THE SUITE CANNOT SEE IT: every unpack fixture in this tree has two or more targets, because two is what anyone writing a test for unpacking writes -- the passing arrangement is the population, so the suite certifies the working case. This is CLAUDE.md's 'put the interesting element somewhere other than last' in its ARITY form rather than its ORDER form. NOT EXOTIC: `(n,) = struct.unpack_from(\"<I\", data, 6)` is the idiomatic way to take one field out of a binary header, and it is the only wall in tsp/stars.py. | — |
 | bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver | N | 40 | bug | `class C: plain = two` then `c.plain(7)` on an INSTANCE does not pass the instance. CPython's plain-function-becomes-method rule binds it -- `def two(a, b)` reached as `c.plain(7)` gets `a = the C instance, b = 7` and prints `a=C b=7` -- and we raise `TypeError: missing 1 required positional argument(s)`. Loud rather than silent, which is the good direction, and a real divergence on an idiom people write. Found 2026-09-10 while landing bug-n-staticmethod-is-not-a-value: the unwrapped `plain = f` row was going to be that fix's CONTROL, and CPython's own oracle refused it -- which is the point, since binding the receiver is exactly the rule `staticmethod` exists in the language to opt OUT of. Read through the CLASS (`C.plain(7)`) the two agree, so the divergence is the instance door only. NOT the same as bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver (p25), which is about `type(k.stat).__name__` on a DECORATED method: that one binds where it should not, this one fails to bind where it should. | — |
 | bug-n-a-procedure-shim-in-value-position-yields-a-number-not-none | N | 45 | bug | A dotted stdlib call whose pylib shim is a PROCEDURE prints a number when used as a value: `print(sys.stdout.flush())` printed `1` where CPython prints `None`. The AN_CALL node is built the same way for a procedure as for a function, so the value read is whatever sits in the result slot — a plausible wrong number rather than a refusal. Found while adding sys.stdout.flush and fixed FOR THAT ENTRY by returning pynone; the mechanism is unchanged and `pysys_exit` is the other procedure in the table. Either every shim returns a value, or PyParseStdlibCall must refuse a procedure entry in value position. | — |
 | bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call | N | 75 | bug | > | — |
@@ -1091,9 +1090,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3884)
+## done (3885)
 
-3884 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3885 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (84)
 
@@ -1418,7 +1417,6 @@ _none_
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nested-class-is-hoisted-to-module-scope-and-is-not-an-attribute-of-its-enclosing-class
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race
-- [p 45] [N] bug-n-a-one-element-unpack-target-binds-nothing
 - [p 45] [N] bug-n-a-procedure-shim-in-value-position-yields-a-number-not-none
 - [p 45] [N] bug-n-a-scalar-expression-class-attribute-declared-after-a-method-reads-none
 - [p 45] [N] bug-n-a-shim-parameter-typed-as-a-container-blocks-the-callable-value-wrapper

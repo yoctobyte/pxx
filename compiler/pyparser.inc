@@ -765,6 +765,7 @@ function PyIsSiteIntTk(tk: TTypeKind): Boolean; forward; { defined ~32900 lines
 function PyParseFor: Integer; forward;
 function PyParseForTargetSlot(slot: Integer): AnsiString; forward; { Nil Python: one entry of a for target list; a `(p, q)` group becomes a hidden name }
 function PySkipTargetGroup(i: Integer): Integer; forward; { Nil Python: step over a `(a, b)` group in an unpack target list, or -1 }
+function PySkipOneTupleTargetGroup(i: Integer): Integer; forward; { Nil Python: step over a `(n,)` ONE-element tuple target, or -1 }
 { Defined further down, beside the comprehension machinery that was its first
   caller; PyParseTry now renames an `except ... as` binder with it too, and that
   sits EARLIER in this include — the FPC seed build needs the forward. }
@@ -32666,6 +32667,29 @@ begin
   end;
 end;
 
+function PyEatTargetComma(inParen: Boolean; var isTuple: Boolean): Boolean;
+{ Does the target list CONTINUE after this comma? — and if not, the comma was a
+  TRAILING one, which is what makes `a, = xs` and `(a,) = xs` one-element TUPLE
+  targets rather than plain assignments.
+
+  It is the `until` expression of PyParseUnpackAssign's target loop and not a
+  tail inside the loop body, because that body's nested-group arm ends in
+  `Continue` — which jumps to the `until` and skips any tail. Writing the rule
+  as a tail therefore stated it for the PLAIN-NAME spelling only, and `(b, c) =
+  xs` stopped parsing: measured, and it is this tree's own "a second spelling is
+  where the rule goes missing" arriving inside one loop.
+
+  bug-n-a-one-element-unpack-target-binds-nothing }
+begin
+  Result := Eat(tkComma);
+  if Result and ((CurTok.Kind = tkAssign) or
+                 (inParen and (CurTok.Kind = tkRParen))) then
+  begin
+    isTuple := True;
+    Result := False;
+  end;
+end;
+
 function PyParseUnpackAssign: Integer;
 var names: array[0..7] of AnsiString;
     flds: array[0..7] of AnsiString;    { attribute target, or '' for a plain name }
@@ -32683,10 +32707,20 @@ var names: array[0..7] of AnsiString;
     unpCi, unpIdx, unpElem: Integer;
     starAt, unpCnt, unpHi, unpTrail: Integer;   { `a, *rest = xs` }
     nestOwner: Integer;   { this target list's nested groups (PyNestEmit) }
+    tupleTarget, oneTupleParen: Boolean;
 begin
   nTargets := 0;
   starAt := -1;
   nestOwner := PyNestBegin;
+  { `a, = xs` and `(a,) = xs` — a ONE-element tuple target. Python decides on
+    the trailing COMMA: `a = xs` binds the whole value, `a, = xs` binds xs[0],
+    and the parentheses are grouping and change nothing. So tupleTarget, not a
+    target COUNT, is what tells the value apart from the sequence below --
+    every gate here used to read `nTargets > 1`, which is true for every
+    ordinary unpack and false for exactly this one. }
+  tupleTarget := False;
+  oneTupleParen := PySkipOneTupleTargetGroup(TokPos - 1) > 0;
+  if oneTupleParen then Next;                { the '(' }
   repeat
     if CurTok.Kind = tkStar then
     begin
@@ -32754,7 +32788,8 @@ begin
       end;
     end;
     Inc(nTargets);
-  until not Eat(tkComma);
+  until not PyEatTargetComma(oneTupleParen, tupleTarget);
+  if oneTupleParen then Expect(tkRParen, ')');
   Expect(tkAssign, '=');
 
   { values into temps, left to right }
@@ -32778,7 +32813,7 @@ begin
     `c = arr` beside it kept the class. Any class declaring `__iter__` is
     drained by PyDrainIfCursor, so every shim and user iterable had this.
     bug-n-a-tuple-unpack-target-is-typed-as-the-tuple-not-as-its-element }
-  if (nValues = 1) and (nTargets > 1) then
+  if (nValues = 1) and ((nTargets > 1) or tupleTarget) then
     vals[0] := PyDrainIfCursor(vals[0]);
   for i := 0 to nValues - 1 do
   begin
@@ -32795,7 +32830,7 @@ begin
   { `pfx, content = cs` — ONE value for several targets means the value is a
     SEQUENCE to be indexed, not a shortfall. Our tuples are TPyLists, so this
     is the shape a function returning a tuple produces. }
-  if (nValues = 1) and (nTargets > 1) then
+  if (nValues = 1) and ((nTargets > 1) or tupleTarget) then
   begin
     unpCi := PyNodeListCi(PyMakeIdent(tmps[0]));
     { A VARIANT value (e.g. `k, v = stack.pop()` — pop yields a variant holding a
@@ -32962,6 +32997,45 @@ begin
   Result := i;
 end;
 
+function PySkipOneTupleTargetGroup(i: Integer): Integer;
+{ Step over a `(n,)` — a parenthesised ONE-ELEMENT tuple target — answering the
+  index just past its `)`, or -1.
+
+  It is a SEPARATE question from PySkipTargetGroup's, and deliberately so: that
+  one requires two or more elements, and it must keep doing so, because `(a)` is
+  not a tuple. Python decides on the TRAILING COMMA, not on the parentheses —
+  `(a) = xs` binds the whole of xs to a, while `(a,) = xs` binds xs[0]. So the
+  comma is the entire discriminator and this helper exists to read it.
+
+  Reached by `(n,) = struct.unpack_from("<I", data, 6)`, which is the idiomatic
+  way to take ONE field out of a binary header (tuxspaceprogram/stars.py:25).
+  Plain names only for now: an attribute or subscript as the single element of a
+  one-tuple is legal Python and is not what any real source here writes, and
+  accepting it here without the parser building it would be a detector claiming
+  a statement it cannot parse.
+  bug-n-a-one-element-unpack-target-binds-nothing }
+begin
+  Result := -1;
+  if (i + 2 >= TokCount) or (Tokens[i].Kind <> tkLParen) then Exit;
+  if Tokens[i + 1].Kind <> tkIdent then Exit;
+  { `(n)` — the SAME parenthesised single target without the comma, and it is
+    deliberately accepted here rather than left to the expression path. It is
+    not a tuple and must not be treated as one; it is admitted so that
+    PyParseUnpackAssign, whose tupleTarget flag is set by the COMMA and by
+    nothing else, decides both spellings in one place. `(c) = v` then binds the
+    whole value exactly as `c = v` does, while `(c,) = v` binds v[0].
+    Untouched it died as `undefined variable (c)` — about a name the source
+    spells correctly — on the pin and at HEAD alike. }
+  if Tokens[i + 2].Kind = tkRParen then
+  begin
+    Result := i + 3;
+    Exit;
+  end;
+  if (i + 3 >= TokCount) or (Tokens[i + 2].Kind <> tkComma) then Exit;
+  if Tokens[i + 3].Kind <> tkRParen then Exit;
+  Result := i + 4;
+end;
+
 function PySkipTargetGroup(i: Integer): Integer;
 { Step over a `(a, b)` group in a target list, answering the index just past its
   `)`, or -1 when it is not a comma-separated list of NAMES and further such
@@ -33011,6 +33085,17 @@ begin
   Result := False;
   nstar := 0;
   i := TokPos - 1;                { the CURRENT token }
+  { `(n,) = xs` — the parenthesised ONE-element tuple target. Asked before the
+    general group path because PySkipTargetGroup requires two or more elements
+    and must keep doing so: `(a) = xs` is not a tuple target and binds the whole
+    value. The trailing COMMA is the discriminator, not the parentheses. }
+  if (PySkipOneTupleTargetGroup(i) > 0) and
+     (PySkipOneTupleTargetGroup(i) < TokCount) and
+     (Tokens[PySkipOneTupleTargetGroup(i)].Kind = tkAssign) then
+  begin
+    Result := True;
+    Exit;
+  end;
   if Tokens[i].Kind = tkStar then
   begin
     Inc(nstar);
@@ -33058,6 +33143,16 @@ begin
     if Tokens[i].Kind = tkComma then
     begin
       Inc(i);
+      { a TRAILING comma closes the list: `a, = xs` is a one-element TUPLE
+        target and binds xs[0], exactly as `(a,) = xs` does. Without this the
+        statement fell through to an ordinary expression and died on the name
+        itself with `undefined variable (a)` — a message about a target the
+        source spells correctly. }
+      if (i < TokCount) and (Tokens[i].Kind = tkAssign) then
+      begin
+        Result := True;
+        Exit;
+      end;
       if (i < TokCount) and (Tokens[i].Kind = tkStar) then
       begin
         Inc(nstar);

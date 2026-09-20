@@ -4,8 +4,8 @@ title: A one-element unpack target binds nothing — `(n,) = f()` is "undefined 
 track: N
 type: bug
 prio: 45
-status: backlog
-owner: ""
+status: done
+owner: "frankH"
 created: 2026-09-20
 found-by: frankH
 tags: [nilpy, unpack, assignment, struct]
@@ -42,3 +42,29 @@ When this is fixed, the fixture must carry BOTH spellings — parenthesised and
 bare — because a fix that special-cases the parenthesised form would pass a
 fixture written with only that one, and the bare form is the shape that proves
 the scan is arity-driven rather than punctuation-driven.
+
+## Resolution (2026-09-20, frankH)
+
+Fixed. `tupleTarget` — set by the trailing COMMA and by nothing else — replaces
+`nTargets > 1` at the two gates that decide whether a single value is INDEXED or
+stored whole, and `PySkipOneTupleTargetGroup` admits both parenthesised
+spellings. `(c) = v` was refused on the pin and at HEAD alike and is fixed with
+it: it binds the whole value, as `c = v` does, and it is the sibling that makes
+the comma readable as the discriminator — a fixture asserting `(c,)` without
+asserting `(c)` cannot show that the comma is what decides.
+
+**The first cut broke `(b, c) = xs`, which had always worked**, and the reason
+belongs here rather than only in the commit: the target loop's nested-group arm
+ends in `Continue`, which jumps to the `until` and **skips any tail**. The rule
+had been written as a tail, so it existed for the plain-name spelling only. The
+remedy was to move it into the `until` EXPRESSION, which every arm reaches by
+construction. That is `normalise-dont-special-case.md`'s second-path rule
+arriving inside ONE LOOP rather than across two files — grepping for the other
+file could not have found it, and the fixture did, because it asserts the
+neighbouring shapes and not only the two being fixed.
+
+Fixture: `test/test_nilpy_a_one_element_unpack_target_binds_the_element.npy`,
+eleven rows against CPython 3.14.4, carrying both one-element spellings, both
+no-comma forms, both multi-element forms, the starred target, the nested group,
+and `struct.unpack_from` — the shape it was found on. Pinned control reds at the
+one-tuple with the original `undefined variable (n)`. `tsp/stars.py` compiles.

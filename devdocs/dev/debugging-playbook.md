@@ -29714,3 +29714,74 @@ different wall). It came back exactly so. **A prediction corrected before the
 run is a prediction; corrected after, it is a reconstruction** — and the
 distinction is only visible if the correction has a timestamp earlier than the
 result.
+
+## THE FIXTURE'S COVERAGE, NOT THE FIX, IS WHAT CATCHES A BAD FIRST CUT — AND A DISCRIMINATOR YOU DO NOT ASSERT BOTH SIDES OF IS NOT A DISCRIMINATOR
+
+Measured 2026-09-20 (frankH, Track N), twice in one evening, one step apart, on
+unrelated mechanisms. Either instance alone reads as a lucky catch; the pair is
+the point, because in both cases **the narrow check the first cut would have
+passed is the check it is natural to write.**
+
+**Instance 1 — the assertion class.** A case-folded class name made
+`u.coast("x")` type a field as the class `Coast`, refused later at
+`info.get(...)`. The prepared fix made the lookup exact; the compile error went
+away; the program printed 64MB of memory, because the field was now a STRING
+holding a dict pointer. A fixture asserting *the program compiles* — which is
+what a wall-clearing census asserts — would have certified a strictly worse
+tree. It was caught because the fixture prints the VALUE.
+
+**Instance 2 — the neighbouring shapes.** The one-element unpack target
+(`(n,) = xs`, `a, = xs`) bound nothing, because the detector required two or
+more targets. The first cut put the trailing-comma rule in a TAIL inside the
+target loop — and that loop's nested-group arm ends in `Continue`, which jumps
+to the `until` and skips any tail. So the rule existed for the plain-name
+spelling only, and `(b, c) = xs`, which had always worked, stopped parsing. A
+fixture containing only the two shapes being FIXED would have been green with a
+working shape broken. It was caught because the fixture asserts the
+NEIGHBOURS: the multi-element parenthesised list, the starred target, the
+nested group, and the no-comma forms.
+
+**The shape both share:** a fix is written against the failing shape, and a
+fixture written at the same time inherits that focus. The defect a fix
+introduces is never in the shape you were looking at — it is in the shape that
+was already working, or in the behaviour you stopped asserting because the old
+symptom was a refusal.
+
+So a fixture for a fix needs two things beyond the repro:
+- **The VALUE, wherever a wrong TYPE or a wrong VALUE is possible.** "It no
+  longer errors" cannot distinguish a fix from a downgrade (see the section on
+  a fix that removes a diagnostic).
+- **Every neighbouring spelling that shares the code path being changed**, each
+  asserted, including the ones that already work. Their passing rows are the
+  only evidence the change did not move them.
+
+### And assert both sides of whatever decides the behaviour
+
+The unpack fix turns on one distinction: Python decides a TUPLE target on the
+trailing COMMA and never on the parentheses. `a = xs` and `(a) = xs` bind the
+whole value; `a, = xs` and `(a,) = xs` bind `xs[0]`.
+
+`(c) = v` was refused on the pin and at HEAD alike, and fixing it was NOT scope
+creep — **a fixture that asserts `(c,)` without asserting `(c)` cannot show that
+the comma is what decides.** It shows only that one spelling works. The claim
+being made is about a discriminator, and a discriminator is a claim about a
+PAIR: this side one way, that side the other, the difference being the single
+thing named. Assert one side and you have asserted an example.
+
+Stating the rule the way the language states it is also what kept the fix
+small — one flag set by the comma and by nothing else, replacing a target COUNT
+at the two gates that decide whether a single value is indexed or stored whole,
+rather than a special case per spelling.
+
+### Put the invariant where the control flow cannot miss it
+
+The `Continue` above is worth generalising. A rule written as a loop TAIL is
+skipped by every arm that jumps to the loop condition; a rule written INTO the
+loop condition is reached by all of them **by construction**, with no reviewer
+required to notice the arms. Same for a guard on a pass: prefer the position
+the control flow must pass through over the position that reads well.
+
+This is `normalise-dont-special-case.md`'s "the second path is the one that
+stays broken" arriving inside a SINGLE LOOP rather than across two files — which
+is why grepping for the other file would not have found it, and why the fixture
+did.

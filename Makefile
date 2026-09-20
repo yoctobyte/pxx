@@ -4962,6 +4962,15 @@ test-nilpy: $(COMPILER)
 	# method) compiled on the pin, so the colliding spelling has to be present.
 	./$(COMPILER) test/test_nilpy_a_method_named_like_a_class_in_another_case_is_not_that_class.npy $(TESTTMP)/test_nilpy_casemeth26
 	$(TESTTMP)/test_nilpy_casemeth26 | diff -u test/test_nilpy_a_method_named_like_a_class_in_another_case_is_not_that_class.expected -
+	# Python decides a TUPLE target on the trailing COMMA, not on parentheses:
+	# `a = xs` and `(a) = xs` bind the whole value, `a, = xs` and `(a,) = xs`
+	# bind xs[0]. The axis is ARITY, not punctuation -- the bare spelling has no
+	# parentheses and failed identically -- so both spellings are asserted, and
+	# so is every neighbouring shape, because the parse that changed is shared
+	# with all of them and the parenthesised MULTI-element list broke during
+	# the fix.
+	./$(COMPILER) test/test_nilpy_a_one_element_unpack_target_binds_the_element.npy $(TESTTMP)/test_nilpy_onetuple26
+	$(TESTTMP)/test_nilpy_onetuple26 | diff -u test/test_nilpy_a_one_element_unpack_target_binds_the_element.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

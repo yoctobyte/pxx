@@ -1,0 +1,56 @@
+# Python decides a tuple target on the TRAILING COMMA, never on the
+# parentheses: `a = xs` binds the whole value, `a, = xs` binds xs[0], and
+# `(a) = xs` is grouping and binds the whole value again. The detector required
+# TWO OR MORE targets, so both one-element spellings fell through to an ordinary
+# expression statement and died on the target's own name -- `undefined variable
+# (n)` about a name the source spells correctly.
+#
+# The axis is ARITY, not punctuation, which is why the bare spelling is here: it
+# has no parentheses at all and failed identically. Every neighbouring shape is
+# asserted too, because the parse that had to change is shared with all of them
+# and one of them (the parenthesised MULTI-element list) broke during the fix.
+
+
+def one():
+    return [5]
+
+
+def two():
+    return [1, 2]
+
+
+# the two one-element spellings
+(n,) = one()
+print(n)
+a, = one()
+print(a)
+
+# ...and what must NOT change: no comma means the whole value, parentheses or not
+b = one()
+print(b)
+(c) = one()
+print(c)
+
+# the ordinary multi-element forms, both spellings
+d, e = two()
+print(d + e)
+(f, g) = two()
+print(f + g)
+
+# a starred target still takes a list of the surplus
+h, *rest = [1, 2, 3]
+print(h)
+print(rest)
+
+# a nested group is still one element of the outer list
+i, (j, k) = [1, [2, 3]]
+print(i + j + k)
+
+# the real shape this was found on: one field out of a binary header
+import struct
+(count,) = struct.unpack_from("<I", b"\x07\x00\x00\x00rest", 0)
+print(count)
+
+# a one-element tuple target over a TUPLE value, not a list
+(p,) = (9,)
+print(p)
