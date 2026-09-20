@@ -3,7 +3,25 @@
 # Flash a PXX program to a REAL ESP32 board over USB and print what it says.
 #
 #   tools/esp_flash.sh [--chip esp32s2|esp32s3|esp32c3] [--port /dev/ttyUSB0]
-#                      [--seconds N] [--no-verify] <prog.pas>
+#                      [--seconds N] [--no-verify] [--no-flash] <prog.pas>
+#   tools/esp_flash.sh --project examples/esp32/nilpy-hw-c3 [--port ...]
+#
+# TWO WAYS IN, AND THE SECOND EXISTS BECAUSE THE FIRST CANNOT REACH THE DEMOS
+# THAT MATTER MOST ON A BOARD. The bare form above builds <prog.pas> into this
+# chip's hello-* project, whose partition table is the IDF stock one: a 1 MB
+# factory app. Measured 2026-09-20: the four NilPy demo images are 3,334,208 B
+# (nilpy-c3) and 3,335,184 B (nilpy-hw-c3), and their own projects carry a
+# custom 0x3C0000 table for exactly that reason. So the NilPy demos were not
+# merely awkward to flash this way, they were off by more than 3x -- `--project`
+# is how they get to silicon at all.
+#
+# `--project` DELEGATES THE BUILD to that project's own build.sh and does only
+# the part this script uniquely owns: write flash, read the tty, print a
+# verdict. That is deliberate. The project holds the authoritative compiler
+# flags (nilpy-s3 needs --xtensa-long-calls, which a 3.3 MB image cannot link
+# without), its own partition table and its own relink trick, and a second copy
+# of any of that here would be a spelling that drifts. One owner for the build,
+# one for the board.
 #
 # The qemu sibling of this script is tools/esp_run.sh, and the two are
 # deliberately identical up to the last step: same projects, same compiler
@@ -25,24 +43,50 @@
 # output matched the oracle).
 set -uo pipefail
 
-CHIP=esp32s3
+CHIP=""
 PORT=""
 SECONDS_TO_READ=10
 VERIFY=1
+PROJECT=""
+NO_FLASH=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --chip)       CHIP="$2"; shift 2 ;;
     --port)       PORT="$2"; shift 2 ;;
     --seconds)    SECONDS_TO_READ="$2"; shift 2 ;;
     --no-verify)  VERIFY=0; shift ;;
-    -h|--help)    sed -n '2,30p' "$0"; exit 0 ;;
+    --project)    PROJECT="$2"; shift 2 ;;
+    --no-flash)   NO_FLASH=1; shift ;;
+    -h|--help)    sed -n '2,45p' "$0"; exit 0 ;;
     *)            break ;;
   esac
 done
-PAS="${1:?usage: tools/esp_flash.sh [--chip esp32s2|esp32s3|esp32c3] [--port /dev/ttyUSB0] <prog.pas>}"
-PAS="$(cd "$(dirname "$PAS")" && pwd)/$(basename "$PAS")"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ -n "$PROJECT" ]; then
+  PROJECT="$(cd "$PROJECT" 2>/dev/null && pwd)" || {
+    echo "esp_flash: --project directory not found" >&2; exit 2; }
+  [ -x "$PROJECT/build.sh" ] || {
+    echo "esp_flash: $PROJECT has no executable build.sh -- --project drives a project's own build" >&2; exit 2; }
+  # The chip comes from the directory SUFFIX, the same rule the demo projects
+  # already use to pick their target, so the two cannot disagree. --chip still
+  # wins if given.
+  if [ -z "$CHIP" ]; then
+    case "$(basename "$PROJECT")" in
+      *-c3) CHIP=esp32c3 ;;
+      *-s3) CHIP=esp32s3 ;;
+      *-s2) CHIP=esp32s2 ;;
+      *) echo "esp_flash: cannot infer the chip from '$(basename "$PROJECT")' -- pass --chip" >&2; exit 2 ;;
+    esac
+  fi
+  PAS=""
+else
+  [ -n "$CHIP" ] || CHIP=esp32s3
+  PAS="${1:?usage: tools/esp_flash.sh [--chip esp32s2|esp32s3|esp32c3] [--port /dev/ttyUSB0] <prog.pas>   (or: --project <idf-project-dir>)}"
+  PAS="$(cd "$(dirname "$PAS")" && pwd)/$(basename "$PAS")"
+fi
+
 PXX="$REPO_ROOT/compiler/pascal26"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
@@ -55,8 +99,16 @@ case "$CHIP" in
            PXXFLAGS="--target=riscv32 --platform=esp" ;;
   *) echo "esp_flash: unknown chip '$CHIP' (esp32s2|esp32s3|esp32c3)" >&2; exit 2 ;;
 esac
+# --project overrides the chip's default project AFTER the case, so an unknown
+# chip is still refused above rather than silently accepted.
+[ -n "$PROJECT" ] && PROJ="$PROJECT"
 
-[ -x "$PXX" ]  || { echo "esp_flash: compiler not built ($PXX) — run make compiler/pascal26" >&2; exit 2; }
+# The compiler is only this script's business on the bare form. Under
+# --project the project's build.sh chooses it -- by default the PIN, which is
+# what the demo IS; export PXX to point it elsewhere.
+if [ -z "$PROJECT" ]; then
+  [ -x "$PXX" ] || { echo "esp_flash: compiler not built ($PXX) — run make compiler/pascal26" >&2; exit 2; }
+fi
 [ -d "$PROJ" ] || { echo "esp_flash: IDF project $PROJ missing" >&2; exit 2; }
 [ -f "$ESP_IDF_DIR/export.sh" ] || { echo "esp_flash: ESP-IDF not at $ESP_IDF_DIR" >&2; exit 2; }
 
@@ -74,12 +126,29 @@ if [ -z "$PORT" ]; then
 fi
 [ -w "$PORT" ] || { echo "esp_flash: $PORT is not writable (add yourself to the dialout group and re-login)" >&2; exit 2; }
 
-echo "esp_flash: $CHIP on $PORT <- $(basename "$PAS")" >&2
+echo "esp_flash: $CHIP on $PORT <- ${PAS:+$(basename "$PAS")}${PROJECT:+$(basename "$PROJECT") (its own build.sh)}" >&2
 
 # The x86-64 oracle, captured BEFORE the board runs: the same source compiled
 # natively. A program that talks to hardware only can pass --no-verify.
+#
+# UNDER --project THE ORACLE IS THE PROJECT'S OWN main/main.expected, and the
+# claim it supports is WEAKER FOR SOME PROJECTS THAN OTHERS -- say which,
+# because "OK" reads the same either way. For nilpy-c3/nilpy-s3 that file is
+# CPython's output for the same program, so a pass there is a real differential
+# against CPython. For nilpy-hw-* the program imports pxx Pascal units CPython
+# has no equivalent of, so the file is the program's SPECIFICATION: a pass
+# witnesses that the SDK timer callback fired and the Python loop saw it, which
+# is worth having and is not an oracle claim.
 ORACLE=""
-if [ "$VERIFY" = 1 ]; then
+if [ "$VERIFY" = 1 ] && [ -n "$PROJECT" ]; then
+  if [ -f "$PROJ/main/main.expected" ]; then
+    ORACLE="$(mktemp)"
+    cat "$PROJ/main/main.expected" > "$ORACLE"
+  else
+    echo "esp_flash: $PROJ has no main/main.expected, so there is nothing to diff against (continuing with --no-verify)" >&2
+    VERIFY=0
+  fi
+elif [ "$VERIFY" = 1 ]; then
   ORACLE="$(mktemp)"
   ORACLE_BIN="$(mktemp)"   # was the fixed /tmp/esp_flash_oracle, shared by every checkout
   if "$PXX" "$PAS" "$ORACLE_BIN" >/dev/null 2>&1 && "$ORACLE_BIN" > "$ORACLE" 2>/dev/null; then
@@ -103,28 +172,52 @@ exec 9<"$PROJ"
 flock 9
 
 cd "$PROJ" || exit 1
-# shellcheck disable=SC2086
-if ! "$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" main/main.o >/dev/null; then
-  echo "esp_flash: compiling $PAS failed (note: -Fu paths must be absolute)" >&2
-  exit 1
-fi
-ar rcs main/libpxx_app.a main/main.o
 
-# Same relink trick as esp_run.sh: ninja does not see inside the prebuilt
-# archive, so drop the image to force one.
-if [ -f build/build.ninja ]; then
-  rm -f build/*.elf build/*.bin
-  ninja -C build >/dev/null || { echo "esp_flash: build failed" >&2; exit 1; }
+if [ -n "$PROJECT" ]; then
+  # DELEGATED: the project's build.sh owns the flags, the partition table and
+  # the relink. Called with no verb, which is its build-only form -- NOT
+  # qemu-assert, because booting under qemu here would be a second run of a
+  # thing that has its own gate, and would report a verdict about qemu in a
+  # tool whose entire purpose is to report one about silicon.
+  echo "esp_flash: building via $PROJ/build.sh ..." >&2
+  if ! ./build.sh >&2; then
+    echo "esp_flash: $PROJ/build.sh failed -- nothing was written to the board" >&2
+    exit 1
+  fi
 else
-  idf.py set-target "$CHIP" >/dev/null && idf.py build >/dev/null || { echo "esp_flash: build failed" >&2; exit 1; }
+  # shellcheck disable=SC2086
+  if ! "$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" main/main.o >/dev/null; then
+    echo "esp_flash: compiling $PAS failed (note: -Fu paths must be absolute)" >&2
+    exit 1
+  fi
+  ar rcs main/libpxx_app.a main/main.o
+
+  # Same relink trick as esp_run.sh: ninja does not see inside the prebuilt
+  # archive, so drop the image to force one.
+  if [ -f build/build.ninja ]; then
+    rm -f build/*.elf build/*.bin
+    ninja -C build >/dev/null || { echo "esp_flash: build failed" >&2; exit 1; }
+  else
+    idf.py set-target "$CHIP" >/dev/null && idf.py build >/dev/null || { echo "esp_flash: build failed" >&2; exit 1; }
+  fi
 fi
 
 cd build || exit 1
-echo "esp_flash: writing flash..." >&2
-if ! python -m esptool --chip "$CHIP" -p "$PORT" -b 460800 \
-     --before default-reset --after hard-reset write-flash "@flash_args" >/dev/null 2>&1; then
-  echo "esp_flash: esptool could not write $PORT. Hold BOOT while tapping RESET to force download mode, then retry." >&2
-  exit 1
+# --no-flash: read and judge what the board is ALREADY running, without
+# rewriting it. The question it answers is the one a board raises and qemu does
+# not -- "is it still producing the right output, or did it stop" -- and the
+# answer is the same verdict, so it is the same code path minus one step. A
+# program that parks in a loop re-prints; one that hung does not, and a capture
+# that comes back short is exactly what a hang looks like from outside.
+if [ "$NO_FLASH" = 1 ]; then
+  echo "esp_flash: --no-flash -- reading $PORT without rewriting the board" >&2
+else
+  echo "esp_flash: writing flash..." >&2
+  if ! python -m esptool --chip "$CHIP" -p "$PORT" -b 460800 \
+       --before default-reset --after hard-reset write-flash "@flash_args" >/dev/null 2>&1; then
+    echo "esp_flash: esptool could not write $PORT. Hold BOOT while tapping RESET to force download mode, then retry." >&2
+    exit 1
+  fi
 fi
 
 # Read the boot log straight off the tty. `idf.py monitor` is interactive and
@@ -143,6 +236,14 @@ timeout "$SECONDS_TO_READ" cat "$PORT" > "$SER" 2>/dev/null || true
 # oracle's first line, then to the whole capture, so the user sees what the
 # board actually said instead of a bare "nothing arrived".
 OUT="$(awk 'f {print} /Calling app_main\(\)/{f=1}' "$SER" | tr -d '\r')"
+# Under --project, drop IDF's own log lines too, because the expected file was
+# written against a capture that had them dropped (build.sh qemu-assert uses
+# the same filter). Scoped to --project ON PURPOSE: widening the bare form's
+# filter would change what a hello-* run compares, and that path is the tested
+# one.
+if [ -n "$PROJECT" ] && [ -n "$OUT" ]; then
+  OUT="$(printf '%s\n' "$OUT" | awk '!/^[IWE] \([0-9]+\) /')"
+fi
 if [ -z "$OUT" ] && [ -n "$ORACLE" ] && [ -s "$ORACLE" ]; then
   FIRST="$(head -1 "$ORACLE")"
   OUT="$(tr -d '\r' < "$SER" | awk -v k="$FIRST" 'index($0,k){f=1} f {print}')"
@@ -165,11 +266,17 @@ if [ "$VERIFY" = 1 ]; then
   # is a PREFIX of the program's output: compare only as many lines as the
   # oracle has.
   ORACLE_LINES="$(wc -l < "$ORACLE")"
+  # NAME THE ORACLE THE VERDICT WAS TAKEN AGAINST, because "OK" reads the same
+  # whichever it was and the two support different claims -- a native run is a
+  # differential, a checked-in .expected is whatever that file is. A verdict
+  # that does not say what it compared against gets quoted as the stronger one.
+  if [ -n "$PROJECT" ]; then WHAT="$(basename "$PROJ")/main/main.expected"
+  else WHAT="the x86-64 oracle"; fi
   if printf '%s\n' "$OUT" | head -n "$ORACLE_LINES" | diff -u "$ORACLE" - >/dev/null; then
-    echo "esp_flash: OK — board output matches the x86-64 oracle ($ORACLE_LINES lines)" >&2
+    echo "esp_flash: OK — board output matches $WHAT ($ORACLE_LINES lines)" >&2
     rm -f "$ORACLE"
   else
-    echo "esp_flash: MISMATCH against the x86-64 oracle:" >&2
+    echo "esp_flash: MISMATCH against $WHAT (a SHORT capture is what a hang looks like -- check the diff for where it stopped):" >&2
     printf '%s\n' "$OUT" | head -n "$ORACLE_LINES" | diff -u "$ORACLE" - >&2
     rm -f "$ORACLE"
     exit 1

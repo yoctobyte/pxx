@@ -21,6 +21,17 @@
 #                                   data+bss, and the DRAM the chip's own
 #                                   heap_init says is LEFT after the whole link
 #
+# ON REAL SILICON, one command, from the repo root:
+#
+#   tools/esp_flash.sh --project examples/esp32/nilpy-c3
+#
+# It delegates the build back to THIS script, writes the image, reads the tty
+# for N seconds and diffs against main/main.expected -- so a board gets the
+# same verdict qemu-assert gives, and a HANG shows up as a short capture with
+# the diff naming the line it stopped at. `--no-flash` re-reads a board that is
+# already running without rewriting it. Plain `idf.py flash monitor` also
+# works and is interactive; it gives you the output, not a verdict.
+#
 # Its OWN project, not tools/esp_run.sh's hello-*, for the same reason as
 # fs-c3: it needs its own partition table. The NilPy runtime is ~3 MB of code
 # without --dce and the stock 1 MB factory app partition cannot hold it, so
