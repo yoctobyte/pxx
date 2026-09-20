@@ -30686,3 +30686,86 @@ So the operational rule is one step stronger than the one everybody knows:
 remedy covers both searches. **Ask what each lookup is scoped to and what each falls back to** — here
 one is anchored to the CWD and one to the executable's own directory, and a guidance line written
 about the first reads as though it governs the second.
+
+## A DEFECT RECORDED IN THE CONSUMER'S ARTEFACT INSTEAD OF THE PRODUCER'S BACKLOG HAS NO OWNER
+
+*Measured 2026-09-20 by `frankb-8e` (lekkerzeilen blocker 03/04), with a follow-up census by the pxx
+coordinator. The framing is 8e's and is better than the one it replaced.*
+
+A downstream repo's run script carried a comment describing **a pxx defect on the exact path its users
+run** — a compiled NilPy binary reaching GL 3.3, loading the world, printing its whole legend and
+**then segfaulting** under one SDL driver, while the CPython twin survived the same driver. The
+comment **cited a ticket slug**. `git log --all -S<slug>` over the whole history of the pxx repo
+returns **zero hits, in any folder, at any commit.**
+
+**"Cited and never written" is not a lost ticket.** It is a defect **recorded in the CONSUMER's
+artefact instead of the producer's backlog**, and that has two properties that compound:
+
+- **It reads to a downstream reader as a tracked bug, BECAUSE IT HAS A TICKET NUMBER.** Nobody
+  re-files it; the citation is the reassurance.
+- **It is invisible to every instrument we own** — `ready`, `next`, the ranker, `check` all read our
+  own tree. **No amount of grepping the producer's repo finds it**, because the defect was never
+  written there. It has **no owner by construction.**
+
+It surfaced only because a seat ran the consumer's script **in the form its users run it** rather than
+an equivalent command of its own — see *"an instruction is verified only when it has been run in the
+form the recipient will run it"*. A headless capture never reached the site.
+
+**HOW BIG IS THE CLASS? MEASURED, AND THE ANSWER IS ONE.** Oracle: 4,945 slugs, every `.md` filename
+under `devdocs/progress/*/` at HEAD. Population: **ten non-pxx repos** on this box. Two pxx clones
+were excluded after they cited 1,805 and 1,587 slugs each — **their own `devdocs/` copies, not
+downstream citations**. Two regexes, strict and loose, because the strict lane-letter form cannot see
+`bug-nilpy-*` or `docs-*` slugs.
+
+**Result: 23 distinct citations, 3 repos citing anything at all, 1 genuinely absent — the one above.**
+The other apparent misses were both instrument artefacts, recorded rather than dropped: **the
+scanner's own regex truncating a slug at a line wrap** (that ticket exists in `done/`), and **six
+slug-shaped strings in a website repo's test fixtures** that were never citations.
+
+**So the class is real and its population is one.** Both halves are the finding: *real* means the hole
+is genuine and ownerless; *one* means **it does not justify a mechanism** — do not build a cross-repo
+slug checker for a population of one. The census is eight lines and now has a stated oracle and
+population, so it is cheap to re-run.
+
+**The limit the census cannot close:** it can only find a citation that is **textually a slug**. A
+defect described in a downstream comment **with no slug at all** is invisible to it and to everything
+else — and that is the **commoner** shape, because writing a slug is the conscientious version.
+
+**Operationally:** when a downstream repo names one of our slugs, **check that we actually have it**;
+and when you write a defect into a consumer's artefact, **file it upstream in the same commit**, or
+you have written a ticket number that nothing backs.
+
+## THE NATURAL WAY TO MAKE A FIXTURE SELF-CONTAINED CAN HAND THE COMPILER THE INFORMATION UNDER TEST
+
+*Measured 2026-09-20 by `frankb-8e` on lekkerzeilen blocker 04. Same family as CLAUDE.md's "the
+position of the interesting element is a variable" — a new axis, not a new rule. Flagged as a
+promotion candidate needing one more subsystem.*
+
+    drive(Boat())          # PASSES
+    b = Boat(); drive(b)   # FAILS
+
+Same compiler, same classes, everything else identical. Handed a **fresh construction**, the frontend
+types the parameter from the call site, **so the receiver stops being dynamic** — and the defect under
+test only exists for a dynamic receiver.
+
+**The mechanism is not the finding. The finding is which spelling gets written first, and why.** The
+seat wrote `drive(Boat())` — **because constructing in the call is the natural way to make a test
+self-contained.** The result was a complete-looking five-row fixture, with controls, **reproducing
+nothing.** Written *after* a fix rather than before one, **it would have certified the bug as
+repaired.**
+
+**The axis generalises past this frontend: not WHERE the interesting element sits, but WHERE THE VALUE
+CAME FROM.** A literal, a fresh construction, an inline expression, a constant — **each hands the
+compiler more static information than a bound variable does, and each is the tidier way to write the
+fixture.** So the tidiness and the blindness arrive together, which is why this is not caught by
+reviewing the fixture for quality.
+
+**The discharge is one extra row and it is cheap:** bind the value to a variable first and call
+through the variable, **as well as** the inline spelling, and keep both. If the two rows disagree, the
+axis is live and you have learned it before writing the fix rather than after.
+
+**And a note on what makes such a fixture's OTHER rows worthless here.** The same ticket's fixture has
+a setter that clamps to 1.0; handed 4.0, it reads back **1.0 if it ran and 4.0 if it never did** (pxx
+gives 4.0). **Every other row can be satisfied by a shadow field answering its own write** — which is
+exactly what makes the defect silent — so a fixture without that one row **goes green while the setter
+is never called.** The other rows are not weak; they are **structurally unable to observe the thing.**
