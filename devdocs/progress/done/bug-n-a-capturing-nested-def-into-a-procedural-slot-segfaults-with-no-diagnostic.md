@@ -214,3 +214,5 @@ Nothing here touches consumer 3 (ESP interrupts) of
 `feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback`,
 which is a different contract — boxing allocates, and an ISR that allocates is
 a latent crash with good latency numbers.
+
+Log: 2026-09-20 frankb-8e — resolved in PyCarrierNamedProc (compiler/pyparser.inc), commit 085c43903, which also wires test_nilpy_a_capturing_nested_def_into_a_procedural_slot_is_refused_by_name. NilPy tier green at 1046 rows, gate quick GREEN re-run after the Makefile change.
