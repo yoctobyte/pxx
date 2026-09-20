@@ -323,10 +323,21 @@ type
     SAME runtime type. That is what the uforth census needs — VM.dict is keyed
     by str and VM.xt_table by int, side by side in one class.
 
-    v1 is a LINEAR SCAN. VM.dict reaches a few hundred entries and every Forth
-    word lookup hits it, so this will want a hash — but a wrong hash is worse
-    than a slow scan, and a hash drops in behind these same methods with no
-    frontend change at all. Tracked in feature-nilpy-dict.
+    LOOKUP IS HASHED. `indexof` is open addressing over an Int32 index
+    (`FHashCap`, linear probe, `idx < 0` means absent), so it is O(1) and not a
+    scan; the linear loop inside it is a defensive fallback for `FHashCap = 0`
+    and says so. This paragraph said "v1 is a LINEAR SCAN ... this will want a
+    hash, tracked in feature-nilpy-dict" until 2026-09-20. THE FEATURE WAS
+    BUILT — the field comment below describes it — and the sentence asking for
+    it survived the work.
+
+    WHY THIS ONE WAS EXPENSIVE: it is the FIRST thing a reader meets, three
+    lines above the field comment that contradicts it. Measured 2026-09-20 —
+    the owner's own hypothesis for lekkerzeilen's frame rate was "dicts not
+    being search-optimized", and this paragraph would have CONFIRMED it. A
+    stale comment that agrees with the reader's hypothesis is read as
+    corroboration and ends the investigation; one that contradicts it gets
+    checked.
 
     Deletion SHIFTS the tail down rather than swapping the last entry into the
     hole: Python dicts preserve insertion order and uforth iterates them. }
