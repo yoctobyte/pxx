@@ -326,6 +326,33 @@ above.**
 
 ---
 
+## 6. One instrument misled the whole fleet today
+
+**Recorded because the cost is invisible: it is the seats who quietly rebuilt
+and said nothing.**
+
+`1241020f5` was a **comment-only** change to `compiler/defs.inc`. It made
+`gate.sh`'s stale-binary hint fire **fleet-wide**. The hint compares the last
+commit touching `compiler/` against the binary's **mtime**, and then announces a
+conclusion about **the binary** — so everyone who pulled that commit and gated
+saw `STALE BINARY` while holding a byte-identical, perfectly correct compiler.
+`frankh-c0` followed it and forced a real recompute, and **got the same binary
+back**.
+
+**This is the project's own "every instrument that lies, lies by being correct
+about something else", sitting in the one place everybody looks before
+gating.** The hint was right about what it measured — a commit timestamp
+against an mtime — and wrong about the thing it named. The wording is now
+advisory-only and touches no verdict (`frankb-8e`).
+
+**The lesson for tomorrow's release work:** a comment-only commit is exactly the
+change nobody expects to move an instrument, which is why this one cost a
+fleet-wide rebuild before anyone said it out loud. **If a hint names an artefact,
+check what it actually compared before you act on it** — here, `sha256sum` of the
+binary against the previous one answers in one command and the hint does not.
+
+---
+
 ## 6. What would retire each claim in this document
 
 - **Every PIN row is perishable.** If `stable_linux_amd64/default/pinned` no
