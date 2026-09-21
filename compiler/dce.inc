@@ -461,12 +461,30 @@ procedure DceReachReport;
   answer honestly about a different thing, and the second on this exact
   question.
 
-  Open, and the next thing to measure: WHY Leaf owns no call sites. Candidates,
-  none checked -- ProcBodyEnd never recorded for Leaf (DceBodyEnd then returns
-  the START, i.e. a zero-width body that owns nothing), or the concat emitted
-  outside the body range. DceBodyEnd's own comment documents the first as
-  deliberate conservatism, which would make this a known cost rather than a
-  defect. }
+  SETTLED SAME DAY, AND THE ZERO-WIDTH-BODY CANDIDATE IS REFUTED. Give Leaf a
+  real call beside the concat and the walk finds it:
+
+      function Leaf(x: Integer): Integer;
+      begin g := g + 'x'; Leaf := Pure(x) + 1; end;
+
+      --dce-reach-from=Leaf   ->  1 body: Pure
+
+  So Leaf owns a range and ProcBodyEnd IS recorded. What is missing is one HOP:
+
+      Leaf  --CodeRef-->  stub (unowned region)  --CallFix-->  PXXStrAppend
+
+  The concat lowers to a runtime stub reached by a CodeRef, which names a code
+  OFFSET and not a proc, so it is not an edge in this graph at all; the stub's
+  own call to PXXStrAppend IS a CallFix entry, but its site is in unowned code
+  and therefore a ROOT. Both halves of the path exist and the join does not.
+
+  THE FIX, for whoever takes it: the walk needs stub regions as pseudo-nodes --
+  an id per CodeRef target (DceAddStubTarget already collects them), an edge
+  from the owning body to that id, and edges from the id to the CallFix targets
+  whose sites fall inside it. That is strictly more work than reading the two
+  existing tables and is why it is not in this commit. Until it exists, a
+  reachable set here is about DIRECT calls between PROC BODIES and says nothing
+  about the runtime stubs, which is where allocation actually lives. }
 var root, p, q, a, b, i, n, seen: Integer;
     vis: array of Boolean;
     work: array of Integer;

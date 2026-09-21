@@ -528,3 +528,71 @@ conservative ROOTS rather than edges. For an allow-list that is the right way
 round — an indirect call inside a candidate body must make it refuse — but the
 predicate has to actually treat "body contains an indirect call" as a refusal
 rather than as an absence of edges, or it will read an unknown as a clean walk.
+
+## THE FORWARD QUERY IS BUILT, AND IT IS NOT YET USABLE AS THE GUARD (2026-09-21)
+
+`--dce-reach-from=<name>` landed at `8007a358b`. It walks the call graph
+FORWARD from one named body, reusing the edge list `DceRun` already
+counting-sorts out of `CallFix`. It prints a reachable SET and refuses to print
+a verdict, and an unresolvable name is a loud refusal rather than an empty set.
+
+**Sound, verified against a `-O0`/`-O2` pair before any use:**
+
+    -O0   Top -> {Leaf, Mid}   Mid -> {Leaf}     transitivity holds
+    -O2   Top -> {Mid}         Mid -> {}         the inliner really removed it
+
+**And it cannot answer this ticket's question yet, for a measured reason:**
+
+    function Leaf(x: Integer): Integer;
+    begin g := g + 'x'; Leaf := x + 1; end;    { g: global AnsiString }
+
+    --dce-reach-from=Leaf   ->  0 bodies
+    --dce-why=PXXStrAppend  ->  PXXStrAppend <- [called from unowned code]
+
+**A body that provably allocates reports zero reachable bodies** — the wrong
+polarity for the third time on this question in one day.
+
+### The mechanism, settled rather than guessed
+
+The zero-width-body candidate is REFUTED. Give `Leaf` a real call beside the
+concat and the walk finds it (`-> 1 body: Pure`), so `Leaf` owns a range and
+`ProcBodyEnd` is recorded. Exactly one hop is missing:
+
+    Leaf  --CodeRef-->  stub (unowned region)  --CallFix-->  PXXStrAppend
+
+A CodeRef names a code OFFSET, not a proc, so it is not an edge in this graph;
+the stub's own call to `PXXStrAppend` *is* a `CallFix` entry, but its site is in
+unowned code and is therefore a ROOT. **Both halves of the path exist and the
+join does not.**
+
+**What it needs:** stub regions as pseudo-nodes — an id per CodeRef target
+(`DceAddStubTarget` already collects them), an edge from the owning body to
+that id, and edges from the id to the `CallFix` targets whose sites fall inside
+it. That is the next piece of work on this ticket.
+
+### The refusal half, corrected by frankb-8e and better than my version
+
+My phrasing was "refuse if the body contains an indirect call". **That
+under-reaches.** `p := @Foo` with no call in sight must still refuse: the root
+`@Foo` creates is GLOBAL and is not an edge out of the body that created it, so
+a forward walk from that very body walks clean and certifies it. The predicate
+must fire on **"this body TAKES AN ADDRESS, or installs a body in a dispatch
+slot"**, not on "this body calls through a pointer".
+
+**A real positive control exists for that half and beats a fixture:**
+`bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...`
+(backlog-nilpy) puts a Python method body in a Pascal vtable slot, entered by a
+virtual call from Pascal. **No edge anywhere in the graph expresses that
+crossing**, so it is precisely the shape that would certify clean and be wrong,
+and it fails at run time for an unrelated reason — which makes it a clean
+subject for a static question.
+
+### Status
+
+Two instruments proposed for this ticket and both refuted before anything was
+built on either: the absolute form (`is PXXAlloc live`, `68a15c4d4` — and 8e
+has since shown it DOES discriminate on ESP riscv32 `--emit-obj`, so the two
+results differ by root set rather than contradicting, and both are carried),
+and now the forward form's stub-hop gap. **Neither refutation cost more than
+twenty minutes, and both were found by running a control the design did not
+call for.**
