@@ -70,7 +70,16 @@ try: gdb.execute("set debuginfod enabled off")
 except gdb.error: pass
 gdb.execute("set startup-with-shell off")
 # `stop` implies `print`. DO NOT ADD `noprint` -- see hazard 3 above.
-gdb.execute("handle SIGUSR1 stop nopass")
+# PICK A SIGNAL THE SUBJECT DOES NOT USE. Default SIGUSR1, but a program that
+# handles it gets its OWN handler invoked by the sampler's ticker -- the
+# instrument injecting the phenomenon under test. Measured 2026-09-21: pointing
+# this at test_threadsafe_heap_lock_deadlock_diag, whose whole subject is a
+# SIGUSR1 handler that allocates, would have driven the very collision the test
+# is trying to observe. `nopass` stops delivery to the program, so the handler
+# does not actually run -- but the stop still perturbs the timing of a race,
+# and a signal the subject installs is the one place that matters.
+SIG = os.environ.get("PXX_SIGNAL", "SIGUSR1")
+gdb.execute("handle %s stop nopass" % SIG)
 
 binpath = gdb.current_progspace().filename
 mappath = os.environ.get("PXX_MAP") or (binpath + ".map" if binpath else "")
@@ -111,8 +120,9 @@ print("pxx_pc_sample: pid=%d N=%d settle=%.2f interval=%.2f maxoff=%d symbols=%d
       % (pid, N, SETTLE, INTERVAL, MAXOFF, len(addrs), mappath or "(none)"))
 
 ticker = subprocess.Popen(
-    ["sh", "-c", "sleep %f; i=0; while [ $i -lt %d ]; do kill -USR1 %d 2>/dev/null || exit 0; "
-                 "sleep %f; i=$((i+1)); done" % (SETTLE, N + 5, pid, INTERVAL)])
+    ["sh", "-c", "sleep %f; i=0; while [ $i -lt %d ]; do kill -%s %d 2>/dev/null || exit 0; "
+                 "sleep %f; i=$((i+1)); done"
+                 % (SETTLE, N + 5, SIG[3:] if SIG.startswith("SIG") else SIG, pid, INTERVAL)])
 
 def pc_now():
     return int(gdb.parse_and_eval("$pc").cast(gdb.lookup_type("unsigned long")))
