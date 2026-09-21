@@ -3613,6 +3613,54 @@ time**, so any "cannot reproduce" resting on it is unproven.
 **A "cannot reproduce" is a claim that needs its instrument named exactly as much as
 a reproduction does** — more, because it is the one that ends the investigation.
 
+**AND "I SAW THE VERB" IS A MEMORY CLAIM — PROVE THE VERB CAN BE ABSENT, IN
+THIS TREE, NOW.** `frankh-c0`, 2026-09-21, pressed on whether a byte-identical
+rebuild against pin v414 was a reproduction or a file compared to itself. The
+whole rule above rests on an unstated premise: **that the two verbs actually
+distinguish.** If `make` printed `converged` unconditionally, seeing it would
+prove nothing, and nobody checks that — the rule is trusted because it is
+written down.
+
+c0 declined to answer from recollection and ran the control instead. Its
+rebuild had printed both lines, in this order:
+
+```
+converged after 1 round(s)
+self-host fixedpoint: verified — 1 round(s), aeadb1754b80 (stamp read back; sources match it)
+```
+
+Re-running with **sources unchanged** printed **one** line — the `verified`
+line alone, no `converged`. So the stamp path demonstrably suppresses the verb
+in that tree at that moment, and the earlier `converged` could only have come
+from the recompute. **The premise was checkable in one command and had never
+been checked.**
+
+**The generalisation: wherever you rely on the PRESENCE of a signal, you are
+also relying on that signal being capable of ABSENCE** — which is the
+positive-control rule applied to a log line rather than to a test, and log lines
+are where it is least often applied because they feel like observations rather
+than instruments. Re-running to show the signal *can* vanish costs seconds and
+converts a remembered observation into a measured one.
+
+**Note also what forced the genuine rebuild, which c0 recorded as mechanism
+rather than luck:** since `01dd27dd1` the stamp refuses when it was written for
+different sources than the tree has. c0's edit changed a compiler source, so the
+stamp *could not* be reused. **A guard firing for you is not a habit of
+yours** — and which of the two it was is the thing that decides whether the next
+reader can rely on the same outcome.
+
+**AND COUNT INDEPENDENT FAILURE MODES, NOT INSTRUMENTS, WHEN SOMETHING LOOKS
+OVER-DETERMINED.** Pin v414's identity was confirmed five ways in one morning:
+`pin.log`'s row, `lekkerzeilen-7a`'s measured PIN-arm sha, `frankz-e5`'s hash
+after a pull, `franks-5b`'s three-arm build, and c0's rebuild. **That is not
+five confirmations.** c0's ranking is the right one and it is this playbook's
+"two readings that can go wrong the same way are one reading" arriving at a
+tally: *"a record can be wrong in ways that are correlated across all three of
+its readers; a reproduction cannot."* Three of the five READ a record and share
+its failure mode; two REPRODUCE from source and cannot. **Five instruments,
+three failure modes**, and the count that sounds impressive is the one that
+hides the correlation.
+
 ### THE THIRD POLARITY: a false REFUTATION of a peer's FIX, from a tree that never had the commit
 
 Measured 2026-09-16 (frankuser), verifying frankb-56's claim that quickjs-ng runs
