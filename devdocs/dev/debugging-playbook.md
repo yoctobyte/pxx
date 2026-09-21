@@ -12577,6 +12577,54 @@ first" step destroys.
   and "no matches" is the answer both a working instrument and a broken pattern
   produce. Run the pattern against a line you know matches, first.
 
+## A RELAY DOES NOT MERELY PROPAGATE A CLAIM — IT MANUFACTURES A SECOND INSTRUMENT OUT OF THE FIRST
+
+*`frankuser`'s finding and framing, banked here because that seat does no pxx
+work and a playbook commit is a commit. Measured 2026-09-20/21 across three
+seats. **Not the same failure as the two relay sections around it** — those are
+about a claim decaying or drifting in transit. This one is about the claim
+staying perfectly intact while its APPARENT INDEPENDENCE multiplies.*
+
+The sequence, and every step in it is reasonable:
+
+1. `frankb-8e` drew an inference from one grep of one file.
+2. `frankz-e5` endorsed the inference. **It did not check the premise** — an
+   endorsement of an inference reads as an endorsement of the whole thing, and a
+   relay cannot tell the two apart.
+3. `frankuser` quoted that endorsement **back to 8e as corroboration**.
+
+**Two parties now confirmed a claim neither had measured, and the evidence under
+it was still one grep of one file.** Nothing was misquoted. Nobody
+over-claimed. The second instrument was created by the act of relaying, out of
+the first.
+
+**WHY IT DEFEATS THE OBVIOUS GUARD.** The rule everyone already has is *check a
+conclusion against a second source, and a second source only counts if it FAILS
+DIFFERENTLY*. That guard is aimed at two **measurements**. Here the second
+source is a **person**, and a person who has read your claim and agreed with it
+cannot fail differently from it — **they are downstream of it.** Agreement from
+someone you told is not corroboration; it is an echo with a name on it.
+
+**AND IT IS WORSE IN A FLEET WITH A COORDINATING SEAT**, because that seat is
+the only place two readings of one event coexist with neither original present,
+and its whole function is to pass things on. **Every claim it handles acquires a
+second endorser by default.**
+
+**The repair is not "be careful relaying" — that version has now failed twice.**
+It is structural:
+
+- **When you relay agreement, name who MEASURED it**, not who agreed. "8e found
+  X and Z agrees" is two instruments. "8e found X, and Z endorsed 8e's
+  inference without checking the premise" is one, and reads correctly.
+- **When you endorse, say which half** — the premise or the inference. They
+  travel as one sentence and they are not one claim.
+- **Before treating agreement as evidence, ask whether the agreeing party read
+  your claim first.** If they did, the count of instruments is still one.
+
+**The tell is a claim whose support grows while no new measurement occurs.**
+Count the measurements, never the endorsers.
+
+
 ## A RELAY CARRIES WHAT WAS TRUE WHEN SENT, AND THE COST OF BELIEVING ONE SCALES WITH WHAT YOU DO NEXT
 
 Measured 2026-09-20 (frankS + frankz-e5), four instances in one day. Companion
