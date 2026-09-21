@@ -34211,3 +34211,54 @@ by an enormous margin rather than as arithmetic on an empty variable.
 **Wherever a ratio, margin or headroom is reported, ask what happens to it when
 the denominator is unset**, and prefer a harness that refuses to print a
 comparison it has no limit for. The failure direction is the dangerous one: an
+
+## `| tail -1` ON A COMPILER RUN HIDES EVERY DIAGNOSTIC AND SHOWS YOU THE SUCCESS LINE
+
+Measured 2026-09-21 (frankb-8e, Track S), three consecutive commands, by a seat
+that had banked two sections about instruments-correct-about-something-else the
+previous afternoon.
+
+`pascal26` writes diagnostics to **stdout**, and its final line on success is
+`ok: <path> [code=...]`. So `... 2>&1 | tail -1` — the idiom everyone reaches
+for to keep a build quiet — prints exactly the reassuring line and discards
+every `warning:` above it. It does not truncate randomly; **it truncates in the
+direction of success**, which is why nobody re-runs.
+
+The case that cost the time: a bare-ESP program with three `WriteLn`s compiled,
+booted under qemu, printed nothing, exited 0. That is a textbook silent failure
+and was about to be filed as one. It was not silent —
+
+    pascal26:5: warning: write/writeln emits nothing on the bare ESP profile:
+    there is no console. Write to the UART from your own code ... or build a
+    hosted image with --platform=posix.
+
+— a warning naming the behaviour, the reason and two remedies, present on line 1
+of every one of those builds. Empty output plus `rc=0` is indistinguishable from
+a device-side fault, which is what made the wrong reading credible.
+
+**The general shape, which is why this is not just a `tail` tip.** A run's
+*last* line is its verdict and its *earlier* lines are its evidence, so any
+tail-shaped filter keeps the verdict and drops the evidence. `tail -1`,
+`2>/dev/null` on a tool that writes diagnostics to stdout, and a `>log` that is
+only `cat`ed on failure are all the same instrument. The last is not
+hypothetical: `tools/esp_run_bare.sh` printed its buildlog **only when the
+compile failed**, so the warning above was invisible to anyone using the
+harness — fixed in `771f67cc4`, to stderr, so the UART-bytes contract is
+untouched.
+
+**What to do instead.** Filter on content rather than position: `| grep -v
+'^ok:'` leaves diagnostics, drops the noise, and prints nothing at all on a
+clean build — which is the quiet you actually wanted. When you must have one
+line, take it from a **grep for the verdict token**, the repo's own rule for
+backgrounded jobs, not from the tail.
+
+**The tell that you have done this:** a program that "does nothing", exits 0, and
+produces an observation identical to a real fault. Before believing that, re-run
+the build with no filter at all. It costs one command.
+
+**Related:** CLAUDE.md, *"Every instrument that lies, lies by being CORRECT ABOUT
+SOMETHING ELSE"* — this is that rule reaching the most ordinary pipe in the repo,
+and the rule was present, correct and twice-read while none of it fired. The
+harness half is *normalise-dont-special-case*'s sibling clause: the same script's
+comment records someone fixing this swallowing for the FAILURE case, and the
+warning-on-success arm was never wired to it.
