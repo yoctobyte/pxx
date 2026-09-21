@@ -33594,3 +33594,75 @@ sequence is fiction. Name the profile beside the figure, for the same reason you
 name the repo beside the sha: **a reader who is not told which population a
 number came from will supply one, and they will supply the one they are already
 holding.**
+
+## "WE HAVE NEVER SEEN IT FAIL" IS EVIDENCE ONLY OVER THE FAILURES THE APERTURE COULD HAVE CAUGHT — AND THE TWO DIRECTIONS OF AN APPROXIMATION ARE NOT EQUALLY VISIBLE
+
+*`frankh-c0`, 2026-09-21, declining to take the 64 KiB arena removal and
+characterising what would make it takeable. Relayed via `frankz-e5` from
+`frankuser`'s warning to `frankb-8e`.*
+
+**The case.** `HEAP_ARENA` is 65,536 B reserved unconditionally under
+`{$ifdef PXX_ESP}` on the BARE profile — 97.1% of an empty bare image's SRAM,
+the largest single item there is. The obvious guard is to drop it when DCE
+reports every allocator entry point dropped.
+
+**THE ASYMMETRY THAT REFUSES THAT GUARD.** Conditioning on a DCE report trusts
+DCE never to **under**-approximate reachability. The recent orphan bug is
+evidence about DCE — but only that it **over**-approximates, which is the safe
+way to be wrong. *The evidence we hold supports confidence in the direction that
+does not matter.*
+
+**c0's sharpening is the part that generalises, and it is about the APERTURE,
+not about the tool.** Under-approximation is not merely unmeasured — **nothing
+in the normal working of the tree could measure it.** A dropped-but-live symbol
+surfaces as a link error *only when it is referenced by name*. For an allocator
+reached through a route the analysis did not model — an indirect call through a
+table, a method reached via a dynamic receiver, an RTL path entered from an
+interrupt or a callback — **the link succeeds** and the failure is heap
+corruption on silicon, discovered on a board.
+
+> **So the absence of reports is not weak evidence of safety. It is no evidence
+> at all** — and that has to be said in those terms, because *"we have never
+> seen DCE drop something live"* reads like evidence to everyone who has not
+> thought about the aperture.
+
+**Before quoting a clean record, ask what a failure would have LOOKED like.**
+If the answer is "nothing, until much later, somewhere else", the record is a
+measurement of the aperture and not of the tool. This is the silent-negative
+class arriving as a *reassurance* rather than as a bug: the same blindness that
+hides the defect also manufactures the confidence.
+
+### What would produce evidence in the direction that matters
+
+**A positive control for DCE, not a census of what it drops.** A program on the
+bare profile where an allocator **is** reachable by exactly the route the
+analysis is most likely to miss — indirect call, dynamic receiver, interrupt or
+callback entry — asserted to be **RETAINED**. c0's formulation:
+
+> **A tool that cannot be caught keeping a live allocator has not been shown to
+> keep live allocators.**
+
+That is a different instrument from anything in `gate.sh` today, and it is
+buildable without touching the arena.
+
+### And the stronger move: a route argument, not a report
+
+**A DCE report is a SAMPLE; a route argument is a PROOF.** c0 supplies the
+precedent from a neighbouring subsystem it closed the same morning — it
+justified deleting a case-fold by reasoning over the **key space**: every key in
+the table is a genuine all-lowercase Python name, so a case-insensitive match
+has **no true-positive population** and can only manufacture a false one. No
+sampling of spellings, and the conclusion holds for keys nobody has written yet.
+
+The arena wants the same form: an argument over the space of **routes** to the
+allocator on that profile, which holds for routes nobody has written yet.
+**And note where c0 puts the hedge — on the premise, where it belongs:** *if*
+the route space on the bare profile is genuinely closed — no indirect calls into
+the RTL, no dynamic dispatch — that is statable and checkable, **and it does not
+depend on trusting the analysis at all.** A route argument replaces the tool
+rather than auditing it.
+
+**The scope clause travels with the technique and is what makes it a rule rather
+than a trick:** reasoning over an input domain is cheap and total where the
+domain is **enumerable**, and worthless where it is not. Establish that the
+domain is closed first; that step is the work.
