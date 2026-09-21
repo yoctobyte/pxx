@@ -119,6 +119,19 @@ implementation
 
 const
   BIG_BASE = 1000000000;
+  { The largest power-of-two chunk a shift may take in one step. BOUNDED BY
+    BMulSmall/BDivSmall'S INNER TERM, NOT BY THE BASE: both compute something
+    of the form <limb-sized> * m (or rem * BIG_BASE) in an Int64, a limb is
+    < 1e9, and 2^33 = 8.59e9, so the product stays under 8.6e18 < 2^63. 2^34
+    overflows SILENTLY and yields a wrong answer, not a range error -- verified
+    by setting it to 34, which breaks 61 of 792 differential rows against
+    CPython with visibly corrupted limbs.
+
+    AND LIMBS CANNOT BE SHIFTED HERE. The magnitude is base-1e9 -- DECIMAL --
+    so a binary shift is a genuine multiply or divide and there is no
+    limb-movement trick. Anyone porting this from a base-2^k bignum will reach
+    for one; it does not exist in this representation. }
+  BIG_SHIFT_CHUNK = 33;
 
 type
   TBig = record
@@ -646,34 +659,83 @@ end;
 
 { a * 2^k (magnitude doubling preserves the sign, matching Python `<<`) }
 function BShl(const a: TBig; k: Int64): TBig;
-var r: TBig; i: Int64; wasNeg: Boolean;
+var r: TBig; wasNeg: Boolean;
 begin
   if k <= 0 then begin BShl := a; Exit; end;
   wasNeg := a.neg;
   r := a; r.neg := False;
-  for i := 1 to k do r := BMulSmall(r, 2);
+  { was `for i := 1 to k do r := BMulSmall(r, 2)` -- one full bignum multiply
+    PER BIT, each allocating a fresh limb array. The cost scaled with the SHIFT
+    COUNT, so a fixture shifting by 1 could not see it.
+    bug-a-python-shift-is-o-k-bignum-multiplies-one-per-bit-shifted }
+  while k >= BIG_SHIFT_CHUNK do
+  begin
+    r := BMulSmall(r, Int64(1) shl BIG_SHIFT_CHUNK);
+    k := k - BIG_SHIFT_CHUNK;
+  end;
+  if k > 0 then r := BMulSmall(r, Int64(1) shl k);
   r.neg := wasNeg and not BIsZero(r);
   BShl := r;
 end;
 
+{ a div d for a SMALL divisor, ONE PASS, no binary search -- the counterpart
+  of BMulSmall. remOut gets the remainder.
+
+  d MUST BE <= 2^BIG_SHIFT_CHUNK. rem < d, and the inner term is
+  rem*BIG_BASE + limb, so d = 2^33 gives 8.59e9 * 1e9 = 8.59e18 < 2^63 with
+  room for the limb. The same bound as BMulSmall's, for the same reason.
+
+  WHY THIS EXISTS: BDivMod BINARY-SEARCHES each quotient digit over
+  [0, BIG_BASE), which is ~30 BMulSmall calls PER LIMB, each allocating. That
+  is the right algorithm for a general divisor and it is enormously wrong for
+  a power of two. Measured 2026-09-21: `x >> 1` cost ~28,000 ns through
+  BDivMod, against ~2,500 ns for a small multiply. }
+function BDivSmall(const a: TBig; d: Int64; var remOut: Int64): TBig;
+var r: TBig; i: Integer; cur, rem: Int64;
+begin
+  SetLength(r.limbs, Length(a.limbs));
+  rem := 0;
+  for i := Length(a.limbs) - 1 downto 0 do
+  begin
+    cur := rem * BIG_BASE + a.limbs[i];
+    r.limbs[i] := cur div d;
+    rem := cur mod d;
+  end;
+  r.neg := False;
+  BNorm(r);
+  remOut := rem;
+  BDivSmall := r;
+end;
+
 { floor(a / 2^k) — Python arithmetic shift right }
 function BShr(const a: TBig; k: Int64): TBig;
-var q, rem, p2: TBig; i: Int64;
+var q: TBig; rem: Int64; anyRem: Boolean;
 begin
   if k <= 0 then begin BShr := a; Exit; end;
-  p2 := BFromInt(1);
-  for i := 1 to k do p2 := BMulSmall(p2, 2);
-  BDivMod(a, p2, q, rem);
-  { BDivMod truncates toward zero; Python `>>` FLOORS. For a negative dividend
-    with a nonzero remainder, floor is one MORE in magnitude (more negative). }
-  if a.neg and not BIsZero(rem) then
+  q := a; q.neg := False;
+  anyRem := False;
+  { was: build 2^k with k multiplies, then a full BDivMod. Both halves were
+    wrong -- the loop scaled with the shift count and the divide binary-searched
+    every quotient digit.
+    bug-a-python-shift-is-o-k-bignum-multiplies-one-per-bit-shifted }
+  while k >= BIG_SHIFT_CHUNK do
   begin
-    q.neg := False;
-    q := BAddMag(q, BFromInt(1));
-    q.neg := not BIsZero(q);
+    q := BDivSmall(q, Int64(1) shl BIG_SHIFT_CHUNK, rem);
+    if rem <> 0 then anyRem := True;
+    k := k - BIG_SHIFT_CHUNK;
   end;
+  if k > 0 then
+  begin
+    q := BDivSmall(q, Int64(1) shl k, rem);
+    if rem <> 0 then anyRem := True;
+  end;
+  { Python `>>` FLOORS and this truncates toward zero, so a negative dividend
+    with ANY nonzero remainder -- in any chunk -- is one more in magnitude. }
+  if a.neg and anyRem then q := BAddMag(q, BFromInt(1));
+  q.neg := a.neg and not BIsZero(q);
   BShr := q;
 end;
+
 
 
 { ---- slot accessors ---------------------------------------------------- }
