@@ -34873,3 +34873,68 @@ Live instance of the slot half, in the tree: a Python method body occupying a
 Pascal vtable slot, entered by a virtual call from Pascal
 (`bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...`). No
 edge anywhere in the graph expresses that crossing.
+
+## A REPRO DECAYS BY HAVING ITS ROUTE RESOLVED OUT FROM UNDER IT, AND IT DECAYS TOWARD PASS
+
+Measured 2026-09-21 (frankb-8e), closing three Track N tickets.
+
+**A stale EXPECTATION goes red and announces itself. A stale REPRO goes green and
+closes a ticket.** That asymmetry is the whole finding, and it is why this class
+costs more than the one it resembles.
+
+`bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned`
+records a program whose unannotated receiver forced the call onto the run-time
+dispatch path. Run today it passes every row. It also no longer tests its own
+bug: the receiver now resolves STATICALLY, and `--dce-why` reports
+`pydyn_meth0`, `pydyn_meth1` and `pydyn_meth2` **all DROPPED** for that file. The
+compiler got better at exactly the thing that put the call on the path under
+test, so the ticket's own program is now a well-written test of something else.
+
+Nothing announced that. The rows are green, the program is unchanged, the ticket
+reads as correct, and the honest conclusion from running it is "fixed" — which
+is the right answer here by luck, and would be a wrong CLOSE on a bug that was
+still live.
+
+### Why the existing rule does not cover it
+
+The fleet already has *"isolation guards against the RUN, not against the
+ROUTE"*. That rule is about a probe you are WRITING that never reaches the
+subject. **This is a probe that DID reach the subject and stopped**, months
+later, because unrelated work removed the route. The author did nothing wrong
+and there was no moment at which re-reading would have helped — the same shape
+as a born-red assertion, arriving from the other end and pointing at PASS.
+
+It was caught only because a SIBLING ticket happened to document that exact trap
+for that exact subsystem, in its own reading 4. That is not a mechanism anyone
+can rely on twice.
+
+### The remedy, and the reason it has to be a second instrument
+
+**Assert the ROUTE beside the value rows, because the value rows cannot detect
+their own irrelevance.** A row comparing output against an oracle is structurally
+incapable of noticing that the path it was written for is gone; it has no term
+for the route in it at all.
+
+Stated POSITIVELY, on the reason you expect:
+
+    # right: names what must be true
+    ... --dce-why=pydyn_meth1 <fixture> | grep -q 'pydyn_meth1 <- Kinds\.'
+
+    # wrong: passes when the report's FORMAT changes
+    ... --dce-why=pydyn_meth1 <fixture> | grep -qv 'DROPPED'
+
+A negative match is a guard that cannot fail: rename the report, and the absence
+of `DROPPED` is satisfied by output that says nothing at all.
+
+**Measure three arms before trusting it**, the third being the one usually
+skipped: the real fixture must match; a subject that should NOT take the route
+must NOT match; and the value rows must still agree with the oracle. The middle
+arm is the positive control, and without it the route assertion is decoration.
+
+### The tell, for an existing suite
+
+Where a fixture's whole point is that a construct takes a particular lowering —
+a dispatch path, a slow path, a fallback, an unoptimised arm — **ask what would
+have to be true for it to still take that path, and whether anything in the
+fixture would notice if it stopped.** If the answer is nothing, the fixture's
+green is a statement about the oracle and not about the compiler.

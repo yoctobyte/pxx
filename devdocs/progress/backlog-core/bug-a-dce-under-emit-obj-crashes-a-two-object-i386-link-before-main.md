@@ -58,3 +58,34 @@ have to survive a compaction they did not participate in.
 
 Not measured: whether one object alone with a non-empty `.init_array` reproduces
 it, which would separate "i386 thunk offsets" from "two objects".
+
+## Re-measured 2026-09-21 (frankb-8e), compiler sha256 `5dd0316573b3`
+
+**STILL REPRODUCES, and deterministically — 5/5 runs.** Confirmed live at HEAD;
+nothing here is a repair. Two corrections to the record above, both carried
+rather than substituted, because a number whose population was not written down
+is not refuted by a new one.
+
+| build | i386 | x86-64 |
+| --- | --- | --- |
+| `--no-dce --emit-obj` | rc=0, `20 11` | rc=0, `20 11` |
+| `--dce --emit-obj` | **rc=139, no output** | rc=0, `20 11` |
+
+1. **The rc is 139 here, not 138.** `139 = 128+11 = SIGSEGV`; the recorded
+   `138 = 128+10 = SIGUSR1`, which is what "User defined signal 1" above names.
+   Both readings were taken on a two-object `gcc -m32 -no-pie` link of the same
+   two fixtures. I have not established whether the signal drifted or whether
+   the original was produced under a different link; **do not treat either
+   number as the expected value** — the assertable fact is "dies before main
+   with no output", which both agree on and which a rc-specific expectation
+   would make brittle.
+2. **`--target=x86-64` IS NOT A VALID FLAG** — the compiler answers
+   `unknown option: --target=x86-64`. x86-64 is the DEFAULT and the row above
+   is produced by passing no `--target` at all. The original x86-64 rows are
+   correct as results; they were not produced by the spelling implied here, and
+   a reader copying that spelling gets a compile failure and may read it as the
+   crash.
+
+Population, so the next re-run has a denominator: two objects,
+`test/c_obj_fnptr_a.c` and `test/c_obj_fnptr_b.c`, linked with
+`gcc [-m32] -no-pie`, run 5 times each, on this box at HEAD.
