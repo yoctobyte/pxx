@@ -35380,3 +35380,70 @@ on it.** The first probe to use `PutS` inside the handler printed nothing and
 was read as "the handler never ran", when in fact the handler ran fine and the
 *call to PutS* was the defect. Ask what your print statement depends on before
 you conclude from its silence.
+## CHOOSE A DEFAULT BY WHICH WAY BEING WRONG BREAKS, NOT BY WHICH VALUE IS MOST LIKELY RIGHT — and the mean is the one value with no cheap direction
+
+Measured 2026-09-22 (frankh-c0 and frankuser, `a40aea849`), designing the
+fallback weight for an unmeasured script in a sharded `tools-devtest`.
+
+**The question was posed as a choice between two guesses and stalled there,
+because on accuracy neither is defensible.** A script with no entry in the
+`script -> weight` table could default to **zero** or to **the mean**:
+
+- **zero** — a new script is free, so it lands in the heaviest shard;
+- **the mean** — 2.07 s, and the same measurement that produced it shows the
+  median is **0.22 s**, so the mean is a value almost nothing in the set has.
+
+Both look arbitrary, and arguing which is *closer* produces nothing, because the
+distribution is skewed enough that either can be off by two orders of magnitude
+on a given script.
+
+**THE AXIS IS NOT ACCURACY. IT IS THE COST OF EACH DIRECTION OF BEING WRONG,
+AND THE TWO DIRECTIONS ARE NOT SYMMETRIC:**
+
+| error | consequence |
+| --- | --- |
+| **under-estimate** | the script lands in an already-full shard, that shard blows its budget, **the tier reds on something that is not a code defect**, and it misattributes to whatever else shares the shard |
+| **over-estimate** | the script is placed early into a light shard, that shard runs under-full, **part of one scheduler slot is wasted and nothing reds** |
+
+So the answer is **default HIGH** — p90 here, not `max`, which is needlessly
+extreme. **Fail toward a wasted slot, never toward a spurious red.** Once the
+question is asked that way it has one answer and the accuracy argument
+disappears; asked the other way it has no answer at all.
+
+**AND THAT IS WHY THE MEAN IS THE WORST OF THE THREE, for a better reason than
+being inaccurate: it has NO CHEAP DIRECTION.** Zero is reliably an
+under-estimate and `max` is reliably an over-estimate, so each has a known
+failure shape you can reason about. The mean sits in the middle of a skewed
+distribution and is therefore **an under-estimate for the heavy scripts and an
+over-estimate for the light ones** — it produces both failure modes, selected
+by which script happens to be missing, which is the one thing you cannot
+predict. A default whose error changes SIGN with its input cannot be reasoned
+about at all.
+
+**GENERAL FORM, and it covers defaults, fallbacks, timeouts, thresholds and
+retry counts:** ask what each direction of being wrong COSTS before asking which
+value is most likely right. The asymmetry is usually large and usually
+one-sided, and it decides the question outright where likelihood does not. The
+reason it is worth a rule rather than being obvious is that the accuracy framing
+is the one that comes to mind first, and it is unanswerable, so the question
+sits open and gets settled by whoever is least tired.
+
+**Why the red direction is the expensive one here, stated so it transfers:** a
+guard that cries wolf teaches people to ignore it, and that cost is paid by
+every future run and every other row in the same job. Capacity wasted by an
+over-estimate is paid once, by nobody's attention. This is the same economics as
+the CLAUDE.md finding that a self-check **born red for everyone except its
+author** does its damage by teaching that it can be ignored — one level up, at
+design time instead of at review time.
+
+**What would retire this section:** a case where the two directions really are
+symmetric in cost. Then the accuracy question is the whole question and picking
+the likeliest value is right. Say so explicitly rather than assuming it — the
+instance above looked symmetric until the consequences were written out side by
+side, which took one table.
+
+Companion to "THE EXPECTED VALUE MUST DIFFER FROM WHAT THE BUG EMITS" and to
+CLAUDE.md's defaults list: those are about a default **colliding with** a value
+you are asserting, so a guard cannot fail. This one is about **choosing** the
+default in the first place, and it applies where nothing is being asserted at
+all.
