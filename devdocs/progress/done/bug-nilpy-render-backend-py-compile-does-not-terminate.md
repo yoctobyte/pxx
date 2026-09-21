@@ -383,4 +383,4 @@ to attribute. The `mimic_reportlab_pdfbase_pdfmetrics` shim note in the output
 above is consistent with it and is not evidence for it.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 45b413bab.
