@@ -3,7 +3,7 @@ summary: "songformatter as a pxx compile target (nilpy) — GUI editor + live pr
 type: feature
 track: E
 prio: 68
-blocked-by: []
+blocked-by: [bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-when-called-back-from-the-pascal-side]
 ---
 
 # songformatter as a pxx compile target (GUI editor + live preview)
@@ -745,3 +745,43 @@ and nothing detects it.
 measurement. The honest next step is **one build, reported as whatever
 happens** — the two prior verdicts on this app were both wrong, in opposite
 directions, within two days.
+
+## MEASURED 2026-09-21 (frankb-8e) — first attempt since the render_backend blocker closed
+
+Pin v414, binary sha256 `aeadb1754b80`, repo `~/songformatter` at `12cf40e`.
+**Five modules, named individually because our docs have confused them three
+times in two days.** Whole compiler output read, not `tail`ed.
+
+| program | build | time | runs? |
+| --- | --- | --- | --- |
+| `key_analysis.py` | **OK** 1.86 MB | 3.3 s | rc=0, no output (no `__main__`) |
+| `settings.py` | **OK** 1.68 MB, 2 warnings | 3.2 s | **SIGSEGV, 3/3** |
+| `render_backend.py` | **OK** 2.70 MB, 11 warnings | 8.2 s | rc=0, no output |
+| `convertrawtext.py` | **FAILS** | 15.3 s | — |
+| `SongFormatter.py` | **FAILS** | 16.2 s | — |
+
+**Three of five build. The two failures are ONE wall, not two:**
+`SongFormatter.py`'s error names `in: convertrawtext.py`, so both stop at
+
+    convertrawtext.py:476: error: no member Draw came of the qualifier
+    ImageDraw -- an import that bound nothing gives exactly this
+
+**PIL is partly bound, which the four-missing-libraries summary does not
+predict.** `Image.new` compiles; `ImageDraw.Draw` does not. Four-line repro:
+`from PIL import Image, ImageDraw` then `Image.new('RGB',(4,4),(255,255,255))`
+builds `ok`, and adding `ImageDraw.Draw(mask)` is the error above. An unresolved
+member on a *receiver* becomes a run-time dispatch warning; on a *qualifier* it
+is a hard error.
+
+**`markdown` and `tkhtmlview` did NOT wall**, though `SongFormatter.py` imports
+them at lines 8-9, before `convertrawtext` at line 11. That is **not** evidence
+they work — nothing forced their use before the compile died, and the expected
+next walls are still ahead.
+
+**The one CRASH is `settings.py`** and it is filed:
+`bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-when-called-back-from-the-pascal-side`.
+A Python subclass of an RTL Pascal class overriding a `virtual` method faults on
+the callback. CPython runs the same file clean.
+
+**Not attempted:** running the GUI. `SongFormatter.py` does not build, and its
+Tk/`markdown`/`tkhtmlview`/`fitz` surface is untested by any of the above.

@@ -2,7 +2,7 @@
 summary: "songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28"
 type: bug
 track: N
-blocked-by: [feature-b-tkhtmlview-in-nilpy]
+blocked-by: []
 prio: 60
 status: backlog
 ---
@@ -195,3 +195,20 @@ carry at least one `blocked-by` naming a closed ticket, five of them fully unblo
 **Track N is NOT being dispatched** (owner deprioritized it and reserved the call, 2026-08-27).
 This ticket is rankable again and correctly filed, but do not auto-claim it on a cold-start
 "take the global top" — ask the owner first.
+
+## 2026-09-21 (frankb-8e) — BLOCKER WAS ALREADY SATISFIED, EDGE CLEARED
+
+`blocked-by: [feature-b-tkhtmlview-in-nilpy]` was carried while that feature sits
+in `done/`. Cleared here. This is the second integration ticket today found
+unrankable on a satisfied-but-uncleared edge; an integration ticket's blockers
+are closed by seats in other lanes who never read it, so its edges go stale by
+construction and nothing detects it.
+
+**AND THIS TICKET'S OWN WALL MAY BE STALE — I could not tell, and say so rather
+than guessing.** Building `SongFormatter.py` at pin v414 today, the first error
+is neither of the two this ticket names: it is
+`convertrawtext.py:476 ... no member Draw came of the qualifier ImageDraw`.
+Either the `set_`/`get()` walls were fixed since 2026-08-09, or they sit
+*behind* the PIL one and the compile never reaches them. A first-failure report
+cannot separate those. Whoever takes this should re-verify the two named
+symptoms before working them.
