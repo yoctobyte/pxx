@@ -310,6 +310,34 @@ write is not expressible. **So nothing can currently allocate concurrently on
 bare, and the free list is safe by unreachability rather than by design.** It
 stops being safe the moment §1.1's enabler lands.
 
+**AND THE OBVIOUS REMEDY IS WORSE THAN THE HAZARD ON A SINGLE CORE — WHICH IS
+WHY THE REFUSAL ABOVE MUST STAY.** Found by frankh-c0, verified here. PXX's
+heap lock, where it exists at all, is a bare exchange spin with **no interrupt
+masking** (`builtinheap.pas:1613`, released by a plain store at `:1678`):
+
+    while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
+      tsIgnore := tsIgnore + 1;
+
+**The mechanism, stated rather than a prohibition, because a mechanism survives
+someone renaming the flags:** on a single core, a task takes that spin, an
+interrupt preempts it, the handler allocates and spins — and the only code that
+can release the lock is the task the handler is standing on, which cannot run
+until the handler returns. **Neither can make progress.** Unlocked corrupts a
+free list, which is survivable and debuggable; this hangs the chip with no
+output at all. So wiring riscv32/xtensa into the `PXX_TS_SOFTLOCK` list — which
+is exactly what the source invites, since `PXX_THREADSAFE` is all over
+`builtinheap.pas` and the refusal message reads like a TODO with instructions
+attached — makes things **strictly worse**, not partially better.
+
+**This is the operative half of the IDF sentence both of us first quoted for
+its other half.** The full line is *"we need to use portmux spinlocks here NOT
+RTOS MUTEXES"*, and `portENTER_CRITICAL_SAFE` **disables interrupts**. The IDF
+is not preferring a spinlock for speed; it is choosing the one primitive that
+closes precisely this hole, and `PXXHeapSpin` is the primitive it rejected. So
+the shape of any eventual ESP heap lock is already determined by the platform,
+and it is not the shape the existing ifdefs would give you: it must mask
+interrupts in the acquire.
+
 **Which makes this the second thing that enabler must carry**, beside §1.7's
 stack story: installing raw ISRs on bare makes reachable an unlocked allocator
 that has never needed a lock. Both are recorded in that ticket.
