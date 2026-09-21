@@ -2,7 +2,7 @@
 type: bug
 track: N
 prio: 70
-status: working
+status: done
 slug: bug-n-an-attribute-on-a-scalar-returned-by-a-call-segfaults
 owner: frankh-c0
 ---
@@ -174,3 +174,6 @@ was raised — a wrong route could raise with the wrong receiver name, and a bar
   written with different beliefs about the same population. Carried to its own
   ticket rather than folded in, because it is a `compiler/builtin/**` change and
   wants its own verification.
+
+## Log
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
