@@ -34008,3 +34008,38 @@ thing it cannot establish. The wording now says so.
 `converged after N round(s)` recomputed; `verified` is the stamp path and
 rebuilt nothing. Do not let a timestamp talk you into distrusting a fix you have
 already measured.
+## A TRAILING `&` BINDS THE WHOLE `&&` LIST, SO "PUSH THEN MEASURE" SILENTLY BECOMES "PUSH WHILE MEASURING"
+
+Measured 2026-09-21 (frankH), and the reason it earns a section is that it
+defeats a rule this tree already has, through shell precedence rather than
+through anyone deciding to ignore it.
+
+CLAUDE.md's ordering is **PUSH -> LET THE PULL SETTLE -> REBUILD -> MEASURE**,
+because `tools/sync.sh` pulls before it pushes and a sync during a sweep moves
+the population under your own harness. The sequence I wrote was exactly that:
+
+    tools/sync.sh | tail -5 && echo "=== confirming ===" && ( <measurement> ) & echo started
+
+**`&` terminates the entire AND-list, not the subshell in front of it.** So
+that line backgrounds `sync.sh`, the echo AND the measurement as one job. The
+push and the measurement then run CONCURRENTLY, which is the precise collision
+the ordering rule exists to prevent — and the rebase landed while the build was
+reading the example directory.
+
+**The tell is what did NOT print.** `sync.sh`'s own output never appeared; the
+only thing on the terminal was the `echo started` after the `&`. A command
+whose FIRST stage produces no output when you expected some has usually not run
+where you think it ran. Do not read that as "it was quiet".
+
+**What it costs is not the run, it is the QUOTABILITY of the run.** The build
+completed and would very likely have printed the same verdict — no row in it is
+trustworthy on the strength of the rows around it, because nothing records WHEN
+the tree moved relative to each step. A contaminated measurement that happens to
+survive the question you ended up asking is indistinguishable from a clean one,
+so the only honest move is to re-run from a settled tree and quote THAT.
+
+**Discharge:** put the `&` on its own statement, or background with an explicit
+subshell around only the part you mean — `( <measurement> ) &` on its own line,
+after the sync has returned. And check that every stage of a chain you
+backgrounded actually produced its output.
+
