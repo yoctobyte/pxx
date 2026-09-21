@@ -35013,6 +35013,17 @@ and banked here because that seat does no pxx work. All the pin-straddle advice
 in this file assumes the contamination event is a **version bump**. This one has
 no version and nothing announces it.*
 
+**THE WORKED EXAMPLE BELOW WAS HISTORICAL WITHIN TEN MINUTES OF BEING WRITTEN,
+AND THAT IS PART OF THE ENTRY.** Pin v416 landed during the author's own `sync.sh`
+— which warned, in terms — and it carries `8cbec7eab`, so both files now agree
+and every number below is about **v415**. `frankb-8e` had warned this same author
+that afternoon to *write the shape beside the sha, because the example stops
+being a counterexample at the next pin*; it was applied to one entry and not to
+this one, hours apart. **The SHAPE, which does not decay:** *any commit that has
+landed on origin but is not yet in the pinned source commit is live in every
+sibling checkout's builtins and absent from the pin's.* Re-derive the instance;
+do not test these shas.
+
 pxx builtins are **compiled into user programs**. A pinned tree carries its own
 `builtin/` beside the binary and is self-consistent. **A live checkout's
 `compiler/builtin/*.pas` is whatever its owner last saved.** Measured on one box
@@ -35023,6 +35034,7 @@ at one moment:
 
     8cbec7eab  ancestor of origin/master            -> exit 0   (landed)
     8cbec7eab  ancestor of pin v415's source commit -> exit 1   (NOT in the pin)
+    8cbec7eab  ancestor of pin v416's source commit -> exit 0   (carried, 20:24Z -- the row above is now historical)
 
 `8cbec7eab` makes Python `<<`/`>>` **4.6–8.6x faster** and lives in
 `promocore.pas`. **So those two toolchains produce materially different programs
