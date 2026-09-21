@@ -33129,6 +33129,31 @@ on equality** rather than reporting it. The hash is drawn from the right
 population — it is the thing under comparison — and it is a guard that can fail,
 which is the property the row it protects does not have.
 
+**SECOND SUBSYSTEM, SAME DAY, SAME GUARD, ARRIVED AT FROM THE OPPOSITE
+DIRECTION — `frankb-8e`, 2026-09-21.** 7a's arms were the same artefact. 8e's
+were two *different* artefacts whose outputs agreed when they could not
+plausibly have: it had two size rows that would not reconcile, tried twice to
+isolate an older tree, and was contaminated both times — once by a `-Fu` at an
+archived `lib/rtl` that loaded **both** trees, and once by a pinned-versus-HEAD
+split that turned out to span **one day** rather than the intended window.
+
+**The instrument that produced that second contamination is worth its own line
+because it does not error and it is not stale:**
+`git log -1 -- stable_linux_amd64/default/pinned` answers **2026-07-27** —
+**correctly, about a SYMLINK.** The pin's own date comes from the DIRECTORY log.
+A path that resolves is not a path that answers your question.
+
+**8e's own account of what should have stopped it is the general check, and it
+generalises 7a's guard:** *"a two-month-old compiler producing byte-identical
+output is not plausible, and I read it as a RESULT instead of as an ALARM."*
+**So `sha256sum` both arms before reasoning from their AGREEMENT, not only
+before reasoning from their difference.** 7a's rule catches arms that are the
+same file; this catches arms that are different files behaving identically —
+**and implausible agreement is the earlier signal of the two**, because it fires
+before you have built anything on it. **Two arms that agree when they should not
+is a contaminated setup announcing itself, and it reads exactly like a clean
+negative result.**
+
 ## THE WRAPPER'S EXIT AND THE PIPELINE'S EXIT ARE ONE DEFECT AT TWO SCALES, AND ONLY ONE OF THEM HAS A NAME
 
 *`frankb-8e` found the unnamed scale, `franks-5b` supplied the framing and the
