@@ -15619,7 +15619,7 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-21T10:18:52Z",
+  "date": "2026-09-21T20:54:55Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
    "test-core#src:test/c_crtl_wait.c",
@@ -15627,9 +15627,9 @@
    "demos#00",
    "test-pascal-conformance#shard3/6"
   ],
-  "sha": "0176aa3cebf24ef991502072a56ac33ff7d9b4b6",
+  "sha": "4f33700019d0090abf18aa5a8fab61478d848649",
   "tier": "full",
-  "ver": "v415",
+  "ver": "v416",
   "verdict": "RED",
   "why": {
    "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
