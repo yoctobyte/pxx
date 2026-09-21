@@ -142,8 +142,31 @@ more, and a reader routed by the old wording goes to the wrong place.**
 **The owner picked `roofs`** (`lekkerzeilen@5ebcee2`), answering in one word a
 fork put to him as *small world or the 14 G `rijn` corridor*.
 
-**7a then took the SHIPPING decision itself, and was right to** — a worked
-application of the reversibility test in both directions inside one commit:
+**THE SHIPPING DECISION WAS `frankuser`'s, NOT 7a's** — corrected here after
+this page got it wrong. 7a **recognised a possible intent fork, declined to
+settle it, wrote a recommendation with its reasoning, and explicitly did not
+act**: *"Recorded in the document so it can be overridden cheaply; I have not
+acted on it."* `frankuser` replied *"proceed with the release artefact, I am
+not spending his turn on it"*, and reported it to the owner as its own decision
+with a cheap veto. **7a built it because it was told to.**
+
+**Why the attribution is not bookkeeping: if the owner overturns this, he is
+overturning `frankuser`.** An owner reading *"7a decided"* takes the objection
+to a seat that will correctly say it did not decide.
+
+**7a's virtue here is real and is a DIFFERENT one from the one this page first
+credited it with.** Not *a big reversible change does not need him* — that was
+`frankuser`'s reasoning. 7a's rule is **"if you cannot tell whether it is yours,
+recommend and hold."**
+
+> **⚠ AND THIS PAGE REACHED THE WRONG ANSWER BY READING THE COMMITS FIRST-HAND,
+> WHICH WAS THE RIGHT INSTINCT.** The commit says the shipping choice was
+> *"taken here rather than spent on the owner's turn"* — ambiguous between
+> *by this seat* and *within this fleet*, and authorship pushed the reading to
+> the first. **A commit says where a seat WAS; it does not say who DECIDED.**
+> The discriminator was in the message thread, not in the tree.
+
+The reasoning `frankuser` decided on:
 
 - **Fetch-at-run-time is out on a stated goal**, not on taste: `docs/index.md:22`
   sells the project against a server in the run path.
@@ -152,8 +175,8 @@ application of the reversibility test in both directions inside one commit:
   1.5 GiB for packages/LFS/attachments — so tracking would spend **a fifth of
   the git quota on the first commit and 154 MB permanently per rebuild**. A wall
   roughly four iterations out.
-- **A release artefact is the reversible one**, so 7a built it rather than
-  spending the owner's turn: *"a big reversible change does not need him."*
+- **A release artefact is the reversible one**, so it did not need the owner's
+  turn — `frankuser`'s call, acted on and reported.
 
 | artefact | size | from |
 | --- | --- | --- |
@@ -191,8 +214,36 @@ matrix and not tracked in any repository.**
 
 **So "songformatter works" and "songformatter does not compile" are two correct
 answers about two different programs that share a name.** The key-analysis
-*library* survives pxx; songformatter *as a product* does not have a pxx story.
-**Always say which one.**
+*library* survives pxx. **Always say which one.**
+
+> **⚠ AND THE PRODUCT'S VERDICT IS A REGRESSION, NOT AN ABSENCE — FROM THE
+> OWNER, 2026-09-21:** *"odd, songformatter was one of the first python programs
+> we tried. we hacked some pdf rendering to mimic reportlab, so that's a
+> regression."*
+>
+> **This page said songformatter "does not have a pxx story", resting on "no pxx
+> shims exist" for `markdown`/`tkhtmlview`/`PIL`/`fitz`. That is true of the
+> tree today and FALSE about the project.** A reportlab-mimicking PDF path was
+> built early and something lost it. **The loss point is unknown.**
+>
+> **The correction matters because it changes the size of the job by an order of
+> magnitude.** *Four shims that never existed* is a project; *a shim that once
+> worked and no longer does* is **a bisect with a window**, and it is cheap. A
+> seat reading the old row would price it wrong and probably never start.
+> **Whoever takes it should look for what REMOVED the reportlab mimic, not for
+> what was never written.**
+>
+> **NOT A DISPATCH.** The owner deprioritised it in the same breath — *"however,
+> for this moment, not important"* — and it must not displace the v414
+> re-measure below, which remains the cheapest open question on this page.
+
+**And note how this page got it wrong: a correct, first-hand reading of the code
+produced a false claim about the project.** The tree recorded the current state
+accurately and held **no memory of the earlier one**. Nobody on this fleet could
+have caught it — **only the owner holds it.** That is the cheap half of asking
+him, and it is worth separating from the expensive half: **he decides
+expensively; asking what HAPPENED costs him one line and is unrecoverable
+otherwise.**
 
 **And the failing measurement is 22 days old, on a compiler three pins back.**
 `bug-nilpy-render-backend-py-compile-does-not-terminate` (p55, `unfinished`) was
