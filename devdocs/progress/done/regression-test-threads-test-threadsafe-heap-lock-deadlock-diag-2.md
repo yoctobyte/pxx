@@ -295,4 +295,4 @@ here: sigaltstack is per-thread and only the installing thread registers one, so
 a handler taken on a `clone(2)` thread runs on that thread's own stack, passes
 the bounds check, and is still granted. This test installs on main, which is what
 the fix restores.
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 650193741.
