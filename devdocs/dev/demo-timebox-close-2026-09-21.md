@@ -410,7 +410,32 @@ advisory-only and touches no verdict (`frankb-8e`).
 
 **The lesson for tomorrow's release work:** a comment-only commit is exactly the
 change nobody expects to move an instrument, which is why this one cost a
-fleet-wide rebuild before anyone said it out loud. **If a hint names an artefact,
+fleet-wide rebuild before anyone said it out loud.
+
+### And a second one, caught by an hour of implementation rather than by review
+
+A row in the ESP hardening map said `test_esp_bare.pas` contains zero
+`try`/`except`, **therefore the bare exception path is never exercised.** The
+first half is true of that file. The second half is false: `test-esp-bare:`
+boots **14 distinct fixtures** on both chips, `test_esp_exception.pas` among
+them, diffed byte-for-byte against an x86-64 oracle. Retracted at `f9bd81610`.
+
+**The claim travelled through three parties and none of them measured it** —
+author, relay, and this page's author, who endorsed the *inference* without
+checking the *premise*, after which the endorsement was relayed onward as
+corroboration. **Two confirmations of one grep of one file.**
+
+**Two things make it worth a line on a release-eve page.** First, the trap is
+sharpest where it is least visible: **the file checked is the one the tier is
+named after**, so checking it *feels* like checking the tier. Second, the author
+had banked two findings that same afternoon about instruments being correct
+about the wrong thing — **knowing the class did not prevent it; being told to
+implement the row did.** Had the row been filed and left, it would have shipped.
+
+**The residue is real and far smaller:** nothing establishes which exception
+*shapes* the bare tier covers — nested, re-raise, finally-through-frames.
+**14 is a count of files, not of shapes**, and the correction deliberately did
+not convert one into the other. **If a hint names an artefact,
 check what it actually compared before you act on it** — here, `sha256sum` of the
 binary against the previous one answers in one command and the hint does not.
 
