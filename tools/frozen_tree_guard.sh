@@ -34,6 +34,31 @@
 #   compiler sha  -- a rebuild. compiler/pascal26 is UNTRACKED, so no git-level
 #                    check sees it move; it has to be hashed by name.
 #
+# WHAT IT DOES NOT COVER, AND THE ONLY WAY IT CAN MISLEAD YOU: ALL THREE
+# FINGERPRINTS ARE PROPERTIES OF THE **LOCAL TREE**. A measurement whose
+# population is a REMOTE REF is not guarded by this at all. `git log
+# origin/master -1500` is a different 1500 commits after any peer pushes and
+# anything fetches -- and **local HEAD need not move for that to happen**, so
+# this script passes, honestly, while the thing being measured has shifted
+# underneath. Correct instrument, wrong population: the failure this repo names
+# most often, arriving in the tool written to prevent it.
+#
+# THAT IS WORSE THAN NO GUARD, because a guard that passes gets read as
+# attestation for whatever it happened to be running alongside. Caught
+# 2026-09-22 by frankuser, one message before a seat armed it around a census
+# over `origin/master` and would have reported the green as coverage.
+#
+# FOR A REF-POPULATION MEASUREMENT THE REMEDY IS CHEAPER THAN A GUARD: **PIN
+# THE REF.** Resolve `origin/master` to a sha ONCE, record it, and run every
+# query against that sha rather than the branch name. The window is then fixed
+# by construction, nothing needs arming, and the number is re-derivable by
+# anyone later -- which a moving-ref count never is. Put the sha beside the
+# result the way a population line goes beside the rows.
+#
+# Arm this as well when such a census also reads WORKING-TREE files -- ticket
+# bodies, tstate/ contents, anything on disk. For a pure log/ref query it buys
+# nothing.
+#
 # USAGE
 #   tools/frozen_tree_guard.sh start <tag>     # before the first job
 #   tools/frozen_tree_guard.sh check <tag>     # after the last one; exit 1 if moved
