@@ -624,3 +624,67 @@ defines are in the tree, so this is re-derivable in two builds.
 than quoted — one to a contended box, one to a peer's undisclosed tier, one to
 an arm-separation bug of a peer's. A number goes in this file when it is taken
 on a clear box, with its population, its tree and its load beside it.
+
+---
+
+# MEASURED ON THE REAL PROGRAM: 12.4% — and why that does NOT settle the question
+
+**Predicted 7–9% before measuring** (`scratchpad/PREREG-fix.txt`, written before
+the fix existed, on the strength of a 9.0% ceiling probe). **Measured 12.4%.**
+The prediction was wrong and wrong in the direction the owner named.
+
+**Population, tree and oracle:**
+
+| | |
+|---|---|
+| source | `/home/neo/lekkerzeilen/lekkerzeilen/__main__.py`, demo tree `25e188f` |
+| population | package is **39** `.py`; the compiler reaches **36**; the 3 it does not are the `ctypes` arm it is designed never to enter; the repo is 192 files. **A file count is not a closure** |
+| pxx tree | `bb6c6c6d4`; arms `7e5bea1ba120` (parent) and `5df859ab180a` (`ffe476877`) |
+| CWD | the pxx repo root — builtin resolution is CWD-relative and a sibling checkout substitutes SILENTLY |
+| precondition | primary `[RTL]` root asserted resolving on BOTH arms, **branched on**, before the first leg |
+| estimator | interleaved min-of-N, `load1` recorded per row |
+
+    r1  base 110.15  fix 96.53   -12.4%   load1 5.28 / 6.78
+    r2  base 108.80  fix 93.53   -14.0%   load1 7.62 / 6.70
+    r3  base 105.63  fix 92.54   -12.4%   load1 5.76 / 6.23
+
+    min-of-2 (certainly clean)         108.80 -> 93.53   -14.0%
+    min-of-3 (r3 may touch the pin)    105.63 -> 92.54   -12.4%
+
+**12.4% is the quoted figure** — the conservative reading, surviving if r3
+overlapped the pin window that pre-empted the run. Every round byte-identical,
+`procs=11594`, rc=0 throughout. **The fix arm carried HIGHER load than base in
+r1 and r3**, so the bias runs against the result.
+
+**Interleaving was necessary, not fussy.** 7a measured lekkerzeilen at 137.8 s
+and 126.4 s an hour apart on the same compiler and source — **~9% run-to-run**,
+which is most of this effect. Arms alternating within minutes is what makes a
+12% delta legible at all; two passes an hour apart could not have found it.
+
+## What this does NOT establish, which is the part to read
+
+**The 9.0% ceiling was for the WALK ALONE. This arm carries BOTH fixes.** So
+"12.4% exceeds 9.0%" shows that two fixes beat one fix. **It is NOT evidence
+that the walk's cost scales with closure size**, which is the owner's actual
+challenge and the interesting question.
+
+The tempting inference — *the synthetic was unrepresentative, his instinct was
+right* — may well be true and **is not shown here**. It is also precisely the
+inference this measurement's author wants to make, the number having moved the
+way he hoped. **A delta gets attributed before it gets quoted**, and this one is
+not attributable until a walk-only arm separates the two causes.
+
+**What would settle it:** a third arm carrying the enclosing table WITHOUT
+`TokenCaseEqual`, same harness. That decomposes 12.4% into its two parts and
+answers the closure-scaling question directly.
+
+## The reach nobody has measured
+
+`CaseEqual(GetTokenStr(idx), nm)` occurs **177 times** across the compiler. The
+**62** in `pyparser.inc` are fixed. **62** more are in `pasparser_prog.inc`,
+**35** in `pasparser_generic.inc`, the rest scattered. Every one allocates a
+string in order to throw it away.
+
+**No claim is made about Pascal parse time — it has not been measured**, and
+this lane's scope is compiling Python faster. But a 62-site subset bought double
+digits here, and the Pascal frontend has never been pointed at.
