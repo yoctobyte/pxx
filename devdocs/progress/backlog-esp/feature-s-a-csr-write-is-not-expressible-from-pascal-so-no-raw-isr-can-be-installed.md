@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-21
 found-by: frankb-8e
 blocked-by: []
-summary: "A raw hardware ISR cannot be INSTALLED from PXX on either ESP ISA, so the `interrupt;` directive -- whose codegen is complete and verified correct on both -- has no reachable execution path and has never been entered by a trap on any instrument. The gap is one instruction class: writing `mtvec` (riscv32) or `vecbase` (xtensa). Measured 2026-09-21 at pin v414, all spellings: `csrw mtvec, t0` -> asm: unknown symbol mtvec; `csrw 0x305, t0` -> the asm operand lexer splits the hex literal into `0` and `x305`; `csrw 773, t0` -> parses as a mnemonic and reaches EmitAsmRv32, which has no encoding for it; `wsr a4, vecbase` -> same failure on xtensa. The tree's ONLY CSR write is rv32_csrw_mstatus (rv32enc.inc:161), hardwired to mstatus for the interrupt-disable the atomics use, so the capability exists at the encoder level and is not reachable from source. ir_codegen_riscv32.inc:1654 documents IR_PROCADDR's own purpose as `needed for raw ISR install (mtvec)` -- the handler's address is obtainable and not installable, i.e. the feature is complete at both ends and missing one instruction in the middle. THIS IS THE ROW THAT MOVES INTERRUPTS FROM UNTESTABLE TO QEMU-TESTABLE: it needs no board, and until it lands, any interrupt work that is not the esp_intr_alloc/`iram;` path cannot be verified by anyone, including the owner on silicon. A separate smaller bug falls out and is worth fixing regardless: the inline-asm operand lexer does not accept hex literals."
+summary: "A raw hardware ISR cannot be INSTALLED from PXX on either ESP ISA, so the `interrupt;` directive -- whose codegen is complete and verified correct on both -- has no reachable execution path and has never been entered by a trap on any instrument. The gap is one instruction class: writing `mtvec` (riscv32) or `vecbase` (xtensa). Measured 2026-09-21 at pin v414, all spellings: `csrw mtvec, t0` -> asm: unknown symbol mtvec; `csrw 0x305, t0` -> the asm operand lexer splits the hex literal into `0` and `x305`; `csrw 773, t0` -> parses as a mnemonic and reaches EmitAsmRv32, which has no encoding for it; `wsr a4, vecbase` -> same failure on xtensa. The tree's ONLY CSR write is rv32_csrw_mstatus (rv32enc.inc:161), hardwired to mstatus for the interrupt-disable the atomics use, so the capability exists at the encoder level and is not reachable from source. ir_codegen_riscv32.inc:1654 documents IR_PROCADDR's own purpose as `needed for raw ISR install (mtvec)` -- the handler's address is obtainable and not installable, i.e. the feature is complete at both ends and missing one instruction in the middle. THIS IS THE ROW THAT MOVES INTERRUPTS FROM UNTESTABLE TO QEMU-TESTABLE: it needs no board, and until it lands, any interrupt work that is not the esp_intr_alloc/`iram;` path cannot be verified by anyone, including the owner on silicon. A separate smaller bug falls out and is worth fixing regardless: the inline-asm operand lexer does not accept hex literals. AND THE INSTALL IS NOT THE WHOLE JOB -- ADDED 2026-09-21 AFTER MEASURING THE TRAMPOLINE: a raw vector entry bypasses rtos_int_enter, which is what installs EVERY ISR facility the IDF provides -- both the nesting counter xPortInIsrContext reads and the SP switch to a dedicated ISR stack (portasm.S:643-645). So a raw handler runs on the interrupted TASK's stack (3584 bytes by IDF default, per defs.inc:2322) while pushing 64 bytes of prologue on riscv or 48 on xtensa, and reports xPortInIsrContext = 0 so the obvious safety check says all-clear. PXX has NO runtime stack guard on ESP on either profile (measured); the only protection is the build-time CheckBareImageFitsSram. LANDING THE CSR WRITE ALONE THEREFORE SHIPS A LOADED GUN -- it makes installable a handler that is unprotected by everything the platform does for ISRs, and the failure mode is a plausible wrong value far from its cause with the diagnostic reporting green. The stack story belongs in this ticket, not after it. Not escalated as a Track U fork because an existing goal already decides it: --esp-profile=bare exists deliberately and is a self-contained no-IDF image, so bare-metal raw ISRs are wanted, and what follows is engineering."
 ---
 
 # No CSR/special-register write is expressible, so no raw ISR can be installed
@@ -58,6 +58,25 @@ asserts the handler ran is this instruction. It never becomes a board question.
    the intended scope before building a fixture that traps synchronously —
    otherwise the first test written against this will hang, correctly, and read
    as a defect in the new code.
+
+## The install is not the whole job — added 2026-09-21
+
+See `devdocs/dev/esp32-hardening-map.md` §1.7. `rtos_int_enter` is what gives an
+IDF-dispatched handler its safety properties, and a raw vector entry never
+reaches it:
+
+    portasm.S:598-605   port_uxInterruptNesting[coreID] += 1    { xPortInIsrContext reads this }
+    portasm.S:643-645   lw sp, (xIsrStackTop[coreID])           { SP -> dedicated ISR stack }
+
+A raw handler therefore runs on the interrupted task's stack and reports
+itself as not-in-an-ISR. **Do not land the CSR write on its own.** Whatever
+prologue an installed raw handler gets has to establish its own stack, or the
+feature's first real use is a silent overflow into whatever is below that
+task's stack.
+
+**Suggested acceptance, so this cannot be forgotten at review:** the fixture
+that first installs a vector must also assert the handler ran on a stack
+OUTSIDE the interrupted task's stack bounds — not merely that it ran.
 
 ## Related
 
