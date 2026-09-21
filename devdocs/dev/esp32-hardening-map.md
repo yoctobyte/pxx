@@ -276,6 +276,44 @@ inside an ISR actually costs on this hardware. c0's numbers are evidence about
 WHERE allocation happens, never about what it costs in interrupt context, and
 they should not be cited as the latter.
 
+### The bare half, RESOLVED 2026-09-21 — and it restores the corruption argument, on bare only
+
+frankh-c0 flagged a lead (`builtinheap.pas:1050-1059`: the hard lock is emitted
+by CODEGEN around the `tkGetMem`/`tkFreeMem` sites and `PXXAlloc` does not take
+it) and correctly filed it as a lead. **It holds, and it is stronger than it
+was framed — on ESP there is no lock model AT ALL:**
+
+    frontend_prologue.inc:127  EmitHeapLockSlowStub  <- ThreadSafeMode AND TARGET_X86_64
+    paslexer.inc:1226          PXX_TS_SOFTLOCK       <- i386 / aarch64 / arm32
+    paslexer.inc:1242          PXX_TS_HARDLOCK       <- x86-64
+
+**riscv32 and xtensa appear in neither list.** So `PXXAlloc` on ESP takes no
+lock under any flag combination — and the flag is not silently ignored, it is
+**refused**, which is the compiler being honest and must not be "fixed":
+
+    $ pascal26 --threadsafe --target=riscv32 --esp-profile=bare t.pas t
+    --threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks
+    are not implemented on this target yet
+
+**So the profile split is now fully resolved, and the two halves differ
+completely:**
+
+| profile | PXXAlloc backs onto | ISR-safe? |
+| --- | --- | --- |
+| **IDF** | `calloc`/`free` → heap_caps (`builtinheap.pas:1383-1400`) | **YES**, by the IDF's deliberate design |
+| **BARE** | the `EspArena` free list, **no lock, none available** | **NO** |
+
+**THE HAZARD IS LATENT, NOT LIVE, AND IT ARMS ON A KNOWN EVENT.** On bare there
+is no FreeRTOS, so the only possible concurrency is an interrupt — and §1.1
+says no interrupt handler can be installed on bare today, because the vector
+write is not expressible. **So nothing can currently allocate concurrently on
+bare, and the free list is safe by unreachability rather than by design.** It
+stops being safe the moment §1.1's enabler lands.
+
+**Which makes this the second thing that enabler must carry**, beside §1.7's
+stack story: installing raw ISRs on bare makes reachable an unlocked allocator
+that has never needed a lock. Both are recorded in that ticket.
+
 **WHAT WOULD MOVE IT:** a per-call allocation census on-target. Note the
 obvious instrument is the wrong one — free-heap delta is a NET measure, so an
 alloc/free pair nets to zero and it can show a flat line while `malloc` is
