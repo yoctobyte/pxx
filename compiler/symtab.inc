@@ -1960,7 +1960,8 @@ begin
   PxxFUCIters := PxxFUCIters + UClsCount;   { one full scan; there are several }
   if (PxxFUCCalls mod 20000) = 0 then
     WriteLn('UCLS calls=', PxxFUCCalls, ' UClsCount=', UClsCount,
-            ' scanned>=', PxxFUCIters, ' realsteps=', PxxFUCReal);
+            ' scanned>=', PxxFUCIters, ' realsteps=', PxxFUCReal,
+            ' pool=', TokCharLen, ' toks=', TokCount);
 {$ENDIF}
   Result := -1;
   bestRank := -2;
