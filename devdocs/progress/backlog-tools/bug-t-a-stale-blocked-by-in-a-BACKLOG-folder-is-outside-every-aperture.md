@@ -166,3 +166,52 @@ umbrella` ticket with a closed member, asserted **not** reported. **When you
 land it, edit this ticket's `summary:` in the same commit**, because a row that
 names its own retirement condition is the one nobody re-reads once the condition
 is met (banked `2f39aee23`).
+
+## THE EXCLUSION IS ITSELF A GUARD THAT CAN FAIL SILENTLY, AND IT FAILS GREEN
+
+*`frankb-8e`, 2026-09-21, extending the re-census above past the point it
+reached.*
+
+The census argues the umbrella exclusion must be **structural** — derived from
+`type: umbrella` — rather than a tuned tolerance, because a tolerance
+calibrated against 44 is wrong within weeks. That is right and it introduces a
+new failure the check did not previously have.
+
+**Once the check excludes a class, the exclusion can silently widen to
+everything, and the check then prints PASS forever.** A broken `type:` read, a
+renamed field, a folder that stops being walked, a resolution map built before
+a rename — every one of those makes the check **green**, and green is exactly
+what a working stale-edge check looks like on a clean tree. There is no
+observable difference between *no stale edges exist* and *the walk found
+nothing*.
+
+**So the fixture needs BOTH controls and neither is optional:**
+
+| control | asserted | catches |
+| --- | --- | --- |
+| an umbrella ticket with a closed member | **IGNORED** | the exclusion inverting or being dropped |
+| a non-umbrella ticket with a closed blocker | **FOUND** | the walk, the resolver, or the aperture silently emptying |
+
+Without the second, `PASS` is unfalsifiable. Without the first, the check
+becomes the thing it was built to avoid — 44 findings that are the system
+working, on its first outside run.
+
+This is the re-census's own cry-wolf argument pointed one level in: **the
+exclusion exists to stop the check being ignored, and it thereby becomes the
+part most likely to fail undetected.**
+
+## WHY THE 2026-08-28 REMEDY MADE IT QUIETER RATHER THAN BETTER
+
+*`frankb-8e`'s framing, sharper than the paragraph above it and kept in its own
+words.*
+
+**The predecessor's remedy and its defect were in different categories.**
+*"Promoted to `backlog/`"* is a fix for **visibility**. The defect was the
+**correctness of a machine-read field**. Moving the tickets made the stale rows
+reachable by the ranker **without making them true** — so the ranker then read
+a wrong `blocked-by` *more reliably than before*.
+
+The symptom was treated so effectively that the cause got quieter. That is the
+shape to look for when a remedy and a defect do not name the same thing: not
+"the fix did not work", but "the fix worked, on a different property, and
+removed the pressure that would have found the real one."
