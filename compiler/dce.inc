@@ -478,17 +478,40 @@ procedure DceReachReport;
   own call to PXXStrAppend IS a CallFix entry, but its site is in unowned code
   and therefore a ROOT. Both halves of the path exist and the join does not.
 
-  THE FIX, for whoever takes it: the walk needs stub regions as pseudo-nodes --
-  an id per CodeRef target (DceAddStubTarget already collects them), an edge
-  from the owning body to that id, and edges from the id to the CallFix targets
-  whose sites fall inside it. That is strictly more work than reading the two
-  existing tables and is why it is not in this commit. Until it exists, a
-  reachable set here is about DIRECT calls between PROC BODIES and says nothing
-  about the runtime stubs, which is where allocation actually lives. }
-var root, p, q, a, b, i, n, seen: Integer;
+  CLOSED, in the over-approximating direction, by modelling unowned code as ONE
+  node (see the block in the body). Not one node per stub: DceStubTgt holds
+  entry offsets and no extents, and inventing extents would be a guess inside a
+  reachability answer. Merging them can produce a false YES and never a false
+  NO, which is the direction a safety question wants, and those rows are
+  printed as [via unowned code] so a reader can see which half of an answer is
+  the approximation.
+
+  MEASURED, frankb-8e's five-body table, reproduced here with the build
+  asserted (its first run printed four clean zeros that were four BUILD
+  FAILURES -- this failure mode renders as the answer you are looking for):
+
+      body          before          after
+      PlainOnly     1    no         1    no      <- must NOT move, and does not
+      UsesNew       8    YES        8    YES
+      UsesSetLen   25    YES       25    YES
+      UsesCopy      2    no        53    YES     <- was wrong
+      UsesConcat    1    no        53    YES     <- was wrong
+
+  THE SHAPE 8e FOUND AND THE REASON IT IS NOT A GENERAL PROPERTY: object
+  creation and dynamic-array growth already recorded their edges; STRING
+  operations did not. So this was never "synthesised helper calls are
+  invisible" -- it was one lowering path whose call sites belong to no body.
+  PlainOnly staying at 1 is what shows the merge did not collapse into
+  everything-reaches-everything; it is the control that makes the other four
+  rows worth reading. }
+var root, p, q, a, b, i, n, seen, viaN: Integer;
     vis: array of Boolean;
+    viaStub: array of Boolean;   { reached only THROUGH unowned code }
+    hasStubEdge: array of Boolean;
+    unowned: array of Integer;
     work: array of Integer;
-    wc: Integer;
+    wc, unownedN: Integer;
+    pulledStub: Boolean;
 begin
   if DceReachFrom = '' then Exit;
   root := FindProc(DceReachFrom);
@@ -500,9 +523,46 @@ begin
     Exit;
   end;
   SetLength(vis, ProcCount + 1);
+  SetLength(viaStub, ProcCount + 1);
+  SetLength(hasStubEdge, ProcCount + 1);
   SetLength(work, ProcCount + 1);
+  SetLength(unowned, CallFixCount + 1);
   i := 0;
-  while i <= ProcCount do begin vis[i] := False; Inc(i); end;
+  while i <= ProcCount do
+  begin vis[i] := False; viaStub[i] := False; hasStubEdge[i] := False; Inc(i); end;
+
+  { THE UNOWNED-CODE NODE. A CodeRef names a code OFFSET, not a proc, so a call
+    into a runtime stub is not an edge in this graph -- and the stub's own calls
+    ARE CallFix entries whose sites belong to no body, so they are roots. Both
+    halves of the path exist and the join does not, which is why a body doing
+    `g := g + 'x'` reached nothing at all.
+
+    Modelled as ONE node rather than one per stub, because DceStubTgt holds
+    entry offsets and no extents, and inventing extents would be a guess inside
+    a reachability answer. Merging them OVER-approximates: a body that calls any
+    stub appears to reach everything any stub calls. That is the safe direction
+    for "can this reach the allocator" -- it can produce a false YES and never a
+    false NO -- and the rows it adds are marked, so a reader can see which part
+    of an answer is the approximation. }
+  unownedN := 0;
+  i := 0;
+  while i < CallFixCount do
+  begin
+    if (DceCallOwner[i] < 0) and (CallFix[i].ProcIdx >= 0)
+       and (CallFix[i].ProcIdx < ProcCount) then
+    begin
+      unowned[unownedN] := CallFix[i].ProcIdx;
+      Inc(unownedN);
+    end;
+    Inc(i);
+  end;
+  i := 0;
+  while i < CodeRefCount do
+  begin
+    q := DceOwnerOf(CodeRefPos[i]);
+    if (q >= 0) and (q < ProcCount) then hasStubEdge[q] := True;
+    Inc(i);
+  end;
   wc := 0;
   vis[root] := True;
   work[wc] := root; Inc(wc);
@@ -511,6 +571,7 @@ begin
                   ' (proc ', root, ') reach by DIRECT calls?');
   WriteLn(StdErr, 'dce-reach:   an indirect call is NOT an edge here, so absence is',
                   ' "no direct path", not "cannot reach"');
+  pulledStub := False;
   while wc > 0 do
   begin
     Dec(wc);
@@ -524,25 +585,54 @@ begin
       if (q >= 0) and (q < ProcCount) and not vis[q] then
       begin
         vis[q] := True;
+        viaStub[q] := viaStub[p];
         work[wc] := q; Inc(wc);
       end;
       Inc(i);
     end;
+    { ...and if this body calls into unowned code at all, it may reach whatever
+      unowned code calls. Marked, because it is the approximate half. }
+    if hasStubEdge[p] then
+    begin
+      pulledStub := True;
+      i := 0;
+      while i < unownedN do
+      begin
+        q := unowned[i];
+        if not vis[q] then
+        begin
+          vis[q] := True;
+          viaStub[q] := True;
+          work[wc] := q; Inc(wc);
+        end;
+        Inc(i);
+      end;
+    end;
   end;
-  n := 0;
+  n := 0; viaN := 0;
   i := 0;
   while i < ProcCount do
   begin
     if vis[i] and (i <> root) then
     begin
       Inc(n);
-      WriteLn(StdErr, 'dce-reach:   ', Procs[i].Name);
+      if viaStub[i] then
+      begin
+        Inc(viaN);
+        WriteLn(StdErr, 'dce-reach:   ', Procs[i].Name, '   [via unowned code]');
+      end
+      else
+        WriteLn(StdErr, 'dce-reach:   ', Procs[i].Name);
     end;
     Inc(i);
   end;
   seen := n;
   WriteLn(StdErr, 'dce-reach: ', seen, ' bodies reachable from ', DceReachFrom,
-                  ' by direct calls');
+                  ' (', seen - viaN, ' by direct calls, ', viaN,
+                  ' only via unowned code)');
+  if pulledStub then
+    WriteLn(StdErr, 'dce-reach:   NOTE the [via unowned code] rows are an',
+                    ' OVER-approximation: all stubs are one node');
 end;
 
 procedure DceRun;

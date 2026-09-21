@@ -596,3 +596,62 @@ results differ by root set rather than contradicting, and both are carried),
 and now the forward form's stub-hop gap. **Neither refutation cost more than
 twenty minutes, and both were found by running a control the design did not
 call for.**
+
+## THE STUB GAP IS CLOSED, AND THE POLARITY IS NOW RIGHT (2026-09-21)
+
+`--dce-reach-from` now models unowned code as ONE node, so a body that calls a
+runtime stub may reach whatever unowned code calls. **The allocating body no
+longer reads clean.**
+
+    --dce-reach-from=Leaf   before:  0 bodies
+                            after:   38 bodies (0 direct, 38 via unowned code)
+                                     including PXXAlloc   [via unowned code]
+
+**frankb-8e's five-body table, which is the acceptance test**, reproduced here
+independently with the build asserted first:
+
+    body          before          after
+    PlainOnly     1    no         1    no      <- must NOT move, and does not
+    UsesNew       8    YES        8    YES
+    UsesSetLen   25    YES       25    YES
+    UsesCopy      2    no        53    YES     <- was wrong
+    UsesConcat    1    no        53    YES     <- was wrong
+
+**`PlainOnly` staying at 1 is the control that makes the other rows worth
+reading** — it shows the merge did not collapse into
+everything-reaches-everything. Without it, "all five now say YES" would be
+indistinguishable from a guard that cannot pass.
+
+### 8e's shape, which is why this was fixable at all
+
+**Object creation and dynamic-array growth already recorded their edges; STRING
+operations did not.** So the gap was never "synthesised helper calls are
+invisible to the graph" — it was one lowering path whose call sites belong to
+no body. My own statement of it ("the concat is emitted outside the body
+range") was too narrow and 8e's table refuted it: the same thing happens to
+`WriteLn` and does not happen to `SetLength`.
+
+8e also killed the alternative reading before reporting: if the concat were
+lowered inline with no call at all, "no edge" would be CORRECT and the
+liveness would come from elsewhere. `--dce-why=PXXStrAppend` answers
+`PXXStrAppendAsciiBits <- PXXStrAppend <- [called from unowned code]`, so there
+IS a call site and it is attributed to no body. A lost edge, not an absent
+call.
+
+### What the approximation costs, stated rather than buried
+
+All stubs are one node, because `DceStubTgt` holds entry offsets and no
+extents, and inventing extents would be a guess inside a reachability answer.
+So a body calling any stub appears to reach everything any stub calls: a false
+YES is possible, a false NO is not. **That is the direction a safety question
+wants**, and those rows print as `[via unowned code]` so the approximate half
+of an answer is visible at the point of use rather than in a ticket.
+
+The string rows going 2 -> 53 and 1 -> 53 is that cost, in the open.
+
+### Still open for the guard
+
+The refusal half — 8e's corrected predicate, fire on **taking an address or
+installing a body in a dispatch slot**, not on "calls through a pointer" — is
+not built. Its positive control is named:
+`bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...`.
