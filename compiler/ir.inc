@@ -12162,11 +12162,15 @@ begin
         (symtab.inc; the region is defs.inc's ESP_BARE_ISR_STACK_*). So the
         address is permitted exactly there and nowhere else.
 
-        EVERYWHERE ELSE IT STILL REFUSES, and the two remaining populations
-        are refused for different reasons, which is why this is one condition
+        WIDENED TO BARE XTENSA 2026-09-22 ON THE SAME AXIS, not on the
+        strength of the install path existing. The xtensa `interrupt;`
+        prologue now performs the same switch (EXCSAVE_1 in place of
+        mscratch), so the hazard this refusal names is false there too. The
+        install being possible was never the test -- see the last paragraph.
+
+        EVERYWHERE ELSE IT STILL REFUSES, and the remaining population is
+        refused for a reason of its own, which is why this is one condition
         and not a blanket lift:
-          - xtensa: no `wsr vecbase` yet, and no ISR-stack switch either, so
-            both halves of the hazard stand.
           - ESP-IDF (either ISA): the handler would run under a port that
             owns mscratch and expects rtos_int_enter to have run. This is
             also the population the diagnostic's esp_intr_alloc paragraph is
@@ -12179,7 +12183,8 @@ begin
         ticket made about itself. }
       if (ASTIVal[node] >= 0) and (ASTIVal[node] < Length(ProcIsInterrupt)) and
          ProcIsInterrupt[ASTIVal[node]] and
-         not (EspBareBoot and (TargetArch = TARGET_RISCV32)) then
+         not (EspBareBoot and ((TargetArch = TARGET_RISCV32) or
+                               (TargetArch = TARGET_XTENSA))) then
         ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
               'cannot take the address of ' + Procs[ASTIVal[node]].Name +
               ', which is declared `interrupt;`: such a routine returns via a trap-return ' +

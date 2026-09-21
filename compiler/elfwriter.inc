@@ -1948,15 +1948,17 @@ procedure CheckBareImageFitsSram(loadBase, memsz: Int64);
 var top, need: Int64; msg: AnsiString;
 begin
   if not EspBareBoot then Exit;
-  { riscv32 carves the top ESP_BARE_ISR_STACK_SIZE bytes for the raw-ISR stack
-    (defs.inc), so the TASK stack no longer starts at ESP_BARE_STACK_TOP and
-    this check would otherwise credit the image with 1 KiB of headroom that
-    belongs to the handler. The check's promise is "the task stack still has
-    ESP_BARE_STACK_MIN below its top", so the top it measures from has to be
-    the one the entry stub actually loads into sp. xtensa has no ISR stack
-    yet and keeps the old top -- the two constants are equal there. }
-  if TargetArch = TARGET_RISCV32 then top := ESP_BARE_TASK_STACK_TOP
-  else top := ESP_BARE_STACK_TOP;
+  { Both bare ISAs carve the top ESP_BARE_ISR_STACK_SIZE bytes for the raw-ISR
+    stack (defs.inc), so the TASK stack does not start at ESP_BARE_STACK_TOP
+    and this check would otherwise credit the image with 1 KiB of headroom
+    that belongs to the handler. The check's promise is "the task stack still
+    has ESP_BARE_STACK_MIN below its top", so the top it measures from has to
+    be the one the entry stub actually loads into sp.
+
+    Deliberately NOT an arch fork, though it was one while riscv32 carved and
+    xtensa did not: one expression, so a third bare arch cannot inherit the
+    wrong top by omission. }
+  top := ESP_BARE_TASK_STACK_TOP;
   need := loadBase + memsz + ESP_BARE_STACK_MIN;
   if need <= top then Exit;
   msg := 'bare-metal image does not fit in SRAM: image+data+bss ends at 0x'

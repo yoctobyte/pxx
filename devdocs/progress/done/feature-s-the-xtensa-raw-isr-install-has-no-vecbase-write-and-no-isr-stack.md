@@ -3,53 +3,54 @@ slug: feature-s-the-xtensa-raw-isr-install-has-no-vecbase-write-and-no-isr-stack
 track: S
 type: feature
 prio: 60
-status: backlog
-owner: ""
+status: done
+owner: frankb-8e
 created: 2026-09-21
 found-by: frankb-8e
 blocked-by: []
 summary: >
-  PARTIALLY LANDED 2026-09-21: `wsr`/`rsr` WITH A NUMERIC SPECIAL REGISTER NOW
-  WORK, so VECBASE ($E7) and the EXCSAVE_n scratch file ($D1..$D7) are
-  reachable from Pascal for the first time; test_esp_bare_sr.pas round-trips
-  EXCSAVE_1 under qemu on esp32s3, byte-identical to the x86-64 oracle, and
-  the pinned compiler cannot build it. All eight encodings were diffed
-  byte-for-byte against xtensa-esp32s3-elf-as, and the four previously
-  hardwired helpers (scompare1 x2, atomctl, cpenable, prid) are now DERIVED
-  from the general form rather than restating it -- controlled behaviourally
-  by running the xtensa atomics under qemu with the pinned AND HEAD
-  compilers, since that codegen is what calls them.
-  THE INSTALL IS STILL NOT POSSIBLE, AND THE REASON IS THE FINDING: VECBASE
-  POINTS AT A VECTOR **TABLE**, NOT AT A HANDLER. Measured from ESP-IDF's own
-  linker script (components/esp_system/ld/esp32s3/sections.ld.in), each vector
-  sits at a fixed offset from the base -- 0x180 Level2, 0x1c0 Level3, 0x200
-  Level4, 0x240 Level5, 0x280 Debug, 0x2c0 NMI, 0x300 KernelException, 0x340
-  UserException, 0x3C0 DoubleException, 0x400 end. And a level-1 interrupt
-  does not even get its own slot: it arrives at the USER exception vector with
-  EXCCAUSE = 4 and must be dispatched there. So the xtensa install is NOT the
-  one-register write riscv32's mtvec was, and anyone planning it from the
-  riscv32 experience will plan the wrong job: it needs an aligned table
-  emitted into IRAM with stub code at the right offset, which is compiler work
-  and a placement decision, not an instruction.
-  STILL MISSING, both halves: that vector table, and a dedicated ISR stack in
-  the xtensa `interrupt;` prologue. They must land together for the reason the
-  riscv32 ticket established -- an install without a stack is a handler on the
-  interrupted task's stack with no runtime guard. The `ir.inc` @<interrupt
-  proc> refusal is currently narrowed to bare riscv32 ONLY and must be
-  narrowed further, never deleted, when this lands; the ESP-IDF arm keeps
-  refusing on both ISAs because it is also the `interrupt;`-instead-of-`iram;`
-  esp_intr_alloc mistake.
-  TWO THINGS NOT TO CARRY OVER FROM riscv32. The scratch mechanism differs:
-  EXCSAVE_n is one register PER INTERRUPT LEVEL, so the prologue must know its
-  level, where riscv32 machine mode has exactly one mscratch and could be
-  level-agnostic. And the OPERAND ORDER is register-first -- `wsr a4, $e7`,
-  verified against the GNU assembler, which ACCEPTS `wsr a4, 231` and REJECTS
-  `wsr 231, a4`; that is why these needed no reordering around the generic
-  operand parse, unlike riscv32's csrw whose CSR genuinely is operand one. An
-  earlier probe of mine used the reversed order and read its (correct)
-  "expected register" refusal as the same operand-class gap riscv32 had. It is
-  not one.
----
+  LANDED 2026-09-22. Bare xtensa can now install a raw vector table and enter
+  an `interrupt;` handler that runs on a dedicated ISR stack;
+  test/test_esp_bare_vector.pas boots under qemu on esp32s3 byte-identical to
+  the x86-64 oracle. Four things had to land together and three of them were
+  defects nobody had seen, because the xtensa `interrupt;` codegen was
+  COMPLETE AND UNREACHABLE -- prologue, epilogue and `rfe` all written, and no
+  way to install a vector, so none of it had ever executed on any instrument.
+  (1) THE VECTOR STUB IS A SINGLE `j`, which is what makes the rest cheap: an
+  18-bit PC-relative jump reaches +/-128 KiB with no register operand, so the
+  table hands the handler an untouched machine and EXCSAVE_1 is free for the
+  prologue's stack switch. The table is built at runtime in a 1 KiB-aligned
+  window; VECBASE at 1 KiB alignment is measured, not assumed.
+  (2) PS WAS NEVER INITIALISED BY ANY BARE IMAGE. At reset PS.EXCM is SET
+  (measured: PS = $1F), and EXCM=1 makes every exception a DOUBLE exception --
+  routed to VECBASE+0x3C0, PC in DEPC not EPC1, returned from with RFDE not
+  RFE. The epilogue emits RFE and reads EPC1, so the whole path was returning
+  from the wrong KIND of exception with the wrong register: EPC1 read back as
+  0 and the RFE jumped to address 0. The entry stub now writes PS = $2F
+  (INTLEVEL 15 unchanged, EXCM cleared, UM 1) plus RSYNC.
+  (3) A CALL OUT OF AN `interrupt;` HANDLER JUMPED TO ADDRESS 0, ON BOTH BARE
+  ISAs. `interrupt;` implies `iram;` (pasparser_proc.inc), so any call to an
+  ordinary proc took the cross-section indirect path, whose literal is patched
+  ONLY by the ET_REL object writer. A bare build is ET_EXEC with one PT_LOAD
+  and no linker, so the literal stayed zero. Guarded with `not EspBareBoot`:
+  on bare there is no flash/IRAM split to span and the direct PC-relative call
+  is always in range. CONTROL: with the guard reverted, both the esp32c3 and
+  esp32s3 fixtures produce no output at all.
+  THE REFUSAL IN ir.inc IS NARROWED, NOT DELETED, and on the axis it argues
+  from -- the hazard it names is "no ISR stack", and the xtensa prologue now
+  switches to one (EXCSAVE_1 where riscv32 uses mscratch). ESP-IDF keeps
+  refusing on both ISAs because that arm is also the
+  `interrupt;`-instead-of-`iram;` esp_intr_alloc mistake.
+  TWO xtensa/riscv32 DIFFERENCES THAT BIT: the ENCODER takes (sr, at) while
+  the text syntax is (at, sr), and written the text way round it still
+  assembles -- sr := 2 is LCOUNT and at := $D1 masks to a1, so the prologue
+  silently began `wsr.lcount a1` with no diagnostic; and l32i/s32i offsets are
+  UNSIGNED 0..1020, so riscv32's `sw sp,-4(t0)` does not transfer (caught as a
+  build error by XtensaCheckWordOffset, which is the good case).
+  No pin needed to USE any of this -- it is compiler codegen, and the fixtures
+  build with the freshly built compiler. A pin is needed before any lib/**
+  code can depend on it.
+
 
 # The xtensa raw-ISR install has no vecbase write and no ISR stack
 
@@ -157,3 +158,50 @@ level-agnostic because RISC-V machine mode has exactly one.
   ESP-IDF arm must keep refusing on both ISAs, because that is also the
   `interrupt;`-instead-of-`iram;` esp_intr_alloc mistake.
 - `test/test_esp_bare_isrstack.pas` — the riscv32 fixture to mirror.
+
+## Resolution 2026-09-22 (frankb-8e)
+
+Landed. `test/test_esp_bare_vector.pas`, wired into the bare tier, boots on
+esp32s3 under the Espressif qemu byte-identical to the x86-64 oracle.
+
+### What the fixture asserts, and none of it is "the handler ran"
+
+    j in range 1                        the stub's 18-bit reach, range-checked
+    handler ran 1
+    exccause 1                          SyscallCause, via the User vector
+    a call from the handler returned    the iram-crossing bug (3)
+    isr sp is ABOVE task sp             the dedicated ISR stack
+    locals survived the trap            the epilogue restored the frame
+    VECTOR-OK
+
+**Positive control, run:** disabling the ISR-stack switch in BOTH the prologue
+and the epilogue leaves `handler ran 1`, `exccause 1`, the call row and the
+locals row **all GREEN** and reddens only the stack row. That is the shape the
+riscv32 ticket prescribed — assert the stack, not the entry — and it is the
+reason "it ran" is not the assertion anywhere in this fixture.
+
+**Only the User vector (0x340) is planted.** Not 0x300, not 0x3C0. A spare slot
+would absorb a regression in the PS init, and — measured the hard way — a table
+with a catch-all converts a fault *inside* the handler into a re-entry that
+reads as the feature working. Written up in the playbook, "A CATCH-ALL ENTRY IN
+A DISPATCH TABLE TURNS EVERY FAULT INTO A SUCCESSFUL-LOOKING LOOP".
+
+### The riscv32 sibling got the same row
+
+`test/test_esp_bare_isrstack.pas` now calls an ordinary proc from its handler.
+It never had, which is why defect (3) was invisible on that ISA too. With the
+`not EspBareBoot` guard reverted, esp32c3 produces no output at all.
+
+### What is NOT done
+
+- **Nothing emits the vector table.** The fixture builds it at runtime out of a
+  BSS array. That is honest for a test and is not an API: a program wanting a
+  raw vector today writes the same twenty lines. Whether the compiler should
+  emit an aligned table, and how a handler would be bound to a slot, is a
+  design question and deliberately not settled here.
+- **Level 1 only.** The prologue spends EXCSAVE_1 and the epilogue returns via
+  `rfe`; both are level-1 facts. A higher-level handler needs RFI and EXCSAVE_n
+  and is a different prologue, not a parameter of this one.
+- **Nesting.** Unneeded at level 1 — PS.EXCM masks further level-1 exceptions
+  until RFE clears it, the xtensa counterpart of RISC-V clearing mstatus.MIE.
+  One ISR region is correct on both ISAs for that reason.

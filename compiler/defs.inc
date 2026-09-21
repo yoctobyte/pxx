@@ -2353,7 +2353,7 @@ const
     down into the heap and produces a plausible wrong value. }
   ESP_BARE_STACK_MIN = $4000;      { 16 KiB }
 
-  { ===== the raw-ISR stack (bare riscv32) ==================================
+  { ===== the raw-ISR stack (bare riscv32 AND bare xtensa) =================
 
     A raw trap vector never reaches the IDF's rtos_int_enter, which is what
     normally switches SP to a dedicated ISR stack and bumps the nesting
@@ -2385,7 +2385,19 @@ const
     interrupts itself. A single ISR stack is therefore correct for every
     handler that does not opt into nesting. A SYNCHRONOUS fault inside a
     handler would re-enter and clobber, but a fault inside a fault handler is
-    unrecoverable regardless of where its stack is. }
+    unrecoverable regardless of where its stack is.
+
+    THE SAME HOLDS ON XTENSA FOR A DIFFERENT MECHANISM, so the shared region
+    is sound on both and not merely on the one it was written for: a level-1
+    exception sets PS.EXCM, which masks further level-1 exceptions until RFE
+    clears it. One region, one handler at a time, on both ISAs.
+
+    ONE REGION SHARED BY BOTH IS SAFE ONLY BECAUSE NO IMAGE IS EVER BOTH, and
+    that is worth saying because the constants no longer name an ISA. A build
+    targets one arch; these are compile-time addresses in that build's entry
+    stub and that build's prologue. The pair is also equal on both chips only
+    because ESP_BARE_STACK_TOP is -- the SoC table is the thing that would
+    break that, not the ISA. }
   ESP_BARE_ISR_STACK_SIZE = $400;  { 1 KiB — prologue is 64B + the body's frame }
   ESP_BARE_ISR_STACK_TOP  = ESP_BARE_STACK_TOP;
   ESP_BARE_TASK_STACK_TOP = ESP_BARE_STACK_TOP - ESP_BARE_ISR_STACK_SIZE;

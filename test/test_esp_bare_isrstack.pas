@@ -58,8 +58,21 @@ var
   isrSp   : Int64;
   taskSp  : Int64;
   hvec    : Pointer;
+  callsOk : Integer;
 
 {$ifdef CPU_RISCV32}
+procedure Bump;
+{ An ORDINARY (non-iram) procedure. `interrupt;` implies `iram;`, so a call
+  from the handler to this one crosses the iram boundary -- and until
+  2026-09-22 that path emitted an indirect call through a literal patched ONLY
+  by the ET_REL object writer. A bare image is ET_EXEC with no linker, so the
+  literal stayed zero and the handler jumped to address 0. Measured first on
+  xtensa; the riscv32 arm of that code has the same shape and this row is what
+  covers it, because no riscv32 handler had ever made a call. }
+begin
+  callsOk := 1;
+end;
+
 procedure MyIsr; interrupt;
 begin
   asm
@@ -74,6 +87,7 @@ begin
     csrw $341, t0
   end;
   Inc(hits);
+  Bump;
 end;
 {$endif}
 
@@ -81,6 +95,7 @@ begin
   hits := 0;
   isrSp := 0;
   taskSp := 0;
+  callsOk := 0;
 
 {$ifdef CPU_RISCV32}
   hvec := @MyIsr;
@@ -99,13 +114,17 @@ begin
   hits := 2;
   taskSp := 1;
   isrSp := 2;
+  callsOk := 1;
 {$endif}
 
   PutS('isr hits '); PutInt(hits); PutC(10);
+  if callsOk = 1 then PutS('a call from the handler returned')
+  else PutS('A CALL FROM THE HANDLER DID NOT RUN');
+  PutC(10);
   if isrSp > taskSp then PutS('isr stack is above the task stack')
   else PutS('ISR RAN ON THE TASK STACK');
   PutC(10);
-  if (hits = 2) and (isrSp > taskSp) then PutS('ISRSTACK-OK')
+  if (hits = 2) and (isrSp > taskSp) and (callsOk = 1) then PutS('ISRSTACK-OK')
   else PutS('ISRSTACK-FAIL');
   PutC(10);
 end.

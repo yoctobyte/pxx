@@ -35324,3 +35324,59 @@ Companion to "Assert the PRECONDITION, not just the comparison" — that section
 is about a comparison whose inputs were never proven to exist; this one is
 about a comparison whose inputs exist and mean something other than what they
 are being read as.
+
+## A CATCH-ALL ENTRY IN A DISPATCH TABLE TURNS EVERY FAULT INTO A SUCCESSFUL-LOOKING LOOP
+
+Measured 2026-09-22, bringing up the xtensa raw vector table
+(`feature-s-the-xtensa-raw-isr-install-has-no-vecbase-write-and-no-isr-stack`).
+
+The xtensa VECBASE table is 1 KiB with handlers at fixed offsets. Not knowing
+which slot a `syscall` would land on, the probe filled **every one of the 256
+4-aligned positions** with the same `j <handler>` stub. That looked like pure
+caution. It was the thing that hid the bug for three rounds.
+
+With every slot planted, the output was `XXXXXXXX...` — the handler's first
+byte, forever. The reading that suggests itself is *"the handler runs; the
+return path loops"*, and it is wrong in the most expensive way: what was
+actually happening is that a **fault INSIDE the handler** raised a second
+exception, which (PS.EXCM being set on entry) routed to the DoubleException
+slot at 0x3C0 — **which the probe had also filled with a jump to the same
+handler.** So the failure re-entered the handler and printed its first byte
+again. The catch-all converted *"this handler faults"* into *"this handler
+runs repeatedly"*, and those two produce the same character stream.
+
+Narrowing to the slots that can genuinely fire changed the symptom from a loop
+to a clean stop, and the stop is what located the fault. The general shape:
+
+> **Any dispatch table with a default arm reports a MISS as a HIT.** Wherever
+> you populate a table defensively — every vector, every opcode, a `default:`
+> that forwards, a fallback route — a failure that would have exited noisily
+> instead re-enters through the catch-all and is indistinguishable from the
+> feature working. The defensive fill is what destroys the diagnostic.
+
+It is the mirror of the contamination rule in CLAUDE.md ("one PASSING part of
+the run supplies what a FAILING part needs"): there an earlier step supplies
+the precondition; here the *table itself* supplies a landing site for the
+failure, and it was put there by the person debugging, one minute earlier, as
+a precaution.
+
+**Two things that follow, both cheap:**
+
+1. **Plant only the entries that can legitimately fire, and let everything else
+   be fatal.** The fixture that shipped plants the User vector at 0x340 ALONE —
+   not 0x300, not 0x3C0 — so a regression in PS initialisation (which is what
+   decides between them) stops the image instead of being absorbed. An empty
+   slot is a better instrument than a safe one.
+2. **When you must fill a table broadly, make the arms DISTINGUISHABLE.** One
+   byte of output per arm is enough; identical stubs in every slot is what
+   makes the stream unreadable. The cost of distinct arms is a few bytes and it
+   converts "something dispatched" into "*this* dispatched".
+
+**And the companion rule that got the rest of the way:** the probes that
+located the fault printed a single byte with a **direct MMIO store**, never
+through `PutC`/`PutS`. That was deliberate — a CALL was the construct under
+suspicion, and **a diagnostic built on the mechanism under test cannot report
+on it.** The first probe to use `PutS` inside the handler printed nothing and
+was read as "the handler never ran", when in fact the handler ran fine and the
+*call to PutS* was the defect. Ask what your print statement depends on before
+you conclude from its silence.

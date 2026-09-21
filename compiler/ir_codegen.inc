@@ -3334,7 +3334,37 @@ begin
       EmitLoadConstXtensa(reg_xtensa_a9, $CDCD);
       xtensa_beq(reg_xtensa_a8, reg_xtensa_a9, 6);  { core 0: skip the park }
       xtensa_j(0);                                  { any other core: spin }
-      EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
+      { INITIALISE PS, WHICH NO BARE IMAGE HAS EVER DONE. At reset PS.EXCM is
+        SET, and EXCM=1 means every exception is a DOUBLE exception: it routes
+        to VECBASE+0x3C0 instead of the User vector at 0x340, saves the PC in
+        DEPC instead of EPC1, and must be returned from with RFDE rather than
+        RFE. The `interrupt;` epilogue emits RFE and its handlers read EPC1, so
+        against an uninitialised PS the whole path is returning from the wrong
+        KIND of exception using the wrong register. Measured on esp32s3: EPC1
+        read back as 0 and the RFE jumped to address 0.
+
+        $2F = INTLEVEL 15, EXCM 0, UM 1. INTLEVEL stays at its reset value 15
+        because bare sets up no interrupt controller and nothing should be able
+        to fire; the ONLY bit this changes is EXCM. UM=1 selects the User
+        exception vector, which is where ESP-IDF's own linker script puts a
+        dispatcher, so a raw table built from the documented offsets lands
+        where those offsets say it does.
+
+        NOT A BEHAVIOUR CHANGE FOR A PROGRAM THAT INSTALLS NO VECTOR: VECBASE
+        still points at whatever reset left, so an exception was fatal before
+        and is fatal now -- it just reaches a different fatal address. What it
+        changes is that a program which DOES install a table gets the exception
+        kind its handler was written for. }
+      EmitLoadConstXtensa(reg_xtensa_a8, $2F);
+      xtensa_wsr(SR_PS, reg_xtensa_a8);
+      xtensa_rsync;
+      { TASK top, not ESP_BARE_STACK_TOP: the top 1 KiB is the raw-ISR stack
+        (defs.inc). Same carve as the riscv32 arm and forced for the same
+        reason -- this constant is emitted before the body is parsed, so
+        "does this program contain an `interrupt;` body" is still undecided
+        here and the region cannot be made conditional without patching the
+        entry stub after the fact. }
+      EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_TASK_STACK_TOP);
       { AFTER sp is established: these are ordinary loads and stores, but they
         belong with the rest of the bare-metal setup and before anything can
         allocate. }

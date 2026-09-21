@@ -160,6 +160,13 @@ begin
   { zero-operand forms }
   if CaseEqual(mnem, 'nop') then begin xtensa_nop; Exit; end;
   if CaseEqual(mnem, 'ret') then begin xtensa_ret; Exit; end;
+  { The only way to RAISE a trap from Pascal on xtensa, and so the xtensa
+    analogue of riscv32's `ecall` -- without it an `interrupt;` handler can be
+    installed and nothing in a test can make it run. `rfe` is deliberately NOT
+    exposed here: the `interrupt;` epilogue emits it, and a hand-written
+    `assembler` handler that spelled it itself would skip the frame unwind its
+    own (non-naked) prologue requires. }
+  if CaseEqual(mnem, 'syscall') then begin xtensa_syscall; Exit; end;
 
   { split rest into up to three comma-separated operands }
   op0 := ''; op1 := ''; op2 := ''; partIdx := 0;

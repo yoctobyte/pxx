@@ -15374,6 +15374,68 @@ begin
         gated off in the parser (mid-window spill is a follow-up). }
       if (CurProc >= 0) and ProcIsInterrupt[CurProc] then
       begin
+        { BARE: switch to the dedicated ISR stack FIRST, before the 48-byte
+          save below, so not one byte of this handler lands on the interrupted
+          code's stack. Exact mirror of the riscv32 arm, and the reasoning in
+          defs.inc's ESP_BARE_ISR_STACK block covers both -- the carve is
+          FORCED on this ISA too, because ir_codegen.inc's xtensa bare entry
+          sets sp from a compile-time constant before the body is parsed.
+
+          THE SCRATCH REGISTER IS EXCSAVE_1, AND THE CHOICE IS LEVEL-BOUND IN
+          A WAY riscv32's mscratch IS NOT. RISC-V machine mode has exactly one
+          mscratch, so that prologue is level-agnostic. Xtensa has EXCSAVE_1..7,
+          one PER INTERRUPT LEVEL, and this prologue is level-1 ONLY -- which
+          is not an arbitrary restriction but the same fact the epilogue
+          already commits to by returning via `rfe` (EPC1/PS.EXCM, the general
+          level-1 return). A higher-level handler needs RFI and EXCSAVE_n, and
+          would be a different prologue, not a parameter of this one.
+
+          NOTHING HAS CLOBBERED EXCSAVE_1 ON THE WAY IN, and that is a property
+          of the vector stub being a bare `j`: an 18-bit PC-relative jump reaches
+          +/-128 KiB and needs no register, so the table entry hands the handler
+          an untouched machine. A stub that had to materialise a 32-bit address
+          would have spent EXCSAVE_1 itself and this would have to give it back
+          first.
+
+          NOTE THE ENCODER TAKES (sr, at) WHILE THE TEXT SYNTAX IS (at, sr).
+          `xtensa_wsr(SR_EXCSAVE_1, a2)` spells what an assembler writes as
+          `wsr a2, $d1`. The two orders are opposite and both are called wsr,
+          and neither spelling is wrong -- the GNU assembler genuinely accepts
+          `wsr a4, 231` and rejects the reverse. Written the text way round it
+          still assembles: sr := 2 is LCOUNT and at := $d1 masks to a1, so the
+          prologue silently began `wsr.lcount a1` and the handler died before
+          its first statement with no diagnostic anywhere. That is how this was
+          found -- by disassembling the emitted prologue, not by reading it.
+
+            wsr  a2, excsave_1    stash a2 somewhere that is not memory
+            l32r a2, ISR_TOP-16   (via EmitLoadConstXtensa's literal island)
+            s32i a1, a2, 12       task sp, at the very top of the ISR stack
+            mov  a1, a2           switch (16-byte aligned, ABI)
+            rsr  a2, excsave_1    give a2 back
+
+          THE CONSTANT IS ANCHORED AT ISR_TOP-16 RATHER THAN AT ISR_TOP, AND
+          THAT IS THE ONE LINE THAT DOES NOT TRANSFER FROM riscv32. There the
+          same two accesses are `sw sp,-4(t0)` and `addi sp,t0,-16` off the TOP,
+          because RISC-V's store offset is a SIGNED 12-bit field. Xtensa's
+          l32i/s32i offset is UNSIGNED, eight bits scaled by four (0..1020), so
+          a negative offset is not encodable at all -- written the riscv32 way
+          this is a build error from XtensaCheckWordOffset, which is how it was
+          caught. Anchoring low makes both accesses non-negative and leaves the
+          arithmetic identical: the saved task sp still lands at ISR_TOP-4 and
+          the handler still starts at ISR_TOP-16.
+
+          a2 is the register spent because it is already first in the save area
+          below, so a reader checking that the interrupted a2 survives has one
+          place to look. The handler body must not clobber EXCSAVE_1; nothing
+          the compiler emits does. }
+        if EspBareBoot then
+        begin
+          xtensa_wsr(SR_EXCSAVE_1, reg_xtensa_a2);
+          EmitLoadConstXtensa(reg_xtensa_a2, ESP_BARE_ISR_STACK_TOP - 16);
+          xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 12);
+          xtensa_mov(reg_xtensa_sp, reg_xtensa_a2);
+          xtensa_rsr(SR_EXCSAVE_1, reg_xtensa_a2);
+        end;
         xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -48);
         xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);  xtensa_s32i(reg_xtensa_a3, reg_xtensa_sp, 4);
         xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 8);  xtensa_s32i(reg_xtensa_a5, reg_xtensa_sp, 12);
@@ -16800,6 +16862,20 @@ begin
         xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, 32); xtensa_l32i(reg_xtensa_a12, reg_xtensa_sp, 36);
         xtensa_l32i(reg_xtensa_a13, reg_xtensa_sp, 40); xtensa_l32i(reg_xtensa_a9, reg_xtensa_sp, 44);
         xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 48);
+        { BARE: switch back to the interrupted code's stack, read from the word
+          the prologue parked at ISR_TOP-4. Mirror of the prologue's switch.
+
+          ORDER: a2 has ALREADY been restored from the save area one line above,
+          so borrowing it here would lose the interrupted a2 -- hence the same
+          EXCSAVE_1 round-trip rather than a plain scratch use. Same shape, and
+          the same reason, as the riscv32 epilogue's mscratch round-trip. }
+        if EspBareBoot then
+        begin
+          xtensa_wsr(SR_EXCSAVE_1, reg_xtensa_a2);
+          EmitLoadConstXtensa(reg_xtensa_a2, ESP_BARE_ISR_STACK_TOP - 16);
+          xtensa_l32i(reg_xtensa_sp, reg_xtensa_a2, 12);
+          xtensa_rsr(SR_EXCSAVE_1, reg_xtensa_a2);
+        end;
         xtensa_rfe;
       end
       else
@@ -18279,8 +18355,33 @@ begin
     .text), so load the callee's absolute address from a relocated 32-bit literal
     and call indirect — same shape as an external call, but the literal is
     relocated against the callee proc's own local symbol (IramCallFix). ESP only;
-    flash<->flash and iram<->iram stay direct PC-relative below. }
-  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+    flash<->flash and iram<->iram stay direct PC-relative below.
+
+    NOT ON BARE, AND THE LITERAL IS WHY: nothing applies IramCallFix in a bare
+    image. It is consumed ONLY by the ET_REL object writer, which turns each
+    entry into an R_XTENSA_32/R_RISCV_32 data-word reloc for an external linker
+    (elfwriter.inc's writeRela32 loop). A bare build is ET_EXEC with ONE
+    PT_LOAD and no linker, so the `EmitI32(0)` placeholder below stays zero and
+    the call becomes `callx0 a8` with a8 = 0 -- a jump to address 0, which on
+    xtensa raises EXCCAUSE 14 (InstrPIFAddrError).
+
+    The condition is also FALSE on bare: there is no flash/IRAM split to span.
+    The whole image, `iram;` bodies included, loads into one SRAM region a few
+    KiB across, so the direct PC-relative call below is both correct and always
+    in range.
+
+    WHAT MADE THIS UNREACHABLE UNTIL NOW, and it is the reason a bug this
+    central sat here: the only way for `ProcIram[caller]` and `ProcIram[callee]`
+    to differ on bare is a proc marked `iram;`, and the one thing that marks a
+    proc IRAM without anyone writing the directive is `interrupt;` --
+    pasparser_proc.inc sets `isIram := True` for it. An `interrupt;` body could
+    not be INSTALLED on bare before 2026-09-21 (riscv32) / 2026-09-22 (xtensa),
+    so no bare program had ever called out of one. The fixedpoint cannot see it
+    either: compiler.pas has no `interrupt;` and no `iram;`.
+    Measured on esp32s3: handler entered, its first direct store printed, and
+    the first CALL faulted. }
+  if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32))
+     and (not EspBareBoot) then
     if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[procIdx]) then
     begin
       if IramCallFixCount >= MAX_CALLFIX then Error('iram call fixup overflow');

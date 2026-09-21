@@ -35675,6 +35675,23 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_isrstack.pas > $(TESTTMP)/test_esp_bare_isrstack.c3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_isrstack.oracle $(TESTTMP)/test_esp_bare_isrstack.c3; then echo "esp32c3 interrupt; handler on a dedicated ISR stack ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32c3 ISR-stack MISMATCH"; exit 1; fi; fi
+	# The xtensa half of the raw-ISR story: a VECTOR TABLE built at runtime, a
+	# `wsr vecbase` install, and the same dedicated ISR stack. Four assertions
+	# and none of them is "the handler ran" -- that row is true with every one
+	# of the three bugs this fixture was written against still present.
+	# Verified by disabling the prologue/epilogue stack switch and re-running:
+	# `handler ran 1`, `exccause 1`, the call row and the locals row ALL stay
+	# GREEN while only the stack row goes red.
+	# Only the User vector (0x340) is planted, so a regression in the entry
+	# stub's PS init -- which clears EXCM and is what makes a level-1 exception
+	# land there at all, rather than at the Double vector with its PC in DEPC
+	# -- fails loudly instead of being absorbed by a spare slot.
+	@./$(COMPILER) test/test_esp_bare_vector.pas $(TESTTMP)/test_esp_bare_vector_oracle >/dev/null && $(TESTTMP)/test_esp_bare_vector_oracle > $(TESTTMP)/test_esp_bare_vector.oracle
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 vector-table run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_vector.pas > $(TESTTMP)/test_esp_bare_vector.s3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_vector.oracle $(TESTTMP)/test_esp_bare_vector.s3; then echo "esp32s3 raw vector table + interrupt; ISR stack ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 vector-table MISMATCH"; exit 1; fi; fi
 	@./$(COMPILER) test/test_esp_bare_largeframe.pas $(TESTTMP)/test_esp_bare_lf_oracle >/dev/null && $(TESTTMP)/test_esp_bare_lf_oracle > $(TESTTMP)/test_esp_bare_lf.oracle
 	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
 	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 large-frame run skipped"; else \

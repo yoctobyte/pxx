@@ -16,6 +16,7 @@ const
   SR_ATOMCTL   = 99;    { what S32C1I does per memory class }
   SR_EXCSAVE_1 = $D1;   { 209 — level-1 scratch; $D1..$D7 is the whole file }
   SR_VECBASE   = $E7;   { 231 — base of the VECTOR TABLE, not of a handler }
+  SR_PS        = $E6;   { processor state: INTLEVEL[3:0] EXCM[4] UM[5] RING[7:6] WOE[18] }
   SR_CPENABLE  = $E0;   { 224 }
   SR_PRID      = $EB;   { 235 }
 
@@ -210,10 +211,20 @@ procedure xtensa_syscall;
   r=5, s=0, t=0, laid out little-endian as byte0=(t shl 4) or op0,
   byte1=(r shl 4) or s, byte2=(op2 shl 4) or op1.
 
-  Raises the Syscall exception. On a bare or IDF part that is a fault with no
-  handler, which is why the ESP profile does not emit this; under qemu-xtensa
-  user mode it is the Linux syscall trap.
-  feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Raises the Syscall exception (EXCCAUSE 1). Under qemu-xtensa user mode it is
+  the Linux syscall trap.
+  feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle
+
+  THE SENTENCE THAT USED TO BE HERE -- "on a bare or IDF part that is a fault
+  with no handler, which is why the ESP profile does not emit this" -- was true
+  until 2026-09-22 and is not now. A bare image can install a raw vector table
+  and an `interrupt;` handler, so this is reachable from ESP inline asm on
+  purpose and is how test/test_esp_bare_vector.pas takes its trap.
+
+  THE HARDWARE DOES NOT ADVANCE THE PC, exactly as RISC-V's ecall does not:
+  EPC1 addresses the SYSCALL itself, so a handler that returns via RFE without
+  stepping EPC1 past it re-executes it and traps forever. SYSCALL is three
+  bytes, so the step is +3 -- NOT the +4 its riscv32 analogue uses. }
 begin
   EmitB($00); EmitB($50); EmitB($00);
 end;
@@ -371,6 +382,13 @@ begin
 end;
 
 procedure xtensa_rsync;                          { rsync }
+{ Wait for a WSR to a state register to take effect before any dependent
+  instruction issues. Insn word $002010.
+
+  REQUIRED AFTER `wsr ps`, AND ITS ABSENCE IS NOT VISIBLE UNDER qemu -- which
+  is the reason to emit it rather than to measure whether it is needed. qemu
+  retires the WSR before the next instruction whatever you do, so a missing
+  RSYNC costs nothing there and is a real race on silicon. }
 begin
   EmitB($10); EmitB($20); EmitB($00);
 end;
