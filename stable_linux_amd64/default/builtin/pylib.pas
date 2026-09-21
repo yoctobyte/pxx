@@ -323,10 +323,21 @@ type
     SAME runtime type. That is what the uforth census needs — VM.dict is keyed
     by str and VM.xt_table by int, side by side in one class.
 
-    v1 is a LINEAR SCAN. VM.dict reaches a few hundred entries and every Forth
-    word lookup hits it, so this will want a hash — but a wrong hash is worse
-    than a slow scan, and a hash drops in behind these same methods with no
-    frontend change at all. Tracked in feature-nilpy-dict.
+    LOOKUP IS HASHED. `indexof` is open addressing over an Int32 index
+    (`FHashCap`, linear probe, `idx < 0` means absent), so it is O(1) and not a
+    scan; the linear loop inside it is a defensive fallback for `FHashCap = 0`
+    and says so. This paragraph said "v1 is a LINEAR SCAN ... this will want a
+    hash, tracked in feature-nilpy-dict" until 2026-09-20. THE FEATURE WAS
+    BUILT — the field comment below describes it — and the sentence asking for
+    it survived the work.
+
+    WHY THIS ONE WAS EXPENSIVE: it is the FIRST thing a reader meets, three
+    lines above the field comment that contradicts it. Measured 2026-09-20 —
+    the owner's own hypothesis for lekkerzeilen's frame rate was "dicts not
+    being search-optimized", and this paragraph would have CONFIRMED it. A
+    stale comment that agrees with the reader's hypothesis is read as
+    corroboration and ends the investigation; one that contradicts it gets
+    checked.
 
     Deletion SHIFTS the tail down rather than swapping the last entry into the
     hole: Python dicts preserve insertion order and uforth iterates them. }
@@ -4680,6 +4691,9 @@ begin
   Result := pystr_of(Int64(NativeInt(obj))) + ':' + name;
 end;
 
+function PyPropertySet(obj: Pointer; const name: AnsiString;
+                       const val: Variant): Boolean; forward;
+
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 begin
   { THE WRITE TWIN OF pydynattr_get'S nil ARM, which has raised here all along.
@@ -4695,6 +4709,14 @@ begin
     bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising }
   if obj = nil then
     raise AttributeError.Create('''NoneType'' object has no attribute ''' + name + '''');
+  { A @property SETTER runs, and it runs BEFORE the shadow write -- see
+    PyPropertySet. The order is the whole fix: the store below is keyed on
+    (obj, name) and pydynattr_get consults it FIRST, so a shadow write does not
+    merely miss the setter, it MASKS the getter from then on. Writing first and
+    calling second would leave that mask in place even on the arm that works.
+    PyPropertySet answers False for anything it does not serve, which is
+    exactly today's behaviour and never a write through the wrong convention. }
+  if PyPropertySet(obj, name, val) then Exit;
   if PyDynAttrStore = nil then PyDynAttrStore := TPyDict.Create;
   PyDynAttrStore.store(PyDynAttrKey(obj, name), val);
 end;
@@ -4731,6 +4753,29 @@ type
   TPyPropS = function(recv: Pointer): AnsiString;
   TPyPropB = function(recv: Pointer): Boolean;
 
+  { The SETTER twin. Two things here are measured rather than assumed, and
+    getting either wrong is a SEGFAULT, not a wrong value:
+
+    (1) THESE ARE FUNCTIONS, NOT PROCEDURES. A NilPy `def` returns None, and
+        None is a Variant, so the frontend emits every method -- a property
+        setter included -- as a function returning Variant. pyeval's PyHostCall
+        has no procedure arm at all for this reason (TPMV_0_1 and friends are
+        all `function ... : Variant`). Declaring these as `procedure` shifts
+        every argument by the hidden result pointer, so `recv` receives the
+        sret slot; that is the crash this comment is standing on. The result
+        is None by construction and is discarded.
+
+    (2) THE VALUE KIND COMES FROM ParamKinds[1] -- index 0 is Self -- and NOT
+        from RetKind. RetKind describes the None the setter hands back; a
+        property is free to accept what it does not return. Reading the
+        convention off the wrong end of the pair is the same crash by a
+        different route. }
+  TPyPropSetV = function(recv: Pointer; const v: Variant): Variant;
+  TPyPropSetI = function(recv: Pointer; v: Int64): Variant;
+  TPyPropSetD = function(recv: Pointer; v: Double): Variant;
+  TPyPropSetS = function(recv: Pointer; const v: AnsiString): Variant;
+  TPyPropSetB = function(recv: Pointer; v: Boolean): Variant;
+
 function PyPropertyGet(obj: Pointer; const name: AnsiString;
                        var found: Boolean): Variant;
 { The getter is CALLED, because a property has no storage of its own — its
@@ -4755,6 +4800,60 @@ begin
     19: begin fd := TPyPropD(mi^.Code); Result := fd(obj); found := True; end;
     23: begin fs := TPyPropS(mi^.Code); Result := fs(obj); found := True; end;
     2:  begin fb := TPyPropB(mi^.Code); Result := pyvar_of_bool(fb(obj)); found := True; end;
+  end;
+end;
+
+function PyPropertySet(obj: Pointer; const name: AnsiString;
+                       const val: Variant): Boolean;
+{ The WRITE twin of PyPropertyGet, and the reason it has to exist is that a
+  property has no storage: the setter body is the only thing that can perform
+  the write, so a store that does not call it has not written the property, it
+  has written something ELSE THAT SHADOWS IT.
+
+  THE SHAPE THIS REPAIRS IS A BARE RECEIVER, NOT A MISSING SETTER. When the
+  frontend cannot name the receiver's class it lowers `b.throttle = v` to
+  pydynattr_set, which was store-only -- so the setter was skipped on exactly
+  the receivers whose class is decided at run time, while the same assignment
+  through an ANNOTATED receiver went straight to the accessor and worked. One
+  property, two doors, two answers, and the working door is the one a reduction
+  reaches for. A same-named FIELD in an unrelated class is what pushes the call
+  site onto the bare path in the first place; it is the trigger, not the cause.
+
+  KIND COMES FROM ParamKinds[1] -- index 0 is Self. The getter's RetKind is the
+  wrong end of the pair: a setter is free to accept what the getter does not
+  return, and a clamping setter (the fixture's row 2) is precisely the case
+  where the two disagree in VALUE as well, which is why that row is the one no
+  shadow write can imitate.
+
+  Only the kinds whose ABI is spelled out are served; anything else answers
+  False and the caller falls through to the store, which is today's behaviour
+  and never a write through the wrong convention. That is the getter's own
+  discipline and the same sentence guards it. }
+var mi: PMethInfo; pk: PInt64; ignored: Variant;
+    sv: TPyPropSetV; si: TPyPropSetI; sd: TPyPropSetD;
+    ss: TPyPropSetS; sb: TPyPropSetB;
+begin
+  Result := False;
+  if obj = nil then Exit;
+  mi := PyFindMethByName(GetInstanceRTTI(obj), '__prop_set_' + name);
+  if (mi = nil) or (mi^.Code = nil) then Exit;
+  { Arity counts Self, so a one-value setter is 2. Anything else is not the
+    accessor shape this knows how to call -- decline rather than guess at a
+    frame we did not emit. }
+  if Integer(mi^.Arity) <> 2 then Exit;
+  { The None a NilPy def hands back is a Variant. A setter carrying any other
+    RetKind was emitted through a convention this does not spell out, so it is
+    declined rather than called -- the getter's own rule, and here the penalty
+    for guessing is a shifted argument list rather than a wrong value. }
+  if mi^.RetKind <> 22 then Exit;
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  case pk[1] of
+    22: begin sv := TPyPropSetV(mi^.Code); ignored := sv(obj, val); Result := True; end;
+    13, 11, 1: begin si := TPyPropSetI(mi^.Code); ignored := si(obj, pyvar_to_int(val)); Result := True; end;
+    19: begin sd := TPyPropSetD(mi^.Code); ignored := sd(obj, pyvar_to_float(val)); Result := True; end;
+    23: begin ss := TPyPropSetS(mi^.Code); ignored := ss(obj, pystr_of(val)); Result := True; end;
+    2:  begin sb := TPyPropSetB(mi^.Code); ignored := sb(obj, pyvar_to_bool(val)); Result := True; end;
   end;
 end;
 
