@@ -12091,6 +12091,51 @@ begin
 
     AN_PROCADDR:
     begin
+      { REFUSE @<a routine declared `interrupt;`>. THIS IS THE ONE SITE EVERY
+        SPELLING CONVERGES ON, deliberately: `@f` in an expression, in a const
+        initializer and as a call argument each allocate their own AN_PROCADDR
+        (pasparser_proc.inc:101, pasparser_prog.inc:386, cparser.inc:2721), and
+        the address-of path at ir.inc:2659 delegates here too. Putting the
+        predicate at any one of those would leave the others open, which is
+        this repo's normalise-dont-special-case sibling case -- the arm you do
+        not check is the one that stays broken.
+
+        WHY IT CANNOT BE CORRECT TODAY, WHICH IS WHAT MAKES THE REFUSAL
+        UNCONDITIONAL RATHER THAN A HEURISTIC. An `interrupt;` body returns via
+        a TRAP-RETURN instruction (riscv32 `mret`, xtensa `rfe`), so it can only
+        be entered by hardware through a vector table. Installing a vector needs
+        a write to mtvec/vecbase, and that is not expressible from Pascal or
+        from inline asm on either ESP ISA (measured 2026-09-21: `csrw` reaches
+        EmitAsmRv32 with no encoding; `wsr a4, vecbase` fails the same way). So
+        there is no legitimate consumer of this address in the language as it
+        stands, and every `@<interrupt proc>` is a mistake -- most often the one
+        below, which has no other diagnostic at any stage and is otherwise
+        found on silicon.
+
+        WHEN THE INSTALL PATH LANDS, NARROW THIS RATHER THAN DELETING IT: the
+        refusal should then permit exactly the vector-install operand and keep
+        refusing everything else.
+        bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-via-mret-with-no-diagnostic
+        feature-s-a-csr-write-is-not-expressible-from-pascal-so-no-raw-isr-can-be-installed
+
+        KNOWN SIBLING, DELIBERATELY NOT REFUSED HERE, so that closing one arm
+        does not read as closing the class: a DIRECT CALL to an `interrupt;`
+        routine is the same fault by a different spelling, and
+        test/test_esp_interrupt.pas relies on one (behind a runtime-false guard)
+        as its only way to force the body to be emitted. Refusing it needs an
+        alternative emission-forcing mechanism first, which is a design question
+        and not a predicate. Recorded in the ticket rather than left silent. }
+      if (ASTIVal[node] >= 0) and (ASTIVal[node] < Length(ProcIsInterrupt)) and
+         ProcIsInterrupt[ASTIVal[node]] then
+        ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
+              'cannot take the address of ' + Procs[ASTIVal[node]].Name +
+              ', which is declared `interrupt;`: such a routine returns via a trap-return ' +
+              '(mret / rfe) and can only be entered by hardware through a vector table, never ' +
+              'by a normal call. If this address is for esp_intr_alloc, the ESP-IDF dispatcher ' +
+              'calls its handler as an ordinary void(*)(void*) -- declare the handler `iram;` ' +
+              'and NOT `interrupt;`, or it will execute a trap-return to leave a normal call. ' +
+              'Installing a RAW vector is not currently expressible from Pascal (no mtvec / ' +
+              'vecbase write), so there is no correct use of this address today.');
       Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);
     end;
 
