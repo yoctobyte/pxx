@@ -5,7 +5,13 @@ program test_ro_data_literal_store;
   must DIE of SIGSEGV by default, and must run to the end under --no-ro-data.
 
   TAKE THE POOL POINTER STRAIGHT FROM THE LITERAL. `p: PChar; p := 'literal'`
-  aliases the pool at every -O level. Do NOT reach it through a string variable
+  aliases the pool at every -O level -- measured 2026-09-21 over the full
+  population this fixture has rows for, x86-64 / i386 / aarch64 / arm32 at
+  -O0..-O3, both arms: 16 default builds fault, 16 --no-ro-data builds print
+  `after: Xiteral` and exit 0. Stated because the per-backend twins carry their
+  own `OptLevel >= 2` gates, so "measured on x86-64" would not have covered the
+  three cross targets, and the claim is the fixture's whole premise.
+  Do NOT reach it through a string variable
   (`s := 'literal'; p := PChar(s)`), which is what this fixture did until
   2026-09-21 -- that form asks a question whose ANSWER DEPENDS ON -O, because
   EmitStaticLitHandle (compiler/ir_codegen.inc, and its per-backend twins) is
