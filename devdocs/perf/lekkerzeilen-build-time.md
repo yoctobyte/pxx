@@ -1007,3 +1007,78 @@ And the missing control, which this lane did not have either: **when an A/B
 returns a flat null, time a THIRD binary you believe is fast. Two arms cannot
 tell you they are the same arm.** c0's own data had the tell — both its arms
 were slower than pin v415 — and nothing prompted the comparison.
+
+## FINAL: the range is 6.4% to 38.7%, and the cost model holds across 176x
+
+frankh-c0's re-measured table (`2cea82daa`), min-of-5 interleaved, v414 recovered
+from `c49b2f646` with its own `builtin/` beside it, HEAD forced through
+`converged after 1 round(s)`:
+
+    program          v414      HEAD      v415     saved     share
+    uforth          10.21s     7.31s     7.31s    2.90s     28.4%
+    key_analysis     3.20s     2.80s     2.90s    0.40s     12.5%
+    render_backend   7.81s     7.31s     7.41s    0.50s      6.4%
+    lekkerzeilen    88.79s        --        --   34.38s     38.7%   (this lane)
+
+**Quote the RANGE, not either endpoint.** render_backend's 6.4% is a genuine
+small win, not a null — which is the thing the retracted section got exactly
+backwards.
+
+### THE COST MODEL IS CONFIRMED, NOT MERELY UNREFUTED
+
+True steps both arms, one tree, only `useIdx` differing:
+
+    program          steps OFF        steps ON    removed    saved   ns/step
+    lekkerzeilen   4,305,236,025            --     ~4305 M   34.38s     7.99
+    uforth           311,636,212     2,382,907      309.3 M    2.90s     9.38
+    render_backend    58,084,463       202,172       57.9 M    0.50s     8.64
+    key_analysis      24,413,553        97,243       24.3 M    0.40s    16.4
+
+**Three of four at 8.0–9.4 ns per step removed, over step counts spanning
+176x.** This lane's two independent derivations for lekkerzeilen bracket the
+same figure: 7.99 ns/step from the saving, 9.9 ns/step from the profile
+(47.8% of 88.789s over 4.305e9 steps).
+
+**The 16.4 row is the one to distrust, not the one to explain** (c0's own
+call): a 0.40s saving read at 0.10s rep resolution on the smallest subject, so
+the honest interval is 12–20. Left as measured rather than smoothed.
+
+### WHAT SETS THE SHARE — and why it is a restatement, not evidence
+
+Lookup density, steps removed per second of compile: lekkerzeilen 48.5 M/s ->
+38.7%, uforth 30.3 -> 28.4%, key_analysis 7.6 -> 12.5%, render_backend 7.4 ->
+6.4%. Monotone in all four.
+
+**It cannot fail to be monotone** — it is density times ns/step and ns/step is
+near-constant, so it restates the model rather than testing it. c0 recorded it
+that way deliberately. **It earns its place only by naming the quantity to ask
+about for a new program**, which is what the qualifier needed.
+
+### THE RATIO FINDING, on four points
+
+`realsteps`/`scanned>=` is **2.97, 2.48, 2.30, 2.03** (lekkerzeilen,
+key_analysis, render_backend, uforth). Not a constant. It is set by how often
+scans 1 and 2 fail, which is a property of a program's scope structure — so
+**measure `realsteps` on the program you are talking about** rather than scaling
+another's counter, which is how this lane projected uforth 46% high.
+
+### THE FAULT SPLIT, recorded as c0 insisted rather than as this lane offered
+
+This lane tried to take a share of the stale-arm episode, on the grounds that it
+had told c0 *"the index ships as the DEFAULT arm"* — a sentence about the TREE,
+read as a check on the BINARY. **c0 declined, and its reason is the finding and
+must not be softened:** *"the whole value of the class is that a correct
+sentence from a peer feels like a check when it is not one."* A true statement
+about the source is not a measurement of the artefact, and the peer who supplies
+it is not the one who needed the fact. Only the 46%-high projection is this
+lane's, and it is separable: it would have been wrong even had c0's arm been
+valid.
+
+**8e's refinement of the third-binary control, which is better than either
+original: a flat null identifies an invalid ARM, not an invalid VERDICT.** Those
+are different claims and the sentence must distinguish them.
+
+**Not claimed:** c0 has not re-measured lekkerzeilen — it does not compile in
+that tree (`MAX_PROC_PARAMS`, a >32-parameter C function out of the GL headers).
+Its row is this lane's, on this lane's binaries. **Only the ratios travel
+between the two harnesses; the absolute seconds do not.**
