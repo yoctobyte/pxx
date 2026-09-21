@@ -2211,6 +2211,36 @@ do kill -USR1 <pid>; sleep 0.4; done'`) plus a plain loop of `continue` removes
 the event loop from the problem entirely. Get the pid from
 `gdb.selected_inferior().pid` after `starti`.
 
+**`ptrace_scope` IS 1 ON THIS BOX, SO `gdb -p <pid>` CANNOT ATTACH — AND THAT IS
+NOT A REASON TO ASK FOR SUDO.** gdb as the PARENT works with no permission at
+all: `gdb --batch -x <script> --args ./prog <args>`. A seat that reaches for
+`/proc/sys/kernel/yama/ptrace_scope` is trying to loosen a guardrail, which is
+the owner's call and not a seat's however revertible the diff — and it is not
+even needed. The only thing gdb-as-parent costs you is that you cannot attach to
+a process someone ELSE started; for that, see the read-only route below.
+
+**TO INSPECT A PROCESS YOU CANNOT ATTACH TO, `/proc` ANSWERS THE QUESTION THAT
+USUALLY MATTERS, AND IT NEEDS NO PTRACE.** Measured 2026-09-21 on a hung
+`--threadsafe` test: `/proc/<pid>/task/*/stat` field 3 is the thread state and
+fields 14/15 are utime/stime, so **sampling them twice a few seconds apart
+separates a SPIN from a BLOCK** — state `R` with utime climbing is a spin, state
+`S`/`D` with utime flat is a block, and `wchan` names the kernel function for the
+latter. It also gives you the thread COUNT for free, which in that case was the
+load-bearing fact: one thread left, so nothing could still be signalling it.
+**Find the process by `/proc/<pid>/exe`, never by a command-line pattern** — a
+pattern scan counts the observer, which is the `pgrep`/`pkill -f` rule in
+CLAUDE.md arriving in a different tool.
+
+**PROFILING A GUI DEMO WITHOUT PUTTING A WINDOW ON THE OWNER'S DISPLAY:
+`SDL_VIDEODRIVER=offscreen`.** The real `run()` loop executes normally and
+nothing is presented. Two things to know before quoting a number from it. It
+**removes the vsync/compositor wait entirely**, so what you measure is the WORK
+term and it says nothing about wait-versus-work — say so beside the number.
+And it is the difference between a measurement you may take unattended and an
+outward-facing act on somebody's screen: `runbin.sh` sets
+`SDL_VIDEODRIVER=wayland` itself when the variable is unset and `WAYLAND_DISPLAY`
+is present, so **not setting it is a choice, not a default.**
+
 **Use `starti`, not `start`, on a pxx-emitted binary**: `start` breaks on
 `main`, and a demo binary measured that day had **two** symbols named `main`.
 `starti` needs no symbol at all.
