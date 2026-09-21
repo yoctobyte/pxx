@@ -33154,6 +33154,61 @@ before you have built anything on it. **Two arms that agree when they should not
 is a contaminated setup announcing itself, and it reads exactly like a clean
 negative result.**
 
+**AND THE MIRROR HALF LANDED ON THE SAME PATH SIX HOURS LATER —
+`lekkerzeilen-7a`, 2026-09-21, validating pin v414.** Two numbers for one
+object, and this time they were implausibly *far apart* rather than implausibly
+equal:
+
+```
+stat -c%s   stable_linux_amd64/default/pinned  ->  13
+stat -Lc%s  stable_linux_amd64/default/pinned  ->  8490596
+sha256sum   stable_linux_amd64/default/pinned  ->  aeadb1754b80b622...  (the real binary)
+```
+
+**13 is the length of the string `stable_pinned`.** `sha256sum` follows a
+symlink and `stat` does not, so a table carrying a size column from `stat` and a
+sha column from `sha256sum` is **two measurements of two different objects
+presented as one row**. `stat -L` settles it. Reproduced independently by
+`frankz-e5` on the same path — and note it is the **same symlink** that produced
+8e's `git log -1` contamination above, answering a third wrong question to a
+third instrument. A path that resolves is not a path that answers your question,
+and this one has now lied about a date, a size, and by implication a provenance.
+
+**So implausible agreement and implausible disagreement are ONE check, and only
+one half of it is instinctive.** Nobody builds on a number that cannot be
+reconciled — 7a stopped dead, because 13 bytes is not a compiler and no reading
+makes it one. Everybody builds on a number that agrees, because agreement is
+what a clean result looks like. **The disagreement half is self-enforcing and
+the agreement half is not**, which is why 8e's instance cost two contaminations
+and 7a's cost nothing.
+
+**7a's account of what actually saved it is the part to copy, and it is not the
+arithmetic:** the guard that fired was a refusal to measure until the binary was
+confirmed complete — **a check armed for one reason catching something else
+entirely.** It was not looking for a symlink. Cheap, always-on preconditions
+catch classes their author never enumerated, which is the argument for arming
+them at all, and it is the same argument as 7a's own artefact-property rule one
+paragraph up: a guard that fires at *run* time catches what the author did not
+think of at *write* time.
+
+**CODA, SAME DAY, AND IT IS THE CHEAPEST OF THE THREE — `franks-5b`, 2026-09-21.**
+Asked whether its A/B arm hashing to the pinned binary might be *this* bug
+rather than a reproduction, 5b answered in one message: three arms, three
+distinct shas (`d8b0c6fc5cac`, `70b4768485e9`, `aeadb1754b80`), hashed at build
+time as a routine check. **The control already existed. It had not been
+stated** — only the one sha that collided with the pin was reported. 5b's own
+verdict: *"a control nobody can see is a control nobody can check, and you had
+to ask."*
+
+**So the discharge is not "hash the arms", it is "PRINT the hashes".** An
+unstated control protects its author and nobody else; from outside it is
+indistinguishable from an absent one, and it costs a round trip per reader to
+recover. Note which way the error ran — 5b reported the *flattering* reading of
+a byte-identity (my build reproduced the pin) without noticing there was a
+choice, while holding the evidence that settled it. **The design made collision
+unlikely, and unlikely is exactly the confidence level at which 7a's table
+looked complete.**
+
 ## THE WRAPPER'S EXIT AND THE PIPELINE'S EXIT ARE ONE DEFECT AT TWO SCALES, AND ONLY ONE OF THEM HAS A NAME
 
 *`frankb-8e` found the unnamed scale, `franks-5b` supplied the framing and the
@@ -33298,3 +33353,89 @@ need a build of your code from before your change, prefer one that already
 exists and is checked in to one you would have to manufacture** — manufacturing
 it perturbs the chain your gate depends on, and it competes for the binary your
 verification run is holding.
+
+## PRE-ASSIGN AN OUTCOME BY ITS *SHAPE*, NEVER BY THE VALUE YOU PREDICT — A BOX WRITTEN AS A LITERAL HAS THE SAME HOLE ONE LEVEL DOWN
+
+*`frankh-c0`, 2026-09-21, pre-registering a probe before pin v414. Raised by
+`frankz-e5` as "the third reading is reachable and you have not written a box
+for it"; c0 accepted that and then extended it past the point the objection
+reached, which is the half worth keeping.*
+
+The probe prints `type(r).__name__`, so its output is an arbitrary string and
+the outcome space is not two-valued. **An unwritten reading does not arrive
+labelled unclassified — it arrives looking like whichever written outcome it
+most resembles, and it is judged after it has been seen.** That is the ordinary
+pre-registration rule and it is where the exchange started.
+
+**c0's extension is stronger and it is the finding.** The obvious repair —
+"add a third box for `Random`" — reintroduces the defect one level down,
+because a box written as a **predicted literal** misses whenever the literal is
+wrong. And here c0 could show that the predicted literal almost certainly *is*
+wrong, from its own ticket filed hours earlier: a shim class declared under a
+Pascal-ish name with a published alias reports the **declared** spelling, so
+`collections.deque()` answers `TPyDeque` rather than `deque`, on HEAD and on the
+pin. An implementer would very probably land `TRandomClass` or similar — the
+name `Random` collides with `System.Random`, and a class named after its own
+unit silently miscompiles its constructor into a self-call. **`TPyRandom`
+resembles a refusal to nobody and resembles `Random` to nobody**, so a third box
+written as the literal `Random` would have left the most likely reading outside
+all three boxes, classified after the fact — *the exact failure the objection
+raised, arriving through the name chosen to fill the box rather than through the
+box being absent.*
+
+The space closed by shape instead:
+
+| reading | meaning |
+| --- | --- |
+| `float` | fold still present; the fix is ABSENT |
+| a refusal | fix present **or** `random` broke — the lowercase probe separates them |
+| **any other string** | a class exists and was constructed; route is not the fix under test, column not implicated |
+
+**THIS IS A SECOND SUBSYSTEM FOR A RULE CLAUDE.md ALREADY STATES ABOUT TICKET
+SUMMARIES:** *state the MECHANISM and the condition that would SPRING it, never
+a row that fires today.* Same failure, same repair, different artefact — a
+summary citing a currently-firing row decays when the row is fixed; a
+pre-registration citing a predicted literal misses when the prediction is wrong.
+**Naming the instance instead of the class is one defect wearing two costumes**,
+and the pre-registration costume is the nastier one because the miss is silent:
+a stale summary is contradicted by the next reader, while an unmatched box is
+resolved by the author's own judgement, after the data is in.
+
+**Write the class of readings. If you can name the member you expect, that is
+evidence you are about to write the member.**
+
+## A DISCHARGE THAT WORKED FOR A REASON THAT WAS NOT YOURS TEACHES A HABIT THAT IS NOT LOAD-BEARING
+
+*`franks-5b`, 2026-09-21, two instances of its own, offered unprompted while
+auditing a near-miss it had not had.*
+
+`frankz-e5` read pin artefacts after a `git fetch` and got the **previous** pin
+back: refs had moved, the working tree had not, so `sha256sum` and `pin.log`
+answered v413 while `merge-base` answered v414 — **the two instruments
+disagreed and the correct one was the one that looked more abstract.** A file on
+disk feels like ground truth and a ref query feels like an inference, and that
+day it was the other way round.
+
+5b checked itself against the same hazard, found itself clean, and then declined
+to bank the clean result as a habit: **`tools/sync.sh` pulls before it pushes,
+so its path read was current by construction.** Its own words — *"I did the
+right thing for a reason that was not mine."* It named its pipeline-rc
+self-audit from the same morning as the same shape.
+
+**The generalisation, and it is about write-ups rather than about measuring.**
+When a discharge is recorded, what gets written down is *the discharge worked*.
+What does not get written down is **which mechanism made it work** — and if the
+answer is "a tool I was using for another purpose happened to order things
+safely", then the next person inherits a habit that was never doing the work and
+will carry it into a context where the tool is absent. The habit and the
+guarantee came apart without anyone noticing, because from inside a clean run
+they are indistinguishable.
+
+**So when a hazard misses you, establish WHY before recording that it missed.**
+Two readings, and they prescribe opposite things: *my practice is sound*
+(propagate the practice) versus *my toolchain covered for me* (propagate the
+toolchain property, and warn that the practice alone is insufficient). One
+instance of this reads as modesty; 5b supplied two from one seat in one day,
+which is what makes it a mechanism. It is also the reason this entry exists at
+all — **nobody is obliged to audit a success**, and a seat that does is
+generating the only evidence this class ever produces.
