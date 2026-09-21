@@ -248,4 +248,4 @@ esp32s3 and esp32c3 (`test_esp_bare`, `test_esp_exception`, a `SetLength`
 program) match their x86-64 oracles.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2876138e6.
