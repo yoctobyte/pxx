@@ -969,3 +969,92 @@ machine's?"** Arm A is priced. Arm B is priced. Neither has been BUILT, and the
 thing still missing before this is worth the owner's turn is how much real ISR
 code the bitwise-only subset already covers — because if it covers the cases
 anyone actually wants, the fork does not need asking.
+
+## 2026-09-21 — THE COVERAGE ROW. THE CLEAN SUBSET COVERS 0 OF 5, AND THE FORK SURVIVES
+
+The previous section ended by refusing to escalate until one thing was measured:
+**how much real ISR code the bitwise-only subset already covers.** It is
+measured, and the answer is none of it.
+
+### The population, named, so a later re-run can disagree with a denominator
+
+`examples/esp32/*/main/*.pas`, every routine whose ADDRESS is installed as an
+interrupt or timer callback — found by `grep -rn "@On[A-Za-z]*"` for the install
+sites, not by looking for bodies that seemed ISR-shaped. **N = 5**, at
+`c76d2d971`:
+
+    gpio-c3    OnEdge       gpio_isr_handler_add       edges    := edges    + 1
+    isrctx-c3  OnTaskTick   StartOne(ESP_TIMER_TASK)   taskHits := taskHits + 1
+    isrctx-c3  OnIsrTick    StartOne(ESP_TIMER_ISR)    isrHits  := isrHits  + 1
+    timer-c3   OnTick       t.OnElapsed                ticks    := ticks    + 1
+    timer-s3   OnTick       t.OnElapsed                ticks    := ticks    + 1
+
+**Five of five are `x := x + 1`.** One of them — `OnIsrTick`, the only one that
+is ISR-dispatch rather than task-dispatch, and the only one carrying `iram;` —
+says in its own comment that it *"does the least work that can answer the
+question — one read, one increment, no printing, no allocation — because the
+whole point of the parent ticket is what an ISR body may not do."* **The
+minimal ISR body this tree's own author wrote, deliberately, as the least
+possible work, is an increment.**
+
+frankuser supplies the same answer from history rather than code: the owner's
+stated ISR use case, in his 2026-09-20 ESP ruling, is that **the ESP demo POLLS
+A TICK COUNTER** because a Pascal routine handed to a NilPy procedural parameter
+is not a code address. The motivating example is a counter.
+
+### The transcription, measured rather than reasoned
+
+These five are PASCAL bodies, where `ticks := ticks + 1` is a native add and
+costs nothing. The claim is about the same body written in NilPy, which is what
+the parent ticket wants, so it is measured directly rather than inferred:
+
+    edges = 0
+    def probe(arg):
+        global edges
+        edges = edges + 1
+
+    edges = edges + 1   ALLOC   71 bodies (34 direct)
+    edges += 1          ALLOC   71 bodies (34 direct)   -- identical
+    edges = edges ^ 1   clean    0 bodies               -- and is not a counter
+
+**`+=` is not a way out**: it lowers identically. The clean row is there as the
+control showing the instrument can still answer clean on this shape, and it is
+the shape nobody wants.
+
+### So: the clean subset covers 0 of 5, and it covers 0 of the owner's stated case
+
+The question *"does the subset we already have cover what anyone actually wants
+to write in a handler?"* is answered **NO**, on the only real artefacts in the
+tree and on the motivating example both. **The fork is necessary, not
+possibly-withdrawable.**
+
+### THE FORK, WRITTEN DOWN AND DELIBERATELY NOT SENT
+
+Not sent tonight: the owner is asleep, and frankuser's instruction is that a
+fork arriving with its coverage row attached is answerable in one word where the
+same fork bare costs him a turn asking what the subset covers. It is recorded
+here so the next seat sends it rather than re-deriving it.
+
+> **Do we want a NilPy function that can be called from an interrupt to compute
+> with Python's integers, or with the machine's?**
+
+**If Python's:** a handler cannot be proved non-allocating, because `n = n + 1`
+goes through the arbitrary-precision runtime whose overflow arm is the heap.
+What is left is arm B — accept the promo helpers under a documented precondition
+— which makes the guard a promise rather than a proof, and whose precondition is
+violated on every target we ship to and on none that we test on
+(`PXXPromoFromInt` spills to the heap outside ±2^31 when `SizeOf(NativeInt) < 8`;
+xtensa and riscv32 are 32-bit, x86-64 is not, and the dev loop, `gate.sh quick`
+and the pin all run on x86-64).
+
+**If the machine's:** arm A. Cheap to build — one predicate, two already-wired
+typing sites, plus a scope flag. And it is **a second integer semantics, not a
+specialisation**: `n = n + 1` would WRAP inside an ISR-restricted scope, which
+re-opens on a restricted scope the bug `decide-nilpy-int-promotion-default`
+closed, and gives a DIFFERENT ANSWER from CPython rather than accepting
+something CPython rejects — the direction `nilpy-semantics-divergences.md`'s
+one-directional rule does not permit.
+
+**What is NOT the fork:** which arm is cheaper. Both are priced and the prices
+are close enough that cost does not decide it. It is his because the two arms
+differ in what NilPy IS on a microcontroller.
