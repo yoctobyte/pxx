@@ -33758,3 +33758,57 @@ Banked here rather than promoted to CLAUDE.md deliberately: CLAUDE.md already
 carries the general rule and both other instances, and what is new is the SHAPE
 (a negative capability claim in a declaration), not the principle. If it turns
 up in a second unrelated subsystem, that is the trigger to argue for promotion.
+
+
+## WHICH CODE WAS RUNNING WHEN THAT VERDICT WAS PUBLISHED — ASK THE ARTEFACT, NOT THE PROCESS
+
+Measured 2026-09-21 (borg, Track T), fixing the watcher's auto-close duplicate.
+
+A resident daemon holds the code it was STARTED with. The file underneath it
+moves on every pull, and the clone is DETACHED at whatever sha is under test,
+so `git log` on `tools/twatch.py` answers about the tree and says nothing about
+the process. `ps` gives a start time, which only bounds it. The question that
+actually matters when you are reading a three-week-old verdict — *did the run
+that produced this already contain the fix I am about to re-derive?* — has a
+direct answer, and it is in the artefact:
+
+    watcher.twatch in devdocs/progress/tstate/<host>.json
+
+It is a **content sha256 of twatch.py**, published by the run itself
+(`code_fingerprint()`), not a git sha and not a status a wrapper returns. So it
+survives detachment, rebases and mid-rebase states, and it is a property the
+JOB maintains rather than one an observer computes afterwards.
+
+To map a published fingerprint back to a version, hash the historical blobs
+until one matches:
+
+    git log --format=%h --since=<date> -- tools/twatch.py |
+      while read h; do
+        printf '%s %s\n' "$h" \
+          "$(git show $h:tools/twatch.py | sha256sum | cut -c1-12)"
+      done
+
+That is how the 2026-09-16 duplicate run was pinned to `cead35240` (2026-09-11)
+in about ten seconds, which **excluded both existing fixes as the explanation**
+— `5e90df31f` and `ee4553627` were ancestors of the running code, so the third
+mechanism had to be real rather than a fix that had not shipped yet. Without
+it, the cheap and wrong reading is "the daemon must be on old code", and that
+reading costs a re-derivation of a bug that is genuinely still there.
+
+**Use it on the way IN and on the way OUT.** After landing a daemon fix, the
+acceptance is not that a restart exited 0: it is that a POST-RESTART run
+publishes a fingerprint equal to the sha256 of the fixed file. A restart that
+exits 0 and leaves the old image resident is indistinguishable from a live fix
+by every other signal — `--status` is green either way, because it is green
+about the tree.
+
+One caveat that follows from the clone being detached: the file on disk is the
+version AT THE TESTED SHA, so the published fingerprint matches the fixed
+content only once the clone is testing a sha that carries the fix. A mismatch
+immediately after a restart is therefore ambiguous between "still old image"
+and "testing an older sha"; check what the clone has checked out before
+reading it as a failed restart.
+
+`tools/twatch_running_code_devtest.py` guards that `--status` asks this
+question at all, and — equally important — that it stays SILENT when it cannot
+tell.
