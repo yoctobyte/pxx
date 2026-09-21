@@ -325,7 +325,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (187)
+## backlog-nilpy (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -346,7 +346,6 @@ _none_
 | bug-n-a-collections-deque-segfaults-at-run-time | N | 70 | bug | `collections.deque()` COMPILES and then SEGFAULTS at run time (rc=139), producing no output at all where CPython prints a value. Minimal: `q = collections.deque(); q.append(5); print(q.pop())` inside a function -- compiles clean, crashes. MEASURED ON BOTH SIDES of the 2026-09-12 candidate-promotion fix, with binaries built from the same tree minus that one hunk, so it is PRE-EXISTING and unrelated to it. The pin cannot serve as a control because it predates deque support entirely (`no member deque came of the qualifier collections`). A compiling program that crashes is worse than a refused one, and the crash is silent -- no diagnostic, no partial output. | — |
 | bug-n-a-def-in-an-imported-module-does-not-shadow-len-or-sorted | N | 55 | bug | > | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 65 | bug | RE-RANKED 45 -> 65 2026-09-20 ON A SECOND OBSERVABLE THAT REFUTES THIS TICKET'S OWN by-design ESCAPE: a conditional def with NO PRIOR DEFINITION is not a rebinding question -- there is nothing to displace -- and it is REFUSED outright, `error: unresolved forward: <name>`. That makes the standard pure-Python fallback `try: from x import f / except ImportError: def f(...)` fail, which is HALF OF PYTHON'S ONLY #ifdef: pxx supports the conditional IMPORT (the owner ruled that idiom by design, 2026-09-20) and not the conditional DEFINITION. It is NOT if-specific -- `if`/`for`/`try`/`finally` all refuse -- and NOT a visibility problem, because a call from INSIDE the same block fails identically. Original observable: `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
-| bug-n-a-def-returning-a-multi-hop-attribute-chain-is-typed-by-the-hop-before-last | N | 80 | bug | `def f(): h = Holder(); return h.c.v` declared the INTERMEDIATE hop's class as its result type and segfaulted the caller. FIXED 2026-09-15; the `return mk().v` shape (a field off a CALL result) is the named residual. | — |
 | bug-n-a-for-in-loop-that-rebinds-its-own-name-leaves-the-thread-registry-undrained | N | 40 | bug | `for t in ts:` where `t` already holds one of the elements leaves the thread registry undrained | — |
 | bug-n-a-free-function-keyword-argument-is-refused-in-a-pyeval-interpreted-lambda-body | N | 45 | bug | `lambda x: g(x, outside=2.0) <= 5.0` dies at RUN time with `pyeval: unsupported keyword arg: outside`, where `g` is a free function. The discriminator is NOT free-vs-method and NOT the keyword: it is whether the body gets LIFTED. A body that is a bare call (`lambda x: g(x, outside=2.0)`) is compiled and correct; wrapping the same call in a comparison routes the body through pyeval, whose keyword handling is hard-wired to print's `end`/`sep`/`flush` and errors on anything else (compiler/builtin/pyeval.pas:4040). The METHOD spelling of the same shape works through the comparison, which is why this reads as a free-vs-method bug and is not one. Measured 2026-09-12 while clearing the float-literal-in-a-lambda wall; app.py:3305 is the METHOD form and is CORRECT (verified against CPython), so this does NOT block the lekkerzeilen closure. Honest run-time refusal, not a wrong value. A real fix needs the callee's signature at run time so a keyword can be mapped to a parameter slot, which pyeval does not have — that is the actual work, and it is why this is not a microfix. | — |
 | bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released | N | 70 | bug | A call whose FRESH result is discarded never releases it -- methods and containers | — |
@@ -1113,9 +1112,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3910)
+## done (3911)
 
-3910 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3911 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (85)
 
@@ -1219,7 +1218,6 @@ _none_
 - [p 80] [T] bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - [p 80] [U] decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
 - [p 80] [A] feature-a-object-output-for-arm32-and-aarch64 (unblocks 1)
-- [p 80] [N] bug-n-a-def-returning-a-multi-hop-attribute-chain-is-typed-by-the-hop-before-last
 - [p 80] [N] bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - [p 80] [N] bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - [p 80] [N] bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type

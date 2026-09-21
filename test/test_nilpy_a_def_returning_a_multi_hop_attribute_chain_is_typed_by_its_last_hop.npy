@@ -207,6 +207,101 @@ def through_str():
 
 check("through_str", "%s" % through_str(), "abc")
 
+# --- THE NAMED RESIDUAL, added 2026-09-21. This fixture shipped WITHOUT it,
+# which is the gap that matters: the ticket recorded `return mk().v` at MODULE
+# scope as still SEGFAULTING after the chain fix, named the reason
+# (PyNestedDefRetType's bare-call arm scans only the ENCLOSING body, so a
+# module-level def is outside its range), and nothing pinned the shape. Measured
+# at HEAD 2026-09-21: every row below passes, and under pin v416 too, so the
+# residual was closed by events with no commit naming it -- the exact way a fix
+# becomes unprotected.
+#
+# CONTROL I DO NOT HAVE, stated rather than glossed: I could not produce a
+# compiler that FAILS these, so nothing here proves the rows can go red. What
+# would settle it is building the parent of whichever commit closed the residual
+# and running this section against it; `git log -S PyNestedDefRetType` finds
+# nothing since 2026-09-15, so it was not fixed there and the culprit is
+# unidentified. Until then read this section as a REGRESSION PIN, not as
+# evidence the defect is understood.
+#
+# Leaves are deliberately non-class, for this file's own reason: with a class
+# leaf the intermediate's type and the right answer coincide and the row passes
+# on a broken compiler.
+
+def mk_cell():
+    return Cell(20)
+
+def mk_holder():
+    return Holder(20)
+
+def call_then_field():
+    return mk_cell().v
+
+def call_then_field_annot() -> int:
+    return mk_cell().v
+
+def call_then_two_hops():
+    return mk_holder().c.v
+
+def call_then_call_then_field():
+    return mk_cell().get()
+
+def nested_call_then_field():
+    def inner():
+        return Cell(20)
+    return inner().v
+
+def call_then_field_in_expr():
+    return mk_cell().v + 0
+
+def call_then_field_via_local():
+    t = mk_cell()
+    return t.v
+
+def ctor_then_field():
+    return Cell(20).v
+
+check("call_then_field", "%s" % call_then_field(), "20")
+check("call_then_field_annot", "%s" % call_then_field_annot(), "20")
+check("call_then_two_hops", "%s" % call_then_two_hops(), "20")
+check("call_then_call", "%s" % call_then_call_then_field(), "20")
+check("nested_call_then_field", "%s" % nested_call_then_field(), "20")
+check("call_field_in_expr", "%s" % call_then_field_in_expr(), "20")
+check("call_field_via_local", "%s" % call_then_field_via_local(), "20")
+check("ctor_then_field", "%s" % ctor_then_field(), "20")
+
+# A non-int leaf off a call result, so the row cannot pass by the leaf and the
+# intermediate agreeing.
+def mk_str_holder():
+    return Holder("abc")
+
+def call_then_str():
+    return mk_str_holder().c.v
+
+check("call_then_str", call_then_str(), "abc")
+
+# MUTUAL RECURSION THROUGH THE RETURN TYPE -- the second thing the ticket named
+# as unguarded ("`a` returns `b().x`, `b` returns `a().y` have no guard today").
+# The inference has to type `a` to type `b` and vice versa. It terminates, and
+# the program's runtime answer matches CPython's, which is what the row asserts.
+class Pair:
+    def __init__(self, v):
+        self.x = v
+        self.y = v
+
+def rec_a(n):
+    if n <= 0:
+        return Pair(1)
+    return rec_b(n - 1)
+
+def rec_b(n):
+    if n <= 0:
+        return Pair(2)
+    return rec_a(n - 1)
+
+check("mutual_ret_x", "%s" % rec_a(3).x, "2")
+check("mutual_ret_y", "%s" % rec_b(2).y, "2")
+
 if ok:
     print("CHAINRET OK")
 else:
