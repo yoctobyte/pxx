@@ -34791,3 +34791,85 @@ exist" into a confident verdict.
 **And pre-register the expected range for BOTH directions.** A ceiling saved the
 win; a floor would have saved the red. Writing down only the number you hope not
 to exceed guards exactly half of your harness.
+
+## LIVENESS IS NOT REACHABILITY-FROM-HERE, AND THE ROOT SET IS PLATFORM-DEPENDENT
+
+Measured 2026-09-21, two seats reaching **opposite** answers to one question
+with one instrument, neither of them wrong.
+
+The question: can a given routine reach the allocator? The proposed classifier
+was "compile a probe, ask whether `PXXAlloc` is live". Two seats measured it:
+
+    --dce-why=PXXAlloc, ESP riscv32 (--emit-obj):
+      a := 1                  PXXAlloc <- DROPPED
+      a := 2; b := a * 21     PXXAlloc <- DROPPED
+      string concat in a loop PXXAlloc <- PXXStrAppend <- PXXStrAppendChar <- [called from unowned code]
+
+    --dce-why=PXXAlloc, hosted x86-64 default target:
+      a := 1                  PXXAlloc <- PXXStrLoadFile <- [called from unowned code]
+      string concat in a loop PXXAlloc <- PXXStrLoadFile <- [called from unowned code]
+
+**On ESP it discriminates perfectly. On hosted it certifies `a := 1` as
+allocating.** Both readings are correct about their own platform: `--dce` answers
+a GLOBAL question — is this node in the live set — and the live set is seeded by
+a ROOT SET that differs per target. The hosted RTL startup roots
+`PXXStrLoadFile`, which reaches the allocator, so on hosted the answer is "yes"
+before the program under test is even consulted.
+
+**The general form: an absolute-liveness query cannot answer a
+reachable-from-HERE question, and it fails silently in the affirmative.** The
+classifier is not subtly miscalibrated on hosted; it is answering a different
+question that happens to share a vocabulary. A forward query ("what does entry E
+reach") has no such failure — provided it never degrades to consulting the live
+set, which is the one line worth asserting inside such a tool.
+
+**Cheap repair where only the global query exists: ask it DIFFERENTIALLY.** Does
+this entry being reachable ADD an edge to the allocator that is not there
+without it? The platform root set then sits in both arms and cancels, and the
+control is built into the instrument rather than bolted beside it.
+
+### The tell that is not a tell
+
+The first reading of the split was that `[called from unowned code]` marks the
+artefact. **It does not.** It terminates the TRUE positive (ESP, string concat)
+exactly as it terminates the false positive (hosted, `a := 1`). The node that
+actually differs is the PENULTIMATE one — `PXXStrAppend` is what the program's
+own concat compiles to, `PXXStrLoadFile` is startup the program never names —
+and the report prints both terminators identically. Nothing in the output
+separates them mechanically. **A conservative root and a real edge look the same
+from the leaf.**
+
+### And the other instrument answered about an empty set
+
+The same investigation carried an `nm`-on-the-output reading, which on hosted
+said "absent" for all three probes **including the one that must allocate** —
+i.e. broken in the opposite direction from the `--dce` reading, which is what
+made the disagreement three-way instead of two-way.
+
+**A pxx-written hosted executable has no symbol table at all.** `nm` exits **0**
+and prints `no symbols`; `readelf -SW` lists no sections. So every query answers
+absent, for every program, and the instrument cannot return a positive. It is
+valid only on `--emit-obj` objects, which retain 40-49 symbols and do
+discriminate, agreeing with `--dce` there.
+
+**`nm` exiting 0 on a binary with no symtab is a guard that cannot fail wearing
+a successful exit status** — this is the fleet's "the instrument enumerates a
+population that cannot contain your subject" rule, in a subsystem where the
+population is empty rather than merely wrong. **Print the size of the set your
+instrument enumerated before trusting a negative from it.** One `nm | wc -l`
+ahead of the grep would have killed this row on sight.
+
+### Indirect calls: the predicate under-reaches if it keys on calls
+
+A refusal predicate guarding such a walk wants to fire on bodies whose outgoing
+edges the graph cannot see. Phrased as "this body contains an indirect call" it
+misses the commoner shape: `p := @Foo` with no call anywhere in the body. The
+root that taking an address creates is **global**, and is not an edge out of the
+body that created it — so a forward walk from that very body walks clean and
+certifies it. Key on **"this body takes an address, or installs a body in a
+dispatch slot"**, not on calling through a pointer.
+
+Live instance of the slot half, in the tree: a Python method body occupying a
+Pascal vtable slot, entered by a virtual call from Pascal
+(`bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...`). No
+edge anywhere in the graph expresses that crossing.
