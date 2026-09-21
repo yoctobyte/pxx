@@ -150,22 +150,21 @@ begin
 end;
 
 procedure InstallVector;
-var base, arrBase, slot, off, insn, i: Integer;
+var base, arrBase, slot, off, insn: Integer;
 begin
   arrBase := Integer(@vecRaw[0]);
   base := (arrBase + 1023) and (not 1023);
-  { One slot. The entry stub sets PS = $2F (EXCM 0, UM 1), so a level-1
-    exception lands at 0x340 and nowhere else; see the header. }
-  for i := 0 to 0 do
-  begin
-    slot := $340;                    { UserExceptionVector — see the header }
-    off := (base - arrBase) + slot;
-    { j target: imm18 = target - pc - 4, where pc is the stub's own address. }
-    insn := ((Integer(@VecHandler) - (base + slot) - 4) shl 6) or $06;
-    vecRaw[off]     := insn and $FF;
-    vecRaw[off + 1] := (insn shr 8) and $FF;
-    vecRaw[off + 2] := (insn shr 16) and $FF;
-  end;
+  { ONE slot, written straight rather than in a loop. The entry stub sets
+    PS = $2F (EXCM 0, UM 1), so a level-1 exception lands at the User vector
+    and nowhere else; see the header for why planting the neighbours would
+    weaken this rather than harden it. }
+  slot := $340;                      { UserExceptionVector }
+  off := (base - arrBase) + slot;
+  { j target: imm18 = target - pc - 4, where pc is the stub's own address. }
+  insn := ((Integer(@VecHandler) - (base + slot) - 4) shl 6) or $06;
+  vecRaw[off]     := insn and $FF;
+  vecRaw[off + 1] := (insn shr 8) and $FF;
+  vecRaw[off + 2] := (insn shr 16) and $FF;
   { A guard that can fail: `j` reaches +/-128 KiB and the table is in BSS while
     the handler is in the code section. Small images are comfortably inside,
     but "comfortably" is not a range check, and past it the stub jumps to a
