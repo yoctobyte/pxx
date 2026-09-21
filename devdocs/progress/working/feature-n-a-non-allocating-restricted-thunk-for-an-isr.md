@@ -7,7 +7,7 @@ blocked-by: []
 status: working
 created: 2026-09-20
 found-by: frankb-8e
-summary: "TWO PREMISES MEASURED AND BOTH FALSE; WHAT SURVIVES IS THE MISSING ENFORCEMENT. (1) THE THUNK DOES NOT ALLOCATE for the scalar case -- 100x the iterations gives +2 allocations (N=200 allocs=5, N=20000 allocs=7) against a positive control that scales exactly 100x (727 -> 72269), and even a `(const AnsiString): AnsiString` slot crosses allocation-free. THE ALLOCATION IS IN THE DEF BODY: `def grow(s): return s + 'x'` allocates ~1 per call. (2) THE JUSTIFICATION IS CONTRADICTED BY THE PLATFORM. This summary used to say an ISR that allocates is a latent crash that fires when the interrupt preempts code HOLDING THE HEAP LOCK. There is no such lock on either ESP profile. IDF: PXXAlloc is backed by calloc/free into heap_caps and multi_heap_platform.h:18 picks portmux spinlocks over RTOS mutexes BECAUSE malloc/free can happen in an ISR -- safe by deliberate design, the cost being latency and determinism. BARE: riscv32/xtensa are in neither the softlock nor hardlock target list, so there is no lock at all, and --threadsafe is REFUSED there rather than silently ignored; the free list is safe only BY UNREACHABILITY, since no interrupt handler can be installed on bare (the vector write is not expressible). SO THE MECHANISM, STATED SO IT DOES NOT DECAY WHEN AN INSTANCE IS FIXED: nothing refuses a def whose BODY can reach the allocator, and the thunk cannot fix that because the thunk is not where the allocation is. THE CONDITION THAT SPRINGS THE BARE HALF is the CSR/vector-install enabler LANDING, which converts bare from unreachable to reachable; at that point note that the remedy a seat will reach for is WORSE than the hazard -- PXXHeapSpin (builtinheap.pas:1611) is a bare xchg spin with no interrupt masking, so a task holding it and an interrupt contending for it on one core cannot make progress. ACCEPTANCE is a measured pair (must-reject `grow`, must-accept `two`), not the unsatisfiable 'reject the existing thunk once established that it allocates'. x86-64 only so far; the on-target context precondition is assertable via xPortInIsrContext and MUST be asserted as `<> 0` never `= 1` (riscv returns the raw nesting count, xtensa a normalised boolean). SPLIT OUT OF feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback 2026-09-20. Parent sits at 85 on a secondhand relay that the owner called ESP interrupts a must-have; this half is 60 because nothing downstream is blocked on it today."
+summary: "TWO PREMISES MEASURED AND BOTH FALSE; WHAT SURVIVES IS THE MISSING ENFORCEMENT. (1) THE THUNK DOES NOT ALLOCATE for the scalar case -- 100x the iterations gives +2 allocations (N=200 allocs=5, N=20000 allocs=7) against a positive control that scales exactly 100x (727 -> 72269), and even a `(const AnsiString): AnsiString` slot crosses allocation-free. THE ALLOCATION IS IN THE DEF BODY: `def grow(s): return s + 'x'` allocates ~1 per call. (2) THE JUSTIFICATION IS CONTRADICTED BY THE PLATFORM. This summary used to say an ISR that allocates is a latent crash that fires when the interrupt preempts code HOLDING THE HEAP LOCK. There is no such lock on either ESP profile. IDF: PXXAlloc is backed by calloc/free into heap_caps and multi_heap_platform.h:18 picks portmux spinlocks over RTOS mutexes BECAUSE malloc/free can happen in an ISR -- safe by deliberate design, the cost being latency and determinism. BARE: riscv32/xtensa are in neither the softlock nor hardlock target list, so there is no lock at all, and --threadsafe is REFUSED there rather than silently ignored; the free list is safe only BY UNREACHABILITY, since no interrupt handler can be installed on bare (the vector write is not expressible). SO THE MECHANISM, STATED SO IT DOES NOT DECAY WHEN AN INSTANCE IS FIXED: nothing refuses a def whose BODY can reach the allocator, and the thunk cannot fix that because the thunk is not where the allocation is. THE CONDITION THAT SPRINGS THE BARE HALF is the CSR/vector-install enabler LANDING, which converts bare from unreachable to reachable; at that point note that the remedy a seat will reach for is WORSE than the hazard, and state it as a MECHANISM because the line number decayed within a day: the remedy is turning on --threadsafe, and PXXHeapSpin (builtinheap.pas, grep the symbol -- TWO acquire sites, both inside {$ifdef PXX_THREADSAFE}, so on bare today there is no lock to be stale about) is a bare xchg spin with no interrupt masking, so a task holding it and an interrupt contending for it on one core cannot make progress. ACCEPTANCE is a measured pair (must-reject `grow`, must-accept `two`), not the unsatisfiable 'reject the existing thunk once established that it allocates'. x86-64 only so far; the on-target context precondition is assertable via xPortInIsrContext and MUST be asserted as `<> 0` never `= 1` (riscv returns the raw nesting count, xtensa a normalised boolean). SPLIT OUT OF feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback 2026-09-20. Parent sits at 85 on a secondhand relay that the owner called ESP interrupts a must-have; this half is 60 because nothing downstream is blocked on it today."
 ---
 
 # A non-allocating restricted thunk for an ISR
@@ -862,3 +862,110 @@ return a value without touching the Variant runtime at all.
 pair fixes every axis you did not think to vary, and the axis you did not think
 of is the one carrying the effect. I varied the annotation because the
 annotation was what I was asking about.
+
+## 2026-09-21 — THE FRONTEND ARM IS PRICED, AND IT IS NOT A VARIANT QUESTION AT ALL
+
+frankuser asked for the frontend question to be MEASURED before anything goes
+up as a `decide`. It is measured. The previous section's remedy — *"Variant
+arithmetic on operands known to be scalar must lower to scalar ops"* — named
+the wrong runtime, for the third framing in a row. There is no Variant in
+`def add_const(a): return a + 1`.
+
+### What `a + 1` actually is
+
+`PXXDBG=a.ast:add_const` on the one-def file:
+
+    #8195 kind=5(AN_BINOP) tk=28 ival=70(tkPlus)
+      #8193 kind=3(ident)  tk=13 sym=553 'a'
+      #8194 kind=1(const)  tk=1  ival=1
+
+`tk=13` is **tyInt64** and `tk=28` is **tyPromoInt64**. So the PARAMETER is
+already a machine integer — the "all-Variant def convention" is not what is
+happening here — and it is the BINOP NODE that is typed arbitrary-precision.
+
+Its three calls, identified by matching arity against the reach set rather than
+by reading the numbers as names: `PXXPromoFromInt(temp, a)` (2 args),
+`PXXPromoAddInt(dst, temp, 1)` (3 args), `PXXPromoToInt64Wrap(dst)` (1 arg,
+result tk=13).
+
+### Where the decision is made — ONE predicate, TWO sites, both already wired
+
+`PyIntGrowsOp` (`symtab.inc`) answers true for `+`, `-`, `*`, and the two binop
+typing arms in `pasparser_expr.inc` (`PyExprMode and PyIntGrowsOp(op) and
+PyIsMachineIntTk(both)`) type the node `tyPromoInt64`. `IRLowerAST`'s binop
+dispatch keys on `TypeIsPromoInt(ASTTk[node])` — the RESULT type — and routes to
+`IRPromoEmitBinop`. Nothing else is consulted. Its own comment records the
+decision it implements: `decide-nilpy-int-promotion-default` option 1, closing
+`bug-nilpy-int-promotion-decided-statically-so-computed-overflow-wraps`.
+
+### The operator table — one body per FILE, so nothing in the run supplies an edge
+
+`./compiler/pascal26 --dce-reach-from=probe <file>.npy`, twelve files, each
+containing exactly one `def probe(a)` and one call. Binary `497489e8a723`.
+
+    a               clean    0 bodies
+    a & 1           clean    0 bodies          IR_BINOP, no call emitted
+    a | 1           clean    0 bodies
+    a ^ 1           clean    0 bodies
+    a > 1           clean    0 bodies
+    a + 1           ALLOC   71 bodies   (34 direct)   PXXPromoAddInt
+    a - 1           ALLOC   74 bodies   (37 direct)   PXXPromoSubInt
+    a * 2           ALLOC   69 bodies   (32 direct)   PXXPromoMulInt
+    a << 1          ALLOC   69 bodies   (32 direct)   PXXPromoShl
+    a >> 1          ALLOC   71 bodies   (34 direct)   PXXPromoShr
+    a // 2          ALLOC  151 bodies  (104 direct)   pyfloordiv_i  -- NO promo
+    a % 2           ALLOC  151 bodies  (104 direct)   pyfloormod_i  -- NO promo
+
+**The table carries its own positive control**: five rows must be clean and
+seven must not, and both halves came out as required. A table that answered
+`clean` everywhere would have been the instrument failing, not a result.
+
+**THE NON-ALLOCATING SUBSET IS NOT EMPTY AND IT IS NOT "NO ARITHMETIC".** It is
+bitwise-and-comparison. That is enough for a mask-and-test ISR and not enough
+for a counter.
+
+### The `//` and `%` rows are a different cause and cost the most
+
+They name no promo helper. `a // 2` lowers to a CALL to `pyfloordiv_i`
+(`a & 1`, for contrast, is an `IR_BINOP` and emits no call at all), because
+Python's `//`/`%` FLOOR and must raise `ZeroDivisionError` — a native `idiv`
+can do neither. The raising arm constructs an exception object, so the reach set
+contains `PXXObjAlloc`, `Exception.Create`, `PXXDivZero` and ten
+`[via @proc taken]` finalizer rows. **A def whose only arithmetic is `//`
+reaches the allocator.**
+
+`PyIntGrowsOp`'s own comment said `//` and `%` *"keep native codegen and cost
+nothing"*. Correct about promotion, false as a codegen claim, and I read it as
+the second before measuring it. Fixed in the same commit; the code is right and
+the comment was wrong.
+
+### BOTH ARMS, PRICED
+
+**Arm A — make the arithmetic non-allocating.** Mechanically CHEAP: one
+predicate, two already-wired call sites, plus a scope flag marking a def
+ISR-restricted. Semantically EXPENSIVE, and that is the whole cost: typing
+`a + 1` as `tyInt64` inside such a def means `a + 1` WRAPS instead of promoting.
+That re-opens, on a restricted scope, precisely the bug
+`decide-nilpy-int-promotion-default` closed — and it is a different ANSWER from
+CPython, not an acceptance of something CPython rejects, so
+`nilpy-semantics-divergences.md`'s one-directional rule does not cover it.
+**It is not a specialisation; it is a second integer semantics.**
+
+**Arm B — classify the promo helpers as conditionally allocating.** No frontend
+change. `PXXPromoAddInt` has an INLINE fast arm that does not allocate and calls
+`AddIntSlow` only on genuine overflow (read at `promocore.pas`). So a guard could
+accept a promo call under a documented precondition. Two costs: it converts the
+guard from a proof into a promise, which is the thing this ticket exists to
+avoid; and **the precondition is target-dependent in a way x86-64 cannot show
+you** — `PXXPromoFromInt` spills to the heap for any value outside ±2^31 when
+`SizeOf(NativeInt) < 8`, which is every ISR target we care about. On xtensa and
+riscv32 an ordinary counter passing 2.1 billion allocates. On x86-64 it does not.
+
+### What goes up, and it is not ready yet
+
+The fork, stated with no implementation noun, is **"do we want a NilPy def that
+can be called from an interrupt to compute with Python's integers, or with the
+machine's?"** Arm A is priced. Arm B is priced. Neither has been BUILT, and the
+thing still missing before this is worth the owner's turn is how much real ISR
+code the bitwise-only subset already covers — because if it covers the cases
+anyone actually wants, the fork does not need asking.

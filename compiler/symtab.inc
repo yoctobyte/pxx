@@ -4387,10 +4387,24 @@ end;
   decided as decide-nilpy-int-promotion-default option 1).
 
   Only the operators that can GROW a value are listed. `//`, `%`, `&`, `|`,
-  `^` and the comparisons cannot leave the range of their operands, so they
-  keep native codegen and cost nothing; `<<` already forces promo at its own
-  site in pyparser.inc for the same reason this exists. Division is absent
-  because Python's `/` is float.
+  `^` and the comparisons cannot leave the range of their operands, so none of
+  them needs promo; `<<` (and `>>`) already force promo at their own site in
+  pyparser.inc for the same reason this exists. Division is absent because
+  Python's `/` is float.
+
+  NOT NEEDING PROMO IS NOT THE SAME AS BEING FREE, and this comment said
+  "`//`, `%` ... keep native codegen and cost nothing" until 2026-09-21, which
+  is true of `&`/`|`/`^`/comparisons and false of the two it names first.
+  Measured, one body per file, `PXXDBG=a.ir`: `a & 1` is an IR_BINOP and emits
+  no call at all, while `a // 2` and `a % 2` are CALLS (pyfloordiv_i,
+  pyfloormod_i) — because Python's
+  `//` and `%` FLOOR (see PromoOpHelper's own note) and must raise
+  ZeroDivisionError, and a native idiv can do neither. The helper's raising arm
+  constructs an exception object, so a NilPy def whose only arithmetic is `//`
+  reaches PXXObjAlloc and therefore PXXAlloc. That matters to anything asking
+  whether a body can allocate — see
+  feature-n-a-non-allocating-restricted-thunk-for-an-isr, whose operator table
+  this sentence was the wrong half of.
 
   This is asked for by NAME at the two binop typing sites rather than folded
   into TypeArithmeticResult, because that routine is shared with Pascal and C,
