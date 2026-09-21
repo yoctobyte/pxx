@@ -477,3 +477,81 @@ callee printing every N calls, `git checkout HEAD -- compiler/pyparser.inc`
 between each round and at the end. **Counts are load-immune**, so this whole
 sequence ran while two peers held the box — worth knowing on a contended machine,
 because it is the one measurement that needs no window.
+
+---
+
+# CEILING MEASURED: removing the walk ENTIRELY buys 9%, not 5x — and that corrects my own section above
+
+**Predicted before measuring** (the arithmetic this lane has been quoting): if
+the imported rate reached the inline rate, ~5x. **Measured: 9.0%.**
+
+Upper-bound probe — `PyDefSiteMode`'s backward walk disabled outright, so it
+always answers mode 2. **Semantically WRONG on purpose**; the binary is not
+correct and only its timing was read. Both arms in-tree under distinct names,
+`--where | grep -c MISSING` equal on both, min-of-6 interleaved, box contended
+throughout (`load1 7.40/7.53/7.57`, `runq 9/9/13` — three lanes landing today).
+
+    base  19.09 18.65 21.53 21.02 21.43 18.37   min 18.37
+    ceil  17.42 18.24 19.13 19.05 18.94 16.71   min 16.71   -9.0%
+
+**What that means for the fix, stated before anyone spends a day on it:**
+
+| | |
+|---|---|
+| imported baseline | 18.37 s |
+| inline, same 400 defs | 3.75 s |
+| gap | 14.62 s |
+| **removing the walk closes** | **1.66 s = 11% of the gap** |
+| after a PERFECT fix, imported is still | **4.5x inline** |
+
+**So the walk is a real cost and it is NOT the dominant one, and my "CAUSE,
+NAMED" heading above overclaims.** It is *a* cause, worth ~11% of the import
+penalty. **~89% of the 13x is something this lane has not yet found.** The
+`~5x if the imported rate reached the inline rate` arithmetic stands as
+arithmetic and is now known not to be reachable by fixing this.
+
+**A cache or a preparse is still worth 9%** — that is not nothing on a 104 s
+build — but **9% is the CEILING and a correctness-preserving fix will be less.**
+Anyone quoting a larger number for this change is quoting the gap, not the
+measurement.
+
+**Why the profile predicted this and I did not read it that way:**
+`PyFindSuiteIndent` was **13% of samples**. Removing it should buy ~13%, and 9%
+is what a probe that also perturbs downstream work returns. The number was in
+front of me and I let a call count — 1.2 million — carry a significance that a
+*share of runtime* had already bounded. **A count is not a cost.** That is
+frankz's sentence from this morning and it was right.
+
+---
+
+# The owner's hypothesis, answered: not lists-versus-hashmaps, for the IMPORT path
+
+*"so basically, it's because we use pascal lists instead of hashmaps?"*
+
+**The discriminator is whether the per-definition call count grows with how many
+symbols are in scope. It does not.**
+
+| K (defs in the module) | calls per def | minus K/2 |
+|---|---|---|
+| 100 | 3,100 | 3,050 |
+| 200 | 3,150 | 3,050 |
+| 400 | 3,275 | 3,075 |
+
+**Per-definition grows 1.06x while the module grows 4x.** A lookup over a linear
+symbol table predicts ~4x. **Refuted for the import path.**
+
+**And the residual fits the measured mechanism exactly.** Subtracting `K/2` — the
+module's own preceding defs, which the walk genuinely does traverse — leaves
+**3,050 / 3,050 / 3,075: constant.** That constant is the import closure's
+definition count, which does not change with the module's size. The model is
+`per-def = C + K/2` with `C ≈ 3,060`, and it predicts all three rows to within
+1%. It is a **scan whose length is everything lexed before you**, not a lookup.
+
+**He is right about the tree, though, and the two must not be merged.** The
+**single-file** near-quadratic — exponent **1.90** by N=3200 — *is* the shape a
+linear structure predicts, and that one is genuinely his hypothesis's shape. It
+is flat below ~400 functions, so it is invisible at real module sizes and does
+not touch lekkerzeilen.
+
+**Two problems, different mechanisms, different regimes.** Conflating them is how
+a reader concludes there is one problem and fixes the wrong one.
