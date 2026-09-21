@@ -41471,11 +41471,13 @@ begin
       Exit;
     end;
   d := -2;
+{$IFNDEF PXX_ENCL_OFF}
   if not PyEnclOverflow then
   begin
     if PyEnclBuilt <> TokCount then PyBuildEnclTable;
     if not PyEnclOverflow then d := PyEnclLookup(defTok);
   end;
+{$ENDIF}
   if d = -2 then d := PyEnclByWalk(defTok);
 {$IFDEF PXX_ENCL_CROSSCHECK}
   m := PyEnclByWalk(defTok);

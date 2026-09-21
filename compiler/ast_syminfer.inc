@@ -208,6 +208,13 @@ function TokenCaseEqual(idx: Integer; const nm: AnsiString): Boolean;
   is True exactly when nm is empty. }
 var i, off, len: Integer; c1, c2: Char; r: Boolean;
 begin
+{$IFDEF PXX_TCE_OFF}
+  { A/B arm: the ORIGINAL allocating path, so a build can isolate the
+    enclosing-table win from the allocation win without moving the tree
+    between arms. Measurement only -- never a shipping configuration. }
+  TokenCaseEqual := CaseEqual(GetTokenStr(idx), nm);
+  Exit;
+{$ENDIF}
   r := False;
   len := Length(nm);
   if (idx < 0) or (idx >= TokCount) or (Tokens[idx].SLen <= 0) then
