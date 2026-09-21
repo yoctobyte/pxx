@@ -1074,6 +1074,41 @@ evidence at all that it was *correct*. **A design-intent citation and a
 soundness argument are different claims.** So is an oracle row and a
 specification.
 
+## A PATH THAT IS A SYMLINK MAKES EVERY HISTORY QUERY ANSWER ABOUT THE LINK
+
+`git log -1 -- <path>` is correct about whatever that path IS. When the path is a
+symlink, or is untracked and shadowed by a tracked neighbour, the answer is about
+the link and nothing in the output says so.
+
+Measured 2026-09-21. Asked when the current pin was minted:
+
+    git log -1 --format='%h %ad' -- stable_linux_amd64/default/pinned
+    -> 2026-07-27
+
+The live pin is **v413, 2026-09-20**. The query was not wrong — it correctly
+reported the last commit touching that path, which is a symlink created in
+August. The cost was a whole inference: a two-month-old compiler producing
+BYTE-IDENTICAL output to HEAD is implausible and should have been the tell, and
+instead it read as "the compiler does not affect this program", which was then
+used to blame `lib/rtl`.
+
+**The instrument that answers correctly is the DIRECTORY log**, because a pin
+lands as a commit touching the tree:
+
+    git log -3 --format='%h %ad %s' --date=short -- stable_linux_amd64
+    -> d79e66f07 2026-09-20 chore(stable): pin v413 -- binary sha256 f94c2a7e2396
+
+**The general form:** before believing a history answer about a file, check what
+the file is (`ls -la`, `git ls-files <path>`). A date that is much older than the
+subsystem's activity is the cheap smell, and a comparison of two things that
+turn out byte-identical is the other — verify the two arms are different
+artefacts (`sha256sum` both) before reasoning from their agreement. That check
+takes one command and would have caught this immediately: the two binaries were
+in fact different (`1a31826169bc` vs `f94c2a7e2396`), and the identical OUTPUT
+was real and meant something else entirely — both postdate the change being
+hunted, so the comparison spanned one day rather than the window in question.
+
+
 ## An instrument can be ANTI-CORRELATED with the truth of the question
 
 The section above collects instruments that answer about something else. This is

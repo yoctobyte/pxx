@@ -35499,6 +35499,9 @@ test-esp-bare: $(COMPILER)
 	  test -n "$$d" -a -n "$$n" || { echo "$$soc bare-dce: no code= line to read -- the assertion never ran"; exit 1; }; \
 	  if [ "$$d" -lt "$$n" ]; then echo "$$soc bare defaults to --dce ($$n -> $$d)"; \
 	  else echo "$$soc bare-dce NOT APPLIED: default $$d is not smaller than --no-dce $$n"; exit 1; fi; \
+	  case $$soc in esp32c3) cap=18700;; esp32s3) cap=15200;; esac; \
+	  if [ "$$d" -le "$$cap" ]; then echo "$$soc bare image $$d B, ceiling $$cap B"; \
+	  else echo "$$soc BARE IMAGE OVER CEILING: $$d B > $$cap B. This row is a DRIFT detector and the relation row above cannot see drift -- it asserts only that --dce beats --no-dce, deliberately, so it survives the fixture and the RTL moving, and an image that has tripled still passes it. Measured 2026-09-21: esp32c3 16988 B, esp32s3 13788 B, ceilings set ~10 percent above. If the growth is intended, RAISE THE CEILING IN THIS FILE AND SAY WHY IN THE COMMIT -- that is the point of a number you cannot --update away."; exit 1; fi; \
 	done
 	@./$(COMPILER) test/test_esp_bare.pas $(TESTTMP)/test_esp_bare_oracle >/dev/null && $(TESTTMP)/test_esp_bare_oracle > $(TESTTMP)/test_esp_bare.oracle
 	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
