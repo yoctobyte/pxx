@@ -2,9 +2,9 @@
 type: bug
 track: N
 prio: 70
-status: open
+status: working
 slug: bug-n-an-attribute-on-a-scalar-returned-by-a-call-segfaults
-owner: frankD
+owner: frankh-c0
 ---
 
 # A missing attribute on a scalar returned by a CALL segfaults instead of raising

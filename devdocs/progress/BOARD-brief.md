@@ -5,12 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:18 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:186 backlog-tools:62 backlog-pascal:12 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3911 rejected:85`
+`working:33 unfinished:18 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:185 backlog-tools:62 backlog-pascal:12 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3911 rejected:85`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-n-an-attribute-on-a-scalar-returned-by-a-call-segfaults` [N] — owner: frankh-c0
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
@@ -75,7 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 565, ranked
+## Ready — top 30 of 564, ranked
 
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
@@ -108,4 +109,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 
-_535 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_534 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
