@@ -35005,3 +35005,51 @@ a dispatch path, a slow path, a fallback, an unoptimised arm — **ask what woul
 have to be true for it to still take that path, and whether anything in the
 fixture would notice if it stopped.** If the answer is nothing, the fixture's
 green is a statement about the oracle and not about the compiler.
+
+## A STRADDLE CAN HAPPEN ENTIRELY BETWEEN TWO PINS — THE COMPILER SHA DOES NOT PIN THE BUILTINS
+
+*`lekkerzeilen-7a`'s finding, 2026-09-21, verified independently by `frankz-e5`
+and banked here because that seat does no pxx work. All the pin-straddle advice
+in this file assumes the contamination event is a **version bump**. This one has
+no version and nothing announces it.*
+
+pxx builtins are **compiled into user programs**. A pinned tree carries its own
+`builtin/` beside the binary and is self-consistent. **A live checkout's
+`compiler/builtin/*.pas` is whatever its owner last saved.** Measured on one box
+at one moment:
+
+    stable_linux_amd64/default/builtin/promocore.pas   19:11   64,791 B
+    compiler/builtin/promocore.pas                     22:22   67,546 B   DIFFER
+
+    8cbec7eab  ancestor of origin/master            -> exit 0   (landed)
+    8cbec7eab  ancestor of pin v415's source commit -> exit 1   (NOT in the pin)
+
+`8cbec7eab` makes Python `<<`/`>>` **4.6–8.6x faster** and lives in
+`promocore.pas`. **So those two toolchains produce materially different programs
+from identical source** — not a labelling difference, a several-fold difference
+on the routine under test — **while no version moved and nothing was
+announced.**
+
+**THE CONSEQUENCE THAT NO PIN-WATCHING GUARD COVERS.** Every straddle rule here
+says: do not measure across a pin. **This contamination happened between two
+pins**, produced by an ordinary `make` in a sibling checkout. A seat watching
+pin version, pin sha, or `pin.log` sees **nothing**, correctly, the whole time.
+
+**Two paths, and they are not two copies of one thing:**
+
+    stable_linux_amd64/default/pinned   + its builtin/   moves ONLY on `make pin`
+    compiler/pascal26                   + compiler/builtin/   moves on every `make`, per checkout
+
+**BUILD MEASUREMENT ARMS AGAINST THE PIN**, which is self-consistent by
+construction. If you must use a live checkout, **hash the builtins you depend
+on, not just the compiler** — the compiler sha does not cover them and they move
+independently.
+
+**AND THE NEAR MISS IS THE INSTRUCTIVE PART.** 7a recorded `compiler/pascal26`'s
+sha at build time and it was **byte-identical to the pin**, because v415 had been
+cut from that checkout that morning. **A live path that currently agrees with the
+pin is the most dangerous state available**: every check passes, the agreement
+looks like corroboration, and it silently stops being true at the next `make`.
+Agreement between a versioned artefact and an unversioned one is a coincidence
+with a timestamp on it.
+
