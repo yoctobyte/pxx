@@ -979,3 +979,4 @@
 2026-09-21T09:13:10Z	borg	80d949e2f7f4f49278c2a229fe54154def8d2cc1	AUTO-PIN DECLINED — HEAD is a87488b8a083, not the tested 80d949e2f7f4
 2026-09-21T09:42:40Z	borg	d901c6cc655ca4921ffed1c05e1bf84235c8b511	WOULD PIN d901c6cc655c — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 3/2
 2026-09-21T09:42:40Z	borg	d901c6cc655ca4921ffed1c05e1bf84235c8b511	AUTO-PIN DECLINED — HEAD is 0b79c8cfb03f, not the tested d901c6cc655c
+2026-09-21T10:36:24Z	borg	5745f9f8f1f89bad3707e6e81a9a8abc03e6dd8d	would NOT pin 5745f9f8f1f8 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-threads#src:test/test_sys_intrinsic_as_argument.pas
