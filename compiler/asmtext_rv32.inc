@@ -131,6 +131,18 @@ begin
     Error('EmitAsmRv32: immediate value out of 12-bit signed range (-2048..2047)');
 end;
 
+{ A CSR address is UNSIGNED 12-bit, which is why this is not AsmRv32CheckImm12:
+  mtvec is $305 and every machine-mode CSR anyone writes is above 2047, so the
+  signed check would reject the entire interesting range. Checked rather than
+  masked for the reason this file's sibling header gives at length -- rv32_csr
+  masks to 12 bits, so an out-of-range address does not fail, it silently
+  addresses a DIFFERENT CSR and the instruction is perfectly well formed. }
+procedure AsmRv32CheckCsr(val: Int64);
+begin
+  if (val < 0) or (val > 4095) then
+    Error('EmitAsmRv32: CSR address out of 12-bit unsigned range (0..4095)');
+end;
+
 procedure AsmRv32CheckImm20(val: Int64);
 begin
   if (val < -524288) or (val > 1048575) then
@@ -183,6 +195,11 @@ begin
   if CaseEqual(mnem, 'nop') then begin rv32_nop; Exit; end;
   if CaseEqual(mnem, 'ret') then begin rv32_jalr(0, 1, 0); Exit; end;
   if CaseEqual(mnem, 'ecall') then begin EmitI32($00000073); Exit; end;
+  { mret had an encoder (rv32_mret) and no way to reach it from source, which
+    made a hand-written raw trap handler impossible to RETURN from even once
+    the vector could be installed. Added with the csrw forms below and for the
+    same ticket -- the two are only useful together. }
+  if CaseEqual(mnem, 'mret') then begin rv32_mret; Exit; end;
 
   { split rest into up to three comma-separated operands }
   op0 := ''; op1 := ''; op2 := ''; partIdx := 0;
@@ -195,7 +212,50 @@ begin
   end;
   op0 := AsmTextTrim(op0); op1 := AsmTextTrim(op1); op2 := AsmTextTrim(op2);
 
+  { CSR forms whose FIRST operand is a CSR address rather than a register, so
+    they have to be decided before the unconditional AsmRv32RegOp below. That
+    line is exactly why `csrw $305, t0` used to fail with "expected register"
+    while `csrw` was never a recognised mnemonic at all -- the refusal came
+    from the generic operand parse and pointed at the wrong thing.
+
+    NUMERIC ONLY, DELIBERATELY. A named table (`csrw mtvec, t0`) would be dead
+    code reached from nowhere: an identifier in an inline-asm operand is
+    resolved as a SYMBOL by asmenc.inc before this file ever sees the line, so
+    `mtvec` fails upstream with "asm: unknown symbol: mtvec" and a name table
+    here could not fire. Write the address: `csrw $305, t0`. Pascal `$` hex is
+    the spelling to use -- C-style `0x305` is split by the inline-asm tokenizer
+    into `0` and the identifier `x305` and refused. }
+  if CaseEqual(mnem, 'csrw') or CaseEqual(mnem, 'csrs') or CaseEqual(mnem, 'csrc') then
+  begin
+    imm := Integer(AsmRv32Int(op0, holes, holeCur));
+    AsmRv32CheckCsr(imm);
+    r1 := AsmRv32RegOp(op1);
+    if CaseEqual(mnem, 'csrw') then rv32_csrrw(0, imm, r1)
+    else if CaseEqual(mnem, 'csrs') then rv32_csrrs(0, imm, r1)
+    else rv32_csrrc(0, imm, r1);
+    Exit;
+  end;
+
   r0 := AsmRv32RegOp(op0);
+
+  { CSR forms whose first operand IS a register; the CSR is operand two. }
+  if CaseEqual(mnem, 'csrr') then
+  begin
+    imm := Integer(AsmRv32Int(op1, holes, holeCur));
+    AsmRv32CheckCsr(imm);
+    rv32_csrrs(r0, imm, 0);   { csrr rd, csr == csrrs rd, csr, x0 }
+    Exit;
+  end;
+  if CaseEqual(mnem, 'csrrw') or CaseEqual(mnem, 'csrrs') or CaseEqual(mnem, 'csrrc') then
+  begin
+    imm := Integer(AsmRv32Int(op1, holes, holeCur));
+    AsmRv32CheckCsr(imm);
+    r2 := AsmRv32RegOp(op2);
+    if CaseEqual(mnem, 'csrrw') then rv32_csrrw(r0, imm, r2)
+    else if CaseEqual(mnem, 'csrrs') then rv32_csrrs(r0, imm, r2)
+    else rv32_csrrc(r0, imm, r2);
+    Exit;
+  end;
 
   if CaseEqual(mnem, 'add') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_add(r0, r1, r2); end
   else if CaseEqual(mnem, 'sub') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_sub(r0, r1, r2); end

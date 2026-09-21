@@ -12112,8 +12112,37 @@ begin
         below, which has no other diagnostic at any stage and is otherwise
         found on silicon.
 
-        WHEN THE INSTALL PATH LANDS, NARROW THIS RATHER THAN DELETING IT: the
-        refusal should then permit exactly the vector-install operand and keep
+        ^^ THAT PARAGRAPH'S PREMISE WAS RETIRED ON 2026-09-21, THE SAME DAY IT
+        WAS MEASURED, AND THE REFUSAL IS NOT. It is left standing above rather
+        than rewritten because the argument it makes is the one a later reader
+        will reconstruct, and it is now wrong: `csrw $305, t0` assembles, and
+        test/test_esp_bare_csr.pas installs a raw vector and takes two traps
+        through it under qemu. So there IS an install path on riscv32, and
+        "you cannot install a vector anyway" is no longer a reason for
+        anything. (The xtensa `wsr a4, vecbase` half is still unlanded.)
+
+        WHY THE REFUSAL STILL STANDS, AS A MECHANISM RATHER THAN AS A ROW THAT
+        HAPPENS TO FIRE TODAY: an `interrupt;` body gets the trap prologue and
+        nothing else. A raw vector entry never reaches the IDF's
+        rtos_int_enter, so the handler runs on the INTERRUPTED TASK's stack
+        (3584 bytes by IDF default) while pushing 64 bytes of prologue on
+        riscv32, and xPortInIsrContext answers 0 while genuinely inside an ISR
+        -- the obvious safety check says all-clear. There is no runtime stack
+        guard on ESP on either profile. Permitting this address today would
+        make installable a handler unprotected by everything the platform
+        normally does for an ISR, and the failure is a plausible wrong value
+        far from its cause.
+
+        THIS REFUSAL IS THE INTERLOCK, and that is precisely why the CSR write
+        could land ahead of it: the write is a capability, while an
+        `interrupt;` handler still cannot be installed because its address
+        cannot be obtained. A hand-written `assembler` routine can be
+        installed and always could -- ordinary code, ordinary address, and
+        whoever writes one saves registers themselves.
+
+        THE CONDITION THAT RETIRES THIS: a dedicated ISR stack for
+        `interrupt;` bodies on bare. When that lands, NARROW THIS RATHER THAN
+        DELETING IT -- permit exactly the vector-install operand and keep
         refusing everything else.
         bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-via-mret-with-no-diagnostic
         feature-s-a-csr-write-is-not-expressible-from-pascal-so-no-raw-isr-can-be-installed
@@ -12134,8 +12163,11 @@ begin
               'by a normal call. If this address is for esp_intr_alloc, the ESP-IDF dispatcher ' +
               'calls its handler as an ordinary void(*)(void*) -- declare the handler `iram;` ' +
               'and NOT `interrupt;`, or it will execute a trap-return to leave a normal call. ' +
-              'Installing a RAW vector is not currently expressible from Pascal (no mtvec / ' +
-              'vecbase write), so there is no correct use of this address today.');
+              'A raw vector CAN now be installed on riscv32 (`csrw $305, t0`), but not with an ' +
+              '`interrupt;` body: such a handler would run on the interrupted task''s stack with ' +
+              'no ISR stack and no nesting counter, so this address stays refused until a ' +
+              'dedicated ISR stack lands. To install a raw vector today, write the handler as an ' +
+              '`assembler` routine and take ITS address; see test/test_esp_bare_csr.pas.');
       Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);
     end;
 

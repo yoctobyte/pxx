@@ -9,6 +9,13 @@ const
   reg_s2 = 18; reg_s3 = 19; reg_s4 = 20; reg_s5 = 21; reg_s6 = 22; reg_s7 = 23; reg_s8 = 24; reg_s9 = 25; reg_s10 = 26; reg_s11 = 27;
   reg_t3 = 28; reg_t4 = 29; reg_t5 = 30; reg_t6 = 31;
 
+  { Machine-mode CSR addresses. Only the ones the compiler itself emits are
+    named here; the inline assembler takes any 12-bit number, which is the
+    capability -- a name table is a convenience and must never be the only
+    way to reach a CSR. }
+  CSR_MSTATUS = $300;   { MIE lives at bit 3 }
+  CSR_MTVEC   = $305;   { trap vector base + mode; THE raw-ISR install target }
+
 { --- range checks for the PC-relative forms -----------------------------------
   RISC-V branch and jump immediates are cut into pieces and OR'd into the
   instruction word, and every one of those pieces is masked. A target out of
@@ -152,16 +159,53 @@ end;
     csrrci t0, mstatus, 8   = 0x300472F3   { clear MIE, old mstatus -> t0 }
     csrrw  zero, mstatus, t0 = 0x30029073  { restore it }
   bug-a-riscv32-and-xtensa-have-no-atomic-codegen }
+{ The general forms. These were added 2026-09-21 for the raw-ISR vector install
+  (feature-s-a-csr-write-is-not-expressible-from-pascal-...): mtvec is CSR $305,
+  and until these existed the tree's ONLY CSR write was the mstatus one below,
+  with the address frozen in the instruction word.
+
+  The two mstatus helpers are now DERIVED from these rather than restating the
+  encoding. That is not tidiness: $300 appeared in two instruction words that
+  no test relates to each other, which is the shape CLAUDE.md's "where two
+  constants share a name-shape" rule is about. Deriving them means a future
+  edit to the CSR field cannot fix one spelling and miss the other.
+
+  Field layout is identical for all six Zicsr instructions -- csr[11:0] in
+  31:20, rs1-or-uimm5 in 19:15, funct3 in 14:12, rd in 11:7, opcode $73:
+    funct3 1 = csrrw   2 = csrrs   3 = csrrc
+           5 = csrrwi  6 = csrrsi  7 = csrrci   (rs1 field is a 5-bit immediate)
+  Verified against riscv32-esp-elf-as (-march=rv32imc_zicsr):
+    csrrci t0, mstatus, 8    = 0x300472F3
+    csrrw  zero, mstatus, t0 = 0x30029073
+    csrw   mtvec, t0         = 0x30529073 }
+procedure rv32_csr(rd, csr, rs1, funct3: Integer);
+begin
+  EmitI32(((csr and $FFF) shl 20) or ((rs1 and $1F) shl 15)
+          or ((funct3 and 7) shl 12) or ((rd and $1F) shl 7) or $73);
+end;
+
+procedure rv32_csrrw(rd, csr, rs1: Integer);   { rd := csr; csr := rs1 }
+begin rv32_csr(rd, csr, rs1, 1); end;
+
+procedure rv32_csrrs(rd, csr, rs1: Integer);   { rd := csr; csr := csr or rs1 }
+begin rv32_csr(rd, csr, rs1, 2); end;
+
+procedure rv32_csrrc(rd, csr, rs1: Integer);   { rd := csr; csr := csr and not rs1 }
+begin rv32_csr(rd, csr, rs1, 3); end;
+
+procedure rv32_csrrci(rd, csr, uimm: Integer); { rd := csr; csr := csr and not uimm }
+begin rv32_csr(rd, csr, uimm, 7); end;
+
 procedure rv32_csrrci_mstatus_mie(rd: Integer);
 { rd := mstatus; mstatus.MIE := 0 }
 begin
-  EmitI32(($300 shl 20) or (8 shl 15) or (7 shl 12) or (rd shl 7) or $73);
+  rv32_csrrci(rd, CSR_MSTATUS, 8);
 end;
 
 procedure rv32_csrw_mstatus(rs1: Integer);
 { mstatus := rs1 }
 begin
-  EmitI32(($300 shl 20) or (rs1 shl 15) or (1 shl 12) or $73);
+  rv32_csrrw(0, CSR_MSTATUS, rs1);
 end;
 
 procedure rv32_add(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 0, rd, $33); end;

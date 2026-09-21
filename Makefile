@@ -35621,6 +35621,22 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_atomic.pas > $(TESTTMP)/test_esp_bare_atomic.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_atomic.oracle $(TESTTMP)/test_esp_bare_atomic.s3; then echo "esp32s3 atomics ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 atomics MISMATCH"; exit 1; fi; fi
+	# feature-s-a-csr-write-is-not-expressible-...: numeric csrw/csrr + mret, and
+	# the first RAW TRAP VECTOR INSTALL in the tree -- mtvec ($305) is written,
+	# read straight back, and two `ecall`s are taken through the handler. TWO,
+	# not one: a handler that fails to step mepc ($341) returns to the trapping
+	# instruction and traps forever, so the second ecall is what separates
+	# "handler ran" from "handler ran and RETURNED correctly". A miscount is not
+	# the failure mode here -- a hang is -- which is why the timeout matters.
+	# riscv32 only: the xtensa `wsr vecbase` sibling is unlanded, and wiring an
+	# esp32s3 row that cannot exercise the feature would be a row that passes
+	# without measuring anything.
+	@./$(COMPILER) test/test_esp_bare_csr.pas $(TESTTMP)/test_esp_bare_csr_oracle >/dev/null && $(TESTTMP)/test_esp_bare_csr_oracle > $(TESTTMP)/test_esp_bare_csr.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 CSR/trap run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_csr.pas > $(TESTTMP)/test_esp_bare_csr.c3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_csr.oracle $(TESTTMP)/test_esp_bare_csr.c3; then echo "esp32c3 CSR + raw trap vector ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 CSR/trap MISMATCH"; exit 1; fi; fi
 	@./$(COMPILER) test/test_esp_bare_largeframe.pas $(TESTTMP)/test_esp_bare_lf_oracle >/dev/null && $(TESTTMP)/test_esp_bare_lf_oracle > $(TESTTMP)/test_esp_bare_lf.oracle
 	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
 	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 large-frame run skipped"; else \
