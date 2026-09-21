@@ -67,7 +67,7 @@ the terminal folders**. Asserting only that the `done/` copy appeared is the
 check that passes today.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e1466217d.
 
 ## Resolution (2026-09-21, borg Track T)
 

@@ -80,7 +80,7 @@ written. `check`'s aperture already catches the residue, which is the safety net
 until then.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e1466217d.
 
 ## Resolution (2026-09-21, borg Track T)
 
