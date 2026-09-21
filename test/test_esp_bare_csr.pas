@@ -36,6 +36,27 @@ program test_esp_bare_csr;
   caller-saved register, which is exactly what the `interrupt;` prologue does
   and why that directive exists.
 
+  AND `assembler` IS NOT `naked` -- MEASURED 2026-09-22, AND THIS FIXTURE HAD
+  THE BUG IT NOW GUARDS AGAINST. An `assembler` procedure still gets the full
+  frame prologue: `addi sp,sp,-16`, save ra and s0, then **`mv s0,sp`**. That
+  last one overwrites the INTERRUPTED code's frame pointer, and a bare `mret`
+  leaves without restoring any of it -- so the handler both leaks 16 bytes of
+  the interrupted stack per trap and hands control back with s0 pointing into
+  the handler's own frame. Hence the explicit unwind before `mret` below,
+  which is what the prologue's matching epilogue would have done.
+
+  THE ORIGINAL VERSION OF THIS FIXTURE PASSED ANYWAY, FOR THE WRONG REASON:
+  every variable it touches after the trap is a GLOBAL, and globals are not
+  addressed through s0. A corrupted frame pointer is invisible to this program
+  unless something reads a LOCAL across the trap. So the trap is now taken
+  inside `TakesTrapWithLocals`, whose three locals live at s0-relative offsets
+  and are checked afterwards. Measured both ways: without the unwind they read
+  back as 1077416976 / 1077672896 / 1077672896 (stack addresses); with it,
+  11 / 22 / 33. The same program with the handler declared `interrupt;`
+  instead is correct with no unwind at all, because that directive emits the
+  matching epilogue -- which is the clearest available statement of what the
+  directive is for.
+
   Note the handler must also step `mepc` past the trapping instruction. `mret`
   restores PC from `mepc`, which for a synchronous trap addresses the `ecall`
   ITSELF -- so a handler that does not advance it returns to the ecall and
@@ -69,6 +90,7 @@ var
   hvec    : Pointer;
   trapHits: Integer;
   readback: Integer;
+  localsOk: Integer;
 
 {$ifdef PXX_CSR_REAL}
 { Raw trap handler. Increments trapHits, steps mepc past the ecall, mret. }
@@ -81,16 +103,21 @@ asm
   csrr t0, $341
   addi t0, t0, 4
   csrw $341, t0
+  { unwind the frame `assembler` gave us -- see the header. ra and s0 belong
+    to the interrupted code and the prologue's `mv s0,sp` destroyed s0. }
+  lw   ra, 12(sp)
+  lw   s0, 8(sp)
+  addi sp, sp, 16
   mret
 end;
-{$endif}
 
+{ The trap is taken in here rather than in the main body, because the main
+  body's variables are globals and a corrupted frame pointer is invisible to
+  those. These three are locals at s0-relative offsets. }
+procedure TakesTrapWithLocals;
+var la1, lb, lc: Integer;
 begin
-  trapHits := 0;
-  readback := 0;
-
-{$ifdef PXX_CSR_REAL}
-  hvec := @TrapHandler;
+  la1 := 11; lb := 22; lc := 33;
   asm
     la   t1, hvec
     lw   t0, 0(t1)
@@ -103,16 +130,33 @@ begin
     ecall
     ecall
   end;
+  localsOk := 0;
+  if (la1 = 11) and (lb = 22) and (lc = 33) then localsOk := 1;
+end;
+{$endif}
+
+begin
+  trapHits := 0;
+  readback := 0;
+  localsOk := 0;
+
+{$ifdef PXX_CSR_REAL}
+  hvec := @TrapHandler;
+  TakesTrapWithLocals;
   if readback = Integer(hvec) then PutS('mtvec readback ok')
   else PutS('mtvec readback BAD');
 {$else}
   { x86-64 oracle: no CSRs, no traps. Prints what a correct bare run prints. }
   trapHits := 2;
+  localsOk := 1;
   PutS('mtvec readback ok');
 {$endif}
   PutC(10);
 
   PutS('trap handler ran '); PutInt(trapHits); PutC(10);
-  if trapHits = 2 then PutS('CSR-OK') else PutS('CSR-FAIL');
+  if localsOk = 1 then PutS('locals survived the trap')
+  else PutS('THE HANDLER CORRUPTED THE INTERRUPTED FRAME');
+  PutC(10);
+  if (trapHits = 2) and (localsOk = 1) then PutS('CSR-OK') else PutS('CSR-FAIL');
   PutC(10);
 end.
