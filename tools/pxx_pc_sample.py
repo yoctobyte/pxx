@@ -10,6 +10,8 @@
 #   PXX_MAXOFF    offset past which a sample is UNATTRIBUTED  (default 8192)
 #   PXX_THREAD    thread to sample                  (default 1)
 #   PXX_STALE_MAP set to 1 to override the map-older-than-binary refusal
+#   PXX_PASS      comma-separated signals the SUBJECT uses, which gdb must let
+#                 through untouched (e.g. "SIGUSR1"). See hazard 4.
 #
 # WHY PC AND NOT A BACKTRACE. A pxx-emitted binary has no symtab, no .debug_*
 # and no .eh_frame -- often no section headers at all. gdb can neither
@@ -55,6 +57,28 @@
 #    gdb's own event loop -- hence the synchronous `continue` below plus an
 #    external ticker. Validate against /bin/sleep, which costs no CPU and so
 #    does not disturb anyone else measuring on the box.
+#
+# 4. GDB STOPS ON THE SUBJECT'S OWN SIGNALS BY DEFAULT, WHICH SERIALISES ANY
+#    RACE THAT USES ONE -- and PXX_SIGNAL does not protect you, because it only
+#    governs the signal this script SENDS. gdb's default disposition for
+#    SIGUSR1/SIGUSR2 is stop+print+pass. Point this at a program that fires one
+#    itself and gdb halts the process on every delivery.
+#
+#    Measured 2026-09-21 on test_threadsafe_heap_lock_deadlock_diag, whose
+#    hammer thread sends 2,000,000 SIGUSR1s: sampling with PXX_SIGNAL=SIGUSR2
+#    gave 100% of 18 samples at ONE pc, identical across three runs, a real
+#    symbol and not a map-gap artefact -- and entirely an artefact of gdb
+#    stopping on the subject's own signal. Two threads alive under gdb where the
+#    real hang has one.
+#
+#    THE OTHER SETTING IS ALSO WRONG, WHICH IS THE POINT. With
+#    `handle SIGUSR1 nostop noprint pass` the same program ran to COMPLETION and
+#    printed "NOT REACHED: the handler never collided with the lock" -- a third
+#    outcome, neither the hang nor the diagnosis, because ptrace overhead moved
+#    the collision window. So: catch the subject's signal and you serialise the
+#    race; pass it and you perturb it. PXX_PASS makes the choice explicit and
+#    visible, but for a RACE the honest answer is that this tool cannot measure
+#    it -- read the emitted bytes, or use an instrument outside the process.
 
 import bisect, gdb, io, os, re, subprocess, sys
 from collections import Counter
@@ -80,6 +104,18 @@ gdb.execute("set startup-with-shell off")
 # and a signal the subject installs is the one place that matters.
 SIG = os.environ.get("PXX_SIGNAL", "SIGUSR1")
 gdb.execute("handle %s stop nopass" % SIG)
+
+# The SUBJECT's own signals, let through untouched -- hazard 4. Named rather
+# than guessed: this script cannot know which signals a program installs, and
+# guessing wrong in either direction is a wrong profile, not an error.
+for _s in [x.strip() for x in os.environ.get("PXX_PASS", "").split(",") if x.strip()]:
+    if _s == SIG:
+        print("REFUSING: PXX_PASS names %s, which is also the sampling signal." % _s)
+        print("  Those dispositions contradict: one stops to sample, the other")
+        print("  must not stop at all. Pick a different PXX_SIGNAL.")
+        raise SystemExit(2)
+    gdb.execute("handle %s nostop noprint pass" % _s)
+    print("pxx_pc_sample: passing %s through to the subject untouched" % _s)
 
 binpath = gdb.current_progspace().filename
 mappath = os.environ.get("PXX_MAP") or (binpath + ".map" if binpath else "")
