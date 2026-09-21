@@ -34076,3 +34076,106 @@ subshell around only the part you mean — `( <measurement> ) &` on its own line
 after the sync has returned. And check that every stage of a chain you
 backgrounded actually produced its output.
 
+
+## A SUCCESSFUL-OPENS FILTER IS NECESSARY AND NOT SUFFICIENT — IT FILTERS ON SUCCESS AND NOT ON DIRECTION, SO IT PROMOTES OUTPUTS TO REQUIREMENTS
+
+*`lekkerzeilen-7a`, 2026-09-21, auditing its own asset survey after the survey
+had already been cited elsewhere.*
+
+The rule 7a used was sound and is worth keeping: *"successful opens only — a
+failed open is a probe, not a dependency."* It correctly excluded
+`assets/facades.lzx`, which gets `ENOENT` and is genuinely optional.
+
+**But an `openat` trace shows a file the program CREATES and a file the program
+READS in the identical shape.** So the filter silently promoted an **output** to
+a **requirement**: `world/gauges.lzg` was listed as a dependency of a demo that
+**writes** it — one open in the whole trace, `O_RDWR|O_CREAT`, nothing reading
+it. A tree built without it has a 24,576-byte one afterwards.
+
+**And the number corroborated the error.** The copy in the working tree is
+**720,896 bytes** — the same file *grown by months of runs* — so its size read
+as evidence of importance. **Moving it aside and re-rendering "proved" it was
+optional for the wrong reason: the demo simply made another one.**
+
+> **THE STING, AND IT IS WHY "PRINT THE FLAGS" IS NOT THE RULE:** the four
+> `roofs` tiles are **also** `O_RDWR|O_CREAT` and are **genuinely required.**
+> The read/write split is **a prompt to go and look, never a verdict.** What
+> settled it was **building the tree without the file and running.**
+
+**The asymmetry is the reason this survives review**, and it is the exculpation
+rule's shape pointed at a list: **adding a file to a required list costs nothing
+and is never challenged.** So the list fails **long** rather than short, every
+test still passes, and the error surfaces years later as an asset nobody can
+find a producer for. A dependency list is one of the few artefacts where the
+cheap error and the invisible error are the same error.
+
+**7a added a fifth item to its own stated incompleteness rather than closing the
+gap quietly: an open does not say which direction the data went.**
+
+## GREPPING THE FIXTURE THE TIER IS NAMED AFTER IS NOT CHECKING THE TIER — AND KNOWING THAT DOES NOT PREVENT IT
+
+*`frankb-8e` wrote the row, `frankuser` relayed it, `frankz-e5` endorsed it, and
+the endorsement was relayed back as corroboration. Retracted at `f9bd81610`,
+2026-09-21. Nobody measured it.*
+
+**The claim:** *"`test_esp_bare.pas` contains ZERO try/except/raise, so the bare
+exception path is never exercised by execution."* **False.**
+`Makefile:35684-35693`, inside `test-esp-bare:`, boots `test_esp_exception.pas`
+on **both** esp32c3 and esp32s3 and diffs UART byte-for-byte against an x86-64
+oracle. The bare tier boots **14 distinct fixtures** on both chips.
+
+**What survives is the narrow reading:** zero `try`/`except` in
+`test_esp_bare.pas` *itself*, a fixture that boots green, **is** a guard that
+cannot fail **for that file**. The generalisation from **that file** to **the
+tier** is what was false — one grep of one file, correct about that file and
+**silent about the other thirteen.** Subject and enumerated set never
+intersected. Nothing errored.
+
+> **THE TRAP IS AT ITS MOST SEDUCTIVE BECAUSE THE FILE CHECKED IS THE ONE THE
+> TIER IS NAMED AFTER.** `test_esp_bare.pas` reads like *the* bare test, so
+> checking it *feels* like checking the tier. **The name did the work, not the
+> measurement** — in a document whose own opening section warns about exactly
+> that.
+
+**AND THE PROMOTION-WORTHY HALF IS THE TIMING.** 8e wrote that row in the
+morning, **banked two playbook sections the same afternoon about instruments
+that are correct about the wrong thing**, and then walked into this with the
+rule freshly written in its own hand. **Knowing the class did not fire it. Only
+ACTING on the claim did** — an hour of implementation work was the instrument
+that caught it, and had the row been filed and left, the false row would have
+shipped. That is CLAUDE.md's *"this class is not prevented by remembering it"*
+arriving in a second independent subsystem, which is the trigger that file names
+for promotion.
+
+**AND THE RELAY HALF IS `frankz-e5`'s AND IS A DISTINCT DEFECT.** Asked to
+comment, it endorsed the *inference* — *zero `try` in a green fixture is a guard
+that cannot fail* — which is sound **about the stated premise**. It did not
+check the premise. The endorsement was then relayed onward **as corroboration**,
+and at that point **two parties had confirmed a claim neither had measured, from
+one grep of one file.**
+
+> **Endorsing an INFERENCE is not endorsing its PREMISE, and a relay cannot
+> tell them apart.** This is CLAUDE.md's hedge-the-premise rule arriving in a
+> relay chain: a careful endorsement of the reasoning reads downstream as
+> support for the claim. **Say which half you checked, or the relay will
+> assume both** — and an endorsement that names no population is not a second
+> instrument, it is an echo.
+
+**The residue is real and much smaller than the row:** nothing establishes which
+exception **shapes** the bare tier covers — nested, re-raise, finally-through-
+frames, exception-in-ISR once the install lands. **14 is a count of FILES and
+not of shapes**, and 8e deliberately declined to convert one into the other in
+its own correction.
+
+## A MARGIN COMPUTED AGAINST AN UNSET LIMIT PRINTS A SPECTACULAR PASS
+
+*`lekkerzeilen-7a`, 2026-09-21, in a scratch harness.*
+
+`run.sh` never assigned `LIMIT`, so every margin printed **`+inf% of limit`**.
+**A number that cannot be wrong, because nothing derives it** — and it is the
+one value in that harness nobody would have queried, because it reads as passing
+by an enormous margin rather than as arithmetic on an empty variable.
+
+**Wherever a ratio, margin or headroom is reported, ask what happens to it when
+the denominator is unset**, and prefer a harness that refuses to print a
+comparison it has no limit for. The failure direction is the dangerous one: an
