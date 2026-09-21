@@ -148,6 +148,51 @@ Empty program live bodies go from **12 (8872 B) to 2 (150 B)**.
 **both** esp32s3 and esp32c3 in **both** arms and prints the same answer, so the
 orphan was contributing nothing but bytes.
 
+### THE SRAM DELTA IS ZERO, AND SRAM IS THE RESOURCE THAT COUNTS
+
+**Every number above is an IMAGE size, and the owner ruled on 2026-09-20 that
+image size is the lesser issue:** *"SRAM here is most relevant, ESP's have
+'plenty' flash memory so that's a lesser issue."* So the headline needed the
+column I had not taken. Taken 2026-09-21, `data + bss`, same eight rows:
+
+| program | target | SRAM as-is | SRAM de-duplicated | delta |
+| --- | --- | --- | --- | --- |
+| empty | xtensa / riscv32 | 67464 B | 67464 B | **0** |
+| `test_esp_bare` | xtensa / riscv32 | 67524 B | 67524 B | **0** |
+| `test_esp_exception` | xtensa / riscv32 | 67496 B | 67496 B | **0** |
+| `SetLength` program | xtensa / riscv32 | 67500 B | 67500 B | **0** |
+
+**Exactly zero, not merely small.** Dropping the orphan removes CODE, and the
+routines it rooted carry no static data, so nothing leaves SRAM.
+
+**So this must not travel as an ESP memory win.** It is worth doing — 13x on the
+image, flash-constrained parts, flashing time — and it does not, on its own,
+outrank whatever else competes for the first hardware day.
+
+(Deterministic, for the record: `code`/`data`/`bss` are outputs of the compiler
+and its sources, so these rows do not depend on box load, and the sandbox holds
+its own copy of `pascal26` and `compiler/builtin/**`, so a rebuild elsewhere
+cannot move them either.)
+
+### WHERE THE ESP SRAM ACTUALLY IS, found by taking that column
+
+An **empty** bare program reserves **67,464 B**, and `HEAP_ARENA` is 65,536 of
+it — **97.1%** of an empty program's SRAM, and ~23% of the 276,832 B free DRAM
+pool, reserved unconditionally under `{$ifdef PXX_ESP}` (`builtinheap.pas:1155`,
+`EspArena : array[0..(HEAP_ARENA div 8) - 1] of Int64`).
+
+**That is the same shape as `bug-a-the-signal-alt-stack-is-32768-bytes-of-
+unconditional-bss`**, fixed on 2026-09-18 by reserving the alt stack *iff* a
+handler can exist. Second unconditional BSS reservation to dominate ESP SRAM in
+four days.
+
+**And the de-duplication above is what makes the condition decidable**: once the
+orphan is gone, DCE *proves* `PXXAlloc` dead in a non-allocating program — it is
+dropped, measured — so the arena provably has no reader. Reserved-iff-reachable
+is then the same one-line predicate `16ebf18ce` used. Belongs under
+`umbrella-an-esp32-image-is-as-small-as-it-can-be`; not filed separately here
+because it wants a measurement against the pin now landing.
+
 ### It reconciles the logbook's two size rows
 
 `Makefile:test-esp-bare` records `47872 -> 4836` for this fixture on 2026-09-19.
