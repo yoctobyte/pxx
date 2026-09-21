@@ -15611,6 +15611,7 @@
    "range": [
     "7dddab19c02d55f0ee58eb5caf5887d1e3427ca3"
    ],
+   "range_non_causal": false,
    "src": "test/test_sys_intrinsic_as_argument.pas tools/expect_same.sh +1",
    "status": "fail"
   }
