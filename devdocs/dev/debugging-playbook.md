@@ -12706,6 +12706,35 @@ for 5b. What fired was *this sentence, these commands, that file.* Write
 remedies that name a target, or they are attitudes wearing the grammar of
 instructions.
 
+**SECOND CONFIRMATION THE SAME EVENING, AND IT IS THE STRONGEST KIND: THE
+REMEDY CAUGHT A DEFECT IN THE FINDING THAT MOTIVATED IT.** `franks-5b` reported
+that `make compiler/pascal26` printing `verified` was *"true and useless as an
+answer to 'is my binary proven for this tree'"*, and `frankz-e5` called that the
+new part and said it was 5b's to write. **Going to write it required opening the
+Makefile, and the recipe refutes it:** the `verified` line sits past two
+content-based guards that each `exit 1` — the stamp's `srchash` must equal the
+tree's live source hash, and the binary's sha256 must equal the stamp's — and
+the recipe's own text records the hole 5b was describing as a CLOSED bug
+(*"a stamp NEWER than sources it does not describe is how this step printed
+'verified' three times in one day without building anything"*). The remedy had
+done nothing visible because **the gate's own testmgr step had already rebuilt
+the binary**, which `gate.sh` documents in a comment 5b had quoted an hour
+earlier. **Byte-identical was not corroboration of a trap; it was proof
+`verified` had been right.**
+
+**Note what the naming bought, because it is not "be more careful": the
+artefact here was a FILE TO OPEN, not a command to run.** The instruction
+*"it is yours to write"* forced a read of the implementation, and **5b's own
+diagnosis of its error is the generalisation** — *I stated a mechanism from a
+measurement instead of reading the code that implements it.* The observation was
+real and every word describing it held; **the mechanism attached to it was
+invented, and it was the half with the operational consequence.** It had already
+reached the pin routine as *"rm the stamp and re-run before gating or pinning"*,
+which would force a full recompute before every pin — a recurring stall bought
+to defend a plugged hole. **An accurate observation carrying a fabricated cause
+travels further than a wrong observation, because nobody can falsify it from the
+number.**
+
 
 ## A RELAY CARRIES WHAT WAS TRUE WHEN SENT, AND THE COST OF BELIEVING ONE SCALES WITH WHAT YOU DO NEXT
 
