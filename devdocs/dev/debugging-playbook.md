@@ -35273,3 +35273,54 @@ whatever any disassembly says.
 Companion to "Every instrument that lies, lies by being CORRECT ABOUT
 SOMETHING ELSE" in CLAUDE.md — this is that rule arriving in a disassembler,
 where the something-else is the instruction boundary.
+
+## AN EXIT STATUS IS NOT A VERDICT: A CLI ERROR AND THE REFUSAL UNDER TEST ARE BOTH rc=1
+
+Two seats, one day, 2026-09-21, opposite signs, and in both cases the wrong
+rows **agreed with what the measurer expected** — which is what let them
+through.
+
+**frankb-8e, false NEGATIVE:** a five-body reachability table came back with
+four clean zeros. They were four *build failures* (`undefined variable
+(IntToStr)`) rendered as zeros by a grep that found no matches. A zero is what
+"reaches nothing" looks like.
+
+**frankh-c0, false POSITIVE:** a four-arm table of the `@<interrupt proc>`
+refusal ran the two ESP-IDF arms as `--esp-profile=idf`. **That option does not
+exist** — IDF is the default and only `--esp-profile=bare` is accepted — so
+both arms exited 1 from `unknown option:` and were recorded as REFUSED. Two of
+four rows were a CLI error wearing the shape of a verdict, and it was written
+up as "matches on all four arms" before anyone looked at what the rc meant.
+
+**A third the same day, same shape:** `A && B` in a shell probe where A was a
+compile that failed — the chain silently produced no rows at all, and the diff
+that consumed them reported both files missing rather than reporting a
+difference.
+
+**THE COMMON MECHANISM: for a compiler probe, rc=1 is the NORMAL, EXPECTED
+outcome of the thing you are testing.** A refusal is rc=1. A syntax error is
+rc=1. An unknown option is rc=1. A missing file is rc=1. So the exit status
+carries no information about *which* of those happened, and the probe that
+most looks like it is working — "it refused, as predicted" — is the one where
+a typo in the command line produces the predicted answer for free.
+
+**THE REMEDY, AND IT IS ONE LINE: key the verdict on the DIAGNOSTIC TEXT, and
+make anything else a loud third outcome.** Not two-valued:
+
+    if   out matches '<the exact expected diagnostic>'   -> REFUSED
+    elif build succeeded                                 -> PERMITTED
+    else                                                 -> OTHER FAILURE: <first line>
+
+The third arm is the whole point. A two-valued probe has nowhere to put "the
+option was misspelled" except into one of the two answers you care about.
+
+**AND THE CHEAPEST CONTROL FOR A "PERMITTED" ROW IS A COMPILER THAT PREDATES
+THE CHANGE** — PERMITTED can also mean the probe never reached the check at
+all. c0 ran the identical source under pin v416, which predates the narrowing,
+and got REFUSED; that proves the check exists and the probe reaches it, so
+PERMITTED at HEAD is a real change rather than a probe that missed.
+
+Companion to "Assert the PRECONDITION, not just the comparison" — that section
+is about a comparison whose inputs were never proven to exist; this one is
+about a comparison whose inputs exist and mean something other than what they
+are being read as.
