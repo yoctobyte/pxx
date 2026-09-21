@@ -683,3 +683,30 @@ load-bearing piece, not polish — which is precisely how it would have read if
 the merge's soundness had been left standing as the tool's. **A NO from this
 tool is not a safety claim today**, and that sentence is now in the tool's own
 comment rather than only here.
+
+### THE @proc FALSE-NO CHANNEL IS CLOSED; THE VMT ONE IS NOT
+
+A body that takes an address now gets an edge to what it took the address of.
+A pointer's value has to come from somewhere, so this is the conservative
+reading of "this body can cause that to run".
+
+    --dce-reach-from=TakesAddr  before:  0 bodies, PXXAlloc no   <- the false NO
+                                after:  37 bodies, PXXAlloc YES
+                                        Allocs  [via @proc taken]
+
+**The five-body table is unchanged by it — `PlainOnly` still 1/`no`** — which
+is what says the new edge fires on the address and not on everything. Without
+that row, "the false NO became a YES" and "the walk now reaches everything from
+everywhere" are the same observation.
+
+Each category is now named separately in the summary line. An earlier version
+folded the `@proc` rows into the unowned-code count and printed *"37 only via
+unowned code"* for a set that was 36 + 1 — a summary contradicting the rows
+above it, caught before it landed.
+
+**STILL OPEN, AND IT IS WHY A `NO` IS STILL NOT A SAFETY CLAIM:** a body
+reached through a VMT/RTTI dispatch slot. `MethodFixups` has **no owning
+body** — a vtable slot is DATA, written at image-write time — so there is no
+site to attribute and no edge to add. That is a different shape from `@proc`
+and this does not touch it. 8e's live instance is the control when it is built:
+`bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...`.

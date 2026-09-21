@@ -504,14 +504,15 @@ procedure DceReachReport;
   PlainOnly staying at 1 is what shows the merge did not collapse into
   everything-reaches-everything; it is the control that makes the other four
   rows worth reading. }
-var root, p, q, a, b, i, n, seen, viaN: Integer;
+var root, p, q, a, b, i, n, seen, viaN, addrN: Integer;
     vis: array of Boolean;
     viaStub: array of Boolean;   { reached only THROUGH unowned code }
+    viaAddr: array of Boolean;   { reached only because a body took its ADDRESS }
     hasStubEdge: array of Boolean;
     unowned: array of Integer;
     work: array of Integer;
     wc, unownedN: Integer;
-    pulledStub: Boolean;
+    pulledStub, pulledAddr: Boolean;
 begin
   if DceReachFrom = '' then Exit;
   root := FindProc(DceReachFrom);
@@ -524,12 +525,16 @@ begin
   end;
   SetLength(vis, ProcCount + 1);
   SetLength(viaStub, ProcCount + 1);
+  SetLength(viaAddr, ProcCount + 1);
   SetLength(hasStubEdge, ProcCount + 1);
   SetLength(work, ProcCount + 1);
   SetLength(unowned, CallFixCount + 1);
   i := 0;
   while i <= ProcCount do
-  begin vis[i] := False; viaStub[i] := False; hasStubEdge[i] := False; Inc(i); end;
+  begin
+    vis[i] := False; viaStub[i] := False; viaAddr[i] := False;
+    hasStubEdge[i] := False; Inc(i);
+  end;
 
   { THE UNOWNED-CODE NODE. A CodeRef names a code OFFSET, not a proc, so a call
     into a runtime stub is not an edge in this graph -- and the stub's own calls
@@ -562,11 +567,26 @@ begin
         --dce-reach-from=TakesAddr  ->  0 bodies, PXXAlloc: no    <- FALSE NO
         --dce-reach-from=Allocs     ->            PXXAlloc: YES   <- control
 
-    For "does this ISR allocate" the false-NO direction is the one that hurts,
-    and closing it is entirely the refusal half's job: fire on a body that TAKES
-    AN ADDRESS or installs a body in a dispatch slot, not on one that calls
-    through a pointer. Until that exists, a NO from this tool is not a safety
-    claim, and the refusal half is the load-bearing piece rather than polish. }
+    THE @proc HALF OF THAT IS NOW CLOSED, and the same probe is its control:
+
+        --dce-reach-from=TakesAddr  before:  0 bodies, PXXAlloc no
+                                    after:  37 bodies, PXXAlloc YES
+                                            Allocs  [via @proc taken]
+
+    A body that takes an address gets an edge to what it took the address of,
+    because a pointer's value has to come from somewhere and this is the
+    conservative reading of "this body can cause that to run". The five-body
+    table is unchanged by it -- PlainOnly still 1/no -- which is what says the
+    new edge fires on the address and not on everything.
+
+    STILL OPEN, AND A NO IS STILL NOT A SAFETY CLAIM: a body reached through a
+    VMT/RTTI dispatch slot. MethodFixups has no owning body -- a vtable slot is
+    DATA, written at image-write time -- so there is no site to attribute and
+    no edge to add here. That is a different shape from @proc and it is not
+    closed by this. frankb-8e has a live instance: a Python method body sitting
+    in a Pascal vtable slot, entered by a virtual call from Pascal, with no edge
+    anywhere expressing the crossing
+    (bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...). }
   unownedN := 0;
   i := 0;
   while i < CallFixCount do
@@ -595,6 +615,7 @@ begin
   WriteLn(StdErr, 'dce-reach:   an indirect call is NOT an edge here, so absence is',
                   ' "no direct path", not "cannot reach"');
   pulledStub := False;
+  pulledAddr := False;
   while wc > 0 do
   begin
     Dec(wc);
@@ -609,7 +630,31 @@ begin
       begin
         vis[q] := True;
         viaStub[q] := viaStub[p];
+        viaAddr[q] := viaAddr[p];
         work[wc] := q; Inc(wc);
+      end;
+      Inc(i);
+    end;
+    { ...and a body that TAKES AN ADDRESS may reach what it took the address
+      of. The root @Foo creates is GLOBAL and is not an edge out of the body
+      that created it, so without this a body doing `hook := @Allocs;` and
+      nothing else walks clean and returns a confident NO -- measured, and it
+      is the false-NO channel frankb-8e named. A pointer's value has to come
+      from somewhere, so treating the taking site as an edge is the
+      conservative reading of "this body can cause that to run". }
+    i := 0;
+    while i < ProcAddrFixCount do
+    begin
+      if DceProcAddrOwner[i] = p then
+      begin
+        q := ProcAddrFix[i].ProcIdx;
+        if (q >= 0) and (q < ProcCount) and not vis[q] then
+        begin
+          pulledAddr := True;
+          vis[q] := True;
+          viaAddr[q] := True;
+          work[wc] := q; Inc(wc);
+        end;
       end;
       Inc(i);
     end;
@@ -632,14 +677,19 @@ begin
       end;
     end;
   end;
-  n := 0; viaN := 0;
+  n := 0; viaN := 0; addrN := 0;
   i := 0;
   while i < ProcCount do
   begin
     if vis[i] and (i <> root) then
     begin
       Inc(n);
-      if viaStub[i] then
+      if viaAddr[i] then
+      begin
+        Inc(addrN);
+        WriteLn(StdErr, 'dce-reach:   ', Procs[i].Name, '   [via @proc taken]');
+      end
+      else if viaStub[i] then
       begin
         Inc(viaN);
         WriteLn(StdErr, 'dce-reach:   ', Procs[i].Name, '   [via unowned code]');
@@ -650,12 +700,19 @@ begin
     Inc(i);
   end;
   seen := n;
+  { Each category named separately. An earlier version folded the @proc rows
+    into the unowned-code count and printed "N only via unowned code" for a set
+    that contained neither -- a summary line contradicting the rows above it,
+    which is the caption-ahead-of-the-data shape this tree keeps paying for. }
   WriteLn(StdErr, 'dce-reach: ', seen, ' bodies reachable from ', DceReachFrom,
-                  ' (', seen - viaN, ' by direct calls, ', viaN,
-                  ' only via unowned code)');
+                  ' (', seen - viaN - addrN, ' by direct calls, ', viaN,
+                  ' via unowned code, ', addrN, ' via @proc taken)');
   if pulledStub then
     WriteLn(StdErr, 'dce-reach:   NOTE the [via unowned code] rows are an',
                     ' OVER-approximation: all stubs are one node');
+  if pulledAddr then
+    WriteLn(StdErr, 'dce-reach:   NOTE a body here TAKES AN ADDRESS; the',
+                    ' [via @proc taken] rows are what that may reach');
 end;
 
 procedure DceRun;
