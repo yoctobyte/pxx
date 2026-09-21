@@ -3,7 +3,7 @@ slug: bug-t-the-watcher-auto-close-left-six-tickets-in-backlog-and-done-at-once
 track: T
 type: bug
 prio: 45
-status: open
+status: done
 created: 2026-09-04
 found-by: frankC
 blocked-by: []
@@ -78,3 +78,46 @@ the clone state that produced it, and a change to the close path that is not
 verified against a real auto-close is how the second copy of this bug gets
 written. `check`'s aperture already catches the residue, which is the safety net
 until then.
+
+## Log
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Resolution (2026-09-21, borg Track T)
+
+Root cause, reproduced in a scratch clone and guarded:
+`close_stub_tickets()` unlinked each closed stub's backlog copy INSIDE its
+loop, then published twice — the annotated set ("green but NOT closed")
+first, the closed set second. The first publish's recovery path
+`_drop_to_origin()` runs `git reset --hard origin/<branch>`, which RESTORES
+every backlog copy already unlinked. The close publish then computes its
+`gone` list from a tree where the file exists again, stages no deletion, and
+the ticket lands in `done/` while staying ranked in `backlog/`.
+
+`publish()` already re-asserts deletions its own `git checkout` undid
+(ee4553627) — but only for the paths IT was given, and the annotated publish
+is a different call with a different path list. That is why the two earlier
+fixes did not cover this and why it is intermittent: it fires on the CYCLE
+MIX (a retry-class job going green alongside an ordinary one, plus a rebase
+conflict, which is ordinary on a busy origin), not on anything about the
+ticket.
+
+This also explains the 2026-09-04 report, whose two candidate causes were
+both excluded by measurement — correctly, because neither was it. Both
+excluded candidates were about the state `src` was computed from; the fault
+is a SECOND publish in the same call.
+
+Fix: defer the unlinks until after the annotated publish, immediately before
+the close publish. `tools/twatch.py`.
+
+Guard: `tools/twatch_close_stubs_devtest.py` case 8 — annotate + close in one
+cycle with the clone DETACHED (the state every case before it was missing,
+and the state the daemon is always in when it decides). It asserts the
+ticket's own positive control: NO file with that slug outside the terminal
+folders. Verified to FAIL on the unfixed code and pass with the fix; the
+"done/ copy appeared" assertion beside it passes either way, which is what
+made this survivable for three weeks.
+
+Inert until the daemon restarts: the watcher holds the code it was STARTED
+with (its published fingerprint said cead35240, 2026-09-11). The duplicates
+already on origin were swept by hand on 2026-09-19 and are not re-created by
+this change.

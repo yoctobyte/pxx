@@ -114,6 +114,91 @@ def bucket_of(slug):
 fails = []
 
 
+def case8_mixed_cycle():
+    """One stub ANNOTATED and one CLOSED in the same cycle, clone DETACHED.
+
+    The cases above run with the clone sitting on `master`, which is the one
+    state the daemon is never in while it decides: it tests detached at the sha
+    under test. In that state close_stub_tickets publishes TWICE — the
+    annotated set first, the closed set second — and the first publish's
+    recovery path (`_drop_to_origin`, i.e. `git reset --hard origin/<branch>`)
+    restores every backlog copy the loop had already unlinked. The close
+    publish then stages no deletion and the ticket is in done/ AND still
+    ranked. That is bug-t-the-watchers-auto-close-copies-a-ticket-into-done-
+    and-leaves-the-original-ranked, and it is also the 2026-09-04 report
+    (bug-t-the-watcher-auto-close-left-six-tickets-in-backlog-and-done-at-once)
+    whose two candidate causes were both excluded by measurement — correctly,
+    because neither was it.
+
+    Its own scratch repo rather than the shared CLONE: the point of the case is
+    a clone state the other cases must not be left in.
+
+    THE ASSERTION IS THE TICKET'S OWN POSITIVE CONTROL — no file with that slug
+    outside the terminal folders. Asserting that the done/ copy appeared is the
+    check that passes with the bug present.
+    """
+    work = tempfile.mkdtemp(prefix="twatch-stubgate8-")
+    bare, clone = os.path.join(work, "origin.git"), os.path.join(work, "clone")
+    subprocess.run(["git", "init", "--quiet", "--bare", "-b", "master", bare],
+                   check=True)
+    subprocess.run(["git", "clone", "--quiet", bare, clone], check=True,
+                   capture_output=True)
+
+    def g(*a):
+        return subprocess.run(["git"] + list(a), cwd=clone, check=True,
+                              capture_output=True, text=True).stdout
+
+    g("config", "user.email", "gate@test")
+    g("config", "user.name", "gate")
+    pdir = os.path.join(clone, "devdocs/progress")
+    for b in twatch.PROGRESS_BUCKETS:
+        os.makedirs(os.path.join(pdir, b), exist_ok=True)
+    os.makedirs(os.path.join(clone, twatch.TSTATE_REL), exist_ok=True)
+    open(os.path.join(clone, twatch.TSTATE_REL, "keep"), "w").write("x\n")
+    # `opt` is in RETRY_CLASSES, so its stub annotates instead of closing —
+    # the ordinary mix whenever a retry-class job goes green in the same
+    # report as another job.
+    close_job, annot_job = "test-core#src:test/eight.pas", "opt#src:test/nine.pas"
+    close_slug, annot_slug = twatch.reg_slug(close_job), twatch.reg_slug(annot_job)
+    for slug, job in ((close_slug, close_job), (annot_slug, annot_job)):
+        open(os.path.join(pdir, "backlog", slug + ".md"), "w").write(
+            STUB % (job, job.split(":", 1)[-1], job))
+    g("add", "-A")
+    g("commit", "--quiet", "-m", "case 8 fixture")
+    g("push", "--quiet", "origin", "master")
+    g("checkout", "--quiet", "--detach", g("rev-parse", "HEAD").strip())
+
+    class DetachedClone(FakeClone):
+        path, branch = clone, "master"
+
+        def _resolve_index_conflict(self):
+            return twatch.Clone._resolve_index_conflict(self)
+
+        def fetch(self):
+            return g("fetch", "--quiet", "origin")
+
+    print("case 8: annotate + close in one cycle, clone detached")
+    twatch.close_stub_tickets(
+        DetachedClone(), "borg",
+        [{"job": annot_job, "bad": "bbbbbbbbbbbb2222"},
+         {"job": close_job, "bad": "aaaaaaaaaaaa1111"}],
+        "ffff5555ffff6666",
+        {"tier": "fu" + "ll", "jobs": [{"name": annot_job, "cls": "opt"}]})
+
+    ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", "master",
+                         "devdocs/progress/"], cwd=bare,
+                        capture_output=True, text=True).stdout.split()
+    stray = [p for p in ls if os.path.basename(p) == close_slug + ".md"
+             and p.split("/")[2] not in ("done", "rejected")]
+    check("8. closed stub is in done/ on origin",
+          "devdocs/progress/done/%s.md" % close_slug in ls, ls)
+    check("8. no copy of the closed slug remains outside done/", not stray,
+          "still ranked at %s" % stray)
+    check("8. the annotated stub stays ranked",
+          "devdocs/progress/backlog/%s.md" % annot_slug in ls, ls)
+    shutil.rmtree(work, ignore_errors=True)
+
+
 def check(name, cond, detail=""):
     print(("  ok   " if cond else "  FAIL ") + name + (" — " + detail if detail and not cond else ""))
     if not cond:
@@ -223,6 +308,8 @@ def main():
           twatch.reg_open(casc, one_green) is True)
     check("4. every job green closes it",
           twatch.reg_open(casc, all_green) is False)
+
+    case8_mixed_cycle()
 
     print()
     if fails:

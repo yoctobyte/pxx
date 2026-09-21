@@ -5515,7 +5515,7 @@ def close_stub_tickets(clone, host, closed, sha, report):
     red_srcs = {(j.get("src") or "").strip() for j in report["jobs"]
                 if j.get("status") in ("fail", "timeout")}
     red_srcs.discard("")
-    paths, slugs, annotated = [], [], []
+    paths, slugs, annotated, pending_unlink = [], [], [], []
     for r in closed:
         base = ("regression-cascade-" + (r.get("bad") or "")[:12]
                 if r.get("cascade") else reg_slug(r["job"]))
@@ -5617,7 +5617,10 @@ def close_stub_tickets(clone, host, closed, sha, report):
         dst = os.path.join(pdir, "done", slug + ".md")
         with open(dst, "w") as f:
             f.write(body)
-        os.unlink(src)
+        # The unlink is DEFERRED to just before this set's own publish (see
+        # below); doing it here left the deletion exposed to any git command
+        # the ANNOTATED publish runs first.
+        pending_unlink.append(src)
         paths += [os.path.relpath(p, clone.path) for p in (src, dst)]
         slugs.append(slug)
     if annotated:
@@ -5627,6 +5630,24 @@ def close_stub_tickets(clone, host, closed, sha, report):
                       paths=[p for _, p in annotated])
         print("twatch: %d stub(s) green but left open — annotated, not closed"
               % len(annotated), flush=True)
+    # Unlink only now. publish() already re-asserts deletions that its own
+    # `git checkout` undid, but it can only do that for the paths IT was given
+    # — and the annotated publish above is a different call with a different
+    # path list. Its recovery path is `_drop_to_origin`, whose `git reset
+    # --hard origin/<branch>` RESTORES every backlog copy this loop had
+    # already unlinked. The close publish then computes `gone` from a tree
+    # where the file exists again, stages no deletion, and the ticket lands in
+    # done/ AND stays ranked in backlog/. Measured 2026-09-21 in a scratch
+    # clone: with one retry-class stub annotated alongside one closable stub,
+    # origin ends up with both copies — the shape of 68c71af13 (9 files, 473
+    # insertions, ZERO deletions) and of 162201a96. A rebase conflict is
+    # ordinary on a busy origin, so this fires on cycle mix, not on anything
+    # about the ticket, which is why it is intermittent and why the two
+    # earlier fixes (5e90df31f per-lane folders, ee4553627 checkout-restore)
+    # did not cover it.
+    for src in pending_unlink:
+        if os.path.exists(src):
+            os.unlink(src)
     if slugs:
         # Both paths go to publish(): `git add -- <gone> <new>` is what records
         # the move; staging only the destination leaves the stub in backlog on
