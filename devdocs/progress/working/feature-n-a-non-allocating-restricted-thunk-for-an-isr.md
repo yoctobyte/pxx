@@ -810,3 +810,55 @@ the stated acceptance pair unsatisfiable until that exists.
 **NOT ESTABLISHED: whether a scalar-parameter NilPy def is feasible at all.**
 That is the next thing to measure, and it is a frontend question rather than a
 graph question. No work should assume it is cheap.
+
+## CORRECTION TO THE SECTION ABOVE: IT IS THE ARITHMETIC, NOT THE SIGNATURE (2026-09-21)
+
+**The section above says *"the all-Variant calling convention. The SIGNATURE
+does this, not the arithmetic."* That is wrong, and it is mine.** It shipped in
+`a0463da3a`, in the commit body. The measurement it rests on is correct; the
+mechanism I attributed it to is not.
+
+**What refutes it — vary the body while holding the signature fixed:**
+
+    def noargs():        return 7        0 bodies   Variant-runtime: 0   CLEAN
+    def one_int(a):      return a        0 bodies   Variant-runtime: 0   CLEAN
+    def add_const(a):    return a + 1  187 bodies   Variant-runtime: 10
+    def loop_only(a):    while...      187 bodies   Variant-runtime: 10
+
+**`one_int` takes a by-reference Variant parameter and is completely clean.**
+Its body is real, not elided — `PXXDBG=a.ir:one_int` gives `IR count=9`,
+`load_sym a` then `store_sym $pyresult`, **and no call node at all.**
+`add_const` is `IR count=23` with `slotaddr`/`arg`/`call`.
+
+**So the Variant PARAMETER CONVENTION costs nothing. The Variant ARITHMETIC
+lowers to a runtime call, and that is what reaches the allocator.** I varied
+the signature (annotated vs bare) and got byte-identical IR, concluded
+"signature", and never varied the BODY — which is the one axis that moves it.
+A minimal pair that fixes the wrong variable.
+
+### What survives, unchanged
+
+- `def two(a, b): return a + b` reaches `PXXAlloc`. Measured, still true.
+- **The must-ACCEPT row still fails**, so the acceptance pair is still
+  unsatisfiable as specified, and that conclusion is untouched.
+- Enforcement still has to reach the def's COMPILATION rather than its thunk.
+- Annotations still do nothing: `two_ann(a: int, b: int) -> int` and
+  `two_bare(a, b)` produce byte-identical IR, `IR count=23` both.
+
+### What changes, and it makes the remaining arm CHEAPER to price
+
+The next shape is **not** "NilPy needs a second calling convention for defs".
+The parameter convention is already fine. What is needed is narrower: **Variant
+arithmetic on operands known to be scalar must lower to scalar ops instead of a
+runtime call.** That is type inference and specialisation inside a body, not a
+new ABI, and it is a different and probably smaller job.
+
+**Still NOT established, and I am not going to assume it twice:** whether that
+specialisation is feasible or cheap. What is now established is that the thing
+to specialise is the ARITHMETIC, and that a def can already take parameters and
+return a value without touching the Variant runtime at all.
+
+**The general lesson is this project's own and I walked into it:** a minimal
+pair fixes every axis you did not think to vary, and the axis you did not think
+of is the one carrying the effect. I varied the annotation because the
+annotation was what I was asking about.
