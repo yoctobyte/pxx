@@ -1960,7 +1960,7 @@ begin
   PxxFUCIters := PxxFUCIters + UClsCount;   { one full scan; there are several }
   if (PxxFUCCalls mod 20000) = 0 then
     WriteLn('UCLS calls=', PxxFUCCalls, ' UClsCount=', UClsCount,
-            ' scanned>=', PxxFUCIters);
+            ' scanned>=', PxxFUCIters, ' realsteps=', PxxFUCReal);
 {$ENDIF}
   Result := -1;
   bestRank := -2;
@@ -1993,6 +1993,7 @@ begin
   if useIdx then i := UClsBHead[hsh] else i := 0;
   while (i >= 0) and (useIdx or (i < UClsCount)) do
   begin
+{$IFDEF PXX_UCLS_STATS}    PxxFUCReal := PxxFUCReal + 1;{$ENDIF}
     if (UClsUnitIdx[i] = CurrentUnitIdx) and (UClsOwnerProc[i] >= 0) and
        UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
     begin
@@ -2015,6 +2016,7 @@ begin
     if useIdx then i := UClsBHead[hsh] else i := 0;
     while (i >= 0) and (useIdx or (i < UClsCount)) do
     begin
+{$IFDEF PXX_UCLS_STATS}    PxxFUCReal := PxxFUCReal + 1;{$ENDIF}
       if (UClsUnitIdx[i] = CurrentUnitIdx) and
          UNameMatch(UClsNOff[i], UClsNLen[i], lo) and
          ScopeReachesProc(UClsOwnerProc[i]) then begin Result := i; Exit; end;
@@ -2043,6 +2045,7 @@ begin
   if useIdx then i := UClsBHead[hsh] else i := 0;
   while (i >= 0) and (useIdx or (i < UClsCount)) do
   begin
+{$IFDEF PXX_UCLS_STATS}    PxxFUCReal := PxxFUCReal + 1;{$ENDIF}
     { ...and never another routine's local type, which the flat fallback would
       otherwise hand out globally -- the leak this whole key exists to close. }
     if UNameMatch(UClsNOff[i], UClsNLen[i], lo) and

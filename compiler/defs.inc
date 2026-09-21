@@ -7668,6 +7668,7 @@ var
   UClsCount  : Integer;
   PxxFUCCalls: Int64;   { -dPXX_UCLS_STATS only }
   PxxFUCIters: Int64;   { -dPXX_UCLS_STATS only }
+  PxxFUCReal : Int64;   { -dPXX_UCLS_STATS only: TRUE loop steps, all scans }
 
   { Name index over UCls. FindUClass ran THREE full scans of this array per
     call, and the first never breaks early because it picks a BEST match rather
