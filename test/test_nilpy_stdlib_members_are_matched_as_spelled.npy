@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: 0BSD
+"""The stdlib call table is consulted with the member AS SPELLED.
+
+Runs unmodified under CPython, which is where every expected value came from.
+
+THIS FILE IS THE CONTROL, NOT THE CATCH. Its companion is
+`test/nilpy_random_class_probe.npy` plus the Makefile row that owns it: that
+pair asserts the capitalised spelling never resolves to the lowercase entry.
+What THIS file guards is the opposite direction -- that making the match exact
+did not take the real lowercase names down with it. Every name below is a
+genuine all-lowercase Python name and every one of them must still resolve.
+
+WHY THE ASYMMETRY MATTERS, because it is the reason a case-insensitive match
+was never a trade-off: all 72 keys in that table are lowercase Python names, so
+an insensitive match cannot find a real entry an exact match misses. It has no
+true-positive population -- it could only ever manufacture a false one. It did:
+`random.Random` folded onto `random.random`.
+"""
+import os
+import os.path
+import sys
+import math
+import time
+import random
+import collections
+import textwrap
+from random import randint
+
+print(os.path.join("a", "b"))
+print(os.path.basename("/x/y.txt"))
+print(math.sqrt(16.0))
+print(math.floor(2.7))
+# Seeded and range-pinned so the row asserts a VALUE and not merely "it ran":
+# randint(3, 3) can only be 3, so a shim that returned a wrong number is still
+# caught, while the test stays deterministic.
+print(random.randint(3, 3))
+print(randint(4, 4))
+print(random.randrange(1))
+print(round(random.uniform(2.0, 2.0), 1))
+print(textwrap.dedent("  hi"))
+d = collections.deque()
+d.append(5)
+d.append(6)
+print(len(d), d.popleft())
+print(sorted(dict.fromkeys(["a", "b"]).keys()))
+print(time.time() > 0)
+sys.stdout.write("wrote\n")
+sys.stdout.flush()
+print("AS-SPELLED OK")

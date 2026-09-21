@@ -8105,6 +8105,39 @@ disclosure was worth sending on the branch where it turned out not to matter.
 let the holder decide; the message costs one turn and the reconstruction costs
 a run.
 
+### AND THE LOAD YOU DISCLOSE IS THE ONE YOU NOTICED YOURSELF PRODUCING, NOT THE ONE THAT MATTERS
+
+Same day, same two seats, and it is the half the rule above does not cover.
+Having learnt to ask, I asked — **about a 60-second sweep** — and then ran a
+**45-minute full tier straight through the other seat's five-pair interleaved
+A/B without a word.** It had been running for 30 minutes when they announced
+their leg, and it had another 20 to go. Their effect was 9% against a 17%
+spread under load. The run was not salvageable.
+
+**The sweep felt like an event and the tier felt like scenery.** That is the
+whole mechanism: a foreground job you are about to start occupies attention at
+exactly the moment a disclosure would be natural, and a background job you
+started half an hour ago occupies none. So the disclosure discipline attaches
+itself to the SHORT loads and skips the LONG ones, which is precisely backwards
+— duration is what determines whether you overlap somebody.
+
+The asymmetry is worse than an oversight, because the short job is the one where
+asking is nearly pointless and the long one is where it is nearly mandatory. A
+seat that has internalised "ask before adding load" can therefore be MORE
+confident and no safer.
+
+**The discharge is not more vigilance, it is a different trigger.** Announce on
+STARTING anything long-running, not on deciding whether it is heavy — you know
+the duration when you launch it and you do not know the other instrument's
+resolution ever. And when a peer announces a timed leg, **check what you already
+have running** before answering "nothing from me"; `ps -eo lstart,etime` on your
+own long jobs answers it, and the answer is not in your context window because
+you started the job in a different one.
+
+The mirror obligation, for the holder: say when a leg STARTS, not only when it
+ends. Neither seat here could see the other's state, and both announcements
+arrived after the overlap had already begun.
+
 
 ## A capability that exists and cannot be asked for costs you at the worst moment
 
@@ -33151,3 +33184,92 @@ discharge.**
 for seats who believe they are in that category. **Give the unnamed scale a
 name** — *pipeline-rc* beside *wrapper-exit* — or the known rule keeps failing to
 arrive at the place it is needed.
+## THE PIN IS A STANDING POSITIVE CONTROL, AND IT IS THE ONE YOU CAN RUN WHILE A TIER IS USING YOUR BINARY
+
+*Measured 2026-09-21 (frankH, Track N), while landing the `PyStdlibCallProc`
+case-fold fix.*
+
+CLAUDE.md already warns what proving a fix by reverting it costs:
+revert → rebuild → restore → rebuild, and **each rebuild seeds from the previous
+local binary**, so after a few cycles the seed has walked off the pin-derived
+chain and `gate.sh quick` goes RED with two valid fixedpoints. That is the known
+hazard. What is not written down is that the revert is usually **unnecessary**,
+and that there is a window in which it is not merely expensive but *unavailable*.
+
+**Unavailable:** a tier running `./compiler/pascal26` a few thousand times is
+holding the very binary a revert-rebuild would replace. Rebuilding to obtain a
+positive control corrupts the run that is validating the same change. The two
+things you want — a demonstration that the guard can fail, and a tier that
+proves it does not fire — contend for one artefact.
+
+**Unnecessary, whenever the defect predates the pin:** the pinned compiler is a
+*checked-in build with the bug still in it*. It needs no rebuild, cannot perturb
+anything, and is drawn from exactly the right population — it is this compiler,
+on this source, before the change. Run the guard's own predicate against it:
+
+    if ./stable_linux_amd64/default/pinned <probe> $S/out >/dev/null 2>&1 \
+       && [ "$($S/out)" = "float" ]; then echo "FAIL (expected here)"; fi
+
+Pin v413 answers `float`; HEAD refuses. That is the whole control, in one
+command, with the live binary untouched.
+
+**Two things it does not do, and both matter before you quote it.**
+
+*It is silent about a defect younger than the pin.* If the bug arrived after the
+pinned sha, the pin is clean and the control returns the same answer as HEAD —
+which reads as "the row cannot fail" when it means "this control has no
+purchase". Check that the fix's defect predates the pin before believing a
+result either way.
+
+**And the pin→commit mapping is written down, which CLAUDE.md's own section on
+this does not say.** That section warns — correctly — that
+`git log --grep 'pin vN'` returns prose ABOUT a pin at 5:1 to 41:1 against the
+one real commit, and recommends matching the binary sha instead.
+`stable_linux_amd64/default/pin.log` already holds both, one line per pin:
+
+    2026-09-20T10:29:32Z  pinned v413  f94c2a7e2396...  (was a6a2a1cc2278)  744284056e1e7a11...
+
+binary sha256 in column 3 — it matches `sha256sum` of
+`stable_linux_amd64/default/stable_pinned` exactly — and **the source commit in
+the last column**. `git show <that commit>:<file>` then answers whether your
+defect predates the pin, from source rather than from behaviour.
+
+**Measured over the whole file rather than the row I needed, because the row I
+needed worked and that proves nothing about the column.** Population: all **404**
+rows of `pin.log` at `8e60c44be`. The last column resolves to a real commit in
+**334**; of those, **334 are ancestors of origin/master — no exceptions**. So
+when it resolves, it is trustworthy without further checking.
+
+The other **70 do not resolve at all**, and the cause is this repo's own ghost-sha
+rule rather than a bad file: `tools/sync.sh` rebases nearly every sync, so a sha
+read before the push is doomed. v392's row has the same seven columns as v413's
+and its object simply is not there. **The newest non-resolving row is v392
+(2026-08-29); every pin from v393 on resolves**, so the instrument is sound for
+current work and the failures are concentrated in history.
+
+That gives the check a clean shape: a column that resolves is an ancestor and
+needs no corroboration, and a column that does NOT resolve is a **ghost, not a
+typo** — do not go looking for a near-match, and do not read the failure as the
+pin being unidentifiable. The binary sha in column 3 still identifies it
+exactly.
+
+Note WHY the grep instrument fails, because the reason is visible in this row:
+v413's source commit is subject `tstate(borg): slow f37400a57126 done`. The
+commit a pin is taken AT has nothing to do with pinning in its message, so a
+subject search cannot find it even in principle — it is not that the signal is
+outnumbered, it is that there is no signal. The last column is the mapping.
+
+*A missing binary answers exactly like a passing control.* Written as an `&&`
+chain, an absent or mis-pathed pin makes the first command fail, the chain
+short-circuits, and the `else` prints the reassuring branch. This happened here
+first try — `stable_linux_amd64/pascal26` does not exist; the pin lives at
+`stable_linux_amd64/default/pinned` — and the output was `ok`, the same word a
+healthy fixed compiler produces. **Print the pin's version and sha256 beside the
+control's verdict**, or the control has a silent failure mode identical to its
+success. Doing so is what caught it within one command.
+
+The general shape, which is why this is here rather than in a ticket: **when you
+need a build of your code from before your change, prefer one that already
+exists and is checked in to one you would have to manufacture** — manufacturing
+it perturbs the chain your gate depends on, and it competes for the binary your
+verification run is holding.

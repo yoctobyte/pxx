@@ -641,6 +641,48 @@ test-nilpy: $(COMPILER)
 	@if ./$(COMPILER) test/test_nilpy_an_error_in_the_main_module_names_nothing.npy $(TESTTMP)/test_nilpy_maindiag26 2>&1 | grep -q '^  in: '; then \
 	  echo "FAIL: an error in the MAIN .npy grew an 'in:' line — the reader is being told the name of the file they just typed"; exit 1; \
 	else echo "ok: an error in the main .npy still names no file, and an imported module names itself"; fi
+	@# THE STDLIB CALL TABLE IS CONSULTED WITH THE MEMBER AS SPELLED.
+	@# Two instruments, and they fail differently on purpose.
+	@#
+	@# FIRST, the row that catches the defect: `random.Random()` must never
+	@# evaluate to a float. Until 2026-09-21 the table's callers lower-cased the
+	@# member, so `random.Random` folded onto the `random.random` key and resolved
+	@# to the FUNCTION -- with no argument there is no arity error, so it COMPILED
+	@# CLEAN and produced that function's result. A compile-success oracle scores
+	@# that as a PASS, which is why the TSP census never saw it.
+	@#
+	@# The assertion is the INVARIANT and not today's behaviour: it never prints
+	@# `float`. True now (the call is refused) and still true the day
+	@# random.Random lands as a real class (it prints `Random`), so this row does
+	@# not need rewriting when the feature arrives.
+	@# The positive control costs nothing and is decisive, and it needs no
+	@# rebuild: the PINNED compiler predates the fix. Measured 2026-09-21 against
+	@# pin v413 -- it compiles this same file rc=0 and prints `float`, so the row
+	@# demonstrably CAN fail.
+	@#
+	@# KNOWN ONE-SIDED, AND THAT IS DELIBERATE: this row also says `ok` when the
+	@# compile fails for a reason having nothing to do with random -- a broken
+	@# tree, a missing binary, any refusal. So a green here is NOT evidence that
+	@# random.Random works, only that it is not silently a float. The other
+	@# direction is the row below, which needs a compile to SUCCEED and its output
+	@# to match; the two of them together are what pin the change.
+	@if ./$(COMPILER) test/nilpy_random_class_probe.npy $(TESTTMP)/test_nilpy_randcls26 >/dev/null 2>&1 \
+	    && [ "$$($(TESTTMP)/test_nilpy_randcls26 2>/dev/null)" = "float" ]; then \
+	  echo "FAIL: random.Random() evaluated to a float — the capitalised member folded onto the lowercase table key again"; exit 1; \
+	else echo "ok: random.Random does not fold onto random.random"; fi
+	@# SECOND, the control for the same change, in the other direction: making the
+	@# match exact must not take the REAL lowercase names down with it. Every name
+	@# in this file is a genuine all-lowercase Python name and the .expected is
+	@# CPython's own output, generated rather than typed.
+	@#
+	@# THE LAST LINE OF THE .expected IS `AS-SPELLED OK` AND IT IS LOAD-BEARING,
+	@# not decoration. `binary | diff -u expected -` reports DIFF's exit status --
+	@# `$$?` belongs to the last command in a pipeline -- so a binary that dies
+	@# part way through contributes its exit code to nothing. What catches that is
+	@# the terminal token: a run that died cannot have printed it, so the diff
+	@# fails on a missing last line. Do not "tidy" the token away.
+	./$(COMPILER) test/test_nilpy_stdlib_members_are_matched_as_spelled.npy $(TESTTMP)/test_nilpy_asspelled26
+	$(TESTTMP)/test_nilpy_asspelled26 | diff -u test/test_nilpy_stdlib_members_are_matched_as_spelled.expected -
 	# THE OTHER DOOR, and it is this row's control. A BARE `import zlib` must reach
 	# lib/rtl/zlib.pas. Before 80d71d782 it reached /usr/include/zlib.h, and the
 	# cost was not a refusal: C's crc32 takes THREE arguments, so CPython's one-

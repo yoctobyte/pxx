@@ -59,3 +59,62 @@ CPython's `replace()` calls the class's `__init__`, so `__post_init__` runs and
 `init=False` fields are rejected. A clone-and-set implementation skips both.
 That difference is invisible on a plain dataclass and visible the moment one has
 `__post_init__`, so it belongs in the design rather than in a later bug report.
+
+## 2026-09-21 — `dataclasses.replace` MAY NOT NEED RUNTIME FIELD ENUMERATION AT ALL
+
+Measured against CPython 3.14.4 while working TSP wall rows 4–8 as a group
+(`devdocs/dev/tsp-rows-4-8-what-shares-a-cause.md`). This does not retire the
+ticket; it may halve it, and it changes which machinery a taker should open
+first.
+
+**CPython 3.13+ generates `__replace__` on every dataclass, and
+`dataclasses.replace(obj, **kw)` is DEFINED in terms of it.** Verified, not
+recalled:
+
+    @dataclasses.dataclass
+    class P:
+        a: int
+        b: int = 2
+    p = P(1)
+    p.__replace__(b=9)              -> P(a=1, b=9)
+    dataclasses.replace(p, b=9)     -> P(a=1, b=9)
+    hasattr(p, '__replace__')       -> True     (and copy.replace exists too)
+
+So lowering `dataclasses.replace(x, k=v, ...)` to `x.__replace__(k=v, ...)` is
+**CPython's own semantics rather than an approximation of them**. And each
+generated `__replace__` knows ITS OWN fields at compile time — the class that
+declares it is the class whose fields it copies. The reflective capability this
+ticket is named for is not needed for `replace`: only the DISPATCH is dynamic,
+and a dynamic method call on a variant receiver is machinery that already
+exists. `copy.copy` may still want the general capability; the two are less
+joined than the title says.
+
+### THIS COUPLES ROW 4 TO ROW 8, THROUGH THE IMPLEMENTATION AND NOT THE SYMPTOM
+
+`x.__replace__(k=v, ...)` is a KEYWORD call through a dynamic receiver, which is
+exactly wall row 8 (`pyvar_callv_kw`). The two rows look unrelated on the board
+and one is a prerequisite of the other's cheap path. Anyone taking row 4 by this
+route takes row 8 first, or takes the reflective route instead.
+
+### AND THE HAZARD, WHICH IS THE PART TO READ BEFORE STARTING
+
+A dynamic-receiver method call resolves by scanning declared classes FOR THE
+NAME and emitting an unconditional hard cast to the first hit, with **no runtime
+class test** — the family behind lekkerzeilen blockers 03 and 04
+(`bug-n-a-variant-field-is-claimed-as-the-callee-...`,
+`bug-n-a-field-of-the-same-name-in-an-unrelated-class-...`).
+
+**Generating `__replace__` on every dataclass creates the exact population that
+defeats a first-wins scan: one name declared by N unrelated classes.** Today
+that family fires on a name two or three classes happen to share; here it would
+be every dataclass in the program, and the failure is not a diagnostic — it is a
+hard cast to the wrong class, i.e. **constructing an instance of a class the
+program never named.** `tsp/shape.py:115`'s receiver is `sol`, a dict value in a
+comprehension, so it is dynamic exactly where this bites.
+
+So the order is: row 8, then the receiver-scan fix, then this. Taking this first
+delivers a silent wrong object in place of a loud refusal, which is a worse
+position than today's.
+
+Filed by frankH, Track N, while grouping rows 4–8 rather than holding row 4
+alone — the coupling is invisible from inside either ticket.

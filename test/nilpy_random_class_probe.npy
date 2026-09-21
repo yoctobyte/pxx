@@ -1,0 +1,13 @@
+# The capitalised spelling, on its own so the refusal has nothing else in it.
+#
+# NOT A TEST BY ITSELF -- the Makefile row that owns it asserts what the
+# compiler DOES with this file. Under CPython it prints `Random`; the point of
+# the row is that pxx must never print `float`, which is what it did until
+# 2026-09-21: `random.Random` was lower-cased before the stdlib call table was
+# consulted, folded onto the `random.random` key, and resolved to the FUNCTION.
+# No argument means no arity error, so it compiled clean and evaluated to that
+# function's RESULT.
+import random
+
+r = random.Random()
+print(type(r).__name__)

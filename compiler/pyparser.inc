@@ -14256,6 +14256,19 @@ end;
   Deliberately a fixed table rather than a general module system: each entry is
   a shim with real semantics behind it, and an unmapped name must stay an
   error rather than resolve to something plausible. }
+{ THE MEMBER IS MATCHED CASE-SENSITIVELY, AND THAT IS PYTHON'S RULE RATHER THAN
+  a convenience. Every key below is a genuine all-lowercase Python name, so a
+  case-INSENSITIVE match can never find a real entry that an exact match misses
+  -- it can only manufacture a FALSE one. It did: callers used to lower-case the
+  member, so `random.Random(seed)` folded onto `random.random` and resolved to
+  the FUNCTION. With a seed it said "pyrandom_random takes fewer arguments than
+  were given", which reads like a missing feature; with NO argument
+  `random.Random()` COMPILED and evaluated to a float where CPython gives an RNG
+  object -- a silent wrong value, in the one place a program asks for a source
+  of randomness and cannot tell it got the wrong thing.
+  So the callers pass the member AS SPELLED. Adding an entry whose Python name
+  has a capital in it needs that capital here too.
+  bug-n-a-stdlib-class-folds-onto-a-same-named-function-and-silently-evaluates-to-its-result }
 function PyStdlibCallProc(const dotted: AnsiString): AnsiString;
 begin
   if dotted = 'os.path.isabs' then Result := 'pyos_path_isabs'
@@ -14512,12 +14525,12 @@ begin
      (base <> 'collections') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
-  d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));
+  d2 := base + '.' + GetTokenStr(TokPos + 1);   { as spelled -- see PyStdlibCallProc }
   { three segments first — `os.path.join` must not be read as `os.path` }
   if (TokPos + 4 < TokCount) and (Tokens[TokPos + 2].Kind = tkDot) and
      (Tokens[TokPos + 4].Kind = tkLParen) then
   begin
-    d3 := d2 + '.' + LowerCase(GetTokenStr(TokPos + 3));
+    d3 := d2 + '.' + GetTokenStr(TokPos + 3);   { as spelled -- see PyStdlibCallProc }
     pname := PyStdlibCallProc(d3);
     if pname <> '' then begin nTok := 5; Result := True; Exit; end;
   end;
@@ -46915,10 +46928,24 @@ end;
   `import os`). feature-nilpy-dotted-package-imports. }
 { Does the compiler PROVIDE `<dotted root>.<member>` — as a mapped call or as a
   modelled value? The question both from-import arms ask before binding a bare
-  name, so the answer can never differ between the two spellings. }
+  name, so the answer can never differ between the two IMPORT spellings.
+  ("spellings" here means `import x` versus `from x import y` -- NOT letter
+  case, which the body below treats differently per arm and deliberately so.) }
 function PyStdProvidesMember(const dottedRoot, member: AnsiString): Boolean;
 begin
-  Result := (PyStdlibCallProc(LowerCase(dottedRoot) + '.' + LowerCase(member)) <> '') or
+  { THE TWO ARMS HAVE OPPOSITE CASE RULES ON PURPOSE. DO NOT MAKE THEM AGREE.
+    The CALL table is matched AS SPELLED -- every key in it is a genuine
+    lowercase Python name, so folding there can only manufacture a false match,
+    and it did (`random.Random` -> `random.random`, silently a float).
+    The VALUE table below is matched FOLDED, and that fold is LOAD-BEARING:
+    os.SEEK_SET / SEEK_CUR / SEEK_END are real capitalised Python names stored
+    here in lowercase, so removing the fold breaks them.
+    Censused 2026-09-21 against CPython 3.14.4, all 17 keys of
+    PyIsStdlibMemberValue: exactly 3 capitalised names fold onto a key and all
+    3 are the intended SEEK_* -- no spurious collision, so the fold is safe
+    here as well as required. A later reader tidying these two calls into one
+    spelling breaks one arm whichever spelling they pick. }
+  Result := (PyStdlibCallProc(LowerCase(dottedRoot) + '.' + member) <> '') or
             PyIsStdlibMemberValue(LowerCase(dottedRoot), LowerCase(member), False);
 end;
 
@@ -55577,7 +55604,7 @@ begin
          (FindSym(name) < 0) then
       begin
         qvMemb := GetTokenStr(TokPos + 1);
-        if PyStdlibCallProc(LowerCase(name) + '.' + LowerCase(qvMemb)) <> '' then
+        if PyStdlibCallProc(LowerCase(name) + '.' + qvMemb) <> '' then
         begin
           ErrorIdent := name + '.' + qvMemb;
           Error('Nil Python: ' + name + '.' + qvMemb + ' is a compiler-provided '

@@ -92,8 +92,8 @@ answer to what is missing.
 | 4 | `dataclasses.replace` | `shape.py:115`, `:135`; receiver is a dict value in a comprehension | known ticket (p45) | compiler |
 | 5 | `@dataclass(frozen=True)` | `director.py:37`; the refusal is correct, the work is a store guard | known ticket (p40) | compiler |
 | 6 | `subprocess.run(cwd=)` | `menu.py:141`, `:161` | known | compiler |
-| 7 | `random.Random(seed)` | `commentary.py:64`, `smoke.py:60`; per-instance RNG class absent | known ticket (p40) | compiler |
-| 8 | keyword through a callable value | needs `pyvar_callv_kw`, >4 positional | known | compiler |
+| 7 | `random.Random(seed)` | `smoke.py:60` **only** — `commentary.py` is behind `voice.py`'s threading wall. **NOT a missing feature: it silently evaluated to a float**; fixed 2026-09-21, class still absent | see note | compiler |
+| 8 | keyword through a callable value | `tsp/historic.py:531`; needs `pyvar_callv_kw`, >4 positional | known | compiler |
 
 Module surface: **26** distinct third-party/stdlib modules imported; **23
 resolve.** The three that do not are `ctypes`, `__pxx__` and `wave`.
@@ -138,6 +138,38 @@ gets fixed is the one you were looking at.
 
 So: TSP's *compiler* gap is small and does look minor. TSP's *remaining* gap is
 mostly one piece of porting, in the owner's own repo.
+
+## RE-SWEEP 2026-09-21 — the board did not move, and that is the result
+
+Population `find tsp -name '*.py'` = **67**, failures **20**, so **47 of 67** —
+**identical to `45b8571d7`**, at pxx `8e60c44be` plus the stdlib case-fold fix,
+with `--threadsafe`.
+
+**`wave` landing delivered ZERO units.** The ticket said it would clear a wall
+without delivering a unit; that was a prediction and is now a measurement.
+`voice.py` moved from `wave` to `threading.Condition` and the count moved not
+at all. Anyone quoting "47 of 67" should quote it as a number that has now
+survived two compiler fixes.
+
+**And three board rows are ONE site.** `commentary.py`, `__main__.py` and
+`voice.py` all report `threading.Condition` at line **79** — but
+`commentary.py:79` is a `def` and `__main__.py:79` is `if args.at:`. Only
+`voice.py:79` is `self._cv = threading.Condition()`; the other two import it,
+and an error inside an imported module prints that module's line number with no
+file name, so the reader supplies the file they invoked.
+
+    3 diagnostics  ->  1 defect  ->  at least 3 files behind it
+
+That is a LOWER bound on yield, which is the opposite of what this instrument
+normally gives. `provider.py` imports `voice` too and is also behind
+`frozen=True`, so it needs both.
+
+**Row 8 is placed**: `tsp/historic.py:531`. It had been recorded with a
+mechanism and no file, because it came off a census column rather than a
+reproduction.
+
+Mechanism grouping for rows 4–8:
+`devdocs/dev/tsp-rows-4-8-what-shares-a-cause.md`.
 
 ## What this inventory does NOT establish
 
