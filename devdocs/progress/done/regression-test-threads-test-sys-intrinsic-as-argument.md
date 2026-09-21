@@ -54,3 +54,6 @@ expect_same: MISMATCH [test_trunc26.1]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-21 — auto-closed by the borg watcher: `test-threads#src:test/test_sys_intrinsic_as_argument.pas` passes at 79852e83ae96 (tier native); it was red at 5745f9f8f1f8. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
