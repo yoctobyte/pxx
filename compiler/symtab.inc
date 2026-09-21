@@ -14109,6 +14109,7 @@ begin
   while n < need do n := n * 2;
   if n > MAX_PROCS then n := MAX_PROCS;
   SetLength(ProcBodyIRNodes, n);  SetLength(ProcBodyMakesCall, n);  SetLength(ProcBodyEarlyExit, n);
+  SetLength(ProcBodyUnresolvedCall, n);
   SetLength(ProcBodyAddrTakenParam, n);  SetLength(ProcBodyCompiled, n);  SetLength(InlineCallSites, n);
   SetLength(ProcInline, n);  SetLength(InlineBodyRoot, n);  SetLength(InlineParamCnt, n);
   SetLength(InlineBodyIsStmt, n);  SetLength(InlineLocalCnt, n);  SetLength(InlineBodyHasCall, n);

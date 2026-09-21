@@ -1048,6 +1048,7 @@ begin
   RegcallCapped5 := 0;
   RegcallEligibleUses := 0;
   MeasureInline := False;
+  ProcBodyUnresolvedValid := False;
   InlineASTNext := 0;
   ASTArenaFloor := INLINE_AST_RESERVE;  { raised while a NilPy module parse is live — see defs.inc }
   ASTNodeCount := INLINE_AST_RESERVE;   { per-proc AST starts above the low inline reserve; the per-body resets restore this, but the FIRST allocation (before any reset) must not land in [0..INLINE_AST_RESERVE) and collide with retained inline nodes }
@@ -1192,6 +1193,9 @@ begin
         integer. Prints a SET, deliberately not a verdict. }
       DceEnabled := True;
       DceReachFrom := Copy(option, 18, Length(option) - 17);
+      { arm the per-body unresolved-call scan; without this the array is
+        all-False and would read as "nothing unresolved anywhere" }
+      ProcBodyUnresolvedValid := True;
       Inc(i);
     end
     else if Copy(option, 1, 10) = '--dce-why=' then

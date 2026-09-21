@@ -3890,6 +3890,28 @@ var
   MeasureInline          : Boolean;
   ProcBodyIRNodes        : array of Integer; { IR node count of the body }
   ProcBodyMakesCall      : array of Boolean; { body contains any call → non-leaf }
+  { --- unresolved-call census (dce.inc's --dce-reach-from) --------------------
+    Set when a body contains IR_VIRTUAL_CALL or IR_CALL_IND -- a call whose
+    target this compiler cannot name, so a forward reachability walk from that
+    body is INCOMPLETE and a NO from it is not a safety claim.
+
+    DELIBERATELY NOT HUNG OFF InlineMeasureBody, which already scans every IR
+    node per body and already distinguishes both opcodes. Two reasons, and the
+    first is the one that matters: InlineMeasureBody runs only under
+    `--measure-inline` (MeasureInline, default FALSE), so a flag set there would
+    read False in every ordinary build -- a guard that cannot fire, reporting
+    "no unresolved calls" for a program full of them. And it also tallies
+    InlineCallSites, which FEEDS INLINING, so switching it on to satisfy a
+    query would let the query change the program it is measuring.
+
+    ProcBodyUnresolvedValid is the positive control in the data itself: the
+    scan is gated on the consumer (DceReachFrom <> ''), so in a normal build
+    this array is all-False and MEANINGLESS. Anything reading the array must
+    check the flag first, or it will read "not set" as "clean" -- which is the
+    collision this tree keeps paying for, the default being the answer the
+    caller wants to hear. }
+  ProcBodyUnresolvedCall : array of Boolean;
+  ProcBodyUnresolvedValid: Boolean;
   ProcBodyEarlyExit      : array of Boolean; { body has an explicit Exit (IR_TERMINATE) → multi-exit }
   ProcBodyAddrTakenParam : array of Boolean; { a param's address is taken in the body }
   ProcBodyCompiled       : array of Boolean; { CompileAST ran for this proc (has a real body) }

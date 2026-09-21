@@ -14118,6 +14118,30 @@ end;
 { Phase-0 opportunity probe for feature-inline-routines / auto-inline. Records the
   current body's size + leaf/early-exit/addr-taken-param facts, and counts direct
   internal call sites per target proc. Pure measurement. }
+{ Does this body make a call whose target cannot be named? IR_VIRTUAL_CALL
+  goes through a vtable slot and IR_CALL_IND through a value; neither yields an
+  edge any call graph here can hold, so a forward walk from this body is
+  incomplete and must say so rather than return a confident NO.
+
+  A SEPARATE SCAN rather than two lines inside InlineMeasureBody, which already
+  visits every node and already tests both opcodes. That loop runs only under
+  --measure-inline, so a flag set there would be False in every ordinary build;
+  and it tallies InlineCallSites, which feeds inlining, so enabling it to serve
+  a query would let the query change the program under measurement. See
+  ProcBodyUnresolvedCall in defs.inc. }
+procedure RecordUnresolvedCalls;
+var k: Integer;
+begin
+  if (CurProc < 0) or (CurProc >= Length(ProcBodyUnresolvedCall)) then Exit;
+  ProcBodyUnresolvedCall[CurProc] := False;
+  for k := 0 to IRCount - 1 do
+    if (IRKind[k] = IR_VIRTUAL_CALL) or (IRKind[k] = IR_CALL_IND) then
+    begin
+      ProcBodyUnresolvedCall[CurProc] := True;
+      Exit;
+    end;
+end;
+
 procedure InlineMeasureBody;
 var k, pi, sy, tgt: Integer;
 begin
@@ -14459,6 +14483,7 @@ begin
   IRVerify;
   if MeasureRegcall and (CurProc >= 0) then RegcallMeasureBody;
   if MeasureInline and (CurProc >= 0) then InlineMeasureBody;
+  if ProcBodyUnresolvedValid and (CurProc >= 0) then RecordUnresolvedCalls;
   RegcallAssignResidency;
   { -O1+ shared-IR optimization pipeline (see ir.inc / IROptimize). Gated here
     so -O0 emits the raw lowering byte-identically; runs after IRVerify (on

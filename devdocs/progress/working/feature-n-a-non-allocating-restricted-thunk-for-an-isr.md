@@ -710,3 +710,48 @@ body** — a vtable slot is DATA, written at image-write time — so there is no
 site to attribute and no edge to add. That is a different shape from `@proc`
 and this does not touch it. 8e's live instance is the control when it is built:
 `bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...`.
+
+### THE VMT CHANNEL IS DECLARED, NOT CLOSED — AND THAT IS THE CORRECT OUTCOME
+
+A vtable slot is DATA written at image-write time, so unlike `@proc` there is
+no site to attribute and no edge to add. **The walk cannot be completed; it can
+only be declared incomplete.** `--dce-reach-from` now does that:
+
+    CallsVirtual  ->  UNRESOLVED CALL in CallsVirtual -- virtual or through a value
+                      "the walk is incomplete and a NO here is not a safety claim"
+    CallsNothing  ->  0 bodies, no unresolved calls in this set     <- must-not-fire control
+
+That converts a silent false NO into an explicit refusal, which is the whole
+difference between a measurement and a safety claim.
+
+**WHERE THE FLAG COMES FROM, AND THE TRAP AVOIDED.** `InlineMeasureBody`
+already scans every IR node per body and already tests `IR_VIRTUAL_CALL` and
+`IR_CALL_IND` — the obvious place to hang two lines. **It runs only under
+`--measure-inline` (default FALSE), so a flag set there would read False in
+every ordinary build: a guard that cannot fire, reporting "no unresolved calls"
+for a program full of them.** And it tallies `InlineCallSites`, which feeds
+inlining, so enabling it to serve a query would let the query change the
+program it measures. A separate minimal scan instead, armed by the consumer.
+
+**`ProcBodyUnresolvedValid` is the positive control carried in the data.** The
+scan is gated on `DceReachFrom <> ''`, so in a normal build the array is
+all-False and meaningless. Without the flag this block would print *"0 bodies
+make an unresolved call"* for a build where nothing was measured — the most
+reassuring possible way to say nothing happened.
+
+### The acceptance criterion for the guard now exists
+
+    body          bodies  PXXAlloc  unresolved
+    PlainOnly       1       no          0        <- the only shape a guard may accept
+    UsesNew         8       YES         0
+    UsesSetLen     25       YES         4
+    UsesCopy       53       YES         5
+    UsesConcat     53       YES         5
+    CallsVirtual    2       -           2
+
+**All three columns clean is the only combination that can support a refusal
+decision**, and it is now expressible. That is what the enforcement half was
+missing: not a verdict, but a statement the verdict could be built on.
+
+**Still not built:** the guard itself, in `PyDefFitsCallbackThunk` or beside
+it. What it needs now exists.

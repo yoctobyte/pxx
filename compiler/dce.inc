@@ -504,7 +504,7 @@ procedure DceReachReport;
   PlainOnly staying at 1 is what shows the merge did not collapse into
   everything-reaches-everything; it is the control that makes the other four
   rows worth reading. }
-var root, p, q, a, b, i, n, seen, viaN, addrN: Integer;
+var root, p, q, a, b, i, n, seen, viaN, addrN, unresN: Integer;
     vis: array of Boolean;
     viaStub: array of Boolean;   { reached only THROUGH unowned code }
     viaAddr: array of Boolean;   { reached only because a body took its ADDRESS }
@@ -713,6 +713,43 @@ begin
   if pulledAddr then
     WriteLn(StdErr, 'dce-reach:   NOTE a body here TAKES AN ADDRESS; the',
                     ' [via @proc taken] rows are what that may reach');
+
+  { --- unresolved calls: the reason a NO may not be a safety claim --------- }
+  { A body containing IR_VIRTUAL_CALL or IR_CALL_IND calls something this
+    compiler cannot name. A vtable slot is DATA written at image-write time, so
+    unlike @proc there is no site to attribute and no edge to add -- the walk
+    cannot be completed, only declared incomplete. Reported per body, because
+    "which body" is what a caller needs in order to fix it.
+
+    The validity flag is checked FIRST and on its own line. Without it this
+    block would print "0 bodies make an unresolved call" in any build where the
+    scan was never armed, which is the most reassuring possible way to say
+    nothing was measured. }
+  if not ProcBodyUnresolvedValid then
+    WriteLn(StdErr, 'dce-reach: unresolved-call scan NOT ARMED -- this says',
+                    ' NOTHING about virtual or indirect calls')
+  else
+  begin
+    unresN := 0;
+    i := 0;
+    while i < ProcCount do
+    begin
+      if (vis[i] or (i = root)) and (i < Length(ProcBodyUnresolvedCall))
+         and ProcBodyUnresolvedCall[i] then
+      begin
+        Inc(unresN);
+        WriteLn(StdErr, 'dce-reach:   UNRESOLVED CALL in ', Procs[i].Name,
+                        ' -- virtual or through a value');
+      end;
+      Inc(i);
+    end;
+    if unresN = 0 then
+      WriteLn(StdErr, 'dce-reach: no unresolved calls in this set')
+    else
+      WriteLn(StdErr, 'dce-reach: ', unresN, ' bodies in this set make an',
+                      ' UNRESOLVED call -- the walk is incomplete and a NO',
+                      ' here is not a safety claim');
+  end;
 end;
 
 procedure DceRun;
