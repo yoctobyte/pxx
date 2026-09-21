@@ -34621,3 +34621,54 @@ Worth knowing for any fleet with a coordinating seat: **that seat is the single
 point at which this can happen, and it will happen toward whatever shape is
 being built at the time.** e5 identified this about its own function rather than
 being caught at it, which is why the record survives.
+
+## WE GUARD THE FLATTERING DIRECTION AND BELIEVE A RED ON SIGHT
+
+**Measured 2026-09-21, one seat, one lane, one day, two harness faults pointing
+opposite ways.** The asymmetry is the finding, not either fault.
+
+**The false WIN was caught.** An index A/B reported a 50.7% speedup. The seat
+had pre-registered a ceiling of 27% before building, with the rule that
+exceeding it means something else was measured — so it stopped, investigated,
+and found its own harness: to keep ONE function body for a crosscheck oracle it
+had parameterised `FindUClassImpl(name, useIdx)`, making the no-index arm pay a
+branch on 1.45 BILLION iterations plus a hash per call that the real pre-change
+compiler never paid. **The design choice that made the crosscheck trustworthy is
+the same one that corrupted the timing.** Honest figure: 38.7%.
+
+**The false RED was not caught — it was survived.** The same seat's ranking
+fixture reported *"idx does NOT match the oracle"* and *"pin and idx DIFFER"*.
+Both false. It had written `-Fu test` where the option is `-Fu<dir>` with no
+space, so nothing was built, and the verdict line ran `cmp` against a file that
+did not exist. It branched on the build's `rc` for the per-arm ROWS and **not
+for the verdict**. Believed, it would have blocked a pin on a ranking
+regression that does not exist.
+
+**Nothing detected the red. It survived only because a fixture the seat
+EXPECTED to pass reporting failure was surprising enough to re-examine.** Had
+the identical bug collapsed toward PASS — one `cmp` argument order, one default
+arm — it would have shipped silently.
+
+**THE GENERAL SHAPE: we arm guards in the direction we expect to be fooled, and
+a flattering number is the one we expect to be fooled by. A red gets believed on
+sight, because believing it costs nothing and feels like rigour.** So the
+unflattering direction is structurally unguarded across every harness anyone
+writes — and this is the mirror of the fleet's existing rule that an
+unfavourable delta terminates the search because you have found a culprit and it
+is you.
+
+**THE REPAIR IS NOT MORE CARE IN THE TWO EXISTING STATES — IT IS A THIRD
+STATE.** Both faults are a two-valued instrument forced onto a three-valued
+reality: the verdict could express PASS and FAIL perfectly well and could not
+express **NO DATA**, so a missing precondition was rendered as one of the two
+legitimate answers. Same shape as
+`git merge-base --is-ancestor A B || echo "not an ancestor"`, which returns
+nonzero for a BAD REF as well as a true negative, collapsing "this ref does not
+exist" into a confident verdict.
+
+    [ -s "$OUT" ] || { echo "no output produced -- NO VERDICT"; exit 1; }
+    cmp "$OUT" "$EXPECTED" && echo PASS || echo FAIL
+
+**And pre-register the expected range for BOTH directions.** A ceiling saved the
+win; a floor would have saved the red. Writing down only the number you hope not
+to exceed guards exactly half of your harness.
