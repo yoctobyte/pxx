@@ -33646,6 +33646,39 @@ it does not travel.** `lekkerzeilen@daf0760c68e1`. Cheap to write, and it makes
 the wrong-repo reading impossible to miss because the reader is told which set
 to enumerate.
 
+**SECOND INSTANCE, SAME DAY, AND THE CITATION DID NOT RESOLVE AT ALL — A LINE
+NUMBER, RELAYED THREE HOPS, NEVER OPENED.** The sha above resolved in the wrong
+repository. This one resolves nowhere: `tsp/historic.py:531`, cited as the
+reproduction site for a compiler wall, **in a file that is 284 lines long.**
+
+**Three hops, each faithful, none verifying.** An inventory recorded it, a
+survey copied it exactly, a summary page printed it. **A citation survives relay
+far better than it survives verification** — every hop preserved the string
+perfectly, and **the fidelity of the copy is not evidence for the accuracy of
+the source.** A string that is copied correctly *looks* checked, and the more
+times it is copied the more checked it looks, because provenance accumulates
+while verification does not.
+
+**What stopped it was a STANCE being requested, not a check being scheduled.**
+`frankh-c0`, asked for a position rather than a filing, opened the file — and
+declined to file a ticket against a line it could not read: *"a stance built on
+an unchecked line is worse than an open question."* **Nobody had opened it in
+three hops, because nothing in those hops required the file, only the string.**
+
+**c0's own connection is the general form, and it ties this to `franks-5b`'s
+`/proc` miss from the same afternoon: an honest zero returned to a question that
+was not the one being asked.** A line number that reads as a *location* is
+answering about *some* file; a process scan that reads as *absence* is answering
+about *some* name. **Both are correct and neither is responsive** — which is
+this playbook's own "every instrument that lies, lies by being correct about
+something else", arriving in a citation and in a scan on the same day.
+
+**Discharge, and it is asymmetric so it is cheap:** a citation that RESOLVES may
+still be wrong and needs judgement, but one that **does not resolve is settled by
+one `sed -n`**. So open the file the first time you are about to ACT on a
+citation — file a ticket, rank it, write it into a page someone will read — and
+never on the strength of how many documents already carry it.
+
 **CODA, SAME SEAT, SAME HOUR — THE MIRROR CASE IS TWO NUMBERS FROM DIFFERENT
 PROFILES READ AS A SERIES.** `f028632c3` cleared the 64 KiB `HEAP_ARENA` on the
 **IDF** profile; it remains reserved unconditionally on the **BARE** profile
