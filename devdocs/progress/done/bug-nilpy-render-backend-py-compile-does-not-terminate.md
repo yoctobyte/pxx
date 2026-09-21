@@ -3,8 +3,8 @@ track: N
 prio: 55
 type: bug
 blocked-by: []
-summary: "It loops forever after a known point emitting nothing — not slowness. PXXDBG=all output is byte-identical at 20s and 45s (54,577 lines, cmp-clean) with VmRSS flat at 7,616 kB, so it is a tight non-allocating spin entered right after _text's parameter list (render_backend.py:244); the method-block bisect agrees independently. NOT minimised: seven candidate shapes are recorded as DISPROVED, including the tuple-unpack cycle that was the leading suspect."
-status: unfinished
+summary: "FIXED -- RE-MEASURED 2026-09-21 AND IT COMPILES IN 8.7 SECONDS, against the original `timeout 1500` expiring at 25:00 wall / 95% CPU / RSS flat 7,616 kB on pin v392. THE SUBJECT IS `render_backend.py` AND ONLY THAT -- three programs share the songformatter name and disagree (SongFormatter.py the Tkinter GUI; render_backend.py this one; key_analysis.py the one the matrix records GREEN off an untracked keydemo.py), so a row that does not name the file is worth nothing. rc=0 on BOTH pin v414 (sha256 aeadb1754b80b622, 8.71s, 99% CPU, 120,804 kB) and HEAD b48a5ce0d (binary 5c8c3b8a4c051337, 8.51s), producing BYTE-IDENTICAL 2,915,104-byte artefacts that run and exit 0 with no output -- correct, since the file is 9 classes/functions with no `__main__`. Control rows on a trivial NilPy file passed on both binaries first, because a broken harness makes every row time out and reads exactly like this bug. AND THE SOURCE DID NOT MOVE, which is where a re-measure lies: render_backend.py was last touched `0d7a5c2` 2026-07-26, a MONTH BEFORE this was filed, and `_text` is still at line 244, the exact line this ticket named as the spin entry. Same program, different compiler. FIXED AT OR BEFORE v414 and the window is NOT narrowed further -- it already compiles under the PIN, and narrowing is a bisect the owner deprioritised (*\"for this moment, not important\"*). v414 closed lekkerzeilen blockers 03 and 04, both the shape that produces a non-terminating compile, recorded as CANDIDATES and not as the cause: nothing here tested it and this ticket already carries seven disproved suspects. RESIDUAL AND EXPLICITLY NOT CLOSED BY THIS: both compilers still warn at `render_backend.py:115` that no class declares `.getRGBData()` so it dispatches on the receiver at run time -- the image-surface family the close-out records at :114. This ticket was a compile that never terminates; the runtime image surface is a separate question."
+status: done
 owner: ""
 ---
 
@@ -302,3 +302,85 @@ second bug.
 `ptrace_scope` blocks `gdb -p` on this box. Run the compiler as gdb's CHILD
 (`gdb --args`) instead; that works. `kill -INT` on a batch-mode gdb kills gdb
 rather than interrupting the inferior, so send the signal to the inferior.
+
+## RESOLVED BY RE-MEASUREMENT 2026-09-21 — IT COMPILES, AND THE SOURCE IS THE SAME SOURCE
+
+Re-measured at frankuser's direction after 22 days and three pins. **Scope was
+re-measure only; no bisect, on the owner's explicit deprioritisation.**
+
+**THE SUBJECT IS `render_backend.py` AND NOTHING ELSE.** Three programs share
+the songformatter name and they disagree — `SongFormatter.py` (Tkinter GUI),
+`render_backend.py` (this ticket), and `key_analysis.py` (the one the matrix
+records GREEN, driven by an untracked `keydemo.py`). *"songformatter works"*
+and *"songformatter does not compile"* have both been true, about different
+programs. Every row below names the file.
+
+    row                          rc   wall     CPU   maxRSS
+    CONTROL      / pin v414       0   0:02.82  96%    73,444 kB
+    CONTROL      / HEAD           0   0:02.71  97%    74,088 kB
+    render_backend.py / pin v414  0   0:08.71  99%   120,804 kB
+    render_backend.py / HEAD      0   0:08.51  99%   121,444 kB
+
+    pin v414 = sha256 aeadb1754b80b622
+    HEAD     = b48a5ce0d, binary sha256 5c8c3b8a4c051337 (rebuilt, `converged`)
+
+**Against the original: `timeout 1500` expired, 25:00 wall, 95% CPU, RSS flat
+at 7,616 kB, on pin v392 (`60b060bb54a8`).** It now finishes in **8.7
+seconds**.
+
+**THE CONTROL ROWS ARE WHY THE SUBJECT ROWS MEAN ANYTHING.** A broken harness
+or a broken binary makes every row time out and reads exactly like this bug. A
+trivial three-line NilPy file compiled clean on both binaries first.
+
+### The source did not change — checked, because this is where a re-measure lies
+
+A "fixed" verdict is worthless if the program moved. `git log -- render_backend.py`
+in `/home/neo/songformatter` shows its last touch as **`0d7a5c2`, 2026-07-26** —
+**a month BEFORE this ticket was filed on 2026-08-29**, and nothing since.
+`_text` is still at line 244, the exact line this ticket named as the spin's
+entry. **Same program, different compiler, different outcome.**
+
+### Fixed at or before v414 — and the window is NOT narrowed further, deliberately
+
+It already compiles under the PIN, so the fix landed at or before v414 and is
+not something in the last few commits. The ticket failed at v392. **That is the
+honest window and narrowing it is a bisect**, which the owner deprioritised
+(*"however, for this moment, not important"*). Not started.
+
+v414 closed lekkerzeilen blockers 03 (a field shadows another class's method)
+and 04 (a `@property` setter runs when the receiver has no slot) — both the
+shape that produces a non-terminating compile — so they are the obvious
+candidates. **Recorded as a candidate and NOT as the cause: nothing here tested
+it, and this ticket has seven disproved suspects already.**
+
+### Both compilers produce a byte-identical artefact, and it runs
+
+2,915,104 bytes from each, `cmp`-clean. It executes and exits 0 with no output,
+which is **correct** — `render_backend.py` has no `if __name__ == "__main__"`
+block; it is 9 classes and functions, a module. Exit 0 with no output is what a
+module with no entry point should do, and saying so matters because a silent
+exit otherwise reads as a failure.
+
+### Residual, NOT part of this ticket
+
+Both compilers emit the same non-fatal warnings, unchanged between them:
+`pascal26:79 pow` C-declaration disagreement on parameter 1, and
+`pascal26:115` twice — *"no class declares a method or callable field
+.getRGBData() — dispatching on the receiver at run time"*. The second is the
+`getSize`/`getRGBData` image-surface family the close-out records at
+`render_backend.py:114`. **This ticket was about a compile that never
+terminates and that is closed; the runtime image surface is a separate
+question and nobody should read this resolution as clearing it.**
+
+### Owner's history, RELAYED and not verified here
+
+Via frankuser: *"songformatter was one of the first python programs we tried.
+we hacked some pdf rendering to mimic reportlab, so that's a regression."*
+Recorded as his account, marked relayed, because it changes what a FAILURE
+would have meant — a regression with a bisectable window rather than a missing
+feature. **My rows do not bear on it either way**, since they found no failure
+to attribute. The `mimic_reportlab_pdfbase_pdfmetrics` shim note in the output
+above is consistent with it and is not evidence for it.
+
+## Log
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

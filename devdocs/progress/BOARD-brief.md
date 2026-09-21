@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:19 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:187 backlog-tools:62 backlog-pascal:12 backlog-decide:51 backlog-libs:26 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3902 rejected:85`
+`working:32 unfinished:18 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:187 backlog-tools:62 backlog-pascal:12 backlog-decide:51 backlog-libs:26 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3903 rejected:85`
 
 ## Held now (working/ — do not touch these files)
 
@@ -42,11 +42,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 
-## unfinished (19) — parked mid-flight; re-claim, do not duplicate
+## unfinished (18) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
-- `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
