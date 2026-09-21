@@ -5921,6 +5921,49 @@ The general form: **a flag makes a feature invisible in exactly the tier you
 would use to judge it.** Coverage is not "did the suite pass", it is "did the
 suite execute this path", and a gate is a machine for guaranteeing it did not.
 
+**AND THE BLIND SUITE CAN BE THE ONE ROW THAT GATES A PIN — WITH A BODY COUNT.**
+Measured 2026-09-21. `make compiler/pascal26`, the self-host fixedpoint, is the
+single row CLAUDE.md says GATES a pin while everything else merely grades. For
+one defect class its answer is an **identity**: it reads the same whether the
+code under test is right or wrong, because `compiler.pas` is not built
+`--threadsafe` and therefore never causes `EmitHeapLockStubs` to run at all.
+
+| tree | fixedpoint | the emitted async-re-entry refusal |
+| --- | --- | --- |
+| broken (`ce18a30c8`) | `converged after 1 round(s)` | **absent** |
+| fixed (`12d6c86f0`) | `converged after 1 round(s)` | present |
+
+The invisible construct was not a cosmetic gap. It was a signal handler being
+granted the heap lock on a bare tid match and then allocating inside a
+half-updated heap — live heap corruption, p70 — and it shipped for **three
+days** behind that green, with `gate.sh quick` equally blind.
+
+**READ THIS AS THE PROBE RULE, NOT AS AN ARGUMENT FOR A WIDER GATE**, because it
+is one careless sentence away from becoming the argument the owner has refused
+four times. A valid pin is the fixedpoint and nothing else may block one. The
+remedy was already written down and simply not applied: *carry a one-line probe
+in the affected shape*. A `--threadsafe` canary is a **probe**, not a gate, and
+the distinction is the whole point — it costs a second, it blocks nothing, and
+it would have caught this on the day.
+
+**Ask what the GATE's key space contains, which costs nothing and settles the
+whole class at once.** `compiler.pas`'s construct set does not include the stub,
+so the gate's true-positive population for this class is *empty* — no run
+required to know it, only the question. The same technique applied to an
+instrument instead of a lookup table.
+
+**What actually found it was the emitted bytes**, and note the trap beside them:
+there IS a bounds compare in the broken binary — the TLS tid-safety check a few
+instructions earlier — so an assertion that greps for "a bounds check" **passes
+on the broken build**. The mechanism was a call site that kept its NAME and lost
+its GUARANTEE: `EmitHeapLockStubs` calls `EnsureSignalBss` under a comment
+saying the bounds are allocated first, which was true until `16ebf18ce` split
+those slots into `EnsureSignalAltStack` — a correct fix that left this reader
+depending on an allocation its callee no longer performed. The downstream
+`if BSS_SIG_ALTSTK <> 0` then failed by **emitting nothing**, silently: a guard
+that cannot tell "zero" from "not applicable" is the same animal as a guard that
+cannot fail.
+
 ## Record the negative result, or someone will spend a night rediscovering it
 
 Track T profiled the test matrix and reported three findings, one of which was

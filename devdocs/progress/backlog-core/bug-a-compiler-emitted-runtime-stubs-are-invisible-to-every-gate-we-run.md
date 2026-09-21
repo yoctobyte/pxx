@@ -1,7 +1,7 @@
 ---
 prio: 55
 track: A
-summary: "A compiler-emitted runtime stub that compiler.pas never causes to be emitted is invisible to the self-host fixedpoint AND to gate.sh quick, and the blindness is structural rather than a coverage gap to be topped up: the fixedpoint's discriminating power is exactly the set of constructs the compiler writes about itself, and --threadsafe is not one of them. Demonstrated with a dated casualty rather than argued -- 12d6c86f0 fixed a p70 heap-corruption regression (a signal handler granted the heap lock on a bare tid match, then allocating inside a half-updated heap) that had shipped for three days while the BROKEN and the FIXED compiler both printed 'converged after 1 round(s)'. The condition that springs it is any codegen whose output compiler.pas does not itself contain: the heap-lock stubs, the signal runtime, the div0 stub, the float-error hook, anything behind --threadsafe / --fpc-float-errors / --no-signals. Wants a deterministic BYTES-level assertion in a cheap tier, not another race-dependent runtime test -- the existing test_threadsafe_heap_lock_deadlock_diag does catch this defect but only by winning a race, which is what made it read as a flake for three days."
+summary: "A compiler-emitted runtime stub that compiler.pas never causes to be emitted is invisible to the self-host fixedpoint AND to gate.sh quick, and the blindness is structural rather than a coverage gap to be topped up: the fixedpoint's discriminating power is exactly the set of constructs the compiler writes about itself, and --threadsafe is not one of them. Demonstrated with a dated casualty rather than argued -- 12d6c86f0 fixed a p70 heap-corruption regression (a signal handler granted the heap lock on a bare tid match, then allocating inside a half-updated heap) that had shipped for three days while the BROKEN and the FIXED compiler both printed 'converged after 1 round(s)'. The condition that springs it is any codegen whose output compiler.pas does not itself contain: the heap-lock stubs, the signal runtime, the div0 stub, the float-error hook, anything behind --threadsafe / --fpc-float-errors / --no-signals. THIS IS THE PROBE RULE, NOT A CASE FOR A WIDER GATE -- a valid pin is the fixedpoint and nothing else may block one; CLAUDE.md's existing remedy, 'carry a one-line probe in the affected shape', was simply never applied here, and a --threadsafe canary is a PROBE that blocks nothing. Wants a deterministic BYTES-level assertion rather than another race-dependent runtime test -- the existing test_threadsafe_heap_lock_deadlock_diag does catch this defect but only by winning a race, which is what made it read as a flake for three days."
 ---
 
 ## The claim, and what would retire it
@@ -25,7 +25,10 @@ fixedpoint "cannot see a construct the compiler never writes". What is new here
 is the severity and a date: the invisible construct was live heap corruption at
 p70, and `gate.sh quick` did not see it either.
 
-**This is not "add more tests".** The affected surface is enumerable and small:
+**This is not "widen the gate", and it is not "add more tests".** A valid pin
+is the self-host fixedpoint; nothing else may block one, and this ticket asks
+for nothing that blocks. What it asks for is the probe CLAUDE.md already
+prescribes for exactly this case. The affected surface is enumerable and small:
 codegen reachable only under a flag `compiler.pas` is not built with —
 `--threadsafe` (the heap-lock stubs and the reentrant layer), the signal
 runtime, `--fpc-float-errors`, `--no-signals`, and the per-arch stub emitters
