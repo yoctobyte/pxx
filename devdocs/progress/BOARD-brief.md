@@ -93,7 +93,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - `[p 80] [N]` bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
-- `[p 80] [N]` feature-n-a-pxx-marker-module-so-an-application-can-ask-whether-it-is-under-pxx
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
@@ -108,5 +107,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 2)
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
+- `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
 
 _537 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -35835,6 +35835,35 @@ test-esp-idf: $(COMPILER)
 	  tail -1 $(TESTTMP)/test_esp_idf_fs.out; \
 	else \
 	  echo "esp32c3 fs-c3 FAILED"; tail -15 $(TESTTMP)/test_esp_idf_fs.out; exit 1; fi
+	@# ISR-DISPATCH CONTEXT ASYMMETRY (isrctx-c3). Like fs-c3 and for the same
+	@# class of reason, this CANNOT go through esp_run.sh: that builds every
+	@# program inside the hello-c3 project, whose sdkconfig has
+	@# CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD off (it is default n). With
+	@# it off, ESP_TIMER_ISR is not even an enumerator -- esp_timer.h puts it
+	@# inside an #if -- so the value 1 means ESP_TIMER_MAX and esp_timer_create
+	@# refuses it. Routed through the wrong project this example does not test a
+	@# weaker version of the thing, it tests nothing: there is no ISR timer to
+	@# read a context from. It ships its own sdkconfig.defaults for that reason.
+	@#
+	@# WHAT THE ROW IS FOR. It is the only place in this repo that can observe
+	@# xPortInIsrContext returning NON-ZERO. Every other ESP row runs in task
+	@# context and reads 0, which is equally consistent with "this is task
+	@# context" and with "the function always returns 0" -- so without this row
+	@# the whole family is unfalsifiable in the reassuring direction, and adding
+	@# more task-context rows would read like corroboration while adding none.
+	@#
+	@# BRANCH ON build.sh's OWN rc -- see the fs-c3 note above for why a
+	@# pipeline's status is not the assertion's. The script asserts the PAIR
+	@# (task ctx = 0 AND ISR ctx <> 0) re-derived from the serial text, not the
+	@# app's own status word.
+	@: > $(TESTTMP)/test_esp_idf_isrctx.out
+	@if bash -c 'cd examples/esp32/isrctx-c3 && . "$$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 && ./build.sh qemu-assert' \
+	    > $(TESTTMP)/test_esp_idf_isrctx.out 2>&1; then \
+	  tail -1 $(TESTTMP)/test_esp_idf_isrctx.out; \
+	elif [ "$$?" = "77" ]; then \
+	  tail -1 $(TESTTMP)/test_esp_idf_isrctx.out; \
+	else \
+	  echo "esp32c3 isrctx-c3 FAILED"; tail -15 $(TESTTMP)/test_esp_idf_isrctx.out; exit 1; fi
 	@for chip in esp32c3 esp32s3; do \
 	  echo "--- $$chip esp_timer callback"; \
 	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \

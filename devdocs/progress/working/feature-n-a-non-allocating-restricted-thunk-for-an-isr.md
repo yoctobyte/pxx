@@ -399,3 +399,58 @@ riscv returns the raw nesting count and a row pinning `1` would be correct on
 every run until a second interrupt arrives during the first.
 
 Nothing here measures allocation. It establishes the CONTEXT, not the contract.
+
+## THE ENFORCEMENT: WHERE IT GOES, AND THE ONE DESIGN DECISION THAT DECIDES WHETHER IT WORKS
+
+The measurement relocated this. `PyDefFitsCallbackThunk` (`pyparser.inc:17566`)
+already decides whether a def may be thunked at all, and what it checks is the
+SIGNATURE — arity, all-`tyVariant` params, a user def rather than pylib, the
+plain function-value carrier with a nil receiver. Every one of those is a fact
+about the interface.
+
+**The ISR restriction is a fact about the BODY, and there is no predicate for
+that.** That is the gap, stated as the thing to build rather than as the thing
+that is missing.
+
+### THE POLARITY IS THE WHOLE DESIGN, AND THE OBVIOUS ONE IS WRONG
+
+The natural implementation is a scan of the def's emitted IR for calls to the
+allocating helpers — `PXXAlloc`, `PXXObjAlloc`, the string and container
+builders — refusing if any appear. **That is a BLACKLIST, and for a safety
+property the polarity is backwards.** A blacklist that misses one allocating
+helper does not fail loudly; it ACCEPTS an allocating def and hands it to an
+interrupt. The failure mode of the guard is the exact outcome the guard
+exists to prevent, and it is silent.
+
+**So: refuse unless EVERY call target in the body is on an allow-list of
+primitives established not to allocate.** A new or renamed helper is then
+refused by default. The guard fails toward rejection, which is recoverable — a
+def that should have been accepted produces a diagnostic somebody reads —
+where the other polarity fails toward a latent defect on a target nobody is
+debugging interactively.
+
+This is the same shape as the `SizeOf`-default and empty-aggregate collisions:
+**ask what the guard does when the machinery has not been taught about
+something.** A blacklist says yes.
+
+### The acceptance pair, restated against this design
+
+- **must-reject** `def grow(s): return s + 'x'` — measured to allocate ~1 per
+  call, so a guard that accepts it is demonstrably wrong.
+- **must-accept** `def two(a, b): return a + b` on a scalar slot — measured to
+  cross the thunk allocation-free, so a guard that refuses it is demonstrably
+  over-strict and the feature is useless.
+
+**Both rows are required and for opposite reasons**: the first is the positive
+control (a guard that cannot reject anything is not a guard), the second is the
+control against the trivially-safe implementation that refuses everything (a
+gate that cannot pass is not a gate). Either alone can be satisfied by a
+one-line lie.
+
+### Not yet built. What is NOT blocking it
+
+The context precondition is settled — `isrctx-c3` witnesses that an `iram;`
+routine on `ESP_TIMER_ISR` runs in interrupt context — and the profile
+question is settled by the sections above. Neither was blocking this, and
+saying so matters because both are the kind of open question a seat parks work
+behind.
