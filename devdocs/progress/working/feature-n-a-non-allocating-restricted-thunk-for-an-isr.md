@@ -454,3 +454,77 @@ routine on `ESP_TIMER_ISR` runs in interrupt context — and the profile
 question is settled by the sections above. Neither was blocking this, and
 saying so matters because both are the kind of open question a seat parks work
 behind.
+
+
+## THE DCE-BASED CLASSIFIER DOES NOT WORK, AND THE NEGATIVE CONTROL IS WHAT SHOWS IT (2026-09-21)
+
+frankb-8e proposed the classifier with the right polarity in mind: compile a
+program whose only content calls primitive P, build with `--dce`, and ask
+whether `PXXAlloc` SURVIVES. DCE over-approximates reachability, so an absent
+`PXXAlloc` would be a sound proof that P cannot allocate. The reasoning is
+correct. **The instrument is not, and it fails in the way this tree keeps
+recording: it cannot produce the answer that would clear anything.**
+
+    program                       is PXXAlloc live?
+    x = 1                    (npy)      YES
+    print(1)                 (npy)      YES
+    def two(a,b): a+b        (npy)      YES
+    def grow(s): s+'x'       (npy)      YES
+    program min; a := 1      (pas)      YES
+    program allocp; s+'x'    (pas)      YES
+
+**`PXXAlloc` is live in EVERY image, including a program that declares one
+integer and assigns it.** The chain is identical in all six and does not
+mention the subject:
+
+    PXXAlloc <- PXXStrLoadFile <- [called from unowned code]
+
+`PXXStrLoadFile` is reached from unowned code, which DCE must treat as a root.
+So `PXXAlloc`'s survival is **a property of the RTL's root set, not of the
+program's body**, and no program can ever make it die.
+
+### Why both arms looked asserted
+
+**The must-reject arm passes, and it passes for a reason that has nothing to do
+with the def.** `def grow(s): return s + 'x'` does allocate, the probe does say
+`PXXAlloc` is live, and the two facts are unrelated — the empty program says
+the same thing. That is a positive control drawn from the wrong population
+certifying a broken instrument, and it is undetectable from the reject side
+alone.
+
+**The control that exposes it is the NEGATIVE one — the empty program — and
+nothing in the design called for running it.** A classifier is naturally tested
+on a thing that should pass and a thing that should fail; the thing that should
+fail *for no reason at all* is the third row, and it is the only one that
+discriminates. Recorded here because the next seat will reach for this
+classifier again: **it is not that the probe is noisy, it is that the probe
+cannot emit the answer the allow-list needs.**
+
+### What it would have done to the feature
+
+Since `PXXAlloc` is never absent, no primitive is ever certified safe, the
+allow-list comes out EMPTY, and the guard refuses every def. That is the SAFE
+direction — which is why it would have survived review — and it makes the
+must-accept row (`def two(a, b): return a + b`) fail. **A gate that cannot pass
+is not a gate**, and this one would have arrived looking appropriately
+conservative.
+
+### The instrument the property actually needs
+
+The question is not "is the allocator in the image". It is **"can THIS proc
+reach the allocator"** — reachability from a chosen root, forward, over the
+call graph. That graph already exists and is exact for internal direct calls:
+`dce.inc`'s header records that `EmitCallProc` puts EVERY internal direct call
+in `CallFix`, precisely so the pass can walk it, and DCE is a post-pass running
+after all emission, so a def's body is complete by then.
+
+No flag exposes a forward query. `--dce-why=<substr>` walks UP from a live body
+to the reason it is live, rooted at the program's roots; this needs a walk DOWN
+from one named proc. That is the next thing to build, and it is small.
+
+**Caveat to carry into it, from `dce.inc`'s own header:** the graph is exact
+for direct calls, and indirect ones (`@proc` taken, vmt/rtti slots) are
+conservative ROOTS rather than edges. For an allow-list that is the right way
+round — an indirect call inside a candidate body must make it refuse — but the
+predicate has to actually treat "body contains an indirect call" as a refusal
+rather than as an absence of edges, or it will read an unknown as a clean walk.
