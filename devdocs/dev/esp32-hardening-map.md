@@ -485,3 +485,126 @@ I did **not** examine, and make no claim about:
   IDF-only and I did not survey it.
 
 Any of these could be empty or could hold the next p70. Unknown is not clean.
+
+## 3. THE PAL REFUSAL CENSUS — which refusals are walls and which are free
+
+**Measured 2026-09-21 by frankb-8e at `compiler/pascal26` = the tree's HEAD build.
+Every count below names its path, because there are three files of this name.**
+
+### 3.0 The denominator, and why "112" is not the number you want
+
+    lib/rtl/platform/esp/platform_backend.pas    112 grep hits   <- THE SUBJECT
+    lib/rtl/platform/wasi/platform_backend.pas   109 grep hits
+    lib/rtl/platform/posix/platform_backend.pas   22 grep hits
+
+**109 is plausible for 112.** Quoting "112 in platform_backend.pas" and landing on
+the wasi file would not announce itself, to me or to a later re-runner. The path
+is part of the number.
+
+And 112 is not 112 refusals. It decomposes exactly:
+
+    112 = 1 const declaration + 8 prose mentions inside block comments + 103 EXECUTABLE sites
+
+Of those 103, **32 sit in the `{$else}` arm of `{$ifdef PXX_PAL_ESP_IDF_TARGET}`** —
+and that symbol is `{$define}`d for `CPU_XTENSA` *and* `CPU_RISCV32` (lines 163-164),
+i.e. for **every ESP target there is**. Those 32 are the unit's host-build fallback
+and **are not compiled into any ESP image**. They are not refusals on the device.
+
+    103 executable = 71 compiled on ESP + 32 never compiled on ESP
+    71 sites live in 70 distinct routines
+
+**So the honest subject is 71 sites in 70 routines, not 112.** I arrived at the
+wrong one three times on the way here — first counting comments as code, then
+counting a dead `{$else}` arm as a refusal, and both times the count *looked*
+reproducible.
+
+### 3.1 The instrument, and its positive control
+
+**`pxx --dce` call-graph reachability, per program — NOT a grep of call sites.**
+A grep answers "is this entry named anywhere"; `--dce` answers "is this entry
+reachable from THIS program's entry point".
+
+**Positive control, and it is sharp:** `fs-c3` without `--dce` emits **114**
+`PalBackend*` bodies — including `Fork`, `Execve` and `Alarm`, which it plainly
+does not call, because without DCE the whole unit is emitted. With `--dce` it
+emits **5**: `Open`, `Read`, `Write`, `Seek`, `Close` — exactly what its source
+calls. **Negative control:** a bare-profile fixture emits **0**.
+
+Flags come from each demo's own `build.sh` invocation line, not from a grep of
+flags in the file — an early pass of mine read `--esp-profile=bare` out of the
+NilPy scripts' *prose* while their actual compile line carries no such flag.
+
+**A KNOWN LOOSENESS, MEASURED IN THIS POPULATION.** `nilpy-c3` and `nilpy-s3` are
+**byte-identical sources** (`cmp`), and riscv32 reports `PalBackendWrite` live
+while xtensa reports it dead. That is
+`bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program` showing up
+here. **Every riscv32 row below is therefore an UPPER BOUND** — the true reached
+set is this size or smaller, which means the wall count is a ceiling, not a floor.
+
+### 3.2 The population of programs
+
+**14 demos in `examples/esp32/`** — and note `find examples/esp32 -name '*.pas'`
+answers **10**, because the four NilPy demos are `.npy`. I used all 14.
+
+### 3.3 The partition
+
+    18   PAL entries reached by at least one of the 14 demos (union)
+     5   of those carry a refusal that IS compiled on ESP   <- WALL CANDIDATES
+    65   refusing-on-ESP routines reached by NOTHING        <- FREE TODAY
+
+**The 5, with the ARM each refusal sits behind** — because "reached" is a claim
+about the routine and the refusal is a claim about a branch inside it:
+
+| routine | site | the arm |
+| --- | --- | --- |
+| `PalBackendWrite` | 356 | `if handle <= PAL_STDERR` |
+| `PalBackendRead` | 342 | `if handle <= PAL_STDERR` |
+| `PalBackendSeek` | 371 | `if handle <= PAL_STDERR` |
+| `PalBackendClose` | 404 | `if handle <= PAL_STDERR` |
+| `PalBackendClose` | 423 | `if handle < 4096` — the deliberate not-a-`FILE*` guard |
+| `PalBackendOpen` | 287 | `if (flags and PAL_OPEN_EXCL) <> 0` |
+| `PalBackendOpen` | 292 | `if (flags and PAL_OPEN_DIRECTORY) <> 0` |
+
+**Every one of the five is reached on a path that does NOT take the refusing
+arm.** `fs-c3` opens, reads, writes, seeks and closes a real file and works: its
+handles come back from `PalOpen` above 4096 and it passes neither `EXCL` nor
+`DIRECTORY`. So there are **zero measured walls in the demo set** — which is a
+much weaker and much more useful statement than "112 unsupported entries".
+
+### 3.4 WHERE THIS CENSUS IS BLANK, AND IT IS THE INTERESTING PART
+
+**No demo in the population uses Pascal `WriteLn`.** All ten Pascal demos print
+through an `esp_rom_printf` external; the four NilPy demos print through the
+NilPy runtime. So **this census says nothing whatever about a `WriteLn`-shaped
+program** — and `TextWriteLn` calls `PalWrite(f.Handle, ...)`, where stdout's
+handle is `1`, which is `<= PAL_STDERR`, which is **the refusing arm of four of
+the five wall candidates.**
+
+That is not a prediction that it fails. It is the statement that **the single
+most likely wall for the first real application anyone ports is the one arm the
+entire demo set structurally cannot reach.** `--dce-why` does root
+`PalBackendWrite <- PalWrite <- TextWriteLn` in a NilPy build, but through
+`holds a stub target`, and the tool's own header says a root is a conservative
+claim — so that chain is not evidence that anything calls it.
+
+**WHO CAN ANSWER IT: qemu, today, with one fixture.** A bare or IDF program that
+does `WriteLn('x')` and asserts the bytes arrive. No board. If it refuses, the
+five-wall table above becomes a one-wall table with a very large blast radius;
+if it does not, the `handle <= PAL_STDERR` arm is dead code on both paths and
+should say so in its own comment.
+
+Also blank: I measured **reachability**, not **entry**. A `--dce` live body is
+reachable-in-graph; only a run records which entries were actually entered.
+Every row above is the first kind. And the 65 free refusals are free **for these
+14 programs** — that is the population, not a property of the PAL.
+
+### 3.5 WHAT RETIRES A ROW
+
+**A new entry point into the PAL**, and one is being built today (frankh-c0's ISR
+thunk consumer). A census of reachability is measured against a program shape,
+so it ages the moment the shape changes. Re-run
+`tools/esp_pal_reachability_census.sh` against the same 14 demos and diff the
+union; its header carries both controls, so a zero from it is checkable.
+
+Not a retiring event: someone adding a refusal. Adding a site changes 71 and
+changes no row here unless the routine is one of the 18 reached.
