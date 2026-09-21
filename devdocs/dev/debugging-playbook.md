@@ -33337,6 +33337,19 @@ and its object simply is not there. **The newest non-resolving row is v392
 (2026-08-29); every pin from v393 on resolves**, so the instrument is sound for
 current work and the failures are concentrated in history.
 
+**USE `merge-base --is-ancestor` FOR BOTH ARMS, NOT `cat-file`.** The census
+above was first produced with `git cat-file -t`, which answers about the
+READER'S OWN OBJECT STORE — the very instrument this file elsewhere names as
+unable to tell a live sha from a ghost. It returned the right answer only
+because the store had been synced minutes earlier, so anything on origin/master
+happened to be present. In a stale or freshly-cloned checkout the same script
+reports a larger ghost count and says nothing, because `cat-file` does not
+error, it answers a different question. Re-tested the proper way: all 70 are
+absent from the store AND reachable from zero remote refs (`git branch -r
+--contains`), and the 334 were verified by ancestry against origin/master
+throughout. The numbers stand; the recipe was wrong and is corrected here
+because a recipe is what gets re-run.
+
 That gives the check a clean shape: a column that resolves is an ancestor and
 needs no corroboration, and a column that does NOT resolve is a **ghost, not a
 typo** — do not go looking for a near-match, and do not read the failure as the
