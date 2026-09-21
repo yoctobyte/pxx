@@ -4846,7 +4846,20 @@ var
   ProcIsGenerator : array of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
   ProcIsStackless : array of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }
   ProcIram        : array of Boolean;   { `; iram;` — body placed in the ELF .iram1.text section (ESP IRAM) }
-  ProcIsInterrupt : array of Boolean;   { `; interrupt;` — raw hardware interrupt handler (reserved; full reg-save/iret not yet emitted) }
+  ProcIsInterrupt : array of Boolean;   { `; interrupt;` — raw hardware interrupt handler. THE CODEGEN IS COMPLETE, and this
+                                          comment said "reserved; full reg-save/iret not yet emitted" until 2026-09-21, which
+                                          would have sent a reader to build what already works. Verified by disassembling
+                                          test/test_esp_interrupt.pas --emit-obj on both ISAs: riscv32 saves t0-t6/a0-a7 (+ra/s0),
+                                          restores them and returns via `mret`; xtensa Call0 saves a2-a13 in 48 bytes (+a0/a15),
+                                          restores and returns via `rfe`; the body lands in .iram1.text on both.
+                                          WHAT IS ACTUALLY MISSING IS THE INSTALL PATH, NOT THE CODEGEN — writing mtvec (riscv32)
+                                          or vecbase (xtensa) is not expressible from Pascal or from inline asm (measured: `csrw`
+                                          parses but EmitAsmRv32 has no encoding; the only CSR write in the tree is hardwired to
+                                          mstatus for the atomics' interrupt-disable), so no such handler can currently be entered
+                                          by a trap on any instrument. Note esp_intr_alloc is NOT that path: the IDF dispatcher
+                                          calls its handler as an ordinary function, so a handler registered there must be `iram;`
+                                          and NOT `interrupt;` — an `interrupt;` proc would mret/rfe out of a normal call.
+                                          devdocs/dev/esp32-hardening-map.md }
   ProcBodyEnd     : array of Integer;   { Code[] offset just past this proc's body (set at proc end); the iram byte-range is [BodyAddr, ProcBodyEnd) }
   ProcDbgMain     : array of Boolean;   { DWARF -g: proc defined in the main source file (gets a DW_TAG_subprogram DIE) }
   ProcGenElemTk   : array of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
