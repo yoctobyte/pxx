@@ -90,6 +90,8 @@ vector install + a deliberate trap is a fixture that runs on this box. It never
 becomes [BOARD]. Fixing the asm lexer's hex literal is a separate, smaller bug
 and is worth doing regardless.
 
+Filed: `feature-s-a-csr-write-is-not-expressible-from-pascal-so-no-raw-isr-can-be-installed` (p60).
+
 **A design question this exposes, for Track U rather than for silicon:** an
 `interrupt;` routine has no way to adjust the return address. For an
 asynchronous interrupt that is correct. For a *synchronous* trap (`ecall`,
@@ -114,6 +116,8 @@ states the rule:
 `@an_interrupt_proc` passed to an external, or at minimum warn) plus one
 sentence of documentation. Stays [SRC]. Cheap, and it is the kind of mistake
 that costs a silicon session to diagnose.
+
+Filed: `bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-via-mret-with-no-diagnostic` (p60). Note the refusal is cheap *today* precisely because §1.1 is open: with no raw install path in existence, EVERY `@interrupt_proc` is currently a mistake, so the predicate is trivial now and refinable when the install lands.
 
 ## 1.3 [QEMU] The `iram;` + `esp_intr_alloc` path is checked only as a *relocation*, never executed
 
