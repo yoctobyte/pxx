@@ -975,3 +975,5 @@
 2026-09-20T19:27:11Z	borg	44728b431d89d226b8bb71441f88d18c604e98ca	would-pin PENDING 44728b431d89 — qualifies, streak 1/2
 2026-09-21T06:57:16Z	borg	d0890e1ba6be5935153b2a10805378b937d24c84	would NOT pin d0890e1ba6be — 1 red(s) the current pin does not have, 7 inherited from the current pin: test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas
 2026-09-21T07:30:45Z	borg	1ce2c86122c6c6cde795f6b0ef831889aa64494d	would-pin PENDING 1ce2c86122c6 — qualifies, streak 1/2
+2026-09-21T09:13:10Z	borg	80d949e2f7f4f49278c2a229fe54154def8d2cc1	WOULD PIN 80d949e2f7f4 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 2/2
+2026-09-21T09:13:10Z	borg	80d949e2f7f4f49278c2a229fe54154def8d2cc1	AUTO-PIN DECLINED — HEAD is a87488b8a083, not the tested 80d949e2f7f4
