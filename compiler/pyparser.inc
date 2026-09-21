@@ -12370,21 +12370,51 @@ end;
   and pydynattr_get(pyvarobj(v), ...)'s naive unwrap would ClassName garbage
   for a scalar (str/int/float/bool) variant on a miss. }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer;
-var procIdx, a0, a1, nameNode: Integer; isVariantRecv: Boolean;
+var procIdx, a0, a1, nameNode: Integer; useObjRoute: Boolean;
 begin
-  isVariantRecv := IntToTypeKind(ASTTk[baseNode]) = tyVariant;
-  if isVariantRecv then
-    procIdx := FindProc('pydynattr_get_v')
+  { WHICH ROUTE IS A QUESTION ABOUT THE RECEIVER BEING A CLASS, NOT ABOUT IT
+    BEING A VARIANT, and this asked the second until 2026-09-21. The two
+    predicates agree everywhere except on a STATICALLY SCALAR receiver -- an int,
+    float, bool or string that is not a variant -- which is exactly what a CALL
+    RESULT is: `def mk(): return 5` then `mk().foo` types the receiver tyInt64,
+    so it took the else arm, PyMakeObjPtr handed the integer 5 to pydynattr_get
+    as an object pointer, and ClassName dereferenced it. SIGSEGV where CPython
+    raises AttributeError.
+
+    pydynattr_get states the contract in its own body -- "Reached with a
+    receiver STATICALLY known to be a real class instance (or nil) -- NEVER an
+    int/str/etc scalar, so ClassName on a non-nil obj is always safe here" -- so
+    two comments in two files named the right rule while the one predicate that
+    enforces it tested something else.
+
+    Measured, one subject per file, with the receiver's static kind printed at
+    this line: tyClass -> correct AttributeError; tyVariant -> correct; tyInt64,
+    tyDouble, tyBoolean and tyAnsiString -> rc=139, every one of them.
+
+    A route census over the NilPy fixture corpus recorded 338 arrivals here and
+    saw ONLY tyVariant (326) and tyClass (12) -- no third kind -- which is the
+    argument that narrowing to tyClass takes nothing away from code that works
+    today. Read that as a PARTIAL census and not a whole one: its own author
+    rebuilt the compiler while it was still running, so the probe stopped
+    printing partway through. The loop did compile all 1058 subjects, so the
+    DENOMINATOR is known and the arrivals came from an unknown PREFIX of it. The
+    corruption can only DROP rows, never invent them, so "no third kind appeared
+    in 338 arrivals" stands and "no third kind exists" is not claimed. The
+    evidence that nothing regressed is the NilPy tier, which is an outcome and
+    not a proxy. bug-n-an-attribute-on-a-scalar-returned-by-a-call-segfaults }
+  useObjRoute := IntToTypeKind(ASTTk[baseNode]) = tyClass;
+  if useObjRoute then
+    procIdx := FindProc('pydynattr_get')
   else
-    procIdx := FindProc('pydynattr_get');
+    procIdx := FindProc('pydynattr_get_v');
   if procIdx < 0 then Error('Nil Python: pylib (pydynattr_get/_v) not loaded');
   nameNode := AllocNode(AN_STR_LIT);
   ASTSOffset[nameNode] := StoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
   a0 := AllocNode(AN_ARG);
-  if isVariantRecv then ASTLeft[a0] := baseNode
-  else ASTLeft[a0] := PyMakeObjPtr(baseNode);
+  if useObjRoute then ASTLeft[a0] := PyMakeObjPtr(baseNode)
+  else ASTLeft[a0] := baseNode;
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := nameNode;
   ASTRight[a0] := a1; ASTRight[a1] := -1;
   Result := AllocNode(AN_CALL);

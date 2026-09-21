@@ -1,0 +1,126 @@
+# A missing attribute on a SCALAR reached through a call result must raise
+# AttributeError, not segfault.
+#
+# `def mk(): return 5` then `mk().foo` typed the receiver tyInt64 -- not a
+# variant and not a class -- and PyMakeDynAttrGet asked "is this a VARIANT" to
+# decide the route. A statically scalar receiver therefore took the OBJECT
+# route, PyMakeObjPtr handed the integer 5 to pydynattr_get as an object
+# pointer, and ClassName dereferenced it. SIGSEGV, rc 139, on HEAD and on the
+# pin. pydynattr_get's own body states the contract it was being called in
+# violation of: "NEVER an int/str/etc scalar".
+#
+# THE RECEIVER'S STATIC TYPE IS THE AXIS, AND IT IS NOT THE ONE A TEST VARIES
+# BY DEFAULT. Measured before the fix, one subject per file, with the receiver
+# kind printed at the deciding line:
+#
+#     tyClass    mkc().foo            correct AttributeError
+#     tyVariant  xs[0].foo            correct AttributeError
+#     tyInt64    mk().foo   -> 5      SIGSEGV
+#     tyDouble   mk().foo   -> 2.5    SIGSEGV
+#     tyBoolean  mk().foo   -> True   SIGSEGV
+#     tyAnsiString mk().foo -> "ab"   SIGSEGV
+#
+# So four of the six scalar kinds crash and the two that a fixture reaches for
+# first -- an object, and a container element -- are exactly the two that pass.
+# A test written the ordinary way certifies the bug. The four scalar rows below
+# are the point of this file; the class and container rows are here so a future
+# change cannot fix the scalars by breaking them.
+#
+# EVERY ROW ASSERTS THE TYPE NAME IN THE MESSAGE, not merely that something was
+# raised. The wrong route did not fail to raise -- it crashed -- but a future
+# wrong route could raise with the WRONG receiver type name, and a bare
+# "AttributeError was raised" row cannot tell those apart. CPython prints the
+# same strings, so this file is byte-identical to the oracle.
+
+ok = True
+
+
+def check(name, got, want):
+    global ok
+    if got == want:
+        print("%s OK" % name)
+    else:
+        print("%s WRONG got %s want %s" % (name, got, want))
+        ok = False
+
+
+def grab(fn):
+    try:
+        fn()
+        return "NO RAISE"
+    except AttributeError as e:
+        return "%s" % e
+
+
+# --- the defect: a scalar reached through a CALL result, one kind per row.
+
+def mk_int():
+    return 5
+
+
+def mk_float():
+    return 2.5
+
+
+def mk_bool():
+    return True
+
+
+def mk_str():
+    return "ab"
+
+
+check("call_int", grab(lambda: mk_int().foo),
+      "'int' object has no attribute 'foo'")
+check("call_float", grab(lambda: mk_float().foo),
+      "'float' object has no attribute 'foo'")
+check("call_bool", grab(lambda: mk_bool().foo),
+      "'bool' object has no attribute 'foo'")
+check("call_str", grab(lambda: mk_str().foo),
+      "'str' object has no attribute 'foo'")
+
+# --- a scalar reached through a METHOD call on a literal, which is the same
+# route with the receiver produced one step earlier.
+check("method_result", grab(lambda: "ab".upper().foo),
+      "'str' object has no attribute 'foo'")
+
+# --- the rows that ALREADY worked, kept so the scalars cannot be fixed by
+# breaking them. A class receiver must still take the object route, and a
+# container element must still take the variant route.
+
+class C:
+    def __init__(self):
+        self.n = 1
+
+
+def mk_obj():
+    return C()
+
+
+xs = [5]
+d = {"k": 5}
+i = 5
+
+check("call_class", grab(lambda: mk_obj().foo),
+      "'C' object has no attribute 'foo'")
+check("list_elem", grab(lambda: xs[0].foo),
+      "'int' object has no attribute 'foo'")
+check("dict_value", grab(lambda: d["k"].foo),
+      "'int' object has no attribute 'foo'")
+check("bare_name", grab(lambda: i.foo),
+      "'int' object has no attribute 'foo'")
+
+# --- an attribute that IS there must still be found, on both routes. Without
+# these the whole file would pass on a compiler that routed everything to a
+# stub that raises unconditionally.
+check("class_hit", "%s" % mk_obj().n, "1")
+
+o = C()
+o.dyn = 7
+check("dynamic_hit", "%s" % o.dyn, "7")
+check("str_method_hit", "ab".upper(), "AB")
+
+if ok:
+    print("SCALARATTR OK")
+else:
+    print("SCALARATTR FAIL")

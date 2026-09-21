@@ -2741,6 +2741,17 @@ test-nilpy: $(COMPILER)
 	@# itself a class, which is what let it survive.
 	./$(COMPILER) test/test_nilpy_a_def_returning_a_multi_hop_attribute_chain_is_typed_by_its_last_hop.npy $(TESTTMP)/test_nilpy_chainret26
 	tools/expect_same.sh test_nilpy_chainret "$$($(TESTTMP)/test_nilpy_chainret26 | tail -n 1)" "CHAINRET OK"
+	@# the FOURTH shape, and it is the route rather than the typing: a missing
+	@# attribute on a SCALAR reached through a call result. PyMakeDynAttrGet
+	@# picked its route by asking "is the receiver a VARIANT", where its own
+	@# comment and pydynattr_get's body both say "is it a CLASS" -- the same
+	@# question until the receiver is statically scalar, which is exactly what a
+	@# call result is. mk().foo handed the integer 5 to pydynattr_get as an
+	@# object pointer and ClassName dereferenced it. SIGSEGV, rc 139, on HEAD and
+	@# on the pin, for int/float/bool/str alike -- and CLEAN for the two
+	@# receivers a fixture reaches for first, an object and a list element.
+	./$(COMPILER) test/test_nilpy_an_attribute_on_a_scalar_returned_by_a_call_raises_attributeerror.npy $(TESTTMP)/test_nilpy_scalarattr26
+	tools/expect_same.sh test_nilpy_scalarattr "$$($(TESTTMP)/test_nilpy_scalarattr26 | tail -n 1)" "SCALARATTR OK"
 	./$(COMPILER) test/test_nilpy_a_class_annotated_local_from_an_uninferrable_call_is_unboxed.npy $(TESTTMP)/test_nilpy_annunbox26
 	tools/expect_same.sh test_nilpy_annunbox "$$($(TESTTMP)/test_nilpy_annunbox26 | tail -n 1)" "ANNUNBOX OK"
 	@# `acc.force += v` where acc is an UNANNOTATED parameter and the field
