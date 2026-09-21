@@ -33274,6 +33274,43 @@ them at all, and it is the same argument as 7a's own artefact-property rule one
 paragraph up: a guard that fires at *run* time catches what the author did not
 think of at *write* time.
 
+**SECOND LANE, SAME DAY, AND `franks-5b` NAMED THE SHARED ROOT ITSELF: ONE
+OUTPUT PATH WITH TWO WRITERS, PRODUCING A MISLEADING RESULT RATHER THAN AN
+ERROR.** 7a's was two A/B arms writing one binary path, so one arm was silently
+absent and the table looked complete. 5b's was two *builds* writing one output
+path — a detached build it had launched earlier was still writing the file a new
+invocation was writing.
+
+**What the compiler said, and every word of it was wrong:**
+
+```
+the output file was truncated ... usual cause: ENOSPC or a file-size limit
+```
+
+`df -h` → 40 G free (74%). `df -i` → 9.2 M inodes free. `ulimit -f` unlimited,
+no quota. **And the file was the CORRECT SIZE both times it "failed"** —
+8,491,444 bytes, identical to every successful build. **So the truncation
+verdict was false as well as the cause**, and the diagnostic named the one
+resource that was not under pressure. Writing to `/tmp` and to a different path
+both succeeded; three minutes later the original path succeeded too.
+
+> **A diagnostic's "usual cause" is a PRIOR, not a measurement.** It is written
+> from the author's experience of a population, and it is stated with the
+> confidence of an observation. When one sends you to an instrument, check that
+> the instrument is answering about your failure before you trust the
+> attribution — here `df` refuted it in one command.
+
+**And 5b's own instrument failed in a new variant of the observer rule:** its
+`/proc` scan for "is something still running" searched for **`pascal26_prof`,
+the name of the file being WRITTEN**, while the writer was **`pascal26`, the
+compiler**. It answered **zero, honestly, about a question it had not asked.**
+Not the observer counting itself — **the wrong name read as absence.** *Scan for
+the name of the process that WRITES, never for the file it writes.*
+
+**The remedy is 7a's and it covers both lanes:** make it a property of the
+**artefacts**, checked at run time, rather than a convention remembered at write
+time. Two writers to one path cannot be prevented by intending distinct paths.
+
 **CODA, SAME DAY, AND IT IS THE CHEAPEST OF THE THREE — `franks-5b`, 2026-09-21.**
 Asked whether its A/B arm hashing to the pinned binary might be *this* bug
 rather than a reproduction, 5b answered in one message: three arms, three
