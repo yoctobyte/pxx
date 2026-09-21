@@ -20875,6 +20875,60 @@ place with the measurement, in the same commit — the same discipline the ticke
 and a *false statement about what the run measured* — the vacuous-`%FAIL` audit found eight
 such lines describing a dialect pass the compiler never reached the source to have.
 
+## THE SAME STALE-SUMMARY FAILURE IN A MACHINE-READ FIELD — and there the rule's own remedy does not apply, because the field's entire content IS a row
+
+*`frankz-e5` and `frankb-8e`, 2026-09-21, measured while re-censusing
+`bug-t-a-stale-blocked-by-in-a-BACKLOG-folder-is-outside-every-aperture`
+(`89930cb0a`, `34d9fff52`). Sibling of the skip-reason section above; the
+difference is the consumer, and it inverts the prescription.*
+
+`bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` carried
+`blocked-by: [feature-b-tkhtmlview-in-nilpy]` with that feature in `done/`.
+**Its own body had recorded the edge as dead since 2026-08-28** — lines 189-201
+name the closed blocker and cite the chore ticket that found it — while the
+frontmatter kept the edge for another **twenty-four days**, until a seat hit it
+a third time.
+
+**The asymmetry is the finding, and it runs the wrong way.** CLAUDE.md's rule
+is about a stale `summary:` — prose, read by people, where a body that records
+its own completion is *"the evidence nobody reaches"*. Here:
+
+| | `blocked-by:` (wrong) | the body (right) |
+| --- | --- | --- |
+| read by a program | **yes** — feeds `effective_prio`, `ready`, `next` | no |
+| read by a person | rarely | rarely |
+
+**The half with the consumers was the wrong half, and the half that was correct
+had no consumers at all.** A stale summary at least misroutes a reader who
+might then check. A stale structured field is consumed silently, forever, by
+something that cannot notice.
+
+**AND THE STANDARD REMEDY CANNOT BE APPLIED HERE, WHICH IS WHY IT IS WORTH ITS
+OWN ENTRY RATHER THAN A CROSS-REFERENCE.** CLAUDE.md's prescription for a stale
+summary is *state the MECHANISM and the condition that would SPRING it, never a
+row that fires today.* That is advice for **prose**. A `blocked-by:` field's
+entire content **is** a row that fires today — there is no mechanism-shaped way
+to write it. The repair therefore cannot be better writing and has to be a
+**check**, which is the ticket above, and which brings its own failure (see
+that ticket: the exclusion the check needs is itself a guard that fails green).
+
+**The general question, and it is cheap:** when prose and a structured field
+disagree, do not only ask which is right — **ask which one has consumers.** The
+answer is usually the field, and the field is usually the stale one, because
+prose gets rewritten when someone revisits and a field only changes when
+someone remembers it exists.
+
+**A second shape from the same case, worth having on its own:** the 2026-08-28
+remedy for this was *"Promoted to `backlog/`"* — it moved the affected tickets
+so the ranker could see them and never touched the edges. **The remedy fixed
+VISIBILITY; the defect was the CORRECTNESS of a machine-read field.** It made
+the stale rows reachable by the ranker *without making them true*, so the
+ranker then read a wrong `blocked-by` **more reliably than before**. When a
+remedy and a defect do not name the same property, the failure is not "the fix
+did not work" — it is "the fix worked, on a different property, and removed the
+pressure that would have found the real one."
+
+
 ## WHICH HALF OF THE DIAGNOSTIC IS LYING IS ITSELF THE QUESTION — neither the line nor the quoted text is reliably the good one
 
 Measured 2026-09-06 (frankD), and it is the exact inverse of a case from the same week.
