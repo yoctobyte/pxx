@@ -1877,6 +1877,13 @@ end;
 function FindUClass(const name: AnsiString): Integer;
 var i, bestRank, r, hop, bestHop: Integer; lo, name2: AnsiString;
 begin
+{$IFDEF PXX_UCLS_STATS}
+  PxxFUCCalls := PxxFUCCalls + 1;
+  PxxFUCIters := PxxFUCIters + UClsCount;   { one full scan; there are several }
+  if (PxxFUCCalls mod 20000) = 0 then
+    WriteLn('UCLS calls=', PxxFUCCalls, ' UClsCount=', UClsCount,
+            ' scanned>=', PxxFUCIters);
+{$ENDIF}
   Result := -1;
   bestRank := -2;
   name2 := name;

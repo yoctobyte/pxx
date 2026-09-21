@@ -7666,6 +7666,8 @@ var
   UClsGuidB   : array[0..MAX_UCLASS*16-1] of Byte;
   UClsCaseSensFields : array[0..MAX_UCLASS-1] of Boolean; { field names match case-SENSITIVELY (C structs/unions; C distinguishes `b` and `B`). Default off = case-insensitive Pascal fields. }
   UClsCount  : Integer;
+  PxxFUCCalls: Int64;   { -dPXX_UCLS_STATS only }
+  PxxFUCIters: Int64;   { -dPXX_UCLS_STATS only }
 
   { Per-(class, interface) Interface Method Table: a Data[] array of code
     addresses, one per interface method slot, filled (like the VMT) via

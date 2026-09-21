@@ -761,3 +761,72 @@ suite skips.
 rebuilt from token 0 whenever `TokCount` moves — 10 times on lekkerzeilen. The
 stack state at a module boundary is the only obstacle. **Not done, and not worth
 doing until something measures the table as a cost rather than a wash.**
+
+---
+
+# THE 89%, MEASURED: a flat class table scanned 1.45 BILLION times
+
+**Re-profiled on the FIXED compiler** (`aeadb1754b80` = pin v414) compiling
+lekkerzeilen. 381 of 400 samples taken, flat self-time, freshly emitted map.
+
+    27.0%  FindUClass
+    11.3%  UNameMatch
+    10.2%  UsesRankOf
+     6.3%  PyParamTypeFromSites
+     6.3%  PyDefRebindTok
+     2.9%  GetTokenStrFromRaw
+     2.6%  PyDefUsedAsValue
+     2.4%  PXXAlloc
+     2.1%  PXXFree
+
+**Pre-registered predictions** (`scratchpad/PREREG-profile2.txt`), and the
+scorecard, including the one where my test design was invalid:
+
+1. `GetTokenStrFromRaw` drops sharply from 16% — **it is 2.9%.** Held.
+2. `PXXAlloc`+`PXXFree` drop from a combined 21% — **4.5%.** Held.
+3. `PyFindSuiteIndent` stays near 13% — **it is 0.3%.** Refuted.
+4. Something new at the top — **`FindUClass` at 27%.** Held.
+
+**PREDICTION 3 WAS NOT A FAIR TEST AND I AM SCORING IT AS INVALID, NOT AS A
+MISS.** The 16%/13%/21% figures come from a profile of a **400-definition
+synthetic under the UNFIXED compiler**. This profile is **lekkerzeilen under the
+fixed one**. Two populations *and* two compilers, so **nothing can be attributed
+by differencing them** — which is the error this document has spent all day
+recording, committed here by its own author while writing the predictions down.
+Rows 1, 2 and 4 survive only as statements about *this* profile.
+
+## What it scales with — the question that matters, not "what is biggest"
+
+Instrumented (`-dPXX_UCLS_STATS`), lekkerzeilen:
+
+    FindUClass calls        3,860,000+
+    UClsCount                     411
+    iterations counted  1,449,667,904
+
+**And that is a FLOOR.** The counter adds `UClsCount` once per call, while
+`FindUClass` contains **three** full scans — the first of which never breaks
+early, because it is picking a best match rather than a first one.
+
+`UNameMatch` is already non-allocating with a length reject, so this is not a
+string problem. **It is 411 classes scanned linearly, 3.86 million times.**
+
+**`UClsCount` IS THE IMPORT CLOSURE'S CLASS COUNT.** Every imported unit adds
+its classes to one flat array, and every subsequent lookup scans all of them.
+**So this is the import-penalty mechanism, and unlike the walk it genuinely
+scales with the closure** — per-lookup cost grows with how much you import, and
+the lookup count grows with how much code you have. Their product is the 13x.
+
+**THE OWNER'S `lists instead of hashmaps` HYPOTHESIS IS CONFIRMED HERE.** It was
+refuted for the enclosing-scope path — measured, 1.06x growth where a lookup
+predicts 4x — and it is exactly right for this one. He was not wrong; he was
+pointing at a different table than the one we were looking at.
+
+## Ceiling, stated before building anything
+
+`FindUClass` alone is **27%**. If `UNameMatch` and `UsesRankOf` are this path,
+the bound is **48.5%** — but a flat profile has NO CALLER INFORMATION, so that
+attribution is unproven and 27% is the number to plan against.
+
+**The remedy is a hash index on the class table, keyed by lowercased name.** Not
+built yet. `ULower` also allocates once per call, 3.86M times, which the index
+would remove for free.
