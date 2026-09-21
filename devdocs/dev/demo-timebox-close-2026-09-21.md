@@ -25,12 +25,27 @@ rather than picking a side.
 by `lekkerzeilen-7a`.** Do not re-derive these rows here; that file carries the
 full matrix, the method, and a perishability protocol. Read it first.
 
-**⚠ ONE ROW IN IT IS SUPERSEDED BY ITS OWN AUTHOR'S LATER WORK.** Line 136 reads
-*"nobody in the fleet has measured it"* about the cost of reaching a runnable
-state from scratch — and `lekkerzeilen@8868d45`, three commits later, measures
-exactly that. The document was not touched again (`git log` on that path stops
-at `253b51d`). Raised with 7a; flagged here because this page points at that
-file as the authority and will not do so silently.
+**ONE ROW IN IT WAS SUPERSEDED BY ITS OWN AUTHOR'S LATER WORK, AND IS NOW
+REPAIRED (`lekkerzeilen@b78a348`).** Recorded because the failure class is the
+point, not the incident. Line 136 read *"nobody in the fleet has measured it"*
+about the cost of reaching a runnable state from scratch — and
+`lekkerzeilen@8868d45`, three commits later, measured exactly that.
+
+**The durable replacement states the mechanism instead of the world:** *"no row
+in this table measures the cost of reaching a runnable state from scratch —
+every row starts from a tree that already has `world/`, so the build and run
+columns cannot price it by construction."* That says both what is missing **and
+why the table cannot answer it**, and it does not decay.
+
+**7a left a visible note saying what the sentence used to be**, rather than
+correcting silently — which is the right call, because a silent fix removes the
+instance from the class this page is cataloguing.
+
+> **The general form, 7a's own and sharper than the prescription:** *a gap
+> statement acquires a dependency on the gap persisting, and a negative is
+> retired by any measurement including the author's own* — **and the author is
+> usually the person best placed to close it, so the half-life is shortest for
+> exactly the person writing it.**
 
 ### What ran, and against what
 
