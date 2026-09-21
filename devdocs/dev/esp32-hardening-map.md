@@ -20,9 +20,13 @@ as qemu coverage and compiler capability change. A row's bucket is a claim about
 
 ## THIS LIST IS INCOMPLETE, AND ITS LENGTH IMPLIES NOTHING
 
-Eleven rows does not mean there are eleven things. This was written in one
-sitting from the interrupt surface outward; it was **not** produced by
-enumerating the ESP surface and classifying all of it. Known unexamined areas
+**The number of rows below is not a count of what is wrong with ESP support**,
+and this sentence deliberately does not say what that number is -- it was
+written as "eleven" on the first draft and was wrong within the hour, by its
+own author adding rows. A self-counting claim in a document that grows is a
+baseline that cannot survive its own file. This was written in one sitting from
+the interrupt surface outward; it was **not** produced by enumerating the ESP
+surface and classifying all of it. Known unexamined areas
 are named in the last section rather than left to look like absence. Read a
 missing subsystem as *not yet looked at*, never as *clean*.
 
@@ -200,6 +204,58 @@ than either arm's absolute value. That arm is c0's.
 
 **WHAT WOULD MOVE IT:** nothing — [QEMU] already. The 1-reading row is
 unwritten, not unanswerable.
+
+## 1.6 [SRC, and it refutes a premise two lanes were using] "An ISR that allocates is a latent crash" does NOT hold on the IDF profile — and the bare profile is a separate, open question
+
+Two lanes (this one and Track N's `feature-n-a-nilpy-def-has-no-native-abi-
+entry-point-...`) were both carrying the sentence *"boxing into Variants
+allocates, and an ISR that allocates is a latent crash"*. Both halves have now
+failed to survive contact, and neither failure was a measurement anyone had
+taken when the sentence was written.
+
+**The first half fell to frankh-c0's measurement** (pxx@aa4e7bb73): the
+existing `$pycbthunk_` scalar path does not allocate — 200 iterations gave 5
+allocations, 20,000 gave 7, against a control that scaled exactly 100x. The
+allocation is in the def BODY, not the marshalling. **That is an x86-64 result
+and c0 labels it as one** — it is not yet a statement about xtensa or riscv32,
+and this file's own §0 warning about the 64-bit host applies.
+
+**The second half is contradicted by the IDF's own source.** On the IDF
+profile, PXX's allocator IS the IDF heap: `builtinheap.pas:1383-1400` redefines
+`PXXAlloc` to `calloc`/`free`, resolving to newlib/heap_caps at link time
+(`EspArena` is the BARE profile only). And `heap_caps` is deliberately
+ISR-safe — `components/heap/multi_heap_platform.h:18-25`, verbatim:
+
+    /* Because malloc/free can happen inside an ISR context,
+       we need to use portmux spinlocks here not RTOS mutexes */
+    #define MULTI_HEAP_LOCK(PLOCK) ... portENTER_CRITICAL_SAFE((PLOCK)) ...
+
+`portENTER_CRITICAL_SAFE` is the ISR-safe variant, and the comment gives the
+ISR case as **the reason** for choosing a spinlock over a mutex. The IDF did
+not tolerate allocation in an ISR; it selected its locking primitive for it.
+
+**So on the IDF profile the cost of allocating in an ISR is LATENCY and
+determinism — a spinlock and a critical section inside a handler — not
+corruption.** That is still a good reason to forbid it in a real-time path, but
+it is a different argument, with a different enforcement and a different
+acceptance, and a ticket justified as "latent crash" is asserting something the
+platform's own source contradicts.
+
+**THE PROFILE SPLIT IS LOAD-BEARING AND MUST NOT BE COLLAPSED.** Bare is not
+IDF. There PXX uses its own `EspArena` and the ISR-safety of that path is
+**unestablished by anyone** — it is not a known-good and not a known-bad. Do
+not let the IDF answer travel to it.
+
+**STILL UNMEASURED, BY ANYONE, AND OWNED BY TRACK N:** what an allocation
+inside an ISR actually costs on this hardware. c0's numbers are evidence about
+WHERE allocation happens, never about what it costs in interrupt context, and
+they should not be cited as the latter.
+
+**WHAT WOULD MOVE IT:** a per-call allocation census on-target. Note the
+obvious instrument is the wrong one — free-heap delta is a NET measure, so an
+alloc/free pair nets to zero and it can show a flat line while `malloc` is
+called every tick, which is exactly the churn the claim is about. Call counts
+need IDF heap tracing (a config flag, heavier build) or a hook.
 
 ---
 
