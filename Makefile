@@ -2750,8 +2750,8 @@ test-nilpy: $(COMPILER)
 	@# object pointer and ClassName dereferenced it. SIGSEGV, rc 139, on HEAD and
 	@# on the pin, for int/float/bool/str alike -- and CLEAN for the two
 	@# receivers a fixture reaches for first, an object and a list element.
-	./$(COMPILER) test/test_nilpy_an_attribute_on_a_scalar_returned_by_a_call_raises_attributeerror.npy $(TESTTMP)/test_nilpy_scalarattr26
-	tools/expect_same.sh test_nilpy_scalarattr "$$($(TESTTMP)/test_nilpy_scalarattr26 | tail -n 1)" "SCALARATTR OK"
+	./$(COMPILER) test/test_nilpy_an_attribute_on_a_scalar_returned_by_a_call_raises_attributeerror.npy $(TESTTMP)/test_nilpy_scalarcallattr26
+	tools/expect_same.sh test_nilpy_scalarcallattr "$$($(TESTTMP)/test_nilpy_scalarcallattr26 | tail -n 1)" "SCALARATTR OK"
 	./$(COMPILER) test/test_nilpy_a_class_annotated_local_from_an_uninferrable_call_is_unboxed.npy $(TESTTMP)/test_nilpy_annunbox26
 	tools/expect_same.sh test_nilpy_annunbox "$$($(TESTTMP)/test_nilpy_annunbox26 | tail -n 1)" "ANNUNBOX OK"
 	@# `acc.force += v` where acc is an UNANNOTATED parameter and the field
