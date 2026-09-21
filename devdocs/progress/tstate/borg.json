@@ -15647,19 +15647,17 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-21T08:42:21Z",
+  "date": "2026-09-21T10:18:52Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
    "test-core#src:test/c_crtl_wait.c",
-   "test-core#src:test/test_set_in_64bit_element.pas",
    "tools-devtest#00",
    "demos#00",
-   "test-pascal-conformance#shard3/6",
-   "size-canary#src:tools/size_canary.py"
+   "test-pascal-conformance#shard3/6"
   ],
-  "sha": "b109703344eaee45e8203d1708baf762bf8ae665",
+  "sha": "0176aa3cebf24ef991502072a56ac33ff7d9b4b6",
   "tier": "full",
-  "ver": "v414",
+  "ver": "v415",
   "verdict": "RED",
   "why": {
    "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
