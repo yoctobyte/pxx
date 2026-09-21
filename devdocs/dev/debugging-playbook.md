@@ -34573,8 +34573,51 @@ different repo from the one most pxx seats have open. **7a's second is
 CLAUDE.md's own `pgrep -f` rule arriving in a fifth subsystem**, hit while
 recovering from an unrelated fault.
 
-**One thing I did NOT resolve and am not going to assert:** I received two
-different descriptions of 5b's instance — a verdict line that did not branch on
-the build succeeding, and a binary that predated the change. Those are one of
-each mechanism. I have no first-hand access to it, so it is recorded here as
-unresolved rather than filed under a mechanism to make the taxonomy tidy.
+**RESOLVED 2026-09-21, and the resolution matters more than the row.** This
+paragraph recorded 5b's instance as unplaced, because I had two descriptions of
+it that fell on opposite sides. frankz-e5 resolved it against **5b's own
+verbatim message**, which it still held: *"Mine the same day was a verdict line
+that did not branch on the build succeeding."* **Invalid verdict.** The second
+description — *"c0's and 5b's binaries predated the change"* — was e5 flattening
+two instances into one shape **while constructing this taxonomy**, which is the
+most ordinary way a category acquires a member it does not have. 5b's
+confirmation is pending; recorded now because the source is a record rather than
+a recollection, and marked so a later reader knows which.
+
+**THE CORRECTED COUNT INVERTS THE LESSON, WHICH IS THE REAL FINDING:**
+
+| mechanism | instances |
+| --- | --- |
+| invalid **arm** | c0 — **one** |
+| invalid **verdict** | 5b, this seat, frankz-e5, and 7a's strace filter — **four** |
+
+7a's filter sits on the verdict side by the same test: the instrument could not
+observe the thing, so *0 files from a successful compile* was an answer it was
+incapable of not giving.
+
+**SO THE MEMORABLE LINE COVERS THE RARE CASE.** c0's *two arms cannot tell you
+they are the same arm* is the sharpest sentence in this entry and it addresses
+**one instance in five**. The common failure is an instrument that cannot
+express the negative, and its repair — **assert the direction that must
+differ** — is the duller sentence doing four-fifths of the work. A reader who
+takes away only the quotable line takes away the coverage of one case in five.
+**The inversion does not depend on the pending confirmation:** even if 5b's row
+moved back to the arm column it would be 2–3, and the verdict mechanism would
+still be the commoner one.
+
+**Deliberately NOT stretched into this taxonomy:** 7a's other instance — a
+profiler recovery whose `pgrep -f lekkerzeilen` matched the wrapper shell and
+copied bash's address map — is neither mechanism. It is a **wrong subject**, the
+wrong process entirely, and belongs to CLAUDE.md's `pgrep -f` rule. Left out
+rather than admitted to make a category bigger.
+
+**AND THE DISCREPANCY WAS NEVER IN THE INSTANCES — IT WAS IN THE RELAY.** Both
+descriptions were honest readings of one event, and the one that arrived second
+would have won by recency had both not been in front of me at once. **A relay is
+the only place two readings of one event coexist and the only place neither
+original is present**, so it is structurally where they get silently reconciled
+— and here it reconciled in the direction that made a taxonomy look tidier.
+Worth knowing for any fleet with a coordinating seat: **that seat is the single
+point at which this can happen, and it will happen toward whatever shape is
+being built at the time.** e5 identified this about its own function rather than
+being caught at it, which is why the record survives.
