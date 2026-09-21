@@ -985,3 +985,5 @@
 2026-09-21T16:27:46Z	borg	b20c65e7ab149e68bdd7eaff0afafef5d9e24521	AUTO-PIN DECLINED — HEAD is d6d6750faa0a, not the tested b20c65e7ab14
 2026-09-21T21:24:21Z	borg	819a5e275987460f70570fd121b230cefd51076f	WOULD PIN 819a5e275987 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 3/2
 2026-09-21T21:24:21Z	borg	819a5e275987460f70570fd121b230cefd51076f	AUTO-PIN DECLINED — HEAD is 1759c9b6d495, not the tested 819a5e275987
+2026-09-21T21:46:52Z	borg	dd131d7afac790f31c6b42ccc312e72aafe8f629	WOULD PIN dd131d7afac7 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 4/2
+2026-09-21T21:46:52Z	borg	dd131d7afac790f31c6b42ccc312e72aafe8f629	AUTO-PIN DECLINED — HEAD is 5ec356784852, not the tested dd131d7afac7
