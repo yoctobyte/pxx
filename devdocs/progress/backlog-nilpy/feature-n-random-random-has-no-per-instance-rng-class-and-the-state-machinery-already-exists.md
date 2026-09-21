@@ -83,3 +83,38 @@ the global `random` in between does not change it.** A test that only checks
 "returns a number in range" passes against the global stream and certifies the
 bug. Seed with a value whose first draw differs from the global stream's, or the
 row cannot fail.
+
+
+## ABSORBED FROM ITS DUPLICATE, 2026-09-21
+
+`feature-n-random-random-the-per-instance-rng-class-is-absent` (p40) was the
+same feature filed a day earlier by the same seat, and is resolved as
+superseded by this one. Both were mine; neither carried a `supersedes` edge,
+and both sat in BOARD.md as live work. Reported by frankz-e5 off the TSP
+survey.
+
+**Why THIS one is the survivor rather than the older:** the p40 summary framed
+the gap around a CONDITION that no longer holds — that the NilPy member lookup
+folds case, so `Random` matched the module-level `random()` and the program was
+refused with `pyrandom_random takes fewer arguments than were given`. **That
+fold was fixed on 2026-09-21** (the member is now matched as spelled), so a
+reader taking p40 at face value would have gone looking for an arity message
+that the compiler no longer emits. Its diagnosis was correct when written and
+its repro still reproduces — with a different, better error.
+
+**The one thing in p40 worth keeping, because it is a CLASS and not this
+ticket:** any absent member whose name differs only in case from a present one
+used to be reported as an ARITY error about a call the source never wrote,
+which sends the reader to the call site instead of to the missing member. That
+is retired as a live hazard by the as-spelled fix, and it is recorded where a
+retired hazard belongs — the logbook and the case-sensitivity work — rather
+than in a feature ticket, so it cannot be mistaken for something still to do.
+
+**p40's repro, kept because it is three lines and still the shortest statement
+of what is wanted:**
+
+```python
+import random
+r = random.Random(7)
+print(type(r).__name__)      # CPython: Random
+```
