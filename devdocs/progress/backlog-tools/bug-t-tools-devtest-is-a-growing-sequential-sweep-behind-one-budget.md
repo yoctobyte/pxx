@@ -8,7 +8,7 @@ found: 2026-09-06
 found-by: frankB
 owner: ""
 blocked-by: []
-summary: "`tools-devtest#00` runs every `tools/*devtest*.py` script one after another in a single job, so its wall time is the SUM of a set everyone is encouraged to add to — and its budget is a constant. Measured: 207s over ~130 scripts (2026-09-01), 354.5s over 149 (2026-09-06). That is 1.71x in five days against only 1.15x more scripts, so the scripts are getting heavier faster than they are getting more numerous and no constant survives it. The class budget was raised 600 -> 1200 in a new `guards-py` class as the immediate fix, but that number is sized to OBTAIN a completing observation under tier contention, not derived from one: the job has still never completed inside a full tier (`n:0`), and 600.1s is a CENSORED reading that establishes only a lower bound on the contention factor (>= 1.69). The structural fix is to SHARD the sweep the way `test-c-conformance` is sharded — N jobs the scheduler can pack, each with a small budget that stays meaningful as the set grows, and each naming which scripts it ran. That also fixes a second thing the single job cannot do: it reports one verdict for 149 scripts, and its stored `reason` is a fixed-width tail that has named passing progress lines rather than the failure."
+summary: "`tools-devtest#00` runs every `tools/*devtest*.py` script one after another in a single job, so its wall time is the SUM of a set everyone is encouraged to add to, behind a CONSTANT budget. That mechanism is the ticket and it is untouched. THE GROWTH-RATE ARGUMENT THIS SUMMARY USED TO LEAD WITH IS RETIRED: it read 207s/~130 (09-01) and 354.5s/149 (09-06) as 1.71x in five days, and the 09-17 section below already called that a slope drawn partly through a bug (host_dev_lib_skip_devtest.py held a quadratic worth 17 minutes on its own). Re-measured 2026-09-22 on the same box and condition -- 344.0s over 166 scripts, plexus quiet, tree 0e864874e, frozen-tree guard green -- the sweep GAINED 17 scripts and LOST ~11s of wall. THE DECIDING MEASUREMENT THIS TICKET ASKED FOR NOW EXISTS AND IT REFUSES BOTH SPLIT RULES PROPOSED BELOW, WHICH ARE BOTH COUNT RULES: the distribution is extremely skewed -- median 0.22s against a 2.07s mean (9.4x), 131 of 166 scripts under a second summing to 10% of the wall, while the top 8 are 70.2% and the top 1 (fpc_trunk_verdict_devtest.py, 78.5s) is 22.8%. Simulated over the real timings at N=8, a count split spans 11.4s..110.6s and admits no budget that is meaningful for both ends; weight-aware greedy gives 78.5s, and THAT SHARD IS THE ONE HEAVY SCRIPT ALONE. So shard by measured WEIGHT at N=4 (344s -> 86s, 4.0x); past N=6 the heaviest single member binds and wider sharding changes nothing, which makes the next lever that script rather than a bigger N. A weight split needs deterministic assignment or a still_red keyed on shard name stops meaning anything -- a checked-in script->weight table, regenerated deliberately, keeps that. THE BUDGET QUESTION IS UNTOUCHED AND THIS MEASUREMENT DOES NOT LICENSE A CHANGE TO IT IN EITHER DIRECTION: it is a quiet-box reading with no tier contention, the job has still never completed inside a full tier (n:0), and 600.1s remains a CENSORED lower bound. The single job also still reports one verdict for 166 scripts, with a stored reason that is a fixed-width tail naming passing progress lines rather than the failure."
 ---
 
 # `tools-devtest` is a growing sequential sweep behind a constant budget
@@ -99,3 +99,125 @@ rather than a trend. **Re-measure the sweep before quoting 1.71x in five days as
 evidence for anything** -- it was honest when written and it is now a slope
 drawn partly through a bug.
 
+
+## 2026-09-22 — THE PER-SCRIPT DISTRIBUTION, WHICH THIS TICKET NAMES AS "THE MEASUREMENT TO TAKE FIRST". IT DECIDES THE SPLIT RULE, AND IT REFUSES BOTH CANDIDATES OFFERED ABOVE
+
+**Population, tree, box and instrument, because a bare count is not re-derivable
+by anyone including the same instrument.** Population is the RECIPE's, read off
+`Makefile:39528` rather than guessed: `tools/*devtest*.py` less
+`bench_timing_devtest.py` = **166 scripts**, and that count is written into the
+output file beside the rows. Tree `0e864874e`, no modified tracked files,
+`compiler/pascal26` = `1e5dd067455ed4fa`. Box **plexus, 12 cores, idle, no tier
+contention** — the same box and the same condition as the two clean rows in the
+table above, which is why they are comparable. Instrument: a standalone loop
+replicating the recipe, `date +%s.%N` either side of each `python3`, one sample
+per script and no repeats. `tools/frozen_tree_guard.sh` armed for the whole run
+and GREEN afterwards, so the verdict is attributable to one tree.
+
+**Corroboration the run did not need but has:** total measured **344.0 s**
+against the full sweep's **343 s** taken separately the same night. Two
+independent runs, 1 s apart.
+
+### It is not flat. It is not close to flat.
+
+| | |
+| --- | --- |
+| total / scripts | 344.0 s over 166 |
+| **mean** | **2.07 s** |
+| **median** | **0.22 s** |
+| p90 | 2.92 s |
+| max | 78.5 s |
+| min | 0.066 s |
+
+**The mean is 9.4x the median.** This ticket's own warning — *"2.4 s mean, and a
+mean over an unmeasured distribution is exactly the kind of number that has been
+wrong all week"* — was correct, and the 2.07 s I could have quoted off the sweep
+describes almost nothing in the set.
+
+**131 of 166 scripts (79%) run in under a second and sum to 35.9 s — 10% of the
+wall.** The other way round: **the top 8 are 70.2% of the wall**, the top 3 are
+43.4%, and the top 1 is 22.8%.
+
+| s | script |
+| --- | --- |
+| 78.5 | `tools/fpc_trunk_verdict_devtest.py` |
+| 37.3 | `tools/fpc_oracle_wide_devtest.py` |
+| 33.5 | `tools/progress_stale_edge_devtest.py` |
+| 33.2 | `tools/testmgr_pin_built_devtest.py` |
+| 20.4 | `tools/sync_pending_commit_devtest.py` |
+| 14.9 | `tools/progress_orphan_fragment_devtest.py` |
+| 12.3 | `tools/fuzz_compare_key_devtest.py` |
+| 11.3 | `tools/testmgr_tmp_var_devtest.py` |
+
+### SO SPLIT BY WEIGHT, NOT BY COUNT — AND BOTH RULES THIS TICKET PROPOSED ARE COUNT RULES
+
+Above it offers *"sorted glob position"* and *"a hash of the filename, stable
+under insertion"*, and prefers the latter. **They differ only in WHICH scripts
+land together; both assign an equal COUNT per shard, and on this distribution
+that is the property that fails.** Simulated at N=8 over the real timings:
+
+    count-split (either rule)     weight-aware, longest-first greedy
+      shard 0  110.6 s / 21         shard 0   78.5 s /  1
+      shard 1   18.6 s / 21         shard 1   37.9 s /  6
+      shard 2   11.4 s / 21         shard 2   37.8 s / 19
+      shard 3   46.5 s / 21         shard 3   37.9 s / 21
+      shard 4   73.1 s / 21         shard 4   37.9 s / 29
+      shard 5   22.5 s / 21         shard 5   37.9 s / 30
+      shard 6   17.8 s / 20         shard 6   37.9 s / 30
+      shard 7   43.5 s / 20         shard 7   37.9 s / 30
+
+**Count-split's makespan is 110.6 s and its shards span 9.7x** — so a small
+budget "that stays meaningful as the set grows" cannot be set: it is either too
+loose for shard 2 or it kills shard 0. Weight-aware gives **78.5 s**, and the
+useful part is WHY: that shard is `fpc_trunk_verdict_devtest.py` **on its own**.
+
+### AND THAT IS THE CEILING. SHARDING WIDER THAN ~4 BUYS NOTHING
+
+Makespan cannot go below the heaviest single member, so the lower bound for any
+split is `max(heaviest, total/N)`:
+
+| N | lower bound | total/N | binding |
+| --- | --- | --- | --- |
+| 2 | 172.0 s | 172.0 | the sum |
+| 4 | 86.0 s | 86.0 | the sum |
+| 6 | **78.5 s** | 57.3 | **the heaviest script** |
+| 8 | **78.5 s** | 43.0 | **the heaviest script** |
+| 12 | **78.5 s** | 28.7 | **the heaviest script** |
+
+**N=4 weight-aware is the whole win: 344 s -> 86 s, a 4.0x cut.** Past N=6 the
+scheduler is packing around one script and the extra jobs are free only in the
+sense that they change nothing. So the sharding work should land at **N=4, split
+by measured weight**, and the next lever after that is not a bigger N — it is
+`fpc_trunk_verdict_devtest.py` itself.
+
+**A weight split needs the weights to be DETERMINISTIC across runs or a
+`still_red` comparison keyed on the shard name stops meaning anything** — which
+is this ticket's own requirement above, and it is the real cost of preferring
+weight to hash. Cheapest form that keeps it: a **checked-in table** of
+script -> weight used to assign shards, re-generated deliberately, so the
+assignment is a reviewed artefact rather than a function of last run's timings.
+A script with no entry goes to the lightest shard and shows up as a diff next
+time the table is regenerated.
+
+### TWO ROWS TO CARRY RATHER THAN RESOLVE
+
+- **`host_dev_lib_skip_devtest.py` measures 8.2 s here against the 4.8 s
+  recorded on 2026-09-17** after its quadratic was fixed. Both rows are kept
+  rather than one replacing the other: they were taken by different instruments
+  on possibly different load, mine is a single sample with no repeats, and a
+  1.7x gap is inside what one unrepeated sample can produce. **It is not a
+  finding and it is not dismissed** — what would settle it is three repeats on a
+  quiet box, and the reason to keep it visible is that this is the one script in
+  the set already known to have held a 1082x pathology.
+- **Single sample, no repeats, quiet box.** Nothing here establishes variance,
+  and the contended case is still `n:0` — the job has never completed inside a
+  full tier. **This measurement does NOT license a budget change**, in either
+  direction; the "Do not" above is untouched and the reading that would settle
+  it is still censored.
+
+### Raw data
+
+`perscript.txt`, one `duration rc script` row per script plus a population line
+and a `PERSCRIPT-COMPLETE` token, kept in the session scratchpad rather than
+committed — it is 166 rows of one box's timings on one night, and the table
+above is the part that transfers.
