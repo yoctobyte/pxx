@@ -1,6 +1,15 @@
 # Does the FindUClass index generalise beyond lekkerzeilen?
 
-**YES. ~28% on uforth, against ~38.7% on lekkerzeilen.**
+**YES — on every program measured. The range is 6.4% to 38.7%:**
+**render_backend 6.4%, key_analysis 12.5%, uforth 28.4%, lekkerzeilen 38.7%.**
+
+**Quote the RANGE, never an endpoint.** This line first read *"~28% on uforth,
+against ~38.7% on lekkerzeilen"* — two ends, both middle rows omitted — which
+is the same mistake as the 38-41% this document was written to stop, made by
+the document that stops it, one commit after retracting a headline. **The
+6.4% row is the one at risk: it is small, and everyone has spent a day being
+told there was a null, so it will be re-flattened into "no effect" unless it
+is named.** It is a real win.
 
 > # RETRACTED 2026-09-21, SAME DAY, BY ITS OWN AUTHOR
 >
@@ -337,6 +346,21 @@ is 12–20 ns/step, and it is the smallest subject in the set.
 
 **So cost IS proportional to steps, and the retracted section's "the stepping
 model is dead" was an artefact of the invalid arm and nothing else.**
+
+**AND THE CONSTANT IS A BIGGER RESULT THAN THE SPEEDUPS** (franks-5b's
+framing, and it is the right one). The speedups say the index was worth
+building. The constant says we have a **PREDICTOR**: measure `realsteps` on
+any program with `-dPXX_UCLS_STATS -dPXX_UCLSIDX_OFF`, multiply by ~8-9 ns,
+and you can state the available win before doing the work. That is what makes
+the next optimisation cheap to triage, and it is the sentence to put in front
+of frankuser rather than 38.7%.
+
+**Flagged, explicitly NOT a finding:** 8-9 ns is ~25-30 cycles for a loop
+whose first test is an integer length compare, which is slow enough that the
+residual is probably not instruction count. If so there may be a second,
+smaller win in how `UClsNOff`/`UClsNLen`/`UClsUnitIdx`/`UClsOwnerProc` are
+laid out. Speculation, untested, and it belongs behind whatever is queued
+rather than in front of it.
 
 ## What actually sets the share, now that there is a spread to explain
 
