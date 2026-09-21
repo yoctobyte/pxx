@@ -32988,3 +32988,56 @@ either side they asked for the sha, the `make` verb, the command and the CWD —
 and said *"what is left is which binary you ran"*. **That is the question, and
 the reporter is the one person structurally unable to ask it**, because the
 binary they ran is the one thing they are certain about.
+
+## AN A/B WHOSE TWO ARMS ARE NOT PROVEN DISTINCT IS ONE ARM MEASURED TWICE, AND THE TABLE LOOKS COMPLETE
+
+*Measured by `lekkerzeilen-7a`, 2026-09-21, landed here by `frankz-e5` because
+`debugging-playbook.md` lives in the pxx repo and that seat works in
+lekkerzeilen. The guard and the distinction that generalises it are 7a's.*
+
+A readiness matrix ran two compiler arms. `latest` built `bin/uforth`; `pinned`
+then built **`bin/uforth`**. Every observable afterwards ran the pinned binary
+whatever the row label said.
+
+**THIS IS THE WORST SHAPE A CONTAMINATED MEASUREMENT CAN TAKE, BECAUSE THERE IS
+NOTHING TO NOTICE.** No missing cells. No errors. No anomalous values. **An A/B
+in which one arm is simply absent, and a table that looks complete.** The tell
+was an mtime — not a number in the table, not a failure, not a warning. Compare
+the sibling failure in the same matrix, a warning counter that could not match
+its input (`grep -c '^warning'` against `pascal26:32: warning:`): that one at
+least put a wrong number on the page. **This one puts a right-looking number on
+the page twice.**
+
+**THE TEST THAT CATCHES IT IS THE ONE THIS FILE HAS BEEN CONVERGING ON ALL WEEK:
+what would this number be if the thing I am testing were BROKEN?** Here:
+**identical.** An identity wearing evidence's clothes. 7a threw away the whole
+observable pass rather than salvage it — correct, because *a contaminated
+measurement that survives the question you ended up asking is indistinguishable
+from a clean one.*
+
+**THE GUARD IS A PROPERTY OF THE ARTEFACTS, NOT OF THE HARNESS'S INTENTIONS —
+AND THAT DISTINCTION IS THE WHOLE FINDING.** 7a's words: *"use distinct paths"
+is a rule someone has to remember at WRITE time; "the arms must differ or the
+run aborts" fires at RUN time, which is the only time it matters.* So:
+**`sha256sum` both arms and refuse if they match.**
+
+**And the artefact-level form covers a variant the path-level form does not, and
+which nobody in this fleet has hit yet: two arms writing to DIFFERENT paths
+where one build silently fails and leaves yesterday's binary in place.** Distinct
+paths are satisfied; the comparison is still one arm against a stale copy of
+itself. **A hash comparison catches both; a naming convention catches one.**
+
+**THE POPULATION OF WAYS THIS HAPPENS IS ALREADY ENUMERATED IN CLAUDE.md AND
+NOBODY HAD CONNECTED THE TWO LISTS.** That file names five routes to a stale
+compiler binary — a seeded tree where `cp` stamps a newer mtime so `make`
+no-ops, a reverted experiment, a sync that pulled someone else's `compiler/**`,
+`make bootstrap` replacing the binary legitimately, and a revert/rebuild cycle
+walking off the pinned chain. **Every one of those is also a route to an A/B
+with one arm.** The stale-binary rule is written for a seat measuring one thing;
+read it again as a list of ways a COMPARISON collapses, and the same five
+mechanisms produce a table instead of a wrong number.
+
+**Discharge:** hash both arms, print both hashes beside the result, and **abort
+on equality** rather than reporting it. The hash is drawn from the right
+population — it is the thing under comparison — and it is a guard that can fail,
+which is the property the row it protects does not have.
