@@ -50,3 +50,31 @@ def through_table():
     w = Wired()
     w.cb = _double
     return fire(w)
+
+
+# THE RESULT-KIND ROWS, and they use the BARE `return <dyn call>` spelling on
+# purpose. Measured on the defect: `print(o.m(1))` inline and `x = o.m(1)` were
+# both CORRECT in the same program, and only `return` was wrong -- the loss was
+# in the enclosing def's inferred RETURN type, not in the call node, which the
+# frontend had already tagged tyVariant. So a row that assigns to a local first
+# does not test this and the two spellings above are already covered by `peek`.
+class Kinds:
+    def ret_float(self, env):
+        return env.kind_float(77)
+
+    def ret_str(self, env):
+        return env.kind_str(1)
+
+    def ret_list(self, env):
+        return env.kind_list(1)
+
+    def ret_dict(self, env):
+        return env.kind_dict(1)
+
+    def ret_int(self, env):
+        # THE ROW THAT CANNOT FAIL, kept and LABELLED as such. The defect
+        # coerced the result to an integer, so an int result survived it --
+        # correct for the wrong reason. An int-only fixture passes on the
+        # unfixed compiler, which is why the four rows above exist. This one is
+        # here as the collision, not as evidence.
+        return env.kind_int(1)

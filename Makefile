@@ -2097,6 +2097,24 @@ test-nilpy: $(COMPILER)
 	# the fixture -- written in the passing order it would have certified the bug.
 	./$(COMPILER) test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy $(TESTTMP)/test_nilpy_callorder26
 	tools/expect_same.sh test_nilpy_callorder26 "$$($(TESTTMP)/test_nilpy_callorder26)" "$$(python3 test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy)"
+	@# THE ROUTE ASSERTION FOR THE RESULT-KIND ROWS, and it is a separate
+	@# instrument because the value rows CANNOT detect their own irrelevance.
+	@# Those rows guard three fixed silent-wrong-value bugs (float 77.5 -> 77, a
+	@# str result raising, a list coming back as a pointer). Every one of them
+	@# only exists on the RUN-TIME dispatch path, so if these calls ever start
+	@# resolving statically the rows all still match CPython while testing
+	@# nothing at all.
+	@# THAT IS MEASURED, NOT HYPOTHETICAL: the original repro in
+	@# bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
+	@# no longer takes the dynamic route (pydyn_meth0/1/2 all DROPPED for it), so
+	@# re-running that ticket's own file today reports a pass by the wrong route.
+	@# Asserted POSITIVELY -- naming the reason we expect -- rather than by the
+	@# absence of `DROPPED`: a negative match also passes when the report's
+	@# format changes, which is a guard that cannot fail.
+	@if ./$(COMPILER) --dce --dce-why=pydyn_meth1 test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy $(TESTTMP)/test_nilpy_callorder_route26.o 2>&1 | grep -q 'pydyn_meth1 <- Kinds\.'; then \
+	  echo "ok: the result-kind rows still dispatch at run time (pydyn_meth1 <- Kinds.*)"; \
+	else \
+	  echo "FAIL: the result-kind rows in test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class no longer reach pydyn_meth1 — they pass while testing nothing. Check --dce-why=pydyn_meth1 on that fixture."; exit 1; fi
 	# A bare READ of a method as a VALUE, off a receiver whose class is not
 	# known statically, where the read lives in an IMPORTED MODULE. The scan
 	# that normalises such a method to the all-variant ABI used to walk the

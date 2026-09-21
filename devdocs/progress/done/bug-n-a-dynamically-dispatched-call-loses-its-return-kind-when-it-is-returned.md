@@ -2,6 +2,21 @@
 slug: bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
 title: a dynamically dispatched call loses its return kind when it is returned
 summary: >
+  RESOLVED 2026-09-21 — FIXED, AND NOT BY THIS TICKET'S WORK. Verified at
+  5d8a0a60b and under pin v415's binary, so the fix is carried by the pin and is
+  not inert. READ THE NEXT SENTENCE BEFORE RE-RUNNING ANYTHING HERE: THE REPRO
+  BELOW NO LONGER TESTS THIS BUG. Its receiver now resolves statically —
+  `--dce-why` reports pydyn_meth0, pydyn_meth1 AND pydyn_meth2 all DROPPED for
+  that file — so running it today reports a pass by the wrong route, which is the
+  trap its own sibling ticket documented. It was verified instead through a route
+  proven live (`pydyn_meth2 <- Sampler.t <- [vmt/rtti slot]`), varying this
+  ticket's value kinds over that route: list, dict, str, tuple, None, bool, float
+  and int all correct, at arity 0, 1, 2 and 3 — so the arity discriminator
+  recorded below no longer separates anything either. Closed with a regression
+  guard, which is what was actually missing, in
+  test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy,
+  carrying a POSITIVE ROUTE ASSERTION so the rows cannot silently stop testing
+  the dynamic path. ORIGINAL REPORT BELOW, unedited.
   `def via(o): return o.lst(1)` on an unannotated receiver answers a RAW POINTER
   printed as an integer where CPython prints the list. The dyn-dispatch node is
   typed tyVariant by the frontend and pydyn_meth1 returns a Variant, so the loss
@@ -14,7 +29,7 @@ track: N
 type: bug
 prio: 65
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured 2026-09-13 (frankH), at 622de7c9494f
@@ -65,3 +80,6 @@ list came back as a pointer. The row now encodes the three facts in one INTEGER
 and says why, so the two bugs are not entangled — but a fixture asserting a
 container result through that path is the natural spelling and would have been
 red for a reason that has nothing to do with arity.
+
+## Log
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

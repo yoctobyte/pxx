@@ -2,6 +2,22 @@
 slug: bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer
 title: a run-time dispatched call's result is coerced to an integer
 summary: >
+  RESOLVED 2026-09-21 — FIXED, AND NOT BY THIS TICKET'S WORK. Verified at
+  5d8a0a60b and under pin v415's binary, so the fix is carried by the pin and is
+  not inert. All five rows of the table below now match CPython, and the route
+  was proven live rather than assumed: `--dce-why=pydyn_meth2` reports
+  `pydyn_meth2 <- Sampler.t <- [vmt/rtti slot]`, and the "no class declares
+  .m_dflt()" warning still fires, so the probe reaches the subject by the route
+  under test. Extended past the filed table while the repro was in hand — list,
+  dict, tuple, None and bool results are correct too, at arity 0 through 3. This
+  repro is the one that still works; the near-identical one in
+  bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
+  does NOT (its calls now resolve statically), and the two were closed together
+  as one cause seen through different values. Closed with a regression guard,
+  which is what was actually missing, in
+  test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy,
+  including the float and str rows this ticket's Gate required and a POSITIVE
+  ROUTE ASSERTION. ORIGINAL REPORT BELOW, unedited.
   A method call dispatched on the receiver at run time (the open-world path,
   pydyn_meth<n>) returns a Variant, and the value is then read as an INTEGER.
   A float return truncates -- `return outside` with outside=77.5 answers 77 --
@@ -12,8 +28,8 @@ summary: >
 track: N
 type: bug
 prio: 84
-owner: unassigned
-status: open
+owner: frankb-8e
+status: done
 ---
 
 ## How it was reached
@@ -117,3 +133,4 @@ both required**; an int-only fixture passes on the unfixed compiler.
 ## Log
 - 2026-09-14 -- filed while fixing the dynamic-default-signature bug, whose fix
   is what made the path reachable. Control measured against a stashed tree.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

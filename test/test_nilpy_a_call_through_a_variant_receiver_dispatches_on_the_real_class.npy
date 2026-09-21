@@ -42,3 +42,39 @@ print(traffic.through_table())
 # The field is still a field: reading it back proves the store landed in Craft's
 # own slot and not somewhere the dispatch invented.
 print(c.wind)
+
+# ---------------------------------------------------------------------------
+# THE RESULT-KIND AXIS. Everything above varies WHICH CLASS the dispatch picks;
+# these rows hold the dispatch fixed and vary the KIND OF VALUE that comes back
+# through it. Three separate tickets lived here, all silent-wrong-value:
+#
+#   bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer (p84)
+#       float 77.5 answered 77; a str raised "expected a number, got str"
+#   bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
+#       a list/dict/str result came back as a raw pointer printed as an integer
+#   bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string
+#       the enclosing def declared AnsiString for a call returning TPyList
+#
+# ALL THREE WERE THE SAME COERCION seen through different values, and all three
+# were fixed before pin v415 with no fixture left behind. Verified fixed
+# 2026-09-21 at 5d8a0a60b and under v415's binary; these rows are the guard that
+# was missing, not a repair.
+#
+# THE INT ROW IS NOT EVIDENCE and is labelled so in traffic.py: the defect
+# coerced to an integer, so an int result survived it. The float and the str
+# rows are the ones that can fail. Anything that prints 77 has already chosen
+# an integer.
+#
+# THE ROUTE IS THE PART THAT DECAYS SILENTLY, so the Makefile asserts it
+# separately with --dce-why: if these calls ever stop being dispatched at run
+# time, every row below still passes while testing nothing. That is not
+# hypothetical -- the ORIGINAL repro in the p65 ticket no longer takes the
+# dynamic route at all (pydyn_meth0/1/2 all DROPPED for it), so re-running that
+# ticket's own file today reports a pass by the wrong route.
+k = traffic.Kinds()
+e = Environment()
+print(k.ret_float(e))
+print(k.ret_str(e))
+print(k.ret_list(e))
+print(k.ret_dict(e))
+print(k.ret_int(e))

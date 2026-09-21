@@ -2,6 +2,16 @@
 slug: bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string
 title: a def returning str.split on an UNANNOTATED receiver is typed a string
 summary: >
+  RESOLVED 2026-09-21 — FIXED, AND NOT BY THIS TICKET'S WORK. Verified at
+  5d8a0a60b and under pin v415's binary, so the fix is carried by the pin and is
+  not inert. Verified at the MECHANISM and not only the output: `PXXDBG=n.ret`
+  now reports `tk=6 rec=50` for the UNANNOTATED `c_split`, which is exactly what
+  this ticket records as the correct ANNOTATED value; it recorded `tk=23`. Closed
+  with a regression guard, which is what was actually missing — the fix landed
+  with no fixture, in
+  test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy,
+  alongside the two dyn-dispatch result-kind tickets this shares a cause shape
+  with. ORIGINAL REPORT BELOW, unedited.
   `def f(label): return label.split(",")` declares an AnsiString result for a
   call that returns a TPyList, so the caller prints raw memory where CPython
   prints `['a', 'b', 'c']`. `PXXDBG=n.ret` says tk=23. ANNOTATE the parameter
@@ -16,7 +26,7 @@ track: N
 type: bug
 prio: 45
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured 2026-09-13 (frankH), at ee5b6adc7 and under stable_pinned
@@ -85,3 +95,6 @@ and is broken when it is the only thing in the file — the contaminant was insi
 the probe, in the right population, and honest. "Would this row still pass if it
 were the ONLY thing in the run?" answers NO here, which is the question that
 caught it.
+
+## Log
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
