@@ -187,3 +187,54 @@ begin
   else
     Result := '';
 end;
+
+function TokenCaseEqual(idx: Integer; const nm: AnsiString): Boolean;
+{ CaseEqual(GetTokenStr(idx), nm) WITHOUT materialising the token's text.
+
+  GetTokenStr heap-allocates through GetTokenStrFromRaw on EVERY call, and these
+  comparisons run once per identifier token in scans that cross the whole token
+  stream -- so the allocation was the cost, not the comparison. Measured
+  2026-09-21 on an imported NilPy module (devdocs/perf/lekkerzeilen-build-time.md):
+  GetTokenStrFromRaw 16% of samples against 3% on the same 400 definitions
+  compiled inline, with PXXAlloc and PXXFree another 21% between them.
+
+  The LENGTH REJECT is the point and it has to come first. CaseEqual already had
+  one -- `if len <> Length(s1) then Exit` -- but only once the string existed, so
+  it saved the comparison and paid the allocation anyway. Here a token of the
+  wrong length costs two integer loads and nothing else.
+
+  Identical semantics to the pair it replaces, edges included: an out-of-range
+  index and an empty token both yield '' from GetTokenStr, and CaseEqual('', nm)
+  is True exactly when nm is empty. }
+var i, off, len: Integer; c1, c2: Char; r: Boolean;
+begin
+  r := False;
+  len := Length(nm);
+  if (idx < 0) or (idx >= TokCount) or (Tokens[idx].SLen <= 0) then
+    r := len = 0
+  else if Tokens[idx].SLen = len then
+  begin
+    off := Tokens[idx].SOffset;
+    r := True;
+    for i := 0 to len - 1 do
+    begin
+      c1 := TokChars[off + i];
+      c2 := nm[i + 1];
+{$IFDEF PXX_TCE_BREAK}
+      c1 := TokChars[off];   { POSITIVE CONTROL: deliberately wrong }
+{$ENDIF}
+      if (c1 >= 'A') and (c1 <= 'Z') then c1 := Chr(Ord(c1) + 32);
+      if (c2 >= 'A') and (c2 <= 'Z') then c2 := Chr(Ord(c2) + 32);
+      if c1 <> c2 then
+      begin
+        r := False;
+        Break;
+      end;
+    end;
+  end;
+{$IFDEF PXX_TCE_CROSSCHECK}
+  if r <> CaseEqual(GetTokenStr(idx), nm) then
+    WriteLn('TCE-DISAGREE idx=', idx, ' nm=', nm, ' fast=', r);
+{$ENDIF}
+  TokenCaseEqual := r;
+end;

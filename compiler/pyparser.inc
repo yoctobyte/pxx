@@ -497,6 +497,21 @@ var
   PyPSEnclDef: array[0..8191] of Integer;
   PyPSEnclMode: array[0..8191] of Integer;
   PyPSEnclCls: array[0..8191] of AnsiString;
+  { Enclosing-construct table. For every `class`/`def` token in the stream, the
+    nearest enclosing one, or -1. PyDefSiteMode used to find that by walking
+    back to token 0 and skipping the suite of every construct on the way; since
+    imported modules APPEND to Tokens, that walk crossed the whole import
+    closure, so an imported module cost ~3200 suite skips PER DEFINITION where
+    an inline one cost ~200 (measured 2026-09-21, devdocs/perf/lekkerzeilen-
+    build-time.md). One forward pass with a stack gives the same answer at one
+    suite skip per construct, full stop.
+    Rebuilt when TokCount moves, which is once per import, never per def. }
+  PyEnclN: Integer;
+  PyEnclBuilt: Integer;      { TokCount the table was built at; -1 = never }
+  PyEnclOverflow: Boolean;   { capacity or depth exceeded: use the walk }
+  PyEnclTok: array[0..PY_ENCL_MAX - 1] of Integer;   { ascending }
+  PyEnclUp: array[0..PY_ENCL_MAX - 1] of Integer;
+  PyEnclDisagreements: Integer;   { -dPXX_ENCL_CROSSCHECK only }
 
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
@@ -1371,7 +1386,7 @@ begin
   i := TokPos - 1;
   lamSkip := False;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
-     CaseEqual(GetTokenStr(TokPos), 'lambda') then
+     TokenCaseEqual(TokPos, 'lambda') then
   begin
     depth := 0;
     while i < TokCount do
@@ -4980,7 +4995,7 @@ begin
       if depth = 0 then Exit;
     end
     else if (depth = 1) and (Tokens[k].Kind = tkIdent) and
-            CaseEqual(GetTokenStr(k), 'default') and
+            TokenCaseEqual(k, 'default') and
             (k + 1 < TokCount) and (Tokens[k + 1].Kind = tkAssign) then
     begin
       Result := True;
@@ -5784,7 +5799,7 @@ begin
     answers, decided by whether the parameter list had a comma in it.
     bug-nilpy-a-lambda-returned-directly-is-not-callable }
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
-     CaseEqual(GetTokenStr(startIdx), 'lambda') then
+     TokenCaseEqual(startIdx, 'lambda') then
   begin
     Result := tyVariant;
     Exit;
@@ -5980,7 +5995,7 @@ begin
     would take those over. bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic }
   if (endIdx = startIdx + 1) and (PyInferSelfCi >= 0) and
      (Tokens[startIdx].Kind = tkIdent) and
-     CaseEqual(GetTokenStr(startIdx), 'self') then
+     TokenCaseEqual(startIdx, 'self') then
   begin
     Result := tyClass;
     PyInferLastCi := PyInferSelfCi;
@@ -7653,7 +7668,7 @@ begin
   j := 1;
   while j < MainProgramTokCount do
   begin
-    if (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'setattr') then
+    if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'setattr') then
       instW := True
     else if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
             (j + 1 < MainProgramTokCount) and
@@ -9924,7 +9939,7 @@ begin
     Expect(tkRParen, ')');
     if (CurTok.Kind <> tkDot) or (TokPos >= TokCount) or
        (Tokens[TokPos].Kind <> tkIdent) or
-       (not CaseEqual(GetTokenStr(TokPos), '__name__')) then
+       (not TokenCaseEqual(TokPos, '__name__')) then
     begin
       { Any OTHER shape — `type(x) == int`, `print(type(x))`, `type(x) is str`
         — is the type OBJECT, which exists now that builtin types are values:
@@ -11134,7 +11149,7 @@ begin
     can render it back out.
     bug-nilpy-curried-lambda-fails-at-runtime }
   nestedLambda := (Tokens[bStart].Kind = tkIdent) and
-                  CaseEqual(GetTokenStr(bStart), 'lambda');
+                  TokenCaseEqual(bStart, 'lambda');
   for i := bStart to bEnd - 1 do
   begin
     if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then
@@ -18122,14 +18137,14 @@ begin
   j := 1;
   while j < MainProgramTokCount do
   begin
-    if (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'setattr') then
+    if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'setattr') then
     begin
       Result := True;
       Exit;
     end;
     if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
        (j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkAssign) and
-       CaseEqual(GetTokenStr(j), nm) then
+       TokenCaseEqual(j, nm) then
     begin
       Result := True;
       Exit;
@@ -18210,7 +18225,7 @@ begin
     while j < rhi - 2 do
     begin
       if (Tokens[j].Kind = tkIdent) and
-         (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
+         (TokenCaseEqual(j, 'getattr') or TokenCaseEqual(j, 'hasattr')) and
          (Tokens[j + 1].Kind = tkLParen) then
       begin
         { walk to the receiver's closing comma at depth 1 }
@@ -18290,7 +18305,7 @@ begin
       while j < rhi - 2 do
       begin
         if (Tokens[j].Kind = tkIdent) and
-           (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
+           (TokenCaseEqual(j, 'getattr') or TokenCaseEqual(j, 'hasattr')) and
            (Tokens[j + 1].Kind = tkLParen) then
         begin
           depth := 1;
@@ -18391,7 +18406,7 @@ begin
     while j < rhi do
     begin
       if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
-         CaseEqual(GetTokenStr(j), nm) then
+         TokenCaseEqual(j, nm) then
       begin
         { a CALL (`o.m(...)`) or an attribute STORE (`o.m = x`) is not a value read }
         if (j + 1 >= rhi) or
@@ -18425,8 +18440,8 @@ begin
       if d = 0 then
       begin
         PyInTypeTestCall := (k > 0) and (Tokens[k - 1].Kind = tkIdent) and
-          (CaseEqual(GetTokenStr(k - 1), 'isinstance') or
-           CaseEqual(GetTokenStr(k - 1), 'issubclass'));
+          (TokenCaseEqual(k - 1, 'isinstance') or
+           TokenCaseEqual(k - 1, 'issubclass'));
         Exit;
       end;
       Dec(d);
@@ -18502,11 +18517,11 @@ begin
         to bind }
       inSkipStmt := (Tokens[j].Kind = tkClass) or (Tokens[j].Kind = tkExcept) or
                     (Tokens[j].Kind = tkUses) or
-                    ((Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'from'));
+                    ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
       atStmtStart := False;
     end;
     if (not inSkipStmt) and (Tokens[j].Kind = tkIdent) and
-       (((not precise) and CaseEqual(GetTokenStr(j), nm)) or
+       (((not precise) and TokenCaseEqual(j, nm)) or
         (precise and (GetTokenStr(j) = nm))) then
     begin
       { An ANNOTATION (`x: A`, `-> A`) is deliberately NOT excluded. The obvious
@@ -20275,7 +20290,7 @@ begin
             (TokPos + 1 < TokCount) and
             (Tokens[TokPos].Kind = tkDot) and
             (Tokens[TokPos + 1].Kind = tkIdent) and
-            CaseEqual(GetTokenStr(TokPos + 1), '__name__');
+            TokenCaseEqual(TokPos + 1, '__name__');
 end;
 
 { Consumes `__class__ . __name__` and answers pytype_name_v(node) — the SAME
@@ -26006,7 +26021,7 @@ begin
     else if stmtStart then
     begin
       if not ((Tokens[k].Kind = tkUses) or
-              ((Tokens[k].Kind = tkIdent) and CaseEqual(GetTokenStr(k), 'from'))) then Exit;
+              ((Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, 'from'))) then Exit;
       stmtStart := False;
     end;
     Inc(k);
@@ -26117,7 +26132,7 @@ begin
       while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
       if (i >= TokCount) then why := 'ran off the end inside the try block'
       else if not ((Tokens[i].Kind = tkUses) or
-              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from'))) then
+              ((Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'from'))) then
         why := 'try block does not OPEN with an import'
       else
       begin
@@ -26130,7 +26145,7 @@ begin
           if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkExcept) then
             why := 'no `except` follows the try block'
           else if (Tokens[i + 1].Kind <> tkIdent) or
-             not CaseEqual(GetTokenStr(i + 1), 'ImportError') then
+             not TokenCaseEqual(i + 1, 'ImportError') then
             why := 'the handler is not `except ImportError`'
           else
             PyIsFallbackImportTry := True;
@@ -28263,7 +28278,7 @@ begin
       with it inside the brackets.
       bug-nilpy-lambda-body-swallows-a-comprehensions-for }
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
-            CaseEqual(GetTokenStr(i), 'lambda') then Inc(lamPend)
+            TokenCaseEqual(i, 'lambda') then Inc(lamPend)
     else if (depth = 0) and (Tokens[i].Kind = tkColon) and (lamPend > 0) then
       Dec(lamPend)
     else if (depth = 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent,
@@ -28707,7 +28722,7 @@ begin
       else if (tdepth = 0) and
               ((Tokens[tj].Kind = tkFor) or
                ((Tokens[tj].Kind = tkIdent) and
-                CaseEqual(GetTokenStr(tj), 'for'))) then
+                TokenCaseEqual(tj, 'for'))) then
       begin
         if tj < tailStart then tailStart := tj;
         Break;
@@ -33950,7 +33965,7 @@ begin
       if (CurTok.Kind = tkIdent) and (TokPos <= TokCount) and
          ((Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF]) or
           ((Tokens[TokPos].Kind = tkIdent) and
-           CaseEqual(GetTokenStr(TokPos), 'from'))) and
+           TokenCaseEqual(TokPos, 'from'))) and
          (PyRaiseBareClassCi(CurTok.SVal) >= 0) then
       begin
         PyCtorNoParens := True;
@@ -35862,7 +35877,7 @@ begin
                                    tkPlusEq, tkMinusEq, tkStarEq, tkShlEq]) then
           NoteTop(GetTokenStr(k));
         isFor := (Tokens[k].Kind = tkFor) or
-                 ((Tokens[k].Kind = tkIdent) and CaseEqual(GetTokenStr(k), 'for'));
+                 ((Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, 'for'));
         if isFor and (k + 1 < MainProgramTokCount) and
            (Tokens[k + 1].Kind = tkIdent) and PyForTargetRun(k + 1, forCnt, forIn) then
         begin
@@ -36727,7 +36742,7 @@ begin
       end
       else if (depth = 0) and
               ((Tokens[i].Kind = tkFor) or
-               ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'for'))) and
+               ((Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'for'))) and
               { a STATEMENT BOUNDARY, exactly like the bare-assignment match
                 above — a comprehension/generator's inline `for` (`next((c for
                 c in cs if ...), ...)`) is the SAME token at depth 0 (parens
@@ -37165,11 +37180,11 @@ begin
     else if atStmtStart then
     begin
       inImport := (Tokens[j].Kind = tkUses) or
-                  ((Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), 'from'));
+                  ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
       atStmtStart := False;
     end;
     if (not inImport) and
-       (Tokens[j].Kind = tkIdent) and CaseEqual(GetTokenStr(j), nm) then
+       (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, nm) then
     begin
       if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
               ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
@@ -39137,7 +39152,7 @@ begin
   retRec := REC_NONE;
   for i := scanFrom to scanTo - 2 do
     if (Tokens[i].Kind = tkFunction) and (Tokens[i + 1].Kind = tkIdent) and
-       CaseEqual(GetTokenStr(i + 1), nm) then
+       TokenCaseEqual(i + 1, nm) then
     begin
       PyNestedDefRetType := PyInferDefRetType(i, retRec);
       Exit;
@@ -39201,7 +39216,7 @@ begin
     if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
        (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
        (Tokens[k + 3].Kind = tkLParen) and
-       CaseEqual(GetTokenStr(k), recvNm) and PyWholeTargetAt(k, scanFrom) then
+       TokenCaseEqual(k, recvNm) and PyWholeTargetAt(k, scanFrom) then
     begin
       { the LAST such binding wins, as everywhere else in this scan }
       if FindUClassNonRecord(GetTokenStr(k + 2)) >= 0 then
@@ -39226,7 +39241,7 @@ begin
       end;
     end
     else if (Tokens[k].Kind = tkIdent) and (k + 2 < TokCount) and
-            (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), recvNm) and
+            (Tokens[k + 1].Kind = tkAssign) and TokenCaseEqual(k, recvNm) and
             PyWholeTargetAt(k, scanFrom) then
     begin
       { `c = a + b`, `c = (a + b)`, `c = h.a` -- any other right-hand side.
@@ -39393,7 +39408,7 @@ begin
   PyRetNameType := tyUnknown;
   for k := scanFrom to scanTo - 1 do
     if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), nm) and
+       (Tokens[k + 1].Kind = tkAssign) and TokenCaseEqual(k, nm) and
        PyWholeTargetAt(k, scanFrom) then
     begin
       e2 := k + 2;
@@ -39426,7 +39441,7 @@ begin
     else if Tokens[k].Kind = tkRParen then Dec(depth)
     else if (depth = 1) and (Tokens[k].Kind = tkIdent) and (k > hdrFrom) and
             (Tokens[k - 1].Kind in [tkLParen, tkComma]) and
-            CaseEqual(GetTokenStr(k), nm) then
+            TokenCaseEqual(k, nm) then
     begin
       Result := True;
       Exit;
@@ -39435,7 +39450,7 @@ begin
   { a LOCAL: `nm = ...` earlier in the body, the same shape PyRetNameType scans }
   for k := bodyFrom to bodyTo - 1 do
     if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), nm) then
+       (Tokens[k + 1].Kind = tkAssign) and TokenCaseEqual(k, nm) then
     begin
       Result := True;
       Exit;
@@ -39676,7 +39691,7 @@ begin
           inside brackets, so its depth is not 0 and it cannot end the header
           early. bug-nilpy-a-lambda-returned-directly-is-not-callable }
         else if (tupDepth = 0) and (Tokens[k].Kind = tkIdent) and
-                CaseEqual(GetTokenStr(k), 'lambda') then tupLamHdr := True
+                TokenCaseEqual(k, 'lambda') then tupLamHdr := True
         else if tupLamHdr and (tupDepth = 0) and (Tokens[k].Kind = tkColon) then
           tupLamHdr := False
         else if (Tokens[k].Kind = tkComma) and (tupDepth = 0) and
@@ -39697,7 +39712,7 @@ begin
         about the enclosing def's empty parameter list
         (bug-nilpy-function-value-call-gaps). }
       else if (Tokens[j + 1].Kind = tkIdent) and
-              CaseEqual(GetTokenStr(j + 1), 'lambda') then
+              TokenCaseEqual(j + 1, 'lambda') then
         cur := tyVariant
       else
         cur := PyInferExprType(j + 1, e);
@@ -39789,7 +39804,7 @@ begin
         chainRec := -1;
         for k := bodyScanStart to j - 1 do
           if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-             CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) and
+             TokenCaseEqual(k, GetTokenStr(j + 1)) and
              PyWholeTargetAt(k, bodyScanStart) then
           begin
           { `x /= 2` REBINDS x to a float, whatever it held before, because `/`
@@ -39833,7 +39848,7 @@ begin
               Fold in the type accumulated across the chain so far instead. }
             if (chainCur <> tyUnknown) and (k + 2 < e2) and
                (Tokens[k + 2].Kind = tkIdent) and
-               CaseEqual(GetTokenStr(k + 2), GetTokenStr(j + 1)) then
+               TokenCaseEqual(k + 2, GetTokenStr(j + 1)) then
             begin
               t2 := PyWiden(chainCur, t2);
               { ...and the class IDENTITY travels with the kind. PyWiden folds
@@ -40156,7 +40171,7 @@ begin
           if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
              (Tokens[k + 1].Kind = tkAssign) and
              (Tokens[k + 2].Kind = tkIdent) and (Tokens[k + 3].Kind = tkLParen) and
-             CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) and
+             TokenCaseEqual(k, GetTokenStr(j + 1)) and
              PyWholeTargetAt(k, bodyScanStart) and
              (FindProc(GetTokenStr(k + 2)) < 0) then
           begin
@@ -40565,7 +40580,7 @@ begin
     else if (Tokens[j].Kind = tkExit) and (bdepth >= 1) then
     begin
       if (j + 2 < TokCount) and (Tokens[j + 1].Kind = tkIdent) and
-         CaseEqual(GetTokenStr(j + 1), 'self') and
+         TokenCaseEqual(j + 1, 'self') and
          (Tokens[j + 2].Kind in [tkNewline, tkDedent, tkEOF]) then
       begin
         Result := True;
@@ -40855,7 +40870,7 @@ begin
   begin
     if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = 'self') and
        (Tokens[k + 1].Kind = tkDot) and (Tokens[k + 2].Kind = tkIdent) and
-       CaseEqual(GetTokenStr(k + 2), fld) then
+       TokenCaseEqual(k + 2, fld) then
     begin
       { `self.f += 1` — the self-reference is implicit in the operator }
       if Tokens[k + 3].Kind in [tkPlusEq, tkMinusEq, tkStarEq] then
@@ -40876,7 +40891,7 @@ begin
           else if (Tokens[e].Kind = tkIdent) and (GetTokenStr(e) = 'self') and
                   (e + 2 < bodyEnd) and (Tokens[e + 1].Kind = tkDot) and
                   (Tokens[e + 2].Kind = tkIdent) and
-                  CaseEqual(GetTokenStr(e + 2), fld) then
+                  TokenCaseEqual(e + 2, fld) then
             sawSelf := True;
           Inc(e);
         end;
@@ -41345,13 +41360,95 @@ begin
   Result := n > 0;
 end;
 
+procedure PyBuildEnclTable;
+{ One forward pass over the whole token stream recording, for each `class`/`def`
+  token, the nearest enclosing one. A stack of (construct, suiteEnd) answers the
+  same question PyDefSiteMode's backward walk answered -- the nearest enclosing
+  construct whose suite reaches the site -- because suites nest properly; the
+  difference is one suite skip per construct rather than one per construct per
+  definition.
+  A construct whose suite cannot be found gets suiteEnd -1, so it pops on the
+  very next token. That is deliberate and it matches the walk, which could never
+  satisfy `suiteEnd > defTok` for such a construct either. }
+var d, sp: Integer;
+    stkTok: array[0..PY_ENCL_DEPTH - 1] of Integer;
+    stkEnd: array[0..PY_ENCL_DEPTH - 1] of Integer;
+begin
+  PyEnclN := 0; PyEnclOverflow := False; sp := 0;
+  for d := 0 to TokCount - 1 do
+    if Tokens[d].Kind in [tkClass, tkFunction] then
+    begin
+      while (sp > 0) and (stkEnd[sp - 1] <= d) do Dec(sp);
+      if (PyEnclN >= PY_ENCL_MAX) or (sp >= PY_ENCL_DEPTH) then
+      begin
+        PyEnclOverflow := True;
+        Break;
+      end;
+      PyEnclTok[PyEnclN] := d;
+{$IFDEF PXX_ENCL_BREAK}
+      PyEnclUp[PyEnclN] := -1;   { POSITIVE CONTROL: deliberately wrong }
+{$ELSE}
+      if sp > 0 then PyEnclUp[PyEnclN] := stkTok[sp - 1]
+      else PyEnclUp[PyEnclN] := -1;
+{$ENDIF}
+      Inc(PyEnclN);
+      stkTok[sp] := d;
+      stkEnd[sp] := PySkipNestedSuite(d);
+      Inc(sp);
+    end;
+  PyEnclBuilt := TokCount;
+end;
+
+function PyEnclLookup(defTok: Integer): Integer;
+{ The enclosing construct of the `class`/`def` token defTok, -1 for none, and
+  -2 for "not a construct token the table holds" -- which is NOT the same answer
+  and must fall back to the walk rather than being read as "no enclosure". }
+var lo, hi, mid: Integer;
+begin
+  PyEnclLookup := -2;
+  lo := 0; hi := PyEnclN - 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if PyEnclTok[mid] = defTok then
+    begin
+      PyEnclLookup := PyEnclUp[mid];
+      Exit;
+    end
+    else if PyEnclTok[mid] < defTok then lo := mid + 1
+    else hi := mid - 1;
+  end;
+end;
+
+function PyEnclByWalk(defTok: Integer): Integer;
+{ The original backward walk, kept as the fallback for a site the table does not
+  hold and as the oracle under -dPXX_ENCL_CROSSCHECK. }
+var d, suiteEnd: Integer;
+begin
+  d := defTok - 1;
+  while d >= 0 do
+  begin
+    if Tokens[d].Kind in [tkClass, tkFunction] then
+    begin
+      suiteEnd := PySkipNestedSuite(d);
+      if suiteEnd > defTok then Break;
+    end;
+    Dec(d);
+  end;
+  PyEnclByWalk := d;
+end;
+
 function PyDefSiteMode(defTok: Integer; var clsName: AnsiString): Integer;
 { Which kind of def sits at defTok, for PyParamTypeFromSites: 0 = a class's
   __init__ (clsName = the class), 1 = a method of clsName, 2 = a module-level
   or nested function. The nearest enclosing `class`/`def` whose suite reaches
-  defTok decides; memoised, because the walk back is over every preceding
-  construct and each candidate costs a suite skip. }
-var d, m, suiteEnd: Integer;
+  defTok decides.
+  Two caches, and they do different jobs: PyPSEncl* memoises the ANSWER per def
+  token, and PyEncl* removes the WALK that a memo miss used to pay. The memo was
+  already working -- measured 2026-09-21, 3599 hits against 400 misses on BOTH
+  an inline and an imported arm -- and the whole cost was in what a miss cost,
+  which was a walk to token 0 across every imported module's tokens. }
+var d, m: Integer;
 begin
   Result := 2; clsName := '';
   for m := PyPSEnclN - 1 downto 0 do
@@ -41360,26 +41457,28 @@ begin
       Result := PyPSEnclMode[m]; clsName := PyPSEnclCls[m];
       Exit;
     end;
-  d := defTok - 1;
-  while d >= 0 do
+  d := -2;
+  if not PyEnclOverflow then
   begin
-    if Tokens[d].Kind in [tkClass, tkFunction] then
-    begin
-      suiteEnd := PySkipNestedSuite(d);
-      if suiteEnd > defTok then
-      begin
-        if (Tokens[d].Kind = tkClass) and (d + 1 < TokCount) and
-           (Tokens[d + 1].Kind = tkIdent) then
-        begin
-          clsName := GetTokenStr(d + 1);
-          if PyMethodName(GetTokenStr(defTok + 1)) = 'create' then Result := 0
-          else Result := 1;
-        end;
-        Break;        { a def encloses it: nested, stays 2 }
-      end;
-    end;
-    Dec(d);
+    if PyEnclBuilt <> TokCount then PyBuildEnclTable;
+    if not PyEnclOverflow then d := PyEnclLookup(defTok);
   end;
+  if d = -2 then d := PyEnclByWalk(defTok);
+{$IFDEF PXX_ENCL_CROSSCHECK}
+  m := PyEnclByWalk(defTok);
+  if m <> d then
+  begin
+    WriteLn('ENCL-DISAGREE defTok=', defTok, ' table=', d, ' walk=', m);
+    PyEnclDisagreements := PyEnclDisagreements + 1;
+  end;
+{$ENDIF}
+  if (d >= 0) and (Tokens[d].Kind = tkClass) and (d + 1 < TokCount) and
+     (Tokens[d + 1].Kind = tkIdent) then
+  begin
+    clsName := GetTokenStr(d + 1);
+    if PyMethodName(GetTokenStr(defTok + 1)) = 'create' then Result := 0
+    else Result := 1;
+  end;                  { a def encloses it, or nothing does: stays 2 }
   if PyPSEnclN < PY_PSMEMO_MAX then
   begin
     PyPSEnclDef[PyPSEnclN] := defTok;
@@ -43623,7 +43722,7 @@ begin
         ClassName.name resolves through FindClassVar). Typed tyClass; the
         assignment that populates it fixes RecName (see PyParseStatement). }
       if (Tokens[i + 2].Kind = tkIdent) and
-         CaseEqual(GetTokenStr(i + 2), 'ClassVar') then
+         TokenCaseEqual(i + 2, 'ClassVar') then
       begin
         if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
         k := AllocVar('', tyClass);
@@ -43681,7 +43780,7 @@ begin
         while (k < bodyEnd) and
               not (Tokens[k].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(k);
         if (Tokens[j].Kind = tkIdent) and
-           (CaseEqual(GetTokenStr(j), 'field') or CaseEqual(GetTokenStr(j), 'lambda')) then
+           (TokenCaseEqual(j, 'field') or TokenCaseEqual(j, 'lambda')) then
           { a factory form — the arms below own it }
         else if (k = j + 1) or
                 ((Tokens[j].Kind = tkMinus) and (k = j + 2)) then
@@ -43713,29 +43812,29 @@ begin
           tkIdent:
           begin
             { field(default_factory=list) -> fresh empty list per construction }
-            if CaseEqual(GetTokenStr(j), 'field') and (j + 4 < bodyEnd) and
+            if TokenCaseEqual(j, 'field') and (j + 4 < bodyEnd) and
                (Tokens[j + 1].Kind = tkLParen) and
                (Tokens[j + 2].Kind = tkIdent) and
-               CaseEqual(GetTokenStr(j + 2), 'default_factory') and
+               TokenCaseEqual(j + 2, 'default_factory') and
                (Tokens[j + 3].Kind = tkAssign) and
                (Tokens[j + 4].Kind = tkIdent) and
-               (CaseEqual(GetTokenStr(j + 4), 'list') or
-                CaseEqual(GetTokenStr(j + 4), 'dict')) and
+               (TokenCaseEqual(j + 4, 'list') or
+                TokenCaseEqual(j + 4, 'dict')) and
                (j + 5 < bodyEnd) and (Tokens[j + 5].Kind = tkRParen) then
             begin
-              if CaseEqual(GetTokenStr(j + 4), 'dict') then
+              if TokenCaseEqual(j + 4, 'dict') then
                 defKind := PYDC_FACTORY_DICT
               else
                 defKind := PYDC_FACTORY_LIST;
               j := j + 5;   { onto ')'; the common Inc(j) below steps past it }
             end
-            else if CaseEqual(GetTokenStr(j), 'field') and (j + 6 < bodyEnd) and
+            else if TokenCaseEqual(j, 'field') and (j + 6 < bodyEnd) and
                (Tokens[j + 1].Kind = tkLParen) and
                (Tokens[j + 2].Kind = tkIdent) and
-               CaseEqual(GetTokenStr(j + 2), 'default_factory') and
+               TokenCaseEqual(j + 2, 'default_factory') and
                (Tokens[j + 3].Kind = tkAssign) and
                (Tokens[j + 4].Kind = tkIdent) and
-               CaseEqual(GetTokenStr(j + 4), 'lambda') and
+               TokenCaseEqual(j + 4, 'lambda') and
                (Tokens[j + 5].Kind = tkColon) then
             begin
               { zero-arg lambda: capture the body's token span; the matching
@@ -45759,7 +45858,7 @@ begin
           end;
         end;
         if (j >= 1) and (Tokens[j].Kind = tkIdent) and
-           CaseEqual(GetTokenStr(j), 'dataclass') and (Tokens[j - 1].Kind = tkAt) then
+           TokenCaseEqual(j, 'dataclass') and (Tokens[j - 1].Kind = tkAt) then
         begin
           isDC := True;
           { `@dataclass(order=True)` — scan the argument list this pass just
@@ -45773,7 +45872,7 @@ begin
           if (k < MainProgramTokCount) and (Tokens[k].Kind = tkLParen) then
             while (k < MainProgramTokCount) and (Tokens[k].Kind <> tkRParen) do
             begin
-              if (Tokens[k].Kind = tkIdent) and CaseEqual(GetTokenStr(k), 'order') and
+              if (Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, 'order') and
                  (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkAssign) and
                  (Tokens[k + 2].Kind = tkTrue) then
                 PyDcOrder[ci] := True;
@@ -45804,7 +45903,7 @@ begin
               name too now, and a flat lookup would inherit the Pascal one
               order-dependently. PyEnsureExceptionClass is the unit-scoped
               answer (with the lazy shell when pylib is absent). }
-            if CaseEqual(GetTokenStr(i + 3), 'Exception') then
+            if TokenCaseEqual(i + 3, 'Exception') then
               baseCi := PyEnsureExceptionClass
             else
               baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
@@ -48032,7 +48131,7 @@ begin
   while i < hi do
   begin
     if ((Tokens[i].Kind = tkUses) or
-        ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
+        ((Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'from') and
          (i + 1 < hi) and (Tokens[i + 1].Kind in [tkIdent, tkDot]))) and
        ((i = lo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
     begin
@@ -48343,7 +48442,7 @@ begin
       guardMissed := False;
     end
     else if ((Tokens[i].Kind = tkUses) or
-             ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
+             ((Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'from') and
               (i + 1 < MainProgramTokCount) and
               (Tokens[i + 1].Kind in [tkIdent, tkDot]))) and
             ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
@@ -48596,7 +48695,7 @@ begin
               (j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkAssign) then
         Result := True
       else if atStart and
-              ((Tokens[j].Kind = tkFor) or CaseEqual(GetTokenStr(j), 'for')) and
+              ((Tokens[j].Kind = tkFor) or TokenCaseEqual(j, 'for')) and
               (j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkIdent) and
               (GetTokenStr(j + 1) = nm) then
         Result := True;
@@ -49159,7 +49258,7 @@ begin
   begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < MainProgramTokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
+       (TokenCaseEqual(i, 'str') or TokenCaseEqual(i, 'val')) then
       needsBuiltin := True;
     { `try` / `raise` anywhere in the program pulls in the exception runtime
       (setjmp/longjmp helpers, the unwind globals). The Pascal driver has the

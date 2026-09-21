@@ -1674,6 +1674,8 @@ const
     all ask `PyAugMarkedTok`, which is the only place the set is written down. }
   PY_BINOP_AUGMENTED = 2;
   PY_PSMEMO_MAX = 8192;   { PyParamTypeFromSites memo entries }
+  PY_ENCL_MAX   = 32768;  { enclosing-construct table entries (class/def tokens) }
+  PY_ENCL_DEPTH = 256;    { nesting depth the table's build stack holds }
   PY_PS_HDR_MAX = 64;     { PyParamTypeFromSites: parameters per def it can attribute sites by arity for }
   { `Assigned(x)` desugars at PARSE time into the SAME `x <> 0` AN_BINOP that
     `x <> nil` produces — but FPC treats the two OPPOSITELY for a procedural
