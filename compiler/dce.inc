@@ -411,6 +411,122 @@ begin
   end;
 end;
 
+procedure DceReachReport;
+{ --dce-reach-from=<name>: the bodies reachable from one named body by DIRECT
+  calls, walked FORWARD. Called once the edge list is built and before the
+  reachability walk; it only READS DceEdgeHead/DceEdgeTo, so it does not
+  disturb the pass.
+
+  WHY THIS EXISTS RATHER THAN --dce-why. Every other query here runs BACKWARD:
+  from a live body up DceVia to the root that kept it. That answers "why is
+  this in the image" and cannot answer "what can this one call". The ISR
+  restriction needs the second question, and the first one gives a confidently
+  useless answer to it -- `--dce-why=PXXAlloc` reports the allocator live for
+  `x = 1`, because PXXStrLoadFile is called from unowned code and is a root.
+  Measured 2026-09-21 across six programs and both frontends: identical chain
+  every time, naming nothing from the subject.
+
+  IT PRINTS A SET AND REFUSES TO PRINT A VERDICT. CallFix holds internal DIRECT
+  calls; an indirect call is not an edge here, because DCE handles those by
+  making the site a conservative ROOT -- correct for keeping bodies, silent for
+  a forward walk. So "PXXAlloc is not in this set" means NO DIRECT PATH, and
+  anything that upgrades that to "cannot allocate" has to establish separately
+  that the body makes no indirect call. Printing a reachable SET rather than
+  yes/no is what keeps that in front of the reader.
+
+  A NAME THAT DOES NOT RESOLVE IS A LOUD REFUSAL, NOT AN EMPTY SET. An empty
+  set is exactly what "reaches nothing, therefore safe" looks like, so a typo
+  would read as the strongest possible pass. That is this tree's own
+  collision-with-the-default class, and here the default is the answer the
+  caller most wants to hear.
+
+  MEASURED LIMIT, 2026-09-21, AND IT IS WHY THIS IS NOT YET A SAFETY GUARD.
+  A body that provably allocates can report ZERO reachable bodies. Hosted
+  x86-64, -O0, a three-line program:
+
+      function Leaf(x: Integer): Integer;
+      begin g := g + 'x'; Leaf := x + 1; end;     { g is a global AnsiString }
+
+      --dce-reach-from=Leaf   ->  0 bodies
+      --dce-why=PXXStrAppend  ->  PXXStrAppend <- [called from unowned code]
+
+  The concat's call site is attributed to NO proc body, so it is a root rather
+  than an edge out of Leaf, and the forward walk from Leaf is empty. Mid->Leaf
+  in the same program IS found, so the walk itself is sound -- verified against
+  a -O0/-O2 pair where -O2 legitimately removes the edge by inlining.
+
+  SO THE POLARITY IS CURRENTLY WRONG FOR THE ISR QUESTION: the allocating body
+  is the one that reads clean. Do not build a refusal on this until the
+  unowned-site question is settled -- it is the third instrument in one day to
+  answer honestly about a different thing, and the second on this exact
+  question.
+
+  Open, and the next thing to measure: WHY Leaf owns no call sites. Candidates,
+  none checked -- ProcBodyEnd never recorded for Leaf (DceBodyEnd then returns
+  the START, i.e. a zero-width body that owns nothing), or the concat emitted
+  outside the body range. DceBodyEnd's own comment documents the first as
+  deliberate conservatism, which would make this a known cost rather than a
+  defect. }
+var root, p, q, a, b, i, n, seen: Integer;
+    vis: array of Boolean;
+    work: array of Integer;
+    wc: Integer;
+begin
+  if DceReachFrom = '' then Exit;
+  root := FindProc(DceReachFrom);
+  if (root < 0) or (root >= ProcCount) then
+  begin
+    WriteLn(StdErr, 'dce-reach: NO BODY NAMED ', DceReachFrom,
+                    ' -- refusing rather than printing an empty set,');
+    WriteLn(StdErr, 'dce-reach: because an empty set reads as "reaches nothing, therefore safe".');
+    Exit;
+  end;
+  SetLength(vis, ProcCount + 1);
+  SetLength(work, ProcCount + 1);
+  i := 0;
+  while i <= ProcCount do begin vis[i] := False; Inc(i); end;
+  wc := 0;
+  vis[root] := True;
+  work[wc] := root; Inc(wc);
+  seen := 0;
+  WriteLn(StdErr, 'dce-reach: which bodies can ', DceReachFrom,
+                  ' (proc ', root, ') reach by DIRECT calls?');
+  WriteLn(StdErr, 'dce-reach:   an indirect call is NOT an edge here, so absence is',
+                  ' "no direct path", not "cannot reach"');
+  while wc > 0 do
+  begin
+    Dec(wc);
+    p := work[wc];
+    if p = 0 then a := 0 else a := DceEdgeHead[p - 1];
+    b := DceEdgeHead[p];
+    i := a;
+    while i < b do
+    begin
+      q := DceEdgeTo[i];
+      if (q >= 0) and (q < ProcCount) and not vis[q] then
+      begin
+        vis[q] := True;
+        work[wc] := q; Inc(wc);
+      end;
+      Inc(i);
+    end;
+  end;
+  n := 0;
+  i := 0;
+  while i < ProcCount do
+  begin
+    if vis[i] and (i <> root) then
+    begin
+      Inc(n);
+      WriteLn(StdErr, 'dce-reach:   ', Procs[i].Name);
+    end;
+    Inc(i);
+  end;
+  seen := n;
+  WriteLn(StdErr, 'dce-reach: ', seen, ' bodies reachable from ', DceReachFrom,
+                  ' by direct calls');
+end;
+
 procedure DceRun;
 var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
     why: AnsiString; src, dst: Integer; progressed: Boolean;
@@ -654,6 +770,8 @@ begin
   { DceEdgeHead[p] now points PAST p's edges, i.e. it is p's end and
     DceEdgeHead[p-1] is its start -- the standard counting-sort shift, read
     backwards instead of shifting the array. }
+
+  DceReachReport;
 
   { --- reachability ------------------------------------------------------- }
   { Two edge kinds, so two nested loops: the call walk drains its worklist,

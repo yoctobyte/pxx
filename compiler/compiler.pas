@@ -1171,6 +1171,17 @@ begin
       DceEnabled := True; DceReport := True;
       Inc(i);
     end
+    else if Copy(option, 1, 17) = '--dce-reach-from=' then
+    begin
+      { Forward: what can THIS body call. Every other DCE query is backward,
+        from a live body to the root that kept it, and backward cannot answer
+        the ISR question -- see DceReachFrom in defs.inc for why
+        --dce-why=PXXAlloc answers YES for a program that only assigns an
+        integer. Prints a SET, deliberately not a verdict. }
+      DceEnabled := True;
+      DceReachFrom := Copy(option, 18, Length(option) - 17);
+      Inc(i);
+    end
     else if Copy(option, 1, 10) = '--dce-why=' then
     begin
       { A named body rather than the biggest twenty. The top-20 listing answers

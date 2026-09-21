@@ -4536,6 +4536,29 @@ var
   DceWhyReport  : Boolean;   { --dce-why: print WHY each live body lived }
   DceWhyFilter  : AnsiString;{ --dce-why=<substr>: name those bodies too, not just the biggest }
   DceOff        : Boolean;   { --no-dce: keep every body even at -O3 }
+  { --dce-reach-from=<name>: walk the call graph FORWARD from one named body
+    and print what it can reach. Every other DCE query runs BACKWARD -- from a
+    live body up to the root that kept it -- which answers "why is this in the
+    image" and cannot answer "what can this one call".
+
+    THE QUESTION IT EXISTS FOR is the ISR restriction: a def handed to an
+    interrupt must not reach the allocator. `--dce-why=PXXAlloc` cannot decide
+    that, because PXXAlloc is live in EVERY image -- PXXStrLoadFile is called
+    from unowned code and is therefore a root, so `x = 1` keeps the allocator
+    alive too. Measured 2026-09-21, six programs across both frontends, all
+    identical. An instrument that answers the same thing for the empty program
+    cannot clear anything.
+
+    DIRECT CALLS ONLY, AND THAT IS WHY IT PRINTS A SET AND NOT A VERDICT.
+    CallFix holds every internal DIRECT call; an indirect call (@proc through a
+    variable, a vmt/rtti slot) is not an edge here at all -- DCE treats those
+    sites as conservative ROOTS, which is correct for keeping bodies and is
+    silent for a forward walk. So an absent name means "no DIRECT path", never
+    "cannot reach", and a caller that turns this into a safety guard must
+    refuse on the presence of an indirect call rather than read a clean walk as
+    proof. Naming the output a reachable SET rather than a yes/no is what keeps
+    that distinction in front of whoever reads it. }
+  DceReachFrom  : AnsiString;
   DceLive       : array of Boolean;
   { WHY a body is live: the FIRST thing that reached it, and through whom.
     `--dce-report` answers which bodies DIED; nothing answered this, and

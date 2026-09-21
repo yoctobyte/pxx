@@ -205,11 +205,32 @@ survived review.**
 and its win is real and measured. It also says nothing about programs not in
 this set.
 
-**Not measured:** lekkerzeilen in MY tree. It does not compile here — it needs
-its own flags and dies at `MAX_PROC_PARAMS` on a >32-parameter C function from
-the GL headers — so lekkerzeilen's figure is 5b's, on 5b's binaries, and the
-absolute seconds above must not be compared against 5b's wall clock. Only the
-ratios travel.
+**Not measured HERE, and the reason is RETIRED as of 2026-09-21:**
+lekkerzeilen's figure is 5b's, on 5b's binaries, so the absolute seconds above
+must not be compared against 5b's wall clock. Only the ratios travel.
+
+**The stated reason was wrong and it was mine.** This said lekkerzeilen "does
+not compile here — it needs its own flags and dies at `MAX_PROC_PARAMS` on a
+>32-parameter C function from the GL headers". It compiles here, rc=0, 11,594
+procs, with the invocation franks-5b supplied:
+
+    ./compiler/pascal26 --threadsafe -dSDL_DISABLE_IMMINTRIN_H \
+        -dGL_GLEXT_PROTOTYPES /home/neo/lekkerzeilen/lekkerzeilen/__main__.py out.bin
+
+run with the CWD at the pxx repo root, which is what makes the RTL and builtin
+roots resolve; the source sits outside the tree. `-dGL_GLEXT_PROTOTYPES` is the
+one that matters — without it the GL headers take a different arm and reach
+declarations you otherwise never meet. **So the wall was my invocation, not
+lekkerzeilen and not a compiler limit**, which is why the `MAX_PROC_PARAMS`
+ticket was deliberately NOT wired to the lekkerzeilen umbrella: an unmeasured
+edge that raises effective_prio is the one thing the ranker cannot recover
+from. The limit is real and separately ticketed
+(`bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment`,
+p45, and raising the constant is a SIGSEGV at exactly 33); it is simply not
+what stopped this build.
+
+**A caveat is a claim and decays like one.** This one was quoted twice in this
+document and once in a message before anyone checked it.
 
 
 ## Pin note
