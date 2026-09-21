@@ -14268,7 +14268,9 @@ end;
   of randomness and cannot tell it got the wrong thing.
   So the callers pass the member AS SPELLED. Adding an entry whose Python name
   has a capital in it needs that capital here too.
-  bug-n-a-stdlib-class-folds-onto-a-same-named-function-and-silently-evaluates-to-its-result }
+  Fixed rather than filed, so there is no ticket slug to cite: the reasoning,
+  the 72-key census and the one collision it found are in
+  devdocs/dev/tsp-rows-4-8-what-shares-a-cause.md and in LOGBOOK 2026-09-21. }
 function PyStdlibCallProc(const dotted: AnsiString): AnsiString;
 begin
   if dotted = 'os.path.isabs' then Result := 'pyos_path_isabs'
