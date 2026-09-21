@@ -35065,3 +35065,55 @@ looks like corroboration, and it silently stops being true at the next `make`.
 Agreement between a versioned artefact and an unversioned one is a coincidence
 with a timestamp on it.
 
+
+## A DISASSEMBLER DESYNCED BY ONE BYTE REPORTS A PARTIAL FAILURE OF EXACTLY THE INSTRUCTIONS YOU ADDED
+
+Measured 2026-09-21, xtensa, verifying new `wsr`/`rsr` encoders against
+`xtensa-esp32s3-elf-as`. Eight instructions emitted, eight compared. objdump
+showed **six matching the oracle exactly and the two under test as garbage** —
+`ee.vmulas.s16.qacc.ld.ip.qup q2, a15, 240, q7, q7, q1, q0` where
+`wsr.vecbase a4` should have been.
+
+**That is the single most convincing shape a wrong-encoder result can take.**
+It is not a wholesale failure, which would read as "I broke the build"; it is
+precisely the new rows failing while every pre-existing row passes, which is
+what a genuine encoding bug in new code looks like. The obvious next move is
+to go edit the encoder.
+
+**The encoder was correct and all eight bytes were identical to the oracle.**
+The two new instructions happened to sit just after the entry `j` and its
+padding, so objdump picked a starting offset one byte early and decoded from
+there; it resynchronised a few instructions later, which is why the *later*
+rows looked fine. Read as raw bytes the run is contiguous and in order:
+
+    pxx      40e713 40d103 300c13 300c03 306313 50e013 60eb03 200013
+    oracle   13e740 03d140 130c30 030c30 136330 13e050 03eb60 130020   (objdump's
+                                                                        reversed display)
+
+**THE TELL, AND IT TRANSFERS OFF XTENSA:** a variable-width ISA (xtensa mixes
+2- and 3-byte instructions; arm32/thumb, riscv with the C extension, x86 and
+wasm all qualify) plus anything non-instruction in the stream — padding, a
+literal island, an alignment pad after a jump — means the disassembler is
+*guessing* where instructions begin. It does not report the guess. It is
+"correct about something else" in this file's usual sense: correct about a
+starting offset you did not choose, and silent about the one you wanted.
+
+**So when the question is "do my bytes match", DIFF THE BYTES, not the
+mnemonics.** Extract the raw stream and compare it against the oracle's raw
+stream. Use the disassembly to locate, never to verify. The two crisp
+secondary tells that a desync rather than a bug is in play:
+
+- the failing rows are **adjacent** and at the **start** of your run, with
+  later rows fine — a real encoder bug does not repair itself three
+  instructions in;
+- the garbage decodes to something exotic and implausible for the code you
+  wrote (a vector/DSP instruction in a program that has no floats).
+
+**And the positive control costs nothing here**: the oracle assembler's own
+object is a byte stream too, so `grep` your emitted sequence in it. If the
+sequence is present once, contiguous, in order, the encoders are right
+whatever any disassembly says.
+
+Companion to "Every instrument that lies, lies by being CORRECT ABOUT
+SOMETHING ELSE" in CLAUDE.md — this is that rule arriving in a disassembler,
+where the something-else is the instruction boundary.

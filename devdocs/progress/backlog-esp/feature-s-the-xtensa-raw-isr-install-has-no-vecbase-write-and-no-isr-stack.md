@@ -96,6 +96,38 @@ has no slot of its own**: it arrives at the USER exception vector with
 side**: `mtvec` is a handler address and `vecbase` is a table base. A plan
 written by analogy will size the job as one instruction and it is not.
 
+## Is the stack carve FORCED here, as it was on riscv32? — measured, yes
+
+Asked because the two are different claims and only one had been checked: *"the
+riscv32 discriminator should transfer"* (the `handler sp > task sp` comparison)
+and *"the constraint that produced it transfers"* (that the carve was not a
+choice). The first was recorded as available-not-verified. **The second is now
+measured and the answer is yes.**
+
+`ir_codegen.inc`'s xtensa bare arm does
+`EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP)` — a compile-time
+constant, in the same entry stub, emitted before the body is parsed. So on
+xtensa too the stack top must be fixed while *"does this program contain an
+`interrupt;` body"* is still undecided, and a conditional ISR region would need
+the same entry-stub patch the riscv32 ticket declined to build. **The carve is
+forced on both ISAs for the same structural reason**, and it is not a fresh
+decision on xtensa.
+
+Two things that did NOT transfer and are worth knowing before writing the
+prologue:
+
+- `EmitLoadConstXtensa` drops a **literal island** rather than emitting a
+  `lui`/`addi` pair, so the constant lives in a pool. That changes what a
+  future patch-the-entry-stub refinement would have to patch, in xtensa's
+  favour — a pool slot is a word, not a split immediate.
+- **The xtensa entry parks every core but core 0** (`rsr.prid`, `$CDCD`, spin)
+  because under `qemu -kernel` both S3 cores execute the entry. Only core 0
+  reaches the stack setup, so a single ISR stack is not a dual-core hazard
+  *today* — but that is a property of the park, not of the design, and anyone
+  who removes the park inherits the question.
+
+## What else is measured, and what is not
+
 **NOT measured, and it is the first thing to establish:** whether xtensa's
 `interrupt;` prologue has any equivalent hazard boundary to assert against.
 riscv32's fixture works because the ISR stack is carved from the top of the
