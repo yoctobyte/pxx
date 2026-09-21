@@ -1,0 +1,10 @@
+# THE WHOLE POINT OF THIS EXAMPLE. Default is n (esp_timer/Kconfig:107), and
+# with it off `ESP_TIMER_ISR` is not even a member of esp_timer_dispatch_t --
+# the enumerator is inside `#if CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD`
+# (esp_timer.h:62-64). A create with dispatch_method=1 against a build that has
+# this off is therefore not an ISR timer: 1 is ESP_TIMER_MAX there, and
+# esp_timer_create rejects it. That failure is LOUD (create returns nonzero and
+# this app reports status), which is the good case -- but it is why the option
+# lives in a checked-in defaults file rather than in a comment telling someone
+# to turn it on.
+CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD=y

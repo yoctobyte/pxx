@@ -7,7 +7,7 @@ blocked-by: []
 status: working
 created: 2026-09-20
 found-by: frankb-8e
-summary: "PREMISE MEASURED 2026-09-21 AND IT IS FALSE FOR THE SCALAR CASE — the existing `$pycbthunk_` does NOT allocate per call: 100x the iterations gives +2 allocations (N=200 allocs=5, N=20000 allocs=7) while a positive control built first scales exactly 100x (727 -> 72269), so the flat line is a measurement and not a blind spot. THE ALLOCATION IS IN THE DEF BODY, NOT THE MARSHALLING: even a `(const AnsiString): AnsiString` slot crosses the thunk allocation-free, while `def grow(s): return s + 'x'` allocates ~1 per call. SO THE WANTED THUNK LARGELY EXISTS AND WHAT IS MISSING IS THE ENFORCEMENT — nothing refuses a def whose BODY can allocate. The Gate section's proposed positive control (reject the existing thunk, once established that it allocates) is UNSATISFIABLE for that reason and is replaced by a measured pair: must-reject `grow`, must-accept `two`. x86-64 only; xtensa and riscv32 unmeasured, which is exactly where an ABI-adjacent property hides. ORIGINAL SUMMARY FOLLOWS. SPLIT OUT OF feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback 2026-09-20 BECAUSE THAT TICKET'S ACCEPTANCE CRITERION WAS UNSATISFIABLE BY IT: it read `the ESP demo stops polling`, while its own `What this does NOT deliver` section says delivering it cannot achieve that. A gate that cannot pass is not a gate, so the bar moved here and that ticket's acceptance was restated to what it does deliver. THE MECHANISM, WHICH IS WHY THIS IS NOT MORE OF THE SAME WORK: the delivered thunk `$pycbthunk_<def>_<sig>` marshals through Variants, and BOXING A VARIANT ALLOCATES. An ISR that allocates is a latent crash with GOOD LATENCY NUMBERS -- it does not fail on the bench, it fails when the heap lock happens to be held by the code the interrupt preempted, which is a schedule-dependent deadlock or corruption that a demo will not reproduce and a soak test might not either. So the existing thunk shape must NOT simply be pointed at an ISR slot. What is wanted is a RESTRICTED thunk: fixed arity, scalar-only parameters, no Variant anywhere on the path, provably allocation-free. THE ACCEPTANCE IS A PROOF OF ABSENCE, NOT A PASSING DEMO, and that is the hard part: `examples/esp32/nilpy-hw-c3` polling less is not evidence, because an allocating ISR usually works. The claim has to be that the emitted thunk contains no call that can reach the allocator, which is a property of the generated code and should be asserted against it rather than against behaviour. Pascal-side `interrupt;`/`iram;` already exist and are DONE (feature-esp32-isr-iram, 2026-06-21) -- this is the NilPy-side entry point, not that. Nothing measured yet: no repro, no emitted-code inspection, no allocation census of the current thunk. THE OWNER CALLED ESP INTERRUPTS A MUST-HAVE (relayed secondhand 2026-09-20, marked as such), which is why the parent sits at 85; this half is 60 because it is the harder and less specified of the two and nothing downstream is blocked on it today."
+summary: "TWO PREMISES MEASURED AND BOTH FALSE; WHAT SURVIVES IS THE MISSING ENFORCEMENT. (1) THE THUNK DOES NOT ALLOCATE for the scalar case -- 100x the iterations gives +2 allocations (N=200 allocs=5, N=20000 allocs=7) against a positive control that scales exactly 100x (727 -> 72269), and even a `(const AnsiString): AnsiString` slot crosses allocation-free. THE ALLOCATION IS IN THE DEF BODY: `def grow(s): return s + 'x'` allocates ~1 per call. (2) THE JUSTIFICATION IS CONTRADICTED BY THE PLATFORM. This summary used to say an ISR that allocates is a latent crash that fires when the interrupt preempts code HOLDING THE HEAP LOCK. There is no such lock on either ESP profile. IDF: PXXAlloc is backed by calloc/free into heap_caps and multi_heap_platform.h:18 picks portmux spinlocks over RTOS mutexes BECAUSE malloc/free can happen in an ISR -- safe by deliberate design, the cost being latency and determinism. BARE: riscv32/xtensa are in neither the softlock nor hardlock target list, so there is no lock at all, and --threadsafe is REFUSED there rather than silently ignored; the free list is safe only BY UNREACHABILITY, since no interrupt handler can be installed on bare (the vector write is not expressible). SO THE MECHANISM, STATED SO IT DOES NOT DECAY WHEN AN INSTANCE IS FIXED: nothing refuses a def whose BODY can reach the allocator, and the thunk cannot fix that because the thunk is not where the allocation is. THE CONDITION THAT SPRINGS THE BARE HALF is the CSR/vector-install enabler LANDING, which converts bare from unreachable to reachable; at that point note that the remedy a seat will reach for is WORSE than the hazard -- PXXHeapSpin (builtinheap.pas:1611) is a bare xchg spin with no interrupt masking, so a task holding it and an interrupt contending for it on one core cannot make progress. ACCEPTANCE is a measured pair (must-reject `grow`, must-accept `two`), not the unsatisfiable 'reject the existing thunk once established that it allocates'. x86-64 only so far; the on-target context precondition is assertable via xPortInIsrContext and MUST be asserted as `<> 0` never `= 1` (riscv returns the raw nesting count, xtensa a normalised boolean). SPLIT OUT OF feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback 2026-09-20. Parent sits at 85 on a secondhand relay that the owner called ESP interrupts a must-have; this half is 60 because nothing downstream is blocked on it today."
 ---
 
 # A non-allocating restricted thunk for an ISR
@@ -23,6 +23,15 @@ be stored where C or Pascal expects a code address. Two consumers landed
 allocate** — inherited from the parent's prose and **not yet measured**; see the
 first-measurement section, which found the IR readable and the proc-index→name
 map missing.
+
+**MEASURED 2026-09-21 AND FALSE FOR THE SCALAR CASE — the thunk does not
+allocate per call.** See the premise section below for the differential and its
+control. The allocation is in the def BODY.
+
+**SUPERSEDED 2026-09-21 — THE PARAGRAPH BELOW IS THE CLAIM THIS TICKET WAS
+FOUNDED ON AND IT IS FALSE ON BOTH ESP PROFILES.** It is kept because the
+correction is about it; see "THE 'LATENT CRASH' JUSTIFICATION DOES NOT SURVIVE"
+below. The heap lock it depends on does not exist on either profile.
 
 An ISR that allocates is not a bug you find by running it. It is a latent
 crash **with good latency numbers**: it works on the bench, and it fails when
@@ -348,3 +357,45 @@ spinlock for speed; it is picking the one primitive that closes this hole, and
 **Stated as a mechanism and not as a prohibition** — "a plain spin taken by a
 task and contended by an interrupt on one core cannot make progress" survives
 someone renaming the flags, where "do not enable threadsafe on ESP" does not.
+
+## THE ASYMMETRY IS WITNESSED — `examples/esp32/isrctx-c3`, esp32c3 under QEMU, 2026-09-21
+
+    PXX isrctx: main ctx=0
+    PXX isrctx: task hits=5 ctx=0
+    PXX isrctx: isr  hits=5 ctx=1
+    PXX isrctx: PAIR OK status=0
+    OK   isrctx-c3 qemu acceptance -- task ctx=0, ISR ctx=1 (asymmetry witnessed)
+
+**ONE IMAGE, ONE BOOT, BOTH DISPATCH METHODS.** The only declared difference
+between the two callbacks is the `dispatch_method` byte in
+`esp_timer_create_args_t`; same instrument, same binary, microseconds apart.
+Two separate runs would have compared two images and two boots.
+
+**What this settles, and it is the thing neither arm could settle alone:**
+`xPortInIsrContext` is a LIVE instrument on riscv32. frankb-8e's four clean
+task-context rows across two ISAs (~400 callbacks each) were consistent with
+*"every context here is task context"* AND with *"the function always returns
+0"*, and no number of further zeros could separate those. The `ctx=1` row does,
+so 8e's baseline is retroactively a measurement rather than a possible
+artefact. **The guard-that-cannot-fail is discharged, and it was discharged in
+the arm that can produce a non-zero — the only one there is.**
+
+**And it agrees with the platform's own expectation**, which is an independent
+check I did not have to write: `esp_timer.c:470` has the IDF itself asserting
+`xPortInIsrContext()` inside the ISR-dispatch path. Our reading is what the
+IDF's own code requires of that path.
+
+**So a pxx `iram;` routine reached through `ESP_TIMER_ISR` genuinely runs in
+interrupt context.** That is the precondition this ticket's restriction exists
+to protect, and it is now a measured fact rather than a design intention.
+
+### What the fixture does NOT witness
+
+QEMU is not silicon — timing, the real peripheral and anything analog are
+untouched. It is riscv32 only; **the xtensa arm would read `1` for a different
+reason** (that port normalises to a boolean) and is not run here. The `1` is
+printed as an observation and never asserted: the assertion is `<> 0`, because
+riscv returns the raw nesting count and a row pinning `1` would be correct on
+every run until a second interrupt arrives during the first.
+
+Nothing here measures allocation. It establishes the CONTEXT, not the contract.

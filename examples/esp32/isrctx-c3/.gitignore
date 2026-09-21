@@ -1,0 +1,3 @@
+build/
+main/main.o
+main/libpxx_app.a
