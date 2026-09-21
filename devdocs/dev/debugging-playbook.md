@@ -34833,6 +34833,32 @@ exist" into a confident verdict.
 win; a floor would have saved the red. Writing down only the number you hope not
 to exceed guards exactly half of your harness.
 
+**AND THE THIRD INSTANCE, 2026-09-21, SAYS WHICH DIRECTION THE FAULTS ACTUALLY
+RUN — AND IT IS NOT THE FLATTERING ONE.** Measuring a bignum shift fix, the
+harness accumulated `a = a + f(x)`, so the accumulator grew without bound and
+for large shifts the ADDITION dominated the operation under test: `x << 26`
+read 70,973 ns where the shift costs ~5,100. It reported **1.4x on a fix that
+is 4.6x.**
+
+So of one seat's three harness faults in two days, **the false WIN was one and
+the false REDS were two** — a verdict line that printed "does NOT match the
+oracle" about files that were never built, and a benchmark that hid a real
+speedup behind its own accumulator.
+
+**PESSIMISTIC FAULTS GET BELIEVED, AND BELIEVING ONE ENDS A LANE.** A
+flattering number invites a second look because someone hopes to quote it; a
+disappointing one is accepted, written up as "measured, not worth it", and the
+work stops. The accumulator fault would have abandoned a genuine 4.6x and the
+abandonment would have read as rigour. **Nothing in this file's earlier
+sections guards that**, because they were all written about being fooled
+upward.
+
+**Practical form: when a measurement says a change did nothing, check the
+harness before you check the change.** A control that must MOVE is the cheapest
+guard — here, `x * 8192` and a no-op lambda, both expected to stay flat, would
+not have caught it; what caught it was noticing that a single `BMulSmall`
+cannot cost 70,973 ns when a plain multiply costs 2,400.
+
 ## LIVENESS IS NOT REACHABILITY-FROM-HERE, AND THE ROOT SET IS PLATFORM-DEPENDENT
 
 Measured 2026-09-21, two seats reaching **opposite** answers to one question
