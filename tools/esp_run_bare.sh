@@ -66,6 +66,23 @@ if ! "$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" "$ELF" >"$ELF.buildlog" 2>&1; the
   cat "$ELF.buildlog" >&2
   exit 1
 fi
+# ...and the SAME swallowing applied to a WARNING on a SUCCESSFUL build, which
+# is the half the fix above did not cover. The case that matters is
+# `write/writeln emits nothing on the bare ESP profile: there is no console`:
+# the program compiles, boots, prints nothing and exits 0, so the observation is
+# again identical to a program that ran and said nothing -- and the one
+# diagnostic that explains it was sitting in a buildlog nobody prints. Measured
+# 2026-09-21 by a three-WriteLn probe that produced empty UART and rc=0 through
+# this script while a by-hand compile warned on its first line.
+#
+# To STDERR, never stdout: this script's output contract is "the bytes the
+# program wrote to UART" and callers diff it against an oracle, so stdout must
+# stay byte-identical. A caller that wants the old silence redirects 2>/dev/null,
+# which is what the Makefile tier already does.
+if grep -q 'warning:' "$ELF.buildlog" 2>/dev/null; then
+  echo "esp_run_bare: $CHIP build warnings for $PAS:" >&2
+  grep 'warning:' "$ELF.buildlog" >&2
+fi
 
 SER="$(mktemp)"
 timeout -s KILL "$TIMEOUT" "$QEMU" -M "$CHIP" -kernel "$ELF" \

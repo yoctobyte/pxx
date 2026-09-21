@@ -571,32 +571,62 @@ handles come back from `PalOpen` above 4096 and it passes neither `EXCL` nor
 `DIRECTORY`. So there are **zero measured walls in the demo set** — which is a
 much weaker and much more useful statement than "112 unsupported entries".
 
-### 3.4 WHERE THIS CENSUS IS BLANK, AND IT IS THE INTERESTING PART
+### 3.4 THE BLIND SPOT — NAMED, THEN MEASURED, AND THE ANSWER IS BENIGN
 
-**No demo in the population uses Pascal `WriteLn`.** All ten Pascal demos print
-through an `esp_rom_printf` external; the four NilPy demos print through the
-NilPy runtime. So **this census says nothing whatever about a `WriteLn`-shaped
-program** — and `TextWriteLn` calls `PalWrite(f.Handle, ...)`, where stdout's
-handle is `1`, which is `<= PAL_STDERR`, which is **the refusing arm of four of
-the five wall candidates.**
+**The blank (found 2026-09-21):** no demo in the population uses Pascal
+`WriteLn`. All ten Pascal demos print through an `esp_rom_printf` external and
+the four NilPy ones through the NilPy runtime. Since `TextWriteLn` calls
+`PalWrite(f.Handle, ...)` and stdout's handle is `1`, which is `<= PAL_STDERR`,
+**the refusing arm of four of the five wall candidates was the one arm the whole
+demo set structurally could not reach.**
 
-That is not a prediction that it fails. It is the statement that **the single
-most likely wall for the first real application anyone ports is the one arm the
-entire demo set structurally cannot reach.** `--dce-why` does root
-`PalBackendWrite <- PalWrite <- TextWriteLn` in a NilPy build, but through
-`holds a stub target`, and the tool's own header says a root is a conservative
-claim — so that chain is not evidence that anything calls it.
+**MEASURED THE SAME DAY RATHER THAN LEFT AS A HAZARD BLOCK. Both profiles.**
 
-**WHO CAN ANSWER IT: qemu, today, with one fixture.** A bare or IDF program that
-does `WriteLn('x')` and asserts the bytes arrive. No board. If it refuses, the
-five-wall table above becomes a one-wall table with a very large blast radius;
-if it does not, the `handle <= PAL_STDERR` arm is dead code on both paths and
-should say so in its own comment.
+| profile | does `WriteLn` reach the PAL? | what happens |
+| --- | --- | --- |
+| **IDF** (`--platform=esp`) | **NO** — `--dce` on a `WriteLn` program shows `PXXSysWrite` and **zero** `PalBackend*` | works; goes to the libc stdout stream |
+| **bare** (`--esp-profile=bare`) | **NO** — zero `PalBackend*`, zero `PXXSysWrite`; whole 3-`WriteLn` program is **336 B** of code | emits nothing, **by design**, with a compiler warning |
 
-Also blank: I measured **reachability**, not **entry**. A `--dce` live body is
-reachable-in-graph; only a run records which entries were actually entered.
-Every row above is the first kind. And the 65 free refusals are free **for these
-14 programs** — that is the population, not a property of the PAL.
+**So the `handle <= PAL_STDERR` arm is not reachable from `WriteLn` on either ESP
+profile, and §3.3's "zero measured walls" now has no known blind spot behind
+it.** The IDF half is already guarded by `test/test_esp_idf_writeln_end.pas`,
+whose own header records that `WriteLn` *used* to lower to nothing on ESP and
+was fixed; the bare half is intentional and stated at
+`docs/targets/esp32.md:70` — *"`writeln`/`readln` are intentionally no-ops —
+there is no console"*.
+
+**I nearly filed the bare result as a silent-failure bug.** The qemu boot
+printed nothing and exited 0, which is the exact shape this map exists to catch.
+It is not silent: the compiler says
+
+    pascal26:5: warning: write/writeln emits nothing on the bare ESP profile:
+    there is no console. Write to the UART from your own code ... or build a
+    hosted image with --platform=posix.
+
+**I could not see it because I had been reading compiler output through
+`| tail -1`, which shows the `ok:` line and hides every diagnostic above it** —
+in three consecutive commands, having spent the day cataloguing instruments that
+are correct about something else. `tail -1` on a pxx run is one of them.
+
+**A REAL RESIDUAL DID FALL OUT, AND IT IS FIXED:** `tools/esp_run_bare.sh` wrote
+compiler output to a buildlog it printed **only on failure**, so that warning was
+invisible to anyone building through the harness — program compiles, boots,
+prints nothing, exits 0, and the one diagnostic explaining it sits in a file
+nobody cats. The script's own comment records someone fixing exactly this
+swallowing for the FAILURE case; the warning-on-success half was never covered.
+Now printed to **stderr**, never stdout, so the "bytes the program wrote to
+UART" contract stays byte-identical.
+
+**STILL BLANK, and stated rather than implied:** I measured **reachability**, not
+**entry** — a `--dce` live body is reachable-in-graph, and only a run records
+what was entered. The 65 free refusals are free **for these 14 programs**; that
+is a property of the population, not of the PAL. And nothing here covers
+`readln`, which shares the bare no-op.
+
+**A guard worth adding and deliberately not added here:** a fixture asserting
+that the bare `WriteLn` warning FIRES. It is currently the only thing between a
+developer and a silent-looking chip, and nothing tests that it still appears.
+That is a tier row, not a drive-by.
 
 ### 3.5 WHAT RETIRES A ROW
 
