@@ -34331,3 +34331,94 @@ and the rule was present, correct and twice-read while none of it fired. The
 harness half is *normalise-dont-special-case*'s sibling clause: the same script's
 comment records someone fixing this swallowing for the FAILURE case, and the
 warning-on-success arm was never wired to it.
+
+## "IS MY FIX IN THE PIN" HAS A WEAK FORM AND A STRONG FORM, AND THE WEAK ONE IS WHAT EVERYBODY RUNS
+
+*2026-09-21, pin v415. Named by `frankb-8e` after `frankz-e5` ran the weak form;
+`frankuser` had run it over seven commits at pin v414 and reported the result as
+pin membership. Three seats, one habit.*
+
+Two different claims, one command apart:
+
+    git merge-base --is-ancestor <fix> origin/master      # the fix LANDED
+    git merge-base --is-ancestor <fix> <pinned source>    # the fix IS IN THE PIN
+
+**Only the second answers it.** The first is CLAUDE.md's ghost-sha test, which is
+a question about whether a sha is real — a different question that shares a
+command. A commit landing *after* the pin passes it, and a `$(PXX_STABLE)`
+consumer is still getting the pre-fix compiler.
+
+**THE LIVE NEGATIVE CONTROL, AND ITS SHAPE MATTERS MORE THAN ITS SHA.** The shape
+is **any commit landing after the pin** — on 2026-09-21 that was origin's tip
+`24bdec967` against pinned source `0176aa3ce`:
+
+    24bdec967 vs origin/master  -> ancestor       weak form PASSES
+    24bdec967 vs 0176aa3ce      -> NOT ancestor   strong form correctly FAILS
+
+A commit demonstrably not in the pin, passing the check most people run, testable
+in one command. **The sha is written here only as a worked example; it stops
+being a counterexample at the next pin, and the shape does not.**
+
+**WHY IT SURVIVES BEING KNOWN: THE WEAK FORM USUALLY GIVES THE RIGHT ANSWER.**
+All three seats above got a correct conclusion from it, because a fix you are
+asking about has usually been pinned by the time you ask. **A check that produces
+the right answer is the hardest kind to notice is wrong** — it is never
+contradicted, so it is caught from a distinction rather than from a failure.
+
+**AND ANCESTRY SAYS THE SOURCE IS IN; ONLY RUNNING IT SAYS THE GUARD FIRES.**
+`frankb-8e` re-ran both arms of `d305e1afa`'s refusal against the **pinned
+binary** rather than HEAD — accepted arm produces an object, refused arm produces
+**none**. An absence cannot be manufactured by an unrelated failure the way a
+diagnostic string can. That is the step after ancestry, and it is the one nobody
+takes.
+
+## A COMPILE-TIME CHANGE AND A CODEGEN CHANGE ARE DIFFERENT CLAIMS — ONLY THE SECOND INVALIDATES A DOWNSTREAM MEASUREMENT
+
+*`lekkerzeilen-7a`, 2026-09-21, catching `frankz-e5`'s own relay. The coordinator
+told four lanes "eleven `compiler/`/`lib/` commits went live, anything measured
+against the old pin is measuring a different compiler." True about the compiler,
+wrong about what follows.*
+
+7a nearly re-sampled an hour-old runtime profile on that instruction. It checked
+first: **pin v415 compiles lekkerzeilen to a byte-identical binary**
+(`0ceb734aa53da5c9`, three v415 rounds against the v414 build, `cmp`-verified).
+
+**A profile cannot move when the machine code does not, so the re-take would have
+been ONE ARM MEASURED TWICE** — and it would have looked like a clean
+confirmation, because two samples of one binary agree.
+
+    after a pin, cmp the OUTPUT before re-measuring anything downstream of it
+
+**The by-product is worth more than the saved work and comes free:** byte-identical
+output means **the pin's compile-time win carries no codegen risk for that
+program.** That is a stronger release statement than "the pin is green", and
+nobody sets out to measure it.
+
+**The general form:** "the tool changed" licenses re-measuring things that depend
+on the tool's *behaviour*. It does not license re-measuring things that depend
+only on the tool's *output*, and those are usually the expensive measurements.
+Ask which one your number is downstream of.
+
+## TAKE THE BASELINE WHILE THE ARTEFACT IS STILL ON DISK — THE ARTEFACT IS THE THING THAT MOVES
+
+*`lekkerzeilen-7a`, 2026-09-21, reporting a cost it could not recover. Banked as
+a PROPERTY of our pin cadence, not as a lapse, at `frankuser`'s direction.*
+
+7a built with pin v414 an hour before v414 was overwritten, and did not time that
+build. When it went to produce a within-harness before/after, **no v414 binary
+existed anywhere** — `stable_pinned` and `stable_latest` are both v415, and no
+archived copy is kept.
+
+**This is rollback-depth-zero met from the measurement side, and that direction
+had not been written down.** `stable_pinned` is a **fixed-name overwrite**, so
+**every pin destroys the previous arm.** CLAUDE.md records the compatibility
+consequence (usable rollback depth is zero, every historical pin is worse against
+the current tree). The measurement consequence is separate: **the A arm of any
+A/B against the pin has a lifetime measured in hours and nothing warns you when
+it ends.**
+
+**It is a consequence of a deliberate choice, not a mistake by whoever was
+mid-measurement when the pin landed** — and the framing matters, because calling
+it a lapse teaches the next seat to quietly hoard binaries. The correct habit is
+the cheap one: **time the build when you make it, even when you do not yet know
+you want a baseline.** A timing costs nothing to take and cannot be taken later.
