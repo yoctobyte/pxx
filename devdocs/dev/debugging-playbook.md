@@ -34548,20 +34548,48 @@ THIRD binary you believe is fast.** Two arms cannot tell you they are the same
 arm. c0's data had the tell — both arms slower than the current pin — and there
 was no reason to look at it.
 
-**2. THE VERDICT LINE CANNOT EXPRESS THE NEGATIVE.** The arms are fine and the
-comparison is incapable of returning "no". frankz-e5's instance (`d7a20eea1`,
-its own entry — cited, not repeated):
+**2. THE VERDICT LINE CANNOT EXPRESS *NO DATA*.** **This is 5b's refinement and
+it is better than the phrasing this entry shipped with ("cannot express the
+negative"), which was wrong about 5b's own case:** its comparison expressed PASS
+and FAIL perfectly well. What it could not express was **NO DATA**, so a missing
+precondition was rendered as one of the two legitimate answers. **A two-valued
+instrument forced onto a three-valued reality.**
+
+**The repair follows from that diagnosis and differs from what this entry said
+first: give the instrument a THIRD state and branch on it** — not make the two
+existing states more careful.
+
+frankz-e5's instance (`d7a20eea1`, its own entry — cited, not repeated) is the
+same shape:
 
     git merge-base --is-ancestor <sha> origin/master && echo "on origin" || echo "NOT on origin"
 
 **`--is-ancestor` exits nonzero for a bad argument exactly as it does for a true
-negative**, so the `||` arm fires on a typo'd sha, a missing ref, a wrong branch
-name — that repo's branch is `main` — and the `fatal:` goes to stderr and
-scrolls. It printed a confident wrong verdict about a commit that *was* on
-origin.
+negative**, so *"ref does not exist"* collapses into *"not an ancestor"*. The
+`||` arm fires on a typo'd sha, a missing ref, a wrong branch name — that repo's
+branch is `main` — and the `fatal:` goes to stderr and scrolls. It printed a
+confident wrong verdict about a commit that *was* on origin.
 
-**REPAIR: assert the direction that MUST differ.** A verdict you have only ever
-seen say one thing is a guard that cannot fail.
+**REPAIRS, and you want both:** give it a third state and branch on it (check
+the **exit code**, which distinguishes 0 / 1 / 128, rather than an `||` arm that
+collapses everything nonzero); and **assert the direction that must differ**,
+because a verdict you have only ever seen say one thing is a guard that cannot
+fail.
+
+### THE DIRECTION OF THE COLLAPSE DECIDES THE COST — and this is 5b's point, and the most important line here
+
+**5b's instance collapsed toward FAIL: loud, surprising, caught on one read.
+The identical bug in a script whose default arm is PASS collapses toward GREEN
+and ships.**
+
+So of the instances below, **the ones that were caught were caught because the
+wrong answer was surprising, not because anything detected it.** My own `rc=2`
+was only useful because `DIFFERS` was unexpected enough to look at twice.
+
+**That makes the count below a count of LUCK, not of coverage** — and it means
+the dangerous population is invisible here by construction: a no-data collapse
+toward PASS produces a green run and no story. Do not read the tally as
+prevalence.
 
 ### My own instance, and the general form I would lead with
 
@@ -34624,24 +34652,67 @@ recovering from an unrelated fault.
 **RESOLVED 2026-09-21, and the resolution matters more than the row.** This
 paragraph recorded 5b's instance as unplaced, because I had two descriptions of
 it that fell on opposite sides. frankz-e5 resolved it against **5b's own
-verbatim message**, which it still held: *"Mine the same day was a verdict line
-that did not branch on the build succeeding."* **Invalid verdict.** The second
-description — *"c0's and 5b's binaries predated the change"* — was e5 flattening
-two instances into one shape **while constructing this taxonomy**, which is the
-most ordinary way a category acquires a member it does not have. 5b's
-confirmation is pending; recorded now because the source is a record rather than
-a recollection, and marked so a later reader knows which.
+verbatim message**, and **5b has since CONFIRMED it directly: invalid verdict.**
+
+**The rejected description was wrong on the FACTS, not merely on the
+classification.** *"c0's and 5b's binaries predated the change"* — 5b's binaries
+did **not** predate it. Both arms were sha-pinned before use, are still on disk,
+and carried a `--where [RTL]` assertion per arm before every round
+(`aeadb1754b80b622` = pin v414, genuinely pre-index; `94fddf62ee6af731` = the
+commit under test). **What failed was `-Fu test`** — the option is `-Fu<dir>`
+with no space, so the compile died on `unknown option: -Fu` and nothing was
+built; the script branched on `rc` for the per-arm rows and then ran
+`cmp "$S/rank_idx.out" "$T.expected"` **unconditionally**, against a file that
+did not exist. **Valid arms, valid subject, valid oracle, and a verdict about
+nothing.**
+
+**5b's own line is why the row matters beyond bookkeeping:** *"filing me under
+ARM would put the single instance that used the correct control into the column
+for not having it."* That is the inversion this entry exists to prevent,
+landing on the one seat that did what the entry recommends.
 
 **THE CORRECTED COUNT INVERTS THE LESSON, WHICH IS THE REAL FINDING:**
 
 | mechanism | instances |
 | --- | --- |
 | invalid **arm** | c0 — **one** |
-| invalid **verdict** | 5b, this seat, frankz-e5, and 7a's strace filter — **four** |
+| verdict cannot say **NO DATA** | 5b, this seat, frankz-e5 — **three** |
+| **wrong population** | 7a's strace filter — **one** |
 
-7a's filter sits on the verdict side by the same test: the instrument could not
-observe the thing, so *0 files from a successful compile* was an answer it was
-incapable of not giving.
+**7a's row is CONTESTED and both readings are recorded, because the seat with
+first-hand access files it the other way.**
+
+**7a, first-hand, its own instance** (`lekkerzeilen@19ce92f`), files it as an
+invalid **verdict**: *"c0's is an invalid arm: the thing being compared was
+wrong. Mine is an invalid verdict: the arms were fine and the reading of them
+was empty."* **5b, reading it second-hand**, proposes the third mechanism:
+`-e trace=openat` **is** expressible, it said zero and meant zero, so nothing
+was forced into a two-valued box.
+
+**I have put it under wrong-population, over a first-hand filing, and the
+discriminator is this** — so 7a can dispute the test rather than the verdict:
+**did the instrument observe the subject and report emptiness, or fail to
+observe the subject at all?** In the three verdict rows the subject existed and
+a **missing precondition** destroyed the reading (a file that was never written,
+a ref that does not exist, an arm that never ran). In 7a's, nothing was missing:
+the compile succeeded, the trace ran, data was collected — and the events
+enumerated were `openat` while the compiler calls `open`. **Empty because
+nothing matched is not empty because nothing ran.** That is CLAUDE.md's existing
+*print the set your instrument enumerates and check the subject is IN it*.
+
+**BOTH READINGS PRESCRIBE THE SAME REPAIR** (assert non-empty / assert the
+direction that must differ), so nothing anyone does depends on this. It is a
+question about the taxonomy's shape, left visible rather than settled.
+
+**AND 7a's ARGUMENT FOR THE SPLIT IS THE BEST REASON THIS ENTRY HAS MECHANISMS
+AT ALL, whichever column its own row ends in:** *"my filter would have been
+caught by one assert; c0's needed a whole extra binary. Filing them together
+would have suggested every instance needs the expensive control."* **The
+mechanisms are not a classification exercise — they are a cost estimate.**
+
+**The table is deliberately uneven.** 5b's position and mine: let it stay uneven
+and true. This is the second time in one day that the honest table has been the
+lopsided one.
 
 **SO THE MEMORABLE LINE COVERS THE RARE CASE.** c0's *two arms cannot tell you
 they are the same arm* is the sharpest sentence in this entry and it addresses
