@@ -64,6 +64,27 @@
 #    SIGUSR1/SIGUSR2 is stop+print+pass. Point this at a program that fires one
 #    itself and gdb halts the process on every delivery.
 #
+# 5. A SYMBOL IN THE MAP IS NOT A REACHABLE SYMBOL, so a static caller scan
+#    over the map answers a question nobody asked. The compiler emits code for
+#    every arm of an {$ifdef}, so a routine that no build can reach is present,
+#    named, and sized in the map exactly like a live one.
+#
+#    Measured 2026-09-21 (7a, lib/rtl/math.pas): a caller list for DdMulD
+#    reported SinCosDd as a caller. True -- it is compiled in and it does call
+#    DdMulD -- and it is DEAD: all three of its call sites sit inside
+#    {$ifdef PXX_FLOAT_EXACT}, a flag defined in exactly ONE Makefile line for
+#    ONE test. Going further, the default Sin/Cos/Tan route to SinCosFast ->
+#    FastTrigReduce, four plain-double flops with no TDd at all, so SinKernel,
+#    CosKernel and TrigReduce are unreachable too. FIVE of nine named callers
+#    were dead, and the sampler agreed: over two 200-sample runs, not one
+#    sample ever landed in any of them.
+#
+#    NEITHER "is it in the binary" NOR "is there a call site" ANSWERS
+#    REACHABILITY -- only the ifdef does. This is the quietest of the five,
+#    because a map is normally the thing you trust OVER a source read. The
+#    sampler is the instrument that gets it right here: a routine no sample
+#    ever hits, in a binary where it is present and named, is evidence.
+#
 #    Measured 2026-09-21 on test_threadsafe_heap_lock_deadlock_diag, whose
 #    hammer thread sends 2,000,000 SIGUSR1s: sampling with PXX_SIGNAL=SIGUSR2
 #    gave 100% of 18 samples at ONE pc, identical across three runs, a real

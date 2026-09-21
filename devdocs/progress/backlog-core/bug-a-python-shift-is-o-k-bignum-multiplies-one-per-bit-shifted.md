@@ -70,3 +70,16 @@ textbook form and removes the loop entirely.
 (`x << 200`) must get faster by orders of magnitude, and a shift by 1 must not
 regress. Assert both — a fixture that only shifts by a small count cannot tell
 the two implementations apart, which is why this survived.
+
+**AND THE REASON THE ORDINARY FIXTURE MISSES IT, in 7a's words: the SHIFT COUNT
+is the independent variable and the OPERAND is the control — which is the
+reverse of how anyone instinctively writes a bignum test.** Written the natural
+way (one small shift, a big operand, assert the value) the test passes today,
+passes after the repair, and certifies the bug in both directions.
+
+**The reading makes a testable prediction that already held.** 7a's `>>` at
+38,023 ns against `<<` at 15,159 is 2.51x, while their shift counts are 17 and
+13 — a ratio of only 1.31. The loop alone does not account for it; `k`
+multiplies **plus a `BDivMod`** does. Their third operand, `x << 5`, is the
+cheapest of the three, exactly as per-bit cost predicts. That is confirmation
+the source read alone does not give.
