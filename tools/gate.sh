@@ -139,6 +139,16 @@ stale_binary_hint() {
     say "gate:      Only a real recompute separates the two. Run"
     say "gate:      'make compiler/pascal26' and look for 'converged after N round(s)'"
     say "gate:      — a 'verified' line is the STAMP path and rebuilt nothing."
+    say "gate:      'verified' HERE IS EXPECTED AND FINE, and reads as a problem:"
+    say "gate:      the \$(COMPILER) recipe refuses (exit 1) unless the stamp was"
+    say "gate:      written for THESE sources AND names the binary on disk, so it"
+    say "gate:      cannot print 'verified' for a tree it never saw. Rebuilt"
+    say "gate:      nothing usually means THIS gate run's own testmgr step already"
+    say "gate:      rebuilt it. RE-GATE; do not rm the stamp. Measured 2026-09-21:"
+    say "gate:      a seat read 'verified' as the remedy silently no-opping, filed"
+    say "gate:      a closed bug as live, and nearly bought a forced recompute"
+    say "gate:      before every pin. What the verb does NOT tell you is whether"
+    say "gate:      the binary was proven when the FAILING gate ran — it wasn't."
   fi
 }
 
