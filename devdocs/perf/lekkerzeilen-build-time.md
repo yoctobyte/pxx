@@ -403,3 +403,77 @@ crashing.** `break *<addr>` + `ignore 1 100000000` gives
 header**, and patching `0xCC` into it corrupts the instruction stream rather than
 trapping. The tell is a segfault a few bytes past the breakpoint address. Use a
 source counter instead; it costs one ~40 s rebuild.
+
+---
+
+# CAUSE, NAMED: the enclosing-scope walk runs to token 0, across every imported module
+
+Call counts, one level at a time, each narrowing to a single site.
+
+    PyFindSuiteIndent   1,200,000 calls -- 1,200,000 from ONE of 7 sites: PySkipNestedSuite
+    PySkipNestedSuite   1,200,000 calls -- 1,199,633 from ONE of 12 sites: PyDefSiteMode  (99.97%)
+
+**`PyDefSiteMode` (`pyparser.inc:41359`) answers "what kind of def sits at
+`defTok`" by walking BACKWARDS from `defTok-1` to token 0**, and for every
+`tkClass`/`tkFunction` it passes it calls `PySkipNestedSuite` to ask whether that
+construct's suite reaches `defTok`. Its own header says so: *"the walk back is
+over every preceding construct and each candidate costs a suite skip."*
+
+## The memo is NOT the problem — measured, both arms identical
+
+    imported   calls=4000  hits=3599  miss=400  memoN=400   skips=1,315,400
+    inline     calls=4000  hits=3599  miss=400  memoN=400   skips=    79,800
+
+**Same calls, same hits, same misses, same memo occupancy. Only the skips differ
+— 16.5x.** The memo works exactly as designed and is nowhere near its
+`PY_PSMEMO_MAX = 8192` cap at 400 entries. **Per miss: 3,288 skips imported
+against 199 inline.**
+
+**199 is the correct number.** Walking back over 400 sibling defs averages 200.
+**3,288 is the walk crossing every definition of every module in the import
+closure** — they share one token array, and the walk's only terminator is
+`d >= 0`. For a module-level def nothing ever encloses it, so **the loop always
+runs to token 0**, and the more you import the further back it goes.
+
+**This is why the cost is a per-declaration CONSTANT rather than a pass**, and
+why it is invisible inline: the constant is the size of everything lexed before
+you, which for an imported module is the whole closure.
+
+## Why this correctly predicts every earlier measurement
+
+- **Per-declaration and linear in module size** — each def pays one walk over a
+  closure that does not grow with the module.
+- **An UNREFERENCED import costs the same** — the walk is over TOKENS, and the
+  closure is lexed whether or not anything uses it.
+- **Bodies barely matter (2.3 s of 20.1)** — the walk counts `def`/`class`
+  tokens, not statements.
+- **Module count is linear at ~20 s each** — each module pays for the closure
+  before it.
+- **`GetTokenStrFromRaw` at 16%, 30x inline** — a per-token accessor dominating
+  is the signature of a stream walked many times, which is 8e's reading and is
+  what this walk is.
+
+## The fix direction, and what would validate it
+
+**A construct in a DIFFERENT module can never enclose a def in this one**, so the
+walk's floor should be the start of `defTok`'s own module rather than token 0. I
+have NOT established that a per-module token range exists to bound it with —
+`MainProgramTokCount` bounds the main program and is used that way at
+`PyDefBindsNameLocally`, but I have not found a lower bound for an imported
+module's range, and inventing one is a design change rather than a fix.
+
+**Validation is an A/B on the instrument already built**: min-of-N interleaved,
+box load beside every number, compiler sha and tree in the sentence, against the
+125 s / 104 s baselines. **A candidate that does not move it is a result.**
+
+**The arithmetic the ticket allows — roughly 5x on the demo's build if the
+imported rate came down to the inline rate — is what the arithmetic allows, NOT
+what a fix is known to deliver.** Nobody should quote it as a promise.
+
+## Method
+
+Per-call-site counters inserted mechanically (7 sites, then 12), a counter in the
+callee printing every N calls, `git checkout HEAD -- compiler/pyparser.inc`
+between each round and at the end. **Counts are load-immune**, so this whole
+sequence ran while two peers held the box — worth knowing on a contended machine,
+because it is the one measurement that needs no window.
