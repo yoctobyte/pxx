@@ -131,9 +131,14 @@ stale_binary_hint() {
   if [ "$binmt" -lt "$newest" ]; then
     say "gate: NOTE compiler/pascal26 is OLDER than the last commit touching"
     say "gate:      compiler/ ($(git log -1 --format='%h %s' -- compiler/ | cut -c1-60))"
-    say "gate:      That is a STALE BINARY, not a miscompile — a sibling landed a"
+    say "gate:      Likely a STALE BINARY, not a miscompile — a sibling landed a"
     say "gate:      compiler change and this checkout has not rebuilt."
-    say "gate:      Run 'make compiler/pascal26' (~12s) and re-gate."
+    say "gate:      THIS IS AN MTIME COMPARISON AND SAYS NOTHING ABOUT CONTENT: a"
+    say "gate:      COMMENT-ONLY commit to compiler/ trips it while your binary is"
+    say "gate:      byte-identical and entirely correct (measured 2026-09-21, twice)."
+    say "gate:      Only a real recompute separates the two. Run"
+    say "gate:      'make compiler/pascal26' and look for 'converged after N round(s)'"
+    say "gate:      — a 'verified' line is the STAMP path and rebuilt nothing."
   fi
 }
 

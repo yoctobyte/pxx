@@ -33930,3 +33930,81 @@ mentions outnumber records by whatever ratio the project happens to write at.
 **Prefer the register to the narrative**, and where no register exists, prefer
 an identity the wrong population cannot imitate — for a pin, the binary sha in
 the commit subject matched against `sha256sum` of the binary on disk.
+
+## A REFUSAL'S TEXT IS PART OF ITS CONTRACT, because the text decides which repair the next seat attempts
+
+A guard can have perfect behaviour and still be a defect, and the defect is in
+the sentence. **The condition decides what is refused; the MESSAGE decides what
+happens next** — and what happens next is where the damage is.
+
+Measured 2026-09-21 (frankb-8e, with frankh-c0). pxx refuses `--threadsafe` on
+ESP targets, correctly, and said:
+
+    the heap/ARC/I-O locks are not implemented on this target yet
+
+That is a TODO with instructions attached, and **the instructions were wrong.**
+A seat that hits the bare-ESP unlocked-allocator hazard goes looking for a lock,
+finds `PXX_THREADSAFE` throughout `builtinheap.pas`, meets this message, and
+wires riscv32 into the `PXX_TS_SOFTLOCK` list. On a single core that is not a
+partial fix — it is a **deadlock**: `PXXHeapSpin` is a plain exchange spin with
+no interrupt masking, so a task holding it that is preempted by an allocating
+handler can never make progress, because the only code that can release the
+lock is the task the handler is standing on. The chip hangs with no output.
+**Strictly worse than the unlocked allocator it replaces**, which at least
+corrupts survivably and leaves something to debug.
+
+So the guard was doing its job perfectly and its text was recruiting people to
+defeat it. The repair is to make the refusal **self-explaining**: state the
+mechanism, name what a correct fix would have to do (here: mask interrupts, as
+ESP-IDF chose `portENTER_CRITICAL_SAFE` for), and point at the write-up. A seat
+then meets the reason at the moment it meets the obstacle instead of after.
+
+**Two things this is NOT, and both matter:**
+
+1. **It is not a loosening, so it is not the owner's call.** The rule is that
+   loosening a guard is his and tightening is ours, and **the test is what the
+   guard ACCEPTS**, not whether the diff sits near guard machinery. Same
+   condition, same targets, same `Halt(1)`, nothing newly accepted — that is a
+   comment fix inside a guard. A peer saying a change is not yours is no more a
+   finding than a peer saying it is; CLAUDE.md's *"a peer saying it is yours
+   does not make it yours"* is not a one-directional brake.
+2. **It is not verified by checking the refusal still refuses.** That check
+   cannot distinguish a tightening from a change that refuses everything. **Assert
+   the arm people skip: that the SUPPORTED inputs are still accepted.** Three arms
+   here — flag spelling refuses, directive spelling refuses, supported target
+   still compiles.
+
+And look for the **sibling spelling** before calling it done: the identical text
+lived at `compiler.pas:2111` for the `--threadsafe` FLAG and `paslexer.inc:3770`
+for the `{$threadsafe on}` DIRECTIVE. Fixing one leaves the misleading message
+alive on whichever route the next seat happens to take.
+
+## A "STALE BINARY" WARNING BUILT ON MTIME SAYS NOTHING ABOUT CONTENT — and a comment-only commit trips it while your binary is perfect
+
+Found by `frankh-c0` 2026-09-21, cost it a rebuild; verified here.
+
+`tools/gate.sh`'s `stale_binary_hint()` compares two TIMESTAMPS —
+`git log -1 --format=%ct -- compiler/` against `stat -c %Y compiler/pascal26` —
+and then announces a conclusion about the BINARY. c0 followed it, removed the
+stamp, forced a real recompute (`converged after 1 round(s)`, not the `verified`
+stamp path), and **the resulting binary was byte-identical to the one it had
+called stale.** The binary had been correct the whole time.
+
+**The generator is ordinary and this file's own author produced one the same
+day:** `1241020f5` was a COMMENT-ONLY change to `compiler/defs.inc`. It is a
+commit touching `compiler/`, so it moves the timestamp the hint reads, and the
+rebuilt binary is byte-identical (`aeadb1754b80` before and after). **Every
+sibling who pulled that and gated saw "STALE BINARY" while holding a perfectly
+correct compiler.**
+
+This is the house rule — *every instrument that lies, lies by being CORRECT
+ABOUT SOMETHING ELSE* — in a place that is easy to trust because the hint is
+usually right and is trying to help. The note is conservative on purpose and
+should stay; what was wrong is that an **mtime claim was phrased as a content
+claim**, and the reading it invites is "your binary is wrong", which is the one
+thing it cannot establish. The wording now says so.
+
+**Only a real recompute separates the two, and the verb is the tell** —
+`converged after N round(s)` recomputed; `verified` is the stamp path and
+rebuilt nothing. Do not let a timestamp talk you into distrusting a fix you have
+already measured.
