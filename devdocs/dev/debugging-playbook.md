@@ -32710,6 +32710,46 @@ to the seat sizing that work. **A size is not a cost, a count is not an effort, 
 not a quantity of anything** — when a figure moves from the question it was measured for to a
 neighbouring one, it needs re-deriving and not re-quoting, however solid it was where it came from.
 
+**AND THE MIRROR OF ATTRITION IS IMPROVEMENT: A RELAY MOVES A CLAIM TOWARD ITS STRONGER FORM,
+WHETHER BY DROPPING A QUALIFIER OR BY ADDING A CLAIM THE SOURCE NEVER MADE.** Everything above is
+something being LOST in the retelling. This is the same displacement running the other way, and it is
+harder to see because it looks like comprehension — the relayer has understood the finding so well
+that it can state it more crisply than its author did. **Three instances, three sources, one day,
+2026-09-20/21, all by this file's own coordinator:**
+
+    what the source said                       what the relay said              attested by
+    "974" = the LINE COUNT of a file           "the cost of the port"           frankh-c0 (received)
+    material received first-hand from 7a       "second-hand through franks-5b"  lekkerzeilen-7a
+                                               (7a's OWN measurement, called                (received,
+                                               hearsay to its author's face)                 confirmed)
+    "I reasoned about the KEY SPACE"           "it required no run at all"      frankh-c0 (received)
+
+**The attestation column is not decoration and it is the entry's own positive control.** c0 holds the
+receipts for rows 1 and 3 and was not present for row 2, which rests on this seat's transcript plus
+7a's acknowledgement that it received and accepted the misattribution. **Presenting three rows as
+uniformly witnessed would be this section's own failure committed inside this section** — c0 caught
+that and it is the reason the column exists.
+
+**THE MECHANISM IS SELF-REPORTED AND MARKED AS SUCH, BECAUSE NO PEER CAN TESTIFY TO IT:** *a
+mediocre claim gets relayed flatly; a good one attracts the improvement.* **The distortion is
+SELECTED FOR BY QUALITY** — the better the finding, the more it feels like it deserves the stronger
+statement — which means **the findings most likely to become fleet rules are the ones most likely to
+arrive overstated.** A relay is not a neutral pipe; it is a filter with a gain that rises with the
+signal.
+
+**AND DETECTION IS AN ACCIDENT OF ROUTING, NOT A PROPERTY OF THE PROTOCOL — WHICH IS WHY THE REMEDY
+CANNOT SIT WITH THE RECEIVER.** All three were caught for one reason: **the improved version was
+handed BACK to the person who held the ground truth.** c0's own statement of it: had the key-space
+version gone to a third seat instead, it would have been unfalsifiable at the far end and *"would
+have come back to me weeks later as an established technique."* **A relay to anyone other than the
+source is structurally uncheckable**, and most relays are exactly that.
+
+**Discharge, sender-side, because the receiver's is unavailable: relay the source's SENTENCE, not
+your understanding of it.** Where you improve the phrasing, say that you have — *"my words, not
+theirs"* — and where the finding is about someone's own method, **quote them.** The test that catches
+it: **is my version stronger, more general, or more quotable than what I was sent?** If yes, the
+delta is yours and it is unattested, whatever its merit.
+
 **AND THE REASON TWO SEATS DREW THE SAME WRONG INFERENCE IS THE LABEL'S WORD, NOT THE ROW'S NUMBER —
 WHICH IS WHY NEITHER OF THEM WAS BEING CARELESS.** `lekkerzeilen-7a`, whose measurement it is, supplied
 the mechanism when it repaired the document (`8ca634f`): **on that box vsync is a 52–68 ms per-frame
