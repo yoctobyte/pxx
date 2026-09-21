@@ -2,10 +2,10 @@
 track: N
 prio: 85
 type: feature
-owner: 
+owner: frankh-c0
 blocked-by: []
 summary: "THE STORE ARM'S ONE SILENT FALLTHROUGH IS CLOSED 2026-09-20 (the `else` the `What this does NOT deliver` section prescribed; unreachable, so proved by forcing `cbThunk := -1` and watching both fixture stores warn, then reverted to a byte-identical binary). AND THREE PLACES IN THIS FILE SAID THE FIELD SITE WAS STILL UNDONE AFTER 8dba4c72e DELIVERED IT -- the four-row table, the next-step paragraph, and the three-consumer list whose own first line is "Say so before anyone builds half of it twice". The SUMMARY was updated in the delivering commit as required and the task LIST was not, so the part a seat reads to decide what to build was the wrong part. All three struck and dated rather than rewritten. WHAT REMAINS IS CONSUMER 3, ESP INTERRUPTS, AND IT IS A DIFFERENT CONTRACT -- not more of the same work. Boxing into Variants ALLOCATES, and an ISR that allocates is a latent crash with good latency numbers, so the thunk shape delivered here does not simply extend to it. DELIVERED: a NilPy `def` compiles all-Variant and can never match a native procedural signature, so `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 the ARGUMENT site (2b28c3302), consumer 2 the STORE site (8dba4c72e) -- procedural field, array element or procvar, via NodeProcSlotSig. `examples/esp32/nilpy-hw-c3` STILL POLLS and its header is still accurate; do not attach that demo sentence to this ticket until consumer 3 lands. A capturing def -- one whose captures are lambda-lifted into EXTRA PARAMETERS, so it cannot match any slot arity by construction -- remains silent at both delivered sites and is its own ticket."
-status: open
+status: working
 ---
 
 # A NilPy def has no native-ABI entry point to hand to a C callback
