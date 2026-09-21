@@ -87,3 +87,13 @@ refusal that also rejects the correct spelling is not a guard, it is a break.
   is the same fault by a different spelling and is deliberately NOT refused, because
   test_esp_interrupt.pas depends on one to force body emission. Filed as
   `bug-s-a-direct-call-to-an-interrupt-routine-is-the-same-trap-return-fault-by-another-spelling`.
+- 2026-09-21 — **INERT UNTIL A PIN CARRIES IT, and the resolution above did not say so.**
+  `d305e1afa` is a compiler change, so every `$(PXX_STABLE)` consumer is still
+  getting the PRE-refusal compiler: a lane that builds against the pin can still
+  write `@<an interrupt; routine>`, hand it to `esp_intr_alloc` and get the
+  silent trap-return this ticket exists to refuse. Verified not carried by pin
+  v414 (`aeadb1754b80`), which is the current pin. CLAUDE.md requires this line
+  — *"before closing a compiler fix that a `lib/**` file depends on, check
+  whether a pin carries it and say so in the resolution"* — and I closed without
+  it; flagged by frankz-e5. **Not a reason to hold anything**: never wait for a
+  pin. What retires this note is the next pin, whatever its number.
