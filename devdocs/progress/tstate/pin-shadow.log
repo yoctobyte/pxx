@@ -992,3 +992,5 @@
 2026-09-21T22:33:37Z	borg	8faa2c13ce8df1cd0a29877d73fa0feb5df28742	would NOT pin 8faa2c13ce8d — 1 red(s) the current pin does not have, 5 inherited from the current pin: tools-devtest#00
 2026-09-21T22:56:03Z	borg	ebc236bba83769a62102f5dc412bcf7a7dc9106d	would NOT pin ebc236bba837 — 1 red(s) the current pin does not have, 5 inherited from the current pin: tools-devtest#00
 2026-09-21T23:24:08Z	borg	ac802a28c594841c114ffda90743032ace8a6f0e	would-pin PENDING ac802a28c594 — qualifies, streak 1/2
+2026-09-21T23:47:09Z	borg	08f4a3c302a7be0ba39fb2118b66d73e84fef174	WOULD PIN 08f4a3c302a7 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 2/2
+2026-09-21T23:47:09Z	borg	08f4a3c302a7be0ba39fb2118b66d73e84fef174	AUTO-PIN DECLINED — HEAD is e58bdbbf3409, not the tested 08f4a3c302a7
