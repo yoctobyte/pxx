@@ -234,7 +234,7 @@ function PalBackendHasFiles: Boolean;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := True;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := False;
 {$endif}
 end;
@@ -243,7 +243,7 @@ function PalBackendHasSockets: Boolean;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := True;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := False;
 {$endif}
 end;
@@ -252,7 +252,7 @@ function PalBackendHasThreads: Boolean;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := True;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := False;
 {$endif}
 end;
@@ -329,7 +329,7 @@ begin
   else
     Result := Integer(stream);
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -343,7 +343,7 @@ begin
   else
     Result := fread(buf, 1, len, Pointer(handle));
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -357,7 +357,7 @@ begin
   else
     Result := fwrite(buf, 1, len, Pointer(handle));
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -376,7 +376,7 @@ begin
   else
     Result := ftell(Pointer(handle));
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -390,7 +390,7 @@ begin
   else
     Result := fflush(Pointer(handle));
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -425,7 +425,7 @@ begin
   end;
   Result := fclose(Pointer(handle));
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -440,7 +440,7 @@ function PalBackendDelete(path: PChar): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := remove(path);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -449,7 +449,7 @@ function PalBackendRename(oldPath, newPath: PChar): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := rename(oldPath, newPath);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -458,7 +458,7 @@ function PalBackendMkdir(path: PChar; mode: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := mkdir(path, mode);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -467,7 +467,7 @@ function PalBackendRmdir(path: PChar): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := rmdir(path);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -813,7 +813,7 @@ function PalBackendSocket(domain, kind, proto: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_socket(domain, kind, proto);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -824,7 +824,7 @@ begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   one := enabled;
   Result := lwip_setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, @one, 4);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -833,7 +833,7 @@ function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; 
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_setsockopt(handle, level, optname, valPtr, valLen);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -844,7 +844,7 @@ begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   if enabled <> 0 then flags := O_NONBLOCK else flags := 0;
   Result := lwip_fcntl(handle, F_SETFL, flags);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -855,7 +855,7 @@ begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   FillSockAddrIpv4(@sa[0], hostAddr, port);
   Result := lwip_bind(handle, @sa[0], 16);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -874,7 +874,7 @@ begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   FillSockAddrIpv4(@sa[0], hostAddr, port);
   Result := lwip_connect(handle, @sa[0], 16);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -931,7 +931,7 @@ function PalBackendListen(handle, backlog: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_listen(handle, backlog);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -940,7 +940,7 @@ function PalBackendAccept(handle: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_accept(handle, nil, nil);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -986,7 +986,7 @@ begin
   if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_recv(handle, buf, len, f);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -1001,7 +1001,7 @@ begin
   if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_send(handle, buf, len, f);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -1010,7 +1010,7 @@ function PalBackendShutdown(handle, how: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_shutdown(handle, how);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -1019,7 +1019,7 @@ function PalBackendSocketClose(handle: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_close(handle);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -1032,7 +1032,7 @@ begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   FillSockAddrIpv4(@sa[0], hostAddr, port);
   Result := lwip_sendto(handle, buf, len, f, @sa[0], 16);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -1054,7 +1054,7 @@ begin
   if Result >= 0 then
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   outAddr := 0;
   outPort := 0;
@@ -1072,7 +1072,7 @@ begin
   if Result > 0 then
     Result := (pfd[1] shr 16) and $FFFF;
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -1087,7 +1087,7 @@ function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Int
 begin
   Result := lwip_poll(fds, nfds, timeoutMs);
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -1107,7 +1107,7 @@ begin
   else
     Result := -err;
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -1130,7 +1130,7 @@ begin
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
   Result := rc;
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   outAddr := 0;
   outPort := 0;
@@ -1155,7 +1155,7 @@ begin
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
   Result := rc;
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   outAddr := 0;
   outPort := 0;
@@ -1167,7 +1167,7 @@ function PalBackendGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; 
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_getsockopt(handle, level, optname, valPtr, lenPtr);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -1176,7 +1176,7 @@ function PalBackendIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Intege
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := lwip_ioctl(handle, LongWord(cmd), argp);
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
@@ -1198,7 +1198,7 @@ begin
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
   Result := rc;
 end;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
   outAddr := 0;
   outPort := 0;
@@ -1210,7 +1210,7 @@ function PalBackendMonotonicMillis: Int64;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   Result := esp_timer_get_time div 1000;
-{$else}
+{$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := 0;
 {$endif}
 end;
