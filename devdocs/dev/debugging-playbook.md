@@ -10203,6 +10203,21 @@ silently FIXES a demonstration of a hazard. The pattern is not "greps go stale";
 it is that **the record and the corpus are the same file**, and every honest
 write-up is also an edit to the instrument.
 
+**A FOURTH HOST FOR THE SAME FAMILY, 2026-09-21: A *"WHAT WOULD MOVE IT"* LINE
+WHOSE CONDITION IS MET IN THE COMMIT THAT WRITES IT.** `esp32-hardening-map.md`
+§2.2 says *"nobody has classified which of the 112 a real program actually
+reaches"* and *"WHAT WOULD MOVE IT: a census of which refusals are reachable
+from the demo set."* **That census is §3 of the same file, fifty lines below,
+added by the same commit.** Not decay over time — **it was never true for any
+reader but its writer**, exactly like a guard written from a report of the code
+and a summary derived from a superseded measurement. **Nothing announces it,
+because there is no interval in which re-reading would have helped.** A row that
+names its own retirement condition is the most trustworthy-looking place for
+this to hide: a reader who checks it is checking the right thing and still gets
+the wrong answer, because **nothing re-reads the row when the condition is
+met.** When you satisfy a "what would move it", move it in the same commit — the
+condition and the work are in your hands at the same moment exactly once.
+
 **The rule, and it is two sentences.** Searching hard-wrapped prose for a quoted
 sentence: **flatten the newlines first**, or search a distinctive fragment short
 enough to fit between two wraps — an absence from a wrapped file is not an
