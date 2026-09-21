@@ -1230,6 +1230,29 @@ begin
     begin
       ProcAddrFix[j].CodePos := DceNewOff(ProcAddrFix[i].CodePos);
       ProcAddrFix[j].ProcIdx := ProcAddrFix[i].ProcIdx;
+      { CARRY THE PARALLEL ARRAYS -- the GlobFix loop above says why, and this
+        loop is the third and fourth instance of the same omission rather than
+        a new one. ProcAddrPCRel/ProcAddrPicDelta are parallel to ProcAddrFix
+        BY INDEX (defs.inc), so compacting the record alone leaves site j
+        wearing the flags of whatever entry used to occupy index j.
+
+        What that cost, measured 2026-09-21: `--dce --emit-obj --target=i386`
+        on the two-object callback-table pair. i386 emits @proc as a
+        PC-relative R_386_PC32 against the .TEXT SECTION symbol, so the proc's
+        own offset lives in the IN-PLACE ADDEND, written here as
+        `BodyAddr + PicDelta`. With the wrong PicDelta the addend named a point
+        0x20D past the real body: `fp_t Handler = dbl;` initialised Handler to
+        mid-function, and the first call through it jumped one byte past a
+        `pop %ecx`, leaving ecx=0 and storing through a null base. The objects
+        LINKED CLEANLY and the program died before printing anything.
+
+        x86-64 could not see it: RELA names the proc's OWN symbol with addend
+        0, so the value is layout-independent and no in-place addend exists to
+        go stale. The exe path could not see it either -- it resolves from
+        BodyAddr at write time, which this pass does remap. Only the 32-bit
+        REL object path reads these two arrays. }
+      ProcAddrPCRel[j] := ProcAddrPCRel[i];
+      ProcAddrPicDelta[j] := ProcAddrPicDelta[i];
       Inc(j);
     end;
     Inc(i);
@@ -1244,6 +1267,21 @@ begin
     begin
       DynCallCodePos[j] := DceNewOff(DynCallCodePos[i]);
       DynCallExtIdx[j] := DynCallExtIdx[i];
+      { SAME OMISSION AS ProcAddrFix BELOW, found by grepping for the sibling
+        rather than by a failing test -- defs.inc states outright that
+        ProcAddrPCRel/PicDelta carry "the same meaning as
+        DynCallPCRel/DynCallPicDelta", and both loops dropped both arrays while
+        the Fixups and GlobFix loops beside them carry theirs.
+
+        NOT REPRODUCED: the @proc twin has a fixture and this one does not. It
+        is fixed here because the tables are parallel by index by construction
+        and the omission is the defect whether or not a program reaches it
+        today -- the reachable shape is a 32-bit REL object whose DCE pass drops
+        an entry BEFORE a surviving PC-relative extern call, which is the same
+        arrangement that made the @proc case fire. Left unasserted rather than
+        claimed as covered. }
+      DynCallPCRel[j] := DynCallPCRel[i];
+      DynCallPicDelta[j] := DynCallPicDelta[i];
       Inc(j);
     end;
     Inc(i);

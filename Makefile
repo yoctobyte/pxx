@@ -34476,6 +34476,11 @@ test-emit-obj: $(COMPILER)
 	  gcc -m32 -no-pie $(TESTTMP)/fnp_a386.o $(TESTTMP)/fnp_b386.o -o $(TESTTMP)/fnp_386 || { echo "test-emit-obj: the i386 callback-table link FAILED"; exit 1; }; \
 	  tools/expect_same.sh fnp_386 "$$($(TESTTMP)/fnp_386)" "$$($(TESTTMP)/fnp_gcc)" || exit 1; \
 	  echo "test-emit-obj: the i386 callback-table round trip matches too"; \
+	  ./$(COMPILER) --emit-obj --dce --target=i386 test/c_obj_fnptr_a.c $(TESTTMP)/fnp_a386d.o && ./$(COMPILER) --emit-obj --dce --target=i386 test/c_obj_fnptr_b.c $(TESTTMP)/fnp_b386d.o || { echo "test-emit-obj: the i386 --dce callback-table objects FAILED to build"; exit 1; }; \
+	  gcc -m32 -no-pie $(TESTTMP)/fnp_a386d.o $(TESTTMP)/fnp_b386d.o -o $(TESTTMP)/fnp_386d || { echo "test-emit-obj: the i386 --dce callback-table link FAILED"; exit 1; }; \
+	  tools/expect_same.sh fnp_386_dce "$$($(TESTTMP)/fnp_386d)" "$$($(TESTTMP)/fnp_gcc)" || exit 1; \
+	  if [ "$$(stat -c%s $(TESTTMP)/fnp_a386d.o)" -ge "$$(( $$(stat -c%s $(TESTTMP)/fnp_a386.o) / 2 ))" ]; then echo "test-emit-obj: fnp_386_dce — the --dce object is not materially smaller than the --no-dce one, so DCE removed nothing and this row passes while testing nothing. The bug it guards needs code to MOVE."; exit 1; fi; \
+	  echo "test-emit-obj: the i386 callback-table round trip survives --dce"; \
 	else echo "gcc -m32 not available; i386 callback-table check skipped"; fi
 	# 4b-quater. THE PASCAL HALF of the same data-symbol work. A global marked
 	#    `cvar` (or `public`) must be linkable BY NAME from a foreign C main.

@@ -3,12 +3,12 @@ slug: bug-a-dce-under-emit-obj-crashes-a-two-object-i386-link-before-main
 track: A
 prio: 55
 type: bug
-status: backlog
+status: done
 found: 2026-09-19
 found-by: frankS
 owner: ""
 blocked-by: []
-summary: "`--dce --emit-obj --target=i386` produces objects that LINK cleanly and then die before main: two i386 objects (test/c_obj_fnptr_a.c + _b.c, the callback-table pair) link with `gcc -m32 -no-pie` and the program exits rc=138 having printed nothing, where `--no-dce` prints `20 11`. x86-64 is correct both ways, so it is i386-specific and not the pass in general. Reachable TODAY with an explicit `--dce` -- this is not a regression, it is an existing shipping path nobody had run on i386. Found while measuring whether `--emit-obj` should enable the pass by default (bug-a-emit-obj-retains-pxxassert-...): the answer is NOT YET, and this is why. The single-object rows pass on i386, so only a TWO-OBJECT link exposes it."
+summary: "FIXED 2026-09-21 (frankb-8e): DceRun compacted ProcAddrFix and DynCall WITHOUT their parallel PCRel/PicDelta arrays, so after compaction site j wore the flags of whatever entry used to occupy index j -- the third and fourth instance of the omission the GlobFix loop beside them already carries a measured comment about. i386 emits @proc as R_386_PC32 against the .TEXT SECTION symbol, so the proc offset lives in the IN-PLACE ADDEND written as BodyAddr+PicDelta; with the wrong PicDelta the addend named a point 0x20D past the real body, `fp_t Handler = dbl;` initialised Handler to mid-function, and the first call through it landed one byte past a `pop %ecx`, leaving ecx=0 and storing through a null base. Verified at the mechanism, not the output: the in-place addend goes 0x474c -> 0x453f, resolving EXACTLY to dbl. x86-64 could never see it (RELA names the proc's own symbol with addend 0, so no in-place addend exists to go stale) and neither could the exe path (resolves from BodyAddr at write time, which this pass does remap) -- only the 32-bit REL object path reads those two arrays, which is why a shipping path nobody had run on i386 is exactly where it sat. DynCall fixed by grepping for the sibling, NOT reproduced, and said so at the site rather than claimed as covered. Guarded by a new fnp_386_dce row in test-emit-obj carrying a ROUTE assertion (the --dce object must be materially smaller, or DCE removed nothing and the row tests nothing). gate quick GREEN, self-host converged. ORIGINAL REPORT BELOW. `--dce --emit-obj --target=i386` produces objects that LINK cleanly and then die before main: two i386 objects (test/c_obj_fnptr_a.c + _b.c, the callback-table pair) link with `gcc -m32 -no-pie` and the program exits rc=138 having printed nothing, where `--no-dce` prints `20 11`. x86-64 is correct both ways, so it is i386-specific and not the pass in general. Reachable TODAY with an explicit `--dce` -- this is not a regression, it is an existing shipping path nobody had run on i386. Found while measuring whether `--emit-obj` should enable the pass by default (bug-a-emit-obj-retains-pxxassert-...): the answer is NOT YET, and this is why. The single-object rows pass on i386, so only a TWO-OBJECT link exposes it."
 ---
 
 # `--dce` under `--emit-obj` crashes a two-object i386 link before main
@@ -89,3 +89,6 @@ is not refuted by a new one.
 Population, so the next re-run has a denominator: two objects,
 `test/c_obj_fnptr_a.c` and `test/c_obj_fnptr_b.c`, linked with
 `gcc [-m32] -no-pie`, run 5 times each, on this box at HEAD.
+
+## Log
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
