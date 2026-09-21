@@ -2253,56 +2253,31 @@ begin
   Result.CurrHeapFree := NativeUInt(mapped - live);
 end;
 
-{$ifdef PXX_ESP}
-{ ESP lean dynamic array: unmanaged elements only (no per-element retain/release
-  -- strings/records/nested arrays are not on ESP yet). Block layout matches the
-  shared runtime: [refcount:word][length:word][data], handle = data pointer,
-  length read at [handle-8]. desc layout: +4 elSize. }
-procedure PXXDynArrayReleaseEsp(arrData: Pointer);
-var rcAddr, rc: Int64;
-begin
-  if arrData = nil then Exit;
-  rcAddr := PXXHdrRC(arrData);             { refcount — NOT the block base }
-  rc := PMachineWord(rcAddr)^ - 1;
-  PMachineWord(rcAddr)^ := rc;
-  if rc <= 0 then PXXFree(Pointer(PXXHdrBase(arrData)));
-end;
+{ THE ESP LEAN DYNAMIC-ARRAY ARM WAS DELETED HERE, 2026-09-21, AND IT WAS NEVER
+  BOUND. It declared a second PXXDynSetLen with the same signature as the shared
+  one below, so on any build with PXX_ESP defined two were visible at once and
+  the compiler's own `duplicate definition ... the later body wins` warning
+  fired. The later body is the shared one below, so ESP has been using the
+  shared implementation since June and this arm bound nothing.
 
-procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
-var
-  oldData, newBlock, newArrData: Pointer;
-  oldLen, elSize, copyLen, i: Int64;
-begin
-  if (arrSlot = nil) or (desc = nil) then Exit;
-  oldData := Pointer(PMachineWord(arrSlot)^);
-  elSize := PInt32(Int64(desc) + 4)^;
-  if newLen <= 0 then
-  begin
-    PMachineWord(arrSlot)^ := 0;
-    PXXDynArrayReleaseEsp(oldData);
-    Exit;
-  end;
-  newBlock := PXXAlloc(PXX_HDR_SIZE + newLen * elSize, 8);
-  PXXHdrInit(Int64(newBlock));
-  PMachineWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;      { refcount }
-  PMachineWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;          { length }
-  newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
-  { Same two calls as the hosted PXXDynSetLen below, for the same reason. Both
-    helpers are forward-declared at the top of this unit, so the ESP arm is not
-    obliged to hand-roll what the hosted one calls.
-    feature-opt-bulk-copy-is-byte-at-a-time }
-  PXXMemZero(newArrData, newLen * elSize);
-  if oldData <> nil then
-  begin
-    oldLen := PMachineWord(Int64(oldData) - 8)^;
-    copyLen := oldLen;
-    if newLen < copyLen then copyLen := newLen;
-    PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
-  end;
-  PMachineWord(arrSlot)^ := Int64(newArrData);
-  PXXDynArrayReleaseEsp(oldData);
-end;
-{$endif}
+  IT WAS NOT FREE, AND THE COST WAS NOT THE AMBIGUITY. A losing duplicate is
+  still EMITTED but never REGISTERED as a proc body, so DceOwnerOf answers < 0
+  for every call site inside it and the DCE pass classifies those calls as
+  `called from unowned code` -- a root. DCE drops only REGISTERED bodies, so the
+  orphan could never be dropped AND it rooted everything it called, which was
+  the whole allocator core via PXXDynArrayReleaseEsp. Measured on an empty bare
+  program at pin v414: code 11348 -> 848 B on xtensa and 14044 -> 336 B on
+  riscv32, live bodies 12 (8872 B) -> 2 (150 B).
+
+  SRAM IS UNCHANGED -- data+bss is 67464 B either way, on both chips. The win is
+  flash, not memory, and that is the lesser resource here; the SRAM floor is
+  HEAP_ARENA and is filed separately.
+
+  Deleting rather than guarding, because the shared body is a strict superset:
+  for unmanaged elements its baseKind falls through to baseRecDesc := nil and
+  the retain/release become no-ops, so it does what this arm did, plus the
+  managed elements this arm's own comment said ESP could not do.
+  bug-s-three-different-pxxdynsetlen-bodies-are-visible-at-once-on-every-esp-isa }
 
 { Managed-string constructor: allocate a [refcount:8][length:8][data][nul]
   block and copy len bytes from src. Returns the data pointer (base+PXX_HDR_SIZE) or
@@ -5234,7 +5209,8 @@ end;
   retains the copied managed elements, publishes the new handle, and releases
   the old one. newLen <= 0 publishes nil. Target-independent — replaces the
   per-arch inline SetLength so i386/ARM32/AArch64 share one implementation.
-  ESP uses the lean unmanaged-element PXXDynSetLen above instead. }
+  ESP uses this body too -- the lean ESP arm that used to sit above was never
+  bound and was deleted 2026-09-21; see the note there. }
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
 var
   oldData, newBlock, newArrData: Pointer;
