@@ -3909,8 +3909,40 @@ begin
     idempotent and every driver reaches it anyway (EmitProgramRuntimeStubsForTarget
     calls it unconditionally, before its NoSignals exit); calling it here only
     fixes the ORDER, so the bounds are allocated before this stub reads them
-    rather than after. }
+    rather than after.
+
+    AND THE THING THE NAME PROMISED MOVED OUT FROM UNDER IT. Until 2026-09-18
+    EnsureSignalBss allocated BSS_SIG_ALTSTK/_ALTSS too, so the call above really
+    did guarantee the bounds. `16ebf18ce` split them into EnsureSignalAltStack to
+    stop reserving 32 KB in images that can never install a handler -- a correct
+    fix -- and this call site kept its spelling and its comment while silently
+    losing its guarantee. BSS_SIG_ALTSTK was then 0 here, the `<> 0` guard below
+    was false, the async refusal WAS NEVER EMITTED, and a signal handler went
+    back to being granted the lock on a bare tid match: exactly the defect the
+    sigaltstack test had closed two days earlier, restored without touching a
+    line of this function. Measured 2026-09-21 in the emitted bytes -- the grant
+    path read `cmp [owner],rsi / jne .acquire / jmp .bump` with no bounds test
+    between them -- and in an interleaved A/B, 8 of 8 hangs at HEAD against 8 of
+    8 correct diagnoses under -dPXX_NO_REENTRANT_HEAPLOCK.
+
+    THE PREDICATE IS COPIED FROM EmitSignalRuntimeForTarget AND MUST STAY EQUAL
+    TO IT. That is what makes this free: a program satisfying it gets the alt
+    stack from there anyway, so this only moves the allocation EARLIER, ahead of
+    the prologue that reads it. Nothing satisfying it pays a byte more, and a
+    --no-signals or signal-less target still reserves nothing. }
   EnsureSignalBss;
+  if (not NoSignals) and TargetHasSignalRuntime then EnsureSignalAltStack;
+
+  { A GUARD, BECAUSE THE ONLY SYMPTOM OF GETTING THIS WRONG IS SILENCE. The miss
+    above cost nothing at build time, emitted a working program, passed the
+    self-host fixedpoint, and showed up only as a threading test that hung
+    intermittently three days later. A build-time refusal is the one instrument
+    that fails loudly. Positive control: delete the EnsureSignalAltStack call
+    above and this fires (verified 2026-09-21). }
+  if (BSS_SIG_ALTSTK = 0) and (not NoSignals) and TargetHasSignalRuntime then
+    Error('compiler error: the reentrant heap lock needs BSS_SIG_ALTSTK to tell an ' +
+          'async re-entry from a sync one, and it is unallocated at prologue time -- ' +
+          'whatever allocates the alt stack must run before EmitHeapLockStubs');
 
   HeapLockAddr := CodeLen;
   EmitAsmX64(['push rax', 'push rcx', 'push rsi', 'push r11']);
