@@ -830,3 +830,124 @@ attribution is unproven and 27% is the number to plan against.
 **The remedy is a hash index on the class table, keyed by lowercased name.** Not
 built yet. `ULower` also allocates once per call, 3.86M times, which the index
 would remove for free.
+
+## Built and measured — 38.7%, and it is LEKKERZEILEN'S number
+
+Pin v414 binary (`aeadb1754b80b622`) against the index build
+(`94fddf62ee6af731`, = `d5de02143`, since pinned as **v415**). Five interleaved
+rounds, one source, loadavg recorded per row, `--where [RTL]` precondition
+asserted on both arms, `procs=11594` identical every round.
+
+    pin  min 88.789  median 90.475
+    idx  min 54.410  median 54.549
+    MIN-OF-5   38.72% reduction, 1.632x
+    paired/round  38.44  41.39  38.56  38.09  39.43
+
+**Quote the min-of-5. The medians are higher and under-quoting is the safer
+error.** Correctness: the two arms' outputs are byte-identical (12,803,076 B),
+and 7a reproduced that independently from a different harness (v414 and v415
+both emit `0ceb734aa53da5c9`, three rounds), with a wall clock of 53.46s
+min-of-3 against this harness's 54.410s — 1.8% apart on instruments that fail
+differently.
+
+### IT DOES NOT GENERALISE, AND THE OBVIOUS REASON IS WRONG
+
+frankh-c0's cross-corpus, same two arms, min-of-5: **uforth +0.0%,
+key_analysis +0.0%, render_backend −1.2%.** So **38.7% is lekkerzeilen's
+figure, not pxx's**, and it must travel with that qualifier.
+
+**Carry "no, and the closure story does not explain why" — never "no, because
+those have small closures."** uforth has the SMALLEST class count in the set
+(126 against 411) and a third of lekkerzeilen's calls, and gains nothing, while
+render_backend has 240 and also gains nothing. Neither factor alone predicts the
+outcome. c0 also kept a 3-rep pass reporting −3.0% on key_analysis in the
+write-up rather than dropping it: three reps on a loaded box cannot separate 3%
+from nothing, which is why five is the floor here.
+
+### `scanned>=` IS A LOWER BOUND, AND THE CORRECTION MAKES THE NULL HARDER
+
+`PxxFUCIters` adds `UClsCount` once per call. `FindUClassImpl` runs up to THREE
+full scans — scan 1 (routine-local types) ranks by `ScopeHopsToProc` and has
+**no early exit**, so it runs to completion on every call. Measured with a true
+per-step counter (`PxxFUCReal`, `24bdec967`):
+
+    UCLS calls=3860000 UClsCount=411 scanned>=1449667904 realsteps=4305236025
+
+**2.97x.** So the "1.45 B" figure is really **4.31 billion** steps. The
+cross-corpus write-up recorded it as an upper bound; the wording that misled it
+was this lane's own comment (*"one full scan; there are several"*), which meant
+undercounts and reads as the opposite. The correction raises the predicted
+saving for the programs that gained nothing — **it argues against this lane's
+position, not for it.**
+
+### THE ATTRIBUTION HELD, AND THE 48.5% BOUND CLOSED
+
+Branch (b) — *"maybe the 38.7% is not mostly FindUClass"* — was the comfortable
+way for both results to be right. It is dead. PC profile, clean
+`-dPXX_UCLSIDX_OFF` build with its own map, 180 samples, threshold
+**pre-registered at >=35% before looking**:
+
+    FindUClassImpl 31.1%   UNameMatch 10.6%   UsesRankOf 6.1%   = 47.8%
+
+**The 48.5% written above as UNPROVEN is now pinned by two independent things**
+— the intervention (38.7% removed) and this profile (47.8% resident) — which
+had no obligation to agree. Where a flat profile cannot attribute callers, **a
+change that removes the call site attributes them for you.**
+
+### WHAT IS STILL OPEN, STATED AS A CONTRADICTION AND NOT SMOOTHED
+
+47.8% of 88.789s = 42.4s over 4.305e9 steps = **9.9 ns/step** (independent of,
+and consistent with, the 7.99 ns/step derived from the saving). Apply that to
+uforth's ~456M true steps and it predicts **3.65s of 10.41s, 35%**. c0 measured
+**+0.0%**, with the arms verified distinct and the index confirmed ON by
+default (it ships as the default arm; `-dPXX_UCLSIDX_OFF` is opt-out).
+
+**A 35x miss. Same loop, same binary, two orders of magnitude apart in cost per
+step.** Two untested candidates, neither promoted:
+
+- **working set** — 411 classes re-walked 3.86M times (~6.6 KB across
+  `UClsUnitIdx`/`UClsOwnerProc`/`UClsNOff`/`UClsNLen`) against 126 (~2 KB);
+- **pool size** — `UNameMatch` indexes `TokChars`, so if cost is memory rather
+  than instructions, pool size is a term. 7a measured lekkerzeilen's on-disk
+  closure at 6.02 MiB, of which **89 C headers are 36% and the demo's own
+  Python only 15%** — so most of the volume is not the demo's code, and "big
+  program" and "big pool" are different claims.
+
+`pool=`/`toks=` ship beside the counters (`8799feb3c`) so both numbers come off
+one run. **The deciding measurement is `realsteps` plus a PC profile on a
+program that gained nothing**, and c0 holds those programs.
+
+### TWO HARNESS FAULTS FROM THIS SESSION, BOTH MINE, POINTING OPPOSITE WAYS
+
+- **False WIN, 50.7%.** To keep ONE body for the crosscheck oracle,
+  `FindUClassImpl(name, useIdx)` made the no-index arm pay a branch on 1.45e9
+  iterations plus a hash per call that the real pre-change compiler never paid.
+  **The design choice that made the crosscheck trustworthy is the same one that
+  corrupted the timing.** Caught by the pre-registered 27% ceiling.
+- **False RED.** The ranking-fixture harness branched on the build's rc for the
+  per-arm rows and **not for the verdict**, so a `-Fu test` typo (the option is
+  `-Fu<dir>`, no space) meant nothing was built and it reported *"idx does NOT
+  match the oracle"*. Believed, it would have blocked the pin on a regression
+  that does not exist.
+
+**The asymmetry is the lesson.** The false win had a pre-registered guard. The
+false red had none, and survived only because a fixture expected to pass
+reporting failure was surprising enough to re-check. **Had it reported PASS
+incorrectly it would have shipped.** A guard only fires in the direction you
+thought to arm it — so pre-register the expected range for BOTH directions.
+
+### THE SAFETY ARGUMENT RESTS ON THE FIXTURE, NOT ON THE CROSSCHECK
+
+`-dPXX_UCLSIDX_CROSSCHECK` reports **0 disagreements over 3.86M calls** and that
+is decoration: descending bucket order can only change an answer where two rows
+share a NAME, so the deduplicated discriminating population is **one**
+(`Exception`, idx=120 vs scan=36, which the `-dPXX_UCLSIDX_BREAK` control did
+catch). **3.86M is the call count, not the test count; the test count is 1.**
+
+What the pin actually rests on is Track P's
+`test_an_alias_in_a_used_unit_ranks_with_the_class_rows.pas` — predating this
+change and written for a real bug, so it cannot have been shaped by what was
+built: five units declaring `TShared`, four rows with **three distinct class
+names**, two controls a naive prefer-the-alias fix would fail, fpc 3.2.2 oracle,
+passing on both arms. It also enters through the **Pascal** frontend where the
+crosscheck ran **NilPy** — two front doors into one table, not an echo.
