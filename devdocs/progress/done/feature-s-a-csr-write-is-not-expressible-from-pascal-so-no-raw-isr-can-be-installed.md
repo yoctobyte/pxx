@@ -186,4 +186,4 @@ Neither is optional and neither is visible from the CSR encoding itself.
 - `devdocs/dev/esp32-hardening-map.md` §1.1.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 37904fdaa.
