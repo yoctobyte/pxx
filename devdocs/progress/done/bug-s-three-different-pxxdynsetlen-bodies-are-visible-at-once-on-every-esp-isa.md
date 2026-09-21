@@ -2,12 +2,12 @@
 prio: 75
 track: S
 type: bug
-status: backlog
+status: done
 found: 2026-09-21
 found-by: frankB
 owner: ""
 blocked-by: []
-summary: "NOT LATENT AFTER ALL -- MEASURED 2026-09-21, THIS COLLISION IS 92% OF AN EMPTY BARE ESP IMAGE. builtinheap.pas defines PXXDynSetLen with the same signature three times (:533, :2271, :5238); on the ESP-class ISAs two are visible at once and the compiler warns that the later body wins. THE MECHANISM IS THE ORPHAN, NOT THE BINDING: the LOSING body is still emitted into the image but is not registered as a proc body, so DceOwnerOf answers <0 for every call site inside it and the pass classifies them as `called from unowned code` -- which means (a) those bytes can never be dropped, DCE only drops registered bodies, and (b) every callee they name is ROOTED unconditionally. One orphan pins the entire allocator core. Proven by renaming ONE definition in an isolated compiler+builtin sandbox (repo untouched): empty program bare xtensa 11348 B -> 864 B, live bodies 12 (8872 B) -> 2 (150 B), and PXXAlloc/PXXBlockCopy/PXXFree/PXXMemZero/HeapMmap/PXXHeapExhausted/PXXDynArrayReleaseEsp/PXXHdrRC/PXXHdrBase/PXXHdrInit all correctly dropped. Real fixtures: test_esp_bare xtensa 13788->4968 and riscv32 16988->5380; test_esp_exception xtensa 28928->20108 and riscv32 37028->25420; a SetLength program xtensa 34724->32576, riscv32 44020->41172. Behaviour identical -- both arms boot under Espressif qemu on esp32s3 AND esp32c3 and print the same answer. THIS ALSO RECONCILES THE IMAGE-SIZE PAIR IN THE LOGBOOK: the Makefile records 4836 B for test_esp_bare on 2026-09-19 and the de-duplicated build measures 4968 B today, so the ~2.85x growth was this, not RTL drift. NOT FIXED HERE ON PURPOSE: the rename is a DIAGNOSTIC. Which of the three bodies ESP should bind is a semantic question about builtinheap -- note that today ESP binds the NON-ESP body and the ESP-specific path through PXXDynArrayReleaseEsp is dead code, which may itself be wrong. THE CLASS IS BIGGER THAN THIS ROUTINE: any duplicate same-signature builtin definition creates an undroppable orphan that roots its callees, so the general remedy is to make the compiler REFUSE the duplicate rather than warn."
+summary: "FIXED 2c59f8326 -- the ESP lean arm is deleted; it was never bound and the shared body is a strict superset. THE RESULT THAT DECIDES ITS VALUE IS THE NULL ONE: SRAM (data+bss) is UNCHANGED, 67464 B either way on both chips at pin v414, so this is a FLASH win and must not travel as an ESP memory win -- the owner ruled 2026-09-20 that SRAM is the constrained resource and flash is not. Image: empty bare program 11348 -> 848 B xtensa, 14044 -> 336 B riscv32. ORIGINAL NOT LATENT AFTER ALL -- MEASURED 2026-09-21, THIS COLLISION IS 92% OF AN EMPTY BARE ESP IMAGE. builtinheap.pas defines PXXDynSetLen with the same signature three times (:533, :2271, :5238); on the ESP-class ISAs two are visible at once and the compiler warns that the later body wins. THE MECHANISM IS THE ORPHAN, NOT THE BINDING: the LOSING body is still emitted into the image but is not registered as a proc body, so DceOwnerOf answers <0 for every call site inside it and the pass classifies them as `called from unowned code` -- which means (a) those bytes can never be dropped, DCE only drops registered bodies, and (b) every callee they name is ROOTED unconditionally. One orphan pins the entire allocator core. Proven by renaming ONE definition in an isolated compiler+builtin sandbox (repo untouched): empty program bare xtensa 11348 B -> 864 B, live bodies 12 (8872 B) -> 2 (150 B), and PXXAlloc/PXXBlockCopy/PXXFree/PXXMemZero/HeapMmap/PXXHeapExhausted/PXXDynArrayReleaseEsp/PXXHdrRC/PXXHdrBase/PXXHdrInit all correctly dropped. Real fixtures: test_esp_bare xtensa 13788->4968 and riscv32 16988->5380; test_esp_exception xtensa 28928->20108 and riscv32 37028->25420; a SetLength program xtensa 34724->32576, riscv32 44020->41172. Behaviour identical -- both arms boot under Espressif qemu on esp32s3 AND esp32c3 and print the same answer. THIS ALSO RECONCILES THE IMAGE-SIZE PAIR IN THE LOGBOOK: the Makefile records 4836 B for test_esp_bare on 2026-09-19 and the de-duplicated build measures 4968 B today, so the ~2.85x growth was this, not RTL drift. NOT FIXED HERE ON PURPOSE: the rename is a DIAGNOSTIC. Which of the three bodies ESP should bind is a semantic question about builtinheap -- note that today ESP binds the NON-ESP body and the ESP-specific path through PXXDynArrayReleaseEsp is dead code, which may itself be wrong. THE CLASS IS BIGGER THAN THIS ROUTINE: any duplicate same-signature builtin definition creates an undroppable orphan that roots its callees, so the general remedy is to make the compiler REFUSE the duplicate rather than warn."
 ---
 
 # Three different `PXXDynSetLen` bodies are visible at once on every ESP ISA
@@ -214,3 +214,38 @@ Any duplicate same-signature definition in a builtin produces an undroppable
 orphan that roots its callees. The general remedy is to make the compiler
 **refuse** it instead of warning — a warning nobody reads has been costing 10 KB
 per ESP image since June.
+
+## 2026-09-21 — FIXED (`2c59f8326`), and the deciding column is the null one
+
+Deleted rather than guarded: the shared body is a strict superset (unmanaged
+elements fall through to `baseRecDesc := nil` and the retain/release become
+no-ops), and the stale comment claiming ESP used the lean arm is corrected in
+the same commit.
+
+**Condition on every number below: pin v414, binary `aeadb1754b80`, pinned
+source `b109703344ea`, `--esp-profile=bare`, empty program.**
+
+| target | code as-pinned | code fixed | data+bss as-pinned | data+bss fixed |
+| --- | --- | --- | --- | --- |
+| xtensa | 11348 B | **848 B** | 67464 B | **67464 B** |
+| riscv32 | 14044 B | **336 B** | 67464 B | **67464 B** |
+
+**SRAM delta: zero.** The orphan lived entirely in flash. Per the owner's
+2026-09-20 ruling this is therefore the lesser axis, and the finding is smaller
+than the image numbers imply.
+
+**What this column does NOT show, which is the point:** every per-feature SRAM
+delta on an ESP image is measured with `HEAP_ARENA` present — 65,536 B reserved
+unconditionally, 97.1% of an empty program's SRAM. A table of small SRAM deltas
+is small for a reason that has nothing to do with the features being measured.
+That is the blocker-in-reverse for the arena ticket, which is now unblocked.
+
+Verified: fixedpoint converged (binary byte-identical to the pin — `builtinheap`
+compiles into user programs, not the compiler); duplicate warning 0 on both ESP
+ISAs with and without the bare profile; hosted output identical;
+i386/arm32/aarch64/wasm32/riscv32 still compile; and 6/6 qemu boots on **both**
+esp32s3 and esp32c3 (`test_esp_bare`, `test_esp_exception`, a `SetLength`
+program) match their x86-64 oracles.
+
+## Log
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

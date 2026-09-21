@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:19 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:189 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3895 rejected:85`
+`working:31 unfinished:19 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:189 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3896 rejected:85`
 
 ## Held now (working/ — do not touch these files)
 
@@ -97,7 +97,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
-- `[p 75] [S]` bug-s-three-different-pxxdynsetlen-bodies-are-visible-at-once-on-every-esp-isa (unblocks 1)
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation
@@ -107,5 +106,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 70] [A]` bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce (unblocks 2)
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 2)
+- `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 
 _537 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
