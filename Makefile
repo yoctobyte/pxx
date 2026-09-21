@@ -35637,6 +35637,19 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_csr.pas > $(TESTTMP)/test_esp_bare_csr.c3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_csr.oracle $(TESTTMP)/test_esp_bare_csr.c3; then echo "esp32c3 CSR + raw trap vector ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32c3 CSR/trap MISMATCH"; exit 1; fi; fi
+	# feature-s-the-xtensa-raw-isr-install-...: wsr/rsr with a NUMERIC special
+	# register, the xtensa sibling of the riscv32 csrw work. Round-trips
+	# EXCSAVE_1 ($D1), which is architecturally scratch so clobbering it on bare
+	# disturbs nothing. Deliberately does NOT write VECBASE: on xtensa that
+	# points at a vector TABLE with fixed per-vector offsets, not at a handler,
+	# so writing it with no table behind it aims the core at whatever is there.
+	# esp32s3 only -- riscv32 has no wsr.
+	@./$(COMPILER) test/test_esp_bare_sr.pas $(TESTTMP)/test_esp_bare_sr_oracle >/dev/null && $(TESTTMP)/test_esp_bare_sr_oracle > $(TESTTMP)/test_esp_bare_sr.oracle
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 SR run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_sr.pas > $(TESTTMP)/test_esp_bare_sr.s3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_sr.oracle $(TESTTMP)/test_esp_bare_sr.s3; then echo "esp32s3 wsr/rsr numeric special register ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 SR MISMATCH"; exit 1; fi; fi
 	# The other half: a real `interrupt;` handler, installed and entered by
 	# hardware, running on the dedicated ISR stack (defs.inc's
 	# ESP_BARE_ISR_STACK_*). It asserts the handler's sp is ABOVE the

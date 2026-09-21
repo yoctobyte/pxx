@@ -6,6 +6,19 @@ const
   reg_xtensa_a2 = 2; reg_xtensa_a3 = 3; reg_xtensa_a4 = 4; reg_xtensa_a5 = 5; reg_xtensa_a6 = 6; reg_xtensa_a7 = 7;
   reg_xtensa_a8 = 8; reg_xtensa_a9 = 9; reg_xtensa_a10 = 10; reg_xtensa_a11 = 11; reg_xtensa_a12 = 12; reg_xtensa_a13 = 13; reg_xtensa_a14 = 14; reg_xtensa_a15 = 15;
 
+  { Special registers this compiler names. Only the ones it emits itself are
+    here; the inline assembler takes any 8-bit number, which is the capability
+    -- a name table must never be the only way to reach an SR, and on this
+    target it could not be one anyway (an identifier in an asm operand is
+    symbol-resolved by asmenc.inc before the xtensa assembler sees the line,
+    so `wsr vecbase, a4` fails upstream with "unknown symbol: vecbase"). }
+  SR_SCOMPARE1 = 12;    { the S32C1I comparand }
+  SR_ATOMCTL   = 99;    { what S32C1I does per memory class }
+  SR_EXCSAVE_1 = $D1;   { 209 — level-1 scratch; $D1..$D7 is the whole file }
+  SR_VECBASE   = $E7;   { 231 — base of the VECTOR TABLE, not of a handler }
+  SR_CPENABLE  = $E0;   { 224 }
+  SR_PRID      = $EB;   { 235 }
+
 procedure XtensaRelCheck(v, lo, hi: Integer; const what: AnsiString);
 { THE range check every PC-relative xtensa field was missing. Each encoder below
   ends in `and $3FFFF` / `and $FF`, and a mask is not a check: an offset past the
@@ -134,18 +147,45 @@ begin
   EmitB((offset div 4) and $FF);
 end;
 
+{ The general special-register forms, added 2026-09-21 for the raw-ISR work
+  (feature-s-the-xtensa-raw-isr-install-has-no-vecbase-write-and-no-isr-stack).
+  Until these existed every SR this compiler could touch had its number frozen
+  into a hand-written helper, so VECBASE ($E7) and the EXCSAVE_n scratch file
+  ($D1..$D7) were unreachable from any source spelling.
+
+  The layout is uniform across every RSR/WSR in the ISA and all four helpers
+  below now DERIVE from it rather than restating it -- the same reason the
+  riscv32 side stopped spelling $300 into two instruction words:
+
+      byte0 = at shl 4      the AR register
+      byte1 = sr            the special register number, 8 bits
+      byte2 = $13 WSR / $03 RSR
+
+  Byte patterns verified against xtensa-esp32s3-elf-as via the four call sites
+  that already had them: wsr.scompare1 a3 (SR 12), wsr.atomctl a3 (SR 99),
+  wsr.cpenable (SR 224), rsr.prid (SR 235). }
+procedure xtensa_wsr(sr, at: Integer);
+begin
+  EmitB((at and $F) shl 4);
+  EmitB(sr and $FF);
+  EmitB($13);
+end;
+
+procedure xtensa_rsr(sr, at: Integer);
+begin
+  EmitB((at and $F) shl 4);
+  EmitB(sr and $FF);
+  EmitB($03);
+end;
+
 procedure xtensa_wsr_scompare1(t: Integer);
 begin
-  EmitB(t shl 4);
-  EmitB(12);        { SCOMPARE1 is special register 12 }
-  EmitB($13);       { WSR }
+  xtensa_wsr(SR_SCOMPARE1, t);
 end;
 
 procedure xtensa_rsr_scompare1(t: Integer);
 begin
-  EmitB(t shl 4);
-  EmitB(12);
-  EmitB($03);       { RSR }
+  xtensa_rsr(SR_SCOMPARE1, t);
 end;
 
 { ATOMCTL (special register 99) selects what S32C1I DOES per memory class:
@@ -156,9 +196,7 @@ end;
   Bytes verified against xtensa-esp32s3-elf-as: `wsr.atomctl a3` = 30 63 13. }
 procedure xtensa_wsr_atomctl(t: Integer);
 begin
-  EmitB(t shl 4);
-  EmitB(99);
-  EmitB($13);       { WSR }
+  xtensa_wsr(SR_ATOMCTL, t);
 end;
 
 procedure xtensa_memw;
@@ -324,16 +362,12 @@ end;
 
 procedure xtensa_wsr_cpenable(ar: Integer);    { wsr.cpenable ar  (SR 224) }
 begin
-  EmitB((ar shl 4) or 0);
-  EmitB($E0);
-  EmitB($13);
+  xtensa_wsr(SR_CPENABLE, ar);
 end;
 
 procedure xtensa_rsr_prid(ar: Integer);        { rsr.prid ar  (SR 235) }
 begin
-  EmitB((ar shl 4) or 0);
-  EmitB($EB);
-  EmitB($03);
+  xtensa_rsr(SR_PRID, ar);
 end;
 
 procedure xtensa_rsync;                          { rsync }

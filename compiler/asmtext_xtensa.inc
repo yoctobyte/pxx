@@ -81,6 +81,18 @@ end;
 
 { Map a branch mnemonic to its EncodeXtensaBranch r-code (beq=1 bne=9 blt=2
   bltu=3 bge=10 bgeu=11). Result=False for a non-branch. }
+procedure AsmXtensaCheckSr(val: Int64);
+{ An SR number is UNSIGNED 8-bit. Checked rather than masked for the reason
+  XtensaRelCheck exists at length in xtensaenc.inc: xtensa_wsr ends in
+  `and $FF`, and a mask is not a check -- an out-of-range number does not
+  fail, it addresses a DIFFERENT special register in a perfectly well-formed
+  instruction. VECBASE is $E7 and EXCSAVE_1 is $D1, so the interesting range
+  is the top of the byte and an off-by-256 would land silently. }
+begin
+  if (val < 0) or (val > 255) then
+    Error('EmitAsmXtensa: special-register number out of 8-bit unsigned range (0..255)');
+end;
+
 function AsmXtensaBranchCode(const m: AnsiString; var r: Integer): Boolean;
 begin
   Result := True;
@@ -208,6 +220,28 @@ begin
     bug-cfront-no-entry-stub-for-xtensa }
   else if CaseEqual(mnem, 'sra') then begin r1 := AsmXtensaRegOp(op1); xtensa_sra(r0, r1); end
   else if CaseEqual(mnem, 'mov') then begin r1 := AsmXtensaRegOp(op1); xtensa_mov(r0, r1); end
+  { Special registers. OPERAND ORDER IS REGISTER FIRST -- `wsr a4, $e7`, not
+    `wsr $e7, a4` -- which is GNU's order and was verified against
+    xtensa-esp32s3-elf-as rather than assumed: it ACCEPTS `wsr a4, 231` and
+    REJECTS `wsr 231, a4`. That is why these sit in the ordinary chain and
+    needed no reordering around the r0 parse above, unlike the riscv32 `csrw`
+    sibling whose CSR genuinely is the first operand.
+
+    NUMERIC ONLY, for the reason the SR constants in xtensaenc.inc give: an
+    identifier in an inline-asm operand is symbol-resolved by asmenc.inc before
+    this file sees the line, so `wsr a4, vecbase` fails upstream with
+    "unknown symbol: vecbase" and a name table here could never fire. Write
+    `wsr a4, $e7`; Pascal `$` hex reaches the integer parser intact.
+
+    THE DOTTED FORM (`wsr.vecbase a4`) IS NOT SUPPORTED AND IS A DIFFERENT
+    PROBLEM: the mnemonic splitter takes the whole dotted word as the mnemonic,
+    so it fails earlier with "unexpected token in instruction: wsr". Left
+    alone deliberately -- adding it would mean a name table, which is the thing
+    that cannot work here. }
+  else if CaseEqual(mnem, 'wsr') then
+    begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); AsmXtensaCheckSr(imm); xtensa_wsr(imm, r0); end
+  else if CaseEqual(mnem, 'rsr') then
+    begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); AsmXtensaCheckSr(imm); xtensa_rsr(imm, r0); end
   else if CaseEqual(mnem, 'movi') then begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); xtensa_movi(r0, imm); end
   else if CaseEqual(mnem, 'addi') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_addi(r0, r1, imm); end
   else if AsmXtensaIsLoadStore(mnem) then
