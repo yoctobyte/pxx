@@ -12773,6 +12773,31 @@ attribution TO A PEER gets the least scrutiny of any causal claim in the room**,
 because it reads as generosity rather than as a claim. It was produced in the
 message praising the lesson about fabricated causes.
 
+**AND THE TALLY IS TWO, NOT FOUR — `franks-5b`'s own correction, offered
+*because* it reduces its worst count and therefore wanted checking rather than
+accepting.** Four corrections that night, two kinds, and the kinds are the whole
+subject:
+
+| | |
+| --- | --- |
+| **fabricated cause** | the `verified` mechanism — a real observation with an invented *because*, reported to the seat holding the pin |
+| **fabricated cause** | the motive — crediting a remedy for a check already under way |
+| unverified quantity | 16+16 taken from a scratch copy rather than the committed file |
+| unverified quantity | "two guards", with a line citation, in its own note |
+
+**An unverified quantity is checkable by anyone who re-runs it and announces
+itself the moment someone does. A fabricated cause is not falsifiable from the
+number it sits under** — which is why **both** of the fabricated ones travelled,
+one into a pin routine and one into this entry, and neither unverified quantity
+did. Rolling them into a tally of four loses exactly the distinction worth
+recording. **Two is the number, and it is the worse two.**
+
+**THE ROUTING IS THE MECHANISM, AND IT IS SHARPER THAN "NOBODY INTERROGATES A
+COMPLIMENT": a generous fabrication SELECTS ITS OWN WORST REVIEWER.** It is
+delivered specifically to the person least able to audit it, *because* they are
+the beneficiary. In this instance the recipient was simultaneously the only
+party holding the disproving timestamp — and banked it without looking.
+
 **5b's extension is the part that outlives the incident, and it widens this
 rule past where its author scoped it.** A motive is unfalsifiable *prospectively*
 and **not retrospectively, when it was stated at the time**: a contemporaneous
