@@ -3,7 +3,7 @@ summary: "songformatter as a pxx compile target (nilpy) — GUI editor + live pr
 type: feature
 track: E
 prio: 68
-blocked-by: [bug-nilpy-render-backend-py-compile-does-not-terminate]
+blocked-by: []
 ---
 
 # songformatter as a pxx compile target (GUI editor + live preview)
@@ -710,3 +710,38 @@ new failure; the key_analysis wall is closed as
 Warnings seen on the way (both modules, not blocking, not investigated here):
 C-vs-Pascal declaration disagreements for `floor`, `ceil` and `pow` on result
 or parameter types, resolved by binding to the C declaration.
+
+## 2026-09-21 (frankz-e5, coordinator): UNBLOCKED — the edge is cleared, and this is the SECOND time
+
+**`blocked-by` emptied.** It listed
+`bug-nilpy-render-backend-py-compile-does-not-terminate`, closed today by
+`frankh-c0` at `45b413bab` (in `done/`, verified as an ancestor of
+origin/master): `render_backend.py` went from a `timeout 1500` expiring to
+**8.7 s**, byte-identical artefacts under pin v414 and HEAD.
+
+**AND THE OTHER RECORDED WALL IS ALSO CLOSED, which nobody had connected.** The
+2026-08-30 status records `convertrawtext.py` and `SongFormatter.py` both
+stopping at `render_backend.py:114` on `w, h = img.getSize()`. That is
+`bug-b-imagereader-getsize-returns-a-string-where-reportlab-returns-a-pair`,
+**`status: done`**, whose own summary says *"Blocks convertrawtext.py and
+SongFormatter.py."* So **both walls this ticket has ever recorded are now
+down.**
+
+**⚠ THIS TICKET HAS HAD A STALE `blocked-by` CORRECTED BEFORE** — see the
+2026-08-30 status, which cleared three edges at once (`feature-lib-pxxpdf-
+reportlab-compat`, `feature-nilpy-re-module`, `feature-nilpy-tkinter-facade`,
+all `done/`) and noted the ticket *"read as blocked while nothing blocked it"*.
+**Twice in three weeks is not carelessness, it is structural:** an integration
+ticket's blockers are closed by seats in other lanes who have never read it, so
+its edges go stale **by construction**, and the ticket is invisible to the
+ranker for exactly as long as nobody looks. A p68 — the highest open number in
+`backlog-libs` — spent today unrankable.
+
+**What would prevent a third time is a check, not vigilance:** every
+`blocked-by` entry resolving to a ticket in `done/` is mechanically detectable,
+and nothing detects it.
+
+**NOT a claim that it builds.** Both recorded walls being down is not a
+measurement. The honest next step is **one build, reported as whatever
+happens** — the two prior verdicts on this app were both wrong, in opposite
+directions, within two days.
