@@ -1,5 +1,5 @@
 ---
-prio: 50
+prio: 75
 track: S
 type: bug
 status: backlog
@@ -7,7 +7,7 @@ found: 2026-09-21
 found-by: frankB
 owner: ""
 blocked-by: []
-summary: "compiler/builtin/builtinheap.pas defines PXXDynSetLen with the SAME signature three times (:533, :2271, :5238) and on the ESP-class ISAs at least two are visible at once, so the compiler itself warns `duplicate definition ... the later body wins, but calls written between the two bind to the earlier one`. The three bodies are NOT copies of each other -- 235, 34 and 59 lines, pairwise different -- so which one a call reaches is decided by the call's LEXICAL POSITION in the builtin, and moving a call site across a definition silently changes which allocator path it takes. Measured 2026-09-21 at HEAD and under pin v413: fires on --target=xtensa and --target=riscv32, WITH and WITHOUT --esp-profile=bare; does NOT fire on arm32, i386 or hosted x86-64, so the trigger is the ISA and not the profile. Long-standing, not a regression -- all three copies date to June 2026 (eb849b3ab, bb234753f, e3b886646) -- and unfiled until now. NO WRONG BEHAVIOUR IS OBSERVED YET: the bare qemu boot rows still diff UART clean against the x86-64 oracle, so this is a live latent hazard on the release target rather than a present miscompile. It would spring the moment a call to PXXDynSetLen is added, moved, or inlined across one of the three definitions. WARNING TO WHOEVER TAKES IT: static analysis of the {$ifdef} nesting in this file is booby-trapped -- lines 13-14 are COMMENT PROSE quoting `{$ifdef CPU_XTENSA}{$define PXX_ESP}` to describe a past bug, and a directive scanner that does not skip comments counts them and produces a confident contradictory answer (three attempts did, here). Ask the compiler which bodies it bound, do not read the conditionals."
+summary: "NOT LATENT AFTER ALL -- MEASURED 2026-09-21, THIS COLLISION IS 92% OF AN EMPTY BARE ESP IMAGE. builtinheap.pas defines PXXDynSetLen with the same signature three times (:533, :2271, :5238); on the ESP-class ISAs two are visible at once and the compiler warns that the later body wins. THE MECHANISM IS THE ORPHAN, NOT THE BINDING: the LOSING body is still emitted into the image but is not registered as a proc body, so DceOwnerOf answers <0 for every call site inside it and the pass classifies them as `called from unowned code` -- which means (a) those bytes can never be dropped, DCE only drops registered bodies, and (b) every callee they name is ROOTED unconditionally. One orphan pins the entire allocator core. Proven by renaming ONE definition in an isolated compiler+builtin sandbox (repo untouched): empty program bare xtensa 11348 B -> 864 B, live bodies 12 (8872 B) -> 2 (150 B), and PXXAlloc/PXXBlockCopy/PXXFree/PXXMemZero/HeapMmap/PXXHeapExhausted/PXXDynArrayReleaseEsp/PXXHdrRC/PXXHdrBase/PXXHdrInit all correctly dropped. Real fixtures: test_esp_bare xtensa 13788->4968 and riscv32 16988->5380; test_esp_exception xtensa 28928->20108 and riscv32 37028->25420; a SetLength program xtensa 34724->32576, riscv32 44020->41172. Behaviour identical -- both arms boot under Espressif qemu on esp32s3 AND esp32c3 and print the same answer. THIS ALSO RECONCILES THE IMAGE-SIZE PAIR IN THE LOGBOOK: the Makefile records 4836 B for test_esp_bare on 2026-09-19 and the de-duplicated build measures 4968 B today, so the ~2.85x growth was this, not RTL drift. NOT FIXED HERE ON PURPOSE: the rename is a DIAGNOSTIC. Which of the three bodies ESP should bind is a semantic question about builtinheap -- note that today ESP binds the NON-ESP body and the ESP-specific path through PXXDynArrayReleaseEsp is dead code, which may itself be wrong. THE CLASS IS BIGGER THAN THIS ROUTINE: any duplicate same-signature builtin definition creates an undroppable orphan that roots its callees, so the general remedy is to make the compiler REFUSE the duplicate rather than warn."
 ---
 
 # Three different `PXXDynSetLen` bodies are visible at once on every ESP ISA
@@ -74,3 +74,75 @@ count the warning, and ask `git log -S` when each copy appeared.
 Either one definition per ISA with the others removed or renamed, or — if all
 three are genuinely wanted — a build-time refusal when two same-signature
 bodies are visible at once, so the binding can never be decided by layout.
+
+
+## 2026-09-21 — MEASURED: THIS IS 92% OF AN EMPTY BARE ESP IMAGE
+
+Filed earlier the same day as a latent hazard on the strength of the compiler's
+warning. It is not latent. It is the dominant cost of every bare ESP image.
+
+### The mechanism is the ORPHAN, not the binding
+
+The warning describes a *binding* ambiguity. The expensive half is what happens
+to the body that loses:
+
+1. it is still **emitted** into the image;
+2. it is **not registered** as a proc body, so `DceOwnerOf` answers `< 0` for
+   every call site inside it;
+3. the pass therefore labels those calls **`called from unowned code`** — and
+   that is a root.
+
+DCE only drops *registered* bodies, so the orphan's bytes are undroppable, and
+every routine it calls is pinned. `PXXDynSetLen`'s orphan calls
+`PXXDynArrayReleaseEsp` (`builtinheap.pas:2282`, `:2303`), which is how the whole
+allocator core ends up live in a program that does nothing.
+
+The tell is visible in `--dce-why` without any experiment: the **registered**
+body is reported `PXXDynSetLen <- DROPPED` while `PXXDynArrayReleaseEsp` is
+simultaneously live `<- [called from unowned code]`. A dropped caller and a live
+callee is only possible if the real caller is not a body.
+
+### Measured, by renaming ONE definition in an isolated sandbox
+
+The repo was never modified: a copy of `compiler/pascal26` plus
+`compiler/builtin/**` in a scratch directory, `--where` confirming it resolved
+the sandbox builtin, and the pristine baseline reproducing `11348 B` exactly
+before any edit.
+
+| program | target | as-is | de-duplicated |
+| --- | --- | --- | --- |
+| empty program | xtensa | 11348 B | **864 B** |
+| `test_esp_bare` | xtensa | 13788 B | 4968 B |
+| `test_esp_bare` | riscv32 | 16988 B | 5380 B |
+| `test_esp_exception` | xtensa | 28928 B | 20108 B |
+| `test_esp_exception` | riscv32 | 37028 B | 25420 B |
+| `SetLength` program | xtensa | 34724 B | 32576 B |
+| `SetLength` program | riscv32 | 44020 B | 41172 B |
+
+Empty program live bodies go from **12 (8872 B) to 2 (150 B)**.
+
+**Behaviour is unchanged**: the `SetLength` program boots under Espressif qemu on
+**both** esp32s3 and esp32c3 in **both** arms and prints the same answer, so the
+orphan was contributing nothing but bytes.
+
+### It reconciles the logbook's two size rows
+
+`Makefile:test-esp-bare` records `47872 -> 4836` for this fixture on 2026-09-19.
+The de-duplicated build today measures **4968 B**. So the ~2.85x growth logged as
+*unreconciled* was this collision, not RTL drift — and the two rows can now be
+collapsed, with this as the reason.
+
+### Why it is not fixed in this commit
+
+The rename is a **diagnostic**, not a fix. Which of the three bodies ESP ought to
+bind is a semantic question about `builtinheap`, and the answer is not obvious:
+today ESP binds the **non-ESP** body, and the ESP-specific path through
+`PXXDynArrayReleaseEsp` is dead. That may itself be the wrong outcome, in which
+case the fix changes behaviour rather than only size.
+
+### The class, which is worth more than this routine
+
+Any duplicate same-signature definition in a builtin produces an undroppable
+orphan that roots its callees. The general remedy is to make the compiler
+**refuse** it instead of warning — a warning nobody reads has been costing 10 KB
+per ESP image since June.
