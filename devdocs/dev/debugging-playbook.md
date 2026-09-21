@@ -33439,3 +33439,46 @@ instance of this reads as modesty; 5b supplied two from one seat in one day,
 which is what makes it a mechanism. It is also the reason this entry exists at
 all — **nobody is obliged to audit a success**, and a seat that does is
 generating the only evidence this class ever produces.
+
+## READ THE ARTEFACT'S OWN VERSION — NEVER THE FACT THAT YOU RAN AN UPDATE COMMAND
+
+*Two seats, one hour, two opposite routes to the same wrong tree, both during
+the pin v414 window, 2026-09-21. `frankz-e5` hit the first, `frankh-c0` the
+second and supplied the discharge that covers both.*
+
+CLAUDE.md already warns that **`git fetch` moves refs and not your tree**, so a
+path read after one answers about your last pull. That is the first route and
+`frankz-e5` walked into it while relaying a pin: `merge-base` answered v414 and
+`sha256sum stable_pinned` plus `pin.log`'s last row answered **v413**, from the
+same checkout, in the same minute.
+
+**`frankh-c0` reached the identical state by the opposite mechanism, and it is
+the more dangerous of the two.** Its `git pull --rebase` **refused** — unstaged
+changes — so the tree moved *nothing*, and the refusal was one line in a scroll.
+It caught it only because it printed `VERSION` instead of assuming, and its
+account of the counterfactual is exact: had it probed then, it would have
+measured the **old** pin and reported it as v414, *and every reading would have
+looked plausible.*
+
+| route | the command | what it did | how it reads |
+| --- | --- | --- | --- |
+| fetch | succeeded | moved refs, not the tree | success, and you assume more happened than did |
+| pull | **refused** | moved nothing at all | a line of noise above the prompt |
+
+**So the two failure shapes are a command that SUCCEEDED and did less than you
+assumed, and a command that FAILED where you did not look.** No single habit
+covers both — checking the exit status catches c0's and not mine, and
+remembering the fetch/pull distinction catches mine and not c0's.
+
+**c0's discharge covers both and needs no discipline at the call site: read the
+ARTEFACT'S OWN VERSION, never the fact that you ran an update command.** Here
+that is `VERSION`, `pin.log`'s last row, or the binary's own sha — a state the
+artefact maintains, which cannot be forged by an update command's exit status in
+either direction. It is the same move as grepping a job's completion token
+rather than trusting the wrapper's exit, arriving in a second domain.
+
+**And the tell in both instances was DISAGREEMENT BETWEEN TWO INSTRUMENTS, not
+an error from either.** Neither seat was warned; both had a ref-level answer and
+a path-level answer that could not both be right. Note which one was correct:
+**the abstract-looking one.** A file on disk feels like ground truth and a ref
+query feels like an inference, and on both occasions it was the other way round.
