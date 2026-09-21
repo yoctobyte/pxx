@@ -8,7 +8,7 @@ found: 2026-09-06
 found-by: frankB
 owner: ""
 blocked-by: []
-summary: "`tools-devtest#00` runs every `tools/*devtest*.py` script one after another in a single job, so its wall time is the SUM of a set everyone is encouraged to add to, behind a CONSTANT budget. That mechanism is the ticket and it is untouched. THE GROWTH-RATE ARGUMENT THIS SUMMARY USED TO LEAD WITH IS RETIRED: it read 207s/~130 (09-01) and 354.5s/149 (09-06) as 1.71x in five days, and the 09-17 section below already called that a slope drawn partly through a bug (host_dev_lib_skip_devtest.py held a quadratic worth 17 minutes on its own). Re-measured 2026-09-22 on the same box and condition -- 344.0s over 166 scripts, plexus quiet, tree 0e864874e, frozen-tree guard green -- the sweep GAINED 17 scripts and LOST ~11s of wall. THE DECIDING MEASUREMENT THIS TICKET ASKED FOR NOW EXISTS AND IT REFUSES BOTH SPLIT RULES PROPOSED BELOW, WHICH ARE BOTH COUNT RULES: the distribution is extremely skewed -- median 0.22s against a 2.07s mean (9.4x), 131 of 166 scripts under a second summing to 10% of the wall, while the top 8 are 70.2% and the top 1 (fpc_trunk_verdict_devtest.py, 78.5s) is 22.8%. Simulated over the real timings at N=8, a count split spans 11.4s..110.6s and admits no budget that is meaningful for both ends; weight-aware greedy gives 78.5s, and THAT SHARD IS THE ONE HEAVY SCRIPT ALONE. So shard by measured WEIGHT at N=4 (344s -> 86s, 4.0x); past N=6 the heaviest single member binds and wider sharding changes nothing, which makes the next lever that script rather than a bigger N. A weight split needs deterministic assignment or a still_red keyed on shard name stops meaning anything -- a checked-in script->weight table, regenerated deliberately, keeps that. THE BUDGET QUESTION IS UNTOUCHED AND THIS MEASUREMENT DOES NOT LICENSE A CHANGE TO IT IN EITHER DIRECTION: it is a quiet-box reading with no tier contention, the job has still never completed inside a full tier (n:0), and 600.1s remains a CENSORED lower bound. The single job also still reports one verdict for 166 scripts, with a stored reason that is a fixed-width tail naming passing progress lines rather than the failure."
+summary: "`tools-devtest#00` runs every `tools/*devtest*.py` script one after another in a single job, so its wall time is the SUM of a set everyone is encouraged to add to, behind a CONSTANT budget. That mechanism is the ticket and it is untouched. THE GROWTH-RATE ARGUMENT THIS SUMMARY USED TO LEAD WITH IS RETIRED: it read 207s/~130 (09-01) and 354.5s/149 (09-06) as 1.71x in five days, and the 09-17 section below already called that a slope drawn partly through a bug (host_dev_lib_skip_devtest.py held a quadratic worth 17 minutes on its own). Re-measured 2026-09-22 on the same box and condition -- 344.0s over 166 scripts, plexus quiet, tree 0e864874e, frozen-tree guard green -- the sweep GAINED 17 scripts and LOST ~11s of wall. THE DECIDING MEASUREMENT THIS TICKET ASKED FOR NOW EXISTS AND IT REFUSES BOTH SPLIT RULES PROPOSED BELOW, WHICH ARE BOTH COUNT RULES: the distribution is extremely skewed -- median 0.22s against a 2.07s mean (9.4x), 131 of 166 scripts under a second summing to 10% of the wall, while the top 8 are 70.2% and the top 1 (fpc_trunk_verdict_devtest.py, 78.5s) is 22.8%. Simulated over the real timings at N=8, a count split spans 11.4s..110.6s and admits no budget that is meaningful for both ends; weight-aware greedy gives 78.5s, and THAT SHARD IS THE ONE HEAVY SCRIPT ALONE. So shard by measured WEIGHT at N=4 (344s -> 86s, 4.0x); past N=6 the heaviest single member binds and wider sharding changes nothing, which makes the next lever that script rather than a bigger N. A weight split needs deterministic assignment or a still_red keyed on shard name stops meaning anything, so the assignment comes from a CHECKED-IN script->weight table -- which is itself a summary of last-known timings and decays silently, mis-balancing shards without reddening anything, i.e. the same object as the stale summary this ticket just had repaired. It therefore carries a refresh design rather than a promise: a devtest reds when any script in the glob lacks a row or any row names a deleted script (so decay is impossible rather than detectable, at devtest speed); each shard prints predicted-vs-actual and reds beyond ~2x (so every tier run re-measures the table for free, and a script growing toward a pathology is visible WHILE it grows); and an absent entry defaults HIGH (p90), because the choice turns on which way the error breaks rather than on accuracy -- under-estimating blows a shard budget and reds something that is not a defect, over-estimating only wastes part of a scheduler slot. THE BUDGET QUESTION IS UNTOUCHED AND THIS MEASUREMENT DOES NOT LICENSE A CHANGE TO IT IN EITHER DIRECTION: it is a quiet-box reading with no tier contention, the job has still never completed inside a full tier (n:0), and 600.1s remains a CENSORED lower bound. The single job also still reports one verdict for 166 scripts, with a stored reason that is a fixed-width tail naming passing progress lines rather than the failure."
 ---
 
 # `tools-devtest` is a growing sequential sweep behind a constant budget
@@ -193,11 +193,62 @@ by measured weight**, and the next lever after that is not a bigger N — it is
 **A weight split needs the weights to be DETERMINISTIC across runs or a
 `still_red` comparison keyed on the shard name stops meaning anything** — which
 is this ticket's own requirement above, and it is the real cost of preferring
-weight to hash. Cheapest form that keeps it: a **checked-in table** of
-script -> weight used to assign shards, re-generated deliberately, so the
-assignment is a reviewed artefact rather than a function of last run's timings.
-A script with no entry goes to the lightest shard and shows up as a diff next
-time the table is regenerated.
+weight to hash. So: a **checked-in table** of script -> weight, used to assign
+shards, so the assignment is a reviewed artefact rather than a function of last
+run's timings.
+
+#### AND THAT TABLE IS THE SAME OBJECT AS THE SUMMARY THIS TICKET JUST HAD REPAIRED, SO IT NEEDS THE SAME TWO THINGS
+
+A `script -> weight` table is **a summary of last-known timings**. It decays
+silently as scripts change, and a stale weight mis-balances the shards
+**without reddening anything** — the no-signal failure, which is the one this
+repo keeps paying for. Proposing it without a refresh rule would be filing the
+defect I had just finished removing from this ticket's own frontmatter. What it
+needs is what every other guard here needs: **what regenerates it, what
+TRIGGERS that, and what an absent entry defaults to.**
+
+**TRIGGER 1 — a missing entry is a RED at devtest speed, not a silent default.**
+A devtest asserts that every script in the recipe's glob has a table row and
+that every table row names a script that exists. That makes the decay
+impossible rather than detectable: **you cannot add a devtest without adding its
+weight row**, the red arrives in seconds, and the fix is one line. It also
+catches the mirror — a row left behind by a deleted script, which quietly
+reserves budget in a shard forever.
+
+**TRIGGER 2 — the shards re-measure the table every time they run, for free.**
+Each shard already knows its own wall time. Have it print predicted-vs-actual
+and red when they diverge beyond a factor (start loose, ~2x). This is the part
+that cannot go stale by neglect, because **every tier run is a fresh
+measurement of the table's accuracy** and nobody has to remember to regenerate
+anything. It is also the only instrument that would have caught
+`host_dev_lib_skip_devtest.py` growing from 4.8 s toward seventeen minutes
+*while it was happening* rather than when it started timing the job out.
+
+**THE DEFAULT FOR AN ABSENT ENTRY IS PESSIMISTIC, AND THE REASON IS THE SHAPE OF
+THE FAILURE, NOT THE ACCURACY OF THE GUESS.** The two obvious choices are both
+wrong and wrong differently: **zero** lands a new script free in the heaviest
+shard, and **the mean** gives it 2.07 s, which this measurement shows is the one
+value almost nothing in the set has (median 0.22 s). Neither is defensible on
+accuracy. But the choice does not turn on accuracy — it turns on which way the
+error breaks:
+
+- **Under-estimate an unknown** → it lands in an already-full shard, that shard
+  blows its budget, and the tier reds. **A red that is not a code defect**, and
+  it misattributes to whatever else is in that shard.
+- **Over-estimate an unknown** → it gets placed early into a light shard, that
+  shard runs under-full, and one scheduler slot is slightly wasted. **Nothing
+  reds and nothing is misattributed.**
+
+So default to a **high** weight — p90 (2.92 s here) is enough, `max` is
+needlessly extreme — and let TRIGGER 1 make the window short. Fail toward a
+wasted slot, never toward a spurious red.
+
+**Regeneration is then a deliberate act with a cheap instrument**: the
+per-script pass that produced this section is a loop around the recipe's own
+glob and takes one sweep's wall time. Re-run it, diff the table, review the
+diff. The trade frankuser named is real — determinism costs freshness — and
+TRIGGER 2 is what pays for it: the table may be stale, but **how stale is
+measured on every run instead of being assumed.**
 
 ### TWO ROWS TO CARRY RATHER THAN RESOLVE
 
