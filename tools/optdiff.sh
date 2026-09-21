@@ -167,6 +167,23 @@ for t in $FILES; do
   # baseline reports PASS for every program in the corpus, which is what it did
   # for as long as the bug existed and is exactly what a dead control looks like
   # from the outside.
+  #
+  # THAT `OptLevel < 2` GATE IS A RECURRING SOURCE OF DIFFs AND THE REMEDY IS
+  # IN THE TEST BOTH TIMES -- not here, and not in the skiplist. Second
+  # instance 2026-09-21: test_ro_data_literal_store reported `rc 0 vs 139`,
+  # because it reached the literal pool through a string variable and so was
+  # storing into a PXXStrFromLit heap copy at -O0/-O1 and into the read-only
+  # pool at -O2/-O3. Rewritten to take the pool pointer straight from the
+  # literal (`p: PChar; p := 'literal'`, which aliases at every level) it
+  # faults at all four and the DIFF is gone, with the fixture now testing the
+  # read-only segment at twice the levels it used to.
+  #
+  # The shape to recognise on a third: a fixture whose subject is what a
+  # literal IS at runtime -- its address, its refcount, whether it allocated --
+  # asks a question with two right answers, and optdiff is correct to report
+  # it. Ask whether the fixture can be written to reach the same property at
+  # every level before reaching for tools/optdiff.skip; skipping buys silence
+  # and loses the -O0/-O1 arms, which is the direction that hides miscompiles.
   if ! "./$CC" $CF -O0 "$t" "$TMP/d" >/dev/null 2>&1; then
     # RETRY WITH --threadsafe BEFORE CALLING IT A SKIP. Any program that reaches
     # __pxxclone -- through palthread, classes, TThread, the parallel-for
