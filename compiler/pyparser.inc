@@ -41440,7 +41440,34 @@ end;
 
 function PyEnclByWalk(defTok: Integer): Integer;
 { The original backward walk, kept as the fallback for a site the table does not
-  hold and as the oracle under -dPXX_ENCL_CROSSCHECK. }
+  hold and as the oracle under -dPXX_ENCL_CROSSCHECK.
+
+  MEASURED ON LEKKERZEILEN 2026-09-21 (-dPXX_ENCL_WALKSTATS, which exists for
+  exactly this and costs nothing when undefined). Read the median against the
+  mean before you believe anything about this routine:
+
+      walks 634    reaching token 0 178 (28.1%)
+      suite skips per walk:  median 14    mean 1069    max 6041
+      total suite skips 677,977   (PyBuildEnclTable costs ~60,000)
+
+  THE WALK BREAKS AT THE FIRST ENCLOSING CONSTRUCT, and for a method that is a
+  few tokens away -- hence a median of FOURTEEN. Only the 28% that are top-level
+  defs have nothing to stop them and run to the root. That median-versus-mean
+  gap IS the shape of real Python: mostly methods, a few top-level defs.
+
+  SO DO NOT RE-DERIVE THE 9%. A synthetic of 400 TOP-LEVEL functions makes every
+  walk run to the root -- 100% worst case, a shape real source does not have --
+  and measures 9.0% for removing this walk. On lekkerzeilen the enclosing table
+  measures +0.2%, i.e. nothing, and lekkerzeilen does FEWER total skips (678k)
+  than that 1-module synthetic did (~1.3M) despite a 36-module closure. The
+  walk's absolute cost is roughly CONSTANT; a bigger program makes it a SMALLER
+  fraction, not a larger one. 9% of 18.4s is 1.66s, and 1.66s of a 104s build is
+  1.6%.
+
+  The table is therefore ~0% on class-heavy code and ~9% on function-heavy code
+  (scripts, generated modules, flat utility files), and IT IS NOT PART OF THE
+  11% that landed with it -- that was the non-allocating TokenCaseEqual.
+  devdocs/perf/lekkerzeilen-build-time.md has the three-arm decomposition. }
 var d, suiteEnd: Integer;
 {$IFDEF PXX_ENCL_WALKSTATS}
     skips: Integer;
