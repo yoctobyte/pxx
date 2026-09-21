@@ -34422,3 +34422,38 @@ mid-measurement when the pin landed** — and the framing matters, because calli
 it a lapse teaches the next seat to quietly hoard binaries. The correct habit is
 the cheap one: **time the build when you make it, even when you do not yet know
 you want a baseline.** A timing costs nothing to take and cannot be taken later.
+
+## A COMMIT MESSAGE IS THE ONE PLACE WHERE A CLAIM AND ITS REFUTATION SHIP IN THE SAME OBJECT
+
+*`frankuser`'s framing and finding, banked here because that seat does no pxx
+work and a playbook commit is a commit. Measured 2026-09-21 on `24bdec967`.*
+
+The message is written from **what the author meant to do**. The diff is **what
+happened**. They travel together in one object and **nothing in git compares
+them.**
+
+`24bdec967` — *"perf(A): count TRUE scan steps, because `scanned>=` undercounts
+by 3x"* — says in its own body: *"That mattered immediately:
+`devdocs/dev/finduclass-cross-corpus-2026-09-21.md`"*. It touches
+`compiler/defs.inc` and `compiler/symtab.inc`. **Two files, no document.** The
+document still read `UPPER BOUND` — the inverted claim the commit was correcting
+— and its author reported the correction as pushed, in good faith, because the
+intention had been written down.
+
+**This is worse than an ordinary stale row for two reasons.** The message is
+**immutable**, so it cannot be repaired in place the way a document can. And it
+reads as a **record of what happened** rather than as a plan, so a later seat
+treating `git log` as evidence finds a confident, dated, authored statement that
+a file was corrected.
+
+**DISCHARGE, AND IT IS ONE COMMAND: when a commit message names a file, run
+`git show --name-only` against the commit before you push.** That was also what
+settled it from the outside — a `git log -- <doc>` read next to a
+`git log -1 origin/master` in the same block produced the opposite answer, with
+origin's tip sitting above the doc's only commit and looking like its history.
+`--name-only` is the instrument that cannot answer that question wrong.
+
+**And the general form, which is why it is an entry and not a note:** *"I said I
+did it"* and *"I did it"* are the same sentence in a commit message. Anywhere a
+claim and its evidence ship together and nothing diffs one against the other,
+the claim is what survives.
