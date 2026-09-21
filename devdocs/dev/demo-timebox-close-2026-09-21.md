@@ -134,8 +134,45 @@ and 9 of the 10 `/data/worlds` symlink targets — each `O_RDWR`. **It mutates
 worlds it never draws.** Only the *tiles* go untouched, which is where the 15 G
 lives, so **the ~168 MB figure survives unchanged; the row label did not.**
 
-**The decision is the owner's** and 7a states it narrowly: does the shipped demo
-point at a small world like `roofs`, or at the 14 G `rijn` corridor.
+### ✅ DECIDED, BUILT, AND AWAITING HIS PUBLISH — a different state from "awaiting his decision"
+
+**This row was "the decision is the owner's" for most of today. It is not any
+more, and a reader routed by the old wording goes to the wrong place.**
+
+**The owner picked `roofs`** (`lekkerzeilen@5ebcee2`), answering in one word a
+fork put to him as *small world or the 14 G `rijn` corridor*.
+
+**7a then took the SHIPPING decision itself, and was right to** — a worked
+application of the reversibility test in both directions inside one commit:
+
+- **Fetch-at-run-time is out on a stated goal**, not on taste: `docs/index.md:22`
+  sells the project against a server in the run path.
+- **Tracking the world in git is the irreversible one**, and the quota settles
+  it. **Codeberg's binding limit is 750 MiB of git storage per repo** against
+  1.5 GiB for packages/LFS/attachments — so tracking would spend **a fifth of
+  the git quota on the first commit and 154 MB permanently per rebuild**. A wall
+  roughly four iterations out.
+- **A release artefact is the reversible one**, so 7a built it rather than
+  spending the owner's turn: *"a big reversible change does not need him."*
+
+| artefact | size | from |
+| --- | --- | --- |
+| `.tar.xz` **(ship this)** | **30.6 MiB** | 153.4 MiB of tiles |
+| `.tar.gz` | 48.2 MiB | — |
+
+**The tiles compress to a third, which was not obvious** — and the `.xz` has
+margin under the 50 MB figure as well as the 100 MB one, **neither of which
+Codeberg documents.**
+
+**Acceptance was re-run against the ARTEFACT rather than the tree it was built
+from** — 7a's own words, that the tree *"was a stand-in"*. Clone, unpack, zero
+symlinks, fresh state; **it compiled the demo from source inside that clone**
+and rendered: `rc=0`, 861,134 B, 6.9 kn.
+
+> **⚠ BUILT, NOT PUBLISHED.** Attaching it is **outward-facing**, and against a
+> host mid-migration. 7a left the file and a one-line recipe and escalated;
+> `frankuser` has put it in front of him. **The state is "awaiting his
+> publish", not "awaiting his decision."**
 
 ### ⚠ songformatter — two records say opposite things and BOTH ARE TRUE
 
@@ -165,7 +202,10 @@ filed against **pin v392 (`60b060bb54a8`)** on 2026-08-29 and parked 2026-08-30:
 `w, h = img.getSize()`.
 
 > **NOBODY HAS RE-MEASURED SONGFORMATTER AT HEAD OR AGAINST v414.** That is the
-> cheapest open question on this page. v414 closed blocker 03 (*a field shadows
+> cheapest open question on this page — **and it is now the top of the queue,
+> going to whoever frees first** (`frankuser`, 2026-09-21; not dispatched, every
+> seat was busy). Until it is taken, *"songformatter works"* does not stand
+> unqualified. v414 closed blocker 03 (*a field shadows
 > another class's method*) and 04 (*a `@property` setter runs when the receiver
 > has no slot*) — both exactly the shape that produced songformatter's 08-09
 > wall (`"set_": no such member`). **Whether those walls moved is unknown and
