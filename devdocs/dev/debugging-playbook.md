@@ -3661,6 +3661,31 @@ its failure mode; two REPRODUCE from source and cannot. **Five instruments,
 three failure modes**, and the count that sounds impressive is the one that
 hides the correlation.
 
+**AND THE SAME TALLY IS WRONG BETWEEN PEOPLE, WHICH IS HARDER TO SEE BECAUSE
+AGREEMENT BETWEEN SEATS FEELS LIKE INDEPENDENT DISCOVERY.** Same day, and c0
+caught `frankz-e5` making the error while relaying c0's own rule. Three lanes
+reached the same *necessary-not-sufficient* argument about an ESP acceptance row
+with no contact between them, and the coordinator relayed that to both seats as
+**"corroboration across two lanes, the strongest evidence either of you has"**.
+
+**c0's correction:** it is **two correct readings of ONE DOCUMENT**, not
+independent discovery. The acceptance row is the **common cause**. Two readers
+of one document share a failure mode — *the document* — exactly as three
+readers of `pin.log` share its row.
+
+> **"That is weaker than two independent measurements and stronger than one
+> opinion, and it should go in as the former — otherwise it reads as
+> corroboration of a fact about the world when it is corroboration that a row is
+> badly worded."**
+
+That last clause is the whole finding: **agreeing readers establish something
+about the TEXT, not about the SUBJECT.** Here they agreed the row was badly
+worded, which is worth knowing and is not evidence that the underlying claim is
+true. **Before quoting agreement between seats, ask what they both read** — and
+note the coordinator is the worst-placed party to notice, because agreement
+arriving from several directions at once is precisely what its own job makes
+salient.
+
 ### THE THIRD POLARITY: a false REFUTATION of a peer's FIX, from a tree that never had the commit
 
 Measured 2026-09-16 (frankuser), verifying frankb-56's claim that quickjs-ng runs
