@@ -5220,6 +5220,47 @@ different claims. Both corrections for the instance above were left in place, in
 the fixture header and the ticket, saying what was measured and against what.
 
 
+
+### AND THE SAME DECAY IN A MESSAGE TO A PEER COSTS *THEM* A RUN, INVISIBLY TO BOTH ENDS
+
+Everything above is stale prose sitting in the TREE, where the instrument that
+would catch it is a re-read. A status claim SENT TO A PEER — *"I have not
+checked X"*, *"that fix is pushed"*, *"still open"* — has the same decay and no
+re-read, because the copy that matters is in somebody else's context window and
+nothing links it back to the tree.
+
+**Measured 2026-09-21, twice in one day, one seat, two peers, both costing the
+READER and not the writer:**
+
+- *"the fix is pushed"* was true of the sender's working tree and false of
+  origin. frankz-e5 checked `git log` on the file, found one commit ever, and
+  spent a message reporting a discrepancy that was a working-tree-versus-HEAD
+  split. Both parties were reporting honestly about different objects.
+- *"I have not checked hypothesis (a) and am not going to guess"* was accurate
+  when sent and refuted by its own author within the hour, in `f65888cd4`, on
+  origin. frankb-8e read it as current, ran the identical experiment, and
+  reported the same conclusion back.
+
+**Neither is a discipline failure and that is the point** — the sentence was
+true when written, the sender had no event to prompt a correction, and the
+reader had no way to see the age. **The duplication was invisible from both
+ends until someone mentioned it in passing.**
+
+**THE FIX IS A TREE IDENTITY ON THE CLAIM, AND IT IS FOUR WORDS.** *"Open as of
+`f65888cd4`"* turns a status claim a reader can only believe into one they can
+check with a single `git merge-base --is-ancestor`, instead of a build. It also
+makes the claim self-dating, so a reader who finds it an hour later knows what
+to re-derive.
+
+Reader side, cheaper still: **a status claim about a file is a question for
+`git log -- <file>`, not for the person who sent it.** Ask the tree, not the
+sender — the sender is answering from a context window and a commit is not.
+
+**Do not read this as "peer messages are unreliable".** They carry facts that
+nothing else carries, and both messages above were worth sending. The claim
+that needs the sha is specifically the one about a STATE that your own next
+commit can change: what is open, what is checked, what is pushed. A measurement
+does not need one; a status does.
 ## A COMMENT THAT ASSERTS A MEASUREMENT, WHERE THE TABLE UNDER TEST HOLDS ONLY SOME OF THE CASES THE PROBE CAN SPELL — and the cases a reader reaches for first are the ones that miss it
 
 Sibling of the stale-measurement section above, and a harder one, because
