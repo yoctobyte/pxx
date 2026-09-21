@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-21
 found-by: frankb-8e
 blocked-by: []
-summary: "A Python class that subclasses a Pascal class from lib/rtl and OVERRIDES one of its `virtual` methods SEGFAULTS when the Pascal side calls that method back through the vtable. The override is entered -- gdb has it in the Python body with correct arguments -- and the fault is on leaving it. The condition that springs it is a virtual call originating in PASCAL code and landing in a NILPY method body; a nilpy->nilpy override and a Pascal->Pascal override are both fine, so neither the frontend's own tests nor the RTL's can reach it. Worked example is `configparser.ConfigParser.optionxform`, whose unit header (lib/rtl/configparser.pas:17-25) declares it virtual FOR THIS PATTERN and quotes the subclass verbatim -- the author explicitly guarded against the override 'silently never running' and the mechanism fails the other way instead. Not scoped to configparser: any `virtual` in a lib/rtl unit that a Python program may override has this shape, and the RTL deliberately marks such methods virtual, so the population is every one of them. Nine-line repro with a passing negative control below. Blocks feature-demo-songformatter-pxx-target (p68): settings.py compiles with two warnings and segfaults at module level, deterministically, while CPython runs it clean."
+summary: "MECHANISM FOUND 2026-09-21: a Python method overriding a Pascal `virtual` is installed in the vtable slot with NO ABI ADAPTER, and the two sides disagree about how a result comes back. The nilpy body returns a 16-byte Python value by writing it through a HIDDEN DESTINATION POINTER in %rdi; the Pascal slot is `function optionxform(const s: AnsiString): AnsiString`, which returns 8 bytes in %rax and passes no such pointer. So on any return path that needs a memory copy the body executes `rep movsb` of 16 bytes to %rdi = 0 and faults. Dispatch itself is correct -- right override, live self, correct argument. The condition that springs it is a virtual call originating in PASCAL code and landing in a NILPY method body; a nilpy->nilpy override and a Pascal->Pascal override are both fine, so neither the frontend's own tests nor the RTL's can reach it. Worked example is `configparser.ConfigParser.optionxform`, whose unit header (lib/rtl/configparser.pas:17-25) declares it virtual FOR THIS PATTERN and quotes the subclass verbatim -- the author explicitly guarded against the override 'silently never running' and the mechanism fails the other way instead. Not scoped to configparser: any `virtual` in a lib/rtl unit that a Python program may override has this shape, and the RTL deliberately marks such methods virtual, so the population is every one of them. Nine-line repro with a passing negative control below. Blocks feature-demo-songformatter-pxx-target (p68): settings.py compiles with two warnings and segfaults at module level, deterministically, while CPython runs it clean."
 ---
 
 # A Python override of a `virtual` Pascal method segfaults on the call back
@@ -45,6 +45,64 @@ Measured 2026-09-21 against **pin v414, binary sha256 `aeadb1754b80`**, x86-64.
 file; CPython raises `MissingSectionHeaderError` and `optionxform` is never
 reached, so the repro "passed" for the wrong reason. Stated because the next
 person will write the same fixture.
+
+## THE MECHANISM (measured 2026-09-21, this is the cause, not the symptom)
+
+    => 0x5529fd <C.optionxform+260>:  rep movsb (%rsi),(%rdi)
+       rsi 0x7fffffffc5f0   (valid)
+       rdi 0x0              <-- 16-byte result written to NULL
+       rcx 0x10
+
+**A Python method overriding a Pascal `virtual` goes into the vtable slot with
+no ABI adapter.** The nilpy body returns a **16-byte** Python value through a
+**hidden destination pointer in `%rdi`**. The Pascal slot's signature is
+`function optionxform(const s: AnsiString): AnsiString` — **8 bytes in `%rax`,
+no hidden pointer passed.** So `%rdi` holds whatever it held, here `0`, and the
+body copies 16 bytes to address zero.
+
+**THIS EXPLAINS WHY THE CRASH DEPENDS ON THE BODY, which is what makes the bug
+look non-deterministic when it is not.** A body whose result the compiler can
+materialise directly never takes the copy path; one whose result must be copied
+out of a stack slot does. Deterministic 3/3 in both directions:
+
+| override body | result |
+| --- | --- |
+| `return optionstr` | **SEGV** |
+| `s = optionstr; return s` | **SEGV** |
+| `return optionstr[:]` | **SEGV** |
+| `return 7` | **SEGV** |
+| `return optionstr.upper().lower()` | **SEGV** |
+| `return "fixed"` | ok |
+| `return optionstr.lower()` | ok |
+| `return optionstr + ""` | ok |
+| `return str(optionstr)` | ok |
+| `pass` | ok |
+
+**Note rows 5 and 7: `optionstr.upper().lower()` and `optionstr.lower()` produce
+the IDENTICAL string and land on opposite sides.** So the fault is not in the
+value and not in aliasing the parameter — it is in which return path the body
+compiles to. Any story that explains this by what is returned is wrong; I had
+two such stories before reading the registers.
+
+**A TRAP I FELL INTO, recorded because the disassembly invites it.** The faulting
+block reads `lea -0x20(%rbp),%esi` — a 32-bit destination, which looks exactly
+like an address-truncation bug, and I had it written down as the cause. **The
+registers say otherwise: `%rsi` is a correct 64-bit address and `%rdi` is
+null.** Reading the disassembly instead of the registers produced a confident,
+precise, wrong mechanism. Check the registers.
+
+## What a fix looks like (not attempted — see scope)
+
+An **adapter thunk** at the seam: a generated shim with the Pascal signature
+that calls the nilpy body and moves the result between the two conventions.
+There is precedent in the same file — `PyGetOrMakeCloneThunk`
+(`pyparser.inc:17514`) already synthesises `$pyclonethunk_N` for the clone
+trampoline — so the machinery pattern exists and is not being applied here.
+
+**This is a project, not a patch**, which is why it is banked with the mechanism
+named rather than half-fixed: it needs a decision about which conventions the
+seam must bridge in general (result width, `self`, exceptions crossing back),
+not just this one return.
 
 ## Where it faults
 
