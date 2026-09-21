@@ -62,8 +62,14 @@ platform, the writer and the shim fixed and vary only the IRAM section, so
 
 ## Not a regression, and not caused by the fix that uncovered it
 
-    pinned (v415)  ld SEGFAULT
-    HEAD           ld SEGFAULT
+    pin v415  (binary 94fddf62ee6a)   ld SEGFAULT
+    pin v416  (binary fddc21e7e661)   ld SEGFAULT   riscv32 AND xtensa
+    HEAD      (497489e8a723)          ld SEGFAULT
+
+**Two pins, and the second is the CURRENT one.** v415 was the pin when this was
+found; v416 landed the same evening and was re-measured against rather than
+letting the v415 row go unquotable. Both reproduce on both ESP targets, so the
+pin that ships today carries this.
 
 Pin v415 predates `30898eef7` (the ProcAddrFix/DynCall compaction fix), so this
 is older than that work and independent of it. It also reproduces with an
