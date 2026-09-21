@@ -216,7 +216,7 @@ the case-fold fix (09-21): **identical**, 47 of 67 both times.
 | 5 | `@dataclass(frozen=True)` | characterised, **not started**, p40 — *the refusal is correct* |
 | 6 | `subprocess.run(cwd=)` | reproduced, **not started**, p40 |
 | 7 | `random.Random(seed)` | **silent half FIXED** (`3d3d90a2d`); feature half open, p45 |
-| 8 | keyword through a callable value | reproduced, **no ticket exists** |
+| 8 | keyword through a callable value | reproduced; **citation does not resolve** — see below |
 
 **Rows 4 and 7 are one mechanism with two failure surfaces** — both qualified
 members of a *consumed-only root*. Row 4: nothing answers. Row 7: the **wrong**
@@ -310,12 +310,57 @@ above.**
   before the ancestry was verified.
 
 **Recorded as absent, so nobody re-derives it:**
-- **No ticket for TSP row 8** (`pyvar_callv_kw`, `tsp/historic.py:531`).
-- **No ticket for the `threading.Condition` site** at `voice.py:79`, which the
-  re-sweep identifies as **one site behind at least three board rows**.
+- **TSP row 8 is characterised but its LOCATION IS UNRECOVERABLE**, and no
+  ticket exists. **`tsp/historic.py:531` does not resolve — that file is 284
+  lines** (verified here, and independently by `frankh-c0` in TSP's own source
+  before it declined to file against it). Either the line is from a different
+  file, or from a version that has since shrunk. **The row's mechanism stands;
+  its citation does not.** Whoever holds the original reproduction can settle it
+  in one look.
+- **`threading.Condition` is TWO sites, not one, and it is a documented hole.**
+  `voice.py:79` **and** `voice.py:158`, both `self._cv = threading.Condition()`,
+  with six operations between them — `notify()` at `:96` and `:169`, `wait()` at
+  `:131` and `:191` — and **both used through the context-manager protocol**
+  (`with self._cv:`), which is a third requirement on top of construct and
+  wait/notify. **Our own side says so:** `lib/rtl/mimic_threading.pas` names
+  `Condition` in its *"What is NOT here"* list, alongside `Semaphore`, `Barrier`,
+  `local`, `current_thread`, `active_count`, `Timer` and `Thread` subclassing.
+  So it is **one CONSTRUCT behind at least three board rows**, at two sites with
+  three distinct pieces of surface — and it is recorded **only inside a CLOSED
+  `wave` ticket**, the least reachable place in the tree. `frankh-c0` is filing
+  it as **Track B** against the threading RTL, not as a NilPy row, because the
+  gap is in the library surface.
+- **⚠ And that ticket has a decide above it.**
+  `backlog-decide/decide-should-a-python-program-that-imports-threading-compile-as-written.md`
+  asks whether `import threading` should stop being a hard refusal without
+  `--threadsafe`. **A `Condition` ticket that does not acknowledge it risks
+  specifying surface for a module the project has not yet decided people may
+  import as written.** (Two further threading decides exist:
+  `decide-a-a-foreign-thread-needs-its-own-tls-block...` and
+  `decide-two-threading-docs-disagreed-for-seven-weeks`.)
 - **Two live `random.Random` tickets** (p45 and p40) with **no `supersedes` or
   `duplicate-of` link**, the p40 one still carrying pre-fix framing. Both are in
-  `BOARD.md`.
+  `BOARD.md`. `frankh-c0` will reconcile with an explicit `supersedes` rather
+  than by quietly closing one.
+
+### ⚠ How the row-8 citation got into this document
+
+**Three hops, each faithful, none verifying:** the inventory recorded it, a
+survey copied it exactly, and this page printed it. **A citation survives relay
+far better than it survives verification** — every hop preserved the string
+perfectly, and *the fidelity of the copy is not evidence for the accuracy of the
+source.* Nobody opened the file until `frankh-c0` did, at the point of being
+asked to file a ticket against it.
+
+**`frankh-c0`'s own framing connects it to the day's other instance:** it is the
+same shape as `franks-5b`'s `/proc` scan — **an honest zero returned to a
+question that was not the one being asked.** A line number that reads as a
+location is answering about *some* file; a process scan that reads as absence is
+answering about *some* name. Both are correct and neither is responsive.
+
+**And note what stopped it: a stance requested, not a check scheduled.** c0 was
+asked for a position rather than a filing, and said a stance built on an
+unchecked line is worse than an open question.
 
 **Known-false leads, retired today so they do not come back:**
 - **974 lines** as the TSP platform port cost — retracted; it was a file size.
