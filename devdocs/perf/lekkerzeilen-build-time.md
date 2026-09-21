@@ -951,3 +951,59 @@ built: five units declaring `TShared`, four rows with **three distinct class
 names**, two controls a naive prefer-the-alias fix would fail, fpc 3.2.2 oracle,
 passing on both arms. It also enters through the **Pascal** frontend where the
 crosscheck ran **NilPy** — two front doors into one table, not an echo.
+
+## RETRACTED, SAME DAY: THERE WAS NO NULL, AND THE INDEX DOES GENERALISE
+
+**Everything in the two sections above that rests on "uforth +0.0%" is
+withdrawn.** c0 found the fault in its own harness and reported it unprompted:
+its "HEAD" arm was built at 11:07 from a tree pulled at **10:50:24**, and
+`d5de02143` landed at **10:59:45**. The arm was built nine minutes before the
+commit under test existed. It A/B'd two full-scan compilers against each other
+and correctly measured that they are the same speed. **The +0.0% was real,
+reproducible, min-of-5, and about nothing.**
+
+Re-measured on uforth after a forced rebuild, by define alone — same tree, same
+instrumentation, only `useIdx` differing:
+
+    index OFF   realsteps=311,636,212   12.01 s
+    index ON    realsteps=  2,382,907    7.51 s
+
+A **131x** step reduction. Against the true pre-index baseline (10.3 s) that is
+**2.9 s of 10.3 s = 28%**, which is the figure comparable to this lane's 38.7%
+(both being a real pre-index binary against a real index one).
+
+**So the qualifier inverts: the index GENERALISES.** 38.7% on lekkerzeilen and
+28% on uforth. The per-step cost agrees across programs too — **14.4 ns/step
+there against 9.9 here**, same order, with the residual explained by the OFF
+arm's extra `useIdx` test rather than by anything invented.
+
+**RETIRED AS EXPLANATIONS OF AN ARTEFACT: the working-set hypothesis and the
+source-volume hypothesis, both above.** They were reasonable responses to a
+contradiction that did not exist. 7a's 6.02 MiB closure measurement is sound
+data and is simply not needed for this question. `pool=`/`toks=` stay in the
+instrument; they are cheap and answer a different question if one ever arises.
+
+### THE ONE THING THAT SURVIVES IS AN ERROR OF THIS LANE'S OWN
+
+**Scan-mix does not transfer between programs.** This doc projected uforth at
+~456M true steps by scaling its `scanned>=` by **2.97x — lekkerzeilen's**
+real/scanned ratio. uforth's own ratio is **2.03x** and its measured figure is
+311.6M, so the projection was **46% high**. The ratio is set by how often scans
+1 and 2 fail, which is a property of the program's scope structure, not a
+constant. **Do not scale another program's counter by this one's ratio** —
+measure `realsteps` on the program you are talking about.
+
+### WHAT SAVED THIS LANE'S NUMBER WAS THE ARM IDENTITY CHECK, NOT JUDGEMENT
+
+The 38.7% stands because both arms were pinned to a sha before use —
+`aeadb1754b80b622` (v414, from `stable_linux_amd64`) and `94fddf62ee6af731`,
+the latter later confirmed byte-identical to what was pinned as v415 — plus a
+`--where [RTL]` precondition per arm. **A commit name is not a binary.** c0's
+sharper statement of it, worth carrying: *a binary built before the commit under
+test cannot be an arm for it, and nothing about it looks wrong* — it runs, it is
+fast, it self-hosts, and it answers.
+
+And the missing control, which this lane did not have either: **when an A/B
+returns a flat null, time a THIRD binary you believe is fast. Two arms cannot
+tell you they are the same arm.** c0's own data had the tell — both its arms
+were slower than pin v415 — and nothing prompted the comparison.
