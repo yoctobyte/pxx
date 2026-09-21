@@ -434,13 +434,41 @@ above.**
   before the ancestry was verified.
 
 **Recorded as absent, so nobody re-derives it:**
-- **TSP row 8 is characterised but its LOCATION IS UNRECOVERABLE**, and no
-  ticket exists. **`tsp/historic.py:531` does not resolve — that file is 284
-  lines** (verified here, and independently by `frankh-c0` in TSP's own source
-  before it declined to file against it). Either the line is from a different
-  file, or from a version that has since shrunk. **The row's mechanism stands;
-  its citation does not.** Whoever holds the original reproduction can settle it
-  in one look.
+- **TSP row 8: the CLAIM stands and the FILE was wrong. Corrected site —
+  `tsp/departure.py:531`.** Not withdrawn, because the reconstruction succeeded.
+
+  `tsp/historic.py:531` does not resolve: that file is **284 lines**, and
+  `git log` shows **one commit** for it, so no revision ever reached 531
+  (`frankh-c0` found it, `frankuser` verified independently, confirmed again
+  here). `frankh-c0` declined to file against a line it could not read, which
+  was right.
+
+  **The true site, traced rather than re-derived:** `tsp/historic.py:26` does
+  `from . import anchor, ascent, departure, ...`, and `tsp/departure.py` is 542
+  lines. Its line 530–531 is
+
+  ```python
+  dv, _, miss = aim(model, t_end, nbody.to_bary(tuple(fl.state), fl.t_us), t_arrive,
+                    target, tol=1000.0)
+  ```
+
+  — **five positional arguments and a keyword**, against a diagnostic reading
+  *"needs `pyvar_callv_kw` (pyeval) and at most 4 positional arguments."* Exact
+  match on the line number, the construct and the arity.
+
+  > **THE CAUSE IS THE MECHANISM THE INVENTORY ITSELF DOCUMENTS THREE PARAGRAPHS
+  > BELOW ROW 8's OWN PLACEMENT:** *"An error inside an imported module prints
+  > that module's line number with no file name, so the reader supplies the file
+  > they invoked."* The sweep invoked `historic.py`; the compiler reported line
+  > 531 **of `departure.py`**; the note recorded the file that had been invoked.
+  > **The same document catches this exact trap for the threading rows** —
+  > three files reporting `threading.Condition` at line 79, all one site at
+  > `voice.py:79` — and row 8 is an unnoticed instance of it, on the same page.
+
+  **Not verified here:** I did not re-run the compiler. The identification rests
+  on the line number, the construct and the arity agreeing, plus the import
+  edge — strong, and one compile would make it certain. **A ticket can now be
+  filed against a line that exists.**
 - **`threading.Condition` is TWO sites, not one, and it is a documented hole.**
   `voice.py:79` **and** `voice.py:158`, both `self._cv = threading.Condition()`,
   with six operations between them — `notify()` at `:96` and `:169`, `wait()` at
