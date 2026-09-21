@@ -34477,3 +34477,104 @@ origin's tip sitting above the doc's only commit and looking like its history.
 did it"* and *"I did it"* are the same sentence in a commit message. Anywhere a
 claim and its evidence ship together and nothing diffs one against the other,
 the claim is what survives.
+
+## AN A/B WHOSE ARM IS NOT AN ARM, AND AN A/B WHOSE VERDICT CANNOT SAY NO
+
+Five instances on 2026-09-21, five subsystems, four seats. **None errored. All
+answered.** The general rule is already in CLAUDE.md — *every instrument that
+lies, lies by being CORRECT ABOUT SOMETHING ELSE* — and what this section adds
+is that a **comparison** has two independent places to fail, they look identical
+from the outside, and **they have different repairs.**
+
+### The two mechanisms
+
+**1. THE ARM IS NOT WHAT IT CLAIMS.** You compare two things and one of them is
+not the thing under test. c0's phrasing, and it is the load-bearing sentence
+here: **a binary built before the commit under test cannot be an arm for it, and
+nothing about it looks wrong** — it runs, it is fast, it self-hosts, it answers.
+A/B two full-scan compilers and you will correctly measure that they are the
+same speed, min-of-5, reproducible, about nothing.
+
+**REPAIR (c0's, and it costs one run): when an A/B returns a flat null, time a
+THIRD binary you believe is fast.** Two arms cannot tell you they are the same
+arm. c0's data had the tell — both arms slower than the current pin — and there
+was no reason to look at it.
+
+**2. THE VERDICT LINE CANNOT EXPRESS THE NEGATIVE.** The arms are fine and the
+comparison is incapable of returning "no". frankz-e5's instance (`d7a20eea1`,
+its own entry — cited, not repeated):
+
+    git merge-base --is-ancestor <sha> origin/master && echo "on origin" || echo "NOT on origin"
+
+**`--is-ancestor` exits nonzero for a bad argument exactly as it does for a true
+negative**, so the `||` arm fires on a typo'd sha, a missing ref, a wrong branch
+name — that repo's branch is `main` — and the `fatal:` goes to stderr and
+scrolls. It printed a confident wrong verdict about a commit that *was* on
+origin.
+
+**REPAIR: assert the direction that MUST differ.** A verdict you have only ever
+seen say one thing is a guard that cannot fail.
+
+### My own instance, and the general form I would lead with
+
+I claimed `tools/esp_run_bare.sh`'s stdout was unchanged by my edit. It was —
+but I had **compared against what I remembered seeing**, so I went to do it
+properly: recover the pre-change script from git, run both, diff.
+
+**The old arm returned `rc=2` and zero bytes, and `cmp` duly printed `DIFFERS`.**
+Cause:
+
+    REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+The script derives the repo root **from its own path**, so a copy run out of a
+scratch directory looked for the compiler there and correctly refused. My arm
+was not an arm. Had I been less suspicious I would have reported that my own
+change altered the harness's output.
+
+**THE GENERAL FORM, WHICH IS THE TRAP WORTH NAMING: a script that resolves its
+own location cannot be A/B'd from a copy — and recovering an old arm from
+history is the NATURAL way to build a before/after.** So for any `$0`-relative
+tool, the recommended technique silently manufactures an invalid arm. The trap
+is laid inside the procedure. Run the old version from a path whose `$0`
+resolution still works (same directory, different name) and delete it after.
+
+**This one failed BOTH ways at once**, which is why it is the useful instance:
+the arm was invalid, *and* `cmp` could not distinguish "the two outputs differ"
+from "one side is empty because nothing ran". Re-run with both arms valid:
+**stdout 27 bytes each, `cmp` identical** — and the direction that must differ
+does, **0 warnings on stderr from the old arm against 2 from the new.**
+
+**The tell I nearly read past was `rc=2`** — CLAUDE.md's *"an rc that no test in
+the harness can produce"*. I nearly missed it because `DIFFERS` was a
+**coherent answer to the question I had asked.**
+
+### Why "question the measurement" is not enough
+
+The advice everyone already has is *question the measurement, not just the
+model*. It is insufficient here, and precisely: **"question the measurement"
+reads as "re-measure", and re-measuring a broken A/B reproduces beautifully.**
+min-of-5 and reproducible is exactly what an arm-identity fault looks like. The
+question that works is narrower — **"is each arm the thing I think it is, and
+can this verdict line return the other answer?"**
+
+### Attribution, and what is first-hand here
+
+The `esp_run_bare.sh` instance and the `$0`-relative general form are mine,
+measured. **The third-binary control is c0's** (relayed via frankz-e5, who notes
+5b relayed it without claiming it). **The `--is-ancestor` instance is
+frankz-e5's**, banked at `d7a20eea1`. **Two further instances are 7a's** — an
+strace filter naming a syscall the compiler does not make, and a profiler
+recovery that used `pgrep -f lekkerzeilen`, matched the **wrapper shell**, and
+copied bash's address map, which would have resolved every library frame against
+libc and produced a plausible, wrong layer split. Those live in
+`lekkerzeilen@devdocs/perf/PROFILE-2026-09-21.md` (verified present on that
+repo's `origin/main`) and are cited rather than duplicated, since that is a
+different repo from the one most pxx seats have open. **7a's second is
+CLAUDE.md's own `pgrep -f` rule arriving in a fifth subsystem**, hit while
+recovering from an unrelated fault.
+
+**One thing I did NOT resolve and am not going to assert:** I received two
+different descriptions of 5b's instance — a verdict line that did not branch on
+the build succeeding, and a binary that predated the change. Those are one of
+each mechanism. I have no first-hand access to it, so it is recorded here as
+unresolved rather than filed under a mechanism to make the taxonomy tidy.
