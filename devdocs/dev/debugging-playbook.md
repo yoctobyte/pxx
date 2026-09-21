@@ -35447,3 +35447,60 @@ CLAUDE.md's defaults list: those are about a default **colliding with** a value
 you are asserting, so a guard cannot fail. This one is about **choosing** the
 default in the first place, and it applies where nothing is being asserted at
 all.
+
+## THREE WAYS A PRECAUTION PRINTS SUCCESS, AND ALL THREE ARE BUILT DELIBERATELY BY CAREFUL PEOPLE
+
+A cross-reference rather than a new finding. Three sections of this file
+describe what looks like three unrelated bugs; they are one family, and naming
+it is what lets you recognise the fourth. Assembled 2026-09-22 (frankh-c0 and
+frankuser) from three instances in three subsystems **in one night**.
+
+| the precaution | what it prints | where |
+| --- | --- | --- |
+| a **catch-all** entry in a dispatch table | a miss as a HIT | "A CATCH-ALL ENTRY IN A DISPATCH TABLE TURNS EVERY FAULT INTO A SUCCESSFUL-LOOKING LOOP" |
+| a guard with no **positive control** | PASS, unconditionally | "THREE SESSIONS HOLDING A CONTROL THAT CANNOT FAIL IS WORSE THAN THREE HOLDING NONE" |
+| a guard armed **outside its scope** | PASS, honestly, about something else | `tools/frozen_tree_guard.sh`'s own header |
+
+**THE FAMILY RESEMBLANCE IS NOT THAT THEY FAIL — IT IS THAT EACH ONE IS ADDED
+ON PURPOSE, BY SOMEONE BEING CAREFUL, AS A PRECAUTION.** Nobody writes a
+catch-all by accident; you write it because you do not know which slot the
+fault lands in. Nobody omits a positive control out of laziness; the guard
+looks obviously correct. Nobody arms a guard outside its scope carelessly; they
+arm it because they have just been burnt and want cover. **So "was I being
+careful here" is not a question that separates them**, and it is the question
+that gets asked.
+
+**THE THIRD IS THE NASTIEST AND IS THE ONE LEAST WRITTEN ABOUT.** The first two
+produce a wrong ANSWER somewhere — a loop that should have faulted, a row that
+should have reddened — so there is an output that can be interrogated later.
+The out-of-scope guard produces **no wrong output at all**: it is correct about
+exactly what it measured, and the defect is entirely in what the reader takes
+it to cover. That is why it needs someone OUTSIDE the work to see it; the
+author has the scope in mind and reads the green as answering the question they
+are holding.
+
+**AND A GUARD ARMED OUTSIDE ITS SCOPE IS WORSE THAN NO GUARD, WHICH IS THE
+COUNTER-INTUITIVE HALF.** No guard leaves the question OPEN. A passing guard
+closes it WRONGLY, and it closes it for every later reader too, because a green
+is read as attestation for whatever it happened to be running alongside. The
+instance: `frozen_tree_guard.sh` fingerprints HEAD, the tracked-diff sha and
+the compiler binary — **all local-tree properties** — and was about to be armed
+around a census whose population is `git log origin/master -1500`, a **remote
+ref** that moves when any peer pushes, with local HEAD never moving. It would
+have passed, honestly, every time.
+
+**THE QUESTION THAT SEPARATES ALL THREE:** *what would this print if the thing
+it is protecting against were happening right now?* If the answer is "the same
+thing it prints now", it is one of these regardless of how deliberate it was.
+
+**And where the answer is structural rather than fixable, prefer making the
+hazard IMPOSSIBLE over detecting it.** For the instance above that is pinning
+the ref — resolve `origin/master` to a sha once and query the sha — which fixes
+the window by construction, needs no arming, and buys what no guard can:
+**re-derivability by someone who was not there.** A guard detects after the
+fact and costs a re-run; construction costs nothing and cannot be misread.
+
+**What would retire this section:** a fourth member that is NOT deliberate —
+a precaution that prints success and was added carelessly. That would break the
+"careful people" claim, which is the load-bearing part, and the section should
+then be re-stated around the output shape instead.
