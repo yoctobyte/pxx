@@ -16782,6 +16782,7 @@ begin
         begin
           { typedef struct {..} Name; — Name *is* the record. }
           UClsNOff[ci] := nmOff;
+          UClsIndexInvalidate;   { the row's NAME changed / table reset: the name index must rebuild }
           UClsNLen[ci] := nmLen;
           AddCTypedefEx(nm, tyRecord, Ord(tyUnknown), REC_UCLASS_BASE + ci);
         end;
@@ -17099,6 +17100,7 @@ begin
       if hasTag and (UClsNLen[ci] = 0) then
       begin
         UClsNOff[ci] := tagOff; UClsNLen[ci] := tagLen;  { name the record by its tag }
+        UClsIndexInvalidate;   { the row's NAME changed / table reset: the name index must rebuild }
       end;
       if hasTag and UClsIsRecord[ci] and (UClsFCount[ci] > 0) then
         { REDEFINITION of an already-laid-out tag (C forbids it in one scope; it

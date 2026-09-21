@@ -7669,6 +7669,25 @@ var
   PxxFUCCalls: Int64;   { -dPXX_UCLS_STATS only }
   PxxFUCIters: Int64;   { -dPXX_UCLS_STATS only }
 
+  { Name index over UCls. FindUClass ran THREE full scans of this array per
+    call, and the first never breaks early because it picks a BEST match rather
+    than a first one. Measured 2026-09-21 on lekkerzeilen: 3.86 MILLION calls
+    against UClsCount=411, at least 1,449,667,904 iterations, 27% of the build
+    (devdocs/perf/lekkerzeilen-build-time.md).
+    UClsCount is the IMPORT CLOSURE's class count, so this grows with what a
+    program imports -- which is the import-penalty mechanism itself.
+    The index yields CANDIDATES ONLY. Selection and ranking are unchanged and
+    must stay that way: duplicate names are real (lekkerzeilen has `error` x3,
+    `exception` x2, plus `sheet`, `event`, `action`), and pylib's and sysutils'
+    `Exception` merging is a behaviour a first-wins lookup would silently break.
+    Chains are kept in ASCENDING row order so the documented tie-break -- a tie
+    keeps the FIRST row -- is preserved exactly. }
+  UClsBHead  : array[0..1023] of Integer;
+  UClsBTail  : array[0..1023] of Integer;
+  UClsBNext  : array[0..MAX_UCLASS-1] of Integer;
+  UClsIdxN   : Integer;    { rows already indexed; appends are picked up incrementally }
+  UClsIdxDirty: Boolean;   { a row was RENAMED or the table reset: rebuild from scratch }
+
   { Per-(class, interface) Interface Method Table: a Data[] array of code
     addresses, one per interface method slot, filled (like the VMT) via
     MethodFixups to the class's implementing methods.

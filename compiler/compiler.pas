@@ -2490,6 +2490,7 @@ begin
   AsmSoCallCount := 0;
   InLValueWrite := False;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
+  UClsIndexInvalidate;   { the row's NAME changed / table reset: the name index must rebuild }
   MethodFixCount := 0; UPropCount := 0; IMTCount := 0;
   DataPtrFixCount := 0;
   { the two Data[] relocation tables grow on demand; drop the reserve so a

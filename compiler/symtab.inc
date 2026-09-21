@@ -1874,8 +1874,86 @@ begin
   end;
 end;
 
-function FindUClass(const name: AnsiString): Integer;
-var i, bestRank, r, hop, bestHop: Integer; lo, name2: AnsiString;
+function UClsHashBytes(off, len: Integer): Integer;
+{ Hash of a UCls row's name, case-folded, matching UClsHashStr for the same
+  text. `and $FFFFFF` keeps the accumulator inside 32 bits on every target. }
+var i, h: Integer; c: Char;
+begin
+  h := 0;
+  for i := 0 to len - 1 do
+  begin
+    c := TokChars[off + i];
+    if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    h := ((h * 31) + Ord(c)) and $FFFFFF;
+  end;
+  UClsHashBytes := h and 1023;
+end;
+
+function UClsHashStr(const lo: AnsiString): Integer;
+{ The same hash for an ALREADY-LOWERCASED lookup key. }
+var i, h: Integer;
+begin
+  h := 0;
+  for i := 1 to Length(lo) do
+    h := ((h * 31) + Ord(lo[i])) and $FFFFFF;
+  UClsHashStr := h and 1023;
+end;
+
+procedure UClsIndexSync;
+{ Bring the name index up to date. Appends are picked up incrementally; a RENAME
+  or a table reset sets UClsIdxDirty and forces a rebuild.
+  The rename case is NOT hypothetical: cparser.inc names a record by its struct
+  tag AFTER registering the row, so an index built only at registration time
+  would hold a stale name and answer wrongly in the C frontend ALONE -- which no
+  NilPy or Pascal test would catch. Found by grepping for in-place writes to
+  UClsNOff before building this, not by a failing test. }
+var i, h: Integer;
+begin
+  if UClsIdxDirty then
+  begin
+    for h := 0 to 1023 do
+    begin
+      UClsBHead[h] := -1;
+      UClsBTail[h] := -1;
+    end;
+    UClsIdxN := 0;
+    UClsIdxDirty := False;
+  end;
+  while UClsIdxN < UClsCount do
+  begin
+    h := UClsHashBytes(UClsNOff[UClsIdxN], UClsNLen[UClsIdxN]);
+    UClsBNext[UClsIdxN] := -1;
+{$IFDEF PXX_UCLSIDX_BREAK}
+    { POSITIVE CONTROL: chain DESCENDING instead of ascending. Every candidate
+      is still found, so a lookup still "works" -- only the tie-break and the
+      first-wins arms change. This is the silent-wrong-value shape a value
+      comparison over a compiling corpus cannot fail on, so the crosscheck must
+      be able to see it. }
+    UClsBNext[UClsIdxN] := UClsBHead[h];
+    UClsBHead[h] := UClsIdxN;
+    if UClsBTail[h] < 0 then UClsBTail[h] := UClsIdxN;
+{$ELSE}
+    if UClsBHead[h] < 0 then UClsBHead[h] := UClsIdxN
+    else UClsBNext[UClsBTail[h]] := UClsIdxN;
+    UClsBTail[h] := UClsIdxN;
+{$ENDIF}
+    UClsIdxN := UClsIdxN + 1;
+  end;
+end;
+
+procedure UClsIndexInvalidate;
+{ Call after CHANGING a registered row's name, or after resetting the table. }
+begin
+  UClsIdxDirty := True;
+end;
+
+function FindUClassImpl(const name: AnsiString; useIdx: Boolean): Integer;
+{ useIdx=False is the ORIGINAL full-scan form, kept as the crosscheck oracle
+  under -dPXX_UCLSIDX_CROSSCHECK. Selection and ranking are IDENTICAL in both
+  arms; only which rows are visited differs, and the index visits exactly the
+  rows a full scan would have name-matched, in the same ascending order -- which
+  is what preserves the documented tie-break (a tie keeps the FIRST row). }
+var i, bestRank, r, hop, bestHop, hsh: Integer; lo, name2: AnsiString;
 begin
 {$IFDEF PXX_UCLS_STATS}
   PxxFUCCalls := PxxFUCCalls + 1;
@@ -1888,6 +1966,8 @@ begin
   bestRank := -2;
   name2 := name;
   lo := ULower(name2);
+  hsh := UClsHashStr(lo);
+  if useIdx then UClsIndexSync;
   { A ROUTINE-LOCAL type wins over everything, and this arm is DELIBERATELY
     OUTSIDE the `CurrentUnitIdx >= 0` guard below.
 
@@ -1910,8 +1990,8 @@ begin
     below rather than ranked, which is the half the alias table cannot have:
     there a unit-level row legitimately answers from every scope. }
   bestHop := 0;
-  i := 0;
-  while i < UClsCount do
+  if useIdx then i := UClsBHead[hsh] else i := 0;
+  while (i >= 0) and (useIdx or (i < UClsCount)) do
   begin
     if (UClsUnitIdx[i] = CurrentUnitIdx) and (UClsOwnerProc[i] >= 0) and
        UNameMatch(UClsNOff[i], UClsNLen[i], lo) then
@@ -1920,7 +2000,7 @@ begin
       if (hop >= 0) and ((Result < 0) or (hop < bestHop)) then
       begin Result := i; bestHop := hop; end;
     end;
-    Inc(i);
+    if useIdx then i := UClsBNext[i] else i := i + 1;
   end;
   if Result >= 0 then Exit;
   { A class declared in the unit being parsed wins over a same-named one
@@ -1932,13 +2012,13 @@ begin
     bug-pascal-duplicate-class-name-silently-shadows. }
   if CurrentUnitIdx >= 0 then
   begin
-    i := 0;
-    while i < UClsCount do
+    if useIdx then i := UClsBHead[hsh] else i := 0;
+    while (i >= 0) and (useIdx or (i < UClsCount)) do
     begin
       if (UClsUnitIdx[i] = CurrentUnitIdx) and
          UNameMatch(UClsNOff[i], UClsNLen[i], lo) and
          ScopeReachesProc(UClsOwnerProc[i]) then begin Result := i; Exit; end;
-      Inc(i);
+      if useIdx then i := UClsBNext[i] else i := i + 1;
     end;
     { AN ALIAS DECLARED HERE ALSO BEATS A CLASS ROW FROM ELSEWHERE, and it did
       not, because the alias table is consulted only after the whole UCls scan
@@ -1960,8 +2040,8 @@ begin
     Result := UClsAliasCi[i];
     Exit;
   end;
-  i := 0;
-  while i < UClsCount do
+  if useIdx then i := UClsBHead[hsh] else i := 0;
+  while (i >= 0) and (useIdx or (i < UClsCount)) do
   begin
     { ...and never another routine's local type, which the flat fallback would
       otherwise hand out globally -- the leak this whole key exists to close. }
@@ -2002,7 +2082,7 @@ begin
         end;
       end;
     end;
-    Inc(i);
+    if useIdx then i := UClsBNext[i] else i := i + 1;
   end;
   { …AND THE ALIAS ROWS RANK IN THE SAME SCAN AS THE CLASS ROWS.
 
@@ -2042,6 +2122,31 @@ begin
   { class-name alias (`TOptionList = TList;`) — resolve to the target row }
   Result := FindUClassAliasCi(lo);
 end;
+
+function FindUClass(const name: AnsiString): Integer;
+{ The index arm is what ships. Under -dPXX_UCLSIDX_CROSSCHECK both arms run on
+  every call and any disagreement is reported -- and -dPXX_UCLSIDX_BREAK chains
+  the buckets DESCENDING so the crosscheck has a case it must reject. A checker
+  nobody has watched fire reports silence, not agreement. }
+{$IFDEF PXX_UCLSIDX_CROSSCHECK}
+var a, b: Integer;
+{$ENDIF}
+begin
+{$IFDEF PXX_UCLSIDX_CROSSCHECK}
+  a := FindUClassImpl(name, True);
+  b := FindUClassImpl(name, False);
+  if a <> b then
+    WriteLn('UCLSIDX-DISAGREE name=', name, ' idx=', a, ' scan=', b);
+  FindUClass := a;
+{$ELSE}
+{$IFDEF PXX_UCLSIDX_OFF}
+  FindUClass := FindUClassImpl(name, False);   { A/B arm: original full scans }
+{$ELSE}
+  FindUClass := FindUClassImpl(name, True);
+{$ENDIF}
+{$ENDIF}
+end;
+
 
 procedure RegisterUClassAlias(noff, nlen, ci: Integer);
 begin
