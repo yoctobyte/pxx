@@ -2,9 +2,9 @@
 track: N
 prio: 60
 type: feature
-owner: ""
+owner: frankh-c0
 blocked-by: []
-status: open
+status: working
 created: 2026-09-20
 found-by: frankb-8e
 summary: "SPLIT OUT OF feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback 2026-09-20 BECAUSE THAT TICKET'S ACCEPTANCE CRITERION WAS UNSATISFIABLE BY IT: it read `the ESP demo stops polling`, while its own `What this does NOT deliver` section says delivering it cannot achieve that. A gate that cannot pass is not a gate, so the bar moved here and that ticket's acceptance was restated to what it does deliver. THE MECHANISM, WHICH IS WHY THIS IS NOT MORE OF THE SAME WORK: the delivered thunk `$pycbthunk_<def>_<sig>` marshals through Variants, and BOXING A VARIANT ALLOCATES. An ISR that allocates is a latent crash with GOOD LATENCY NUMBERS -- it does not fail on the bench, it fails when the heap lock happens to be held by the code the interrupt preempted, which is a schedule-dependent deadlock or corruption that a demo will not reproduce and a soak test might not either. So the existing thunk shape must NOT simply be pointed at an ISR slot. What is wanted is a RESTRICTED thunk: fixed arity, scalar-only parameters, no Variant anywhere on the path, provably allocation-free. THE ACCEPTANCE IS A PROOF OF ABSENCE, NOT A PASSING DEMO, and that is the hard part: `examples/esp32/nilpy-hw-c3` polling less is not evidence, because an allocating ISR usually works. The claim has to be that the emitted thunk contains no call that can reach the allocator, which is a property of the generated code and should be asserted against it rather than against behaviour. Pascal-side `interrupt;`/`iram;` already exist and are DONE (feature-esp32-isr-iram, 2026-06-21) -- this is the NilPy-side entry point, not that. Nothing measured yet: no repro, no emitted-code inspection, no allocation census of the current thunk. THE OWNER CALLED ESP INTERRUPTS A MUST-HAVE (relayed secondhand 2026-09-20, marked as such), which is why the parent sits at 85; this half is 60 because it is the harder and less specified of the two and nothing downstream is blocked on it today."

@@ -4,8 +4,8 @@ prio: 85
 type: feature
 owner: frankh-c0
 blocked-by: []
-summary: "THE STORE ARM'S ONE SILENT FALLTHROUGH IS CLOSED 2026-09-20 (the `else` the `What this does NOT deliver` section prescribed; unreachable, so proved by forcing `cbThunk := -1` and watching both fixture stores warn, then reverted to a byte-identical binary). AND THREE PLACES IN THIS FILE SAID THE FIELD SITE WAS STILL UNDONE AFTER 8dba4c72e DELIVERED IT -- the four-row table, the next-step paragraph, and the three-consumer list whose own first line is "Say so before anyone builds half of it twice". The SUMMARY was updated in the delivering commit as required and the task LIST was not, so the part a seat reads to decide what to build was the wrong part. All three struck and dated rather than rewritten. WHAT REMAINS IS CONSUMER 3, ESP INTERRUPTS, AND IT IS A DIFFERENT CONTRACT -- not more of the same work. Boxing into Variants ALLOCATES, and an ISR that allocates is a latent crash with good latency numbers, so the thunk shape delivered here does not simply extend to it. DELIVERED: a NilPy `def` compiles all-Variant and can never match a native procedural signature, so `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 the ARGUMENT site (2b28c3302), consumer 2 the STORE site (8dba4c72e) -- procedural field, array element or procvar, via NodeProcSlotSig. `examples/esp32/nilpy-hw-c3` STILL POLLS and its header is still accurate; do not attach that demo sentence to this ticket until consumer 3 lands. A capturing def -- one whose captures are lambda-lifted into EXTRA PARAMETERS, so it cannot match any slot arity by construction -- remains silent at both delivered sites and is its own ticket."
-status: working
+summary: "RESOLVED 2026-09-21 — ALL THREE REVISED ACCEPTANCE ITEMS WERE ALREADY DELIVERED AND THE SUMMARY IS WHAT KEPT IT OPEN AT p85, where `next --track N` offered it as the highest-ranked open ticket in the lane. Consumer 3 (ESP interrupts) was split out by this ticket's own Acceptance section into feature-n-a-non-allocating-restricted-thunk-for-an-isr on 2026-09-20; the split updated the Acceptance section and NOT this line, so the body said done and the summary said work remains. Verified before closing: 2b28c3302 and 8dba4c72e are both ancestors of origin/master, the consumer-2 fixture exists, and the mint-failure else arm is in compiler/pyparser.inc. HISTORICAL SUMMARY FOLLOWS. THE STORE ARM'S ONE SILENT FALLTHROUGH IS CLOSED 2026-09-20 (the `else` the `What this does NOT deliver` section prescribed; unreachable, so proved by forcing `cbThunk := -1` and watching both fixture stores warn, then reverted to a byte-identical binary). AND THREE PLACES IN THIS FILE SAID THE FIELD SITE WAS STILL UNDONE AFTER 8dba4c72e DELIVERED IT -- the four-row table, the next-step paragraph, and the three-consumer list whose own first line is "Say so before anyone builds half of it twice". The SUMMARY was updated in the delivering commit as required and the task LIST was not, so the part a seat reads to decide what to build was the wrong part. All three struck and dated rather than rewritten. WHAT REMAINS IS CONSUMER 3, ESP INTERRUPTS, AND IT IS A DIFFERENT CONTRACT -- not more of the same work. Boxing into Variants ALLOCATES, and an ISR that allocates is a latent crash with good latency numbers, so the thunk shape delivered here does not simply extend to it. DELIVERED: a NilPy `def` compiles all-Variant and can never match a native procedural signature, so `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 the ARGUMENT site (2b28c3302), consumer 2 the STORE site (8dba4c72e) -- procedural field, array element or procvar, via NodeProcSlotSig. `examples/esp32/nilpy-hw-c3` STILL POLLS and its header is still accurate; do not attach that demo sentence to this ticket until consumer 3 lands. A capturing def -- one whose captures are lambda-lifted into EXTRA PARAMETERS, so it cannot match any slot arity by construction -- remains silent at both delivered sites and is its own ticket."
+status: done
 ---
 
 # A NilPy def has no native-ABI entry point to hand to a C callback
@@ -434,3 +434,42 @@ Closed with the `else` that section prescribed, with a message that is deliberat
 — then removed the injected line and rebuilt. **The binary returned to `3c6e31f94a62`, byte-identical to the pre-experiment one**, which is the control on the control: it says the revert was clean and the seed chain did not drift across the two cycles.
 
 Verified: `converged after 1 round(s)` on both rebuilds (a real recompute, not the stamp path); the consumer-2 fixture identical to `.expected`; **zero** occurrences of the new warning on that fixture with the control removed, which is the row that would catch the arm firing when it must not.
+
+## RESOLVED 2026-09-21 (frankH) — ITS OWN ACCEPTANCE WAS ALREADY MET, AND THE SUMMARY WAS WHAT KEPT IT OPEN AT p85
+
+I took this from `next --track N`, which offered it as the **highest-ranked
+open Track N ticket at effective p85**. It should not have been offered at all.
+The three revised acceptance items were already delivered, and the fourth thing
+— ESP interrupts — was split out by this ticket's own Acceptance section into
+[[feature-n-a-non-allocating-restricted-thunk-for-an-isr]].
+
+Verified rather than read off the ticket, because the ticket is what was wrong:
+
+- item 1, argument site — `2b28c3302`, ancestor of origin/master
+- item 2, store site — `8dba4c72e`, ancestor of origin/master, and the fixture
+  `test/test_nilpy_def_into_a_native_callback_slot.npy` exists
+- item 3, no silent path at either site — the `PyDefFitsCallbackThunk` arms are
+  in `compiler/pyparser.inc`, and the mint-failure `else` the ticket prescribed
+  was closed 2026-09-20 and proved by forcing `cbThunk := -1`
+
+**THE CONTRADICTION WAS INTERNAL AND IT WAS IN THE HALF EVERYONE READS.** The
+SUMMARY says *"WHAT REMAINS IS CONSUMER 3, ESP INTERRUPTS"*. The Acceptance
+section says *"The demo stopping polling is the ISR ticket's acceptance, not
+this one's"*, and lists all three of its own items as Done. Both were edited on
+2026-09-20. The body was right and the summary was stale, and **the summary is
+what carries the prio into the ranker** — so a finished ticket sat at the top
+of a lane's queue and dispatched a seat to it.
+
+That is CLAUDE.md's own rule firing exactly as written: *a stale summary
+promotes dead work to the top of a queue and a seat gets dispatched to it.* It
+is worth noting the summary was not careless — it was written when consumer 3
+WAS this ticket's, and it went stale the moment the same author split consumer
+3 out. **The split updated the Acceptance section and not the summary**, which
+is the same commit-boundary failure the rule describes, arriving inside a
+ticket whose own summary is otherwise meticulous.
+
+**No code changed here.** The work was done by others; this closes the record.
+Consumer 3 continues under the ISR ticket, which I am taking.
+
+## Log
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:19 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:189 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3896 rejected:85`
+`working:32 unfinished:19 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:188 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3897 rejected:85`
 
 ## Held now (working/ — do not touch these files)
 
@@ -27,7 +27,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
-- `feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback` [N] — owner: frankh-c0
+- `feature-n-a-non-allocating-restricted-thunk-for-an-isr` [N] — owner: frankh-c0
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-expansion` [P] — owner: frankD
@@ -76,7 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 569, ranked
+## Ready — top 30 of 568, ranked
 
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
@@ -109,4 +109,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
 
-_539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_538 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
