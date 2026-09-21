@@ -208,4 +208,4 @@ wrapper's exit code. No compiler change in this commit; the fixture is already
 wired into the tier, so no `make test-nilpy` was needed and none was run.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6b728ca31.
