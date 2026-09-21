@@ -472,4 +472,4 @@ ticket whose own summary is otherwise meticulous.
 Consumer 3 continues under the ISR ticket, which I am taking.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 04be5c412.
