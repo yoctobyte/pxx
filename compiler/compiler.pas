@@ -977,9 +977,13 @@ begin
     through OutWrote (util.inc), so this is exact, not a size guess. }
   if OutWriteShort then
   begin
-    writeln(StdErr, 'pascal26: error: the output file was truncated: ', path);
-    writeln(StdErr, '  a write stored fewer bytes than it was asked to; the file on disk is incomplete.');
-    writeln(StdErr, '  usual cause: the filesystem is full (ENOSPC) or a file-size limit.');
+    writeln(StdErr, 'pascal26: error: a write to the output file stored fewer bytes than asked: ', path);
+    writeln(StdErr, '  check all four -- the first is the commonest and the last is the one that fools people:');
+    writeln(StdErr, '    df -h <dir>   free BYTES');
+    writeln(StdErr, '    df -i <dir>   free INODES -- can hit 100% while df -h reads 9%');
+    writeln(StdErr, '    ulimit -f     a file-size limit truncates at a plausible size');
+    writeln(StdErr, '    another pascal26 writing THIS SAME PATH -- two writers interleave,');
+    writeln(StdErr, '      and the file can then end up the RIGHT size, so its size proves nothing.');
     Halt(1);
   end;
   if OutputArtefactLanded(path) then Exit;
