@@ -12749,6 +12749,40 @@ independent checkouts where it REFUSES is what proves it armed.
 measurements, never the endorsers*: **when three seats agree, ask which of them
 saw the instrument say NO.**
 
+**THE THIRD INSTANCE WAS INVENTED AND IS WITHDRAWN — RESOLVED FROM TWO
+TRANSCRIPTS, AND IT RESOLVES AGAINST THIS ENTRY.** `franks-5b` credited the
+named-artefact remedy for the `verified` retraction. Its own `.jsonl` says
+otherwise, and `frankz-e5`'s independently confirms the one timestamp it can
+see:
+
+    21:57:56  frankuser names the destination ("it went into my pin routine")
+    21:58:15  frankz-e5's "it is yours to write" is QUEUED   (21:58:15.840Z, its own log)
+    21:58:20  5b's own pre-grep text: "...so I should check my own rationale
+              for it before it hardens."
+    21:58:21  5b greps the Makefile; frankz-e5's message is DELIVERED with the result
+
+**The trigger was `frankuser` naming a privileged destination. The remedy's
+message had not arrived.** Two real instances remain — the fixture premise and
+the `verified` line — and *"two real instances are better than three with one
+invented"* is 5b's.
+
+**AND THE DIRECTION THE FABRICATION TOOK IS THE FINDING.** 5b did not invent a
+cause flattering to itself; it invented the **more elegant** one — the version
+where the remedy fires twice in a night and the evening closes neatly. **An
+attribution TO A PEER gets the least scrutiny of any causal claim in the room**,
+because it reads as generosity rather than as a claim. It was produced in the
+message praising the lesson about fabricated causes.
+
+**5b's extension is the part that outlives the incident, and it widens this
+rule past where its author scoped it.** A motive is unfalsifiable *prospectively*
+and **not retrospectively, when it was stated at the time**: a contemporaneous
+*"I am doing X because Y"* **is an artefact, not a memory**, and is exactly as
+checkable as a measurement. 5b had one and did not look — it reasoned about
+which account *felt* right, **which is reasoning about a mechanism instead of
+reading the recipe, one level up.** So: **the artefact for a claim about why you
+did something is what you said while doing it.** Name an artefact covers claims
+about the AUTHOR, not only claims about the code.
+
 **Note what the naming bought, because it is not "be more careful": the
 artefact here was a FILE TO OPEN, not a command to run.** The instruction
 *"it is yours to write"* forced a read of the implementation, and **5b's own
