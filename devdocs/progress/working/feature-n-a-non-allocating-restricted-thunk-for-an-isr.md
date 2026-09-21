@@ -7,7 +7,7 @@ blocked-by: []
 status: working
 created: 2026-09-20
 found-by: frankb-8e
-summary: "SPLIT OUT OF feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback 2026-09-20 BECAUSE THAT TICKET'S ACCEPTANCE CRITERION WAS UNSATISFIABLE BY IT: it read `the ESP demo stops polling`, while its own `What this does NOT deliver` section says delivering it cannot achieve that. A gate that cannot pass is not a gate, so the bar moved here and that ticket's acceptance was restated to what it does deliver. THE MECHANISM, WHICH IS WHY THIS IS NOT MORE OF THE SAME WORK: the delivered thunk `$pycbthunk_<def>_<sig>` marshals through Variants, and BOXING A VARIANT ALLOCATES. An ISR that allocates is a latent crash with GOOD LATENCY NUMBERS -- it does not fail on the bench, it fails when the heap lock happens to be held by the code the interrupt preempted, which is a schedule-dependent deadlock or corruption that a demo will not reproduce and a soak test might not either. So the existing thunk shape must NOT simply be pointed at an ISR slot. What is wanted is a RESTRICTED thunk: fixed arity, scalar-only parameters, no Variant anywhere on the path, provably allocation-free. THE ACCEPTANCE IS A PROOF OF ABSENCE, NOT A PASSING DEMO, and that is the hard part: `examples/esp32/nilpy-hw-c3` polling less is not evidence, because an allocating ISR usually works. The claim has to be that the emitted thunk contains no call that can reach the allocator, which is a property of the generated code and should be asserted against it rather than against behaviour. Pascal-side `interrupt;`/`iram;` already exist and are DONE (feature-esp32-isr-iram, 2026-06-21) -- this is the NilPy-side entry point, not that. Nothing measured yet: no repro, no emitted-code inspection, no allocation census of the current thunk. THE OWNER CALLED ESP INTERRUPTS A MUST-HAVE (relayed secondhand 2026-09-20, marked as such), which is why the parent sits at 85; this half is 60 because it is the harder and less specified of the two and nothing downstream is blocked on it today."
+summary: "PREMISE MEASURED 2026-09-21 AND IT IS FALSE FOR THE SCALAR CASE — the existing `$pycbthunk_` does NOT allocate per call: 100x the iterations gives +2 allocations (N=200 allocs=5, N=20000 allocs=7) while a positive control built first scales exactly 100x (727 -> 72269), so the flat line is a measurement and not a blind spot. THE ALLOCATION IS IN THE DEF BODY, NOT THE MARSHALLING: even a `(const AnsiString): AnsiString` slot crosses the thunk allocation-free, while `def grow(s): return s + 'x'` allocates ~1 per call. SO THE WANTED THUNK LARGELY EXISTS AND WHAT IS MISSING IS THE ENFORCEMENT — nothing refuses a def whose BODY can allocate. The Gate section's proposed positive control (reject the existing thunk, once established that it allocates) is UNSATISFIABLE for that reason and is replaced by a measured pair: must-reject `grow`, must-accept `two`. x86-64 only; xtensa and riscv32 unmeasured, which is exactly where an ABI-adjacent property hides. ORIGINAL SUMMARY FOLLOWS. SPLIT OUT OF feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback 2026-09-20 BECAUSE THAT TICKET'S ACCEPTANCE CRITERION WAS UNSATISFIABLE BY IT: it read `the ESP demo stops polling`, while its own `What this does NOT deliver` section says delivering it cannot achieve that. A gate that cannot pass is not a gate, so the bar moved here and that ticket's acceptance was restated to what it does deliver. THE MECHANISM, WHICH IS WHY THIS IS NOT MORE OF THE SAME WORK: the delivered thunk `$pycbthunk_<def>_<sig>` marshals through Variants, and BOXING A VARIANT ALLOCATES. An ISR that allocates is a latent crash with GOOD LATENCY NUMBERS -- it does not fail on the bench, it fails when the heap lock happens to be held by the code the interrupt preempted, which is a schedule-dependent deadlock or corruption that a demo will not reproduce and a soak test might not either. So the existing thunk shape must NOT simply be pointed at an ISR slot. What is wanted is a RESTRICTED thunk: fixed arity, scalar-only parameters, no Variant anywhere on the path, provably allocation-free. THE ACCEPTANCE IS A PROOF OF ABSENCE, NOT A PASSING DEMO, and that is the hard part: `examples/esp32/nilpy-hw-c3` polling less is not evidence, because an allocating ISR usually works. The claim has to be that the emitted thunk contains no call that can reach the allocator, which is a property of the generated code and should be asserted against it rather than against behaviour. Pascal-side `interrupt;`/`iram;` already exist and are DONE (feature-esp32-isr-iram, 2026-06-21) -- this is the NilPy-side entry point, not that. Nothing measured yet: no repro, no emitted-code inspection, no allocation census of the current thunk. THE OWNER CALLED ESP INTERRUPTS A MUST-HAVE (relayed secondhand 2026-09-20, marked as such), which is why the parent sits at 85; this half is 60 because it is the harder and less specified of the two and nothing downstream is blocked on it today."
 ---
 
 # A non-allocating restricted thunk for an ISR
@@ -117,3 +117,77 @@ So the shape is: **three calls, one of which (`a=2232`) is the def itself** — 
 **SO THE FIRST DELIVERABLE HERE IS NOT THE THUNK, IT IS THE MAP:** a way to resolve a `call a=<n>` target to a routine name. Without it the IR dump shows the call graph in a coordinate system nothing else in the tree speaks, and any claim about what a thunk reaches is guesswork wearing a proc number. With it, the allocation question is probably a short afternoon.
 
 **AND THE PREMISE REMAINS UNMEASURED.** The `tk=22` temporaries are suggestive of Variant marshalling and are not proof of a heap allocation — a Variant in a stack temporary need not allocate. **Nothing here yet establishes that the current thunk allocates.** That is still inherited from the parent ticket's prose, and this ticket is pointless if it is false.
+
+## THE PREMISE IS MEASURED AND IT IS FALSE FOR THE SCALAR CASE (frankH, 2026-09-21)
+
+This ticket's `Not established` section asks for exactly one thing first: *"The
+claim that the present thunk allocates is inherited from the parent ticket's
+prose and should be MEASURED before any design work ... this ticket would be
+pointless if it turned out false."* Measured, with the positive control built
+before the result was read.
+
+**Instrument:** `-dPXX_ALLOC_CENSUS`, whose `pxx-census:` line reports
+allocs/frees/live. **Population and tree:** x86-64, HEAD at pxx@04be5c412,
+compiler byte-identical to pin v414 (`aeadb1754b80`).
+
+**Method is a DIFFERENTIAL with the route varied and the subject held fixed** —
+the same loop, the same call site, the same `cbslot.pas` slot, differing only in
+whether the callee is a NilPy `def` (thunked) or a Pascal routine (plain
+address). And the load is varied by TWO ORDERS OF MAGNITUDE, because a single N
+cannot distinguish "does not allocate" from "allocates a constant".
+
+    thunked   (def two(a,b): return a+b)      N=200 -> allocs=5      N=20000 -> allocs=7
+    native    (cb.TheMaker, no thunk)         N=2000 -> allocs=8
+    CONTROL   (a loop that must allocate)     N=200 -> allocs=727    N=20000 -> allocs=72269
+
+**100x the iterations, +2 allocations.** The control scales exactly 100x, so the
+instrument demonstrably sees per-iteration allocation and the thunk's flat line
+is a measurement rather than a blind spot. **The existing `$pycbthunk_` does not
+allocate per call for a scalar signature.**
+
+### AND THE ALLOCATION IS IN THE DEF BODY, NOT IN THE MARSHALLING
+
+Followed up because "no allocation" on a scalar slot does not yet say where
+allocation WOULD come from. A second slot shape, `function(const s: AnsiString):
+AnsiString`, in a scratch unit so no green fixture was touched:
+
+    def ident(s): return s          N=200 -> allocs=3     N=20000 -> allocs=5
+    def grow(s):  return s + "x"    N=200 -> allocs=196   N=20000 -> allocs=19780
+
+**`ident` was nearly a false negative and is kept as the lesson**: it returns the
+literal unchanged, so it never reaches the allocator and would have "confirmed"
+that string thunks are allocation-free. Only forcing a concatenation exercised
+the route. *Does my probe reach the thing under test BY THE ROUTE under test?*
+
+So even an **AnsiString** parameter and return cross the thunk without
+allocating. The ~1-per-iteration allocation in `grow` is the def BODY doing
+allocating work.
+
+### What this does to the ticket
+
+**The wanted object largely EXISTS.** `What is wanted` asks for fixed arity,
+scalar-only parameters and return, and no path to the allocator. For a scalar
+signature the emitted thunk already meets the third — measured, not read.
+
+**What is missing is the ENFORCEMENT, which is the half the ticket said matters:
+"the restriction enforced rather than documented".** Nothing today refuses a def
+whose body allocates, and a body is where the allocation demonstrably is.
+
+**The positive control the `Gate` section demands is now established rather than
+assumed**, and it is not the one the ticket guessed. The ticket proposed
+rejecting the existing `$pycbthunk_` *"but only once it is ESTABLISHED that it
+allocates"* — it does not, so that control would have been unsatisfiable and a
+guard built on it would have had nothing to reject. The working pair is:
+
+    MUST REJECT : def grow(s): return s + "x"     ~1 allocation per call
+    MUST ACCEPT : def two(a, b): return a + b     flat across 100x
+
+### Scope limits, stated rather than left to be assumed
+
+- **x86-64 only.** Nothing here is measured on xtensa or riscv32, and this is an
+  ABI-adjacent property, so the 64-bit host is exactly where a width- or
+  convention-dependent difference would be invisible.
+- Two slot shapes measured: `(Integer, Integer) -> Integer` and
+  `(const AnsiString) -> AnsiString`. **Variant-parameter slots not measured.**
+- The census samples on a geometric threshold, so the absolute counts are
+  approximate. The 100x/flat CONTRAST is not: it is two orders of magnitude.
