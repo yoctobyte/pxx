@@ -38,3 +38,4 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-20 — the borg watcher saw `test-core#src:test/test_set_in_64bit_element.pas` GREEN at 0a03074b1139 (tier native) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+- 2026-09-21 — the borg watcher saw `test-core#src:test/test_set_in_64bit_element.pas` GREEN at edf1ecf4bfe8 (tier native) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
