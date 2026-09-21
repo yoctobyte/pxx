@@ -164,13 +164,16 @@ interrupt context.
 as an ordinary external. Declared `function xPortInIsrContext: Integer;
 external;` it links and returns.
 
-**MEASURED BY ME**, esp32c3 under qemu, IDF profile, 398 callbacks:
+**MEASURED BY ME, BOTH ISAs**, under qemu, IDF profile, one program:
 
-    PROBE: app_main       in-isr=0
-    PROBE: timer-callback in-isr=0      (all 398)
+    esp32c3 (riscv32)   app_main in-isr=0   timer-callback in-isr=0   (all 398)
+    esp32s3 (xtensa)    app_main in-isr=0   timer-callback in-isr=0   (all 392)
 
-So the esp_timer callback is task context **by measurement**, not by its own
-source comment — which is §1.4's caveat now established rather than read.
+Zero non-zero readings on either chip. So the esp_timer callback is task
+context **by measurement on both ISAs**, not by its own source comment — which
+is §1.4's caveat now established rather than read. (The callback counts differ
+only because each run is a fixed wall-clock window against a 100 ms periodic
+timer; they are not a quantity either row is asserting.)
 
 **DERIVED FROM THE IDF SOURCE, NOT MEASURED BY ME — label it that way when
 quoting it.** `xPortInIsrContext` returns `port_uxInterruptNesting[coreID]`
