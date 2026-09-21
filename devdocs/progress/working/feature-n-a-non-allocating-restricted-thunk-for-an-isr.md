@@ -191,3 +191,109 @@ guard built on it would have had nothing to reject. The working pair is:
   `(const AnsiString) -> AnsiString`. **Variant-parameter slots not measured.**
 - The census samples on a geometric threshold, so the absolute counts are
   approximate. The 100x/flat CONTRAST is not: it is two orders of magnitude.
+
+## THE "LATENT CRASH" JUSTIFICATION DOES NOT SURVIVE ON THE IDF PROFILE (frankb-8e, verified independently by frankH 2026-09-21)
+
+Both citations read in the tree on this box rather than taken on report,
+because they contradict this ticket's own stated reason to exist.
+
+**(1) On the IDF profile, pxx's allocator IS the IDF heap.**
+`compiler/builtin/builtinheap.pas:1391`, `{$ifdef PXX_ESP_IDF}`, in its own
+words: *"the pxx heap is backed by the IDF heap — calloc/free externals resolve
+to newlib/heap_caps at IDF link time"*, with `HeapMmap` never called. `EspArena`
+is the BARE profile only. So a pxx allocation in an IDF-profile ISR is a
+heap_caps allocation.
+
+**(2) The IDF makes malloc/free ISR-safe deliberately.**
+`components/heap/multi_heap_platform.h:18-19`, verbatim:
+
+    /* Because malloc/free can happen inside an ISR context,
+       we need to use portmux spinlocks here not RTOS mutexes */
+
+and the macro below it uses `portENTER_CRITICAL_SAFE`, the ISR-safe variant.
+The IDF did not tolerate allocation in an ISR; it chose its locking primitive
+FOR it.
+
+**So "an ISR that allocates is a latent crash" — the sentence in this ticket
+and in its parent — is contradicted by the platform's own source on the profile
+this work targets.** The real cost there is **latency and determinism**: a
+spinlock and a critical section inside an interrupt handler. That is still a
+good reason to forbid allocation in a real-time path, but it is a DIFFERENT
+argument, with a different enforcement and a different acceptance, and the
+ticket must not keep asserting the stronger one.
+
+### THE PROFILE SPLIT MUST NOT BE COLLAPSED — "may a pxx ISR allocate" has at least two answers
+
+**IDF profile: answered, by the platform, safe-but-costly.**
+
+**Bare profile: OPEN.** There pxx uses its own `EspArena` and nothing in the
+IDF's answer travels to it.
+
+**A LEAD ON THE BARE HALF, AND IT IS A LEAD AND NOT A FINDING.**
+`builtinheap.pas:1050-1059` records that the hard lock *"is emitted by the
+CODEGEN around the tkGetMem/tkFreeMem sites (EmitAcquireHeapLock,
+ir_codegen.inc) and PXXAlloc does not take it — so an allocation reached from a
+Pascal HELPER (PXXObjAlloc -> PXXAlloc ...) held nothing"*. If that still holds,
+then on the bare profile a concurrent allocator entry has no mutual exclusion on
+the free list, and an ISR is a concurrent context — which would put the
+corruption argument back, but located precisely and only on bare.
+
+**NOT VERIFIED BY ME.** That comment is describing a threading bug with its own
+measurement date and I have not established what the tree does today, nor that
+the thread case transfers to the interrupt case. Recorded so the next reader has
+the thread to pull, explicitly not as a result.
+
+## THE PRECONDITION IS ASSERTABLE, AND THE ASSERTION MUST BE `<> 0` NOT `= 1` (frankb-8e)
+
+`BaseType_t xPortInIsrContext(void)` is an ordinary IDF external, so pxx can
+call it and the fixture can ASSERT the context rather than claim it in a
+comment. **The two ports return different quantities:**
+
+    riscv   port.c:461/469  return port_uxInterruptNesting[coreID];      RAW COUNT
+    xtensa  port.c          return (port_interruptNesting[coreID] != 0); NORMALISED
+
+So under nesting riscv legitimately answers 2 or 3 where xtensa answers 1, and
+an `= 1` row is a cross-target trap that the esp32c3 arm alone cannot reveal —
+**correct on every run until a second interrupt arrives during the first.** The
+variable is even spelled differently per port (`port_uxInterruptNesting` vs
+`port_interruptNesting`), so a grep for one finds half the story.
+
+**Row design, therefore: assert the ASYMMETRY as predicates, not values** —
+task-dispatch reads 0, ISR-dispatch reads NON-ZERO, on both chips. Portable
+across both ports, survives nesting, and the single asymmetry validates the
+instrument and the precondition together. A raw nesting count is a separate
+observational row and is **riscv-only**, because xtensa cannot produce it.
+
+**Why the asymmetry and not an absolute value:** a probe that only ever reads 0
+cannot distinguish "both are task context" from "the instrument always returns
+0". That is the guard-that-cannot-fail shape, and the discriminating half lives
+in this ticket's arm.
+
+### THE TASK-CONTEXT BASELINE IS MEASURED ON BOTH ISAs (frankb-8e, 2026-09-21)
+
+    esp32c3 (riscv32)   app_main in-isr=0   timer-callback in-isr=0   (all 398)
+    esp32s3 (xtensa)    app_main in-isr=0   timer-callback in-isr=0   (all 392)
+
+So `xPortInIsrContext` is callable from Pascal on both ports, and the ordinary
+esp_timer callback is task context **by measurement on both**, not merely by the
+source comment. The 398/392 difference is a fixed wall-clock window against a
+100 ms periodic timer and is **not a signal**.
+
+**AND THE BASELINE DOES NOT VALIDATE THE INSTRUMENT — 8e SAYS SO ITSELF AND IS
+RIGHT.** Four zeros across two ISAs are exactly as consistent with *"the
+function always returns 0"* as two zeros were: more rows of the SAME arm add
+confidence about that arm and none about the instrument. **A wider clean sweep
+is the more seductive version of the trap, because it reads like
+corroboration.** Only the ISR-dispatch row in THIS ticket's arm can produce a
+non-zero, so the guard-that-cannot-fail is discharged here or nowhere.
+
+**The riscv nesting quantifier is verified in source, not inferred**:
+`portasm.S:607` branches on it in terms — *"If we reached here from another
+low-priority ISR, i.e, port_uxInterruptNesting[coreID] > 0, then skip stack
+pushing to TCB"*. So a `= 1` row is a live trap on that port and not a
+theoretical one.
+
+**`iram;` does its placement job**: `MyIsr` in `test_esp_isr_register.pas`
+resolves to `.iram1.text` on the IDF object, same as an `interrupt;` body. (Both
+emit symbol size 0, which matters to nothing here but would matter to any tool
+reading FUNC sizes.)
