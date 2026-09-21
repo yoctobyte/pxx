@@ -34109,14 +34109,24 @@ test-emit-obj: $(COMPILER)
 	#    Measured at the fix: 133608 -> 31312 for this source, and the marginal
 	#    cost of an extra object in a 3-object link 71440 -> 20296.
 	#    feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes
-	rm -f $(TESTTMP)/test_emit_obj_x64_dce.o
+	rm -f $(TESTTMP)/test_emit_obj_x64_dce.o $(TESTTMP)/test_emit_obj_x64_nodce.o
 	./$(COMPILER) -Fulib/rtl --emit-obj --dce test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64_dce.o
+	#    THE BASELINE IS EXPLICITLY --no-dce SINCE 2026-09-21, and it has to be.
+	#    The pass now defaults ON under --emit-obj, so test_emit_obj_x64.o above
+	#    -- built with no flag -- is a DCE'd object too, and comparing the two
+	#    became a comparison of one object with itself. It did not read as a
+	#    broken row: `-lt` on two equal numbers FAILS, so it went red rather
+	#    than quietly passing, which is the only reason the default change was
+	#    caught here instead of downstream. Naming --no-dce keeps the row
+	#    measuring what it was written to measure -- that the pass SHRINKS an
+	#    object -- rather than what the default happens to be.
+	./$(COMPILER) -Fulib/rtl --emit-obj --no-dce test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64_nodce.o
 	#    ASSERT THE PRECONDITION, not just the comparison: a size test whose
 	#    inputs were never proven to exist cannot fail. `&&` between the stages,
 	#    never `;`.
-	test -s $(TESTTMP)/test_emit_obj_x64.o && test -s $(TESTTMP)/test_emit_obj_x64_dce.o
-	test $$(size -A $(TESTTMP)/test_emit_obj_x64_dce.o | awk '$$1==".text"{print $$2}') -lt \
-	     $$(size -A $(TESTTMP)/test_emit_obj_x64.o     | awk '$$1==".text"{print $$2}')
+	test -s $(TESTTMP)/test_emit_obj_x64_nodce.o && test -s $(TESTTMP)/test_emit_obj_x64_dce.o
+	test $$(size -A $(TESTTMP)/test_emit_obj_x64_dce.o   | awk '$$1==".text"{print $$2}') -lt \
+	     $$(size -A $(TESTTMP)/test_emit_obj_x64_nodce.o | awk '$$1==".text"{print $$2}')
 	#    THE ROW THAT CATCHES THE REAL FAILURE MODE. The pass roots an object at
 	#    its export surface, so a bug in that root set does not crash -- it
 	#    deletes an exported routine, and the link either fails on `undefined
@@ -34479,7 +34489,8 @@ test-emit-obj: $(COMPILER)
 	  ./$(COMPILER) --emit-obj --dce --target=i386 test/c_obj_fnptr_a.c $(TESTTMP)/fnp_a386d.o && ./$(COMPILER) --emit-obj --dce --target=i386 test/c_obj_fnptr_b.c $(TESTTMP)/fnp_b386d.o || { echo "test-emit-obj: the i386 --dce callback-table objects FAILED to build"; exit 1; }; \
 	  gcc -m32 -no-pie $(TESTTMP)/fnp_a386d.o $(TESTTMP)/fnp_b386d.o -o $(TESTTMP)/fnp_386d || { echo "test-emit-obj: the i386 --dce callback-table link FAILED"; exit 1; }; \
 	  tools/expect_same.sh fnp_386_dce "$$($(TESTTMP)/fnp_386d)" "$$($(TESTTMP)/fnp_gcc)" || exit 1; \
-	  if [ "$$(stat -c%s $(TESTTMP)/fnp_a386d.o)" -ge "$$(( $$(stat -c%s $(TESTTMP)/fnp_a386.o) / 2 ))" ]; then echo "test-emit-obj: fnp_386_dce — the --dce object is not materially smaller than the --no-dce one, so DCE removed nothing and this row passes while testing nothing. The bug it guards needs code to MOVE."; exit 1; fi; \
+	  ./$(COMPILER) --emit-obj --no-dce --target=i386 test/c_obj_fnptr_a.c $(TESTTMP)/fnp_a386n.o || { echo "test-emit-obj: the i386 --no-dce baseline object FAILED to build"; exit 1; }; \
+	  if [ "$$(stat -c%s $(TESTTMP)/fnp_a386d.o)" -ge "$$(( $$(stat -c%s $(TESTTMP)/fnp_a386n.o) / 2 ))" ]; then echo "test-emit-obj: fnp_386_dce — the --dce object is not materially smaller than the explicit --no-dce one, so DCE removed nothing and this row passes while testing nothing. The bug it guards needs code to MOVE."; exit 1; fi; \
 	  echo "test-emit-obj: the i386 callback-table round trip survives --dce"; \
 	else echo "gcc -m32 not available; i386 callback-table check skipped"; fi
 	# 4b-quater. THE PASCAL HALF of the same data-symbol work. A global marked

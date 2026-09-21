@@ -31,9 +31,23 @@
       goto fixups, exception landing pads, inline-asm locals). A body moves as a
       unit, so those distances are preserved untouched.
     * @proc addresses (ProcAddrFix) and VMT/RTTI method slots (MethodFixups) are
-      absolute and resolved from BodyAddr at write time, so they follow the move
-      for free -- and both are ROOTS, because an address that is taken can be
-      called from anywhere.
+      resolved from BodyAddr at write time, and both are ROOTS, because an
+      address that is taken can be called from anywhere.
+
+      "FOLLOW THE MOVE FOR FREE" IS TRUE ONLY WHERE THE REFERENCE IS ABSOLUTE,
+      and this line said it unconditionally until 2026-09-21. It is false for
+      the 32-bit REL OBJECT path: SHT_REL has no addend field, so i386 writes
+      @proc as R_386_PC32 against the .TEXT SECTION symbol and the proc's own
+      offset lives in the IN-PLACE ADDEND, as `BodyAddr + PicDelta`. BodyAddr
+      is remapped below, PicDelta is read from a PARALLEL ARRAY, and the
+      compaction loop dropped that array -- so the site inherited another
+      entry's delta and the addend named a point 0x20D past the real body. The
+      objects linked cleanly and the program died before main.
+
+      The sentence was not merely wrong, it was load-bearing: it is the reason
+      this table reads as needing no attention. Anything resolved from BodyAddr
+      through a parallel array is NOT free, and the parallel arrays are the
+      thing to check.
 
   A range that holds a CodeRef TARGET is never dropped, whoever emitted it. That
   one rule is what keeps this honest against a stub kind nobody remembered to

@@ -2194,6 +2194,29 @@ begin
     option order: this runs after the whole option loop. }
   if EspBareBoot and not DceOff then DceEnabled := True;
 
+  { --emit-obj does NOT default the pass on, and the reason has changed twice.
+    It was tried and reverted 2026-09-19 because `make test-emit-obj` died at
+    fnp_386, a two-object i386 link that linked cleanly and crashed before
+    main. That blocker is GONE (fixed 2026-09-21: the ProcAddrFix/DynCall
+    parallel arrays in DceRun's compaction), and the default was tried again
+    the same day.
+
+    IT IS STILL OFF BECAUSE THE NEXT WALL IS WORSE AND IS NOT OURS TO SHIP
+    AROUND: `--dce --emit-obj --platform=esp` on a fixture with an IRAM-
+    attributed routine emits an object that makes GNU ld ITSELF SEGFAULT
+    (`collect2: fatal error: ld terminated with signal 11`). Measured on BOTH
+    ESP targets, riscv32 and xtensa; the `ro` and `--no-ro-data` variants of
+    the same fixture link cleanly on both, so it is the IRAM path specifically.
+    Pre-existing -- pin v415's binary reproduces it identically -- so it is a
+    property of the pass under IRAM, not of defaulting it on.
+    See bug-a-dce-under-emit-obj-emits-an-esp-iram-object-that-segfaults-the-linker.
+
+    Do not re-enable this line on the strength of the i386 fix alone: the
+    symbol-surface measurement everyone quotes (zero GLOBAL defined symbols
+    lost, relocations roughly halved, x86-64/riscv32/xtensa) was taken on
+    objects with no IRAM section and says nothing about this. `--dce` remains
+    available explicitly, which is how the ESP bare profile already uses it. }
+
   { PXXDBG=a.obj:<path> -- read an ELF64 relocatable object and report what is
     in it, then stop. HERE, before the usage check, because it takes its
     subject from the CHANNEL and not from argv: it is an introspection topic
