@@ -34359,6 +34359,26 @@ A commit demonstrably not in the pin, passing the check most people run, testabl
 in one command. **The sha is written here only as a worked example; it stops
 being a counterexample at the next pin, and the shape does not.**
 
+**AND THE IDIOM THAT RUNS IT CANNOT TELL "NOT AN ANCESTOR" FROM "THAT REF DOES
+NOT EXIST" — measured 2026-09-21 by `frankz-e5`, one hour after writing the
+paragraph above, on this very command.**
+
+    git merge-base --is-ancestor 38f84b2 origin/master && echo "on origin" || echo "NOT on origin"
+      fatal: Not a valid object name origin/master
+      NOT on origin
+
+The repository's branch is `main`. **`--is-ancestor` exits nonzero for a bad
+argument exactly as it does for a true negative, so the `||` arm fires on every
+failure mode there is** — a typo'd sha, a ref that does not exist, a repository
+you are not in. It printed a confident wrong verdict about a commit that **was**
+on origin, and the `fatal:` line above it went to stderr and scrolled.
+
+This bites the strong form hardest, because **the pinned source commit is a long
+hex string nobody has memorised** and a typo in it produces "your fix is not in
+the pin" — alarming, plausible, and wrong. **Check `$?` for 1 specifically, or
+resolve both arguments with `git rev-parse --verify` first.** The `&& echo IN ||
+echo NOT-IN` idiom is prescribed elsewhere in this file and this is its hole.
+
 **WHY IT SURVIVES BEING KNOWN: THE WEAK FORM USUALLY GIVES THE RIGHT ANSWER.**
 All three seats above got a correct conclusion from it, because a fix you are
 asking about has usually been pinned by the time you ask. **A check that produces
