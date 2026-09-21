@@ -755,3 +755,58 @@ missing: not a verdict, but a statement the verdict could be built on.
 
 **Still not built:** the guard itself, in `PyDefFitsCallbackThunk` or beside
 it. What it needs now exists.
+
+## THE ACCEPTANCE PAIR IS UNSATISFIABLE AS SPECIFIED, AND THAT DECIDES THE SHAPE (2026-09-21)
+
+The instrument now exists, so the ticket's own acceptance pair can be run. It
+fails, and it fails on the **must-ACCEPT** row:
+
+    def two(a, b): return a + b      71 bodies (34 direct), PXXAlloc YES, 5 unresolved
+    def grow(s):  return s + 'x'     37 bodies (0 direct),  PXXAlloc YES, 4 unresolved
+
+**`two` is the row that proves the feature is useful — a guard that refuses it
+is a gate that cannot pass — and statically it reaches the allocator.**
+
+### Why, measured rather than argued
+
+What `two` reaches by DIRECT call:
+
+    PXXVarClear  PXXVarRetain  PXXVarReleasePayload  PXXPromoFromInt
+    PXXPromoClear  PXXStrIncRef  PXXRecordRetain  PXXRecordRelease
+    PXXDynArrayRelease  PXXDynArrayIncRef  PXXIntfRelease  ...
+
+**That is the all-Variant calling convention.** A NilPy `def` takes by-reference
+Variants and returns through the Variant hidden-destination convention, so even
+`return a + b` drags in the Variant retain/release machinery, which reaches
+`PXXAlloc`. Nothing about the def's own arithmetic does this; the SIGNATURE does.
+
+### This does NOT contradict the earlier measurement — they are different claims
+
+The premise section records, correctly, that the thunk crosses
+**allocation-free at run time**: 100x the iterations gives +2 allocations
+(N=200 allocs=5, N=20000 allocs=7) against a control that scales exactly 100x.
+That is a statement about **paths taken**. This is a statement about **paths
+reachable**. `PXXVarRetain` and friends allocate on some payloads and not on a
+scalar one, so both are true and neither is the other's refutation.
+
+**The static instrument is therefore too coarse for the must-accept row, and no
+amount of fixing it will help** — the reachability is real, and an allow-list
+over a call graph cannot express "does not allocate *for this payload kind*".
+
+### So the next shape, and it is a narrowing rather than an abandonment
+
+Enforcement cannot be a predicate over a def compiled the ordinary way. **The
+restriction has to reach the def's COMPILATION, not just its thunk**: an ISR
+def must compile with scalar parameters and a scalar result, with no Variant
+marshalling anywhere in its body — at which point the reachable set contains no
+Variant runtime and the allow-list question becomes answerable.
+
+That is what "restricted thunk" has to mean, and the ticket's own wanted-list
+already said it in the first section — *"scalar-only parameters and return — no
+Variant, no string, no container"*. **What is new is that this is a constraint
+on the DEF, not on the thunk**, and that the current all-Variant lowering makes
+the stated acceptance pair unsatisfiable until that exists.
+
+**NOT ESTABLISHED: whether a scalar-parameter NilPy def is feasible at all.**
+That is the next thing to measure, and it is a frontend question rather than a
+graph question. No work should assume it is cheap.
