@@ -4,7 +4,7 @@ type: bug
 track: N
 prio: 60
 status: open
-summary: "`from random import Random as R` compiles and `R()` returns the INTEGER 0 where CPython returns an RNG object — it binds Pascal's `Random` out of the backing unit. The mechanism is a same-named Pascal routine with an accepting signature and different semantics, and the condition that springs it is an ALIAS: the plain spelling `from random import Random` refuses loudly at the call (`no overload of Random matches these arguments`) while the aliased spelling is silent. Two spellings of one import, two different answers, and the silent one is the one a program written for CPython uses. Live at HEAD and in pin v414 (binary aeadb1754b80). NOT the case-fold defect fixed in pxx@3d3d90a2d — that one is closed and this one survived it, which is how it was found."
+summary: "FLOOR DECIDED 2026-09-21 (frankuser): a silent wrong value is ruled out by the project's own rule that real code running wrong is a bug, so both spellings must behave alike and A LOUD REFUSAL SATISFIES IT — this is NOT an open design fork and was mis-filed as one. MECHANISM CORRECTED: it is the BACKING-UNIT arm and PASCAL's case-insensitive routine lookup, not the stdlib alias table, which neither name reaches. `from random import Random as R` compiles and `R()` returns the INTEGER 0 where CPython returns an RNG object — it binds Pascal's `Random` out of the backing unit. The mechanism is a same-named Pascal routine with an accepting signature and different semantics, and the condition that springs it is an ALIAS: the plain spelling `from random import Random` refuses loudly at the call (`no overload of Random matches these arguments`) while the aliased spelling is silent. Two spellings of one import, two different answers, and the silent one is the one a program written for CPython uses. Live at HEAD and in pin v414 (binary aeadb1754b80). NOT the case-fold defect fixed in pxx@3d3d90a2d — that one is closed and this one survived it, which is how it was found."
 ---
 
 # An aliased from-import binds a same-named Pascal routine the plain spelling refuses
@@ -88,6 +88,62 @@ that is the one direction NilPy is allowed to differ in.
 That is the case-fold class closed by argument rather than by spot-checks, and
 it is a NULL result: nothing else folds harmfully, and the one name that could
 is the one already fixed.
+
+## THE FORK IS NARROWER THAN THIS TICKET FIRST SAID (frankuser, 2026-09-21)
+
+Filed saying the correct behaviour was undecided because "make the two
+spellings agree" does not name a target. **That is too weak, and the project's
+own rule closes the half that matters without settling anything about an RNG
+class.** *Real code compiling or running wrong is a bug*, and
+`from random import Random as R` is not an exotic input — it is ordinary Python
+that someone MEANT to write, the spelling a style guide pushes you toward. So
+one answer is ruled OUT today: **a silent wrong value.**
+
+**The floor is that both spellings behave the same, and a LOUD REFUSAL
+satisfies it.** That is decidable now, costs nothing, pre-empts nobody, and it
+makes the shadowing hazard below impossible to hit silently — which was the
+actual danger. Reproduced independently under the pin before this was written.
+
+## MECHANISM CORRECTED: it is the UNIT arm and Pascal case-insensitivity
+
+This ticket first implied the stdlib alias table. It is not that. Measured
+2026-09-21 at HEAD:
+
+    from math import Sqrt as S ; print(S(9))   ->  3.0     (Pascal `Sqrt`)
+    from math import sqrt as s ; print(s(9))   ->  3.0
+    from random import Random as R ; print(R())  ->  0
+    from random import Random as R ; print(R(0)) ->  0     (identical)
+
+`PyStdProvidesMember` answers FALSE for both `math.Sqrt` and `random.Random`
+once the member is matched as spelled, so **neither reaches `PyStdAliasRecord`
+at all.** Both are bound by the BACKING-UNIT arm, where Pascal's
+case-insensitive routine lookup matches `Sqrt` to `sqrt` and `Random` to
+`Random`. So the case-insensitivity here is **Pascal's, leaking into Python name
+resolution** — not the fold that pxx@3d3d90a2d removed.
+
+`R()` and `R(0)` give the same answer, so the no-argument call is reaching
+Pascal's `Random(n)` with a zero, not Pascal's argumentless `Random: Real`.
+
+**AND THIS CONFIRMS THE KEY-SPACE CENSUS BY A ROUTE THAT WAS NOT TESTED WHEN IT
+WAS WRITTEN.** The census says `math` has no case-collision, so a fold there can
+only accept what CPython rejects — and `Sqrt as S` is exactly that: accepted by
+us, rejected by CPython, harmless. The argument predicted the behaviour of a
+name nobody had tried, which is the property an observational census does not
+have.
+
+## What a fix MUST NOT break
+
+`from math import sqrt as s` and `from random import randint as ri` both work
+and are genuine Python. Any rule that refuses `Random as R` by requiring the
+member to be a Python-facing name has to keep those. **`Sqrt as S` may be
+refused** — CPython rejects it too — but that is a widening of the blast radius
+beyond the floor above, so it should be a stated decision rather than a side
+effect.
+
+**Not attempted here.** The binding site is shared by every
+`from <unit> import <name>`, so the change is a name-resolution rule and not a
+local repair; landing it needs a full tier rather than the quick one. Banked
+rather than microfixed.
 
 ## What would retire THIS ticket
 
