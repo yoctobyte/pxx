@@ -33812,3 +33812,84 @@ reading it as a failed restart.
 `tools/twatch_running_code_devtest.py` guards that `--status` asks this
 question at all, and — equally important — that it stays SILENT when it cannot
 tell.
+
+## IN A TABLE OF DERIVED CELLS, A HARDCODED CONSTANT IS INVISIBLE — IT LOOKS LIKE THE OTHERS AND DECOUPLES SILENTLY WHEN THE WORLD MOVES
+
+*`lekkerzeilen-7a`, 2026-09-21, `lekkerzeilen@2c21c9e`. Read here from the commit
+rather than from the relay that reported it.*
+
+A demo-readiness matrix labelled each arm with the pin it was measured against.
+**The numbers came from the per-row logs; the pin sha was a hardcoded constant
+in the table code.** Both printed in the same row, in the same style, and agreed
+— until a pin was minted. At that moment the generator would have **printed new
+measurements under the old sha, with nothing to notice.**
+
+**A constant sitting next to a measurement is not a label, it is an
+ASSERTION that the world has not moved** — and it is the one cell in the table
+with no mechanism to keep it true. Every other cell is re-derived on each run
+and therefore self-correcting; the constant is not, and it is indistinguishable
+from the self-correcting ones by inspection. 7a's fix is the general one:
+**the arm label now reads the sha out of the row it labels**, verified
+behaviour-preserving by regenerating and diffing before and after.
+
+**This is the stale-label class with a mechanism attached.** The reason it is
+worth its own entry is the *invisibility*: nobody audits a table cell that looks
+like all the other table cells, and the failure fires exactly when the table
+becomes interesting — when something moved.
+
+**7a's handling of the row itself is the other half and is the part a reader
+will be tempted to skip:** rather than editing the pre-pin row away, it kept
+both rows, each labelled with the pin sha it measured, and **recorded NO
+predicted value for the new one** — the pin carried more than the one blocker,
+that combination had never been measured against this demo, and *a guessed cell
+is wrong in the direction nobody re-checks.*
+
+## A MEASUREMENT CAN AGREE WITH ITSELF BY COINCIDENCE WHEN YOUR OWN ENVIRONMENT SUPPLIES THE ANSWER
+
+*`lekkerzeilen-7a`, 2026-09-21, `lekkerzeilen@8868d45`, tracing what a clean
+clone actually needs at run time.*
+
+7a traced the demo's successful `open()` calls to construct the minimum runnable
+set. **It traced twice, and the pair is the finding.** The first run inherited
+*this user's* `session.conf`, carrying `region roofs`, so `world/DEFAULT` was
+**never read**. With a fresh `XDG_STATE_HOME`, a genuine first run *does* read
+it.
+
+**Both name the same world — which is the coincidence that hides the
+dependency.** A single trace would have concluded `world/DEFAULT` is not needed,
+and the constructed clone would have rendered correctly *on the machine that
+built it*, for a reason that does not travel.
+
+**So the contaminant here is the OPERATOR'S OWN STATE, and it did not corrupt
+the measurement — it made the measurement agree with the wrong conclusion.**
+This is the earlier-step-supplies-the-answer class with the step outside the
+run entirely: no probe wrote it, no build produced it, it was in a dotfile from
+a previous day. **Ask what your environment is answering on the subject's
+behalf** — a config, a cache, a state dir, an env var, a login shell — and
+re-run from a clean one before recording a dependency as absent.
+
+**And note the discipline that makes the survey trustworthy rather than merely
+thorough:** 7a stated in its own write-up where the survey is *incomplete* — one
+code path, one world, one four-second run, bytes-read never measured — and
+distinguished *"not required to draw a frame"* from *"unused"* for a file it
+moved aside, because a four-second shot does not exercise tide. **An optional-
+looking row is only optional over the paths you actually ran.**
+
+## `--grep` SEARCHES THE POPULATION THAT TALKS ABOUT A THING, NOT THE ONE THAT RECORDS IT
+
+*`frankh-c0`, 2026-09-21, sharpening a rule CLAUDE.md already measures.*
+
+CLAUDE.md records that `git log --grep='pin vN'` returns 5:1 to 41:1 more
+commits than there are pin commits, and that the ratio *grows while you watch*
+because the investigation's own write-ups join the population.
+
+**c0's form names why, and it generalises past pins:** `--grep` searches
+**commit messages**, which were never in the business of recording pins. The
+register that records a pin is `pin.log`, whose rows exist for exactly that
+purpose and cannot be joined by prose. **Asking a narrative store a
+record-keeping question returns everything that MENTIONS the subject**, and
+mentions outnumber records by whatever ratio the project happens to write at.
+
+**Prefer the register to the narrative**, and where no register exists, prefer
+an identity the wrong population cannot imitate — for a pin, the binary sha in
+the commit subject matched against `sha256sum` of the binary on disk.
