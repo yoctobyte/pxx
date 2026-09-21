@@ -33553,3 +33553,44 @@ an error from either.** Neither seat was warned; both had a ref-level answer and
 a path-level answer that could not both be right. Note which one was correct:
 **the abstract-looking one.** A file on disk feels like ground truth and a ref
 query feels like an inference, and on both occasions it was the other way round.
+
+## AN UNRESOLVABLE SHA HAS TWO CAUSES THAT LOOK IDENTICAL — A GHOST, AND A CORRECT SHA IN THE WRONG REPO — AND THIS PROJECT HAS TRAINED EVERYONE TO REACH FOR THE GHOST
+
+*`frankuser`, 2026-09-21, one step from relaying a false ghost call to the
+owner. The bare sha was written by `frankz-e5`, relaying `lekkerzeilen-7a`.*
+
+`frankz-e5` reported a demo result as *"committed at `daf0760`"*. frankuser
+fetched, ran `git merge-base --is-ancestor` in its own checkout, got **unknown
+revision**, and grepped forty subjects on `origin/master` — nothing. Every check
+passed and every check was about the wrong repository. The commit is real:
+`daf0760c68e1213f`, in **`/home/neo/lekkerzeilen`**, not in the pxx repo.
+
+**THE TRAP IS THAT THE WRONG READING IS THE ONE THIS HANDBOOK TEACHES.**
+CLAUDE.md states the ghost rate is *~100% by construction* — the repo rebases
+nearly every sync, so a pre-push `log -1` reads a doomed id every time. So an
+unresolvable sha has an obvious, documented, usually-correct explanation sitting
+right there, and reaching for it is not carelessness. **A well-founded prior is
+what makes this expensive**: the more reliable "ghost" normally is, the less
+anyone interrogates it.
+
+**This is the population rule arriving in a CITATION rather than in a census.**
+The instrument was current, correctly parameterised, and enumerated a set that
+**could not contain the subject** — so freshness, staleness and syntax checks
+all pass and the answer comes back confidently wrong. The discriminator is not
+"try harder"; it is to notice that a repo was never specified.
+
+**In a fleet with more than one repository, a sha travels as `<repo>@<sha>` or
+it does not travel.** `lekkerzeilen@daf0760c68e1`. Cheap to write, and it makes
+the wrong-repo reading impossible to miss because the reader is told which set
+to enumerate.
+
+**CODA, SAME SEAT, SAME HOUR — THE MIRROR CASE IS TWO NUMBERS FROM DIFFERENT
+PROFILES READ AS A SERIES.** `f028632c3` cleared the 64 KiB `HEAP_ARENA` on the
+**IDF** profile; it remains reserved unconditionally on the **BARE** profile
+under `{$ifdef PXX_ESP}`, which is 97.1% of an empty bare image's SRAM. Two
+correct measurements, two different populations — **and anyone reading them as a
+time series concludes the fix was reverted.** Neither number is wrong and the
+sequence is fiction. Name the profile beside the figure, for the same reason you
+name the repo beside the sha: **a reader who is not told which population a
+number came from will supply one, and they will supply the one they are already
+holding.**
