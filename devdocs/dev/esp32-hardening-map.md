@@ -282,6 +282,55 @@ alloc/free pair nets to zero and it can show a flat line while `malloc` is
 called every tick, which is exactly the churn the claim is about. Call counts
 need IDF heap tracing (a config flag, heavier build) or a hook.
 
+## 1.7 [SRC] EVERYTHING THE IDF DOES TO MAKE AN ISR SAFE IS INSTALLED BY ITS TRAMPOLINE — AND A RAW `interrupt;` HANDLER BYPASSES ALL OF IT
+
+This is the row that ties §1.1, §1.5 and the stack question together, and it is
+the one I would put in front of the owner before any board time is spent on
+interrupts.
+
+`rtos_int_enter` (riscv `portasm.S`) does at least two things before any
+handler runs:
+
+    :598-605   port_uxInterruptNesting[coreID] += 1     { what xPortInIsrContext reads }
+    :643-645   lw sp, (xIsrStackTop[coreID])            { SWITCHES SP to a dedicated ISR stack }
+
+The ISR stack is a real, separate object — `StackType_t
+xIsrStack[portNUM_PROCESSORS][configISR_STACK_SIZE]`, with `xIsrStackTop` /
+`xIsrStackBottom` (`port.c:112-120`). So an **IDF-dispatched** handler runs on
+its own stack and correctly reports itself as in-ISR.
+
+**A RAW `interrupt;` VECTOR ENTRY GETS NEITHER**, because it never passes
+through that trampoline:
+
+- It runs on **whatever stack was current** — the interrupted task's. Its
+  prologue then pushes 64 bytes (riscv) or 48 (xtensa) plus its own frame onto
+  a stack sized for that task. `defs.inc:2322` notes ESP-IDF task stacks of
+  **3584 bytes**, and observes there that it already halves recursion depth.
+- It reports **`xPortInIsrContext` = 0** (§1.5), so the obvious safety check
+  says "not in an ISR" while the CPU is in a trap handler.
+
+**AND PXX HAS NO RUNTIME STACK GUARD ON ESP AT ALL.** Measured: zero matches
+for a stack overflow / guard / canary / limit check in `builtinheap.pas` or
+`lib/rtl/platform/esp/**`. The only protection anywhere is
+`CheckBareImageFitsSram` (`elfwriter.inc:1947`), which is **build time** — it
+enforces `ESP_BARE_STACK_MIN` (16 KiB) of headroom so an oversized arena is a
+build error rather than, in the tree's own words, *"a stack that grows down
+into the heap and produces a plausible wrong value."* Nothing checks at
+runtime, on either profile.
+
+**So the raw path is not merely uninstallable (§1.1) — it is also unprotected
+by every ISR facility the platform provides.** Enabling the install without a
+stack story would produce exactly this project's most-feared failure: a
+plausible wrong value far from its cause, on hardware, with the obvious
+diagnostic instrument reporting all-clear.
+
+**WHAT WOULD MOVE IT:** it is [SRC] and stays there — this is a design
+conclusion, not a measurement gap. What it should PRODUCE is a decision
+recorded before §1.1's enabler lands: either the raw path switches stacks in
+its own prologue, or `interrupt;` is documented as IDF-dispatch-only and the
+raw arm is dropped. That is a Track U question and it is cheap to answer now
+and expensive to discover later.
+
 ---
 
 # 2. NON-INTERRUPT ROWS
@@ -332,7 +381,11 @@ warns about. They should be re-derived against the current fixture.
 I did **not** examine, and make no claim about:
 
 - **Watchdogs** (TWDT/IWDT) — whether a PXX program feeds or disables them.
-- **Stack overflow detection** on either profile; no guard page on bare metal.
+- ~~**Stack overflow detection**~~ — PARTLY ANSWERED, see §1.7: there is no
+  runtime guard on either profile (measured), and the only protection is the
+  build-time `CheckBareImageFitsSram`. What remains unexamined is whether the
+  IDF's own task-stack watermarking is reachable from PXX, and what a sensible
+  runtime check would cost.
 - **Cache/flash coherency** beyond ISR IRAM residency — e.g. whether anything
   reachable from an ISR can touch flash and stall.
 - **Multi-core** (esp32s3 is dual-core) — task/core affinity, cross-core atomics.
