@@ -118,6 +118,7 @@ begin
     DCE_WHY_VMT:      DceWhyName := 'vmt/rtti slot';
     DCE_WHY_PROCADDR: DceWhyName := '@proc taken in unowned code';
     DCE_WHY_IRAM:     DceWhyName := 'iram call fixup';
+    DCE_WHY_VECTOR:   DceWhyName := 'interrupt; -- entered by hardware';
     DCE_WHY_INIT:     DceWhyName := 'unit initialization';
     DCE_WHY_ENTRY:    DceWhyName := 'entry stub call';
     DCE_WHY_FINI:     DceWhyName := 'unit finalization';
@@ -895,6 +896,20 @@ begin
   DceWhyNow := DCE_WHY_IRAM;
   i := 0;
   while i < IramCallFixCount do begin DceMark(IramCallFix[i].ProcIdx); Inc(i); end;
+  { An `interrupt;` body is a ROOT: hardware enters it through a vector table
+    and no call edge or @proc leads to it. Until the compiler emitted that
+    table a program had to write `@MyIsr` itself to install one, so every such
+    body was reachable as DCE_WHY_PROCADDR and this root was never needed --
+    the gap existed and was masked by the very awkwardness the table removes.
+    The first program that simply declared one and took a trap would otherwise
+    have had its handler deleted and its vector pointed at the hole. }
+  DceWhyNow := DCE_WHY_VECTOR;
+  i := 0;
+  while i < ProcCount do
+  begin
+    if (i < Length(ProcIsInterrupt)) and ProcIsInterrupt[i] then DceMark(i);
+    Inc(i);
+  end;
   DceWhyNow := DCE_WHY_INIT;
   i := 0;
   while i < InitProcCount do begin DceMark(InitProcs[i]); Inc(i); end;

@@ -2125,6 +2125,17 @@ begin
   { Patch jmp to point here (start of main body) }
   PatchProgramEntryJump(jmpPatch);
 
+  { The VECBASE write is the first thing the main body does, so an exception
+    the program itself raises is handled. The TABLE it points at is appended
+    after DCE (compiler.pas), because only then is its address final.
+
+    Only the Pascal driver calls this, and that is correct rather than the
+    ninth-copy mistake EmitIoLockStubsForTarget documents: `interrupt;` is a
+    Pascal directive, so no other frontend can set ProcIsInterrupt and there is
+    nothing for them to install. The day one of them gains the directive is the
+    day it needs this line. }
+  EmitBareVectorInstallForTarget;
+
   { Default signal install (SIGINT/SIGTERM) — six arch arms, lifted into
     EmitDefaultSignalInstallForTarget so the other frontends get it too.
     bug-a-only-the-pascal-driver-emits-the-signal-runtime }

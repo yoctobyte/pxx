@@ -35504,3 +35504,59 @@ fact and costs a re-run; construction costs nothing and cannot be misread.
 a precaution that prints success and was added carelessly. That would break the
 "careful people" claim, which is the load-bearing part, and the section should
 then be re-stated around the output shape instead.
+
+## MAKING A REFERENCE IMPLICIT MAKES THE THING IT REFERENCED GARBAGE — AND DCE RUNS AFTER YOU EMITTED
+
+Measured 2026-09-22, giving the bare xtensa `interrupt;` its compiler-emitted
+vector table (the second half of
+`feature-s-the-xtensa-raw-isr-install-has-no-vecbase-write-and-no-isr-stack`).
+
+The whole point of the feature is to delete a line the programmer used to
+write. Before it, installing a handler meant `@MyIsr` — building a table and
+planting the address by hand. After it, declaring the routine `interrupt;` is
+the install and **nothing in the source mentions the handler's address at
+all.**
+
+That is also, exactly, the removal of its last reachability edge. `ProcIsInterrupt`
+appeared nowhere in `dce.inc`, and it had never needed to: every such body was
+reachable as `DCE_WHY_PROCADDR` **because of the awkwardness the feature
+removes.** The gap was real the whole time and perfectly masked. The first
+program to simply declare a handler and take a trap would have had it deleted
+and the vector pointed at the hole.
+
+**The general shape, and it is not about interrupts:** whenever you replace an
+explicit reference with an implicit one — a registration, an address-take, a
+name in a table — ask what was keeping the target alive, because the answer is
+usually *the reference you just deleted*. Reachability analysis sees source
+edges, and you have removed one without adding a node it can see. The other
+directions are the same class: a `{$ifdef}` that stops naming a unit, a
+convention-based dispatch replacing a switch, an entry point reached only from
+a linker script.
+
+**The second half is ORDER, and it is what actually cost the evening.** The
+first implementation emitted the table at parse time, where "is there an
+`interrupt;` routine" is known. It produced no output and no diagnostic. The
+instrumentation: `tableAt=73612 body=72308 codelen=74636` — against a final
+image reporting `code=8360B`. **DCE is default-on for bare ESP**
+(`compiler.pas`, `if EspBareBoot and not DceOff then DceEnabled := True`) and
+`DceRun` compacts code AFTER parsing, so both the alignment padding and the
+`j` displacement were computed against addresses that no longer existed. A
+hand-placed byte offset is a claim about a layout, and **anything that runs
+later and moves code silently falsifies every such claim already emitted.**
+
+The fix is to split the feature across the barrier and join the halves through
+something that does not move: the parse-time half allocates a **data word** and
+emits `l32i` + `wsr vecbase` against it; the post-DCE half lays the table down,
+records where it landed, and the ELF writer patches the word. Data does not
+move under DCE. **If you must emit a position-dependent thing before a pass
+that repositions things, emit the indirection, not the position.**
+
+**The control that makes this an assertion rather than a story** is asymmetric
+and costs one rebuild: disable the DCE root and run BOTH fixtures. The
+compiler-installed one (`test_esp_bare_vectorauto.pas`, which never names the
+handler) builds fine, boots, and prints **nothing at all**; the hand-built one
+(`test_esp_bare_vector.pas`, which still takes `@MyIsr`) stays entirely green.
+A shared failure would have meant something else was wrong. Note also what the
+failing arm looks like from outside — a successful build, exit 1, empty
+stdout — which is byte-identical to a build error, and is why
+`tools/esp_run_bare.sh` prints build diagnostics to stderr.

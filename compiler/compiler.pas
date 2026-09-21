@@ -2515,6 +2515,8 @@ begin
   CodeRefCount := 0;
   EntryRootCount := 0;
   XtEntryPcAnchor := -1;
+  BareVecTableAt  := -1;
+  BareVecBaseDataOff := -1;
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   { bootstrap the per-routine tables before anything can index them }
@@ -2870,6 +2872,13 @@ begin
     slots are roots), before anything reads a final code offset. Off unless
     --dce; see compiler/dce.inc for what turns it off again. }
   DceRun;
+  { AFTER DceRun, and that is the whole reason it is here rather than beside
+    the rest of the bare-metal emission. The table has to be 1 KiB-aligned in
+    the final image, and DCE removes bytes ahead of it -- so aligning it while
+    parsing aligns it to a layout that no longer exists by the time anything
+    reads it. Emitted last, when nothing moves again, its offset is final by
+    construction rather than by repair. }
+  EmitBareVectorTableAfterDce;
 
   if DebugTrace then
     for i := 0 to ProcCount - 1 do

@@ -3719,6 +3719,106 @@ begin
   PatchCodeRefSlot(jmpPatch, CodeLen, 0, xtAnchor);   { a jump: no link register }
 end;
 
+function BareInterruptProcIdx: Integer;
+{ The one `interrupt;` routine a bare image installs into its vector, or -1.
+
+  ONE LEVEL-1 VECTOR MEANS ONE LEVEL-1 HANDLER, and that is a property of the
+  hardware rather than a limit this compiler chose: xtensa has a single
+  UserExceptionVector slot and riscv32 a single mtvec. So the binding needs no
+  syntax -- a program that declares an `interrupt;` routine has said which one
+  it means, because there can only be one.
+
+  TWO IS A DIAGNOSTIC, NOT A FIRST-WINS PICK. Silently installing whichever
+  came first would give the other routine a body that is emitted, reachable by
+  address, and never entered -- exactly the "complete and unreachable" shape
+  that let three defects sit in the xtensa interrupt path until the first time
+  it executed. If a future revision wants several handlers dispatched by
+  EXCCAUSE, or a level above 1, it plugs in HERE, and the error text is what
+  tells its author where. }
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to ProcCount-1 do
+    if (i < Length(ProcIsInterrupt)) and ProcIsInterrupt[i]
+       and (Procs[i].BodyAddr >= 0) then
+    begin
+      if Result >= 0 then
+        ErrorNoPos('two routines are declared `interrupt;` (' + Procs[Result].Name
+          + ' and ' + Procs[i].Name + ') and the hardware has ONE level-1 '
+          + 'vector, so the compiler cannot tell which one to install. Keep a '
+          + 'single `interrupt;` routine and dispatch from inside it.');
+      Result := i;
+    end;
+end;
+
+procedure EmitBareVectorInstallForTarget;
+{ Point VECBASE at the table this image will carry. Emitted at the top of the
+  main body, where "does this image declare an `interrupt;` routine" is decided
+  but the table's ADDRESS is not -- DCE has not run yet and will move code out
+  from under any offset taken here.
+
+  SO THE TWO HALVES ARE JOINED THROUGH A DATA WORD, not a code offset. Data
+  does not move under DCE, the writer patches the word once the final layout
+  exists (elfwriter.inc), and the code below simply loads whatever is in it.
+  The alternative -- recording a code position and compacting it alongside
+  DCE's own tables -- would put a second thing in every future reader's way for
+  no gain.
+
+  a8/a9 are the documented address/scratch temps and nothing in the main body
+  has run yet. A program that wants a different table is free to write VECBASE
+  itself afterwards: this is a default, not a lock. }
+begin
+  if (not EspBareBoot) or (TargetArch <> TARGET_XTENSA) then Exit;
+  if BareInterruptProcIdx < 0 then Exit;   { no handler: no table, no cost }
+  { l32i wants a 4-aligned address and DataLen is byte-granular here. }
+  while (DataLen mod 4) <> 0 do
+  begin
+    DataEnsure(1);
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  BareVecBaseDataOff := DataLen;
+  EmitDataWord32Zx(0);                     { patched with the table VA }
+  EmitLoadDataRefXtensa(reg_xtensa_a9, BareVecBaseDataOff);
+  xtensa_l32i(reg_xtensa_a8, reg_xtensa_a9, 0);
+  xtensa_wsr(SR_VECBASE, reg_xtensa_a8);
+  xtensa_rsync;
+end;
+
+procedure EmitBareVectorTableAfterDce;
+{ The xtensa exception vector table, appended to the code section AFTER DCE.
+
+  WHY AFTER, and it is the only thing that decides where this can live: the
+  table must be 1 KiB-aligned in the FINAL image, and DCE removes bytes ahead
+  of it. Padding computed while parsing aligns the table to a layout that no
+  longer exists by the time VECBASE is written -- and a misaligned VECBASE is
+  not a refused build, it is a table at a DIFFERENT address, silently, because
+  the hardware discards the low bits. Emitted last, nothing moves again and the
+  offset is final by construction. The assert in elfwriter.inc is the guard
+  that says so out loud if any of that ever stops being true.
+
+  NOTHING EXECUTES THIS. It sits past the end of the main body and is reached
+  only by the hardware, through VECBASE.
+
+  NO FIXUP FOR THE HANDLER EITHER: the stub is a `j`, which is PC-relative, so
+  the operand is a difference of two final code offsets. Procs[].BodyAddr is
+  post-DCE here, which is exactly why this runs where it does. }
+var isr: Integer;
+begin
+  if (not EspBareBoot) or (TargetArch <> TARGET_XTENSA) then Exit;
+  isr := BareInterruptProcIdx;
+  if isr < 0 then Exit;
+  { Align the table's VIRTUAL address. The load base is aligned far past this,
+    so aligning (header size + code offset) is the same statement about the VA
+    and needs nothing the writer knows. }
+  while ((ESP_CODE_OFFSET32 + CodeLen) mod ESP_BARE_VEC_ALIGN) <> 0 do EmitB(0);
+  BareVecTableAt := CodeLen;
+  while CodeLen < BareVecTableAt + ESP_BARE_VEC_USER do EmitB(0);
+  { target = PC + offset, so this is a plain difference of code offsets }
+  xtensa_j(Procs[isr].BodyAddr - CodeLen);
+  while CodeLen < BareVecTableAt + ESP_BARE_VEC_TABLE_SIZE do EmitB(0);
+end;
+
 procedure EmitIoLockStubsForTarget;
 { THE one place that decides which I/O-lock stubs a build needs. Every frontend
   driver calls this; none of them may spell out the per-arch choice itself.

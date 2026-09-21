@@ -19,8 +19,22 @@ summary: >
   (1) THE VECTOR STUB IS A SINGLE `j`, which is what makes the rest cheap: an
   18-bit PC-relative jump reaches +/-128 KiB with no register operand, so the
   table hands the handler an untouched machine and EXCSAVE_1 is free for the
-  prologue's stack switch. The table is built at runtime in a 1 KiB-aligned
-  window; VECBASE at 1 KiB alignment is measured, not assumed.
+  prologue's stack switch. VECBASE at 1 KiB alignment is measured, not assumed.
+  SECOND LANDING, SAME DAY: THE COMPILER NOW EMITS THE TABLE, so a program
+  declares a routine `interrupt;` and takes a trap -- no BSS window, no
+  displacement arithmetic, no `@MyIsr`, no inline asm
+  (test/test_esp_bare_vectorauto.pas). The install is a DEFAULT and not a
+  lock: it runs at the top of the main body, so a program that writes VECBASE
+  itself still wins, and test_esp_bare_vector.pas is what keeps that path
+  alive. Two things that made it non-obvious. The table is emitted AFTER
+  DceRun, because DCE is default-on for bare ESP and compacts code after
+  parsing -- a parse-time table had its padding and its `j` computed against
+  addresses that no longer existed, silently (tableAt=73612 against a final
+  code=8360B); the halves join through a DATA word, which DCE does not move.
+  And `interrupt;` had to BECOME a DCE root (DCE_WHY_VECTOR): it had never
+  needed to be, because installing a handler used to require `@MyIsr`, so
+  every such body was reachable as DCE_WHY_PROCADDR and the gap was masked by
+  the very awkwardness the table removes.
   (2) PS WAS NEVER INITIALISED BY ANY BARE IMAGE. At reset PS.EXCM is SET
   (measured: PS = $1F), and EXCM=1 makes every exception a DOUBLE exception --
   routed to VECBASE+0x3C0, PC in DEPC not EPC1, returned from with RFDE not
@@ -205,3 +219,81 @@ It never had, which is why defect (3) was invisible on that ISA too. With the
 - **Nesting.** Unneeded at level 1 — PS.EXCM masks further level-1 exceptions
   until RFE clears it, the xtensa counterpart of RISC-V clearing mstatus.MIE.
   One ISR region is correct on both ISAs for that reason.
+
+## Resolution, second landing 2026-09-22 (frankb-8e) — the compiler emits the table
+
+The first landing made a raw vector table WORK. It did not make it usable: the
+fixture that proved it contains a BSS window, an alignment computation, a
+hand-assembled 18-bit displacement and a `wsr vecbase` in inline asm — roughly
+twenty lines that no Pascal program should have to carry, for a capability the
+owner names as a must-have.
+
+**What a program writes now**, in full:
+
+```pascal
+procedure MyIsr; interrupt;
+begin
+  ...
+end;
+```
+
+No table, no VECBASE, no `@MyIsr`. Declaring it is the install.
+
+**Where it lives.** `EmitBareVectorInstallForTarget` (ir_codegen.inc) runs at
+parse time from `pasparser_prog.inc`, right after the program entry jump is
+patched: it allocates a zeroed data word and emits `l32i` / `wsr vecbase` /
+`rsync` against it. `EmitBareVectorTableAfterDce` runs from `compiler.pas`
+immediately after `DceRun`: it pads to 1 KiB, records `BareVecTableAt`, plants
+a single `j` to the handler at the User offset 0x340 and zero-fills to 0x400.
+`elfwriter.inc` patches the data word with `entry + BareVecTableAt`.
+
+**Why split across DceRun** is the finding worth keeping, and it is in the
+playbook as "MAKING A REFERENCE IMPLICIT MAKES THE THING IT REFERENCED
+GARBAGE — AND DCE RUNS AFTER YOU EMITTED". Short form: DCE is default-on for
+bare ESP and compacts code after parsing, so the first implementation's
+padding and `j` were computed against addresses that no longer existed — no
+diagnostic, no output, `tableAt=73612` against a final `code=8360B`. Data does
+not move under DCE, which is why the halves are joined through a word and not
+an offset.
+
+**Only the User vector is planted.** The other 255 slots stay zero,
+deliberately: a fault inside the handler must land on a hole and stop, not be
+absorbed. The first landing lost three rounds to a probe that filled every
+slot, which converted "this handler faults" into "this handler runs
+repeatedly" — playbook, "A CATCH-ALL ENTRY IN A DISPATCH TABLE TURNS EVERY
+FAULT INTO A SUCCESSFUL-LOOKING LOOP".
+
+**EPC1 is still the handler's to step**, and that is a decision rather than an
+omission. `syscall` leaves EPC1 addressing the syscall, so a handler that
+returns without advancing it re-executes forever — but the right step is 3 for
+a syscall and 0 for an asynchronous interrupt that must resume where it was
+preempted. A compiler that guessed would be wrong for one of the two and
+silent about it.
+
+### Controls, all four run
+
+| control | expected | observed |
+| --- | --- | --- |
+| two `interrupt;` procs | refuse, name both | `error: two routines are declared 'interrupt;' (A1 and B1) ... the hardware has ONE level-1 vector` |
+| one `interrupt;` proc, same shape | compile | ok, `code=2956B` |
+| same source without the keyword | no table | `code=916B` — the 1 KiB table and its padding are the delta |
+| alignment assert (padding disabled) | refuse | `error: internal: the bare exception vector table landed at 0x40378494, which is not 1024-byte aligned` |
+| DCE root reverted | auto fixture dies, manual one lives | auto: builds, boots, prints nothing; manual (`@MyIsr`) fully green |
+
+The DCE control is the load-bearing one and it is asymmetric on purpose — a
+shared failure would have meant something else was wrong.
+
+**Structural check on the emitted image** (`one_isr.elf`, entry 0x40378074):
+table at VMA 0x40378800, i.e. 1 KiB-aligned; `06 04 fe` — a `j` — at file
+offset 0xb40 = table + 0x340; and 0x40378800 present as the patched data word.
+
+**Fixtures.** `test/test_esp_bare_vectorauto.pas` is new and wired into the
+bare tier. `test_esp_bare_vector.pas` STAYS: it is now the regression test for
+the override, since the compiler's install is a default and a program must
+still be able to point VECBASE somewhere else. Both are green on esp32s3,
+byte-identical to their x86-64 oracles, as are `test_esp_bare_isrstack.pas`
+and (cross-ISA, untouched) `test_esp_bare_csr.pas` on esp32c3.
+
+**Still bare-xtensa only.** riscv32 has `mtvec` and its own install path; this
+table is the xtensa answer and `EmitBareVectorTableAfterDce` exits immediately
+on any other target or profile.

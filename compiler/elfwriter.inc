@@ -2592,6 +2592,27 @@ begin
   filesz   := codeOffset + CodeLen + DataFileLen;
   memsz    := (bssBase - loadBase) + BSSSize;
   CheckBareImageFitsSram(loadBase, memsz);
+  { The vector table's alignment, asserted against the address the image
+    ACTUALLY gets rather than the one codegen assumed. EmitBareVectorTableAfterDce
+    padded using ESP_CODE_OFFSET32 and a per-chip base it read directly; this
+    is the same number arrived at by the writer's own route, so if either the
+    header count, the load base or the entry offset ever moves, the two
+    disagree here instead of shipping a VECBASE whose low bits the hardware
+    discards -- which is not a wrong table, it is a table at a DIFFERENT
+    address, with no diagnostic anywhere. }
+  if BareVecTableAt >= 0 then
+  begin
+    { The one link between the install (emitted while parsing) and the table
+      (appended after DCE): the word the install loads gets the table's final
+      virtual address here. }
+    if BareVecBaseDataOff >= 0 then
+      PatchDataU64(BareVecBaseDataOff, entry + BareVecTableAt);
+    if ((entry + BareVecTableAt) mod ESP_BARE_VEC_ALIGN) <> 0 then
+      ErrorNoPos('internal: the bare exception vector table landed at 0x'
+        + IntToHexStr(entry + BareVecTableAt, 8) + ', which is not '
+        + AIntToStr(ESP_BARE_VEC_ALIGN) + '-byte aligned; VECBASE would '
+        + 'silently truncate it to a different address');
+  end;
 
   { DWARF -g for the 32-bit hosted targets (i386/arm32). esp (bare/xtensa/riscv32)
     is excluded. Section headers placed past p_filesz, like the 64-bit path. }

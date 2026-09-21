@@ -35692,6 +35692,22 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_vector.pas > $(TESTTMP)/test_esp_bare_vector.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_vector.oracle $(TESTTMP)/test_esp_bare_vector.s3; then echo "esp32s3 raw vector table + interrupt; ISR stack ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 vector-table MISMATCH"; exit 1; fi; fi
+	# The COMPILER-INSTALLED vector table -- the same four assertions as the row
+	# above, from a source that builds no table, computes no displacement and
+	# never writes VECBASE. The two rows are not redundant: this one proves the
+	# default exists, the one above proves a program can still override it, and
+	# the override is what keeps the default from becoming a lock. Dropping
+	# either leaves the other silently rotting.
+	# It is also the only row that can fail if DCE stops treating `interrupt;`
+	# as a root -- nothing in this source takes @MyIsr, so the handler's only
+	# reference is the vector the compiler plants. Verified by reverting that
+	# root: the handler is deleted and the run prints nothing at all.
+	@./$(COMPILER) test/test_esp_bare_vectorauto.pas $(TESTTMP)/test_esp_bare_vectorauto_oracle >/dev/null && $(TESTTMP)/test_esp_bare_vectorauto_oracle > $(TESTTMP)/test_esp_bare_vectorauto.oracle
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 auto-vector run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_vectorauto.pas > $(TESTTMP)/test_esp_bare_vectorauto.s3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_vectorauto.oracle $(TESTTMP)/test_esp_bare_vectorauto.s3; then echo "esp32s3 compiler-installed interrupt; vector ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 auto-vector MISMATCH"; exit 1; fi; fi
 	@./$(COMPILER) test/test_esp_bare_largeframe.pas $(TESTTMP)/test_esp_bare_lf_oracle >/dev/null && $(TESTTMP)/test_esp_bare_lf_oracle > $(TESTTMP)/test_esp_bare_lf.oracle
 	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
 	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 large-frame run skipped"; else \

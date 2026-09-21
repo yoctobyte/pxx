@@ -77,6 +77,12 @@ procedure EmitIoLockStubsForTarget; forward;
 procedure EmitBareHeapArenaInit; forward;
 procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Integer); forward;
 procedure PatchProgramEntryJump(jmpPatch: Integer); forward;
+{ Called from pasparser_prog.inc immediately after PatchProgramEntryJump, which
+  is included EARLIER in compiler.pas than the ir_codegen.inc body — so PXX
+  (which prescans) accepts it without this line and FPC, single-pass, does not.
+  Caught by gate.sh quick's FPC seed canary and by nothing else, including the
+  self-host fixedpoint. Same class as bug-a-fpc-seed-drift-emitasmx64-forward. }
+procedure EmitBareVectorInstallForTarget; forward;
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer); forward;
 procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer); forward;
 { TargetHasSignalRuntime's forward MOVED to compiler.pas, above {$include lexer.inc}, on 2026-09-04 -- it is still ONE declaration, just earlier. lexer.inc's PasApplyPlatformDefines turns it into the PXX_HAS_SIGNALS define, and lexer.inc is included at compiler.pas:66 while this file is included at :153. Declaring it in both places builds fine under PXX (which prescans) and FPC rejects it single-pass with "Function is already declared Public/Forward" -- caught by gate.sh quick's FPC seed canary, which is the only gate that can see this class. }

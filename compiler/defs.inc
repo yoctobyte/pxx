@@ -236,6 +236,11 @@ const
   DCE_WHY_FREECODE = 10;  { called from code no body owns (entry, stubs, main) }
   DCE_WHY_CALL     = 11;  { called by DceVia[p] }
   DCE_WHY_PAEDGE   = 12;  { @proc taken INSIDE live body DceVia[p] -- not a root }
+  { Added after PAEDGE, so the numbers are stable identifiers and no longer
+    strictly the install order the comment above describes; this one installs
+    beside IRAM, which is where it belongs -- both are "ESP, entered from
+    outside the call graph". }
+  DCE_WHY_VECTOR   = 13;  { an `interrupt;` body: hardware enters it, nothing calls it }
   { Absolute BSS-address fixups in one emitted image. The SELF-HOST build under
     --threadsafe is the high-water mark — every global reference in the compiler's
     own code costs one — so this grows with the compiler and had been sitting just
@@ -2398,6 +2403,39 @@ const
     stub and that build's prologue. The pair is also equal on both chips only
     because ESP_BARE_STACK_TOP is -- the SoC table is the thing that would
     break that, not the ISA. }
+  { ===== the xtensa exception VECTOR TABLE ==================================
+
+    VECBASE is the base of a TABLE, not a handler address -- the one thing that
+    does not transfer from riscv32's mtvec. Offsets are ESP-IDF's own, read
+    from components/esp_system/ld/esp32s3/sections.ld.in rather than
+    remembered: 0x180 Level2, 0x1c0 Level3, 0x200 Level4, 0x240 Level5, 0x280
+    Debug, 0x2c0 NMI, 0x300 KernelException, 0x340 UserException, 0x3C0
+    DoubleException, 0x400 end.
+
+    ONLY THE USER VECTOR IS PLANTED and the rest of the table is left ZERO,
+    which decodes as `ill`. That is deliberate: a stray exception at an
+    unplanted vector dies at a known address instead of running whatever code
+    happens to follow the table, and -- the reason it is worth a paragraph --
+    filling every slot with a jump to the one handler would make a fault INSIDE
+    the handler re-enter it through the Double vector and read as the feature
+    working. A catch-all in a dispatch table reports a MISS as a HIT
+    (debugging-playbook.md, "A CATCH-ALL ENTRY IN A DISPATCH TABLE...").
+
+    THE FULL KILOBYTE IS EMITTED, not just the bytes up to the User slot,
+    precisely so the Double vector at 0x3C0 lands on a zero. Truncating the
+    table would save 0xC0 bytes and point the double-fault vector at live code.
+    The cost is paid ONLY by an image that declares an `interrupt;` routine;
+    everything else emits no table at all.
+
+    1 KiB ALIGNMENT IS HONOURED THOUGH qemu DOES NOT REQUIRE IT. Measured
+    2026-09-22: qemu's esp32s3 dispatches correctly from a VECBASE aligned to
+    only 64 bytes. That is an emulator being permissive -- the LX VECBASE field
+    hardwires its low bits on real silicon and IDF's linker script aligns the
+    vectors to 0x400 -- so the alignment is NOT relaxed on the strength of it. }
+  ESP_BARE_VEC_TABLE_SIZE = $400;  { through the Double vector at 0x3C0 }
+  ESP_BARE_VEC_USER       = $340;  { UserExceptionVector: where PS.UM=1 lands }
+  ESP_BARE_VEC_ALIGN      = $400;
+
   ESP_BARE_ISR_STACK_SIZE = $400;  { 1 KiB — prologue is 64B + the body's frame }
   ESP_BARE_ISR_STACK_TOP  = ESP_BARE_STACK_TOP;
   ESP_BARE_TASK_STACK_TOP = ESP_BARE_STACK_TOP - ESP_BARE_ISR_STACK_SIZE;
@@ -4599,6 +4637,21 @@ var
     rides here rather than widening a signature every backend shares.
     bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb }
   XtEntryPcAnchor : Integer;
+
+  { Code offset of the bare xtensa exception vector table, or -1 if this image
+    has no `interrupt;` routine and therefore emits none. Set by
+    EmitBareVectorTableAfterDce -- after DceRun, which is the last thing that
+    moves code, so the offset is final the moment it is written. Read once
+    afterwards, by the ELF writer, which patches the install's data word with
+    it and asserts its alignment. }
+  BareVecTableAt : Integer;
+
+  { Data offset of the word the VECBASE install reads, or -1. The install is
+    emitted while parsing (it is part of the main body) but the table's address
+    is not known until after DCE has finished moving code, so the two are
+    joined through a DATA word rather than a code offset: data does not move
+    under DCE, and the writer patches the word once the final layout exists. }
+  BareVecBaseDataOff : Integer;
 
   { --- reachability-gated dead-code elimination (dce.inc) --------------------
     Sized by MAX_PROCS: one entry per emitted routine, never per instruction. }
