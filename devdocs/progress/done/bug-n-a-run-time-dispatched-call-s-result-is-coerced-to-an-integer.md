@@ -133,4 +133,4 @@ both required**; an int-only fixture passes on the unfixed compiler.
 ## Log
 - 2026-09-14 -- filed while fixing the dynamic-default-signature bug, whose fix
   is what made the path reachable. Control measured against a stashed tree.
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c63455470.

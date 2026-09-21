@@ -82,4 +82,4 @@ container result through that path is the natural spelling and would have been
 red for a reason that has nothing to do with arity.
 
 ## Log
-- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-21 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c63455470.
