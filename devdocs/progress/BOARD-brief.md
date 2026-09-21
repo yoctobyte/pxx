@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:19 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:189 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3896 rejected:85`
+`working:31 unfinished:19 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:174 backlog-nilpy:190 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:6 experimental:20 rainy-day:48 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3896 rejected:85`
 
 ## Held now (working/ — do not touch these files)
 
@@ -75,7 +75,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 569, ranked
+## Ready — top 30 of 570, ranked
 
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
@@ -108,4 +108,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 2)
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 
-_539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_540 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
