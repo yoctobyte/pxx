@@ -148,6 +148,59 @@ exercises IDF dispatch, **not** a PXX ISR.
 example of one — the probe has already been written, has already run, and has
 already returned "qemu cannot answer this".
 
+## 1.5 [QEMU, measured] "Runs in interrupt context" IS assertable from Pascal — but the instrument is scoped to IDF-DISPATCHED ISRs and would LIE about a raw one
+
+Measured 2026-09-21 for frankh-c0, whose acceptance row ("allocation count
+unchanged across N ticks") is only evidence if the handler genuinely runs in
+interrupt context.
+
+**The instrument exists and is callable from Pascal.** ESP-IDF exports
+`BaseType_t xPortInIsrContext(void)` for **both** ports
+(`freertos/FreeRTOS-Kernel/portable/{riscv,xtensa}/include/freertos/portmacro.h`),
+as an ordinary external. Declared `function xPortInIsrContext: Integer;
+external;` it links and returns.
+
+**MEASURED BY ME**, esp32c3 under qemu, IDF profile, 398 callbacks:
+
+    PROBE: app_main       in-isr=0
+    PROBE: timer-callback in-isr=0      (all 398)
+
+So the esp_timer callback is task context **by measurement**, not by its own
+source comment — which is §1.4's caveat now established rather than read.
+
+**DERIVED FROM THE IDF SOURCE, NOT MEASURED BY ME — label it that way when
+quoting it.** `xPortInIsrContext` returns `port_uxInterruptNesting[coreID]`
+(`portable/riscv/port.c:461/469`), a counter incremented by `rtos_int_enter`
+(`portasm.S:598-605`: `lw a1 / addi a2, a1, 1 / sw a2`) and decremented on the
+exit path (`:736`). So it is a live variable maintained by **the IDF's own
+interrupt-entry trampoline**.
+
+**TWO CONSEQUENCES, AND THE FIRST IS A TRAP:**
+
+1. **It would report 0 inside a RAW `interrupt;` handler.** A raw vector entry
+   does not pass through `rtos_int_enter`, so the counter is never incremented
+   and the instrument says "not in an ISR" while the CPU is genuinely in a trap
+   handler. **`xPortInIsrContext` is a predicate about IDF DISPATCH, not about
+   machine state**, and its name does not say so. Anyone verifying §1.1's raw
+   path with it will get a confident wrong answer. (Not reachable today —
+   §1.1 — but it will be, and this is precisely a hazard that produces no
+   signal while it is believed.)
+2. **It is also 0 before the scheduler starts**, even in an ISR: `rtos_int_enter`
+   skips the increment when `port_xSchedulerRunning[coreID] == 0`
+   (`portasm.S:596`). Early-boot interrupt code cannot use it.
+
+**WHAT I HAVE NOT SHOWN, STATED PLAINLY:** I have not seen this return 1. All
+my rows are 0, so "the instrument works and both arms are task context" and
+"the instrument always returns 0" are not distinguishable from these
+measurements alone — the mechanism above is what separates them, and it is a
+source read. **The positive control belongs beside an IDF-dispatched ISR
+arm**: one handler reading 1 where the timer callback reads 0 validates the
+instrument and the precondition in a single asymmetry, which is far stronger
+than either arm's absolute value. That arm is c0's.
+
+**WHAT WOULD MOVE IT:** nothing — [QEMU] already. The 1-reading row is
+unwritten, not unanswerable.
+
 ---
 
 # 2. NON-INTERRUPT ROWS
