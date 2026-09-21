@@ -12680,6 +12680,32 @@ prefer "I did not measure that" to a plausible one** — and if you are the seat
 being summarised, check the summary, because its author is the one least likely
 to re-derive it.
 
+**THAT LAST INSTRUCTION IS A DISPOSITION, NOT A REMEDY, AND `franks-5b` PROVED
+IT BY RUNNING IT — 2026-09-21, `327ebcd34`, minutes after this entry landed.**
+Told to check its own summary, 5b did not resolve to be careful; it **nominated
+one sentence and went and ran the commands.** The sentence claimed
+`p := 'literal'` aliases the pool at *every* `-O` level; 5b had measured four
+LEVELS on x86-64 while the fixture has rows for four TARGETS, each backend twin
+carrying its own `OptLevel >= 2` gate. **Measured on one target, asserted
+everywhere, in the sentence the whole fixture rests on.** It held — 16 default
+builds fault, 16 `--no-ro-data` clean, across x86-64/i386/aarch64/arm32 at
+`-O0..-O3` — so the commit **records the population** instead of narrowing the
+claim.
+
+**And the second layer is the one that nearly got through: 5b's first draft of
+the CORRECTING sentence cited 16+16 from a SCRATCH COPY with byte-identical
+code**, while the real file's `--no-ro-data` arm had only ever run at the
+default. It was about to fix an unmeasured claim with an unmeasured claim, while
+concentrating on exactly that failure. **A byte-identical copy is not the
+artefact, and a correcting sentence is not exempt from the rule it corrects.**
+
+**So the shape, which is the transferable part: an instruction that does not
+name an ARTEFACT TO RE-MEASURE is a disposition.** "Measure your quantifiers"
+did not fire for the coordinator; "check your own summary" would not have fired
+for 5b. What fired was *this sentence, these commands, that file.* Write
+remedies that name a target, or they are attitudes wearing the grammar of
+instructions.
+
 
 ## A RELAY CARRIES WHAT WAS TRUE WHEN SENT, AND THE COST OF BELIEVING ONE SCALES WITH WHAT YOU DO NEXT
 
