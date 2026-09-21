@@ -3,12 +3,12 @@ slug: bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-vi
 track: S
 type: bug
 prio: 60
-status: backlog
+status: done
 owner: ""
 created: 2026-09-21
 found-by: frankb-8e
 blocked-by: []
-summary: "`interrupt;` and `iram;` are two spellings of one concept -- an ESP interrupt handler -- and WHICH ONE IS CORRECT IS DECIDED BY THE DISPATCHER THAT CALLS YOU, not by anything visible at the declaration. A raw vector entry must be `interrupt;` (epilogue returns via `mret`/`rfe`); an esp_intr_alloc handler must be `iram;`, because the IDF dispatcher calls it as an ordinary `void(*)(void*)`. PICKING WRONG PRODUCES NO ERROR AT ANY STAGE: an `interrupt;` proc whose address is handed to esp_intr_alloc compiles, links and executes a trap-return instruction to leave a normal call, restoring a caller-saved set the caller never saved and returning through mepc/EPC rather than to the return address. The condition that springs it is any `@proc` of an `interrupt;` routine reaching a normal call site or an external -- so it is armed the moment a third ISR call site is written, and the only reason it has never fired is that the tree's two existing ISR tests (test_esp_isr_register.pas using `iram;`, test_esp_interrupt.pas using `interrupt;`) each happen to have picked the right one while NOTHING IN THE TREE STATES THE RULE. Wants a compile-time refusal, not a note: this is normalise-dont-special-case's sibling case, where the two spellings mean the same thing to whoever wrote the source and neither the construct name nor the test corpus distinguishes them. Diagnosing it on silicon costs a board session; refusing it costs a predicate at the @proc site."
+summary: "FIXED PENDING-COMMIT (the @proc arm; the direct-call arm is split out and still open). `interrupt;` and `iram;` are two spellings of one concept -- an ESP interrupt handler -- and WHICH ONE IS CORRECT IS DECIDED BY THE DISPATCHER THAT CALLS YOU, not by anything visible at the declaration. A raw vector entry must be `interrupt;` (epilogue returns via `mret`/`rfe`); an esp_intr_alloc handler must be `iram;`, because the IDF dispatcher calls it as an ordinary `void(*)(void*)`. PICKING WRONG PRODUCES NO ERROR AT ANY STAGE: an `interrupt;` proc whose address is handed to esp_intr_alloc compiles, links and executes a trap-return instruction to leave a normal call, restoring a caller-saved set the caller never saved and returning through mepc/EPC rather than to the return address. The condition that springs it is any `@proc` of an `interrupt;` routine reaching a normal call site or an external -- so it is armed the moment a third ISR call site is written, and the only reason it has never fired is that the tree's two existing ISR tests (test_esp_isr_register.pas using `iram;`, test_esp_interrupt.pas using `interrupt;`) each happen to have picked the right one while NOTHING IN THE TREE STATES THE RULE. Wants a compile-time refusal, not a note: this is normalise-dont-special-case's sibling case, where the two spellings mean the same thing to whoever wrote the source and neither the construct name nor the test corpus distinguishes them. Diagnosing it on silicon costs a board session; refusing it costs a predicate at the @proc site."
 ---
 
 # An `interrupt;` proc reached through a normal call returns via `mret`, silently
@@ -72,3 +72,18 @@ refusal that also rejects the correct spelling is not a guard, it is a break.
 - `feature-s-a-csr-write-is-not-expressible-from-pascal-so-no-raw-isr-can-be-installed`
   — why the raw arm is currently unreachable, which is what makes the refusal
   cheap today.
+
+## Log
+- 2026-09-21 — resolved in `PENDING-COMMIT`. Refused at the AN_PROCADDR convergence
+  point in ir.inc, so every spelling of `@f` is covered rather than the one the ticket
+  happened to name. BOTH CONTROL ARMS ASSERTED: test_esp_isr_register.pas as it stands
+  (`iram;`) still compiles and produces an object; the same file with `iram;` changed to
+  `interrupt;` is REFUSED at line 30 — exactly the `h := @MyIsr;` line — and produces none.
+  The refusal is unconditional today because no raw vector install exists in the language;
+  the code comment says in terms that it must be NARROWED to permit the install operand
+  when that lands, not deleted. `gate.sh quick` GREEN, read from the job's own verdict line
+  rather than the wrapper's exit status; fixedpoint a7ce4183f209.
+  RESIDUAL, SPLIT OUT RATHER THAN CLOSED SILENTLY: a DIRECT CALL to an `interrupt;` routine
+  is the same fault by a different spelling and is deliberately NOT refused, because
+  test_esp_interrupt.pas depends on one to force body emission. Filed as
+  `bug-s-a-direct-call-to-an-interrupt-routine-is-the-same-trap-return-fault-by-another-spelling`.
