@@ -33702,3 +33702,34 @@ and neither end's review has an aperture for it. **Before trusting a feature
 that has been read rather than run, ask what would have to exist for it to be
 REACHED** — and treat "verified by disassembly" as a claim about the bytes, never
 about the path.
+
+**AND THE DECLARATION'S OWN COMMENT IS THE WORST PLACE FOR THIS, BECAUSE A
+NEGATIVE CAPABILITY CLAIM DECAYS IN THE DIRECTION THAT CAUSES DUPLICATE WORK
+AND PRODUCES NO SIGNAL WHILE IT IS WRONG.** Same finding, the half that is not
+about the feature. `defs.inc` declared `ProcIsInterrupt` with the gloss
+*"reserved; full reg-save/iret not yet emitted"* — false, and it had been false
+for however long the codegen has been complete. A POSITIVE claim that goes stale
+gets contradicted the next time someone exercises the thing. **A NEGATIVE one is
+obeyed by not exercising it**, so nothing ever collides with it: the reader
+concludes the feature is absent, does not use it, and generates no observation
+that could reveal the comment is wrong. That is the hazard-block failure mode
+(*a stale warning decays like a LOCK: silently, in the direction of doing
+nothing*) arriving in a type declaration, which is a far more likely place for a
+reader to meet it than a hazard block is.
+
+**The tell is that it reads as modesty, which is the one register nobody
+audits.** "Not yet implemented", "reserved", "partial", "stub" all sound like a
+careful author under-claiming, so a reviewer's instinct is to trust them more
+than a bold claim, not less. This is the third decayed fact in CLAUDE.md's orbit
+in three days — `threading` (built, described as absent) and `LINE_BUF_SIZE`
+(deleted, still cited) are the other two — and **in all three the RULE was fine
+and the FACT underneath it had moved**, which is exactly why re-reading the rule
+never catches it. **Grep before citing a named constant, a stub or an
+unimplemented feature from a comment, and when you write such a comment, date it
+and name what would retire it.** A one-line disassembly or a one-line probe
+settles it; the comment costs an evening of rebuilding what exists.
+
+Banked here rather than promoted to CLAUDE.md deliberately: CLAUDE.md already
+carries the general rule and both other instances, and what is new is the SHAPE
+(a negative capability claim in a declaration), not the principle. If it turns
+up in a second unrelated subsystem, that is the trigger to argue for promotion.
