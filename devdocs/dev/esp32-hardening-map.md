@@ -436,16 +436,34 @@ finally-through-frames, exception in an ISR context once §1.1 lands). The
 14-fixture list is a count of files, not of shapes, and I am explicitly not
 converting one into the other — that would be the same error one level up.
 
-## 2.2 [SRC] 112 `PAL_ERR_UNSUPPORTED` sites in `platform_backend.pas`
+## 2.2 ~~[SRC] 112 `PAL_ERR_UNSUPPORTED` sites in `platform_backend.pas`~~ — **ANSWERED IN §3**
 
-Deliberate refusals — CLAUDE.md's "ESP is not a Unix" is the design and this is
-not a defect. It is on the list because **nobody has classified which of the 112
-a real program actually reaches.** A refusal that no demo hits is free; one on a
-path `lekkerzeilen` or a busybox applet takes is a wall.
+**This row is CLOSED and kept rather than deleted, so the class stays visible.**
+It asked for *"a census of which refusals are reachable from the demo set"* and
+that census is **§3 of this same file**, landed 2026-09-21 in `3ef925668` — the
+commit that left this row untouched.
 
-**WHAT WOULD MOVE IT:** a census of which refusals are reachable from the demo
-set. [SRC], free, and it is the sort of thing that stops being affordable when
-the token budget drops.
+**The short answer: zero measured walls**, and "112" was the wrong number —
+1 const declaration + 8 prose mentions + 103 executable sites, of which 32 are
+never compiled on any ESP target. See §3.0 for the denominator and §3.3 for the
+partition.
+
+**WHY THIS ROW IS WORTH A PARAGRAPH RATHER THAN A DELETION** (found by frankz-e5,
+2026-09-21). It is the **"WHAT WOULD MOVE IT" form of the stale row, and that
+form is nastier than a stale fact**: the row names its own retirement condition,
+so a reader who checks it is checking exactly the right thing — and still gets
+the wrong answer, because **nothing re-reads a row when its condition is met.**
+A stale fact gets contradicted by the next measurement; a satisfied
+retirement-condition just sits there looking open.
+
+**Its half-life was the shortest possible: the condition was met by the same
+author in the same commit.** I wrote §3 and did not look fifty lines up at the
+row that had asked for it. So this is not an argument for more diligence — it is
+the reason a retirement condition needs a POINTER AT THE ANSWER and not just a
+description of it. **When you satisfy a "what would move it", edit the row in the
+same commit**, exactly as CLAUDE.md requires of a ticket summary, and for the
+same reason: the question is where a reader looks, and the answer being elsewhere
+in the same document does not help them.
 
 ## 2.3 [SRC] The 64 KiB arena — see the denominator warning above
 
