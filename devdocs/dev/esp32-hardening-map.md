@@ -401,17 +401,40 @@ and expensive to discover later.
 
 # 2. NON-INTERRUPT ROWS
 
-## 2.1 [QEMU] Exceptions are unexercised on the bare profile
+## 2.1 ~~Exceptions are unexercised on the bare profile~~ — **RETRACTED 2026-09-21, THE ROW WAS FALSE**
 
-`test/test_esp_bare.pas` — the fixture the bare tier boots on both chips — has
-**zero** occurrences of `try`, `except` or `raise`. `test_esp_exception.pas`
-exists (12) and `test_esp_idf_nested_try.pas` covers the windowed-ABI frame bug
-on the IDF profile. The *bare* exception path is the hole. I booted
-`test_esp_exception` in qemu on both chips earlier today (6/6 boots) — so the
-capability is there and the *bare tier* simply does not assert it.
+**This row was wrong and I withdraw it.** The bare tier DOES exercise
+exceptions, on both chips, against the x86-64 oracle — `Makefile:35684-35693`,
+inside `test-esp-bare:`, booting `test_esp_exception.pas` on esp32c3 and
+esp32s3 and diffing UART byte-for-byte. It is not a hole. I found this by
+trying to *fix* it.
 
-**WHAT WOULD MOVE IT:** already [QEMU]; it is a missing row, not a missing
-instrument.
+**THE REAL COVERAGE, since the point of this file is populations**: the bare
+tier boots **14 distinct fixtures** in qemu on both chips —
+`test_esp_bare{,_arg64,_asm,_assert,_atomic,_float,_largeframe}.pas`,
+`test_esp_{class,exception,frozen_string,procvar,record_result,stack_args,varparam}.pas`.
+That is a substantially better-covered tier than this row implied.
+
+**THE MECHANISM OF THE ERROR, which is the part worth keeping.** I grepped ONE
+fixture — `test/test_esp_bare.pas` — found zero `try`/`except`/`raise`, and
+asserted a property of **the tier**. The grep was *correct about that file* and
+silent about the other thirteen. That is this repo's own rule fired at my own
+work: *print the set your instrument enumerates and check the subject is IN
+it.* The subject was "does the bare tier assert exceptions"; the set I
+enumerated was "the text of one file". They never intersected, and nothing
+errored.
+
+**It is also the wrong-population trap in its most seductive form**, because the
+fixture I checked is the one the tier is NAMED after. `test_esp_bare.pas` reads
+like *the* bare test, so checking it feels like checking the tier — and the
+name is doing the work, not the measurement. Filed under this file's own §0
+warning about names.
+
+**A residue survives and it is much smaller than the row claimed:** nothing
+here establishes which exception SHAPES are covered (nested, re-raise,
+finally-through-frames, exception in an ISR context once §1.1 lands). The
+14-fixture list is a count of files, not of shapes, and I am explicitly not
+converting one into the other — that would be the same error one level up.
 
 ## 2.2 [SRC] 112 `PAL_ERR_UNSUPPORTED` sites in `platform_backend.pas`
 
