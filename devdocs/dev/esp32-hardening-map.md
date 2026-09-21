@@ -202,6 +202,28 @@ arm**: one handler reading 1 where the timer callback reads 0 validates the
 instrument and the precondition in a single asymmetry, which is far stronger
 than either arm's absolute value. That arm is c0's.
 
+**AND THE TWO PORTS DO NOT RETURN THE SAME QUANTITY, SO `= 1` IS A
+CROSS-TARGET TRAP.** Source read, both files, verified:
+
+    riscv   port.c:461/469   return port_uxInterruptNesting[coreID];   { the RAW COUNT }
+    xtensa  port.c           return (port_interruptNesting[coreID] != 0);  { normalised to 0/1 }
+
+riscv hands back the nesting COUNT; xtensa normalises to a boolean. Under
+nested interrupts riscv legitimately answers 2 or 3 where xtensa still answers
+1 — **and nesting is real there, not theoretical**: `portasm.S:607` branches on
+it in so many words, *"If we reached here from another low-priority ISR, i.e,
+port_uxInterruptNesting[coreID] > 0, then skip stack pushing to TCB"*. So an
+`= 1` assertion passes on xtensa and can fail on riscv, and it fails only once
+a second interrupt arrives during the first — correct on every run until it
+is not. **Assert `<> 0`.** Note too that the variable is spelled differently in
+each port (`port_uxInterruptNesting` vs `port_interruptNesting`), so a grep for
+one finds half the story.
+
+This is the single-target hazard this file warns about elsewhere for x86-64,
+arriving BETWEEN THE TWO ESP ISAs — and it nearly shipped that way here: §1.5
+was drafted from the riscv implementation plus an esp32c3 run, and the xtensa
+half is a different expression.
+
 **WHAT WOULD MOVE IT:** nothing — [QEMU] already. The 1-reading row is
 unwritten, not unanswerable.
 
