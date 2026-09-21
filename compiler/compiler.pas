@@ -975,6 +975,18 @@ begin
     limit: `ok:` with exact byte counts over a 40960-byte prefix of hello, which
     then segfaulted -- a full disk does the same. Every writer syswrite reports
     through OutWrote (util.inc), so this is exact, not a size guess. }
+  { AND A SECOND-ORDER PROPERTY OF THIS TEXT, MEASURED 2026-09-21 THE DAY IT
+    LANDED: a checklist quoted in a captured log READS AS EVIDENCE FOR THE
+    CONDITION IT EXPLAINS. test_trunc26 manufactures the short write on purpose
+    (`ulimit -f 40`, XFSZ trapped), and when its output appeared in a tier
+    report two seats read the `df -h` / `df -i` lines below as a FINDING about
+    the test host, concluded borg was short on disk or inodes, and relayed it --
+    one of them nearly building a "host transient" story on two of 955 archived
+    reports that merely carried this string. Nothing here is a measurement: the
+    compiler prints all four causes unconditionally and has checked none of
+    them. What settled it was reading the failing STEP rather than the symptom.
+    Keep the causes; do not let a future edit phrase any of them as an
+    observation. }
   if OutWriteShort then
   begin
     writeln(StdErr, 'pascal26: error: a write to the output file stored fewer bytes than asked: ', path);

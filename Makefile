@@ -8231,7 +8231,7 @@ test-threads: $(COMPILER)
 	# writers discarded that count and printed `ok:` over a truncated binary.
 	# `ulimit -f 40` is well under hello's ~69KB in either block unit, and XFSZ is
 	# ignored so the write returns short instead of killing the compiler.
-	tools/expect_same.sh test_trunc26.1 "$$( (trap '' XFSZ; ulimit -f 40; ./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc26 2>&1 >/dev/null); echo "rc=$$?")" "$$(printf 'pascal26: error: the output file was truncated: $(TESTTMP)/test_trunc26\n  a write stored fewer bytes than it was asked to; the file on disk is incomplete.\n  usual cause: the filesystem is full (ENOSPC) or a file-size limit.\nrc=1')"
+	tools/expect_same.sh test_trunc26.1 "$$( (trap '' XFSZ; ulimit -f 40; ./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc26 2>&1 >/dev/null); echo "rc=$$?")" "$$(printf 'pascal26: error: a write to the output file stored fewer bytes than asked: $(TESTTMP)/test_trunc26\n  check all four -- the first is the commonest and the last is the one that fools people:\n    df -h <dir>   free BYTES\n    df -i <dir>   free INODES -- can hit 100%% while df -h reads 9%%\n    ulimit -f     a file-size limit truncates at a plausible size\n    another pascal26 writing THIS SAME PATH -- two writers interleave,\n      and the file can then end up the RIGHT size, so its size proves nothing.\nrc=1')"
 	# CROSS ROWS, wired when bug-a-riscv32-and-xtensa-accept-a-shortstring-
 	# sysopen-path-and-open-nothing closed. riscv32 and xtensa COMPILED this and
 	# printed `short open  FALSE` for a file that exists: the generic arg
