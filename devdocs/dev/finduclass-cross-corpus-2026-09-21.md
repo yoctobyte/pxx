@@ -1,15 +1,52 @@
 # Does the FindUClass index generalise beyond lekkerzeilen?
 
-**No. It is ~0% on all three other Python programs that compile here.**
-Measured 2026-09-21 (frankH) at frankuser's direction, because every number in
-the original finding came from ONE program and this fleet had just spent a day
-learning that a benchmark's SHAPE, not its size, decided whether a 9% win
-existed.
+**YES. ~28% on uforth, against ~38.7% on lekkerzeilen.**
 
-## The two arms, named and hashed
+> # RETRACTED 2026-09-21, SAME DAY, BY ITS OWN AUTHOR
+>
+> **This document first answered "No. It is ~0% on all three other Python
+> programs that compile here." That answer was wrong, and it was wrong for a
+> reason that leaves every number below intact and every conclusion void.**
+>
+> **THE HEAD ARM WAS BUILT BEFORE THE COMMIT IT WAS SUPPOSED TO TEST.**
+>
+>     d5de02143  index commit lands          10:59:45
+>     my last pull before the build          10:50:24   (reflog, rebase finish)
+>     "HEAD" binary 5c8c3b8a4c051337 built   11:07
+>     next pull                              11:10:27
+>
+> Nine minutes. Pin v414 has no index; that binary had no index either. **The
+> A/B compared two full-scan compilers and correctly reported that they are the
+> same speed.** The +0.0% was real, reproducible, min-of-5, interleaved, and
+> about nothing.
+>
+> **Everything below the retraction line is preserved rather than deleted**,
+> because the failure is worth more than the finding was and a deleted mistake
+> teaches nobody. Read the measurements as valid and the conclusions as void.
+> The corrected table is at the end, under CORRECTED RESULT.
+
+## The arms, named and hashed
+
+**THE ORIGINAL ARMS — the second one is the defect:**
 
     pin v414   sha256 aeadb1754b80b622   PRE-index   (source b109703344ea)
-    HEAD       sha256 5c8c3b8a4c051337   index ON    (d5de02143 is an ancestor)
+    HEAD       sha256 5c8c3b8a4c051337   NO INDEX -- built 11:07 from a tree
+                                         pulled 10:50, before d5de02143 existed
+
+**The original text of that row said `index ON (d5de02143 is an ancestor)`, and
+that sentence is the whole error in miniature: `d5de02143` IS an ancestor of
+the commit the binary was named after, and was not in the tree the binary was
+built from.** A claim about the COMMIT, written into a row describing the
+BINARY. Nothing checked it and nothing could have, because both halves are true
+statements about different things.
+
+**THE CORRECTED ARMS:**
+
+    pin v414   sha256 aeadb1754b80b622   PRE-index, recovered from c49b2f646
+                                         with its own builtin/ beside it
+    HEAD       sha256 ab768cbf487a9817   index ON, after `rm` of the stamp and
+                                         a forced `converged after 1 round(s)`
+    pin v415   sha256 94fddf62ee6af731   index ON -- the THIRD-BINARY CONTROL
 
 Verified as genuinely different files, and that `d5de02143` is an ancestor of
 the HEAD arm — because two arms that are secretly one binary produce exactly
@@ -59,6 +96,7 @@ alone is ambiguous about which factor moved.
 
     program          UClsCount   FindUClass calls   scanned>= (LOWER BOUND)
     lekkerzeilen         411          3,860,000          ~1.45 B   (5b)
+    [true steps, measured later: 4,305,236,025 -- see CORRECTED RESULT]
     uforth               126          1,240,000           153.7 M
     render_backend       240            160,000            25.2 M
     key_analysis         135            100,000             9.9 M
@@ -106,6 +144,10 @@ the finding.** If it holds, the qualifier is not "import-heavy programs" but
 
 ## THE CONTRADICTION IS REAL AND IS NOT BEING SMOOTHED
 
+**SUPERSEDED -- THE PARAGRAPH BELOW REASONS FROM THE INVALID ARM.** The
+model it doubts is in fact correct: measured across four programs the cost
+is 8-9.4 ns per step removed. See CORRECTED RESULT.
+
 A model where cost is proportional to scan steps fits lekkerzeilen (>=1.45 B
 steps, 34.4 s saved, so ~8-23 ns/step) and **that same model predicts uforth
 should save 1.5-4 s of 10.41 s. It saved nothing.** Two branches, and the
@@ -137,8 +179,18 @@ and remains a proxy.
 
 ## What this does and does not say
 
-**Does:** the index is worth ~0% on uforth, key_analysis and render_backend, so
-38-41% must not be quoted as a general figure for pxx compile speed.
+**Does (CORRECTED):** the index is worth **28.4% on uforth, 12.5% on
+key_analysis and 6.4% on render_backend**, against ~38.7% on lekkerzeilen.
+It generalises. What must not be quoted as a general figure is the 38-41%
+itself -- the RANGE is 6.4% to 38.7%, and the bottom of it is real.
+
+**The original text of this bullet read:** *"the index is worth ~0% on
+uforth, key_analysis and render_backend, so 38-41% must not be quoted as a
+general figure for pxx compile speed."* The conclusion it drew about not
+over-quoting 38-41% happens to survive; the measurement it drew it from does
+not. **A right conclusion from a void measurement is not a partial success,
+and it is worth naming because it is the form in which this would have
+survived review.**
 
 **Does not:** say the index is not worth having. lekkerzeilen is a real target
 and its win is real and measured. It also says nothing about programs not in
@@ -232,3 +284,108 @@ model under either. 5b holds (b) open on its own account because the 38.7%
 rests on a flat PC profile, which by construction cannot see callers, and
 because 38.7% already exceeded the 27% self-time figure. **A win of 34.4 s is
 not in dispute; what produced it is.**
+
+
+# CORRECTED RESULT — 2026-09-21
+
+**The index generalises to every program measured. The spread is 6.4% to
+38.7%, and the cost model that the retracted section declared dead is correct
+to within a factor of two across a 176x range of step counts.**
+
+## The arms, and the control that was missing the first time
+
+    v414  aeadb1754b80b622  PRE-index, recovered from c49b2f646 with its own
+                            builtin/ beside it (--where shows no MISSING on the
+                            builtin row; [RTL] falls through to the CWD-relative
+                            path, so every arm was run from the repo root and
+                            every arm sees the same lib/rtl)
+    HEAD  ab768cbf487a9817  index ON, after removing the stamp and forcing
+                            `converged after 1 round(s)` -- the verb that means
+                            something was actually rebuilt
+    v415  94fddf62ee6af731  index ON -- THE THIRD-BINARY CONTROL
+
+**v415 is not decoration and it is the whole repair.** The first attempt had
+two arms and no way to notice they were the same arm. Here v415 lands within
+0.10s of HEAD on all three subjects while both beat v414 — so the harness is
+demonstrably able to see the difference it is being asked about, before any row
+is read.
+
+## The table — min of 5, interleaved, one box
+
+    program          v414      HEAD      v415     saved     share
+    uforth          10.21s     7.31s     7.31s    2.90s     28.4%
+    key_analysis     3.20s     2.80s     2.90s    0.40s     12.5%
+    render_backend   7.81s     7.31s     7.41s    0.50s      6.4%
+    lekkerzeilen    88.79s        --        --   34.38s     38.7%   (5b)
+
+Every rep is in `redo.out`; the three subjects' reps spread by at most 0.30s.
+
+## The cost model, which is the part that was wrongly declared dead
+
+True steps from `PxxFUCReal`, both arms, same tree, only `useIdx` differing:
+
+    program          steps OFF        steps ON    removed    saved     ns/step
+    lekkerzeilen   4,305,236,025            --     ~4305 M   34.38s      7.99
+    uforth           311,636,212     2,382,907      309.3 M    2.90s      9.38
+    render_backend    58,084,463       202,172       57.9 M    0.50s      8.64
+    key_analysis      24,413,553        97,243       24.3 M    0.40s     16.4
+
+**Three of four cluster at 8.0–9.4 ns per step removed, across step counts
+spanning 176x.** key_analysis's 16.4 is the row to distrust rather than the one
+to explain: its saving is 0.40s at 0.10s reps resolution, so the honest reading
+is 12–20 ns/step, and it is the smallest subject in the set.
+
+**So cost IS proportional to steps, and the retracted section's "the stepping
+model is dead" was an artefact of the invalid arm and nothing else.**
+
+## What actually sets the share, now that there is a spread to explain
+
+Not class count and not call count — the retracted decomposition was right to
+kill both, and that part stands on its own evidence. What tracks the share is
+**lookup density: steps removed per second of compile.**
+
+    lekkerzeilen   4305 M / 88.79s  =  48.5 M steps/s   ->  38.7%
+    uforth          309 M / 10.21s  =  30.3 M steps/s   ->  28.4%
+    key_analysis     24 M /  3.20s  =   7.6 M steps/s   ->  12.5%
+    render_backend   58 M /  7.81s  =   7.4 M steps/s   ->   6.4%
+
+The ordering is monotone in all four rows and it has to be, because share is
+density times ns/step and ns/step is near-constant. **This is a restatement of
+the model, not independent evidence for it** — it earns its place by naming the
+quantity to ask about for a new program, not by confirming anything.
+
+**The real/`scanned>=` ratio is NOT a constant and must not be scaled between
+programs:** 2.97 (lekkerzeilen), 2.48 (key_analysis), 2.30 (render_backend),
+2.03 (uforth). 5b projected uforth at ~456 M by applying lekkerzeilen's 2.97
+and the measured figure is 311.6 M — 46% high. The ratio is set by how often
+scans 1 and 2 fail, which is a property of a program's scope structure.
+**Measure `realsteps` on the program you are talking about.**
+
+## What this document is now for
+
+The finding is ordinary: an index over a linear scan is worth roughly its step
+count times ~8 ns, everywhere, and the share varies because programs differ in
+how lookup-dense they are. **The reason to keep the document is the failure.**
+
+**A BINARY BUILT BEFORE THE COMMIT UNDER TEST CANNOT BE AN ARM FOR IT, AND
+NOTHING ABOUT IT LOOKS WRONG.** It runs, it is fast, it self-hosts, it answers,
+and it produces a clean reproducible number with tight variance. There is no
+error, no warning and no anomaly — the measurement is correct and it is about a
+different question. CLAUDE.md's "rebuild after any sync touching `compiler/**`"
+covers staleness in general; this is the specific killer, and the nine-minute
+gap between the pull and the build is small enough that no instinct fires.
+
+**THE CONTROL, which is what makes it actionable: when an A/B returns a flat
+null, time a THIRD BINARY YOU BELIEVE IS FAST. Two arms cannot tell you they
+are the same arm.** The tell was in the original data — both arms were slower
+than pin v415 — and there was no reason to look, because nothing was wrong.
+
+**Its limit, and it matters:** this catches an invalid ARM. It does not catch
+an invalid VERDICT — a check that prints a confident wrong answer, such as one
+whose exit status cannot distinguish "false" from "bad argument". That is a
+different repair (assert the direction that must DIFFER) and this control
+should not be asked to carry it.
+
+**And the near-miss worth recording:** this document's retracted half drew the
+right conclusion — do not quote 38-41% as a general figure — from a void
+measurement. It would have passed review on the strength of the conclusion.
