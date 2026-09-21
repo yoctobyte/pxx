@@ -235,12 +235,30 @@ document and once in a message before anyone checked it.
 
 ## Pin note
 
-These arms are **pin v414** (`aeadb1754b80b622`) against HEAD-at-the-time
-(`5c8c3b8a4c051337`). **Pin v415 landed afterwards** — binary
-`94fddf62ee6af731`, source `0176aa3cebf24ef9` — and carries `d5de02143` among
-eleven commits that went inert to live. So every figure here names a compiler
-that is no longer the pin, and "the pinned compiler" means something different
-after v415 than it does above.
+**Every arm in this document is named by its BINARY sha, and those are the only
+identities that mean anything here.** The pin has moved several times since and
+will keep moving, so "the pinned compiler" is not a fixed referent and must not
+be read as one anywhere above.
+
+    pre-index arm    aeadb1754b80b622   (shipped as pin v414; recovered from c49b2f646)
+    post-index arms  ab768cbf487a9817   (HEAD, forced `converged after 1 round(s)`)
+                     94fddf62ee6af731   (shipped as pin v415)
+
+**This note first read "Pin v415 landed afterwards ... so every figure here
+names a compiler that is no longer the pin", and that sentence needed rewriting
+at v416 four hours later.** A note whose correctness depends on which pin is
+current is a row that fires today, and this file is supposed to know better:
+the binary shas above do not decay, and a reader who wants to know where a
+given pin sits relative to them can ask `git merge-base --is-ancestor` and read
+the exit code.
+
+**AND ANCESTRY IS A CLAIM ABOUT COMMITS, NOT ABOUT BINARIES — which is the
+error this whole document exists to record.** When v416 was reported as
+carrying this work, the check that settled it was not the ancestry walk but
+running the pinned binary: `sha256sum` it, confirm it is byte-identical to the
+build under test, and invoke the feature. `d5de02143 is an ancestor` was true
+of a commit and false of the binary beside it, and that cost a published
+result.
 
 
 ## THE DECIDING MEASUREMENT — TAKEN 2026-09-21, AND IT KILLS THE STEPPING MODEL
