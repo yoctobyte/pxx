@@ -297,3 +297,54 @@ theoretical one.
 resolves to `.iram1.text` on the IDF object, same as an `interrupt;` body. (Both
 emit symbol size 0, which matters to nothing here but would matter to any tool
 reading FUNC sizes.)
+
+### THE BARE LEAD IS RESOLVED, AND THE PROFILE SPLIT'S TWO HALVES ARE OPPOSITE (frankb-8e 94ba410fa + frankH)
+
+The lead above is settled and it was understated. It is not that `PXXAlloc`
+misses the codegen hard lock on ESP — **there is no lock model on ESP at all**:
+
+    frontend_prologue.inc:127   EmitHeapLockSlowStub  <- ThreadSafeMode AND TARGET_X86_64
+    paslexer.inc:1226           PXX_TS_SOFTLOCK       <- i386 / aarch64 / arm32
+    paslexer.inc:1242           PXX_TS_HARDLOCK       <- x86-64
+
+riscv32 and xtensa are in **neither** list, and the flag is not silently a
+no-op: `--threadsafe --target=riscv32 --esp-profile=bare` is REFUSED with *"the
+heap/ARC/I-O locks are not implemented on this target yet"*. The compiler is
+being honest.
+
+So: **IDF — safe, by the platform's deliberate design. BARE — unlocked, and
+safe only BY UNREACHABILITY**: no FreeRTOS, and no interrupt handler can be
+installed on bare at all because the vector write is not expressible, so
+nothing can currently interrupt an allocation. The hazard is **latent, not
+live**, which retires the on-target allocation-call census — its condition is
+met and its consequence is not. What refires it is the CSR enabler LANDING,
+because that is the commit that converts the bare cell from unreachable to
+reachable.
+
+### AND THE OBVIOUS REMEDY IS WORSE THAN THE HAZARD ON A SINGLE CORE (frankH)
+
+Recorded here because a seat that reads *"unlocked allocator"* as the finding
+will reach for the fix the source itself offers, and it is a trap.
+
+`builtinheap.pas:1611` — under `PXX_THREADSAFE` the allocator's lock is a bare
+exchange loop with **no interrupt masking**, released by a plain store:
+
+    while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do tsIgnore := tsIgnore + 1;
+
+Wire riscv32 into the softlock list once interrupts are reachable and that is
+not a partial fix, it is a **deadlock**: a task takes the spin, an interrupt
+preempts it, the handler allocates and spins forever on a lock whose only
+possible releaser is the task it is standing on. Neither can make progress.
+Unlocked corrupts a free list, which is survivable and debuggable; this hangs
+the chip silently.
+
+**The platform already decided the shape of any eventual ESP lock, and it is
+not this one.** The operative half of the IDF line both of us quoted is its
+ending: *"we need to use portmux spinlocks here **not RTOS mutexes**"*, with
+`portENTER_CRITICAL_SAFE` — which DISABLES INTERRUPTS. The IDF is not picking a
+spinlock for speed; it is picking the one primitive that closes this hole, and
+`PXXHeapSpin` is the primitive it rejected.
+
+**Stated as a mechanism and not as a prohibition** — "a plain spin taken by a
+task and contended by an interrupt on one core cannot make progress" survives
+someone renaming the flags, where "do not enable threadsafe on ESP" does not.
