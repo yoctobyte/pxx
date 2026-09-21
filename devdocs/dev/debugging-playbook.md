@@ -12711,9 +12711,10 @@ REMEDY CAUGHT A DEFECT IN THE FINDING THAT MOTIVATED IT.** `franks-5b` reported
 that `make compiler/pascal26` printing `verified` was *"true and useless as an
 answer to 'is my binary proven for this tree'"*, and `frankz-e5` called that the
 new part and said it was 5b's to write. **Going to write it required opening the
-Makefile, and the recipe refutes it:** the `verified` line sits past two
-content-based guards that each `exit 1` — the stamp's `srchash` must equal the
-tree's live source hash, and the binary's sha256 must equal the stamp's — and
+Makefile, and the recipe refutes it:** the `verified` line sits past **three
+`exit 1` guards — two that COMPARE content, one that refuses when content
+CANNOT BE MEASURED** (stamp `srchash` against the tree's live source hash;
+binary sha256 against the stamp's; and `[ -z "$livesrc" ]`) — and
 the recipe's own text records the hole 5b was describing as a CLOSED bug
 (*"a stamp NEWER than sources it does not describe is how this step printed
 'verified' three times in one day without building anything"*). The remedy had
@@ -12721,6 +12722,32 @@ done nothing visible because **the gate's own testmgr step had already rebuilt
 the binary**, which `gate.sh` documents in a comment 5b had quoted an hour
 earlier. **Byte-identical was not corroboration of a trap; it was proof
 `verified` had been right.**
+
+**THE GUARD BOTH THE CORRECTOR AND THE CORRECTED DROPPED IS THE INTERESTING
+ONE.** `frankz-e5` banked "two guards" and `franks-5b` had "two" in its own
+note; `frankuser` counted three. **All three of us read the same 35 lines.** The
+one that goes missing is `[ -z "$livesrc" ]`, and its own comment says why it
+exists: *"An empty result means 'could not measure', never 'measured and they
+match'."* An unmeasurable hash would compare **equal** to another empty one and
+print *sources match it* for a tree it had never seen. **That is this project's
+own `an instrument that cannot measure must not answer` rule sitting inside the
+recipe being mis-described** — and it is skipped because it is not about
+drift, and drift was the subject. **A guard against unmeasurability does not
+look like a guard about content until you read why it exists.** Spell it as
+*three `exit 1` guards; two compare content, one refuses when content cannot be
+measured*, so the next reader is not reconciling two banked numbers.
+
+**AND THE CONTROL IS NOT WHERE ANY OF US FIRST PUT IT.** `frankz-e5` reported
+its live `srchash` as matching 5b's quoted value and read that as independent
+confirmation. **It is not evidence about the guard at all** — `srchash` is a
+content hash over the same 233 sources, so two checkouts at one commit MUST
+agree; it is evidence the SOURCES agree. **What makes that row a control is the
+STAMP differing from it**, i.e. the guard saying NO. 5b had watched it PASS.
+**A guard that passes is compatible with a guard that cannot fail**; two
+independent checkouts where it REFUSES is what proves it armed.
+`frankuser`'s generalisation, and it is the operational form of *count the
+measurements, never the endorsers*: **when three seats agree, ask which of them
+saw the instrument say NO.**
 
 **Note what the naming bought, because it is not "be more careful": the
 artefact here was a FILE TO OPEN, not a command to run.** The instruction
