@@ -1,6 +1,7 @@
 ---
 prio: 70
-track: T
+track: A
+summary: "NOT a timing flake and NOT a too-short timeout -- the ticket said so from 2026-09-18 to 2026-09-21 and the number that settles it had never been taken. A PASSING run of this job is 4.22-4.53s against a 60s limit (13x margin); a failing run pins the wall at 60s AND at 90s. Bimodal, nothing in between, 8 runs, loads 5.1-8.66 -- and the TWO HIGHEST-LOAD runs both PASSED, which is the opposite of what a loaded-box timeout predicts. The phase-1 control prints contention-workers-finished=12 in every single run, so twelve threads complete the heaviest legitimate contention and the failure is entirely phase 2, the deliberate collision that must be NAMED. Re-laned T->A: the asserted exit code 212 is produced by a COMPILER-EMITTED stub (ir_codegen.inc:3779 interns the message and emits the spin budget, the .dead arm and exit_group(212)); nothing in tools/ decides it, and track:T was the auto-filer's documented fallback. The regression is in RELIABILITY and the parent ticket records the baseline: bug-a-the-threadsafe-allocator-is-not-async-signal-safe logs option 3 landing 2026-09-02 as 'measured 1.9s from the collision, 6 runs of 6'. It now fires 5 of 8. Leading candidate NOT yet established: the reentrant heap-lock layer grants the lock on a tid match and a signal handler runs on the thread it interrupted, which was measured with this exact symptom on 2026-09-16 and fixed by a sigaltstack bounds test whose own comment names an unclosed per-thread residual."
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 13 is `out=$(timeout 60 /tmp/test_ts_hl_diag26 2>&1); rc=$?; \ tools/expect_same.sh test_ts_hl_diag26_exit "$rc" "212" && \ too`. The job's own `src` (`test/test_threadsafe_heap_lock_deadlock_diag.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -132,3 +133,64 @@ a watch, not a dispatch. Flagged to the owner the same night.
 - 2026-09-20 — the borg watcher saw `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` GREEN at 8318e225854d (tier native) and did NOT close this: this is a repeat stub (`regression-test-threads-test-threadsafe-heap-lock-deadlock-diag-2`, not `regression-test-threads-test-threadsafe-heap-lock-deadlock-diag`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-20 — the borg watcher saw `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` GREEN at 606d79c053ff (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-threadsafe-heap-lock-deadlock-diag-2`, not `regression-test-threads-test-threadsafe-heap-lock-deadlock-diag`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-20 — the borg watcher saw `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` GREEN at 44728b431d89 (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-threadsafe-heap-lock-deadlock-diag-2`, not `regression-test-threads-test-threadsafe-heap-lock-deadlock-diag`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## 2026-09-21 — RE-LANED TO A, AND THE FLAKE READING IS REFUTED ON THE DURATION AXIS
+
+**Lane: A, not T.** `track: T` was the auto-filer's documented fallback and the
+ticket says so in its own header. The failing assertion is an exit code that a
+**compiler-emitted stub** produces: `compiler/ir_codegen.inc:3779` interns
+`Runtime error 212: the heap lock was never released.` and emits the spin
+budget, the `.dead` arm, the `sys_write` and the `exit_group(212)`. Nothing in
+`tools/` decides this outcome. The test source named in the slug is what the job
+compiles, which the header also warns about.
+
+**THE 2026-09-18 CONCLUSION IS REFUTED, AND IT WAS A GOOD CONCLUSION FROM THE
+EVIDENCE IT HAD.** That watch read the failure as a race against a clock —
+`rc=124` is `timeout`'s own exit code, so what fails is "did the box get through
+in sixty seconds". It then reasoned, correctly, that a defect present and absent
+at one sha is not a defect at that sha. **What nobody did was measure how long a
+PASSING run takes**, and that single number decides it:
+
+    HEAD, --threadsafe -dPXX_NO_HEAP_MAG, load recorded per run
+
+      N=8, one binary, alternating nothing, loads 5.10 -> 8.66 per run
+        pass  rc=212   4.22  4.32  4.43  4.53  4.53 s     (5 of 8)
+        hang  rc=124  90.04 90.11 90.11 s                 (3 of 8)
+      earlier N=5 at a 60 s limit: rc=212 4.43 s once, rc=124 60.08-60.10 s x4
+
+      THE TWO HIGHEST-LOAD RUNS BOTH PASSED (load 7.93 and 8.66, 4.22 s and
+      4.32 s). If load caused the timeout those are the two that should have
+      failed. Load does not order this outcome.
+
+**A passing run is 4.4–4.5 s against a 60 s limit — a 13x margin — and a failing
+run pins the wall at 60 s AND at 90 s.** The distribution is bimodal with
+nothing in between. A box too slow produces 30 s, 50 s, 58 s creeping toward the
+limit; this produces 4.5 s or never. **No load turns 4.5 into 90.** Raising the
+timeout is therefore not the fix and would only make the job slower to fail.
+
+**The phase-1 control passes in every run**, printing
+`contention-workers-finished=12`. So twelve threads complete the heaviest
+legitimate contention and the failure is entirely in phase 2 — the deliberate
+collision that must be NAMED.
+
+**There is a recorded baseline for how often it should fire, and it is in the
+parent ticket.** `bug-a-the-threadsafe-allocator-is-not-async-signal-safe`
+records option 3 landing on 2026-09-02 as *"measured 1.9s from the collision,
+6 runs of 6"*. So the diagnosis used to be reliable and is now intermittent.
+**That is the regression** — not a wrong answer, and not a slow box.
+
+## What is NOT established
+
+That the mechanism is the reentrant layer. It is the leading candidate and the
+code says why: `EmitHeapLockStubs` grants the lock when the caller's tid equals
+`BSS_HEAP_OWNER`, and **a signal handler runs on the thread it interrupted**, so
+it presents exactly that tid. That was measured on 2026-09-16 with this same
+symptom — *"the deadlock probe HANGS to the harness timeout (rc=124, no
+message)"* — and fixed by testing whether `rsp` lies inside the sigaltstack
+bounds, which separates an interrupt from a call. The fix is present at HEAD.
+**Its own comment names an unclosed residual:** sigaltstack is per-thread and
+only the installing thread registers one.
+
+Two arms settle it: `-dPXX_NO_REENTRANT_HEAPLOCK`, which the code says restores
+the 212, and a PC sample of a hanging run to see where it is parked. Both are
+running as this lands; the result goes below rather than replacing this.
