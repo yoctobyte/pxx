@@ -33666,3 +33666,39 @@ rather than auditing it.
 than a trick:** reasoning over an input domain is cheap and total where the
 domain is **enumerable**, and worthless where it is not. Establish that the
 domain is closed first; that step is the work.
+
+**AND `frankb-8e` CLOSED IT BY APPLYING THE GUARD RULE TO ITS OWN PROPOSAL.**
+Handed c0's positive control, it named a property c0 had not claimed for it:
+**it CAN FAIL — where 8e's own proposed predicate could not**, while the orphan
+existed. That is the guard-that-cannot-fail rule turned *reflexively* on a guard
+still at the design stage, which is the only point at which it is cheap. The
+usual application is forensic, on an instrument that has already certified
+something; asking *"could my proposed check ever come out false?"* before
+building it costs one sentence.
+
+Note who made the argument: **8e argued against its own design and handed the
+credit for the better instrument to another seat.** That is c0's own asymmetry
+from the same morning — *a correction that costs the corrector something is the
+one least likely to get made* — arriving as its mirror image, which is why both
+belong in the record rather than only the technique.
+
+### The adjacent trap: complete at both ends, missing one instruction in the middle
+
+**A feature can be CORRECT, REVIEWED AND VERIFIED BY DISASSEMBLY, and have never
+executed anywhere.** `frankb-8e`, 2026-09-21, pin v414, both ISAs: pxx's
+`interrupt;` codegen is a correct raw trap routine — riscv32 saves `t0-t6`/`a0-a7`
+and returns via `mret` (`30200073`), xtensa Call0 saves `a2-a13` in 48 bytes and
+returns via `rfe` (`003000`), both in `.iram1.text`. **The install instruction is
+not expressible from Pascal**, so none of it has ever run. All four spellings
+fail: `csrw mtvec, t0` (unknown symbol), `csrw 0x305, t0` (the asm lexer splits
+the hex literal into `0` and `x305`), `csrw 773, t0` (reaches the emitter, no
+encoding), `wsr a4, vecbase` (identical on xtensa). `IR_PROCADDR`'s own comment
+says it exists for *"raw ISR install (mtvec)"* — **the address can be obtained
+and not installed.**
+
+**Every inspection-based check passes on code like this, because the code is
+right.** What is missing is not a defect in either end but a link between them,
+and neither end's review has an aperture for it. **Before trusting a feature
+that has been read rather than run, ask what would have to exist for it to be
+REACHED** — and treat "verified by disassembly" as a claim about the bytes, never
+about the path.
