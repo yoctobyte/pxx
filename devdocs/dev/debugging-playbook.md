@@ -33182,6 +33182,16 @@ what a clean result looks like. **The disagreement half is self-enforcing and
 the agreement half is not**, which is why 8e's instance cost two contaminations
 and 7a's cost nothing.
 
+**7a's own compression of that asymmetry is the sentence to carry, and it
+generalises past sha comparisons to every number you read:** *"a number that
+surprises you downward gets interrogated, a number that surprises you upward
+gets banked."* It offered the rest of its own morning as the population — a
+green build count it expected, a `warnings=0` it expected, and a plausible hang
+that matched the finding it had been sent to look for. **Three upward surprises
+in one session, none interrogated**, against one downward surprise that stopped
+it dead in seconds. The instrument is not weaker in the upward direction; the
+reader is.
+
 **7a's account of what actually saved it is the part to copy, and it is not the
 arithmetic:** the guard that fired was a refusal to measure until the binary was
 confirmed complete — **a check armed for one reason catching something else
