@@ -17,7 +17,7 @@ against what that line actually holds.
 | 5 | `@dataclass(frozen=True)` | dataclass codegen; the refusal is correct | — |
 | 6 | `subprocess.run(cwd=)` | a real unit, a missing parameter | — |
 | 7 | `random.Random(seed)` | qualified member of a **consumed-only root** | **4** |
-| 8 | keyword through a callable value | marshalling (`pyvar_callv_kw`) — `tsp/historic.py:531` | **4** (row 4's cheap lowering needs it) |
+| 8 | keyword through a callable value | marshalling (`pyvar_callv_kw`) — `tsp/departure.py:531` (CORRECTED 2026-09-21; was `historic.py:531`) | **4** (row 4's cheap lowering needs it) |
 
 **Rows 4 and 7 are one mechanism with two failure surfaces**, and that is the
 finding. A *consumed-only root* is a module the compiler consumes at the import
@@ -163,7 +163,14 @@ Order, therefore: row 8, then the receiver-scan fix, then row 4. **Taking row 4
 first trades a loud refusal for a silent wrong object**, which is worse than
 today.
 
-## Row 8 is placed: `tsp/historic.py:531`
+## Row 8 is placed: `tsp/departure.py:531`  (CORRECTED 2026-09-21)
+
+**Was `historic.py:531` — that file is 284 lines and has no such line.** The
+no-filename trap this very document describes for the threading rows. Confirmed
+by elimination: six modules under `tsp/` have a line 531 and only `departure.py`
+matches both halves of the diagnostic (>4 positional AND a keyword).
+**Compiling `departure.py` directly is CLEAN** — it fires only through
+`historic.py:26`'s import.
 
     Nil Python: a keyword argument through a callable value needs
     pyvar_callv_kw (pyeval) and at most 4 positional arguments
@@ -211,7 +218,8 @@ site, or a unit.**
 - No claim that rows 5 and 6 are unrelated to anything — only that they are not
   the rows-4-and-7 mechanism. Both were READ: row 5's refusal site in
   `PyParseDataclassArgs`, row 6's spawn path down to the syscall.
-- Row 8 is now REPRODUCED (`tsp/historic.py:531`), but its mechanism is read
+- Row 8 is now REPRODUCED (`tsp/departure.py:531` — CORRECTED 2026-09-21, and
+  only via `historic.py`; the direct compile is clean), but its mechanism is read
   from the diagnostic rather than from the code — weaker than rows 4–7, where
   the machinery itself was opened. (This list used to say "each was read",
   which was true of four rows and written across five; then said row 8 was

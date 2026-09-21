@@ -93,7 +93,7 @@ answer to what is missing.
 | 5 | `@dataclass(frozen=True)` | `director.py:37`; the refusal is correct, the work is a store guard | known ticket (p40) | compiler |
 | 6 | `subprocess.run(cwd=)` | `menu.py:141`, `:161` | known | compiler |
 | 7 | `random.Random(seed)` | `smoke.py:60` **only** — `commentary.py` is behind `voice.py`'s threading wall. **NOT a missing feature: it silently evaluated to a float**; fixed 2026-09-21, class still absent | see note | compiler |
-| 8 | keyword through a callable value | `tsp/historic.py:531`; needs `pyvar_callv_kw`, >4 positional | known | compiler |
+| 8 | keyword through a callable value | `tsp/departure.py:531` (CORRECTED 2026-09-21; was `historic.py:531`, the no-filename trap); needs `pyvar_callv_kw`, >4 positional | known | compiler |
 
 Module surface: **26** distinct third-party/stdlib modules imported; **23
 resolve.** The three that do not are `ctypes`, `__pxx__` and `wave`.
@@ -164,7 +164,15 @@ That is a LOWER bound on yield, which is the opposite of what this instrument
 normally gives. `provider.py` imports `voice` too and is also behind
 `frozen=True`, so it needs both.
 
-**Row 8 is placed**: `tsp/historic.py:531`. It had been recorded with a
+**Row 8 is placed**: `tsp/departure.py:531` — **CORRECTED 2026-09-21.** It was
+recorded here as `historic.py:531`, which is this page's own no-filename trap,
+documented three paragraphs below: an error inside an IMPORTED module prints
+that module's line with no file name, so the reader supplies the file they
+invoked. `historic.py` is 284 lines and has no line 531. Reproduced at pin v414
+AND HEAD via `historic.py`; **compiling `departure.py` DIRECTLY is clean, rc=0**,
+so the obvious test gives a false green. Ticket:
+`bug-n-a-keyword-argument-through-a-callable-value-is-refused-above-four-positionals`.
+The superseded original follows. It had been recorded with a
 mechanism and no file, because it came off a census column rather than a
 reproduction.
 
