@@ -555,3 +555,72 @@ not touch lekkerzeilen.
 
 **Two problems, different mechanisms, different regimes.** Conflating them is how
 a reader concludes there is one problem and fixes the wrong one.
+
+---
+
+# THE 89%, FOUND: a second whole-stream scan, and the allocation is the cost
+
+The section above closed the walk and left ~89% of the 13x unexplained. **The
+same disease is in a second routine, and it is the bigger half.** Found by
+reading the profile's own top row rather than by another measurement — which is
+worth saying, because that row had been sitting there since the profile was
+taken and the walk finding drew attention away from it.
+
+    GetTokenStrFromRaw   16% imported   3% inline    ~30x
+    PXXAlloc             11%            6%           ~10x
+    PXXFree              10%            5%           ~11x
+    PyDefUsedAsValue      9%            3%           ~17x
+
+**`PyDefUsedAsValue` scans from token 0 to `MainProgramTokCount` — the whole
+stream, every imported module in it — once per definition.** For each identifier
+token it called `CaseEqual(GetTokenStr(j), nm)`.
+
+**And `GetTokenStr` HEAP-ALLOCATES.** `GetTokenStrFromRaw` does `SetLength(s,
+len)` plus a copy, so every identifier token the scan passes cost a `PXXAlloc`,
+a copy, a comparison and a `PXXFree`. `CaseEqual` *did* reject on length first —
+but only once the string existed, so the reject saved the comparison and paid
+the allocation regardless. **That is why the allocator is 21% of an imported
+build and half that inline: the allocator was not busy with the program, it was
+busy with the scan's temporaries.**
+
+lekkerzeilen's stream is **224,707 tokens** (the figure is in `PyDefUsedAsValue`'s
+own comment, recording an unrelated investigation). At ~3,500 definitions that is
+a scan of the whole closure three and a half thousand times.
+
+## The fix, and why it is not the same fix as the walk
+
+The walk needed a *structure* — one forward pass replacing a per-definition
+search. This one needs no structure at all: **do not materialise the string.**
+`TokenCaseEqual(idx, nm)` compares `TokChars` in place after an integer length
+reject, so a wrong-length token costs two integer loads and touches no memory
+the program did not already have. 62 occurrences in `pyparser.inc`.
+
+**Identical semantics, including the edges** — an out-of-range index and an empty
+token both give `''` from `GetTokenStr`, and `CaseEqual('', nm)` is true exactly
+when `nm` is empty, which the replacement reproduces explicitly rather than by
+accident.
+
+**The scan is still O(tokens) per definition.** This makes each step roughly an
+order of magnitude cheaper; it does not make the scan go away. **The structural
+fix — one pass building the set of names used as a value, then a lookup per
+query — is still available and is NOT done here.** Anyone picking that up should
+measure this change first, because the cheap fix may take enough off that the
+structural one stops being worth its risk.
+
+## Correctness, with the control that makes the zero mean something
+
+    -dPXX_ENCL_CROSSCHECK   table vs walk, every call     0 disagreements
+    -dPXX_ENCL_BREAK        enclosing forced to -1      468 disagreements
+    -dPXX_TCE_CROSSCHECK    fast vs CaseEqual, every call  0 disagreements
+    -dPXX_TCE_BREAK         comparison forced wrong       67 disagreements, rc=1
+
+    emitted lekkerzeilen binary, HEAD vs both fixes:   BYTE-IDENTICAL
+    code=12159489B  procs=11594  warnings=89  rc=0     on both arms
+
+**Both zeroes have a control behind them and neither is a silence.** All four
+defines are in the tree, so this is re-derivable in two builds.
+
+**TIMING IS NOT MEASURED HERE.** Three legs were discarded this morning rather
+than quoted — one to a contended box, one to a peer's undisclosed tier, one to
+an arm-separation bug of a peer's. A number goes in this file when it is taken
+on a clear box, with its population, its tree and its load beside it.
