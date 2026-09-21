@@ -97,3 +97,25 @@ refusal that also rejects the correct spelling is not a guard, it is a break.
   whether a pin carries it and say so in the resolution"* — and I closed without
   it; flagged by frankz-e5. **Not a reason to hold anything**: never wait for a
   pin. What retires this note is the next pin, whatever its number.
+- 2026-09-21, later — **RETIRED. PIN v415 CARRIES IT AND THE GUARD FIRES.**
+  Verified here rather than relayed, and in both directions, because ancestry
+  says the SOURCE is in while only running it says the GUARD FIRES:
+  - pin commit `8218ddf28` subject says `binary sha256 94fddf62ee6a`, and
+    `sha256sum` of the pinned binary on disk gives `94fddf62ee6af731...` — the
+    identity a wrong population cannot imitate, rather than a
+    `git log --grep 'pin v415'`, which returns prose about the pin.
+  - `d305e1afa` is an ancestor of the pinned SOURCE commit `0176aa3ce`, not
+    merely of `origin/master`. Different claims; only the first means the
+    pinned compiler contains the fix.
+  - **Both control arms re-run against the PINNED binary**, not HEAD:
+    `test_esp_isr_register.pas` as it stands (`iram;`) compiles and produces an
+    object; the same file with `iram;` → `interrupt;` is REFUSED at line 30 and
+    produces none.
+
+  **Retired the moment its condition was met, which is the point.** The note
+  named "the next pin, whatever its number" as its retiring event, and a
+  retirement condition nobody re-reads once satisfied is the failure documented
+  the same day in `devdocs/dev/esp32-hardening-map.md` §2.2 — where a row asked
+  for a census that had landed fifty lines below it, in the same commit. Such a
+  row is checked by readers who are checking exactly the right thing and who
+  still get the wrong answer.
