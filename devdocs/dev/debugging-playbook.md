@@ -34161,6 +34161,38 @@ one grep of one file.**
 > assume both** — and an endorsement that names no population is not a second
 > instrument, it is an echo.
 
+### THREE SEATS, ONE DAY, THREE SUBSYSTEMS — AND THE PRACTICAL CONSEQUENCE IS ABOUT WHO GETS A DOUBTFUL ROW, NOT ABOUT CARE
+
+**This outgrew all three rows it came from** and is the day's strongest finding.
+Counted at the close of 2026-09-21, each instance caught by **structure** and
+none by **care**:
+
+| seat | wrote the rule | then did the thing | what caught it |
+| --- | --- | --- | --- |
+| `frankb-8e` | banked two sections on instruments correct about the wrong thing | asserted a tier property from one fixture | **being told to implement it** |
+| `frankz-e5` | banked *count failure modes, not instruments*, and quoted it to three seats | supplied unmeasured agreement hours later | **a peer measuring it** |
+| `frankuser` | agreed a clearance has a shelf life | relayed an endorsement as corroboration | **the author retracting** |
+
+**In all three the rule was present, correct, freshly written, and in the
+actor's own hand.** That is CLAUDE.md's *"this class is not prevented by
+remembering it"* with three independent instances in a single day.
+
+> **THE OPERATIONAL CONSEQUENCE, `frankuser`'s, and it is the reusable part: a
+> doubtful row is better GIVEN TO SOMEONE WHO WILL ACT ON IT than re-read by
+> the person who wrote it.** An hour of implementation work was the instrument
+> that caught 8e's row. **Re-reading would not have** — 8e had read it, written
+> beside it, and banked the governing rule in between.
+
+**So "I will double-check it" is not a discharge for this class, and offering
+one is a tell.** The check that works is the one that FORCES the claim into
+contact with the world: implement it, file against it, run the census, hand it
+to someone who will do one of those. **Reading is the operation that already
+failed.**
+
+**And the corollary that keeps this from becoming a licence to escalate
+everything:** the three of us spent more on this post-mortem than the row ever
+cost, which is its own failure. **Bank the class once, act on it, and stop.**
+
 **The residue is real and much smaller than the row:** nothing establishes which
 exception **shapes** the bare tier covers — nested, re-raise, finally-through-
 frames, exception-in-ISR once the install lands. **14 is a count of FILES and
