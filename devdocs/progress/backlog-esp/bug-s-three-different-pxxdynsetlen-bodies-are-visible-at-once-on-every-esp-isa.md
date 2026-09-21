@@ -27,7 +27,30 @@ At HEAD (`compiler/pascal26 = 1a31826169bc`) and identically under pin v413
 | `--target=i386` | 0 |
 | hosted x86-64 (no `--target`) | 0 |
 
-The trigger is the **ISA**, not the profile. The compiler's own text names the
+**CORRECTED 2026-09-21, and the first table measured the FIXTURE as well as the
+compiler.** The table above was taken with `test_esp_bare.pas`, which opens with
+`{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}` — so the *program* supplies the
+define, and the rows that fire without `--esp-profile=bare` fire because of the
+fixture, not the target. Re-measured with an empty program and with a program
+whose only content is those two `{$define}` lines:
+
+| program | flags | duplicates |
+| --- | --- | --- |
+| empty | `--target=xtensa` | **0** |
+| empty | `--target=xtensa --esp-profile=bare` | 1 |
+| defines `PXX_ESP` | `--target=xtensa` | **1** |
+| defines `PXX_ESP` | `--target=xtensa --esp-profile=bare` | 1 |
+
+**The trigger is `PXX_ESP` being defined — by the profile or by the source —
+not the ISA.** An ESP-class ISA is merely where that normally happens. Stated
+because the difference decides who can hit it: any program that defines
+`PXX_ESP` itself pays this, on any target where those arms compile.
+
+**Census, same day:** compiling an empty program across xtensa, riscv32 (each
+with and without `--esp-profile=bare`), arm32, aarch64, i386, wasm32 and hosted
+x86-64 yields exactly **one** duplicated name tree-wide — `PXXDynSetLen`. So the
+class has one live instance today; the mechanism below is what makes it worth a
+guard anyway. The compiler's own text names the
 hazard:
 
 > duplicate definition of 'PXXDynSetLen' with the same parameter types; the
