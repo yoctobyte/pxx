@@ -216,8 +216,39 @@ matrix and not tracked in any repository.**
 answers about two different programs that share a name.** The key-analysis
 *library* survives pxx. **Always say which one.**
 
-> **⚠ AND THE PRODUCT'S VERDICT IS A REGRESSION, NOT AN ABSENCE — FROM THE
-> OWNER, 2026-09-21:** *"odd, songformatter was one of the first python programs
+> **⚠⚠ STOP. THIS VERDICT HAS NOW BEEN WRONG THREE TIMES IN TWO DAYS, TWICE IN
+> OPPOSITE DIRECTIONS. READ THE MECHANISM BELOW AND NOT THE STATUS.**
+>
+> **THE MECHANISM, which survives every future fix:** **`reportlab` is REPLACED
+> AT A SEAM, not shimmed by name — so a census of shim NAMES cannot see it.**
+> The app at `12cf40e` puts `reportlab` in a `try/except` falling back to
+> `pxxpdf`, which presents the same canvas API. CPython takes the first branch,
+> pxx the second, and **nothing impersonates the `reportlab` name.** Our side is
+> `lib/pcl/mimic_reportlab_pdfgen.pas` — **498 lines at HEAD, verified here** —
+> over vendored C in `lib/vendor/pdfgen/`, with `feature-lib-pxxpdf-reportlab-
+> compat` in `done/`.
+>
+> **So the PDF path was never missing and was never lost.** *"No pxx shims exist
+> for `markdown`/`tkhtmlview`/`PIL`/`fitz`"* was true **about those four names**
+> and the PDF path was never one of them. **What blocked songformatter was a
+> compile that did not terminate — never an absent library.**
+>
+> **How the three verdicts went wrong, because the pattern is the lesson:**
+>
+> | verdict | basis | wrong because |
+> | --- | --- | --- |
+> | *"no pxx story"* | a census of shim **names** | the seam is nameless |
+> | *"a REGRESSION"* | the owner's memory of building it | the mimic was never lost |
+> | *"works"* | `keydemo.py` | a different program |
+>
+> **And the middle row is mine to own:** the owner was told *no shims exist*,
+> remembered correctly that a reportlab mimic had been built, and drew the only
+> available inference — *"so that's a regression."* **His memory was right; the
+> premise I gave him was wrong.** A false premise handed to someone with real
+> history produces a confident, reasonable, wrong conclusion — and it looks like
+> corroboration from both ends.
+>
+> **Superseded, kept for the record — FROM THE OWNER, 2026-09-21:** *"odd, songformatter was one of the first python programs
 > we tried. we hacked some pdf rendering to mimic reportlab, so that's a
 > regression."*
 >
@@ -233,9 +264,23 @@ answers about two different programs that share a name.** The key-analysis
 > **Whoever takes it should look for what REMOVED the reportlab mimic, not for
 > what was never written.**
 >
-> **NOT A DISPATCH.** The owner deprioritised it in the same breath — *"however,
-> for this moment, not important"* — and it must not displace the v414
-> re-measure below, which remains the cheapest open question on this page.
+> **THE DEPRIORITISATION EXPIRED WITH ITS REASON.** The owner said *"however,
+> for this moment, not important"* — **while it looked like four missing
+> shims.** The cost collapsed on 2026-09-21: `frankh-c0` closed
+> `bug-nilpy-render-backend-py-compile-does-not-terminate` at `45b413bab`
+> (`render_backend.py`: `timeout 1500` expiring → **8.7 s**, byte-identical
+> artefacts under v414 and HEAD), and the *other* recorded wall —
+> `w, h = img.getSize()` at `render_backend.py:114` — is
+> `bug-b-imagereader-getsize-...-returns-a-pair`, **also `done/`**.
+>
+> **Both walls this app has ever recorded are down, and the p68 ticket was
+> unblocked today** (`93e6f24eb`; its `blocked-by` had been satisfied-but-uncleared,
+> **for the second time in three weeks**).
+>
+> **The honest next step is ONE BUILD, reported as whatever happens** — not a
+> campaign. Queued to the next seat that frees; **nobody comes off compiler
+> speed (5b, c0) or lekkerzeilen frame rate (7a)**, which are the owner's brief.
+> This does **not** displace the v414 re-measure.
 
 **And note how this page got it wrong: a correct, first-hand reading of the code
 produced a false claim about the project.** The tree recorded the current state
