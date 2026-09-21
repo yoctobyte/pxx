@@ -97,10 +97,27 @@ with pxx and is equally true of the CPython demo.**
 | the single world DEFAULT names (`roofs`) | 154 MB |
 | **total** | **~168 MB** |
 
-Two optional rows were **measured rather than assumed**: `assets/facades.lzx` is
-probed for, gets `ENOENT`, and the demo renders anyway; `world/gauges.lzg` was
-moved aside and it rendered identically — **though a four-second shot does not
-exercise tide, so "not required to draw a frame" is not "unused."**
+**The ~168 MB is now stronger than a trace.** 7a rebuilt it as a real release
+artefact — clone plus unpacked tarball, **zero symlinks, fresh state** — which
+**compiled from source inside that clone** and rendered an 861,134-byte frame,
+`rc=0`. So it is a clean-clone **build and run**, not a reconstruction.
+
+`assets/facades.lzx` is probed for, gets `ENOENT`, and the demo renders anyway —
+**though a four-second shot does not exercise tide, so "not required to draw a
+frame" is not "unused."**
+
+**⚠ `gauges.lzg` WAS ON THIS LIST AND IS RETRACTED — the demo WRITES it.** One
+open in the whole trace, `O_RDWR|O_CREAT`, nothing reads it. A tree built
+without it has a **24,576-byte** one afterwards. The 720,896-byte copy in the
+working tree is the same file *grown by months of runs* — **a big number that
+read as evidence of importance.** Moving it aside and rendering identically was
+true and proved nothing: the demo simply made another one.
+
+**⚠ And "present but not opened" was wrong.** The demo enumerates `world/` and
+opens the `index.lzi` of **every** world it finds — `rijn`, `uv`, `wageningen`
+and 9 of the 10 `/data/worlds` symlink targets — each `O_RDWR`. **It mutates
+worlds it never draws.** Only the *tiles* go untouched, which is where the 15 G
+lives, so **the ~168 MB figure survives unchanged; the row label did not.**
 
 **The decision is the owner's** and 7a states it narrowly: does the shipped demo
 point at a small world like `roofs`, or at the 14 G `rijn` corridor.
@@ -303,8 +320,9 @@ above.**
 
 **Measured narrowly, and the narrowness is the point:**
 - lekkerzeilen's asset survey is **one code path, one world, one four-second
-  run** — 7a's own statement of its limits, and the reason `gauges.lzg` is
-  "not required to draw a frame" rather than "unused".
+  run, bytes-read never measured** — 7a's own statement of its limits — **plus a
+  fifth it added after the `gauges.lzg` retraction: an open does not say which
+  direction the data went.**
 - **Three of today's four fixed demo rows were measured on a binary, not on a
   changelog.** That was deliberate and it is why the 3/3 could be published
   before the ancestry was verified.
@@ -409,7 +427,9 @@ binary against the previous one answers in one command and the hint does not.
 - **The 47-of-67 row** is retired by any re-sweep at a newer pxx sha. Carry the
   sha and the `--threadsafe` flag with it, or it is not comparable.
 - **The ~168 MB figure** is retired by a second trace over a different code
-  path, a different world, or a run long enough to exercise tide.
+  path, a different world, or a run long enough to exercise tide. It is *not*
+  retired by the `gauges.lzg` retraction — that file was an output, never part
+  of the 154 MB.
 - **The 1.52× uforth ratio** is retired by a re-run on v414; it was taken on
   `f94c2a7e`.
 
