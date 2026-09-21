@@ -688,3 +688,76 @@ string in order to throw it away.
 **No claim is made about Pascal parse time — it has not been measured**, and
 this lane's scope is compiling Python faster. But a 62-site subset bought double
 digits here, and the Pascal frontend has never been pointed at.
+
+---
+
+# DECOMPOSED: the directed fix delivers ZERO, and the owner's hypothesis is refuted
+
+Three arms from **one source, one driver, three defines**, so no tree movement,
+rebuild ordering or seed drift can sit between them. Distinct shas, stated as a
+control rather than kept privately — the arms must differ or the run is
+measuring one binary three times:
+
+    a_base  d8b0c6fc5cac   PXX_ENCL_OFF + PXX_TCE_OFF    neither fix
+    b_walk  70b4768485e9   PXX_TCE_OFF                   enclosing table only
+    c_both  aeadb1754b80   (none)                        both -- and this sha IS pin v414's binary
+
+Five rounds interleaved, all three outputs byte-identical every round,
+`procs=11594`, rc=0 throughout, load recorded per row.
+
+| step | by min | by median | paired per round |
+|---|---|---|---|
+| **enclosing table alone** | **+0.2%** | **−1.0%** | **+0.2%** |
+| allocation fix on top | −11.2% | −9.0% | — |
+| both | −11.0% | −9.8% | −9.5% |
+
+**The enclosing-construct table — the fix the owner directed — buys NOTHING on
+the real program. The entire win is the allocating-comparison fix, which nobody
+asked for and which came from re-reading a profile row that had been sitting
+there all along.**
+
+## Why, measured rather than reasoned
+
+Instrumented the walk itself (`-dPXX_ENCL_WALKSTATS`) on lekkerzeilen:
+
+    walks                       634
+    reaching token 0            178  (28.1%)
+    suite skips per walk        median 14     mean 1069     max 6041
+    tokens traversed per walk   median 1252   mean 91176    max 679433
+    total suite skips           677,977
+
+    table cost: 10 rebuilds x ~6000 constructs  ~=  60,000 skips
+
+**The walk BREAKS at the first enclosing construct, and for a method that is a
+few tokens away.** Median 14 skips. Only 28% of walks run to token 0 — the
+top-level defs, which have no enclosing construct to stop them.
+
+**So the synthetic was unrepresentative in its SHAPE, not its SIZE.** It was 400
+**top-level functions**: every walk ran to the root, 100% worst case. Real Python
+is mostly **methods inside classes**, where the walk stops almost immediately.
+
+**THE OWNER'S HYPOTHESIS IS REFUTED, AND THE TRUTH IS THE OPPOSITE.** He
+reasoned that lekkerzeilen's larger import closure would make the walk a bigger
+share, so 9% would be a floor. Measured: lekkerzeilen does **677,977** suite
+skips against the synthetic's ~1.3 million — **fewer walking, on a 36-module
+closure, than a 1-module one.** And the absolute cost is roughly constant while
+the build is 5.7x longer, so the same saving is a **smaller** fraction, not a
+larger one. 9% of 18.4 s is 1.66 s; 1.66 s of 104 s is 1.6%, which is what
+"+0.2% ± noise" looks like.
+
+**He was right that the synthetic did not generalise. He was wrong about which
+way, and so was I** — my pre-registered prediction was 7–9% and I expected to be
+wrong in his direction.
+
+## Is the table worth keeping? Yes, with its scope stated
+
+It is **~0% on class-heavy code and ~9% on function-heavy code**, which is what
+the synthetic actually measured. A module of top-level functions — a script, a
+generated module, a flat utility file — is the population it helps. It is
+correct, crosschecked against the walk with a positive control, and costs ~60k
+suite skips.
+
+**What would make it earn more: build it INCREMENTALLY.** It is currently
+rebuilt from token 0 whenever `TokCount` moves — 10 times on lekkerzeilen. The
+stack state at a module boundary is the only obstacle. **Not done, and not worth
+doing until something measures the table as a cost rather than a wash.**

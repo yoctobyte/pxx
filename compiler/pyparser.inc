@@ -41412,6 +41412,9 @@ begin
       Inc(sp);
     end;
   PyEnclBuilt := TokCount;
+{$IFDEF PXX_ENCL_COUNT}
+  WriteLn('ENCL-REBUILD constructs=', PyEnclN, ' tokcount=', TokCount);
+{$ENDIF}
 end;
 
 function PyEnclLookup(defTok: Integer): Integer;
@@ -41439,17 +41442,29 @@ function PyEnclByWalk(defTok: Integer): Integer;
 { The original backward walk, kept as the fallback for a site the table does not
   hold and as the oracle under -dPXX_ENCL_CROSSCHECK. }
 var d, suiteEnd: Integer;
+{$IFDEF PXX_ENCL_WALKSTATS}
+    skips: Integer;
+{$ENDIF}
 begin
+{$IFDEF PXX_ENCL_WALKSTATS}
+  skips := 0;
+{$ENDIF}
   d := defTok - 1;
   while d >= 0 do
   begin
     if Tokens[d].Kind in [tkClass, tkFunction] then
     begin
       suiteEnd := PySkipNestedSuite(d);
+{$IFDEF PXX_ENCL_WALKSTATS}
+      skips := skips + 1;
+{$ENDIF}
       if suiteEnd > defTok then Break;
     end;
     Dec(d);
   end;
+{$IFDEF PXX_ENCL_WALKSTATS}
+  WriteLn('WALK tokens=', defTok - d, ' skips=', skips, ' toroot=', Ord(d < 0));
+{$ENDIF}
   PyEnclByWalk := d;
 end;
 
