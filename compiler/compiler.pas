@@ -2108,7 +2108,7 @@ begin
     question to tell a wasm32 user that threading is absent rather than
     prescribe this flag, which this line would then refuse. }
   if ThreadSafeMode and (not TargetHasThreadSafeLocks) then
-  begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;
+  begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only. THIS IS NOT A TODO: on a single-core target the existing lock would be UNSAFE rather than merely absent. PXXHeapSpin (builtinheap.pas) is a plain exchange spin with NO interrupt masking, so a task holding it that is preempted by an allocating interrupt handler DEADLOCKS -- the only code that can release the lock is the task the handler is standing on -- which hangs the chip with no output. That is strictly worse than the unlocked allocator it would be replacing. An acquire here must MASK INTERRUPTS, which is what ESP-IDF chose portENTER_CRITICAL_SAFE for. Do not add a target to the softlock list without that; see devdocs/dev/esp32-hardening-map.md'); Halt(1); end;
   if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;
   { Derive the platform from the target unless --platform= set it explicitly.

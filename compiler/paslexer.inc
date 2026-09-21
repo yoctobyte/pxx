@@ -3767,7 +3767,7 @@ begin
           flag form. }
         if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
            and (TargetArch <> TARGET_AARCH64) and (TargetArch <> TARGET_ARM32) then
-          ErrorAt(SrcLine, '{$threadsafe on} is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet');
+          ErrorAt(SrcLine, '{$threadsafe on} is x86-64/i386/aarch64/arm32 only. THIS IS NOT A TODO: on a single-core target the existing lock would be UNSAFE rather than merely absent. PXXHeapSpin (builtinheap.pas) is a plain exchange spin with NO interrupt masking, so a task holding it that is preempted by an allocating interrupt handler DEADLOCKS -- the only code that can release the lock is the task the handler is standing on -- which hangs the chip with no output. That is strictly worse than the unlocked allocator it would be replacing. An acquire here must MASK INTERRUPTS, which is what ESP-IDF chose portENTER_CRITICAL_SAFE for. Do not add a target to the softlock list without that; see devdocs/dev/esp32-hardening-map.md');
         { EVERY supported target, x86-64 included. This guarded three of four,
           and the fourth had the same defect for a different define.
 
