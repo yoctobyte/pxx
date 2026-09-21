@@ -540,10 +540,33 @@ begin
     Modelled as ONE node rather than one per stub, because DceStubTgt holds
     entry offsets and no extents, and inventing extents would be a guess inside
     a reachability answer. Merging them OVER-approximates: a body that calls any
-    stub appears to reach everything any stub calls. That is the safe direction
-    for "can this reach the allocator" -- it can produce a false YES and never a
-    false NO -- and the rows it adds are marked, so a reader can see which part
-    of an answer is the approximation. }
+    stub appears to reach everything any stub calls, so THE MERGE can produce a
+    false YES and never a false NO, and the rows it adds are marked so a reader
+    can see which part of an answer is the approximation.
+
+    THAT SOUNDNESS IS THE MERGE'S, NOT THE TOOL'S, AND THE DIFFERENCE IS THE
+    WHOLE POINT (frankb-8e, 2026-09-21). Collapsing unowned code to one node can
+    only ADD reachability, so it cannot manufacture a NO relative to the
+    previous behaviour. A reader hears "never a false NO" as a property of the
+    ANSWER. It is not one. The tool still returns a clean, confident NO for a
+    body that installs an allocating routine in a dispatch slot, because the
+    root `@Foo` creates is GLOBAL and is not an edge out of the body that
+    created it -- so a forward walk from that very body walks clean. Measured,
+    hosted, -O0, with the build asserted:
+
+        function Allocs(x: Integer): Integer;
+        begin g := g + 'x'; Allocs := x + 1; end;
+        function TakesAddr(x: Integer): Integer;
+        begin hook := @Allocs; TakesAddr := x + 1; end;   { calls nothing }
+
+        --dce-reach-from=TakesAddr  ->  0 bodies, PXXAlloc: no    <- FALSE NO
+        --dce-reach-from=Allocs     ->            PXXAlloc: YES   <- control
+
+    For "does this ISR allocate" the false-NO direction is the one that hurts,
+    and closing it is entirely the refusal half's job: fire on a body that TAKES
+    AN ADDRESS or installs a body in a dispatch slot, not on one that calls
+    through a pointer. Until that exists, a NO from this tool is not a safety
+    claim, and the refusal half is the load-bearing piece rather than polish. }
   unownedN := 0;
   i := 0;
   while i < CallFixCount do

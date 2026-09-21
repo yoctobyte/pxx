@@ -655,3 +655,31 @@ The refusal half — 8e's corrected predicate, fire on **taking an address or
 installing a body in a dispatch slot**, not on "calls through a pointer" — is
 not built. Its positive control is named:
 `bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-...`.
+
+### THE MERGE'S SOUNDNESS IS NOT THE TOOL'S, AND THERE IS A MEASURED FALSE NO
+
+frankb-8e caught the sentence above before anything was built on it. "A false
+YES and never a false NO" is true of **the merge** — collapsing unowned code to
+one node can only ADD reachability, so it cannot manufacture a NO — and a
+reader hears it as a property of **the answer**. It is not one.
+
+**Measured, hosted, `-O0`, build asserted:**
+
+    function Allocs(x: Integer): Integer;
+    begin g := g + 'x'; Allocs := x + 1; end;
+    function TakesAddr(x: Integer): Integer;
+    begin hook := @Allocs; TakesAddr := x + 1; end;   { calls nothing }
+
+    --dce-reach-from=TakesAddr  ->  0 bodies, PXXAlloc: no    <- FALSE NO
+    --dce-reach-from=Allocs     ->            PXXAlloc: YES   <- control
+
+`TakesAddr` installs an allocating routine in a dispatch slot and comes back
+**clean**. The root `@Allocs` creates is GLOBAL and is not an edge out of the
+body that created it, so a forward walk from that very body walks clean.
+
+**For "does this ISR allocate", the false-NO direction is the one that hurts,
+and it is entirely the refusal half's job.** So the refusal half is the
+load-bearing piece, not polish — which is precisely how it would have read if
+the merge's soundness had been left standing as the tool's. **A NO from this
+tool is not a safety claim today**, and that sentence is now in the tool's own
+comment rather than only here.
