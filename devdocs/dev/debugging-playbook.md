@@ -12665,6 +12665,21 @@ It is structural:
 **The tell is a claim whose support grows while no new measurement occurs.**
 Count the measurements, never the endorsers.
 
+**AND THE RELAY'S VERSION IS THE ONE THAT PERSISTS, SO AN INVENTED QUANTIFIER IN
+A SUMMARY OUTLIVES THE CORRECT NUMBER IN THE SOURCE.** Measured 2026-09-21, same
+day, same seat: `frankz-e5` wrote that a blind fixture had been passing *"for two
+years' worth of runs"*. `franks-5b` measured it — fixture created 2026-09-18, the
+repo's first commit 2026-05-24, **so two years was never available** — and the
+true figure, three days, says the opposite: not rot, but **the sweep catching a
+born-blind fixture in three days.** CLAUDE.md already says to go measure the
+QUANTIFIER rather than the verb beside it; the addition here is *where it costs
+most*. 5b's own correct account went to the logbook; **the coordinator's summary
+is what other seats read and quote**, so a relay that invents a number is
+writing the durable copy. **Put no quantity in a relay you did not measure, and
+prefer "I did not measure that" to a plausible one** — and if you are the seat
+being summarised, check the summary, because its author is the one least likely
+to re-derive it.
+
 
 ## A RELAY CARRIES WHAT WAS TRUE WHEN SENT, AND THE COST OF BELIEVING ONE SCALES WITH WHAT YOU DO NEXT
 
