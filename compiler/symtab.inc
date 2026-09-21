@@ -15400,6 +15400,45 @@ begin
       covered by the normal prologue. (Codegen never touches s1-s11.) }
     if (CurProc >= 0) and ProcIsInterrupt[CurProc] then
     begin
+      { BARE: switch to the dedicated ISR stack FIRST, before anything is
+        pushed, so not one byte of this handler lands on the interrupted
+        code's stack. Without it the 64-byte save below plus the body's frame
+        go onto a task stack that is 3584 bytes by IDF default and has no
+        runtime guard on either ESP profile.
+
+        THE DIFFICULTY THIS SOLVES IS THAT THERE IS NO FREE REGISTER. A trap
+        arrives with every register live, so the address of the ISR stack
+        cannot be materialised without first saving something, and there is
+        nowhere safe to save it to -- that is the whole reason RISC-V gives
+        machine mode `mscratch`. Bare has no FreeRTOS, so mscratch is ours;
+        under IDF it is NOT (the port uses it), which is why this is gated on
+        EspBareBoot and not merely on the platform.
+
+          csrw mscratch, t0     stash t0 somewhere that is not memory
+          lui/addi t0, ISR_TOP
+          sw   sp, -4(t0)       task sp, at the very top of the ISR stack
+          addi sp, t0, -16      switch (16-byte aligned, ABI)
+          csrr t0, mscratch     give t0 back
+
+        The handler body must not clobber mscratch. Nothing the compiler emits
+        does; a body containing inline asm that writes mscratch is the
+        programmer's own affair. }
+      if EspBareBoot then
+      begin
+        rv32_csrrw(reg_zero, CSR_MSCRATCH, reg_t0);        { mscratch := t0 }
+        { lo is derived as (addr - hi) rather than as (addr and $FFF), so it
+          carries its own sign and needs no sign-extension step: addi's
+          immediate is signed, and for a low half above $7FF the correct lo is
+          NEGATIVE against the rounded-up hi. Both terms are zero for the
+          current constant; writing it the other way would be a guard that
+          cannot fail until someone moves the SRAM map. }
+        rv32_lui(reg_t0, ((ESP_BARE_ISR_STACK_TOP + $800) shr 12) shl 12);
+        rv32_addi(reg_t0, reg_t0,
+                  ESP_BARE_ISR_STACK_TOP - ((((ESP_BARE_ISR_STACK_TOP + $800) shr 12) shl 12)));
+        rv32_sw(reg_sp, reg_t0, -4);                       { save the task sp }
+        rv32_addi(reg_sp, reg_t0, -16);                    { sp := ISR stack }
+        rv32_csrrs(reg_t0, CSR_MSCRATCH, reg_zero);        { t0 := mscratch }
+      end;
       rv32_addi(reg_sp, reg_sp, -64);
       rv32_sw(reg_t0, reg_sp, 0);  rv32_sw(reg_t1, reg_sp, 4);  rv32_sw(reg_t2, reg_sp, 8);
       rv32_sw(reg_t3, reg_sp, 12); rv32_sw(reg_t4, reg_sp, 16); rv32_sw(reg_t5, reg_sp, 20);
@@ -16863,6 +16902,25 @@ begin
       rv32_lw(reg_a3, reg_sp, 40); rv32_lw(reg_a4, reg_sp, 44); rv32_lw(reg_a5, reg_sp, 48);
       rv32_lw(reg_a6, reg_sp, 52); rv32_lw(reg_a7, reg_sp, 56);
       rv32_addi(reg_sp, reg_sp, 64);
+      { BARE: switch back off the ISR stack. Mirror of the prologue, and the
+        ORDER is the subtle part -- t0 has just been restored to the
+        interrupted context's value above, so reading the ISR stack top into
+        it again would corrupt the very register we just put back. Hence the
+        same mscratch round-trip: stash t0, use it, give it back, and only
+        then mret.
+
+        The task sp is read from ISR_TOP-4 where the prologue put it, not from
+        a frame slot, so this does not depend on the body having left sp
+        anywhere in particular. }
+      if EspBareBoot then
+      begin
+        rv32_csrrw(reg_zero, CSR_MSCRATCH, reg_t0);        { mscratch := t0 }
+        rv32_lui(reg_t0, ((ESP_BARE_ISR_STACK_TOP + $800) shr 12) shl 12);
+        rv32_addi(reg_t0, reg_t0,
+                  ESP_BARE_ISR_STACK_TOP - ((((ESP_BARE_ISR_STACK_TOP + $800) shr 12) shl 12)));
+        rv32_lw(reg_sp, reg_t0, -4);                       { sp := the task sp }
+        rv32_csrrs(reg_t0, CSR_MSCRATCH, reg_zero);        { t0 := mscratch }
+      end;
       rv32_mret;
     end
     else

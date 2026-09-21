@@ -3509,11 +3509,25 @@ begin
       EmitBareHeapArenaInit;
     { Bare-metal: no kernel set up a stack, so establish sp at the top of SRAM
       (grows down toward the image) before entering main. lui+addi covers any
-      low bits in the stack-top constant. }
+      low bits in the stack-top constant.
+
+      TASK top, not ESP_BARE_STACK_TOP: the top 1 KiB is the raw-ISR stack
+      (defs.inc, ESP_BARE_ISR_STACK_SIZE), so an `interrupt;` handler does not
+      run on the interrupted code's stack. The carve is unconditional because
+      this stub is emitted before the body is parsed and therefore before
+      anyone knows whether the program has a handler at all -- the reasoning
+      and the alternative are at the constant.
+
+      NOTE THE LOW BITS NOW MATTER AND DID NOT BEFORE. ESP_BARE_STACK_TOP is
+      $403C0000, whose low 12 bits are zero, so the `and $FFF` term was 0 and
+      the `+ $800` rounding in the lui was inert. The task top is $403BFC00,
+      whose low 12 bits are $C00 -- which addi sign-extends to -1024, and the
+      rounding is exactly what makes that come out right ($403C0000 - 1024).
+      The formula was always correct; it was never previously exercised. }
     if EspBareBoot then
     begin
-      EmitI32((((ESP_BARE_STACK_TOP + $800) shr 12) shl 12) or (2 shl 7) or $37); { lui sp,hi }
-      EmitI32(((ESP_BARE_STACK_TOP and $FFF) shl 20) or (2 shl 15) or (2 shl 7) or $13); { addi sp,sp,lo }
+      EmitI32((((ESP_BARE_TASK_STACK_TOP + $800) shr 12) shl 12) or (2 shl 7) or $37); { lui sp,hi }
+      EmitI32(((ESP_BARE_TASK_STACK_TOP and $FFF) shl 20) or (2 shl 15) or (2 shl 7) or $13); { addi sp,sp,lo }
       if withHeapArena then EmitBareHeapArenaInit;
     end;
     { Hosted: save the kernel-provided initial sp (points at argc) for

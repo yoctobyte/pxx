@@ -15,6 +15,9 @@ const
     way to reach a CSR. }
   CSR_MSTATUS = $300;   { MIE lives at bit 3 }
   CSR_MTVEC   = $305;   { trap vector base + mode; THE raw-ISR install target }
+  CSR_MSCRATCH= $340;   { machine scratch. Free on BARE (no FreeRTOS); the IDF
+                          port uses it, which is why the ISR-stack switch that
+                          depends on it is gated on EspBareBoot. }
 
 { --- range checks for the PC-relative forms -----------------------------------
   RISC-V branch and jump immediates are cut into pieces and OR'd into the

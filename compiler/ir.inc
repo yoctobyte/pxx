@@ -12154,8 +12154,32 @@ begin
         as its only way to force the body to be emitted. Refusing it needs an
         alternative emission-forcing mechanism first, which is a design question
         and not a predicate. Recorded in the ticket rather than left silent. }
+      { NARROWED 2026-09-21, NOT DELETED, and narrowed on the exact axis the
+        refusal argues from. The stated hazard is "this handler would run on
+        the interrupted code's stack, with no ISR stack and no nesting
+        counter". On BARE riscv32 that is now false: the `interrupt;`
+        prologue switches to a dedicated ISR stack before it pushes anything
+        (symtab.inc; the region is defs.inc's ESP_BARE_ISR_STACK_*). So the
+        address is permitted exactly there and nowhere else.
+
+        EVERYWHERE ELSE IT STILL REFUSES, and the two remaining populations
+        are refused for different reasons, which is why this is one condition
+        and not a blanket lift:
+          - xtensa: no `wsr vecbase` yet, and no ISR-stack switch either, so
+            both halves of the hazard stand.
+          - ESP-IDF (either ISA): the handler would run under a port that
+            owns mscratch and expects rtos_int_enter to have run. This is
+            also the population the diagnostic's esp_intr_alloc paragraph is
+            aimed at -- the `interrupt;`-instead-of-`iram;` mistake -- which
+            is the commonest way to reach this error and must keep reaching
+            it.
+
+        SO THE TEST IS NOT "has the install path landed". A capability
+        landing does not imply a path is safe, which is the mistake the CSR
+        ticket made about itself. }
       if (ASTIVal[node] >= 0) and (ASTIVal[node] < Length(ProcIsInterrupt)) and
-         ProcIsInterrupt[ASTIVal[node]] then
+         ProcIsInterrupt[ASTIVal[node]] and
+         not (EspBareBoot and (TargetArch = TARGET_RISCV32)) then
         ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
               'cannot take the address of ' + Procs[ASTIVal[node]].Name +
               ', which is declared `interrupt;`: such a routine returns via a trap-return ' +

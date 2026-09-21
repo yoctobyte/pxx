@@ -35637,6 +35637,20 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_csr.pas > $(TESTTMP)/test_esp_bare_csr.c3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_csr.oracle $(TESTTMP)/test_esp_bare_csr.c3; then echo "esp32c3 CSR + raw trap vector ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32c3 CSR/trap MISMATCH"; exit 1; fi; fi
+	# The other half: a real `interrupt;` handler, installed and entered by
+	# hardware, running on the dedicated ISR stack (defs.inc's
+	# ESP_BARE_ISR_STACK_*). It asserts the handler's sp is ABOVE the
+	# interrupted task's sp, not merely that the handler ran -- stacks grow
+	# down, so a build without the switch necessarily lands on the other side
+	# of that comparison and cannot pass by accident. Verified by disabling the
+	# switch and re-running: `isr hits 2` stays GREEN while the stack row goes
+	# red, which is exactly why "it ran" is not the assertion.
+	@./$(COMPILER) test/test_esp_bare_isrstack.pas $(TESTTMP)/test_esp_bare_isrstack_oracle >/dev/null && $(TESTTMP)/test_esp_bare_isrstack_oracle > $(TESTTMP)/test_esp_bare_isrstack.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 ISR-stack run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_isrstack.pas > $(TESTTMP)/test_esp_bare_isrstack.c3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_isrstack.oracle $(TESTTMP)/test_esp_bare_isrstack.c3; then echo "esp32c3 interrupt; handler on a dedicated ISR stack ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 ISR-stack MISMATCH"; exit 1; fi; fi
 	@./$(COMPILER) test/test_esp_bare_largeframe.pas $(TESTTMP)/test_esp_bare_lf_oracle >/dev/null && $(TESTTMP)/test_esp_bare_lf_oracle > $(TESTTMP)/test_esp_bare_lf.oracle
 	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
 	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 large-frame run skipped"; else \

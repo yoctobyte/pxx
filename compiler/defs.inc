@@ -2353,6 +2353,43 @@ const
     down into the heap and produces a plausible wrong value. }
   ESP_BARE_STACK_MIN = $4000;      { 16 KiB }
 
+  { ===== the raw-ISR stack (bare riscv32) ==================================
+
+    A raw trap vector never reaches the IDF's rtos_int_enter, which is what
+    normally switches SP to a dedicated ISR stack and bumps the nesting
+    counter. So without this an `interrupt;` handler runs on whatever stack
+    the interrupted code was using -- 3584 bytes by IDF default -- while its
+    prologue alone pushes 64 bytes, and nothing on ESP has a runtime stack
+    guard on either profile. That is the hazard that kept @<interrupt proc>
+    refused in ir.inc.
+
+    CARVED FROM THE TOP OF THE EXISTING STACK REGION RATHER THAN RESERVED IN
+    BSS, and that is the whole reason this is two constants instead of an
+    allocation. The entry stub sets sp from a COMPILE-TIME CONSTANT, and it is
+    emitted before the program body is parsed -- so at the point the address
+    would have to be known, "does this program contain an `interrupt;` body"
+    has not been decided yet. A BSS region would therefore have to be reserved
+    unconditionally, which is precisely the mistake frontend_prologue.inc
+    documents at length: a 64 KiB arena that nothing read, 73.3% of a NilPy
+    demo object's bss.
+
+    So the cost is 1 KiB of STACK, not of BSS, taken off a region that was
+    already reserved for stack and is guarded by ESP_BARE_STACK_MIN's 16 KiB
+    floor. It is still unconditional, and the refinement that would make it
+    conditional is to record the entry stub's lui/addi offsets and patch them
+    after parsing, the way jmpPatch already patches the entry jump. Not done
+    here because it buys 1 KiB and costs a patch slot in five arms.
+
+    NESTING IS NOT HANDLED AND DOES NOT NEED TO BE: RISC-V clears mstatus.MIE
+    on trap entry, so a handler cannot be interrupted unless it re-enables
+    interrupts itself. A single ISR stack is therefore correct for every
+    handler that does not opt into nesting. A SYNCHRONOUS fault inside a
+    handler would re-enter and clobber, but a fault inside a fault handler is
+    unrecoverable regardless of where its stack is. }
+  ESP_BARE_ISR_STACK_SIZE = $400;  { 1 KiB — prologue is 64B + the body's frame }
+  ESP_BARE_ISR_STACK_TOP  = ESP_BARE_STACK_TOP;
+  ESP_BARE_TASK_STACK_TOP = ESP_BARE_STACK_TOP - ESP_BARE_ISR_STACK_SIZE;
+
 { ===== ESP SoC capability table ============================================
 
   WHICH CHIP, and what follows from it. Until now the chip was IMPLIED by the
