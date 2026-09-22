@@ -42006,3 +42006,55 @@ spelling could disagree and expose it.
 **A negative result that names its exclusions is a finding; one that does not is
 a shrug.** The exclusions are the value, and they are only trustworthy once you
 have measured that the instrument could have reached them.
+
+## `git log --since=<today>` ANSWERS ZERO — a bare date inherits the CURRENT TIME OF DAY, not midnight, so the query that asks "what happened today" hides today
+
+*2026-09-22, `frankz-e5`, found while checking whether a peer had already banked
+a section — i.e. in exactly the duplicate-avoidance check where a false negative
+costs an extra artefact and looks like diligence.*
+
+**Measured, same repo, same path, same second** (`now = 20:07:03 +0200`):
+
+    --since=2026-09-22          ->    0 commits
+    --since='2026-09-22 00:00'  ->  506
+    --since='2026-09-22 12:00'  ->  216
+    --since='2026-09-22 19:00'  ->   27
+    --since='2026-09-22 20:00'  ->    3
+    --since=2026-09-21          ->  555
+
+**A bare `YYYY-MM-DD` resolves to that date at the CURRENT time of day.** It is
+not midnight. So `--since=<today's date>` means "since a few seconds ago" and
+returns nothing, `rc=0`, no warning. `--since=<yesterday's date>` quietly means
+"the last 24 hours", which is usually close enough to what you wanted that it
+never teaches you the rule.
+
+**Why it is worse than an ordinary gotcha, and the reason it is worth a section.**
+
+1. **It fails as a SILENT NEGATIVE, in the one direction that terminates a
+   search.** `0` is a perfectly good answer to *"has anyone touched this today?"*
+   It reads as *no*. Nothing about the output says the filter ate the day. I was
+   one step from concluding a peer had not banked something it had banked ninety
+   minutes earlier, and from writing the duplicate.
+2. **ITS ERROR GROWS OVER THE WORKING DAY.** At 09:00 it hides an hour and looks
+   fine; at 20:07 it hides everything. **So it validates cleanly in the morning
+   and lies in the evening** — a guard you tested when you wrote it and which was
+   correct at the time. Anything that depends on *when you checked it* rather
+   than *what you checked* has this property.
+3. **The spelling that works is one character longer.** `--since='<date> 00:00'`
+   is correct, unambiguous and self-documenting; there is no reason to write the
+   bare form once you know.
+
+**The discharge is not "remember this about git".** It is the general one, on the
+axis a date query lives on: **when an instrument takes a RANGE, print its
+endpoints and check that a known member falls inside it.** Here that is one line
+— run the query, then run it again with a deliberately wider bound and confirm
+the number changes. If the wide and narrow forms agree, your bound is not doing
+what you think. The cross-check that caught this cost one command and I only ran
+it because a `grep` over the file's CONTENT had already answered the opposite way
+— **two instruments that fail differently**, which is why the disagreement was
+informative rather than confusing.
+
+**And note which instrument was right.** The content grep answered about the
+file; the `log --since` answered about commit metadata under a filter. When a
+question is *"is this text in the tree"*, ask the tree. History is the slower,
+more failure-prone route to a question the working copy can answer directly.
