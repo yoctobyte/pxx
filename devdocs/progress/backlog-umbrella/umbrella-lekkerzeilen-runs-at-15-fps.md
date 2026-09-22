@@ -14,7 +14,7 @@ blocked-by:
   - perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds
   - perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
   - perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob
-summary: "OWNER DIRECTIVE 2026-09-22: `all performance issues have the highest prio right now. file appropiate tickets and lets start working on them. hopefully, by the end of the day we have 15+ fps`. This umbrella exists so the perf tickets inherit that rank through edges rather than by hand-editing prios. THE NUMBER IS 9.4x AND IT IS A PROPERTY OF A NAMED SCENE, NEVER A BARE FACTOR -- 7a's stamped baseline, pin v416, world/roofs, windowed, vsync ON, audio ON, no interaction: pxx median 1.603 fps = 624 ms/frame over 11 windows; 15 fps is 66.7 ms; 9.4x. EARLIER VERSIONS OF THIS SECTION SAID 18x AND 5.9x AND BOTH WERE COMPUTED ON A FRAME NOBODY SHIPS (a v413 vsync-off `--region rijn` row at 391 ms); each was arithmetically correct and each was taken on the wrong scene, so carry the factor WITH its scene and pin or not at all. THE STRONGEST FACT IS THE ORACLE, NOT THE FACTOR: CPython runs the SAME scene on the SAME box in the SAME session at median 22.40 fps (45 ms). So 15 fps is NOT a physics question and this umbrella is NOT fatalistic -- it is a 14.0x compiler gap against a working oracle, and that is the frame to carry. WHAT NOBODY HAS: a decomposition of a roofs frame. Every lever below was identified on a profile of `--region rijn`, so the flat-profile picture (no row over 16.5%, largest four sum 43.5%) is a property of a scene nobody runs and MAY NOT DESCRIBE THE SHIPPING FRAME AT ALL. Decomposing a roofs frame therefore likely outranks every edge on this ticket and is the honest first action. NOT THE CAUSE, MEASURED: vsync (a tenth of a 624 ms frame -- remove it entirely and 8.5x remains), audio (ON in every row above), and the RNG (~6 ms of 624 at v416). THREE CAVEATS ON THE OLD PROFILE'S ROWS, each from the measuring seat's own hand: the 16.5% heap-lock row OVERSTATES itself (+4.9% with overlapping distributions on a controlled A/B -- nobody may rank on 16.5% as headroom); the 13% software-numerics row SPLITS and half is already fixed (`8cbec7eab`, in v416); refcount is CALL overhead not atomic overhead (3.772 ns/slot = 79% call/ret, and an inline nil-test takes it to 1.667 with NO liveness analysis). DO NOT REVERT the computed-getattr widening -- it is what stops a SIGSEGV in imported modules. This RE-RANKS the release and ESP32 window recorded in demo-timebox-close-2026-09-21.md; it does not replace it."
+summary: "OWNER DIRECTIVE 2026-09-22: `all performance issues have the highest prio right now. file appropiate tickets and lets start working on them. hopefully, by the end of the day we have 15+ fps`. This umbrella exists so the perf tickets inherit that rank through edges rather than by hand-editing prios. THE NUMBER IS 9.4x AND IT IS A PROPERTY OF A NAMED SCENE, NEVER A BARE FACTOR -- 7a's stamped baseline, pin v416, world/roofs, windowed, vsync ON, audio ON, no interaction: pxx median 1.603 fps = 624 ms/frame over 11 windows; 15 fps is 66.7 ms; 9.4x. EARLIER VERSIONS OF THIS SECTION SAID 18x AND 5.9x AND BOTH WERE COMPUTED ON A FRAME NOBODY SHIPS (a v413 vsync-off `--region rijn` row at 391 ms); each was arithmetically correct and each was taken on the wrong scene, so carry the factor WITH its scene and pin or not at all. THE ORACLE CLAIM IS **UNBACKED AS OF 2026-09-22 -- ARTEFACT DESTROYED, RE-RUN IN FLIGHT** and must not be quoted until it is re-confirmed: CPython at median 22.40 fps on the shipping scene, and the 14.0x ratio derived from it, survive only as 7a's recollection of a reduction it read at the time (55 windows, min 10.428 / median 22.396 / max 38.462) because the run file was deleted by its own harness. 7a's ruling, unsoftened: a number without a population, and being the measurer's own recollection does not improve it. IF IT RE-CONFIRMS, the frame to carry is that 15 fps is NOT a physics question but a ~14x compiler gap against a working oracle. THE 9.4x IS NOT AFFECTED AND NEEDS NO CPYTHON NUMBER -- it is 624 ms against a 66.7 ms target, off `diag-B.txt`, which is still on disk with its full stamp. WHAT NOBODY HAS: a decomposition of a roofs frame. Every lever below was identified on a profile of `--region rijn`, so the flat-profile picture (no row over 16.5%, largest four sum 43.5%) is a property of a scene nobody runs and MAY NOT DESCRIBE THE SHIPPING FRAME AT ALL. Decomposing a roofs frame therefore likely outranks every edge on this ticket and is the honest first action. NOT THE CAUSE, MEASURED: vsync (a tenth of a 624 ms frame -- remove it entirely and 8.5x remains), audio (ON in every row above), and the RNG (~6 ms of 624 at v416). THREE CAVEATS ON THE OLD PROFILE'S ROWS, each from the measuring seat's own hand: the 16.5% heap-lock row OVERSTATES itself (+4.9% with overlapping distributions on a controlled A/B -- nobody may rank on 16.5% as headroom); the 13% software-numerics row SPLITS and half is already fixed (`8cbec7eab`, in v416); refcount is CALL overhead not atomic overhead (3.772 ns/slot = 79% call/ret, and an inline nil-test takes it to 1.667 with NO liveness analysis). DO NOT REVERT the computed-getattr widening -- it is what stops a SIGSEGV in imported modules. This RE-RANKS the release and ESP32 window recorded in demo-timebox-close-2026-09-21.md; it does not replace it."
 ---
 
 # Umbrella: lekkerzeilen runs at 15 fps
@@ -45,11 +45,36 @@ default boat, no interaction:
     arms A c91f50b560d56230 / B 7a24e6c56255e93e, scene world/roofs (4 tiles),
     session 90c77059f105dacb, SDL_VIDEODRIVER=wayland
 
-**THE ORACLE IS THE POINT, NOT THE FACTOR.** CPython runs **this** scene, on
-this box, in the same session, at 22.4 fps. **15 fps is therefore not a physics
-question and this umbrella is not a fatalistic document.** It is a **14x
+### UNBACKED AS OF 2026-09-22 — artefact destroyed, re-run in flight
+
+**The CPython row above, and the 14.0x with it, must not be quoted until the
+re-run lands.** 7a's harness step opened with `rm -f "$R"/run-*.txt` to clear
+what it was about to rewrite, and that glob was wider than the set the step
+owned: `run-C1.txt`, the CPython baseline measured an hour earlier, matched it.
+**What survives is the reduction 7a read at the time** — 55 windows, min 10.428,
+median 22.396, max 38.462 fps. **What is gone is the file, and with it the
+stamp, the scene banner and the session sha.** 7a's own ruling, recorded
+unsoftened at its request: *a number without a population, and the fact that it
+is my recollection rather than someone else's does not improve it.*
+
+**THE 9.4x IS NOT AFFECTED.** It is 624 ms against a 66.7 ms target and needs no
+CPython number at all; the pxx side comes from `diag-B.txt`, which did not match
+the glob and is still on disk with its full stamp.
+
+**IF THE RE-RUN CONFIRMS** — it is scheduled at 150 s rather than the original
+60 s, so it will be better evidence than what was lost — then the frame to carry
+is the one below, and nothing in this section changes.
+
+**THE ORACLE WOULD BE THE POINT, NOT THE FACTOR.** CPython running **this**
+scene, on this box, in the same session, at ~22 fps would mean **15 fps is not a
+physics question and this umbrella is not a fatalistic document** — a **~14x
 compiler gap against a working oracle running the same program.** Anyone who
 reads this ticket as "the target is unreachable" has read the wrong half.
+
+**And the destructive-step lesson is 7a's and is not "scope your globs":** a
+step may clear **what it is about to rewrite and nothing else.** 7a had a note
+to itself, written three days earlier, about taking a baseline before something
+overwrites it — and did not apply it to a destructive line in its own tool.
 
 ## The factor has moved three times today and every version was correct
 
@@ -108,9 +133,17 @@ pinned. **n=200, so every row is ±3-5 points.**
 `index.lzi`, and the directory never appears in any output — **verified here by
 query, not relayed**: `roofs` answers `meta.name=rijn` with **4** tiles, `rijn`
 answers `meta.name=rijn` with **432**. So a banner reading "rijn" proves
-nothing about which scene ran. **Discriminate on tile count, 4 versus 432.**
-Anyone re-quoting a `rijn`-labelled measurement should first establish where the
-label came from — a `--region` argument, or a banner.
+nothing about which scene ran. **TILE COUNT IS NOT A
+DISCRIMINATOR AND THIS PARAGRAPH SAID IT WAS FOR AN HOUR** — `roofs` and `uv`
+agree on name, tiles, pounds and routes, and the 4-tile class is the one the
+shipping scene is in. Enumerated: twelve worlds, three names, two identical
+classes. See `bug-e-every-world-reports-meta-name-rijn-...` (p60).
+
+**THIS PROFILE'S OWN LABEL IS NOT AFFECTED, and 7a checked rather than
+inferred:** `PROFILE-2026-09-21.md:29` records `--region rijn` as an
+**invocation**, not a banner reading, and `:222` puts `atan2` at **46.0
+calls/frame on roofs against 1,258.4 on rijn**. No 4-tile run produces that.
+**The doubt applies to anything citing a banner; this is not one.**
 
 ## Why the ranking is not the profile order
 
@@ -153,11 +186,25 @@ measurement.
    inline nil-test at the call site takes 3.772 → 1.667 — a 56% runtime saving
    with NO liveness analysis.** That is the cheapest large win on the board.
 
-3. **`perf-b-the-inverse-trig-...`** — the surviving half of the software-numerics
-   row. Double-double inverse trig at ~106 bits in `lib/rtl/math.pas` where a
-   scene needs ~24. It survives `--silent` and **grows as a share** (Dd\* 8 → 17
-   samples). Banked at `2efde35a3` as explicitly not-to-build; **the owner has
-   reversed that.** `franks-5b` has been fed this directly.
+3. **`perf-b-the-inverse-trig-...`** — **SETTLED 2026-09-22 AND IT IS NOT A
+   FRAME-RATE LEVER. Do not rank it here.** Double-double inverse trig at ~106
+   bits in `lib/rtl/math.pas` where a scene needs ~24, and it does grow as a
+   share under `--silent` (Dd\* 8 → 17 samples) **on `rijn`**. The share
+   question did not need the roofs decomposition — it needed the call count, and
+   7a had it: **`atan2` runs 1,258.4/frame on `rijn` and 46.0/frame on `roofs`,
+   a 27x collapse** (`PROFILE-2026-09-21.md:222`). Against today's 624 ms frame:
+   **46 × 29,463 ns = 1.36 ms, 0.22%.**
+   **`franks-5b` landed `6b8b45af4` with "THIS IS NOT A FRAME-RATE LEVER" in the
+   commit body and the ticket summary**, and re-ranked it as a
+   **correctness-of-effort** fix — ~106 bits for a 53-bit answer, `ArcCos` at
+   1095x `Sqrt` against libm's 20–50 ns. It also moved its own number the
+   unflattering way: 0.13% → 0.22%, because re-measuring the dd arm gave 29.5 µs
+   against the 14.4 µs its ticket published. **Both rows are carried
+   unreconciled.**
+   **POPULATION LIMIT, raised by 5b against its own row before anyone asked: the
+   call counts are CPython's**, on the argument that the program logic is
+   identical. That is an argument, not a pxx measurement — but a 27x collapse
+   does not invert into a lever, so it does not reopen the ranking.
 
 ## Caveats, each flagged by the seat that measured the row
 
