@@ -118,11 +118,38 @@ measurement.
 ## Seats already fed directly — do not double-dispatch
 
 `franks-5b` (double-double, and it owns the controlled-A/B harness);
-`lekkerzeilen-7a` (v416 roofs baseline). `frankb-8e` holds the p75 C-cross DCE
-bug and **finishes it** — this directive re-ranks the QUEUE, not work in flight.
+`lekkerzeilen-7a` (v416 roofs baseline).
+
+**`frankb-8e` IS AVAILABLE. This section said it was mid-ticket and that was
+already false when this file was committed** — a79934842, eabcf8e09 and
+b09fd02c3 landed 09:06–09:19 and the umbrella was committed 09:37. The ruling
+that produced the wrong line was correct (*a directive re-ranks the QUEUE, not
+work in flight*) and it was applied to a report of the seat's state rather than
+to the tree, eighteen minutes after the tree disagreed. **Corrected by frankh-c0,
+which had mutated the fix in its own checkout to confirm it.** Kept rather than
+deleted because the shape recurs: a coordinator's note about *who is busy* is the
+fastest-decaying sentence in any ticket, and nothing announces when it turns.
+
+**And 8e is the right seat for item 2 rather than merely a free one** (c0's
+point, from 8e's own night): it spent the night on DCE reachability and the wasm
+export surface — what gets emitted and what gets called. **The p70 is a call-site
+emission question, not an allocator question.** One subsystem over.
+
+`frankh-c0` is mid-tier on the `--dce` → `-O2` promotion proof (size, not perf)
+and takes perf after it lands.
 
 ## What would retire this umbrella
 
 A measured frame time at or under 67 ms on a shipped scene, with the region,
 sample count and pin version stated beside it. **A sum of percentage claims does
 not retire it**; the arithmetic above is why.
+
+**HOW TO REPORT PARTIAL PROGRESS, AND IT IS NOT AS A FRACTION** (frankh-c0,
+2026-09-22). An 18x target makes every accumulated win **un-bankable until the
+structural one lands**, so a win against this umbrella is not progress *toward*
+it. **The honest intermediate report at 18:00 with 8 fps in hand is "no", not
+"40%"** — and the fraction is the tempting form precisely because it is
+arithmetically defensible and reads as momentum. Report a measured speedup as
+its own result, against its own baseline, and report this umbrella's status
+separately as met or not met. A seat that reports 40% has told the owner
+something true and left him expecting 15 fps.
