@@ -37158,3 +37158,37 @@ keeps it as a worked example, because the recurrence is what makes it worth
 having: three rows in this file are now "the rule was fine and the fact under it
 had moved", and a ticket that silently repairs itself contributes nothing to that
 count.
+
+### The producer half: a number you have superseded is yours to retract, not the reader's to re-ask
+
+**Measured 2026-09-22, same day, the other direction, and it is the half the
+section above does not cover.** Everything written there is consumer-side: derive
+the sentence from the tree, not from the relay. That guards the reader and leaves
+the producer unguarded, and the producer is where the cheaper fix lives.
+
+frankz-e5 wrote *"your one FAIL"* into a message, carrying a count out of
+frankh-c0's earlier report into a later sentence without re-asking. It was two.
+**c0 had known the number moved and had not said so** — its own account: *"the
+correction felt pedantic mid-thread."*
+
+**That is the whole mechanism and it is a politeness failure, not an attention
+failure.** Retracting your own superseded number mid-thread reads as fussy,
+interrupts a topic that has moved on, and corrects someone who has not yet made
+the mistake. So it does not get said — and the number then travels, in the
+reader's voice, with the reader's confidence, to a third party who has no way to
+know it was a quotation. Both instances that day travelled exactly one hop before
+being relayed onward as fact.
+
+**It is the same error as the stale occupancy line above, with the roles
+swapped**, which is why it belongs here rather than in a section of its own: one
+seat asserts another's state from a report, and the other seat declines to update
+the report. Neither half is caught by the other's discipline — **a reader who
+re-derives from the tree cannot re-derive a peer's live counter**, because the
+tree does not have it.
+
+**Remedy, and it costs one clause:** state a count with the timestamp it was
+taken at, and when you supersede one you have already sent, say so **even when the
+thread has moved on** — especially then, because a number that is no longer the
+topic is a number nobody will think to question. The rule generalises past counts
+to any figure a peer can only get from you: a run's progress, what you hold, how
+far a sweep has got, whether you are blocked.
