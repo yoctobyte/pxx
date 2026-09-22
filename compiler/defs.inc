@@ -4653,6 +4653,13 @@ var
     under DCE, and the writer patches the word once the final layout exists. }
   BareVecBaseDataOff : Integer;
 
+  { The one `interrupt;` routine this bare image installs, or -1. Recorded when
+    the install is emitted so the ELF writer can assert what it needs to assert
+    about the handler's FINAL address -- on riscv32 that address goes into
+    mtvec, whose low two bits are a MODE field, so a body that is not 4-aligned
+    installs a different mode at a different address and nothing says so. }
+  BareIsrProcIdx : Integer;
+
   { --- reachability-gated dead-code elimination (dce.inc) --------------------
     Sized by MAX_PROCS: one entry per emitted routine, never per instruction. }
   DceEnabled    : Boolean;   { --dce: drop unreachable routine bodies }

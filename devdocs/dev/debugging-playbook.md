@@ -35560,3 +35560,53 @@ A shared failure would have meant something else was wrong. Note also what the
 failing arm looks like from outside — a successful build, exit 1, empty
 stdout — which is byte-identical to a build error, and is why
 `tools/esp_run_bare.sh` prints build diagnostics to stderr.
+
+## WHEN A MECHANISM DOES NOT TRANSFER BETWEEN TWO BACKENDS, ASK WHETHER THE DIFFERENCE IS THE BACKEND OR THE REFERENT
+
+Measured 2026-09-22, making `interrupt;` self-installing on bare riscv32 after
+it landed on bare xtensa (`feature-s-the-xtensa-raw-isr-install-has-no-vecbase-
+write-and-no-isr-stack`).
+
+The xtensa install needs an awkward mechanism: the vector table is emitted
+after DCE, so the install — emitted at parse time — cannot know its address,
+and the two halves are joined through a **data word** that the ELF writer
+patches. The comment on it argues the case at length, because it looks like
+over-engineering until you know why.
+
+Porting to riscv32, the obvious reading is *"same problem, same solution"*:
+the install is still emitted at parse time, DCE still moves everything, so a
+data word again. **That reading is wrong, and the reason is worth more than
+the case.** The xtensa half needed an indirection because **a table appended
+after DCE has no recorded reference shape** — nothing in the compiler knew it
+existed, so nothing could re-aim a pointer to it. riscv32's `mtvec` points at a
+**proc**, and a proc address already has `ProcAddrFix`: a recorded,
+DCE-compacted reference that `@proc` has always had to survive. The mechanism
+was already there and had been for years.
+
+**So the question to ask at a backend boundary is not "does this ISA need the
+same trick", it is "is the THING BEING POINTED AT the same kind of thing".**
+Two backends differing in instruction set is the visible difference and usually
+the irrelevant one; what decides the design is whether the referent already has
+a reference shape the existing passes maintain. Here the two differ on exactly
+that — table versus proc — and everything else followed.
+
+**The tell that you are about to get this wrong is a comment that argues hard
+for a mechanism.** A well-defended design decision reads as a general
+principle, and it was written about one referent.
+
+### The second half: the port was first written as a copy
+
+The riscv32 install was initially its own copy of the seven-line
+auipc / jal / literal / `lw` sequence that `IR_PROCADDR` emits — **and its own
+comment claimed it was "the same sequence rather than a second spelling of
+it"**, which was false of the code as written. That is this file's
+sibling-spelling failure appearing at the moment of authorship rather than at
+regression time, and it was caught by re-reading the comment against the code
+rather than by any test: **both spellings were correct**, which is what makes
+this class invisible to a test suite and fatal six months later.
+
+Extracted to `EmitProcAddrLiteralRISCV32`, with `@proc` moved onto it in the
+same commit. The control worth copying: **the emitted image is byte-identical
+across the refactor**, which proves the extraction changed nothing while the
+fixtures prove the feature works — two separate claims needing two separate
+instruments.

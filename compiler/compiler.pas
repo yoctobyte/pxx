@@ -2517,6 +2517,7 @@ begin
   XtEntryPcAnchor := -1;
   BareVecTableAt  := -1;
   BareVecBaseDataOff := -1;
+  BareIsrProcIdx  := -1;
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   { bootstrap the per-routine tables before anything can index them }

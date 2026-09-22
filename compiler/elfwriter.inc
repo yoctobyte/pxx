@@ -2613,6 +2613,21 @@ begin
         + AIntToStr(ESP_BARE_VEC_ALIGN) + '-byte aligned; VECBASE would '
         + 'silently truncate it to a different address');
   end;
+  { The riscv32 counterpart, and it guards a NARROWER window for a WIDER
+    reason. mtvec's low two bits are a MODE field (0 Direct, 1 Vectored, 2-3
+    reserved), so an unaligned handler does not land slightly wrong -- it
+    selects a different dispatch mode AND a different base, from one write that
+    the hardware accepts without complaint. Nothing aligns Procs[].BodyAddr, so
+    this is asserted rather than assumed; if it ever fires the fix is to pad the
+    handler's body, not to mask the bits here, because masking installs an
+    address the source never named. }
+  if (BareIsrProcIdx >= 0) and (TargetArch = TARGET_RISCV32) and EspBareBoot then
+    if ((entry + Procs[BareIsrProcIdx].BodyAddr) mod 4) <> 0 then
+      ErrorNoPos('internal: the `interrupt;` handler '
+        + Procs[BareIsrProcIdx].Name + ' landed at 0x'
+        + IntToHexStr(entry + Procs[BareIsrProcIdx].BodyAddr, 8)
+        + ', which is not 4-byte aligned; mtvec would read its low bits as a '
+        + 'MODE field and dispatch from a different address');
 
   { DWARF -g for the 32-bit hosted targets (i386/arm32). esp (bare/xtensa/riscv32)
     is excluded. Section headers placed past p_filesz, like the 64-bit path. }

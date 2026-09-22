@@ -3751,6 +3751,41 @@ begin
     end;
 end;
 
+procedure EmitBareVectorInstallRISCV32;
+{ riscv32's half of the same job, and it is a DIFFERENT job despite the shared
+  call site -- mtvec holds a HANDLER ADDRESS where VECBASE holds a TABLE BASE.
+  So there is no table, no 1 KiB alignment, no `j` displacement and nothing to
+  emit after DCE: the whole feature is "put the handler's address in mtvec".
+
+  AND THE DATA-WORD INDIRECTION THE XTENSA SIDE NEEDS IS NOT NEEDED HERE, which
+  is worth stating because the two routines sit next to each other and the
+  xtensa one's comment argues hard for that mechanism. The difference is not
+  the ISA, it is WHAT IS BEING POINTED AT: a proc address already has a
+  recorded, DCE-compacted reference shape (ProcAddrFix), because `@proc` has
+  always had to survive this pass. A table emitted after DCE has no such
+  record, which is the only reason it needed one invented.
+
+  So this calls the SAME ROUTINE `@MyIsr` does -- EmitProcAddrLiteralRISCV32,
+  which IR_PROCADDR was refactored onto in the same commit. It was first
+  written here as its own copy of those seven lines, which is precisely the
+  "two spellings of one concept" this tree keeps getting bitten by: both
+  correct on the day, drifting the moment someone fixes the one their bug
+  reproduced through. There is one spelling now and no way to fix half of it.
+
+  MODE BITS: mtvec[1:0] SELECT THE MODE, so the handler body must be 4-aligned
+  or the hardware reads a Vectored (1) or reserved (2/3) mode out of an address
+  that was only ever meant to be an address. Nothing aligns Procs[].BodyAddr --
+  it is a bare CodeLen -- so the writer asserts it rather than this code
+  masking the bits off, which would silently install a DIFFERENT address.
+
+  A program that wants a different vector writes mtvec itself afterwards: like
+  the xtensa side, this is a default and not a lock. }
+begin
+  if BareIsrProcIdx < 0 then Exit;
+  EmitProcAddrLiteralRISCV32(BareIsrProcIdx);  { a0 = handler address }
+  rv32_csrrw(reg_zero, CSR_MTVEC, reg_a0);     { csrw mtvec, a0 -- Direct mode }
+end;
+
 procedure EmitBareVectorInstallForTarget;
 { Point VECBASE at the table this image will carry. Emitted at the top of the
   main body, where "does this image declare an `interrupt;` routine" is decided
@@ -3768,8 +3803,15 @@ procedure EmitBareVectorInstallForTarget;
   has run yet. A program that wants a different table is free to write VECBASE
   itself afterwards: this is a default, not a lock. }
 begin
-  if (not EspBareBoot) or (TargetArch <> TARGET_XTENSA) then Exit;
-  if BareInterruptProcIdx < 0 then Exit;   { no handler: no table, no cost }
+  if not EspBareBoot then Exit;
+  BareIsrProcIdx := BareInterruptProcIdx;  { errors here if two are declared }
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    EmitBareVectorInstallRISCV32;
+    Exit;
+  end;
+  if TargetArch <> TARGET_XTENSA then Exit;
+  if BareIsrProcIdx < 0 then Exit;         { no handler: no table, no cost }
   { l32i wants a 4-aligned address and DataLen is byte-granular here. }
   while (DataLen mod 4) <> 0 do
   begin

@@ -35675,6 +35675,22 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_isrstack.pas > $(TESTTMP)/test_esp_bare_isrstack.c3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_isrstack.oracle $(TESTTMP)/test_esp_bare_isrstack.c3; then echo "esp32c3 interrupt; handler on a dedicated ISR stack ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32c3 ISR-stack MISMATCH"; exit 1; fi; fi
+	# The COMPILER-INSTALLED handler on riscv32 -- the twin of the esp32s3
+	# auto-vector row below, and not a duplicate of it. Same promise, two
+	# mechanisms with no code in common: mtvec holds the handler's ADDRESS
+	# where VECBASE holds a TABLE BASE, so neither landing predicts the other.
+	# This source writes no mtvec and takes no @MyIsr.
+	# The row that would catch a regression nothing else can see is the mtvec
+	# MODE field: its low two bits select Direct/Vectored, so an unaligned
+	# handler dispatches from a different address in a different mode with no
+	# diagnostic. elfwriter.inc asserts the alignment; verified reachable by
+	# tightening that assert to 8 and watching it refuse a real build.
+	@./$(COMPILER) test/test_esp_bare_vectorauto_rv.pas $(TESTTMP)/test_esp_bare_vectorauto_rv_oracle >/dev/null && $(TESTTMP)/test_esp_bare_vectorauto_rv_oracle > $(TESTTMP)/test_esp_bare_vectorauto_rv.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 auto-mtvec run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_vectorauto_rv.pas > $(TESTTMP)/test_esp_bare_vectorauto_rv.c3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_vectorauto_rv.oracle $(TESTTMP)/test_esp_bare_vectorauto_rv.c3; then echo "esp32c3 compiler-installed interrupt; mtvec ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 auto-mtvec MISMATCH"; exit 1; fi; fi
 	# The xtensa half of the raw-ISR story: a VECTOR TABLE built at runtime, a
 	# `wsr vecbase` install, and the same dedicated ISR stack. Four assertions
 	# and none of them is "the handler ran" -- that row is true with every one

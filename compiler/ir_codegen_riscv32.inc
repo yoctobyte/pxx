@@ -1504,6 +1504,31 @@ begin
   EmitCallProc(procIdx);
 end;
 
+procedure EmitProcAddrLiteralRISCV32(procIdx: Integer);
+{ a0 = the absolute code address of procIdx, as a PC-relative inline literal
+  the ELF writer patches to entry+BodyAddr (the same shape as the iram
+  cross-section call literal). Recorded in ProcAddrFix, which is one of the
+  tables DCE compacts and re-patches -- which is what makes this survive a pass
+  that moves every body in the image.
+
+  THE ONE SPELLING, ON PURPOSE. Two callers want it: `@proc` (IR_PROCADDR,
+  below) and the bare-metal mtvec install (EmitBareVectorInstallRISCV32 in
+  ir_codegen.inc), and the install was briefly written as its own copy of these
+  seven lines. That is the shape this repo keeps getting bitten by -- two
+  spellings of one concept, both correct on the day, drifting the moment
+  someone fixes only the one their bug reproduced through. Whoever changes how
+  a proc address is materialised on riscv32 must be unable to fix half of it. }
+begin
+  if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+  rv32_auipc(reg_a0, 0);            { a0 = PC of this auipc }
+  rv32_jal(reg_zero, 8);            { skip the 4-byte literal }
+  ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
+  ProcAddrFix[ProcAddrFixCount].ProcIdx := procIdx;
+  Inc(ProcAddrFixCount);
+  EmitI32(0);                       { literal: absolute proc addr (patched) }
+  rv32_lw(reg_a0, reg_a0, 8);       { a0 = [auipc_pc + 8] = literal }
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
@@ -1657,14 +1682,7 @@ begin
           EmitExternalProcAddr(IRA[node]);   { a0 = resolved external fn addr }
           Exit;
         end;
-        rv32_auipc(reg_a0, 0);            { a0 = PC of this auipc }
-        rv32_jal(reg_zero, 8);            { skip the 4-byte literal }
-        if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
-        ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
-        ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
-        Inc(ProcAddrFixCount);
-        EmitI32(0);                       { literal: absolute proc addr (patched) }
-        rv32_lw(reg_a0, reg_a0, 8);       { a0 = [auipc_pc + 8] = literal }
+        EmitProcAddrLiteralRISCV32(IRA[node]);
       end;
 
     IR_LOAD_SYM:

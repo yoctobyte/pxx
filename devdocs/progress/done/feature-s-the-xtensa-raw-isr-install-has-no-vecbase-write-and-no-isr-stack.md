@@ -34,7 +34,22 @@ summary: >
   And `interrupt;` had to BECOME a DCE root (DCE_WHY_VECTOR): it had never
   needed to be, because installing a handler used to require `@MyIsr`, so
   every such body was reachable as DCE_WHY_PROCADDR and the gap was masked by
-  the very awkwardness the table removes.
+  the very awkwardness the table removes. That root is GENERIC, not
+  xtensa-scoped, which was established by control rather than by grep: a bare
+  riscv32 program declaring an unreferenced `interrupt;` routine is 676B with
+  the root and 360B without, so the body is deleted when it is off. The
+  riscv32 defect was therefore ALREADY ARMED rather than latent -- any bare
+  riscv32 program installing a handler by a hardcoded mtvec write, or from
+  another unit, lost the body -- and it was repaired as a side effect here.
+  THIRD LANDING, SAME DAY: BARE RISCV32 INSTALLS ITSELF TOO, so declaring a
+  routine `interrupt;` is the install on both bare ISAs
+  (test/test_esp_bare_vectorauto_rv.pas). It is NOT the xtensa mechanism
+  ported: mtvec holds a handler ADDRESS, so there is no table, no alignment
+  window and nothing emitted after DCE, and the data-word indirection xtensa
+  needs is unnecessary because a proc address already has a DCE-compacted
+  reference shape (ProcAddrFix) while a post-DCE table had none. `@proc` and
+  the install now share ONE routine, EmitProcAddrLiteralRISCV32, because the
+  install was first written as its own copy of that sequence.
   (2) PS WAS NEVER INITIALISED BY ANY BARE IMAGE. At reset PS.EXCM is SET
   (measured: PS = $1F), and EXCM=1 makes every exception a DOUBLE exception --
   routed to VECBASE+0x3C0, PC in DEPC not EPC1, returned from with RFDE not
@@ -297,3 +312,74 @@ and (cross-ISA, untouched) `test_esp_bare_csr.pas` on esp32c3.
 **Still bare-xtensa only.** riscv32 has `mtvec` and its own install path; this
 table is the xtensa answer and `EmitBareVectorTableAfterDce` exits immediately
 on any other target or profile.
+
+## Resolution, third landing 2026-09-22 (frankb-8e) — bare riscv32 installs itself too
+
+Declaring a routine `interrupt;` is now the install on **both** bare ESP ISAs.
+`test/test_esp_bare_vectorauto_rv.pas` is the riscv32 twin of
+`test_esp_bare_vectorauto.pas`, and the two are not duplicates: they assert the
+same promise through mechanisms with no code in common, so neither landing
+predicts the other.
+
+**Why the riscv32 job is smaller, and it is not "the ISA is simpler".**
+`mtvec` holds a **handler address**; VECBASE holds a **table base**. So there
+is no table, no 1 KiB alignment window, no `j` displacement, and nothing that
+has to be emitted after DCE.
+
+**And the data-word indirection the xtensa side argues so hard for is not
+needed here — for a reason that is about the REFERENT, not the ISA.** A proc
+address already has a recorded, DCE-compacted reference shape (`ProcAddrFix`),
+because `@proc` has always had to survive that pass. A table appended after DCE
+had no such record, which is the only reason one had to be invented. Reading
+the xtensa comment and concluding "riscv32 needs a data word too" would have
+been the analogy mistake this work has already paid for twice (the `s32i`
+offset sign, the `wsr` argument order).
+
+**ONE SPELLING, AND IT TOOK A CORRECTION TO GET THERE.** The install was first
+written as its own copy of the seven-line auipc / jal / literal / `lw`
+sequence — while its own comment claimed it was "the same sequence rather than
+a second spelling of it", which was false of the code as written. Extracted to
+`EmitProcAddrLiteralRISCV32` in `ir_codegen_riscv32.inc`; `@proc` was moved
+onto it in the same commit. Control: the emitted image is **byte-identical**
+across the refactor, and all 11 riscv32 bare fixtures match their oracles
+before and after.
+
+### The hazard that has no xtensa counterpart
+
+`mtvec[1:0]` is a **MODE** field — 0 Direct, 1 Vectored, 2–3 reserved. So a
+handler body that is not 4-aligned does not land slightly wrong: it selects a
+different dispatch mode *and* a different base, from a single write the
+hardware accepts silently. Nothing aligns `Procs[].BodyAddr` (it is a bare
+`CodeLen`), so `elfwriter.inc` asserts it.
+
+It asserts rather than masking the low bits off, because masking installs an
+address the source never named — a wrong answer dressed as a correction.
+
+**The assert is reachable, which is the part that makes it a guard**: tightened
+to `mod 8` it refuses a real build, naming `MyIsr` at `0x40380124`. Restored to
+`mod 4` afterwards and the binary sha returns to its pre-control value.
+
+### Controls
+
+| control | expected | observed |
+| --- | --- | --- |
+| riscv32 auto fixture vs oracle | identical | identical |
+| two `interrupt;` procs, riscv32 | refuse, name both | refused, both named |
+| same source without the keyword | no install | 512B vs 696B |
+| mtvec alignment assert (`mod 8`) | refuse a real build | refused, named the address |
+| refactor of `@proc` | no emitted byte changes | byte-identical image |
+
+11 riscv32 and 11 xtensa bare fixtures re-run against their x86-64 oracles.
+
+### What the DCE-root question turned up, which was not part of this work
+
+Asked whether the root was xtensa-scoped, the answer came from a control rather
+than a grep — a `grep` for a target condition would have agreed and proved
+nothing. Bare riscv32, unreferenced `interrupt;` body: **676 B** with the root,
+**360 B** without. So the root is not merely generic in spelling, it is
+**load-bearing on riscv32 today**, and the riscv32 defect was **already armed**
+rather than latent: any bare riscv32 program installing a handler by a
+hardcoded `mtvec` write or from another unit lost the body. Nobody had written
+that program, nothing was observably broken, and the repair shipped inside the
+xtensa commit as a side effect. It is recorded because a sibling question got
+asked, not because anything failed.
