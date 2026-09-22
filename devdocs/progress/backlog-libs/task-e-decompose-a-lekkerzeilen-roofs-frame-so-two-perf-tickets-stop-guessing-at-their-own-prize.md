@@ -27,6 +27,29 @@ the producer cannot see who is standing on the measurement and nobody is
 notified when it lands.* An edge does survive. Both consumers should
 `blocked-by` this, and then the machinery notifies instead of me remembering.
 
+## PAUSED BY THE OWNER 2026-09-22 — NO DATE, AND THAT IS THE POINT
+
+*"ok. stop gui testing lekkerzeilen for a while please"* (owner, relayed by
+`frankuser`). `lekkerzeilen-7a` was mid-run on the roofs pair and has stopped.
+
+**So this row is not blocked on a seat and not on a quiet box — it is blocked on
+him lifting a pause, and he gave no duration.** Anyone opening this should read
+it as WAITING WITHOUT A DATE, not as imminent. Both consumers have been released
+rather than held: `perf-o` is parked and unowned, and its `blocked-by` edge to
+this ticket survives, which is what makes releasing safe.
+
+**Scope, deliberately not widened:** he named GUI testing of lekkerzeilen. That
+is not compile-time work, not other demos, and not non-GUI lekkerzeilen work.
+Nobody should extend it on his behalf — ask him.
+
+**What is already banked and does NOT need the display**, so a later seat does
+not re-derive it: both arms built and verified; the dispatch/variant-arithmetic
+bucket split by symbol family (`PyHostCall`, `PyFindMethCI`, `PyFieldGet/Set`,
+`PyBindHostKwArgs`, closure arm against `PXXVarBinOp*` and pyeval's integer fast
+paths); the stamp fields (`region` from the invocation, `worldindex` as a sha,
+`tiles`/`twins`, per-round `loadstart`/`loadend`); and 7a's two-rounds-per-arm
+repeatability falsifier, declared in advance.
+
 ## What to measure
 
 NilPy method dispatch as a **share of a roofs frame**, on a quiet box.

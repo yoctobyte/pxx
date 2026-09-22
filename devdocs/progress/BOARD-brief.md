@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:18 blocked:9 backlog:38 backlog-umbrella:14 backlog-core:172 backlog-nilpy:184 backlog-tools:66 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3926 rejected:87`
+`working:34 unfinished:18 blocked:9 backlog:38 backlog-umbrella:14 backlog-core:173 backlog-nilpy:184 backlog-tools:66 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3926 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,7 +40,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `perf-a-every-return-releases-every-managed-local-even-the-untouched-ones` [A] — owner: frank-subcoord
 - `perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program` [N] — owner: franks-5b
-- `perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob` [A] — owner: frankh-c0
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
