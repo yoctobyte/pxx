@@ -313,3 +313,54 @@ A section heading that states a CONCLUSION is the same animal as a probe
 labelled with its answer — it puts the claim upstream of the evidence, and
 re-reading has nothing to check it against. Name the measurement in a heading,
 never its consequence.
+
+### MEASURED, and it retires the RANGE the section above reports: the cost is 4,224 FLAT for any program this fork is about
+
+The costing above says the threadvar area is a number "another ticket is
+moving", and gives the cost as a range of 1,152 to 4,224 bytes. **That was
+written in the wrong tense and the range does not describe this fork's
+subject.** Both halves corrected here, measured 2026-09-22 at HEAD by printing
+`__pxxTlsBlockSize` from compiled programs rather than by reading definitions.
+
+| program shape | `__pxxTlsBlockSize` | bss |
+| --- | --- | --- |
+| no `threadvar`, no `uses` | **1,152** | 35,324 |
+| a `threadvar` | **4,224** | 38,400 |
+| no `threadvar` but WITH `uses` | **4,224** | — |
+
+**The mover has already shipped.** `feature-a-the-threadvar-area-is-3072-bytes-
+of-bss-in-every-program-that-has-no-threadvar` says so in the first four words
+of its own summary — ROUTES C AND A SHIPPED — and the section above cites that
+ticket while describing it as a proposal. Delta is exactly 3,072, chosen per
+program at compile time, today.
+
+**AND THE THIRD ROW MAKES THE CHEAP END UNREACHABLE HERE.** The zero-area arm
+requires a program naming neither `threadvar` nor `uses`. A program that
+creates a thread cannot be one: `BeginThread` is **undefined without `uses`**
+(`error: undefined variable (BeginThread)`), as are `TThreadID` and
+`WaitForThreadTerminate`. Tested rather than asserted, because "a threaded
+program always has a `uses` clause" is exactly the quantifier that should not be
+written from intuition.
+
+So **the cost for this fork is 4,224 bytes per foreign thread, flat, today** —
+not a range, and not a number anyone is currently moving. Quoting the range
+here would understate the cost by nearly 4x on precisely the programs at issue.
+
+One thing survives and is worth keeping, because it makes 4,224 read as
+justified rather than arbitrary: the split is not a tuning knob, it tracks
+**whether the program can have threadvars at all**. 1,152 is the size when
+there is provably nothing to hold. The 3,072 is therefore not waste in the
+threaded case.
+
+**Scope of the measurement, stated so nobody reads it as wider:** this is the
+Pascal arm. A foreign thread entering a unit-free pxx OBJECT from C would see
+1,152; that is the object-consumer direction, it belongs to
+`decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit`, and
+it is not what "4,224 flat" is claiming.
+
+**The general shape, and it is why this is a correction and not an edit:** the
+section above was accurate about definitions and wrong about the world, because
+it read a ticket's PROPOSAL framing past a summary whose first line said the
+work had shipped. A cost derived from constants cannot tell you which
+population reaches which constant — that takes a compiled program. **Derive the
+bound, then compile something to find out who is standing under it.**
