@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:172 backlog-nilpy:184 backlog-tools:70 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3931 rejected:87`
+`working:35 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:171 backlog-nilpy:184 backlog-tools:70 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3931 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
@@ -25,6 +25,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-object-output-for-arm32-and-aarch64` [A] — owner: frankb-8e
 - `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A] — owner: frankA
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
+- `feature-a-unreferenced-class-rtti-keeps-every-method-alive` [A] — owner: frankb-8e
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
@@ -78,7 +79,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 574, ranked
+## Ready — top 30 of 573, ranked
 
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
@@ -102,7 +103,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 - `[p 70] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal (unblocks 1)
@@ -110,5 +110,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program (unblocks 1)
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 1)
 - `[p 70] [N]` bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)
+- `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 
-_544 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_543 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
