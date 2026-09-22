@@ -15472,22 +15472,22 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-22T09:46:44Z",
+  "date": "2026-09-22T13:06:58Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
    "test-core#src:test/c_crtl_wait.c",
    "test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy",
    "test-aarch64#src:tools/compiler_srchash.sh",
+   "test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2",
    "tools-devtest#00",
    "demos#00"
   ],
-  "sha": "819aab1dbb148fe7a842544607ce5c50d32a49f9",
+  "sha": "db6d1bddb3b3059547fd8669b988e6731ad10198",
   "tier": "full",
-  "ver": "v417",
+  "ver": "v418",
   "verdict": "RED",
   "why": {
-   "test-aarch64#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), 734d10ec7b53 (stamp read back; sources match it) | probe: no working llvm-objdump (tried llvm-objdump-21, llvm-objdump); | the PXX side cannot be disassemb",
-   "test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy": "-100000000.0 7.0 -1.5707962567948965 | --100000000.0 -7.0 -1.5707963967948966 | +-100000000.0 -7.0 -1.5707963967948968 | -100000000.0 1e-08 -1.5707963267948966 | -100000000.0 -1e-08 -1.570796326794896",
+   "test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2": "ok: $TMP  [code=38576B  data=1408B  bss=34320B  procs=538  codeseg=40812B] | ok: $TMP  [code=931632B  data=164360B  bss=34112B  procs=186  codeseg=933740B] | rv32_bigbody: code=931632 does not exceed ",
    "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
   }
  },
