@@ -35,6 +35,34 @@ perf tickets off the 2026-09-21 `rijn` profile this afternoon** — that scene h
 now produced three levers measuring to about zero on the scene that ships. **The
 re-profile must be on ROOFS**; 7a has been briefed.
 
+### PAUSED BY OWNER INSTRUCTION, 2026-09-22 — THE RE-PROFILE CANNOT BE RUN AND THAT IS NOT A BACKLOG STATE
+
+**Owner, verbatim, relayed by `frankuser` while 7a was mid-run on the roofs
+pair:**
+
+> *"ok. stop gui testing lekkerzeilen for a while please"*
+
+**So the finish-then-measure sequence above is blocked on HIM, not on a seat and
+not on a measurement.** Recorded here because **a criterion nobody can satisfy
+reads exactly like work nobody has done**, and in a month the difference is
+invisible to whoever opens this file. Same reasoning as the `pylib.pas` section
+being marked retired rather than deleted: the record of why a row stopped applying
+is worth more than a clean file.
+
+**SCOPE, AND NOBODY HERE WIDENS IT FOR HIM.** He named **GUI testing of
+lekkerzeilen**. *"Stop"* is now, in-flight included; *"for a while"* is a pause,
+not a cancellation. **He gave no duration and no reason and was not asked.** This
+does NOT extend to compile-time work, to other demos, or to non-GUI lekkerzeilen
+work — and if a seat asks whether it covers their case, the honest answer is that
+he named GUI testing of lekkerzeilen and none of us should read further on his
+behalf.
+
+**What this does NOT change:** nothing measured stays measured any less. The 19.7x
+against CPython, the four rows under MEASURED AS NOT THE CAUSE, and every
+measurement rule this ticket has paid for all stand. **What is suspended is the
+production of NEW frame numbers**, which is exactly the input the ranking below
+was waiting on.
+
 **The first directive, which this supersedes on the TARGET and not on the
 priority:**
 
@@ -541,6 +569,15 @@ prio 45 it sits below every ticket it unblocks, which is the exact inversion
 the frame no longer matters — the owner has retired *15 fps* as a number
 (*"not written in stone, just a wishful figure"*), and that changes the target,
 not the need to know where the time goes.
+
+**AND AS OF 2026-09-22 THAT RETIREMENT IS PAUSED BY THE OWNER, NOT PENDING A
+SEAT** — *"ok. stop gui testing lekkerzeilen for a while please"*, 7a stopped
+mid-run. See the PAUSED BY OWNER INSTRUCTION section above for the scope. **This
+edge is not stalled, unowned or deprioritised; it is waiting on a decision only he
+can make.** Do not read its age as neglect and do not re-rank it on the strength
+of nothing having happened. `frankh-c0` held `perf-o` in `working/` against this
+row's dispatch date; that date no longer exists, and whether to park it properly
+is c0's call, which it has been told directly.
 
 ## The variant-clear row is being tested for RETIREMENT, not for a fix
 
