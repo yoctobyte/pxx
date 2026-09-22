@@ -2255,7 +2255,31 @@ begin
     symbol-surface measurement everyone quotes (zero GLOBAL defined symbols
     lost, relocations roughly halved, x86-64/riscv32/xtensa) was taken on
     objects with no IRAM section and says nothing about this. `--dce` remains
-    available explicitly, which is how the ESP bare profile already uses it. }
+    available explicitly, which is how the ESP bare profile already uses it.
+
+    THE IRAM WALL ABOVE IS RETIRED -- MEASURED 2026-09-22 (frankh-c0), and the
+    ticket it names is in done/. The exact repro links CLEANLY on both ESP
+    targets now, with the pass on:
+
+      esp_obj_rodata_iram.pas --emit-obj --platform=esp, then the tier's own
+      emit_obj_stub_shim.sh + esp gcc link:
+        riscv32  --no-dce rc=0   --dce rc=0
+        xtensa   --no-dce rc=0   --dce rc=0
+
+    So the sentence above -- "IT IS STILL OFF BECAUSE THE NEXT WALL IS WORSE"
+    -- no longer states a live condition. It is left in place because it
+    records WHY the line was reverted twice, and because the two reverts are
+    the reason to be careful here; it is no longer a reason to refuse.
+
+    A STALE HAZARD BLOCK IS THE EXPENSIVE KIND: obeying one produces no signal,
+    so it cannot be refuted by the next measurement the way a stale fact is. It
+    was found only because a promotion attempt had to read past it. What would
+    retire THIS note in turn: the four rows above going nonzero again.
+
+    Note this line is about an --emit-obj-SPECIFIC default. The `-O` rule
+    further up is unconditional on output mode, so an object built at an -O
+    level that enables the pass already gets it, and that is the path the rows
+    above actually measured. }
 
   { PXXDBG=a.obj:<path> -- read an ELF64 relocatable object and report what is
     in it, then stop. HERE, before the usage check, because it takes its
