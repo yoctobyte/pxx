@@ -200,7 +200,22 @@ measurement.
    anywhere in the import closure makes `PyMethodUsedAsValue` true for EVERY
    name, so every method in the program takes the function-object ABI and pays
    boxing. lekkerzeilen has exactly one — `lekkerzeilen/gfx.py:349`,
-   `handle = getattr(self, attr)`. **Boxing sits upstream of refcount,
+   `handle = getattr(self, attr)`.
+   **THE SOURCE-SIDE UNROLL IS DEAD AS OF 2026-09-22 AND THIS ITEM DROPS BELOW
+   ITEM 2.** The plan was to remove that one call and flip the flag. **`5b` ran
+   `PXXDBG=a.srcmap:*` against the pin and all four ladder rungs came back
+   PLANTED — including the two it had predicted absent — so `_sdl2.py:212`
+   holds `PyModuleHasComputedGetattr` true whatever happens to `gfx.py`.**
+   Killed for one compile and no display time; `lekkerzeilen@83bb324` — **that
+   sha is in the lekkerzeilen repo, not this one.** 7a's pre-registered
+   prediction is **unspent, not resolved** (antecedent false) and **must not be
+   scored either way.**
+   **WHAT SURVIVES IS THE COMPILER-SIDE NARROWING, AND IT HAS NO KNOWN
+   MECHANISM** — the ticket's own honest answer is that the coarse arm probably
+   cannot be narrowed by name, because a computed getattr is exactly the case
+   where no token spells the name. **What died is the cheap way to MEASURE the
+   lever, not an estimate of its size**, and that is what moves it below item 2.
+   **Boxing sits upstream of refcount,
    allocator and variant-dispatch — 37% between them — rather than beside
    them.** Controlled measurement exists for **SIZE only** (`5b1045dad`:
    +112,025 B, +0.93%, `procs` IDENTICAL, so the growth is boxing inside
@@ -287,7 +302,9 @@ the full stamp beside it (`region`, `tiles`, `worldindex`, `twins`, compiler,
 promocore, source, session) and the window count. **Not `rijn`, and not a
 `rijn`-labelled run whose label came from a banner.** **And not a single run:**
 within-arm run-to-run noise here is 8.8% and machine load moves a timing 20%,
-so a retirement claim wants windows and a median, not a best frame. **A sum of percentage
+so a retirement claim wants windows and a median, not a best frame — **and both
+arms measured in ONE INTERLEAVED SESSION.** Two arms taken on the same quiet box
+hours apart is the failure recorded above, not a fix for it. **A sum of percentage
 claims does not retire it**; the table above is why.
 
 **HOW TO REPORT PARTIAL PROGRESS, AND IT IS NOT AS A FRACTION** (frankh-c0,
