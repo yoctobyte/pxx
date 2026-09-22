@@ -344,4 +344,4 @@ a different ticket; `errors` from anywhere else is not this at all.
 often phase A happened to serialise**, which depends on box load, core count and
 scheduler, not on how often TLS is wrong — TLS was never wrong. A future run
 disagreeing with either is not a regression and not a refutation.
-- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit db9ba7669.
