@@ -36240,3 +36240,61 @@ errors.
 
 **What would retire this section:** analyses over this archive taking a job id
 rather than a name, so ambiguity is unrepresentable rather than caught.
+
+## A RATE COMPUTED OVER A TIME WINDOW IS NOT A PER-RUN PROBABILITY — ASK WHETHER THE EVENTS ARE CLUSTERED OR SPREAD
+
+**The rule.** Dividing failures by runs gives a number that *looks* like a
+probability and licenses inferences a time-ordered dataset cannot support. **A
+row red for four days and then fixed reads as "52% red" across a seven-day
+window** — and 52% invites a prediction about the next run, a chi-square, a
+`p^3` retry calculation, none of which mean anything if the reds are one
+contiguous episode. **Before using a rate as a probability, sort by time and
+look at the run lengths.**
+
+**The one-line instrument** — print the sequence and the longest run:
+
+```python
+s = "".join("R" if red else "." for date, red in sorted(rows))
+longest = max((len(x) for x in s.split(".") if x), default=0)
+```
+
+`.............RRRRRRRRRRRRRRRRRRRR...` is an episode.
+`..R.R...R..R.R....R..R.` is a rate.
+
+**Measured 2026-09-22, and the second instance is the reason it is here.**
+
+1. A toolchain cross-tab produced fifteen job ids "materially more red" on one
+   emulator, and they were filed as a backlog at p60. **Every one of the
+   fourteen with any reds had already ENDED** — none red in the final 20
+   reports. `size_canary.py`: 189 reds, **158 of them consecutive**.
+   `test_libwriteln_parity.pas`: 86 reds, **86 consecutive, inside one day**.
+   The ticket was rejected by its author's own next measurement, within the
+   hour, and a probability computed from those rates (`P(all nine pass) ≈ 13%`)
+   was not a weak result but a **meaningless** one.
+2. Hours earlier the same evening, the same seat published a **2.6x** derived
+   from 16 greens in a window. A peer asked *"are they CLUSTERED or SPREAD?"*
+   and the ratio dissolved.
+
+**So the lesson was in hand, in the same session, from the same question — and
+it did not transfer to the next table.** That is the finding: this is not
+prevented by having learned it once, because the second table looks like new
+data rather than like the same mistake.
+
+**Three tells that a rate is really an episode**, none needing statistics:
+
+- **The longest consecutive run is a large fraction of the total count.**
+- **The last event is old** relative to the window's end. A live phenomenon
+  reaches the present; a closed episode does not.
+- **Nothing in the code changed and the failures stopped anyway** — which the
+  playbook elsewhere reads as "a test that stops failing without being changed
+  was never fixed", and which here means something changed *outside* the tree.
+
+**Related:** "WHEN AN UPGRADE MOVES TWO QUANTITIES AT ONCE" — same night, same
+archive, the mirror error. There a **step** was misread as a gradient; here an
+**episode** was misread as a rate. Both come from collapsing a time-ordered
+series into one number, and both read as clean findings.
+
+**What would retire this section:** a rate helper over this archive that
+refuses, or at least annotates, when the longest consecutive run exceeds some
+fraction of the event count — so the shape is reported with the number instead
+of having to be asked for.

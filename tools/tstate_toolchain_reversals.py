@@ -19,6 +19,12 @@ MIN_N = 30          # per side; below this a rate is noise
 
 red = collections.defaultdict(lambda: collections.Counter())
 tot = collections.Counter()
+# Per (job, qemu) time-ordered outcome string, so a rate can be shown with its
+# SHAPE. A rate over a window is not a per-run probability: measured 2026-09-22,
+# `size_canary.py` was 189 reds of which 158 were CONSECUTIVE, i.e. one closed
+# episode, and it was filed as a 52.4%-flaky backlog row on the strength of the
+# ratio alone. The longest-run column is what stops that.
+seq = collections.defaultdict(list)
 
 for f in sorted(glob.glob("devdocs/progress/tstate/reports/*.md")):
     txt = open(f, encoding="utf-8", errors="replace").read()
@@ -44,8 +50,11 @@ for f in sorted(glob.glob("devdocs/progress/tstate/reports/*.md")):
                 mm = re.match(r"- ([a-z0-9-]+#[^ ]+)", line)
                 if mm:
                     names.add(mm.group(1))
-    for n in names:
-        red[n][q] += 1
+    for n in list(names) + [k for k in red if k not in names]:
+        if n in names:
+            red[n][q] += 1
+    for n in set(list(names) + list(red)):
+        seq[(n, q)].append((g("date") or "", n in names))
 
 QA, QB = "10.2.1", "8.2.2"
 print("population: native/full reports since %s | %s n=%d | %s n=%d"
@@ -59,15 +68,27 @@ for n, c in red.items():
     rows.append((ra - rb, n, c[QA], ra, c[QB], rb))
 
 rows.sort(reverse=True)
+def shape(n, q):
+    rows = sorted(seq.get((n, q), []))
+    s = "".join("R" if r else "." for _, r in rows)
+    runs = [len(x) for x in s.split(".") if x]
+    last = max((d for d, r in rows if r), default="-")
+    return (max(runs) if runs else 0), last[:10]
+
+
 print("REVERSED — more red on the NEWER emulator (%s):" % QA)
 any_rev = False
 for d, n, a, ra, b, rb in rows:
     if d > 0.05 and tot[QA] >= MIN_N and tot[QB] >= MIN_N:
-        print("  %-52s %s %3d/%d %5.1f%%  vs  %s %3d/%d %5.1f%%" % (n[:52], QA, a, tot[QA], 100*ra, QB, b, tot[QB], 100*rb))
+        lr, lastd = shape(n, QA)
+        print("  %-46s %s %3d/%d %5.1f%% [longest run %3d, last red %s]  vs %s %5.1f%%"
+              % (n[:46], QA, a, tot[QA], 100*ra, lr, lastd, QB, 100*rb))
         any_rev = True
 if not any_rev:
     print("  NONE. No job id is materially more red on the newer emulator.")
 
 print("\nWORST on the OLDER emulator (%s), top 8:" % QB)
 for d, n, a, ra, b, rb in rows[-8:][::-1]:
-    print("  %-52s %s %3d/%d %5.1f%%  vs  %s %3d/%d %5.1f%%" % (n[:52], QA, a, tot[QA], 100*ra, QB, b, tot[QB], 100*rb))
+    lr, lastd = shape(n, QB)
+    print("  %-46s %s %5.1f%%  vs %s %3d/%d %5.1f%% [longest run %3d, last red %s]"
+          % (n[:46], QA, 100*ra, QB, b, tot[QB], 100*rb, lr, lastd))
