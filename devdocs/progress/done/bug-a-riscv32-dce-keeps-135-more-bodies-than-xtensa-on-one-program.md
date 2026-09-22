@@ -6,7 +6,7 @@ status: open
 found: 2026-09-19
 found-by: frankS
 blocked-by: []
-summary: "On one NilPy program (test/test_dce_nilpy_esp_kept_body.npy, --platform=esp) --dce leaves riscv32 with 870 live bodies / 2,065,508 B of code and xtensa with 735 / 1,721,263 B -- 135 bodies and ~344 KB more on riscv32, from the same source and the same live set to begin with. The measured asymmetry upstream of that is stub targets: before the kept-body fix landed, --dce-report named 71 bodies `kept (holds a stub target)` on riscv32 and ZERO on xtensa, and those 71 are now roots (correctly -- something jumps into them), dragging their callees live with them. So the question is not DCE's: it is why riscv32 codegen puts a CodeRef target INSIDE 71 procedure bodies where xtensa puts none. A stub target inside a body is a root by construction, so every one of them is a body no program can ever drop. PRICED 2026-09-20 by `--dce-why`: on the nilpy-c3 demo riscv32 has **143 stub targets of which 139 land inside a body**, rooting **819,480 B across 128 bodies** as `holds a stub target` -- 39.6% of its live code -- while xtensa has 4 stub targets, NONE inside a body, and 0 B rooted that way. ANSWERED 2026-09-20 (frankS) AND IT IS NOT A BLIND PASS: the in-body targets are MANAGED-LOCAL SWEEP THUNKS, which `EmitProcScopeExitCleanupForTarget` places after a body's second return (>=3 releasable slots) and calls through `EmitRiscv32CallToCode`/`EmitXtensaCallToCode` -- both of which record unconditionally on both arms. `TargetHasSweepThunk` excludes WINDOWED xtensa (sp is constant and a0 is the live return address, so a thunk has nowhere to put either), so the sweep is inlined at every return and no in-body target exists. Measured on `test/test_dce_sweep_thunk_abi.pas`, same ISA and source with one flag varied: riscv32 and **call0 xtensa** each report 1 in-body target, windowed reports 0 -- the asymmetry moves with the ABI and nothing else. So riscv32's 819,480 B is correct and both ISAs behave correctly. WHAT SURVIVES is an optimisation, not a bug: `DceRangeHoldsStub` roots a body for a stub target it OWNS, and since `DceOwnerOf` already knows the owner, an owned thunk could be treated as an intra-body reference -- which would make riscv32 match xtensa without disabling anything. Plus two latent items: `exception_emit.inc:710` records nothing where its riscv32 sibling at :510 does, and `IREmitCodeCall` falls through to an x86 `E8` on riscv32/xtensa instead of refusing. RE-LANED as correctness/optimisation; the SIZE half is answered 'working as designed' and this is NOT SRAM work."
+summary: "CLOSED 2026-09-22 (frankb-8e) -- ALL THREE SURVIVING ITEMS LANDED. The optimisation this ticket specified is done (372dd5113): DceRangeHoldsStub answered on GEOMETRY, and now asks whether anything OUTSIDE the range refers to the target. A sweep thunk sits inside its own body and is called from that body alone, so every qualifying body pinned ITSELF. examples/esp32/nilpy-c3 riscv32 --platform=esp --dce: 2,093,100 -> 931,552 B, -55.5%, which puts riscv32 BELOW windowed xtensa (847,167 B) instead of 344 KB above it. Sound for a LOCAL reason and not a reachability argument: live body -> not removed -> the thunk survives with it; dead body -> its only caller is dead. The two latent items went earlier the same day (5fccc890a, 73b1ade90) and THIS TICKET PRESCRIBED THE WRONG HELPER FOR ONE OF THEM -- EmitXtensaCallToCode is the CALL0 helper, the stub is entered with a2 = &jmpbuf and ends in RETW and the site loads a10, so CALL0 passes the argument in the wrong register and retw rotates no window back; EmitXtensaCall8ToCode is the one, and the site also hardcoded a beq displacement the helper may invalidate, so fixing it as written would have made a latent bug live. THE VERIFICATION IS THE PART WORTH READING. A 116-program riscv32-under-qemu differential returned 116 same / 0 differ AND IS WORTHLESS: the positive control (disabling the root entirely) returned 116 same / 0 differ too, and the root fired for NONE of the 116 -- the population could not contain the subject. So the verification is an INVARIANT instead of a corpus: the live set must be closed under the call graph, now checked on every target across CallFix, ProcAddrFix AND CodeRef, where only wasm had such a check. Checking only CallFix would have passed this very commit, since DceRangeHoldsStub decides CodeRef targets. Positive control fires by name via a one-line forced drop in DceMark. NOT ESTABLISHED, and said out loud: `Result := False` -- the most aggressive possible predicate -- leaves every measurable artefact byte-identical and passes all three arms, so both True arms are unexercised in this tree; that BOUNDS the risk (the landed version roots a strict superset of one measured safe) rather than leaving it open. AND `D_EXPF` IS NOT A DEFECT -- the first version of the closure check read Procs[].BodyAddr AFTER the loop that remaps it and fired on riscv32 and windowed xtensa; reverting my other change reproduced it identically, which is a sound control for "did my edit cause this" and blind to "is my instrument sound". Also corrected: dce.inc claimed ApplyCallFixups reports a dropped-and-called body by name. It does not -- CallFixTarget is a clamped snapshot -- and that false all-clear is why five targets had no closure check. ORIGINAL ANALYSIS BELOW, still correct: the in-body targets are sweep thunks, the riscv32/xtensa asymmetry is an ABI consequence via TargetHasSweepThunk, and the SIZE half was answered working-as-designed."
 ---
 
 # riscv32 DCE keeps 135 more bodies than xtensa on one program
@@ -197,3 +197,94 @@ program, which is why it transfers.
 which is an optimisation, and the two latent correctness items above. Not SRAM
 work — see [[umbrella-an-esp32-image-is-as-small-as-it-can-be]], where code
 removal is measured at zero SRAM from here.
+
+## 2026-09-22 (frankb-8e) — THE OPTIMISATION IS DONE, THE TWO LATENT ITEMS ARE DONE, AND THIS CLOSES
+
+All three of this ticket's surviving items are landed. Taking them in the order
+the summary lists them.
+
+**The optimisation, exactly as this ticket specified it** (`372dd5113`).
+`DceRangeHoldsStub` answered on GEOMETRY — any stub target inside a body rooted
+that body. It now asks whether anything OUTSIDE the range refers to the target,
+which is the question the root was always asking. A sweep thunk is placed inside
+its own body and called from that body alone, so every qualifying body pinned
+ITSELF.
+
+| | before | after |
+| --- | ---: | ---: |
+| `examples/esp32/nilpy-c3` riscv32 `--platform=esp --dce` | 2,093,100 B | **931,552 B** |
+
+**−55.5%**, and riscv32 now lands *below* windowed xtensa's 847,167 B rather
+than 344 KB above it. Windowed xtensa is unaffected by construction
+(`TargetHasSweepThunk` is false); x86-64 is unaffected in fact — 0 of 19 stub
+targets land inside a body, so the sweep thunk it does emit is not reached by a
+CodeRef there.
+
+Sound for a LOCAL reason rather than a reachability argument, which is why it
+needs no new analysis: the thunk lives INSIDE the range. Live body → not
+removed → the thunk survives with it and `DceRun` re-aims the call like any
+other CodeRef. Dead body → its only caller is dead → the thunk is dead too.
+
+**The two latent items, fixed earlier the same day** (`5fccc890a`,
+`73b1ade90`) — and the prescription for the first one named the wrong helper.
+`EmitXtensaCallToCode` is the CALL0 helper; `ExcLongJmpAddr`'s windowed stub is
+entered with `a2 = &jmpbuf` and ends in `RETW` and the site loads **a10**, so
+CALL0 would pass the argument in the wrong register and `retw` with no window
+rotated. `EmitXtensaCall8ToCode` is the one. It also had a half this ticket did
+not see — `xtensa_beq(a2, a4, 9)` hardcoded a 3+3+3 byte count that the helper
+is allowed to invalidate — so fixing it as written would have converted a
+latent bug into a live one. Two further sites of the same family turned up in
+the census afterwards.
+
+## THE VERIFICATION IS THE PART WORTH READING, because the obvious one was void
+
+**A 116-program riscv32-under-qemu differential of `--dce` against `--no-dce`
+returned 116 same / 0 differ, and it is worthless.** The positive control —
+disabling the stub root entirely — returned **116 same / 0 differ as well**, and
+comparing the two sets of binaries shows the root fired for **NONE of the 116**.
+The population could not contain the subject. A clean differential over a corpus
+that does not exercise the change is not weak evidence, it is no evidence, and
+it reads exactly like the strong kind.
+
+**So the verification is an INVARIANT instead of a corpus** (`372dd5113`): the
+live set must be closed under the call graph, checked on every target across all
+three tables that can name a body — `CallFix`, `ProcAddrFix` and `CodeRef`.
+Only wasm had such a check, and the asymmetry was an accident of its slot
+INDEX being inexpressible for a dropped body; an ELF target expresses one
+perfectly well, and `DceNewOff` CLAMPS an offset inside a removed range to that
+range's start, so the reference does not go invalid — it becomes a confident
+reference to whatever slid up. **Checking only `CallFix` would have passed this
+very commit**, since `DceRangeHoldsStub` decides the fate of CodeRef targets.
+
+**What is NOT established, stated here and in the source rather than left to be
+found.** Replacing the predicate with `Result := False` — the most aggressive
+version possible — leaves the nilpy-c3 object on both ISAs and
+`--dce --emit-obj` **byte-identical** to the landed version, and passes all
+three closure arms. So in this tree every in-body stub target is a
+self-referenced sweep thunk and **both arms of the predicate that answer True
+are unexercised**. That bounds the risk rather than leaving it open: the landed
+version roots a strict superset of a version already measured safe.
+
+**AND ONE INSTRUMENT FAILURE THAT NEARLY SHIPPED AS A BUG REPORT.** The first
+version of the closure check read `Procs[].BodyAddr` AFTER the loop that remaps
+it, comparing post-compaction offsets against pre-compaction ranges. It fired on
+`D_EXPF`, on riscv32 **and** on windowed xtensa. I confirmed it was not my own
+predicate change by reverting that and reproducing the identical message at the
+identical code offset — which is a sound control for *"did my edit cause this"*
+and structurally blind to *"is my instrument sound"*, the question actually in
+doubt. Moving the check ahead of the remap: clean everywhere. **`D_EXPF` does
+not exist as a defect.** Where a NEW instrument produces a finding, the
+proposition in doubt is the instrument, and varying your own diff cannot reach
+it.
+
+**A FALSE SAFETY CLAIM IN dce.inc IS WHY THIS CHECK DID NOT EXIST.** The header
+said a dropped body's `BodyAddr := -1` means *"ApplyCallFixups says so by name
+instead of jumping into the hole"*. Measured false: with the guard removed and a
+called body force-dropped, the compiler prints `ok:` and emits the binary.
+`CallFixTarget` holds a resolved snapshot that `DceNewOff` clamps, so
+`ApplyCallFixups` never consults the `-1`. Corrected in place — **a comment
+explaining why a check is unnecessary is a guard with no positive control, and
+it is read as the reason not to add one.**
+
+Closing: every item in the summary is landed and the size half was already
+answered "working as designed".
