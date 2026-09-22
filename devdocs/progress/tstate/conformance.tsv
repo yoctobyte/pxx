@@ -158,7 +158,7 @@ skip	terecs20.pp	terecs	gap	REASON CORRECTED 2026-09-06 at compiler 0d77c1e48ea4
 pass	terecs21.pp	terecs	-	
 pass	terecs2.pp	terecs	-	
 pass	terecs3.pp	terecs	-	
-fail	terecs4.pp	terecs	UNKNOWN-TAG:accepted-invalid	%FAIL test compiled
+skip	terecs4.pp	terecs	gap	accepts-invalid -- a DESTRUCTOR declared in a RECORD is accepted and NEVER FIRES. First observed 2026-09-22: this row had never run on this box, because it needs library_candidates/fpc-testsuite and that corpus was absent until today, so this is a FIRST OBSERVATION and not a regression -- the previous full tier SKIPped the whole shard. Measured at compiler 06255ab1878c: `destructor Destroy;` inside `TFoo = record` under {$mode delphi} compiles clean (rc=0, no diagnostic), and a probe giving the destructor a WriteLn body and a record local in a procedure prints scope-in/scope-out with the body never reached. So we do not support record destructors, we only fail to reject them. THIS IS THE WORSE SUB-SHAPE OF THE accepts-invalid CLASS and that is the reason it is written down rather than filed: tgeneric21.pp and terecs1.pp leave the mistake visible at the USE site or under an opt-in flag, whereas here there is no use site to fail -- a programmer who writes a record destructor expecting cleanup gets silence and no cleanup, at any flag. Us accepting what fpc rejects is not a defect (the goal doc) and a differing diagnostic is deferred, so this is not open work; but if anyone ranks the accepts-invalid rows against each other, rank this one ABOVE the rows whose mistake surfaces somewhere. Paired with terecs1.pp as the record-diagnostic family.
 pass	terecs5.pp	terecs	-	
 pass	terecs6.pp	terecs	-	
 pass	terecs7.pp	terecs	-	
