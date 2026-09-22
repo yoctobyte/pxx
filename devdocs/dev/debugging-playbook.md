@@ -42527,3 +42527,117 @@ second harness in an unrelated lane is found converting a regression into a
 SKIP, this earns a line in CLAUDE.md, and it should land as an EXTENSION of the
 existing "a guard that cannot fail is not a guard" rule rather than as a
 neighbour beside it, since it is the same rule reached through a different door.
+
+## A CHECK CAN REST ON A PRECONDITION OWNED BY ANOTHER SUBSYSTEM AND NEVER NAME IT — AND THEN A *CORRECT* CHANGE THERE BREAKS IT
+
+Two instances on 2026-09-22, two seats, two subsystems, found within an hour of
+each other and neither looking for the other.
+
+**The shape.** A check has been passing for a reason other than the one it
+states. The real reason is a behaviour or a bound owned somewhere else and never
+written down at the check. When that somewhere-else is **fixed** — not broken,
+fixed — the check stops working, and it stops working in a way that reads as a
+regression in whatever landed beside it.
+
+**Instance 1, frankh-c0, a test fixture (loud).** `test/esp_obj_export.pas`
+named no external at all, and the Makefile row asserted that the emitted object
+carried a relocation naming `free`. `free` reached that object only because the
+RTL was pulled into every program unconditionally. `523833fde` made that pull
+evidence-based; the fixture is an integer increment with no string, no array and
+no `uses`, so it correctly stopped qualifying and the RTL correctly stopped
+arriving:
+
+    pinned  41696 B, 1 relocation naming free
+    HEAD     1688 B, 0
+
+The row failed **with the symbol-index arithmetic it exists to check working
+perfectly.** It had never been testing what it said; it had been testing that
+another subsystem was being over-generous.
+
+**Instance 2, frankb-8e, a report (silent).** `DceReachReport` sizes its
+accumulator `array[0..12]` and filters `DceWhy[i] <= 12`. Both were correct when
+12 was the top reason code. `DCE_WHY_VECTOR = 13` was added later without
+touching either, so an `interrupt;` body has **never** appeared in that table —
+not as a wrong number, as no row at all. The filter drops silently, and `total
+live` is computed from `liveB` elsewhere, so the rows were never required to sum
+to the total. **The one cross-check that would have caught it is the one the
+output format made unnecessary.**
+
+**THE TWO SYMPTOMS ARE OPPOSITE AND THAT IS THE USEFUL PART.** The same
+structural defect fails LOUD when the unnamed precondition feeds an
+**assertion** (a row reddens) and SILENT when it feeds the check's own **bounds**
+(a row vanishes). So "have my checks started failing?" finds one class and is
+blind to the other. The silent one is worse and had been live far longer.
+
+**IN BOTH, THE ATTRACTIVE WRONG READING WAS ONE STEP AWAY, and it was
+quotable.** For instance 1: *"the `--dce` default broke the ESP object row"* —
+plausible, since the default had just landed, and it would have triggered a
+revert of a correct change. For instance 2: *"the vmt bucket collapsed, so Rapid
+Type Analysis is pointless"* — a clean, publishable finding, and its author was
+one message from sending it. **A false reading of this class is not vague; it is
+a crisp conclusion in the shape people like to report**, which is exactly what
+carries it into someone else's summary.
+
+**WHAT ACTUALLY CAUGHT IT, both times: an instrument that fails differently
+from the check.** Not re-reading, not reasoning.
+
+- Instance 1: build the same object with `--no-dce`. **Byte-identical, 1688 B,
+  same 0 relocations** — so the pass was not reaching that object at all, and
+  the suspect was cleared before anything was touched.
+- Instance 2: arithmetic. Five buckets summing to **190 B** against the pinned
+  compiler's single **89,597 B**. A ratio that large is not a finding, it is a
+  broken instrument, and treating it as a finding is the trap.
+
+**THE REPAIR IS THE HALF THAT MATTERS, and in both cases it is to give the check
+a reason to stay true rather than a habit of being true.**
+
+- Instance 1: the fixture now DECLARES its external — `esp_rom_delay_us`, an ESP
+  ROM routine we never define, so it **cannot stop being external** the way
+  `free` did. The row tests what its message claims instead of borrowing a
+  symbol from a runtime that may or may not be linked.
+- Instance 2: the bound became a named `DCE_WHY_MAX`, and an unknown code now
+  prints `UNNAMED REASON CODE -- raise DCE_WHY_MAX` **instead of being dropped**.
+  That is this file's existing "derive the second spelling from the first rather
+  than restating it", with the silent-drop arm closed as well.
+
+**THE QUESTION TO ASK AT WRITE TIME:** *what has to stay true elsewhere for this
+check to keep meaning what I think it means — and does the check name it?* If
+the answer is a behaviour of another subsystem (an unconditional pull, a
+defaulted flag, a bound, an over-generous allocation), either name it at the
+check or arrange the input so it cannot evaporate. A fixture that relies on
+something arriving for free is a fixture that will fail when someone stops
+giving it away.
+
+**STATUS: BANKED. NOT PROMOTED TO CLAUDE.md, AND THE REFUSAL IS DELIBERATE —
+see the note below**, which is written for the second author as much as for a
+later reader.
+
+### Why this is not being promoted, stated out loud
+
+CLAUDE.md's promotion test is **a second independent subsystem, not merit**, and
+on its face this now meets it: two subsystems, two seats, one day. It is being
+banked here anyway, for two reasons and neither is that the finding is weak.
+
+**First, I am not sure it is one class.** Instance 2 is already covered by an
+existing CLAUDE.md rule — *"where two constants share a name-shape ... DERIVE the
+second spelling from the first rather than restating it"* — and `array[0..12]`
+beside `DceWhy[i] <= 12` is exactly a restated bound. Instance 1 is not that; its
+unnamed precondition is another subsystem's *behaviour*, not a constant. The two
+arrived together, in one conversation, an hour apart, and **a shared conversation
+can manufacture an equivalence class as easily as a wide grep can** — which is a
+hazard this same file records. Two instances that feel like one class because
+you met them together is the thing to be suspicious of, not the evidence.
+
+**Second, and it settles it: the second instance and the suggestion to promote
+both came from a peer.** A peer cannot authorise a change to the file every
+session pays for at startup, and converting *"that is worth a line"* into a
+CLAUDE.md edit is precisely the move that is not mine to make. The distinction is
+not about the peer's judgement, which was good: it is that a rules-file edit made
+on someone else's say-so has no one who checked it.
+
+**What would retire this note into a CLAUDE.md line:** a third instance, found by
+someone who was not in this conversation, whose unnamed precondition is a
+BEHAVIOUR rather than a restated constant — i.e. a second instance of *instance
+1's* half specifically. At that point it should land as an EXTENSION of the
+existing guard rules rather than as a neighbour, because it is the
+positive-control discipline reaching a precondition the guard does not own.
