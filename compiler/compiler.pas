@@ -2288,7 +2288,39 @@ begin
     option order: this runs after the whole option loop. }
   if EspBareBoot and not DceOff then DceEnabled := True;
 
-  { --emit-obj does NOT default the pass on, and the reason has changed twice.
+  { --emit-obj DEFAULTS THE PASS ON as of 2026-09-22, at the third attempt, and
+    the two reverts below are why this line carries the whole history instead of
+    a one-line note. Both walls that caused them are now in done/:
+
+      2026-09-19  reverted: fnp_386, a two-object i386 link that linked cleanly
+                  and crashed before main. FIXED 30898eef7 (ProcAddrFix/DynCall
+                  lost their parallel PCRel/PicDelta arrays in DceRun's
+                  compaction), guarded by a new fnp_386_dce row.
+      2026-09-21  reverted: `--dce --emit-obj --platform=esp` on an IRAM-
+                  attributed routine emitted an object that made GNU ld ITSELF
+                  segfault, both ESP targets. FIXED; the exact repro now links
+                  rc=0 on riscv32 and xtensa with the pass on, measured
+                  2026-09-22 (ec8ce7192).
+
+    The evidence FOR the default was never the problem and is unchanged: the
+    pass roots an object at its exports via the writer's own predicate, ELF
+    locals cannot resolve across objects, and measured on x86-64/riscv32/xtensa
+    ZERO global defined symbols are lost while relocations roughly halve. What
+    was missing was that the measurement was taken on objects with NO IRAM
+    section, so it never covered the failing case. It does now.
+
+    `--no-dce` still opts out, checked here rather than assumed from option
+    order, exactly as the bare-profile line above does.
+
+    WHAT WOULD RETIRE THIS LINE: `make test-emit-obj` going red at a row the
+    pass causes. Two reverts is enough history to say plainly that a third is
+    not a defeat -- revert it, name the wall here, and file it. Do not weaken
+    the pass to keep the default. }
+  if EmitObjMode and not DceOff then DceEnabled := True;
+
+  { HISTORICAL -- the note below described this line while it was OFF, and is
+    kept because it records the two reverts and the reasoning that produced
+    them. It is NOT a live refusal; see the block above.
     It was tried and reverted 2026-09-19 because `make test-emit-obj` died at
     fnp_386, a two-object i386 link that linked cleanly and crashed before
     main. That blocker is GONE (fixed 2026-09-21: the ProcAddrFix/DynCall
