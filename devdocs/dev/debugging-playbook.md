@@ -22672,6 +22672,46 @@ frankS supplied the mirror image within the hour: their concatenation fixture ha
 
 Related: *a derived census tells you WHERE the doors are, not what SHAPE reaches each one* — this is that animal one level up, where the report's own wording chooses the axis. And *the name you would naturally give the repro hides the bug*, which is the same failure at the file-naming step.
 
+### EXTENSION 2026-09-22: THE AXIS CAN BE CHOSEN DELIBERATELY AND STILL BE THE WRONG ONE, WHEN THE TABLE IS FOR SOMEBODY ELSE'S DECISION
+
+Both rows above are a seat inheriting an aperture **without knowing it is one**.
+This is the version where nothing was inherited and nothing was unconsidered:
+the axis was picked on purpose, and it was the axis the OBSERVATION was framed
+on rather than the axis the CONSUMER reads.
+
+`frankh-c0` sent `frankb-8e` four measured rows on identifier casing —
+`string[20]`, `String[20]`, `STRING[20]`, `StRiNg[20]`, all `ab 2` — to settle
+whether a keyword table holding only two spellings had an observable
+consequence. Internally coherent, correctly measured, and they reproduce
+exactly at `fda77c48b8ee`. **Every one of them is `string[N]`, the FROZEN
+type.** The change they were supporting turns on bare `string`, the MANAGED
+one. Had the ident path been case-sensitive for the bare spelling only, all
+four rows pass and the finding is wrong in precisely the direction that
+mattered. (It is not: nine rows including bare and `AnsiString` all answer
+`ab 2`, so the short table has no observable consequence.)
+
+**The two axes are not symmetric and nothing in the observation points at the
+second one.** Casing is what the finding was about; frozen-versus-managed is
+what the ticket stands on. So *"an axis I did not think about"* understates it —
+c0 enumerated, chose, and chose from the finding's own frame.
+
+**Re-deriving caught it and re-reading would not have.** 8e's own account: it
+did not notice the rows were all `string[N]` by reading them, it noticed by
+writing its own list and finding it had no bare row. That is the
+prescribed-row rule paying out in its hardest case — the report was RIGHT, and
+from the person who measured it, which is exactly what makes transcription feel
+safe.
+
+**The discharge, and it is a different question from the one above:** before
+sending a table, **name the CONSUMER of the finding and check your rows vary
+what the consumer turns on**, not what the observation is about. Where a table
+exists to support somebody else's decision, the relevant axis is defined by the
+decision and not by the measurement — and the producer is the seat least likely
+to notice, because the measurement is the part they were looking at.
+
+Distinct from *put the interesting element last*, which is about arrangement
+**within** an axis already chosen. This is about which axis gets varied at all.
+
 ## TWO PROGRESS INSTRUMENTS, BOTH CORRECT, BOTH SILENT ABOUT THE SAME DAY'S WORK — AND NEITHER OF THEM ERRORS
 
 Measured 2026-09-07/08 by frankS, reported unprompted as *"the part the count
@@ -38980,6 +39020,15 @@ Cheap discharge, and it is one command: before writing *independently*,
 your own session file for the artefact and compare record numbers. A convergence
 result is worth an hour of checking precisely because of what it is worth if
 true.
+
+**AND THE REASON IT GOES IN UNEXAMINED IS THAT THOSE WORDS DO NOT LOOK LIKE
+CLAIMS** — 8e's addition, and it is the only reason it ran the check at all.
+*"Independently"* reads as a detail of the story rather than as an assertion
+with a truth value, so it passes review while the measurement in the same
+sentence gets three controls. **It is the quantifier-clause rule wearing a
+different disguise**: there the tell is a word like *always*, *cannot*,
+*either way* — words that announce their own scope. Here the tell is a word
+that sounds like colour.
 
 ## THE EMITTED RUNTIME AND `lib/rtl` ARE INSIDE THE SELF-HOST PROOF'S OWN SOURCE SET — SO A LIBRARY EDIT REDS THE FIXEDPOINT GATE, CORRECTLY
 
