@@ -163,13 +163,28 @@ Tree `fda77c48b8ee`, compiler sha printed beside every row below. Parked patch:
 **The lexing question this ticket asks is answered.** `string` is **`tkString_T`,
 a keyword token** (`paslexer.inc:166-167`), not `tkIdent` — so the `CaseEqual`
 arm the ticket points at could never have seen it, and the test is a token
-KIND. Note the 6-char table matches only `string` and `String`, so a scan wanting
-every spelling must test the token kind AND the ident name, which is what the
-parked patch does. **There is no defect behind that observation** — measured by
-frankh-c0, 2026-09-22: `string[20]`, `String[20]`, `STRING[20]` and `StRiNg[20]`
-all compile and run correctly, because the ident path resolves the other
-spellings case-insensitively. Real observation, nothing reachable behind it;
-`rejected/`, not a low prio, if anyone writes it up. `ShortString`/`WideString`/`UnicodeString`/`UTF8String`/
+KIND. Note the 6-char keyword table matches only `string` and `String`, so a scan
+wanting every spelling must test the token KIND and the ident NAME, which is
+what the parked patch does.
+
+**THERE IS NO DEFECT BEHIND THAT OBSERVATION, AND IT IS WORTH SAYING SO HERE SO
+NOBODY WRITES ONE UP.** Found by frankh-c0 and re-derived at `fda77c48b8ee`
+rather than transcribed, `var s: <decl>; s := 'ab'; WriteLn(s, ' ', Length(s))`,
+all nine rows building and printing `ab 2`:
+
+| declaration | | declaration | |
+| --- | --- | --- | --- |
+| `string[20]` | ab 2 | `string` | ab 2 |
+| `String[20]` | ab 2 | `STRING` | ab 2 |
+| `STRING[20]` | ab 2 | `StRiNg` | ab 2 |
+| `StRiNg[20]` | ab 2 | `AnsiString` / `ANSISTRING` | ab 2 |
+
+c0's four rows are the FROZEN `string[N]` spelling; the bare and `AnsiString`
+rows are added here because bare `string` is the MANAGED type and is the one
+this ticket turns on, so the frozen rows alone would not have covered it. The
+ident path resolves every non-keyword spelling case-insensitively, so the short
+table has **no observable consequence**. Real observation, nothing reachable
+behind it — `rejected/`, never a low prio, per the four-terminal-folders rule. `ShortString`/`WideString`/`UnicodeString`/`UTF8String`/
 `RawByteString`/`OleVariant` are ordinary identifiers and were all measured to
 need the bundle, as was `string[N]` — a frozen string still reaches the concat
 and write helpers, so there is no win in telling frozen from managed here.
