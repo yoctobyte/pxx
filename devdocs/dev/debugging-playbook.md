@@ -38722,6 +38722,18 @@ that this is not a list.** A property survives the next emitter; a completed lis
 is stale on the day someone adds one. It also left the failure inline, in
 capitals, with its date.
 
+**AND THE SAME DISEASE IN A HAZARD NOTE: NAMING ONE DIRECTION OF A
+TWO-DIRECTIONAL HAZARD READS AS COVERING THE HAZARD.** Offered by `frankuser`
+2026-09-22 about its own error, and handed here rather than kept, *"because the
+playbook reaches every seat and my memory reaches one."* The straddle note says
+`compiler/builtin/*.pas` is live source and **a live path AGREEING with the pin
+is the most dangerous state.** True — and it names the direction where the LIVE
+TREE drifts. It is silent on the pin falling behind, which is the same hazard
+running the other way, and that is the one that bit: the pinned `pylib.pas` was
+135 lines behind HEAD. **A one-direction note is a list of length one**, and it
+reads as the definition of the hazard for exactly the reason a two-name bullet
+reads as the definition of a set.
+
 ### AND A DOCUMENTED REFUSAL IS SCOPED TO ITS REASON, BUT IS READ AS SCOPED TO THE THING REFUSED
 
 The spill routine's comment **declines `EmitXtensaCall8ToCode`, correctly** —
@@ -39087,3 +39099,122 @@ filesystem, so the `srchash` should not have moved. **A retraction that names wh
 an instance cannot belong is worth more than the instance was** — and this is the
 second time in one evening that a seat's retraction improved a row this
 coordinator had already agreed to bank.
+
+## ATTRIBUTION BY NARRATIVE FIT — AND YOU ARE LEAST LIKELY TO RUN THE INSTRUMENT YOU HAVE BEEN RECOMMENDING
+
+**Self-reported by `frankuser` 2026-09-22, hours after it and this coordinator
+had banked the rule that `--author` cannot discriminate and
+`tools/whose_commit.sh` is the instrument that can.**
+
+It credited `838e8eb45` to `lekkerzeilen-7a`. The commit is **`frankZ`**'s. 7a
+had caught the PREVIOUS instance of the same class, so *"7a caught the same class
+twice"* was a **tidy story**, and **tidiness did the work a lookup should have
+done.** That is the structure-from-convenience root with a PERSON as the subject.
+
+**THE PART WORTH THE SECTION IS THE SECOND HALF: it had quoted the correct
+instrument three times that day** — telling seats that `--author` is a
+non-discriminator and `whose_commit.sh` is the answer — **and did not run it on
+the one attribution it was banking.** Recommending an instrument feels like
+having used it. **The seat most fluent in a check is the seat likeliest to skip
+it**, because fluency is stored as *knowing the answer* rather than as *having
+looked*, which is `frankb-8e`'s recall-versus-derivation finding from the same
+day with a tool in place of a code path.
+
+**Why it is worth correcting rather than shrugging at, and this is the reason to
+keep:** *"one seat caught this twice"* and *"three seats each caught it once"*
+are different facts about **how a class of defect gets found**. The first makes
+the fix depend on a particular seat being sharp; **a story about a vigilant seat
+is not reproducible and a criterion is.** So a misattribution is not only unfair,
+it quietly argues for the wrong remedy.
+
+**The correction cost one command.** History could not be rewritten — the pin's
+own body carries the wrong name permanently, and 2,945 files in `done/` cite
+shas — so it is recorded where a reader arrives instead.
+
+## AN INTERIM FROM A MIN-OF-N SWEEP IS NOT A SMALL VERSION OF THE ANSWER — AND ONE THAT SUPPORTS A *STOP* DECISION IS SELF-SEALING
+
+**Measured 2026-09-22, `franks-5b`, retracted by its author before anyone acted.**
+
+Round 1 of 3 gave base 63.46 s against 62.75 s, **~1.1%**, and that is what was
+reported — with the honest caveat that the sweep had not finished. The completed
+interleaved min-of-3:
+
+```
+base         63.46  65.14  62.93  -> min 62.93
+clsattr_off  62.75  62.11  60.35  -> min 60.35      2.58s = 4.1%
+```
+
+**Per-round diffs: 0.71, 3.03, 2.58. Round 1 was the outlier and round 1 was the
+one that travelled.** The rule that says min-of-N and never means exists for
+exactly this, and a single pair was quoted anyway. **An interim is not the answer
+with a wider error bar; it can point the other way.**
+
+**AND THE CONCLUSION IT WAS FEEDING IS WHAT MAKES IT DANGEROUS: "the ceiling here
+is ~1%, so do not build the table."** A stop decision **generates no future
+observation that could contradict it** — the table is never built, the lever
+never measured, and the row reads as settled forever. **That is the
+decays-toward-doing-nothing family arriving in a MEASUREMENT instead of in a
+warning**, and it is the third host for it in one day (a hazard note, a
+prohibition, now an interim). In its author's words: *"I would have killed a
+real, if modest, lever on one round of an interleaved sweep."*
+
+**Discharge: treat an interim that supports STOPPING as requiring the full sweep,
+even where an interim that supports CONTINUING would not** — the asymmetry is
+that only one of the two leaves evidence behind. And say **retracted**, not
+refined: 5b did, and the distinction matters because "refined" invites a reader
+to average the two.
+
+**The control that makes the 4.1% quotable ran too:** a combined
+`-dPXX_SCANCOUNT -dPXX_CLSATTR_OFF` build reports `clsattr_calls=0
+clsattr_visits=0` against 165 / 47,776,271 with the switch off — so *no
+difference* and *my off-switch never fired* are separated.
+
+### THE SECOND RETRACTION THE SAME HOUR: A SMALLER-THAN-EXPECTED RESULT EXPLAINED BY A STORY INSTEAD OF BY A RATIO
+
+**This section first carried a "durable half" that outlived the number: *the
+synthetic is parse-dominated and lekkerzeilen is not* (11.6 MB, 11,596 procs).
+5b retracted that too, and it was FALSE — refuted by a document 5b had read and
+cited the same morning.** It was caught one command before this entry was
+committed, by the retraction arriving first, not by any check here.
+
+`devdocs/perf/lekkerzeilen-build-time.md:843`: the `FindUClass` hash index ALONE
+was **38.72% of lekkerzeilen's build** — pin v414 88.789 s against v415
+54.410 s, min-of-5, outputs byte-identical, **reproduced independently by a
+second seat from a different harness, 1.8% apart.** That is a parser scan, on the
+real corpus, worth over a third of the build. **Parse scans DO dominate
+lekkerzeilen's build.**
+
+**THE REAL EXPLANATION IS MAGNITUDE AND IT NEEDED NO STORY:**
+
+```
+FindUClass          4.31e9 steps  -> 38.72%
+PyClsAttrWriteScan  4.78e7 visits ->  4.1%
+                    90.2x fewer      9.4x less time
+```
+
+**Same class, same corpus, same kind of fix. The small one is small because it is
+ninety times smaller.** The arithmetic was available throughout.
+
+**THE MECHANISM, in 5b's words: a result came in smaller than expected and the
+gap was explained with a structural story rather than checked against an existing
+measurement of the same corpus.** The story was coherent and built from real
+facts, **and it flattered the result** — an unexciting number becomes an
+interesting finding about the corpus, which is the direction to be suspicious of.
+
+**BOTH OF THE DAY'S RETRACTIONS FROM THIS SEAT ARE ONE SHAPE: a conclusion
+reported before the measurement that would have constrained it** — once from one
+round of three, once from a ratio never computed. **That is the promotable form,
+and it is cheaper to apply than either instance**: before explaining why your
+number is small, ask what OTHER number on the same corpus it should be compared
+against, and compute the ratio. If a comparable measurement exists, the ratio
+usually IS the explanation and no mechanism is required.
+
+**What stands is only what was measured:** two further whole-stream-scan
+instances (`PyClsAttrWriteScan`, `PyDynAttrEverAssigned`), missed by the earlier
+census because it filtered on loops starting at 0 and these start at 1; 165 calls
+and 47,776,271 visits on lekkerzeilen with `PyDynAttrEverAssigned` called zero
+times; 4.1% for removing the scan, with its control; and the one-line
+`if classW and instW then Break` worth **nothing at all** — 47,776,271 visits with
+and without it, bit for bit, because `classW` needs a write through the literal
+class name and that never co-occurs with an instance write in this program.
+**A measured-zero one-liner is not landed as dead code.**

@@ -614,6 +614,17 @@ perf issues have landed**, naming the main performance issues it finds.
 **THE TREE THAT PROFILE MUST SIT ON IS PIN v418** (`000425392`, binary sha256
 `fda77c48b8ee`, source tip `db6d1bddb`), **superseding v417 after 100 minutes.**
 
+**ATTRIBUTION NOTE, because the pin's own body is wrong and cannot be edited:**
+`000425392` says *"lekkerzeilen-7a found (838e8eb45)"*. `838e8eb45` is
+**`frankZ`** (`tools/whose_commit.sh`, rc=0, confirmed independently by its
+author). The chain was **`franks-5b` flagged its leak fixes were inert until a
+pin -> `frankZ` verified at the artefacts and wrote it up -> `frankuser` cut the
+pin**. 7a's catch is the EARLIER one, v416/v417. Recorded here rather than by
+rewriting history, which is unavailable (2,945 files in `done/` cite shas). It
+matters because *"one seat caught this twice"* and *"three seats each caught it
+once"* are different facts about **how this gets found**, and only the second
+argues for a criterion rather than for a person.
+
 **AND THE REASON v418 EXISTS IS A CRITERION THIS SECTION DID NOT HAVE: A PIN IS A
 BINARY *AND* A FROZEN COPY OF `builtin/**`, AND THE TWO HAVE SEPARATE STALENESS
 CLOCKS.** v417 closed the gap between origin and the pinned BINARY. The same gap
