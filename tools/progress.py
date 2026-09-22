@@ -2680,6 +2680,29 @@ pre code{background:none;padding:0}
                 f"the ticket look taken to everyone who opens it"
             )
 
+        # THE SIBLING CHECK BELOW WAS CONSIDERED AND IS DELIBERATELY NOT BUILT
+        # (frankh-c0, 2026-09-22). The obvious complement to FM-STATUS-DRIFT is
+        # "a ticket in a RANKED folder carrying a non-empty `owner:`", because
+        # that case really IS silent: no row here, and `ready`/`next` offer it
+        # while a human opening it reads a name and skips. It looks like the
+        # same defect one field over. It is not, and the population says so.
+        #
+        # Measured before building it: 115 of 609 ranked tickets carry a
+        # non-empty `owner:`; 23 of those sit in `backlog-*` with a real agent
+        # id (frankh 4, user 4, frankuser 3, franks 2, and a tail). EVERY ONE
+        # IS ATTRIBUTION, which CLAUDE.md settles by owner decree -- `owner:`
+        # is ATTRIBUTION, not a claim, and a parked ticket with an owner is
+        # free to take. So the guard would assert the opposite of the rule it
+        # was built to serve, and would do it to 23 correct tickets on its
+        # first outside run. The comment above already names that failure
+        # mode: flagging all 85 would bury the 3 that matter.
+        #
+        # Left here rather than in a logbook line because this is where the
+        # next person who has the idea will be standing. If you are about to
+        # add it: re-run the count first. What would change the answer is the
+        # population shifting -- `owner:` starting to mean a claim somewhere
+        # other than working/ -- not a fresh instance of someone forging one.
+        #
         # DUPLICATE-SLUG: one slug present in two status folders. The folder IS
         # the lock, so a stray copy in working/ is a phantom lock on a ticket that
         # may already be finished -- and it is indistinguishable from a real lock,
