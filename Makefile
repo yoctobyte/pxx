@@ -34091,6 +34091,21 @@ test-emit-obj: $(COMPILER)
 	@#     naming each section, and unanimity is the control: a single wrong
 	@#     addend is a minority vote rather than a shifted base.
 	PXX=./$(COMPILER) tools/reloc_resolve_check.py riscv32 test/reloc_resolve_probe.c
+	@#     aarch64, same executable oracle, and it needed one thing riscv32 did
+	@#     not: a pxx EXECUTABLE loads .data in TWO pieces (read-only at one
+	@#     base, writable at another 0x13290 away) and an OBJECT cannot say
+	@#     that, so the one-base-per-section vote split 265 to 7 and the mode
+	@#     refused. The object was never wrong -- a linker placing .data
+	@#     contiguously resolves all of it consistently. content_regions now
+	@#     locates each piece from the executable's own segments, which is
+	@#     independent of the relocation values under test.
+	@#     THE RUN ALSO PRINTS WHICH ARMS IT EXERCISED, because this probe
+	@#     drives ZERO movz/movk relocations: pxx resolves printf from its own
+	@#     crtl and emits no undefined symbol, so the headline count says
+	@#     nothing about the external-call arm. clang assembles the two
+	@#     instructions as an external oracle for the FIELD, and that row is
+	@#     the only evidence for that arm here.
+	PXX=./$(COMPILER) tools/reloc_resolve_check.py aarch64 test/reloc_resolve_probe.c
 	@#     xtensa is NOT here, and the reason is filed rather than routed past:
 	@#     bug-a-xtensa-cannot-lower-a-store-through-a-pointer-so-no-c-program-that-writes-through-a-parameter-compiles
 	rm -f $(TESTTMP)/test_emit_obj_x64.o

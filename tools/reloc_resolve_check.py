@@ -204,7 +204,132 @@ def exe_bytes(xe, xoff, va, n):
     return xe.b[start:start + n]
 
 
-def solve_bases(e, syms, xe, xoff, text):
+def _reloc_mask(e, sname, size):
+    """Byte positions in a section that a relocation writes. They are the ONLY
+    places the executable and the object are allowed to differ when the same
+    bytes are loaded at a known address, because the executable has the
+    resolved value baked in and the object has not."""
+    m = bytearray(size)
+    for r in e.relocs(sname):
+        o = r['off']
+        for i in range(o, min(o + 8, size)): m[i] = 1
+    return m
+
+
+def content_regions(e, xe):
+    """Where each of the object's PROGBITS sections actually landed, found from
+    the executable's own loadable segments and its section CONTENT.
+
+    THIS EXISTS BECAUSE A pxx EXECUTABLE SPLITS ONE .data ACROSS TWO SEGMENTS
+    AND AN OBJECT CANNOT. Measured 2026-09-22 on the first aarch64 object: the
+    executable loads .data[0x20:] read-only at 0x4c0000 and .data[0x00:0x20]
+    writable at 0x4d3270, so references into the SAME section resolve against
+    two bases 0x13290 apart. solve_bases's vote split 265 to 7 and the mode
+    refused -- correctly, and uninformatively. The OBJECT is fine: a linker
+    placing .data contiguously resolves every one of those sites consistently.
+    It is the executable that has a layout an object cannot express.
+
+    THE TWO BASES ARE ATTESTED SEPARATELY, AND NEITHER BY THE RELOCATIONS. The
+    danger in any multi-base model is choosing the base per site TO MAKE THE
+    SITE MATCH, because fitting always agrees. So:
+
+      the PRINCIPAL region is found by sliding the segment's bytes along the
+      section's and taking the offset with the fewest mismatches, over probe
+      positions where the SEGMENT byte is nonzero. This is only usable because
+      the separation is not marginal, and the margin is measured rather than
+      hoped for: aarch64 scored 2 mismatches of 512 at the right offset and
+      486 at the runner-up, x86-64 7 against 480. The rule demands <=10% at the
+      best and >=50% at the second, which those clear by an order of magnitude.
+
+      the PREFIX region -- section bytes before the principal region's start --
+      is attested by its base being EXACTLY the vaddr of a writable PT_LOAD,
+      which is a number in the program headers and not one this harness can
+      fit. It applies only when exactly one such segment is a candidate.
+
+    THE MATCH TOLERATES MISMATCHES, AND HAS TO. An exact compare found nothing
+    at all, which reads as "these layouts do not correspond" and is wrong.
+    Some .data words differ because the executable has resolved pointers where
+    the object has zeros; others differ because the executable's build-time
+    writer fills slots an object leaves for runtime initialisation. THE
+    CONTROL FOR THAT CLAIM IS x86-64, whose object links with GNU ld and whose
+    linked binary runs: it shows the same unrelocated differences (83 bytes in
+    the read-only region, 10 in the writable one), so they are normal and not
+    a missing relocation on aarch64. A known-good target is what separates
+    "this writer is incomplete" from "this comparison is looking at the wrong
+    thing", and nothing else available here does.
+
+    Returns {shndx: [(lo, hi, base), ...]}, most specific first."""
+    out = {}
+    b = bytes(xe.b)
+    phoff = rd(b, 0x20, 8) if xe.cls == 2 else rd(b, 0x1c, 4)
+    phent = rd(b, 0x36 if xe.cls == 2 else 0x2a, 2)
+    phnum = rd(b, 0x38 if xe.cls == 2 else 0x2c, 2)
+    segs = []
+    for i in range(phnum):
+        o = phoff + i * phent
+        if rd(b, o, 4) != 1: continue                       # PT_LOAD
+        if xe.cls == 2:
+            fl, off, va, fsz = (rd(b, o+4, 4), rd(b, o+8, 8),
+                                rd(b, o+16, 8), rd(b, o+32, 8))
+        else:
+            fl, off, va, fsz = (rd(b, o+24, 4), rd(b, o+4, 4),
+                                rd(b, o+8, 4), rd(b, o+16, 4))
+        if fsz: segs.append((off, va, fsz, fl))
+    for k, sh in enumerate(e.sh):
+        if sh['type'] != 1 or not (sh['flags'] & 0x2):      # PROGBITS + ALLOC
+            continue
+        # NOT the executable section. Its base already has an independent
+        # attestation -- a defined FUNC symbol matched BY NAME against the
+        # executable's map -- so a content search adds no evidence, and the
+        # search is quadratic: .text is 772 KB against a 512-position probe,
+        # which is 400M byte comparisons and took this function from under a
+        # second to over two minutes.
+        if sh['flags'] & 0x4:                               # SHF_EXECINSTR
+            continue
+        body = bytes(e.data(sh))
+        if not body: continue
+        best = None
+        for off, va, fsz, fl in segs:
+            seg = b[off:off+fsz]
+            if not seg or len(seg) > len(body): continue
+            probe = [j for j in range(len(seg)) if seg[j]]
+            if len(probe) < 32: continue        # too little signal to place it
+            if len(probe) > 512: probe = probe[::len(probe)//512][:512]
+            sc = sorted((sum(1 for j in probe if body[K+j] != seg[j]), K)
+                        for K in range(len(body) - len(seg) + 1))
+            if sc[0][0] > 0.10 * len(probe): continue
+            if len(sc) > 1 and sc[1][0] < 0.50 * len(probe): continue
+            cand = (len(seg), sc[0][1], va - sc[0][1], va, fsz)
+            if best is None or cand[0] > best[0]: best = cand
+        if best is None: continue
+        _, K, base, va, fsz = best
+        regs = [(K, K + fsz, base)]
+        if K > 0:
+            # The bytes before the principal region have to live somewhere, and
+            # in a pxx executable that is the writable segment. Accept it only
+            # if exactly one writable PT_LOAD can hold them: its vaddr is then
+            # the prefix's base, taken from the program headers rather than
+            # fitted to anything.
+            w = [sg for sg in segs
+                 if (sg[3] & 0x2) and sg[2] >= K and sg[1] != va]
+            if len(w) == 1:
+                regs.append((0, K, w[0][1]))
+        out[k] = sorted(regs, key=lambda r: r[1]-r[0])
+    return out
+
+
+def base_at(base_of, regions, shndx, off):
+    """The base a reference at `off` inside section `shndx` resolves against.
+    One region (or none recorded) is the ordinary case and behaves exactly as
+    the plain dict did."""
+    rs = (regions or {}).get(shndx)
+    if rs and len(rs) > 1:
+        for lo, hi, bs in rs:                                # most specific first
+            if lo <= off < hi: return bs
+    return base_of.get(shndx)
+
+
+def solve_bases(e, syms, xe, xoff, text, regions=None):
     """Where each of the object's sections landed in the executable, derived
     from the executable's own bytes rather than from anything pxx reports.
 
@@ -241,8 +366,16 @@ def solve_bases(e, syms, xe, xoff, text):
     base = {ti: tbase}
     for k, c in votes.items():
         top = c.most_common(2)
-        # A base carried by a bare majority is not a base; it is two layouts.
+        attested = {r[2] for r in (regions or {}).get(k, [])}
         if len(top) > 1 and top[1][1] > top[0][1] * 0.02:
+            # A split vote is two layouts -- which is a REFUSAL unless every
+            # value the vote produced is a base the executable's own segments
+            # attest by content. Then it is not two layouts, it is one section
+            # the executable loaded in two pieces, and content_regions already
+            # fixed which offsets belong to which piece.
+            if len(attested) > 1 and set(c) <= attested:
+                base[k] = max(regions[k], key=lambda r: r[1]-r[0])[2]
+                continue
             return None, votes
         base[k] = top[0][0]
     return base, votes
@@ -287,7 +420,23 @@ def runtime_witness(exe, runner, e, syms):
     The probe prints &g and msg. Subtracting the OBJECT's own symbol values
     from the addresses the program printed yields a base that no relocation
     arithmetic here produced, so a uniform shift becomes a mismatch.
-    (frankuser, 2026-09-22.)"""
+    (frankuser, 2026-09-22.)
+
+    A FIFTH CONTROL WAS PROPOSED AND IS REDUNDANT -- MEASURED, NOT ARGUED.
+    The symmetric case is an object symbol whose st_value is wrong: that moves
+    the WITNESS rather than the vote, where the uniform-shift control moves the
+    vote rather than the witness. Measured 2026-09-22 on riscv32 by bumping
+    g.st_value 0x860c -> 0x8610 in a copy of the object: the harness already
+    exits 1, with `BROKEN -- no runtime witness (two symbols in .bss imply
+    different bases ['0x81202b8', '0x81202b4'])`. It is caught by a guard
+    NEITHER of us predicted -- not the vote-versus-witness comparison, but the
+    witness's own internal consistency, because .bss holds two witnessed
+    symbols and a per-symbol error makes them disagree with EACH OTHER before
+    anything is compared to the vote. Note what that implies and what would
+    retire this paragraph: the cover is a property of the PROBE, not of the
+    harness. It holds only while some section carries two or more witnessed
+    symbols. Add the fifth control if the probe is ever reduced to one witness
+    per section -- and re-measure rather than trusting this note."""
     cmd = ([runner] if runner else []) + [exe]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -343,19 +492,20 @@ def alloc_sections(e):
     return out
 
 
-def apply_relocs(e, secname, secdata, base_of, sec_va, syms, unhandled):
+def apply_relocs(e, secname, secdata, base_of, sec_va, syms, unhandled,
+                 regions=None):
     for r in e.relocs(secname):
-        _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled)
+        _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions)
 
 
-def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled):
+def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions=None):
     """Patch `secdata` in place. Arithmetic straight from each psABI.
 
     An IN-PLACE addend (SHT_REL) is read out of the bytes the relocation
     covers, which is what makes i386 different from x86-64 rather than merely
     smaller."""
     s = syms[r['sym']]
-    b_ = base_of.get(s['shndx'])
+    b_ = base_at(base_of, regions, s['shndx'], s['value'] + (r['addend'] or 0))
     if b_ is None:
         # SHN_UNDEF. A LINKER'S ONLY CONTRIBUTION HERE IS CHOOSING THE NUMBER,
         # so the harness chooses it instead and checks the bytes encode THAT.
@@ -400,6 +550,19 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled):
         # cannot see, which is why this harness exists.
         if r['type'] == 257:
             struct.pack_into('<Q', secdata, r['off'], (S + A) & (2**64-1))
+        elif r['type'] == 258:                   # R_AARCH64_ABS32
+            # FOUR BYTES ON A 64-BIT TARGET, and writing eight here would
+            # silently destroy the branch that follows the literal. pxx's
+            # aarch64 backend materialises a .bss address with `ldr w0,[pc+8]`
+            # over a 4-byte literal, so this is the COMMONEST relocation in an
+            # aarch64 object (1077 of 1350 in the probe) and it was not in the
+            # first version of this arm, which was written from the psABI
+            # before the writer existed and expected instruction fields.
+            v = S + A
+            if v >= 2**32:
+                unhandled['aarch64:ABS32-overflow'] = \
+                    unhandled.get('aarch64:ABS32-overflow', 0) + 1
+            struct.pack_into('<I', secdata, r['off'], v & 0xffffffff)
         elif r['type'] in (263, 264, 265, 266):
             shift = {263: 0, 264: 16, 265: 32, 266: 48}[r['type']]
             insn = struct.unpack_from('<I', secdata, r['off'])[0]
@@ -418,7 +581,65 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled):
         unhandled[f'machine{m}:{r["type"]}'] = unhandled.get(f'machine{m}:{r["type"]}', 0) + 1
 
 
-def uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname):
+def clang_movw_oracle():
+    """An EXTERNAL check on the one piece of arithmetic nothing else reaches.
+
+    clang cannot EMIT R_AARCH64_MOVW_UABS_G0_NC -- it materialises an address
+    with adrp/add and a CALL26, measured on this box with clang 21.1.8 -- so it
+    is no oracle for whether pxx should use MOVW at all. It CAN assemble the
+    instruction, and that is a different and sufficient question: given a value,
+    which bits of the instruction word does it go in? That is the half of the
+    MOVW relocation this harness computes from one reading of the psABI, and
+    the ld calibration does not touch it, because ld here has no aarch64
+    emulation.
+
+    It asks clang for `movz x16,#0x1234` and `movk x16,#0x5678,lsl #16`, and
+    for the two ZERO-immediate forms beside them, then applies this harness's
+    own MOVW arithmetic to the zero forms and requires the results to be
+    clang's non-zero words BYTE FOR BYTE. A value in the wrong field, a wrong
+    shift, or a clobbered register number all fail it.
+
+    A SECOND THING FALLS OUT AND IT IS WORTH THE LINE: clang's encoding of
+    `movz x16,#0` is 0xd2800010 and of `movk x16,#0,lsl #16` is 0xf2a00010,
+    which are the exact literals EmitExternalCallA64 emits by hand in
+    symtab.inc. The backend's hand-written encodings are confirmed by an
+    external assembler, which no test here did before.
+
+    Returns (ok, detail) or (None, why) when clang cannot target aarch64."""
+    import shutil
+    cc = shutil.which('clang') or shutil.which('clang-21')
+    if not cc: return None, 'no clang on this box'
+    d = tempfile.mkdtemp(prefix='movwchk-')
+    src = os.path.join(d, 'm.s'); obj = os.path.join(d, 'm.o')
+    open(src, 'w').write('movz x16, #0x1234\n'
+                         'movk x16, #0x5678, lsl #16\n'
+                         'movz x16, #0\n'
+                         'movk x16, #0, lsl #16\n')
+    r = subprocess.run([cc, '--target=aarch64-linux-gnu', '-c', src, '-o', obj],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None, f'clang cannot target aarch64 here: {r.stderr.strip()[:60]}'
+    e = Elf(obj); b = bytes(e.data(e.sec('.text')))
+    if len(b) < 16: return None, 'clang emitted an unexpected .text'
+    w = [struct.unpack_from('<I', b, i)[0] for i in range(0, 16, 4)]
+    V = 0x56781234
+    rows = []
+    for insn, shift, want in ((w[2], 0, w[0]), (w[3], 16, w[1])):
+        got = (insn & ~(0xffff << 5)) | (((V >> shift) & 0xffff) << 5)
+        rows.append((shift, got, want))
+    ok = all(g == wv for _, g, wv in rows)
+    detail = '  '.join(f'G{ "0" if sh==0 else "1" }:{g:#010x}vs{wv:#010x}'
+                       for sh, g, wv in rows)
+    pxx_movz, pxx_movk = 0xd2800010, 0xf2a00010
+    same = (w[2] == pxx_movz and w[3] == pxx_movk)
+    return ok, (detail + ('  [and clang agrees with EmitExternalCallA64\'s own '
+                          'hand-written movz/movk words]' if same else
+                          '  [NOTE: clang\'s zero forms differ from the '
+                          'literals in symtab.inc]'))
+
+
+def uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname,
+                          regions=None):
     """Prove the uniform-offset hole is real AND that the witness closes it."""
     from collections import Counter
     ti = e.sh.index(text)
@@ -444,7 +665,7 @@ def uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname):
     for r in e.relocs('text'):
         s = syms[r['sym']]
         rr = dict(r, addend=(r['addend'] or 0) + N) if s['shndx'] == target else r
-        _apply_one(e, rr, tb2, shifted, base[ti], syms, unh)
+        _apply_one(e, rr, tb2, shifted, base[ti], syms, unh, regions)
     bytes_blind = bytes(tb2) == et
     witness_sees = shifted[target] != wit[target]
     nm = e.sh[target]['sname']
@@ -462,7 +683,7 @@ def uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname):
     return True
 
 
-def control_suite(e, text, base, addrs, syms, theirs, tname):
+def control_suite(e, text, base, addrs, syms, theirs, tname, regions=None):
     """POSITIVE CONTROLS. The AGREE above is a comparison; these show it can
     FAIL, which is a separate claim and the one a guard most often cannot make.
 
@@ -477,6 +698,20 @@ def control_suite(e, text, base, addrs, syms, theirs, tname):
     test."""
     rs = [r for r in e.relocs('text')
           if base.get(syms[r['sym']]['shndx']) is not None]
+    # THE BASELINE MUST AGREE BEFORE A PERTURBATION MEANS ANYTHING. Measured
+    # 2026-09-22 on the first aarch64 run: these three controls were passed a
+    # single base per section while the executable loads .data in two pieces,
+    # so the UNPERTURBED resolution already differed and every control
+    # reddened no matter what it did -- "3 of 3 controls reddened it" over a
+    # comparison that could not have been green. A control that cannot come
+    # out STILL AGREES is not a control, and the assert is one line.
+    tb0 = e.data(text); unh0 = {}
+    for r in e.relocs('text'):
+        _apply_one(e, r, tb0, base, addrs['.text'], syms, unh0, regions)
+    if bytes(tb0) != theirs:
+        print('   CONTROLS: BROKEN -- the UNPERTURBED resolution already '
+              'differs, so every perturbation reddens vacuously')
+        return False
     if not rs:
         print(f'   CONTROLS: BROKEN -- no resolvable relocation to perturb')
         return False
@@ -505,7 +740,7 @@ def control_suite(e, text, base, addrs, syms, theirs, tname):
         unh = {}
         for r in e.relocs('text'):
             rr = mutate(r) if (r['off'] == victim['off'] and r['sym'] == victim['sym']) else r
-            _apply_one(e, rr, tb2, base, addrs['.text'], syms, unh)
+            _apply_one(e, rr, tb2, base, addrs['.text'], syms, unh, regions)
         red = bytes(tb2) != theirs
         results.append((label, red))
     bad = [l for l, red in results if not red]
@@ -590,7 +825,8 @@ def main():
         if xoff is None:
             print(f'reloc-resolve[{tname}]: SKIP -- no loadable segment found in the executable')
             return 0
-        base, votes = solve_bases(e, syms, xe, xoff, text)
+        regions = content_regions(e, xe)
+        base, votes = solve_bases(e, syms, xe, xoff, text, regions)
         if base is None:
             print(f'reloc-resolve[{tname}]: SKIP -- the object and the executable do '
                   f'not share a layout here, so the executable cannot be the oracle')
@@ -616,6 +852,12 @@ def main():
                 mark = f'WITNESS SAYS {w:#x}'
             print(f'   base {e.sh[k]["sname"]:<14} {top[0][0]:#x}  '
                   f'{top[0][1]} votes{extra}  [{mark}]')
+            if len(regions.get(k, [])) > 1:
+                print('       ' + e.sh[k]['sname'] + ' is loaded in '
+                      f'{len(regions[k])} pieces by this executable, each '
+                      'located by CONTENT: ' + ', '.join(
+                          f'[{lo:#x},{hi:#x}) -> {bs:#x}'
+                          for lo, hi, bs in regions[k]))
         bad = [e.sh[k]['sname'] for k, v in wit.items()
                if k in base and base[k] != v]
         if bad:
@@ -630,7 +872,8 @@ def main():
                   f'rest on the vote alone and a uniform shift there is invisible')
         unh = {}
         tb = e.data(text)
-        apply_relocs(e, 'text', tb, base, base[e.sh.index(text)], syms, unh)
+        apply_relocs(e, 'text', tb, base, base[e.sh.index(text)], syms, unh,
+                     regions)
         undef = unh.pop('_undef', 0); synth = unh.pop('_synth', 0)
         if unh:
             print(f'reloc-resolve[{tname}]: BROKEN -- unhandled relocation types {unh}')
@@ -644,7 +887,7 @@ def main():
                 print(f'   off={i:#x} harness={tb[i]:02x} exe={theirs[i]:02x}')
             return 1
         if not control_suite(e, text, base, {'.text': base[e.sh.index(text)]},
-                             syms, theirs, tname):
+                             syms, theirs, tname, regions):
             return 1
         # THE FOURTH CONTROL, and it is the one the other three cannot make:
         # shift EVERY relocation naming one section by the same amount. The
@@ -653,8 +896,32 @@ def main():
         # asserts BOTH halves -- that the byte comparison misses it, and that
         # the witness catches it -- because either half alone would let the
         # control pass for the wrong reason.
-        if not uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname):
+        if not uniform_shift_control(e, text, base, wit, syms, xe, xoff,
+                                     tname, regions):
             return 1
+        # WHICH ARMS ACTUALLY RAN. A verdict over 1355 relocations says nothing
+        # about an arm none of them exercised, and the probe decides that, not
+        # the target: measured 2026-09-22, this probe drives ZERO of aarch64's
+        # movz/movk relocations, because pxx resolves printf from its own crtl
+        # and emits no undefined symbol at all. Printing the census is what
+        # stops the headline standing in for coverage it does not have.
+        from collections import Counter as _C
+        cen = _C(r['type'] for r in e.relocs('text'))
+        print('   applied: ' + ', '.join(f'type {t} x{n}'
+                                         for t, n in sorted(cen.items())))
+        if e.machine == 183:
+            ok, detail = clang_movw_oracle()
+            if ok is None:
+                print(f'   movw field oracle: SKIP -- {detail}')
+            elif ok:
+                print(f'   movw field oracle: clang AGREES -- {detail}')
+            else:
+                print(f'   movw field oracle: clang DISAGREES -- {detail}')
+                return 1
+            if not any(t in (263, 264, 265, 266) for t in cen):
+                print('   NOTE: this probe applied NO movz/movk relocation, so '
+                      'the run above says nothing about that arm; the clang '
+                      'row is the only evidence for it here')
         print(f'reloc-resolve[{tname}]: AGREE with pxx\'s own executable on {len(tb)} '
               f'bytes, {nrel} relocations; 4 of 4 controls reddened it, and every '
               f'section base has an independent runtime witness')

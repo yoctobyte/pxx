@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankC
 owner: frankb-8e
 blocked-by: []
-summary: "arm32 and aarch64 still have no object writer; i386 landed separately and x86-64 before it. Both are DIVERGENT targets on the C-ABI question, so each one is a second and third oracle for a ruling the i386 measurement has already made once -- worth having, not urgent. THE aarch64 ABI GATE IS CLEARED, 2026-09-22: it asked that the spill be made AAPCS or shown already to be, and it already is. A C function on aarch64 takes EmitParamSpillsForTarget's genuine AAPCS64 arm -- measured against clang as an external oracle, not read: for f(int,double,int,double) pxx's prologue reads w0/d0/w1/d1, byte-for-byte clang's placement, where positional would be w0/x1/w2/x3. Five register-passed signatures agree, including reordered, float and mixed; tools/aarch64_cabi_prologue_probe.sh is the instrument and its positive control is to disable the cdecl gate in cparser.inc, which makes pxx emit exactly w0/x1/w2/x3 and the probe report DIFFER. STILL UNSETTLED and NOT claimed: stack-passed arguments (an offset question the register probe skips by design) and by-value AGGREGATES -- both need the writer plus a gcc-compiled caller for the VALUE question, so the falsifying test remains the reason to build it, but a PLACEMENT question in that territory may not: the neighbouring aggregate-hidden-dest ticket was rejected on 2026-09-22 with no linking at all, by declaring the callee `extern` to route it down the arm and differencing the emitted code. Expect the shape to follow i386's, not the ESP writer's: check how each backend reaches an external before assuming."
+summary: "THE aarch64 OBJECT WRITER IS LANDED AND VERIFIED, 2026-09-22; arm32 is what remains. aarch64 shares writeELFRelX64General's body -- e_machine, the absolute-pointer type and .rela.text construction are the only differences, so the block was lifted into ObjBuildTextRelocsX64/A64 rather than cloned a third time, with byte-identity of four saved x86-64 and i386 objects as the control. THE PSABI WAS THE WRONG PLACE TO DESIGN FROM: this backend materialises addresses from an INLINE LITERAL POOL, so three of the four relocation sites are DATA WORDS in .text (ABS64 for an 8-byte literal, ABS32 for the 4-byte `ldr w0,[pc+8]` form) and only the external call is an instruction field, where one site takes TWO relocations (MOVW_UABS_G0_NC + G1_NC). Grepping ir_codegen_aarch64.inc for the fixup arrays returns nothing -- it reaches them through the shared emitters in emit.inc -- so the sites are invisible at the file with the target name on it. Verified by tools/reloc_resolve_check.py: AGREE with pxx's own executable on 772256 bytes and 1355 relocations, 4 of 4 controls reddening it, both section bases carrying a runtime witness. --function-sections is REFUSED on aarch64 (it needs CALL26) rather than half-served. KNOWN GAP, stated because the count does not show it: the probe applies ZERO movz/movk relocations, since pxx resolves printf from its own crtl and emits no undefined symbol, so the external-call arm rests on the clang field oracle alone and wants an extern-driving probe."
 ---
 
 # Object output for arm32 and aarch64
@@ -275,3 +275,96 @@ this box does not have.
 ## Umbrella
 
 [[meta-a-pxx-produces-linkable-code]]
+
+
+## The aarch64 writer, landed 2026-09-22 (frankb-8e)
+
+`ObjBuildTextRelocsA64` in `compiler/elfwriter.inc`, dispatched from
+`writeELFRelX64General`, which now serves both ELF64 machines.
+
+**The design banked on this ticket was written from the psABI and was wrong
+about three of the four sites.** It expected instruction-field relocations
+throughout. What the backend actually emits, measured:
+
+| emitter | site | relocation |
+| --- | --- | --- |
+| `EmitDataRef` | 8-byte literal in `.text` | `ABS64` (257) vs `.data` + DataOff |
+| `EmitGlobRef` | 4-byte literal in `.text` | `ABS32` (258) vs `.data`/`.bss` |
+| `EmitExternalCallA64` | `movz`+`movk` | `MOVW_UABS_G0_NC`/`G1_NC` vs `.data` |
+| `ProcAddrFix` | 8-byte literal in `.text` | `ABS64` (257) vs `.text` |
+
+`EmitLoadVarAddrA64` emits `ldr w0,[pc+8]` / `b .+8` / a 4-byte word, so the
+commonest relocation in an aarch64 object is a **data word**, not a field:
+1077 of 1355 in the probe. `ABS32` on a 64-bit target is what `ldr w0` asks
+for and carries the overflow check that says so.
+
+**Why grepping the backend found nothing.** `ir_codegen_aarch64.inc` mentions
+none of `Fixups`, `GlobFix`, `DynCall`; it reaches them through the shared
+emitters in `emit.inc`. A census of the file with the target's name on it
+reports zero and is correct about the wrong set.
+
+### One body, not a third copy
+
+Everything but the relocation construction is ELF64 and identical for both
+machines. The block was lifted into `ObjBuildTextRelocsX64` unchanged and an
+`A64` sibling added beside it; `machine` and `rAbs64` carry the rest. i386
+stays separate because it is a different FORMAT, which is the case that
+genuinely needs its own writer.
+
+**The control is byte-identity**, which is the reason to do it this way: four
+saved objects (the reloc probe and a `--function-sections` case, x86-64 and
+i386) are byte-for-byte what they were before the lift.
+
+### How it is verified, and what is NOT verified
+
+`tools/reloc_resolve_check.py aarch64` — AGREE with pxx's own executable on
+772256 bytes, 1355 relocations, 4 of 4 controls reddening it, both section
+bases carrying an independent runtime witness.
+
+Two things had to be built for that, and both were findings:
+
+**A pxx executable loads one `.data` in two pieces and an object cannot say
+so.** Read-only at `0x4c0000` carrying `.data[0x20:]`, writable at `0x4d3270`
+carrying `.data[0x00:0x20]` — two bases `0x13290` apart. The single-base vote
+split 265 to 7 and refused, correctly and uninformatively. `content_regions`
+locates each piece from the executable's own segments: the large one by
+sliding its bytes against the section's (2 mismatches of 512 at the right
+offset against 486 at the runner-up — the margin is measured, not hoped for),
+the prefix by its base being EXACTLY a writable `PT_LOAD` vaddr. Neither
+attestation can be influenced by the relocation values under test.
+
+**The match has to tolerate mismatches, and x86-64 is what proves that.** An
+exact compare found nothing, which reads as "these layouts do not correspond"
+and is wrong: some words differ because the executable has resolved pointers
+where the object has zeros, others because its build-time writer fills slots
+an object leaves for runtime init. x86-64 — whose object links with GNU ld and
+whose linked binary runs — shows the same differences (83 bytes and 10). A
+known-good target is the only thing here that separates *this writer is
+incomplete* from *this comparison is looking at the wrong thing*.
+
+**The three perturbation controls were vacuous on the first aarch64 run** and
+printed `3 of 3 controls reddened it`. They resolved without the regions, so
+the UNPERTURBED comparison already differed and every perturbation reddened no
+matter what it did. `control_suite` now asserts a green baseline first. A
+control that cannot come out `STILL AGREES` is not a control.
+
+### The gap, stated because the headline hides it
+
+**The probe applies ZERO `movz`/`movk` relocations.** pxx resolves `printf`
+from its own crtl and emits no undefined symbol, so `1355 relocations` covers
+only `ABS64` and `ABS32`. The run now prints its own type census and says so.
+
+The external-call arm therefore rests on ONE row: clang assembles
+`movz x16,#0x1234` / `movk x16,#0x5678,lsl #16` and the harness's field
+arithmetic reproduces both words exactly. That is an oracle for the FIELD, not
+for which value belongs in it. A second finding fell out of it: clang's
+`movz x16,#0` is `0xd2800010` and `movk x16,#0,lsl #16` is `0xf2a00010`, the
+exact literals `EmitExternalCallA64` writes by hand — the backend's
+hand-written encodings confirmed by an external assembler, which nothing here
+did before.
+
+**Next, and it is small:** a probe whose externs are real libc functions pxx
+does not implement, so the arm is exercised end to end rather than by
+assertion. `extern int some_undefined_helper(int)` already produces 2 G0 + 2
+G1 relocations and 2 UND symbols on aarch64 — the shape works, it just is not
+wired into a checked run.

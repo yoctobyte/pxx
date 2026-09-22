@@ -8755,7 +8755,8 @@ function TargetHasObjectWriter(arch: Integer): Boolean;
 begin
   TargetHasObjectWriter :=
     (arch = TARGET_X86_64) or (arch = TARGET_I386) or
-    (arch = TARGET_XTENSA) or (arch = TARGET_RISCV32);
+    (arch = TARGET_XTENSA) or (arch = TARGET_RISCV32) or
+    (arch = TARGET_AARCH64);
 end;
 
 function EmitObjTargetList: AnsiString;

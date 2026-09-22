@@ -36405,3 +36405,86 @@ warning label.
 number; here two numbers over different sets were treated as commensurable.
 Both are **the population going unstated beside the figure**, and in both cases
 the arithmetic was flawless.
+## A POSITIVE CONTROL CAN FAIL VACUOUSLY, AND THEN IT REPORTS 3 OF 3
+
+The familiar failure is a guard that cannot fail and prints PASS. This is its
+mirror and it is harder to see, because the output looks like the control
+doing its job: **a positive control asserts that a perturbation turns the
+comparison RED, so if the comparison was ALREADY red before the perturbation,
+every control passes and the suite reports full marks.**
+
+Measured 2026-09-22 (frankb-8e), `tools/reloc_resolve_check.py`, first run of
+the aarch64 arm. Three controls — perturb an addend, an offset, a relocation
+type — printed `red (good)` three times and the suite printed
+`3 of 3 controls reddened it`. None of them had done anything. The controls
+resolved the object with one base per section while the executable loads
+`.data` in two pieces, so the UNPERTURBED resolution already differed in seven
+places, and `bytes(tb2) != theirs` was true before any perturbation was
+applied. Deleting the perturbation entirely would have produced the same three
+green rows.
+
+**The tell is not available from the control's own output, by construction** —
+a vacuous `red (good)` is spelled identically to a real one. What made it
+visible was a separate bug hunt in the same file; nothing in the suite could
+have raised it.
+
+**The discharge is one assert and it is cheap: resolve WITHOUT any
+perturbation and require the comparison to be GREEN before running the
+suite.** A positive control needs a negative baseline the same way a negative
+control needs a positive one, and only one of those two halves is folklore.
+
+  tb0 = fresh_copy(); apply_all_unperturbed(tb0)
+  if tb0 != oracle: return BROKEN, 'baseline already differs'
+
+**The general form, which is why this is not one harness's bug:** whenever a
+control is *"do X and require failure"*, ask **"would it still fail if X were
+removed?"** That is the same question as *"would this row still pass if it
+were the only thing in the run?"* from the contamination family, asked from
+the other end — there a passing step supplies what a failing one needs; here
+the failing baseline supplies the failure the control was going to claim
+credit for.
+
+**Not promoted to CLAUDE.md.** It is one subsystem, on one day, and the
+guard-family rules there already carry the positive-control requirement; this
+is the second half of one of them and it earns a line there only if a second
+independent subsystem produces it.
+
+## A CENSUS OF THE FILE WITH THE TARGET'S NAME ON IT ANSWERS ABOUT THE WRONG SET
+
+Third instance of the assumed-set shape, in a new place: not a stale tree, not
+a wrong version, but a search scoped to the file whose NAME matches the
+subject, when the subject is reached from somewhere else.
+
+Measured 2026-09-22 (frankb-8e), designing the aarch64 object writer.
+`grep -c` over `compiler/ir_codegen_aarch64.inc` for every relocation fixup
+array — `FixCount`, `GlobFixCount`, `DynCallCount`, `DataPtrFixCount`,
+`MethodFixCount` — returns **zero for all of them**, in a 5624-line file, and
+reads as *this backend records no relocations*. It records four kinds. It
+reaches them through the SHARED emitters in `emit.inc` (`EmitDataRef`,
+`EmitGlobRef`) and through `symtab.inc` (`EmitExternalCallA64`), so not one of
+the call sites is spelled in the file named for the target.
+
+The census was correct and the set was wrong, and the wrongness is invisible
+because a zero over a large file reads as a thorough search. **The same query
+run one layer up — over `compiler/*.inc` — finds the recorders immediately.**
+
+**And the design that census fed was wrong in a way the psABI could not
+correct.** The relocation design banked on the ticket expected
+instruction-field relocations throughout, because that is what the AArch64
+psABI is mostly about. Three of the four sites are DATA WORDS in `.text`: the
+backend materialises an address from an inline literal pool
+(`ldr w0,[pc+8]` / `b .+8` / the word), so `R_AARCH64_ABS32` over a 4-byte
+literal is the commonest relocation in an aarch64 object — 1077 of 1355 — and
+was not in the first version of the harness's applier at all.
+
+**Design from the EMITTER, not from the specification.** The psABI says what
+each relocation means; only the emitter says which ones this compiler needs.
+Read `EmitLoadVarAddrA64` before reading the ABI document — it is twelve lines
+and it settles the question the document cannot.
+
+**Not promoted to CLAUDE.md.** The file already carries the general rule
+("print the set your instrument enumerates and check the subject is IN it")
+and this is a third instance of it rather than a new mechanism. It is banked
+here because the *specific* form — scoping a grep by filename when the
+behaviour is in shared code — is worth recognising by shape, and because the
+design half is a separate, useful habit.

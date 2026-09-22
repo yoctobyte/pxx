@@ -3051,6 +3051,13 @@ begin
       else
         writeELFRelX64General(outFile);
     end
+    else if TargetArch = TARGET_AARCH64 then
+      { aarch64 is a HOSTED ELF64 object and shares writeELFRelX64General's
+        body: same class, same section layout, same symbol planning. Only
+        e_machine, the absolute-pointer relocation type, and the .rela.text
+        construction differ, and the writer takes those three from TargetArch.
+        feature-a-object-output-for-arm32-and-aarch64 }
+      writeELFRelX64General(outFile)
     else if TargetArch = TARGET_I386 then
       { i386 is a HOSTED object like x86-64's, not an ESP firmware image: it
         exports the C-convention surface and reaches externals through a GOT

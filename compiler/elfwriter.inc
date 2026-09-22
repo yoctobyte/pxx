@@ -4658,105 +4658,22 @@ begin
             ': the address of a routine with no body was taken');
 end;
 
-procedure writeELFRelX64General(const outPath: AnsiString);
-var
-  i: Integer;
-  numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
-  numLocalData, numExportData, numImportData, impSym0, dsym: Integer;
-  textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
-  shstrOff, shOff, strSize: Integer;
-  relaTextCount, relaDataCount: Integer;
-  initArrOff, relaInitArrOff, finiArrOff, relaFiniArrOff: Integer;
-  initArrSec, finiArrSec, numSects, shstrSize: Integer;
-  initArrNm, relaInitArrNm, finiArrNm, relaFiniArrNm: Integer;
-  hasInitArr, hasFiniArr: Boolean;
-    nThunkSym, initThunkSym, finiThunkSym: Integer;
-    thunkInitStrOff, thunkFiniStrOff, thunkNext: Integer;
-  nSecSym, c, extraRelaOff, extraRelaCount: Integer;
-{$ifdef FPC}
-  f: File;
-{$else}
-  f: Integer;
-{$endif}
+procedure ObjBuildTextRelocsX64(firstGlobal, extSym0, impSym0,
+                                numExportProcs: Integer);
+{ Everything that goes into .rela.text for an x86-64 object, lifted out of
+  writeELFRelX64General UNCHANGED so the aarch64 sibling below it could be
+  added without a third copy of the ELF64 scaffolding.
+
+  THE SPLIT IS WHERE THE ARCHITECTURE ACTUALLY IS. Everything the caller still
+  does -- symbol planning, the string table, the section headers, the file
+  layout -- is ELF64 and is identical for both machines; only the relocation
+  TYPES and the SHAPE of each site differ, and that is exactly this procedure.
+  The control for the lift is byte-identity, which is available here and is
+  the reason to do it this way: the objects this produces must be the files
+  they were before the refactor, and four saved ones (the reloc probe and a
+  function-sections case, x86-64 and i386) are compared to check it. }
+var i, dsym: Integer;
 begin
-  { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
-    here with TargetArch = TARGET_X86_64, and the refusal a user sees is the
-    TargetHasObjectWriter one beside that dispatch. It still has to name the
-    right set, because the next reader of this line takes it for a statement of
-    fact -- and it was one: it said "i386 [...] ha[s] no object writer yet"
-    while writeELFRel386General had existed for a day. Enumerate, do not
-    assert. }
-  if TargetArch <> TARGET_X86_64 then
-    ErrorNoPos('--emit-obj: internal -- the general ELF64 object writer was '
-        + 'reached with --target=' + TargetArchName(TargetArch)
-        + ', and it is x86-64 only. Targets with a writer of any kind: '
-        + EmitObjTargetList + '; each of the others reaches its own, not this '
-        + 'one, so arriving here is a dispatch bug rather than a missing '
-        + 'writer.');
-
-  ObjCheckProcAddrBodies;
-  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs,
-                       numLocalData, numExportData, numImportData);
-
-  { null + 3 section syms + local procs + local data | exported procs +
-    exported data + external funcs + imported data. extSym0 moves by
-    numExportData and impSym0 is new; every relocation that names a symbol
-    index is built from these three. }
-  { --function-sections: the init and fini thunks get LOCAL FUNC symbols of
-    their own, so .rela.init_array/.rela.fini_array can name THEM with addend 0
-    instead of `.text` plus a baked offset. They were the last two code
-    references in the object still bound to the section symbol, and they cannot
-    be left that way for per-function sections: each thunk falls INSIDE the
-    range of whatever proc precedes it -- a different proc in every program --
-    so a `.text + off` addend is a promise about a layout the linker is about
-    to change.
-
-    Gated, so the DEFAULT object is byte-identical: without the flag no symbol
-    is added, firstGlobal does not move, and every index built from it is what
-    it was. }
-  nThunkSym := 0;
-  if FunctionSections then
-  begin
-    if InitThunkOff >= 0 then Inc(nThunkSym);
-    if FiniThunkOff >= 0 then Inc(nThunkSym);
-  end;
-  initThunkSym := -1; finiThunkSym := -1;
-  thunkInitStrOff := 0; thunkFiniStrOff := 0;
-  if nThunkSym > 0 then
-  begin
-    thunkNext := 4 + numLocalProcs + numLocalData;
-    if InitThunkOff >= 0 then begin initThunkSym := thunkNext; Inc(thunkNext); end;
-    if FiniThunkOff >= 0 then finiThunkSym := thunkNext;
-    { The two names go at the END of .strtab, not beside their symbols. A string
-      table is a blob addressed by explicit per-symbol offsets, so the order is
-      free -- and appending is the only placement whose offset is knowable here,
-      because ObjPlanHostedSymbols returns a TOTAL and not a running position.
-      The SYMBOLS still sit between the local data and the first global, which
-      is the part firstGlobal cares about. }
-    if InitThunkOff >= 0 then
-    begin
-      thunkInitStrOff := strSize;
-      strSize := strSize + Length(OBJ_INIT_THUNK_NAME) + 1;
-    end;
-    if FiniThunkOff >= 0 then
-    begin
-      thunkFiniStrOff := strSize;
-      strSize := strSize + Length(OBJ_FINI_THUNK_NAME) + 1;
-    end;
-  end;
-
-  { --function-sections: one STT_SECTION symbol per cut after the head (whose
-    section symbol is the fixed symbol 1), LOCAL, after the thunk symbols. }
-  ObjPlanCuts(4 + numLocalProcs + numLocalData + nThunkSym);
-  nSecSym := ObjCutCount - 1;
-
-  firstGlobal := 4 + numLocalProcs + numLocalData + nThunkSym + nSecSym;
-  extSym0 := firstGlobal + numExportProcs + numExportData;
-  impSym0 := extSym0 + ExternalCount;
-  numSyms := impSym0 + numImportData;
-
-  ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, nThunkSym + nSecSym);
-
   { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
     R_X86_64_64 = 1, R_X86_64_32S = 11. }
   for i := 0 to FixCount-1 do
@@ -4872,6 +4789,258 @@ begin
   for i := 0 to CallFixCount-1 do
     if ObjCallFixIsRelocatable(i) then
       ObjRelPush(CallFix[i].CodePos, ObjProcSymIdx[CallFix[i].ProcIdx], 2, -4);
+end;
+
+procedure ObjBuildTextRelocsA64(firstGlobal, extSym0, impSym0,
+                                numExportProcs: Integer);
+{ The aarch64 twin. The same four sources of .text relocations, four different
+  shapes -- and the shapes are the finding, not the psABI numbers.
+
+  WHAT THE BACKEND ACTUALLY EMITS, MEASURED RATHER THAN ASSUMED (2026-09-22).
+  Grepping ir_codegen_aarch64.inc for the fixup arrays returns NOTHING, which
+  reads as "this backend records no relocations" and is wrong: it reaches them
+  through the SHARED emitters in emit.inc, so the sites are invisible at the
+  file with the target's name on it. The design banked on the ticket was
+  written from the psABI and expected instruction-field relocations throughout;
+  three of the four sites are DATA WORDS in .text, because this backend
+  materialises an address from an inline literal pool -- `ldr w0,[pc+8]` /
+  `b .+8` / the word -- rather than from a movz/movk pair. Only the
+  external-call site is an instruction field.
+
+    EmitDataRef     8-byte literal   ABS64 (257) vs .data + DataOff
+    EmitGlobRef     4-byte literal   ABS32 (258) vs .data/.bss + offset
+    DynCall         movz+movk        MOVW_UABS_G0_NC/G1_NC (263/264) vs .data
+    ProcAddrFix     8-byte literal   ABS64 (257) vs .text
+
+  TWO RELOCATIONS FOR ONE SITE, and it is the only place in any writer here
+  where that happens. R_AARCH64_MOVW_UABS_G0_NC writes bits [15:0] of S+A into
+  the movz's imm16 field (instruction bits 5..20) and G1_NC writes bits [31:16]
+  of the SAME S+A into the movk's, so both entries carry the same addend and
+  differ only in type and in the four-byte step between the instructions. Get
+  the addend right on one and wrong on the other and the link still succeeds;
+  the program then calls a plausible address in the wrong 64 KiB.
+
+  ABS32 ON A 64-BIT TARGET IS NOT A SLIP -- it is what `ldr w0` asks for. The
+  literal is four bytes and the load zero-extends, so the reference cannot
+  survive a .bss above 4 GiB, and ABS32 is the relocation that SAYS so: it
+  carries an overflow check, and a linker refuses rather than truncating. An
+  ABS64 here would write eight bytes over four and destroy the branch that
+  follows the literal. }
+var i, dsym: Integer;
+begin
+  { Section syms: 1 = .text, 2 = .data, 3 = .bss -- the same three the caller
+    writes, and this object keeps that numbering so the two writers' symbol
+    tables stay comparable. }
+  { EmitDataRef: an 8-byte literal in .text holding a .data address. No
+    PC-relative form exists on this path -- FixupPCRel is set only by the i386
+    rewrites and the x86-64 lea form, neither of which this backend reaches --
+    so every entry here is absolute. REFUSING is cheaper than a branch that
+    cannot be taken, and it is the guard that fires if one of those shared
+    rewrites ever grows an arm that reaches aarch64. }
+  for i := 0 to FixCount-1 do
+  begin
+    if FixupPCRel[i] then
+      ErrorNoPos('--emit-obj: internal -- a PC-relative data fixup on aarch64, '
+          + 'which no emitter on this target produces; the shared EmitDataRef '
+          + 'rewrites are i386 and x86-64 only, so arriving here means one of '
+          + 'them has grown an arm that fires for this target');
+    ObjRelPush(Fixups[i].CodePos, 2, 257, Fixups[i].DataOff);
+  end;
+  { EmitGlobRef: a 4-byte literal. The import/export symbol lookup is the same
+    decision the x86-64 builder makes and for the same reason -- an IMPORTED
+    global must name its OWN undefined symbol, not this object's .bss, or the
+    link succeeds and the program reads a private slot in the importing object
+    instead of the definition. Addend 0 in that case: an UND symbol has no
+    value yet and the linker supplies it. }
+  for i := 0 to GlobFixCount-1 do
+  begin
+    if GlobFixPCRel[i] then
+      ErrorNoPos('--emit-obj: internal -- a PC-relative global fixup on '
+          + 'aarch64, which EmitGlobRef produces only for i386 and x86-64');
+    dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
+    if dsym >= 0 then
+      dsym := impSym0 + ObjDataImportOrdinal(dsym)
+    else
+    begin
+      dsym := ObjDataExportSymForOff(GlobFix[i].BSSoff);
+      if dsym >= 0 then
+        dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
+    end;
+    if dsym >= 0 then
+      ObjRelPush(GlobFix[i].CodePos, dsym, 258, 0)
+    else if SymOffIsData(GlobFix[i].BSSoff) then
+      ObjRelPush(GlobFix[i].CodePos, 2, 258, SymOffDataPart(GlobFix[i].BSSoff))
+    else
+      ObjRelPush(GlobFix[i].CodePos, 3, 258, GlobFix[i].BSSoff);
+  end;
+  { The external call. DynCallCodePos is the movz; the movk is four bytes on.
+    The operand names OUR GOT slot in .data, never the callee -- the slot's own
+    ABS64 against the extern's UND symbol goes into .rela.data in the caller,
+    exactly as on x86-64. }
+  for i := 0 to DynCallCount-1 do
+  begin
+    ObjRelPush(DynCallCodePos[i], 2, 263,
+               ExternalGotOff[DynCallExtIdx[i]]);
+    ObjRelPush(DynCallCodePos[i] + 4, 2, 264,
+               ExternalGotOff[DynCallExtIdx[i]]);
+  end;
+  { @proc: an 8-byte literal, absolute against .text. The x86-64 sibling is
+    PC32 with a -4 bias because its site is an instruction displacement; this
+    one is a data word, so the addend is the plain .text offset and there is no
+    bias to get wrong. }
+  for i := 0 to ProcAddrFixCount-1 do
+    if ObjProcRefIsRelocatable(ProcAddrFix[i].ProcIdx) then
+      ObjRelPush(ProcAddrFix[i].CodePos,
+                 ObjProcSymIdx[ProcAddrFix[i].ProcIdx], 257, 0)
+    else
+      ObjRelPush(ProcAddrFix[i].CodePos,
+                 ObjTextSym(Procs[ProcAddrFix[i].ProcIdx].BodyAddr), 257,
+                 ObjTextRel(Procs[ProcAddrFix[i].ProcIdx].BodyAddr));
+  { NO CallFix LOOP, AND THE REFUSAL THAT MAKES THAT SAFE IS IN THE CALLER.
+    Internal direct calls are resolved at emit time and need no relocation
+    while the whole .text stays in one section; --function-sections is what
+    breaks that, and serving it needs R_AARCH64_CALL26 with the +/-128 MiB
+    range check that goes with it. Emitting nothing here under that flag would
+    produce an object whose cross-section calls branch inside the wrong
+    section and still link, so the flag is refused rather than half-served. }
+end;
+
+procedure writeELFRelX64General(const outPath: AnsiString);
+var
+  i: Integer;
+  numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
+  numLocalData, numExportData, numImportData, impSym0, dsym: Integer;
+  textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
+  shstrOff, shOff, strSize: Integer;
+  relaTextCount, relaDataCount: Integer;
+  initArrOff, relaInitArrOff, finiArrOff, relaFiniArrOff: Integer;
+  initArrSec, finiArrSec, numSects, shstrSize: Integer;
+  initArrNm, relaInitArrNm, finiArrNm, relaFiniArrNm: Integer;
+  hasInitArr, hasFiniArr: Boolean;
+    nThunkSym, initThunkSym, finiThunkSym: Integer;
+    thunkInitStrOff, thunkFiniStrOff, thunkNext: Integer;
+  nSecSym, c, extraRelaOff, extraRelaCount: Integer;
+  machine, rAbs64: Integer;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
+    here with TargetArch = TARGET_X86_64, and the refusal a user sees is the
+    TargetHasObjectWriter one beside that dispatch. It still has to name the
+    right set, because the next reader of this line takes it for a statement of
+    fact -- and it was one: it said "i386 [...] ha[s] no object writer yet"
+    while writeELFRel386General had existed for a day. Enumerate, do not
+    assert. }
+  if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) then
+    ErrorNoPos('--emit-obj: internal -- the general ELF64 object writer was '
+        + 'reached with --target=' + TargetArchName(TargetArch)
+        + ', and it serves x86-64 and aarch64 only. Targets with a writer of '
+        + 'any kind: ' + EmitObjTargetList + '; each of the others reaches its '
+        + 'own, not this one, so arriving here is a dispatch bug rather than a '
+        + 'missing writer.');
+  { The two machines this body serves. EM_X86_64 = 62, EM_AARCH64 = 183, and
+    the absolute-pointer relocation .rela.data writes is R_X86_64_64 = 1 or
+    R_AARCH64_ABS64 = 257. Those three numbers, plus ObjBuildTextRelocs*, are
+    the ENTIRE difference between the two objects -- measured by diffing the
+    two writers rather than assumed, which is why there is one body and not a
+    third copy. }
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    machine := 183; rAbs64 := 257;
+    { --function-sections needs R_AARCH64_CALL26 for the calls that cross a
+      cut, and ObjBuildTextRelocsA64 emits none. Refusing is the whole reason
+      that procedure can leave the CallFix loop out: a half-served flag here
+      would produce an object that LINKS and whose cross-section calls branch
+      into the wrong section. The refusal names what is missing so the next
+      reader does not have to find it. }
+    if FunctionSections then
+      ErrorNoPos('--emit-obj: --function-sections is not supported on aarch64 '
+          + 'yet: a call that crosses a section boundary needs an '
+          + 'R_AARCH64_CALL26 relocation, which this writer does not emit. '
+          + 'Without the flag every internal call stays inside one .text and '
+          + 'needs no relocation at all, which is why the plain object is '
+          + 'correct. x86-64 supports the flag.');
+  end
+  else
+  begin
+    machine := 62; rAbs64 := 1;
+  end;
+
+  ObjCheckProcAddrBodies;
+  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs,
+                       numLocalData, numExportData, numImportData);
+
+  { null + 3 section syms + local procs + local data | exported procs +
+    exported data + external funcs + imported data. extSym0 moves by
+    numExportData and impSym0 is new; every relocation that names a symbol
+    index is built from these three. }
+  { --function-sections: the init and fini thunks get LOCAL FUNC symbols of
+    their own, so .rela.init_array/.rela.fini_array can name THEM with addend 0
+    instead of `.text` plus a baked offset. They were the last two code
+    references in the object still bound to the section symbol, and they cannot
+    be left that way for per-function sections: each thunk falls INSIDE the
+    range of whatever proc precedes it -- a different proc in every program --
+    so a `.text + off` addend is a promise about a layout the linker is about
+    to change.
+
+    Gated, so the DEFAULT object is byte-identical: without the flag no symbol
+    is added, firstGlobal does not move, and every index built from it is what
+    it was. }
+  nThunkSym := 0;
+  if FunctionSections then
+  begin
+    if InitThunkOff >= 0 then Inc(nThunkSym);
+    if FiniThunkOff >= 0 then Inc(nThunkSym);
+  end;
+  initThunkSym := -1; finiThunkSym := -1;
+  thunkInitStrOff := 0; thunkFiniStrOff := 0;
+  if nThunkSym > 0 then
+  begin
+    thunkNext := 4 + numLocalProcs + numLocalData;
+    if InitThunkOff >= 0 then begin initThunkSym := thunkNext; Inc(thunkNext); end;
+    if FiniThunkOff >= 0 then finiThunkSym := thunkNext;
+    { The two names go at the END of .strtab, not beside their symbols. A string
+      table is a blob addressed by explicit per-symbol offsets, so the order is
+      free -- and appending is the only placement whose offset is knowable here,
+      because ObjPlanHostedSymbols returns a TOTAL and not a running position.
+      The SYMBOLS still sit between the local data and the first global, which
+      is the part firstGlobal cares about. }
+    if InitThunkOff >= 0 then
+    begin
+      thunkInitStrOff := strSize;
+      strSize := strSize + Length(OBJ_INIT_THUNK_NAME) + 1;
+    end;
+    if FiniThunkOff >= 0 then
+    begin
+      thunkFiniStrOff := strSize;
+      strSize := strSize + Length(OBJ_FINI_THUNK_NAME) + 1;
+    end;
+  end;
+
+  { --function-sections: one STT_SECTION symbol per cut after the head (whose
+    section symbol is the fixed symbol 1), LOCAL, after the thunk symbols. }
+  ObjPlanCuts(4 + numLocalProcs + numLocalData + nThunkSym);
+  nSecSym := ObjCutCount - 1;
+
+  firstGlobal := 4 + numLocalProcs + numLocalData + nThunkSym + nSecSym;
+  extSym0 := firstGlobal + numExportProcs + numExportData;
+  impSym0 := extSym0 + ExternalCount;
+  numSyms := impSym0 + numImportData;
+
+  ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, nThunkSym + nSecSym);
+
+  { The .rela.text construction is the one part of this writer that is about
+    the ARCHITECTURE; everything else below is ELF64. Dispatch rather than
+    fork the whole procedure -- a third copy of the scaffolding is what
+    normalise-dont-special-case is about, and the second copy (i386) is a
+    different FORMAT, which is the case that genuinely needs one. }
+  if TargetArch = TARGET_AARCH64 then
+    ObjBuildTextRelocsA64(firstGlobal, extSym0, impSym0, numExportProcs)
+  else
+    ObjBuildTextRelocsX64(firstGlobal, extSym0, impSym0, numExportProcs);
   { CodeRefs that cross a cut -- none without the flag }
   ObjPushCodeRefs;
   ObjReportFunctionSections;
@@ -4952,12 +5121,12 @@ begin
   f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
 {$endif}
 
-  { ELF64 ehdr (64 bytes), ET_REL, EM_X86_64 }
+  { ELF64 ehdr (64 bytes), ET_REL, EM_X86_64 or EM_AARCH64 }
   writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
   writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 64, LE, v1 }
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
-  writeU16(f,1);writeU16(f,62);writeU32(f,1);           { ET_REL, EM_X86_64 }
+  writeU16(f,1);writeU16(f,machine);writeU32(f,1);      { ET_REL, EM_X86_64/EM_AARCH64 }
   writeU64(f,0);writeU64(f,0);writeU64(f,shOff);        { entry, phoff, shoff }
   writeU32(f,0);                                        { e_flags }
   writeU16(f,ELF_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
@@ -5045,20 +5214,20 @@ begin
   { .rela.data: data->data pointers, data->code method slots, and one
     R_X86_64_64 per external GOT slot against that extern's UND symbol. }
   for i := 0 to DataPtrFixCount-1 do
-    writeRela64(f, DataPtrFix[i].DataPos, 2, 1, DataPtrFix[i].TargetOff);
+    writeRela64(f, DataPtrFix[i].DataPos, 2, rAbs64, DataPtrFix[i].TargetOff);
   { A VMT slot is R_X86_64_64 -- an absolute address, addend 0 against the
     method's own symbol under --function-sections, where it was `.text` plus the
     body offset. }
   for i := 0 to MethodFixCount-1 do
     if ObjProcRefIsRelocatable(MethodFixups[i].ProcIdx) then
       writeRela64(f, MethodFixups[i].DataPos,
-                  ObjProcSymIdx[MethodFixups[i].ProcIdx], 1, 0)
+                  ObjProcSymIdx[MethodFixups[i].ProcIdx], rAbs64, 0)
     else
       writeRela64(f, MethodFixups[i].DataPos,
-                  ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), 1,
+                  ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), rAbs64,
                   ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
   for i := 0 to ExternalCount-1 do
-    writeRela64(f, ExternalGotOff[i], extSym0 + i, 1, 0);
+    writeRela64(f, ExternalGotOff[i], extSym0 + i, rAbs64, 0);
 
   { .init_array / .fini_array: ONE 8-byte slot each, whose VALUE is supplied by
     the relocation rather than by these bytes. The slot is written as zero
@@ -5070,14 +5239,14 @@ begin
   if hasInitArr then
   begin
     writeU64(f, 0);
-    if initThunkSym >= 0 then writeRela64(f, 0, initThunkSym, 1, 0)
-    else writeRela64(f, 0, ObjTextSym(InitThunkOff), 1, ObjTextRel(InitThunkOff));
+    if initThunkSym >= 0 then writeRela64(f, 0, initThunkSym, rAbs64, 0)
+    else writeRela64(f, 0, ObjTextSym(InitThunkOff), rAbs64, ObjTextRel(InitThunkOff));
   end;
   if hasFiniArr then
   begin
     writeU64(f, 0);
-    if finiThunkSym >= 0 then writeRela64(f, 0, finiThunkSym, 1, 0)
-    else writeRela64(f, 0, ObjTextSym(FiniThunkOff), 1, ObjTextRel(FiniThunkOff));
+    if finiThunkSym >= 0 then writeRela64(f, 0, finiThunkSym, rAbs64, 0)
+    else writeRela64(f, 0, ObjTextSym(FiniThunkOff), rAbs64, ObjTextRel(FiniThunkOff));
   end;
 
   { the cut sections' relocations, grouped, after the head's and the arrays' }
