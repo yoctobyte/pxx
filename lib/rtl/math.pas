@@ -1653,12 +1653,95 @@ begin
   if x < 0.0 then Result := -Result;
 end;
 
+{ The fdlibm atan kernel, the default arm's answer to DdAtan -- same role that
+  FastLnBits and FastExpD play for Ln and Exp, and the same shape: reduce into
+  one of four brackets, then an odd minimax polynomial in x^2.
+
+  x MUST BE FINITE AND NON-NEGATIVE. Every caller already handles NaN, the
+  infinities, the zeros and the sign before reaching the kernel, because the dd
+  path needed exactly the same guards -- so this arm adds no special cases, it
+  replaces the three lines between them.
+
+  WHY THIS IS NOT THE KERNEL THAT WAS REMOVED. The plain-double atan this file
+  once had was a reduce-and-Taylor that missed on 2065 of 3005 arguments by up
+  to 4 ulp, and that is why DdAtan exists. This is a different algorithm, not a
+  retuning of that one: the reduction is four fixed brackets with atan(b)
+  carried as a hi+lo PAIR (which is where the accuracy comes from -- the result
+  is assembled as atanhi - ((x*s - atanlo) - x), never as a single rounded
+  constant plus a correction), and the polynomial is minimax-fitted rather than
+  truncated Taylor. fdlibm states < 1 ulp; test/lib_math_fast_tolerance.pas
+  asks for 2.
+
+  The exact arm is untouched and stays reachable under -dPXX_FLOAT_EXACT, which
+  is what test/lib_math_correctly_rounded.pas builds with. }
+function FastAtanD(x: Double): Double;
+var z, w, s1, s2, ah, al: Double; id: Integer;
+begin
+  if x > 7.3786976294838206e19 then                 { 2^66: atan x = pi/2 }
+  begin
+    Result := DdBits($3FF921FB54442D18) + DdBits($3C91A62633145C07);
+    Exit;
+  end;
+  ah := 0.0; al := 0.0;
+  if x < 0.4375 then
+  begin
+    if x < 1.862645149230957e-09 then               { 2^-29: atan x = x }
+    begin
+      Result := x;
+      Exit;
+    end;
+    id := -1;
+  end
+  else if x < 1.1875 then
+  begin
+    if x < 0.6875 then
+    begin                                           { 7/16 <= x < 11/16 }
+      id := 0; x := (2.0 * x - 1.0) / (2.0 + x);
+      ah := DdBits($3FDDAC670561BB4F); al := DdBits($3C7A2B7F222F65E2);
+    end
+    else
+    begin                                           { 11/16 <= x < 19/16 }
+      id := 1; x := (x - 1.0) / (x + 1.0);
+      ah := DdBits($3FE921FB54442D18); al := DdBits($3C81A62633145C07);
+    end;
+  end
+  else if x < 2.4375 then
+  begin
+    id := 2; x := (x - 1.5) / (1.0 + 1.5 * x);
+    ah := DdBits($3FEF730BD281F69B); al := DdBits($3C7007887AF0CBBD);
+  end
+  else
+  begin
+    id := 3; x := -1.0 / x;
+    ah := DdBits($3FF921FB54442D18); al := DdBits($3C91A62633145C07);
+  end;
+  z := x * x;
+  w := z * z;
+  { the sum over aT[i]*z^(i+1) split into its odd and even halves, so the two
+    Horner chains are independent and the negative coefficients are written as
+    negated positives -- $BFC9.. does not fit Int64 the way DdBits takes it. }
+  s1 := z * (DdBits($3FD555555555550D) + w * (DdBits($3FC24924920083FF) +
+        w * (DdBits($3FB745CDC54C206E) + w * (DdBits($3FB10D66A0D03D51) +
+        w * (DdBits($3FA97B4B24760DEB) + w * DdBits($3F90AD3AE322DA11))))));
+  s2 := w * (-DdBits($3FC999999998EBC4) + w * (-DdBits($3FBC71C6FE231671) +
+        w * (-DdBits($3FB3B0F2AF749A6D) + w * (-DdBits($3FADDE2D52DEFD9A) +
+        w * (-DdBits($3FA2B4442C6A6C2F))))));
+  if id < 0 then Result := x - x * (s1 + s2)
+  else Result := ah - ((x * (s1 + s2) - al) - x);
+end;
+
 function ArcTan(x: Double): Double;
-{ Over the double-double kernel, like Ln/Exp: the plain-double reduce-and-Taylor
-  this replaces disagreed with libm on 2065 of 3005 random arguments (up to
-  4 ulp). Sign is handled here so DdAtan only ever sees a non-negative
-  argument. }
-var ax: Double; t, w: TDd;
+{ Over the double-double kernel under -dPXX_FLOAT_EXACT; the fdlibm kernel by
+  default. The plain-double reduce-and-Taylor that DdAtan replaced disagreed
+  with libm on 2065 of 3005 random arguments (up to 4 ulp) -- see FastAtanD for
+  why the default arm is not that kernel returning. Sign is handled here so
+  neither kernel ever sees a negative argument. }
+var ax: Double;
+{$ifdef PXX_FLOAT_EXACT}
+    t, w: TDd;
+{$else}
+    w: TDd;
+{$endif}
 begin
   if x <> x then begin Result := x; Exit; end;              { NaN }
   ax := Abs(x);
@@ -1670,9 +1753,13 @@ begin
     Exit;
   end;
   if ax = 0.0 then begin Result := x; Exit; end;            { keeps -0 }
+{$ifdef PXX_FLOAT_EXACT}
   t.Hi := ax; t.Lo := 0.0;
   w := DdAtan(t);
   Result := w.Hi + w.Lo;
+{$else}
+  Result := FastAtanD(ax);
+{$endif}
   if x < 0.0 then Result := -Result;
 end;
 
@@ -1757,7 +1844,10 @@ end;
   leaves undefined with a note citing atan2(0.5, 1) being a ulp out — that note
   is now stale, and the name is Track N's to add. }
 function ArcTan2(y, x: Double): Double;
-var q, w: TDd; sy, xneg, yinf, xinf: Boolean;
+var w: TDd; sy, xneg, yinf, xinf: Boolean;
+{$ifdef PXX_FLOAT_EXACT}
+    q: TDd;
+{$endif}
 begin
   if (x <> x) or (y <> y) then begin Result := x + y; Exit; end;    { NaN }
   sy := SignBitD(y);
@@ -1838,10 +1928,25 @@ begin
     Exit;
   end;
 
+{$ifdef PXX_FLOAT_EXACT}
   q := DdDivD(Dd2Sum(Abs(y), 0.0), Abs(x));   { |y|/|x| with the residual kept }
   w := DdAtan(q);
   if xneg then w := DdAdd(DdPi, DdMulD(w, -1.0));
   Result := w.Hi + w.Lo;
+{$else}
+  { The default arm rounds |y|/|x| to a double before the kernel sees it, and
+    the comment above says what that costs: ~1 ulp on 1409 of 6000 random
+    pairs, which is the whole reason the exact arm keeps the residual. That is
+    the trade this arm exists to make, and 2 ulp is what the fast mode
+    promises. The negative-x reflection is pi - (z - pi_lo) rather than a
+    subtraction from a single rounded pi, for the same reason atan's brackets
+    carry a lo word: z is at most pi/2 here, so the result lands in [pi/2, pi]
+    and nothing cancels. }
+  Result := FastAtanD(Abs(y) / Abs(x));
+  if xneg then
+    Result := DdBits($400921FB54442D18) -
+              (Result - DdBits($3CA1A62633145C07));
+{$endif}
   if sy then Result := -Result;
 end;
 
