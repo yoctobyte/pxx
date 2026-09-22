@@ -35661,3 +35661,61 @@ the family is large and familiar elsewhere: ARM's Thumb bit in a branch target,
 aarch64 VBAR's reserved low bits, tagged pointers, and any "aligned pointer
 plus flags" encoding. **Derive the alignment requirement from the register's
 layout, assert it against the FINAL address, and never repair it by masking.**
+
+## TRUNCATION THAT KEEPS THE *OLDEST* RECORDS INVERTS THE VERDICT INSTEAD OF DEGRADING IT — assert population-in equals population-out
+
+Every truncation hazard already in this file assumes the same thing: that
+truncation loses the TAIL, so the answer gets noisier, thinner, less confident.
+**This one kept the oldest records and the answer lived in the newest, so the
+instrument did not degrade toward noise — it printed a clean, well-formatted
+table stating the OPPOSITE of the finding.** Nothing errored.
+
+Measured 2026-09-22 (frankh-c0), censusing whether the `native` and `full` tiers
+ever publish a GREEN verdict.
+
+A reader over 2898 `tstate` reports parsed **53** of them and reported:
+
+    by tier/verdict: {('full','RED'): 31, ('full','GREEN'): 9,
+                      ('native','GREEN'): 9, ('native','RED'): 4}
+
+which says both tiers go green comfortably. The truth over all 2898 is that
+`native` last went green on 2026-09-11 and `full` on 2026-09-09, and neither has
+since. **The 53 it kept were the 53 OLDEST** — `git ls-tree` lists
+date-prefixed filenames in sorted order, so a reader that stops early keeps the
+beginning of history, which is precisely the era when the thing you are asking
+about was still true.
+
+The cause was one line: a `git cat-file --batch` loop that `break`s on a header
+it cannot parse rather than handling it. It stopped at the first anomaly and
+returned everything before it, silently.
+
+**WHY IT SURVIVES REVIEW, AND IT IS NOT CARELESSNESS.** The output has every
+mark of a good result: all four tier/verdict combinations present, plausible
+ratios, no exception, no warning. The failure is invisible in the RESULT and
+visible only in the COUNT — and the count was not printed, because printing
+`len(recs)` looks like debug noise once the table renders.
+
+**THE GUARD IS ONE LINE AND IT GENERALISES PAST THIS SCRIPT:**
+
+```python
+assert len(docs) == len(files), 'TRUNCATED: %d docs for %d files' % (len(docs), len(files))
+```
+
+**Population in equals population out, asserted BEFORE anything is counted.**
+Not logged, not eyeballed — asserted, so the run stops rather than reporting.
+The second half of the fix is to keep alignment when an item genuinely is
+missing (append an empty placeholder) rather than `break`ing, so one bad record
+costs one record instead of the remainder of the set.
+
+**THE QUESTION THAT CATCHES THE FAMILY:** *if my reader stopped early, would
+the records it kept be biased toward the answer I am testing against?* Wherever
+the population is ordered by TIME — reports, logs, commits, archives, anything
+date-prefixed or append-only — **the answer is yes by construction**, because a
+prefix of a time-ordered set IS the past, and the past is where "this used to
+work" lives. A tail-truncation in the same data would have been obvious: it
+would have shown only the recent era, all red, which is the finding.
+
+Companion to "print the set your instrument enumerates and check the subject is
+IN it" (CLAUDE.md): that is about a population that cannot contain the subject.
+This is about one that contains only its history, which is worse, because the
+history answers.
