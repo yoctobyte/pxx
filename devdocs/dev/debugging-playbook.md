@@ -37890,6 +37890,28 @@ it.**
 general form: **state what an all-clear RESTS ON, inline, not merely when it was
 measured.**
 
+**AND THE COSTLIEST SHAPE OF AN ALL-CLEAR IS ONE WHOSE CONSEQUENCE IS AN
+OMISSION — IT IS READ AS THE REASON NOT TO ADD A GUARD, AND THEN IT BEHAVES LIKE
+A STALE PROHIBITION.** Measured 2026-09-22, `frankb-8e`, in a lane nobody was
+working. `dce.inc` stated that a dropped body's `BodyAddr := -1` is safe because
+*"`ApplyCallFixups` says so by name instead of jumping into the hole"*. **It does
+not.** With a forced drop in place and no guard, the compiler prints `ok:` and
+emits a binary whose call site **aims into the hole** — `CallFixTarget` holds a
+resolved SNAPSHOT that `DceNewOff` clamps to the hole's start, so
+`ApplyCallFixups` never consults the `-1`.
+
+**The comment asserted a guard that was not there, and was read for months as the
+reason not to add one.** That is why it sits with the all-clear family and not
+only under CLAUDE.md's *comment vs code* rule, which already decides the case
+once you look: **an all-clear that licenses an OMISSION produces no signal at
+all**, because nobody does anything and nothing fails visibly. It has the
+all-clear's content and the prohibition's decay profile. **When a comment
+explains why a check is unnecessary, that comment is a GUARD with no positive
+control** — and the cheap discharge is the one 8e ran: force the condition the
+comment says is handled, and watch whether anything actually objects. It did not.
+The guard is now in with a verified positive control (a one-line refusal in
+`DceMark` forcing a called body to be dropped makes it fire by name).
+
 ### AND THE THIRD MEMBER OF THE FAMILY IS A STALE PROHIBITION, WHICH DECAYS TOWARD BEING IGNORED WHOLESALE
 
 **Found 2026-09-22 by `frankuser`, about its own role file, after reading this
@@ -38680,23 +38702,59 @@ been**, and it arrived unprompted.
 family rule is already there. What would promote it: a self-implicating report
 whose classification is wrong, in a lane this seat is not working.
 
-### And the mirror in the same message: the right conclusion reached by a wrong argument, twice in one day
+### AND THE MECHANISM UNDER IT IS RECALL, NOT RIGHTNESS — THE AUTHOR NARROWED THIS AND THE NARROWER CLAIM IS THE CHECKABLE ONE
 
-8e also reversed itself on a wasm carve-out. Its **original ticket sentence was
-right**, its **stated reason for it was wrong**, and its **later argument against
-it was wrong outright** — established by c0 promoting the rule and running
-`test/wasm/check_all.sh` (38 PASS / 7 FAIL / 1 SKIP, six of the seven one shape:
-JS calling `inst.exports.f()` with no pxx caller, which is what a wasm LIBRARY
-is). 8e's one checkable argument — that carving out suppresses an arm that caught
-a real bug — was checked and is **false**: that seventh failure is
-flag-INDEPENDENT, fails at HEAD unflipped, already filed at p45, and was
-established by two independent routes.
+**This subsection first said the mechanism was that BEING REPEATEDLY RIGHT stops
+you re-deriving. `frankb-8e` refused that and supplied a third case, and it is
+right: rightness is a CONSEQUENCE, not a cause, and it is not actionable.**
+Recorded as a correction rather than an edit because the replaced claim was this
+coordinator's, offered as an observation to be refused, and was.
 
-**That is the second time in one day for this seat that a correct conclusion
-rested on an unsound derivation** (the first: reaching for the wrong fork test
-and landing on the right verdict). **A conclusion that keeps reading as sound
-applies no pressure to its inputs** — already in this file — and the extension is
-that **being repeatedly RIGHT is itself a mechanism for not re-deriving**, which
-no amount of care about conclusions detects. c0 landed it with a retirement
-condition and a note that on ELF the same pass is export-PRESERVING and must not
-generalise.
+**The three cases, all 8e's, all 2026-09-22:**
+
+1. **The fork test** — reached for a rule that fit the SHAPE of the question;
+   right verdict, wrong test.
+2. **The wasm carve-out** — reached for *"a harness that reaches by name will
+   break"*, which is the right story about the wrong tree. `dce.inc:799` was
+   sitting there, settled and deliberate.
+3. **A live-set closure guard** — reached for *"the check goes next to the
+   compaction loop"*, which is where such checks live, **without reading what the
+   loop above it does to the field the check reads.** It read `Procs[].BodyAddr`
+   AFTER the loop that remaps it, testing post-compaction offsets against
+   pre-compaction removal ranges. It fired on `D_EXPF` on riscv32 and windowed
+   xtensa, **and a bug report was half-written** — a shipping miscompile, since
+   `-O3` enables `--dce`. Moved four hundred lines earlier: clean on every
+   target. **`D_EXPF` does not exist as a defect.**
+
+**WHAT THEY SHARE IS THAT THE STEP CAME FROM A REMEMBERED PATTERN RATHER THAN
+FROM THE CODE IN FRONT OF IT** — pattern-matched, at speed, on something already
+believed. 8e's own prediction, which is why this version is better than the one
+it replaced: **the failures should cluster where you are acting FAST on a
+FAMILIAR pattern, and not where you are working something out.** All three took
+under a minute and none felt like a decision. **And it explains why being right
+does not help: the conclusions come from the same store as the derivations, so a
+correct conclusion is not independent evidence that the derivation was done.**
+
+**THE ACTIONABLE FORM, in the author's words: when a step feels like RECALL
+rather than DERIVATION, that is the step to re-derive.** The self-implicating
+point above attaches here rather than to rightness — a classification is exactly
+the kind of step that arrives as recall.
+
+### A CONTROL CAN BE VALID, RUN CORRECTLY, AND ANSWER THE QUESTION YOU HAD ALREADY SETTLED
+
+**The same case, and it is separable from the recall mechanism.** Before
+reporting `D_EXPF`, 8e checked it was not its own change: reverted the predicate
+edit, kept the guard, got an identical message at an identical code offset,
+concluded *pre-existing*. **That control is sound.** It is a perfectly good
+control for *did MY EDIT cause this* — and **completely blind to *is my
+INSTRUMENT sound***, which was the live question. In its own words: **"I ran the
+control for the question I had already answered."**
+
+**This is the population rule turned on the QUESTION instead of on the data.** A
+control drawn from the right population, executed correctly, reported honestly,
+and aimed at a proposition nobody was disputing. **Nothing about it looks like a
+gap** — there is a control, it passed, it is even the right one for something.
+**Before trusting a control, say out loud which proposition it discriminates,
+and check that it is the one in doubt.** Where a NEW instrument produces a
+finding, the proposition in doubt is the instrument, and no amount of varying
+your own diff reaches it.
