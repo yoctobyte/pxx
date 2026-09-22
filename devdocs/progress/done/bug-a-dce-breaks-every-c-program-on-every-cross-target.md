@@ -373,3 +373,47 @@ That is worth more than either correction: the tell was not available to more
 care, it was available to **reading the row instead of a column**. Where a
 result has more than one channel — status and output, size and content, count
 and population — name what every channel says before explaining any of them.
+
+> **The section below was written by frankh-c0 before the one above landed.**
+> They overlap on the riscv32 row and agree. Where it says the xtensa row is
+> UNCONFIRMED from this checkout, the section above settles it: the measurement
+> used `--platform=posix`, not `--emit-obj`, and the recipe now says so.
+
+## 2026-09-22 (frankh-c0) — the `riscv32 exit 0` row in the matrix above was MINE and it was wrong
+
+Recorded here rather than silently corrected, because the row was quoted twice
+and the reason it was wrong is not the reason first offered for it.
+
+**Measured by mutation**: `compiler/symtab.inc` reverted to `a79934842~1`,
+rebuilt, run, restored, rebuilt (binary back to `f7dedaea694f`, tree identical
+to HEAD). Pre-fix, the seven-line C hello world:
+
+| target | program rc | stdout/stderr |
+| --- | --- | --- |
+| aarch64 | 139 | `qemu: uncaught target signal 11 (Segmentation fault) - core dumped` |
+| arm32 | 139 | same |
+| riscv32 | **139** | **(nothing at all)** |
+
+So there was never a silent-exit-0 arm. **What is real is that riscv32's runner
+prints no crash banner**, where the other two announce themselves
+unmissably — and I turned *"no diagnostic"* into *"exit 0"* without ever
+reading the status I was claiming.
+
+The explanation offered at resolution time — that I read the compiler's rc for
+the program's — was tested and does not hold: in the `&&` chain this ticket
+publishes, and in the bare form, a crashing riscv32 program reports 139 either
+way. **The error was inferring an exit status from a SILENCE, on the one target
+whose runner is silent.** Same family as reading a wrapper's status for a job's,
+one step earlier: there was no wrong number to read, so I supplied one.
+
+**This strengthens the fixture rather than weakening it.** `test_dce_c_cross_entry.c`
+asserts stdout on every leg. On riscv32 the qemu banner is not available as a
+tell at all, so stdout is not merely the better assertion — it is the only one
+that separates a pass from a crash.
+
+**And one row of the resolution's own corrections is unconfirmed from here:**
+`--dce --target=xtensa` on a standalone executable is REFUSED by design, at HEAD
+and pre-fix alike ("a STANDALONE EXECUTABLE on the ESP profile has no argc on
+the stack ... Build a RELOCATABLE OBJECT instead"). If the xtensa measurement
+went through `--emit-obj`, the ticket should say so: the next reader will reach
+for `--target=xtensa` as I did and get a refusal that looks like a different bug.

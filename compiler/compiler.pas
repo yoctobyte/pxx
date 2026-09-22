@@ -2158,12 +2158,52 @@ begin
     functions, so breakpoints and single-step break. `-g -O2` is still honoured for
     users who accept degraded debug info. See feature-optimization-levels. }
   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
-  { -O3 turns dead-code elimination on, per the convention that a new pass lands
-    in the free tier first (-O2 stays the proven default). It also buys the one
-    thing the pass most needs: tools/optdiff.sh sweeps ~900 programs demanding
-    identical behaviour at -O0/-O2/-O3, so from here Track T's opt tier IS a
-    whole-corpus --dce differential. --no-dce opts back out; --dce turns it on
-    at any -O level. compiler/dce.inc, feature-emission-size-dce }
+  { -O3 turns dead-code elimination on; -O2, the default, does NOT. Promotion to
+    the default was ATTEMPTED TWICE on 2026-09-22 and REFUSED BOTH TIMES by a
+    full tier. Do not spend the mechanical work again without reading both
+    refusals -- bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce.
+
+    PROMISE is not in dispute and is why this keeps being tried: over nine real
+    examples/** programs, 4,424,828 -> 1,475,708 bytes, -66%, self-host
+    fixedpoint converging at the promoted setting.
+
+    ATTEMPT 2 (4949/4955 pass, RED): two CORRECTNESS regressions, both of the
+    class bug-a-compiler-emitted-runtime-stubs-are-invisible-to-every-gate-we-run
+    names in its own summary. `--fpc-float-errors` division by zero gives rc 139
+    instead of 208, and `--fpc-mem-errors` nilread gives 139 instead of 216 --
+    raw SIGSEGV where a controlled runtime error is owed, because the pass drops
+    a handler that nothing in the call graph points at. Both reproduce in one
+    line and both are correct under `--no-dce`. Plus wasm32, where the backend's
+    own guard refuses the build: "--dce dropped slot 0 (PXXHdrInit) and
+    something live still references it -- the live set is not closed under the
+    call graph".
+
+    AND THE FIXEDPOINT CANNOT SEE ANY OF IT. It converges at the promoted
+    setting, in 2 rounds, and it would converge the same way if the pass dropped
+    every handler in the tree: its discriminating power is exactly the set of
+    constructs compiler.pas writes about itself, and the signal runtime is not
+    one of them. A gate's authority is scoped to what it can DISCRIMINATE, and a
+    green row cannot tell you which of the two it is.
+
+    THE ARGUMENT THIS COMMENT USED TO MAKE FOR -O3 WAS FALSE AND IS KEPT HERE AS
+    THE REASON THE PROMOTION TOOK TWO ATTEMPTS. It said: optdiff sweeps ~900
+    programs demanding identical behaviour at -O0/-O2/-O3, so the opt tier IS a
+    whole-corpus --dce differential. Every clause is true and the corpus does
+    include test/*.c -- but optdiff BUILDS HOST-ONLY. It varies the -O level and
+    holds the TARGET fixed, so it could not contain `--dce` miscompiling every C
+    program on every cross target, which it had been doing since the day the
+    pass landed here. The first promotion attempt found it: 101 hard FAILs, one
+    cause, a seven-line hello world (bug-a-dce-breaks-every-c-program-on-every-
+    cross-target, fixed 2026-09-22 -- the C entry stub's branch was rooted on
+    all five targets and RECORDED as a relocation site on one).
+
+    So do not read "the opt tier covers this pass" off this line. It covers the
+    pass ON THE HOST. The cross-target evidence is test_dce_c_cross_entry.c and
+    the per-target rows in the tier, and a completeness claim about a corpus
+    says nothing about the axes the corpus holds fixed.
+
+    --no-dce opts back out; --dce turns it on at any -O level.
+    compiler/dce.inc, feature-emission-size-dce }
   if (OptLevel >= 3) and not DceOff then DceEnabled := True;
   { AND ON A BARE ESP IMAGE, AT ANY -O LEVEL. This is not the -O3 convention
     being short-circuited; it is a different argument that happens to reach the

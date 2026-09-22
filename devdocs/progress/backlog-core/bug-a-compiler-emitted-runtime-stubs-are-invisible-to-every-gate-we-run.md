@@ -63,3 +63,64 @@ depends on and confirming the refusal fires and emits no binary. That closes
 Whether the cheap form is a bytes assertion per stub, or one fixture compiled
 under each such flag whose output is diffed against a checked-in disassembly of
 the interesting region. The second scales but pins addresses, which move.
+
+## 2026-09-22 (frankh-c0) — TWO NEW DATED CASUALTIES, and a different KIND of casualty from the one this ticket has
+
+Found by promoting `--dce` to the default `-O2` and running a full tier. Both
+are on this ticket's own springing list, by name, in its summary.
+
+| flag | expected | got under `--dce` | under `--no-dce` |
+| --- | --- | --- | --- |
+| `--fpc-float-errors`, division by zero | `208` | **139 (raw SIGSEGV)** | `208` |
+| `--fpc-mem-errors`, nil read | `216` | **139 (raw SIGSEGV)** | `216` |
+
+`test-core#519` and `test-core#2353` in the 2026-09-22 full tier.
+
+**THE MECHANISM IS NOT THIS TICKET'S AND I FIRST WROTE THAT IT WAS.** My first
+draft of this section said *"a handler reached only by being INSTALLED has
+nothing in the call graph pointing at it"* — plausible, this ticket's own
+shape, and **refuted by a two-sided control frankb-8e ran and I reproduced**:
+if that were the cause, every installed-only handler would break, and
+`test_signal_handler_callback_b336` and `test_setsignalhandler_call` both come
+out **rc=0 under `--dce`**. Only the sites with a droppable body between the
+reference and its target break.
+
+The real mechanism is `EmitCodeAbsToRdx` (`ir_codegen.inc:1001`): it
+materialises a code address as `call +0 / pop rdx / add rdx, imm32` where
+`imm32 = targetOff - CodeLen` is **a delta fixed at emit time**, and it records
+no `CodeRef` — so the pass neither protects the range nor re-aims the delta.
+Three of its seven call sites sit adjacent to their targets and survive; the
+`--fpc-float-errors` ones do not. A third spelling of "reference a code
+offset", beside the `EmitCallProc` and `IREmitCodeCall` that `dce.inc:24-29`
+enumerates.
+
+**So these two rows belong here as casualties of the GATE BLINDNESS — which is
+this ticket's actual claim and is untouched — and NOT as instances of its
+mechanism.** 8e's caution is the right one and I had already walked into it:
+*do not let the slug stand in for the mechanism.* The slug was handed to me by
+a third seat, it fit, and I wrote a mechanism to match it before anyone
+measured one.
+
+### The part worth more than the two rows: THE CASUALTY IS AN ARGUMENT, NOT A SHIPPED BUG
+
+This ticket's existing casualty is `12d6c86f0` — a heap-corruption regression
+that shipped for three days while both compilers printed `converged after 1
+round(s)`. **A shipped bug can always be read as somebody being careless**, which
+is the weakest form of evidence for a claim about a STRUCTURAL blindness.
+
+This one is the other kind. A seat spent a night promoting a pass, reported
+four separate times that *"the self-host fixedpoint converges at the new
+setting, which is the one row that GATES rather than grades"*, and was
+**correct about that row every single time**. The row was green. It would have
+been green if the pass dropped every handler in the tree. Nobody was careless
+and the sentence was true; it was doing rhetorical work it cannot support.
+
+**The transferable form, which is what this ticket is for:** the fixedpoint
+being green says the compiler still reproduces itself under the new default. It
+says nothing about whether the new default breaks the signal runtime. **A
+gate's authority is scoped to what it can DISCRIMINATE, and the two claims are
+indistinguishable while the row is green.**
+
+So the promotion was refused by the TIER, and the tier is the only instrument
+in this repo that could have refused it. That is this ticket's thesis with a
+worked example attached.
