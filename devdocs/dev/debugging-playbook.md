@@ -40975,3 +40975,71 @@ the series above says *all six backends now carry it* and that sentence became
 false for `$(PXX_STABLE)` consumers forty minutes later. And when you report a
 pinned measurement on a non-x86-64 target, **name the pin and check the specific
 change is in it by ancestry** — not by date, and not by the pin being "recent".
+
+## INLINING IS CORRECTNESS-PRESERVING AND NOT INSTRUMENT-PRESERVING — a detector keyed on the CALL BOUNDARY goes silently blind to whatever got inlined
+
+*2026-09-22. Found by `franks-5b` before it read a single number, confirmed by it in
+disassembly; the emitter corroboration below is `frankz-e5`'s source read. Banked
+with the promotion trigger stated: a second instance where an optimisation removes
+the artefact an instrument keys on, in a lane with no code in common.*
+
+5b was building a census to answer the owner's *"aren't we allocating/freeing/
+refcounting too much?"* by reading emitted code **for call sites**. Six commits
+earlier that same day had converted the managed-local release from a call into
+inline code, across all six backends.
+
+**So a detector that greps for `call` had just gone structurally blind to release
+sites, and would have reported "no release emitted" for code that releases on every
+iteration.** Not an error, not a zero row it could argue with — a confident clean
+table. This is the silent-zero family arriving *inside the probe*, one day old, and
+introduced by a change that was correct, wanted, and measured.
+
+The inlined sequence, from 5b's disassembly of its own fixture's loop body:
+
+```
+40022a: test %rax,%rax                 ; the nil test the six commits inlined
+40022d: je   0x400265
+40022f: cmpq $0x40000000,-0x10(%rax)   ; MSTR_STATIC_RC saturation check
+400237: jae  0x400265
+400239: decq -0x10(%rax)
+40023d: jne  0x400265
+```
+
+`defs.inc:122` confirms `MSTR_STATIC_RC = $40000000`, so the block is the release
+path and not something that resembles it.
+
+**AND THE BLINDNESS WAS PARTIAL, WHICH IS THE WORSE SHAPE.** The release is reached
+*both* ways: `ir_codegen.inc:5109` sets `AnsiStrReleaseAddr`, and
+`IREmitCodeCall(AnsiStrReleaseAddr)` survives at **5197, 5361 and 5376** — the last
+two inside the variant clear/retain blobs, whose own comment at 5327 says they call
+it. **So the census was blind to the inlined fast path and correct about the variant
+route, which is the subject the owner actually asked about.** A probe that is right
+about your headline case and silently wrong about a neighbour is worse than a
+uniformly broken one, because **the working part certifies the whole table**.
+
+**The general form, and it is a family rather than a fact about `call`.** Inlining
+preserves semantics and destroys the *artefact* — the call boundary — that a whole
+class of instruments is keyed on: call-site censuses, stack-depth probes,
+symbol-attributing profilers, breakpoint-on-function debugging, `LD_PRELOAD`
+interposition, backtrace sampling. Every one of them reports **less** after an
+inlining change, and every one of them reports it as a fact about the program. The
+same holds for any optimisation that removes the thing you count rather than the
+work it does: hoisting out of a loop, constant folding, tail-call elimination, CSE.
+
+**Discharges, and the second is the one nobody does.** Key the detector on the
+emitted *sequence* as well as on the boundary — here, the `test/je/cmpq
+$0x40000000/jae/decq/jne` block — and count both populations, separately, so the
+split is visible rather than absorbed. And **date your instrument against the
+compiler**: ask what landed in the emitter since the probe was designed, because a
+detector is a claim about codegen and codegen is the thing under active change. 5b
+caught this only because it was told the series had landed that morning; nothing in
+the probe's own output would ever have said so.
+
+**Two further disciplines from the same design, worth keeping.** A whole-program
+**total** and a per-operation **slope** are different quantities that must be
+consistent rather than equal — 5b built its census as a slope (two loop counts,
+differenced, so fixed costs cancel) precisely so it could be reconciled against an
+existing "seven allocations in both arms" total instead of appearing to contradict
+it. And a pass whose control cell misbehaves is **discarded, not annotated**:
+otherwise every `0.00` in the table is unfalsifiable, and an annotated bad control
+is a row that gets quoted with the annotation stripped.
