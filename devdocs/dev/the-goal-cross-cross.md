@@ -99,13 +99,37 @@ sent the owner, because machine integers scoped to ISR handlers is the same
 simplification, only narrower. **Adjacent enough to retire a proposal, not close
 enough to decide a fork** is the shape.
 
-**One reading that has entered circulation and is NOT his words.** *"Complete-
-but-slow outranks incomplete"* is a paraphrase of the pivot, not a quote, and it
-is being used as load-bearing for how an open fork's arms rank. The pivot is a
-SEQUENCING instruction — wrap up, then ESP32 — and whether ESP32 **outranks** the
-demos or runs beside them is on this file's own question list two paragraphs up,
-unanswered. A seat may of course argue an arm on its merits; it may not cite that
-paraphrase as the owner's ranking. Ask him, or rank on something else.
+### A THIRD THING HE SAID THE SAME NIGHT — and it is the one that gives the pivot its REASON
+
+Recovered because a compression of it was circulating as if it were a rule. His
+actual words, relayed by `frankuser`:
+
+> *"lekkerzeilen does compile and run.. just we have performance issues. those
+> can all be chased down in a later stage. however, work on ESP is incomplete."*
+
+**What this DOES answer, and it is more than the pivot alone said:** why perf work
+is being sequenced behind ESP. The demo **runs**; its problem is a quality one and
+explicitly deferrable (*"chased down in a later stage"*). ESP is **incomplete** —
+a capability that does not exist yet. That is a reason, in his own words, and a
+seat may cite it.
+
+**What it still does NOT answer**, so the question list above stands: whether
+ESP32 outranks the **other** demos, whether the full-green-pin goal moves, and
+whether "wrap up" means finish-in-flight or close-and-park. He drew one
+comparison, between perf work and ESP. He did not rank the goal list.
+
+**AND THE COMPRESSION OF IT IS NOT HIS WORDS.** *"Complete-but-slow outranks
+incomplete"* is `frankuser`'s compression, sent to `frankh-c0` **with the quote
+attached** — so c0 did not invent it and did not strip the source. What gave it
+the standing of a rule is that the compression was also banked as a memory file's
+NAME, and a name is read as a fact. `frankuser` has said so itself and is adding
+the same caveat there. **The compression asserts a general ordering (`outranks`)
+where the quote makes one specific comparison**, which is the widening this
+section exists to catch, happening in the shortest possible form: a filename.
+
+**The reusable bit: a compression is not a quote, and a compression used as a
+NAME stops looking like anyone's phrasing at all.** Prefer his sentence, which is
+two lines long and says more.
 
 ### What this does NOT license, since a pivot invites exactly this
 
