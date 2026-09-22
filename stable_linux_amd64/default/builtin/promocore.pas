@@ -1490,14 +1490,66 @@ begin
 end;
 
 procedure PXXPromoShl(dst, a, b: Pointer);
+var av, k, lim: Int64;
 begin
-  { shift count b is small in practice; a<<k always risks Int64 overflow so it
-    goes through the bignum path unconditionally. }
+  { EVERY OTHER OPERATOR IN THIS FILE HAS AN INLINE ARM AND THE TWO SHIFTS DID
+    NOT -- compare PXXPromoXor/And/Or directly above. The old comment said
+    a<<k "always risks Int64 overflow so it goes through the bignum path
+    unconditionally": true about the RISK and false as a reason, because the
+    risk is CHECKABLE and the check is three comparisons. What it cost is not
+    the bignum arithmetic, it is SlotBig -- on an inline slot that calls
+    BFromInt, which allocates a limb array for a value that was already a
+    machine word, and StoreBig allocates again on the way out.
+
+    Measured as the audio RNG in lekkerzeilen (audio.py:81), a 32-bit xorshift
+    whose values never leave a machine word and which paid a bignum allocation
+    on all three of its shifts, once per audio sample at 22050 Hz.
+    bug-a-python-shift-is-o-k-bignum-multiplies-one-per-bit-shifted }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  begin
+    av := SlotInt(a);
+    k := SlotInt(b);
+    { 62 rather than 63 leaves the sign bit alone: lim = 2^(62-k), so the
+      result is strictly inside Int64 with a bit to spare. k = 62 collapses
+      lim to 1 and admits only av = 0, which is correct rather than a special
+      case. A NEGATIVE k falls through to BShl, which returns a unchanged --
+      preserving the existing behaviour rather than inventing one here. }
+    if (k >= 0) and (k <= 62) then
+    begin
+      lim := Int64(1) shl (62 - k);
+      if (av < lim) and (av > -lim) then
+      begin
+        PXXPromoFromInt(dst, av shl k);
+        Exit;
+      end;
+    end;
+  end;
   StoreBig(dst, BShl(SlotBig(a), PromoShiftCount(b)));
 end;
 
 procedure PXXPromoShr(dst, a, b: Pointer);
+var av, k: Int64;
 begin
+  { A right shift of a NON-NEGATIVE machine word cannot overflow and cannot
+    need the floor correction BShr carries, so this arm is unconditional in k.
+
+    NEGATIVE av FALLS THROUGH DELIBERATELY AND THAT IS THE WHOLE CARE HERE:
+    Pascal `shr` is LOGICAL, so -8 shr 1 is 9223372036854775804, not Python's
+    -4. Admitting negatives to save an allocation would trade a slow answer
+    for a silently wrong one, on the arm a test is least likely to cover. }
+  if (SlotTag(a) = PROMO_TAG_INLINE) and (SlotTag(b) = PROMO_TAG_INLINE) then
+  begin
+    av := SlotInt(a);
+    k := SlotInt(b);
+    if (av >= 0) and (k >= 0) then
+    begin
+      { k >= 63 would be a shift count Pascal leaves undefined (it reduces mod
+        the width); av is non-negative so every such shift is 0. }
+      if k >= 63 then PXXPromoFromInt(dst, 0)
+      else PXXPromoFromInt(dst, av shr k);
+      Exit;
+    end;
+  end;
   StoreBig(dst, BShr(SlotBig(a), PromoShiftCount(b)));
 end;
 
