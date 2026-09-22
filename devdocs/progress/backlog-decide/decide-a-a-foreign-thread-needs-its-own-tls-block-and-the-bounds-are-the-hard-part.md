@@ -275,9 +275,23 @@ is being taken against a number another ticket is already trying to move.
 **NOT MEASURED HERE, ON PURPOSE:** the SETUP cost (what installing a block
 costs in instructions/time). The box was at load average 14+ and a timing row
 taken there would look like evidence — see the deferral note in
-`perf-o-the-variant-hidden-dest-clear-...`. That half is outstanding and is the
-only thing missing before the fork can be stated in goal terms with costs
-attached.
+`perf-o-the-variant-hidden-dest-clear-...`.
+
+**RETIRED THE SAME DAY BY THE SECTION TWO BELOW, and this sentence said
+otherwise for hours after that section was written.** It read: *"that half is
+outstanding and is the only thing missing before the fork can be stated in goal
+terms with costs attached."* **That is false.** The correction below establishes
+that this ticket does not turn on cost at all — its hard part is the idempotence
+MARKER — so a setup-cost number is not missing from the fork and never was
+blocking it. Setup cost becomes worth having only if the owner answers *work*,
+and then it is ordinary implementation cost, not a decision input.
+
+**Worth recording because of WHO was wrong about it:** the same seat wrote the
+correction and then repeated the retired sentence three more times the same
+afternoon — to two peers and in its own status. Own text reads as
+already-checked, so the author is worse placed to notice than a stranger.
+CLAUDE.md's *authorship is not protection* arriving inside the one file where
+both halves were visible at once.
 
 **This is NOT an audit of the TLS machinery** and must not become one.
 
