@@ -39946,6 +39946,20 @@ wrong.
 - **Where a test asserts that a size, a count or a duration crosses a threshold,
   ask what fraction of the margin the SUBJECT contributes** (e5's form). One
   differential: measure the same threshold on a trivial program and subtract.
+- **And the same animal appears as a DENOMINATOR, which is where most people
+  will meet it.** Measured 2026-09-22, same day, same seat, opposite roles: in
+  the JAL case I found an aggregate padded with dead RTL; in a roofs profile I
+  *committed* it. Re-bucketing `lekkerzeilen-7a`'s raw samples I filtered on
+  *"PC is inside the binary"* — honest, reproducible, and a population that is
+  **mostly blocked**. The run has 15 threads; the 14 non-main ones sit at five
+  FIXED addresses for every sample, parked for the whole run, and **two of those
+  addresses are in the demo's own text**. So the filter admitted them. One set
+  of ten samples then reads **11.2%** (main thread, correct), **3.9%** (mine) or
+  **0.8%** (all samples), and the wider denominators are not the conservative
+  reading — they are dilution by sleeping threads, scaled by however many threads
+  the toolkit happened to spawn. **Ask what fraction of your DENOMINATOR is
+  capable of being the subject**, and for a profile the test is concrete: a
+  thread sampled at one unchanging PC is parked, not slow.
 - **Then ask the structural question, because the differential only bounds the
   margin and does not tell you the quantity is right:** *is the number I assert
   on the number the mechanism actually reads?* Here the mechanism reads one

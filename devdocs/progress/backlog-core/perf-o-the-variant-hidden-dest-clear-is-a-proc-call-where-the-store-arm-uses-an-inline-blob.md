@@ -216,3 +216,70 @@ is k-1 per call site per scope, so **a fixture calling once per scope cannot see
 it at all** and `k1` alone is a guard that cannot fail. Do not trim it for
 speed. That is the interesting-element-position rule with the axis being *calls
 per scope* rather than ordering.
+
+## THE ROOFS ROW LANDED PARTIAL, 2026-09-22 — and it answers the retirement condition in the NEGATIVE while keeping the ticket alive
+
+`lekkerzeilen-7a`, one arm, one round, before the owner paused GUI testing.
+Page `894144c` in the lekkerzeilen repo,
+`devdocs/perf/ROOFS-DECOMPOSITION-2026-09-22-PARTIAL.md`; raw at
+`/data/lz-perf/roofs-decomp-2026-09-22/`. **Do not act on this row yet** — that is
+7a's own instruction and the reasons below are good ones.
+
+### The number, with the denominator named, because there are three
+
+**10 of 89 main-thread samples (11.2%)** fall in `0x400560-0x4005f5`, an unnamed
+block with no symbol in the `.map` — six of them on one instruction,
+`movq $0x0,0x8(%rax)`, the payload clear. **No symbol-level profile could ever
+have named this block**, which is why the ticket had only synthetic evidence for
+seven days.
+
+I re-bucketed the raw independently rather than taking the table, got 10 and 6
+exactly, and got a different SHARE:
+
+| denominator | share | what it is |
+| --- | --- | --- |
+| 89 | **11.2%** | main thread only — **the right one** |
+| 256 | 3.9% | mine: every PC below `0x1000000` |
+| 1246 | 0.8% | every sample |
+
+**Mine was wrong and the way it was wrong is this ticket's own house error.**
+The run has 15 threads; the 14 non-main ones sit at FIVE fixed addresses for
+every sample — parked for the whole run — and **two of those addresses are in
+the demo's own text** (`0x5cf482`, `0x5cf369`). So "PC is inside the binary" is
+an honest filter that enumerates the wrong population: it is a denominator
+padded with sleeping threads, and the padding factor is however many threads SDL
+happened to spawn. All 10 clear-block samples and all 6 payload-clear samples
+are thread 1; none are on a parked thread.
+
+### Dispatch is an UPPER BOUND, not a measurement — 7a's correction, and it matters
+
+I was going to write "dispatch is cold". That overstates what 89 draws can say.
+`PyHostCall` is 1 of 89; `PyFindMethCI`, `PyFieldGet/Set` and the closure arm are
+**zero of 89** — and by the rule of three, zero in 89 is consistent with a true
+share up to **~3.4%**, which is several times the row sitting beside it. So the
+retirement condition is answered **"not supported by this arm"**, not "refuted".
+`pcdispatch.py` now prints that ceiling instead of a bare `0.00%`.
+
+### Why it stays parked rather than retired or acted on
+
+- **The pre-registered repeatability check has NO DATA.** `v416/prof-r2.raw` is
+  988 lines containing **zero** `PC` records — the stop landed after the round
+  began and before sampling started. 7a declared a two-rounds-per-arm falsifier
+  in advance; it has not been run, on either arm. That is pre-registration
+  working: the absence is visible instead of skipped.
+- **A profile share is not a lever until an A/B says it is.** 7a's own last miss
+  on this exact question was 12.3x per call against 3.3% in situ.
+- **Skid is NOT the reason to withhold it** — 7a withdrew that and it was right
+  to. Its precedent (16.5% -> 4.9% at a lock `xchg`) is PMU sampling, where skid
+  is a hardware artefact. This is gdb SIGINT sampling with an exact RIP.
+  Signal-delivery bias toward landing after a store retires is *plausible and
+  unmeasured*, and it is a different mechanism. **The reason to withhold 11.2%
+  is the population, not skid.**
+- Cross-ARM is available where cross-ROUND is not: 13/433 on v416 against 10/256
+  on v418 under my (wrong) denominator, same order of magnitude. That varies the
+  wrong thing to be a repeatability check.
+
+### What would now retire this ticket
+
+An **in-situ A/B** of the flip, not a microbenchmark, once GUI testing reopens —
+which only the owner can lift. At 11.2% of main-thread time it is worth one.
