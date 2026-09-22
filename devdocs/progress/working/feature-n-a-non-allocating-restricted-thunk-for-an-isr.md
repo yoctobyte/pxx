@@ -1104,19 +1104,32 @@ silently change them. It needs its own spelling; choosing it is engineering.
 
 ### AND ARM B IS NO LONGER THE WEAK ARM
 
-**CORRECTED 2026-09-22 — this section rested on a paraphrase of the owner that I
-wrote myself, and frankz-e5 caught it.** What I had written was: *"He framed the
-pivot as complete-but-slow outranks incomplete, with ESP work named as the
-incomplete part"* — bolded, in his voice, and then used as a RANKING to revive
-arm B. He did not say that. What he said is a **sequencing** instruction (wrap up
+**CORRECTED 2026-09-22 — this section rested on a compression of the owner that
+is not in his words.** frankz-e5 flagged it, then corrected its own flag on
+origin, and the transcript settles it: the phrase came to me from `frankuser`,
+already bolded and already attributed to him, **with his actual quote attached
+in the same sentence**. I did not invent it. What I did was re-voice it as his
+(*"He framed the pivot as..."*, dropping the intermediary) and use it as a
+RANKING to revive arm B, and in the logbook I hyphenated it into a named
+principle. He did not say it. What he said is a **sequencing** instruction (wrap up
 the loose ties, then focus on ESP32 once more) plus an observation:
 
 > *"lekkerzeilen does compile and run.. just we have performance issues. those
 > can all be chased down in a later stage. however, work on ESP is incomplete."*
 
 Whether ESP32 **outranks** the demos or runs beside them is on the goal file's
-own open-question list, unanswered, and nothing in the chain can settle it. So
-arm B does not get a ranking from him.
+own open-question list, unanswered, and nothing in the chain can settle it. He
+made ONE comparison — perf work against ESP work — and did not rank the goal
+list. So arm B does not get a general ordering from him.
+
+**But it does get that one comparison, and it is the comparison arm B needs.**
+The quote gives the pivot a reason and not just an order: lekkerzeilen *compiles
+and runs*, its problem is a quality one he explicitly defers to a later stage,
+and ESP work is **incomplete**. Arm B's claim lines up with the word *incomplete*
+in his own sentence — a capability that refuses loudly at compile time is not the
+thing he called incomplete, and a handler that might allocate is. That is
+narrower ground than the compression claimed and it is ground that actually
+exists.
 
 **It does not need one.** A **loud compile-time refusal is a completed capability
 rather than a gap** — that stands on its own, and it is the stronger form of the

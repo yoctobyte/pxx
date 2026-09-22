@@ -39570,13 +39570,50 @@ different disguise**: there the tell is a word like *always*, *cannot*,
 that sounds like colour.
 
 
-### AND THE UNAUDITED VOICE IS YOUR OWN — A PARAPHRASE OF SOMEONE ELSE ARRIVES ALREADY SOUNDING LIKE SOMETHING THEY SAID
+### AND THE COMPRESSION TRAVELLED WITH ITS OWN REFUTATION ATTACHED, AND WAS ADOPTED ANYWAY
 
-Measured 2026-09-22, caught by `frankz-e5` in `f35b44b8b`, my own commit.
+Measured 2026-09-22 in `f35b44b8b`, my own commit. Flagged by `frankz-e5`, which
+then corrected its own flag; the origin below is from the transcript, not from
+either of our recollections, and it is not what either of us first said.
 
-The section above is about a provenance claim only the subject can check. This
-is the sharper case, because there is **nothing to check against** — the claim is
-manufactured in the writing.
+**THE HEADLINE IS THE OPPOSITE OF WHAT I FIRST WROTE HERE.** I recorded this as
+a paraphrase I had produced myself, unaudited because it was in my own voice.
+e5 checked and it was not mine: `frankuser` wrote the compression and sent it
+to me. e5's note then said I had not produced it, which is true and is an
+exculpation **in my favour, which is the direction nobody checks** — so I went
+to the record. `grep`ping my own session file for the phrase gives three hits:
+one `role=user` (the inbound relay) and two `role=assistant` (me, using it).
+
+What arrived, verbatim and complete:
+
+> *"he framed the whole pivot as **complete-but-slow outranks incomplete** —
+> \"lekkerzeilen does compile and run.. just we have performance issues. those
+> can all be chased down in a later stage. however, work on ESP is
+> incomplete.\""*
+
+**The compression and the quote that refutes it travelled in the same
+sentence.** The relayer did the honest thing and attached the source. The quote
+makes ONE comparison — perf work against ESP work — and the compression asserts
+a general ORDERING; the gap between them is visible without leaving the line.
+I adopted the compression anyway, and the discharge cost nothing and was
+already in my hands.
+
+So the transferable finding is stronger than "a paraphrase is unaudited",
+because here the audit material was **attached**:
+
+- **Attaching the source does not cause anyone to read it.** A compression with
+  its quote beside it reads as *sourced*, and "sourced" is where checking stops.
+  The attachment is what made it safe to adopt, which inverts its purpose.
+- **What was mine is the two steps after receipt, and they are the ones that
+  made it durable.** I re-voiced it — my ticket says *"He also framed the pivot
+  as..."*, dropping the intermediary, so a peer's compression became a direct
+  attribution to the owner. And I **named** it: the logbook line says
+  `Complete-outranks-incomplete`, hyphenated, where it reads as established.
+  Neither step is in the message I received.
+- **A relay chain loses its intermediary at every honest step.** frankuser
+  attributed it to him, I attributed it to him, and by the logbook there was no
+  frankuser in the sentence at all. Nobody lied; the intermediary simply is not
+  load-bearing in any single retelling.
 
 Handling the owner's words on the ESP32 pivot, I did two things in one commit:
 
@@ -39585,16 +39622,17 @@ Handling the owner's words on the ESP32 pivot, I did two things in one commit:
   *thunk-scoped*, concluded no amount of careful reading makes one answer the
   other, and withdrew my own recommendation on the strength of it. That is the
   scope test applied correctly to a hard case.
-- A **paraphrase I wrote myself** — *"He framed the pivot as complete-but-slow
-  outranks incomplete"* — went in bolded, unquoted, in his voice, and was then
-  used as a **ranking** to revive a design arm. It appeared three times in the
-  commit, once as the named principle *"Complete-outranks-incomplete"*. He had
-  said no such thing: his words were a **sequencing** instruction (wrap up the
-  loose ties, then ESP32 again). Whether ESP32 outranks the demos is an open
-  question in the goal file that nobody in the chain can settle.
+- A **compression handed to me by a peer** — *"complete-but-slow outranks
+  incomplete"* — was re-voiced as his, unquoted, and used as a **ranking** to
+  revive a design arm. He had said no such thing: he made one comparison, perf
+  work against ESP work. Whether ESP32 outranks the demos is an open question in
+  the goal file that nobody in the chain can settle.
 
 **Both directions of one class, in one commit, and the harder one came out
-right.** e5's mechanism for why:
+right** — the quote I interrogated arrived from the same peer, in the same
+shape, and got the scope test; the compression did not. e5's mechanism, written
+when we both still thought the compression was mine, and still the right account
+of why a re-voiced claim is not re-read:
 
 > *A quote arrives marked as somebody else's and gets interrogated; a paraphrase
 > arrives in your own voice already sounding like something he said, and that is
@@ -39602,10 +39640,10 @@ right.** e5's mechanism for why:
 
 Two things make it worse than an ordinary misquote:
 
-- **A paraphrase acquires a NAME.** Mine became `Complete-outranks-incomplete`,
+- **A paraphrase acquires a NAME.** This one became `Complete-outranks-incomplete`,
   hyphenated, and a named principle gets cited rather than re-derived. That is
   CLAUDE.md's "the name is not the thing" arriving in one's own prose, where the
-  80%-accurate name is one you minted.
+  80%-accurate name is one the chain minted and no single link owns.
 - **It launders authority in the direction you already wanted.** The paraphrase
   did not revive a random arm; it revived the one I was arguing for. A quote that
   cut against me would have been re-read.
