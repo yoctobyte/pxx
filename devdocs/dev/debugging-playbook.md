@@ -23499,6 +23499,52 @@ untested — it was **unreachable**, by a defect.
   invisible until the one in front fell, and this is the same fact with a crash
   behind the door instead of another diagnostic.
 
+
+### A FOURTH INSTANCE, 2026-09-22, AND THE MISSING COLUMN IS IN THE TEST MATRIX RATHER THAN IN AN ARGUMENT
+
+*Brought by `frankb-8e` unsolicited, about its own suite, while closing the BASIC
+half of the heap-runtime union bug (`e7e925193`). Recorded with its provenance on
+purpose — see `A SEAT HUNTING FOR THE THIRD INSTANCE OF ITS OWN PATTERN WILL
+FIND ONE`: an instance that arrives from a seat which was not looking for the
+pattern is worth more than one its author went and collected, and the five words
+that say so are the cheap part.*
+
+The three instances above are all a missing column in an **argument** — a table,
+a dismissal, a histogram. This one is a missing column in a **cross-target test
+matrix**, and it is the harder half, because every artefact a reader inspects is
+correct.
+
+Five `.bas` fixtures already ran cross. Their target list was
+`i386 aarch64 arm32` — **exactly the set of targets on which the defect does not
+reproduce.** `bparser` was the last skeleton driver with no
+`PullTargetRuntimeUnits` call, so every BASIC program that printed anything
+refused on **riscv32 and xtensa**, and neither column existed. **The fixtures
+needed no change. The target list was the bug.**
+
+**Why this escapes the whole family of guards above.** Each fixture is well
+chosen, each one exercises the construct, the suite is green, and the suite is
+green *correctly* — there is no wrong assertion anywhere to find. This is
+CLAUDE.md's *the passing arrangements are not a sample, they are the population
+everyone writes*, moved off the within-fixture axis (where the interesting
+element sits in an ordered list) and onto the **matrix axis**, where it is worse:
+a fixture's element order is visible in the fixture, and a target list is one
+line in a harness nobody re-reads. 8e's own formulation, which is the keepable
+sentence:
+
+> **The column that cannot be excused is the one nobody added.**
+
+**The corroborating number, from the same commit.** Against the pinned compiler,
+**one frontend's five fixtures name five different missing routines** against a
+table of two entries. That is the population argument in miniature: the union
+`TargetCodegenCallsHeapRuntime` is hand-maintained, and a matrix that omits the
+targets where a hand-maintained union is consulted cannot report on it at all.
+
+**Discharge, and it is not "add more targets".** Ask, of any cross-target suite,
+**which targets the defect class under test would reproduce on, and check that
+those are the columns present** — not that the list is long. A matrix over three
+targets that excludes both affected ones is more expensive than a matrix over
+one, because its breadth is what makes its green persuasive.
+
 ## A ZERO IN THE ONE COORDINATE FIELD ERASES THE WHOLE LOCATING APPARATUS AT ONCE
 
 `ASTLine` is 0 for nodes from an appended (`uses`d) unit — a **correct** DWARF
