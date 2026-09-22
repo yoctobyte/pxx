@@ -42046,8 +42046,21 @@ costs an extra artefact and looks like diligence.*
     --since='2026-09-22 20:00'  ->    3
     --since=2026-09-21          ->  555
 
-**A bare `YYYY-MM-DD` resolves to that date at the CURRENT time of day.** It is
-not midnight. So `--since=<today's date>` means "since a few seconds ago" and
+**A bare `YYYY-MM-DD` does NOT resolve to midnight.** It resolves to a time late
+in the day, consistent with the current clock.
+
+**Stating exactly what these rows prove, because a peer ran the same probe on a
+quieter repo and its `19:00` row collapsed to `0` for want of commits** — a
+control is only as good as the population it happened to have, and that one
+confirmed the hazard while being unable to discriminate the mechanism. Mine
+discriminate more and not completely. Same repo, no path filter, `now = 20:11`:
+`--since=2026-09-21` and `--since='2026-09-21 20:00'` and `--since='2026-09-21
+20:15'` all answer **557**, while `'2026-09-21 23:59'` answers **508** and
+`'2026-09-21 00:00'` answers **766**. So the bare form is **neither midnight nor
+end-of-day**, and today's `0` places it after the newest commit of the day
+(20:05). That is consistent with *current time of day* and does not pin it to the
+minute — no commit fell in the window that would. **The HAZARD is proven; the
+exact default is bounded, not measured.** So `--since=<today's date>` means "since a few seconds ago" and
 returns nothing, `rc=0`, no warning. `--since=<yesterday's date>` quietly means
 "the last 24 hours", which is usually close enough to what you wanted that it
 never teaches you the rule.
@@ -42133,3 +42146,115 @@ discriminator precisely because a byte count can coincide and a hash cannot.
 - **The tell is the disagreeing row you did not care about.** When a re-measurement
   agrees on your headline number and differs on a column you were not asking
   about, that is not noise around a confirmation. Re-derive the binary first.
+
+## ONCE YOU ARE MID-MEASUREMENT WITH UNPUSHED WORK, BOTH RULES ARE BINDING AND BOTH ACTIONS ARE WRONG — the resolution is a PATCH, which banks without moving the tree
+
+*2026-09-22, `franks-5b` paying for it and `frankz-e5` causing it. One discarded
+suite run, on a tree the rule's own remedy moved.*
+
+CLAUDE.md holds two rules that are each correct and that collide in one state:
+
+- **Push often.** A local commit is not banking; a restart leaves the next
+  session with no idea the work is there.
+- **Do not touch the instrument while it is measuring.** `tools/sync.sh` pulls
+  before it pushes, so a push during a run moves the population under your own
+  harness.
+
+The file resolves the collision by ORDERING — *push, let the pull settle,
+rebuild, measure* — and then says the honest thing: **the collision window only
+exists if you start a measurement with work already unpushed.** That is a
+prevention, not a remedy, and it is silent about the state it describes.
+
+**What the silence costs.** I told a seat *"push before the long run, not
+after"* — correct as a rule — while it was **already mid-run**. The only way to
+comply was to push during. `sync.sh` pulled four compiler files including
+`compiler/builtin/builtinheap.pas`, which the compiler reads per compilation, so
+every test compiled after that instant used moved builtin sources against a
+pre-pull binary. The compiler sha went `59b5bf39acd1` -> `464ddd6c2b02`: the tree
+really had moved under the run. The seat discarded the run rather than reading
+its verdict, which was right and cost it the whole run.
+
+**THE ADVICE WAS SOUND AND THE DELIVERY MADE IT UNFOLLOWABLE.** A rule phrased as
+*do X before Y* is an instruction to somebody who has not started Y. Handed to
+somebody already inside Y, the same words become *do X now*, and the two readings
+are indistinguishable in the sentence. **Before you give a sequencing rule, check
+which side of the sequence the recipient is on** — it is one question and it is
+the difference between advice and a wrecked run.
+
+**The resolution, and it is already in CLAUDE.md under a different heading.**
+Mid-run with unpushed work, the three obvious moves are all bad:
+
+- **Push** — pulls, moves the tree, contaminates the run. Worst.
+- **Commit** — does not pull, but `git commit` MOVES THE TREE'S IDENTITY, which
+  `testmgr` reads; it prints `the source tree MOVED during this run`, and that
+  warning only bites a RED, so a green run swallows it.
+- **Do nothing** — the work is undiscoverable if the session is cycled.
+
+**Write a PATCH instead.** `git diff` (and `git diff --cached`) to a file in the
+scratchpad, plus a one-line pointer wherever the next session will look. It banks
+the CONTENT without a pull, without moving the tree, and without touching the
+index — and it is the same instrument CLAUDE.md already prescribes for parking
+held work (*park held work as a PATCH or a STASH, never a file copy*), applied to
+a different problem. Push when the run ends.
+
+**Note what the threat actually is**, because it decides this. The danger in an
+unpushed commit is not that the bytes vanish — the tree survives on disk. It is
+that **the next session does not know it is there**, and is told by CLAUDE.md to
+distrust a diff it cannot explain. A patch file with a pointer solves exactly
+that, and solves nothing else, which is why it is enough here and not a general
+substitute for pushing.
+
+## AN ALARM ABOUT A PEER'S STATE IS INSIDE THE POPULATION IT MEASURES — a correct one is falsified by its own success, and the sender is worst placed to tell that from staleness
+
+*2026-09-22. `frankz-e5` warned `franks-5b` that its ticket was not on origin,
+re-checked ninety seconds later, found it there, and retracted — wrongly.
+`franks-5b` supplied the correction and the mechanism.*
+
+**What I did.** Ref-level check after a fetch at 19:56: the ticket was not on
+`origin/master`. I sent the alarm. At 19:58 I re-checked; it was there, pushed at
+19:57. I concluded my measurement had been true when taken and false by the time
+it arrived, filed it as the shelf-life class, and proposed softening the wording
+to *"as of 19:56 it was not on origin; re-check before you act."*
+
+**Both halves of that were wrong.**
+
+**The state was worse than I reported, not better.** `--diff-filter=A` puts the
+file's first appearance in the tree at `526eb79e6`, 19:57. At 19:56 it was not
+merely unpushed — it was **untracked**, never committed. The alarm was correct
+about a real and worse state, not about a state the peer was in the middle of
+leaving.
+
+**And the ninety seconds was the alarm WORKING.** The peer pushed *because the
+message arrived*. The interval I read as decay was the interval between my
+measurement and its acting on it.
+
+**THE CLASS.** An alarm about a peer's state is not a reading of an independent
+world. **It is inside the population it measures**, and its delivery is an
+intervention on that population. So it does not merely go stale: **it changes the
+thing it reports, and a correct alarm is therefore falsified by its own
+success.** Every effective warning about an unpushed commit, an idle session or a
+stale binary will read as wrong on re-check, and **the seat least able to tell
+that from staleness is the one who sent it**, because it never observes the
+action it caused — it sees only the before and the after.
+
+This is the process-table rule (*any instrument that scans a namespace the
+observer is also in counts the observer*) in a social subsystem instead of a
+`/proc` one, and it is nastier there, because the coupling runs through another
+agent's decision rather than through a command line, and leaves no artefact
+saying it happened.
+
+**The discharge, and it is the peer's and better than the timestamp I
+proposed:** when an alarm about a peer's state reads as false on re-check, **ask
+whether YOU caused the change before concluding you were early.** One command
+usually settles it — `git log --diff-filter=A` for a file, the peer's own commit
+time against your send time.
+
+**AND THE SOFTENING I PROPOSED WOULD HAVE BROKEN IT, by this file's own rule.**
+*"As of 19:56 it was not on origin; re-check before you act"* is better practice
+for a claim in general, and here it moves the check onto the person least
+motivated to run it. The flat statement is what caused the check. A hedge invites
+either *re-check, find it untracked, push anyway* — the same outcome by luck — or
+*"probably fine"*, and does nothing. **An open question with a named next step is
+a task; one without is a tax**, and a hedged alarm names no actor. **Timestamp a
+CLAIM; do not hedge an ALARM.** They are different speech acts and only one of
+them is trying to cause something.
