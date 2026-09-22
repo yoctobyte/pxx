@@ -1037,6 +1037,7 @@ begin
   DceReport := False;
   DceWhyReport := False;
   DceWhyFilter := '';
+  DceCostFilter := ''; DceCostBytes := 0; DceCostBodies := 0;
   DceOff := False;
   EmitMapFile := True;   { default on; --no-map suppresses }
   MeasureRegcall := False;
@@ -1206,6 +1207,24 @@ begin
         grepping a map file. }
       DceEnabled := True; DceReport := True; DceWhyReport := True;
       DceWhyFilter := Copy(option, 11, Length(option) - 10);
+      Inc(i);
+    end
+    else if Copy(option, 1, 11) = '--dce-cost=' then
+    begin
+      { What the named methods' VMT/RTTI slots COST, as a differential: the
+        pass marks twice, once with those slots withheld, and reports the
+        difference in live bytes.
+
+        THIS IS THE QUESTION --dce-why CANNOT ANSWER AND LOOKS LIKE IT DOES.
+        Its `vmt/rtti slot` total is FIRST-reason attribution, so it contains
+        bodies something else also reaches -- on the nilpy-c3 demo it contains
+        `main`. Summing what a slot reaches has the same defect and no fix;
+        subtracting two live sets has neither.
+
+        Costs a second marking pass, so it is opt-in and never on by default.
+        feature-a-unreferenced-class-rtti-keeps-every-method-alive }
+      DceEnabled := True; DceReport := True;
+      DceCostFilter := Copy(option, 12, Length(option) - 11);
       Inc(i);
     end
     else if option = '--dce-why' then

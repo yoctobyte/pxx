@@ -1011,102 +1011,32 @@ begin
                 AIntToStr(liveB));
 end;
 
-procedure DceRun;
-var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
-    why: AnsiString; src, dst: Integer; progressed: Boolean;
+procedure DceMarkAll(suppressVmt: Boolean);
+{ Install the roots and run the reachability fixpoint. Leaves the answer in
+  DceLive/DceWhy/DceVia and touches NOTHING that is emitted.
+
+  EXTRACTED FROM DceRun 2026-09-22 (frankb-8e) SO IT CAN BE RUN TWICE. It was
+  inline in the middle of a 730-line procedure, which is the only thing that
+  made the differential below hard; the code itself was already re-runnable and
+  is unchanged apart from the two marked spots. Three properties make a second
+  run correct, and all three were here before this move:
+    * it RESETS everything it uses -- DceLive/DceWhy/DceVia in the first loop,
+      DceWorkCount, DceViaNow, and DceEdgeHead before the counting sort -- so
+      there is no saved state to restore;
+    * DceMark only ever SETS (it returns early if already live), so withholding
+      a root can only shrink the live set, never move a body between reasons
+      in a way that invents one;
+    * nothing it reads is mutated by DceRun until the removable-ranges phase,
+      which is why this must be called BEFORE that and never after.
+  The real pass must therefore be the LAST call, because DceLive is what the
+  ranges phase consumes.
+
+  COST: a second call roughly doubles the pass. DceRangeHoldsStub is
+  O(stubs x coderefs) per body and DceOwnerOf is a binary search per fixup, and
+  both are recomputed. That is why the second run happens only under
+  --dce-cost and never by default. }
+var i, p, owner, a, b, slot: Integer; progressed: Boolean;
 begin
-  if not DceEnabled then Exit;
-  why := '';
-  { WHICH REFERENCE SHAPES PatchCodeRefSlot AND ApplyCallFixups CAN RE-AIM.
-    This used to read "x86-64's rel32 call/jmp", which was the truth about the
-    ONE line below the CodeRef loop, not about the pass; see PatchCodeRefSlot
-    (ir_codegen.inc) for the 2026-09-18 measurement that separated them.
-
-    A target qualifies when two things hold, and both are about the EMITTER, not
-    about this file: every code->code reference it emits is recorded (CallFix for
-    a call to a proc, CodeRef for a call or jump to a fixed code offset), and the
-    slot each one sits in can be re-encoded in place. Reach is not a third
-    condition -- DCE only REMOVES bytes, so |target - site| never grows and a
-    branch form that encoded before still encodes after.
-
-    XTENSA IS NO LONGER REFUSED AND THIS COMMENT SAID IT WAS until 2026-09-19 --
-    stale prose sitting three lines above a refusal list that does not contain
-    it, which is the shape that gets believed because the code below is correct
-    and nobody re-reads the paragraph. What it describes is real and was DONE:
-    the slot needs both a delta ANCHOR and a per-site FORM (call0 vs call8,
-    chosen by the callee's own return instruction), and both columns exist now.
-    WASM32 IS NO LONGER REFUSED EITHER, and this gate is now empty of targets.
-    It ran the pass at module-write time instead of here, because writeWasm
-    adds functions AND roots after this point -- see WasmDceRun above for the
-    ordering and for why its refusal's stated reason ("references functions by
-    INDEX") was true about wasm and was not what blocked it. }
-  if TargetArch = TARGET_WASM32 then
-    { handled by WasmDceRun, from writeWasm, where the index space closes }
-    Exit
-  { --shared only. `-c` used to be refused beside it on the premise that an
-    object "carries its own code-offset relocations"; it does, and every table
-    those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,
-    DynCall, IramCallFix, CodeRef and Procs[].BodyAddr -- is one this pass
-    already compacts and re-patches below, because an ET_EXEC image reads the
-    same tables. IramCallFix WAS MISSING FROM THIS LIST UNTIL 2026-09-22 and
-    from the pass entirely, and the sentence claims completeness, so it read as
-    the evidence for the very decision it was wrong about; the compaction loop
-    below now exists and carries what that cost. An enumeration that asserts
-    "every table" is a census, and this one omitted a member. The
-    half that was genuinely missing was not a relocation at all: it was the ROOT
-    SET. An executable is rooted at its entry point, and an object's callers are
-    outside it, so rooting an object the same way drops its entire reason to
-    exist. That root now exists (see the export loop below), so the refusal has
-    nothing left to refuse. --shared keeps it: its exported surface goes through
-    a .dynsym and a GOT this pass has never been read against, and turning both
-    on from one measurement would leave the failing one unidentified. }
-  else if EmitSharedMode then why := '--shared: .dynsym/GOT surface is unmeasured against this pass'
-  else if DebugInfo then why := '-g line/frame tables carry code offsets'
-  else if (not IsPascalFrontend) and (not IsCFrontend) and
-          (not IsNilPyFrontend) then
-    why := 'only the Pascal, C and NilPy frontends are wired up so far'
-  else if AsmEntryOff <> 0 then why := 'the .asm frontend overrides the entry point';
-  if why <> '' then begin DceReportLine('off: ' + why); Exit; end;
-
-  if not DceCollectBodies(why) then begin DceReportLine('off: ' + why); Exit; end;
-
-  { Every code offset something reaches without naming a proc. }
-  DceStubCount := 0;
-  i := 0;
-  while i < CodeRefCount do
-  begin
-    if not DceAddStubTarget(CodeRefTarget[i]) then
-    begin
-      DceReportLine('off: more than MAX_DCE_STUBS distinct stub targets');
-      Exit;
-    end;
-    Inc(i);
-  end;
-  { THE INIT/FINI THUNKS ARE CODE NO PROC OWNS, and under --emit-obj they are
-    the object's entry points -- the loader calls them through .init_array /
-    .fini_array. They are NOT a clean tail: measured on test_emit_obj, the init
-    thunk sits at 0x1aae4 and __pxx_run_finalizers' body at 0x1ab28, so both
-    thunks fall INSIDE the removable range of whatever proc precedes them.
-    Registering them as stub targets is the existing mechanism for exactly this
-    -- a range that holds one is kept whole -- and it is why the thunks survive
-    a pass that has no edge pointing at them.
-
-    The fini thunk's own call to the finalizer runner needs no edge either:
-    FiniRunnerProc is already an explicit root above. Reaching it through
-    DceOwnerOf would attribute it to the proc whose range it happens to land in,
-    which is a different proc on every program. }
-  if InitThunkOff >= 0 then
-    if not DceAddStubTarget(InitThunkOff) then
-    begin DceReportLine('off: no stub slot for the init thunk'); Exit; end;
-  if FiniThunkOff >= 0 then
-    if not DceAddStubTarget(FiniThunkOff) then
-    begin DceReportLine('off: no stub slot for the fini thunk'); Exit; end;
-
-  { The two graph tables are sized to THIS image's call sites, not to a cap --
-    they are the only place the pass allocates anything big. }
-  SetLength(DceCallOwner, CallFixCount + 1);
-  SetLength(DceEdgeTo, CallFixCount + 1);
-
   { --- roots ------------------------------------------------------------- }
   i := 0;
   while i < ProcCount do
@@ -1119,7 +1049,22 @@ begin
   { an address in a VMT / RTTI / interface table can be called from anywhere }
   DceWhyNow := DCE_WHY_VMT;
   i := 0;
-  while i < MethodFixCount do begin DceMark(MethodFixups[i].ProcIdx); Inc(i); end;
+  while i < MethodFixCount do
+  begin
+    { THE ONE SUPPRESSIBLE ROOT, and it is suppressible only for MEASUREMENT.
+      --dce-cost=<substr> runs this whole routine twice: once with the VMT/RTTI
+      slots of the named methods withheld, then once for real. The difference
+      between the two live totals is what those slots actually cost, which is
+      NOT what a subtree sum would say -- a body reachable both from a slot and
+      from somewhere else is in the subtree and costs nothing. }
+    if suppressVmt and (DceCostFilter <> '') and
+       (Pos(LowerCase(DceCostFilter),
+            LowerCase(Procs[MethodFixups[i].ProcIdx].Name)) > 0) then
+      { withheld for this measurement pass }
+    else
+      DceMark(MethodFixups[i].ProcIdx);
+    Inc(i);
+  end;
   { @proc: the same argument, BUT ONLY WHERE THE TAKING SITE IS NOT IN A BODY.
     "an address in a table can be called from anywhere" is true of an address
     that is actually WRITTEN somewhere; an `@proc` sitting in a body this same
@@ -1278,7 +1223,7 @@ begin
     DceEdgeHead[p-1] is its start -- the standard counting-sort shift, read
     backwards instead of shifting the array. }
 
-  DceReachReport;
+  if not suppressVmt then DceReachReport;
 
   { --- reachability ------------------------------------------------------- }
   { Two edge kinds, so two nested loops: the call walk drains its worklist,
@@ -1313,6 +1258,137 @@ begin
       Inc(i);
     end;
   until not progressed;
+end;
+
+procedure DceRun;
+var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
+    why: AnsiString; src, dst: Integer; progressed: Boolean;
+begin
+  if not DceEnabled then Exit;
+  why := '';
+  { WHICH REFERENCE SHAPES PatchCodeRefSlot AND ApplyCallFixups CAN RE-AIM.
+    This used to read "x86-64's rel32 call/jmp", which was the truth about the
+    ONE line below the CodeRef loop, not about the pass; see PatchCodeRefSlot
+    (ir_codegen.inc) for the 2026-09-18 measurement that separated them.
+
+    A target qualifies when two things hold, and both are about the EMITTER, not
+    about this file: every code->code reference it emits is recorded (CallFix for
+    a call to a proc, CodeRef for a call or jump to a fixed code offset), and the
+    slot each one sits in can be re-encoded in place. Reach is not a third
+    condition -- DCE only REMOVES bytes, so |target - site| never grows and a
+    branch form that encoded before still encodes after.
+
+    XTENSA IS NO LONGER REFUSED AND THIS COMMENT SAID IT WAS until 2026-09-19 --
+    stale prose sitting three lines above a refusal list that does not contain
+    it, which is the shape that gets believed because the code below is correct
+    and nobody re-reads the paragraph. What it describes is real and was DONE:
+    the slot needs both a delta ANCHOR and a per-site FORM (call0 vs call8,
+    chosen by the callee's own return instruction), and both columns exist now.
+    WASM32 IS NO LONGER REFUSED EITHER, and this gate is now empty of targets.
+    It ran the pass at module-write time instead of here, because writeWasm
+    adds functions AND roots after this point -- see WasmDceRun above for the
+    ordering and for why its refusal's stated reason ("references functions by
+    INDEX") was true about wasm and was not what blocked it. }
+  if TargetArch = TARGET_WASM32 then
+    { handled by WasmDceRun, from writeWasm, where the index space closes }
+    Exit
+  { --shared only. `-c` used to be refused beside it on the premise that an
+    object "carries its own code-offset relocations"; it does, and every table
+    those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,
+    DynCall, IramCallFix, CodeRef and Procs[].BodyAddr -- is one this pass
+    already compacts and re-patches below, because an ET_EXEC image reads the
+    same tables. IramCallFix WAS MISSING FROM THIS LIST UNTIL 2026-09-22 and
+    from the pass entirely, and the sentence claims completeness, so it read as
+    the evidence for the very decision it was wrong about; the compaction loop
+    below now exists and carries what that cost. An enumeration that asserts
+    "every table" is a census, and this one omitted a member. The
+    half that was genuinely missing was not a relocation at all: it was the ROOT
+    SET. An executable is rooted at its entry point, and an object's callers are
+    outside it, so rooting an object the same way drops its entire reason to
+    exist. That root now exists (see the export loop below), so the refusal has
+    nothing left to refuse. --shared keeps it: its exported surface goes through
+    a .dynsym and a GOT this pass has never been read against, and turning both
+    on from one measurement would leave the failing one unidentified. }
+  else if EmitSharedMode then why := '--shared: .dynsym/GOT surface is unmeasured against this pass'
+  else if DebugInfo then why := '-g line/frame tables carry code offsets'
+  else if (not IsPascalFrontend) and (not IsCFrontend) and
+          (not IsNilPyFrontend) then
+    why := 'only the Pascal, C and NilPy frontends are wired up so far'
+  else if AsmEntryOff <> 0 then why := 'the .asm frontend overrides the entry point';
+  if why <> '' then begin DceReportLine('off: ' + why); Exit; end;
+
+  if not DceCollectBodies(why) then begin DceReportLine('off: ' + why); Exit; end;
+
+  { Every code offset something reaches without naming a proc. }
+  DceStubCount := 0;
+  i := 0;
+  while i < CodeRefCount do
+  begin
+    if not DceAddStubTarget(CodeRefTarget[i]) then
+    begin
+      DceReportLine('off: more than MAX_DCE_STUBS distinct stub targets');
+      Exit;
+    end;
+    Inc(i);
+  end;
+  { THE INIT/FINI THUNKS ARE CODE NO PROC OWNS, and under --emit-obj they are
+    the object's entry points -- the loader calls them through .init_array /
+    .fini_array. They are NOT a clean tail: measured on test_emit_obj, the init
+    thunk sits at 0x1aae4 and __pxx_run_finalizers' body at 0x1ab28, so both
+    thunks fall INSIDE the removable range of whatever proc precedes them.
+    Registering them as stub targets is the existing mechanism for exactly this
+    -- a range that holds one is kept whole -- and it is why the thunks survive
+    a pass that has no edge pointing at them.
+
+    The fini thunk's own call to the finalizer runner needs no edge either:
+    FiniRunnerProc is already an explicit root above. Reaching it through
+    DceOwnerOf would attribute it to the proc whose range it happens to land in,
+    which is a different proc on every program. }
+  if InitThunkOff >= 0 then
+    if not DceAddStubTarget(InitThunkOff) then
+    begin DceReportLine('off: no stub slot for the init thunk'); Exit; end;
+  if FiniThunkOff >= 0 then
+    if not DceAddStubTarget(FiniThunkOff) then
+    begin DceReportLine('off: no stub slot for the fini thunk'); Exit; end;
+
+  { The two graph tables are sized to THIS image's call sites, not to a cap --
+    they are the only place the pass allocates anything big. }
+  SetLength(DceCallOwner, CallFixCount + 1);
+  SetLength(DceEdgeTo, CallFixCount + 1);
+
+  { --- roots and reachability, once or twice -------------------------------
+    The suppressed pass FIRST and the real pass LAST, because the ranges phase
+    below consumes DceLive and must see the real answer. }
+  if DceCostFilter <> '' then
+  begin
+    DceMarkAll(True);
+    DceCostBytes := 0; DceCostBodies := 0;
+    slot := 0;
+    while slot < DceOrderCount do
+    begin
+      p := DceOrder[slot];
+      a := Procs[p].BodyAddr;
+      b := DceBodyEnd(slot);
+      { `b > a` IS NOT A TIDINESS GUARD -- IT IS WHAT MAKES THE TWO COUNTS
+        COMPARABLE. The ranges phase below counts liveN under exactly this
+        condition, so an EMPTY body is live there and not counted. Without the
+        same test here the withheld run reported MORE live bodies than the real
+        one and the subtraction printed `-4 bodies`. Caught by the `main`
+        control, which is the one case where the byte answer is 0 and the body
+        column therefore has nothing to hide behind: bytes agreed exactly
+        (833392 = 833392, empty bodies contribute nothing) while the counts
+        disagreed by four. Fixed by making the PREDICATE identical rather than
+        by adjusting the subtraction, because the number is only meaningful
+        against the one it is subtracted from. }
+      if (b > a) and DceLive[p] then
+      begin
+        DceCostBytes := DceCostBytes + (b - a);
+        Inc(DceCostBodies);
+      end;
+      Inc(slot);
+    end;
+  end;
+  DceMarkAll(False);
 
   { --- removable ranges --------------------------------------------------- }
   DceRemCount := 0;
@@ -1371,6 +1447,22 @@ begin
     writeln(StdErr, 'dce: bodies ', DceOrderCount, '  live ', liveN, ' (', liveB,
             'B)  dead ', deadN, ' (', deadB, 'B)  dropping ', DceRemCount, ' (', gotB, 'B)');
     writeln(StdErr, 'dce: code ', CodeLen, 'B -> ', CodeLen - gotB, 'B');
+    if DceCostFilter <> '' then
+    begin
+      { THE DIFFERENTIAL, AND IT IS REPORTED AS ONE. Both totals are printed,
+        not just the delta, because a delta alone cannot be checked: the reader
+        needs to see that the withheld run is SMALLER and by how much, and a
+        cost of 0 is a real and useful answer (the slot's whole reach is held
+        by something else) that would otherwise look like the flag not working.
+        The wording says WOULD STOP BEING LIVE rather than "would be saved" --
+        removing the slot is a separate decision this instrument does not make
+        and cannot justify on its own. }
+      writeln(StdErr, 'dce-cost: "', DceCostFilter, '" vmt/rtti slot(s) withheld: ',
+              'live ', DceCostBodies, ' (', DceCostBytes, 'B) vs ',
+              liveN, ' (', liveB, 'B)');
+      writeln(StdErr, 'dce-cost: ', liveB - DceCostBytes, 'B in ',
+              liveN - DceCostBodies, ' bodies would stop being live');
+    end;
     if DceWhyReport then DceReportWhy(liveB);
   end;
   if DceRemCount = 0 then Exit;

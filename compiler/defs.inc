@@ -4694,6 +4694,27 @@ var
   DceReport     : Boolean;   { --dce-report: print what it found (implies --dce) }
   DceWhyReport  : Boolean;   { --dce-why: print WHY each live body lived }
   DceWhyFilter  : AnsiString;{ --dce-why=<substr>: name those bodies too, not just the biggest }
+  { --dce-cost=<substr>: what the VMT/RTTI slots of the named methods actually
+    COST, as a differential -- the live total with those slots withheld,
+    subtracted from the real live total.
+
+    IT IS NOT A SUBTREE SUM, AND THE DIFFERENCE IS THE ENTIRE POINT. Measured
+    2026-09-22 on examples/esp32/nilpy-c3: the `vmt/rtti slot` bucket is
+    174,350 B, and `main` IS IN IT -- `--dce-why=main` answers
+    `8289B main <- [vmt/rtti slot]`. A sum over what a slot reaches counts every
+    body once per root that reaches it, so it charges a slot for bodies the
+    entry point holds anyway, and there is no arrangement of sums that does not.
+    A differential charges it for exactly the bodies that stop being live, and
+    answers ZERO for a slot whose whole reach is held elsewhere -- which is the
+    true answer and the one a sum cannot express.
+
+    Attribution in the --dce-why table is FIRST-reason, so the bucket totals are
+    not upper bounds on a saving in either direction. This is the instrument for
+    that question; the table is not.
+    feature-a-unreferenced-class-rtti-keeps-every-method-alive }
+  DceCostFilter : AnsiString;
+  DceCostBytes  : Integer;   { live bytes with the named slots withheld }
+  DceCostBodies : Integer;   { live bodies, likewise }
   DceOff        : Boolean;   { --no-dce: keep every body even at -O3 }
   { --dce-reach-from=<name>: walk the call graph FORWARD from one named body
     and print what it can reach. Every other DCE query runs BACKWARD -- from a

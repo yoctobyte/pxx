@@ -817,3 +817,91 @@ which is a **differential**, not a sum: live-set WITH the root minus live-set
 WITHOUT it. It over-counts nothing, it cannot be confused with a subtree, and
 it answers `0` for a root like `main` that something else reaches anyway —
 which is the correct answer and the one a subtree sum cannot give.
+
+## 2026-09-22 (frankb-8e) — BUILT: `--dce-cost`, and it inverts the ranking
+
+The section above asks for a per-root subtree total and says to build it
+*"before ranking candidates against each other."* Built — as a **differential**
+rather than a subtree total, for the reason in the section before this one, and
+the difference is not academic: **the two numbers invert the ranking of the top
+three candidates.**
+
+`--dce-cost=<substr>` marks twice. Once with the VMT/RTTI slots of every method
+whose name matches withheld, then once for real, and it reports the difference
+in live bodies and bytes. Withholding a root can only shrink the live set
+(`DceMark` only ever sets), so the difference is exactly the set of bodies that
+stop being live — no double counting, and no way to confuse it with a subtree.
+
+### What the candidates actually cost
+
+nilpy-c3, xtensa windowed, `--xtensa-abi=windowed --xtensa-long-calls
+--platform=esp --no-signals --dce`, binary `48f69d2d285d`. The middle column is
+what this ticket has been ranking on: the rows for that method in the
+`--dce-why` top-twenty listing, added up.
+
+| candidate | `--dce-why` rows | **actual cost** | bodies |
+| --- | ---: | ---: | ---: |
+| `TPyList.sort` | 17,116 B | **30,411 B** | 18 |
+| `TPyBytes.decode` | 12,909 B | **22,978 B** | 9 |
+| `TPyDict.update` | 5,143 B | **17,068 B** | 4 |
+| `TPyFile.writelines` | **116,178 B** | **13,571 B** | 8 |
+| `TPyDict.most_common` | 5,845 B | **6,008 B** | 2 |
+| `TPyDict.indexof` | 8,521 B | **0 B** | 0 |
+| `main` | 23,914 B | **0 B** | 0 |
+
+**`TPyFile.writelines` is over-stated by 8.6x and is fourth, not first.** The
+iterator-drain path it heads is reached by something else as well, so removing
+its slot frees only what is uniquely behind it. `TPyList.sort` — mid-pack in the
+listing — is the largest real candidate. `TPyDict.indexof` is credited 8,521 B
+and costs **nothing at all**.
+
+The listing also UNDER-states, and for a different reason: it shows the twenty
+biggest bodies, so a candidate whose cost is spread over many small bodies is
+invisible to it. `TPyDict.update` is 3.3x its listed rows.
+
+So this ticket's headline sentence — *"`TPyFile.writelines` alone heads three of
+the nine largest rows, 115,606 B, because it accepts any sequence"* — is a true
+statement about the LISTING and not about a saving. Anyone who had started work
+from it would have spent it on the fourth-biggest item.
+
+### Costs are NOT additive, in either direction
+
+| withheld | cost | sum of its named methods above |
+| --- | ---: | ---: |
+| `TPyList.*` | 70,544 B / 52 | 30,411 |
+| `TPyDict.*` | 45,759 B / 23 | 23,076 |
+| `TPyFile.*` | 31,637 B / 31 | 13,571 |
+
+Withholding a whole class's slots frees **more** than the sum of withholding
+each method alone, because bodies shared between two slots die only when both
+go. So a per-candidate table is a guide to where to look and **never a plan**:
+measure the union you actually intend to remove.
+
+### `main` is the control and it answers zero
+
+`main` is inside the 174,350 B `vmt/rtti slot` bucket (`--dce-why=main` says so)
+and costs **0 B in 0 bodies**, because the entry root reaches it anyway. That is
+the row no subtree sum can produce, and it is the reason the instrument is
+subtraction rather than addition.
+
+### Guarded
+
+`test/test_dce_cost_is_a_differential_not_a_subtree_sum.pas`, wired into
+`test-quick`, three rows asserted as BODY COUNTS so they do not drift with code
+size: a slot that costs **2** bodies where a subtree sum would say three or
+four; a live non-slot name that must cost **0**; and a virtual method that costs
+exactly **1**, its own body. That third row was first written asserting zero,
+from the argument that the method is "called" from two places — both of those
+calls dispatch THROUGH the slot, so for a virtual method the slot is the only
+edge there is. The measurement corrected the argument and the row keeps the
+measured value.
+
+### What this does NOT do
+
+It does not say a slot is removable. It prices a candidate on the assumption
+that the slot goes, which is the question the section above says to answer
+first: **when can a VMT slot be proven undispatchable?** `PyUserObjGetattr` and
+`pydynattr_get_v` are live in this image, and that is still the thing to
+establish before any of these numbers become a saving. The instrument exists so
+that whoever establishes it is working on `TPyList.sort` and not on
+`TPyFile.writelines`.

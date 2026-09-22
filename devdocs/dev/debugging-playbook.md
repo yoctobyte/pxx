@@ -31559,6 +31559,95 @@ reason for anything and the report is markedly less informative there. If a
 root report looks uninformative, check whether an earlier, coarser root rule is
 claiming everything first.
 
+## WHAT A ROOT REACHES IS NOT WHAT IT COSTS — AND RANKING SIZE CANDIDATES ON REACH INVERTS THE ORDER
+
+The section above gives `--dce-why`, which answers *why is this body alive*.
+The next question anyone asks is *which root should I attack first*, and the
+handover on `feature-a-unreferenced-class-rtti-keeps-every-method-alive` asked
+for the obvious instrument: a per-root SUBTREE TOTAL, everything reachable from
+each VMT slot, summed. **That instrument would be wrong, and wrong in the
+direction that picks the loser.** Two reasons, and they push opposite ways:
+
+- **A subtree double-counts everything SHARED.** Almost every method reaches
+  the allocator, the string runtime and the exception path, so a subtree total
+  is mostly a measure of how deep the runtime is, not of the candidate.
+- **`--dce-why`'s per-reason totals are FIRST-reason attribution, so they are
+  not an upper bound either.** `main` sits inside the `vmt/rtti slot` bucket —
+  `--dce-why=main` answers `8289B main <- [vmt/rtti slot]` — so the bucket
+  contains bodies nobody is deleting under any circumstances.
+
+**`--dce-cost=<substring>`** (compiler/dce.inc, 2026-09-22) is the differential
+instead. It marks TWICE: once with the VMT/RTTI slot roots of every matching
+method withheld, once for real, and reports the DIFFERENCE in live bodies and
+bytes. `DceMark` only ever sets (`if DceLive[p] then Exit`), so withholding a
+root can only shrink the live set, and the difference is exactly the set of
+bodies that stop being live — shared bodies cancel, and nothing can be counted
+twice.
+
+**The two numbers disagree by 8.6x on the largest candidate and invert the top
+three.** nilpy-c3, xtensa windowed, binary `48f69d2d285d`, full command
+`--xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals --dce`.
+Middle column is that method's rows in the `--dce-why` top-twenty, added up:
+
+| candidate | `--dce-why` rows | actual cost | bodies |
+| --- | ---: | ---: | ---: |
+| `TPyList.sort` | 17,116 B | **30,411 B** | 18 |
+| `TPyBytes.decode` | 12,909 B | **22,978 B** | 9 |
+| `TPyDict.update` | 5,143 B | **17,068 B** | 4 |
+| `TPyFile.writelines` | **116,178 B** | **13,571 B** | 8 |
+| `TPyDict.most_common` | 5,845 B | **6,008 B** | 2 |
+| `TPyDict.indexof` | 8,521 B | **0 B** | 0 |
+| `main` | 23,914 B | **0 B** | 0 |
+
+It over-states and under-states at the same time, for two different reasons.
+`TPyFile.writelines` — the ticket's headline, *"115,606 B in a program that
+never opens a file"* — is over-stated 8.6x and is FOURTH, because the iterator
+drain it heads is reached from elsewhere too. `TPyDict.update` is under-stated
+3.3x for the opposite reason: the listing shows the twenty biggest BODIES, so a
+candidate whose cost is spread across many small ones is nearly invisible to
+it. **A ranking instrument that is wrong in both directions cannot be corrected
+by a fudge factor.**
+
+**AND COSTS ARE NOT ADDITIVE, SO A PER-CANDIDATE TABLE IS A GUIDE AND NEVER A
+PLAN.** `TPyList.*` as a class frees 70,544 B in 52 bodies, against 30,411 for
+its largest member — because a body reached by two slots dies only when BOTH
+go. Summing rows over-counts; taking the max under-counts. Re-measure the union
+you actually intend to remove.
+
+**Two mistakes worth carrying, from building it:**
+
+- **For a VIRTUAL method the slot is the only edge there is.** The fixture's
+  third row was first written asserting ZERO cost for a method with two call
+  sites, on the argument that a direct call makes the slot redundant. Both
+  "direct" calls dispatch THROUGH the slot; the answer is 1 body. A prediction
+  written from an argument, and the measurement disagreed.
+- **A differential needs the two sides to share a PREDICATE, not just a
+  formula.** The first build printed `-4 bodies` for a candidate whose byte
+  answer was 0, because the ranges phase counts live bodies under `b > a` and
+  the cost loop did not, so empty bodies landed on one side only. It was caught
+  by the `main` control — the one row where the bytes are 0 and the count column
+  therefore has nothing to hide behind — and fixed by making the predicate
+  identical rather than by adjusting the subtraction. **A control whose expected
+  value is 0 in one column is worth having precisely because the other column
+  cannot be excused.**
+
+Guarded by `test/test_dce_cost_is_a_differential_not_a_subtree_sum.pas`, three
+rows in `test-quick`, asserted as BODY COUNTS so they do not drift with code
+size: a slot costing 2 where a subtree sum says three or four; a live name that
+is not a slot and must cost 0; and a virtual method costing exactly 1. The
+negative control was RUN and is recorded in the fixture header rather than
+asserted — and the first attempt at it was itself defective, a `sed` aimed at
+one of two identical lines cutting the wrong one, which answered the same
+number as the passing case and read as the fixture being broken. **Build a
+control by naming a whole procedure body, not by matching a line that appears
+twice.**
+
+**WHAT IT DOES NOT DO, and this is the open question:** it does not say a slot
+is REMOVABLE. It prices a candidate on the ASSUMPTION that the slot goes. When
+a VMT slot can be proven undispatchable is still unanswered, and on this image
+`PyUserObjGetattr` and `pydynattr_get_v` are both live, which is what makes it
+hard.
+
 ## A SILENT INSTRUMENT AND A BROKEN ONE ARE THE SAME OUTPUT — AND OPTIMISATION CAN DELETE THE SUBJECT OUT FROM UNDER A CORRECT PROBE
 
 The guard-that-cannot-fail rules cover a probe that observes the wrong

@@ -36875,6 +36875,45 @@ test-quick: $(COMPILER)
 	# beautifully and answers wrongly fails here.
 	tools/expect_same.sh dce_why_root_report "$$($(TESTTMP)/dcewhy)" "$$(printf 'tag 2\ncall 42')"
 	@echo "=== test_dce_why_root_report: --dce-why names both known roots ==="
+	# --dce-cost: A DIFFERENTIAL, NOT A SUBTREE SUM, and the three rows below
+	# are what separates the two. --dce-why answers "what kept this body here";
+	# --dce-cost answers "what would stop being live if this slot went", and
+	# they are DIFFERENT NUMBERS because a body reached from a slot AND from
+	# somewhere else costs the slot nothing. On the nilpy-c3 demo they disagree
+	# by 8.6x on the largest candidate and INVERT the ranking of the top three,
+	# so ranking work off the --dce-why table sends you to the wrong method.
+	#
+	# ASSERTED AS BODY COUNTS, NOT BYTES, so the rows do not drift when a body's
+	# code changes. The fixture's own header carries the byte figures with the
+	# binary they were measured at, which is where a drifting number belongs.
+	./$(COMPILER) --dce --dce-cost=Unreached test/test_dce_cost_is_a_differential_not_a_subtree_sum.pas $(TESTTMP)/dcecost >$(TESTTMP)/dcecost_run.log 2>$(TESTTMP)/dcecost_a.log
+	./$(COMPILER) --dce --dce-cost=SharedHelper test/test_dce_cost_is_a_differential_not_a_subtree_sum.pas $(TESTTMP)/dcecost2 2>$(TESTTMP)/dcecost_b.log >/dev/null
+	./$(COMPILER) --dce --dce-cost=TThing.Used test/test_dce_cost_is_a_differential_not_a_subtree_sum.pas $(TESTTMP)/dcecost3 2>$(TESTTMP)/dcecost_c.log >/dev/null
+	# (1) the differential. Unreached reaches OnlyDead, Used and SharedHelper;
+	# only the first two die with it, because Used has its own slot and
+	# SharedHelper is reached from Used as well. THREE would be a subtree sum.
+	grep -q 'in 2 bodies would stop being live' $(TESTTMP)/dcecost_a.log \
+	  || { echo "--dce-cost: withholding Unreached's VMT slot should free exactly 2 bodies (Unreached, OnlyDead). A count of 3 or 4 means this is summing the subtree, which is the defect the flag exists to avoid:"; \
+	       grep 'dce-cost' $(TESTTMP)/dcecost_a.log; exit 1; }
+	# (2) a name that is NOT a slot must be ZERO even though it is very much
+	# alive. Without this row an implementation charging "everything reachable
+	# from this name" passes (1) by luck.
+	grep -q 'in 0 bodies would stop being live' $(TESTTMP)/dcecost_b.log \
+	  || { echo "--dce-cost: SharedHelper is a plain procedure with no VMT slot, so withholding nothing must cost nothing. A nonzero answer means the flag is charging for reachability rather than for the slot:"; \
+	       grep 'dce-cost' $(TESTTMP)/dcecost_b.log; exit 1; }
+	# (3) A VIRTUAL CALL IS NOT A SECOND ROUTE. This row was first written
+	# asserting ZERO, from the argument that Used is "called" from the program
+	# body and from Unreached; it is 1, because both of those calls dispatch
+	# THROUGH the slot. Kept with the measured value because it is an easy
+	# assumption to make twice, and because it pins that the flag models the
+	# slot and not the name.
+	grep -q 'in 1 bodies would stop being live' $(TESTTMP)/dcecost_c.log \
+	  || { echo "--dce-cost: TThing.Used is reached only through its own VMT slot (a virtual call dispatches through the slot, it is not a second edge), so withholding it must cost exactly its own body:"; \
+	       grep 'dce-cost' $(TESTTMP)/dcecost_c.log; exit 1; }
+	# ...and the program still has to RUN, because a build that reports
+	# beautifully and computes wrongly passes everything above.
+	tools/expect_same.sh dce_cost_differential "$$($(TESTTMP)/dcecost)" "SINK 1"
+	@echo "=== test_dce_cost_is_a_differential_not_a_subtree_sum: 2 / 0 / 1 bodies ==="
 	# THE SWEEP-THUNK ABI ASYMMETRY, which is what a 2.5x live-set gap between
 	# riscv32 and xtensa turned out to be. A managed-local sweep thunk lands
 	# INSIDE the body that calls it, so its CodeRef target is mid-body and
