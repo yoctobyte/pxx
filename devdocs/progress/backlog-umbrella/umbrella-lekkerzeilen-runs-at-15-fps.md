@@ -9,6 +9,7 @@ created: 2026-09-22
 found-by: owner (directive, 2026-09-22), evidence assembled by frankuser, ranked by frankz-e5
 tags: [perf, lekkerzeilen, nilpy, frame-rate, amdahl]
 blocked-by:
+  - task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize
   - perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program
   - perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
   - perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
@@ -307,6 +308,41 @@ measurement.
    membership is the EDGE.** The ticket keeps its own prio 45 and is reachable
    on its own merits. If a roofs re-profile ever puts inverse trig above the
    noise, re-add the edge and say which measurement did it.
+
+## The frame decomposition is wired HERE, not under the two tickets waiting on it
+
+`task-e-decompose-a-lekkerzeilen-roofs-frame-...` (frankh-c0, `f1e9d0fa8`) is
+added to this umbrella's `blocked-by` on 2026-09-22 by frankb-8e. It was wired
+under `perf-o` already, and the suggestion on the table was to wire it under
+`perf-a` too. **That edge would have been false and this one is not**, and the
+difference is worth stating because the frontmatter is the only part the
+ranker reads.
+
+**`perf-a` is NOT blocked by it.** That ticket is proceeding on its own
+evidence — all six backends landed, the population census done — and the only
+thing held is a *frame-share claim*, which is a sentence nobody is waiting to
+write. A `blocked-by` saying otherwise would be a summary-level falsehood in
+the one field that routes people, and this board already has a dated instance
+of prose and frontmatter disagreeing (see the removed inverse-trig edge above,
+found because the ranker dispatched a seat to a ticket the prose said not to
+rank).
+
+**This umbrella IS blocked by it, and by its own text.** The section below says
+of the variant-clear row: *"the question is does this cost anything in roofs at
+all"*. The same question decides `perf-a`'s remaining half and `perf-n`'s two
+rows. **An umbrella that cannot rank its own children until a measurement
+lands is blocked on that measurement** — that is what the relation means here.
+
+**It also ranks the work correctly rather than merely visibly.** Under
+`perf-a` the producing ticket would inherit p70; under this umbrella it
+inherits **p95**, which is right: it gates three children, not one. At its own
+prio 45 it sits below every ticket it unblocks, which is the exact inversion
+`effective_prio` exists to prevent.
+
+**What would retire this edge:** the decomposition landing. Not a decision that
+the frame no longer matters — the owner has retired *15 fps* as a number
+(*"not written in stone, just a wishful figure"*), and that changes the target,
+not the need to know where the time goes.
 
 ## The variant-clear row is being tested for RETIREMENT, not for a fix
 
