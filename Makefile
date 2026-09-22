@@ -36184,7 +36184,7 @@ test-esp-idf: $(COMPILER)
 	# THE SIZE COMPARISON IS THE OTHER HALF, as in the row above: a pass that
 	# refuses this target builds fine and drops nothing.
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
-	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	  ./$(COMPILER) --no-dce $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/test_dce_nilpy_esp_kept_body.npy $(TESTTMP)/dce_nilpy_esp_off.o >/dev/null \
 	  && ./$(COMPILER) --dce $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/test_dce_nilpy_esp_kept_body.npy $(TESTTMP)/dce_nilpy_esp_on.o >/dev/null \
@@ -36360,7 +36360,7 @@ test-quick: $(COMPILER)
 	# refusal. `&&` between the stages, not `;`: a precondition that does not
 	# branch is a comment.
 	@if command -v qemu-riscv32 >/dev/null 2>&1; then \
-	  ./$(COMPILER) --target=riscv32 test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcerv32_off >/dev/null \
+	  ./$(COMPILER) --no-dce --target=riscv32 test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcerv32_off >/dev/null \
 	  && ./$(COMPILER) --target=riscv32 --dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcerv32_on >/dev/null \
 	  && want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')" \
 	  && tools/expect_same.sh dcerv32_off "$$(timeout 30 qemu-riscv32 $(TESTTMP)/dcerv32_off; echo "exit=$$?")" "$$want" \
@@ -36383,7 +36383,7 @@ test-quick: $(COMPILER)
 	# with no encoding difference from x86-64 at all, is what says the pattern is
 	# "record the hand-built branch" rather than "write a per-target arm".
 	@if command -v qemu-i386 >/dev/null 2>&1; then \
-	  ./$(COMPILER) --target=i386 test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce386_off >/dev/null \
+	  ./$(COMPILER) --no-dce --target=i386 test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce386_off >/dev/null \
 	  && ./$(COMPILER) --target=i386 --dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce386_on >/dev/null \
 	  && want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')" \
 	  && tools/expect_same.sh dce386_off "$$(timeout 30 qemu-i386 $(TESTTMP)/dce386_off; echo "exit=$$?")" "$$want" \
@@ -36420,7 +36420,7 @@ test-quick: $(COMPILER)
 	  want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')"; \
 	  for abi in call0 windowed; do \
 	    if [ $$abi = windowed ]; then af=--xtensa-abi=windowed; else af=; fi; \
-	    ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $$af \
+	    ./$(COMPILER) --no-dce --target=xtensa --platform=posix --xtensa-soft-mulhigh $$af \
 	        test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcext_off >/dev/null \
 	    && ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $$af --dce \
 	        test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcext_on >/dev/null \
@@ -36454,7 +36454,7 @@ test-quick: $(COMPILER)
 	  case $$t in arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; esac; \
 	  if command -v $$q >/dev/null 2>&1; then \
 	    want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')"; \
-	    ./$(COMPILER) --target=$$t test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcearm_off >/dev/null \
+	    ./$(COMPILER) --no-dce --target=$$t test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcearm_off >/dev/null \
 	    && ./$(COMPILER) --target=$$t --dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcearm_on >/dev/null \
 	    && tools/expect_same.sh dcearm_off_$$t "$$(timeout 60 $$q $(TESTTMP)/dcearm_off; echo "exit=$$?")" "$$want" \
 	    && tools/expect_same.sh dcearm_on_$$t "$$(timeout 60 $$q $(TESTTMP)/dcearm_on; echo "exit=$$?")" "$$want" \
