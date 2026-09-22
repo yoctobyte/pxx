@@ -39496,3 +39496,62 @@ paragraphs and this is a fourth shape of it, not a second independent subsystem,
 so it would cost a paragraph at startup for every session to add a case to a rule
 those sessions already have. If a conflated-unit claim turns up in a lane with no
 code in common with this one, that is the trigger to argue it up.
+
+## `git log --diff-filter=A` DATES A FILE'S ARRIVAL IN A FOLDER, NOT ITS BIRTH — AND CLAUDE.md'S OWN WORKED EXAMPLE NO LONGER REPRODUCES
+
+**Measured 2026-09-22 by `frankz-e5` while checking a claim from `frankuser`. In
+a repo whose entire ticket workflow is MOVING FILES BETWEEN FOLDERS, this is a
+systematic blind spot in an instrument the rules file prescribes.**
+
+`git log --diff-filter=A -- <path>` does no rename detection, so **a file that
+was renamed into its current path is reported as CREATED there.** Every ticket in
+this repo is renamed at least once — `backlog-*/` -> `working/` -> `done/` — so
+the command answers *"when did this path appear"* and gets read as *"when was this
+ticket written."*
+
+### CLAUDE.md's citation is the live casualty
+
+CLAUDE.md pins a born-stale-summary finding with: *"`git log --diff-filter=A`
+puts the ticket file's creation in `09de09465` — the same commit as the warning
+that falsifies it."* That was true when written. At HEAD the ticket sits in
+`done/`, and **the prescribed command run on its current path answers
+`1e1e3f659`** — a later commit, in a different lane, that merely moved it.
+
+```
+git log --oneline --diff-filter=A -- devdocs/progress/done/bug-c-a-bare-thread-...md
+  -> 1e1e3f659     (the move)
+git log --oneline --follow --diff-filter=A -- <same path> | tail -1
+  -> 09de09465     (the creation, in backlog-cfront/)
+```
+
+**The finding CLAUDE.md records is correct and its instrument no longer
+reproduces it.** A reader following the instruction gets a different sha, reasons
+from it, and has no signal that anything went wrong — the command succeeds and
+prints a real commit. **Add `--follow`.**
+
+### The second instance, found the same hour, where a right answer came off a wrong reading
+
+`frankuser` reported `feature-t-grade-a-pin-instead-of-gating-it` as *"created at
+`1d3da6ae9`, a 72-file bulk sweep into `low-prio/`, never judged into that
+folder"*, and drew from it that the folder is not evidence of intent. Checked:
+
+- `1d3da6ae9` touched 76 files — **1 add (`README.md`) and 71 RENAMES**, not 72 adds.
+- The ticket was **created at `fcbfc02f5`**, in `backlog-tools/`, in the very
+  commit that wrote CLAUDE.md's pin-grading rule. `--diff-filter=A` named the
+  rename instead.
+- Its real path is `backlog-tools/` -> **`rejected/`** at `696c9fab1`
+  (*"cut the Track T tooling backlog — 69 rejected, 4 kept"*) -> `low-prio/` at
+  `1d3da6ae9`, **four minutes later**.
+- `prio: 85` at every step, never edited.
+
+**So the conclusion is right and safer than the one reported: it was bulk-cut into
+`rejected/` and bulk-corrected out of it four minutes later, and neither step was
+about this ticket.** But a reader checking the reported evidence finds a rename
+where a creation was claimed, and this file's own lesson applies — *a conclusion
+that survives its premise being wrong is the hardest kind to catch, because the
+thing you would check to test it comes out right.*
+
+**Discharge: `--follow` for a file's history, `--name-status -M` for what a
+commit actually did to a folder.** A bare `--name-only` count cannot tell 71
+renames from 71 new tickets, and the two mean opposite things about whether
+anybody judged anything.
