@@ -217,6 +217,38 @@ relocation — wrong type, wrong addend, offset shifted by 4 — and the compari
 must go red for each. Without that this is a guard that has never been shown
 able to fail, over a comparison of two things produced by one compiler.
 
+**AND THOSE THREE CONTROLS TEST THE HARNESS, NOT THE CHAIN** (frankuser,
+2026-09-22). The case they cannot reach: if the executable path and the object
+path share the routine that computes a relocation's value, a bug in it makes
+both sides wrong identically and `.text` compares equal forever. So the
+harness applies relocations **with its own arithmetic, written from the
+psABI** — read type, symbol, offset and addend out of the object, compute the
+value, patch, compare — and the object writer emits an addend the harness must
+resolve rather than a value the executable writer already computed. If the
+harness turns out to need a pxx routine to do it, that is the finding and it
+gets said before anything is built on it.
+
+**The residual I owe beside that**, because the chain's first link is
+execution: qemu proves the executable only on the paths it EXECUTES. A
+relocation on an unexecuted path inherits nothing from that leg. The probe
+program is chosen so every relocated site is on the executed path, and any
+site that is not gets named.
+
+**Two tiers of evidence, marked.** clang oracles `R_AARCH64_CALL26` for a
+direct call and cannot oracle `MOVW_UABS_G0_NC`/`G1_NC` at all. The output
+says which relocations have an external oracle and which rest on
+resolve-and-compare, so a later reader cannot quote the weaker tier as the
+stronger.
+
+**BUILD ORDER, CHANGED 2026-09-22: the harness comes FIRST and is
+target-generic.** It is filed separately as
+[[feature-a-a-target-generic-resolve-and-compare-harness-for-emit-obj-objects]]
+because xtensa and riscv32 inherit it for free — both have shipped writers
+that have never had a relocation resolved — and because building it against
+objects that ALREADY EXIST gives it a positive control drawn from code I did
+not write. Writing the instrument and its first subject together would have
+been a whole-family test certifying its own broken half.
+
 **What it does NOT establish, and the existing precedent does not either:** that
 a real linker agrees with our relocation semantics. Every ESP object in this
 tree (`riscv32`, `xtensa`) is verified today by `readelf -r` assertions on
