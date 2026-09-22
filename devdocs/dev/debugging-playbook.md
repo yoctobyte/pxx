@@ -42082,3 +42082,54 @@ informative rather than confusing.
 file; the `log --since` answered about commit metadata under a filter. When a
 question is *"is this text in the tree"*, ask the tree. History is the slower,
 more failure-prone route to a question the working copy can answer directly.
+## A BISECT SCRIPT THAT RESTORES SOURCES AND NEVER REBUILDS IS A SIXTH ROUTE TO A STALE COMPILER — AND IT IS THE ONLY ONE THAT FIRES ON NORMAL COMPLETION
+
+Measured 2026-09-22 (frankh-c0). CLAUDE.md lists five routes to a stale
+`compiler/pascal26`: a seeded tree, a reverted experiment, a sync that pulled
+someone else's `compiler/**`, `make bootstrap`, and the positive-control
+revert/rebuild/restore/rebuild cycle. This is a sixth, and it differs from all
+five in **when** it fires.
+
+A line-patching bisect script — comment out candidate lines, rebuild, run the
+repro, restore the lines — leaves the binary built from the **last patched
+tree**. Restoring the sources is the script's final act and it is honest; what it
+does not do is rebuild afterwards, because from the script's point of view the
+run is over. `compiler/pascal26` is untracked, so `git status` is silent, and the
+tree is genuinely clean.
+
+**The five routes in CLAUDE.md all fire on something that FEELS like an event** —
+you seeded, you reverted, you pulled, you bootstrapped. This one fires on
+**normal completion of a successful run**, which is the one moment nobody
+inspects. The script printed its verdict, the verdict was correct, and the
+by-product is a compiler nobody asked for.
+
+### What it cost, and why the cost is the interesting part
+
+Re-measuring an ESP ticket with that binary gave `bss=66808B`. The true figure at
+HEAD is `66812B`.
+
+**Four bytes out, on the single number the ticket turns on — and it matched the
+figure the ticket had been FILED with, exactly.** So it did not read as a broken
+instrument; it read as *corroboration of the original measurement by an
+independent re-run*. That is the house failure mode in its most expensive
+arrangement: an instrument wrong by an amount small enough to look like
+agreement, on the one axis that decides the question.
+
+The row that disagreed loudly was code size, 336 B against 524 B, and that is the
+row nobody checks — a ticket about BSS does not interrogate its code column.
+
+`sha256sum compiler/pascal26` settled it in one command: `fda77c48b8ee` on disk,
+and a rebuild `converged` to `464ddd6c2b02`. That is CLAUDE.md's own prescription
+working — **an identity the wrong population cannot imitate** — and it is the
+discriminator precisely because a byte count can coincide and a hash cannot.
+
+### Discharge
+
+- **A script that patches sources must rebuild after restoring them, or say
+  loudly that it has not.** Restoring sources and leaving a mismatched binary is
+  worse than leaving both patched, because the tree then LOOKS consistent.
+- **Print `sha256sum compiler/pascal26` beside every number** — already the rule;
+  the new part is that the trigger can be a run that succeeded.
+- **The tell is the disagreeing row you did not care about.** When a re-measurement
+  agrees on your headline number and differs on a column you were not asking
+  about, that is not noise around a confirmation. Re-derive the binary first.

@@ -115,7 +115,76 @@ So there are two routes, and they are different sizes:
    slot instead of `@EspArena[0]`.
 
 Route 2 is the smaller change and matches an existing idiom; route 1 is worth
-more and is a separate ticket. **Neither is started.** The sharp edge named below
+more and is a separate ticket. **Neither is started.**
+
+## ROUTE 2 IS SETTLED AND THE PIECES ALL EXIST — measured 2026-09-22
+
+Three facts, each read off the tree rather than reasoned:
+
+**1. The arena is INTERIOR to BSS, so the cheap version is dead.** Ambient units
+are parsed at `pasparser_prog.inc` ~2085-2180 (`ParseUsesUnitAmbient`), and the
+program's own `tkVar: ParseVarSection` is at 2360. Builtin globals therefore get
+LOW offsets and user globals follow — confirmed by adding a 4,096 B global to the
+`frozen` witness, `bss` 66,812 -> 70,912. So "shrink `BSSSize` if the dead range
+is a suffix" cannot work: a single user global sits after the arena.
+
+**2. `DceRun` runs late, and the tree already reserves space after it FOR THIS
+EXACT REASON.** `compiler.pas:3020`, *"after every emitter (RTTI included), before
+anything reads a final code offset"*. Immediately below it,
+`EmitBareVectorTableAfterDce`, whose comment is the design note for route 2
+written by somebody else for a different object:
+
+> *"AFTER DceRun, and that is the whole reason it is here ... DCE removes bytes
+> ahead of it — so aligning it while parsing aligns it to a layout that no longer
+> exists by the time anything reads it. Emitted last, when nothing moves again,
+> its offset is final by construction rather than by repair."*
+
+A compiler-reserved arena allocated after `DceRun` has a final offset by
+construction and shifts nothing, because nothing is behind it.
+
+**3. NO NEW INTRINSIC IS NEEDED, which was the expensive part of route 2 and it
+evaporates.** `frontend_prologue.inc:113-117` shows the compiler ALREADY
+reserving a heap arena exactly this way, gated on `EspBareBoot`:
+
+    if EspBareBoot then
+    begin
+      BSS_HEAP_ARENA := BSSSize;
+      Inc(BSSSize, SocNilPyArenaSize(TargetSoc));
+    end;
+
+That is e5's `f028632c3` casualty — removed because it was dead, not because the
+mechanism was wrong. And the mechanism's own dead-code note records how the
+Pascal side reached it: **the ENTRY STUB wrote `HeapPtr`/`HeapEnd` into BSS from
+the arena base, and the native allocator read those.** So `HeapMmap` never needs
+the base directly and `__pxxTlsBase`-style plumbing is not required.
+
+### The shape, then
+
+- Stop declaring `EspArena` in `builtinheap.pas` for the bare profile; let the
+  `{$else}` arm's `HeapPtr`/`HeapEnd` path serve it, as the NilPy arena did.
+- Reserve `HEAP_ARENA` bytes of BSS **after `DceRun`**, gated on whether any
+  allocator body survived, on the `EmitBareVectorTableAfterDce` pattern.
+- Entry stub seeds `HeapPtr`/`HeapEnd` from that base.
+
+**The predicate is the one open question I have not measured**: what exactly to
+ask after `DceRun` for "did any allocator body survive". `--dce-why` already
+distinguishes the cases (`frozen` drops all 78; `alloc` keeps them), so the
+information exists; whether it is still addressable at that point in
+`compiler.pas` is unchecked. **Do not write the guard from this paragraph** —
+re-derive the predicate from the tree, per the born-red rule.
+
+### Not to be fixed here: the pre-scan
+
+It is tempting to make `frozen` stop linking `builtinheap` at all — the arena
+arrives with the unit, so narrowing the token pre-scan would make this witness
+go away. **Do not.** Two reasons. `pasparser_prog.inc` ~352-360 says the scan
+deliberately does not try to tell frozen from managed, having measured that a
+frozen string still needs the bundle's concat and write helpers. And
+**`frankb-8e` has a 234-line patch parked on `needsAnsiRuntime`** — that is one
+QUESTION with two seats on it, which is the collision git cannot see. The arena
+fix belongs on the BSS side and does not touch the scan.
+
+ The sharp edge named below
 -- the predicate must be evaluated where the arena is declared, not where it is
 first read (`12d6c86f0`) -- applies to route 2 directly.
 
