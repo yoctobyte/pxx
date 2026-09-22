@@ -15429,6 +15429,7 @@
     "45bcf8ce569d5cad8ce19bbe5005d73e23e54b29",
     "6a6ff4a044983bebaabcd714df9ee120c7c6a1c4"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_float_repr_roundtrip.npy tools/expect_same.sh",
    "status": "fail"
   }
