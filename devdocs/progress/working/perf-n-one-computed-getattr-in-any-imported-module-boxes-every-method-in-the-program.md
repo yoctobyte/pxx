@@ -3,8 +3,8 @@ slug: perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-t
 track: N
 prio: 45
 type: perf
-status: backlog
-owner: ""
+status: working
+owner: franks-5b
 created: 2026-09-20
 found-by: frankb-8e
 tags: [nilpy, getattr, abi, boxing, blast-radius, lekkerzeilen]
