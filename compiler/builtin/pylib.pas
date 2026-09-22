@@ -3411,7 +3411,11 @@ end;
   (project_string_conversion_shape_blindspot_pattern). }
 function pystr_ofchar(c: Char): AnsiString;
 begin
-  Result := c;
+  { The THIRD spelling of the same one-byte-string allocation -- see PyChar1.
+    Neither the construct name nor a grep for it distinguishes these: a
+    subscript, chr(), and a char->str promotion are one operation to whoever
+    wrote the source, and they are three routines here. }
+  Result := PyChar1(Byte(Ord(c)));
 end;
 
 { --- CHARACTER coordinates over a UTF-8 byte substrate ----------------------
