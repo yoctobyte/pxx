@@ -7895,6 +7895,18 @@ read the emitted code must pass it, and `-g` alone is what silently drops you to
 gets both, and the `OptLevelExplicit` guard above is exactly what makes that
 work.
 
+**AND THE GENERAL SHAPE, which `lekkerzeilen-7a` named after checking its own
+profile against this (it was clean -- no `-g`, default `-O2`, confirmed from the
+gdb output of the run that produced the samples rather than from a build script
+that might not be the one that ran): in every member of this family THE WRONG
+SETTING PRODUCES OUTPUT THAT IS MORE USEFUL-LOOKING, NOT LESS.** A readable
+binary and a full sample count are both exactly what you were hoping for. That
+is why these are not caught by noticing something is off -- nothing is off, the
+output is better than the correct output. Its own instance: a harness whose
+`=== SAMPLE` header made an empty capture present as twenty samples. The tell is
+never the output's quality; it is whether a parameter that decides the answer is
+being carried as a convenience.
+
 **This section already existed and was rediscovered from scratch**, over four
 experiments chasing a global-versus-local difference that did not exist, by a
 seat that had been quoting other sections of this file all day. The `--help`
