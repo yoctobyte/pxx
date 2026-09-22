@@ -36,9 +36,54 @@ frame number from it is 1.826 → 1.887 fps on the shipping scene — about 3%**
 against a day largely spent repairing instruments rather than the program. That
 is an accurate summary of the record and it is the reading his sentence deserves.
 It is not a complaint and it is not a failure: several of those instrument
-repairs were real defects that would have made any later number wrong. But
-anybody re-reading this in a month should meet the 3% and not a story about
-throughput.
+repairs were real defects that would have made any later number wrong.
+**Concretely, so this clause is not a soft one:** `gdbsample2.sh` reported its
+REQUESTED sample count whether or not the inferior was still alive, and its pid
+fallback returned the forked CHILD by construction — so a profile taken through
+it counted samples nobody took, off a process nobody meant, and printed a
+plausible table either way. Repairing that is why a later number can be believed
+at all. But anybody re-reading this in a month should meet the 3% and not a
+story about throughput.
+
+**AND THE 3% IS THE PART THAT TRAVELS. THE ABSOLUTES CARRY A CONDITION NOBODY
+RECORDED WHEN THEY WERE TAKEN.** Measured by `frankuser` on 2026-09-22, after
+the owner mentioned that an unrelated project of his is using this workstation:
+load average **23.93 on a 24-thread box**, GPU at **4195 of 6144 MiB**, `/` at
+**95%, 8.3G free**. The A/B survives this **by construction and not by luck** —
+it was interleaved A/B/A/B inside one session, so a common-mode background load
+appears in both arms and cancels in the difference. **Nothing cancels in an
+absolute.** So `1.826 fps`, `530 ms` and CPython's `27 ms` are measurements of
+this box under a load that was never written beside them, and they must not be
+quoted as a property of an idle machine or compared against a number taken on
+one. **Quote the delta; re-measure before quoting a level.** What would retire
+this caveat is one thing: the same scene re-run on a quiet box, with the load
+average printed beside the number — which is the general rule (*record the
+population, the tree and the oracle beside the number*) arriving on an axis
+nobody thinks of as a population.
+
+### A SECOND THING HE SAID THE SAME NIGHT, AND IT IS A CONSTRAINT ON THE ESP32 ARM
+
+Relayed verbatim through `frankuser`, 2026-09-22, and recorded here because the
+pivot above makes ESP32 the target and this is the first thing the owner has said
+about arithmetic in this push:
+
+> *"and about aritmethic.. micropython even does away with bigint totally. now,
+> we actually don't want to do that, we have a fine mechanism with our promotable
+> ints."*
+
+**What it definitely settles:** the size-driven route of dropping bigint on a
+constrained target is **not** the route, and promotable ints are named by him as
+the mechanism we keep. Anyone sizing an ESP32 image may not reach for that
+saving. It is stated as a preference about what we ARE, which is exactly the kind
+of fork that is his and not ours.
+
+**What it is NOT recorded as deciding.** It is **not** written down here as
+answering Track C's ISR fork. `frankuser` relayed it to `frankc-c0` with both
+readings and deliberately did not decide it; **c0 owns that send**, and a
+coordinator converting a general statement of intent into a verdict on a specific
+open fork is the widening-by-re-derivation this file's pivot section is shaped to
+prevent. If it does decide it, c0 says so and the ESP umbrella's shape changes
+here — in that order.
 
 ### What this does NOT license, since a pivot invites exactly this
 
