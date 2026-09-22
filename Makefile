@@ -34667,6 +34667,50 @@ test-emit-obj: $(COMPILER)
 	./$(COMPILER) --emit-obj $(TESTTMP)/test_emit_obj_noinit.c $(TESTTMP)/test_emit_obj_noinit.o
 	! readelf -SW $(TESTTMP)/test_emit_obj_noinit.o | grep -qE 'INIT_ARRAY'
 	readelf -SW $(TESTTMP)/test_emit_obj_noinit.o | grep -qE 'FINI_ARRAY'
+	# 4b-quater. THE SHIM GATE MUST NOT DEPEND ON WHAT THE C TEXT SAYS. Four
+	#    cells, and THREE of them were red for a day: the gate on the AnsiString
+	#    shims was DetectPascalRuntimeNeeds, which walks Tokens[] -- and in a C
+	#    compile Tokens[] is C text classified by the shared PASCAL lexer, so it
+	#    is a Pascal-KEYWORD scan of C and answers by accident in both
+	#    directions. A dead local named `string` lexes as tkString_T and was the
+	#    entire difference between a translation unit that compiled and one that
+	#    could not. Fixed by deleting the scan from cparser.inc: the honest
+	#    predicate is "will builtinheap be linked", because builtinheap's body
+	#    CALLS these shims and the shims' forwards are RESOLVED BY builtinheap.
+	#    That is an if-and-only-if, which is why both columns are here.
+	#
+	#    WHY THIS IS A FOUR-CELL TABLE AND NOT ONE ROW: the two broken gates
+	#    redden DIFFERENT cells, so no single row pins the predicate, and each
+	#    cell is recorded with the binary that reddens it rather than bare.
+	#
+	#      cell                        523833fde..88489420f   pin fda77c48b8ee
+	#      default RTL,  keyword-free  RED (stub never emit)  ok
+	#      default RTL,  `string`      ok  <- the accident     ok
+	#      --no-default-rtl, kw-free   RED (unresolved fwd)   RED (unresolved fwd)
+	#      --no-default-rtl, `string`  RED (unresolved fwd)   RED (unresolved fwd)
+	#
+	#    Column one is the false NEGATIVE this ticket is about: evidence-based
+	#    over a token stream that holds no Pascal evidence. Column two is the
+	#    converse and is OLDER THAN THE REGRESSION -- live on every pin, never
+	#    noticed, because the gate was an always-true define so the shims went
+	#    out even where builtinheap did not, and their forwards had nothing to
+	#    resolve against. Exactly one cell was green under both, and it is the
+	#    accident. Re-introducing ANY content-dependent gate reddens two cells;
+	#    dropping the iff in either direction reddens the other two.
+	#
+	#    The `string` spelling is load-bearing and is not a stand-in for "some
+	#    identifier": it must be a word the Pascal lexer classifies as a
+	#    keyword. If tkString_T is ever renamed or the C path stops sharing the
+	#    lexer, this row stops discriminating and should be re-derived, not
+	#    deleted. x86-64 only, because the shims are x86-64 machine code.
+	#    bug-c-a-c-file-compiles-to-an-object-only-if-it-happens-to-contain-a-pascal-keyword
+	printf 'int gate_a(int x){return x+1;}\n' > $(TESTTMP)/c_shimgate_plain.c
+	printf 'int gate_b(int x){int string = 0; return x + string;}\n' > $(TESTTMP)/c_shimgate_kw.c
+	./$(COMPILER) --emit-obj $(TESTTMP)/c_shimgate_plain.c $(TESTTMP)/c_shimgate_a.o
+	./$(COMPILER) --emit-obj $(TESTTMP)/c_shimgate_kw.c $(TESTTMP)/c_shimgate_b.o
+	./$(COMPILER) --no-default-rtl --emit-obj $(TESTTMP)/c_shimgate_plain.c $(TESTTMP)/c_shimgate_c.o
+	./$(COMPILER) --no-default-rtl --emit-obj $(TESTTMP)/c_shimgate_kw.c $(TESTTMP)/c_shimgate_d.o
+	@echo "test-emit-obj: the C shim gate is flag-decided, not text-decided (4 cells, 3 were red)"
 	@if command -v gcc >/dev/null 2>&1; then \
 	  printf '#include <stdio.h>\nextern const char *shared_c_from_data(void);\nextern int shared_c_envcount(void);\nextern int shared_c_addup(int);\nint main(void){const char*d=shared_c_from_data();if(!d){printf("data=(null) -- .init_array did not run\\n");return 1;}if(shared_c_envcount()<1){printf("envcount=%%d -- environ was not filled\\n",shared_c_envcount());return 1;}printf("%%d %%s\\n",shared_c_addup(6),d);return 0;}\n' > $(TESTTMP)/test_emit_obj_cinit_host.c; \
 	  gcc $(TESTTMP)/test_emit_obj_cinit_host.c $(TESTTMP)/test_emit_obj_cinit.o -o $(TESTTMP)/test_emit_obj_cinit_host || { echo "test-emit-obj: cinit host FAILED to build"; exit 1; }; \

@@ -12545,7 +12545,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     callAnchor, initAnchor: Integer;   { xtensa only -- see PatchEntryStubCall }
     xtFiniIdx, xtFiniLit, xtFiniAnchor: Integer;   { xtensa only, ditto }
     needInit: Boolean;
-    cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
+    cPullsBuiltinHeap: Boolean;   { the default-RTL pull below, decided ONCE -- see its use }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
     cWasmEntry: Boolean;        { wasm32: the entry is synthesised, not emitted -- see the arm }
     cWasmFini: Integer;         { ... and the finalizer runner it will call }
@@ -13070,13 +13070,68 @@ begin
     every caller — the pulled units included — must be compiled after them.
     That is also why the forwards are registered first.
 
-    Gated on the SAME pre-scan the Pascal driver uses rather than a C-specific
-    guess, so a C translation unit with no Pascal in it carries no shims. x86-64
-    only, like the Pascal path: the shims are x86-64 machine code and the other
-    backends' string IR ops call the builtinheap helpers directly.
-    bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit }
-  DetectPascalRuntimeNeeds(cNeedsHeap, cNeedsAnsi, cNeedsDiv);
-  if cNeedsAnsi and (TargetArch = TARGET_X86_64) then
+    x86-64 only, like the Pascal path: the shims are x86-64 machine code and the
+    other backends' string IR ops call the builtinheap helpers directly.
+    bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit
+
+    DO NOT GATE THIS ON DetectPascalRuntimeNeeds, HOWEVER MUCH IT LOOKS LIKE
+    THE RIGHT PREDICATE. It was, for a day, and both directions were wrong.
+    This read `if cNeedsAnsi`, under a comment claiming it used "the SAME
+    pre-scan the Pascal driver uses rather than a C-specific guess" -- which
+    is exactly the trap, because that routine walks Tokens[], and in a C
+    compile Tokens[] is C TEXT CLASSIFIED BY THE SHARED PASCAL LEXER. It is
+    not a Pascal-evidence scan here; it is a Pascal-KEYWORD scan of C.
+
+    THE FALSE NEGATIVE, found first because it is loud: until 523833fde,
+    needsAnsiRuntime was PasDefineExists('PXX_MANAGED_STRING') and
+    PasInitDefines defines that unconditionally, so it was True in every
+    frontend and the shims went out always. Making it evidence-based is right
+    for Pascal and left C with no evidence to offer, while the default-RTL
+    block below pulls builtinheap ANYWAY, on flags alone, and builtinheap's
+    own body calls these shims -- so the call stayed at address 0 and the
+    stub guard reported `a runtime stub that was never emitted` against a line
+    in a unit the C author never wrote. Bisected 2026-09-22: 523833fde^
+    builds, 523833fde does not, and it is EVERY x86-64 C build, not only
+    --emit-obj/--shared -- `int main(void){return 0;}` fails identically.
+
+    THE FALSE POSITIVE IS THE HALF THAT MATTERS FOR THE FIX, and it is frankh-c0's
+    measurement, not mine. Same compiler, one pair:
+
+        int f(int x){return x+1;}                          -> refused
+        int f(int x){int string = 0; return x + string;}    -> builds
+
+    A dead local named `string` lexes as tkString_T, so the scan answers True
+    for a C file that has no Pascal in it at all. It is a TOKEN effect and not
+    a text effect -- `string` in a comment or inside a string literal does not
+    rescue it -- and any case works. THAT is why the tier never caught the
+    false negative: its C --emit-obj rows split on #include count, and the one
+    row that passed was passing on a keyword its headers happened to contain.
+    Adding names to a Pascal keyword list cannot make it a correct predicate
+    for a C translation unit, in either direction, so the scan is gone from
+    this driver rather than corrected.
+
+    THE HONEST PREDICATE IS "WILL builtinheap BE LINKED", WHICH IS THE
+    INVARIANT 523833fde ITSELF STATED: builtinheap's body calls these stubs,
+    so emitting that unit without them leaves a call to 0 in code the compiler
+    appended itself. The Pascal driver keeps the pair inseparable inside
+    DetectPascalRuntimeNeeds's own tail (`if needsHeap then needsAnsiRuntime
+    := True`); the C driver takes its heap decision here instead, so the pair
+    is restored here. It is an if-and-only-if and the converse half is a
+    SECOND, OLDER BUG this closes: the shims' forwards are resolved BY
+    builtinheap, so emitting them without it fails as `unresolved forward:
+    PXXStrFromLit`. Measured against pin fda77c48b8ee, which predates the
+    regression -- `--no-default-rtl --emit-obj` on x86-64 refused for EVERY C
+    file, because the old gate was the always-true define. It now builds.
+
+    cPullsBuiltinHeap IS COMPUTED ONCE AND USED TWICE -- here, and as the
+    guard on the default-RTL block below -- rather than spelled twice. Two
+    spellings of one condition that agree today is how this broke the first
+    time. ORDER IS WHY IT IS A VARIABLE: the shims must be emitted BEFORE the
+    pull (see two paragraphs up), so the condition is evaluated before the
+    block it guards. If a second door to builtinheap is ever added, it goes
+    into this variable, not beside it. }
+  cPullsBuiltinHeap := (not NoDefaultRtl) and (TargetPlatform <> PLATFORM_ESP);
+  if cPullsBuiltinHeap and (TargetArch = TARGET_X86_64) then
   begin
     RegisterEmittedStringRuntimeForwards;
     EmitAnsiStringRuntime;
@@ -13121,7 +13176,7 @@ begin
       begin cWantsSoftFloat := True; Break; end;
     if cWantsSoftFloat then ParseUsesUnitAmbient('softfloat');
   end;
-  if (not NoDefaultRtl) and (TargetPlatform <> PLATFORM_ESP) then
+  if cPullsBuiltinHeap then
   begin
     { builtinheap declares TInterfacedObject/IInterface (Pascal classes), whose
       signatures name TGuid and TObject — builtin rows the Pascal ParseProgram
