@@ -573,6 +573,15 @@ begin
     xtensa_movi(reg_xtensa_a4, 0);
     xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 9);                { no handler -> park }
     xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, EXC_JMP_OFFSET_XT);
+    { RECORDED, AND THE SHAPE DELIBERATELY NOT CHANGED -- the Call0 twin of the
+      windowed arm below, found by censusing for the sibling after fixing that
+      one rather than by anything failing. It is a `j`, which never widens, so
+      the `beq ..., 9` above stays a correct byte count and the two-defect
+      problem the windowed arm had does not exist here. What DOES apply is the
+      other half: an unrecorded code->code reference is safe only because both
+      endpoints sit in the unowned stub blob, which nothing asserts.
+      CODEREF_ANCHOR_J re-encodes it in place, so recording costs no bytes. }
+    RecordCodeRefFull(CodeLen, ExcLongJmpAddr, 0, CODEREF_ANCHOR_J);
     xtensa_j(ExcLongJmpAddr - CodeLen);
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
@@ -635,6 +644,14 @@ begin
     xtensa_beq(reg_xtensa_a2, reg_xtensa_a3, 12);      { count = 0: -> retw }
     xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+    { RECORDED WITHOUT WIDENING, which is why the note above stands unchanged:
+      it objects to EmitXtensaCall8ToCode because that helper MIGHT widen and
+      the `beq ..., 12` above counts fixed 3-byte instructions. Recording is a
+      separate concern from choosing the form -- CODEREF_ANCHOR_CALL8 says
+      "re-encode this short call8 in place", so the slot stays 3 bytes and DCE
+      can still re-aim it and protect the target. The two were coupled only
+      because the helper did both. }
+    RecordCodeRefFull(CodeLen, ExcSpillAddr, 0, CODEREF_ANCHOR_CALL8);
     xtensa_call8(ExcSpillAddr - CodeLen);
     xtensa_retw;
 

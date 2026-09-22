@@ -24,9 +24,26 @@
     * EmitCallProc records EVERY internal direct call in CallFix, not just the
       forward ones it used to (RecordInternalCall). That table is BOTH the call
       graph this pass walks and the set of call sites it re-patches.
-    * IREmitCodeCall and the program entry's jump record a CodeRef -- the
-      references that name a code OFFSET rather than a proc (the ~50 runtime
-      stubs). RecordCodeRef, in emit.inc.
+    * The references that name a code OFFSET rather than a proc (the ~50
+      runtime stubs) record a CodeRef. RecordCodeRef, in emit.inc.
+
+      THIS BULLET NAMED TWO PRODUCERS -- IREmitCodeCall and the program entry's
+      jump -- until 2026-09-22, and there were FIVE. The three it did not name
+      recorded nothing, and one of them was live: EmitCodeAbsToRdx materialises
+      a code address as `call +0 / pop rdx / add rdx, imm32`, so the delta is an
+      emit-time constant the pass never re-aimed and whose target it never
+      protected. That is what returned rc 139 instead of FPC's 208/216 from the
+      --fpc-float-errors and --fpc-mem-errors runtimes and refused the
+      --dce-at-default-O2 promotion twice. Its i386 twin EmitCodeAbsToEax386 and
+      two raw xtensa sites in exception_emit.inc were the other three.
+
+      THE LIST IS THE HAZARD, not the omission. A bullet that enumerates the
+      producers reads as the definition of the set, so a reader checking whether
+      a new emitter needs a CodeRef finds two names, does not find their own, and
+      concludes correctly from a list that was never complete. The property is
+      "does this emit a displacement or an absolute address naming another point
+      in .text", and the answer is not a list -- which is why the anchored x86
+      slot below exists rather than a sixth name here.
     * Everything else that is PC-relative is INTRA-body (IR labels, loop and
       goto fixups, exception landing pads, inline-asm locals). A body moves as a
       unit, so those distances are preserved untouched.
