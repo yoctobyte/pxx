@@ -2405,6 +2405,33 @@ begin
       writeln(StdErr, '  there is no -o flag; write  pxx ', inFile, ' <output>');
       Halt(1);
     end;
+    { ANYTHING AFTER THE OUTPUT WAS SILENTLY DISCARDED, INCLUDING FLAGS.
+      The guard above catches a misplaced flag in the OUTPUT position and
+      nothing caught one in the position AFTER it, which is the spelling a
+      human actually reaches for: `pxx src.pas out.bin --target=aarch64`
+      built x86-64, exit 0, with an `ok:` line, because only ParamStr(i) and
+      ParamStr(i+1) are ever read.
+
+      Measured 2026-09-22 (frankb-8e): a six-target blast-radius control
+      written that way produced SIX BYTE-IDENTICAL NATIVE BINARIES and
+      printed five of the six rows its author wanted to see. The cost is not
+      a failed build -- it is a confident wrong ARTEFACT that every later
+      instrument is correct about.
+
+      Same reasoning as the dash guard: no working invocation passes a third
+      positional, so refusing costs a retry and accepting costs a
+      measurement. Named individually because "too many arguments" does not
+      tell you WHICH word was thrown away. }
+    if ParamCount > i + 1 then
+    begin
+      writeln(StdErr, 'too many arguments: pxx takes ONE source and ONE output');
+      writeln(StdErr, '  source: ', inFile);
+      writeln(StdErr, '  output: ', outFile);
+      for n := i + 2 to ParamCount do
+        writeln(StdErr, '  IGNORED: ', ParamStr(n));
+      writeln(StdErr, '  flags go BEFORE the source: pxx [options] <source> [output]');
+      Halt(1);
+    end;
   end;
   { Last-resort guard: refuse to write the binary over the source file. }
   if outFile = inFile then outFile := inFile + '.out';
