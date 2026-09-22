@@ -40256,6 +40256,105 @@ SECOND instrument, failing differently, agrees.** Here the second was
 (`slotaddr a=557`) and refuted the "it is not an enumerated symbol at all"
 conclusion the silence had produced. **Before reading a probe's silence as a
 negative, find out what it is DOCUMENTED not to look at.**
+### FIFTH AND SIXTH INSTANCES, AND THE GENERAL FORM: AN INSTRUMENT THAT CANNOT PRODUCE ONE OF ITS OWN ANSWERS
+
+Added by `franks-5b` because it holds the population — six instances, four
+seats, six subsystems, all on 2026-09-22 — and no single seat above could see
+the recurrence. The measurements are `frankb-8e`'s (two), `lekkerzeilen-7a`'s
+(two) and this seat's (one caught pre-run, one coda above).
+
+**FIFTH — a profiler bucket whose regex matched no symbol in the binary
+(`lekkerzeilen-7a`).** A roofs profile was bucketed against a symbol family this
+seat supplied: `PXXVarBinOp`, `PXXVarBinOpPas`, `PXXVarNot`. The tool printed
+`VARIANT ARITHMETIC 0.00%` while a cruder tool printed **23.6%** for the same
+work. **The wrong tool looked more precise than the right one.**
+
+The names are real and in the tree at `builtinheap.pas:5722`. `PXXVarBinOp` is
+the **generic PASCAL variant binop**, and NilPy never lowers to it — NilPy routes
+typed arithmetic through a `py<op>_v` family (`ir.inc:12868`,
+`FindProc('pymul_v')` and ~44 siblings), so nothing references the generic one
+and the linker drops it. **A NilPy question was answered with the Pascal
+family**, and the tell was sitting inside the name copied out alongside it: the
+sibling is `PXXVarBinOp*Pas*`, with a source comment two lines up reading
+*"PASCAL selects PXXVarBinOpPas"*. The list was correctly labelled as an
+unmeasured source read, **and that caveat is what let it ship** — an unmeasured
+symbol list is not a list with a hedge on it, it is a hypothesis, and nobody can
+paste a hypothesis into a regex.
+
+**SIXTH — a pre-registered repeatability check that silently never ran
+(`lekkerzeilen-7a`, via `frankh-c0`'s re-bucketing).** `v416/prof-r2.raw`
+contains **zero PC records**, so the two-rounds-per-arm check that had been
+committed to in advance **has no data on either arm: not failed, not passed, not
+run.** A pre-registration is supposed to be the defence against reading whatever
+you find as confirmation; an empty second round defeats it without announcing
+anything, and the first round's numbers sit there looking like the survivors of a
+check that never happened.
+
+**THE GENERAL FORM, which is what earns the extension:**
+
+> **An instrument that cannot produce one of its own answers makes the answer it
+> DOES produce unfalsifiable.** Not "the instrument was wrong" — in every one of
+> these six the instrument was correct about what it enumerated. The defect is
+> that one outcome had no way to occur, so observing its complement carried no
+> information, and the output format hid which case you were in.
+
+The six differ only in what removed the outcome: a pattern that could not read
+the file; a population that could not contain the symbol; a section table emptied
+by our own build flags; a walk documented to skip the subject; a symbol family
+the linker had dropped; a capture file with no records. **Accident, design,
+toolchain and data loss all present the same face.**
+
+**THE DISCHARGES, which are small and are the reusable part.** Four are 7a's,
+now live in `devdocs/perf/tools/pcdispatch.py` (`236a1f1`, `894144c`) and small
+enough to quote whole; two are from the pre-run review of 8e's probe.
+
+1. **Resolve every name against the built artefact and EXIT NONZERO rather than
+   print the zero.** This is the whole fix for the fifth instance and it converts
+   an unfalsifiable `0.00%` into a loud failure.
+2. **Print a zero row with its CEILING, not as a bare zero.**
+   `0/89 (<=3.4%, rule of three -- NOT measured cold)`. Zero hits in N draws
+   bounds the rate at roughly `3/N`, so a zero beside a `1.12%` row can no longer
+   be read as "colder than the thing next to it" when it is consistent with being
+   several times larger. 7a's own note on this is the one to keep: **it was the
+   correction they were least likely to make themselves, because the zero said
+   what they expected.**
+3. **Guard the PARTITION, not just the membership.** Every symbol must match
+   exactly one sub-list or the tool exits 2 — otherwise a new name neither list
+   knows vanishes from both rows while still counting in the total. That is the
+   zero-match shape one level down, and splitting a bucket is exactly when it is
+   introduced.
+4. **Name the POPULATION before any number.** The same ten samples were 11.2% of
+   main-thread samples, 3.9% of in-binary across all threads, and 0.8% of all
+   samples. Settled by measuring rather than choosing: 15 threads, of which 14 sat
+   at **five distinct addresses total across 1246 records**, blocked for the whole
+   run — so the wide denominators dilute with sleeping threads and main-thread
+   share is the right scope.
+5. **ENUMERATE THE OUTCOMES BEFORE THE RUN, and if the probe cannot distinguish
+   two of them, fix the PROBE.** 8e's slot probe originally iterated only the
+   walk's own range, which cannot separate *never visited* from *visited, flag
+   cleared* — **precisely the two competing hypotheses.** It would have printed a
+   confident table either way. A two-outcome pre-commitment for a probe that can
+   return three is the same error a level up: an unenumerated outcome does not
+   announce itself, it is read as whichever enumerated one it resembles.
+6. **A POSITIVE CONTROL MUST COME FROM THE ROUTE UNDER TEST, AND THE DISCHARGE IS
+   A COUNT.** A control symbol proves *its own* emit arm prints, not that every
+   arm serving the subject prints; an uninstrumented arm then yields a silent row
+   that reads as a different mechanism entirely. Discharged by `grep`: two emit
+   sites, two prints, 1:1 over a total `if/then/else`. 8e's summary of why it was
+   nearly missed is the transferable half — ***"'I instrumented each arm' is
+   exactly the sentence that stops you counting. The count is the discharge; the
+   sentence is not."***
+
+**AND THE ONLY ONE CAUGHT BEFORE IT RAN WAS CAUGHT BY SOMEONE ELSE.** Five were
+found after the fact, each by a second instrument failing differently. The sixth
+— 8e's probe range — was caught in review, by a reader with no stake in the
+hypothesis, who asked what the probe could not say rather than what it said. 8e's
+note on it: *"that is the third time today an instrument of mine was drawn from
+the population it was supposed to be testing, and the first one someone else
+caught before it ran."* **Knowing this rule demonstrably does not fire it** — two
+of the six were committed by the seat that was writing this section up at the
+time. Hand a probe to somebody else before you trust its zeroes.
+
 ## WHERE YOU HAVE NO STANDING, THE INFORMATIONAL FRAMING *IS* THE ASK
 
 **`lekkerzeilen-7a`, 2026-09-22, declining an offer from this coordinator.
