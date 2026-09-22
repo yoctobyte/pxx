@@ -3597,6 +3597,58 @@ def generate(tier):
     return jobs
 
 
+# The pre-run banner's headline count, kept so the END of the run can
+# reconcile against it. The banner is computed BEFORE the first job starts and
+# is therefore structurally unable to see a job whose corpus need is discovered
+# mid-run -- so its number is a LOWER BOUND, not a total.
+#
+# Measured 2026-09-22, and the cost was two seats and an invented cause: the
+# banner said `40 job(s)` and the report said `46 SKIP`. Two seats independently
+# subtracted and concluded six skips had ANOTHER cause, one of them reasoning
+# as far as a missing cross-linker. There was no second cause -- the six were
+# test-c-conformance#shard0..5, the NATIVE shards, which skip in-run for the
+# same absent c-testsuite the banner already named (its `24` is 4 cross arches
+# x 6 shards). Both subtractions were arithmetically correct over two different
+# populations, which is why neither seat doubted them.
+#
+# CORRECTING THE ROW WAS THE WRONG REPAIR AND WAS THE FIRST ONE PROPOSED:
+# hardcoding 46 restores today's number and leaves the mechanism, so it goes
+# silently wrong the next time a corpus-dependent family skips in-run. This
+# reconciles by RECOMPUTING at the end, where both numbers exist, so it cannot
+# go stale -- the same reason `skips` above is recomputed rather than reusing
+# the pre-run `nskip`.
+_CORPUS_BANNER_NJOBS = None
+
+
+def corpus_reconciliation(jobs):
+    """Reconcile the pre-run corpus banner against the end-of-run skips.
+
+    Returns a line to print, or None when there is nothing to say (no banner
+    was shown). Prints the arithmetic rather than asserting it, because a
+    discrepancy here is information about the DETECTOR, not a reason to fail a
+    run: a new in-run corpus skip is a legitimate thing to discover.
+    """
+    if _CORPUS_BANNER_NJOBS is None:
+        return None
+    end = sum(1 for j in jobs
+              if j.status == "skip"
+              and (j.skip_reason or "").startswith(SKIP_CORPUS_ABSENT))
+    pre = _CORPUS_BANNER_NJOBS
+    extra = end - pre
+    if extra == 0:
+        return ("corpus reconciliation: banner %d + in-run 0 = %d corpus skips "
+                "(pre-run detection was complete)" % (pre, end))
+    if extra > 0:
+        return ("corpus reconciliation: banner %d + in-run %d = %d corpus "
+                "skips — the banner is a LOWER BOUND and %d job(s) were only "
+                "found to need a corpus once running; do not read the "
+                "difference as a second cause" % (pre, extra, end, extra))
+    return ("corpus reconciliation: banner %d but only %d corpus skip(s) at the "
+            "end — the pre-run detector OVERCOUNTED, which it has never done "
+            "before; treat this as a bug in the detector, not in the tree"
+            % (pre, end))
+
+
 def corpus_warning(absent, njobs):
     """The loud, actionable version of 'N jobs skipped'.
 
@@ -3606,12 +3658,21 @@ def corpus_warning(absent, njobs):
     trees and prints the exact fetch command, because the failure mode this
     guards against is a box reporting GREEN for tests it never ran.
     """
+    # Recorded HERE rather than at the call sites, of which there are two: a
+    # second copy of this assignment is a name standing in for the thing it
+    # names, which is the failure this file's SKIP_* constants exist to avoid.
+    global _CORPUS_BANNER_NJOBS
+    _CORPUS_BANNER_NJOBS = njobs
     names = sorted(absent)                       # [(root, tree), ...]
     width = max(len("%s/%s" % k) for k in names)
     lines = ["",
              "  " + "!" * 68,
-             "  !! CORPUS MISSING — %d job(s) will SKIP, not run." % njobs,
+             "  !! CORPUS MISSING — AT LEAST %d job(s) will SKIP, not run." % njobs,
              "  !! A green verdict here does NOT cover them.",
+             "  !! (pre-run detection only: a job whose corpus need is",
+             "  !!  discovered mid-run skips IN ADDITION to these, so do NOT",
+             "  !!  subtract this from the report's skip total -- see the",
+             "  !!  corpus reconciliation line at the end of the run.)",
              "  !!"]
     for k in names:
         lines.append("  !!   %-*s  %3d job(s)" % (width, "%s/%s" % k, absent[k]))
@@ -6930,6 +6991,9 @@ def main():
     # different silences, one variable.
     skips = skip_summary(jobs)
     nskip = skips["count"]
+    _recon = corpus_reconciliation(jobs)
+    if _recon:
+        print("  " + _recon)
     flaky = [j.name for j in jobs if j.flaky]
     # Jobs that never ran because a job they DEPEND on failed are counted and
     # named separately. Without this the summary read "0/167 pass" for a run

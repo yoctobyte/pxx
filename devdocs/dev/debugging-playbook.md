@@ -36308,18 +36308,36 @@ a time window must print its shape, or it will be read as a probability.*
   playbook elsewhere reads as "a test that stops failing without being changed
   was never fixed", and which here means something changed *outside* the tree.
 - **AND THE CHEAPEST TELL OF ALL, WHICH NEEDS NO ANALYSIS: RUN THE CENSUS
-  TWICE.** A closed episode's count is **frozen**; a live phenomenon's count
-  **moves**. Measured the same hour this section landed: on a re-run an hour
-  later, every reversed row's red count was byte-for-byte identical (189, 107,
-  86, 65, 64) while the one genuinely live row went `549/550` → `550/551`. **The
-  number either changed or it did not**, so this cannot be misread the way a
-  run-length can be argued about, and it costs one repeated command. It is the
-  operational form of the `last red` tell above and it is strictly better.
+  TWICE — BUT ONLY WHERE THE DENOMINATOR IS STILL MOVING, AND THE FIRST VERSION
+  OF THIS BULLET GOT THAT WRONG.** The shape that discriminates is **numerator
+  frozen while denominator GROWS** — reds stay at 189 while the total climbs
+  past 361. A closed episode freezes the numerator; **so does a retired host**,
+  and so does a deleted job. Measured, and this is the correction: the reversed
+  rows' counts were byte-for-byte identical an hour apart (189, 107, 86, 65, 64)
+  and **that was guaranteed by construction** — all of them live on the host
+  whose last report was eleven days earlier, so no new reports existed that
+  *could* move them. The one row that moved was on the only still-reporting
+  host. **So the re-run discriminated live host from dead host, which was
+  already known, and said nothing about whether the episodes had closed.** With
+  a live denominator it is exactly the cheap unarguable check it looks like —
+  the number either changed or it did not — and it has no purchase where
+  reporting stopped. **Check that the total moved before reading anything into
+  the count not moving.**
 
 **Related:** "WHEN AN UPGRADE MOVES TWO QUANTITIES AT ONCE" — same night, same
 archive, the mirror error. There a **step** was misread as a gradient; here an
 **episode** was misread as a rate. Both come from collapsing a time-ordered
 series into one number, and both read as clean findings.
+
+**AND THE NEW TELL INHERITED THE CLASS IT WAS BUILT TO FIX, WHICH IS THE LAST
+THING WORTH TAKING FROM THIS.** The frozen-count check above was proposed as an
+improvement on the run-length evidence and was itself **a correct observation
+over a population that could not produce the other outcome** — the fifth
+instance of that class in one session, arriving *inside the instrument written
+to close the fourth*. A peer caught it in one sentence: *the frozen counts are
+frozen because the host is retired.* So the discipline is not "build a better
+tell" — it is **ask what population your new tell is reading, every time,
+including when the tell is your own repair for the last one.**
 
 **Half-discharged in the tool, 2026-09-22, and the remaining half is named.**
 `tools/tstate_toolchain_reversals.py` now prints `[longest run N, last red
@@ -36330,3 +36348,60 @@ that contradicts it. **What would retire this section entirely:** a helper that
 declines to emit a bare rate at all when the longest run exceeds some fraction
 of the event count, since instance 3 above shows a reader holding both numbers
 can still quote only one.
+
+## TWO NUMBERS FROM ONE HARNESS ARE UN-SUBTRACTABLE UNTIL YOU NAME BOTH SETS — A REPORTED COUNT CARRIES AN IMPLICIT POPULATION THE HARNESS DOES NOT RESTATE
+
+**The rule.** A harness prints counts at different moments, over different sets,
+with the same noun. **Subtracting two of them produces a number that looks like
+a cause and is usually a structural artefact.** Before differencing any two
+figures from the same tool, say out loud what set each one enumerated and at
+what moment. If you cannot, the difference is not a quantity.
+
+**Measured 2026-09-22 — two seats, two instances, inside one hour, in one
+exchange, neither noticing.** Both reached for the denominator that was nearest
+rather than the one that answered the question.
+
+1. A pre-run banner said `CORPUS MISSING — 40 job(s) will SKIP`; the end-of-run
+   report said `46 SKIP`. One seat subtracted and concluded **six skips have
+   another cause**, then reasoned about what that cause might be (a missing
+   cross-linker was the leading candidate). There was no second cause: the
+   banner is computed **before the first job starts**, and the six were native
+   C-conformance shards that skip **in-run**, for the same absent corpus. **The
+   two numbers were never over the same set** — one is what the tool could see
+   in advance, the other what it observed by the end.
+2. The other seat, in the same exchange, reported the install's effect as
+   **`+4` jobs** by differencing `4950` against `4954`. The header reads
+   `jobs=4910 skip=40(pre-run...)`, so **4910 is the RUNNABLE count and 4950 the
+   total enumerated**. Against the new run's `jobs=4954`: runnable went
+   **+44** — what the install actually bought — and total enumerated **+4**. It
+   had quoted the denominator that hides the effect, to a peer, as the headline.
+
+**Why it survives review:** both subtractions are arithmetically correct, both
+operands are real, and the tool restates neither population beside its number.
+The remainder therefore reads as a residual demanding explanation — which is
+exactly how instance 1 generated a plausible hypothesis about a cross-linker
+that was never involved.
+
+**THE REPAIR IS IN THE HARNESS, AND "FIX THE ROW" IS THE WRONG REPAIR.**
+Correcting the banner's `40` to `46` restores the row and leaves the mechanism:
+the banner is **structurally unable to count any skip whose cause is discovered
+after the first job starts**, so a hardcoded 46 goes silently wrong the next
+time a corpus-dependent family skips in-run, and the next reader repeats the
+subtraction. Two repairs that survive:
+
+- **Declare the aperture in the text** — *"at least 40 job(s) will SKIP (pre-run
+  detection only)"* — which stops the subtraction being attempted at all.
+- **Reconcile at the END, where both numbers exist** — assert `banner count +
+  in-run skips of the same class == total skips` and print the discrepancy.
+  **This one cannot go stale, because it recomputes rather than restates**,
+  and it would have printed `40 + 6 = 46` rather than leaving two seats to find
+  it.
+
+Prefer the second and add the first; the second is the guard, the first is the
+warning label.
+
+**Related:** "A RATE COMPUTED OVER A TIME WINDOW IS NOT A PER-RUN PROBABILITY"
+— same family, same night. There a time-ordered series was collapsed into one
+number; here two numbers over different sets were treated as commensurable.
+Both are **the population going unstated beside the figure**, and in both cases
+the arithmetic was flawless.

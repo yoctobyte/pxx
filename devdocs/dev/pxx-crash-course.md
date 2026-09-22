@@ -316,3 +316,46 @@ feature to build, and §3 is already its specification.
 Any of the five numbered sections being fixed. §2 in particular describes a bug
 as current behaviour — when the p85 ticket lands, that table changes and this
 file must change with it. Date your edits and name the measurement.
+
+## ASK "HAS THE HARNESS ALREADY GOT THIS?" BEFORE "LET US REASON ABOUT IT"
+
+**This is an ORDERING, not a technique** — which is why it belongs here and not
+in the debugging playbook. The failure it prevents is the one this file was
+created for: a seat with full repo access spending an evening rediscovering
+settled design that was never secret and never anywhere it would look.
+
+**Measured 2026-09-22 — three instances in one night, two seats, three
+subsystems, none of them found by looking.**
+
+1. **The qemu answer was written down on 2026-09-04.** Two seats spent an
+   evening establishing that a chronic cross-target red was an emulator version
+   difference rather than compiler work. `tools/twatch.py` had recorded the
+   host/toolchain variable eighteen days earlier — and the `toolchain:` field in
+   every tstate report **exists because of that very row**, so its absence from
+   the oldest reds was a date stamp rather than missing data. A peer's summary:
+   *"both of us went looking for a mechanism when the tree already held the
+   discriminator."*
+2. **The corpora were a fetch, not a project.** `tools/install_lib_candidates.sh`
+   — a committed tool with pinned commits, sparse paths and a PROVENANCE.md per
+   candidate — sat there while the missing corpora were discussed as an owner
+   escalation gated on disk space. The whole fetch is **43 MB**. Reading the tool
+   (and replicating its `fetch_commit` to size the result) answered in three
+   commands what an unmeasured adjective had made into a decision.
+3. **The resource habit was already in the preflight.** Two seats argued their
+   way to *"check inodes as well as bytes, because neither predicts the other"*
+   — from a real ten-hour outage where a box died on inodes at 9% bytes used.
+   `testmgr`'s own preflight already prints
+   `scratch /tmp: 88162 MB free of 95975, 6210699/6283264 inodes, ~220 more
+   run(s) (bytes-bound)` — **both figures, and it names which one binds.**
+
+**So the ordering is:** before reasoning about a mechanism, before writing a
+probe, and before escalating anything — **grep the tools that already touch the
+subject, and read their headers and their output.** A harness that runs this
+subsystem every day has usually been taught the thing you are about to derive,
+by whoever was burned by it first. **And when the grep returns prose, read the
+prose** — CLAUDE.md's existing form of this, which these three instances are the
+cost of not applying.
+
+**The tell that you are in this failure:** you are about to *derive* a property
+of the build, the hosts, the corpora or the archive. Those are all things
+something in `tools/` already measures.
