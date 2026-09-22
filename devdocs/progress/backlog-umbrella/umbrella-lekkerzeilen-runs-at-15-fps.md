@@ -192,6 +192,44 @@ caught by an unrelated byte signature answering 2387 against 18 — a 130x
 disagreement between two instruments on one subject, with a clean negative
 control. **Do not quote 58.6% from anywhere; it never existed.**
 
+## THE PIN'S `pylib.pas` IS 135 LINES BEHIND HEAD — SO A RE-PROFILE MEASURES A NilPy RUNTIME THAT NO LONGER EXISTS
+
+**Measured here 2026-09-22, at the artefacts rather than from the handbook:**
+`sha256sum` of `stable_linux_amd64/default/builtin/pylib.pas` against
+`compiler/builtin/pylib.pas` differ, and `diff` counts **135 changed lines**.
+`$(PXX_STABLE)` consumers — every Track B and E demo, **lekkerzeilen included** —
+get the PINNED one. This matters to this umbrella specifically because
+**lekkerzeilen runs under nilpy**, so `pylib.pas` is its runtime, not a detail.
+
+**Three commits touch it today and none of them is in the pin:**
+
+- `be65bc3e3` — **nine more pylib temporaries that nothing released**
+  (`franks-5b`). Per-pair and per-call leaks with measured byte counts:
+  `TPyDict.most_common` 200 B **per pair** and linear; `pylist_setslice` 584 B
+  rising to 1096 as **capacity** grows; the `pyiter_drain(pyiter_of_*(...))`
+  family, seven sites, the four aggregates leaking **twice** (968 = 384 cursor +
+  584 list). Eight fixture rows, each shown to FAIL on the unfixed compiler
+  first.
+- `8f1cf3341` — `%d`/`%x`/`%o` returned **a bare sign** for `Low(Int64)`.
+- `185a81621` — `abs()` of `Low(Int64)` returned **a negative number**.
+
+**THE TWO CORRECTNESS ROWS ARE THE ONES NOBODY FLAGGED.** The leak fixes change
+allocation behaviour, which is what a frame decomposition would notice. The other
+two are **wrong VALUES** that a demo built against the pin still produces today.
+
+**CONSEQUENCE FOR `task-e-decompose-a-lekkerzeilen-roofs-frame-...`, and it is
+not a reason to wait:** a decomposition taken on pin v417 is a true measurement
+of the tree the demos actually run, and it is **not** a measurement of HEAD's
+NilPy runtime. Say which, in the report. **NEVER WAIT FOR A PIN** — that is the
+owner's standing rule and this paragraph does not soften it. What it asks is one
+sentence of provenance, because a leak fixed at HEAD and absent from the pin is
+exactly the kind of difference that turns up later as an unexplained delta in the
+flattering direction.
+
+**What would retire this row:** a pin carrying `be65bc3e3` or later. Re-derive
+the 135 before quoting it; the two files move independently and the number is a
+snapshot.
+
 ## What nobody has, and it probably outranks every edge below
 
 **~470 ms OF A 530 ms FRAME IS UNACCOUNTED FOR once vsync is removed, and
