@@ -200,10 +200,32 @@ end;
   [[bug-b-sockets-fp-wrappers-return-raw-negative-errno-and-fpgeterrno-is-a-constant]].
 
   errno is PER-THREAD in FPC and must be here too: one global would just be a
-  quieter version of the same wrong answer once two threads fail at once. There
-  is no threadvar in this dialect, so this is the tid-keyed table
-  lib/rtl/scheduler.pas already uses for its reactors — linear scan on the fast
-  path, a CAS spinlock only when a thread first claims a slot. }
+  quieter version of the same wrong answer once two threads fail at once. So
+  this is the tid-keyed table lib/rtl/scheduler.pas already uses for its
+  reactors -- linear scan on the fast path, a CAS spinlock only when a thread
+  first claims a slot.
+
+  THIS SAID "there is no threadvar in this dialect" UNTIL 2026-09-22 AND THE
+  PREMISE IS RETIRED -- `threadvar` landed -- WHILE THE DESIGN ABOVE IS
+  UNCHANGED AND CORRECT. A stale RATIONALE is worse than a stale fact: this one
+  read as IMPOSSIBLE when the truth is POSSIBLE AND WRONG HERE, so it invited
+  exactly the repair that breaks five targets. Naming the real reason is what
+  stops the next reader deriving it again.
+
+  A `threadvar errno` WOULD NOT DEGRADE HERE, IT WOULD REFUSE.
+  TryAssignThreadVarStorage (pasparser_decl.inc) refuses FIRST on
+  `TargetArch <> TARGET_X86_64` -- the block is installed with
+  arch_prctl(ARCH_SET_GS) and no other target can SET a thread register yet --
+  and PASCAL'S ARM OF THAT FORK ERRORS ON EVERY REFUSAL, by design. C's
+  `__thread errno` takes the OTHER arm: it falls back to one shared object off
+  x86-64 with a warning, which lib/crtl/include/errno.h argues for in its own
+  words and parks the residual in a named ticket. Pascal has no such fallback,
+  so a threadvar here would make this unit REFUSE TO COMPILE on i386, arm32,
+  aarch64, riscv32 and xtensa -- and it also refuses under --emit-obj/--shared,
+  which have no ELF entry point to install the block.
+
+  So what would revisit this table is a thread register that can be SET off
+  x86-64, never the existence of the keyword. }
 { gettid inlined rather than taken from palthread, for the reason
   lib/rtl/scheduler.pas gives at its own copy: depending on the thread unit
   drags in __pxxclone and would force every single-threaded program that opens

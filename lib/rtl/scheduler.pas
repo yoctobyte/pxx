@@ -347,9 +347,17 @@ begin
 end;
 
 { Resolve the calling thread's reactor, attaching a fresh slot on first use.
-  Per-thread state without threadvar, keyed on the kernel tid. The fast path
-  (already attached) is lock-free; attachment is guarded by a tiny atomic
-  spinlock (contended only briefly at worker-thread startup). }
+  Per-thread state keyed on the kernel tid. The fast path (already attached) is
+  lock-free; attachment is guarded by a tiny atomic spinlock (contended only
+  briefly at worker-thread startup).
+
+  THIS SAID "without threadvar" UNTIL 2026-09-22, WHICH READ AS A LIMITATION
+  AND IS NOW A CHOICE. `threadvar` exists; it is x86-64 ONLY and Pascal's arm
+  of TryAssignThreadVarStorage ERRORS rather than degrading, so using one here
+  would make this unit refuse to compile on the five other targets. The full
+  reasoning is at the errno table in lib/rtl/sockets.pas rather than restated
+  here -- one copy, because the two tables exist for the same reason and a
+  second copy is what drifts. }
 function InCoroutine: Boolean;
 var me: Int64; i: Integer;
 begin

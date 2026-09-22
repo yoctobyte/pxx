@@ -7,7 +7,7 @@ prio: 45
 status: working
 created: 2026-09-18
 owner: frankb-8e
-summary: "THE NILPY ARM WAS RETIRED THE SAME DAY IT SHIPPED AND THIS SUMMARY ADVERTISED IT AS LIVE FOR THREE DAYS -- corrected 2026-09-22 (frankb-8e) after MEASURING it, not reading it. Re-measured at HEAD: a NilPy hello is bss 62,740 by default and 59,668 under -dPXX_TLS_USER_0, i.e. it still carries the full 3,072 and the flag is the only way to get it back. The retirement is correct and is recorded in ir_codegen.inc's own words: 402d61e0d made the AREAFULL reason a hard ERROR and c5ae069c5 made errno `__thread`, so EVERY C unit now declares a thread-local, and a NilPy program reaches C units through -Fu -- every mixed NilPy+C build refused at HEAD. Letting the C arm degrade instead would hand a NilPy program ONE errno shared across every thread, which is the race c5ae069c5 removed, so the 3,072 bytes are the price (~0.2% of a NilPy program's ~1.35 MB code segment). ONLY ONE ARM IS LIVE AND IT IS `IsPascalFrontend`; there is no NilPy condition in the routine at all. ROUTES C AND A SHIPPED AND ARE UNAFFECTED. A Pascal program naming neither `threadvar` nor `uses` gets a ZERO-byte threadvar area automatically -- hello.pas bss 38,396 -> 35,324 at the time, and 34,600 at HEAD now that bug-a-a-pascal-hello-world-is-63kb has landed -- with __pxxTlsBlockSize 1152 instead of 4224. On top of that -dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K sets it explicitly and always wins. THE PASCAL SCAN READS THE SOURCE TEXT, NOT TOKENS, and that is forced: the token array is EMPTY at the only moment the size may be chosen, and the call cannot move down because EmitTlsMainInstall bakes the size into the BSS reservation and the fold captures it. Source is include-expanded by then, which is why the text scan is Pascal-only. THE ARGUMENT THAT ONCE JUSTIFIED THE NILPY ARM IS PRESERVED BELOW AS HISTORY AND IS NOT THE STATE -- it reasoned only about a threadvar in a PASCAL unit a NilPy program imports (which does error loudly at 0 bytes, naming the unit, the line and the flag), and it never considered a C unit, which is what retired it. The C exclusion's old wording said the C allocator arm WARNS rather than errors; that was true when written and 402d61e0d made it a hard error. Guards: test_tlsnone26 (Pascal, asserts block=1152 -- the arm that IS live) and test_tlsnonenp26 (NilPy, asserts block=4224, i.e. that the area is still PAID). The NilPy fixture was named `test_a_nilpy_program_pays_no_threadvar_area.npy` while asserting the opposite, and was renamed to `..._pays_the_full_threadvar_area.npy` on 2026-09-22 with its header rewritten: whoever retired the arm updated the assertion correctly and left the name and header behind, so a grep for the old sentence found a test proving its negation. Its stated positive control -- \"the pinned compiler answers 4224\" -- was also removed rather than reworded, because it discriminated only while HEAD answered 1152; both answer 4224 now, so that agreement is two compilers doing the same correct thing and not evidence. The `uses` rule stays on the Pascal side because dropping it would REFUSE a program that compiles today, capping that arm's reach at unit-free programs, 11 of 49 under examples/. STILL OPEN: the long-tail frontends (one `or Is<X>Frontend` term each, unrequested), and route B, still the only unsound route. Found on the way and fixed separately: bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero, which was really the -O2 inliner retaining a threadvar read as a plain global."
+summary: "THE NILPY ARM WAS RETIRED THE SAME DAY IT SHIPPED AND THIS SUMMARY ADVERTISED IT AS LIVE FOR THREE DAYS -- corrected 2026-09-22 (frankb-8e) after MEASURING it, not reading it. Re-measured at HEAD: a NilPy hello is bss 62,740 by default and 59,668 under -dPXX_TLS_USER_0, i.e. it still carries the full 3,072 and the flag is the only way to get it back. The retirement is correct and is recorded in ir_codegen.inc's own words: 402d61e0d made the AREAFULL reason a hard ERROR and c5ae069c5 made errno `__thread`, so EVERY C unit now declares a thread-local, and a NilPy program reaches C units through -Fu -- every mixed NilPy+C build refused at HEAD. Letting the C arm degrade instead would hand a NilPy program ONE errno shared across every thread, which is the race c5ae069c5 removed, so the 3,072 bytes are the price (~0.2% of a NilPy program's ~1.35 MB code segment). ONLY ONE ARM IS LIVE AND IT IS `IsPascalFrontend`; there is no NilPy condition in the routine at all. ROUTES C AND A SHIPPED AND ARE UNAFFECTED. A Pascal program naming neither `threadvar` nor `uses` gets a ZERO-byte threadvar area automatically -- hello.pas bss 38,396 -> 35,324 at the time, and 34,600 at HEAD now that bug-a-a-pascal-hello-world-is-63kb has landed -- with __pxxTlsBlockSize 1152 instead of 4224. On top of that -dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K sets it explicitly and always wins. THE PASCAL SCAN READS THE SOURCE TEXT, NOT TOKENS, and that is forced: the token array is EMPTY at the only moment the size may be chosen, and the call cannot move down because EmitTlsMainInstall bakes the size into the BSS reservation and the fold captures it. Source is include-expanded by then, which is why the text scan is Pascal-only. THE ARGUMENT THAT ONCE JUSTIFIED THE NILPY ARM IS PRESERVED BELOW AS HISTORY AND IS NOT THE STATE -- it reasoned only about a threadvar in a PASCAL unit a NilPy program imports (which does error loudly at 0 bytes, naming the unit, the line and the flag), and it never considered a C unit, which is what retired it. The C exclusion's old wording said the C allocator arm WARNS rather than errors; that was true when written and 402d61e0d made it a hard error. Guards: test_tlsnone26 (Pascal, asserts block=1152 -- the arm that IS live) and test_tlsnonenp26 (NilPy, asserts block=4224, i.e. that the area is still PAID). The NilPy fixture was named `test_a_nilpy_program_pays_no_threadvar_area.npy` while asserting the opposite, and was renamed to `..._pays_the_full_threadvar_area.npy` on 2026-09-22 with its header rewritten: whoever retired the arm updated the assertion correctly and left the name and header behind, so a grep for the old sentence found a test proving its negation. Its stated positive control -- \"the pinned compiler answers 4224\" -- was also removed rather than reworded, because it discriminated only while HEAD answered 1152; both answer 4224 now, so that agreement is two compilers doing the same correct thing and not evidence. The `uses` rule stays on the Pascal side because dropping it would REFUSE a program that compiles today, capping that arm's reach at unit-free programs, 11 of 49 under examples/. ROUTE B IS PRICED NOW AND IS NOT BLOCKED -- IT IS UNDERSTOOD AND DECLINED, 2026-09-22, and this summary said 'still the only unsound route' as if a mechanism were missing. Worth 3,072 B to 25 of 28 host example programs that build (mean 2.86% of bss, ceiling 3.32%, and 36 of 36 compile at -dPXX_TLS_USER_0 because there are ZERO threadvar declarations in examples/ or lib/). Costs: defer the BSS_TLS_MAIN offset past parsing, patch two prologue displacements, stop one builtin folding early -- ONE backend, since threadvar refuses off x86-64, and the clone stub's four reads are already late for free. The blocker section in the body overstated this: the fold is one obstacle of four and PatchProcPrologue, not Patch32, is the precedent for a patched NUMBER. Declined because the failure mode is silent gs-relative corruption in the entry prologue every program runs through, for ~3% of bss. AND THE ESP HALF OF THIS TICKET IS WORTH NOTHING AND ALWAYS WAS: TryAssignThreadVarStorage refuses FIRST on TargetArch <> TARGET_X86_64, and the area is not reserved off x86-64 either -- measured delta ZERO on i386, arm32, aarch64, riscv32/esp32c3 and wasm32 against 3,072 on x86_64, with a subject carrying a `uses` so route A had not already removed it. So any blocked-by edge wiring this to an ESP size umbrella transmits an effective p70 for a benefit that does not exist there; RE-JUSTIFY ON THE HOSTED CASE OR CUT THE EDGE. What would revive route B: a threadvar landing in lib/rtl, at which point route A's `uses` term forces the full area on every program that touches a unit. STILL OPEN: the long-tail frontends, one `or Is<X>Frontend` term each, unrequested and unscheduled. Found on the way and fixed separately: bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero, which was really the -O2 inliner retaining a threadvar read as a plain global."
 verified: 2026-09-22
 ---
 
@@ -465,7 +465,157 @@ off this ticket before 2026-09-22 has a different denominator** — recorded
 because the ticket's own tables carry absolute bss figures with no tree beside
 them.
 
-*frankb-8e (Track A). Measured, not implemented: I corrected the summary and
-did not write the BASIC arm, because step 1 above is unanswered and the ticket
-already contains one arm that was written from an argument and retired by a
-measurement.*
+*frankb-8e (Track A). SUPERSEDED BY THE SECTION BELOW, SAME DAY, SAME SEAT:
+this said "I did not write the BASIC arm" and the arm shipped a few hours
+later -- it is live at `ir_codegen.inc:1877` with both fixtures
+(`test_a_unit_free_basic_program_pays_no_threadvar_area.bas`,
+`test_a_basic_program_with_a_unit_pays_the_full_threadvar_area.bas`). Left in
+place rather than deleted because it is the third sentence of mine falsified by
+a later commit of mine in one day, and the shape is worth seeing: a sign-off
+records what was true when you stopped, and stopping is exactly when you also
+stop re-reading it.*
+
+## 2026-09-22 — ROUTE B IS PRICED NOW, IN BOTH DIRECTIONS, AND IT IS SMALLER THAN THIS TICKET SAYS ON BOTH SIDES
+
+Two numbers were missing and both are here: what route B is WORTH, and what it
+actually COSTS. The ticket recorded neither, and the blocker paragraph above
+overstates the cost badly enough that nobody was going to look.
+
+### The area is an x86-64-ONLY cost — so the ESP half of this ticket is worth nothing
+
+`TryAssignThreadVarStorage` (`pasparser_decl.inc:2767`) refuses **first**, before
+any other check, on `TargetArch <> TARGET_X86_64`: *"a per-thread block is
+installed with `arch_prctl(ARCH_SET_GS)` by the clone stub, and the other
+targets have a readable thread register (aarch64 tpidr_el0, arm32 tpidruro) but
+no way to SET one yet."* So no other target can ever populate the area — and it
+is not reserved there either.
+
+Measured 2026-09-22 at binary `48f69d2d285d`, default versus
+`-dPXX_TLS_USER_0`, six targets:
+
+| target | default bss | `_0` bss | delta |
+| --- | ---: | ---: | ---: |
+| x86_64 | 92,340 | 89,268 | **3,072** |
+| i386 | 79,576 | 79,576 | 0 |
+| arm32 | 79,576 | 79,576 | 0 |
+| aarch64 | 88,100 | 88,100 | 0 |
+| riscv32 / esp32c3 | 79,576 | 79,576 | 0 |
+| wasm32 | 1,096,496 | 1,096,496 | 0 |
+
+xtensa and esp32s3 are NOT in that table and the reason is not TLS: the subject
+`uses sysutils`, and those targets refuse an external `calloc` with *"external
+(dynamic) symbols are not supported on this target"*. Unmeasured, not zero.
+
+**THE FIRST VERSION OF THAT TABLE WAS TAKEN THROUGH THE WRONG ROUTE AND SAID
+THE SAME THING.** It used `test/hello.pas` and answered delta 0 on every cross
+target — true, uninformative, and indistinguishable from the finding. `hello.pas`
+names no `uses`, so **route A had already zeroed the area on x86-64 too**; the
+probe reached the subject by a path that had already removed the thing under
+test. The control costs one line and it is the general form: **when every arm
+agrees, check that the arm you expected to DISAGREE still does.** Running the
+x86-64 arm showed 0 where it had to show 3,072, which is what sent me back for
+a subject with a `uses` in it.
+
+**Ranking consequence, and it is not rhetorical.** Whatever `blocked-by` edge
+wires this ticket to the ESP size umbrella is transmitting an effective p70 for
+a benefit that does not exist on that umbrella's target. `effective_prio` takes
+the max over everything a ticket unblocks and nothing in the number says which
+edge supplied it. **This ticket has to justify itself on the hosted x86-64 case
+alone**, and the section below is the attempt.
+
+### What route B is worth: 25 of 28 host example programs, 3,072 B each, ≤3.32%
+
+Sweep of every `program` under `examples/` — population `find examples -name
+'*.pas'` filtered to files whose first keyword is `program`, **46 of 50 `.pas`
+files**. Oracle: `-dPXX_TLS_USER_0` reserves a zero-byte area and the compiler
+REFUSES (hard error, `402d61e0d`) any compilation that declares a threadvar, so
+"compiles at `_0`" == "this whole compilation, RTL chain included, declares no
+threadvar" == "route B would reserve 0 here". Control: each subject is compiled
+at DEFAULT first, and a `_0` failure is only attributed inside the set whose
+default arm succeeded — without it, a missing GL/gtk/tk header reads as a
+threadvar refusal.
+
+- 36 of 46 build at default. **36 of 36 also build at `_0`. Zero refusals.**
+- **Expectation recorded before the run finished**, and it held: there are
+  **zero `threadvar` declarations in all of `examples/` and all of `lib/`** —
+  the only three occurrences of the word in `lib/` are comments.
+- 8 of the 36 are `examples/esp32/**`, which the sweep built **for the host**.
+  Their real target answers delta 0 (table above), so they are excluded rather
+  than counted; a ticket quoting the raw 28 would have credited route B with
+  the three whose share is HIGHEST (5.19%, 5.17%, 3.68%) on the one target
+  where it is zero.
+- **Of the 28 host programs: 25 gain 3,072 B; 3 already have it from route A.**
+  Mean share of bss **2.86%**, range 0.18% (`chess`) to 3.32% (`g2048`,
+  `satdemo`, `menudemo`).
+
+The 3.32% is close to a ceiling rather than a sample: the smallest
+`uses`-bearing Pascal program measured is ~92 KB of bss, so 3,072 cannot be a
+larger fraction than that for anything with a unit in it.
+
+**Denominator note, because this ticket already carries a different one.** The
+`uses`-rule paragraph above says the Pascal arm's reach is *"unit-free programs,
+11 of 49 under examples/"*. That was counted over 49 `.pas` FILES by source
+inspection; this is 3 of 28 host PROGRAMS that build, by measured delta. Both
+rows stand, each with its own population — a re-run disagreeing with either is
+not a regression.
+
+### The blocker is much smaller than the section above says
+
+That section names one obstacle, the `AN_INT_LIT` fold, and prescribes *"a
+patched immediate recorded like the other Patch32 sites, or a relocation"*. A
+full map of `TlsBlockSize`'s consumers says the fold is one of four and the
+other three are mostly already late:
+
+| consumer | site | when it runs | route B? |
+| --- | --- | --- | --- |
+| the `AN_INT_LIT` fold | `pasparser_expr.inc:4451` | parse time | **early — must change** |
+| BSS reservation | `ir_codegen.inc:1992` | `EmitTlsMainInstall`, before parsing | **early — must change** |
+| two prologue displacements | `ir_codegen.inc:2005`, `:2009` | same | **early — must change** |
+| clone stub carve, ×4 reads | `thread_emit.inc:114/120/164/182` | `EnsureCloneStub`, at `IR_CLONE` lowering | **already late — free** |
+
+And two of the three early ones are cheaper than they look. The block's
+**ADDRESS** is already late: the prologue reaches it through
+`mov r9, @glob BSS_TLS_MAIN`, i.e. a `GlobFix[]` entry the ELF writer resolves
+at the end — so what is early is the BSS *offset assignment*, not the reference.
+The two displacements are plain immediates in already-emitted bytes, and there
+is an existing precedent for exactly that: `EmitProcPrologue` emits a
+placeholder `0` for the frame size and `PatchProcPrologue`
+(`symtab.inc:15533`) writes the real number after the body, with a per-arch
+encoder. **`Patch32` is NOT the mechanism to copy** — it is a within-pass
+backpatch; `PatchProcPrologue` is the only existing example in this compiler of
+a NUMBER, rather than an address, emitted as a placeholder and filled in later.
+
+**And it is one backend, not six.** `threadvar` refuses off x86-64, so every
+site above that would need patching is in the x86-64 path. The `AN_INT_LIT`
+fold is the only cross-cutting one, and it is 2 of 25 `__pxx*` builtins that
+fold to a literal at all — the other 23 already allocate a dedicated node that
+survives to IR and emit.
+
+### DECISION: priced, understood, NOT built — and this is not a park for want of a mechanism
+
+Value ~2.9% of bss on 25 of 28 host example programs, x86-64 only, nothing on
+ESP. Cost: defer the `BSS_TLS_MAIN` offset assignment past parsing, patch two
+prologue displacements, and stop one builtin folding early. The failure mode of
+getting it wrong is **silent memory corruption** — gs-relative slots writing
+past the mapping — in the entry prologue every program runs through.
+
+That trade does not clear the bar while the owner's stated goals are a full
+green pin, working demos, busybox and lekkerzeilen, and it is worth saying
+plainly rather than leaving the ticket reading as blocked. **Route B is not
+blocked. It is understood and it is not worth 3% today.** What would change
+that: a hosted program whose bss is small enough for 3,072 to be a large share
+(nothing in `examples/` is), or a threadvar landing in `lib/rtl` — at which
+point route A's `uses` term forces the full area on every program that touches
+a unit, and route B becomes the only way to pay for what is actually declared.
+
+**Adjacent, and the reason the second condition is not hypothetical.**
+`lib/rtl/sockets.pas:204` says *"There is no threadvar in this dialect, so this
+is the tid-keyed table"* and `scheduler.pas:350` says *"Per-thread state
+without threadvar"*. Both premises are false — threadvar landed — and **both
+designs are still correct, for a reason neither comment gives**: threadvar is
+x86-64 only, so a threadvar `errno` would break five targets. A stale RATIONALE
+is worse than a stale fact: it reads as *impossible* when the truth is
+*possible and wrong here*, and it invites exactly the repair that breaks the
+cross targets. Comment repair only; the 64-slot tid table stays.
+
+*frankb-8e (Track A), holding this ticket.*
