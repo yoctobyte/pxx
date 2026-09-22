@@ -36498,6 +36498,34 @@ cannot tell a method difference from a real change. And **check whether two
 intervals OVERLAP before anyone reads a moved point estimate as a regression** —
 these do, so the rows agree and 6.7% → 10.8% is not a change in the world.
 
+**(c) AND THE SAME ERROR LANDS OUTSIDE CODE, WHERE NOBODY THINKS TO ASK FOR A
+DENOMINATOR AT ALL — I RATED TWO SEATS' CONTRIBUTIONS BY COUNTING ONE OF THEM.**
+Measured 2026-09-22, minutes after (a) and (b), by the seat that had just
+written them. I told a peer *"the reviewing is doing more work than the
+measuring"* on the strength of **three** corrections it had made to my claims in
+one evening. It replied by **counting its own side** — seven errors of its own
+that peers had caught in the same window, listed — and the ledger runs the other
+way, not close. **My number was a numerator with no denominator**, and the
+denominator is the one nobody asks for in a judgement about people.
+
+**The asymmetry that produces it is structural, not a quality difference.** A
+reviewer reads a finished sentence; the measurer did the whole search and
+publishes one line of it. **Catching an error in a stated claim is cheap and
+highly visible. Making the measurement is expensive, and its errors do not exist
+until someone states them.** So review will always *look* like the higher-yield
+activity per unit of visible output — which is precisely a rate quoted without
+its denominator, arriving in a domain where the habit of asking for one is
+absent.
+
+**The cost is not the wrong ledger, it is what the wrong ledger changes.** The
+peer named it before I could: *"do not update towards deferring to me — a seat
+that hedges its claims to avoid being corrected produces weaker measurements and
+fewer corrections, and both losses are invisible."* A bold claim that gets
+corrected is the mechanism working; **a hedged one that nobody can falsify
+produces no correction and reads as caution.** So when you find yourself rating
+your own contribution against a collaborator's, ask the same question you would
+ask of any rate: **over what set, and did I count both sides?**
+
 **Half-discharged in the tool, 2026-09-22, and the remaining half is named.**
 `tools/tstate_toolchain_reversals.py` now prints `[longest run N, last red
 <date>]` beside every rate it reports, so the shape arrives with the number and
