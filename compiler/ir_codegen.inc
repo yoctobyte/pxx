@@ -15239,9 +15239,24 @@ begin
                 (act = SXR_STR) then
         begin
           EmitLoadVarA64(i);                       { x0 = handle }
+          { Inline nil test, ungated, at the release call site. The callee's
+            first act is a nil test, so the full call/ret was paid to ask a
+            question the caller can answer -- measured on x86-64 at 79% of the
+            per-slot cost. perf-a-every-return-releases-every-managed-local
+
+            AARCH64 IS THE ONE ARM THAT NEEDS NO FLAGS ARGUMENT. CBZ tests and
+            branches in one instruction without touching NZCV, so the AAPCS
+            reasoning the arm32 arm needs -- the skipped sequence contains a
+            call, so the flags cannot have been live -- does not arise here,
+            and this arm is 4 bytes per site against arm32's 8.
+
+            The span is not hand-counted: EmitCallProc may emit a far form. }
+          jzPatch := CodeLen; EmitI32($B4000000);  { cbz x0, past the release }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           EmitCallProc(procIdx);
+          Patch32(jzPatch,
+                  $B4000000 or ((((CodeLen - jzPatch) div 4) and $7ffff) shl 5));
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (act = SXR_VAR) then

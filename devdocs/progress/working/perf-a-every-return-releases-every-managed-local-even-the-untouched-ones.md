@@ -1361,3 +1361,105 @@ call does real work and its nil path may be worth more per site — but it
 retires the idea that the string arm is a partial fix waiting on the others.
 **It is the fix; the others are an increment.** Anyone picking them up should
 re-derive the tk number before quoting this paragraph.
+
+## 2026-09-22 (frankb-8e) — aarch64 JOINS, and the blast-radius table spent one run measuring nothing
+
+Fourth backend, one commit. aarch64 is the cheapest arm so far and the only
+one that raises no flags question at all.
+
+| target | before -> after |
+| --- | --- |
+| x86_64 | IDENTICAL |
+| i386 | IDENTICAL |
+| arm32 | IDENTICAL |
+| riscv32 | IDENTICAL |
+| xtensa (`--platform=posix`) | IDENTICAL |
+| **aarch64** | **CHANGED, as intended** |
+
+### CBZ makes this the one arm with no ABI argument to make
+
+x86-64 (`test`), i386 (`test`) and arm32 (`cmp`) all destroy condition flags
+and all three need the same argument to license it — the skipped sequence
+contains a call, and no ABI preserves flags across one, so nothing the test
+could damage was live. **aarch64 needs none of it: `CBZ` tests and branches in
+one instruction and does not write NZCV.** It is also the cheapest site:
+
+| target | bytes per release site | why |
+| --- | --- | --- |
+| aarch64 | **4** | one `cbz`, no separate compare |
+| i386 | 4 | `test eax,eax` (2, no REX) + `jz` (2) |
+| x86-64 | 5 | `test rax,rax` (3, REX) + `jz` (2) |
+| arm32 | 8 | `cmp` (4) + `beq` (4), fixed-width, no cheap form |
+
+The patch expression is `exception_emit.inc:443`'s `cbz x0` pair character for
+character (`$B4000000 or ((((CodeLen - jzPatch) div 4) and $7ffff) shl 5)`),
+for the same reason the arm32 arm copied `PatchCodeRefSlot`: one spelling of
+an architecture's branch arithmetic in the tree, not a second that drifts.
+
+### Measured
+
+- **Size**: `code=` 165200 -> 165264 on the six-frame fixture, **+64 bytes =
+  16 sites x 4**.
+- **The instruction is the one intended, decoded from the image**: the post
+  build has **16 more `cbz x0,#+8` immediately followed by a `BL`** than the
+  pre build (30 vs 14). `imm19 = 2` is the whole check — the branch clears
+  itself and the `bl` and lands on the next slot, which is what a hand-written
+  displacement would have got wrong the day `EmitCallProc` emits a far form.
+- **The opcode count alone would NOT have shown this**: `cbz x0,#+8` occurs
+  **92 times in the PRE image** (RTL code). The population already contains
+  the pattern, so the readout has to be the delta *and* the followed-by-BL
+  subset; a bare `grep -c` for the encoding would have answered 108 and meant
+  nothing. Three independent arrivals at 16 (site count, +64 bytes, +16 pairs).
+- **Behaviour**: `cross=3` under `qemu-aarch64`, before and after.
+- **Leaks, differentially, FIVE fixtures under `qemu-aarch64`**:
+  `allocs`/`frees`/`live`/`bytes`/`reuse` identical on **every field of every
+  row**, including the three named for leaking.
+- `tools/gate.sh quick`: GREEN.
+- Self-host fixedpoint: converged in 1 round — correct, the x86-64 emitter did
+  not move.
+
+### THE FIRST RUN OF THIS TABLE WAS SIX COPIES OF ONE NATIVE BINARY
+
+Worth more than the arm it was checking. The loop was written as
+
+```
+pascal26 cross.pas out.bin --target=$t
+```
+
+and **pxx reads the output positionally as `ParamStr(i+1)` and IGNORES every
+argument after it** — silently, exit 0, with an `ok:` line. All six legs built
+x86-64. `sha256sum` of the six "pre" images: **one distinct value.**
+
+The table printed:
+
+```
+x86-64 IDENTICAL   i386 IDENTICAL   arm32 IDENTICAL
+aarch64 IDENTICAL  riscv32 IDENTICAL   xtensa IDENTICAL
+```
+
+which is **five of the six rows I wanted to see**. The only row that could
+expose it is the one that must CHANGE — so *the converted target's row is not
+a result, it is this instrument's positive control*, and a blast-radius check
+without it cannot fail. That is this file's own guard rule arriving in the
+method I have been calling the whole point of doing one backend per commit.
+
+**Second instance in the same session, same shape**: `--target=x86-64` (hyphen)
+is `unknown option` — the spelling is `x86_64`. That leg failed loudly, and
+because the loop wrote nothing, the `cmp` compared **two leftover files from
+the broken run** and reported IDENTICAL. A `cmp` between two stale artefacts
+is indistinguishable from a `cmp` between two fresh ones.
+
+**Re-measured retroactively, and the CLAIMS were true**: building `cross.pas`
+for `x86_64` with each landed compiler gives `19c98a5cc05f` (pre-x86-64
+control) then `4409ff4b6238` for the x86-64, arm32 and aarch64 builds alike.
+So the x86_64 row in the i386 and arm32 sections is correct — it was just not
+established by the command that ran there. **A true claim and a void
+instrument, which is the pair that never gets caught, because nothing about
+the output looks wrong.**
+
+Two things this changes going forward, both cheap:
+1. **Assert the converted target CHANGED** before reading the five IDENTICAL
+   rows. One line, and it is the only line that can fail.
+2. **Assert every leg BUILT** (`|| echo FAIL`, and branch on it) and that the
+   N pre-images are N distinct shas. A `cmp` is a comparison whose
+   preconditions were never established.
