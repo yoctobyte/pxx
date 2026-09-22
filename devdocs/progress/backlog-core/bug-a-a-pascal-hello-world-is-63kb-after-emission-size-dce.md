@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: ""
 created: 2026-08-25
-summary: "THE PROMOTION LANDED AT 39ca6ac2a (frankh-c0, 2026-09-22, third attempt) AND THIS TICKET IS NOT DONE -- its ORIGINAL mechanism is untouched and is now the whole of what remains, stated at the end of this summary. --dce is the default at -O2, wasm32 carved out. PROOF: full tier at that tree, 4959/4962 pass, 2 flaky, RED on two FAILs and NEITHER attributable to the change -- test-nilpy#675 was recorded NEW-RED by Track T's borg run at pin v417 BEFORE the work (a 1-ULP atan2 difference; byte-identical output under --dce/--no-dce/default so the flag cannot cause it) and test-riscv32#180 is red across FOUR hosts in tstate and compiles rc=0 either way. Attempt 2 was six FAILs; this was two, both outside the change. No green tier was claimed. THE OBJECT-MODEL GATE WAS MEASURED AWAY AND IT WAS MINE: the promotion enacts NEITHER half of decide-a-is-a-pxx-object-..., because --emit-obj keeps all 323 exports (312 WEAK FUNC, identical name sets, UND 0) while dropping 269 LOCAL bodies, and model B's collapse needs RE-ROOTING which an -O level does not do. WASM32 IS CARVED OUT for the TARGET's consumption model, not for our tests: six of seven wasm failures were `inst.exports.<Name> is not a function`, which is what a wasm library IS, and the seventh is flag-INDEPENDENT and already filed. VERIFIED AGAINST frankb-8e's 372dd5113 afterwards (rebuild, every target builds at the default, both correctness rows give their owed codes with no flag, no closure refusal, gate quick GREEN). THE TWO CORRECTNESS REGRESSIONS WERE FIXED BY frankb-8e at 5fccc890a. `--fpc-float-errors` div0 and `--fpc-mem-errors` nilread both give their owed 208/216 under `--dce` now, on all arms (0/208/205/207 and five modes at 216), with `--no-dce` unchanged as the control. The mechanism was EmitCodeAbsToRdx recording no CodeRef for a `call +0 / pop rdx / add rdx, imm32` delta, so the pass neither protected the target nor re-aimed it; the i386 twin and two latent siblings went with it (see bug-a-two-code-to-code-references-are-unrecorded-and-are-safe-only-by-where-they-happen-to-sit, now done). THE EVIDENCE IS THE SLOT BYTES, NOT THE EXIT CODE: before the fix the four deltas were byte-identical in the --dce and --no-dce binaries of one program while the code between them had moved; after, exactly one moves (-66886 -> -24082, 42,804 bytes dropped in that gap) and three do not -- which is the three-survive/two-break split this ticket measured and could not explain. OF THE SIX FAILS FROM ATTEMPT 2, FOUR REMAIN AND NONE IS A CORRECTNESS BUG: two are the `test-emit-obj` `t Hidden` control arms whose subject the promotion deletes and whose repair is `--no-dce` on those rows, NOT weakening the assertion (dropping the row leaves a guard that passes when the symbol is absent); one is test-core#1008, frankb-8e's own wasm32 renumbering guard firing correctly on an unclosed live set; one is not ours (test-riscv32#180, identical rc either way). SO A THIRD ATTEMPT IS: respell those two rows, carve wasm32 out of the default, re-run the tier. THE WASM32 CARVE-OUT IS STILL REQUIRED and is not a defect -- the harness reaches bodies by EXPORT NAME and `--dce` correctly drops an export nothing reaches, so those rows would arrive as failures and read as evidence against the pass. AND THE TRAP IS UNCHANGED: the self-host fixedpoint converges at the promoted setting and converged while both regressions were live -- it converged at all seven builds of the fix too, including the unfixed ones. It is not evidence about this class and it reads exactly like evidence. THE OBJECT-MODEL GATE IS MEASURED AWAY AND IT WAS MINE (frankh-c0, 2026-09-22): the promotion enacts NEITHER half of decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit, so a third attempt says THAT in the commit rather than picking a side. I had written that promoting turns per-object DCE on by the back door and therefore answers the fork silently. The first clause is true and the second does not follow. Measured at fd6965890102, x86-64, `--emit-obj` of a C TU pulling the runtime: `--dce` drops 269 of 540 LOCAL FUNC bodies and the export surface is INVARIANT -- 323 exports, 312 of them WEAK FUNC, IDENTICAL NAME SETS, UND 0 both ways; a second TU drops 436 of 489 locals with 2 exports unchanged. The bodies DCE removes are LOCAL and were never part of the object's external contract, so an object still supplies exactly what it supplied before under EITHER answer. The fork's model B -- 298 of 307 exports vanishing -- requires RE-ROOTING at the TU's own exports, which the decide itself had to SIMULATE because `--dce` does not do it; promoting an -O level does not do it either. SCOPE, stated because the decide flags it: x86-64. The xtensa row is VACUOUS and is not counted -- exports were identical there but `--dce` dropped ZERO bytes (390 B both), so it cannot tell a preserved export from a pass that did nothing. PROMISE, WITH ITS POPULATION THIS TIME: at tree fd6965890102, x86-64, `program h; begin WriteLn('hello'); end.`, code= from the ok line, 67,541 B -> 18,790 B, -72.2%. That does not refute the earlier -66% / 74,096 -> 24,944 row -- different tree, moving floor -- so both stand, each with what it measured. THE ORIGINAL MECHANISM THIS TICKET NAMES IS STILL UNTOUCHED AND IS NOT THE BLOCKER: PasApplyDefaults defines PXX_MANAGED_STRING unconditionally so every Pascal program still PULLS builtinheap, and DCE removes the consequence rather than the pull; frankS scoped that half on 2026-09-18 (-98% code on bare esp32c3) and its one concrete blocker is that the `string` KEYWORD is not in DetectPascalRuntimeNeeds' scan. EARLIER HISTORY BELOW."
+summary: "THE PROMOTION LANDED AT 39ca6ac2a (frankh-c0, 2026-09-22, third attempt) AND THIS TICKET IS NOT DONE -- its ORIGINAL mechanism is untouched and is now the whole of what remains, stated at the end of this summary. --dce is the default at -O2, wasm32 carved out. PROOF: full tier at that tree, 4959/4962 pass, 2 flaky, RED on two FAILs and NEITHER attributable to the change -- test-nilpy#675 was recorded NEW-RED by Track T's borg run at pin v417 BEFORE the work (a 1-ULP atan2 difference; byte-identical output under --dce/--no-dce/default so the flag cannot cause it) and test-riscv32#180 is red across FOUR hosts in tstate and compiles rc=0 either way. Attempt 2 was six FAILs; this was two, both outside the change. No green tier was claimed. THE OBJECT-MODEL GATE WAS MEASURED AWAY AND IT WAS MINE: the promotion enacts NEITHER half of decide-a-is-a-pxx-object-..., because --emit-obj keeps all 323 exports (312 WEAK FUNC, identical name sets, UND 0) while dropping 269 LOCAL bodies, and model B's collapse needs RE-ROOTING which an -O level does not do. WASM32 IS CARVED OUT for the TARGET's consumption model, not for our tests: six of seven wasm failures were `inst.exports.<Name> is not a function`, which is what a wasm library IS, and the seventh is flag-INDEPENDENT and already filed. VERIFIED AGAINST frankb-8e's 372dd5113 afterwards (rebuild, every target builds at the default, both correctness rows give their owed codes with no flag, no closure refusal, gate quick GREEN). THE TWO CORRECTNESS REGRESSIONS WERE FIXED BY frankb-8e at 5fccc890a. `--fpc-float-errors` div0 and `--fpc-mem-errors` nilread both give their owed 208/216 under `--dce` now, on all arms (0/208/205/207 and five modes at 216), with `--no-dce` unchanged as the control. The mechanism was EmitCodeAbsToRdx recording no CodeRef for a `call +0 / pop rdx / add rdx, imm32` delta, so the pass neither protected the target nor re-aimed it; the i386 twin and two latent siblings went with it (see bug-a-two-code-to-code-references-are-unrecorded-and-are-safe-only-by-where-they-happen-to-sit, now done). THE EVIDENCE IS THE SLOT BYTES, NOT THE EXIT CODE: before the fix the four deltas were byte-identical in the --dce and --no-dce binaries of one program while the code between them had moved; after, exactly one moves (-66886 -> -24082, 42,804 bytes dropped in that gap) and three do not -- which is the three-survive/two-break split this ticket measured and could not explain. OF THE SIX FAILS FROM ATTEMPT 2, FOUR REMAIN AND NONE IS A CORRECTNESS BUG: two are the `test-emit-obj` `t Hidden` control arms whose subject the promotion deletes and whose repair is `--no-dce` on those rows, NOT weakening the assertion (dropping the row leaves a guard that passes when the symbol is absent); one is test-core#1008, frankb-8e's own wasm32 renumbering guard firing correctly on an unclosed live set; one is not ours (test-riscv32#180, identical rc either way). SO A THIRD ATTEMPT IS: respell those two rows, carve wasm32 out of the default, re-run the tier. THE WASM32 CARVE-OUT IS STILL REQUIRED and is not a defect -- the harness reaches bodies by EXPORT NAME and `--dce` correctly drops an export nothing reaches, so those rows would arrive as failures and read as evidence against the pass. AND THE TRAP IS UNCHANGED: the self-host fixedpoint converges at the promoted setting and converged while both regressions were live -- it converged at all seven builds of the fix too, including the unfixed ones. It is not evidence about this class and it reads exactly like evidence. THE OBJECT-MODEL GATE IS MEASURED AWAY AND IT WAS MINE (frankh-c0, 2026-09-22): the promotion enacts NEITHER half of decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit, so a third attempt says THAT in the commit rather than picking a side. I had written that promoting turns per-object DCE on by the back door and therefore answers the fork silently. The first clause is true and the second does not follow. Measured at fd6965890102, x86-64, `--emit-obj` of a C TU pulling the runtime: `--dce` drops 269 of 540 LOCAL FUNC bodies and the export surface is INVARIANT -- 323 exports, 312 of them WEAK FUNC, IDENTICAL NAME SETS, UND 0 both ways; a second TU drops 436 of 489 locals with 2 exports unchanged. The bodies DCE removes are LOCAL and were never part of the object's external contract, so an object still supplies exactly what it supplied before under EITHER answer. The fork's model B -- 298 of 307 exports vanishing -- requires RE-ROOTING at the TU's own exports, which the decide itself had to SIMULATE because `--dce` does not do it; promoting an -O level does not do it either. SCOPE, stated because the decide flags it: x86-64. The xtensa row is VACUOUS and is not counted -- exports were identical there but `--dce` dropped ZERO bytes (390 B both), so it cannot tell a preserved export from a pass that did nothing. PROMISE, WITH ITS POPULATION THIS TIME: at tree fd6965890102, x86-64, `program h; begin WriteLn('hello'); end.`, code= from the ok line, 67,541 B -> 18,790 B, -72.2%. That does not refute the earlier -66% / 74,096 -> 24,944 row -- different tree, moving floor -- so both stand, each with what it measured. THE ORIGINAL MECHANISM THIS TICKET NAMES IS STILL UNTOUCHED AND IS NOT THE BLOCKER: PasApplyDefaults defines PXX_MANAGED_STRING unconditionally so every Pascal program still PULLS builtinheap, and DCE removes the consequence rather than the pull; frankS scoped that half on 2026-09-18 (-98% code on bare esp32c3). THE STATED BLOCKER IS ANSWERED AND IT WAS NOT THE BLOCKER (frankb-8e, 2026-09-22, tree fda77c48b8ee): `string` lexes as tkString_T, a KEYWORD token (paslexer.inc:166), not tkIdent, so a token-kind test reaches it; with that plus eight further type names, PromoInt and the string-valued intrinsics, an evidence scan BUILDS AND RUNS -- x86-64 hello 25016 -> 4472 B (-82.1%), xtensa --esp-profile=bare code 860 -> 58 B and procs 88 -> 0 (-93.3%), riscv32 --esp-profile=bare 336 -> 20 B (-94.0%), all four rows measured against this tree, the pin agreeing on both bare rows. THE REAL BLOCKER IS ORDERING AND NO TOKEN SCAN CAN REACH IT: EmitAnsiStringRuntime is decided at pasparser_prog.inc:1977, while the ambient RTL units that are THEMSELVES written over managed strings are pulled AFTER it -- at :2163 and, for units, from a SECOND pull site at pasparser_proc.inc:7422 -- so `var p: PChar`, `var c: WideChar` and `var s: set of Char` each refuse inside lib/rtl/textfile.pas:1344 with no string in the program at all. The evidence arrives after the decision. WHAT WOULD SPRING IT: any construct that pulls an ambient unit whose body calls a string stub, which is why the fix is to settle the emission after unit pulls (or emit on demand), not to add names. THE FAILURE DIRECTION IS CONFIRMED SAFE AND IS NOW MUCH BETTER EVIDENCED THAN THE ONE riscv32 ROW BELOW: six string shapes x six targets refused 36 of 36 with 0 built, by TWO independent guards (IREmitCodeCall's addr=0 refusal on x86-64; name resolution on the five cross targets), and nine string-valued builtin expressions gave 3 constant-folded agreeing with the oracle, 6 refusals, 0 silently wrong. Work is parked at devdocs/progress/parked/needsansiruntime-evidence-scan.patch (234 lines, quick gate 35/36 with the one failure attributable and diagnosed above). EARLIER HISTORY BELOW."
 ---
 
 # The measurement
@@ -154,6 +154,89 @@ fails under `-uPXX_MANAGED_STRING` today. `tkString` is the string LITERAL
 token (see `defs.inc:6802`, *"tkString empty is a legitimate `''`"*), not the
 type keyword, so whoever takes this must first establish what `string`,
 `ShortString`, `WideString` and `UnicodeString` lex as and add them.
+
+## 2026-09-22 (frankb-8e): the stated blocker is answered, and it was not the blocker
+
+Tree `fda77c48b8ee`, compiler sha printed beside every row below. Parked patch:
+`devdocs/progress/parked/needsansiruntime-evidence-scan.patch` (234 lines).
+
+**The lexing question this ticket asks is answered.** `string` is **`tkString_T`,
+a keyword token** (`paslexer.inc:166-167`), not `tkIdent` — so the `CaseEqual`
+arm the ticket points at could never have seen it, and the test is a token
+KIND. Note the 6-char table matches only `string` and `String`: an all-caps
+`STRING` lexes as `tkIdent` while Pascal is case-insensitive, so a scan wanting
+both must test both. `ShortString`/`WideString`/`UnicodeString`/`UTF8String`/
+`RawByteString`/`OleVariant` are ordinary identifiers and were all measured to
+need the bundle, as was `string[N]` — a frozen string still reaches the concat
+and write helpers, so there is no win in telling frozen from managed here.
+
+**The prize is real and reproduces off the ESP profile.** Baseline
+`fda77c48b8ee` -> evidence scan, same tree, `program hello; begin
+WriteLn('Hello, world!'); end.`:
+
+| target | baseline | evidence scan | delta |
+| --- | --- | --- | --- |
+| x86-64 (file bytes) | 25,016 | 4,472 | **-82.1%** |
+| xtensa `--esp-profile=bare` (code=) | 860 B, procs 88 | 58 B, procs 0 | **-93.3%** |
+| riscv32 `--esp-profile=bare` (code=) | 336 B, procs 85 | 20 B, procs 0 | **-94.0%** |
+| riscv32 hosted (code=) | 33,244 B | 33,244 B | 0% |
+
+The pinned compiler agrees with this tree on both bare rows (860/336), so no
+intervening change contributes to them. The hosted riscv32 row is zero on
+purpose: `write`/`writeln` route through `PXXWriteNL`/`PXXWriteDecW` there and
+on xtensa, so the scan must pull the heap unit for any program that writes —
+measured across all seven targets, and x86-64/i386/arm32/aarch64/wasm32 need
+nothing. On the BARE ESP profile `write` emits nothing at all, which is why the
+two bare rows keep the whole win.
+
+**THE REAL BLOCKER IS ORDERING, AND NO TOKEN SCAN CAN REACH IT.**
+`EmitAnsiStringRuntime` is decided at `pasparser_prog.inc:1977`. The ambient RTL
+units that are *themselves* written over managed strings are pulled **after**
+it — at `:2163`, and for units from a **second, independent pull site** at
+`pasparser_proc.inc:7422`. So the evidence arrives after the decision, and these
+three refuse inside `lib/rtl/textfile.pas:1344` with no string anywhere in the
+program:
+
+    var p: PChar;        var c: WideChar;        var s: set of Char;
+
+Each pulls a unit whose body calls a string stub. Adding names does not fix a
+class where the trigger is *a unit arriving behind the construct*. Two
+narrowings were tried and measured, and both are in the parked patch: coupling
+`needsHeap`/`needsTextfile`/`needsMath`/`needsThreads`/`needsWide` into
+`needsAnsiRuntime`, and broadening the emission condition to every ambient flag.
+The first fixed `test_promoint_bitwise.pas` (which needed `PromoInt` added to
+the pre-scan, because `needHeapUnit` is computed before `needsPromoInt` exists);
+neither reaches the three above. **The fix is to settle the emission after unit
+pulls, or to emit the stubs on demand** — the tidy version moves the ~150-line
+registration block below the token loop, which is its own verified pass.
+
+**The failure direction is safe — confirmed, and on far more than the one
+riscv32 row above.** Under-detection cannot produce a wrong binary:
+
+- six string shapes x six targets: **36 refused, 0 built**, by TWO independent
+  guards — `IREmitCodeCall`'s `addr = 0` refusal on x86-64 (a guard that exists
+  because `--threadsafe` once shipped broken on every NilPy program), and plain
+  name resolution on the five cross targets (`PXXStrDecRef not found`,
+  `PXXStrConcat`, `PXXStrEq`, `PXXWriteStrMW`);
+- nine string-valued builtin expressions naming no type: 3 constant-folded and
+  **agreed with the oracle**, 6 refused, **0 silently wrong**.
+
+**AND THE MEASUREMENT OFFERED FOR THAT CLAIM TESTS A DIFFERENT MECHANISM —
+BOTH TIMES IT WAS TAKEN.** The row above cites `-uPXX_MANAGED_STRING`, and so
+did the seat re-checking it today, independently, before noticing. That flag is
+consulted in ~15 places to decide what `string` **means** (`util.inc:148`
+`BareStringKind`, `symtab.inc:3297/3349`); undefining it makes `string` a frozen
+255-byte type. Under-detection changes **one** consumer, `needsAnsiRuntime`,
+and never touches the type. The two routes give opposite answers: with
+`-uPXX_MANAGED_STRING` a concat loop **builds clean and silently truncates** —
+`n=26` prints `len=255` against an owed `260`, rc=0, no diagnostic, boundary
+exactly at 255 — which reads as a refutation of the safety claim and is not one.
+Simulated properly (a compiler built with `needsAnsiRuntime := False`) the same
+program **refuses to compile**. The conclusion was right both times and the
+evidence was about something else, which is this repo's own "an instrument lies
+by being correct about something else" in a claim that a check is unnecessary.
+To re-verify this claim, build the compiler with that initialiser forced False;
+do not reach for the define.
 
 **Why it was not done in the same pass as the rest of today's ESP work:** the
 change flips a default for **every Pascal program on every target**, the
