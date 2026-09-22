@@ -283,3 +283,47 @@ retirement condition is answered **"not supported by this arm"**, not "refuted".
 
 An **in-situ A/B** of the flip, not a microbenchmark, once GUI testing reopens —
 which only the owner can lift. At 11.2% of main-thread time it is worth one.
+
+### RETRACTION, 2026-09-22 — "41% of interrupts discarded under load" is WRONG, and it weakens 11.2% further rather than less
+
+**I put that sentence in commit `8b7b556dc`'s message and in a peer message.
+Neither can be edited, so this is the forward correction.** `lekkerzeilen-7a`
+gave it to me as measured, retracted it within the hour, and I verified the
+retraction against the raw rather than taking that on trust either:
+
+    v418/prof-r1.raw:11467   [Inferior 1 (process 604839) exited normally]
+    blocks   1- 89 : every one produced PC records
+    blocks  90-150 : none, and NO live block after the first dead one
+    v416/prof-r1.raw:18648   [Inferior 1 ... killed]   <- still alive at 150
+
+**A hard cliff with zero interleaving. Contention degrades; this stopped.**
+Nothing was discarded and nothing was under load — **the demo exited and gdb
+kept answering.**
+
+**The real harness bug is different and still real:** `gdbsample2.sh` tests
+liveness with `kill -0 $GDBPID` — **gdb's pid, not the inferior's.** gdb stayed
+up, so the loop ran to 150, interrupting a dead process and writing a
+`=== SAMPLE` header each time. The harness reported 150 and had 89.
+
+**AND THE CONSEQUENCE FOR THIS TICKET'S NUMBER IS THE OPPOSITE OF REASSURING.**
+The 89 samples are a **contiguous PREFIX covering the first ~59% of the intended
+window**, not a random subsample. A share computed off it is safe only if the
+workload is **stationary across the run**, which is untested. So 11.2% is weaker
+than the population correction alone made it — and the earlier
+attempt-count-denominator worry is **more** warranted, not less: any run whose
+inferior died early reported its full requested count, deflating every share and
+inflating none.
+
+**Why the v418 demo exited cleanly at ~213 s while v416 ran past 307 s is
+UNKNOWN.** One run each. Not named as a pin effect, a scripted duration, or
+anything else.
+
+**And the methodological half is mine, not 7a's.** I re-bucketed 7a's raw when
+it was a TABLE and took its harness claim on trust because it arrived as a
+**mechanism with numbers attached** — three minutes after I had praised 7a for
+naming exactly this failure (*"I reached for a stored lesson because it fit the
+shape, not because it fit the mechanism"*). A causal story with a count in it
+reads as already-measured in a way a bare table does not, which is precisely
+backwards: **the table is the part I can check cheaply, and the mechanism is the
+part I cannot.** The discriminator here was one pass over a file I already had
+open.
