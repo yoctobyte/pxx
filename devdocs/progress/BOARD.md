@@ -84,7 +84,7 @@ _none_
 | regression-lib-test-crtl-atexit-2 | C | 70 | regression | NOT ACTIONABLE AND NOT THE SLUG'S SUBJECT: crtl_atexit passes. The census step fails because it runs under $(PXX_STABLE) and the pinned compiler warns on a WEAK external. The fix (e4c72bd15) landed 18 minutes AFTER pin v410. Live compiler: 600 declared, all defined, rc=0. Clears itself at the next pin; there is nothing to fix. | — |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (39)
+## backlog (38)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -109,7 +109,6 @@ _none_
 | regression-test-core-test-set-in-64bit-element | T | 70 | regression | regression: test-core#src:test/test_set_in_64bit_element.pas at d250db9d3678 in step 29/52, `for combo in "xtensa --esp-profile=bare" "xtensa --platform=esp" "riscv32 --esp-profile=bare" "riscv32 --platform=esp";…` (auto-filed by twatch) | — |
 | regression-test-debug-g-compiler-srchash-2 | A | 70 | regression | regression: test-debug-g#src:tools/compiler_srchash.sh at 7e5a0470a6b2 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ "$liv…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
-| regression-test-emit-obj-compiler-srchash-2 | A | 70 | regression | regression: test-emit-obj#src:tools/compiler_srchash.sh at 387782d9166f in step 106/589, `PXX=./compiler/pascal26 tools/reloc_resolve_check.py arm32 test/reloc_resolve_probe.c` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-args-errors-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy at 523c10e42d90 in step 1/5, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_args_errors.npy /tmp/test_cpyext_args_err…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-containers-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy at 523c10e42d90 in step 1/5, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_containers.npy /tmp/test_cpyext_container…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-cython-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy at 523c10e42d90 in step 1/7, `./compiler/pascal26 -DPy_LIMITED_API=0x030c0000 -DCYTHON_COMPRESS_STRINGS=0 -Futest/nilpy_units -Ilib/cpyext/include te…` (auto-filed by twatch) | — |
@@ -1115,9 +1114,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3916)
+## done (3917)
 
-3916 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3917 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (87)
 
@@ -1280,7 +1279,6 @@ _none_
 - [p 70] [T] regression-test-core-test-set-in-64bit-element
 - [p 70] [A] regression-test-debug-g-compiler-srchash-2
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
-- [p 70] [A] regression-test-emit-obj-compiler-srchash-2
 - [p 70] [N] regression-test-nilpy-test-cpyext-args-errors-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-containers-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-cython-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]

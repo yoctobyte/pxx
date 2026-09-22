@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+status: done
 ---
 
 > **Track A from the job NAME `test-emit-obj`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`tools/compiler_srchash.sh`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -119,3 +120,4 @@ HEAD" — was the one that did NOT apply: HEAD was green here all along, and
 believing that would have closed this as fixed-by-events. **A green re-verify
 on the wrong host is not a re-verify**, which is the same class of error as the
 bug itself.
+- 2026-09-22 — resolved, commit c9b0fd4b5.
