@@ -96,11 +96,11 @@ class Elf:
             if w64:
                 s = dict(name=rd(b,o,4), type=rd(b,o+4,4), flags=rd(b,o+8,8),
                          addr=rd(b,o+16,8), off=rd(b,o+24,8), size=rd(b,o+32,8),
-                         link=rd(b,o+40,4), entsize=rd(b,o+56,8))
+                         link=rd(b,o+40,4), info=rd(b,o+44,4), entsize=rd(b,o+56,8))
             else:
                 s = dict(name=rd(b,o,4), type=rd(b,o+4,4), flags=rd(b,o+8,4),
                          addr=rd(b,o+12,4), off=rd(b,o+16,4), size=rd(b,o+20,4),
-                         link=rd(b,o+24,4), entsize=rd(b,o+36,4))
+                         link=rd(b,o+24,4), info=rd(b,o+28,4), entsize=rd(b,o+36,4))
             self.sh.append(s)
         # A pxx EXECUTABLE carries program headers and NO section headers at
         # all, so this has to tolerate shnum == 0 rather than assume a .symtab.
@@ -150,6 +150,65 @@ class Elf:
                 add = int.from_bytes(self.b[o+8:o+12],'little',signed=True) if rela else None
             out.append(dict(off=off, sym=sym, type=typ, addend=add))
         return out
+
+
+SHT_REL, SHT_RELA = 9, 4
+
+
+def structural_check(e):
+    """Every relocation must point INSIDE the section it relocates, and name a
+    symbol that exists. Returns a list of violation strings.
+
+    WHY THIS IS SEPARATE FROM THE RESOLVE-AND-COMPARE BELOW, and why it is the
+    weaker check that catches the louder bug. The resolver asks whether the
+    VALUE a relocation writes is right; this asks whether the relocation is
+    addressable at all. They fail on disjoint populations: a wrong addend
+    produces a perfectly well-formed object, and an out-of-range offset makes
+    the resolver patch a bytearray past its end -- which in Python EXTENDS it
+    silently rather than raising, so the stronger check sails past the weaker
+    fault.
+
+    MEASURED 2026-09-22, which is why it exists. `--dce --emit-obj
+    --platform=esp` on an IRAM-attributed routine emitted two .rela.text
+    entries at 0x3fd68 and 0x3fe74 against a .text of 0x8788 -- stale
+    pre-compaction offsets from DCE never compacting IramCallFix -- and GNU ld
+    SEGFAULTED applying the first. Nothing else could see it: elfwriter counts
+    these entries with the same predicate it writes them with, so sh_size is
+    honest about a wrong set and `readelf -r` prints entries that look fine
+    one at a time. The invariant only exists BETWEEN the relocation and its
+    target section, which is exactly what no per-entry assertion compares.
+
+    It is target-independent by construction -- no psABI arithmetic, no
+    instruction encoding -- so it covers the architectures that have no linker
+    on this box as cheaply as the ones that do."""
+    bad = []
+    nsyms = 0
+    st = e.sec('.symtab')
+    if st and st['entsize']:
+        nsyms = st['size'] // st['entsize']
+    for s in e.sh:
+        if s['type'] not in (SHT_REL, SHT_RELA) or not s['entsize']:
+            continue
+        if s['info'] >= len(e.sh):
+            bad.append(f"{s['sname']}: sh_info {s['info']} names no section")
+            continue
+        tgt = e.sh[s['info']]
+        n = s['size'] // s['entsize']
+        for k in range(n):
+            o = s['off'] + k * s['entsize']
+            if e.cls == 2:
+                off, info = rd(e.b, o, 8), rd(e.b, o + 8, 8)
+                sym = info >> 32
+            else:
+                off, info = rd(e.b, o, 4), rd(e.b, o + 4, 4)
+                sym = info >> 8
+            if off >= tgt['size']:
+                bad.append(f"{s['sname']} entry {k}: offset 0x{off:x} is outside "
+                           f"{tgt['sname']} (size 0x{tgt['size']:x})")
+            if nsyms and sym >= nsyms:
+                bad.append(f"{s['sname']} entry {k}: symbol index {sym} "
+                           f"exceeds .symtab ({nsyms} entries)")
+    return bad
 
 
 _UNDEF_SEEN = {}
@@ -1047,6 +1106,23 @@ def ld_section_addrs(mapfile, objname):
 
 
 def main():
+    # --check-object <obj>... : the structural invariant ONLY, over objects
+    # somebody else already built. Separate from the resolve mode because the
+    # population that needs it is the one this harness cannot build for itself
+    # -- an ESP object wants -Fulib/rtl, --platform=esp and a fixture with an
+    # IRAM routine, and baking that in would make the tool own a profile.
+    if len(sys.argv) >= 3 and sys.argv[1] == '--check-object':
+        rc = 0
+        for p in sys.argv[2:]:
+            bad = structural_check(Elf(p))
+            if bad:
+                rc = 1
+                print(f'reloc-structure: {p}: {len(bad)} VIOLATION(S)')
+                for b in bad[:8]:
+                    print('   ' + b)
+            else:
+                print(f'reloc-structure: {p}: OK')
+        return rc
     if len(sys.argv) < 3:
         raise SystemExit(__doc__)
     tname, src = sys.argv[1], sys.argv[2]

@@ -34927,6 +34927,21 @@ test-emit-obj: $(COMPILER)
 	  [ "$$j" = "home=.rodata flags=A refs=.text" ] || { echo "test-emit-obj: $$t two-text-section writer put the flash literal at '$$j', want 'home=.rodata flags=A refs=.text'"; exit 1; }; \
 	  echo "test-emit-obj: $$t linked: literal in .rodata and the code holds its address; control in .data; iram literal kept in .data"; \
 	done
+	#    AND THE STRUCTURAL INVARIANT ON THE RELOCATIONS THEMSELVES: no entry
+	#    may point OUTSIDE the section it relocates. The rows above cannot see
+	#    that and neither can `readelf -r` -- the invariant holds BETWEEN a
+	#    relocation and its target section, so every entry looks ordinary on its
+	#    own, and elfwriter COUNTS these entries with the same predicate it
+	#    later WRITES them with, which makes sh_size honest about a wrong set.
+	#    It is also the one relocation defect that kills the LINKER instead of
+	#    producing a wrong value: measured 2026-09-22, `--dce --emit-obj
+	#    --platform=esp` on an IRAM routine emitted .rela.text entries at
+	#    0x3fd68/0x3fe74 against a .text of 0x8788 and ld died with signal 11
+	#    (DCE never compacted IramCallFix). The --dce arm is the subject because
+	#    that is the arm that broke, and the devtest carries its own positive
+	#    control -- it corrupts one r_offset of the SAME object and requires a
+	#    rejection, so a checker that stopped checking cannot pass.
+	@python3 tools/reloc_structure_devtest.py || { echo "test-emit-obj: the --dce ESP objects failed the structural relocation check"; exit 1; }
 	#    AND AN IMPORT IS REFUSED, not silently given local storage. These
 	#    writers relocate every global reference against the .bss section sym, so
 	#    an `external` variable would read zero -- the exact silent-wrong-value
