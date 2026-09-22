@@ -42808,3 +42808,64 @@ nobody audits what travelled with it. Three instances, one day, three seats, and
 none of the three was looking for it. **If you meet a fourth, it will not look
 like carelessness either** — look for the part of the claim that the care does
 not cover.
+
+## A SEAT HUNTING FOR THE THIRD INSTANCE OF ITS OWN PATTERN WILL FIND ONE — if a third arrives unsolicited it counts, if you go looking it does not
+
+*2026-09-22, `frankz-e5` declining to look, `frankuser` naming it as the guard
+the promotion test never had. Both of us had a stake, which is how it came up.*
+
+**The setting.** CLAUDE.md promotes a finding on **recurrence in a second
+independent subsystem**, and this file's own convention is *two is a smell, three
+is a design flaw*. `frankuser` had two instances of a compression class — *the
+compression keeps the OUTCOME and loses the CONDITION* — and declined to call it
+a rule, writing *"watch for a third"* into the note. Correctly.
+
+**The problem with "watch for a third" is the word that sounds passive.** One of
+the two instances was mine. I could have produced a third in ten minutes, and it
+would have been a real one — the day's transcripts are long, the pattern is
+loosely specified, and **a loosely specified pattern is satisfied by a great deal
+of ordinary text.** Nothing about that search would have felt like fabrication.
+Every step would have been honest.
+
+**THIS IS THE CENSUS-BUILT-ON-ITS-OWN-HYPOTHESIS FAILURE WITH THE SEAT AS THE
+FILTER.** That rule normally bites when a *query* restates the claim it is
+testing. Here there is no query to inspect — **the selection happens inside the
+person deciding what counts as an instance**, which is not written down anywhere
+and cannot be reviewed. The hypothesis supplies both the pattern and the
+judgement of fit, and the count comes out confident, correct-looking, and
+unfalsifiable.
+
+**THE RULE, and the asymmetry is the whole of it:**
+
+> **If a third instance arrives unsolicited, it counts. If you go looking for it,
+> it does not.**
+
+Not because a sought instance is fake, but because **the search has no negative
+outcome.** An unsolicited instance passed through somebody who was not trying to
+confirm anything, and could have failed to arrive; a sought one cannot fail to
+arrive, so its arrival carries no information. **A count whose collection cannot
+come out empty is not evidence, however real each member is.**
+
+**Why this matters more than an ordinary counting error: it is the promotion
+test's own guard.** The test says recurrence promotes. Nothing in it says who may
+do the counting, and the party most motivated to count is always the finding's
+author. **That is the mechanism by which a rules file grows** — every addition
+arrives with three genuine instances and an author who went and found them. This
+file's own history records it growing to 72KB the first time and being cut back
+to rules; the guard that would have prevented it is one sentence about who is
+allowed to look.
+
+**Discharge, three lines.**
+
+1. **Write the smell down with its instance count and a date, and then stop.**
+   *Two, watch for a third* is a complete and useful artefact. It is not an
+   invitation to go looking.
+2. **When a third does arrive, record WHO brought it and whether they were
+   looking.** An instance supplied by a seat that had never heard of the pattern
+   is worth more than three collected by its author, and the provenance costs
+   five words.
+3. **If you have a stake, say so and hand the counting to someone who does
+   not** — which is available whenever more than one seat exists, and is exactly
+   what stops being available in a fleet of one. **A single seat cannot run this
+   guard at all**, so on a shrink the correct response is to raise the bar for
+   promotion rather than to keep the test and lose its guard.

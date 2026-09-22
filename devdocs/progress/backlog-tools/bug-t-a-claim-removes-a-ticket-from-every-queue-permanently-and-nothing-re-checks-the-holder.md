@@ -212,3 +212,54 @@ depend on a live query that can fail, and which CLAUDE.md already warns about on
 the process-scan axis.
 
 *Both corrections are `frankb-8e`'s. The census they correct is `frankz-e5`'s.*
+
+## FINAL CENSUS AT THE SHRINK, 2026-09-22 ~22:00 — the five rows that are about to join the invisible set, by name
+
+*Run by `frankz-e5` as its last act, because the owner's directive (slow down,
+finish current work, then ONE seat on ESP32) converts this ticket from a
+standing defect into a **dated** one. Recorded so the single seat has the list
+rather than the number.*
+
+**Population:** `devdocs/progress/working/*.md` — **36** files, up from the 34
+counted earlier the same day. **Liveness oracle:** `ListAgents`, ten reachable
+peer sessions. **NO separation claim is made this time** — the earlier
+"last touched today separates live from dead with zero error" was contaminated by
+having been measured on a claiming day, and nothing here re-establishes it.
+
+### The five currently live-held rows — THESE ARE THE ONES THAT MATTER
+
+| owner | last touch (file) | slug |
+| --- | --- | --- |
+| `frankb-8e` | 21:57 | `feature-a-unreferenced-class-rtti-keeps-every-method-alive` |
+| `frankb-8e` | **07:52** | `feature-a-object-output-for-arm32-and-aarch64` |
+| `frankh-c0` | 21:38 | `decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package` |
+| `frankh-c0` | 20:07 | `feature-n-a-non-allocating-restricted-thunk-for-an-isr` |
+| `franks-5b` | 16:16 | `perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program` |
+
+**All three holders were asked to put each ticket's STATE INTO ITS SUMMARY before
+stopping**, because a body that records its own state is the evidence nobody
+reaches, and `working/` is in no ranked queue. Whether they did is checkable from
+the summaries themselves and is not asserted here.
+
+**The 07:52 row is the one to look at first.** It is the only live-held row not
+touched in the evening, so it is the likeliest to have been left mid-thought.
+
+### The other 31
+
+Held by fifteen distinct owner names of which twelve have **no reachable
+session**: `frankA`, `frankS`, `frankH`, `frankD`, `frankB`, `frankC`, `frankZ`,
+`frank-subcoord`, `franks-ab`, `frank-optimize`, `franka-29`, `frank-rust` — plus
+one row with an empty `owner:`. Unchanged in substance from the census above:
+**CLAUDE.md says `owner:` is ATTRIBUTION, not a claim, so all of them are free to
+take.** The named casualties there remain
+`bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` (p80, out of
+every queue since 2026-09-06) and `feature-pascal-corpus-oop` (p75, held by
+`frank-rust`, which `check` itself cites as its worked example of a dead holder).
+
+### What this adds to the ticket
+
+Nothing about the mechanism, which is unchanged. It adds **the dated list**: at
+the moment the fleet shrank, these five rows were current work in flight, and
+after it they are indistinguishable from the thirty-one. **A single seat reading
+`ready` will see none of the thirty-six.** That is the whole cost of this ticket,
+stated once with names attached.
