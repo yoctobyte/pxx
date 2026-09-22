@@ -41282,11 +41282,50 @@ verification are the same act.** CLAUDE.md already says `make compiler/pascal26`
 mandatory and is not a test — it is the build; this is the case where the reason to
 run it is most obviously absent and most actually present.
 
-**And in Pascal the category is not even coherent.** With `{ }` comments, the
-comment delimiters *are* syntax: a stray `}` does not corrupt a comment, it
-**reassigns which text is code**. There is no such thing as an edit inside a
-comment that cannot change the program. The same holds for `/* */` in C, for any
-block-comment language, and for a docstring in Python that stops being one.
+**CORRECTED 2026-09-22, SAME DAY, BY `frankb-8e` WHO MEASURED THE PREMISE I HAD
+ASSERTED.** This paragraph originally read *"there is no such thing as an edit
+inside a comment that cannot change the program"* — a universal negative, landed
+unmeasured, in an entry about not trusting unverified claims. CLAUDE.md names that
+exact clause shape (*"always", "cannot", "no X escapes"*) as the one to go measure.
+`frankz-e5`'s error; the conclusion survives and the reason is better.
+
+**Measured**, one program, sha of the emitted binary, against `7ed7bc249672`:
+
+```
+{ a plain comment }                    b9d331ba7eec   baseline
+{ a plain comment with MORE WORDS }    b9d331ba7eec   byte-identical
+{ outer { inner } still outer? }       b9d331ba7eec   byte-identical
+{ a comment with a stray } brace }     error: unexpected character
+{ outer { inner }                      error: unterminated comment
+(* star { brace } star *)              b9d331ba7eec   byte-identical
+```
+
+**So an edit inside a comment CAN be provably inert** — adding prose with no brace
+characters reproduces the binary exactly. And **pxx NESTS `{ }` comments and counts
+depth**, so a `}` inside a comment is not automatically a terminator. The rule is
+narrower and sharper: **an edit inside a `{ }` comment changes the program IFF it
+changes brace BALANCE.** The near miss above was a `}` with no matching `{`.
+
+**AND WHETHER BALANCE IS DEPTH-COUNTED AT ALL IS A `{$mode}` PROPERTY** — corroborated
+from the lexer rather than from the probe, which is a source that fails differently.
+`paslexer.inc:954` sets `NestedComments := True` with the comment *"REAL FPC default
+(verified 3.2.2, fpc AND objfpc"*, and `:766` sets `NestedComments := not DelphiMode`.
+**So in Delphi mode a `}` inside a comment IS a terminator**, and the rows above were
+measured in the default mode. The same edit is inert under one `{$mode}` and
+reassigns code under another. (That `:954` comment also answers a question 8e
+correctly declined to guess at: nesting-by-default is FPC's own behaviour, so this
+is not a divergence.)
+
+**WHY THIS MAKES THE CONCLUSION STRONGER, WHICH IS 8e's POINT AND THE REASON THE
+CORRECTION IS WORTH MORE THAN THE ORIGINAL.** Not *every edit is dangerous* — that
+is both false and, being false, dismissible. It is that **balance is a GLOBAL
+property of the comment and of the mode, never a local property of the line you
+edited.** Depth-counting puts the failure arbitrarily far from your change in either
+direction, and a mode switch puts it in a different file entirely. **The dangerous
+edits are indistinguishable from the inert ones at the point of inspection**, which
+is precisely why reading the diff cannot settle it and the binary sha can. The same
+structure holds wherever a delimiter is stateful: `/* */` in C does NOT nest, so the
+balance rule differs there and must be re-derived rather than assumed.
 
 **The discipline 8e used, which is the reusable half:** it did not assert
 comment-only from the diff's appearance. It reported that the binary reproduced
