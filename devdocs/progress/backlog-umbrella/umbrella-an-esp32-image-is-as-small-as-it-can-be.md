@@ -4,7 +4,7 @@ title: "An ESP32 image is as small as it can be — code and constants in flash,
 track: A
 prio: 70
 type: umbrella
-blocked-by: [bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter, bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program, bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work, bug-a-dce-refuses-every-target-except-x86-64, feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident, bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss, bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok, bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss, bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal, bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program, bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it, feature-a-unreferenced-class-rtti-keeps-every-method-alive, bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]
+blocked-by: [bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter, bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program, bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work, bug-a-dce-refuses-every-target-except-x86-64, feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident, bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok, bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss, bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal, bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program, bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it, feature-a-unreferenced-class-rtti-keeps-every-method-alive, bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]
 status: new
 created: 2026-09-18
 owner: ""
@@ -413,3 +413,31 @@ flash figure beside the SRAM one so the split is visible rather than assumed.
 The ranking consequence is untouched and if anything sharper: `--dce` moved
 `.data` and `.bss` by **zero** in both builds, which was true when measured off
 either instrument, and 59.6% of the free pool is still our static data.
+
+## 2026-09-22 — the signal alt stack was CUT from this umbrella's blockers
+
+`bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss` was listed
+here on the strength of a comment in `compiler/defs.inc` reading *"on a target
+where BSS is SRAM it is 32768 bytes of RAM in every image"*. That stopped being
+true at `16ebf18ce` (2026-09-18), which made the reservation conditional on a
+signal runtime actually being emitted, and **an ESP bare image emits none**.
+
+Measured at HEAD by halving `SIG_ALTSTACK_SIZE` and rebuilding — a
+plain-vs-`--no-signals` delta of 0 cannot tell *not allocated* from *allocated
+on both arms*, so only a differential in the constant separates them:
+
+| profile | 32768 | 16384 | delta |
+| --- | --- | --- | --- |
+| bare esp32c3 | 66808 | 66808 | **0** |
+| bare esp32s3 | 66808 | 66808 | **0** |
+| hosted x86-64, plain | 35324 | 18940 | 16384 |
+| hosted x86-64, `--no-signals` | 2532 | 2532 | 0 |
+
+So it costs an ESP image nothing and belongs only to
+`umbrella-a-hosted-program-is-as-small-as-it-can-be`, where it remains listed
+and where the remaining piece (size the constant per target) actually lands.
+Its own author had already re-ranked it 60 -> 15 on this evidence; the edge
+kept it at effective 70 and at the TOP of `next --track A` regardless, because
+the ranker takes the max over everything a ticket unblocks. **A stale
+membership edge is not a mis-ranking of one ticket — it is a goal claiming work
+that does not serve it.**

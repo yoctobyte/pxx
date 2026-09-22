@@ -1068,10 +1068,16 @@ procedure EmitSignalRuntime;
   The program entry installs dispatch for SIGINT(2) and SIGTERM(15). Hooks for
   any other signal 1..64 install on the first SetSignalHandler call. }
 begin
-  { The alt stack's storage (BSS_SIG_ALTSTK / _ALTSS) moved to EnsureSignalBss
+  { The alt stack's storage (BSS_SIG_ALTSTK / _ALTSS) moved OUT of this emitter
     on 2026-08-21, when the other four hosted targets started registering one
     too — allocating it in ONE arch's emitter is exactly how it read 0, aliased
-    onto BSS[0], in every other.
+    onto BSS[0], in every other. It went to EnsureSignalBss then and to its own
+    EnsureSignalAltStack at `16ebf18ce` (2026-09-18), so that it is reserved iff
+    a runtime is emitted; this sentence named EnsureSignalBss until 2026-09-22,
+    which sent anyone grepping for the allocation to a function that no longer
+    performs it. The constant's own comment in defs.inc carried the identical
+    stale referent and was found only by grepping for SIG_ALTSTACK_SIZE — two
+    spellings of one claim, neither reachable from the other.
 
     BSS_SIG_NUM used to be allocated HERE too, on the reasoning that x86-64 was
     its only writer. That reasoning expired the moment a second target parked the

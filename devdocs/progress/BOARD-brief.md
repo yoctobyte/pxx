@@ -101,7 +101,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
-- `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 2)
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
 - `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
@@ -109,5 +108,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 - `[p 70] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal (unblocks 1)
 - `[p 70] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
+- `[p 70] [A+S]` bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program (unblocks 1)
 
 _537 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

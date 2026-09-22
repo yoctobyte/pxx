@@ -505,12 +505,32 @@ const
     latency differs by more than an order of magnitude. }
   HEAP_LOCK_SPIN_LIMIT = $10000000;
   SIG_ALTSTACK_SIZE = 32768;   { alt-stack bytes. Linux MINSIGSTKSZ is 2048 and SIGSTKSZ 8192, but both are advisory floors that grew with the register file (AVX-512 pushes the kernel's signal frame past the old constants).
-    "Zero-filled BSS with no file cost" was the old justification here and it is
-    true of a HOSTED target only. EnsureSignalBss allocates this unconditionally,
-    --no-signals included, so on a target where BSS is SRAM it is 32768 bytes of
-    RAM in every image. Measured 2026-09-18: it is 78% of the bss of an x86-64
-    hello world at its 195-byte code floor (41800 bss, of which 32768 is this).
-    See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss. }
+    RESERVED IFF A RUNTIME IS EMITTED, and this comment said the opposite until
+    2026-09-22. It claimed EnsureSignalBss allocated this unconditionally,
+    --no-signals included, so that a target whose BSS is SRAM paid 32768 bytes in
+    every image. That was true when written and stopped being true at
+    `16ebf18ce` (2026-09-18), which moved the storage OUT of EnsureSignalBss into
+    its own EnsureSignalAltStack -- called only from EmitSignalRuntimeForTarget,
+    past `if NoSignals then Exit` and under TargetHasSignalRuntime. So this
+    paragraph named a function that no longer holds the allocation and a cost
+    nobody pays, on the constant everyone greps first.
+
+    MEASURED AT HEAD 2026-09-22 by halving this constant and rebuilding, because
+    a plain-vs---no-signals delta of 0 cannot tell "not allocated" from
+    "allocated on both arms" -- the expected value collides with the failure
+    value, so only a differential in the CONSTANT separates them. Pascal hello,
+    bss bytes at 32768 -> 16384:
+
+      bare esp32c3 / esp32s3   66808 -> 66808   delta 0  (no runtime, no reservation)
+      hosted x86-64 --no-signals 2532 ->  2532   delta 0
+      hosted x86-64 plain       35324 -> 18940   delta 16384
+
+    Where it IS paid it is genuinely live: the program entry installs dispatch
+    for SIGINT(2) and SIGTERM(15), and the emitter registers this buffer with
+    sigaltstack(2). So sizing it per target is hosted-only tuning of a facility
+    in use -- not dead weight, and not an ESP SRAM cost.
+    bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (pieces 1 and
+    3 done; the TITLE's "unconditional" is now false and the ticket says so). }
   SPECIAL_IN  = 999;
 
   MAX_UCLS_FLAT   = 1024;  { (class, flattened base) rows -- see UClsFlatOwner }
