@@ -229,7 +229,7 @@ Still not a recommendation: no option is chosen here and no code changed. Three
 of the address-based shapes are now excluded on a reason that is measured rather
 than argued, and one exclusion already in the ticket has been corrected.
 
-## 2026-09-22 (frankh-c0) — WHAT A BLOCK COSTS, so the fork is a yes/no and not an architecture question
+## 2026-09-22 (frankh-c0) — WHAT A BLOCK COSTS, on the axis this ticket does NOT turn on
 
 Bounded deliberately to the question asked — **how many slots, how many bytes** —
 and stopping there. It is **derived from the definitions**, not measured off a
@@ -280,3 +280,36 @@ only thing missing before the fork can be stated in goal terms with costs
 attached.
 
 **This is NOT an audit of the TLS machinery** and must not become one.
+
+### Correction, same day, same seat: THE COSTING ABOVE PRICES AN AXIS THIS TICKET DOES NOT TURN ON
+
+This section's heading said *"so the fork is a yes/no and not an architecture
+question"* for a few hours. That was written from what the costing was
+COMMISSIONED to do, before I re-read the fork, and it is wrong.
+
+This ticket's own summary says the open question is **where a lazily-installed
+block comes from AND what marker says "already mine", and the marker cannot be
+an address** — because a pxx stackful generator runs on a heap stack 13TB from
+its thread's frame, so every rsp test reads a running generator as foreign.
+**That is an idempotence problem, not a budget problem.** Everything above
+makes the block cheaper and merges its cost with the magazine ticket's; none of
+it touches the marker. A reader who takes the table as answering the fork will
+conclude the fork is priced when its hard part has not been approached.
+
+So the two findings stand as written and their SCOPE is narrower than the
+heading claimed: cost is no longer a fork — it is a range, 1,152 to 4,224
+bytes, with a named mover — and that half is ours to close, not his.
+
+**What is left for the owner is one sentence with no implementation noun in
+it:** *do we want a thread that pxx never wrapped to WORK, or to be REFUSED
+loudly?* If "work", the marker question is engineering and we own it. If
+"refuse loudly", the block question evaporates and so does this costing.
+
+The general shape, which is why the correction is here rather than only in a
+message: **a costing commissioned to settle a fork will be read as having
+settled it, whatever axis it actually priced.** The heading is where that
+damage lands, because the heading is what a ranker and a skimming reader get.
+A section heading that states a CONCLUSION is the same animal as a probe
+labelled with its answer — it puts the claim upstream of the evidence, and
+re-reading has nothing to check it against. Name the measurement in a heading,
+never its consequence.
