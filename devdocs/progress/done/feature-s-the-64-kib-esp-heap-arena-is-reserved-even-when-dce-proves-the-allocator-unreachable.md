@@ -2,12 +2,12 @@
 prio: 60
 track: S
 type: feature
-status: working
+status: done
 found: 2026-09-21
 found-by: frankB
 owner: frankh-c0
 blocked-by: []
-summary: "EspArena is 65,536 B of BSS reserved for any bare-ESP program that LINKS builtinheap, including one where DCE has proved every allocator entry point dead. RE-MEASURED AT HEAD 2026-09-22 (binary 464ddd6c2b02) and the WITNESS IN THIS TICKET HAD GONE STALE: an empty program no longer reproduces it -- it pays 640 B because it links no heap at all. The live shape is a program that pulls builtinheap in for a non-allocating reason; a six-line program whose whole body is a frozen string constant (`p := MSG`) compiles on --esp-profile=bare --target=esp32c3 to code=524B bss=66812B, with --dce-why reporting bodies 81, live 2 (160B), dropped 78 (89268B), i.e. code 89792B -> 524B. THE ARENA IS 125x THE PROGRAM IT SERVES and 98.1% of its BSS. This is SRAM, the resource the owner ruled relevant on 2026-09-20. The fix is NOT the alt-stack pattern applied directly: the alt stack is reserved by the compiler (Inc(BSSSize)) and can be gated in one place, whereas EspArena is an ordinary Pascal unit global whose BSS comes from AllocateSymOffset (ast_syminfer.inc:163) at PARSE time, before DCE runs -- and DCE does not eliminate dead globals at all, it only compacts GlobFix relocations. So this needs either dead-global elimination or a move of the arena to a compiler-reserved block on the BSS_HEAP_PTR pattern (pasparser_prog.inc:1099). The expected win is bounded and honest -- 64 KiB for programs that do not allocate, and most real programs do."
+summary: "DONE 2026-09-22. EspArena was 65,536 B of BSS reserved for any bare-ESP program that LINKS builtinheap, including one where DCE had proved every allocator entry point dead; it is now dropped when `HeapMmap` -- its only reader in the whole tree -- does not survive DCE. PREDICATE IS ONE PROC AND IS THE TRUE REFERENT, not a proxy: EspArena is referenced from exactly one place, builtinheap.pas:1306 inside HeapMmap, so `can anything read the arena` IS `is HeapMmap live`, with no allocator list to go stale. IMPLEMENTED AS A REMAP, NOT A REWRITE, on frankz-e5's reading of the RoRange*/DataRemap precedent: BssRemap(o) beside DataRemap(o) in elfwriter.inc, identity unless a hole was punched, so stored offsets never change and nothing that recorded one has to know the hole exists. That dissolved a hazard NEITHER of us had enumerated -- BSS_SIG_ALTSTK, BSS_INTBUF and XtExcSlotOff are allocated during CODEGEN and therefore sit ABOVE a Pascal unit global, so an in-place rewrite of Syms/GlobFix would have had to reason about each; under a remap they shift with everything else, which is simply correct. TWO call sites, not one: ApplyImageFixups and a second inside writeELF32, which is the writer riscv32 and xtensa actually use -- patching only the 64-bit one would have been a change that does nothing on the targets it is for, and an edit tool refusing for ambiguity is the only reason I looked. MEASURED esp32c3 bare, one program each: frozen-string-constant 66,812 -> 1,276 B bss (-65,536, 98.1%); string[16] 66,832 -> 1,296 B; SetLength control correctly keeps 66,812 B because HeapMmap is live; --no-dce keeps it in all three, which is the positive control. VERIFIED RUNNING, not just sized: a bare program carrying three scalar globals and an array global -- all ABOVE the arena and shifted by the remap -- matches the x86-64 oracle byte-for-byte under qemu on esp32c3 AND esp32s3; wrong remap arithmetic prints garbage there rather than failing to build. make test-esp-bare 21 ok / 1 fail, identical to the pre-change baseline (the fail is the unrelated record-by-value regression). Gated on DceEnabled and that is load-bearing: DceRun exits at its first line when DCE is off, leaving DceLive unallocated, so every entry reads `not live` and the predicate would drop an arena the program is about to use. NOT CHECKED, bounded rather than cleared: composition with RoSplitActive, and the ESP object-writer path; BssDropLen is 0 for every target and profile but bare-ESP-with-dead-HeapMmap. THE WIN IS NARROW AND HONEST: nothing for a program that allocates, and the paying population is programs that LINK builtinheap for a non-allocating reason -- one frozen string constant is enough. The layer that fixes that is feature-a-pull-builtinheap-on-demand-instead-of-predicting-it."
 ---
 
 # The 64 KiB ESP heap arena is reserved even when DCE proves the allocator unreachable
@@ -187,6 +187,123 @@ fix belongs on the BSS side and does not touch the scan.
  The sharp edge named below
 -- the predicate must be evaluated where the arena is declared, not where it is
 first read (`12d6c86f0`) -- applies to route 2 directly.
+
+## IMPLEMENTED 2026-09-22 — and the route is neither of the two above
+
+Landed as a **remap**, not as a reservation and not as an in-place rewrite. The
+shape is `frankz-e5`'s: it pointed at `RoRange*`/`DataRemap`, which solves the
+same problem for `Data[]`, and the borrowed part is the invariant rather than
+the code (`defs.inc`, verbatim): *"Offsets everywhere else stay in `Data[]`
+coordinates: fixups resolve through `DataRemap`, so nothing that records an
+offset has to know the split exists."*
+
+Three edits:
+
+- `defs.inc` — `BssDropOff`, `BssDropLen`. Zero means no hole, which is every
+  target and every profile but one.
+- `elfwriter.inc` — `BssRemap(o)` beside `DataRemap(o)`, and **two** call sites:
+  `ApplyImageFixups` and a second inside `writeELF32`. The 32-bit writer is the
+  one riscv32 and xtensa actually use, so patching only the 64-bit one would
+  have been a change that does nothing on the targets it is for.
+- `dce.inc` — `DropEspArenaIfAllocatorDead`, called from `compiler.pas` directly
+  after `DceRun`.
+
+### Why not route 1 or route 2
+
+Route 1 (rewrite `Syms` and `GlobFix` offsets in place) has two bugs available
+that a remap cannot have: it must get right WHICH stored offsets are BSS, since
+`GlobFix` packs data offsets into the same field (`SymOffIsData`), and it
+acquires a dependency on nothing having captured a BSS address before the
+rewrite.
+
+**And the hazard that actually decided it was one I had not enumerated.**
+`BSS_SIG_ALTSTK`, `BSS_INTBUF`, `XtExcSlotOff` and the rest are allocated during
+CODEGEN, so they sit ABOVE a Pascal unit global. An in-place rewrite would have
+had to reason about each; under a remap they shift with everything else, which
+is simply correct. The hazard I *had* written down — a BSS address resolved into
+`.data` before `DceRun` — does not exist: `Fixups[]` are `Data[]` coordinates
+only.
+
+### The completeness condition, verified rather than assumed
+
+`EmitGlobRef` (`emit.inc:1150`) is the single funnel for emitting a BSS address;
+the per-backend helpers go through it (`EmitLoadGlobAddrRISCV32` ->
+`EmitGlobRef`); and `bssBase + GlobFix[i].BSSoff` is the only expression that
+forms a BSS address from an offset. Compiler slots and Pascal globals alike.
+
+### The predicate
+
+`HeapMmap` is not live. One proc, and the **true referent** rather than a proxy:
+`EspArena` is referenced from exactly one place in the tree, and `EspArenaUsed`
+only from two more in the same function. Same predicate the NilPy arena ticket
+used, reached independently.
+
+**Gated on `DceEnabled`, and that is load-bearing, not defensive.** `DceRun`
+exits at its first line when DCE is off, leaving `DceLive` an unallocated
+dynamic array — so every entry reads "not live" and the predicate would come out
+TRUE for every program, dropping an arena the program is about to use. The gate
+is the difference between a size win and a heap based at a dropped address.
+
+`BssRemap` **refuses loudly** on an offset inside the hole rather than clamping:
+a live reference into dropped storage means the predicate was wrong, and
+clamping would resolve it to a neighbouring variable — the plausible-wrong-value
+failure that is most expensive to chase.
+
+### Measured, esp32c3 `--esp-profile=bare`
+
+| program | before | after | `--no-dce` |
+| --- | --- | --- | --- |
+| `frozen` (one frozen string const) | 66,812 B | **1,276 B** | 66,812 B |
+| `strvar` (one `string[16]`) | 66,832 B | **1,296 B** | 66,832 B |
+| `alloc` (`SetLength`) | 66,812 B | **66,812 B** | 66,812 B |
+| `empty` / `noalloc` / `reconly` | 640 / 652 / 656 B | unchanged | unchanged |
+
+−65,536 B exactly. `alloc` correctly keeps it. `--no-dce` keeps it everywhere,
+which is this routine's positive control.
+
+### The run is the proof, not the size column
+
+A bare program printing through UART MMIO with no `AnsiString` anywhere — so
+`builtinheap` links, `HeapMmap` dies, the arena drops — carrying **three scalar
+globals and an eight-element array global**, all of them user globals and
+therefore ABOVE the arena and shifted by the remap:
+
+    x86-64 oracle : hi111-222-333-0,11,22,33,44,55,66,77,
+    esp32c3 qemu  : hi111-222-333-0,11,22,33,44,55,66,77,   bss=1324B
+    esp32s3 qemu  : hi111-222-333-0,11,22,33,44,55,66,77,   bss=1324B
+
+Wrong remap arithmetic prints garbage here; it does not fail to build.
+
+**The first version of that program proved nothing and looked like it did.** It
+used `PutS(const s: AnsiString)`, which materialises and keeps `HeapMmap` alive,
+so it measured 66,848 B, ran perfectly, and never entered the changed path. The
+size column is what caught it. A runtime check that does not reach the changed
+code passes for the wrong reason.
+
+### Not checked, and bounded rather than cleared
+
+Whether `BssRemap` composes with `RoSplitActive`, and the ESP object-writer
+path. `BssDropLen` is 0 for every target and profile except bare ESP with a dead
+`HeapMmap`, so the exposure is the case measured above — but bounded is not
+checked, and both were named by e5 when it proposed the shape.
+
+### One more thing the loud refusal bought, unplanned
+
+Because `BssRemap` **errors** on an offset inside the hole rather than clamping,
+the fact that `frozen`, `strvar` and the qemu witness build at all is
+independent evidence that DCE correctly compacted away the dropped `HeapMmap`
+body's `GlobFix` entries. A stale fixup pointing into the arena would have
+stopped the build with a named diagnostic. The backstop turned out to double as
+a check on the pass it depends on.
+
+### Suite
+
+`make test-esp-bare`: **21 ok, 1 fail — identical to the baseline taken before
+this change.** The single failure is
+`bug-a-a-function-returning-a-record-by-value-fails-to-compile-on-four-targets`
+(p85, `523833fde`, filed separately), a compile failure with no connection to
+this work. Self-host fixedpoint converged. Hosted targets unaffected:
+`BssDropLen` is 0 off the bare-ESP path.
 
 ## Why this is the right resource
 

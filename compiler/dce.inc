@@ -1832,3 +1832,80 @@ begin
     Inc(i);
   end;
 end;
+
+procedure DropEspArenaIfAllocatorDead;
+{ The bare-ESP static heap arena is 64 KiB of SRAM. If DCE has proved its only
+  reader dead, punch it out of BSS rather than reserving it for nobody.
+
+  THE PREDICATE IS ONE PROC AND IT IS THE TRUE REFERENT, NOT A PROXY FOR ONE.
+  `EspArena` is referenced from exactly one place in the tree --
+  builtinheap.pas:1306, inside HeapMmap -- and `EspArenaUsed` only from 1301 and
+  1305 in the same function. So "can anything read the arena" is exactly "is
+  HeapMmap live", with no enumeration of allocator entry points to go stale.
+  Measured 2026-09-22: `grep -n EspArena compiler/builtin/*.pas lib/rtl/*.pas`
+  returns those three code lines and nothing else. Re-run it before adding a
+  second reader; a new one silently invalidates this whole routine, and the
+  failure it would produce is a live reference into a dropped region -- which
+  BssRemap refuses loudly rather than resolving to a neighbour.
+
+  It is the same predicate bug-a-the-nilpy-heap-arena-is-64-kib-of-dead-sram-
+  on-the-esp-idf-profile used for the NilPy arena, and for the same stated
+  reason: HeapMmap is the arena-refill call and the only route to a HeapPtr
+  read. Two arenas, two seats, one predicate, arrived at independently.
+
+  GATED ON DceEnabled AND THAT IS NOT BELT-AND-BRACES. DceRun exits at its
+  first line when DCE is off, so DceLive is an unallocated dynamic array and
+  every entry would read as "not live" -- i.e. the predicate would come out
+  TRUE for every program and drop an arena the program is about to use. The
+  guard is the difference between a size win and a heap based at a dropped
+  address. --no-dce keeping the arena is also the positive control for this
+  routine: it must still measure 66,812 B on the frozen-string witness. }
+var procIdx, arenaIdx, usedIdx, heapUnit: Integer;
+begin
+  BssDropOff := 0;
+  BssDropLen := 0;
+  if not EspBareBoot then Exit;
+  if not DceEnabled then Exit;
+
+  procIdx := FindProc('HeapMmap');
+  { No builtinheap in this build -- there is no arena to drop. Common: a bare
+    program that never pulls the unit pays nothing here already. }
+  if procIdx < 0 then Exit;
+  if (procIdx >= Length(DceLive)) or DceLive[procIdx] then Exit;
+
+  heapUnit := InternStr('builtinheap');
+  arenaIdx := FindSymInUnit('EspArena', heapUnit);
+  { HeapMmap exists, so builtinheap is linked, so under PXX_ESP its arena must
+    be too -- they are in one unit under one {$ifdef}. Absent means the unit's
+    shape changed under this routine, and continuing would leave the predicate
+    silently doing nothing. Say so. }
+  if arenaIdx < 0 then
+    ErrorNoPos('internal: HeapMmap is linked on a bare ESP profile but EspArena is not -- '
+               + 'builtinheap''s PXX_ESP arm changed shape; see DropEspArenaIfAllocatorDead');
+
+  BssDropOff := Syms[arenaIdx].Offset;
+  BssDropLen := SymAllocSize[arenaIdx];
+
+  { EspArenaUsed is declared immediately after the arena and is dead for the
+    same reason, but it is four bytes and folding it in would make the hole
+    depend on declaration adjacency. Left alone deliberately: the hole is ONE
+    named object, so a later reader can check it against SymAllocSize. }
+  usedIdx := FindSymInUnit('EspArenaUsed', heapUnit);
+  if usedIdx < 0 then ;   { not required; the arena alone is the win }
+
+  { Everything above the hole shifts down by BssDropLen, so the shift must
+    preserve 8-alignment or an aarch64/riscv64 8-byte access above it faults.
+    HEAP_ARENA's every tier is a multiple of 8 and the array is Int64-celled,
+    so this holds -- assert it rather than trust it, because the tiers are
+    user-selectable with -dPXX_ESP_HEAP_*. }
+  if (BssDropLen mod 8) <> 0 then
+    ErrorNoPos('internal: EspArena size ' + AIntToStr(BssDropLen) +
+               ' is not a multiple of 8; dropping it would misalign every BSS object above it');
+  if (BssDropOff mod 8) <> 0 then
+    ErrorNoPos('internal: EspArena offset ' + AIntToStr(BssDropOff) + ' is not 8-aligned');
+
+  Dec(BSSSize, BssDropLen);
+  if DceReport then
+    writeln('dce: esp arena dropped -- ', BssDropLen, 'B at bss+', BssDropOff,
+            ' (HeapMmap is dead, so nothing can read it)');
+end;

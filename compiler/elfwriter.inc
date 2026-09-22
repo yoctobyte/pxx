@@ -149,6 +149,31 @@ begin
   Result := dataBase + DataRemap(o);
 end;
 
+{ Where the byte at BSS offset `o` lands once a post-DCE hole is closed, as an
+  offset from bssBase. Identity unless a hole was punched -- the BSS twin of
+  DataRemap above, and placed beside it so the two cannot drift.
+
+  ONE-SIDED, WHICH IS WHY IT IS FOUR LINES AND DataRemap IS NOT: there is at
+  most one hole, so this is a threshold and a subtraction rather than a piece
+  table. If a second droppable region ever appears, grow it into RoPieceOf's
+  shape instead of adding a second threshold -- two thresholds applied in the
+  wrong order is a silent wrong address.
+
+  An offset INSIDE the hole is a live reference to storage that was dropped,
+  i.e. the liveness predicate that punched it was wrong. That is a compiler
+  bug and not a user error, so it is loud here rather than quietly clamped:
+  clamping would resolve the reference to a neighbouring variable and produce
+  exactly the plausible-wrong-value failure that is most expensive to chase. }
+function BssRemap(o: Integer): Int64;
+begin
+  if BssDropLen = 0 then begin Result := o; Exit; end;
+  if (o >= BssDropOff) and (o < BssDropOff + BssDropLen) then
+    ErrorNoPos('internal: BSS offset ' + AIntToStr(o) +
+               ' is inside the dropped region [' + AIntToStr(BssDropOff) + ',' +
+               AIntToStr(BssDropOff + BssDropLen) + ') -- the drop predicate was wrong');
+  if o >= BssDropOff then Result := o - BssDropLen else Result := o;
+end;
+
 { The byte's FILE position relative to the start of the data image. }
 function DataFilePos(o: Integer): Integer;
 var k: Integer;
@@ -2064,7 +2089,7 @@ begin
     if SymOffIsData(GlobFix[i].BSSoff) then
       addr := DataVA(dataBase, SymOffDataPart(GlobFix[i].BSSoff))
     else
-      addr := bssBase + GlobFix[i].BSSoff;
+      addr := bssBase + BssRemap(GlobFix[i].BSSoff);
     { PCRel: EmitGlobRef rewrote the operand to [rip+disp32], so the field holds
       the distance from the address AFTER it (rip at execution) to the target,
       not the target. }
@@ -2667,7 +2692,7 @@ begin
     if SymOffIsData(GlobFix[i].BSSoff) then
       addr := DataVA(dataBase, SymOffDataPart(GlobFix[i].BSSoff))
     else
-      addr := bssBase + GlobFix[i].BSSoff;
+      addr := bssBase + BssRemap(GlobFix[i].BSSoff);
     { PCRel is never set on this path today -- EmitGlobRef's rewrite is guarded
       on TARGET_X86_64 and this writer serves i386 and arm32. Kept identical to
       the two 64-bit loops on purpose: three copies of one decision that differ

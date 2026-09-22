@@ -4489,6 +4489,32 @@ var
   DataRelFixCount : Integer;
 
   BSSSize : Integer;
+  { A HOLE PUNCHED OUT OF BSS AFTER DCE -- half-open [BssDropOff, BssDropOff+BssDropLen).
+    BssDropLen = 0 means no hole and every remap below is identity, which is the
+    state for every target and every profile but the one case that sets it.
+
+    The SHAPE IS BORROWED FROM RoRange*/DataRemap ABOVE, deliberately and on
+    frankz-e5's reading, and the borrowed part is the invariant rather than the
+    code: offsets everywhere else stay in ORIGINAL BSS coordinates and resolve
+    through BssRemap, so nothing that recorded an offset has to know the hole
+    exists. The alternative -- walking Syms and GlobFix after DCE and rewriting
+    stored offsets in place -- was written up first and is worse in a way that
+    does not show in a diff: it has to get right WHICH stored offsets are BSS
+    (GlobFix packs data offsets into the same field, see SymOffIsData) and it
+    acquires a dependency on nothing having captured a BSS address before the
+    rewrite. A remap cannot have either bug, because it changes no stored value.
+
+    SAFE BY CONSTRUCTION FOR SLOTS ALLOCATED AFTER THE HOLE, which is the
+    non-obvious half: BSS_SIG_ALTSTK, BSS_INTBUF, XtExcSlotOff and the rest are
+    allocated during CODEGEN and therefore sit ABOVE a Pascal unit global. They
+    shift down with everything else, which is correct -- the hole is being
+    closed, not reserved around. Verified 2026-09-22 that this is sound for
+    every one of them: EmitGlobRef (emit.inc:1150) is the single funnel for a
+    BSS address, the per-backend helpers go through it (EmitLoadGlobAddrRISCV32
+    -> EmitGlobRef), and elfwriter.inc's `bssBase + GlobFix[i].BSSoff` is the
+    only place a BSS address is formed from an offset. }
+  BssDropOff : Integer;
+  BssDropLen : Integer;
   DbgDataBase : Integer; { absolute address of .data, for a DWARF location on a data-resident global (see DATA_SYM_BIAS); set beside DbgBssBase by the ELF writer }
 
   { Grown in InternStr. MAX_STRS was 65536 and COULD NOT BE REACHED: every entry

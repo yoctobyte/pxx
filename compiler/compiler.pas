@@ -3018,6 +3018,12 @@ begin
     slots are roots), before anything reads a final code offset. Off unless
     --dce; see compiler/dce.inc for what turns it off again. }
   DceRun;
+  { AFTER DceRun for the same reason as the vector table below, and BEFORE it
+    so that nothing reads BSSSize between the two. Drops the 64 KiB bare-ESP
+    heap arena when DCE has proved HeapMmap -- its only reader -- dead. No-op
+    on every other profile and under --no-dce.
+    feature-s-the-64-kib-esp-heap-arena-is-reserved-even-when-dce-proves-the-allocator-unreachable }
+  DropEspArenaIfAllocatorDead;
   { AFTER DceRun, and that is the whole reason it is here rather than beside
     the rest of the bare-metal emission. The table has to be 1 KiB-aligned in
     the final image, and DCE removes bytes ahead of it -- so aligning it while
