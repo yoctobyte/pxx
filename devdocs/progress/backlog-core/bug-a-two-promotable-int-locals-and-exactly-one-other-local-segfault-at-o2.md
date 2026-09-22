@@ -127,3 +127,49 @@ pair disappears into `tyVariant`, and the crash goes with it. My first benchmark
 for that ticket ran clean *because* it contained a computed `getattr`; deleting
 the getattr is what produced the segfault. **Narrowing that arm will unmask this
 in programs that currently work.**
+
+## CHEAP DISCRIMINATOR OFFERED, AND ITS PREMISE CHECKED AGAINST THE SOURCE — 2026-09-22
+
+**`frankh-c0` (author of the `--dce`-at-default-`-O2` promotion) offered the one
+cheap discriminator so whoever takes this does not start cold: run the repro at
+`-O2 --no-dce`.** It did not claim the bug and is not taking it.
+
+Its stated reasoning was that *"clean at -O3"* is a strange row for a
+pass-ordering bug **if** DCE is on at `-O2` and off at `-O3`. **That conditional
+resolves in the direction that makes the row stranger, not less strange.**
+Checked here by READING THE SOURCE — no build was run, and this is a source
+reading, not a behavioural measurement:
+
+```
+compiler/compiler.pas:2207   if (OptLevel >= 2) and not DceOff and (TargetArch <> TARGET_WASM32) then
+                               DceEnabled := True;
+compiler/compiler.pas:1040   DceOff := False;                    { initialised }
+compiler/compiler.pas:1179   DceOff := True; DceEnabled := False; { --no-dce, the ONLY setter }
+compiler/defs.inc:4697       DceOff : Boolean;   { --no-dce: keep every body even at -O3 }
+```
+
+`grep -rn DceOff compiler/` returns five hits and they are all accounted for
+above plus `compiler.pas:2270` (`EspBareBoot`). **So DCE is ON at `-O2` AND at
+`-O3`** — `defs.inc`'s own comment says so in as many words — **and nothing in
+the `-O3` path turns it off.**
+
+**THEREFORE "CLEAN AT -O3" IS NOT EXPLAINED BY DCE BEING ABSENT THERE, AND THE
+DISCRIMINATOR'S EXPECTATION FLIPS:**
+
+- If `-O2 --no-dce` is **clean**, DCE is implicated only in combination with
+  something `-O3` does differently — not on its own, because `-O3` has DCE too.
+- If `-O2 --no-dce` still **crashes**, DCE is exonerated outright and the cause
+  is a pass that `-O2` runs and `-O3` does not, or one whose behaviour `-O3`
+  changes.
+
+**Either way it is one build and it halves the search.** Run it before attributing
+anything to a pass.
+
+**Recorded by the coordinator, who did not run it and cannot** — no pxx work in
+that seat. Everything above is c0's suggestion plus a source reading; the repro,
+the 18 variants and the fault-site reading are `franks-5b`'s and are attributed
+to it in this ticket's body. **A second reading of the fault site has been
+requested from `frankb-8e`** (Track A, builds), because *"a promo-int's inline
+payload dereferenced as a heap bignum pointer"* is 5b's interpretation of the
+instruction sequence and register, and 5b flagged it as such rather than as
+established.
