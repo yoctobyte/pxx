@@ -1822,7 +1822,75 @@ begin
      (not SourceMentionsKeyword('uses')) then
     TlsUserBytes := 0;
 
-  { NILPY, WITH NO TEXT SCAN AT ALL, because there is nothing for one to find:
+  { BASIC, ON THE PASCAL ARM'S PRECEDENT AND NOT ON NILPY'S. Added 2026-09-22
+    (frankb-8e) after measuring the three things the ticket said had to be
+    established first, in its own order. The ticket's standing warning was
+    `Do not write the arm from the analogy` -- the NilPy arm was written from a
+    sound argument and retired the same day by a route it had never considered
+    -- so every clause below is a measurement at 7ed7bc249672, not a read.
+
+    1. CAN A BASIC PROGRAM REACH A C UNIT? YES, and it is not hypothetical:
+       test/test_basic_comprehensive.bas already says `USES my_c_lib`. That is
+       the exposure that retired NilPy's arm, so this is where it had to stop
+       if it was going to stop anywhere.
+
+    2. SO WHY IS THIS SAFE WHERE NILPY'S WAS NOT? Because the two differ in
+       the POPULATION, not in the failure mode, and that is the whole finding.
+       NilPy reaches C units AMBIENTLY through -Fu and every C unit declares a
+       __thread errno, so a zero-byte area refused EVERY mixed build -- the
+       arm was unusable, not unsafe. BASIC has exactly ONE door to a unit of
+       any language, `USES` during the parse (bparser.inc's BSourceUsesAUnit
+       says so in its own words), and this arm is OFF the moment the source
+       says it. A .bas with no `USES` cannot reach a C unit at all.
+
+    3. AND THE FAILURE IS LOUD IF CLAUSE 2 IS EVER WRONG. Measured: a .bas
+       doing `USES tl_lib` where tl_lib.c declares `__thread int tl_counter`,
+       compiled at -dPXX_TLS_USER_0, gives
+       `error: __thread tl_counter: the per-thread variable area is full
+       (0 bytes)`, naming the file, the line, the declaration and the flag,
+       exit 1. 402d61e0d made that a hard ERROR; the NilPy comment below still
+       describes it as a WARNING, which was true when that comment was written
+       and is what its own RETIRED block records. So the worst case here is an
+       acceptance regression carrying its own remedy, never a silent collision
+       of per-thread state -- and it is unreachable anyway while `USES` gates
+       the arm.
+
+    NO THREAD-LOCAL SCAN FOR BASIC, DELIBERATELY. The Pascal arm scans for
+    `threadvar` because Pascal can spell one; BASIC cannot, in any spelling, so
+    a scan for it is a guard that cannot fail and would print PASS forever.
+    `uses` is the only honest predicate, which is the same conclusion
+    BSourceUsesAUnit reached for builtinheap by a different route.
+
+    SOURCE IS COMPLETE HERE FOR BASIC even though ExpandIncludes does not run
+    for it (compiler.pas guards both pre-passes on IsPascalFrontend): BASIC has
+    no include directive at all, so the .bas text IS the whole program. That is
+    the property the C and NilPy frontends lack, and it is why they stay out
+    rather than caution -- a C header's __thread and a NilPy import both arrive
+    after this point.
+
+    MEASURED, unit-free `10 PRINT "hello"`: bss 37,632 -> 34,560, a flat
+    -3,072, and it still prints `hello`. test_basic_comprehensive.bas (USES a
+    Pascal unit AND a C unit) is the negative control and it is unaffected --
+    it keeps the full area by this arm's own condition, and its 21 lines of
+    output are byte-identical either way.
+    feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar }
+  if (not explicit) and isBasic and
+     (not SourceMentionsKeyword('uses')) then
+    TlsUserBytes := 0;
+
+  { *** RETIRED 2026-09-19. THERE IS NO NILPY ARM. Everything in this block is
+    HISTORY, including its claim that the C allocator arm WARNS -- 402d61e0d
+    made that a hard ERROR, measured again 2026-09-22 from BASIC. The full
+    retraction is the block immediately below; it used to sit only there, two
+    paragraphs under the sentence it retracts, and this banner exists because
+    a comment is read by PREFIX: a reader scans until they have what they came
+    for, exactly as they scan a ticket summary, and this one hands them the
+    stale sentence first. Moved to the top on frankz-e5's read, 2026-09-22 --
+    the same append-vs-lead failure we had both just corrected in summaries,
+    in a source comment, where there is no append-only body to move history
+    into. So the history goes SECOND, under a line saying it is history. ***
+
+    NILPY, WITH NO TEXT SCAN AT ALL, because there is nothing for one to find:
     the language has no thread-local declaration, so no NilPy source can declare
     one however it is spelled. What a NilPy program CAN do is drag in Pascal RTL
     units, and that is the whole risk -- `isNilPy` is true for the entire

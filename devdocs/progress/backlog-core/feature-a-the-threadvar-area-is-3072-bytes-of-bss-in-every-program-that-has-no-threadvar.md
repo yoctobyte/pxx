@@ -336,6 +336,18 @@ would not have distinguished "the arm is off" from "the flag does nothing".
 
 ### BASIC is a real open row and it is NOT the same question as NilPy's
 
+> **ANSWERED AND SHIPPED THE SAME DAY, 2026-09-22 (frankb-8e).** All three
+> questions below were measured, in the order written, and the arm is live:
+> `isBasic and not SourceMentionsKeyword('uses')`. Unit-free `10 PRINT "hello"`
+> is bss 37,632 → **34,560** by default, a flat −3,072, and still prints.
+> `### The three questions, answered` immediately below this section has the
+> measurements. The short of it: BASIC **can** reach a C unit (question 1 is
+> YES — `test_basic_comprehensive.bas` already says `USES my_c_lib`), and the
+> arm is safe anyway because BASIC's exposure differs from NilPy's in
+> **population, not in failure mode** — NilPy pulls C units ambiently through
+> `-Fu`, BASIC only on an explicit `USES`, which is exactly what the arm turns
+> off on. Guarded by a PAIR of fixtures that fail for opposite reasons.
+
 Nobody has assessed it — the ticket's "long-tail frontends" line treats them as
 one undifferentiated group of `or Is<X>Frontend` terms, and they are not one
 group. The retirement reasoning above is specific: it is about **C units
@@ -357,6 +369,90 @@ from the fact that it retired NilPy.
 sound argument about Pascal units and retired by a C unit nobody had
 considered; repeating that with BASIC substituted is the same mistake with a
 different letter.
+
+### The three questions, answered — and the BASIC arm is live
+
+Measured 2026-09-22 (frankb-8e) at binary `464ddd6c2b02`, in the order the
+section above set, because the section above also said **do not write the arm
+from the analogy** and the only way to honour that is to answer its own
+questions rather than NilPy's.
+
+**1. Can a BASIC program reach a C unit at all? YES — and it already does.**
+`test/test_basic_comprehensive.bas` says `USES my_c_lib` on line 6, against
+`test/my_c_lib.c`. This is the exposure that retired the NilPy arm, so the
+honest answer to the question as I posed it is the *unfavourable* one, and the
+arm had to survive it on some other ground or not be written.
+
+**2. It survives because the two differ in POPULATION, not in failure mode.**
+That is the whole finding and it is what the analogy would have got wrong in
+both directions. NilPy reaches C units **ambiently** through `-Fu`, and every C
+unit declares a `__thread` errno, so a zero-byte area refused *every* mixed
+build — that arm was **unusable, not unsafe**. BASIC has exactly one door to a
+unit of any language, `USES` during the parse, which is `bparser.inc`'s
+`BSourceUsesAUnit` in its own words — and it is the same door the arm switches
+off on. A `.bas` with no `USES` cannot reach a C unit by any route.
+
+**3. And the failure is loud if 2 is ever wrong.** Measured directly rather
+than inferred from the Pascal side: a `.bas` doing `USES tl_lib`, where
+`tl_lib.c` declares `__thread int tl_counter`, compiled at
+`-dPXX_TLS_USER_0`:
+
+```
+pascal26:2: error: __thread tl_counter: the per-thread variable area is full (0 bytes)...
+  near: void   __thread int tl_counter >>>  int tl_bump
+(exit 1)
+```
+
+naming the file, the line, the declaration and the flag. `402d61e0d` made that
+a hard ERROR; `ir_codegen.inc`'s NilPy block still describes it as a WARNING,
+which was true when that block was written and is what its own RETIRED note
+records. **Reading that comment instead of measuring would have produced the
+wrong answer to this question** — it is the same stale-premise trap this
+ticket is full of.
+
+**No thread-local scan for BASIC, deliberately.** The Pascal arm scans for
+`threadvar` because Pascal can spell one. BASIC cannot, in any spelling, so a
+scan for it is a guard that cannot fail and would print PASS forever. `uses` is
+the only honest predicate — the same conclusion `BSourceUsesAUnit` reached for
+`builtinheap` by a different route.
+
+**`Source` is complete for BASIC** even though `ExpandIncludes` runs only under
+`IsPascalFrontend`: BASIC has no include directive at all, so the `.bas` text
+*is* the whole program. That is the property C and NilPy lack, and it is why
+they stay out — a C header's `__thread` and a NilPy import both arrive after
+this point.
+
+| subject | before | after | delta |
+| --- | ---: | ---: | ---: |
+| `10 PRINT "hello"` (unit-free) | 37,632 | **34,560** | **−3,072** |
+| `test_basic_comprehensive.bas` (`USES` ×2) | 38,908 | 38,908 | 0 — correct |
+| Pascal `hello.pas` | 34,600 | 34,600 | 0 |
+| NilPy `print()` | 62,740 | 62,740 | 0 |
+| C `puts` | 72,448 | 72,448 | 0 |
+
+The unit-free row still prints `hello`; the comprehensive row still prints its
+21 lines, byte-identical. `-dPXX_TLS_USER_4K` still raises the area on a
+unit-free `.bas` (explicit wins, unchanged).
+
+**GUARDED BY A PAIR, AND NEITHER ROW CATCHES WHAT THE OTHER DOES.**
+`test_a_unit_free_basic_program_pays_no_threadvar_area.bas` asserts `1152` and
+reds at 4224 if the arm is removed;
+`test_a_basic_program_with_a_unit_pays_the_full_threadvar_area.bas` asserts
+`4224` and reds at 1152 if the arm stops looking at the source, which is the
+cheapest wrong widening. The control names a **C** unit on purpose, so the day
+a unit arrives without the source saying so it says which half broke. The pin
+is a real control for the first row (it answers 4224 where HEAD answers 1152)
+and **is not cited as one for the second**, where both answer 4224 — that is
+two compilers doing the same correct thing, which is the non-discriminating
+control this ticket removed from the NilPy fixture the same day.
+
+Both fixtures read `__pxxTlsBlockSize` as a bare identifier. They have to: the
+NilPy row borrows `test/units/utlsblock.pas` to read that number, and importing
+anything from the unit-free `.bas` would switch off the very thing under test.
+The unit-free fixture also carries a standing warning not to write the
+`USES` keyword anywhere in it, **including in a REM** — the decision is a text
+scan over the whole source, and this ticket already records the Pascal sibling
+destroying itself exactly that way.
 
 ### And the 3,072 is now a larger fraction than the ticket assumed
 

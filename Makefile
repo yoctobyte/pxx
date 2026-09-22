@@ -7579,6 +7579,30 @@ test-threads: $(COMPILER)
 	@printf 'program tlsdeclarea;\nthreadvar t: LongInt;\nbegin t := 1; writeln(__pxxTlsBlockSize); end.\n' > $(TESTTMP)/tlsdeclarea.pas
 	./$(COMPILER) $(TESTTMP)/tlsdeclarea.pas $(TESTTMP)/tlsdeclarea
 	tools/expect_same.sh tlsdeclarea "$$($(TESTTMP)/tlsdeclarea)" "4224"
+	# THE BASIC ARM, added 2026-09-22, and it is the PASCAL argument rather than
+	# the NilPy one. BASIC has exactly ONE door to a unit of any language --
+	# `USES` during the parse, which bparser.inc's BSourceUsesAUnit says in its
+	# own words -- so the source-text scan is the honest predicate here for the
+	# same reason it is on the Pascal side. There is no scan for a thread-local
+	# keyword because BASIC cannot spell one, and scanning for it would be a
+	# guard that cannot fail.
+	# A PAIR, AND NEITHER ROW CATCHES WHAT THE OTHER DOES. The first reds at
+	# 4224 if the arm is removed; the second reds at 1152 if the arm stops
+	# looking at the source, which is the cheapest wrong widening.
+	# PINNED CONTROL, AND IT COVERS ONLY THE FIRST ROW: the pin answers 4224
+	# for BOTH files. On the unit-free row that discriminates (HEAD says 1152);
+	# on the control row it is two compilers doing the same correct thing, so
+	# it is not cited as a control there.
+	# WHY THE CONTROL ROW NAMES A C UNIT ON PURPOSE: a NilPy arm of this exact
+	# shape shipped and was reverted the same day, 2026-09-19, because NilPy
+	# reaches C units AMBIENTLY through -Fu and every C unit declares a
+	# __thread errno. BASIC is safe from that only while its door is explicit,
+	# so this row builds and runs a real C unit -- the day a unit arrives
+	# without the source saying so, it goes to 1152 and names which half broke.
+	./$(COMPILER) test/test_a_unit_free_basic_program_pays_no_threadvar_area.bas $(TESTTMP)/test_tlsnonebas26
+	tools/expect_same.sh test_tlsnonebas26 "$$($(TESTTMP)/test_tlsnonebas26)" "1152"
+	./$(COMPILER) test/test_a_basic_program_with_a_unit_pays_the_full_threadvar_area.bas $(TESTTMP)/test_tlsusesbas26
+	tools/expect_same.sh test_tlsusesbas26 "$$($(TESTTMP)/test_tlsusesbas26)" "4224"
 	# THE NILPY ARM of the same saving, and it rests on a different argument
 	# from the Pascal one. There is no text scan and nothing for one to find:
 	# the language has no thread-local declaration, so no NilPy source can
@@ -8267,9 +8291,27 @@ test-threads: $(COMPILER)
 	# A SHORT write of the output file is an error, not `ok:`. A full disk or a
 	# file-size limit makes write() store a prefix and return its length; the
 	# writers discarded that count and printed `ok:` over a truncated binary.
-	# `ulimit -f 40` is well under hello's ~69KB in either block unit, and XFSZ is
-	# ignored so the write returns short instead of killing the compiler.
-	tools/expect_same.sh test_trunc26.1 "$$( (trap '' XFSZ; ulimit -f 40; ./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc26 2>&1 >/dev/null); echo "rc=$$?")" "$$(printf 'pascal26: error: a write to the output file stored fewer bytes than asked: $(TESTTMP)/test_trunc26\n  check all four -- the first is the commonest and the last is the one that fools people:\n    df -h <dir>   free BYTES\n    df -i <dir>   free INODES -- can hit 100%% while df -h reads 9%%\n    ulimit -f     a file-size limit truncates at a plausible size\n    another pascal26 writing THIS SAME PATH -- two writers interleave,\n      and the file can then end up the RIGHT size, so its size proves nothing.\nrc=1')"
+	# XFSZ is ignored so the write returns short instead of killing the compiler.
+	#
+	# THE LIMIT WAS `ulimit -f 40` AND ITS STATED REASON WAS "well under hello's
+	# ~69KB". THAT PREMISE WAS FALSIFIED BY A FIX, 2026-09-22 (523833fde), and
+	# this row went RED for a reason that is not the defect: hello.pas is 4,520
+	# bytes now, 40 blocks is 20,480, so the write FITS and the compiler
+	# correctly says nothing. **A guard that depends on its subject staying
+	# BIG acquires a dependency on the size never improving** -- the same shape
+	# as a ticket summary citing a currently-firing row, in a test. It is not
+	# in gate.sh quick, so the fix's own gate was green.
+	#
+	# `ulimit -f 1` is 512 bytes, ~8.8x under the current 4,520, and the
+	# PRECONDITION IS NOW ASSERTED rather than stated in prose: the row below
+	# fails with its own sentence if hello ever fits in 512 bytes, instead of
+	# handing the next reader an eight-line diff whose real meaning is "the
+	# subject shrank". Do not repair a future instance by raising the limit
+	# without re-reading that -- the point is a SHORT write, and any subject
+	# larger than the cap gives one.
+	@sz=$$(./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc_pre 2>/dev/null >/dev/null; stat -c%s $(TESTTMP)/test_trunc_pre); \
+	  [ "$$sz" -gt 512 ] || { echo "FAIL [test_trunc26.0]: hello.pas now compiles to $$sz bytes, which FITS in the 512-byte cap this guard sets -- the short-write path is unreachable and the row below can no longer fail. Lower the cap or pick a larger subject; do not just raise it."; exit 1; }
+	tools/expect_same.sh test_trunc26.1 "$$( (trap '' XFSZ; ulimit -f 1; ./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc26 2>&1 >/dev/null); echo "rc=$$?")" "$$(printf 'pascal26: error: a write to the output file stored fewer bytes than asked: $(TESTTMP)/test_trunc26\n  check all four -- the first is the commonest and the last is the one that fools people:\n    df -h <dir>   free BYTES\n    df -i <dir>   free INODES -- can hit 100%% while df -h reads 9%%\n    ulimit -f     a file-size limit truncates at a plausible size\n    another pascal26 writing THIS SAME PATH -- two writers interleave,\n      and the file can then end up the RIGHT size, so its size proves nothing.\nrc=1')"
 	# CROSS ROWS, wired when bug-a-riscv32-and-xtensa-accept-a-shortstring-
 	# sysopen-path-and-open-nothing closed. riscv32 and xtensa COMPILED this and
 	# printed `short open  FALSE` for a file that exists: the generic arg

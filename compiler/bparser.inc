@@ -718,13 +718,24 @@ function BSourceUsesAUnit: Boolean;
   here" and "does this source say USES" are the SAME question, and it is the
   only honest predicate for whether the shims can be emitted.
 
-  DetectPascalRuntimeNeeds cannot answer it. Its `needsAnsiRuntime` is
-  `PasDefineExists('PXX_MANAGED_STRING')` first thing, and PasInitDefines
-  (paslexer.inc) defines PXX_MANAGED_STRING unconditionally -- so for EVERY program, in every
-  frontend, it returns True and then sets needsHeap from it. It is not a
-  discriminator; it is a constant. That is why a unit-free `10 PRINT "hello"`
+  DetectPascalRuntimeNeeds cannot answer it, and THE REASON CHANGED ON
+  2026-09-22 WHILE THE ANSWER DID NOT. What this paragraph used to say, and
+  what was true when it was written: `needsAnsiRuntime` was
+  `PasDefineExists('PXX_MANAGED_STRING')` first thing, PasInitDefines
+  (paslexer.inc) defined PXX_MANAGED_STRING unconditionally, so for EVERY
+  program in every frontend it returned True and then set needsHeap from it --
+  not a discriminator, a constant. That is why a unit-free `10 PRINT "hello"`
   got the shim, and the shim called a builtinheap body that was never going to
   arrive.
+
+  523833fde retired that: needsAnsiRuntime now starts False and is set from
+  evidence, so it is a real discriminator. It is still the wrong one HERE,
+  for a reason that was always the deeper one -- it answers "does this program
+  use managed strings", and the question this function asks is "will
+  builtinheap BE HERE", which for BASIC is decided by `USES` and by nothing
+  else. A BASIC program can want a string and still have no door for the body
+  to arrive through. Do not replace this scan with that flag now that the flag
+  works.
   bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits }
 var i: Integer;
 begin
