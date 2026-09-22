@@ -125,3 +125,23 @@ self-skip exits 0 and is not counted, so `skip_holes` reads low. This probe is
 not undercounted as a hole; it is **overcounted as a finding**. Different
 errors, not a contradiction: the p70 sentence is scoped to the exit-0 spelling,
 exactly as e5 wrote it, while the missing channel errs in both directions.
+
+### ADDENDUM (`frankz-e5`): TWO THINGS THE ACCOUNT ABOVE DOES NOT CARRY
+
+**The p70 neighbour's population has GROWN and both rows stay.** Its
+`grep -c 'NOT verified' Makefile` recorded **72 @ 2026-09-12**; the same command
+answers **80 @ `fda77c48b8ee`**. **Growth, not a correction** — the direction
+strengthens that ticket, and anything derived from 72, its `skip_holes == 0`
+argument included, wants re-deriving rather than scaling. Neither number replaces
+the other; each is marked with what it measured.
+
+**And the way 8e found its own error is banked separately, because it
+generalises past this ticket.** The refuting grep was a Python-idiom pattern
+(`returncode|rc|exitcode [=!]= 2`) run across two `.py` files and one `.sh`. All
+three answered 0 and **three zeroes were read as three answers.** The positive
+control matched 21 and 6 in the Python files and **zero in `gate.sh`, because
+`gate.sh` never contains the word `returncode`** — so the control **went silent**
+for the one file it was blind to instead of failing, and a silent control reads
+as nothing-to-report. `debugging-playbook.md`, "A NEGATIVE RESULT FROM A GREP CAN
+BE CONFIDENT ABOUT A FILE THE PATTERN CANNOT READ — AND THE POSITIVE CONTROL GOES
+SILENT INSTEAD OF FAILING".

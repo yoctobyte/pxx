@@ -39555,3 +39555,87 @@ thing you would check to test it comes out right.*
 commit actually did to a folder.** A bare `--name-only` count cannot tell 71
 renames from 71 new tickets, and the two mean opposite things about whether
 anybody judged anything.
+
+## A THRESHOLD FIXTURE'S MARGIN CAN BE SUPPLIED BY CODE THAT IS NOT UNDER TEST — AND THEN THE CONSERVATIVE-LOOKING REMEDY IS THE WRONG ONE
+
+**Measured 2026-09-22 by `frankh-c0` (`ea48d8877`), correcting a triage this
+coordinator wrote the same hour.** Both remedies were offered as equivalent. Only
+one of them preserves the subject, and it is not the one that looks careful.
+
+A riscv32 fixture asserts its program still exceeds JAL's ±1 MiB displacement.
+DCE promoted to the default `-O2` dropped it from 1,162,916 B to 931,632 B, under
+the wall, and the guard fired. The triage offered: **enlarge the fixture**, or
+**build this one job with `--no-dce`** and say its subject is the displacement,
+not the optimiser. The second reads as the conservative choice — leave the
+fixture alone, stop the optimiser interfering.
+
+**It is not conservative. It restores the wall out of padding.**
+
+```
+hello-world, riscv32   --no-dce 267,108 -> default  33,988   drop 233,120
+the fixture            --no-dce 1,162,916 -> 931,632         drop 231,284
+difference                                                        1,836
+```
+
+**The entire drop is dead RTL, not the body under test.** `Big` alone is ~895,808
+under `--no-dce` and ~897,644 at the default — **it has never exceeded 1,048,576
+on its own.** Before DCE the test cleared the wall by 114,340 B while carrying
+267,108 B of never-called runtime, so **the whole margin came from code nobody was
+testing.** Turning DCE off does not preserve the subject; it reinstates a layout
+no shipping riscv32 program has.
+
+**THE GENERAL SHAPE: where a test asserts a SIZE, a COUNT or a DURATION crosses a
+threshold, ask what fraction of the margin the subject itself contributes.** The
+answer is available in one differential — measure the same threshold on a trivial
+program and subtract. Here it took two builds and settled a remedy that two seats
+had written down as a free option.
+
+**And note which verdict each route reaches.** Reverting or carving out the
+optimisation was already ruled out as compiler-appeasement — trading a proven win
+for a fixture's convenience. **The `--no-dce` arm fails for a different reason
+that the appeasement rule does not reach: not that it hides a win, but that the
+thing it restores was never the subject.** Two wrong remedies, two distinct
+mechanisms, and only one of them is covered by the rule everybody quotes.
+
+The fixture was enlarged 4000 -> 6000: 1,387,624 B, 32% clear of the wall on LIVE
+code where the old one cleared it on padding — **and its edited guard was
+positive-controlled by feeding it the pre-fix 931,632, which it still rejects.**
+A guard that can no longer fail is worse than the red it replaced.
+
+## A NEGATIVE RESULT FROM A GREP CAN BE CONFIDENT ABOUT A FILE THE PATTERN CANNOT READ — AND THE POSITIVE CONTROL GOES SILENT INSTEAD OF FAILING
+
+**Measured 2026-09-22 by `frankb-8e` (`32676fb80`), while verifying a sentence it
+had supplied for somebody else's ticket.** The assertion was *"no exit-code
+vocabulary above pass/fail anywhere in the harness"*, and it was false:
+`tools/gate.sh:104` special-cases **exit 77** — the autotools SKIP convention —
+for `tools/selfhost_fixedpoint.sh`, printing SKIP and returning 0.
+
+**How the grep produced a confident zero.** The pattern matched PYTHON idiom —
+`returncode|rc|exitcode [=!]= 2` — across two `.py` files and one `.sh`. All
+three answered 0, **and three zeroes were read as three answers.**
+
+**The positive control is what exposed it, and the way it failed is the finding.**
+The same pattern with `2` replaced by `0` matches **21** times in `testmgr.py`,
+**6** in `twatch.py`, and **zero** in `gate.sh` — because `gate.sh` never contains
+the word `returncode` at all. **The control fired for the files the pattern could
+see and went SILENT for the one it was blind to.** A control that goes quiet
+reads as "nothing to report" rather than as "I cannot see this file", so the
+negative came out confident about the one file that refuted it.
+
+**This is "print the set your instrument enumerates and check the subject is IN
+it" arriving inside a NEGATIVE RESULT** — where there is no output to look
+suspicious, and where the author is not making a claim they expect to be
+challenged. **A control drawn from the same population as the query inherits the
+query's blindness.** For a cross-language search, control per LANGUAGE, or grep
+for something every file must contain (`exit`, `$?`) and read the hits.
+
+**What the corrected fact did to the remedy, which is the reason it mattered:** a
+skip convention already exists and is live, with one producer and one consumer —
+but 77 maps to `return 0`, a PASS, which is exactly the laundering the probe
+exits 2 to refuse. **So the missing state was never "skip". It is SKIP AND COUNT
+AS A COVERAGE HOLE**, which is precisely the state
+`bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole`
+says `skip_holes` cannot express. **Two tickets filed from opposite sides — one
+about an honest exit 0 losing a hole, one about an honest exit 2 gaining a false
+finding — turn out to want the same new state.** Neither seat could see that
+until the false sentence was measured.

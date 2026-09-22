@@ -81,6 +81,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 569, ranked
 
 - `[p 95] [E]` task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize (unblocks 2)
+- `[p 95] [A]` bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2 (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -90,7 +91,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
-- `[p 80] [A]` bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - `[p 80] [N]` bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
