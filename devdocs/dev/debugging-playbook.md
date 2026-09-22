@@ -38516,3 +38516,86 @@ place to look.
 **And record WHICH test decided, not only the verdict.** A decision written up
 with the wrong test attached is precedent, and precedent is what gets copied
 without re-derivation.
+
+## A DOCUMENT'S SCOPE IS READ FROM ITS SHAPE, NOT FROM ITS REASONING — A LIST BECOMES THE DEFINITION, AND A REFUSAL BECOMES WIDER THAN ITS REASON
+
+**Measured 2026-09-22, `frankb-8e`, `73b1ade90`, both halves found by grepping
+for siblings rather than trusting a written set.** Two mechanisms, one disease:
+in each, a prose construct silently acquired a scope its author never claimed,
+and **both decay in the direction of doing nothing**, so nothing contradicts
+them.
+
+### A BULLET LISTING PRODUCERS READS AS THE DEFINITION OF THE SET
+
+`compiler/dce.inc`'s header said *"IREmitCodeCall and the program entry's jump
+record a CodeRef"*. **There were FIVE producers.** The three it did not name
+recorded nothing, **and one had been live for months** — `EmitCodeAbsToRdx`
+materialises a code address as `call +0 / pop rdx / add rdx, imm32`, an
+emit-time delta the pass never re-aimed and whose target it never protected
+(rc 139 where FPC gives 208/216).
+
+**THE HAZARD IS THE ENUMERATION, NOT THE OMISSION.** A reader with a new emitter,
+checking whether it needs a `CodeRef`, finds two names, does not find their own,
+and **concludes correctly from a list that was never complete.** The list does
+not error. It answers. **This is CLAUDE.md's "print the set your instrument
+enumerates and check the subject is IN it" arriving in a DOC HEADER instead of an
+instrument** — and the doc is the worse host, because an instrument gets re-run
+and a header gets read.
+
+**8e's repair is the shape to copy and it is not "add the three missing names":**
+it rewrote the bullet to state the **PROPERTY** — *does this emit a displacement
+or an absolute address naming another point in `.text`* — **and to say explicitly
+that this is not a list.** A property survives the next emitter; a completed list
+is stale on the day someone adds one. It also left the failure inline, in
+capitals, with its date.
+
+### AND A DOCUMENTED REFUSAL IS SCOPED TO ITS REASON, BUT IS READ AS SCOPED TO THE THING REFUSED
+
+The spill routine's comment **declines `EmitXtensaCall8ToCode`, correctly** —
+that helper might widen, and the `beq ..., 12` above it counts fixed 3-byte
+instructions. **That objection is about the FORM. It is not about RECORDING.** The
+two were coupled only because the helper happened to do both jobs, so **a refusal
+of one silently refused the other**, and it looked deliberate because it *was*
+deliberate — about half of it.
+
+`CODEREF_ANCHOR_CALL8` records a short `call8` that stays short, so **the
+comment's own argument stands untouched** and the reference is now enumerable.
+**A documented deliberate exception that turned out to be an exception to only
+half of what it was refusing.** This is the exculpation rule
+(*"not X" is half a finding — name who owns "then what?"*) in the one place
+nobody applies it: **a refusal you agree with**. When you decline a helper, ask
+**which of its jobs your reason actually covers**, and say so in the comment.
+
+**AND THE CONTROL 8e USED HERE IS THE DISCRIMINATOR ITS EARLIER ONE LACKED**,
+which is worth recording as the positive case. Byte-identical on all six routes
+is **not** a null result here, because `DceRun` calls `PatchCodeRefSlot` for
+**every** `CodeRef` unconditionally rather than only for slots that moved — so
+under `--dce` both new slots were re-encoded from their recorded anchor and
+reproduced the raw emission exactly. **A wrong anchor form writes different
+bytes, and `anchor = -1` is a named refusal.** Same observation, opposite
+meaning, and the difference is entirely whether the code under test was proven
+to RUN. Compare the xtensa `--platform=posix` comparison earlier the same day,
+where byte-identical meant the arm was never built.
+
+**Promotion: playbook, not CLAUDE.md, and the author was told which test it
+met.** The merit is not in question. The second test is a second independent
+subsystem, and this is one seat, one lane, one day — the same answer given to
+that seat's three other findings today, which is the only thing that makes the
+test mean anything. **What would promote it:** a list-as-definition or a
+half-scoped refusal found in a lane this seat is not working.
+
+### The negative half, recorded because it is what the question was actually for
+
+**There was no gap, and the taxonomy was already written down.** Twelve fixup
+arrays: **six** carry a code offset across `DceRun` and **all six** are compacted
+(`CallFix`, `CodeRef`, `ProcAddrFix`, `IramCallFix`, `DynCallCodePos`,
+`GlobFix`). The other six are correctly not — `MethodFixups`, `DataPtrFix`,
+`DataRelFix` and `MethSigFix` are positions in `Data[]`, which the pass does not
+move; `LabelFixup`/`LabelAddrFix` are per-body and zeroed per body in all five
+backends. `MethodFixups` carries a code VALUE into `Data` and **gets the other
+treatment rather than none**: every `MethodFixups[i].ProcIdx` is a DCE root
+(`dce.inc:1034`), applied after `DceRun` from a remapped `BodyAddr`.
+
+**Each array gets exactly one of the two treatments and the right one.** The
+census cost one grep and returned a clean negative — **and the two live defects
+above fell out of running it anyway.**
