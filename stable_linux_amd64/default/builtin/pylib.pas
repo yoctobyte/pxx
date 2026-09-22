@@ -9071,11 +9071,23 @@ begin
     pair.append(ks.at(idx[i]));
     pair.append(vs.at(idx[i]));
     res.append(pair);
+    { DROP THE CONSTRUCTOR'S rc=1 -- the question the comment below left open,
+      answered 2026-09-22. res.append(pair) reaches PyVarSlotSet, which does
+      `if PyVarSlotIsObj(src^.VType) then PXXObjRetain(...)`, so the result list
+      takes its OWN reference and the constructor's is never dropped by
+      anything. Whether the object->Variant conversion on the way in retains as
+      well does not change the arithmetic: either way exactly one surplus
+      reference survives, held by nobody.
+      Measured before the fix: most_common(4) 800 bytes/call and most_common()
+      on a 16-entry Counter 3200, against 0/0 under CPython -- 200 bytes PER
+      EMITTED PAIR and linear in the pair count, which is what says one leaked
+      TPyList per pair rather than a per-call cost. Same shape and the same
+      200 bytes/entry as TPyDict.itemlist twenty lines below, which drops its
+      pair explicitly for this reason. }
+    PXXObjRelease(Pointer(pair));
   end;
-  { measured 3855 bytes/call on a 16-entry dict. This releases the two
-    SNAPSHOTS only: the pairs reach res through res.append(pair) -- an object,
-    not a boxed variant like the four eager sites -- so whether that retains is
-    not established here and is not patched on an assumption. }
+  { The two SNAPSHOTS. Measured 3855 bytes/call on a 16-entry dict when these
+    were missing. }
   PXXObjRelease(Pointer(ks));
   PXXObjRelease(Pointer(vs));
   Result := res;
@@ -15278,7 +15290,7 @@ begin
 end;
 
 function pystar_as_list(const v: Variant): TPyList;
-var o: TObject;
+var o: TObject; it: TPyIter;
 begin
   { a list (or a tuple, which is the same object) is handed straight back —
     the packing only READS it, so a copy would be pure cost — but it is handed
@@ -15301,7 +15313,11 @@ begin
       Exit;
     end;
   end;
-  pystar_as_list := pyiter_drain(pyiter_v(v));
+  { the cursor is built here and drained here, so it is ours to release; the
+    list is the result and stays owned. }
+  it := pyiter_v(v);
+  pystar_as_list := pyiter_drain(it);
+  PXXObjRelease(Pointer(it));
 end;
 
 function pystar_iterable(l: TPyList): TPyList;
@@ -16017,31 +16033,67 @@ begin
 end;
 
 { The RANGE consumers. Each drains a fresh cursor, so consuming a range does
-  not consume the range — it stays re-iterable, which is the property that
-  separates it from a cursor. }
+  not consume the range -- it stays re-iterable, which is the property that
+  separates it from a cursor.
+
+  EACH OF THESE BUILT TWO OBJECTS AND RELEASED NEITHER, and the four aggregates
+  leaked BOTH. pyiter_drain does not take ownership of its cursor (it cannot --
+  list(it: TPyIter) hands it a cursor the CALLER owns, and releasing there would
+  over-release), and the list it returns is only READ by sum/tuple/any/all.
+  Measured 2026-09-22 over range(32), bytes per call, CPython 0 for all of them:
+
+      list(range)   384          the cursor alone; the drained list is returned
+      sum/tuple/any/all(range)   968 = 384 cursor + 584 drained list
+
+  The 584 is a 32-slot TPyList (32 x 16 plus header) and the 384 is flat across
+  range(8) through range(128), which is how the two were told apart: a per-call
+  object and a per-call list, not a per-element cost. }
 function sum(r: TPyRange): Variant; overload;
+var it: TPyIter; tmp: TPyList;
 begin
-  Result := sum(pyiter_drain(pyiter_of_range(r)));
+  it := pyiter_of_range(r);
+  tmp := pyiter_drain(it);
+  Result := sum(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
+  PXXObjRelease(Pointer(it));
 end;
 
 function tuple(r: TPyRange): TPyList; overload;
+var it: TPyIter; tmp: TPyList;
 begin
-  Result := tuple(pyiter_drain(pyiter_of_range(r)));
+  it := pyiter_of_range(r);
+  tmp := pyiter_drain(it);
+  Result := tuple(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
+  PXXObjRelease(Pointer(it));
 end;
 
 function any(r: TPyRange): Boolean; overload;
+var it: TPyIter; tmp: TPyList;
 begin
-  Result := any(pyiter_drain(pyiter_of_range(r)));
+  it := pyiter_of_range(r);
+  tmp := pyiter_drain(it);
+  Result := any(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
+  PXXObjRelease(Pointer(it));
 end;
 
 function all(r: TPyRange): Boolean; overload;
+var it: TPyIter; tmp: TPyList;
 begin
-  Result := all(pyiter_drain(pyiter_of_range(r)));
+  it := pyiter_of_range(r);
+  tmp := pyiter_drain(it);
+  Result := all(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
+  PXXObjRelease(Pointer(it));
 end;
 
 function list(r: TPyRange): TPyList; overload;
+var it: TPyIter;
 begin
-  Result := pyiter_drain(pyiter_of_range(r));
+  it := pyiter_of_range(r);
+  Result := pyiter_drain(it);   { the LIST is the result and stays owned }
+  PXXObjRelease(Pointer(it));
 end;
 
 function len(r: TPyRange): Integer; overload;
@@ -17313,19 +17365,35 @@ end;
   sign-and-magnitude form here: a negative value formats its minus sign and
   then the magnitude, exactly as CPython does for {-255:x} = -ff. }
 function PyFmtBase(v: Int64; base: Integer; upper: Boolean): AnsiString;
-var tmp: AnsiString; neg: Boolean; d: Integer;
+var tmp: AnsiString; neg: Boolean; d: Integer; u, b: QWord;
 begin
+  { THE DIGIT LOOP RUNS ON A QWORD, NOT ON THE NEGATED Int64. Low(Int64) is the
+    one value whose MAGNITUDE Int64 cannot hold, so the old `if neg then v := -v`
+    overflowed and left v NEGATIVE: `while v > 0` was false on arrival, tmp
+    stayed empty, and the function returned a bare '-' -- a sign with no digits,
+    for `"%d" % -9223372036854775808` and for every base. Every other value was
+    correct, Low(Int64)+1 included.
+
+    This is the same fix aarch64's WriteLn needed and for the same reason
+    (done/bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes): once
+    the sign has been taken off, what is left is a MAGNITUDE, and a magnitude
+    wants unsigned arithmetic. There it was sdiv -> udiv; here it is Int64 ->
+    QWord. Negating in the unsigned domain (0 - QWord(v)) is exact two's
+    complement for every input including Low(Int64), and never relies on signed
+    overflow behaviour.
+    bug-a-low-int64-renders-as-a-bare-minus-under-percent-d-and-abs-of-it-stays-negative }
   neg := v < 0;
-  if neg then v := -v;
+  if neg then u := QWord(0) - QWord(v) else u := QWord(v);
+  b := QWord(base);
   tmp := '';
-  if v = 0 then tmp := '0';
-  while v > 0 do
+  if u = 0 then tmp := '0';
+  while u > 0 do
   begin
-    d := v mod base;
+    d := Integer(u mod b);
     if d < 10 then tmp := Chr(Ord('0') + d) + tmp
     else if upper then tmp := Chr(Ord('A') + d - 10) + tmp
     else tmp := Chr(Ord('a') + d - 10) + tmp;
-    v := v div base;
+    u := u div b;
   end;
   if neg then Result := '-' + tmp else Result := tmp;
 end;
@@ -18944,6 +19012,7 @@ begin
 end;
 
 function pyseq_of_obj(o: TObject): TPyList;
+var it: TPyIter;
 begin
   Result := nil;
   if o = nil then Exit;
@@ -18967,7 +19036,11 @@ begin
   { a USER class implementing the iterator protocol, drained the same way a
     cursor is. This is the arm the three copies of this chain were missing. }
   if PyUserObjIterable(o) then
-    Result := pyiter_drain(pyiter_of_userobj(o));
+  begin
+    it := pyiter_of_userobj(o);
+    Result := pyiter_drain(it);
+    PXXObjRelease(Pointer(it));
+  end;
 end;
 
 function pylist_v(const v: Variant): TPyList;
@@ -19458,9 +19531,29 @@ begin
   if src <> nil then
     for i := 0 to src.count - 1 do keep.append(src.at(i));
   for i := hi to l.count - 1 do keep.append(l.at(i));
-  { copy back into l so the original handle stays valid }
+  { copy back into l so the original handle stays valid.
+    FLen := 0 does NOT release the slots being dropped, and it does not have to:
+    every slot at index < keep.count is overwritten below by append ->
+    PyVarSlotSet, which clears the destination before storing. The slots BEYOND
+    keep.count are the ones nothing revisits -- so a SHRINKING slice assignment
+    over managed elements would strand their references. This loop runs BEFORE
+    FLen := 0, so l.FLen is still the OLD length and the band is exactly what
+    is about to be orphaned. Same spelling the finalizer uses. }
+  for i := keep.count to l.FLen - 1 do
+    PyVarSlotClear(PPyVarRec(NativeInt(l.FItems) + i * 16));
   l.FLen := 0;
   for i := 0 to keep.count - 1 do l.append(keep.at(i));
+  { RELEASE THE TEMPORARY. `keep` is a local Pascal TPyList that only ever gets
+    READ (copied back into l element by element, each element retained by
+    PyVarSlotSet on the way in), so nothing owns it when this returns and a
+    Pascal local does not participate in the frontend's retain/release.
+    Measured 2026-09-22, l[lo:hi] = src on a 32-element list: 584 bytes/call
+    leaked, and 1096 when the assignment grew the list past 32. That the number
+    tracks keep's CAPACITY rather than its length -- 32 slots x 16 bytes plus
+    header, then 64 -- is what identifies it as one leaked list object per call
+    rather than a per-element cost. CPython 0.
+    bug-n-a-pylib-temporary-tpylist-is-never-freed }
+  PXXObjRelease(Pointer(keep));
 end;
 
 { `l[lo:hi:step] = src` — an EXTENDED slice assign, the write half of
