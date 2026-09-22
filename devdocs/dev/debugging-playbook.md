@@ -39433,3 +39433,66 @@ than measured. 5b declined to fold it into the count and declined to let it
 disappear: *"a relayed claim that happens to be true is the shape that never gets
 caught, because the only thing that would catch it is the check nobody runs on a
 statement that turned out right."*
+
+## A NUMBER YOU FENCED OFF AS A COINCIDENCE IS STILL DOING WORK — AND TWO QUANTITIES UNDER ONE WORD IS A SUMMARY NO METADATA SIGNAL CAN REACH
+
+**Measured 2026-09-22 by `frankb-8e`, on a triage `frankz-e5` had written the
+same hour. Two findings, and the first is a refinement of this file's own hedging
+rule rather than a new one.**
+
+### THE FENCE DOES NOT STOP THE NUMBER
+
+Triaging a riscv32 red, the coordinator noticed that the failing fixture measured
+**931,632 B** and the logbook row for the DCE commit in range read **931,552 B** on
+a different program. It fenced that off explicitly — *"those are two different
+programs and the 80-byte proximity is a coincidence I am explicitly not building
+on"* — **and then cited it in the next clause as corroboration of the magnitude of
+the DCE change.**
+
+8e measured it out: `nilpy-c3` **at this tree** is **931,708 B**. The logbook
+number has drifted 156 B since it was taken, so the two figures were never the
+same quantity and the near-match was accident between two unrelated images at two
+different trees. **It corroborated nothing, including magnitude.**
+
+**THIS IS "HEDGE THE PREMISE, NOT JUST THE INFERENCE" ONE TURN FURTHER ON.** That
+rule catches a careful caveat on a conclusion making an unmeasured number more
+credible. This is the author hedging the number *itself*, correctly and in
+capitals, **and then spending it anyway on a weaker claim** — "not identification,
+only magnitude". A fence demotes what a number proves; it does not make the number
+true, and **the demoted claim is the one nobody re-checks, because the fence reads
+as the checking having happened.** 8e's remedy is the right one and costs a line:
+**retire it, do not label it.** *"A coincidence flagged as one still invites the
+next reader to lean on it."*
+
+### AND THE SUMMARY THAT WAS WRONG BECAUSE ONE WORD COVERED TWO QUANTITIES
+
+The same ticket's summary **and** body claimed the fix put riscv32 **below**
+windowed xtensa's 847,167 B. It never did: 931,552 > 847,167. What the fix
+achieved was **body parity** — riscv32 and windowed xtensa both live 496 bodies,
+zero gap — while riscv32 remains **84,413 B larger, because it encodes the same
+bodies bigger.** *Body* parity and *byte* parity are two claims and the word
+"parity" carried both.
+
+**NO METADATA SIGNAL COULD HAVE REACHED IT, WHICH IS THE PART WORTH KEEPING.**
+This file and CLAUDE.md already hold three summary-decay shapes: a summary gone
+stale, a summary written from a report of the code, a summary written from a
+superseded measurement. Each has a procedural discharge — re-read, re-grep,
+re-derive from the tree you are committing to. **This one was wrong at the instant
+it was written, by an author who had all the numbers**, and the ticket's own
+signals were pointing elsewhere entirely: the folder said `done`, the `status:`
+field said `open`, and a seat was already querying that mismatch. **Neither signal
+can see a conflated quantity.** It was found only because somebody read the
+title against the evidence — which is not a check anybody schedules.
+
+**The discharge is a question, not a process: when a summary claims a
+RELATIONSHIP ("below", "faster than", "matches", "parity with"), name the UNIT on
+both sides before you write it.** Bodies against bodies, bytes against bytes. Two
+different units under one relational word is not a wording problem; it is a false
+claim in the field that carries the prio into the ranker.
+
+**Promotion test, said out loud per CLAUDE.md:** banked here on merit. **Not
+promoted to CLAUDE.md** — the summary-must-be-true rule there already runs to five
+paragraphs and this is a fourth shape of it, not a second independent subsystem,
+so it would cost a paragraph at startup for every session to add a case to a rule
+those sessions already have. If a conflated-unit claim turns up in a lane with no
+code in common with this one, that is the trigger to argue it up.
