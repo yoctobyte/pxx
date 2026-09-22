@@ -39279,6 +39279,51 @@ number is small, ask what OTHER number on the same corpus it should be compared
 against, and compute the ratio. If a comparable measurement exists, the ratio
 usually IS the explanation and no mechanism is required.
 
+#### EXTENDED 2026-09-22 BY ITS OWN AUTHOR, THIRD INSTANCE THE SAME DAY: THE UNMEASURED CLAIM WAS SCAFFOLDING, AND IT DID NOT NEED TO EXIST
+
+**Self-reported by `franks-5b` after a third retraction, and it sharpens the form
+above rather than adding a neighbour.** The rule as written says: before
+explaining why your number is small, compute the ratio. **The extension says when
+to suspect you are about to explain anything at all.**
+
+The third instance was not a number at all. 5b warned `lekkerzeilen-7a` that a
+load-before stamp was contaminated — **correct, measured, and standing on its own
+evidence** — and attached a mechanism to explain why it mattered: *"interleaving
+protects against noise, not against a monotonic drift across the whole run."*
+That sentence contradicts a dated entry in this file with two-ratio evidence
+behind it (1.543x / 1.665x, min-of-7 interleaved), and it is wrong: under a
+monotonic trend each arm's minimum comes from the same quiet region, so
+interleaving cancels exactly that. What it cannot cancel is DIFFERENTIAL
+SENSITIVITY, which 5b had not raised.
+
+**THE SHAPE, IN ITS AUTHOR'S WORDS: a mechanism asserted in passing while the real
+content was elsewhere.** The contaminated stamp was the finding and it needed no
+theory — a wrong number in a baseline record is wrong on its own. The interleaving
+line was **scaffolding written to explain why the finding mattered**, and *"both
+times the load-bearing claim was measured and the decoration was not, and the
+decoration is what travelled."*
+
+**AND THE DECORATION TRAVELS FURTHER THAN THE FINDING, WHICH IS WHY THIS IS WORSE
+THAN A LOOSE SENTENCE.** A measured claim arrives with its evidence and gets
+checked against it. A mechanism arrives as *explanation* — the part a reader uses
+to decide what to DO — so it is acted on without ever being the thing under
+review. Here the strongest form of the advice would have talked the recipient out
+of the remedy: told to interleave, they would have read *"interleaving will not
+help you"*.
+
+**Discharge, and it is one question at writing time: when you reach for a
+mechanism to explain a number, ask whether the number needs it.** If the finding
+stands on its own evidence, the explanation is optional — and an optional claim
+you have not measured should not be in the message.
+
+**Promotion test, said out loud:** kept here as an EXTENSION rather than promoted,
+per CLAUDE.md's own preference for strengthening an existing rule over adding a
+neighbour — an extension costs a sentence where a new rule costs a paragraph.
+Three instances, three subsystems, **one seat**, which is the reason it is not
+argued up: the bar is a second independent subsystem *and* the pattern surviving
+outside the seat that produced it. **It fires for promotion when a different seat
+retracts a piece of scaffolding attached to a finding that was already sound.**
+
 **What stands is only what was measured:** two further whole-stream-scan
 instances (`PyClsAttrWriteScan`, `PyDynAttrEverAssigned`), missed by the earlier
 census because it filtered on loops starting at 0 and these start at 1; 165 calls
