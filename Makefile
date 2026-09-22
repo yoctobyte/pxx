@@ -13889,6 +13889,22 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_fpc_ferr26 "$$($(TESTTMP)/test_fpc_ferr26 div)" "Runtime error 208 (division by zero)"
 	./$(COMPILER) test/test_fpc_float_errors.pas $(TESTTMP)/test_fpc_ferr_off26
 	tools/expect_same.sh test_fpc_ferr_off26 "$$($(TESTTMP)/test_fpc_ferr_off26 div)" "no trap, r= Inf"
+	# THE SAME THING UNDER --dce, and it is the row that matters rather than a
+	# duplicate: the signal hook's address reaches the kernel through
+	# EmitCodeAbsToRdx, whose delta was an emit-time constant with no CodeRef
+	# until 2026-09-22 -- so DCE compacted 42,804 bytes out of the gap and left
+	# the delta pointing at nothing. This exact invocation gave rc=139 (raw
+	# SIGSEGV) where 208 is owed, and it is what refused the --dce-at-default-O2
+	# promotion twice. The rows above CANNOT catch it: they run at the default,
+	# where the pass is off. Failure direction is a wild branch, so a bare
+	# "it still exits nonzero" assertion would pass -- the exact CODE is the test.
+	# bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
+	./$(COMPILER) --dce --fpc-float-errors test/test_fpc_float_errors.pas $(TESTTMP)/test_fpc_ferr_dce26
+	$(TESTTMP)/test_fpc_ferr_dce26; tools/expect_same.sh test_fpc_ferr_dce26-rc "$$?" "0"
+	$(TESTTMP)/test_fpc_ferr_dce26 div; tools/expect_same.sh test_fpc_ferr_dce26-rc.2 "$$?" "208"
+	$(TESTTMP)/test_fpc_ferr_dce26 ovf; tools/expect_same.sh test_fpc_ferr_dce26-rc.3 "$$?" "205"
+	$(TESTTMP)/test_fpc_ferr_dce26 inv; tools/expect_same.sh test_fpc_ferr_dce26-rc.4 "$$?" "207"
+	tools/expect_same.sh test_fpc_ferr_dce26 "$$($(TESTTMP)/test_fpc_ferr_dce26 div)" "Runtime error 208 (division by zero)"
 	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
 	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
 	./$(COMPILER) test/test_rust_else_if.rs $(TESTTMP)/test_rust_else_if26
@@ -26657,6 +26673,22 @@ test-core: $(COMPILER)
 	  out=$$($(TESTTMP)/test_fpc_mem_errors_off26 $$m 2>&1); rc=$$?; \
 	  test "$$rc" = "139" || { echo "FAIL default (no flag) $$m: exit $$rc, want 139"; exit 1; }; \
 	done
+	@# THE SAME FIVE MODES UNDER --dce. The SIGSEGV/SIGBUS hook addresses reach
+	@# the kernel through EmitCodeAbsToRdx, whose delta was an emit-time constant
+	@# with no CodeRef until 2026-09-22, so the pass compacted the gap and left
+	@# the delta aimed at nothing: every mode gave 139 instead of 216. The rows
+	@# above run at the default, where the pass is off, and cannot see it.
+	@# Note 139 is ALSO the correct answer for the no-flag build one loop up --
+	@# same number, opposite meaning -- so this row asserts 216 and never "not 139".
+	@# bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
+	./$(COMPILER) --dce --no-nil-check --fpc-mem-errors test/test_fpc_mem_errors.pas $(TESTTMP)/test_fpc_mem_errors_dce26
+	@for m in nilread nilwrite nilproc nilmethod wildstore; do \
+	  out=$$($(TESTTMP)/test_fpc_mem_errors_dce26 $$m 2>&1); rc=$$?; \
+	  test "$$rc" = "216" || { echo "FAIL --dce --fpc-mem-errors $$m: exit $$rc, want 216"; exit 1; }; \
+	  case "$$out" in *"Runtime error 216 (access violation"*) ;; \
+	    *) echo "FAIL --dce --fpc-mem-errors $$m: [$$out]"; exit 1;; esac; \
+	done
+	@echo "  --dce --fpc-mem-errors: 5 modes still report 216"
 	./$(COMPILER) --threadsafe test/test_multithreading.pas $(TESTTMP)/test_multithreading26
 	$(TESTTMP)/test_multithreading26 | grep -q "multithreading test completed successfully"
 	# The I/O lock's owner tid comes from TLS, and a FOREIGN thread (glibc

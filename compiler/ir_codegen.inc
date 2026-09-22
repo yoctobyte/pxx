@@ -52,6 +52,26 @@ begin
     Exit;
   end;
 {$endif}
+  { THE TAIL IS x86, AND IT IS NOW SAID OUT LOUD RATHER THAN BEING THE
+    FALL-THROUGH. Before 2026-09-22 riscv32 and xtensa reached this line and
+    got `E8 rel32` -- x86 bytes, on a target that has no such instruction,
+    silently. Nothing reaches it from those two today (every caller is a
+    `*Addr` stub and the stub emitters that have one are x86/arm arms), so this
+    is a REFUSAL rather than a fix: the shape is safe because of where the
+    callers happen to sit, which is not a property anybody is maintaining.
+
+    NOT A BORN-RED GUARD: verified by building a riscv32 and an xtensa image
+    with exceptions, threads and signals on before landing it, which is the
+    population that owns the ~50 `*Addr` callers. Both targets already HAVE the
+    right helper -- EmitRiscv32CallToCode and EmitXtensaCallToCode /
+    EmitXtensaCall8ToCode -- so whoever trips this message has a one-line
+    answer beside it rather than a puzzle. }
+  if (TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA) then
+    Error('compiler error: IREmitCodeCall reached its x86 tail on '
+          + 'riscv32/xtensa, which would emit an E8 rel32 on a target that '
+          + 'has no such instruction. Use EmitRiscv32CallToCode(reg_ra, addr) '
+          + 'or EmitXtensaCallToCode(addr) -- EmitXtensaCall8ToCode for a stub '
+          + 'that ends in RETW.');
   EmitB($E8);
   { The displacement is finished here and correct until something moves. It is
     recorded because DCE moves things -- see RecordCodeRef. }
@@ -999,12 +1019,41 @@ begin
 end;
 
 procedure EmitCodeAbsToRdx(targetOff: Integer);
-{ rdx := absolute runtime address of code offset targetOff, via the
-  call/pop trick (position-independent; the delta from the pop instruction's
-  own offset to the target is an emit-time constant). Clobbers rdx only. }
+{ rdx := absolute runtime address of code offset targetOff, via the call/pop
+  trick (position-independent). Clobbers rdx only.
+
+  THE DELTA IS A CODE->CODE REFERENCE AND IS RECORDED AS ONE. It was not until
+  2026-09-22, and that is what refused the `--dce`-at-default-`-O2` promotion
+  twice: the imm32 is fixed at emit time, so with no CodeRef the pass neither
+  protects the target's bytes nor re-aims the delta when it compacts the gap.
+  Only a site with a droppable body BETWEEN the pop and the target breaks,
+  which is why three of the five survived and read as "installed-only handlers
+  are fine". Measured at HEAD: `--fpc-float-errors` div0 gave rc 139 where 208
+  is owed and `--fpc-mem-errors` nilread gave 139 for 216, both correct under
+  `--no-dce`, and the four deltas in the two binaries were BYTE-IDENTICAL while
+  the code around them had moved.
+
+  The slot's shape is `target - anchor` with the anchor the address the `call`
+  pushed -- the SAME shape as xtensa's long form, which is why PatchCodeRefSlot
+  re-aims it with the arm that was already there rather than a new one.
+
+  THE ADD IS HAND-EMITTED RATHER THAN ASKED OF EmitAsmX64, and the reason is
+  the patch and not the bytes: a slot whose WIDTH is chosen by an assembler
+  that may pick an imm8 form is not a slot, and a 4-byte Patch32 over a 3-byte
+  instruction corrupts whatever follows it, silently. Measured, the text
+  assembler does emit `48 81 C2 imm32` here for every delta in the tree, so
+  this is byte-identical to what it produced -- but that is a fact about today's
+  assembler, and this site now depends on it being a fact. `48 81 C2 id` is
+  REX.W + 81 /0 with mod=11 rm=rdx. The i386 twin EmitCodeAbsToEax386 has
+  hand-emitted for the same reason all along. }
+var anchor: Integer;
 begin
   EmitB($E8); EmitI32(0);                             { call +0 (pushes next-insn addr) }
-  EmitAsmX64(['pop rdx', 'add rdx, %', targetOff - CodeLen]);
+  anchor := CodeLen;                                  { what the call pushed = pop's own addr }
+  EmitB($5A);                                         { pop rdx }
+  EmitB($48); EmitB($81); EmitB($C2);                 { add rdx, imm32 }
+  RecordCodeRefFull(CodeLen, targetOff, 0, anchor);   { linkReg 0: this slot does not link }
+  EmitI32(targetOff - anchor);
 end;
 
 procedure EmitSigGroupBaseX64(useR8: Boolean);
@@ -3687,6 +3736,21 @@ begin
   end
   else if TargetArch = TARGET_RISCV32 then
     PatchRv32LinkSlot(pos, target, linkReg)
+  else if anchor >= 0 then
+    { x86-64/i386 ANCHORED slot: not a rel32 in a call/jmp but the imm32 of an
+      `add reg, delta` following the call/pop trick, so the displacement is
+      measured from the address the CALL PUSHED and not from the end of the
+      slot. EmitCodeAbsToRdx and EmitCodeAbsToEax386 are the only emitters, and
+      the shape is xtensa's long form one architecture over -- the anchor moves
+      when the pass compacts, exactly like the site, and DceRun already remaps
+      both with DceNewOff. Recorded 2026-09-22; before that these deltas were
+      not recorded at all and went stale in place.
+
+      The test is `anchor >= 0` and not a target check because that is what the
+      column MEANS: every other x86 slot records -1 and falls through to the
+      rel32 below. The three negative sentinels are xtensa forms and cannot
+      reach here -- that arm returns above. }
+    Patch32(pos, target - anchor)
   else
     Patch32(pos, target - (pos + 4));
 end;

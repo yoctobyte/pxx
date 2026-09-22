@@ -705,9 +705,36 @@ begin
     xtensa_l32r(reg_xtensa_a3, $FFFF);
     xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, 0);      { top handler frame }
     xtensa_movi(reg_xtensa_a4, 0);
-    xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 9);       { no handler -> park }
+    { THE ONLY ARM OF THE SIX THAT HARDCODED ITS DISPLACEMENT, and the only one
+      that spelled its stub call raw. Both are 2026-09-22 and they are one fix,
+      because separating them would turn a latent bug into a live one.
+
+      The raw `xtensa_call8(ExcLongJmpAddr - CodeLen)` recorded no CodeRef, so
+      DCE neither protected __pxx_longjmp's bytes nor re-aimed the displacement
+      -- the same defect EmitXtensaCall8ToCode was written for, two call sites
+      up in this same procedure (ExcSpillAddr, twice). A SPELLING, not a shape:
+      grepping for the construct finds the helper, not this.
+
+      And `9` was correct only while the call is the SHORT form: 3 (beq) + 3
+      (addi) + 3 (call8). EmitXtensaCall8ToCode widens to a literal slot when
+      the target is out of reach, which would leave that 9 landing inside the
+      widened call. So the branch is patched from CodeLen like its five
+      siblings (x86-64 :153, :303, arm32 :368, aarch64, riscv32 :507) rather
+      than counting bytes that a helper is now allowed to choose.
+
+      EmitXtensaCall8ToCode and NOT EmitXtensaCallToCode -- the prescription in
+      bug-a-two-code-to-code-references-are-unrecorded named the latter, and it
+      is the CALL0 helper: __pxx_longjmp is entered with its argument in a10 by
+      the addi below, which is the windowed CALL8 convention, and the call0
+      helper would pass it in a2 and rotate no window. The distinction is the
+      one EmitXtensaCall8ToCode's own header is named for. }
+    unhandledJmp := CodeLen;
+    xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 4);       { patched below: no handler -> park }
     xtensa_addi(reg_xtensa_a10, reg_xtensa_a2, EXC_JMP_OFFSET_XTW);
-    xtensa_call8(ExcLongJmpAddr - CodeLen);            { never returns here }
+    EmitXtensaCall8ToCode(ExcLongJmpAddr);             { never returns here }
+    Patch24(unhandledJmp,
+            EncodeXtensaBranch(1, reg_xtensa_a2, reg_xtensa_a4,
+                               CodeLen - unhandledJmp));
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   { NO SECOND riscv32 ARM. The park-and-exit stub this arm replaced was spelled

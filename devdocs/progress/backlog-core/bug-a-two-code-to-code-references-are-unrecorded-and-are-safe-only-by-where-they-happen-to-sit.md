@@ -92,3 +92,68 @@ no caller that reaches it on those targets, so the refusal cannot be exercised
 without adding one. A temporary call behind a debug flag, asserted to refuse,
 is the honest way; a guard nothing can trip is the thing this repo files
 tickets about.
+
+## 2026-09-22 (frankb-8e) — BOTH FIXED, AND THE PRESCRIPTION FOR (1) NAMED THE WRONG HELPER
+
+Taken as the group neighbour of
+[[bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]], whose own
+blocker turned out to be a THIRD member of this family — `EmitCodeAbsToRdx`,
+unrecorded, and unlike these two it was LIVE. Three instances of one mechanism,
+one commit each.
+
+**(2) — the unguarded tail now refuses.** `IREmitCodeCall`'s fall-through emits
+`E8 rel32`, so riscv32 and xtensa reaching it wrote an x86 instruction onto a
+target that has no such opcode, silently. It now `Error`s on those two and
+names the two helpers that exist (`EmitRiscv32CallToCode`,
+`EmitXtensaCallToCode` / `EmitXtensaCall8ToCode`), so whoever adds the caller
+this ticket predicts gets a one-line answer instead of a wild branch.
+
+**NOT BORN RED, and that was checked rather than assumed** — the population is
+"everything on those two targets that owns a `*Addr` caller":
+`test_cross_exception`, `test_exception_finally` on riscv32; those plus
+`test_esp_bare`, `test_esp_exception` on xtensa; bare and `--platform=posix`;
+`--no-dce` and `--dce`. All build rc=0.
+
+**(1) — routed through `EmitXtensaCall8ToCode`, NOT `EmitXtensaCallToCode`, and
+the difference is a live bug rather than a detail.** The prescription in the
+summary above names the CALL0 helper. `ExcLongJmpAddr`'s windowed stub is
+entered with `{ a2 = &jmpbuf }` and ends in **RETW**, and the site reaches it by
+loading **a10** — the CALL8 argument register, which a window rotation of 8
+makes the callee's a2. Under CALL0 nothing rotates: the callee would read the
+caller's own a2 (the raw handler frame, not `frame + EXC_JMP_OFFSET_XTW`) and
+then `retw` with no window under it. `EmitXtensaCall8ToCode`'s own header says
+this in advance — *"NOT a windowed arm inside EmitXtensaCallToCode, which would
+have been the smaller diff and would have been wrong"* — so the correction was
+available at the point of prescribing. **A prescription in a summary reads as a
+requirement and is a claim to check**; this one was written from the riscv32
+sibling, where there is only one helper and so no choice to get wrong.
+
+**AND (1) HAD A SECOND HALF THE TICKET DID NOT SEE, WHICH IS WHY FIXING IT AS
+WRITTEN WOULD HAVE CONVERTED A LATENT BUG INTO A LIVE ONE.** The branch above
+the call was `xtensa_beq(a2, a4, 9)` — a HARDCODED displacement counting
+3 (beq) + 3 (addi) + 3 (call8). `EmitXtensaCall8ToCode` widens to a literal
+slot when the target is out of reach, and that 9 would then land inside the
+widened call. The five sibling arms of this same procedure (x86-64 :153 and
+:303, arm32 :368, aarch64, riscv32 :507) all patch from `CodeLen`; the xtensa
+arm was the only one of six counting bytes. It patches from `CodeLen` now.
+
+**The control, and the first one I ran was wrong in a way worth recording.**
+Output must be byte-identical wherever the call stays short, because the
+patched displacement recomputes to the same 9. I measured that first on
+`--target=xtensa --platform=posix` — IDENTICAL on four builds — and it proved
+nothing: that route takes the **Call0** arm at :535, not the windowed one at
+:579. A one-line `Error` probe inserted into the arm showed it is reached only
+with `--xtensa-abi=windowed` (and that `--esp-profile=bare` REFUSES that ABI
+outright, so no bare build can reach it either). Re-run on the right route —
+`--target=xtensa --platform=posix --xtensa-abi=windowed --xtensa-soft-mulhigh`,
+two sources × `--no-dce`/`--dce` — all four IDENTICAL. **Isolation guards the
+run, not the route**, and the wrong-route control was current, correctly
+parameterised, and honest.
+
+What the byte-identical result does NOT show is that the CodeRef is now
+recorded — identical bytes are also what "nothing happened" looks like. That is
+carried by the probe (the arm runs) plus the helper being unconditional in
+recording; and the identity is itself the evidence that DCE was not moving this
+distance, which is exactly the "safe by where it sits" this ticket filed.
+
+Tree: `fd6965890102`.

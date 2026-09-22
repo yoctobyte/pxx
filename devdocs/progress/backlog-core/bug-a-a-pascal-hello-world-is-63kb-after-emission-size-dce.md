@@ -312,3 +312,72 @@ consumer can grep for whether it is affected.
 **A third attempt must say which half it enacts, in the commit**, so the
 decision reads as MADE rather than BYPASSED. It is not this ticket's question
 and is not answered here.
+
+## 2026-09-22 (frankb-8e) — THE TWO CORRECTNESS REGRESSIONS ARE FIXED. The remaining work is the tier re-run.
+
+Both reproduce at HEAD and both are gone. `EmitCodeAbsToRdx` now records its
+delta as a CodeRef, which is what the refusal above named and what I had
+root-caused without fixing.
+
+| test | flag | want | before `--dce` | after `--dce` | `--no-dce` (control) |
+| --- | --- | --- | --- | --- | --- |
+| `test-core#519` | `--fpc-float-errors` div0 | 208 | 139 | **208** | 208 |
+| `test-core#2353` | `--fpc-mem-errors` nilread | 216 | 139 | **216** | 216 |
+
+All arms, `--dce`: ferr `''`/`div`/`ovf`/`inv` = 0/208/205/207 with the exact
+text `Runtime error 208 (division by zero)`; merr nilread/nilwrite = 216/216.
+
+**THE MECHANISM, CONFIRMED BY THE SLOT'S OWN BYTES RATHER THAN BY THE EXIT
+CODE.** The site is `call +0 / pop rdx / add rdx, imm32`, and the imm32 is
+`target - (the address the call pushed)` — an emit-time constant with no
+record, so DCE neither protected the target's bytes nor re-aimed the delta.
+Measured before the fix, the four deltas in the `--dce` and `--no-dce` binaries
+of the same program were **byte-identical** while the code between them had
+moved:
+
+    --no-dce   5bffffff a7feffff bafcfeff c9feffff
+    --dce      5bffffff a7feffff bafcfeff c9feffff      (before)
+    --dce      5bffffff a7feffff c9feffff eea1ffff      (after)
+
+**One delta moved and three did not, and that is the positive control**:
+`bafcfeff` (-66886) became `eea1ffff` (-24082), i.e. 42,804 bytes were dropped
+inside that one gap. The other three gaps had nothing droppable in them, which
+is the three-survive / two-break split this ticket measured and could not
+explain. If the fix had done nothing every row would still read 139.
+
+**THE SHAPE ALREADY HAD A HOME, so the patcher needed no new arm design.**
+`target - anchor` measured from a pushed PC is xtensa's long-form slot one
+architecture over, and `CodeRefAnchor` already travels per-slot and is remapped
+by `DceNewOff` in `DceRun`'s compaction. `PatchCodeRefSlot`'s x86 tail gained
+an `anchor >= 0` branch above its rel32 default. No existing x86 slot records
+an anchor (every one passes -1), and the three negative sentinels are xtensa
+forms that return before the tail, so the branch is unreachable for everything
+that existed before this commit — `--no-dce` output is byte-identical to the
+pre-fix binary on both repro programs, which is the negative control.
+
+**The i386 twin `EmitCodeAbsToEax386` is fixed in the same commit and was NOT
+caught by anything** — there is no i386 `--fpc-*-errors` row for it to break.
+It is the same emitter with the same missing record; i386 exception builds run
+correctly `--no-dce` and `--dce` (identical output, `1..12` both ways).
+
+**The size prize, with its population, because this ticket has been quoting
+numbers without one.** Tree `fd6965890102`, x86-64, `program h; begin
+WriteLn('hello'); end.`, `code=` from the compiler's own ok line:
+**67,541 B plain `-O` → 18,790 B with `--dce`, −72.2%.** That does NOT refute
+the −66% / 74,096 → 24,944 row above — it is a different tree and the floor has
+moved again — so both rows stand, each with what it measured. What would retire
+mine: any change to the RTL startup floor.
+
+**WHAT IS LEFT IS THE TIER RE-RUN AND NOTHING ELSE MECHANICAL.** Of the six
+FAILs from attempt 2: two are these, fixed; two are the `test-emit-obj` control
+arms wanting `--no-dce` (the repair this ticket already specifies, and NOT
+weakening the assertion); one is `test-core#1008`, a wasm32 guard firing
+correctly on an unclosed live set; one is not ours. **The wasm32 carve-out this
+ticket records above is still required** and is not evidence against the pass.
+
+**The trap this ticket warns about was respected: the self-host fixedpoint is
+NOT quoted as evidence here.** It converged at every one of the seven builds I
+made this session, including the ones carrying both live regressions. The
+evidence is the two repros, their `--no-dce` controls, and the slot bytes.
+
+Tree `fd6965890102`; `gate.sh quick` green.

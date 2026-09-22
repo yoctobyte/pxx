@@ -331,14 +331,21 @@ end;
 
 procedure EmitCodeAbsToEax386(targetOff: Integer);
 { eax := absolute runtime address of code offset targetOff, via the call/pop
-  trick (position-independent; the delta from the pop's own offset to the
-  target is an emit-time constant). The i386 twin of EmitCodeAbsToRdx. }
+  trick (position-independent). The i386 twin of EmitCodeAbsToRdx, and it
+  records its delta as a CodeRef for the same reason and in the same shape --
+  `target - anchor`, anchor = the address the call pushed. See that routine's
+  header for the two correctness regressions the missing record produced on
+  x86-64; this twin was never measured (no i386 `--fpc-*-errors` row exists to
+  break) and is fixed here because it is the same emitter, not because it was
+  caught. }
 var popPos: Integer;
 begin
   EmitB($E8); EmitI32(0);                  { call +0  (pushes the next insn's addr) }
   popPos := CodeLen;
   EmitB($58);                              { pop eax  (eax = popPos's runtime addr) }
-  EmitB($05); EmitI32(targetOff - popPos); { add eax, delta }
+  EmitB($05);                              { add eax, imm32 }
+  RecordCodeRefFull(CodeLen, targetOff, 0, popPos);
+  EmitI32(targetOff - popPos);
 end;
 
 procedure EmitSignalRuntime386;
