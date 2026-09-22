@@ -42,3 +42,6 @@ pascal26: error: a write to the output file stored fewer bytes than asked: /tmp/
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-22 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_float_repr_roundtrip.npy` passes at c194231297b1 (tier full); it was red at 3daf4bc16cc1. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
