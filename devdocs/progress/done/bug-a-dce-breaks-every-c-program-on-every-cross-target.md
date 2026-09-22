@@ -243,3 +243,88 @@ twice — not 0, not 1, not a length, not a pointer width.
 
 ## Log
 - 2026-09-22 — resolved, commit a79934842.
+
+
+## 2026-09-22 — TWO OF MY THREE CORRECTIONS WERE WRONG (frankb-8e, after frankh-c0 re-measured)
+
+The fix is independently confirmed: frankh-c0 reverted `symtab.inc` to
+`a79934842~1`, rebuilt, measured all three cross targets SIGSEGV, restored,
+rebuilt, measured all three printing 42. Binary back to `f7dedaea694f`. That is
+a mutation test from a second seat and a second checkout.
+
+The corrections I attached to the resolution did not hold up as well.
+
+### riscv32: the rc claim was right, my EXPLANATION of it was wrong
+
+I wrote that the report's `exit 0` was *"the compiler's rc read for the
+program's"*. **It was not.** Measured from both seats, in the `&&` chain and in
+the bare form: a crashing riscv32 program reports 139 either way, and the
+compiler's rc cannot mask it.
+
+What actually differs is the **output**:
+
+```
+aarch64  rc=139  out='qemu: uncaught target signal 11 (Segmentation fault) - core dumped'
+arm32    rc=139  out='qemu: uncaught target signal 11 (Segmentation fault) - core dumped'
+riscv32  rc=139  out=''
+```
+
+**qemu-riscv32 prints no crash banner.** So the quiet arm was REAL — in the
+output, which is what the reporter was reading — and the actual error was
+inferring an exit status from a silence, on the one target whose runner is
+silent. That is a sharper mistake than the one I invented for it, and it was
+**in my own first repro run, on screen, two lines under two targets that did
+print a banner.** I read past it and then wrote a confident mechanism for
+something I had already measured.
+
+So "there is no quiet arm" is **withdrawn**. There is one, it is riscv32, and
+it is quiet in the channel a human watches.
+
+This also gives the test a reason neither of us had stated: on riscv32 the qemu
+banner is not available as a tell, so **stdout is not merely the better
+assertion, it is the only one that separates a working leg from a broken one.**
+The Makefile comment asserting my wrong explanation is corrected in the same
+commit as this note — it was live in the tree for one commit.
+
+### xtensa: the row stands, and the REPRO NEEDS A FLAG
+
+frankh-c0 could not corroborate the xtensa row and was right not to claim it
+was wrong. The invocation is the difference:
+
+```
+./compiler/pascal26 --dce --target=xtensa tiny.c out
+  -> rc=1, REFUSED: "a STANDALONE EXECUTABLE on the ESP profile has no argc on
+     the stack ... Build a RELOCATABLE OBJECT instead"   (measures nothing)
+
+./compiler/pascal26 --dce --target=xtensa --platform=posix --xtensa-soft-mulhigh tiny.c out
+  -> builds; pre-fix SIGSEGV under qemu-xtensa, post-fix prints 42
+```
+
+**`--platform=posix` is load-bearing.** The ESP profile refuses a standalone C
+entry stub by design; the posix profile is what produces an ELF `qemu-xtensa`
+can run. My measurement used it and the Makefile leg uses it; the resolution
+above did not SAY so, and the next person reaches for the short form and gets a
+refusal that reads like an unrelated bug. Now stated in the recipe too.
+
+The literal-anchor point is why this matters: xtensa is the arm most likely to
+regress alone, **and it is the one whose repro needs a different command line.**
+
+### What survives unchanged
+
+- **xtensa was a fourth broken target.** Still true, still measured by
+  stash-and-rebuild here.
+- **The second call site** (`__pxx_run_initializers`, gated on `environ`) was
+  broken and is fixed. Unchallenged.
+- **The root/site split.** `--dce-why` printing `main <- [entry stub call]` on
+  the *broken* binary is the refutation of the "look at the C entry root"
+  lead, and it came from asking the instrument instead of trusting the ticket.
+
+### The pattern in my own two errors, since it is the same one twice
+
+Both were **a confident mechanism written for a number I had already
+measured and not re-read**: the riscv32 silence was in my first repro output,
+and the xtensa flag was in my own command line. Neither needed new work to
+catch — only re-reading the terminal before explaining it. A correction is an
+assertion like any other and wants the same evidence as the thing it corrects;
+mine had none beyond plausibility, and plausibility is exactly what a wrong
+mechanism has.

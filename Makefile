@@ -36536,11 +36536,23 @@ test-quick: $(COMPILER)
 	# which is the actual claim; a hardcoded string would have to encode that
 	# difference and would go stale the moment another target joins it.
 	#
-	# STDOUT, NOT THE EXIT STATUS. The riscv32 arm of this same defect was
-	# reported as "no output, exit 0" -- that turned out to be the COMPILER's rc
-	# read for the program's, and riscv32 segfaults like the others. But the
-	# warning stands on its own: a dropped body can produce an empty stdout and a
-	# clean exit, and a row asserting rc alone calls that a pass.
+	# STDOUT, NOT THE EXIT STATUS, AND riscv32 IS WHY -- not as a general
+	# principle but as a measured property of this exact leg.
+	#
+	# All three cross targets exit 139 pre-fix. What differs is the OUTPUT:
+	# qemu-arm and qemu-aarch64 print "uncaught target signal 11 (Segmentation
+	# fault)", and qemu-riscv32 prints NOTHING AT ALL. So on riscv32 the crash
+	# banner is not available as a tell, and a reader watching output sees total
+	# silence with no indication that anything went wrong.
+	#
+	# THIS COMMENT SAID THE OPPOSITE FOR ONE COMMIT. It claimed the original
+	# "no output, exit 0" report was the compiler's rc read for the program's.
+	# It was not -- measured from two seats, the program's rc is 139 in every
+	# form, and the compiler's cannot mask it. The report inferred an rc from a
+	# SILENCE, on the one target whose runner is silent, which is a better
+	# mistake than the one this comment invented for it and the reason the
+	# assertion below is what it is: on riscv32, stdout is not merely the better
+	# discriminator between a working and a broken leg, it is the ONLY one.
 	@for t in aarch64 arm32 riscv32; do \
 	  case $$t in arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
 	  if command -v $$q >/dev/null 2>&1; then \
@@ -36576,6 +36588,15 @@ test-quick: $(COMPILER)
 	# the LITERAL-anchor form rather than a branch immediate, so it exercises the
 	# one encoding the three above do not. --xtensa-soft-mulhigh for the reason
 	# the Pascal block above states: qemu-xtensa's CPU model has no MULUH.
+	#
+	# --platform=posix IS LOAD-BEARING AND IS NOT A STYLE CHOICE. Without it the
+	# xtensa C entry stub is REFUSED outright ("a STANDALONE EXECUTABLE on the
+	# ESP profile has no argc on the stack ... Build a RELOCATABLE OBJECT
+	# instead"), so `--dce --target=xtensa` alone exits 1 and measures nothing.
+	# A second seat reached for exactly that invocation while trying to
+	# corroborate this row and got a refusal that looks like an unrelated bug.
+	# The posix profile is what produces a standalone ELF qemu-xtensa can run,
+	# which is what makes this leg a RUNNING check rather than a build-only one.
 	@if command -v qemu-xtensa >/dev/null 2>&1; then \
 	  ./$(COMPILER) --no-dce --target=xtensa --platform=posix --xtensa-soft-mulhigh \
 	      test/test_dce_c_cross_entry.c $(TESTTMP)/dcecx_off >/dev/null \
