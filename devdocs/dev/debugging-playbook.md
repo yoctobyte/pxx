@@ -37923,19 +37923,47 @@ an assertion that **no check is needed**. Nobody checks, nothing fails, **the
 route is never contradicted** — the hazard-block decay shape wearing a safety
 claim instead of a warning.
 
-**AND TWO SEATS REACHED FOR THE SAME WRONG INSTRUMENT INDEPENDENTLY, BECAUSE IT
-IS NAMED AFTER THE THING.** The ticket's original evidence simulated
-under-detection with `-uPXX_MANAGED_STRING`; 8e reached for the same flag without
-reading that, and got what looked like a clean refutation — a concat loop builds,
-rc=0, no diagnostic, silently prints `len=255` against an owed 260, boundary
-exactly at 255, three magnitudes checked. **A wrong binary, which the claim says
-cannot happen.** It is not a refutation: that flag decides what `string` MEANS,
-so undefining it makes `string` a frozen 255-byte type and the truncation is the
-TYPE changing, correctly. **Under-detection changes exactly one consumer**
-(`needsAnsiRuntime`) and never touches the type. **This is why "two readings
-agreed" is not corroboration: a name-shaped instrument attracts independent seats
-to the same wrong route**, and their convergence is caused by the naming, not by
-the fact.
+**AND A WRONG VERIFICATION ROUTE RECORDED BESIDE A CLAIM IS INHERITED BY WHOEVER
+COMES TO AUDIT THAT CLAIM.** The ticket's original evidence simulated
+under-detection with `-uPXX_MANAGED_STRING`; 8e used the same flag and got what
+looked like a clean refutation — a concat loop builds, rc=0, no diagnostic,
+silently prints `len=255` against an owed 260, boundary exactly at 255, three
+magnitudes checked. **A wrong binary, which the claim says cannot happen.** It is
+not a refutation: that flag decides what `string` MEANS, so undefining it makes
+`string` a frozen 255-byte type and the truncation is the TYPE changing,
+correctly. **Under-detection changes exactly one consumer**
+(`needsAnsiRuntime`) and never touches the type.
+
+**THE AUDITOR IS THE LIKELIEST PERSON TO INHERIT THE BAD ROUTE, BECAUSE AUDITING
+MEANS READING THE CLAIM AND THE ROUTE IS IN THE ADJACENT SENTENCE**, offered as
+how-to-check-this. **The audit picks up the instrument the audit is about.** It
+needs no second seat and no coincidence, and it predicts the failure **recurs
+every time anyone re-checks that ticket** until the route is corrected in place —
+which is why writing the correct lever INTO the ticket is the discharge, not
+merely good manners.
+
+**THIS PARAGRAPH FIRST CLAIMED THE TWO SEATS REACHED FOR THE FLAG
+*INDEPENDENTLY*, AND THAT WAS FALSE.** 8e retracted it against its own interest
+and this coordinator verified it in 8e's own transcript rather than accepting the
+retraction — because *a self-implicating report is not self-verifying* is an
+entry in this same file, banked the same evening, from this same seat. Filtering
+that `.jsonl` by record type for the literal flag spelling: **first USER-side
+occurrence at line 295, first ASSISTANT-side occurrence at line 30640.** The
+instrument was in context ~30,300 records before it was used. **8e's own
+retraction understated its case** — it cited the nearest prior occurrence it
+found (3986) rather than the earliest. Two numbers, two populations: 295 is the
+first time the *string* appears at all (the slug matches too, and a search for a
+name matches prose about the thing), while **29522 is the one that matters** —
+the ticket text carrying the safety claim AND its verification method in the same
+paragraph.
+
+**The error's shape is the one CLAUDE.md names: "independently" is a QUANTIFIER
+clause, it was the load-bearing word, and it is exactly the clause the rule says
+to go measure before landing.** 8e measured the mechanism carefully and asserted
+the provenance from recollection. **And it only checked because the claim had
+been promoted** — putting it in the file is what made the independence
+load-bearing enough to be worth a grep. **Banking a claim raises its stakes and
+that is a feature**, not a risk to be managed by banking less.
 
 **THE DISCRIMINATOR IS ONE GREP, ASKED BEFORE THE PROBE RATHER THAN AFTER: does
 the mechanism I am simulating have ONE consumer or fifteen?** Measured here to
