@@ -29795,13 +29795,27 @@ test-riscv32: $(COMPILER)
 	# encodable range`. The compiler itself was the first program to cross it
 	# (ParseFactorCore is 2.20 MB of rv32 code), which is a terrible regression
 	# test -- it needs the whole self-build to fail. This is the same wall in
-	# 0.9 s. GENERATED rather than checked in: the source has to be ~260 KB to
+	# 1.2 s. GENERATED rather than checked in: the source has to be ~390 KB to
 	# produce >1 MB of code, and that is not a file worth carrying.
 	# bug-a-riscv32-cannot-reach-a-far-call-so-the-compiler-will-not-link
+	#
+	# ENLARGED 4000 -> 6000 ON 2026-09-22, AND THE REASON IS WHY --no-dce IS
+	# NOT THE FIX HERE. Promoting --dce to the default -O2 (39ca6ac2a) dropped
+	# this image 1,162,916 -> 931,632 B and the guard below fired, correctly.
+	# MEASURED at fda77c48b8ee, riscv32: the whole 231,284 B drop is dead RTL,
+	# not this body -- a hello-world shrinks 267,108 -> 33,988 over the same
+	# flag, 233,120 B, the same figure within 1,836. `Big` itself is ~896 KB
+	# under BOTH settings and has NEVER exceeded 1,048,576 on its own.
+	# So before DCE this test cleared the wall by 114,340 B while carrying
+	# 267,108 B of never-called RTL: the margin was supplied entirely by code
+	# that was not under test. `--no-dce` on this job would restore the wall
+	# out of exactly the padding the shipping configuration no longer emits --
+	# it would pass while measuring a layout no real riscv32 program has. At
+	# 6000 the image is 1,387,624 B, 32% clear of the wall on LIVE code.
 	@awk 'BEGIN{print "program bigbody;"; print "var n: Integer;"; \
 	  print "procedure Big(x: Integer);"; print "var i: Integer;"; \
 	  print "begin"; print "  i := 0;"; \
-	  for(k=0;k<4000;k++) printf "  if x = %d then begin i := i + %d; Writeln(\"a%d\", i); end;\n", k, k, k; \
+	  for(k=0;k<6000;k++) printf "  if x = %d then begin i := i + %d; Writeln(\"a%d\", i); end;\n", k, k, k; \
 	  print "  n := i;"; print "end;"; print "begin"; print "  Big(7);"; \
 	  print "  Writeln(\"n=\", n);"; print "end."}' | tr '"' "'" > $(TESTTMP)/rv32_bigbody.pas
 	./$(COMPILER) --target=riscv32 $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody | tee $(TESTTMP)/rv32_bigbody.log
@@ -29812,7 +29826,7 @@ test-riscv32: $(COMPILER)
 	# would exit 0 -- and then leave no `code=` line for this to read.
 	@sz=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody.log); \
 	  test -n "$$sz" && test "$$sz" -gt 1048576 || \
-	  { echo "rv32_bigbody: code=$$sz does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for"; exit 1; }
+	  { echo "rv32_bigbody: code=$$sz does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for. RAISE THE awk LOOP BOUND ABOVE (~224 B of image per iteration at the default -O2); do NOT add --no-dce, see the note above the generator"; exit 1; }
 	./$(COMPILER) $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody_x64
 	tools/expect_same.sh riscv32/test_rv32_bigbody "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_bigbody)" "$$($(TESTTMP)/test_rv32_bigbody_x64)"
 	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL

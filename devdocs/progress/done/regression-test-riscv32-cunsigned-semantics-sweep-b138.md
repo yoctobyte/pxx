@@ -1,7 +1,8 @@
 ---
 prio: 70
 track: A
-summary: "NOT A MISCOMPILE -- the failing step is a self-check that the fixture is still bigger than RISC-V JAL's 1 MiB displacement, and DCE (now on by default at -O2, riscv32 not carved out) shrank the program to 931,632 B, under the 1,048,576 threshold. The guard fired as designed and says so in its own message. Remedy is to enlarge the fixture or build this one job with DCE off -- NOT to revert or carve out --dce, which would trade a measured image-size win for a fixture's convenience. Whoever takes it should re-rank: this is fixture maintenance, not a defect at p70. Triaged by frankz-e5 2026-09-22; which of the two DCE commits in range did it is unbisected and does not change the remedy."
+summary: "RESOLVED 2026-09-22 -- NOT A MISCOMPILE. The failing step is the fixture's own self-check that it still exceeds RISC-V JAL's 1,048,576 B displacement; promoting --dce to the default -O2 (39ca6ac2a, mine) shrank the image 1,162,916 -> 931,632 and the guard fired as designed. Fixture enlarged 4000 -> 6000 iterations: 1,387,624 B, 32% clear of the wall. MEASURED, and it retires the -no-dce arm of the recorded remedy: the entire 231,284 B drop is dead RTL (a hello-world drops 233,120 over the same flag), so Big alone is ~896 KB under BOTH settings and has NEVER crossed the wall on its own -- the old margin was supplied entirely by 267 KB of never-called RTL, i.e. by code that was not under test. --no-dce would have restored the wall out of exactly the padding the shipping config no longer emits."
+status: done
 ---
 
 > **Track A from the job NAME `test-riscv32`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/cunsigned_semantics_sweep_b138.c`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -134,3 +135,61 @@ apart, different programs, and e5 flagged it as corroboration of magnitude only.
 It is not even that: nilpy-c3 at this tree measures **931,708 B**, so the two
 numbers were never the same quantity and the near-match was arithmetic accident
 between two unrelated images.
+
+## RESOLVED 2026-09-22 by frankh-c0 — fixture enlarged 4000 -> 6000, and the `--no-dce` option was never as neutral as it looked
+
+I own `39ca6ac2a`. Re-derived rather than taken on report, at `fda77c48b8ee`,
+riscv32, generator lifted from the Makefile itself (260,818 B of source, which
+matches e5's figure exactly):
+
+| flags | code= | vs the 1,048,576 wall |
+| --- | --- | --- |
+| `--no-dce` | 1,162,916 | above — the test's premise |
+| `--dce` | 931,632 | below |
+| default | 931,632 | below; `--dce` is the default now |
+
+**The guard fired as designed and e5's and 8e's triage is confirmed in full.**
+
+### THE PART THAT CHANGES WHICH REMEDY IS RIGHT
+
+The recorded remedy offered two arms — enlarge the fixture, or build this one
+job with DCE off and say its subject is the JAL displacement. **The second arm
+is not available, and the reason is measured.** The whole 231,284 B drop is
+**dead RTL, not this body**: a hello-world over the same flag goes
+267,108 -> 33,988, a drop of 233,120, the same figure within 1,836 B. So
+
+    Big alone, --no-dce  ~ 895,808 B
+    Big alone, default   ~ 897,644 B
+
+**`Big` has NEVER exceeded 1,048,576 on its own.** Before DCE this test cleared
+the wall by 114,340 B while carrying 267,108 B of never-called RTL — **the
+entire margin was supplied by code that was not under test.** `--no-dce` here
+would not preserve the subject; it would restore the wall out of exactly the
+padding the shipping configuration no longer emits, and the job would pass while
+measuring a layout no real riscv32 program has. That is the compiler-appeasement
+shape that e5 and `frankuser` both named, arrived at from the other end: not
+"it hides a win", but "the thing it restores was never the subject".
+
+The enlargement is therefore the only arm, and it is strictly better than what
+was there before — at 6000 the image is **1,387,624 B, 32% clear of the wall on
+LIVE code**, where the old fixture cleared it on padding.
+
+### VERIFIED
+
+- Expanded recipe replayed from `make -n` output, unmodified but for the tmp
+  path: builds, passes the guard, `expect_same` rc=0, rv32 and x86-64 both
+  `a77 / n=7`.
+- **Positive control on the guard itself**, because an edited guard that can no
+  longer fail is worse than the red it replaced: fed the pre-fix 931,632 it
+  still rejects.
+- Cost 0.9 s -> 1.2 s; source 260 KB -> 390 KB.
+
+The guard's failure message now names the lever (`~224 B of image per iteration`)
+and says **not** to reach for `--no-dce`, so the next person to meet this does
+not have to re-derive the paragraph above.
+
+### NOT RE-RANKED, CLOSED
+
+e5 correctly flagged that p70 would dispatch a seat to hunt a miscompile. Rather
+than re-rank fixture maintenance, it is done.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
