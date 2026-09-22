@@ -45046,7 +45046,7 @@ begin
   for i := UClsMBase[ci] to UClsMBase[ci] + UClsMCount[ci] - 1 do
     if UMthVirSlot[i] >= 0 then
     begin
-      AddMethodFix(UClsVMTOffset[ci] + UMthVirSlot[i] * 8, UMthProc_[i]);
+      AddMethodFix(UClsVMTOffset[ci] + UMthVirSlot[i] * 8, UMthProc_[i], MFK_VMT);
     end;
   { INHERITED slots this class does not override still need an entry: the VMT is
     per-class and starts zeroed, so an un-filled slot is a call through NIL. Walk
@@ -45067,7 +45067,7 @@ begin
       end;
       if inhMmi >= 0 then
       begin
-        AddMethodFix(UClsVMTOffset[ci] + slot * 8, UMthProc_[inhMmi]);
+        AddMethodFix(UClsVMTOffset[ci] + slot * 8, UMthProc_[inhMmi], MFK_VMT);
       end;
     end;
   end;

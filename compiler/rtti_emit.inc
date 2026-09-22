@@ -327,7 +327,7 @@ begin
     if mIdx >= 0 then
     begin
       procIdx := UMthProc_[mIdx];
-      if procIdx >= 0 then AddMethodFix(piPos + 32, procIdx);
+      if procIdx >= 0 then AddMethodFix(piPos + 32, procIdx, MFK_RTTIPROP);
     end;
   end;
 
@@ -347,7 +347,7 @@ begin
     if mIdx >= 0 then
     begin
       procIdx := UMthProc_[mIdx];
-      if procIdx >= 0 then AddMethodFix(piPos + 48, procIdx);
+      if procIdx >= 0 then AddMethodFix(piPos + 48, procIdx, MFK_RTTIPROP);
     end;
   end;
 
@@ -390,7 +390,7 @@ begin
   strIdx := InternStr(nm);
   AddDataPtrFix(miPos + 0, Strs[strIdx].Offset);
   procIdx := UMthProc_[mi];
-  if procIdx >= 0 then AddMethodFix(miPos + 8, procIdx);
+  if procIdx >= 0 then AddMethodFix(miPos + 8, procIdx, MFK_RTTIMETH);
   arity := 0;
   if procIdx >= 0 then
   begin
@@ -601,7 +601,7 @@ begin
               ' paramCount=', Procs[pi].ParamCount, ' firstUser=', firstUser,
               ' nUser=', nUser, ' reqN=', reqN, ' off=', DataLen);
     DataPutZeros(PYSIG_SIZE);
-    AddMethodFix(ProcSigOff[pi] + PYSIG_OFF_CODE, pi);
+    AddMethodFix(ProcSigOff[pi] + PYSIG_OFF_CODE, pi, MFK_PYSIG);
     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_REQN, reqN);
     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_TOTN, nUser);
     if ProcPyStarIdx[pi] >= 0 then

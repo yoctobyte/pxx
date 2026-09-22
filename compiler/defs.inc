@@ -224,7 +224,7 @@ const
   { DceWhy codes -- the root KINDS DceRun installs, in the order it installs
     them, plus the two that are not roots at all. Reported by --dce-why. }
   DCE_WHY_UNSET    = 0;   { dead, or never marked }
-  DCE_WHY_VMT      = 1;   { an address in a VMT / RTTI / interface table }
+  DCE_WHY_VMT      = 1;   { a VMT DISPATCH slot -- see MFK_* and the codes 14..17 }
   DCE_WHY_PROCADDR = 2;   { @proc taken in code no body owns -- a true root }
   DCE_WHY_IRAM     = 3;   { an IRAM call fixup (ESP) }
   DCE_WHY_INIT     = 4;   { a unit initialization section }
@@ -241,6 +241,33 @@ const
     beside IRAM, which is where it belongs -- both are "ESP, entered from
     outside the call graph". }
   DCE_WHY_VECTOR   = 13;  { an `interrupt;` body: hardware enters it, nothing calls it }
+  { 14..17 SPLIT WHAT USED TO BE DCE_WHY_VMT, and the split is a MEASUREMENT
+    and not a tidy-up. `vmt/rtti slot` was one bucket over FIVE unrelated
+    mechanisms, because MethodFixups carries no kind and DceRun's root loop
+    walked it undifferentiated. On the nilpy-c3 demo that bucket is 172,637 B
+    over 149 bodies -- 21% of the live image -- and the ticket asking whether
+    an unreferenced-CLASS criterion can reach any of it CANNOT BE ANSWERED
+    FROM ONE NUMBER: a dispatch slot is reachable-if-instantiated, an RTTI
+    property accessor is reachable-by-NAME through the streaming registry, and
+    a NilPy signature word is per-PROC with no owning class even in principle.
+    Those have different answers and were being added together.
+    feature-a-unreferenced-class-rtti-keeps-every-method-alive }
+  DCE_WHY_IMT      = 14;  { an interface method table slot -- dispatch, but in no VMT }
+  DCE_WHY_RTTIPROP = 15;  { a published property's getter/setter in the RTTI blob }
+  DCE_WHY_RTTIMETH = 16;  { a TMethInfo.Code word -- what NilPy's PyClassRefNew reflects `create` out of }
+  DCE_WHY_PYSIG    = 17;  { a NilPy callable-signature Code word -- per-proc, never per-class }
+  { THE HIGHEST CODE, AND IT IS A CONSTANT BECAUSE A LITERAL HERE SILENTLY ATE
+    A WHOLE REASON FOR DAYS. DceReachReport sized its accumulator `array[0..12]`
+    and filtered `DceWhy[i] <= 12` -- written when 12 was the top -- and
+    DCE_WHY_VECTOR = 13 was added afterwards without touching either. An
+    `interrupt;` body has therefore NEVER appeared in the per-reason table: not
+    as a wrong number, as no row at all. Nothing errored, because the filter
+    drops and the `total live` line is computed from liveB elsewhere, so the
+    rows were never required to sum to it -- the one check that would have
+    caught it was the one the format made unnecessary. Found 2026-09-22 when
+    the four codes above vanished the same way and the sum was 190B against a
+    pinned 89,597B. Anything that adds a code updates THIS and nothing else. }
+  DCE_WHY_MAX      = 17;
   { Absolute BSS-address fixups in one emitted image. The SELF-HOST build under
     --threadsafe is the high-water mark — every global reference in the compiler's
     own code costs one — so this grows with the compiler and had been sitting just
@@ -3142,9 +3169,22 @@ type
     SpecName     : AnsiString;
   end;
 
+  { MFK_* -- which MECHANISM wrote this slot. Carried per-fixup because the
+    whole array used to arrive at DCE as one undifferentiated root kind; see
+    the DCE_WHY_IMT..DCE_WHY_PYSIG block. It is REPORTING ONLY: every kind is
+    marked exactly as before, so no kind here changes what survives. }
+const
+  MFK_VMT      = 0;   { UClsVMTOffset[ci] + slot*8 -- a real dispatch slot }
+  MFK_IMT      = 1;   { an interface method table entry }
+  MFK_RTTIPROP = 2;   { published property getter/setter }
+  MFK_RTTIMETH = 3;   { TMethInfo.Code }
+  MFK_PYSIG    = 4;   { NilPy ProcSig Code word }
+
+type
   TMethodFixup = record
     DataPos : Integer;
     ProcIdx : Integer;
+    Kind    : Integer;   { MFK_* }
   end;
 
   TDataPtrFix = record

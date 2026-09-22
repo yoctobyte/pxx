@@ -2812,7 +2812,7 @@ begin
     if UMthVirSlot[mmi] >= 0 then
     begin
       slot := UMthVirSlot[mmi];
-      AddMethodFix(UClsVMTOffset[methOwnerCi] + slot * 8, procIdx);
+      AddMethodFix(UClsVMTOffset[methOwnerCi] + slot * 8, procIdx, MFK_VMT);
 
       { PROPAGATE INTO SUBCLASSES THAT INHERIT THIS SLOT -- AND ONLY THOSE.
         A subclass with no override of its own must get this body in its slot,
@@ -2836,7 +2836,7 @@ begin
         if IsSubclassOf(otherCi, methOwnerCi) and
            (DeclaringClassForSlot(otherCi, slot) = methOwnerCi) then
         begin
-          AddMethodFix(UClsVMTOffset[otherCi] + slot * 8, procIdx);
+          AddMethodFix(UClsVMTOffset[otherCi] + slot * 8, procIdx, MFK_VMT);
         end;
       end;
     end;

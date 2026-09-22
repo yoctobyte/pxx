@@ -3172,7 +3172,13 @@ begin
   case rec of
     REC_TTOKEN: Result := 4;
     REC_TSTRENTRY: Result := 3;
-    REC_TFIXUP, REC_TGLOBFIX, REC_TCALLFIX, REC_TMYCLASS, REC_TMETHODFIXUP: Result := 2;
+    REC_TFIXUP, REC_TGLOBFIX, REC_TCALLFIX, REC_TMYCLASS: Result := 2;
+    { TMethodFixup left this group when it gained Kind (MFK_*). It sat here for
+      the whole life of the table because it happened to have the same field
+      count as four unrelated records -- a shared arm is an accident of arity,
+      not a statement that the records are alike, and the next one to gain a
+      field has to leave too. }
+    REC_TMETHODFIXUP: Result := 3;
     REC_TSYMBOL: Result := 13;
     REC_TPARAM: Result := 5;
     REC_TPROC: Result := 9;
@@ -3257,7 +3263,7 @@ begin
         2: Result := 'ConcreteName'; 3: Result := 'SpecName';
       end;
     REC_TMETHODFIXUP:
-      case idx of 0: Result := 'DataPos'; 1: Result := 'ProcIdx'; end;
+      case idx of 0: Result := 'DataPos'; 1: Result := 'ProcIdx'; 2: Result := 'Kind'; end;
   end;
 end;
 
@@ -3895,9 +3901,23 @@ begin
   CheckBuiltinRecField(REC_TPENDINGGFSPEC, 'ConcreteName', 16, tyString, REC_NONE, False);
   CheckBuiltinRecField(REC_TPENDINGGFSPEC, 'SpecName', 280, tyString, REC_NONE, False);
 
-  CheckBuiltinRecSize(REC_TMETHODFIXUP, 8, 'TMethodFixup');
+  { ADDING A FIELD TO A BUILTIN RECORD IS A TWO-STAGE BOOTSTRAP, and the first
+    stage does not look like one. Field ACCESS on these records resolves
+    through the tables above, not through the declaration in defs.inc -- so a
+    compiler whose table says two fields cannot compile source that writes a
+    third, however correct the source is. Measured 2026-09-22 adding `Kind`
+    here: the build refuses at `MethodFixups[..].Kind := kind` with the running
+    binary's own table behind the refusal, and no amount of editing defs.inc
+    moves it. The order is: (1) declare the field and update every table in
+    this file, WITHOUT writing or reading it anywhere, and build -- that
+    compiler now knows the field; (2) add the writes and reads, and build
+    again. Stage 1 converges in 2 rounds rather than the usual 1, because the
+    layout changed under the seed, and that extra round is the tell that the
+    stage did what it was for. }
+  CheckBuiltinRecSize(REC_TMETHODFIXUP, 12, 'TMethodFixup');
   CheckBuiltinRecField(REC_TMETHODFIXUP, 'DataPos', 0, tyInteger, REC_NONE, False);
   CheckBuiltinRecField(REC_TMETHODFIXUP, 'ProcIdx', 4, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TMETHODFIXUP, 'Kind', 8, tyInteger, REC_NONE, False);
 end;
 
 function RecFieldDynDepth(rec: Integer; const field: AnsiString): Integer;

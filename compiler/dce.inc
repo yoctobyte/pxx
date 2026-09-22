@@ -132,7 +132,19 @@ end;
 function DceWhyName(code: Integer): AnsiString;
 begin
   case code of
+    { STILL 'vmt/rtti slot' UNTIL THE FIELD IS READABLE, AND THAT IS
+      CORRECTNESS, NOT CAUTION. Until a pin carries the Kind field, the case in
+      DceRun cannot read it, so every one of the five mechanisms below still
+      lands in THIS bucket -- an RTTI method entry included. Renaming it to
+      'vmt dispatch slot' now would make the label narrower than what it
+      counts, which is the one thing the split exists to stop. The rename and
+      test/test_dce_why_root_report.expected move together in the stage-2
+      commit; see the two-stage note in symtab.inc. }
     DCE_WHY_VMT:      DceWhyName := 'vmt/rtti slot';
+    DCE_WHY_IMT:      DceWhyName := 'interface method table slot';
+    DCE_WHY_RTTIPROP: DceWhyName := 'rtti published property accessor';
+    DCE_WHY_RTTIMETH: DceWhyName := 'rtti method table (reflected by name)';
+    DCE_WHY_PYSIG:    DceWhyName := 'nilpy signature word (per-proc)';
     DCE_WHY_PROCADDR: DceWhyName := '@proc taken in unowned code';
     DCE_WHY_IRAM:     DceWhyName := 'iram call fixup';
     DCE_WHY_VECTOR:   DceWhyName := 'interrupt; -- entered by hardware';
@@ -396,12 +408,14 @@ procedure DceReportWhy(liveB: Integer);
   The reason recorded is the FIRST that reached a body. A body reachable four
   ways shows one, and which one is a property of the mark order. }
 var i, slot, sz, big, bigIdx, shown: Integer;
-    perWhy: array[0..12] of Integer;
-    perWhyN: array[0..12] of Integer;
+    perWhy: array[0..DCE_WHY_MAX] of Integer;
+    perWhyN: array[0..DCE_WHY_MAX] of Integer;
+    whyLost, whyLostN: Integer;
     seen: array of Boolean;
     chain: AnsiString;
 begin
-  for i := 0 to 12 do begin perWhy[i] := 0; perWhyN[i] := 0; end;
+  for i := 0 to DCE_WHY_MAX do begin perWhy[i] := 0; perWhyN[i] := 0; end;
+  whyLost := 0; whyLostN := 0;
   SetLength(seen, ProcCount);
   for i := 0 to ProcCount - 1 do seen[i] := False;
   slot := 0;
@@ -409,19 +423,32 @@ begin
   begin
     i := DceOrder[slot];
     sz := DceBodyEnd(slot) - Procs[i].BodyAddr;
-    if DceLive[i] and (sz > 0) and (DceWhy[i] >= 0) and (DceWhy[i] <= 12) then
+    if DceLive[i] and (sz > 0) then
     begin
-      perWhy[DceWhy[i]] := perWhy[DceWhy[i]] + sz;
-      perWhyN[DceWhy[i]] := perWhyN[DceWhy[i]] + 1;
+      if (DceWhy[i] >= 0) and (DceWhy[i] <= DCE_WHY_MAX) then
+      begin
+        perWhy[DceWhy[i]] := perWhy[DceWhy[i]] + sz;
+        perWhyN[DceWhy[i]] := perWhyN[DceWhy[i]] + 1;
+      end
+      else
+      begin
+        { A code this table does not know. The old spelling DROPPED it; this
+          one has to say so, because a missing row is indistinguishable from a
+          reason that never fired. }
+        whyLost := whyLost + sz; Inc(whyLostN);
+      end;
     end;
     Inc(slot);
   end;
   writeln(StdErr, 'dce-why: live bytes by FIRST reason (live is not reachable;',
           ' a root is a conservative claim)');
-  for i := 0 to 12 do
+  for i := 0 to DCE_WHY_MAX do
     if perWhyN[i] > 0 then
       writeln(StdErr, 'dce-why:   ', perWhy[i], 'B  ', perWhyN[i], ' bodies  ',
               DceWhyName(i));
+  if whyLostN > 0 then
+    writeln(StdErr, 'dce-why:   ', whyLost, 'B  ', whyLostN,
+            ' bodies  UNNAMED REASON CODE -- raise DCE_WHY_MAX in defs.inc');
   writeln(StdErr, 'dce-why: total live ', liveB, 'B');
   { --dce-why=<substr>: every live body whose name matches, with its chain.
     Substring and case-insensitive, because a method reads as `TDerived.Tag`
@@ -1046,8 +1073,13 @@ begin
   end;
   DceWorkCount := 0;
   DceViaNow := -1;   { every loop below installs a ROOT; only the walk sets a via }
-  { an address in a VMT / RTTI / interface table can be called from anywhere }
-  DceWhyNow := DCE_WHY_VMT;
+  { An address in a VMT / RTTI / interface table can be called from anywhere --
+    one marking rule, and it is unchanged. What is no longer one thing is the
+    REASON REPORTED: the array carries MFK_* per fixup now, because this loop
+    was the place five unrelated mechanisms became one row in --dce-why. See
+    the DCE_WHY_IMT..DCE_WHY_PYSIG block in defs.inc for why that matters to
+    the unreferenced-class question. DceWhyNow is set PER FIXUP inside the
+    loop, not once before it. }
   i := 0;
   while i < MethodFixCount do
   begin
@@ -1057,6 +1089,7 @@ begin
       between the two live totals is what those slots actually cost, which is
       NOT what a subtree sum would say -- a body reachable both from a slot and
       from somewhere else is in the subtree and costs nothing. }
+    DceWhyNow := DCE_WHY_VMT;   {STAGE2}
     if suppressVmt and (DceCostFilter <> '') and
        (Pos(LowerCase(DceCostFilter),
             LowerCase(Procs[MethodFixups[i].ProcIdx].Name)) > 0) then

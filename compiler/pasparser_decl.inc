@@ -9459,7 +9459,7 @@ begin
           slot := ResolveVMTSlotProc(ci, i);
           if slot >= 0 then
           begin
-            AddMethodFix(UClsVMTOffset[ci] + i * 8, slot);
+            AddMethodFix(UClsVMTOffset[ci] + i * 8, slot, MFK_VMT);
           end;
         end;
 
@@ -9555,7 +9555,7 @@ begin
                     + ' parameter(s) and the class method takes '
                     + AIntToStr(Procs[UMthProc_[mmi]].ParamCount - 1));
             imProc := UMthProc_[mmi];
-            AddMethodFix(DataLen, imProc);
+            AddMethodFix(DataLen, imProc, MFK_IMT);
             for i := 0 to 7 do begin DataEnsure(1); Data[DataLen] := 0; Inc(DataLen); end;
           end;
         end;

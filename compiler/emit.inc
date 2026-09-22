@@ -315,7 +315,7 @@ begin
   ResolveDataRefSentinel := DATAREF_NOT_SENTINEL;
 end;
 
-procedure AddMethodFix(dataPos, procIdx: Integer);
+procedure AddMethodFix(dataPos, procIdx, kind: Integer);
 { Record a code-address relocation into Data[]: the 8-byte slot at dataPos is
   patched to the entry address of Procs[procIdx]. Every VMT slot and every RTTI
   method entry goes through here.
@@ -335,6 +335,7 @@ begin
   end;
   MethodFixups[MethodFixCount].DataPos := dataPos;
   MethodFixups[MethodFixCount].ProcIdx := procIdx;
+  {STAGE2}
   Inc(MethodFixCount);
 end;
 

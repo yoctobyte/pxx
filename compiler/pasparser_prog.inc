@@ -854,7 +854,7 @@ begin
     slots — the decl-time fill loop only runs for a class the PARSER declares. }
   if UClsVMTOffset[ci] >= 0 then
   begin
-    AddMethodFix(UClsVMTOffset[ci] + slot * 8, pi);
+    AddMethodFix(UClsVMTOffset[ci] + slot * 8, pi, MFK_VMT);
   end;
 end;
 
@@ -918,7 +918,7 @@ begin
   if ResolveVMTSlotProc(ci, slot) >= 0 then Exit;
   hp := FindProc(helper);
   if hp < 0 then Exit;
-  AddMethodFix(UClsVMTOffset[ci] + slot * 8, hp);
+  AddMethodFix(UClsVMTOffset[ci] + slot * 8, hp, MFK_VMT);
 end;
 
 procedure FillRootVMTSlotDefaults;
