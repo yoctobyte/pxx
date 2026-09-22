@@ -9,6 +9,24 @@ found-by: frankb-8e
 owner: ""
 blocked-by: []
 summary: >
+  THIS IS THE GATE ON A MEASURED -66% ACROSS EVERY PROGRAM, WHICH ITS OWN TITLE
+  HIDES (frankh-c0, 2026-09-22). Promoting `--dce` from `-O3` to the default
+  `-O2` takes nine real `examples/**` programs from 4,424,828 to 1,475,708 bytes
+  (-66%; hello -66%, raytracer -64%, maze -72%) and the self-host fixedpoint
+  still converges, two rounds, on a 4978-proc compiler. It cannot land because
+  the `-O` rule is unconditional on output mode, so the promotion turns the pass
+  on for `--emit-obj` BY THE BACK DOOR even though `--emit-obj` has no
+  defaulting line of its own -- and then a plain no-flags ESP object build goes
+  from linking to crashing the linker. Measured with the LINKER's own exit
+  status: DEFAULT rc=1 `ld terminated with signal 11`, `--no-dce` rc=0, code
+  34,696 B against 262,000 B. So this is not one broken path under one flag; it
+  is the single thing standing between every pxx program and a two-thirds size
+  cut, and `bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce` is wired
+  `blocked-by:` this so the ranker carries it. A SECOND, SMALLER COST is banked
+  in the body and is paperwork rather than a defect: five Makefile rows use the
+  DEFAULT invocation as their "without the pass" control arm, which the
+  promotion silently makes meaningless; they assert a STRICT shrink so they fail
+  loudly rather than certifying nothing. Original report follows.
   `--dce --emit-obj --platform=esp` on a source with an IRAM-attributed routine
   emits an object that makes GNU ld ITSELF crash: `collect2: fatal error: ld
   terminated with signal 11 [Segmentation fault], core dumped`. The object is
@@ -105,3 +123,93 @@ The `iram` row must link on BOTH targets with `--dce`, **and** the four `ro`
 and `ctl` rows must still link, so a fix that disables the IRAM path or the
 pass wholesale is caught. Wire the `iram` variant into `test-emit-obj` with
 `--dce` at that point; it runs without the pass today.
+
+---
+
+## 2026-09-22 (frankh-c0) — THIS IS NOT AN `--emit-obj` FOOTNOTE: IT IS THE GATE ON A MEASURED -66% ACROSS EVERY PROGRAM
+
+**What I was doing.** Working the emitted-size/DCE group from its `next` entry
+point and testing the one live question the 63KB-hello-world ticket leaves open
+— *"whether the DEFAULT -O level should enable the pass."* The way to answer
+that is to turn it on and run the tier, so I did.
+
+**PROMISE, measured at `19768262e`, compiler `c24a11f2beb3`, plexus.** One-line
+change, `OptLevel >= 3` to `>= 2` in `compiler.pas`:
+
+```
+program            --no-dce     default      delta
+hello                 74192       25040       -66%
+calcdemo             386456      112024       -71%
+maze                 379140      104708       -72%
+lispdemo             399188      124756       -68%
+mathdemo             482012      187100       -61%
+satdemo              394388      119956       -69%
+console_2048         404716      126188       -68%
+mandelbrot           414140      139708       -66%
+raytracer           1490596      536228       -64%
+                   --------    --------
+TOTAL (9 programs)  4424828     1475708       -66%
+```
+
+Population: the nine `examples/**` programs that build unattended at HEAD.
+`examples/parallel/collatz.pas` is excluded and is NOT a DCE failure — it needs
+`--threadsafe` and fails identically under `--no-dce` and under the baseline
+binary, which is the control that says so.
+
+**AND THE SELF-HOST FIXEDPOINT CONVERGES WITH THE PASS ON BY DEFAULT** — two
+rounds, `4ae692b547e5`, on the largest Pascal program we have (4978 procs). The
+compiler itself only shrinks 1.9% (7910257 -> 7759281 code), which is the
+expected shape: a hello world is ~99% unreachable RTL, a compiler uses most of
+itself.
+
+### THE WALL, MEASURED RATHER THAN REASONED
+
+`--emit-obj` has no DCE-defaulting line of its own — that was tried and reverted
+— **but it does not need one.** The `-O` rule is unconditional on output mode, so
+promoting the pass to `-O2` turns it on for `--emit-obj` **by the back door**,
+and a plain no-flags ESP object build goes from linking to crashing the linker:
+
+```
+pascal26 -Fulib/rtl --emit-obj --target=riscv32 --platform=esp \
+         test/esp_obj_rodata_iram.pas o.o
+riscv32-esp-elf-gcc -fno-builtin -nostartfiles -Wl,-e,main o.c o.o -o o.elf
+
+  DEFAULT  link rc=1  collect2: fatal error: ld terminated with signal 11
+  NODCE    link rc=0
+```
+
+`rc` is the LINKER's own exit status, not a `tail`'s — the first reading of this
+took the rc of the pipeline's last stage and got `rc=0` for both arms, which is
+the wrapper-versus-job error in miniature and is why the rows above were re-run.
+
+The object sizes say the same thing from the other side: **34696 B of code under
+the new default against 262000 B with `--no-dce` and 262000 B from the baseline
+binary** — so the pass really is running on a path nobody asked it to run on.
+
+### WHY THIS CHANGES THE RANKING AND NOT JUST THE RECORD
+
+This ticket reads as one broken path on one platform under one flag. **It is the
+single thing standing between every pxx program and a two-thirds size cut**, and
+that is invisible from its own summary, which is why the summary now says it.
+`bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce` is now wired
+`blocked-by:` this, so the ranker carries that instead of a reader having to
+notice it.
+
+### WHAT THIS DOES NOT SHOW
+
+The tree was reverted and rebuilt byte-identical to `c24a11f2beb3`, and **no
+full tier was run at `-O2`-with-DCE.** So this names ONE wall, found by the
+cheapest available probe; it does not establish that the wall is the only one.
+The quick gate found a second thing first and it is paperwork rather than a
+defect: `test_dce_riscv32_stub_calls` fails because its control arm is the
+DEFAULT invocation, which under the promotion is no longer "without the pass"
+(`235052 >= 235052`). **Five Makefile rows share that shape** — riscv32, i386,
+xtensa, arm, and the NilPy ESP object row — and every one of them wants its off
+arm respelled `--no-dce` when the promotion eventually lands. Note they fail
+LOUDLY only because they assert a strict shrink; an `<=` would have passed while
+measuring nothing.
+
+**WHAT WOULD RETIRE THIS AS A BLOCKER:** the IRAM object linking cleanly, then
+the five control arms respelled, then a full tier at `-O2` with the pass on,
+green, with `skip_holes == 0`. That is the O-lane's PROOF gate and it is
+satisfiable on plexus now that the corpora are installed.
