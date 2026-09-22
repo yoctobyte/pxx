@@ -39832,3 +39832,56 @@ wrong.
   on the EDITED guard** — feed it the pre-fix value and confirm it still
   rejects. An enlarged fixture "obviously" passes, which is exactly why a guard
   that can no longer fail gets shipped in place of a red.
+
+## THE UNENUMERATED AXIS WAS THE PROBE'S TAIL — THE LINE EVERY VARIANT ENDS WITH, WHICH NOBODY COUNTS AS A VARIABLE
+
+**Measured 2026-09-22 by `franks-5b` against its own ticket, `b327ee134`/
+`9ced257d3`.** This is not a new class — CLAUDE.md already records that a minimal
+case pins axes nobody enumerated, and that **this class is not prevented by
+remembering it.** What this instance adds is WHERE the pinned axis hides, and the
+answer is uncomfortable: **in the boilerplate.**
+
+5b's first table for the `-O2` segfault varied the third local's type across
+`Int64`, `AnsiString` and `Double` and concluded the type does not matter. **True
+as measured.** Every one of those variants ended `print(acc)`. A third trigger
+condition was sitting in that line:
+
+```
+print(acc)        promo-int                              139
+print(i)          the other promo-int                    139
+print(acc + 0)    promo-int expression                   139
+print(v0)         the plain Int64                          0
+print(7)          literal                                  0
+print('done')     string                                   0
+print(str(acc))   SAME promo-int, explicitly converted     0
+no print at all                                            0
+```
+
+**`print(str(acc))` clean against `print(acc)` crashing is the row that relocates
+the bug** — identical value, identical frame, identical local composition, only
+the route to a string differs. So it is the **implicit promo-int -> AnsiString
+conversion on the write path**, not frame layout and not the loop. The first
+version sent every reader hunting slot allocation, its author included.
+
+**WHY THE TAIL IS THE WORST PLACE FOR IT.** A probe's subject is the thing you are
+consciously varying, so it gets enumerated. The **readout** — the `print`, the
+`WriteLn`, the assertion at the bottom — is treated as plumbing: it exists to make
+the variant observable, it is identical across variants *on purpose*, and its
+sameness reads as experimental hygiene rather than as a held-fixed variable.
+**The discipline that makes a good probe is what hides the axis.**
+
+Note also that the obvious way to test the tail is itself a clean row: `print(v0)`
+prints the third local and comes back 0, so a seat probing "does the printed
+variable matter" via the *plain* local gets a negative and stops.
+
+**Discharge: before concluding an axis does not matter, list what every variant in
+your table has IN COMMON, including the line that produces the output.** If the
+readout is identical across all rows, it is a held-fixed variable and not part of
+the apparatus.
+
+**And the recurrence note is the one CLAUDE.md already makes:** 5b wrote the
+dead-local warning into this ticket's own summary and committed the same error one
+section below it, inside the hour. It was caught by an outside prompt — c0's
+discriminator offer making it re-read its own table — not by knowing the rule.
+**Corrected count while there: the trigger is EXACTLY two promo-ints, not at least
+two.** One is clean, three is clean.
