@@ -34054,6 +34054,30 @@ test-emit-obj: $(COMPILER)
 	#    true when a writer is added rather than needing a fifth edit.
 	#    bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64
 	tools/emit_obj_target_set_check.sh ./$(COMPILER) $(TESTTMP)/emit_obj_target_set
+	@# 0b. THE RELOCATIONS RESOLVE TO THE RIGHT VALUE, not merely to the right
+	@#     TYPE. Every row in this rule below is a readelf -r assertion on type
+	@#     and symbol, which cannot see a wrong addend, a value written into the
+	@#     wrong bit-field of an instruction, or an offset four bytes out -- and
+	@#     all three produce an object a linker accepts. A successful link is a
+	@#     default-shaped pass: it is what you get when the machinery did
+	@#     something plausible and something wrong.
+	@#     The harness applies relocations with its OWN psABI arithmetic and
+	@#     never calls back into pxx, so a bug in a routine shared by the
+	@#     executable and object paths cannot make both sides wrong identically.
+	@#     On x86-64 and i386 a real linker exists on this box, so the applier is
+	@#     CALIBRATED against it -- the resolved bytes must equal ld's output
+	@#     exactly and the linked binary must run. That agreement is what
+	@#     licenses the same applier on the targets that have no linker here at
+	@#     all (aarch64, arm32, riscv32, xtensa).
+	@#     Each run asserts its own three positive controls: perturbing the
+	@#     addend, the offset and the type must each redden the comparison. The
+	@#     addend one is format-aware because it has to be -- bumping a RELA
+	@#     addend field does NOTHING on i386, where SHT_REL keeps the addend in
+	@#     the section bytes, and the control reported STILL AGREES rather than
+	@#     passing vacuously.
+	@#     feature-a-a-target-generic-resolve-and-compare-harness-for-emit-obj-objects
+	PXX=./$(COMPILER) tools/reloc_resolve_check.py x86_64 test/reloc_resolve_probe.c
+	PXX=./$(COMPILER) tools/reloc_resolve_check.py i386   test/reloc_resolve_probe.c
 	rm -f $(TESTTMP)/test_emit_obj_x64.o
 	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64.o
 	readelf -h $(TESTTMP)/test_emit_obj_x64.o | grep -q 'REL (Relocatable file)'

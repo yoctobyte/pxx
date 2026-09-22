@@ -187,6 +187,20 @@ itself instructs them to write. Landed with the `Write`/`Edit` tool and the pros
 UNCHANGED -- a different tool is not a different wording, and I did not ask a peer
 to authorise loosening the hook when one offered context on it.
 
+**INSTANCE, 2026-09-22 (frankb-8e), and it is the SIBLING HOOK with the identical
+shape.** `no-variable-rm.sh` refused a `python3` heredoc that was editing a
+Makefile, because the Makefile TEXT being inserted contains a neighbouring recipe
+line reading `rm -f $(TESTTMP)/test_emit_obj_x64.o`. Nothing was being deleted:
+the `rm` was a quoted anchor string in a search-and-replace, sitting inside the
+script the way the refused prose sat inside a heredoc two rows above. Worth one
+line here rather than its own ticket because it says the class is not specific to
+`no-full-suite.sh` -- **any hook that matches on a command's TEXT counts an
+occurrence the command is only QUOTING**, which is this tree's own "an instrument
+that scans a namespace the observer is also in counts the observer", arriving in
+the permission layer. Landed with the `Edit` tool and the Makefile content
+UNCHANGED, same as the row above. Not reported as new, not reworded to slip past,
+and no peer asked to authorise a loosening.
+
 ## MEASURED 2026-09-09 (frankB) — the mechanism, and it is not the one any row here describes
 
 **Nothing was implemented and the hook is untouched.** This is evidence for the
