@@ -37472,3 +37472,45 @@ runs many sessions on one box; a seat measuring while peers compile is the
 ordinary case, not the exception. The quiet run only happened because another
 seat deliberately held off the CPU, which is not a property anything recorded
 either.
+
+## A GUARD WHOSE PRECONDITION IS SUPPLIED BY THE EXPERIMENTAL DESIGN CANNOT FAIL — AND THIS ONE PRINTED A FRIGHTENING WORD WHILE DOING NOTHING
+
+**Measured 2026-09-22, frankb-8e, against its own A/B harness, reported unasked.**
+
+The experiment was deliberately **one source built by two compilers** — that is
+what makes a control and a nil-test leg comparable. The harness then asserted
+that **both** output binaries were self-reproducing, and printed
+`niltest: NOT self-reproducing`.
+
+**The assertion was empty by construction.** The tree held the **control**
+sources throughout, because that is the design; so self-reproduction was
+available to the control leg **whatever the other leg did**, and unavailable to
+the other leg for a reason that has nothing to do with the change under test.
+**The one-input-two-compilers design is precisely what removes self-reproduction
+from the evidence**, and the guard was written as though the design were not
+there.
+
+**This is the "a measurement can create the condition it is testing for" family,
+arriving from the design rather than from an earlier step** — no prior step
+contaminated anything; the *shape of the comparison* did. Asking *"would this row
+still pass if it were the only thing in the run?"* returns **yes**, and asking
+whether the probe takes the right route returns **yes**. The question that
+reaches it is narrower: **does the experimental design itself determine this
+assertion's outcome, for either value of the thing under test?**
+
+**AND THE COST IS NOT THE FALSE VERDICT, IT IS THE VOCABULARY.** A guard that
+cannot fail usually prints `PASS` and wastes nothing. **This one printed
+`NOT self-reproducing`** — a phrase this repo treats as near-catastrophic,
+attached to a leg that was fine. **An empty guard that emits an alarming string
+is worse than an empty guard that emits a reassuring one**, because somebody
+will spend real time on it, and the next person will spend it again.
+
+**The real evidence was one line away and unglamorous:** `make`'s own
+`converged after 2 rounds`. **When an assertion about a build's validity is
+available from the build's own output, do not restate it in a harness** — the
+restatement is where the design's constraints get forgotten.
+
+**Discharge:** delete the guard or make it conditional on the leg that can
+actually vary, and **keep the incident in the ticket** rather than silently
+removing it — 8e did, on the grounds that the frightening word will otherwise be
+re-derived by the next reader.
