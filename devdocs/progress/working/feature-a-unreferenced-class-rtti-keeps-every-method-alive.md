@@ -9,7 +9,7 @@ owner: frankb-8e
 # An unreferenced class keeps every one of its methods alive
 
 - **Type:** feature (codegen / emission size) — Track A, tag O
-- **Status:** backlog, released 2026-09-22 (was frankb-8e) — opened 2026-08-21; the registry-root blocker cleared 2026-09-19 (`5bde993c5`); the ranking instrument `--dce-cost` landed 2026-09-22 (`68dfff97e`); the pass itself still unwritten, and the question it waits on is when a VMT slot can be proven undispatchable
+- **Status:** working, re-claimed 2026-09-22 by frankb-8e (88489420f) after `next` ranked it top of A — opened 2026-08-21; the registry-root blocker cleared 2026-09-19 (`5bde993c5`); the ranking instrument `--dce-cost` landed 2026-09-22 (`68dfff97e`); the pass itself still unwritten, and the question it waits on is when a VMT slot can be proven undispatchable
 - **Follows:** [[feature-emission-size-dce]] (`--dce`, landed)
 
 ## What

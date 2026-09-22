@@ -2,12 +2,12 @@
 prio: 90
 track: C
 type: bug
-status: working
+status: done
 found: 2026-09-22
 found-by: frankh-c0
 owner: frankb-8e
 blocked-by: []
-summary: "EVERY x86-64 C BUILD AT HEAD FAILS UNLESS THE SOURCE HAPPENS TO CONTAIN A WORD THE SHARED LEXER CLASSIFIES AS A PASCAL KEYWORD. `int f(int x){return x+1;}` refuses with `compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point)` pointing into builtinheap.pas, a file the C author never wrote; adding `int string;` -- or a LOCAL variable named `string`, anywhere, any case -- makes the identical file build. Controls: the word in a COMMENT and inside a STRING LITERAL both leave it failing, so it is a TOKEN effect and not a text effect. CAUSE: the C driver gated x86-64 AnsiString-shim emission (cparser.inc:13079) on DetectPascalRuntimeNeeds, a PASCAL token pre-scan, run over a C token stream, in which `string` IS tkString_T -- so the gate answered by accident in BOTH directions and was never measuring anything about the C program, while builtinheap is pulled regardless and its own body calls the shims. BISECTED by frankb-8e: 523833fde^ builds, 523833fde does not. x86-64 only; i386/aarch64/arm32/riscv32 build the failing file clean, because only x86-64 emits the shims as machine code. Independent of --dce. FIX LANDING (frankb-8e, owns it): the scan is REMOVED from cparser.inc rather than corrected, and the gate becomes `cPullsBuiltinHeap and x86-64`, computed once and shared with the default-RTL guard so the two spellings cannot drift apart again -- that drift is the mechanism. Priced by 8e and the cost is ZERO: exe.c is 21928 B with DCE and byte-identical to the pinned compiler's output, because DCE drops the shims when nothing calls them. It also closes an older converse bug: on the PIN, `--no-default-rtl --emit-obj` on x86-64 refused for EVERY C file, because the shims' forwards are resolved BY builtinheap, so an OR-shaped fix would have left that half broken -- only deleting the scan closes both directions. TWO CORRECTIONS TO THIS TICKET'S OWN EARLIER TEXT, both mine and both in the direction that UNDERSTATED the bug: (a) it said a plain C EXECUTABLE was unaffected and that is FALSE -- `int main(void){return 0;}` refuses identically, so the scope is every x86-64 C build and not just --emit-obj/--shared; (b) it said the emit-obj tier's C rows split on #include count and they do NOT -- Makefile:34666 generates `int plain_add(int a,int b){return a+b;}` with no include and no keyword and had real coverage of the predicate. So the tier was NOT blind; the reason it did not protect anyone is that `gate.sh quick` never runs the emit-obj tier, which is the guard question actually worth asking and is not answered by adding a row."
+summary: "FIXED 324d668b8. FOR ONE DAY (523833fde..324d668b8^) EVERY x86-64 C BUILD FAILED UNLESS THE SOURCE HAPPENED TO CONTAIN A WORD THE SHARED LEXER CLASSIFIES AS A PASCAL KEYWORD. `int f(int x){return x+1;}` refuses with `compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point)` pointing into builtinheap.pas, a file the C author never wrote; adding `int string;` -- or a LOCAL variable named `string`, anywhere, any case -- makes the identical file build. Controls: the word in a COMMENT and inside a STRING LITERAL both leave it failing, so it is a TOKEN effect and not a text effect. CAUSE: the C driver gated x86-64 AnsiString-shim emission (cparser.inc:13079) on DetectPascalRuntimeNeeds, a PASCAL token pre-scan, run over a C token stream, in which `string` IS tkString_T -- so the gate answered by accident in BOTH directions and was never measuring anything about the C program, while builtinheap is pulled regardless and its own body calls the shims. BISECTED by frankb-8e: 523833fde^ builds, 523833fde does not. x86-64 only; i386/aarch64/arm32/riscv32 build the failing file clean, because only x86-64 emits the shims as machine code. Independent of --dce. FIXED by frankb-8e at 324d668b8, verified at merged-tree binary 5f986d67044a: the scan is REMOVED from cparser.inc rather than corrected, and the gate is now `cPullsBuiltinHeap and x86-64`, computed once and shared with the default-RTL guard so the two spellings cannot drift apart again -- that drift is the mechanism. Priced by 8e and the cost is ZERO: exe.c is 21928 B with DCE and byte-identical to the pinned compiler's output, because DCE drops the shims when nothing calls them. It also closes an older converse bug: on the PIN, `--no-default-rtl --emit-obj` on x86-64 refused for EVERY C file, because the shims' forwards are resolved BY builtinheap, so an OR-shaped fix would have left that half broken -- only deleting the scan closes both directions. TWO CORRECTIONS TO THIS TICKET'S OWN EARLIER TEXT, both mine and both in the direction that UNDERSTATED the bug: (a) it said a plain C EXECUTABLE was unaffected and that is FALSE -- `int main(void){return 0;}` refuses identically, so the scope is every x86-64 C build and not just --emit-obj/--shared; (b) it said the emit-obj tier's C rows split on #include count and they do NOT -- Makefile:34666 generates `int plain_add(int a,int b){return a+b;}` with no include and no keyword and had real coverage of the predicate. So the tier was NOT blind. AND NEITHER IS `gate.sh quick` THE ANSWER, though it is true it never runs the emit-obj tier: frankh-c0 established from the archive that Track T DETECTED this at the first full tier containing it and its own report said not to follow it -- the 17-job cascade was bounded at f64af0fd3a0c, a commit THE WATCHER ITSELF WROTE, which truthfully "touches NO buildable file" and so printed "not a lead" about a cause findable nine commits back. The residual is therefore about the REPORT, not about coverage, and is owned by [[bug-t-a-cascade-bounded-at-track-t-s-own-bookkeeping-commit-reports-itself-as-not-a-lead]] (p70, 5da620faa)."
 ---
 
 # Whether a C file builds to an object depends on whether it contains a Pascal keyword
@@ -254,3 +254,121 @@ that `gate.sh quick` does not run the emit-obj tier at all**, so a seat can be
 green on its own gate while having broken every x86-64 C build. That is a
 question about which instruments the fast path reaches, and the answer is not
 "add another row" — the row existed.
+
+## Log
+- 2026-09-22 — resolved, commit 324d668b8.
+## Resolution — frankb-8e, 2026-09-22, `324d668b8`
+
+Fixed by DELETING `DetectPascalRuntimeNeeds` from `cparser.inc`, not by
+correcting it. The gate is now `cPullsBuiltinHeap and (TargetArch =
+TARGET_X86_64)`, with `cPullsBuiltinHeap := (not NoDefaultRtl) and
+(TargetPlatform <> PLATFORM_ESP)` evaluated once and used both as the shim gate
+and as the guard on the default-RTL pull, so the two spellings cannot drift
+apart again. Order is why it is a variable: the shims must be emitted before
+the pull.
+
+**Why correcting the scan was not an option.** It is not under-detecting. It
+walks `Tokens[]`, which in a C compile is C text classified by the shared
+Pascal lexer, so it is a Pascal-keyword scan of C and answers by accident in
+both directions. No addition to a keyword list makes it a predicate about a C
+translation unit.
+
+**An OR would have left half of it broken, and I tried the OR first.** My first
+cut was `cNeedsAnsi or cPullsBuiltinHeap`. It passed every row in this ticket —
+the headline pair, all four `c_obj_data` rows, `c_function_sections`,
+`test_shared_lib`, `--shared`, the executable, every cross target — and still
+failed `--no-default-rtl --emit-obj` on a file containing `string`, which is
+this ticket's own accident surviving in a narrower window. Only deleting the
+scan closes both directions.
+
+**It closes a second, older bug that was live on every pin.** The shims'
+forwards are resolved BY builtinheap, so emitting them without it fails as
+`unresolved forward: PXXStrFromLit`. Measured against pin `fda77c48b8ee`, which
+predates the regression: `--no-default-rtl --emit-obj` on x86-64 refused for
+EVERY C file, keyword-bearing and keyword-free alike. It builds now. Nobody had
+reported it because the old gate was an always-true define, so the failure was
+unconditional rather than content-dependent and looked like "that flag does not
+work for C".
+
+**Cost, measured in both artefact kinds rather than argued.** Binary
+`3e44b2ba2f43`, re-verified at the merged tree `5f986d67044a`:
+
+| | pinned `fda77c48b8ee` | fixed |
+| --- | --- | --- |
+| `exe.c` executable | 21,928 B | 21,928 B, byte-identical |
+| `kw.c --emit-obj` | 25,328 B | 25,328 B, byte-identical |
+
+`--no-dce` is 120,232 B, so the shims are real and DCE drops them when nothing
+calls them. Note `kw.c` is the ONLY cell admitting a pinned/fixed pair at all —
+it is the one cell the pin does not refuse, which is the bug. `523833fde` keeps
+every byte of the Pascal bss win it was actually for.
+
+## The guard is four cells, and three of them were red
+
+`Makefile`, `test-emit-obj`, step 4b-quater. The two broken gates redden
+DIFFERENT cells, so no single row pins the predicate:
+
+| cell | `523833fde..88489420f` | pin `fda77c48b8ee` |
+| --- | --- | --- |
+| default RTL, keyword-free | RED (stub never emitted) | ok |
+| default RTL, `string` | ok — **the accident** | ok |
+| `--no-default-rtl`, keyword-free | RED (unresolved forward) | RED |
+| `--no-default-rtl`, `string` | RED (unresolved forward) | RED |
+
+Exactly one cell was green under both compilers and it is the accident.
+Re-introducing any content-dependent gate reddens two; dropping the iff in
+either direction reddens the other two. The `string` spelling is load-bearing
+and the comment says so: if `tkString_T` is renamed or the C path stops sharing
+the lexer, the row stops discriminating and must be re-derived, not deleted.
+
+## Sibling check — clean, and `rparser` is the precedent
+
+Every driver that can reach builtinheap without a `uses` was checked.
+`rparser.inc` already does what this fix now does: one variable, `wantStr`,
+drives BOTH the shim flag it passes to `EmitProgramPrologue` AND its own
+builtinheap pull, and its comment says *"Both halves, or neither"* in those
+words. Its second, target-driven pull (`TargetCodegenCallsHeapRuntime`) is
+deliberately kept out of that variable and cannot reach this bug, because the
+target set it covers excludes x86-64 — the only target that emits the shims as
+machine code. Measured, not read: Rust and Zig build on x86-64 and on
+riscv32/arm32/aarch64. NilPy passes a literal `True` (`pyparser.inc:49665`) and
+never calls the scan, so it has no content-dependent gate to get wrong.
+`zparser`, `bparser`, `fparser`, `aparser`, `gparser` pull builtinheap nowhere.
+
+## The residual, with an owner, because an exculpation needs one
+
+**Neither "the tier lacked coverage" nor "quick does not run it" is the
+answer, and I had the second one.** Coverage existed and was red
+(`Makefile:34666`). It is also true that `gate.sh quick` never runs the
+emit-obj tier, which is why my own gate was GREEN at `81bf5f94fb6f` with this
+live. But that framing sends the next reader off to add rows to the fast gate,
+which is exactly what CLAUDE.md says spends the machine that produces breadth.
+
+**frankh-c0 found the real gap and it is cheaper: detection worked and the
+REPORT said not to follow it.** Verified from the archive, not inferred —
+`test-emit-obj#src:test/c_obj_data_import.c` went `fixed` (2026-09-12) to
+`new_red` at `f64af0fd3a0c` (2026-09-22), with `523833fde` an ancestor nine
+commits back. `twatch.py --status` then printed *"open CASCADE: 17 of 17 swept
+job(s) still red, bad=f64af0fd3a0c ... bad touches NO buildable file: it is the
+tested upper bound, not a lead"* — and `f64af0fd3a0c` is a commit **Track T
+itself wrote**, one of the watcher's own archive-bookkeeping commits. So the
+bisect range is bounded by the observer's own writes, the bound truthfully
+touches no buildable file, and the honest sentence *"not a lead"* is the last
+thing anyone reads about a 17-job cascade whose cause was findable nine commits
+back. Nothing errored; everything answered.
+
+That is this file's own *"any instrument that scans a namespace THE OBSERVER IS
+ALSO IN counts the observer"* — written about `pgrep`/`pkill` — arriving in the
+COMMIT RANGE a bisect walks. Theirs is the better finding and it is filed as
+`bug-t-a-cascade-bounded-at-track-t-s-own-bookkeeping-commit-reports-itself-as-not-a-lead`
+(p70, backlog-tools, `5da620faa`), deliberately filed rather than fixed because
+the two facts that decide whether it is a papercut or the normal case are
+answerable only from inside the archive. Their `reloc_resolve_check` SKIP
+finding (`5b9781799`) is a third instance of the family.
+
+**Verified at `5f986d67044a`** (merged with `96366af9b`, the `--emit-obj --dce`
+default): all four guard cells, the executable at 21,928 B, and
+`test/c_pasunit_strings.c` — the fixture for the original bug this gate exists
+for — builds AND prints correct output, which is the row saying this was not
+fixed by disabling the feature. `tools/gate.sh quick`: `gate: GREEN (exit 0)`,
+read from the job's own `summary.log`.
