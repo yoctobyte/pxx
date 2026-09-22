@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:18 blocked:9 backlog:38 backlog-umbrella:14 backlog-core:173 backlog-nilpy:184 backlog-tools:66 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3926 rejected:87`
+`working:34 unfinished:18 blocked:10 backlog:38 backlog-umbrella:14 backlog-core:173 backlog-nilpy:184 backlog-tools:66 backlog-pascal:13 backlog-decide:51 backlog-libs:28 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3926 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (9) — has an unmet blocker; do not claim
+## blocked (10) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
@@ -76,10 +76,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
+- `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 569, ranked
+## Ready — top 30 of 568, ranked
 
-- `[p 95] [E]` task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize (unblocks 2)
 - `[p 95] [A]` bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
@@ -109,5 +109,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 - `[p 70] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal (unblocks 1)
+- `[p 70] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 
-_539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_538 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

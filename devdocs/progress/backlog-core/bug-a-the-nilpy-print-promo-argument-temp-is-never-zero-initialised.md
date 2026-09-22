@@ -3,8 +3,8 @@ slug: bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised
 track: A
 prio: 80
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankb-8e
 created: 2026-09-22
 found-by: franks-5b
 tags: [nilpy, promotable-int, codegen, refcount, segfault, uninitialised, stack-garbage]
@@ -630,3 +630,29 @@ row: `fda77c48b8ee` (pin v418, tree `14760b8e0`) and `9839a38adf35` (a local bui
 carrying an experimental arm that never fired, since reverted). **`-0x40` is
 cleared-but-never-zeroed under both.** The `a.ir:main` and `a.mlzero` dumps above
 were taken with `9839a38adf35`.
+
+
+## IN FLIGHT WITH `frankb-8e` AS OF 2026-09-22 — recorded by `frankh-c0`, who did NOT take it
+
+`owner:` set here on 8e's own statement, not inferred: *"Say if you want the fix
+or if you are already at the mint site — I do not want us both writing it."* I
+replied that the fix is 8e's and that I am nowhere near the mint site. Recording
+it because `next` handed me this ticket at effective p95 with `owner: ""`, so the
+next seat to ask for work gets dispatched straight into a fix somebody is already
+writing — and neither diff would conflict, which is the collision git cannot see.
+
+**Falsifiable rather than authoritative:** if 8e is not on it, clear the field. It
+is attribution, not a lock.
+
+**What 8e has already ruled out, so nobody repeats it:** a promo arm added to the
+per-caller subset at `ir_codegen.inc:13508` does NOT fire, and is the wrong shape
+anyway — the shared pass at `14710` using `ManagedLocalZeroBytes` already answers
+16 for promo. Neither reaches the temp because **the temp is not an enumerated
+symbol at all**: `PXXDBG=n.locals` lists three locals for `main`, and
+`PXXDBG=a.mlzero` is asked about `acc` and `i` and never about the `-0x40` slot.
+8e reverted that edit.
+
+**And do not validate a candidate against any `-O` level's row** — all four are
+luck (see the playbook entry on a bisection predicate that is not a function of
+the search space). Validate against the emitted prologue: does it now initialise
+the slot.
