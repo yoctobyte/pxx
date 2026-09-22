@@ -72,7 +72,15 @@ measured on.** The 9.4x row is the instructive one: **right scene, right pin,
 correct arithmetic, and still 18% out** — and it was the row nobody had marked
 as doubtful, because the pxx side had a full stamp.
 
-## TREAT ANY TWO TIMINGS ON THIS BOX AS 20% APART FOR FREE
+## A complete stamp is what made me stop looking
+
+**The 9.4x row is instructive precisely because it had no defect anyone could
+point at.** Right scene, right pin, correct arithmetic, eleven recorded axes all
+matching — and 18% out. I marked the CPython side unbacked because its file had
+been deleted, and left the pxx side alone **because it carried a full stamp.**
+That is the whole failure: **a complete population line reads as a checked one.**
+
+## TREAT A SINGLE TIMING ON THIS BOX AS ~20% SOFT — AND A RATIO AS UNBOUNDED
 
 The 624 ms/22.4 fps pair was taken while the box sat at **load 27–30** with
 other sessions compiling; this pair ran quiet because `franks-5b` held off the
@@ -81,8 +89,32 @@ CPU. Same binaries, same scene, same pin. **CPython got 66% faster and pxx only
 bound by something that contends less, which would also explain the ratio moving
 14.0 → 19.7. **Hypothesis only: load was not recorded, so it cannot be checked.**
 
-**Do not report a ratio change smaller than 20% as a finding** until load is in
-the stamp.
+**THE 20% IS A PLACEHOLDER, NOT A CONSTANT** — it comes from one observed jump
+between two moments with load recorded at neither end. It has the shape of a
+haircut, not a measurement. Do not let it harden.
+
+**AND IT DOES NOT APPLY TO RATIOS, WHICH IS WHAT THIS UMBRELLA RANKS BY.** The
+two arms did not move together:
+
+    CPython  22.4 -> 37.1 fps   +66%
+    pxx       1.603 -> 1.887    +18%
+    ratio     14.0 -> 19.7      +41%
+
+**A reader who applies "20% for free" to a ratio concludes 14.0 and 19.7 are
+compatible. They are not** — the ratio moved twice the per-arm haircut, because
+**contention is DIFFERENTIAL**: a CPU-bound arm at 27 ms contends and a 530 ms
+arm bound by something else does not.
+
+**So the warning is two sentences, and the second is the one that would have
+caught this:**
+
+1. Treat a single timing as **~20% soft**.
+2. Treat a **RATIO of two arms with different load sensitivity as UNBOUNDED**
+   until both are measured **in one interleaved session on a quiet box.**
+
+Same animal as the rule that a ratio divides out a shared factor but never an
+**additive or asymmetric** term — arriving here from the load side rather than
+the vsync side.
 
 ## DO NOT RANK BY "per-call cost x calls per frame"
 
