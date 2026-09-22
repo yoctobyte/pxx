@@ -10,7 +10,7 @@ found-by: frankb-8e
 tags: [nilpy, getattr, abi, boxing, blast-radius, lekkerzeilen]
 blocked-by:
   - bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2
-summary: "`PyModuleHasComputedGetattr` is deliberately COARSE: when it is true, `PyMethodUsedAsValue` returns true for EVERY name, so every method in the program takes the function-object ABI (variant params, variant result) and pays boxing. Until 0c508e507 (2026-09-20 19:23) it scanned the MAIN FILE only, so in practice the coarse arm almost never fired. That commit widened the scan to every Python source range -- required, because a computed getattr in an imported module was a SIGSEGV, rc=139, two fixtures -- and the coarse arm now fires for any program with one computed `getattr` ANYWHERE in its imports. lekkerzeilen has exactly one: `lekkerzeilen/gfx.py:349`, `handle = getattr(self, attr)`. Measured cost on the demo, now CONTROLLED (franks-5b, 5b1045dad, one tree, one CWD, both binaries in-tree, only the compiler differing): code 12047464B -> 12159489B, +112025B, +0.93%, with `procs` IDENTICAL at 11594 -- so no wrappers were added and the growth is boxing inside existing bodies. The uncontrolled estimate filed first landed on these numbers to the byte. SEPARATELY AND DO NOT CONFLATE THE TWO: the same controlled run makes the demo COMPILE 20.3% faster (130.70/130.95s -> 104.15/104.19s, interleaved min-of-N), because the range also contains the memoisation 1fbe6e104. That is BUILD time. THE RUN-TIME COST OF THE BOXING IS STILL UNMEASURED AND IS WHAT THIS TICKET IS ABOUT -- a build-time win does not retire it and must not be quoted as if it had. NOT a correctness bug and NOT a candidate for reverting: the widening is what stops the crash. The question is whether the coarse arm can be narrowed without reopening it, and the honest answer today is that it probably cannot be narrowed by NAME, because a computed getattr is precisely the case where no token spells the name."
+summary: "`PyModuleHasComputedGetattr` is deliberately COARSE: when it is true, `PyMethodUsedAsValue` returns true for EVERY name, so every method in the program takes the function-object ABI (variant params, variant result) and pays boxing. Until 0c508e507 (2026-09-20 19:23) it scanned the MAIN FILE only, so in practice the coarse arm almost never fired. That commit widened the scan to every Python source range -- required, because a computed getattr in an imported module was a SIGSEGV, rc=139, two fixtures -- and the coarse arm now fires for any program with one computed `getattr` ANYWHERE in its imports. lekkerzeilen has exactly one: `lekkerzeilen/gfx.py:349`, `handle = getattr(self, attr)`. Measured cost on the demo, now CONTROLLED (franks-5b, 5b1045dad, one tree, one CWD, both binaries in-tree, only the compiler differing): code 12047464B -> 12159489B, +112025B, +0.93%, with `procs` IDENTICAL at 11594 -- so no wrappers were added and the growth is boxing inside existing bodies. The uncontrolled estimate filed first landed on these numbers to the byte. SEPARATELY AND DO NOT CONFLATE THE TWO: the same controlled run makes the demo COMPILE 20.3% faster (130.70/130.95s -> 104.15/104.19s, interleaved min-of-N), because the range also contains the memoisation 1fbe6e104. That is BUILD time. THE RUN-TIME COST IS NOW MEASURED (franks-5b, 2026-09-22) AND IT IS 4.01x ON A METHOD-CALL-DOMINATED SYNTHETIC -- min-of-5 interleaved, boxed 8.69 s against native 2.17 s over 6,000,000 method calls, one define apart from one tree, the ON arm BYTE-IDENTICAL to compiler/pascal26. THE ALLOCATION ROW IS THE INFORMATIVE ONE: seven allocations in BOTH arms, identical, so the 4x is ABI width and variant tag dispatch and NOT the heap -- chasing the allocator would find nothing, and 'make the boxed path cheaper' means dispatch and parameter passing. Code +103,020 B (+25.8%) with procs identical at 2232. CONTROLS: on a program where the arm cannot fire the two compilers emit BYTE-IDENTICAL binaries, so the define is confined to this arm; with the getattr present they differ; both arms print the same answer. READ IT AS A CEILING, NOT AS A PREDICTION FOR THE DEMO -- the fixture's loop is almost nothing but method calls, lekkerzeilen's frame is not, and the demo has still not been run at HEAD. The switch -dPXX_COARSE_GETATTR_OFF is committed and documented at the arm so the price is re-derivable; it is TIMING ONLY and suppresses the crash fix. AND NARROWING IS NOW BLOCKED BY A CRASH: bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2 segfaults at the DEFAULT -O2 on pin v418 and at HEAD, and BOXING MASKS IT -- when this arm fires the promo-int pair becomes tyVariant and the crash disappears. The first version of this benchmark segfaulted for exactly that reason. Narrowing this arm turns working programs into segfaults until that lands. NOT a correctness bug and NOT a candidate for reverting: the widening is what stops the crash. The question is whether the coarse arm can be narrowed without reopening it, and the honest answer today is that it probably cannot be narrowed by NAME, because a computed getattr is precisely the case where no token spells the name."
 ---
 
 ## What it is
@@ -77,10 +77,12 @@ nets. Nobody has separated them and nobody needs to for this ticket.
 **THIS COMPARISON IS NOT CONTROLLED AND MUST NOT BE QUOTED AS IF IT WERE.** The
 "before" row is another seat's build from another checkout, and the two
 compilers differ by ~44 commits, not by mine alone. What it establishes is a
-bound and a direction, not an attribution. *The controlled experiment is one
-command and nobody has run it:* build a compiler at `24c2f18de` (the parent;
-franks-5b measured its sha as `55f1ef09492b`), compile the demo **from the same
-root with the same CWD**, and diff `code=`/`procs=` against HEAD.
+bound and a direction, not an attribution. *The controlled experiment* -- build a compiler at `24c2f18de` (the parent;
+franks-5b measured its sha as `55f1ef09492b`), compile the demo from the same
+root with the same CWD, and diff `code=`/`procs=` against HEAD -- **has been
+run**, by franks-5b at `5b1045dad`, and its numbers are the second table above.
+This paragraph said "nobody has run it" while sitting fifteen lines below the
+result it was asking for.
 
 `procs` being identical is the informative half: **normalisation did not add
 procedures, so the growth is boxing emitted inside bodies that already existed.**
@@ -153,3 +155,90 @@ it gates.
 
 **What would retire the edge:** the -O2 bug landing, or a measurement showing the
 narrowing can be done without un-boxing the promo-int pair. Nothing else.
+## 2026-09-22 — the run-time cost, measured: 4.01x, and it is not the heap
+
+The ticket's one open question was the RUN-TIME cost of the boxing. It could
+not be asked on lekkerzeilen without the display, which is another seat's, so it
+is asked on a CPU-bound synthetic instead — with the caveat that owns the result:
+**this measures the fixture, and the fixture's inner loop is almost nothing but
+method calls.** Read it as an upper bound for call-dominated code, not as a
+prediction for the demo.
+
+### The fixture
+
+`bench_mod.py` holds a three-method class and one computed `getattr` in a
+function that is **never called**, so the coarse arm fires while the program
+never executes the dynamic path — which is what lets the two arms run the same
+program. `bench_main.py` calls all three methods in a 2,000,000-iteration loop.
+
+Both arms are one `-d` apart from one tree; `p26_ga_on` is **byte-identical to
+`compiler/pascal26`** (`fda77c48b8ee4b03`), so the ON arm is the shipped
+compiler and not a variant of it.
+
+### Controls, before the number
+
+- **The define is confined to the arm.** On a program with no `getattr` at all,
+  the two compilers emit **byte-identical binaries** (`cmp` clean). So the
+  define does nothing except where the coarse arm can fire.
+- **The define fired.** With the `getattr` present the binaries differ.
+- **The two arms are the same program.** Both print `999829`.
+
+### The numbers
+
+    interleaved, min-of-5, load 3.08 before / 2.92 after
+
+    boxed  (arm fires)   8.91  8.85  8.96  8.81  8.69   -> min 8.69 s
+    native (arm off)     2.25  2.20  2.17  2.24  2.23   -> min 2.17 s
+                                                           4.01x
+
+    code    502,733 B  vs  399,713 B     +103,020 B, +25.8%
+    procs        2232  vs       2232     identical
+    allocs          7  vs          7     IDENTICAL
+
+**The allocation row is the informative one.** 6,000,000 method calls, seven
+allocations, the same seven in both arms. The 4x is **not** the heap: it is ABI
+width and variant tag dispatch inside bodies that already existed — which is
+the same story `procs` being identical tells about the code growth.
+
+That matters for the fix direction. The ticket's own suggestion was "accept the
+boxing and make the boxed path cheaper"; this says the target is dispatch and
+parameter passing, and that chasing the allocator would find nothing.
+
+**Read the two halves separately, because only one of them is what was asked
+for.** The ticket wanted a COST and it got one: 4.01x. It also carried an
+unstated MODEL — that boxing means heap traffic — and the same run refutes it.
+Six million calls, seven allocations, the same seven in both arms. **A
+measurement that confirms the cost and falsifies its assumed mechanism reads as
+merely confirmatory unless the second half is pointed at**, and the second half
+is the one that decides where the work goes: it eliminates the fix everyone
+would have tried first and turns "boxing is slow" into something a great deal
+narrower. The negative row is the finding.
+
+### What this does NOT say
+
+It does not say lekkerzeilen is 4x slower. The demo's frame does far more than
+call methods, the profile already puts ~80% of thread-1 self time in the runtime
+generally, and no one has run the demo at HEAD. **A 4.01x on a fixture whose
+loop is only method calls is the ceiling of this effect, and the demo's share of
+it is unmeasured.**
+
+### The switch is committed
+
+`-dPXX_COARSE_GETATTR_OFF`, documented at the arm, so the price is re-derivable
+without rebuilding the instrument. It is **timing only** — it suppresses the
+crash fix, and a program that actually executes a computed `getattr` jumps to a
+garbage code address without it.
+
+### A blocker discovered by this fixture, and it gates any narrowing
+
+The first version of this benchmark **segfaulted in the native arm**, and it was
+not the arm's fault: `bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2`.
+A frame with exactly two `tyPromoInt64` locals and exactly one other segfaults at
+the default `-O2`, on pin v418 and at HEAD. **Boxing masks it** — when the
+coarse arm fires, the promo-int pair becomes `tyVariant` and the crash
+disappears. The benchmark above only runs because a fourth local was added to
+leave that composition.
+
+**So narrowing this arm will turn working programs into segfaults until that bug
+is fixed.** Whoever takes this ticket needs it closed first, or the reds will
+look like their own work.

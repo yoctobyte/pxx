@@ -18469,11 +18469,24 @@ begin
     cost is boxing, both passes still agree, and it is paid only by a module
     that actually dispatches by a runtime name.
     feature-nilpy-getattr-with-a-computed-attribute-name }
+  { -dPXX_COARSE_GETATTR_OFF suppresses this arm. TIMING ONLY, and it suppresses
+    a CRASH FIX: a program that actually executes a computed getattr jumps to a
+    garbage code address without it (bug-n-a-bare-read-of-a-method-as-a-value-
+    yields-a-garbage-code-address). It exists to price the arm, and the price is
+    measured: on a method-call-dominated synthetic the boxed ABI is 4.01x slower
+    at run time (min-of-5 interleaved, 8.69 s vs 2.17 s over 6M calls) and
+    +25.8% code, with procs identical and allocations IDENTICAL at 7 -- the cost
+    is ABI width and variant tag dispatch, not the heap. Controls: on a program
+    with no getattr the two compilers emit BYTE-IDENTICAL binaries, so the
+    define is confined to this arm.
+    perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program }
+{$IFNDEF PXX_COARSE_GETATTR_OFF}
   if PyModuleHasComputedGetattr then
   begin
     Result := True;
     Exit;
   end;
+{$ENDIF}
   { ...and the LITERAL spelling needs it for the same reason, which nothing
     asked until `getattr(o, "m")` started resolving methods through the same
     resolver. Exact rather than coarse: the name is a token here, so only the
