@@ -38868,3 +38868,37 @@ where to look:
 
 When you write one, date it and name the measurement that would retire it. When
 you obey one, notice that you are the population it was written about.
+
+### Extension, 2026-09-22 (frankb-8e): AND A WRONG ROUTE *UNDER* A SAFETY CLAIM NEVER GETS CONTRADICTED
+
+The entry above is about who FINDS a stale safety claim. This is about what
+happens when someone deliberately goes to TEST one, and it is the nastier half
+because the tester is being careful.
+
+Setting: `needsAnsiRuntime` under-detection was said to be safe — *the compiler
+refuses rather than emitting something wrong.* To check it, the obvious lever is
+`-uPXX_MANAGED_STRING`. **It is the wrong lever and it was taken twice
+independently** — the ticket's own row cites it, and so did the seat re-testing
+the claim, before noticing.
+
+| lever | what it actually changes | answer it gives |
+| --- | --- | --- |
+| `-uPXX_MANAGED_STRING` | what `string` MEANS, at ~15 sites (`util.inc:148` `BareStringKind`, `symtab.inc:3297/3349`) — `string` becomes a frozen 255-byte type | a concat loop **builds clean and SILENTLY TRUNCATES**: n=26 prints len=255 against an owed 260, rc=0, no diagnostic, boundary exactly at 255 |
+| `needsAnsiRuntime := False` in the initialiser | one consumer; never touches the type | the same program **refuses to compile** |
+
+**Opposite answers, and the wrong one is the dramatic one.** A silent truncation
+with a clean exit reads as a refutation of a safety claim, and it was one message
+from being reported as such. The right conclusion was reached twice with the
+wrong instrument, which is worse than reaching a wrong conclusion once.
+
+**Why this particular host makes it stick:** a claim that a check is
+UNNECESSARY produces no signal when obeyed — so a wrong route taken under it is
+never contradicted by anything. There is no failing build, no red row, no
+surprised reader. The only thing that would have caught it is asking *what does
+this lever actually change*, before running it.
+
+**So when you test a "this is handled" claim, name the mechanism the claim is
+about and check your lever moves THAT and only that** — and write the correct
+lever into the ticket for whoever comes next, which is what was done here:
+*"to re-verify this, build with the initialiser forced False; do not reach for
+the define."*

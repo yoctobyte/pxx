@@ -521,9 +521,32 @@ The promotion is in. **This ticket is not done**, and the remaining half is the
 one its title is about: `PasApplyDefaults` defines `PXX_MANAGED_STRING`
 unconditionally, so every Pascal program still PULLS `builtinheap`. **DCE
 removes the CONSEQUENCE, not the pull.** frankS scoped that half on 2026-09-18
-(-98% code on bare esp32c3) and its one concrete blocker is that the `string`
-KEYWORD is not in `DetectPascalRuntimeNeeds`' scan. Whoever takes this next
-takes that; the size work below is finished.
+(-98% code on bare esp32c3).
+
+**THE BLOCKER I HANDED ON HERE WAS THE WRONG SHAPE, and frankb-8e answered it
+rather than inheriting it** (2026-09-22, banked `b823a08d6`, not landed).
+`string` lexes as `tkString_T`, a KEYWORD token (`paslexer.inc:166`), so the
+`tkIdent`/`CaseEqual` arm the ticket pointed at **could never have seen it** —
+adding the name reaches nothing.
+
+**The real blocker is ORDERING and no token scan can reach it.**
+`EmitAnsiStringRuntime` is decided at `pasparser_prog.inc:1977`, while the
+ambient RTL units that are themselves written over managed strings are pulled
+*after* it (`:2163`, plus a second independent site at
+`pasparser_proc.inc:7422`). The evidence arrives after the decision. Three
+programs containing no `string` at all still refuse inside
+`lib/rtl/textfile.pas:1344`, each because it pulls a unit whose BODY calls a
+string stub:
+
+    var p: PChar;      var c: WideChar;      var s: set of Char;
+
+The fix is to settle emission after the unit pulls, or to emit on demand.
+Whoever takes this next takes THAT; the size work below is finished.
+
+**Worth noting how the handoff failed, since it is this file's own class:** the
+blocker was relayed from a scoping note, read as a task ("add the name to the
+scan"), and was really a claim ("the scan is where this is decided"). I passed
+it on without checking which. One `grep` of the lexer settles it in a line.
 
 ### What the third attempt actually changed
 
