@@ -200,11 +200,16 @@ begin
       second keyword. `packed record` needs nothing extra: the tkRecord is
       still there.
 
-      OVER-DETECTION IS NOT FREE ON ONE PROFILE and it is the reason this arm
-      is worth re-reading rather than widening. On --esp-profile=bare pulling
-      builtinheap costs a 65,536 B EspArena, so a bare program that DECLARES a
-      record and only ever touches its fields now pays ~16% of the chip's SRAM
-      for a routine it never calls. Under-detection is a build break and
+      OVER-DETECTION IS NOT FREE and it is the reason this arm is worth
+      re-reading rather than widening -- but the bare-ESP figure this paragraph
+      carried for one hour is retired. Written as: on --esp-profile=bare
+      pulling builtinheap costs a 65,536 B EspArena, so a bare program that
+      DECLARES a record and only touches its fields pays ~16% of the chip's
+      SRAM. True at binary 81bf5f94fb6f. 04e20af2c drops that arena when DCE
+      proves HeapMmap dead, and the same program at 8c22736b1a7d is
+      bss 652 -> 1,288 B, with and without --dce -- a difference of 65,536
+      exactly. So over-detection here costs ~636 B now, not ~66 KB, and the
+      x86-64 size is what this arm's gate is actually protecting. Under-detection is a build break and
       over-detection is that arena, so neither direction is free here and the
       real repair is feature-a-pull-builtinheap-on-demand-instead-of-predicting
       -it, which reacts to the emitted call instead of guessing from tokens.

@@ -178,15 +178,27 @@ fi
 # source is 38 procs here and 185 on riscv32, where the unit is genuinely
 # needed. The ceiling is the same loose 80 as assertion 2 for the same reason.
 #
-# THE COST THIS PROTECTS IS NOT ONLY x86-64 SIZE. On --esp-profile=bare
-# builtinheap brings a 65,536 B EspArena: measured 2026-09-22, a bare esp32c3
-# program that declares a record and only ever touches its FIELDS goes
-# bss 652 -> 66,824 B under the arm above, which is real over-detection that
-# nobody has removed. It is accepted here because the alternative is a build
-# break on four targets, and the actual repair is
+# THE COST THIS PROTECTS IS x86-64 SIZE, AND THE BARE-ESP HALF OF THIS NOTE WAS
+# TRUE FOR ONE HOUR. Written 2026-09-22 as: on --esp-profile=bare builtinheap
+# brings a 65,536 B EspArena, so a bare esp32c3 program that declares a record
+# and only touches its FIELDS goes bss 652 -> 66,824 B under the arm above.
+# That was measured and correct at binary 81bf5f94fb6f. frankh-c0's 04e20af2c
+# landed the same hour and drops the arena when DCE proves HeapMmap dead, and
+# re-measuring the IDENTICAL program at 8c22736b1a7d gives bss 652 -> 1,288 B,
+# with and without --dce. The difference is 65,536 exactly, so the attribution
+# is not a guess. Over-detection here now costs ~636 B, not ~66 KB.
+#
+# KEPT RATHER THAN OVERWRITTEN because the author of that commit told me in the
+# same message that it "does not help your case, because your trigger pulls
+# builtinheap and keeps the allocator reachable" -- a reasonable reading of
+# one's own change, and measurably wrong. Neither of us would have caught it by
+# reading. Carry both rows with their binaries rather than replacing one with
+# the other.
+#
+# The arm above is still accepted for the reason it always was -- the
+# alternative is a build break on four targets -- and the real repair is still
 # feature-a-pull-builtinheap-on-demand-instead-of-predicting-it. Do not read
-# this assertion as blessing that arena -- it only stops the cost spreading to
-# the targets that never needed it.
+# this assertion as blessing any arena; it only stops the x86-64 cost.
 printf 'program r;\ntype TB = record a, b, c: Integer; end;\nvar r, q: TB;\nbegin q.a := 7; r := q; if r.a = 0 then Halt(1); end.\n' > "$TMP/amb_rec.pas"
 out=$("$PXX" "$TMP/amb_rec.pas" "$TMP/amb_rec.bin" 2>&1) || {
   echo "FAIL: the x86-64 record program did not build."; echo "$out" | tail -3; exit 1; }

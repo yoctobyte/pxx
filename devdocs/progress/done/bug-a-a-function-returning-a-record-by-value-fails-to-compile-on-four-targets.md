@@ -7,7 +7,7 @@ found: 2026-09-22
 found-by: frankh-c0
 owner: frankb-8e
 blocked-by: []
-summary: "FIXED 23fcd326f (frankb-8e). A record used AS A VALUE failed to compile with `compiler error: PXXMemMove not found` on riscv32, xtensa, arm32 and aarch64 -- both bare ESP SoCs and the hosted spellings -- while x86-64, i386 and wasm32 copy inline and were fine. Regression from 523833fde the same day, whose evidence-based needsAnsiRuntime scan (an 82.1% size win that was correctly NOT reverted) could not see a construct that names no heap. MY REPORT NAMED A TRIGGER ONE QUARTER THE TRUE WIDTH AND A RULE WRITTEN TO IT WOULD HAVE PASSED MY OWN REPRO: I reduced to `function M: TB` and proposed matching function-result-of-record-type; 8e varied the shape before choosing a rule and found FOUR breaking shapes -- whole-record assignment `r := q`, by-value record parameter `F(r)`, record function result, and assignment from a typed const -- with field-only access `r.a := 7` the single building case. The real trigger is any record used as a VALUE, which no token-level rule separates from a record DECLARATION without becoming a parser, so the fix is the missing kind beside tkUses/tkArray/tkClass gated on TargetCodegenCallsHeapRuntime. AND `object` LEXES AS tkIdent, not a kind, so a kind-only test misses `TB = object ... end` entirely while passing every record row -- the routine's own string/tkString_T trap in a second keyword. Guard: five rows in test/pascal_ambient_unit_needs_heap.sh, one shape per build, positive-controlled by rebuilding to the pre-fix sha exactly (48f69d2d285d) and back (81bf5f94fb6f), plus a THIRD assertion because the existing two cannot see the cheapest wrong repair. SECOND FRONTEND, SAME SHAPE, ALREADY CLOSED: bug-a-cfront-riscv32-byval-record-result-pxxmemmove (C, p70, 2026-07-20) rooted an 18-job regression cascade -- two frontends, two unrelated causes, one shape, two months apart, which is the argument for feature-a-pull-builtinheap-on-demand-instead-of-predicting-it that neither instance makes alone. Conservative fix measured to cost a bare-ESP field-only record program bss 652 -> 66,824 B, which is the EspArena and is explicitly not blessed by it."
+summary: "FIXED 23fcd326f (frankb-8e). A record used AS A VALUE failed to compile with `compiler error: PXXMemMove not found` on riscv32, xtensa, arm32 and aarch64 -- both bare ESP SoCs and the hosted spellings -- while x86-64, i386 and wasm32 copy inline and were fine. Regression from 523833fde the same day, whose evidence-based needsAnsiRuntime scan (an 82.1% size win that was correctly NOT reverted) could not see a construct that names no heap. MY REPORT NAMED A TRIGGER ONE QUARTER THE TRUE WIDTH AND A RULE WRITTEN TO IT WOULD HAVE PASSED MY OWN REPRO: I reduced to `function M: TB` and proposed matching function-result-of-record-type; 8e varied the shape before choosing a rule and found FOUR breaking shapes -- whole-record assignment `r := q`, by-value record parameter `F(r)`, record function result, and assignment from a typed const -- with field-only access `r.a := 7` the single building case. The real trigger is any record used as a VALUE, which no token-level rule separates from a record DECLARATION without becoming a parser, so the fix is the missing kind beside tkUses/tkArray/tkClass gated on TargetCodegenCallsHeapRuntime. AND `object` LEXES AS tkIdent, not a kind, so a kind-only test misses `TB = object ... end` entirely while passing every record row -- the routine's own string/tkString_T trap in a second keyword. Guard: five rows in test/pascal_ambient_unit_needs_heap.sh, one shape per build, positive-controlled by rebuilding to the pre-fix sha exactly (48f69d2d285d) and back (81bf5f94fb6f), plus a THIRD assertion because the existing two cannot see the cheapest wrong repair. SECOND FRONTEND, SAME SHAPE, ALREADY CLOSED: bug-a-cfront-riscv32-byval-record-result-pxxmemmove (C, p70, 2026-07-20) rooted an 18-job regression cascade -- two frontends, two unrelated causes, one shape, two months apart, which is the argument for feature-a-pull-builtinheap-on-demand-instead-of-predicting-it that neither instance makes alone. Conservative fix measured to cost a bare-ESP field-only record program bss 652 -> 66,824 B at binary 81bf5f94fb6f -- AND THAT ROW WAS FALSIFIED WITHIN THE HOUR BY THIS TICKET'S OWN SIBLING COMMIT: 04e20af2c drops the EspArena when DCE proves HeapMmap dead, and the IDENTICAL program at 8c22736b1a7d is bss 652 -> 1,288 B with and without --dce, a difference of 65,536 exactly. Over-detection costs ~636 B, not ~66 KB. Both rows stand with their binaries. The message announcing that commit said it 'does not help your case, because your trigger pulls builtinheap and keeps the allocator reachable' -- a reasonable reading of one's own change and measurably wrong, since the allocator entry points ARE dead in this shape, which is the condition the drop tests for. One seat's measured number carried into another seat's summary by the very commit that retired it; nothing here depended on the arena staying reserved and two summaries asserted it anyway."
 ---
 
 # A function returning a record by value fails to compile on four targets
@@ -163,6 +163,30 @@ FIELDS goes **bss 652 -> 66,824 B**, code 320 -> 552, procs 17 -> 85. That is th
 was taken anyway — correctly, since the alternative is a build break on four
 targets — with the cost written into the guard's comment and an explicit line
 saying the assertion does **not** bless that arena.
+
+### THAT ROW WAS FALSIFIED BY THIS TICKET'S OWN SIBLING COMMIT, WITHIN THE HOUR
+
+**Both rows stand, each with its binary.** 66,824 B was correct at
+`81bf5f94fb6f`. `04e20af2c` — the arena drop, landed the same hour — makes the
+IDENTICAL program **bss 652 -> 1,288 B** at `8c22736b1a7d`, with and without
+`--dce`. The difference is 65,536 exactly, so the attribution needs no
+argument. Over-detection by the record arm costs **~636 B**, not ~66 KB, and
+the x86-64 size is what its target gate is actually protecting.
+
+**The message announcing `04e20af2c` said it "does not help your case, because
+your trigger pulls builtinheap and keeps the allocator reachable."** That is a
+reasonable reading of one's own change and it is measurably wrong — the
+allocator entry points are dead in this shape, which is precisely the condition
+the drop tests for. Neither of us would have caught it by reading, and the
+number had already been written into two summaries by then.
+
+So this is the ordinary stale-summary rule arriving through an unguarded door:
+not an author failing to re-read their own sentence, but **one seat's measured
+number carried into another seat's summary by the very commit that retired
+it.** Nothing in either ticket depended on the arena staying reserved, and both
+asserted it anyway. The repair is the one CLAUDE.md prescribes — carry both
+rows with their trees rather than overwriting — because a number whose
+population and binary were recorded is correctable, and one quoted bare is not.
 
 It is also the evidence
 `feature-a-pull-builtinheap-on-demand-instead-of-predicting-it` was missing:
