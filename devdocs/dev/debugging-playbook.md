@@ -36274,11 +36274,30 @@ longest = max((len(x) for x in s.split(".") if x), default=0)
 2. Hours earlier the same evening, the same seat published a **2.6x** derived
    from 16 greens in a window. A peer asked *"are they CLUSTERED or SPREAD?"*
    and the ratio dissolved.
+3. **AND THE PEER WHO ASKED THAT QUESTION THEN MADE THE SAME MISTAKE ONE TABLE
+   LATER — which is what makes this structural rather than a lapse.** Handed the
+   fifteen reversed rows, it proposed *"run `size_canary` ten times and see
+   whether it really sits at 52.4%"*. **A repeat experiment presumes a per-run
+   probability exists**, and it never asked whether one did; the prior question
+   retired its experiment and the other seat's `13%` together. Its own summary:
+   *"it is not one seat failing to carry a lesson across a session — it is two
+   seats, in the same session, with the lesson explicitly stated between them,
+   both failing to transfer it to the next table."*
 
-**So the lesson was in hand, in the same session, from the same question — and
-it did not transfer to the next table.** That is the finding: this is not
-prevented by having learned it once, because the second table looks like new
-data rather than like the same mistake.
+**So the lesson was in hand, in the same session, in BOTH seats, and stated out
+loud between them — and it transferred to neither's next table.** That is the
+finding, and instance 3 is what forecloses the obvious objection that somebody
+merely needed to be more careful: **the seat that supplied the question failed
+the same way when the numbers were in front of it.** The second table does not
+look like the same mistake; it looks like new data. **So the only fix that
+survives is the one in the tool, not in the reader** — see the retirement
+condition below, which is now implemented.
+
+**The general form, visible across three of that night's findings:** greens read
+as clustered-versus-spread, a wall read as step-versus-gradient, reversals read
+as episodes-versus-rates. **All three are one time-ordered series collapsed into
+a single number, and all three read as clean findings.** *Any rate computed over
+a time window must print its shape, or it will be read as a probability.*
 
 **Three tells that a rate is really an episode**, none needing statistics:
 
@@ -36288,13 +36307,26 @@ data rather than like the same mistake.
 - **Nothing in the code changed and the failures stopped anyway** — which the
   playbook elsewhere reads as "a test that stops failing without being changed
   was never fixed", and which here means something changed *outside* the tree.
+- **AND THE CHEAPEST TELL OF ALL, WHICH NEEDS NO ANALYSIS: RUN THE CENSUS
+  TWICE.** A closed episode's count is **frozen**; a live phenomenon's count
+  **moves**. Measured the same hour this section landed: on a re-run an hour
+  later, every reversed row's red count was byte-for-byte identical (189, 107,
+  86, 65, 64) while the one genuinely live row went `549/550` → `550/551`. **The
+  number either changed or it did not**, so this cannot be misread the way a
+  run-length can be argued about, and it costs one repeated command. It is the
+  operational form of the `last red` tell above and it is strictly better.
 
 **Related:** "WHEN AN UPGRADE MOVES TWO QUANTITIES AT ONCE" — same night, same
 archive, the mirror error. There a **step** was misread as a gradient; here an
 **episode** was misread as a rate. Both come from collapsing a time-ordered
 series into one number, and both read as clean findings.
 
-**What would retire this section:** a rate helper over this archive that
-refuses, or at least annotates, when the longest consecutive run exceeds some
-fraction of the event count — so the shape is reported with the number instead
-of having to be asked for.
+**Half-discharged in the tool, 2026-09-22, and the remaining half is named.**
+`tools/tstate_toolchain_reversals.py` now prints `[longest run N, last red
+<date>]` beside every rate it reports, so the shape arrives with the number and
+no reader has to know to ask. It **annotates and does not refuse** — it will
+still print `52.4%` for a single closed episode, in the same line as the `158`
+that contradicts it. **What would retire this section entirely:** a helper that
+declines to emit a bare rate at all when the longest run exceeds some fraction
+of the event count, since instance 3 above shows a reader holding both numbers
+can still quote only one.
