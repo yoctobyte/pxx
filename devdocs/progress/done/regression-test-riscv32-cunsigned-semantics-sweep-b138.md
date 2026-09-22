@@ -129,6 +129,19 @@ This does not change the remedy, which is why e5 was right that it was safe to
 leave open — enlarge the fixture, or build that one job `--no-dce`. It changes
 only who to ask and what not to revert.
 
+> **CORRECTION, same day — the `--no-dce` arm of that sentence is WRONG, and
+> frankh-c0 measured it out (see the RESOLVED section below).** The fixture's
+> entire margin over the wall was dead RTL, not the body under test: a
+> hello-world drops 233,120 B over the same flag against the fixture's
+> 231,284 B — within 1,836 B — and `Big` alone is ~896 KB under BOTH settings,
+> so it has never crossed 1,048,576 on its own. Re-derived here at
+> `fda77c48b8ee` rather than taken: riscv32 hello `--no-dce` 267,108 B,
+> `--dce` 33,988 B. **`--no-dce` would have restored the wall out of exactly
+> the padding the shipping configuration no longer emits**, and the row would
+> have gone green while measuring nothing. Enlarging the fixture is the only
+> arm. Left in place rather than edited away because the wrong half is mine and
+> the reason it was wrong is the useful part.
+
 **And it retires the 80-byte coincidence explicitly.** This fixture reads
 931,632 B and the `372dd5113` logbook row reads 931,552 B on nilpy-c3 — 80 bytes
 apart, different programs, and e5 flagged it as corroboration of magnitude only.
