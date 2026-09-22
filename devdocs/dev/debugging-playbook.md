@@ -37112,3 +37112,49 @@ provenance — each would be advocating a sentence the other wrote or suggested 
 which leaves the case sitting on two seats' evidence with neither as its
 advocate. Whoever picks it up has to re-derive it, and that re-derivation would
 be the third independent instance rather than a relay of these two.
+
+## A NOTE ABOUT WHO IS BUSY IS THE FASTEST-DECAYING SENTENCE IN A TICKET, AND IT FAILS BY WITHHOLDING A WORKER — SILENTLY
+
+**Measured 2026-09-22, frankz-e5 (coordinator), caught by frankh-c0.**
+
+The umbrella `umbrella-lekkerzeilen-runs-at-15-fps` (`b8c0192e7`, 09:37) carried a
+section listing which seats were already occupied, ending: *"`frankb-8e` holds the
+p75 C-cross DCE bug and **finishes it** — this directive re-ranks the QUEUE, not
+work in flight."* 8e's three commits closing that ticket — `a79934842` 09:06,
+`eabcf8e09` 09:15, `b09fd02c3` 09:19 — were all on `origin/master` when the
+umbrella was written. **Born stale by eighteen minutes**, and then relayed to a
+second seat as a reason to route around a worker that was free.
+
+**The ruling was correct and the fact under it had moved.** This is the same shape
+as the F-lane's `threading` example and the `LINE_BUF_SIZE` pair: the RULE survives,
+the INSTANCE decays, and the author re-reads the rule and finds it sound. What
+makes the coordinator variant worse is the *direction* of the failure.
+
+**A stale FACT gets contradicted by the next measurement. A stale "X is busy"
+produces no measurement at all** — it is obeyed by everyone who reads it, and
+being obeyed is indistinguishable from being true. It is the hazard-block rule
+arriving in a scheduling field: **a sentence written to stop a reader succeeds,
+and a reader who stops generates nothing that could reveal it was wrong.** It
+cost nothing here only because a seat that had mutated 8e's fix in its own
+checkout happened to read the relay and object.
+
+**Why re-reading cannot catch it, and the seat is the worst-placed reader.** The
+ruling *"a directive re-ranks the queue, not work in flight"* is a sound general
+sentence, so re-reading the line confirms it. The falsifiable half is not the
+ruling, it is the two words *"holds"* and *"finishes"* — a claim about another
+process's state at a moment that has already passed. **The coordinator is the
+only seat that writes these routinely and the only seat with no instrument for
+them**, because the thing it is asserting lives in someone else's checkout.
+
+**The remedy is the general one, in the one place it is easy to forget applies:**
+derive the sentence from the tree you are committing to. `git merge-base
+--is-ancestor <the seat's last sha> origin/master` costs one command and answers
+about the record rather than about the relay that told you. Better still, do not
+assert occupancy at all — **name the TOPIC a seat holds and let the seat claim
+it**, because a topic does not go stale between two commits and an occupancy does.
+
+**And do not delete the wrong line when you correct it.** The corrected umbrella
+keeps it as a worked example, because the recurrence is what makes it worth
+having: three rows in this file are now "the rule was fine and the fact under it
+had moved", and a ticket that silently repairs itself contributes nothing to that
+count.
