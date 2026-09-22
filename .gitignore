@@ -108,3 +108,10 @@ fred.txt
 twatch.conf
 .unoracled_buildable
 compiler/.pxx-under-test-*
+# Scratch compiler binaries. These are how you A/B two builds -- one define
+# apart, or pinned against HEAD -- so they appear in compiler/ routinely and
+# are never artefacts anyone wants tracked. Patterned rather than named
+# because the names are invented per experiment: `git add -A compiler` swept
+# five of them (41 MB) into 45bcf8ce5 on 2026-09-22.
+compiler/pascal26_*
+compiler/p26_*
