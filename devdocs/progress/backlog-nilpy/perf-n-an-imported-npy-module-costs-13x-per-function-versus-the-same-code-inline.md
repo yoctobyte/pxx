@@ -4,7 +4,7 @@ prio: 60
 status: open
 type: perf
 blocked-by: []
-summary: "MECHANISM, and it is the thing to look for again: a routine that scans a WHOLE-PROGRAM array once per DEFINITION, where that array holds every imported module concatenated -- so per-definition work scales with the import closure and an inline arm never pays it. It SPRINGS wherever a new per-definition or per-lookup scan is added over Tokens or UCls; it is not tied to any routine named here. THREE instances found and fixed, all landed and carried by pin v415: PyDefSiteMode's backward walk (now a precomputed enclosing-construct table), PyDefUsedAsValue's allocating CaseEqual(GetTokenStr(j),nm) per identifier token (now non-allocating TokenCaseEqual, length reject first, 62 sites) -- those two together MEASURED 12.4% -- and FindUClass's flat class-table scan, three scans per call with no early exit on the first, 4.31 BILLION true steps on lekkerzeilen (now a name-keyed hash index preserving the ranking exactly, d5de02143). INDEX MEASURED: 38.72% on lekkerzeilen (min-of-5, pin v414 aeadb1754b80 vs 94fddf62ee6af731 = pin v415, arms sha-pinned, outputs byte-identical) and 28% on uforth (frankh-c0, 131x step reduction). It GENERALISES -- an earlier +0.0% cross-corpus null was a stale arm built before the commit existed and is retracted. The ticket's own retirement condition (an interleaved min-of-N on lekkerzeilen with load recorded) IS NOW MET. STILL OPEN AND WHY THIS IS NOT CLOSED: the parser scans remain O(tokens) per definition -- only each step got cheaper -- so the structural one-pass version is available and unbuilt; and the structural one-pass version is available and unbuilt. THE 13x HAS NOW BEEN RE-MEASURED (2026-09-22, franks-5b) AND IT IS NOT GONE: IT IS 6.2x. Same method as the original (identical bodies inline vs moved into one imported module), min-of-3 INTERLEAVED, compiler 734d10ec7b53 at cbb8f81c0, CWD repo root, load ~4 and stable across the run: 100 fns 2.30 vs 3.25 s, 200 fns 2.50 vs 4.52 s, 400 fns 2.93 vs 7.13 s. Per function off the 100->400 span, inline 2.10 ms and imported 12.93 ms, ratio 6.2x against the original 3.4/45 ms = 13.2x; the implied fixed cost lands at 2.09 s and 1.96 s for the two arms, which is the check that the slope is real rather than a fixed-term artefact. CARRY BOTH ROWS, DO NOT SUBTRACT THEM: the 13.2x was taken in another session at an unrecorded load, so the per-function MILLISECONDS are not comparable across the two and only the within-session RATIOS are -- each arm pair was interleaved, so shared load divides out of a ratio and does not divide out of a duration. What is safe to say: the ratio more than halved and the observable survives. Method, both refuted hypotheses, the retraction, and two harness faults of opposite sign: devdocs/perf/lekkerzeilen-build-time.md."
+summary: "MECHANISM, and it is the thing to look for again: a routine that scans a WHOLE-PROGRAM array once per DEFINITION, where that array holds every imported module concatenated -- so per-definition work scales with the import closure and an inline arm never pays it. It SPRINGS wherever a new per-definition or per-lookup scan is added over Tokens or UCls; it is not tied to any routine named here. THREE instances found and fixed, all landed and carried by pin v415: PyDefSiteMode's backward walk (now a precomputed enclosing-construct table), PyDefUsedAsValue's allocating CaseEqual(GetTokenStr(j),nm) per identifier token (now non-allocating TokenCaseEqual, length reject first, 62 sites) -- those two together MEASURED 12.4% -- and FindUClass's flat class-table scan, three scans per call with no early exit on the first, 4.31 BILLION true steps on lekkerzeilen (now a name-keyed hash index preserving the ranking exactly, d5de02143). INDEX MEASURED: 38.72% on lekkerzeilen (min-of-5, pin v414 aeadb1754b80 vs 94fddf62ee6af731 = pin v415, arms sha-pinned, outputs byte-identical) and 28% on uforth (frankh-c0, 131x step reduction). It GENERALISES -- an earlier +0.0% cross-corpus null was a stale arm built before the commit existed and is retracted. The ticket's own retirement condition (an interleaved min-of-N on lekkerzeilen with load recorded) IS NOW MET. STILL OPEN AND WHY THIS IS NOT CLOSED: the structural one-pass version is available and unbuilt for the scans that remain. A FOURTH AND FIFTH INSTANCE were found 2026-09-22 and NEITHER WAS IN THE CENSUS ABOVE -- PyClsAttrWriteScan and PyDynAttrEverAssigned scan from j := 1, and that census filtered on loops starting at 0, so the blind spot was the START VALUE and not the bound spelling this ticket named. MEASURED AND DELIBERATELY NOT BUILT: PyClsAttrWriteScan is 165 calls / 47,776,271 token visits on lekkerzeilen and removing it outright is worth 4.1% of the build (min-of-3 interleaved, base 62.93 s vs off 60.35 s, with a combined-define control reporting visits=0); PyDynAttrEverAssigned is called ZERO times there. The one-line `if classW and instW then Break` is semantically exact and worth NOTHING -- identical visit count, byte-identical output -- so only the table captures the 4.1%, which does not justify ~200 lines in the routine that decides class-attribute lowering at this ticket's rank. TWO RETRACTIONS BY THE SAME HAND, both in devdocs/perf/lekkerzeilen-build-time.md: 1.1% was reported off round 1 of a 3-round sweep (per-round 0.71/3.03/2.58) and read as a null; and the explanation offered for the small number -- that lekkerzeilen's build is not parse-dominated -- is FALSE and refuted by this ticket's own 38.72% FindUClass row. The real reason is magnitude alone: 4.31e9 steps against 4.78e7, 90x fewer for 9.4x less time. THE 13x HAS NOW BEEN RE-MEASURED (2026-09-22, franks-5b) AND IT IS NOT GONE: IT IS 6.2x. Same method as the original (identical bodies inline vs moved into one imported module), min-of-3 INTERLEAVED, compiler 734d10ec7b53 at cbb8f81c0, CWD repo root, load ~4 and stable across the run: 100 fns 2.30 vs 3.25 s, 200 fns 2.50 vs 4.52 s, 400 fns 2.93 vs 7.13 s. Per function off the 100->400 span, inline 2.10 ms and imported 12.93 ms, ratio 6.2x against the original 3.4/45 ms = 13.2x; the implied fixed cost lands at 2.09 s and 1.96 s for the two arms, which is the check that the slope is real rather than a fixed-term artefact. CARRY BOTH ROWS, DO NOT SUBTRACT THEM: the 13.2x was taken in another session at an unrecorded load, so the per-function MILLISECONDS are not comparable across the two and only the within-session RATIOS are -- each arm pair was interleaved, so shared load divides out of a ratio and does not divide out of a duration. What is safe to say: the ratio more than halved and the observable survives. Method, both refuted hypotheses, the retraction, and two harness faults of opposite sign: devdocs/perf/lekkerzeilen-build-time.md."
 ---
 
 # An imported `.npy` module costs ~13x per function versus the same code inline
@@ -139,3 +139,47 @@ conditions: `devdocs/perf/lekkerzeilen-build-time.md`.
 The census is blind to a scan bounded by a saved copy of the count or by
 `Length(Tokens)`, and it only covered `pyparser.inc`. Three found is not a
 population either.
+
+## 2026-09-22 — instances four and five, measured and NOT built
+
+`PyClsAttrWriteScan` and `PyDynAttrEverAssigned`, both `compiler/pyparser.inc`,
+both `j := 1; while j < MainProgramTokCount`, both name-parameterised with every
+structural condition about a token's neighbours — the same shape as
+`PyDefUsedAsValue` and convertible by the same transformation.
+
+**The census above missed them and the reason is worth more than the instances.**
+It reported "four hits in three routines" and it filtered on loops that start at
+**0**. These start at **1**. The blind spot this ticket named for itself was the
+bound spelling (`Length(Tokens)`, a saved copy); `Length(Tokens)` turns out not
+to occur anywhere in `compiler/**` at all. **The actual blind spot was the start
+value, which nobody had written down as an axis.** That is the minimal-case rule
+arriving in a census: the filter fixed an axis its author never enumerated.
+
+**Measured on lekkerzeilen, and the ceiling does not justify the fix:**
+
+    PyClsAttrWriteScan     165 calls, 47,776,271 token visits
+    PyDynAttrEverAssigned    0 calls
+    removing the scan outright:  4.1%  (min-of-3 interleaved, 62.93 -> 60.35 s)
+    control: both defines ->  clsattr_visits=0
+
+`PyClsAttrWriteScan` has **no early exit by design** — it answers two questions
+at once — and the obvious one-line remedy is worth nothing: `if classW and instW
+then Break` is semantically exact and removes **zero** visits on this program,
+because `classW` needs a write through the literal class name and that never
+co-occurs with an instance write. So the 4.1% is available only via the table.
+
+**Not built, and the reason is rank rather than difficulty.** ~200 lines in the
+routine that decides class-attribute lowering, for 4.1% of a compile, at this
+ticket's own prio of 60. The design is straightforward if someone wants it: a
+name-keyed index over the write sites, staleness key on `MainProgramTokCount`,
+overflow stand-down to the scan, `_OFF`/`_CROSSCHECK` switches — the same house
+pattern as `PyBuildDValTable`. The switches to re-derive the ceiling are
+committed and documented at the routine.
+
+**Two retractions, both mine, both in `devdocs/perf/lekkerzeilen-build-time.md`.**
+I reported 1.1% off round 1 of a three-round sweep and called it a null (the
+per-round differences were 0.71, 3.03, 2.58). And I explained the small number by
+claiming lekkerzeilen's build is not parse-dominated — **false, and refuted by
+this ticket's own headline row**, where the `FindUClass` index alone is 38.72% of
+that build. The explanation is magnitude and nothing else: 4.31e9 steps against
+4.78e7, ninety times fewer for nine times less time.

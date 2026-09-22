@@ -39255,3 +39255,61 @@ times; 4.1% for removing the scan, with its control; and the one-line
 and without it, bit for bit, because `classW` needs a write through the literal
 class name and that never co-occurs with an instance write in this program.
 **A measured-zero one-liner is not landed as dead code.**
+## A PROBE'S SUBJECT CAN BE NARROWED OUT FROM UNDER IT — ASK THE COMPILER WHAT YOUR VARIABLE IS, DO NOT REASON ABOUT IT
+
+Measured 2026-09-22 (franks-5b), closing
+`bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation`. The ticket
+said a variant-bound comparison heap-allocated one box **per evaluation** —
+91466 allocations for 100000 iterations. I wrote four probes, each taking the
+bound as a **bare parameter**:
+
+```python
+def lt(v):
+    i = 0
+    while i < v:      # v is unannotated: "obviously" a variant
+        i = i + 1
+```
+
+All four read **6-8 allocations**, and one of them was called with an `int` on
+one line and a `float` on the next, which I took as proof the parameter could
+not have been narrowed. I was one step from reporting the bug fixed.
+
+**It is a dynamic language and the parameter carries no annotation, so the
+inference that it must be a variant feels like it is about the LANGUAGE.** It
+is not; it is about this compiler, which narrows an unannotated parameter from
+what it can see. The probes may never have executed a single variant
+comparison. The number was not wrong — it was the right answer about code I had
+not meant to write.
+
+**`PXXDBG=n.locals` answers it and costs one run.** The tags are the whole
+discriminator:
+
+    tk=22  variant        tk=13  int        tk=19  float
+
+A plain `5` reads `tk=13`, a plain `2.5` reads `tk=19`, and an element of a
+heterogeneous list — `mixed = [100000, 3.5, "x"]`, then `mixed[0]` — reads
+`tk=22`. The committed fixture takes its bound that way, and says so in its
+header, so the next reader cannot quietly reintroduce the parameter form.
+
+**Why this is not already covered by "isolation guards the RUN, not the ROUTE".**
+There, the probe is alone and reaches the right subject by a wrong route. Here
+the route is fine and **the subject is a different thing than the one named** —
+an inference step substituted it, silently, correctly, and before the probe ran.
+Every isolation question returns yes: one file, one construct, nothing else in
+the run, no contaminant from an earlier step.
+
+**What makes it hard to catch is that the probe SUCCEEDS.** It compiles, runs,
+prints a plausible small number, and that number agrees with the hypothesis you
+were hoping for. A probe that failed would have sent me looking.
+
+**The general form, which is not about variants.** Wherever the machinery under
+test is *also* the machinery that decides what your probe's variable IS —
+type inference, overload selection, promotion, constant folding, devirtualisation
+— you cannot establish the subject by reading your own source. **Ask the
+implementation what it decided, and assert the answer as part of the probe.**
+
+**And the correct positive control is about the TYPE, not the behaviour.**
+"Does my probe allocate?" has a control (a program that allocates a known
+amount). "Is my probe's `v` a variant?" needs its own, and it is the cheap one:
+print the tag. If you cannot make a probe whose tag comes out *wrong*, you do
+not yet know the tag is being read at all.

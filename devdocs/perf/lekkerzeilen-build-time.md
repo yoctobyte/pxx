@@ -1284,3 +1284,91 @@ The candidate table deliberately precomputes POSITIONS and re-asks the
 qualifier every time for exactly this reason — a memo would give back the
 property that makes the table safe. If someone wants this 2x, it needs a
 generation counter on the alias table, not a token count.
+
+## 2026-09-22 — a FOURTH whole-stream scan, its ceiling, and two retractions
+
+`PyClsAttrWriteScan` and `PyDynAttrEverAssigned` (`compiler/pyparser.inc`) are
+two further instances of the mechanism this file's ticket predicted: `j := 1;
+while j < MainProgramTokCount`, name-parameterised, every structural condition
+about a token's neighbours. **Neither was in the census that reported "four hits
+in three routines"** — that census filtered on loops starting at `0`, and these
+start at `1`. The blind spot was not the bound spelling the ticket named; it was
+the start value.
+
+| | |
+|---|---|
+| compiler | `compiler/p26_base`, sha256 `fda77c48b8ee4b03…`, **byte-identical to `compiler/pascal26`** |
+| arms | `p26_base` vs `p26_clsattr_off`, one `-d` apart, one tree, both built in the same minute |
+| CWD | `/home/neo/frankS` (repo root) for every build and every run |
+| subject | lekkerzeilen demo tree `8ca634f`, extracted with `git archive` into the session scratchpad — 7a's checkout was never touched |
+| invocation | `--threadsafe -dSDL_DISABLE_IMMINTRIN_H -dGL_GLEXT_PROTOTYPES` |
+| estimator | min-of-3, arms interleaved; loadavg 2.31 before, 4.83 after |
+
+    base          63.46  65.14  62.93   -> min 62.93
+    clsattr_off   62.75  62.11  60.35   -> min 60.35
+    2.58 s of 62.93 = 4.1%
+
+    PyClsAttrWriteScan    165 calls, 47,776,271 token visits
+    PyDynAttrEverAssigned   0 calls  (never reached on this program)
+
+**The control that makes the number attributable.** A combined
+`-dPXX_SCANCOUNT -dPXX_CLSATTR_OFF` build reports `clsattr_calls=0
+clsattr_visits=0`. Without it, "removing the scan changed nothing much" and "my
+off-switch never fired" are the same observation.
+
+**A one-line alternative to the table, measured and worth nothing.** `if classW
+and instW then Break` is semantically exact — `setattr` only ever sets `instW`,
+and once both flags are set no later token can change either output. It removes
+**zero** visits: 47,776,271 with and without, bit for bit, outputs
+byte-identical. `classW` requires a write through the literal class name, which
+never co-occurs with an instance write in this program. **Only the table
+captures the 4.1%, and it is not built.**
+
+### Retraction 1 — I reported 1.1% off round 1 of a 3-round sweep
+
+The per-round differences were **0.71, 3.03, 2.58**. Round 1 was the outlier and
+it was the one I sent the coordinator, as "~1.1%, looks like a null". The
+min-of-3 answer is 4.1%. The rule about min-of-N rather than means exists for
+exactly this, and a single pair is not an estimator. **I would have killed a
+real lever on one third of a measurement.**
+
+### Retraction 2 — the structural explanation was refuted by this file
+
+I explained the small number by saying the synthetic is parse-dominated and
+lekkerzeilen is not, citing its 11.6 MB of code and 11,596 procs. **That is
+false and the refutation is at line 843 of this file**: the `FindUClass` hash
+index ALONE was **38.72%** of lekkerzeilen's build (88.789 s → 54.410 s,
+min-of-5, byte-identical outputs, independently reproduced by 7a). Parser scans
+dominate this build.
+
+**The real reason needed no mechanism at all — it is magnitude:**
+
+    FindUClass          4.31e9 steps   -> 38.72%
+    PyClsAttrWriteScan  4.78e7 visits  ->  4.1%
+    90.2x fewer steps, 9.4x less time
+
+Same class, same corpus, same kind of fix; mine is small because it is ninety
+times smaller. **When a result comes in smaller than expected, check the
+magnitude ratio against an existing measurement of the same corpus before
+reaching for a structural reason.** The arithmetic was available throughout and
+the story I told instead was coherent, used true facts, and flattered the
+result — an unexciting number became an interesting finding about the corpus,
+which is the direction to distrust.
+
+### A byte-identical binary in another directory is a different compiler
+
+Ten minutes were spent believing the instrumented build had broken lekkerzeilen:
+it died on `no member heapify came of the qualifier heapq` where
+`compiler/pascal26` succeeded. It had not. Building the same sources with the
+instrument compiled out produced a binary **byte-identical by sha256** to
+`compiler/pascal26` that **failed exactly the same way**. The variable was the
+binary's LOCATION — it had been built into the scratchpad, and pxx resolves
+libraries from its **exe dir**, which `--where` row one prints. Same bytes, same
+CWD, different compiler.
+
+CLAUDE.md documents the CWD half of this for `compiler/builtin/**`. This is the
+exe-dir half, and it bites the **library** lookup. The failure is loud, which is
+the good case — but it arrives looking like your own diff, and **the
+self-blaming reading terminates the search** where a self-crediting one at least
+leaves a number someone may query. Build a candidate compiler into `compiler/`
+(`.gitignore` already carries `compiler/p26_*`), not into the scratchpad.

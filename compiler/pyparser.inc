@@ -526,6 +526,10 @@ var
   PyDValTok: array[0..PY_DVAL_MAX - 1] of Integer;   { ascending }
   PyDValKind: array[0..PY_DVAL_MAX - 1] of Byte;     { 1 = bare, 2 = dot candidate }
   PyDValDisagreements: Integer;   { -dPXX_DVAL_CROSSCHECK only }
+{$IFDEF PXX_SCANCOUNT}
+  PyScanClsAttrCalls, PyScanDynAttrCalls: Int64;
+  PyScanClsAttrVisits, PyScanDynAttrVisits: Int64;
+{$ENDIF}
 
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
@@ -7673,15 +7677,47 @@ procedure PyClsAttrWriteScan(const clsName, attrName: AnsiString;
   costs generality, never correctness.
 
   `setattr` anywhere forces the instance side on for the same reason
-  PyDynAttrEverAssigned does — the target is not visible in the tokens. }
+  PyDynAttrEverAssigned does — the target is not visible in the tokens.
+
+  COST, measured 2026-09-22 on lekkerzeilen (demo tree 8ca634f, min-of-3
+  interleaved, one define apart, same tree): 165 calls, 47,776,271 token visits,
+  and removing the scan outright is worth 4.1% of the build (base min 62.93 s,
+  off min 60.35 s). It is the fourth instance of the whole-stream-scan shape in
+  perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
+  and it has NO early exit, deliberately — it answers two questions at once.
+
+  Two build switches, for whoever converts it to a one-pass table:
+
+      -dPXX_SCANCOUNT    count calls and visits, reported at end of parse
+      -dPXX_CLSATTR_OFF  skip the scan entirely (measure the ceiling).
+                         WRONG LOWERING -- timing only, never a correctness run.
+
+  Defining both reports visits=0, which is the control that separates "the scan
+  costs nothing" from "my off-switch never fired".
+
+  WHAT IS NOT WORTH TRYING: `if classW and instW then Break`. It is semantically
+  exact (setattr only ever sets instW, and nothing after both flags are set can
+  change either) and it is worth ZERO — 47,776,271 visits with and without it,
+  bit for bit, outputs byte-identical. classW needs a write through the literal
+  class name and that never co-occurs with an instance write here. Only the
+  table captures the 4.1%. }
 var j: Integer;
 begin
   classW := False;
   instW := False;
   if attrName = '' then Exit;
+{$IFDEF PXX_CLSATTR_OFF}
+  Exit;   { ceiling measurement ONLY -- this changes the lowering and is wrong }
+{$ENDIF}
+{$IFDEF PXX_SCANCOUNT}
+  PyScanClsAttrCalls := PyScanClsAttrCalls + 1;
+{$ENDIF}
   j := 1;
   while j < MainProgramTokCount do
   begin
+{$IFDEF PXX_SCANCOUNT}
+    PyScanClsAttrVisits := PyScanClsAttrVisits + 1;
+{$ENDIF}
     if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'setattr') then
       instW := True
     else if (Tokens[j].Kind = tkIdent) and (Tokens[j - 1].Kind = tkDot) and
@@ -18193,9 +18229,15 @@ function PyDynAttrEverAssigned(const nm: AnsiString): Boolean;
 var j: Integer;
 begin
   Result := False;
+{$IFDEF PXX_SCANCOUNT}
+  PyScanDynAttrCalls := PyScanDynAttrCalls + 1;
+{$ENDIF}
   j := 1;
   while j < MainProgramTokCount do
   begin
+{$IFDEF PXX_SCANCOUNT}
+    PyScanDynAttrVisits := PyScanDynAttrVisits + 1;
+{$ENDIF}
     if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'setattr') then
     begin
       Result := True;
@@ -49907,6 +49949,13 @@ begin
     calls PXXAlloc. }
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
   ApplyCallFixups;
+{$IFDEF PXX_SCANCOUNT}
+  WriteLn(StdErr, 'pxx-scancount: tokens=', MainProgramTokCount,
+          ' clsattr_calls=', PyScanClsAttrCalls,
+          ' clsattr_visits=', PyScanClsAttrVisits,
+          ' dynattr_calls=', PyScanDynAttrCalls,
+          ' dynattr_visits=', PyScanDynAttrVisits);
+{$ENDIF}
 end;
 
 { ===== NilPy selector/subscript parsing =====
