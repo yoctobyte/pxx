@@ -48,8 +48,19 @@ story about throughput.
 **AND THE 3% IS THE PART THAT TRAVELS. THE ABSOLUTES CARRY A CONDITION NOBODY
 RECORDED WHEN THEY WERE TAKEN.** Measured by `frankuser` on 2026-09-22, after
 the owner mentioned that an unrelated project of his is using this workstation:
-load average **23.93 on a 24-thread box**, GPU at **4195 of 6144 MiB**, `/` at
-**95%, 8.3G free**. The A/B survives this **by construction and not by luck** —
+load average **23.93**, GPU at **4195 of 6144 MiB**, `/` at **95%, 8.3G free**.
+
+**THAT LOAD FIGURE ARRIVED WITH A WRONG DENOMINATOR AND I PROPAGATED IT HERE
+BEFORE CHECKING IT.** It was relayed as *"23.93 on a 24-thread box"*, which reads
+as roughly saturated. This box has **12 threads** — one Xeon E5-2620 v2, 6 cores,
+`nproc`, `nproc --all` and `/proc/cpuinfo` all agreeing at 12 — so the same
+correct reading means **about twice oversubscribed**, not about saturated. Same
+number, opposite conclusion. **A load average is a ratio with its denominator
+left off**, which is why it is the easiest figure in this file to relay wrong,
+and the measured reading at the time of writing was 23.18 / 12. **`/` is also the
+filesystem the repo sits on; `/tmp` is a separate volume at 6% with 1% of inodes
+used**, so scratchpad writes are safe and build artefacts under `/home` are the
+exposure. The A/B survives all of this **by construction and not by luck** —
 it was interleaved A/B/A/B inside one session, so a common-mode background load
 appears in both arms and cancels in the difference. **Nothing cancels in an
 absolute.** So `1.826 fps`, `530 ms` and CPython's `27 ms` are measurements of

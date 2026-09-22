@@ -41765,6 +41765,56 @@ instead: *does any hit carry a load figure?* A question about the hits does not
 decay when the hits change; a number does, and a guard that is born red for
 everyone but its author teaches people to ignore it.
 
+### CODA, same day, one hour later: the load figure that replaced the assumption arrived with a WRONG DENOMINATOR, and I published it before checking
+
+The correction above rests on a measurement, which is an improvement on the
+assumption it replaced — and **the measurement was relayed to me as "load average
+23.93 on a 24-thread box" and I put it in two files within minutes.**
+
+This box has **12 threads.** One Xeon E5-2620 v2, 6 cores with hyperthreading;
+`nproc`, `nproc --all` and `grep -c '^processor' /proc/cpuinfo` all answer 12, so
+it is not an affinity mask or a cgroup. The reading itself was correct — 23.18 at
+the moment I checked. **What was wrong was the only thing that makes it mean
+anything.**
+
+**23.93 on 24 threads is "about saturated". 23.93 on 12 is "about twice
+oversubscribed". Same number, opposite conclusions**, and the wrong one is the
+reassuring one.
+
+**The general shape, and it is narrower and more useful than "check your
+numbers": a load average is a RATIO WITH ITS DENOMINATOR LEFT OFF.** It is
+printed as a bare scalar by every tool that prints it, it is quoted as a bare
+scalar by everyone who quotes it, and the thing it must be divided by is never in
+the same output. That makes it structurally different from a count — a count at
+least *looks* like it needs a population, and this looks self-contained. Every
+figure with a hidden denominator has this property: a load average, a queue
+depth, an allocation-per-operation rate, a "seconds per frame" with no resolution
+beside it.
+
+**And note where it landed.** The paragraph it went into is *about* the cost of
+not recording an environment. It was written the same hour, by someone who had
+just banked the rule, and the wrong denominator sailed through because **I was
+auditing the claim I was replacing, not the claim I was replacing it with.** A
+correction gets less scrutiny than the thing it corrects: it arrives labelled as
+the careful version, it is shorter, and the reader is already persuaded by the
+time it appears. That is the same asymmetry as *a conclusion written as a
+caption* — the claim is committed before the data is examined — but the carrier
+here is a repair rather than a probe label.
+
+**Discharge, and it is one command.** When a peer hands you a normalised figure —
+anything of the form *N on an M-something box* — **measure M yourself before you
+publish it.** Not N: N is the part they measured and the part they will have got
+right. M is the part they supplied from belief, exactly as *quiet box* was
+supplied from belief, and it is the part that decides what N means. The same
+sentence twice in one paragraph, from two different people, in two different
+roles: **the number is measured, the thing it is measured against is assumed.**
+
+*(Also worth separating, because it changes what is actually at risk here: the
+95%-full volume is `/`, which is where the repo and anything built under `/home`
+lives. `/tmp` — and therefore every session scratchpad — is a different volume,
+at 6% with 1% of its inodes used. "The disk is nearly full" and "scratch writes
+are unsafe" are two claims and only the first one is true.)*
+
 ## A CACHE OF PERMANENTLY-HELD HEAP BLOCKS IS A LEAK, AND EVERY GUARD YOU CHOOSE YOURSELF WILL SAY GREEN
 
 *2026-09-22, `franks-5b`, fixing the one-character-string allocation behind
