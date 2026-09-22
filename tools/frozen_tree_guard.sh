@@ -61,7 +61,27 @@
 #
 # USAGE
 #   tools/frozen_tree_guard.sh start <tag>     # before the first job
+#   tools/frozen_tree_guard.sh stop  <tag>     # the moment the LAST job ends
 #   tools/frozen_tree_guard.sh check <tag>     # after the last one; exit 1 if moved
+#
+# WHY `stop` EXISTS, AND IT IS THIS SCRIPT'S OWN HAZARD ARRIVING IN THIS SCRIPT.
+# Measured 2026-09-22, by the seat that wrote the file: every measurement ran on
+# a provably clean tree, and `check` then printed CONTAMINATED -- because between
+# the last job and the check the seat had WRITTEN THE RESULTS UP. Appending a
+# section to the ticket moves the tracked diff, and the tracked diff is one of
+# the three things this guard watches.
+#
+# So the naive lifecycle is self-defeating: recording a verdict is itself an edit,
+# which means a `check` taken after the write-up ALWAYS reds, and a guard that
+# always reds gets ignored -- the cry-wolf failure this repo already records for
+# a born-red guard. The observer is inside the namespace it scans, which is the
+# exact class the header above is about.
+#
+# `stop` closes the measurement window at the right instant and freezes the
+# verdict, so a later `check` reports what the tree was doing WHILE THE JOBS RAN
+# rather than what the author has typed since. Call it before you write anything
+# down. If you forget, `check` falls back to the live comparison and its red
+# means "the tree moved at some point", which is weaker but never falsely green.
 #
 # `check` prints CONTAMINATED and exits 1 when any of the three moved. It does
 # NOT say the code is broken -- it says this run cannot be attributed to one
@@ -80,12 +100,16 @@
 #   tools/frozen_tree_guard.sh selftest
 # makes each of the three inputs move in turn, in a scratch copy, and asserts
 # `check` reds on each -- and asserts it stays green when nothing moves, so the
-# control cannot pass by always failing.
+# control cannot pass by always failing. It also covers `stop` in both
+# directions, including the row that mode exists for (a write-up AFTER the
+# window must not redden the verdict) and that row's own negative control
+# (re-arming must clear the frozen verdict, or `stop` would be a way to switch
+# the guard off permanently and every later run would pass on stale state).
 
 set -u
 
 usage() {
-    echo "usage: $0 start <tag> | check <tag> | selftest" >&2
+    echo "usage: $0 start <tag> | stop <tag> | check <tag> | selftest" >&2
     exit 2
 }
 
@@ -115,13 +139,46 @@ case "$mode" in
 start)
     [ $# -eq 2 ] || usage
     mkdir -p "$state_dir" || exit 2
+    # Clear any frozen verdict from a PREVIOUS run under this tag. Without this
+    # a re-armed tag would inherit the old run's `closed` marker and `check`
+    # would report attributable without having compared anything -- a guard
+    # passing on stale state, which is the one outcome worse than a false red.
+    rm -f "$state_dir/$2.closed"
     fingerprint > "$state_dir/$2.fp"
     echo "frozen-tree-guard: armed for '$2' — what this run's verdict is about:"
     sed 's/^/frozen-tree-guard:   /' "$state_dir/$2.fp"
     ;;
+stop)
+    [ $# -eq 2 ] || usage
+    before="$state_dir/$2.fp"
+    if [ ! -f "$before" ]; then
+        echo "frozen-tree-guard: NOT ARMED for '$2' — nothing to close." >&2
+        exit 2
+    fi
+    if [ "$(fingerprint)" = "$(cat "$before")" ]; then
+        # Freeze the verdict. A later `check` reads this rather than re-comparing
+        # against a tree the author has since written the results into.
+        : > "$state_dir/$2.closed"
+        echo "frozen-tree-guard: measurement window CLOSED for '$2' — tree was frozen"
+        echo "frozen-tree-guard:   throughout. Write-ups from here cannot affect the verdict."
+        exit 0
+    fi
+    echo "frozen-tree-guard: CONTAMINATED — inputs moved before the window closed." >&2
+    echo "frozen-tree-guard:   Not a claim the code is broken; a claim this run" >&2
+    echo "frozen-tree-guard:   cannot be attributed to one tree. Re-run settled." >&2
+    diff "$before" - <<EOF >&2 || true
+$(fingerprint)
+EOF
+    exit 1
+    ;;
 check)
     [ $# -eq 2 ] || usage
     before="$state_dir/$2.fp"
+    if [ -f "$state_dir/$2.closed" ]; then
+        echo "frozen-tree-guard: window was closed by 'stop' — verdict attributable"
+        echo "frozen-tree-guard:   (edits made after the window are deliberately ignored)"
+        exit 0
+    fi
     if [ ! -f "$before" ]; then
         # Never silently pass when the guard was not armed. An unarmed guard
         # that prints nothing is indistinguishable from a clean run, which is
@@ -187,11 +244,53 @@ selftest)
         echo "  ok   t_unarmed_check_refuses"
     fi
 
+    # `stop` on a frozen tree closes the window.
+    "$0" start selftest >/dev/null 2>&1
+    if "$0" stop selftest >/dev/null 2>&1; then
+        echo "  ok   t_stop_closes_a_frozen_window"
+    else
+        echo "  FAIL t_stop_closes_a_frozen_window   — reds on a frozen tree"
+        fails=$((fails + 1))
+    fi
+
+    # THE ROW THIS MODE EXISTS FOR: after `stop`, an edit (the write-up) must
+    # NOT turn the verdict red. Simulated by moving the recorded fingerprint,
+    # which is what a real edit does to the comparison.
+    sed -i 's/^diff .*/diff MOVED-BY-WRITEUP/' "$work/state/selftest.fp"
+    if "$0" check selftest >/dev/null 2>&1; then
+        echo "  ok   t_writeup_after_stop_is_not_contamination"
+    else
+        echo "  FAIL t_writeup_after_stop_is_not_contamination   — write-up reddened it"
+        fails=$((fails + 1))
+    fi
+
+    # ...and the negative control for that row, or it would pass against a
+    # `stop` that simply disables the guard forever: re-arming must CLEAR the
+    # frozen verdict, so a moved tree reds again under the same tag.
+    "$0" start selftest >/dev/null 2>&1
+    sed -i 's/^cc .*/cc MOVED-AFTER-REARM/' "$work/state/selftest.fp"
+    if "$0" check selftest >/dev/null 2>&1; then
+        echo "  FAIL t_rearm_clears_the_frozen_verdict   — stale 'closed' still passing"
+        fails=$((fails + 1))
+    else
+        echo "  ok   t_rearm_clears_the_frozen_verdict"
+    fi
+
+    # `stop` must red on a tree that moved during the window.
+    "$0" start selftest >/dev/null 2>&1
+    sed -i 's/^head .*/head MOVED-DURING-RUN/' "$work/state/selftest.fp"
+    if "$0" stop selftest >/dev/null 2>&1; then
+        echo "  FAIL t_stop_reds_on_a_moved_tree   — closed a contaminated window"
+        fails=$((fails + 1))
+    else
+        echo "  ok   t_stop_reds_on_a_moved_tree"
+    fi
+
     if [ "$fails" -gt 0 ]; then
         echo "frozen-tree-guard selftest: $fails red"
         exit 1
     fi
-    echo "frozen-tree-guard selftest: 5 guard(s), 0 red"
+    echo "frozen-tree-guard selftest: 9 guard(s), 0 red"
     ;;
 *)
     usage
