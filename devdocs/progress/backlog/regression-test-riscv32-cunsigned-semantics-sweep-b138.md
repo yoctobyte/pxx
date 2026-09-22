@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+summary: "NOT A MISCOMPILE -- the failing step is a self-check that the fixture is still bigger than RISC-V JAL's 1 MiB displacement, and DCE (now on by default at -O2, riscv32 not carved out) shrank the program to 931,632 B, under the 1,048,576 threshold. The guard fired as designed and says so in its own message. Remedy is to enlarge the fixture or build this one job with DCE off -- NOT to revert or carve out --dce, which would trade a measured image-size win for a fixture's convenience. Whoever takes it should re-rank: this is fixture maintenance, not a defect at p70. Triaged by frankz-e5 2026-09-22; which of the two DCE commits in range did it is unbisected and does not change the remedy."
 ---
 
 > **Track A from the job NAME `test-riscv32`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/cunsigned_semantics_sweep_b138.c`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -36,3 +37,61 @@ rv32_bigbody: code=931632 does not exceed JAL's 1048576 -- this test no longer c
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## TRIAGED 2026-09-22 (`frankz-e5`, coordinator): THIS IS NOT A COMPILER REGRESSION — IT IS A FIXTURE THAT DETECTED ITS OWN OBSOLESCENCE, AND IT IS A DCE WIN
+
+**Read the failing step before ranking this.** It is not an output comparison. It
+is an assertion that the program under test is **still big enough to be the test**:
+
+```
+test "$sz" -gt 1048576 || { echo "rv32_bigbody: code=$sz does not exceed JAL's
+1048576 -- this test no longer covers the wall it was written for"; exit 1; }
+```
+
+1,048,576 is RISC-V **JAL's ±1 MiB displacement range**. The fixture exists to put
+a body on the far side of that wall. The log shows it built fine —
+`ok: ... test_rv32_bigbody [code=931632B ...]` — and came out at **931,632 B,
+below the threshold.** The red IS the guard firing, in its own words.
+
+**THE TWO COMMITS IN RANGE ARE BOTH DCE, AND ONE OF THEM TURNED DCE ON BY
+DEFAULT.** `git log 3daf4bc16cc1..c194231297b1` contains exactly two
+code-touching commits, which is the watcher's own count:
+
+```
+39ca6ac2a  perf(A/O): promote --dce to the default -O2, with wasm32 carved out -- third attempt, PROVEN   (frankH)
+372dd5113  fix(A): a stub target reached only from its own body is not a root ...                         (frankB / frankb-8e)
+```
+
+riscv32 is not among wasm32's carve-out, so **this job's program is now built with
+DCE where it was not before, and it shrank out of its own test's range.** The same
+day's logbook row for `372dd5113` records `-55.5%` on a *different* riscv32 image
+(`nilpy-c3`, 2,093,100 -> 931,552 B). **Those are two different programs and the
+80-byte proximity to 931,632 is a coincidence I am explicitly not building on** —
+it is cited as corroboration of the magnitude of the DCE change, nothing more.
+
+**WHAT IS NOT ESTABLISHED:** which of the two commits moved this particular
+program below the wall, or whether both did. Nobody has bisected the pair, and
+nothing here needs it — **the remedy is the same either way.**
+
+**THE REMEDY IS TO ENLARGE THE FIXTURE, NOT TO TOUCH DCE.** The wall is a property
+of the ISA and has not moved; what moved is how much code survives to sit either
+side of it. Either grow `rv32_bigbody` until it exceeds 1 MiB under default `-O2`
+with DCE on, or build this one job with DCE off and say in the recipe that the
+test's subject is the JAL displacement and not the optimiser. **Do not revert or
+carve out `--dce` for riscv32 to make this green** — that would trade a proven
+55% image-size win for a fixture's convenience, and it would make the test pass
+while measuring something the shipping configuration no longer does.
+
+**RANKING: p70 is too high for what this is and I have not changed it**, because
+the number is the ranker's and a coordinator lowering a prio it does not own is
+the wrong direction. It is fixture maintenance in Track A's lane, not a defect.
+Whoever takes it should re-rank it in the same commit.
+
+**AND THE REASON THIS WAS WORTH TRIAGING RATHER THAN LEAVING:** the ticket's own
+title and type say *regression*, `prio: 70`, `Untriaged`, and the ranker reads
+frontmatter and summary. A seat dispatched to it reads "riscv32 regression, p70"
+and starts looking for a miscompile. The failing step says what it is in one
+line, and that line is four screens down. **A fixture that refuses to silently
+stop covering its wall is the healthy inverse of "a guard that cannot fail" — it
+noticed it could no longer fail and said so — and it arrives wearing a
+regression's clothes.**
