@@ -38877,9 +38877,18 @@ because the tester is being careful.
 
 Setting: `needsAnsiRuntime` under-detection was said to be safe — *the compiler
 refuses rather than emitting something wrong.* To check it, the obvious lever is
-`-uPXX_MANAGED_STRING`. **It is the wrong lever and it was taken twice
-independently** — the ticket's own row cites it, and so did the seat re-testing
-the claim, before noticing.
+`-uPXX_MANAGED_STRING`. **It is the wrong lever, and the ticket's own row cites
+it as the verification method** — so the seat re-testing the claim used it too,
+before noticing.
+
+**CORRECTED 2026-09-22 by its own author, against its own transcript, and the
+correction makes the rule sharper.** This first read *"taken twice
+independently"*, which would have made it a convergence result. It is not.
+`frankb-8e` checked the session `jsonl` rather than its memory and found the
+route had been **inherited, not rediscovered**: the ticket text carrying the
+safety claim — and, in the SAME PARAGRAPH, `-uPXX_MANAGED_STRING` written out as
+how to check it — entered that seat's context **1,118 records before** it first
+invoked the flag. One seat recorded a wrong route; a second picked it up.
 
 | lever | what it actually changes | answer it gives |
 | --- | --- | --- |
@@ -38896,6 +38905,15 @@ UNNECESSARY produces no signal when obeyed — so a wrong route taken under it i
 never contradicted by anything. There is no failing build, no red row, no
 surprised reader. The only thing that would have caught it is asking *what does
 this lever actually change*, before running it.
+
+**And the corrected mechanism is the useful one, because it predicts
+recurrence:** a wrong verification route recorded BESIDE a claim is inherited by
+exactly the person who comes to audit that claim. Auditing means reading the
+claim, and the route sits in the adjacent sentence presented as how to check it
+— so **the auditor picks up the instrument the audit is about.** It needs no
+second seat and no coincidence, and it fires again on every future re-check of
+that ticket until the route is corrected *in place*. That is the argument for
+writing the correct lever into the ticket BODY rather than only into a message.
 
 **So when you test a "this is handled" claim, name the mechanism the claim is
 about and check your lever moves THAT and only that** — and write the correct
