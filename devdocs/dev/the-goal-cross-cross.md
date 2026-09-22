@@ -77,13 +77,24 @@ the mechanism we keep. Anyone sizing an ESP32 image may not reach for that
 saving. It is stated as a preference about what we ARE, which is exactly the kind
 of fork that is his and not ours.
 
-**What it is NOT recorded as deciding.** It is **not** written down here as
-answering Track C's ISR fork. `frankuser` relayed it to `frankc-c0` with both
-readings and deliberately did not decide it; **c0 owns that send**, and a
-coordinator converting a general statement of intent into a verdict on a specific
-open fork is the widening-by-re-derivation this file's pivot section is shaped to
-prevent. If it does decide it, c0 says so and the ESP umbrella's shape changes
-here — in that order.
+**What it is NOT recorded as deciding, and `frankc-c0` supplied the reason this
+sentence can be written at all** (`f35b44b8b`, its own words): *he rules out
+doing it **totally** and nobody proposed that, so treating a **language-scoped**
+sentence as settling a **thunk-scoped** fork would be a scope widened by a second
+seat's judgement.* That is the mechanism, not a caution — the quote and the fork
+are about different scopes, so no amount of careful reading makes one answer the
+other. **It was not inert, though:** c0 withdrew a recommendation it had already
+sent the owner, because machine integers scoped to ISR handlers is the same
+simplification, only narrower. **Adjacent enough to retire a proposal, not close
+enough to decide a fork** is the shape.
+
+**One reading that has entered circulation and is NOT his words.** *"Complete-
+but-slow outranks incomplete"* is a paraphrase of the pivot, not a quote, and it
+is being used as load-bearing for how an open fork's arms rank. The pivot is a
+SEQUENCING instruction — wrap up, then ESP32 — and whether ESP32 **outranks** the
+demos or runs beside them is on this file's own question list two paragraphs up,
+unanswered. A seat may of course argue an arm on its merits; it may not cite that
+paraphrase as the owner's ranking. Ask him, or rank on something else.
 
 ### What this does NOT license, since a pivot invites exactly this
 
