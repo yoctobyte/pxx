@@ -39983,3 +39983,65 @@ said it would **verify the tree is clean before stopping, and say so.** A stop
 that reports its own tree state converts "the box went quiet" into "the box went
 quiet and the next measurement can be trusted", which is what the asker actually
 needed.
+## A DISASSEMBLER ANSWERS ABOUT AN EMPTY SECTION TABLE, AND THE BUILD FLAG THAT EMPTIES IT IS NOT ONE ANYBODY CALLS A MEASUREMENT PARAMETER
+
+Measured 2026-09-22 (frankb-8e, Track A), chasing the promo-temp segfault
+`bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2`.
+
+**The instrument.** A probe built each variant of a NilPy program, located `main`
+in the `--map` file, disassembled that address range with
+`objdump -d --start-address=.. --stop-address=..`, and counted two things per
+row: which frame slots the prologue zeroes, and which the epilogue passes to
+`PXXPromoClear`. Seven rows across three source variants and four `-O` levels.
+
+**What it printed.** `zeroed=[] PromoClear=0 PromoCopy=0 PromoFromInt=0` — for
+every row. **Seven rows of zeroes read as seven answers**, and the shape of the
+table made them look like a finding: the counts were uniform, which is exactly
+what "this program has no promo temps" would produce.
+
+**Why it could not have been anything else.** pxx writes its own ELF, and
+**without `-g` it emits NO SECTION HEADERS at all.** `objdump -h` on such a
+binary prints the `Sections:` banner and stops. `objdump -d --start-address=X`
+then has no section containing X, so it prints the one-line file-format header
+and **exits 0** with no disassembly. It does not warn, and it does not fail: it
+answers, correctly and completely, about an empty set. The same command against
+the same program built WITH `-g` disassembles 550 bytes.
+
+**So the build flag is a measurement parameter and nothing labels it as one.**
+`-g` reads as a debugging convenience you add when you want line numbers. Here it
+is the difference between the binary being observable and not, and the probe that
+omitted it was not measuring the program at all.
+
+**THE TELL WAS IN THE SAME TABLE AND IT IS THE PART WORTH COPYING.** Every row
+also carried an `rc` column taken by RUNNING the binary, and those were right —
+`rc=139` for the crashing variant, `rc=0` for the others, matching the manual
+runs exactly. **One probe, two quantities, two sources: the execution half was
+correct and the static half was blind**, and the correct half made the table look
+healthy. A probe that reports several numbers from several sources can be
+partially blind, and the working columns lend their credibility to the dead ones.
+Do not read a table as one instrument.
+
+**Positive control, and the shape it has to take.** The earlier manual run had
+already disassembled this exact function by hand and found the `rep stos` pairs
+and four `PXXPromoClear` calls — so a known-nonzero answer existed and the probe
+disagreed with it. That disagreement is the whole catch. Where no prior hand
+reading exists, the control is: **assert the disassembly is non-empty, and assert
+it contains the function's own first instruction, before reading any count off
+it** — and branch on the assert, because a precondition you do not branch on is a
+comment. `test -s`, or a line count, is enough; the failure is not subtle once
+anything is checked at all.
+
+**This is "print the set your instrument enumerates and check the subject is IN
+it" (CLAUDE.md) arriving in a place nobody thinks of as an enumeration.** A grep
+enumerates files and a census enumerates rows, and both are obviously sets. A
+DISASSEMBLER enumerates a section table, which feels like a property of the tool
+rather than a population — and when the table is empty the tool's honest answer
+is indistinguishable from a real zero.
+
+**Third instance of the silent-zero shape in one day, which is why it earns a
+section:** a positive control that went SILENT for `gate.sh` because the pattern
+could not read that file (section above); `crtl_decl_probe.sh` answering
+`unimplemented: 0` about a population that could not contain the symbol; and this
+one. What is new here is that **the emptiness was our own toolchain's doing** —
+the sections are missing because *we* chose the flags — so the instrument is
+correct, the subject is real, and the gap is invisible from both ends.
