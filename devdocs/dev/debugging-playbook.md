@@ -39673,6 +39673,19 @@ because here the audit material was **attached**:
   attributed it to him, I attributed it to him, and by the logbook there was no
   frankuser in the sentence at all. Nobody lied; the intermediary simply is not
   load-bearing in any single retelling.
+- **EXTENSION 2026-09-22, third instance the same day and the first on an
+  INSTRUMENT rather than a claim: a REPAIR inherits the credibility of the
+  diagnosis it repairs.** `frankuser` published a recovery pipe for the
+  CLAUDE.md grep failure — five phrases that a naive `grep` misses, all five
+  found — **with no must-not-match row**. Without one the pipe is
+  indistinguishable from an instrument that finds everything, and those five rows
+  read identically either way. It holds (a genuinely absent phrase answers 0),
+  and it was only checked because a reader asked for the control. **The fix
+  arrives labelled as the careful version**, shorter than the problem, and the
+  reader is already persuaded by the time it appears — so a guard is audited
+  where a repair is adopted. Same shape as the bullet three above: what makes
+  something safe to adopt is what stops it being checked. **Ask of any repair the
+  question you would ask of any guard: what input must this REFUSE?**
 
 Handling the owner's words on the ESP32 pivot, I did two things in one commit:
 

@@ -50,10 +50,11 @@ The recovery pipe, verified at HEAD:
 
 ### Two denominators for the wrap figure, both recorded rather than reconciled
 
-`frankuser` measured **785 of 887 prose lines over 60 characters — 89%**.
+`frankuser` measured **785 of 887 prose lines over 60 characters — 89%**, where
+*prose line* is an ad-hoc predicate: non-empty, and not starting with `#`, `|`,
+`-`, `*`, a backtick, a space or `>` — which drops continuation lines.
 `frankz-e5`, counting every non-empty line, measured **1,587 of 1,740 — 91%**.
-The populations differ (what counts as a "prose line" was not defined the same
-way) and **the two numbers are not in conflict** — they answer different
+The populations differ, and **the two numbers are not in conflict** — they answer different
 questions and reach the same conclusion. Recorded as two rows per CLAUDE.md's own
 rule, rather than one replacing the other. Either way, **about nine in ten lines
 end mid-sentence.**
@@ -118,3 +119,19 @@ grep now finds the rules. **What would RAISE its priority:** evidence that a
 non-retrieval reached a wrong conclusion in the tree rather than being caught by
 a peer. As of 2026-09-22 there is none, and that is why this is p45 and not
 higher — the number is `frankz-e5`'s and is the softest thing in this ticket.
+
+**AND THAT CONDITION HAS NO NATURAL SOURCE, WHICH A FUTURE READER MUST NOT WAIT
+FOR** (`frankuser`'s point, and it is the right correction to the paragraph
+above). **A seat cannot report a non-retrieval about itself** — it did not fail
+to find the rule, it never knew the rule was there, so from inside, deriving it
+is just ordinary competent work with nothing anomalous to notice. A
+non-retrieval that reached the tree therefore **looks exactly like ordinary
+work** and generates no signal at all.
+
+So the raising evidence, if it exists, arrives only the way today's five did:
+**a PEER recognising a derived rule as one already in the file.** That is a
+narrow and fragile channel — it needs a second seat who knows the rule, reading
+the first seat's output, and connecting them. **Nothing polls for it, nothing
+guards it, and its absence is not evidence.** Read "there is none today" as *no
+peer happened to notice one*, never as *none occurred*. This is the ticket's own
+silent-negative class applied to its own acceptance criterion.
