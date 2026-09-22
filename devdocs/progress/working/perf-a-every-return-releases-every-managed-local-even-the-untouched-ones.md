@@ -1463,3 +1463,73 @@ Two things this changes going forward, both cheap:
 2. **Assert every leg BUILT** (`|| echo FAIL`, and branch on it) and that the
    N pre-images are N distinct shas. A `cmp` is a comparison whose
    preconditions were never established.
+
+## 2026-09-22 (frankb-8e) — THE ESP SIZE QUESTION IS ANSWERED, AND THE ANSWER IS THAT IT IS NOT A BLOCKER
+
+The i386 and arm32 sections both say the next step for riscv32 and xtensa is a
+**measurement, not an emitter**, because "+4 bytes per release site" had never
+been priced where image size is tracked. Here it is.
+
+### The instrument is the change itself, because the two cheaper ones were void
+
+**A disassembly scan was tried first and discarded.** Decoding RISC-V `JAL`
+out of the image and matching the target against `PXXStrDecRef` from the
+`.map` answered **0 sites** — and its positive control answered **0 too**:
+270 `JAL` words found, **none landing on any named symbol at all**, against
+28 symbols in the map. A scan that cannot find a single known call is not
+reporting zero, it is reporting nothing. (Two independent reasons, either
+sufficient: far calls are `auipc`+`jalr`, and the map names only exports.)
+**The "0 sites" it produced is exactly the answer the size argument wanted,
+which is why it got a control at all.**
+
+**What worked: emit a NOP at each `SXR_STR` site, build, read `code=`,
+divide.** No branch arithmetic to get wrong, no symbol resolution, and the
+delta *is* the count. Scratch only — inserted, measured, reverted.
+
+### Measured, with the positive control stated first
+
+| build | riscv32 | xtensa |
+| --- | --- | --- |
+| **positive control** — `cross.pas`, hosted, probe vs no-probe | +64 B / 4 = **16 sites** | +28 B / 2 = **14 sites** |
+| `cross.pas`, `--esp-profile=bare` | +20 B / 4 = **5 sites** | +12 B / 2 = **6 sites** |
+| `test_esp_bare_managed.pas`, bare | **0 sites** | **0 sites** |
+| `test_esp_bare_assert.pas`, bare | **0 sites** | **0 sites** |
+| `test_esp_stack_args.pas`, bare | **0 sites** | **0 sites** |
+
+The 16 on hosted riscv32 is the same 16 the x86-64, i386, arm32 and aarch64
+arms each found in that fixture — five instruments, five targets, one number.
+
+**The three bare fixtures in the tree have ZERO string release sites**, so on
+every bare program that exists today the cost of this change is **zero bytes**.
+That is a fact about the fixtures and not a licence, which is why the row that
+decides it is `cross.pas`.
+
+### The price, and the density bound that makes it safe
+
+`cross.pas` under bare is 5 sites in a **12,400 B** image on riscv32 and 6 in
+**10,140 B** on xtensa. At 4 B/site that is **0.16%** and **0.18%**.
+
+| program | sites per 1000 B of code | cost of the test |
+| --- | --- | --- |
+| `compiler.pas`, x86-64, thunked | **5.90** | 2.95% of code (measured artefact: +1.39%) |
+| `cross.pas`, bare riscv32 | 0.40 | 0.16% |
+| `cross.pas`, hosted riscv32 | 0.06 | 0.02% |
+
+**`compiler.pas` is the density BOUND, not a comparison** — it is the most
+managed-local-dense program in the tree by a wide margin, and the x86-64
+decision to go ungated was taken at that density. A bare ESP image is **15x
+less site-dense**, because the bare RTL contributes essentially none of them:
+the sites come from the application's own string locals, so an ESP program
+pays in proportion to how much it uses strings and nothing for having linked
+an RTL. **No program can be denser than the densest one we have, and at that
+density the bill was already accepted.**
+
+**So the ESP-specific gate is not needed and the frame-size threshold stays
+retired.** The hold was correct — the number did not exist and the hosted
+argument did not transfer — and the measurement now says the hosted answer
+happens to be the conservative one.
+
+**What would reopen this:** a real ESP application, not a fixture, whose site
+density approaches `compiler.pas`'s 5.90/1000 B. Nothing in the tree is close,
+and the honest limit on the row above is that `cross.pas` is fifteen lines —
+it prices the MECHANISM at a known density, it does not predict an app.
