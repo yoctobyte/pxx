@@ -9,7 +9,7 @@ created: 2026-09-03
 found-by: frankB
 owner: frankb-8e
 blocked-by: []
-summary: "REJECTED 2026-09-22 (frankb-8e): the premise is false by CONSTRUCTION, not merely unreachable. `ir_codegen_aarch64.inc`'s direct C-ABI arm really does save x0..x7 and not v0..v7 around the hidden-destination evaluation, and that asymmetry is CORRECT -- the operand it evaluates in that window, IRC[node], is always `IRAppend(IR_LEA, scratchSym, ...)` over a COMPILER-ALLOCATED scratch symbol at all five sites that build it (inlined in IRAppendCall; `IRBuildHiddenDest` for the CALL_IND and VIRTUAL paths), never the user's destination expression. An aggregate call returns into that scratch and the assignment to the user's lvalue is a separate copy afterwards, so `a nested call inside the destination` is not a shape the IR can hold, and an IR_LEA of a sym lowers to integer address materialisation that touches no v register. x0 needs saving (the LEA clobbers it); d0..d7 do not. MEASURED, not read, and by the route the original probe missed: the 2026-09-03 probe used a BODIED C function, which takes pxx's internal convention and never reaches this arm -- with an EXTERNAL of the reaching shape (`extern struct D2 mk(double,double)`, destination `v[idx()]`) the arm IS reached (differential on the `stp x0,x1,[sp,#-16]!` signature instruction: 1 with the call, 0 without), d0/d1 are demonstrably live and unsaved across it, and the window still holds only ldr/add/mov because the nested idx() call is hoisted above the fmovs. Population: two destination shapes (nested call, float computation), aarch64, compiler sha 06255ab1878c7061. The comment at the site now states the mechanism instead of the gap."
+summary: "REJECTED 2026-09-22 (frankb-8e) for aarch64 AND arm32, both measured; i386 and x86-64 have the same shape and were NOT looked at. The premise is false by CONSTRUCTION, not merely unreachable. `ir_codegen_aarch64.inc`'s direct C-ABI arm really does save x0..x7 and not v0..v7 around the hidden-destination evaluation, and that asymmetry is CORRECT -- the operand it evaluates in that window, IRC[node], is always `IRAppend(IR_LEA, scratchSym, ...)` over a COMPILER-ALLOCATED scratch symbol at all five sites that build it (inlined in IRAppendCall; `IRBuildHiddenDest` for the CALL_IND and VIRTUAL paths), never the user's destination expression. An aggregate call returns into that scratch and the assignment to the user's lvalue is a separate copy afterwards, so `a nested call inside the destination` is not a shape the IR can hold, and an IR_LEA of a sym lowers to integer address materialisation that touches no v register. x0 needs saving (the LEA clobbers it); d0..d7 do not. MEASURED, not read, and by the route the original probe missed: the 2026-09-03 probe used a BODIED C function, which takes pxx's internal convention and never reaches this arm -- with an EXTERNAL of the reaching shape (`extern struct D2 mk(double,double)`, destination `v[idx()]`) the arm IS reached (differential on the `stp x0,x1,[sp,#-16]!` signature instruction: 1 with the call, 0 without), d0/d1 are demonstrably live and unsaved across it, and the window still holds only ldr/add/mov because the nested idx() call is hoisted above the fmovs. Population: two destination shapes (nested call, float computation), aarch64, compiler sha 06255ab1878c7061. The comment at the site now states the mechanism instead of the gap."
 ---
 
 # The site
@@ -126,13 +126,43 @@ mechanism and cites this rejection.
 The ticket's closing instruction was right and is what stopped the patch
 landing: *"Do not land it without a program that fails first."*
 
+### arm32, measured rather than caveated — and it fails to have the bug for a SECOND reason
+
+This section first shipped saying arm32 was unmeasured. frankuser's objection
+was the summary rule — `REJECTED` reads as a disposition about the CONSTRUCT
+and this one was about a TARGET — and measuring was cheaper than scoping the
+sentence.
+
+The same program at `--target=arm32` emits the twin arm
+(`push {r0-r3}` / `e92d000f`: 1 with the call, 0 without). Its window body is
+`ldr r0,[pc]` / `add r0,r11,r0` / `mov r12,r0` — the same `IR_LEA` shape, so
+reason (2) below carries over unchanged. But arm32 never had the exposure in
+the first place: pxx marshals its arguments as WORDS under the base AAPCS,
+doubles included, so both doubles arrive through `ldr r0,[sp]` … `ldr r3,[sp,#0xc]`
+and `push {r0-r3}` covers **every** argument. The `vmov d0, r0, r1` that
+retrieves the double RESULT is the confirming tell: values cross this boundary
+in core registers.
+
+So the two targets are safe for different reasons, and only one of them
+generalises:
+
+| | why the FP bank is not at risk | target-independent? |
+| --- | --- | --- |
+| aarch64 | the window holds only an `IR_LEA` of a compiler scratch sym | **yes** |
+| arm32 | FP arguments are not in FP registers at all under base AAPCS | no |
+
+Both sites now say so in their own comments, because the aarch64 one sat
+mis-described for nineteen days and the arm32 one is the obvious next place to
+ask the same question.
+
 ### Population, so nobody inherits this without its denominator
 
-Two destination shapes (`v[idx()]`, `v[(int)(g*2.0)]`), target aarch64,
-`--system-libs=c`, compiler sha `06255ab1878c7061`. The **mechanism** is read
-from all five `IRC`-construction sites and is not limited to those two shapes;
-the **disassembly** is. Nothing here is measured on arm32, whose
-`ir_codegen_arm32.inc` has the same three arms and was not looked at.
+Two destination shapes (`v[idx()]`, `v[(int)(g*2.0)]`), targets aarch64 and
+arm32, `--system-libs=c`, compiler sha `06255ab1878c7061`. The **mechanism** is
+read from all five `IRC`-construction sites and is not limited to those two
+shapes or those two targets; the **disassembly** is. i386 and x86-64 have arms
+of the same shape and were not looked at — the provenance argument covers them,
+the convention argument does not.
 
 ### What would reopen it
 

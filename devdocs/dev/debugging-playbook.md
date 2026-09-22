@@ -27891,6 +27891,35 @@ assigns it and read what they put there. Name the count in the comment —
 reader's check is `grep -c`, and so the sentence goes red if a sixth appears.
 State the constructor, never the possibility.
 
+**AND THE REASON IT SURVIVES IS SHARPER THAN "NOBODY CHECKS" — THE CHECK THAT
+FAILS IS THE ONE EVERYBODY RUNS.** frankuser's framing, 2026-09-22, and it is
+the half that makes this publishable. CLAUDE.md's rule for a comment and code
+that disagree is to decide which is wrong before touching either. **A comment
+of this shape passes that check by claiming an acknowledged gap, and the gap is
+genuinely there.** The reviewer compares comment to code, finds exactly the
+disagreement the comment describes, and concludes the comment is the correct
+half — which is the intended outcome of the method. Disagreement-detection
+cannot fire here. The only way in is to ask whether the hazard STATE can exist,
+which means leaving the file and reading every constructor.
+
+**And it decays in the opposite direction to a stale hazard block, which is
+worse in one specific way.** CLAUDE.md's hazard-block rule is that a stale
+warning decays *"like a LOCK: silently, in the direction of doing nothing"* — a
+reader stops, and a reader who stops generates nothing that reveals the warning
+was wrong. This one is a standing instruction to **ADD** work: eight FP stores,
+a 64-byte `sub sp` and a matching restore on every aggregate-returning C-ABI
+call, dead on every one of them. **The no-signal property is identical** —
+work done for a hazard that cannot fire looks exactly like work done for one
+that can — and the cost is paid forever by everyone who obeys it rather than
+once by the person who stops. Same family, opposite sign; check the direction
+before assuming the lock rule covers your case.
+
+*(Not promoted to CLAUDE.md: one subsystem. The rule there for promotion is a
+second INDEPENDENT subsystem, and a peer proposing it does not substitute for
+one — see the note in this section's commit. A second instance of a comment
+that is false in a way that survives being checked against the code beside it
+should be added here first, and the pair promoted together.)*
+
 ## TWO PREDICATES FOR ONE CONCEPT, AND THE INCOMPLETE ONE IS WIRED INTO THE HOT PATH
 
 **Where a concept is expressed as a MEMBERSHIP LIST, look for a second copy

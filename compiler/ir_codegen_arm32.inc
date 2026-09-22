@@ -3199,7 +3199,24 @@ begin
             from r12 (ip) whatever the convention, and this arm never set it --
             see the i386 twin. r12 is free: the argument words are already in
             r0..r3 and nothing else in this sequence uses ip.
-            bug-c-a-c-function-s-calling-convention-depends-on-the-target }
+            bug-c-a-c-function-s-calling-convention-depends-on-the-target
+
+            NO FP-BANK QUESTION HERE, unlike the aarch64 twin, and for TWO
+            independent reasons -- recorded because the aarch64 arm carried a
+            ticket for nineteen days asking why its save covers the GP bank
+            only, and the obvious next move is to ask the same of this one.
+            (1) pxx marshals arm32 arguments as WORDS in r0..r3 under the base
+            AAPCS, doubles included -- measured 2026-09-22, a double argument
+            arrives via `ldr r0,[sp]`/`ldr r1,[sp,#4]` and a double RESULT
+            comes back through `vmov d0, r0, r1`, so no argument is ever live
+            in a d register across this window and `push {r0-r3}` covers all of
+            them. (2) IRC[node] on an ABIRetViaHiddenDestProc call is set at
+            exactly five sites in ir.inc and every one sets it to an IR_LEA
+            over a COMPILER-ALLOCATED scratch sym -- never the user's
+            destination expression, which is copied separately afterwards -- so
+            the window can hold no call and no FP touch on any target. Reason
+            (2) is target-independent; reason (1) is not.
+            bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-argument-bank-unsaved (rejected) }
           if ABIRetViaHiddenDestProc(procIdx) then
           begin
             EmitI32($E92D000F);                     { push {r0-r3} (args) }
