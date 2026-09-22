@@ -36582,12 +36582,25 @@ test-quick: $(COMPILER)
 	    || exit 1; \
 	  else echo "=== test_dce_c_cross_entry[$$t]: $$q absent, $$t C entry NOT verified ==="; fi; \
 	done
-	# AND XTENSA, which is the fourth cross arm and was NOT in the report that
-	# opened this. It was broken the same way and is fixed by the same line; it is
-	# here so the arm that nobody listed is not the arm that regresses. It takes
-	# the LITERAL-anchor form rather than a branch immediate, so it exercises the
-	# one encoding the three above do not. --xtensa-soft-mulhigh for the reason
-	# the Pascal block above states: qemu-xtensa's CPU model has no MULUH.
+	# AND XTENSA -- WHICH IS A DIFFERENT EXPERIMENT FROM THE THREE ABOVE, not a
+	# fourth row of the same one. Read that first, because the resolution of this
+	# bug called it "four targets, one cause" and that phrasing invites someone to
+	# check three and assume the fourth.
+	#
+	# The three legs above run each target's ordinary profile. This one CANNOT:
+	# on xtensa's native (ESP) profile a standalone C executable is refused by
+	# design, so it runs a POSIX ELF under qemu-xtensa instead. What it therefore
+	# proves is that the LITERAL-ANCHOR encoding of the entry-stub call was broken
+	# and is fixed -- the one encoding form the three above never reach, since
+	# they all patch a branch immediate. It proves nothing about C on the ESP
+	# profile, which does not take this road at all.
+	#
+	# It was not in the report that opened this bug and was found by measuring
+	# rather than by reading the matrix; it is here so the arm nobody listed is
+	# not the arm that regresses alone.
+	#
+	# --xtensa-soft-mulhigh for the reason the Pascal block above states:
+	# qemu-xtensa's CPU model has no MULUH.
 	#
 	# --platform=posix IS LOAD-BEARING AND IS NOT A STYLE CHOICE. Without it the
 	# xtensa C entry stub is REFUSED outright ("a STANDALONE EXECUTABLE on the

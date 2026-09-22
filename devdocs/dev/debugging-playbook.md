@@ -37035,3 +37035,80 @@ If it belongs there it is a one-sentence extension of the existing
 sometimes has every handler already, with the reason written in the arm that
 calls one* — and that is the owner's call to make, or a later session's on its
 own evidence.
+
+## A CORRECTION IS AN ASSERTION LIKE ANY OTHER AND WANTS THE SAME EVIDENCE AS THE THING IT CORRECTS — IT ARRIVES WITH BORROWED AUTHORITY
+
+Filed 2026-09-22 (frankb-8e and frankh-c0, two seats, one measurement).
+
+**The shape.** Someone reports X. Someone else corrects it to Y. The correction
+is believed immediately and checked by nobody — including by the person who
+made the original error, who has the strongest reason to interrogate it. A
+correction has **already survived one round of scrutiny by being a correction**,
+and the reader's attention is on the thing being fixed rather than on the fix.
+
+**The instance.** A report said a riscv32 program under `--dce` gave *"no
+output, exit 0"*. A second seat measured `rc=139` on all three cross targets,
+correctly, and then explained the discrepancy as *"the compiler's rc read for
+the program's"* — a confident mechanism, written into a ticket resolution AND
+into a live Makefile comment, **with no evidence beyond plausibility.** It was
+wrong. The program reports 139 in every invocation form; the compiler's rc
+cannot mask it. The original reporter believed the correction instantly, having
+made the original error and having the contradicting output in their own
+scrollback.
+
+**The real mechanism, and it was in both seats' terminals the whole time:**
+
+```
+aarch64  rc=139  out='qemu: uncaught target signal 11 (Segmentation fault) ...'
+arm32    rc=139  out='qemu: uncaught target signal 11 (Segmentation fault) ...'
+riscv32  rc=139  out=''
+```
+
+`qemu-riscv32` prints **no crash banner**. The reporter inferred an exit status
+from a **silence**, on the one target whose runner is silent.
+
+**THE READING FAILURE WAS SYMMETRIC AND THAT IS THE GENERAL FORM.** Both seats
+had those same three lines. One read the **rc column**, saw 139 uniformly, and
+concluded the report was an rc confusion. The other read the **output column**,
+saw the silence, and supplied an rc to match it. **Neither was missing data.
+Each compressed a two-column result into the column they were already thinking
+in**, and the two wrong claims are mirror images drawn from one measurement.
+
+So the tell was not available to more care — it was available to **reading the
+row instead of a column.**
+
+**Two discharges, and they are different.**
+
+1. **Before writing a correction, ask what measurement supports the CORRECTION**,
+   not what supports the fact being corrected. "Their number was wrong" and "it
+   was wrong *because* X" are two claims and the second usually has nothing
+   behind it. If the mechanism is a guess, say it is a guess: *"the rc is 139;
+   I do not know how 0 was arrived at."* That sentence would have cost nothing
+   and been true.
+2. **Where a result has more than one channel — status and output, size and
+   content, count and population — say what EVERY channel shows before
+   explaining any of them.** A one-column reading of a two-column result is not
+   a small loss of detail; it is the whole failure here, twice, in opposite
+   directions.
+
+**Why it is worth a section.** A wrong correction is more durable than a wrong
+report. The report gets re-measured by the person fixing it; the correction
+lands in a resolution and a code comment and is read thereafter as the settled
+version. This one reached a live Makefile comment, where a stale *fact* would
+have been contradicted by the next run but a wrong *explanation* is simply
+believed and propagated.
+
+**Related:** "the name is not the thing" (CLAUDE.md) covers an instrument that
+is correct about something else. This is the human layer of the same disease —
+a person correct about the number and wrong about the reason, with the correct
+half lending its credibility to the invented half. It is also the
+hedge-the-premise rule in a new position: there the caution was on the
+conclusion and the number was unmeasured; here the *number* was measured and the
+*mechanism* was not, and being demonstrably right about the number is what made
+the mechanism go unchallenged.
+
+**Promotion decision.** Banked, not promoted. Both seats declined on inverted
+provenance — each would be advocating a sentence the other wrote or suggested —
+which leaves the case sitting on two seats' evidence with neither as its
+advocate. Whoever picks it up has to re-derive it, and that re-derivation would
+be the third independent instance rather than a relay of these two.

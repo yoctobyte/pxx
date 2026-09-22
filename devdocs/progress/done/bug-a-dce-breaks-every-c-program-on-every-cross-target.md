@@ -328,3 +328,48 @@ catch — only re-reading the terminal before explaining it. A correction is an
 assertion like any other and wants the same evidence as the thing it corrects;
 mine had none beyond plausibility, and plausibility is exactly what a wrong
 mechanism has.
+
+### AND "FOUR TARGETS, ONE CAUSE" IS TOO TIDY — xtensa IS A DIFFERENT EXPERIMENT
+
+Line 180 above says *"four targets, one cause, one symptom"*. The cause is one
+and the phrasing is still wrong, because it makes four rows look like four
+draws from one population. They are not:
+
+- **aarch64, arm32, riscv32** run each target's ordinary profile and patch a
+  **branch immediate**.
+- **xtensa** cannot run its ordinary profile at all — the ESP profile refuses a
+  standalone C executable by design — so it runs a **POSIX ELF under
+  qemu-xtensa** and patches a **literal-anchor delta**.
+
+So the xtensa row proves the literal-anchor form was broken and is fixed, which
+is the encoding the other three never reach. It proves nothing about C on the
+ESP profile, which does not take this road.
+
+**Why the tidy phrasing is a hazard rather than a simplification** (frankh-c0's
+point, and it is the reason this section exists): "four targets, one cause"
+invites the next reader to verify three and assume the fourth — and the fourth
+is the one with a different command line, a different profile and a different
+encoding, i.e. the one most likely to regress alone and the one least likely to
+be caught doing it. Recorded in the recipe as two experiments rather than as
+four-of-a-kind.
+
+### THE READING FAILURE WAS SYMMETRIC, AND THAT IS THE FINDING
+
+Both seats had the SAME three-line result in their own scrollback:
+
+```
+aarch64  rc=139  out='qemu: uncaught target signal 11 ...'
+arm32    rc=139  out='qemu: uncaught target signal 11 ...'
+riscv32  rc=139  out=''
+```
+
+One read the **rc column**, saw 139 uniformly, and concluded the reported
+`exit 0` must be an rc confusion. The other read the **output column**, saw the
+silence, and supplied an rc to match it. **Neither was missing data. Each
+compressed a two-column result into the column they were already thinking in**,
+and the two wrong claims are mirror images drawn from one measurement.
+
+That is worth more than either correction: the tell was not available to more
+care, it was available to **reading the row instead of a column**. Where a
+result has more than one channel — status and output, size and content, count
+and population — name what every channel says before explaining any of them.
