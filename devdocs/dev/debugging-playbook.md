@@ -42453,3 +42453,77 @@ storage as a **neighbouring variable** — a wrong value that reads as deliberat
 A live reference into a hole means the liveness predicate was wrong, and the
 correct response to a falsified predicate is to stop, not to produce the nearest
 plausible answer.
+
+## A GUARD THAT CANNOT FAIL PRINTS PASS; A GUARD THAT OPTS OUT PRINTS **SKIP**, AND SKIP IS NOT COUNTED
+
+Measured 2026-09-22 (frankh-c0), and found by accident while reading a tier log
+for an unrelated row.
+
+CLAUDE.md already says *"a guard that cannot fail is not a guard, and it prints
+PASS"*. This is the same animal arriving through a door that rule does not
+cover. The guard here CAN fail, does have a positive control, and its control
+works. It simply decided the question did not apply to it, said so honestly, and
+left the run — and because a SKIP is not a failure, nothing anywhere went red.
+
+`tools/reloc_resolve_check.py x86_64 test/reloc_resolve_probe.c` is the
+strongest x86-64 C row in the emit-obj tier. Under the **pinned** compiler:
+
+    reloc-resolve[x86_64]: AGREE with GNU ld on 250686 bytes of .text,
+      1641 .text relocations (0 undefined, ld-only); 3 of 3 controls reddened it
+      linked binary runs: rc=0 out='42 0x44fa30 0x44fa38 0x4445f8'
+
+Under **HEAD**, the same row, same probe, same command:
+
+    reloc-resolve[x86_64]: SKIP -- pxx cannot emit an object here
+
+1,641 verified relocations and a three-control positive suite, gone, silently.
+The compiler had regressed so that it could not emit an x86-64 object from that
+particular C file at all, and the probe read its own inability to build as
+**evidence about the target's capabilities**.
+
+**THE SKIP IS TRUE AND ITS REASON IS INVENTED.** The probe really could not emit
+an object there; that half is correct and is why nothing looks wrong. What it
+could not do is tell *"this target does not support object emission"* from
+*"this compiler just broke"*, and it resolved the ambiguity toward the answer
+that requires no action. That is the house failure mode — an instrument that
+lies by being correct about something else — with SKIP as the vehicle.
+
+**WHY THIS IS WORSE THAN A GUARD THAT CANNOT FAIL.** A guard that always passes
+is at least counted: it occupies a row, it is in the pass tally, someone
+auditing coverage sees it. A SKIP is designed to be uncounted, because the
+legitimate uses of SKIP are exactly the cases nobody should look at — no
+toolchain installed, target not applicable, oracle unavailable. So the whole
+convention around SKIP is *do not investigate this*, and a broken-compiler skip
+inherits that convention.
+
+**THE DISCRIMINATOR IS ALMOST ALWAYS ALREADY IN THE RUN.** Two rows earlier the
+same tier asserts the supported-target set by name:
+
+    emit-obj-target-set: ok -- dispatch, refusal and --help all name
+      aarch64,arm32,i386,riscv32,x86-64,xtensa (refused: wasm32)
+
+x86-64 is in that list. The tier therefore already knew, in the same log, thirty
+lines up, that "pxx cannot emit an object here" was a false statement about
+x86-64. Nothing had to be measured; two facts in one log simply never met.
+
+**WHAT TO DO.** When you write a skip, the reason must be a fact about the
+ENVIRONMENT (a missing tool, an absent oracle, an inapplicable target), never an
+inference from your own failure to produce something. If the skip's condition is
+"I tried and it did not work", that is a FAIL or it is nothing. And where a
+supported-set is already asserted somewhere in the run, a skip that contradicts
+it should be an error rather than a skip.
+
+**AUDIT QUESTION, cheap, for any harness:** *list every SKIP the run printed, and
+for each one ask whether the reason could have been produced by a regression.*
+A skip whose text begins "cannot", "could not" or "failed to" is the shape to
+look at first; a skip whose text names a missing binary or an absent directory
+is almost always the legitimate kind.
+
+**STATUS: BANKED, NOT PROMOTED, and saying so deliberately.** This is ONE
+subsystem. CLAUDE.md's promotion test is a second independent subsystem, not
+merit, and this entry does not meet it however good the story is — that test
+exists precisely because an entry like this one argues well for itself. If a
+second harness in an unrelated lane is found converting a regression into a
+SKIP, this earns a line in CLAUDE.md, and it should land as an EXTENSION of the
+existing "a guard that cannot fail is not a guard" rule rather than as a
+neighbour beside it, since it is the same rule reached through a different door.
