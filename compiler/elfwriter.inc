@@ -5418,6 +5418,188 @@ begin
   if pcRel then Rel386Type := 2 else Rel386Type := 1;
 end;
 
+function ObjGotLocalName(extIdx: Integer): AnsiString;
+{ The name of the LOCAL symbol that marks external extIdx's GOT slot in .data.
+  arm32 only -- see ObjGotStrOff in defs.inc for why the slot needs a symbol of
+  its own at all.
+
+  THE PREFIX IS NOT COSMETIC. A leading `$` would be, and would be wrong: on ARM
+  `$a`, `$d` and `$t` are MAPPING SYMBOLS that mark ARM code, data and Thumb
+  code, and a disassembler and a linker both read them. Observed 2026-09-22 in
+  clang's own output for a hand-written .s -- it emits `$a` at 0 and `$d` at the
+  first `.word`. A name in that namespace is the one shape here that a tool
+  would interpret rather than ignore. `.pxxgot.` cannot collide with a C or
+  Pascal identifier either, since neither can contain a dot. }
+begin
+  ObjGotLocalName := '.pxxgot.' + ExternalLinkName(extIdx);
+end;
+
+procedure ObjBuildTextRelocs386(firstGlobal, impSym0, numExportProcs: Integer);
+{ Everything that goes into .rel.text for an i386 object, lifted out of
+  writeELFRel386General UNCHANGED so the arm32 sibling below it could be added
+  without a third copy of the ELF32 scaffolding -- the same split, for the same
+  reason, that ObjBuildTextRelocsX64/A64 made in the ELF64 writer.
+
+  It buffers through ObjRelPush rather than writing entries as it goes, which
+  is the one behavioural change: push order is write order, so the file is
+  unchanged, and the caller can now take relTextCount from ObjRelCount instead
+  of recomputing the sum. That matters because arm32 emits TWO entries per
+  external call and one arithmetic statement of the count would have been
+  wrong for it while looking right.
+
+  The control for the lift is byte-identity: the i386 objects this produces
+  must be the files they were before it. }
+var i, dsym: Integer;
+begin
+  for i := 0 to FixCount-1 do
+    ObjRelPush(Fixups[i].CodePos, 2, Rel386Type(FixupPCRel[i]), 0);
+  for i := 0 to GlobFixCount-1 do
+  begin
+    { An IMPORTED global relocates against its OWN symbol here too. REL (not
+      RELA) carries no addend field, so the addend already sits in the code
+      word: the patch loop writes it, and for an import that must be 0 rather
+      than this object's private .bss offset -- the linker supplies the address.
+      Getting only one of the two right is the silent-wrong-read bug again. }
+    dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
+    if dsym >= 0 then dsym := impSym0 + ObjDataImportOrdinal(dsym)
+    else
+    begin
+      dsym := ObjDataExportSymForOff(GlobFix[i].BSSoff);
+      if dsym >= 0 then
+        dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
+    end;
+    if dsym >= 0 then
+      ObjRelPush(GlobFix[i].CodePos, dsym, Rel386Type(GlobFixPCRel[i]), 0)
+    else if SymOffIsData(GlobFix[i].BSSoff) then
+      ObjRelPush(GlobFix[i].CodePos, 2, Rel386Type(GlobFixPCRel[i]), 0)
+    else
+      ObjRelPush(GlobFix[i].CodePos, 3, Rel386Type(GlobFixPCRel[i]), 0);
+  end;
+  { `call dword [abs32]`: the operand names OUR GOT slot in .data, not the
+    callee. The slot's own relocation is in .rel.data. }
+  for i := 0 to DynCallCount-1 do
+    ObjRelPush(DynCallCodePos[i], 2, Rel386Type(DynCallPCRel[i]), 0);
+  for i := 0 to ProcAddrFixCount-1 do
+    ObjRelPush(ProcAddrFix[i].CodePos, 1, Rel386Type(ProcAddrPCRel[i]), 0);
+end;
+
+procedure ObjBuildTextRelocsArm32(firstGlobal, gotSym0, impSym0,
+                                  numExportProcs: Integer);
+{ The arm32 twin. Same four sources, and the shapes were taken from the
+  EMITTERS rather than from the psABI, because that is what the aarch64 work
+  found the hard way -- grepping ir_codegen_arm32.inc for the fixup arrays
+  returns one hit in 4000 lines and reads as "this backend records no
+  relocations", when in fact it reaches three of the four through the shared
+  emitters in emit.inc.
+
+    EmitDataRef     4-byte literal   ABS32 (2)  vs .data + DataOff
+    EmitGlobRef     4-byte literal   ABS32 (2)  vs .data/.bss + offset
+    DynCall         movw+movt        MOVW_ABS_NC (43) / MOVT_ABS (44)
+    ProcAddrFix     4-byte literal   ABS32 (2)  vs .text
+
+  So arm32 is i386's SHAPE with aarch64's external call: three inline literal
+  pools (`ldr r0,[pc]` / `b .+8` / the word) and one instruction-field pair.
+
+  EVERY NUMBER HERE WAS OBSERVED, NOT READ (2026-09-22), and the reason is the
+  aarch64 MOVW bug: that writer and its own harness held the same wrong type
+  numbers, taken from the same document, so every comparison between them was
+  green. clang assembles arm32 on this box even with no arm toolchain, so each
+  row below came off an object it produced:
+
+    R_ARM_MOVW_ABS_NC = 0x2b = 43   R_ARM_MOVT_ABS = 0x2c = 44
+    R_ARM_ABS32       = 2
+
+  ABS32 IS 2 AND NOT 1, and 1 is the answer three independent analogies give:
+  R_386_32, R_RISCV_32 and R_AARCH64_ABS64 are all 1 on their own targets, and
+  an inference that is right three times out of three is not a careless guess
+  -- it is a well-founded one, which is exactly what makes it dangerous. On ARM
+  1 is R_ARM_PC24, a real relocation, so the wrong number does not refuse; it
+  asks the linker to write a branch displacement into a data word.
+
+  THE ADDEND IS 0 ON EVERY ROW, AND THAT IS A DESIGN AND NOT A CONVENIENCE.
+  SHT_REL keeps the addend in the field being relocated, and for MOVW/MOVT that
+  field is the instruction's SPLIT 16-bit immediate -- imm4 at bits 19:16, imm12
+  at bits 11:0 -- which is SIGNED 16-BIT. Measured: clang accepts
+  `movw r0, #:lower16:sym+32767` and refuses +65535 with "Relocation Not In
+  Range", and both entries of a pair carry the same FULL addend (A=8 encodes as
+  imm12=8 in the movw AND in the movt). The aarch64 design -- relocate against
+  the .data section symbol, put ExternalGotOff in the addend -- therefore cannot
+  be copied here: .data in the self-hosted compiler is 607044 bytes with the GOT
+  slots at 72% and 99% of it. gotSym0 is what removes that ceiling instead of
+  raising it: a LOCAL symbol placed at each slot, so the offset lives in a
+  32-bit st_value and the addend is 0. Observed to work in clang's own output --
+  a local at .data+0x40 relocated by a movw/movt pair with a zero field.
+
+  This is the failure mode the ticket's own evidence is about: a writer built
+  the other way would pass every object test in this repo, because every probe
+  here has a .data small enough to fit under 32767, and fail on the first real
+  program. The probe's SIZE is the population parameter, and nothing states it. }
+var i, dsym: Integer;
+begin
+  { The three literal-pool sites have no PC-relative form on this target:
+    FixupPCRel and GlobFixPCRel are set only by the i386 rewrites (each guarded
+    by `if TargetArch <> TARGET_I386 then Exit`) and by the x86-64 lea form.
+    REFUSING is cheaper than a branch that cannot be taken, and it is the guard
+    that fires if one of those shared rewrites ever grows an arm reaching here
+    -- at which point the addend would silently need a PC term. }
+  for i := 0 to FixCount-1 do
+  begin
+    if FixupPCRel[i] then
+      ErrorNoPos('--emit-obj: internal -- a PC-relative data fixup on arm32, '
+          + 'which no emitter on this target produces; the shared EmitDataRef '
+          + 'rewrites are i386 and x86-64 only, so arriving here means one of '
+          + 'them has grown an arm that fires for this target');
+    ObjRelPush(Fixups[i].CodePos, 2, 2, 0);
+  end;
+  for i := 0 to GlobFixCount-1 do
+  begin
+    if GlobFixPCRel[i] then
+      ErrorNoPos('--emit-obj: internal -- a PC-relative global fixup on arm32, '
+          + 'which EmitGlobRef produces only for i386 and x86-64');
+    dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
+    if dsym >= 0 then dsym := impSym0 + ObjDataImportOrdinal(dsym)
+    else
+    begin
+      dsym := ObjDataExportSymForOff(GlobFix[i].BSSoff);
+      if dsym >= 0 then
+        dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
+    end;
+    if dsym >= 0 then
+      ObjRelPush(GlobFix[i].CodePos, dsym, 2, 0)
+    else if SymOffIsData(GlobFix[i].BSSoff) then
+      ObjRelPush(GlobFix[i].CodePos, 2, 2, 0)
+    else
+      ObjRelPush(GlobFix[i].CodePos, 3, 2, 0);
+  end;
+  { The external call. DynCallCodePos is the movw; the movt is four bytes on.
+    TWO RELOCATIONS FOR ONE SITE, the only place in this writer where that
+    happens: MOVW_ABS_NC writes bits [15:0] of S+A into the split immediate and
+    MOVT_ABS writes bits [31:16] of the SAME S+A into the identical field of the
+    next instruction. Get one right and the other wrong and the link still
+    succeeds; the program then calls a plausible address in the wrong 64 KiB.
+    Both name the slot's own local symbol, never the callee -- the slot's ABS32
+    against the extern's UND symbol is in .rel.data. }
+  for i := 0 to DynCallCount-1 do
+  begin
+    if DynCallPCRel[i] then
+      ErrorNoPos('--emit-obj: internal -- a PC-relative external call on arm32; '
+          + 'this target reaches an external through a movw/movt pair, which '
+          + 'has no PC-relative form here');
+    ObjRelPush(DynCallCodePos[i],
+               gotSym0 + DynCallExtIdx[i], 43, 0);
+    ObjRelPush(DynCallCodePos[i] + 4,
+               gotSym0 + DynCallExtIdx[i], 44, 0);
+  end;
+  { @proc: a 4-byte literal, absolute against .text, with the body offset
+    patched into the word as the addend -- the i386 sibling's shape exactly. }
+  for i := 0 to ProcAddrFixCount-1 do
+  begin
+    if ProcAddrPCRel[i] then
+      ErrorNoPos('--emit-obj: internal -- a PC-relative @proc fixup on arm32');
+    ObjRelPush(ProcAddrFix[i].CodePos, 1, 2, 0);
+  end;
+end;
+
 procedure writeELFRel386General(const outPath: AnsiString);
 var
   i: Integer;
@@ -5429,6 +5611,9 @@ var
   initArrOff, relInitArrOff, finiArrOff, relFiniArrOff: Integer;
   initArrSec, finiArrSec, numSects, shstrSize: Integer;
   initArrNm, relInitArrNm, finiArrNm, relFiniArrNm: Integer;
+  machine, eflags, textAlign, rAbs32, gotSymCount, gotSym0: Integer;
+  nSym, nStr: Integer;
+  isArm: Boolean;
   hasInitArr, hasFiniArr: Boolean;
 {$ifdef FPC}
   f: File;
@@ -5436,24 +5621,85 @@ var
   f: Integer;
 {$endif}
 begin
-  if TargetArch <> TARGET_I386 then
-    ErrorNoPos('--emit-obj: the general ELF32/i386 object writer is i386 only');
+  { arm32 SHARES THIS WRITER because it shares the FORMAT -- ELF32, SHT_REL,
+    the same nine-section layout, the same 8-byte .data GOT slots. Only the
+    machine, the relocation type numbers, the external-call site's shape and
+    one extra group of local symbols differ, and those are the locals below
+    plus ObjBuildTextRelocsArm32. i386 stays here rather than being forked for
+    the same reason x86-64 and aarch64 share writeELFRelX64General: a second
+    copy of the scaffolding is a second place for the symbol-index arithmetic
+    to drift, and that arithmetic is what decides whether a relocation names
+    the symbol it meant to. }
+  isArm := TargetArch = TARGET_ARM32;
+  if (TargetArch <> TARGET_I386) and (not isArm) then
+    ErrorNoPos('--emit-obj: the general ELF32 object writer serves i386 and '
+        + 'arm32 only');
 
   ObjCheckProcAddrBodies;
   ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs,
                        numLocalData, numExportData, numImportData);
 
-  { null + 3 section syms + local procs + local data | exported procs +
-    exported data + external funcs + imported data. extSym0 moves by
-    numExportData and impSym0 is new; every relocation that names a symbol
-    index is built from these three. }
-  firstGlobal := 4 + numLocalProcs + numLocalData;
+  { ONE LOCAL SYMBOL PER EXTERNAL, arm32 only -- see ObjGotLocalName and
+    ObjBuildTextRelocsArm32 for why the GOT slot needs a symbol rather than an
+    addend. Their names continue the string table ObjPlanHostedSymbols just
+    laid out, so they are written LAST in .strtab; their SYMBOLS sit in the
+    middle of .symtab, with the other locals, and st_name is an offset so the
+    two orders need not agree. }
+  gotSymCount := 0;
+  gotSym0 := 4 + numLocalProcs + numLocalData;
+  if isArm then
+  begin
+    gotSymCount := ExternalCount;
+    for i := 0 to ExternalCount-1 do
+    begin
+      ObjGotStrOff[i] := strSize;
+      strSize := strSize + Length(ObjGotLocalName(i)) + 1;
+    end;
+  end;
+
+  { null + 3 section syms + local procs + local data + GOT slot locals |
+    exported procs + exported data + external funcs + imported data. extSym0
+    moves by numExportData and impSym0 is new; every relocation that names a
+    symbol index is built from these three.
+
+    ELF REQUIRES EVERY LOCAL BEFORE EVERY GLOBAL, with sh_info naming the first
+    non-local -- so inserting a group of locals shifts EVERY global's index and
+    must move sh_info by the same amount. Off by a constant does not refuse: it
+    points each relocation at a neighbouring symbol and links. That is safe by
+    construction here only because firstGlobal is the single expression all
+    three of the others are derived from, and ObjAssertSymbolOrder below checks
+    the result rather than trusting the derivation. }
+  firstGlobal := gotSym0 + gotSymCount;
   extSym0 := firstGlobal + numExportProcs + numExportData;
   impSym0 := extSym0 + ExternalCount;
   numSyms := impSym0 + numImportData;
 
-  relTextCount := FixCount + GlobFixCount + DynCallCount + ProcAddrFixCount;
+  { .rel.text is BUILT before the file offsets are computed, and relTextCount
+    comes from the buffer rather than from a sum. arm32 emits two entries per
+    external call, so a sum written for i386 would be short by DynCallCount and
+    every section after .rel.text would land at the wrong offset -- an object
+    that is structurally wrong in a way no relocation assertion looks at. }
+  ObjRelCount := 0;
+  if isArm then
+    ObjBuildTextRelocsArm32(firstGlobal, gotSym0, impSym0, numExportProcs)
+  else
+    ObjBuildTextRelocs386(firstGlobal, impSym0, numExportProcs);
+  relTextCount := ObjRelCount;
   relDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
+
+  { EM_386 = 3 with no flags; EM_ARM = 40 with EF_ARM_EABI_VER5 = $05000000.
+    Observed off clang's own arm32 object on 2026-09-22 ("Version5 EABI"), not
+    read: an e_flags of 0 declares EABI version 0 and ld refuses to combine it
+    with anything a modern toolchain produced.
+    R_386_32 = 1, R_ARM_ABS32 = 2 -- see ObjBuildTextRelocsArm32 on why 1 is
+    the plausible wrong answer here and what it would do.
+    .text alignment: 16 is an x86 cache-line habit; ARM instructions are 4-byte
+    and 4 is what clang emits. }
+  machine := 3; eflags := 0; rAbs32 := 1; textAlign := 16;
+  if isArm then
+  begin
+    machine := 40; eflags := $05000000; rAbs32 := 2; textAlign := 4;
+  end;
 
   { SHT_REL addends, written into the bytes the relocation covers. Every site
     below holds zero from the backend, so this fills rather than overwrites --
@@ -5508,11 +5754,18 @@ begin
         Patch32(GlobFix[i].CodePos, GlobFix[i].BSSoff);
     end;
   end;
-  for i := 0 to DynCallCount-1 do
-    if DynCallPCRel[i] then
-      Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]] + DynCallPicDelta[i])
-    else
-      Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]]);
+  { NOT ON arm32, DELIBERATELY. There the site is a movw/movt pair whose addend
+    field is the instruction's split 16-bit immediate, and the design puts the
+    slot offset in a local symbol's st_value with the addend 0 -- so the right
+    thing to write here is the zero the emitter already left. Patch32 would
+    write the offset as a flat 32-bit word straight over both halves of the
+    movw's encoding, destroying the instruction. }
+  if not isArm then
+    for i := 0 to DynCallCount-1 do
+      if DynCallPCRel[i] then
+        Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]] + DynCallPicDelta[i])
+      else
+        Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]]);
   for i := 0 to ProcAddrFixCount-1 do
     if ProcAddrPCRel[i] then
       Patch32(ProcAddrFix[i].CodePos, Procs[ProcAddrFix[i].ProcIdx].BodyAddr + ProcAddrPicDelta[i])
@@ -5589,9 +5842,9 @@ begin
   writeU8(f,1);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 32, LE, v1 }
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
-  writeU16(f,1);writeU16(f,3);writeU32(f,1);            { ET_REL, EM_386 }
+  writeU16(f,1);writeU16(f,machine);writeU32(f,1);      { ET_REL, EM_386/EM_ARM }
   writeU32(f,0);writeU32(f,0);writeU32(f,shOff);        { entry, phoff, shoff }
-  writeU32(f,0);                                        { e_flags }
+  writeU32(f,eflags);                                   { e_flags }
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
   writeU16(f,40);writeU16(f,numSects);writeU16(f,8); { shentsize, shnum, shstrndx }
 
@@ -5622,6 +5875,30 @@ begin
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
       writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $01, 5);
+  { The arm32 GOT-slot locals, LAST in the local half and therefore immediately
+    before firstGlobal. $01 = STB_LOCAL | STT_OBJECT; shndx 3 is .data; the
+    slot is 8 bytes wide because the .data layout is shared with the 64-bit
+    targets, even though a 32-bit pointer read only reaches the low word. The
+    loop runs zero times on i386, so that object is unchanged byte for byte. }
+  for i := 0 to gotSymCount-1 do
+    writeSym32(f, ObjGotStrOff[i], ExternalGotOff[i], 8, $01, 3);
+  { THE LOCAL/GLOBAL BOUNDARY, COUNTED RATHER THAN DERIVED. sh_info below is
+    written as firstGlobal, and firstGlobal is an ARITHMETIC statement of where
+    this point falls; this is the only line that observes where it ACTUALLY
+    falls. The two agree by construction today, which is exactly why the check
+    is worth having: adding a group of locals means editing both the sum and
+    the emission order, and if only one is edited nothing refuses -- ELF simply
+    has every global index shifted by N, and each relocation then names a
+    NEIGHBOURING symbol and links. A wrong answer that is structurally valid is
+    the failure mode this whole ticket is about. }
+  nSym := 4 + numLocalProcs + numLocalData + gotSymCount;
+  if nSym <> firstGlobal then
+    ErrorNoPos('--emit-obj: internal -- the ELF32 symbol table emitted ' +
+        AIntToStr(nSym) + ' local symbols but sh_info says ' +
+        AIntToStr(firstGlobal) + '. Every STB_LOCAL must precede every global '
+        + 'and sh_info must be the index of the first non-local; a mismatch '
+        + 'shifts every global index and the object still links, naming a '
+        + 'neighbouring symbol at each relocation');
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), Byte(ObjProcBind(i) or 2), 1);
@@ -5647,11 +5924,43 @@ begin
   for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
+  { The GOT-slot names continue the table, which is where their offsets were
+    assigned. Their SYMBOLS are in the middle of .symtab and their NAMES are at
+    the end of .strtab, and that is fine: st_name is an offset, not an order. }
+  for i := 0 to gotSymCount-1 do writeStrZ(f, ObjGotLocalName(i));
+  { .strtab's REAL length against the one ObjPlanHostedSymbols budgeted. Every
+    st_name written above is an offset into this table, so a group added to the
+    emission loops and not to the plan (or the reverse) silently renames every
+    symbol after it -- and a symbol table full of valid-looking wrong names is
+    a linkable object. The pad below is the only other thing that would notice,
+    and it notices by going negative, which writePad treats as zero. }
+  nStr := 1;
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
+      nStr := nStr + Length(Procs[i].Name) + 1;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then nStr := nStr + Length(Syms[i].Name) + 1;
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and ObjProcIsExported(i) then
+      nStr := nStr + Length(Procs[i].Name) + 1;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then nStr := nStr + Length(Syms[i].Name) + 1;
+  for i := 0 to ExternalCount-1 do
+    nStr := nStr + Length(ExternalLinkName(i)) + 1;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
+      nStr := nStr + Length(Syms[i].Name) + 1;
+  for i := 0 to gotSymCount-1 do
+    nStr := nStr + Length(ObjGotLocalName(i)) + 1;
+  if nStr <> strSize then
+    ErrorNoPos('--emit-obj: internal -- the ELF32 .strtab is ' + AIntToStr(nStr) +
+        ' bytes and ' + AIntToStr(strSize) + ' were budgeted; every st_name '
+        + 'after the divergence names the wrong string');
   writePad(f, relTextOff - (strOff + strSize));
 
-  { .rel.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
+  { .rel.text, flushed from the buffer ObjBuildTextRelocs386/Arm32 filled.
 
-    TWO types now: R_386_32 = 1 (absolute) and R_386_PC32 = 2 (relative to the
+    TWO i386 types: R_386_32 = 1 (absolute) and R_386_PC32 = 2 (relative to the
     PC-anchored base in esi). A site is relative exactly when the emitter marked
     it so, which is the SAME flag pair x86-64 already uses for its rip form --
     reused rather than duplicated, because a second parallel notion of "this
@@ -5659,54 +5968,24 @@ begin
 
     This reads False for every i386 site until the addressing conversion sets
     it, so landing it is inert.
-    bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
-  { FOUR ARRAYS, ONE QUESTION. Each of Fixups/GlobFix/DynCall/ProcAddrFix carries
+    bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations
+
+    FOUR ARRAYS, ONE QUESTION. Each of Fixups/GlobFix/DynCall/ProcAddrFix carries
     its own PCRel flag, so the relocation TYPE is chosen in four places; Rel386Type
-    is the one place that answers it. The arm added second is the one that stays
-    wrong, and there are already four (frankA, 2026-09-01). }
-  for i := 0 to FixCount-1 do
-    writeRel32(f, Fixups[i].CodePos, 2, Rel386Type(FixupPCRel[i]));
-  for i := 0 to GlobFixCount-1 do
-  begin
-    { An IMPORTED global relocates against its OWN symbol here too. REL (not
-      RELA) carries no addend field, so the addend already sits in the code
-      word: Patch32 below writes it, and for an import that must be 0 rather
-      than this object's private .bss offset -- the linker supplies the address.
-      Getting only one of the two right is the silent-wrong-read bug again. }
-    dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
-    if dsym >= 0 then dsym := impSym0 + ObjDataImportOrdinal(dsym)
-    else
-    begin
-      dsym := ObjDataExportSymForOff(GlobFix[i].BSSoff);
-      if dsym >= 0 then
-        dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
-    end;
-    if dsym >= 0 then
-      writeRel32(f, GlobFix[i].CodePos, dsym, Rel386Type(GlobFixPCRel[i]))
-    else if SymOffIsData(GlobFix[i].BSSoff) then
-    begin
-      writeRel32(f, GlobFix[i].CodePos, 2, Rel386Type(GlobFixPCRel[i]));
-    end
-    else
-    begin
-      writeRel32(f, GlobFix[i].CodePos, 3, Rel386Type(GlobFixPCRel[i]));
-    end;
-  end;
-  { `call dword [abs32]`: the operand names OUR GOT slot in .data, not the
-    callee. The slot's own relocation is in .rel.data below. }
-  for i := 0 to DynCallCount-1 do
-    writeRel32(f, DynCallCodePos[i], 2, Rel386Type(DynCallPCRel[i]));
-  for i := 0 to ProcAddrFixCount-1 do
-    writeRel32(f, ProcAddrFix[i].CodePos, 1, Rel386Type(ProcAddrPCRel[i]));
+    is the one place that answers it for i386, and the arm32 builder refuses all
+    four rather than growing a fifth. The arm added second is the one that stays
+    wrong, and there were already four (frankA, 2026-09-01). }
+  for i := 0 to relTextCount-1 do
+    writeRel32(f, Integer(ObjRelPos[i]), ObjRelSym[i], ObjRelType[i]);
 
   { .rel.data: data->data pointers, data->code method slots, and one entry per
     external GOT slot against that extern's UND symbol. }
   for i := 0 to DataPtrFixCount-1 do
-    writeRel32(f, DataPtrFix[i].DataPos, 2, 1);
+    writeRel32(f, DataPtrFix[i].DataPos, 2, rAbs32);
   for i := 0 to MethodFixCount-1 do
-    writeRel32(f, MethodFixups[i].DataPos, 1, 1);
+    writeRel32(f, MethodFixups[i].DataPos, 1, rAbs32);
   for i := 0 to ExternalCount-1 do
-    writeRel32(f, ExternalGotOff[i], extSym0 + i, 1);
+    writeRel32(f, ExternalGotOff[i], extSym0 + i, rAbs32);
 
   { .init_array / .fini_array contents. Unlike the x86-64 twin, the slot is NOT
     zero: SHT_REL has no addend field, so the thunk's code offset lives in these
@@ -5715,12 +5994,12 @@ begin
   if hasInitArr then
   begin
     writeU32(f, InitThunkOff);
-    writeRel32(f, 0, 1, 1);          { R_386_32 vs the .text section symbol }
+    writeRel32(f, 0, 1, rAbs32);     { absolute vs the .text section symbol }
   end;
   if hasFiniArr then
   begin
     writeU32(f, FiniThunkOff);
-    writeRel32(f, 0, 1, 1);
+    writeRel32(f, 0, 1, rAbs32);
   end;
 
   { .shstrtab: 64-byte base blob, plus 28 bytes per array pair that exists. }
@@ -5750,7 +6029,7 @@ begin
   writeShdrA(f, 0, 0, 0, 0, 0);
   writeShdrB(f, 0, 0, 0, 0);
   writeShdrA(f, 1, 1, 6, textOff, CodeLen);
-  writeShdrB(f, 0, 0, 16, 0);
+  writeShdrB(f, 0, 0, textAlign, 0);
   writeShdrA(f, 7, 9, $40, relTextOff, relTextCount*8);
   writeShdrB(f, 6, 1, 4, 8);
   writeShdrA(f, 17, 1, 3, dataOff, DataLen);

@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankC
 owner: frankb-8e
 blocked-by: []
-summary: "THE aarch64 OBJECT WRITER IS LANDED AND VERIFIED, 2026-09-22; arm32 is what remains. It shares writeELFRelX64General's body (e_machine, the absolute-pointer type and .rela.text construction are the only differences) with byte-identity of four saved x86-64/i386 objects as the control. THE PSABI WAS THE WRONG PLACE TO DESIGN FROM: this backend materialises addresses from an INLINE LITERAL POOL, so three of four sites are DATA WORDS in .text (ABS64, and ABS32 for the 4-byte `ldr w0,[pc+8]` form -- 1077 of 1355 relocations) and only the external call is an instruction field, where one site takes TWO relocations. AND THE FIRST VERSION GOT THOSE TWO TYPE NUMBERS WRONG IN BOTH THE WRITER AND THE HARNESS, IDENTICALLY, SO THEY AGREED: MOVW_UABS is G0=263 G0_NC=264 G1=265 G1_NC=266, interleaving checked and unchecked, and reading it as four consecutive numbers from 263 put the OVERFLOW-CHECKED G0 on the movz and a second G0 on the movk. Found by clang -fno-pic -mcmodel=large over `&extern_var`, whose object names the types -- an external emitter was the only thing that could see it. Verified: AGREE with pxx's own executable on 772256 bytes and 1355 relocations, 4 of 4 controls reddening it; plus test/reloc_movw_probe.c for the arm the main probe cannot reach, with clang as a shape oracle and a GOT-slot coherence check carrying its own two controls. --function-sections is REFUSED on aarch64 (it needs CALL26) rather than half-served."
+summary: "BOTH HALVES LANDED AND VERIFIED, 2026-09-22 (aarch64, then arm32). Each shares its ELF-class writer rather than cloning it -- aarch64 in writeELFRelX64General, arm32 in writeELFRel386General -- with byte-identity of four saved x86-64/i386 objects as the control for both lifts. THE PSABI WAS THE WRONG PLACE TO DESIGN FROM ON BOTH: these backends materialise addresses from an INLINE LITERAL POOL, so three of four sites are DATA WORDS in .text and only the external call is an instruction field, where one site takes TWO relocations. THE MECHANISM WORTH REMEMBERING IS THE SHARED READING: the aarch64 MOVW type numbers were wrong in the writer AND in its own harness, identically, so every comparison between them was green -- only clang's object could see it. Every arm32 number was therefore OBSERVED, never read, and R_ARM_ABS32 = 2 is the one an analogy gets wrong three times out of three (1 is R_ARM_PC24, which does not refuse). arm32 gives each GOT slot its OWN LOCAL SYMBOL with addend 0, because SHT_REL keeps the addend in a SIGNED 16-BIT split immediate and .data is 607044 bytes here -- a writer built the aarch64 way passes every test in this repo and fails on the first real program, since every probe is small enough to fit. Verified: aarch64 AGREE on 772256 bytes / 1355 relocations, arm32 AGREE on 835712 / 1354, 4 of 4 controls each, plus shape, coherence and split-addend oracles against clang. OPEN, FOUND HERE AND NOT CLOSED: an object carries a DUPLICATE .rel.data entry, harmless on RELA and a doubled base on SHT_REL -- measured against GNU ld on i386, 0x100a00b1 where 0x8054f51 was meant."
 ---
 
 # Object output for arm32 and aarch64
@@ -544,3 +544,131 @@ reproduces `0xe301c234`/`0xe345c678`), reading one is not.
 addend, and that object agrees with GNU ld byte for byte, so the `SHT_REL`
 read path is thoroughly exercised there. The gap is specific to arm32's SPLIT
 field, which i386's flat 32-bit one does not have.
+
+## The arm32 writer, landed 2026-09-22 (frankb-8e) — BOTH HALVES DONE
+
+`--emit-obj --target=arm32` writes a linkable ET_REL object. It shares
+`writeELFRel386General`'s body rather than cloning the ELF32 scaffolding a
+second time, the same split the aarch64 half made in the ELF64 writer:
+`ObjBuildTextRelocs386` / `...Arm32` hold the `.rel.text` construction and five
+locals (`machine`, `eflags`, `rAbs32`, `textAlign`, `gotSymCount`) carry the
+rest. **The control for the lift is byte-identity** — four saved objects (the
+reloc probe and a `--function-sections` case, x86-64 and i386) are byte for byte
+what they were before it.
+
+**THE FOUR SITES, TAKEN FROM THE EMITTERS AND NOT FROM THE PSABI**, which is
+what the aarch64 half learned the hard way. arm32 turns out to be i386's SHAPE
+with aarch64's external call:
+
+| site | shape | relocation |
+| --- | --- | --- |
+| `EmitDataRef` | 4-byte literal in `.text` | `R_ARM_ABS32` (2) vs `.data` |
+| `EmitGlobRef` | 4-byte literal | `R_ARM_ABS32` (2) vs `.data`/`.bss` |
+| `DynCall` | `movw`+`movt` | `MOVW_ABS_NC` (43) / `MOVT_ABS` (44) |
+| `ProcAddrFix` | 4-byte literal | `R_ARM_ABS32` (2) vs `.text` |
+
+Every number observed off clang's own arm32 object, never read: clang assembles
+`--target=arm-linux-gnueabihf` on this box with no ARM toolchain present, and
+emits `movw`/`movt` for ordinary `-fno-pic` C over `&extern_var` — no
+`-mcmodel=large` and no hand-written `.s`, unlike aarch64. `e_flags` is
+`0x05000000` (EABI version 5), also observed; 0 declares version 0 and `ld`
+refuses to combine it with anything modern.
+
+### The GOT slot gets a LOCAL SYMBOL, and that is the whole design
+
+The ceiling recorded in the section above is why. `SHT_REL` keeps the addend in
+the field, the field is a signed 16-bit split immediate, and `.data` in the
+self-hosted compiler is 607044 bytes with the slots at 72% and 99% of it. So
+each external gets `.pxxgot.<name>`, an `STB_LOCAL` `STT_OBJECT` symbol **placed
+at** its slot, and the pair relocates against that with addend 0: the offset
+lives in a 32-bit `st_value` and the ceiling is removed rather than raised.
+Observed to be exactly what clang does for a local at `.data+0x40`.
+
+The prefix is not cosmetic. A `$`-led name would land in ARM's **mapping symbol**
+namespace (`$a` code, `$d` data, `$t` thumb), which tools interpret; clang emits
+both in its own output. A dot-led name cannot collide with a C or Pascal
+identifier either.
+
+### The symbol-ordering trap, named by frankuser before the code existed
+
+ELF requires every `STB_LOCAL` before every global, with `sh_info` the index of
+the first non-local. A new local group therefore shifts **every** global index
+and must move `sh_info` by the same N — and **off by a constant does not refuse.
+It points each relocation at a neighbouring symbol and links.** Same class as
+`R_ARM_PC24` for `R_ARM_ABS32`: a wrong answer that is structurally valid.
+
+It is right by construction here (`firstGlobal` is the one expression the other
+three indices derive from), which is exactly why it is also **checked**, in
+three independent places, none of which restates the derivation:
+
+- the writer counts the locals it actually emitted and compares with `sh_info`;
+- the writer recomputes `.strtab`'s real length against the budgeted `strSize`
+  — the pad would otherwise absorb a divergence by going negative;
+- `symtab_order_check` in the harness reads the boundary back **off the object**
+  and carries its own positive control, run every time: if `sh_info ± 1` would
+  also pass, the table has no observable boundary and the check says so.
+  Verified to reject a hand-perturbed `sh_info` on both an ELF32 and an ELF64
+  object, and to accept both clean ones.
+
+### The harness had a RELA assumption nothing had ever exposed
+
+arm32 is **the first `SHT_REL` target to use the executable oracle**, and that
+combination had never run: `solve_bases` and `base_at` both read
+`r['addend'] or 0`, which is correct for RELA and reads 0 for every `SHT_REL`
+site. i386 never exposed it because it takes the GNU ld oracle instead. Not a
+latent bug in the untriggered sense — **the population that would trigger it did
+not exist.**
+
+The symptom is the instructive part: the base vote split into as many values as
+there are distinct addends (1076 across `.bss`, top vote 248) and the run
+printed *"the object and the executable do not share a layout here"* — an honest
+sentence about the wrong thing. The fix is `_inplace_addend`, one reader used by
+both, and **the addend is read before the base is chosen**, because for a
+section symbol the addend *is* the offset and `base_at` needs it to pick which
+piece of a split `.data` the site names. Reading it late cost 265 sites resolved
+against a base `0x42c0` away — 530 bytes disagreeing, every one in the low half
+of a word, which reads like a field-encoding bug and is not.
+
+### The split-field READ, which pxx's own objects cannot test
+
+frankuser's ask, and it survived the design change that answered it. pxx now
+emits `A = 0` on **every** `MOVW`/`MOVT` row by design, so a reader that skips
+the field entirely is indistinguishable from a correct one on every row pxx
+produces. So the addends come from clang: eight values assembled into
+`movw r0, #:lower16:sym+N`, and `_inplace_addend` — the same function the applier
+uses, not a copy — must recover each one. Recovered `[0, 1, 8, 4096, 32767, -1,
+-8, -32768]`, both entries of each pair carrying the same full addend.
+
+Two controls, both drawn from how this reader would really go wrong:
+
+- a **contiguous** reader (`insn & 0xffff`) must disagree on at least one N. It
+  is right for every N below 4096 — which is every addend a casually-written
+  fixture would use. It disagrees on 5 of 8 here.
+- clang must **refuse** `+0x8000` and `+0x10000`. If it accepted them the field
+  would not be 16-bit signed and the local-symbol design would be answering a
+  question that does not exist.
+
+### One aarch64-shaped assumption in the shared checks, found by arm32
+
+`clang_movw_entries`'s shape invariant read *"every entry is 4 past the previous
+one and all addends are equal"*. True of clang's aarch64 output because that is
+ONE group of four covering one 64-bit address; false of its arm32 output, which
+is TWO pairs for two externs, 16 bytes apart. **The invariant that was always
+meant is per-PAIR**, and stating it across the group was an accident of the
+aarch64 probe having a single extern. The harness flagged it correctly, with the
+right message — *"clang's own group does not have the shape this check assumes;
+the assumption is what is wrong"*.
+
+### Verified
+
+`AGREE with pxx's own executable on 835712 bytes, 1354 relocations; 4 of 4
+controls reddened it, and every section base has an independent runtime
+witness`, plus the split-addend oracle, the shape oracle and the GOT-slot
+coherence check with its own 2 of 2 controls. x86-64, i386, riscv32 and aarch64
+all unchanged and green in the same run. Wired into `test-emit-obj`.
+
+**WHAT IS NOT CLAIMED.** No ARM linker exists on this box — no `ld.lld`, no
+cross binutils — so the oracle is pxx's own executable under qemu, exactly as
+for riscv32 and aarch64. That does NOT establish that a real linker agrees, and
+the run says so in its own last line. The `.rel.data` duplicate-offset note
+below is the one open question this work surfaced and did not close.

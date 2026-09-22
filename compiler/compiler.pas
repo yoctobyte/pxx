@@ -3058,11 +3058,17 @@ begin
         construction differ, and the writer takes those three from TargetArch.
         feature-a-object-output-for-arm32-and-aarch64 }
       writeELFRelX64General(outFile)
-    else if TargetArch = TARGET_I386 then
+    else if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
       { i386 is a HOSTED object like x86-64's, not an ESP firmware image: it
         exports the C-convention surface and reaches externals through a GOT
         slot in .data. writeELF32Rel does neither.
-        feature-a-object-output-for-i386-arm32-and-aarch64 }
+        arm32 joins it rather than writeELF32Rel for exactly the same reason,
+        and shares the FORMAT besides -- ELF32, SHT_REL, nine sections. What it
+        does not share is the external-call site (a movw/movt pair, not an
+        absolute operand) and the group of local symbols that pair needs; both
+        live in writeELFRel386General's arm32 arm.
+        feature-a-object-output-for-i386-arm32-and-aarch64
+        feature-a-object-output-for-arm32-and-aarch64 }
       writeELFRel386General(outFile)
     else
       writeELF32Rel(outFile);

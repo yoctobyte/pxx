@@ -6415,6 +6415,21 @@ var
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
   ObjDataStrOff : array of Integer;
   ObjExtStrOff  : array[0..MAX_EXTERNAL-1] of Integer;
+  { .strtab offset of the LOCAL symbol that names external i's GOT slot in
+    .data. arm32 only, and it exists because R_ARM_MOVW_ABS_NC's addend lives
+    in the instruction's own split immediate field, which is SIGNED 16-BIT:
+    relocating the movw/movt pair against the .data SECTION symbol with the
+    slot's offset as the addend -- which is what the aarch64 writer does, where
+    RELA carries the addend at full width -- overflows the moment .data grows
+    past 32 KiB. Measured 2026-09-22: .data in the self-hosted compiler is
+    607044 bytes with the GOT slots at 72% and 99% of it, eighteen times over.
+    A local symbol PLACED AT the slot moves the offset into a 32-bit st_value
+    and leaves the addend 0, so the ceiling is removed rather than raised.
+    DO NOT "simplify" this back to a section-relative addend on the evidence
+    that the test objects link: every probe in this repo has a .data small
+    enough to fit, so that evidence is about the probe's SIZE and not about the
+    writer. See feature-a-object-output-for-arm32-and-aarch64. }
+  ObjGotStrOff  : array[0..MAX_EXTERNAL-1] of Integer;
   ObjProcSymIdx : array of Integer; { .symtab index of each proc (extended iram writer) }
   ObjProcIramOff: array of Integer; { offset of an iram proc's body within .iram1.text }
   { Directory of the compiler binary itself (from ParamStr(0)); RTL/LCL units are
@@ -8756,7 +8771,7 @@ begin
   TargetHasObjectWriter :=
     (arch = TARGET_X86_64) or (arch = TARGET_I386) or
     (arch = TARGET_XTENSA) or (arch = TARGET_RISCV32) or
-    (arch = TARGET_AARCH64);
+    (arch = TARGET_AARCH64) or (arch = TARGET_ARM32);
 end;
 
 function EmitObjTargetList: AnsiString;

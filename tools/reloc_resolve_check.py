@@ -72,7 +72,7 @@ see undef_addr. Skipping them would have excluded the entire class this exists
 for on aarch64, where an extern is reached through movz/movk and every one of
 those relocations names an undefined symbol.
 """
-import os, subprocess, sys, struct, tempfile
+import os, subprocess, sys, struct, tempfile, shutil
 
 def rd(b, o, n): return int.from_bytes(b[o:o+n], 'little')
 
@@ -124,10 +124,12 @@ class Elf:
             o = st['off'] + i * st['entsize']
             if self.cls == 2:
                 nm, shndx, val = rd(self.b,o,4), rd(self.b,o+6,2), rd(self.b,o+8,8)
+                bind = rd(self.b,o+4,1) >> 4
             else:
                 nm, val, shndx = rd(self.b,o,4), rd(self.b,o+4,4), rd(self.b,o+14,2)
+                bind = rd(self.b,o+12,1) >> 4
             out.append(dict(name=strs[nm:strs.index(b'\0',nm)].decode(),
-                            shndx=shndx, value=val))
+                            shndx=shndx, value=val, bind=bind))
         return out
 
     def relocs(self, base):
@@ -403,7 +405,77 @@ VOTE_ABSOLUTE = {
     243: {1},              # EM_RISCV:  R_RISCV_32
     94:  {1},              # EM_XTENSA: R_XTENSA_32
     183: {257, 258},       # EM_AARCH64: ABS64 (low word), ABS32
+    40:  {2},              # EM_ARM:    R_ARM_ABS32
 }
+
+
+def obj_label(e):
+    return f'EM_{e.machine} object'
+
+
+def symtab_order_check(e, syms, tname):
+    """ELF's local/global ordering, READ BACK OFF THE OBJECT.
+
+    Every STB_LOCAL symbol must precede every global and weak one, and
+    .symtab's sh_info must be the index of the first non-local. The compiler
+    derives that index arithmetically; this is the only place it is OBSERVED.
+
+    WHY IT IS WORTH A CHECK THAT LOOKS TAUTOLOGICAL. Adding a group of locals
+    -- which arm32 did, one per external GOT slot -- shifts EVERY global index
+    by N, so a sum edited in one place and not the other does not refuse:
+    sh_info and the table simply disagree, the linker partitions the table at
+    the wrong point, and each relocation resolves to a NEIGHBOURING symbol. An
+    object that links and calls the wrong function is this ticket's whole
+    subject, and it is the failure mode a relocation-type assertion cannot see.
+    (frankuser, 2026-09-22, naming the hazard before the writer had it.)
+
+    Also asserts that every relocation's symbol index is inside the table, and
+    that a relocation naming a SECTION symbol names one of the three this
+    writer defines -- the cheap half of "does r_info resolve to the symbol you
+    intended"."""
+    st = e.sec('.symtab')
+    if st is None or 'info' not in st: return True
+    first_nonlocal = next((i for i, s in enumerate(syms) if s.get('bind', 0) != 0),
+                          len(syms))
+
+    def partition_ok(info):
+        """Is `info` a valid sh_info for THIS table: every symbol below it
+        local, every symbol at or above it non-local?"""
+        return (all(sy.get('bind', 0) == 0 for sy in syms[:info])
+                and all(sy.get('bind', 0) != 0 for sy in syms[info:]))
+
+    # ITS OWN POSITIVE CONTROL, INLINE AND RUN EVERY TIME, because an ordering
+    # check over a correct table is exactly the shape that passes without being
+    # able to fail. Off by one is not an arbitrary perturbation here: it is
+    # precisely what adding a group of locals and editing only one of the two
+    # places produces. Both directions, since a group added at the wrong END of
+    # the local half moves the boundary the other way.
+    for delta in (-1, +1):
+        probe = first_nonlocal + delta
+        if 0 <= probe <= len(syms) and partition_ok(probe):
+            print(f'reloc-resolve[{tname}]: BROKEN -- this check cannot fail on '
+                  f'{obj_label(e)}: sh_info {probe} would also pass, so the '
+                  f'table has no observable local/global boundary')
+            return False
+    if st['info'] != first_nonlocal:
+        print(f'reloc-resolve[{tname}]: BROKEN -- .symtab sh_info is {st["info"]} '
+              f'but the first non-local symbol is at index {first_nonlocal} '
+              f'({syms[first_nonlocal]["name"] if first_nonlocal < len(syms) else "-"}); '
+              f'a linker partitions the table at sh_info, so every relocation '
+              f'past that point names a neighbouring symbol and still links')
+        return False
+    for s in syms[first_nonlocal:]:
+        if s.get('bind', 0) == 0:
+            print(f'reloc-resolve[{tname}]: BROKEN -- local symbol '
+                  f'{s["name"]!r} sits after the first global')
+            return False
+    for kind in ('text', 'data'):
+        for r in e.relocs(kind):
+            if r['sym'] >= len(syms):
+                print(f'reloc-resolve[{tname}]: BROKEN -- a .rel{kind} entry at '
+                      f'{r["off"]:#x} names symbol {r["sym"]} of {len(syms)}')
+                return False
+    return True
 
 
 def solve_bases(e, syms, xe, xoff, text, regions=None):
@@ -433,6 +505,7 @@ def solve_bases(e, syms, xe, xoff, text, regions=None):
     if tbase is None: return None, {}
     et = exe_bytes(xe, xoff, tbase, e.sec('.text')['size'])
     if len(et) < e.sec('.text')['size']: return None, {}
+    ot = e.data(text)
     votes = {}
     absset = VOTE_ABSOLUTE.get(e.machine, set())
     for r in e.relocs('text'):
@@ -441,7 +514,21 @@ def solve_bases(e, syms, xe, xoff, text, regions=None):
         if r['type'] not in absset: continue
         try: have = struct.unpack_from('<I', et, r['off'])[0]
         except Exception: continue
-        votes.setdefault(s['shndx'], Counter())[have - (s['value'] + (r['addend'] or 0))] += 1
+        # SHT_REL KEEPS THE ADDEND IN THE OBJECT'S OWN BYTES, and this loop read
+        # it as 0 until arm32 arrived (2026-09-22). Every target that had ever
+        # reached this vote was RELA -- riscv32, xtensa, aarch64 -- and i386,
+        # the one SHT_REL target here before arm32, takes the GNU ld oracle
+        # instead and never runs it. So the bug was not latent in the sense of
+        # untriggered: the population that would trigger it did not exist.
+        # The symptom is a vote that splits into as many values as there are
+        # distinct addends -- 1076 votes across .bss with the top at 248 -- and
+        # the honest-sounding "the layouts do not correspond" that follows says
+        # nothing about the layouts. An instrument that is correct about RELA.
+        A = r['addend']
+        if A is None:
+            try: A = struct.unpack_from('<i', ot, r['off'])[0]
+            except Exception: A = 0
+        votes.setdefault(s['shndx'], Counter())[have - (s['value'] + A)] += 1
     base = {ti: tbase}
     for k, c in votes.items():
         top = c.most_common(2)
@@ -577,6 +664,34 @@ def apply_relocs(e, secname, secdata, base_of, sec_va, syms, unhandled,
         _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions)
 
 
+def _inplace_addend(e, r, secdata):
+    """The addend a SHT_REL target keeps in the field the relocation covers.
+
+    ONE PLACE, because it is read twice -- once to choose which piece of a
+    split section the site names (base_at) and once to compute S+A -- and two
+    readings that can disagree are how a harness reports a field-encoding bug
+    that is really a base-selection bug.
+
+    ARM MOVW/MOVT IS THE ONLY NON-CONTIGUOUS CASE HERE: imm4 at bits 19:16 and
+    imm12 at bits 11:0, SIGNED 16-bit. Observed against clang (2026-09-22):
+    `movw r0, #:lower16:sym+8` encodes imm12=8, `+32767` encodes imm4=7
+    imm12=0xfff, and +65535 is refused with "Relocation Not In Range". Both
+    entries of a pair carry the same FULL addend; only the type says which 16
+    bits of S+A go back into the field.
+
+    pxx never emits a non-zero addend on those two types -- by design, since
+    the slot offset lives in a local symbol's st_value -- so this read is
+    exercised from the other side by clang_arm_split_addend_oracle()."""
+    try:
+        if e.machine == 40 and r['type'] in (43, 44):
+            insn = struct.unpack_from('<I', secdata, r['off'])[0]
+            a = ((insn >> 4) & 0xf000) | (insn & 0xfff)
+            return a - 0x10000 if a >= 0x8000 else a
+        return struct.unpack_from('<i', secdata, r['off'])[0]
+    except Exception:
+        return 0
+
+
 def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions=None):
     """Patch `secdata` in place. Arithmetic straight from each psABI.
 
@@ -584,7 +699,17 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions=None):
     covers, which is what makes i386 different from x86-64 rather than merely
     smaller."""
     s = syms[r['sym']]
-    b_ = base_at(base_of, regions, s['shndx'], s['value'] + (r['addend'] or 0))
+    # THE ADDEND IS READ BEFORE THE BASE IS CHOSEN, and on a SHT_REL target
+    # that ordering is the whole correctness of the region lookup. base_at
+    # picks which piece of a split section an offset falls in, so it needs the
+    # OFFSET -- and for a section symbol the offset is entirely in the addend.
+    # Reading `r['addend'] or 0` here sent every .data relocation on arm32 to
+    # offset 0, which lands in the 32-byte prefix piece, so 265 sites resolved
+    # against a base 0x42c0 away from the right one: 530 bytes disagreeing,
+    # every one of them in the low half of a word, which reads like a field
+    # encoding bug and is not.
+    A = _inplace_addend(e, r, secdata) if r['addend'] is None else r['addend']
+    b_ = base_at(base_of, regions, s['shndx'], s['value'] + A)
     if b_ is None:
         # SHN_UNDEF. A LINKER'S ONLY CONTRIBUTION HERE IS CHOOSING THE NUMBER,
         # so the harness chooses it instead and checks the bytes encode THAT.
@@ -605,14 +730,12 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions=None):
     S = b_ + s['value']
     P = sec_va + r['off']
     m = e.machine
-    A = r['addend']
     if m == 62:                                  # EM_X86_64, RELA
         if   r['type'] == 1:  struct.pack_into('<Q', secdata, r['off'], (S + A) & (2**64-1))
         elif r['type'] == 2:  struct.pack_into('<i', secdata, r['off'], S + A - P)
         elif r['type'] == 11: struct.pack_into('<i', secdata, r['off'], S + A)
         else: unhandled[f'x86_64:{r["type"]}'] = unhandled.get(f'x86_64:{r["type"]}', 0) + 1
     elif m == 3:                                 # EM_386, REL (in-place addend)
-        A = struct.unpack_from('<i', secdata, r['off'])[0]
         if   r['type'] == 1: struct.pack_into('<i', secdata, r['off'], (S + A) - (2**32 if S+A >= 2**31 else 0))
         elif r['type'] == 2: struct.pack_into('<i', secdata, r['off'], S + A - P)
         else: unhandled[f'i386:{r["type"]}'] = unhandled.get(f'i386:{r["type"]}', 0) + 1
@@ -659,9 +782,45 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions=None):
                 (struct.unpack_from('<I', secdata, r['off'])[0] & ~0x03ffffff)
                 | (((S + A - P) >> 2) & 0x03ffffff))
         else: unhandled[f'aarch64:{r["type"]}'] = unhandled.get(f'aarch64:{r["type"]}', 0) + 1
-    elif m == 40:                                # EM_ARM, REL
-        A = struct.unpack_from('<i', secdata, r['off'])[0]
-        unhandled[f'arm:{r["type"]}'] = unhandled.get(f'arm:{r["type"]}', 0) + 1
+    elif m == 40:                                # EM_ARM, REL (in-place addend)
+        # 2 R_ARM_ABS32, 43 R_ARM_MOVW_ABS_NC, 44 R_ARM_MOVT_ABS.
+        #
+        # ABS32 IS 2, NOT 1. On i386, riscv32 and aarch64 the plain absolute
+        # relocation is 1, so three independent analogies say 1 here and all
+        # three are wrong -- and 1 is R_ARM_PC24, a real relocation, so the
+        # mistake would not refuse. Observed off clang's own arm32 object
+        # (2026-09-22), not read off the psABI, because the aarch64 MOVW bug
+        # was a psABI reading that the writer AND this file held identically.
+        if r['type'] == 2:
+            v = S + A
+            struct.pack_into('<i', secdata, r['off'],
+                             v - (2**32 if v >= 2**31 else 0))
+        elif r['type'] in (43, 44):
+            # THE SPLIT IMMEDIATE, AND READING IT IS THE HALF THAT IS EASY TO
+            # SKIP. SHT_REL keeps the addend in the field, and on ARM that
+            # field is not contiguous: imm4 at bits 19:16, imm12 at bits 11:0.
+            # Both entries of a movw/movt pair carry the same FULL addend and
+            # the type alone says which 16 bits of S+A to write back.
+            #
+            # A writer that never produces a non-zero addend here -- which pxx
+            # is, deliberately: it relocates against a local symbol placed AT
+            # the GOT slot so the offset lives in a 32-bit st_value -- makes a
+            # skipped read indistinguishable from a correct one on every row it
+            # emits. So the read is exercised from the OTHER side, by
+            # clang_arm_split_addend_oracle() below, against objects clang
+            # assembles with addends this writer cannot produce.
+            #
+            # SIGNED, and that is the whole reason for pxx's design here:
+            # clang accepts `movw r0, #:lower16:sym+32767` and refuses +65535
+            # with "Relocation Not In Range".
+            insn = struct.unpack_from('<I', secdata, r['off'])[0]
+            v = (S + A) & 0xffffffff
+            imm = (v >> 16) & 0xffff if r['type'] == 44 else v & 0xffff
+            struct.pack_into('<I', secdata, r['off'],
+                             (insn & ~0x000f0fff)
+                             | ((imm & 0xf000) << 4) | (imm & 0xfff))
+        else:
+            unhandled[f'arm:{r["type"]}'] = unhandled.get(f'arm:{r["type"]}', 0) + 1
     else:
         unhandled[f'machine{m}:{r["type"]}'] = unhandled.get(f'machine{m}:{r["type"]}', 0) + 1
 
@@ -829,6 +988,125 @@ def clang_movw_entries():
             for x in e.relocs('text') if 263 <= x['type'] <= 269]
 
 
+def clang_movw_entries_arm():
+    """The arm32 MOVW group's SHAPE, from clang, for ordinary C.
+
+    Better than the aarch64 sibling needed: no -mcmodel=large, no hand-written
+    .s -- `-fno-pic` over `&extern_var` makes clang materialise the address with
+    movw/movt, which is exactly the shape pxx emits for a GOT slot. Returns
+    [(offset, type, addend)] with the addend read out of the field, since ARM is
+    SHT_REL and there is no addend column to read."""
+    cc = shutil.which('clang')
+    if not cc: return None
+    work = tempfile.mkdtemp(prefix='armshape-')
+    src = os.path.join(work, 's.c'); obj = os.path.join(work, 's.o')
+    open(src, 'w').write('extern int ev;\nextern int ev2;\n'
+                         'int *p(void){ return &ev; }\n'
+                         'int *q(void){ return &ev2; }\n')
+    r = subprocess.run([cc, '--target=arm-linux-gnueabihf', '-fno-pic',
+                        '-c', src, '-o', obj], capture_output=True, text=True)
+    if r.returncode != 0: return None
+    e = Elf(obj)
+    tb = e.data(e.sec('.text'))
+    out = []
+    for rr in e.relocs('text'):
+        if rr['type'] in (43, 44):
+            out.append((rr['off'], rr['type'], _inplace_addend(e, rr, tb)))
+    return out or None
+
+
+ARM_SPLIT_ADDENDS = (0, 1, 8, 4096, 0x7fff, -1, -8, -0x8000)
+
+
+def clang_arm_split_addend_oracle():
+    """THE READ HALF OF THE SPLIT FIELD, WHICH NOTHING ELSE HERE EXERCISES.
+
+    pxx never emits a non-zero addend on R_ARM_MOVW_ABS_NC/MOVT_ABS -- by
+    design, since the GOT slot offset lives in a local symbol's st_value -- so
+    every row pxx produces has A = 0, and with A = 0 a reader that skips the
+    field entirely is indistinguishable from a correct one. (frankuser,
+    2026-09-22, before this writer existed: the point that the write half being
+    covered says nothing about the read half.)
+
+    So the addends come from clang, which can encode what pxx will not. Each N
+    is assembled into `movw r0, #:lower16:sym+N` and `movt r0, #:upper16:sym+N`,
+    and _inplace_addend -- the SAME function the applier uses, not a copy -- must
+    recover N from the bytes. BOTH entries carry the same full addend, which is
+    asserted rather than assumed.
+
+    ITS OWN POSITIVE CONTROLS, both drawn from how this reader would really go
+    wrong rather than from what is easy to assert:
+
+      - a reader that takes the low 16 bits CONTIGUOUSLY (insn & 0xffff) must
+        recover the wrong value for at least one N. That is the natural
+        mistake: it is right for every N below 4096, which is every addend a
+        casually-written fixture would use.
+      - the SIGN. -1 must come back as -1 and not as 65535, because the field
+        is signed and a linker computes S + A.
+
+    And the ceiling is asserted from the other side: clang must REFUSE 0x8000
+    and 0x10000. If it accepted them the field would not be 16-bit signed and
+    pxx's whole local-symbol design would be answering a question that does not
+    exist."""
+    cc = shutil.which('clang')
+    if not cc: return None, 'clang not found'
+    work = tempfile.mkdtemp(prefix='armadd-')
+    src = os.path.join(work, 'a.s'); obj = os.path.join(work, 'a.o')
+    body = ['        .text', 'f:']
+    for n in ARM_SPLIT_ADDENDS:
+        body.append(f'        movw r0, #:lower16:sym+({n})')
+        body.append(f'        movt r0, #:upper16:sym+({n})')
+    open(src, 'w').write('\n'.join(body) + '\n')
+    r = subprocess.run([cc, '--target=arm-linux-gnueabihf', '-c', src, '-o', obj],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None, 'clang cannot assemble the arm32 addend set: ' + \
+               (r.stdout + r.stderr).strip().splitlines()[-1][:80]
+    e = Elf(obj); tb = e.data(e.sec('.text'))
+    rel = sorted((rr for rr in e.relocs('text') if rr['type'] in (43, 44)),
+                 key=lambda rr: rr['off'])
+    if len(rel) != 2 * len(ARM_SPLIT_ADDENDS):
+        return False, f'expected {2*len(ARM_SPLIT_ADDENDS)} entries, got {len(rel)}'
+    got, naive = [], []
+    for j, n in enumerate(ARM_SPLIT_ADDENDS):
+        lo, hi = rel[2*j], rel[2*j+1]
+        a1 = _inplace_addend(e, lo, tb); a2 = _inplace_addend(e, hi, tb)
+        if a1 != n or a2 != n:
+            return False, (f'addend {n}: recovered {a1} from the movw and {a2} '
+                           f'from the movt; both must be {n}')
+        got.append(n)
+        naive.append(struct.unpack_from('<I', tb, lo['off'])[0] & 0xffff)
+    # CONTROL 1: the contiguous reading must be wrong somewhere in this set.
+    if all(nv == (n & 0xffff) for nv, n in zip(naive, ARM_SPLIT_ADDENDS)):
+        return False, ('the contiguous reader (insn & 0xffff) agreed on every '
+                       'addend in the set, so this check cannot tell the split '
+                       'field from a flat one -- the SET is what is wrong')
+    # CONTROL 2: clang must refuse what the field cannot hold.
+    refused = []
+    for n in (0x8000, 0x10000):
+        open(src, 'w').write(f'        .text\nf:\n'
+                             f'        movw r0, #:lower16:sym+({n})\n')
+        rr = subprocess.run([cc, '--target=arm-linux-gnueabihf', '-c', src,
+                             '-o', obj], capture_output=True, text=True)
+        refused.append(rr.returncode != 0)
+    if not all(refused):
+        return False, ('clang ACCEPTED an addend the 16-bit signed field cannot '
+                       'hold, so the ceiling this writer is designed around is '
+                       'not where it was measured')
+    return True, (f'recovered {got} through the split field (imm4@19:16, '
+                  f'imm12@11:0, signed); a contiguous read disagrees on '
+                  f'{sum(1 for nv, n in zip(naive, ARM_SPLIT_ADDENDS) if nv != (n & 0xffff))} '
+                  f'of {len(got)}; clang refuses +0x8000 and +0x10000')
+
+
+# Per-machine MOVW group shape. The pair's two types, and the predicate that
+# says a relocation belongs to a group at all.
+MOVW_GROUP = {
+    183: (lambda t: 263 <= t <= 269, 264, 266),   # aarch64 G0_NC, G1_NC
+    40:  (lambda t: t in (43, 44),    43,  44),   # arm32 MOVW_ABS_NC, MOVT_ABS
+}
+
+
 def movw_value_check(pxx, pxxflag, src, work, tname):
     """The external-call arm, end to end, on a source that REACHES it.
 
@@ -870,28 +1148,57 @@ def movw_value_check(pxx, pxxflag, src, work, tname):
                   f'{(r.stdout + r.stderr).strip().splitlines()[-1][:90]}')
             return 0
     e = Elf(obj); syms = e.symbols()
-    grp = [r for r in e.relocs('text') if 263 <= r['type'] <= 269]
+    ingrp, t0, t1 = MOVW_GROUP[e.machine]
+    tb = e.data(e.sec('.text'))
+
+    def key(r):
+        """WHICH GOT SLOT THIS ENTRY NAMES -- one expression for both designs.
+        aarch64 relocates against the .data SECTION symbol (value 0) and puts
+        the slot offset in the addend; arm32 relocates against a LOCAL symbol
+        PLACED AT the slot (value = offset) with the addend 0, because its
+        addend field is a signed 16-bit split immediate and .data is 607044
+        bytes. `sym.value + addend` is the slot either way, so this check does
+        not have to know which design it is looking at -- and a future writer
+        that moved the offset between the two would still be checked."""
+        a = r['addend']
+        if a is None: a = _inplace_addend(e, r, tb)
+        return syms[r['sym']]['value'] + a
+
+    grp = [r for r in e.relocs('text') if ingrp(r['type'])]
     if not grp:
         print('   movw arm: BROKEN -- the probe written to reach this arm '
-              'produced no movz/movk relocation')
+              'produced no movw/movt relocation')
         return 1
     grp.sort(key=lambda r: r['off'])
     ok = True
     for i in range(0, len(grp), 2):
         a, b = grp[i], grp[i+1] if i+1 < len(grp) else None
+        # SAME SYMBOL AS WELL AS SAME ADDEND. On aarch64 both entries name the
+        # .data section symbol and only the addend could diverge; on arm32 the
+        # symbol IS the slot, so a pair whose halves name two different slots
+        # is the exact shape of the bug this pair-check exists for, and an
+        # addend comparison alone cannot see it.
         if b is None or b['off'] != a['off'] + 4 or \
-           a['type'] != 264 or b['type'] != 266 or \
-           (a['addend'] or 0) != (b['addend'] or 0):
+           a['type'] != t0 or b['type'] != t1 or \
+           a['sym'] != b['sym'] or key(a) != key(b):
             ok = False
-    ce = clang_movw_entries()
+    ce = clang_movw_entries_arm() if e.machine == 40 else clang_movw_entries()
     if ce:
         ce.sort()
-        cstep = all(ce[j+1][0] == ce[j][0] + 4 for j in range(len(ce)-1))
-        csame = len({t[2] for t in ce}) == 1
+        # PAIRWISE, NOT ACROSS THE WHOLE GROUP. This read "every entry is 4
+        # past the previous one and all addends are equal", which is true of
+        # clang's aarch64 output because that is ONE group of four covering one
+        # 64-bit address -- and false of its arm32 output, which is TWO pairs
+        # for two different externs, 16 bytes apart. The invariant that was
+        # always meant is per-PAIR: the movt sits 4 bytes after its movw and
+        # carries the same addend. Stated across the group it was an accident
+        # of the aarch64 probe having a single extern.
+        cstep = all(ce[j+1][0] == ce[j][0] + 4 for j in range(0, len(ce)-1, 2))
+        csame = all(ce[j+1][2] == ce[j][2] for j in range(0, len(ce)-1, 2))
         ctypes = [t[1] for t in ce]
         print(f'   movw shape oracle: clang group = {len(ce)} entries, '
               f'types {ctypes}, 4-byte step {cstep}, one addend {csame}')
-        if not (cstep and csame and ctypes[:2] == [264, 266]):
+        if not (cstep and csame and ctypes[:2] == [t0, t1]):
             print('   movw arm: BROKEN -- clang\'s own group does not have the '
                   'shape this check assumes; the assumption is what is wrong')
             return 1
@@ -899,7 +1206,7 @@ def movw_value_check(pxx, pxxflag, src, work, tname):
         print('   movw shape oracle: SKIP -- clang cannot emit a MOVW group here')
     print(f'   movw shape: pxx group = {len(grp)} entries, '
           f'{"MATCHES clang\'s invariants" if ok else "VIOLATES them"} '
-          f'(pairwise G0_NC/G1_NC, +4 apart, equal addends)')
+          f'(pairwise type {t0}/{t1}, +4 apart, one symbol, equal slot)')
     if not ok:
         return 1
     # COHERENCE, and it replaces a comparison that was never valid. The first
@@ -924,7 +1231,7 @@ def movw_value_check(pxx, pxxflag, src, work, tname):
     bad = []
     seen = {}
     for i in range(0, len(grp), 2):
-        a = grp[i]; ad = a['addend'] or 0
+        a = grp[i]; ad = key(a)
         tgt = slots.get(ad)
         if tgt is None:
             bad.append(f'{a["off"]:#x} -> .data+{ad:#x} where no GOT slot is defined')
@@ -933,10 +1240,10 @@ def movw_value_check(pxx, pxxflag, src, work, tname):
     if bad:
         print('   movw coherence: BROKEN -- ' + '; '.join(bad))
         return 1
-    print(f'   movw coherence: every group\'s addend names a real GOT slot '
-          f'{dict((k, len(v)) for k, v in seen.items())} -- each slot an ABS64 '
-          f'against an UNDEFINED symbol, which is the invariant the two-'
-          f'relocation design rests on')
+    print(f'   movw coherence: every group names a real GOT slot '
+          f'{dict((k, len(v)) for k, v in seen.items())} -- each slot an '
+          f'absolute relocation against an UNDEFINED symbol, which is the '
+          f'invariant the two-relocation design rests on')
     if len(slots) > 1 and len(seen) < 2:
         print('   movw coherence: BROKEN -- the object defines '
               f'{len(slots)} extern slots and every call site points at '
@@ -946,24 +1253,27 @@ def movw_value_check(pxx, pxxflag, src, work, tname):
     # is exactly the shape that passes without being able to fail. Two
     # perturbations, both drawn from how this writer would really go wrong: an
     # addend off by one slot, and every site pointing at the same slot.
-    def coherent(gs):
+    def coherent(keys):
         sn = {}
-        for j in range(0, len(gs), 2):
-            t = slots.get(gs[j]['addend'] or 0)
+        for j in range(0, len(keys), 2):
+            t = slots.get(keys[j])
             if t is None: return False
             sn.setdefault(t['name'], 0)
         return not (len(slots) > 1 and len(sn) < 2)
-    off1 = [dict(r, addend=(r['addend'] or 0) + 8) if j < 2 else r
-            for j, r in enumerate(grp)]
-    allone = [dict(r, addend=sorted(slots)[0]) for r in grp]
-    ctl = [('addend off by one slot', coherent(off1)),
+    # THE PERTURBATION IS OF THE RESOLVED SLOT, not of the addend field, so the
+    # control is the same experiment on both designs. Bumping the addend alone
+    # would be a no-op on any writer that carried the offset in the symbol.
+    ks = [key(r) for r in grp]
+    off1 = [k + 8 if j < 2 else k for j, k in enumerate(ks)]
+    allone = [sorted(slots)[0] for _ in ks]
+    ctl = [('slot off by one', coherent(off1)),
            ('every site one slot', coherent(allone))]
     if any(ok for _, ok in ctl):
         print('   movw coherence: BROKEN -- a control it must reject was '
               f'accepted: {[n for n, ok in ctl if ok]}')
         return 1
     print(f'   movw coherence controls: {len(ctl)} of {len(ctl)} rejected '
-          f'(addend off by one slot; every site on one slot)')
+          f'({"; ".join(n for n, _ in ctl)})')
     return 0
 
 
@@ -1138,6 +1448,7 @@ def main():
         print('   ' + (r.stdout + r.stderr).strip().splitlines()[-1][:120])
         return 0
     e = Elf(obj); syms = e.symbols()
+    if not symtab_order_check(e, syms, tname): return 1
     text, data, bss = e.sec('.text'), e.sec('.data'), e.sec('.bss')
     nrel = len(e.relocs('text')) + len(e.relocs('data'))
     # A ZERO-RELOCATION OBJECT CANNOT FAIL THIS CHECK, so it is not a pass.
@@ -1255,6 +1566,37 @@ def main():
         cen = _C(r['type'] for r in e.relocs('text'))
         print('   applied: ' + ', '.join(f'type {t} x{n}'
                                          for t, n in sorted(cen.items())))
+        if e.machine == 40:
+            # arm32's TWO oracles, and they answer different questions.
+            # SHAPE: clang emits movw/movt for ordinary -fno-pic C on this
+            # target -- no -mcmodel=large and no hand-written .s, unlike
+            # aarch64 -- so the group pxx emits is compared with a group an
+            # external assembler emits for the same job.
+            # SPLIT ADDEND: the half nothing else here can reach. pxx emits
+            # A = 0 on every MOVW/MOVT row by design, so its own objects cannot
+            # distinguish a correct reader of the split field from one that
+            # skips it; clang supplies the addends pxx will not.
+            sok, sdetail = clang_arm_split_addend_oracle()
+            if sok is None:
+                print(f'   arm split addend: SKIP -- {sdetail}')
+            elif sok:
+                print(f'   arm split addend: clang AGREES -- {sdetail}')
+            else:
+                print(f'   arm split addend: WRONG -- {sdetail}')
+                return 1
+            if not any(t in (43, 44) for t in cen):
+                mp = os.path.join(os.path.dirname(os.path.dirname(
+                        os.path.abspath(__file__))), 'test',
+                        'reloc_movw_probe.c')
+                if os.path.exists(mp):
+                    print('   the movw/movt arm is unreached by this probe; '
+                          'running test/reloc_movw_probe.c for it')
+                    if movw_value_check(pxx, pxxflag, mp, work, tname):
+                        return 1
+                else:
+                    print('   NOTE: this probe applied NO movw/movt '
+                          'relocation, so the run above says nothing about '
+                          'that arm')
         if e.machine == 183:
             tok, tdetail = check_movw_table()
             if tok is None:

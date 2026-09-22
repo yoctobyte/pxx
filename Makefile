@@ -34106,6 +34106,30 @@ test-emit-obj: $(COMPILER)
 	@#     instructions as an external oracle for the FIELD, and that row is
 	@#     the only evidence for that arm here.
 	PXX=./$(COMPILER) tools/reloc_resolve_check.py aarch64 test/reloc_resolve_probe.c
+	@#     arm32, the FIRST SHT_REL target to use the executable oracle, and
+	@#     that combination is what the harness had never run: solve_bases and
+	@#     base_at both read `r['addend'] or 0`, which is right for RELA and
+	@#     reads 0 for every i386/arm32 site. i386 never exposed it because it
+	@#     takes the GNU ld oracle instead. The symptom was a base vote split
+	@#     into as many values as there are distinct addends -- 1076 across
+	@#     .bss -- under the honest-sounding verdict "the layouts do not
+	@#     correspond", which said nothing about the layouts.
+	@#     THE ADDEND IS READ BEFORE THE BASE IS CHOSEN, because for a section
+	@#     symbol the addend IS the offset, and base_at needs the offset to
+	@#     pick which piece of a split .data the site names.
+	@#     Two arm32-only oracles run beside the comparison. The SHAPE oracle
+	@#     is clang's own movw/movt group for plain -fno-pic C. The SPLIT
+	@#     ADDEND oracle is the one that reaches what nothing else can: pxx
+	@#     emits A = 0 on every MOVW/MOVT row by design -- the GOT slot offset
+	@#     lives in a local symbol's st_value, because the in-field addend is
+	@#     a SIGNED 16-BIT split immediate and .data is 607044 bytes in the
+	@#     self-hosted compiler -- so pxx's own objects cannot tell a correct
+	@#     reader of that field from one that skips it. clang supplies eight
+	@#     addends pxx will not, including negatives, and the check carries
+	@#     its own controls: a contiguous (insn & 0xffff) reader must disagree
+	@#     on at least one of them, and clang must REFUSE +0x8000 and
+	@#     +0x10000 or the ceiling is not where the design assumed.
+	PXX=./$(COMPILER) tools/reloc_resolve_check.py arm32 test/reloc_resolve_probe.c
 	@#     xtensa is NOT here, and the reason is filed rather than routed past:
 	@#     bug-a-xtensa-cannot-lower-a-store-through-a-pointer-so-no-c-program-that-writes-through-a-parameter-compiles
 	rm -f $(TESTTMP)/test_emit_obj_x64.o
