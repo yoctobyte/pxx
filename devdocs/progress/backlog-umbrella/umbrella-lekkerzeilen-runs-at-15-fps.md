@@ -14,12 +14,30 @@ blocked-by:
   - perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds
   - perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
   - perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob
-summary: "summary: "OWNER DIRECTIVE 2026-09-22: `all performance issues have the highest prio right now. file appropiate tickets and lets start working on them. hopefully, by the end of the day we have 15+ fps`. This umbrella exists so the perf tickets inherit that rank through edges rather than by hand-editing prios. THE NUMBER IS 8.0x, MEASURED ON THE SCENE THAT SHIPS, AND IT IS A PROPERTY OF THAT SCENE -- never quote a bare factor. 7a, `lekkerzeilen@devdocs/perf/ROOFS-2026-09-22.md` (`62859ff`), `world/roofs`, windowed, vsync ON, audio ON, quiet box: pxx median 1.887 fps = 530 ms/frame over 19 windows; 15 fps is 66.7 ms; 8.0x. THE GAP IS 19.7x AGAINST A WORKING ORACLE: CPython 3.14.4 runs the SAME scene at median 37.140 fps (27 ms) over 414 windows, same box, same session. So 15 fps is NOT a physics question -- it is a compiler gap, and that is the frame to carry. THIS TICKET HAS CARRIED FOUR FACTORS IN ONE DAY (18x, 5.9x, 9.4x, now 8.0x) AND EVERY ONE WAS ARITHMETICALLY CORRECT ON A DIFFERENT FRAME; the 391 ms was a v413 vsync-off `--region rijn` row, and the 624 ms pair it replaced was taken while the box was at load 27-30. TREAT ANY TWO TIMINGS TAKEN AT DIFFERENT TIMES ON THIS BOX AS 20% APART FOR FREE, and do not report a ratio change smaller than that as a finding -- load is NOT in the stamp. AND DO NOT RANK BY `per-call cost x calls per frame`: 7a predicted 12% from a 12.3x per-call win and measured 3.3% (P(B faster)=0.653, z=1.57, its own within-arm noise 8.8%), because `Soundscape.update` tops the audio queue to a fixed BYTE target, so work per frame is capped and does not grow as the frame slows. A call count must be a SEPARATELY MEASURED quantity, never one derived from frame duration. WHAT NOBODY HAS: a decomposition of a roofs frame -- ~470 ms of 530 is unaccounted for once vsync is removed, every lever below was identified on `--region rijn`, and the 43.5% flat-profile figure is an answer about a scene nobody runs. That decomposition outranks every edge here and 7a has it next. NOT THE CAUSE, measured: vsync, audio (ON throughout), the RNG (~6 ms), and inverse trig (SETTLED, 0.22% -- do not rank it). Refcount is CALL overhead not atomic overhead (3.772 ns/slot = 79% call/ret; an inline nil-test takes it to 1.667 with NO liveness analysis). The 16.5% heap-lock row OVERSTATES itself (+4.9%, overlapping distributions). DO NOT REVERT the computed-getattr widening -- it stops a SIGSEGV in imported modules. This RE-RANKS the release and ESP32 window in demo-timebox-close-2026-09-21.md; it does not replace it."
+summary: "**15 FPS IS RETIRED AS A TARGET -- OWNER, 2026-09-22, HIS OWN WORDS: `15fps is not written in stone, just a wishful figure`.** NOTHING MAY BE RANKED BY DISTANCE TO IT, and any ticket justified as `gets us to 15` needs re-justifying on something else. The slug keeps the number so citations resolve; the GOAL is now: find the main performance issues. HIS SEQUENCE IS FINISH-THEN-MEASURE, NOT MEASURE-THEN-PICK: `i think when all current known issues are done, just profile it again`. So do NOT grow new perf tickets off the 2026-09-21 `--region rijn` profile -- that scene has now produced THREE levers measuring to approximately zero on the scene that ships, and the re-profile must be on ROOFS. WHERE WE ACTUALLY ARE, and these rows stand on their own without any target: pxx median 1.887 fps = 530 ms/frame over 19 windows on `world/roofs`, vsync ON, audio ON, quiet box; CPython 3.14.4 on the SAME scene, box and session, median 37.140 fps (27 ms) over 414 windows. THAT 19.7x AGAINST A WORKING ORACLE IS THE REAL FINDING and it needs no wishful number: the gap is OURS and it is structural. `lekkerzeilen@devdocs/perf/ROOFS-2026-09-22.md`, `62859ff`. MEASUREMENT RULES THIS TICKET HAS PAID FOR, all still binding: a factor is a property of the SCENE and the MACHINE STATE it was measured on (four factors in one day, every one arithmetically correct on a different frame); treat a single timing as ~20% soft and a RATIO of two arms with different load sensitivity as UNBOUNDED until both run interleaved on a quiet box; and NEVER rank by `per-call cost x calls per frame` -- 7a predicted 12% from a 12.3x per-call win and measured 3.3% inside its own 8.8% noise, because `Soundscape.update` caps the audio queue at a fixed BYTE target so work per frame does not grow as the frame slows. MEASURED AS NOT THE CAUSE: vsync, audio, the RNG (8.16x per shift, in-situ value nil), inverse trig (0.22%), and heap contention (the render loop is ONE thread; the 16.5% rijn heap-lock row is UNCONTENDED and a 400k-object A/B bought +4.9% with overlapping error bars). STILL LIVE: the computed-getattr flag has a shippable off switch (`fn = lib[name]`, zero computed sites) worth 112,180 bytes STATIC with its runtime value UNMEASURED; and the managed-local release sweep, whose inline nil-test landed at 56.8% off the per-slot cost against a 55.8% prediction, x86-64 and SXR_STR only. DO NOT REVERT the computed-getattr widening -- it stops a SIGSEGV in imported modules.""
 ---
 
-# Umbrella: lekkerzeilen runs at 15 fps
+# Umbrella: lekkerzeilen performance
 
-**Owner directive, 2026-09-22, verbatim:**
+**THE TARGET IN THIS TICKET'S SLUG IS RETIRED. Owner, 2026-09-22, second
+directive of the day, verbatim:**
+
+> *"the goals are clear - find the main performance issues. 15fps is not written
+> in stone, just a wishful figure. i think when all current known issues are
+> done, just profile it again."*
+
+**So: nothing is ranked by distance to 15 fps, and any ticket justified as
+`gets us to 15` needs re-justifying on something else.** The slug keeps the
+number only so existing citations resolve.
+
+**And the SEQUENCE is his, not a preference: finish-then-measure.** Current known
+perf issues land, *then* a fresh profile decides what is next. **Do not grow new
+perf tickets off the 2026-09-21 `rijn` profile this afternoon** — that scene has
+now produced three levers measuring to about zero on the scene that ships. **The
+re-profile must be on ROOFS**; 7a has been briefed.
+
+**The first directive, which this supersedes on the TARGET and not on the
+priority:**
 
 > *"all performance issues have the highest prio right now. file appropiate
 > tickets and lets start working on them. hopefully, by the end of the day we
@@ -42,8 +60,9 @@ apart.
     B    pxx, `*`/`//` spelling          19   1.734    1.887 fps     1.925    530 ms
     C    CPython 3.14.4                 414  14.524   37.140 fps    49.628     27 ms
 
-    15 fps needs 66.7 ms      ->  pxx is 8.0x away
     ratio at the medians      ->  19.7x, pxx against CPython
+    (15 fps would be 66.7 ms = 8.0x; RETIRED as a target, kept only so the
+     older rows in the table below can be read against something)
 
     region=roofs tiles=4 worldindex=5cb61f3753c90cb6 twins=uv
     compiler=fddc21e7e6615f80 promocore=fa1e57a9b1e5564c source=5c34d02
@@ -345,8 +364,14 @@ and takes perf after it lands.
 
 ## What would retire this umbrella
 
-A measured frame time at or under **66.7 ms on `world/roofs`**, windowed, vsync
-ON, audio ON, **on a quiet box** — the same configuration as arm B above — with
+**NOT a frame time any more — the owner retired that target.** What retires this
+umbrella is **a fresh profile of a ROOFS frame, taken after the current known
+perf issues have landed**, naming the main performance issues it finds. That is
+his sequence stated as a criterion.
+
+**If anyone still wants the old bar for comparison:** a median at or under
+**66.7 ms on `world/roofs`**, windowed, vsync ON, audio ON, **on a quiet box** —
+the same configuration as arm B above — with
 the full stamp beside it (`region`, `tiles`, `worldindex`, `twins`, compiler,
 promocore, source, session) and the window count. **Not `rijn`, and not a
 `rijn`-labelled run whose label came from a banner.** **And not a single run:**
