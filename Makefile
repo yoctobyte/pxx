@@ -4956,6 +4956,14 @@ test-nilpy: $(COMPILER)
 	# math.atan2 out of the table for a month.
 	./$(COMPILER) test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy $(TESTTMP)/test_nilpy_atan226
 	tools/expect_same.sh test_nilpy_atan226 "$$($(TESTTMP)/test_nilpy_atan226)" "$$(python3 test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy)"
+	# A promotable shift has an INLINE arm as well as the bignum one
+	# (promocore.pas PXXPromoShl/Shr). The risk is not slowness, it is the two
+	# arms DISAGREEING, so the rows STEP ACROSS the guard -- lim-1, lim, lim+1,
+	# 2*lim per shift count -- and consecutive rows therefore take different
+	# arms and must agree. Sampling NEAR the guard would pass on a broken
+	# boundary as readily as a correct one. Oracle is CPython on the same file.
+	./$(COMPILER) test/nilpy_promo_shift_boundary.py $(TESTTMP)/test_nilpy_shiftbound26
+	tools/expect_same.sh test_nilpy_shiftbound26 "$$($(TESTTMP)/test_nilpy_shiftbound26)" "$$(python3 test/nilpy_promo_shift_boundary.py)"
 	./$(COMPILER) test/test_nilpy_callable_builtin.npy $(TESTTMP)/test_nilpy_callable26
 	$(TESTTMP)/test_nilpy_callable26 | diff -u test/test_nilpy_callable_builtin.expected -
 	# __file__ / sys.executable from the RESOLVED executable (freezer
