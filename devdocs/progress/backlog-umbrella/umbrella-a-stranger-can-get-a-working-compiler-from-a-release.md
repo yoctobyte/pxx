@@ -4,7 +4,7 @@ title: "A stranger downloads a release and ends up with a working compiler"
 track: T
 prio: 80
 type: umbrella
-blocked-by: [feature-release-checksums-repro, decide-release-signing-key-custody, bug-t-the-documented-build-path-never-enumerates-what-it-needs, umbrella-one-full-tier-run-with-no-red-tier]
+blocked-by: [feature-release-checksums-repro, decide-release-signing-key-custody, bug-t-the-documented-build-path-never-enumerates-what-it-needs, umbrella-one-full-tier-run-with-no-red-tier, bug-t-native-s-red-is-one-row-and-full-s-is-ninety-four-so-they-are-different-problems]
 created: 2026-09-06
 summary: "GOAL, not a unit of work. Owner, 2026-09-06: 'project goal, let's slowly prepare for a release.' The target is not a tag and not a document -- it is a person who has never seen this repo getting a compiler that works, from an artefact they can verify. SLOWLY is part of the instruction: this ranks steadily in the background, it does not displace development. Attach whatever an ATTEMPT breaks on; do not pre-populate it from the backlog by guessing."
 ---
