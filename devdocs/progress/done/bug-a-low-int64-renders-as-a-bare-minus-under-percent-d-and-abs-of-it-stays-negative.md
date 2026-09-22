@@ -4,12 +4,12 @@ title: "A promotable int at exactly Low(Int64) prints as a bare `-` under `%d`, 
 track: A
 prio: 40
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-22
 found-by: franks-5b
 blocked-by: []
-summary: "MECHANISM: every path that takes |v| by NEGATING IN PLACE is wrong at exactly Low(Int64) and correct at every other input, because it is the one value in the type whose magnitude the type cannot hold -- so -v overflows and leaves the sign bit set. It SPRINGS wherever a renderer or a numeric helper negates before it widens, and the population is that class, NOT the two instances below. This repo has now hit it through THREE paths: aarch64 WriteLn (done/bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes -- emitted -, did neg x0,x0, then ran the digit loop with sdiv where arm32 correctly used udiv); NilPy abs() (FIXED 2026-09-22, 185a81621 -- pyabs_v now routes 2^63 to the promotable arm it already had); and NilPy '%d' formatting, STILL OPEN -- \"%d\" % -9223372036854775808 emits a bare - with no digits. NARROWED: print(v) and \"%s\" % v are both CORRECT on the same value, and Pascal-side Format('%d', [Low(Int64)]) is correct too, so the open half is NilPy-specific and PER-FORMATTER, not per-value -- which is the shape that produces a fourth instance. Neighbours verified clean throughout: -2^62, -2^63+1, +2^63, -2^64. Grep for the other formatters' handlers, not for the value: the sibling is a SPELLING, not a shape."
+summary: "MECHANISM: every path that takes |v| by NEGATING IN PLACE is wrong at exactly Low(Int64) and correct at every other input, because it is the one value in the type whose magnitude the type cannot hold -- so -v overflows and leaves the sign bit set. It SPRINGS wherever a renderer or a numeric helper negates before it widens, and the population is that class, NOT the two instances below. This repo has now hit it through THREE paths: aarch64 WriteLn (done/bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes -- emitted -, did neg x0,x0, then ran the digit loop with sdiv where arm32 correctly used udiv); NilPy abs() (FIXED 2026-09-22, 185a81621 -- pyabs_v now routes 2^63 to the promotable arm it already had); and NilPy's PyFmtBase digit loop (FIXED 2026-09-22, 8f1cf3341 -- it did `if neg then v := -v` then `while v > 0`, false on arrival, so it returned a bare - with no digits in EVERY base; the loop runs on a QWord now and negates in the unsigned domain). ONE NEGATION SERVED EVERY BASE, so the fix moved 8 rows at once: %d %x %X %o {:d} %+d %-25d %020d. THE WORST ROW WAS NOT THE ONE FILED: zero-padded, the same empty body rendered as -0000000000000000000, which looks like a real number, so the width path turned an obvious defect into a plausible wrong value. Neighbours verified clean throughout: -2^62, -2^63+1, +2^63, -2^64. Grep for the other formatters' handlers, not for the value: the sibling is a SPELLING, not a shape."
 ---
 
 # A promotable int at exactly Low(Int64) prints as `-` under `%d`
@@ -82,8 +82,12 @@ caller will have it too.
   `-1`, and a compare past `High(Int64)`) rather than only its printed form —
   an `abs()` returning text that happens to print right would pass a
   printed-value check and fail every use.
-- **`"%d" %` — OPEN.** Not fixed here, and the fixture says so explicitly so it
-  cannot be read as covering it.
+- **`"%d" %` and every other base — FIXED**, `8f1cf3341`. `PyFmtBase`
+  (`compiler/builtin/pylib.pas`) now runs its digit loop on a `QWord` and
+  negates in the unsigned domain (`0 - QWord(v)`), exact two's complement for
+  every input and never relying on signed overflow. Positive control by
+  stash-rebuild-rerun: 8 rows move. `bin()`/`hex()` take a different path and
+  were already correct — they do not move, verified by the same control.
 
 ## The sibling was already fixed, and it holds the mechanism
 
@@ -106,3 +110,6 @@ stashing the `abs` fix, rebuilding and re-running: that row is unchanged and
 only the `Low(Int64)` row moved. Different mechanism (a bool keeping its tag
 through a numeric helper, not a magnitude overflow), so it is noted rather than
 folded in.
+
+## Log
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
