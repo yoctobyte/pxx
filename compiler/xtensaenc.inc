@@ -665,6 +665,33 @@ begin
   EmitB((val shr 16) and $FF);
 end;
 
+function EncodeXtensaBEQZ(s, offset: Integer): Integer;
+{ BRI12, not BRI8: BEQZ compares against zero and so has no `t` field, which
+  buys a 12-bit displacement instead of 8. Layout is
+  imm12[23:12] s[11:8] m[7:6] n[5:4] op0[3:0], with op0=0110 and n=01; m
+  selects BEQZ(00) / BNEZ(01) / BLTZ(10) / BGEZ(11).
+
+  THE ENCODING IS DERIVED FROM THE TOOLCHAIN, NOT FROM THE ISA DOCUMENT.
+  xtensa-esp32s3-elf-as assembles
+  `beqz a2, .+9` to 16 52 00, i.e. $005216: op0=6, n:m=1 (BEQZ), s=2,
+  imm12=5 = 9 - 0 - 4. Two instances at different PCs both give imm12 =
+  target - pc - 4, which is the same +4 bias EncodeXtensaBranch applies.
+
+  The range check is the point of putting this next to its siblings rather
+  than open-coding it at the one call site: see XtensaRelCheck's own note on
+  the esp32s3 image whose entry `j` wrapped and landed mid-instruction.
+
+  NO `xtensa_beqz` WRAPPER, deliberately, and EncodeXtensaAddmi above is the
+  precedent. Every other branch here has one because it is emitted with the
+  target already known; this one is always PATCHED after the span it skips
+  has been emitted, so the only caller wants the word, not an emit. A wrapper
+  written for symmetry would have been dead on arrival -- it was, for about
+  ten minutes, until a grep for its own name returned one hit. }
+begin
+  XtensaRelCheck(offset - 4, -2048, 2047, 'beqz');
+  Result := (((offset - 4) and $FFF) shl 12) or (s shl 8) or $16;
+end;
+
 procedure xtensa_bne(s, t, offset: Integer);
 var val: Integer;
 begin

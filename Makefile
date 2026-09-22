@@ -12542,6 +12542,24 @@ test-core: $(COMPILER)
 	cmp $(TESTTMP)/test_socm_xt26 $(TESTTMP)/test_socm_s326
 	./$(COMPILER) test/test_esp_bare_managed.pas $(TESTTMP)/test_socm_oracle26
 	tools/expect_same.sh test_socm_oracle26 "$$($(TESTTMP)/test_socm_oracle26 | tr '\n' '|')" "local:in|copy:src:src|fin2:two|managed ok|"
+	# SCALAR AnsiString locals on bare -- the SXR_STR arm, which every backend's
+	# inline nil test touches and which NO bare fixture contained. Measured
+	# 2026-09-22 with the real xtensa disassembler: all three bare fixtures above
+	# emit ZERO `beqz a2` release sites, so the arm was uncovered on this profile
+	# in exactly the way the managed-record rows above were uncovered before
+	# 2026-09-20. Same failure, same file, one fixture later.
+	# It contains BOTH sides of the nil test on purpose -- four assigned locals,
+	# four never-assigned, and a mixed frame with the live one LAST -- so a
+	# fixture cannot pass with the branch inverted or with a sweep that stops at
+	# the first nil. perf-a-every-return-releases-every-managed-local
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_string_locals.pas $(TESTTMP)/test_socs_rv26
+	./$(COMPILER) --esp-profile=bare --target=esp32c3 test/test_esp_bare_string_locals.pas $(TESTTMP)/test_socs_c326
+	cmp $(TESTTMP)/test_socs_rv26 $(TESTTMP)/test_socs_c326
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_string_locals.pas $(TESTTMP)/test_socs_xt26
+	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare_string_locals.pas $(TESTTMP)/test_socs_s326
+	cmp $(TESTTMP)/test_socs_xt26 $(TESTTMP)/test_socs_s326
+	./$(COMPILER) test/test_esp_bare_string_locals.pas $(TESTTMP)/test_socs_oracle26
+	tools/expect_same.sh test_socs_oracle26 "$$($(TESTTMP)/test_socs_oracle26 | tr '\n' '|')" "acc=1100|strlocals ok|"
 	# VARIANTS: the ORACLE ROW ONLY, and the missing bare rows are the finding.
 	# test_esp_bare_variant.pas is the value fixture for the variant half of the
 	# same ticket, written BEFORE the split so a split that compiles but reads

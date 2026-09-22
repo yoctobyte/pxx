@@ -15440,11 +15440,36 @@ begin
             TypeKind IS its element kind, so without it a local `array of
             string` would hand its DATA POINTER to the string releaser. }
           EmitLoadVarXtensa(i);                  { a2 = handle }
+          { Inline nil test, ungated, at the release call site. a2 is the right
+            register in BOTH ABIs: Call0 passes arg0 there, and the windowed
+            arm moves it to a10 AFTER this branch, so the test is on the value
+            either way and the branch skips the move as well as the call.
+
+            BEQZ needs no scratch and no flags -- xtensa has no condition
+            codes, like aarch64 and riscv32. 3 bytes per site, the cheapest of
+            the six. Priced first, as an ESP target must be: 5 sites in a
+            10,140 B --esp-profile=bare image, 0.15%, against the 5.90
+            sites/1000 B of compiler.pas where the ungated decision was taken.
+            That 5 is COUNTED WITH THE DISASSEMBLER, not derived from a code=
+            delta: this target's instructions are 2 or 3 bytes, so inserting
+            a probe moves alignment padding and the byte delta does not divide
+            by the width. The probe's own answer here was 6.
+
+            VERIFIED BY RUNNING IT, not only by reading the bytes:
+            tools/esp_run_bare.sh boots a bare image under Espressif qemu on
+            both chips, and test_esp_bare_string_locals.pas agrees with its
+            x86-64 oracle there. This comment said "nothing here can run
+            xtensa" until the run was tried -- it is the assumption that keeps
+            a target verified by inspection when it need not be.
+            perf-a-every-return-releases-every-managed-local }
+          jzPatch := CodeLen; EmitB(0); EmitB(0); EmitB(0);  { beqz a2, past }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
           EmitCallProc(procIdx);
+          Patch24(jzPatch,
+                  EncodeXtensaBEQZ(reg_xtensa_a2, CodeLen - jzPatch));
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (act = SXR_VAR) then

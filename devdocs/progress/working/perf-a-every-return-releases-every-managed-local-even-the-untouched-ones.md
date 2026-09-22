@@ -4,7 +4,7 @@ prio: 70
 status: working
 type: perf
 blocked-by: []
-summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. COST (2) IS NOW LANDED on all six flat-code backends, one commit each (x86-64 50e25f5f0, i386 3d7cde305, arm32 4a1a80184, aarch64 5f89103c9, riscv32 b1554c59a, xtensa Call0 dde109a7a); wasm32 is not a seventh and has its own ticket. Measured like-for-like on one instrument with TargetHasSweepThunk forced False for the control: compiler.pas release sites 349,581 -> 43,508 (8.03x), code= 11,075,352 -> 7,376,664 (-33.4%), artefact -31.9% -- and the control lands within 0.07% of the 349,322 counted independently by objdump, two instruments that fail differently. THAT DISSOLVES THE T=400 THRESHOLD rather than confirming it: at the measured +5.06 B/site the inline nil-test on EVERY site now costs +2.98% of .text against +15.97% before, i.e. a third of what the T=400 gate cost without the sharing, while covering 100% of sites instead of 56.6%. That recommendation -- build it UNGATED, keep a threshold in reserve only if the BUILT artefact's size cost came in materially above 2.98% -- was followed and its condition did not fire: measured +1.39%. THE BRANCH-WIDTH CAVEAT IS CLOSED and is structural, not a frequency: the per-slot sequence is `mov`+`call` with the argument already in rax, so a nil-test skips exactly one 5-byte `call rel32` and the displacement is 5 on every site in the binary -- cost is exactly 5 B/site, and a 7.23% figure for site-to-site gaps over 127 bytes measures a DIFFERENT quantity (gaps between sweeps, which the branch never spans). THE CHEAP HALF OF (1) IS BUILT ON x86-64 (2026-09-22, frankb-8e): the inline nil-test at the release call site, ungated, on the scalar AnsiString arm -- 4.367 -> 1.886 ns/slot/call, 56.8%, against the 55.8% the calibrated model predicted, and +1.39% of artefact against the +2.98% predicted, so the frame-size threshold's own trigger condition is measured and NOT met and T=400 is retired rather than deferred. The ratio transfers between boxes and the absolute does not: the control marginal reads 4.367 here under load against 3.821 on an idle box, both rows kept. WHAT REMAINS OF (1) IS THE EXPENSIVE HALF AND IT IS STILL UNSTARTED -- the full sweep still RUNS on every return; this removed the cost of ASKING about a slot, not the asking, and per-path liveness over compiler-minted temps is untouched. Also still open: the other five register backends (each its own arm, one per commit, the other five byte-identical as the blast-radius bound), the non-string arms (SXR_VAR/SXR_OBJ/interface/array -- a string-slot decomposition does not transfer to a call that does real work), and the prologue nil-init store (0.526 ns/slot on all seven targets, which no fix on this ticket reaches). (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. WHOLE-PROGRAM, MODEL-FREE (2026-09-07): the thunked build compiles compiler.pas 2.04% and 2.51% faster than the inline build across two runs -- the SAME PROGRAM built two ways, cmp-gated so a pair can never be reported for builds that disagree. That is the -31.9% size win showing up as SPEED, with the call/ret cost INSIDE the figure rather than absent from it; it does not decompose them and nothing here lets it. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
+summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. COST (2) IS NOW LANDED on all six flat-code backends, one commit each (x86-64 50e25f5f0, i386 3d7cde305, arm32 4a1a80184, aarch64 5f89103c9, riscv32 b1554c59a, xtensa Call0 dde109a7a); wasm32 is not a seventh and has its own ticket. Measured like-for-like on one instrument with TargetHasSweepThunk forced False for the control: compiler.pas release sites 349,581 -> 43,508 (8.03x), code= 11,075,352 -> 7,376,664 (-33.4%), artefact -31.9% -- and the control lands within 0.07% of the 349,322 counted independently by objdump, two instruments that fail differently. THAT DISSOLVES THE T=400 THRESHOLD rather than confirming it: at the measured +5.06 B/site the inline nil-test on EVERY site now costs +2.98% of .text against +15.97% before, i.e. a third of what the T=400 gate cost without the sharing, while covering 100% of sites instead of 56.6%. That recommendation -- build it UNGATED, keep a threshold in reserve only if the BUILT artefact's size cost came in materially above 2.98% -- was followed and its condition did not fire: measured +1.39%. THE BRANCH-WIDTH CAVEAT IS CLOSED and is structural, not a frequency: the per-slot sequence is `mov`+`call` with the argument already in rax, so a nil-test skips exactly one 5-byte `call rel32` and the displacement is 5 on every site in the binary -- cost is exactly 5 B/site, and a 7.23% figure for site-to-site gaps over 127 bytes measures a DIFFERENT quantity (gaps between sweeps, which the branch never spans). THE CHEAP HALF OF (1) IS BUILT ON x86-64 (2026-09-22, frankb-8e): the inline nil-test at the release call site, ungated, on the scalar AnsiString arm -- 4.367 -> 1.886 ns/slot/call, 56.8%, against the 55.8% the calibrated model predicted, and +1.39% of artefact against the +2.98% predicted, so the frame-size threshold's own trigger condition is measured and NOT met and T=400 is retired rather than deferred. The ratio transfers between boxes and the absolute does not: the control marginal reads 4.367 here under load against 3.821 on an idle box, both rows kept. WHAT REMAINS OF (1) IS THE EXPENSIVE HALF AND IT IS STILL UNSTARTED -- the full sweep still RUNS on every return; this removed the cost of ASKING about a slot, not the asking, and per-path liveness over compiler-minted temps is untouched. ALL SIX REGISTER BACKENDS NOW CARRY IT (2026-09-22, frankb-8e), one commit each with the other five byte-identical as the blast-radius bound: x86-64 022739dce, i386 2aa7e7159, arm32 a0f4facd8, aarch64 ec82fc0de, riscv32 63fdda88d, xtensa this commit -- 3 to 8 bytes per site depending on the ISA, and the split between the three arms needing an ABI argument for clobbered flags and the three needing none is exactly whether the architecture HAS condition codes. The ESP size question the middle commits deferred was measured before riscv32 was written (608e0f53c): a bare image is 15x less site-dense than compiler.pas, at whose density the ungated decision was already taken, so no ESP-specific gate is needed. Also still open: the non-string arms (SXR_VAR/SXR_OBJ/interface/array -- a string-slot decomposition does not transfer to a call that does real work), and the prologue nil-init store (0.526 ns/slot on all seven targets, which no fix on this ticket reaches). (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. WHOLE-PROGRAM, MODEL-FREE (2026-09-07): the thunked build compiles compiler.pas 2.04% and 2.51% faster than the inline build across two runs -- the SAME PROGRAM built two ways, cmp-gated so a pair can never be reported for builds that disagree. That is the -31.9% size win showing up as SPEED, with the call/ret cost INSIDE the figure rather than absent from it; it does not decompose them and nothing here lets it. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
 owner: frank-subcoord
 ---
 
@@ -1611,3 +1611,168 @@ experimental source, **rebuild before copying the binary anywhere**, and print
 `sha256sum` of the control beside the number it produced. The control here was
 `b47aec0b26be` when it should have been `2c5b821bbf05`, and one printed sha
 would have said so before the first `cmp` ran.
+
+## 2026-09-22 (frankb-8e) — xtensa JOINS, ALL SIX ARE DONE, and the NOP probe that priced this was WRONG on this target
+
+Sixth and last backend. `BEQZ` needs no scratch and no flags — xtensa has no
+condition codes either — and at **3 bytes it is the cheapest site of the six**.
+
+| target | before -> after |
+| --- | --- |
+| **xtensa** | **CHANGED — the positive control** |
+| x86_64 / i386 / arm32 / aarch64 / riscv32 | IDENTICAL |
+
+Six legs asserted BUILT, six distinct pre-image shas, control sha printed and
+checked (`e5a13a7cfa8a`) before the first `cmp` — the three discharges from
+the two sections above, all fired.
+
+### The encoding came from the assembler, not from the ISA document
+
+`BEQZ` is BRI12, not BRI8 — no `t` field, so a 12-bit displacement.
+`xtensa-esp32s3-elf-as` assembles `beqz a2, .+9` to `16 52 00` = `$005216`:
+op0=6, n:m=1, s=2, imm12=5 = 9−0−4. Two instances at different PCs both give
+`imm12 = target − pc − 4`, the same +4 bias `EncodeXtensaBranch` already
+applies. `EncodeXtensaBEQZ` lives beside its siblings in `xtensaenc.inc` and
+carries `XtensaRelCheck(offset−4, −2048, 2047)`, because that file exists over
+an esp32s3 image whose entry `j` wrapped and landed mid-instruction.
+
+### THE PRICING PROBE WAS WRONG ON XTENSA, IN BOTH DIRECTIONS, AND IT LOOKED RIGHT
+
+The section above priced this change by emitting a NOP at each site and
+dividing the `code=` delta. **On riscv32 that was exact** — it predicted 16
+hosted and 5 bare, and the emitter delivered `+64 = 16 × 4` and `+20 = 5 × 4`.
+
+**On xtensa it was wrong both times.** Counted with the real disassembler:
+
+| | NOP probe said | actually |
+| --- | --- | --- |
+| hosted xtensa, `cross.pas` | 14 | **16** |
+| bare xtensa, `cross.pas` | 6 | **5** |
+
+**The cause is that the probe assumes a fixed-width ISA.** `nop.n` is 2 bytes
+in a stream of 3-byte instructions, so inserting *n* of them moves alignment
+padding by an amount that is not a function of *n*: measured, hosted lost 4
+bytes of padding and bare gained 2. The real emitter shows the same noise —
+`code=` 217068 → 217108 is **+40 for 16 × 3 = 48**, and 10140 → 10156 is
+**+16 for 5 × 3 = 15**. **Neither delta divides by the instruction width, so
+byte arithmetic cannot count sites on this target at all.**
+
+**Why it survived:** it produced *plausible near-misses*, not absurdities —
+14 against 16, 6 against 5. A number that is nearly right is the one nobody
+re-derives. What exposed it was that **every other target found exactly 16 in
+this fixture**, five instruments agreeing, and xtensa alone dissenting by two.
+
+**The correction does not move the decision, and it moves it the safe way:**
+bare xtensa is **5** sites × 3 B = 15 B on a 10,140 B image = **0.15%**, where
+the pricing section claimed 0.18%. It was pessimistic, not optimistic. The
+`608e0f53c` table's riscv32 rows stand as measured; **its two xtensa rows are
+superseded by the disassembler count and both rows are kept here** rather than
+one being overwritten, because they measured different things — one counted
+bytes, one counted instructions.
+
+**Generalised, and the variable-width ISA is the MECHANISM rather than the
+class** (frankz-e5's sharpening, and it is better than how I first wrote it):
+the class is **the error was small enough to look like a measurement.** 14
+against 16 is not an absurdity that announces itself; it is a plausible
+reading, and a number that is nearly right is the one nobody re-derives. A
+NOP-delta site count happens to be valid only on a fixed-width ISA — that is
+the local rule — but near-miss-shaped error is what makes any instrument
+survive.
+
+**AND THE THING TO ARRANGE, NOT MERELY TO AVOID:** what exposed it was
+**five instruments agreeing and one dissenting by two**, which was only
+available because this fixture is built for six targets. **A single-target
+measurement of the same kind has no dissent to notice** — the near-miss just
+stands as the answer. The redundancy was there for the blast-radius bound and
+paid a second time as an oracle; that is a reason to prefer a measurement
+that runs on every target even when the question is about one.
+
+### VERIFIED BY RUNNING IT — and the comment that said that was impossible was mine, for an hour
+
+I wrote *"the one target nothing here can run"* into the emitter, and into the
+encoder, as the reason the verification had to be byte inspection.
+**`tools/esp_run_bare.sh` boots a bare image under Espressif qemu on both
+chips and has all session.** Both comments are corrected in this commit. The
+claim was never measured; it came from `--list-targets` saying xtensa does not
+run on this host, **which is true about a raw ELF and false about the bare
+profile under the vendor emulator.** An instrument answering correctly about
+something adjacent, believed about the thing.
+
+**TWO THINGS MADE IT WORSE THAN AN ORDINARY MISREAD, and the second is why it
+is recorded here rather than shrugged off.** It went into **COMMENTS**, which
+outlive the session and get obeyed without a re-measure — the durable half of
+the damage was never the wrong belief, it was the wrong belief written where
+the next reader inherits it. And it was a claim that something **CANNOT** be
+done, which **produces no signal when believed**: nobody tries, nothing fails,
+and the belief holds indefinitely. That is this file's own *"a stale warning
+decays like a LOCK, silently, in the direction of doing nothing"*, arriving in
+a comment I wrote myself an hour earlier.
+
+### The suite avoided the shape, exactly as it did before 2026-09-20
+
+**All three bare fixtures in the tree emit ZERO string release sites** — the
+`SXR_STR` arm, the one every backend's nil test touches, had no bare coverage
+at all. That is the same finding the managed-record rows above record for
+`PXXRecordRelease`, in the same file, one fixture later.
+
+**This is a RECURRENCE in one place, which is the test that promotes
+something** — the same hole, in the same Makefile block, one fixture earlier,
+for a different release arm. A suite that avoids a shape certifies its
+absence, and this block has now done it twice.
+
+`test/test_esp_bare_string_locals.pas` is new and wired into the bare target
+beside its sibling. It contains **both sides of the branch deliberately**:
+four assigned locals (falls through, release runs), four never-assigned (nil,
+branch taken), and a mixed frame with **the live one LAST** — so it cannot
+pass with the branch inverted, nor with a sweep that stops at the first nil.
+12 `beqz a2` sites on bare xtensa against 0 in all three older fixtures.
+
+- **Runs**: bare xtensa (esp32s3) and bare riscv32 (esp32c3) under qemu both
+  print `acc=1100 / strlocals ok`, byte-identical to the x86-64 oracle, under
+  the control compiler and the new one alike. 1100 is independently derivable
+  from the source: (20 + 0 + 2) × 50.
+- **Disassembled**: all 16 hosted sites are `beqz a2, X` where X is exactly
+  the instruction after a `call0` to one callee — the branch clears itself and
+  the call and lands on the next slot.
+- `tools/gate.sh quick`: GREEN — **and it is the THIRD run that is quoted.**
+  The first went green too, and I had edited two comments in
+  `ir_codegen.inc` while it was running. The binary came out byte-identical
+  (`d59755743109` both sides — comments do not move code), so the green was
+  almost certainly sound; it is re-run anyway from a settled tree, because
+  *"no row is trustworthy on the strength of the rows around it"* and a green
+  whose tree moved under it is not a green anyone can quote later. A third run
+  follows the removal of a dead `xtensa_beqz` wrapper (see below), and that
+  one is the verdict here.
+
+### A WRAPPER WRITTEN FOR SYMMETRY WAS DEAD ON ARRIVAL, AND THE BINARY PROVES IT WAS CARRIED
+
+Every other branch in `xtensaenc.inc` comes as an `Encode…` / `xtensa_…`
+pair, so I wrote both. **`xtensa_beqz` had exactly one occurrence in the
+tree: its own definition.** This branch is always *patched* after the span it
+skips has been emitted, so the only caller wants the WORD, not an emit —
+`EncodeXtensaAddmi` is the in-file precedent for an encoder with no wrapper.
+
+It is removed, and **the compiler binary changed when it went**
+(`d59755743109` -> `38c84a7325ea`), which is the interesting part: it was not
+elided, it was being emitted and carried. The compiler's *output* is
+unaffected — all six targets byte-identical across the removal, and the bare
+xtensa fixture still prints `acc=1100`. **Dead code written for symmetry with
+its neighbours is the kind a reviewer reads past**, because it looks exactly
+like the four things above it.
+
+### ALL SIX BACKENDS NOW CARRY IT
+
+| target | B/site | nil test | flags argument needed |
+| --- | --- | --- | --- |
+| xtensa | **3** | `beqz a2` | none — no condition codes |
+| aarch64 | 4 | `cbz x0` | none — CBZ does not write NZCV |
+| riscv32 | 4 | `beq a0, x0` | none — no condition codes |
+| i386 | 4 | `test eax,eax` + `jz` | System V: skipped span contains a call |
+| x86-64 | 5 | `test rax,rax` + `jz` | System V: same |
+| arm32 | 8 | `cmp r0,#0` + `beq` | AAPCS: same |
+
+**Three of the six needed an ABI argument and three needed none**, and the
+split is exactly whether the architecture has condition codes. The measured
+runtime win remains the x86-64 one — **4.367 → 1.886 ns/slot, 56.8% against a
+55.8% prediction** — and no other target has a ns/slot figure because every
+one of them runs under emulation here.
