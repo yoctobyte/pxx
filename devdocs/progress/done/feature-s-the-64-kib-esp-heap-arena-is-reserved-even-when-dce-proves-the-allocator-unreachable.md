@@ -358,3 +358,6 @@ such item found in five days.
 A larger, separate question this does not address: whether `HEAP_ARENA` should
 be *sized* per program rather than being one 64 KiB constant. That is design and
 belongs under the umbrella, not here.
+
+## Log
+- 2026-09-22 - resolved. The FIX and the close are the same commit here - commit 04e20af2c.

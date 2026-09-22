@@ -176,3 +176,8 @@ record result emitting `PXXMemMove` with no builtinheap injected, p70,
 2026-07-20 — **rooted an 18-job regression cascade**. Two frontends, two
 unrelated causes, one shape, two months apart. Neither instance argues for the
 on-demand fix on its own; the pair does.
+
+## Log
+- 2026-09-22 - filed by frankh-c0 with a repro and a measured target set - commit e7b8532c9.
+- 2026-09-22 - FIXED by frankb-8e, and the fix is wider than the report: four breaking shapes, not the one I reduced to - commit 23fcd326f.
+- 2026-09-22 - resolved, with the summary rewritten to lead with 8e's four-row table instead of my reduction. The close is not the fix - commit 04e20af2c.
