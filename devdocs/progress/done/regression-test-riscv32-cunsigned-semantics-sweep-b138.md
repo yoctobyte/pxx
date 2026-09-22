@@ -206,3 +206,54 @@ not have to re-derive the paragraph above.
 e5 correctly flagged that p70 would dispatch a seat to hunt a miscompile. Rather
 than re-rank fixture maintenance, it is done.
 - 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ea48d8877.
+
+## FOLLOW-UP SAME DAY: THE GUARD WAS ASSERTING THE WRONG QUANTITY, AND THE FIXTURE NEVER COVERED ITS WALL AT ALL
+
+`frankb-8e` read the resolution above and said the finding was stronger than
+*"one remedy arm was wrong"*. It is, and it is now **directly measured rather
+than inferred from the hello-world subtraction**, because the subtraction could
+not settle it.
+
+**The subject is an intra-BODY jump.** `ir_codegen_riscv32.inc`, *"reaching a
+LABEL inside one body"*: direct proc calls have used an unconditional
+`auipc+jalr` since cross-lua, so only a body's jumps to its OWN labels ever
+depended on JAL's reach. The quantity is therefore **one procedure's span**, and
+`code=` is the whole **image**. The 267 KB of never-called RTL is what held those
+two apart.
+
+**Measured by wrapping the body in a `repeat` whose backward jump spans it** and
+reading the slot width — 4 B while JAL reaches, 8 B once it must widen:
+
+| k | body | backward-jump slot |
+| --- | --- | --- |
+| 4400 | 988,852 | 4 B |
+| 4650 | 1,045,852 | 4 B — **image 1,079,840, above the old threshold** |
+| 4700 | 1,057,252 | 8 B |
+| 4800 | 1,080,052 | 8 B |
+
+The transition straddles **1,048,576 exactly**, so the instrument is reading the
+wall itself. And **k=4650 is the old guard passing while the subject is
+untested** — not an inference, a build.
+
+**So the old fixture never exercised the wall, in either flag setting.** Guard
+rewritten to subtract a baseline build of the same program with an empty `Big`,
+at the same flags:
+
+| fixture | flags | image | baseline | body | OLD | NEW |
+| --- | --- | --- | --- | --- | --- | --- |
+| k=4000 | default | 931,632 | 36,016 | 895,616 | reject | reject |
+| k=4000 | `--no-dce` | 1,162,916 | 267,300 | 895,616 | **ACCEPT** | reject |
+| k=4650 | default | 1,079,840 | 36,016 | 1,043,824 | **ACCEPT** | reject |
+| k=6000 | default | 1,387,624 | 36,016 | 1,351,608 | ACCEPT | ACCEPT |
+
+**The body is 895,616 B under BOTH flag settings, identical to the byte** — the
+subtraction cancels the RTL exactly, which is the whole point of it. The old
+guard accepts three rows and two of those are wrong. **The new guard rejects the
+old fixture at `--no-dce` too, so it would have caught on day one that this test
+never covered its wall.**
+
+### WHAT THIS DOES TO THE `--dce` STORY
+
+`--dce` did not break this test. **It removed the padding that was hiding that
+the test's premise was only ever accidentally true** — which is 8e's sentence and
+it is the right one. My promotion is the reason anyone looked.

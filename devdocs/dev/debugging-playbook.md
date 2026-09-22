@@ -39602,6 +39602,17 @@ code where the old one cleared it on padding — **and its edited guard was
 positive-controlled by feeding it the pre-fix 931,632, which it still rejects.**
 A guard that can no longer fail is worse than the red it replaced.
 
+
+**EXTENDED THE SAME DAY BY THE SEAT THAT MEASURED IT — and the extension is
+sharper than this section.** c0 went back with a direct instrument and found the
+guard was not merely clearing its threshold on non-subject code: it was
+**asserting the wrong quantity**. The subject is one procedure's span; `code=` is
+the whole image. The fixture had therefore **never** exercised its wall, in
+either flag setting. See *A THRESHOLD GUARD THAT READS AN AGGREGATE CANNOT SEE
+WHICH COMPONENT SUPPLIED THE MARGIN* below — the margin question this section
+asks is the cheap discharge, and it bounds the margin without telling you the
+quantity is right.
+
 ## A NEGATIVE RESULT FROM A GREP CAN BE CONFIDENT ABOUT A FILE THE PATTERN CANNOT READ — AND THE POSITIVE CONTROL GOES SILENT INSTEAD OF FAILING
 
 **Measured 2026-09-22 by `frankb-8e` (`32676fb80`), while verifying a sentence it
@@ -39709,3 +39720,115 @@ second independent one. 5b supplied the trigger itself and it is falsifiable:
 **it fires again the next time a bug is found in a benchmark or a real program and
 cannot be reproduced in a fixture.** At that point it is two subsystems and the
 argument is about recurrence rather than about how good the finding is.
+## A THRESHOLD GUARD THAT READS AN AGGREGATE CANNOT SEE WHICH COMPONENT SUPPLIED THE MARGIN — a fixture cleared RISC-V's 1 MiB JAL wall for a year on dead RTL it was not testing
+
+**Measured 2026-09-22 by `frankh-c0`, triaged by `frankz-e5`, bisected by
+`frankb-8e`, and the general form is 8e's.** A guard can be aimed at a real
+quantity, be able to fail, be drawn from the right population, and still certify
+nothing — because the number it reads is an **aggregate**, and the subject is
+**one component of it**.
+
+`test-riscv32`'s `rv32_bigbody` fixture exists for one wall: on riscv32 a jump
+from a body to its OWN labels was a bare 4-byte JAL, which reaches ±1 MiB, and
+one procedure finally got bigger than that. (Direct proc calls have used an
+unconditional `auipc+jalr` since cross-lua, so **only intra-body jumps ever
+depended on JAL's reach** — `ir_codegen_riscv32.inc`, *"reaching a LABEL inside
+one body"*.) The subject is therefore **one procedure's span**.
+
+The guard asserted `code=` — **the whole image**:
+
+    test "$sz" -gt 1048576 || { echo "...no longer covers the wall..."; exit 1; }
+
+That is a model positive control in every other respect. It is the discipline
+this playbook preaches, it names its own remedy, and it is the thing that caught
+the regression. **It was also reading the wrong number.**
+
+### HOW IT SURFACED, AND WHY THE CAUSE LOOKED LIKE THE CULPRIT
+
+Promoting `--dce` to the default `-O2` dropped the image 1,162,916 → 931,632 B
+and the guard fired. Read as *"an optimisation shrank a fixture out of its own
+test's range"* — true, and the recorded remedy offered two arms: enlarge the
+fixture, or build this one job `--no-dce`.
+
+**A differential kills the second arm in two builds.** Measure the same
+threshold on a trivial program and subtract:
+
+| | `--no-dce` | default | drop |
+| --- | --- | --- | --- |
+| hello-world, riscv32 | 267,108 | 33,988 | 233,120 |
+| the fixture | 1,162,916 | 931,632 | 231,284 |
+
+Same figure within 1,836 B: **the entire drop is dead RTL, none of it the
+body.** So the margin had never belonged to the subject.
+
+### THE DIRECT MEASUREMENT, BECAUSE A SUBTRACTION COULD NOT SETTLE IT
+
+Two readings of "the wall" — intra-body span versus image layout distance — give
+**opposite answers about whether the test ever worked**, and the subtraction is
+compatible with both. Settle it by making the mechanism itself the instrument:
+wrap the body in a `repeat` whose backward jump spans it, and read the slot
+width. A backward jump keeps the cheap 4-byte JAL whenever it reaches and pays
+8 bytes when it must widen, so **the slot width is a one-bit readout of "does
+this body exceed JAL's reach"**:
+
+| k | body | backward-jump slot |
+| --- | --- | --- |
+| 4400 | 988,852 | 4 B |
+| 4650 | 1,045,852 | 4 B — **image 1,079,840, above the guard's threshold** |
+| 4700 | 1,057,252 | 8 B |
+| 4800 | 1,080,052 | 8 B |
+
+**The transition straddles 1,048,576 exactly**, which is how you know the
+instrument is reading the wall and not something correlated with it. And k=4650
+is **the guard passing while the subject is untested — a build, not an
+inference.**
+
+Verdict: the fixture had **never** exercised the wall, in either flag setting.
+The body is ~896 KB; the image cleared 1 MiB on ~267 KB of never-called RTL.
+**`--dce` did not break this test. It removed the padding that was hiding that
+the test's premise was only ever accidentally true.**
+
+### THE FIX IS TO ASSERT THE COMPONENT, AND IT IS CHEAP
+
+Build a baseline of the **same program with the subject emptied out, at the same
+flags**, and subtract. `image - baseline` is purely the generated body, a strict
+**lower** bound on its span, so a pass cannot be an artefact of RTL size in
+either direction:
+
+| fixture | flags | image | baseline | body | OLD | NEW |
+| --- | --- | --- | --- | --- | --- | --- |
+| k=4000 | default | 931,632 | 36,016 | 895,616 | reject | reject |
+| k=4000 | `--no-dce` | 1,162,916 | 267,300 | 895,616 | **ACCEPT** | reject |
+| k=4650 | default | 1,079,840 | 36,016 | 1,043,824 | **ACCEPT** | reject |
+| k=6000 | default | 1,387,624 | 36,016 | 1,351,608 | ACCEPT | ACCEPT |
+
+**895,616 under both flag settings, identical to the byte** — the subtraction
+cancels the RTL exactly, which is the point of it. The old guard accepts three
+rows and two are wrong; the new one rejects the old fixture even at `--no-dce`,
+i.e. **it would have caught on day one that the test never covered its wall.**
+Keep the baseline at the same flags as the fixture or the cancellation is
+meaningless — mixing them is how the first version of this table got a row
+wrong.
+
+### WHAT TO TAKE
+
+- **Where a test asserts that a size, a count or a duration crosses a threshold,
+  ask what fraction of the margin the SUBJECT contributes** (e5's form). One
+  differential: measure the same threshold on a trivial program and subtract.
+- **Then ask the structural question, because the differential only bounds the
+  margin and does not tell you the quantity is right:** *is the number I assert
+  on the number the mechanism actually reads?* Here the mechanism reads one
+  procedure's span and the guard read the image. **No amount of margin fixes an
+  aggregate standing in for a component** — it only moves when you get lucky.
+- **Where the mechanism has an observable, make IT the instrument.** The slot
+  width is a one-bit answer to exactly the question, and it pinned the wall to
+  the byte where a size proxy could not.
+- **Two wrong remedies can fail for different reasons and only one be covered by
+  a famous rule.** Revert-or-carve-out is compiler-appeasement, which everyone
+  quotes. `--no-dce`-this-one-job hides no win at all — it restores something
+  that was never the subject, and the appeasement rule does not reach it. **The
+  remedy that no rule condemns is the one to measure.**
+- And when you enlarge a fixture to clear a threshold, **run the positive control
+  on the EDITED guard** — feed it the pre-fix value and confirm it still
+  rejects. An enlarged fixture "obviously" passes, which is exactly why a guard
+  that can no longer fail gets shipped in place of a red.

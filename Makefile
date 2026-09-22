@@ -29824,9 +29824,51 @@ test-riscv32: $(COMPILER)
 	# nothing -- so assert the thing it exists to exceed. It is also what makes
 	# the `| tee` above safe: a pipeline's status is tee's, so a FAILED compile
 	# would exit 0 -- and then leave no `code=` line for this to read.
+	#
+	# IT ASSERTED THE WRONG QUANTITY UNTIL 2026-09-22 AND THAT IS WHY IT PASSED
+	# FOR A YEAR ON A FIXTURE THAT NEVER REACHED THE WALL. The subject is an
+	# intra-BODY jump -- see `reaching a LABEL inside one body` in
+	# ir_codegen_riscv32.inc; direct proc calls have used an unconditional
+	# auipc+jalr since cross-lua -- so the quantity is ONE PROCEDURE'S SPAN, and
+	# `code=` is the whole IMAGE. Those came apart by the 267 KB of never-called
+	# RTL the old image carried. MEASURED at fda77c48b8ee by wrapping the body
+	# in a `repeat` whose backward jump spans it, and reading the slot width
+	# (4 B when JAL reaches, 8 B when it must widen to auipc+jalr):
+	#
+	#     k      body (image - baseline)   backward-jump slot
+	#     4400            988,852                4 B
+	#     4650          1,045,852                4 B    <- image 1,079,840, ABOVE
+	#     4700          1,057,252                8 B       the old threshold, and
+	#     4800          1,080,052                8 B       the wall NOT crossed
+	#
+	# The transition straddles 1,048,576 exactly, and k=4650 is the old guard
+	# passing while the subject is untested. So subtract a baseline build of the
+	# SAME program with an empty `Big`, AT THE SAME FLAGS: image - baseline is
+	# purely the generated ifs, a strict LOWER bound on the procedure's span, so
+	# a pass cannot be an artefact of RTL size in either direction.
+	#
+	#   fixture   flags        image   baseline       body   OLD      NEW
+	#   k=4000    default    931,632     36,016    895,616   reject   reject
+	#   k=4000    --no-dce 1,162,916    267,300    895,616   ACCEPT   reject
+	#   k=4650    default  1,079,840     36,016  1,043,824   ACCEPT   reject
+	#   k=6000    default  1,387,624     36,016  1,351,608   ACCEPT   ACCEPT
+	#
+	# The body is 895,616 B under BOTH flag settings, identical to the byte --
+	# the subtraction cancels the RTL exactly, which is the point. The old guard
+	# accepts three of these and two of those are wrong; the new one rejects the
+	# old fixture at --no-dce too, i.e. it would have caught on day one that this
+	# test never covered its wall. Keep the baseline build at the same flags as
+	# the fixture or the cancellation is meaningless.
+	@awk 'BEGIN{print "program bigbody;"; print "var n: Integer;"; \
+	  print "procedure Big(x: Integer);"; print "var i: Integer;"; \
+	  print "begin"; print "  i := 0;"; \
+	  print "  n := i;"; print "end;"; print "begin"; print "  Big(7);"; \
+	  print "  Writeln(\"n=\", n);"; print "end."}' | tr '"' "'" > $(TESTTMP)/rv32_bigbody_base.pas
+	@./$(COMPILER) --target=riscv32 $(TESTTMP)/rv32_bigbody_base.pas $(TESTTMP)/test_rv32_bigbody_base > $(TESTTMP)/rv32_bigbody_base.log
 	@sz=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody.log); \
-	  test -n "$$sz" && test "$$sz" -gt 1048576 || \
-	  { echo "rv32_bigbody: code=$$sz does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for. RAISE THE awk LOOP BOUND ABOVE (~224 B of image per iteration at the default -O2); do NOT add --no-dce, see the note above the generator"; exit 1; }
+	  bs=$$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/rv32_bigbody_base.log); \
+	  test -n "$$sz" && test -n "$$bs" && test $$(($$sz - $$bs)) -gt 1048576 || \
+	  { echo "rv32_bigbody: body=$$(($$sz - $$bs))B (image $$sz - empty-Big baseline $$bs) does not exceed JAL's 1048576 -- this test no longer covers the wall it was written for. RAISE THE awk LOOP BOUND ABOVE (~228 B of body per iteration at the default -O2); do NOT add --no-dce, and do NOT assert on the image, see the note above"; exit 1; }
 	./$(COMPILER) $(TESTTMP)/rv32_bigbody.pas $(TESTTMP)/test_rv32_bigbody_x64
 	tools/expect_same.sh riscv32/test_rv32_bigbody "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_bigbody)" "$$($(TESTTMP)/test_rv32_bigbody_x64)"
 	# ParamStr with an OUT-OF-RANGE index. argv[argc] is the vector's own NULL
