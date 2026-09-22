@@ -37711,3 +37711,63 @@ to loosen the guard — and loosening one is the owner's call in any case.
 **c0's framing, which generalises past hooks:** *a guard refusing a compound
 command silently drops the side effects you batched with it, and the failure
 presents as a green.*
+
+
+## A HEAD-TRUNCATION ON AN APPEND-UPDATED SUMMARY REMOVES THE NEWEST CLAUSE — AND A WIDTH YOU CHOSE YOURSELF PRINTS NO ELLIPSIS
+
+**Measured 2026-09-22, frankuser, reported against itself.** The repo-side entry
+is written here because the private note that seat banked serves one session and
+this file serves every seat.
+
+A seat escalated `bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine`
+as an unguarded data race on the heap magazine. **The ticket's own summary says
+the opposite** — the crash is fixed, the guard was made atomic, *"so a shared
+magazine is correct."*
+
+It had read that summary, through `cut -c1-1400`. **The output ended on the words
+"The CRASH this caused is fixed" and stopped there.** It had the first five words
+of the sentence that refutes it on screen, and built the opposite claim, because
+it arrived carrying *lock-free fast path implies assumes-exclusivity* from the
+magazine design ticket it had just read. **The truncation ended exactly where the
+refutation began and the prior filled the gap.**
+
+**THE STRUCTURAL PART: these ticket summaries are APPEND-UPDATED, so the current
+state is at the END.** A head-truncation therefore removes **the newest and most
+load-bearing clause, systematically** — not at random. The older the ticket, the
+more reliably the truncation deletes exactly the part that would change your
+mind.
+
+**AND A WIDTH YOU CHOSE YOURSELF PRINTS NO ELLIPSIS.** A tool's own default
+truncation usually marks the cut; `cut -c1-N` does not, because you told it
+where to stop. **An instrument you parameterised is one you do not audit** — a
+truncation you asked for does not announce itself, and the output looks like a
+complete read of a short field rather than a partial read of a long one.
+
+**Discharge:** **read the TAIL of a summary first**, since that is where the
+current state lives. And **a read that ends mid-sentence is a flag, not a
+stopping point** — if the last thing on screen is a clause opener, the clause is
+the thing you have not read.
+
+## AND THE MIRROR OF THE STALE-HAZARD RULE IS A STALE ALL-CLEAR, WHICH DECAYS TOWARD DOING THE UNSAFE THING CONFIDENTLY
+
+**frankuser's strengthening, same day, and it is the sharper half.** The existing
+rule says a stale WARNING decays like a lock: silently, in the direction of doing
+nothing, for as long as it is trusted, because a reader who stops generates
+nothing that reveals it was wrong.
+
+**An ALL-CLEAR decays the other way, and that is worse.** *"A shared magazine is
+correct"* is not a caution, it is a permission. A reader who trusts a stale one
+**proceeds** — confidently, on a property that no longer holds — and the damage
+is downstream rather than absent.
+
+**So an all-clear needs a RETIREMENT CONDITION more than a warning does, and
+dating it is not enough.** Dating tells a reader how old the claim is; it does
+not tell them what would make it false. The repair is one clause naming the
+dependency: the magazine clause now reads that it holds **because** that guard is
+atomic and is **void** the moment the guard stops being atomic, so **a reader who
+finds a non-atomic guard knows the all-clear is retired rather than trusting
+it.**
+
+**That makes the sentence self-invalidating instead of permanent**, which is the
+general form: **state what an all-clear RESTS ON, inline, not merely when it was
+measured.**
