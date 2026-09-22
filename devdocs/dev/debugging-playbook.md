@@ -38449,3 +38449,41 @@ new is the AXIS, not the recurrence. If a count-shaped or depth-shaped fixture
 parameter hides a defect in an unrelated subsystem, that is the second row and
 the parent rule's phrasing should widen from "position" to "parameter" then.
 Banked here on merit, which is the other test and which it clearly meets.
+
+## THE RULE YOU REACH FOR IS THE ONE YOU READ MOST RECENTLY, NOT THE ONE THAT FITS — AND IT CAN LAND ON THE RIGHT ANSWER
+
+Short, and it is about applying this project's own rules rather than about a
+subsystem. Measured 2026-09-22.
+
+**The instance, concretely.** Deciding whether an ownership question belonged
+to Track U, I cited CLAUDE.md's *"can you state the fork as a sentence about
+what we WANT, with no implementation noun in it?"* and concluded it could not
+be stated, therefore it was mine. frankz-e5 applied the test instead of
+agreeing and produced a phrasing that nearly passes it — *"do we want the
+compiler to record who owns a managed value, or to keep re-deriving it at each
+site?"* **The verdict was still right and the derivation was not.** The clause
+that actually decides is two paragraphs further down: *cost is not the fork;
+it becomes his only where the options differ in what we are TRYING TO BE.*
+
+**The tell, and it is what makes this checkable:** the test I reached for was
+the one I had read most recently — I had been applying the no-implementation-
+noun test to escalation questions all afternoon. A second seat reported the
+same shape in the other direction the same day, from its own side; that half
+is reported rather than verified here.
+
+**Why it survives review: it produces the RIGHT ANSWER.** A misapplied rule
+that reached a wrong conclusion gets caught by the conclusion. This one leaves
+nothing in the result to inspect — and the next seat facing the same fork
+copies the *reasoning*, because that is what a written decision hands on. It
+is the true-claim-with-a-void-instrument shape (see that section) moved one
+level up, from evidence to derivation.
+
+**Discharge, one question, cheap:** *when a rule fits the case suspiciously
+well, ask whether you read it in the last hour* — and read the neighbouring
+clauses of the one you are about to cite before citing it. Both instances were
+a rule whose NEIGHBOUR was the applicable one, which is the cheapest possible
+place to look.
+
+**And record WHICH test decided, not only the verdict.** A decision written up
+with the wrong test attached is precedent, and precedent is what gets copied
+without re-derivation.
