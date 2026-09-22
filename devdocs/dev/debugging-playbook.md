@@ -40883,3 +40883,54 @@ the step that looks like summarising and is the step that invents the result. Th
 is the positive-control family's mirror: those rules ask whether a guard could have
 failed, this asks **what a successful control was able to separate**, and a
 category noun is the tell that nobody wrote it down.
+
+## A PIN CUT IN THE MIDDLE OF A PER-BACKEND SERIES MAKES "MEASURED UNDER THE PIN" AN AMBIGUOUS STATEMENT ON A SUBSET OF TARGETS
+
+*2026-09-22, `frankz-e5`. One instance, BANKED AND NOT PROMOTED. What would promote
+it: a second series — a per-frontend, per-arch or per-tier rollout — that a pin or
+any other snapshot bisects, in a lane with no code in common with this one.*
+
+A pin is treated, correctly and almost always, as **one coherent artefact**: a
+binary plus a frozen `builtin/**`. The failure here is that a single *logical*
+change is often landed as **one commit per backend**, and a pin cut mid-series
+freezes a binary that implements that change on some targets and not others.
+
+Measured. The series *"inline nil test at the managed-local release site"* landed
+2026-09-22 across six commits in 65 minutes, the last announcing *all six backends
+now carry it*. **Pin v417 was cut between the fourth and the fifth.** Checked by
+ancestry rather than by timestamp order — `git merge-base --is-ancestor <sha>
+<pin-commit>`, because a log's date column survives a rebase and its ordering does
+not:
+
+```
+x86-64   IN pin v417       riscv32  NOT in v417
+i386     IN pin v417       xtensa   NOT in v417
+arm32    IN pin v417
+aarch64  IN pin v417
+```
+
+**So `$(PXX_STABLE)` under v417 emits one release sequence for four targets and a
+different one for two**, for a change whose own commit message says all six carry
+it. Under v418 all six do. Nothing in the source distinguishes the two states, and
+nothing in a build log mentions it.
+
+**Why this is not covered by the existing pin rules.** CLAUDE.md already warns that
+a green under the pin can be correct about a *different compiler*, because the pin
+is legitimately older and the source branches on its age. That is a TIME axis and
+it applies uniformly. This one is **partial along the TARGET axis at a single point
+in time**: the pin is not older, it is heterogeneous. A seat that has internalised
+"the pin is three days behind HEAD" has a model that cannot represent "the pin is
+current for x86-64 and behind for xtensa on this one change."
+
+**And it is worst where cross-target work is already thin.** x86-64 is where the
+dev loop, `gate.sh quick` and the pin itself all run, so the targets a mid-series
+pin is most likely to miss are precisely the ones nobody measures by default — the
+same structural blindness CLAUDE.md records for width and alignment defects,
+arriving through the pin instead of through the host.
+
+**Discharge, cheap and at two moments.** When you land a change as a per-target
+series, **say in the last commit which pin carries it**, or land it as one commit;
+the series above says *all six backends now carry it* and that sentence became
+false for `$(PXX_STABLE)` consumers forty minutes later. And when you report a
+pinned measurement on a non-x86-64 target, **name the pin and check the specific
+change is in it by ancestry** — not by date, and not by the pin being "recent".
