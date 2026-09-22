@@ -37215,11 +37215,27 @@ the tally was kept in **propositions those artefacts assert**. A rich artefact
 therefore scores higher than a thin one, and the richest artefact in any list is
 usually the one that most impressed the person making it.
 
-**So the bias has a direction and it is never conservative.** You subdivide the
-evidence that struck you hardest, because that is the evidence you thought about
-longest and can articulate in parts. **The items that argue for your point get
-finer-grained than the items that do not**, and the total moves the way you
-already wanted.
+**What IS measured: a rich artefact scores higher than a thin one, and richness
+tracks ATTENTION.** You can articulate in parts the artefact you thought about
+longest, so that is the one you subdivide. On c0's instance the subdivided item
+was unambiguously the one that had struck it hardest — it had spent a whole
+exchange deriving that rule with a peer and then found it written in the guard
+that enforces it, three lines away — and the subdivision did favour its thesis.
+
+**WHAT IS NOT MEASURED, AND THIS PARAGRAPH ASSERTED IT FOR AN HOUR: that the
+bias has a DIRECTION.** The first draft here read *"the bias has a direction and
+it is never conservative"* — **a universal quantifier over a population of one**,
+written by the coordinator from c0's single instance, in the file whose own rule
+says the quantifier is the clause to go and measure. c0 cut it and supplied the
+counter-case: **an artefact that REFUTES your thesis is also one you examine
+hardest**, because you have to decide whether it sinks you, and that is equally
+a route to subdividing it. Its instance cannot separate the two readings, since
+its richest artefact happened to be pro-thesis.
+
+**So the honest statement is that the effect AMPLIFIES whatever you attended to,
+and whether attention tracks the direction you want is open.** If it later turns
+out to be directional, that is a stronger finding and wants banking then, with
+the instances that showed it.
 
 **It is the same defect as "four targets, one cause",** which is why it is worth
 a section rather than a footnote: there, four symptoms of one mechanism were
@@ -37229,6 +37245,22 @@ produced the second form about its own evidence the same evening** — so knowin
 the rule does not fire it. What fired it was **being asked to write the
 population down**, which is the cheapest instrument in this file and the one that
 keeps working.
+
+**AND THE SHARPENING IS c0's, AND IT IS THE PART THAT CHANGES WHAT YOU DO ABOUT
+IT: THE INSTRUMENT WAS SOCIAL, NOT COGNITIVE.** This was not recall failing. c0
+had rejected that exact shape in a peer's ticket that morning **in writing, at
+length** — so the knowledge was not merely present, it was *recently exercised
+and successfully applied*, which is the strongest form in which a rule can be
+held. What produced the retraction was **being asked for the population by
+someone who said they intended to quote it.** Its own verdict: *"I would not have
+enumerated it for myself."*
+
+**So the remedy is not a discipline you adopt, it is a question someone else
+asks.** A rule you have just applied correctly gives you no protection on your
+own numbers, and self-review is the weakest possible instrument here because the
+figure already feels checked. **When you want a count quoted, ask for the
+population before you quote it** — that request is the whole mechanism, it costs
+one line, and on this instance it was worth more than the number it corrected.
 
 **The discharge is one question, asked before the number leaves your hands:
 what is the UNIT, and can one object supply two?** If it can, you are counting
