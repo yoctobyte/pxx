@@ -64,17 +64,37 @@ _SELF_DOCS = (_SELF, _SELF[:-3] + "_devtest.py")
 # Extensions that are SUBJECTS of a test run. `.expected` is deliberately not
 # here: it is an assertion belonging to a subject, and it is checked through its
 # sibling instead, so a missing pair reports once rather than twice.
-# .bas added 2026-09-22 (frankb-8e, Track A -- T owns this tool; this is a
-# tightening with a measured population of zero failures, so it is a fix rather
-# than a ticket). Every .bas in the tree was structurally invisible to this
-# census for as long as it has existed, which is the census's own founding
-# failure -- "the suite printed green one check smaller than its own directory"
-# -- in a second guise. Measured at the time of the change: seven .bas under
-# test/, all seven already named by the Makefile, so nothing reddens and
-# nothing was uncovered. That is what makes it cheap and it is also why nobody
-# found it by being bitten: a latent gap produces no victim until someone adds
-# the first unwired file. Found while adding two.
-SUBJECT_EXT = (".pas", ".npy", ".c", ".lua", ".fth", ".bas")
+# .bas and .rs added 2026-09-22 (frankb-8e, Track A -- T owns this tool; both
+# are tightenings with a measured population of ZERO new failures, which is
+# what makes them fixes rather than tickets). Each was structurally invisible
+# to this census for as long as its tests have existed -- the census's own
+# founding failure, "the suite printed green one check smaller than its own
+# directory", in a second guise.
+#
+# I FIXED .bas FIRST AND SAID "THE GAP WAS .bas", HAVING MEASURED ONLY .bas.
+# That is the quantifier error: the extension I had tripped over, asserted as
+# the extent of the problem. One census of what actually lands under test/
+# (git log --diff-filter=A --name-only, 30 days) answered it and the answer was
+# bigger: .rs 30 files with 27 Makefile compile sites and thirty top-level
+# test_rust_*.rs subjects, and .py 140 files. .bas was 7 -- the smallest of the
+# three, found first only because I happened to add one.
+#
+# .py IS A REAL GAP AND IS DELIBERATELY NOT HERE, because adding it is not a
+# tightening. Measured by doing it: 55 files land in the unwired report, and
+# every one is a false positive -- __init__.py, which no module name can match
+# because consumed_by keys on a basename STEM, and dotted submodules like
+# platform/_gl.py imported as platform._gl. The report is already careful about
+# this class in its own words (reporting real wiring "would train people to
+# ignore the check, which costs more than the gaps it finds"), so shipping 55
+# of them would break the tool in the way it was designed not to break.
+# It needs package-aware resolution first:
+# bug-t-the-wiring-census-cannot-see-a-python-package-so-py-stays-uncensused
+#
+# Counts at the time of the change: 4321 -> 4328 (.bas) -> 4358 (.rs), rc=0
+# throughout, nothing reddened, nothing was uncovered. That is why nobody was
+# ever bitten and why nobody found it: a latent census gap produces no victim
+# until someone adds the first unwired file of that extension.
+SUBJECT_EXT = (".pas", ".npy", ".c", ".lua", ".fth", ".bas", ".rs")
 
 # Directories under test/ that are inputs to a suite rather than test subjects:
 # a conformance corpus enumerates its own members, and a fixture is data.
