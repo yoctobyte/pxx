@@ -35699,7 +35699,16 @@ test-emit-obj: $(COMPILER)
 	# about. And the link+RUN is not redundant with the symbol table — a `T` row
 	# proves a NAME, and only the call proves the CONVENTION, which is the whole
 	# thing the exports check exists to protect.
-	./$(COMPILER) --emit-obj test/test_library_exports.pas $(TESTTMP)/test_library_exports.o
+	# --no-dce IS LOAD-BEARING ON THESE TWO ROWS AND IS NOT A WORKAROUND, 2026-09-22.
+	# `Hidden` is an unreachable local body, which is the entire point of it: it
+	# proves the export predicate DISCRIMINATES. --dce correctly drops an
+	# unreachable local, and then ` t Hidden` is absent and this row fails while
+	# `! ... T Hidden` still PASSES -- vacuously, because a symbol that is gone is
+	# also not global. So under the pass the control silently stops controlling.
+	# Pin the flag rather than weaken the assertion to the negative half; this
+	# test is about ObjProcIsExported, not about DCE, and DCE has its own rows.
+	# bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
+	./$(COMPILER) --no-dce --emit-obj test/test_library_exports.pas $(TESTTMP)/test_library_exports.o
 	test -s $(TESTTMP)/test_library_exports.o
 	nm $(TESTTMP)/test_library_exports.o | grep -q ' T PxxLibAdd$$'
 	nm $(TESTTMP)/test_library_exports.o | grep -q ' T PxxLibMul$$'
@@ -35717,7 +35726,8 @@ test-emit-obj: $(COMPILER)
 	# successful parse — which is what a compiler that dropped the file would
 	# also produce.
 	# compat-p-a-library-still-requires-a-begin-end-main-body
-	./$(COMPILER) --emit-obj test/test_a_library_needs_no_main_body.pas $(TESTTMP)/test_lib_nobody.o
+	# --no-dce for the same reason as the row above -- see it.
+	./$(COMPILER) --no-dce --emit-obj test/test_a_library_needs_no_main_body.pas $(TESTTMP)/test_lib_nobody.o
 	test -s $(TESTTMP)/test_lib_nobody.o
 	nm $(TESTTMP)/test_lib_nobody.o | grep -q ' T PxxLibAdd$$'
 	nm $(TESTTMP)/test_lib_nobody.o | grep -q ' T PxxLibMul$$'

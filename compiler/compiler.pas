@@ -2204,7 +2204,42 @@ begin
 
     --no-dce opts back out; --dce turns it on at any -O level.
     compiler/dce.inc, feature-emission-size-dce }
-  if (OptLevel >= 3) and not DceOff then DceEnabled := True;
+  if (OptLevel >= 2) and not DceOff and (TargetArch <> TARGET_WASM32) then
+    DceEnabled := True;
+  { WASM32 IS CARVED OUT OF THE -O DEFAULT, and this is a statement about the
+    TARGET's consumption model rather than about our tests. MEASURED
+    2026-09-22 (frankh-c0) by promoting the rule to `>= 2` and running
+    test/wasm/check_all.sh: 38 PASS, 7 FAIL. SIX of the seven are the same
+    shape -- `TypeError: inst.exports.<Name> is not a function` in
+    check_phase2/3/4, check_data, check_calls, check_host.
+
+    WHY THAT IS THE PRODUCT AND NOT THE HARNESS. ir_codegen_wasm32.inc exports
+    EVERY routine (141 of 141 on a Pascal hello world) and the pass
+    DELIBERATELY does not treat that blanket export as a root -- see dce.inc's
+    own note, which is right that rooting it would make the pass a no-op here.
+    The consequence is that a wasm function nothing INTERNAL reaches is
+    dropped. That is exactly a wasm library: the host calls `inst.exports.f`
+    from JS and no pxx code calls it at all. The failing checks are not
+    mis-written; they are doing what every wasm consumer does.
+
+    So `--no-dce` on those rows would have hidden a real usability
+    regression, which is why the repair is here and not there. On ELF the same
+    pass is export-preserving and measurably so -- an `--emit-obj` C TU keeps
+    all 323 exports (312 WEAK FUNC, identical name sets, UND 0) while 269 local
+    bodies go -- so this carve-out does not generalise to other targets and
+    must not be copied to one.
+
+    NOT SUPPRESSING A REAL BUG, checked rather than assumed: the SEVENTH
+    failure, check_nilpy_generator_slot.sh, traps `memory access out of
+    bounds` and is flag-INDEPENDENT -- it fails identically under `--no-dce`,
+    under `--dce`, and at HEAD with this line unflipped. It is already filed as
+    bug-a-a-nilpy-generator-slice-faults-out-of-bounds-under-wasm32 (p45), and
+    carving out the default neither causes nor conceals it.
+
+    `--dce` still turns the pass on for wasm32 explicitly, and
+    test/wasm/check_dce.sh passes both flags by hand, so the target keeps its
+    coverage. WHAT WOULD RETIRE THIS: a way to mark a wasm export as a root --
+    then the default can come back and a library keeps its surface. }
   { AND ON A BARE ESP IMAGE, AT ANY -O LEVEL. This is not the -O3 convention
     being short-circuited; it is a different argument that happens to reach the
     same flag.
