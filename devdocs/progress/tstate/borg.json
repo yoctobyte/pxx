@@ -15427,6 +15427,7 @@
     "39ca6ac2a79dfde6335597c8b02704b763ed4d63",
     "372dd5113d2c45dc7c60d5fe3af268009cafd236"
    ],
+   "range_non_causal": false,
    "src": "test/cunsigned_semantics_sweep_b138.c tools/run_target.sh +2",
    "status": "fail"
   }
