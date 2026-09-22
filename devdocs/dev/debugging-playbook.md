@@ -41312,9 +41312,21 @@ from the lexer rather than from the probe, which is a source that fails differen
 (verified 3.2.2, fpc AND objfpc"*, and `:766` sets `NestedComments := not DelphiMode`.
 **So in Delphi mode a `}` inside a comment IS a terminator**, and the rows above were
 measured in the default mode. The same edit is inert under one `{$mode}` and
-reassigns code under another. (That `:954` comment also answers a question 8e
-correctly declined to guess at: nesting-by-default is FPC's own behaviour, so this
-is not a divergence.)
+reassigns code under another. 
+**The FPC half is MEASURED, not read off that comment** — `frankb-8e`, fpc 3.2.2
+against `7ed7bc249672`, same two sources: `{ outer { inner } still outer? }` is OK
+under both, and `{ TODO: fix the { in this note }` errors under both. **No
+divergence; FPC nests `{ }` by default too**, so there is no compat ticket here and
+nobody should open one. It compared DIAGNOSTICS rather than exit codes, on the
+grounds that two different errors agreeing on `rc` is the shape that reads as
+corroboration — FPC says `Warning: Comment level 2 found` then `Fatal: Unexpected
+end of file`, pxx says `unterminated comment`. Same cause, same outcome, different
+wording, which is a differing diagnostic and therefore deferred. The only real gap
+is that FPC warns at comment level 2 and we do not, and that is not worth chasing.
+
+*Worth noting where that leaves the `:954` comment: it was RIGHT, and on the day
+this file recorded a routine name that existed only in comments citing each other,
+a source comment is not what upgrades a claim to evidence. 8e's probe is.*
 
 **WHY THIS MAKES THE CONCLUSION STRONGER, WHICH IS 8e's POINT AND THE REASON THE
 CORRECTION IS WORTH MORE THAN THE ORIGINAL.** Not *every edit is dangerous* — that
