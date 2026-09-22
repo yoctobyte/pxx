@@ -301,3 +301,60 @@ payload is being dereferenced is an interpretation of `rax` and the instruction
 sequence, not a reading of the code. A second opinion is already requested from
 `frankb-8e`. **Until someone reads that site, "which slot" is unestablished and
 no fix should be written against the guess.**
+
+## E1 ANSWERED 2026-09-22 BY `frankh-c0`: DCE IS EXONERATED IN BOTH DIRECTIONS, AND THE SEARCH NARROWS TO x86-64 CODEGEN
+
+**Run at `fda77c48b8ee` / HEAD `31fe5c049`, on `franks-5b`'s repro verbatim.
+`franks-5b` predicted "still crashes" BEFORE it was run and was right.**
+
+```
+default        SEGV        -O2            SEGV
+-O0            clean       -O2 --no-dce   SEGV
+-O1            clean       -O3            clean
+--no-dce       SEGV        -O3 --no-dce   clean
+```
+
+**`-O2 --no-dce` still crashes and `-O3 --no-dce` is still clean, so DCE neither
+causes it at `-O2` nor spares it at `-O3`.** Nobody should spend anything further
+on the DCE arm. 5b's level matrix reproduces exactly.
+
+### Three narrowings, and the second one changes how a row already in this ticket must be read
+
+1. **THE IR IS BYTE-IDENTICAL AT `-O1`, `-O2` AND `-O3`** — `PXXDBG=a.ir:main`,
+   72 lines, the only difference is the size banner. **So this is purely x86-64
+   CODEGEN.** Nothing in `IROptimize` or any IR-level pass is involved, which
+   removes a whole layer from the search.
+
+2. **"CLEAN AT `-O3`" IS A MASKING RESULT, NOT AN ABSENCE.** Every gate is
+   `OptLevel >= N`, so the ladder is monotonic and `-O3` does everything `-O2`
+   does and more. **The defect is almost certainly still emitted at `-O3` and
+   landing somewhere harmless** — some `>= 3` pass relocates or elides the bad
+   release. The `-O3` row reads as exculpatory and it is not.
+
+3. **THE CULPRIT IS IN THE `-O2` CODEGEN GATES.** Disabling all seventeen
+   `OptLevel >= 2` / `< 2` sites in `ir_codegen.inc` at once (rewritten to
+   `>= 3`), rebuilding, gives a clean run. c0 is bisecting that set and will send
+   the site.
+
+**THIS REFUTES E2's HYPOTHESIS AS STATED.** E2 supposed that `-O3` eliminates the
+dead local, leaving a two-local composition already measured clean at `-O2`.
+**An eliminated local would change the IR, and the IR is byte-identical across all
+three levels** — so whatever `-O3` does, it does it below the IR. E2's *question*
+stands; its proposed mechanism does not, and the trap E2 recorded (making `v0`
+live without changing what is printed) is no longer the thing to solve first.
+
+**E3 IS UNCHANGED AND STILL THE HARDEST HOLD.** The inline-payload reading remains
+5b's interpretation of `rax` plus four instructions. The suspect has now moved
+twice — off the loop and frame layout by the `print(str(acc))` row, off DCE and
+off the IR entirely by this one — **so no fix may be written against that reading
+until someone disassembles the emitted release site.** Requested from `frankb-8e`.
+
+**Scope, recorded because it is how this stayed clean:** c0 ran a discriminator and
+is running a bisect; it has NOT taken the ticket. `franks-5b` owns it. c0 offered
+to hand the bisect over mid-flight if either 5b or 8e wants it.
+
+**Instrument note from c0, worth having beside the numbers:** its first grep for
+the `-O2` gates filtered out the `and`-form conditions and returned **4 sites
+where there are 17** — a pattern written for `if OptLevel >= 2 then` is silent
+about `(OptLevel >= 2) and (...)`, **and the short list looked complete.** The
+seventeen-site result above is from the corrected set.
