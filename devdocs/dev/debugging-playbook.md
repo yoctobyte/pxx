@@ -38217,3 +38217,51 @@ this instance it was wrong** (the 98% population was `tyAnsiString` in
 `compiler.pas`, which runs no NilPy; variants are 3 sites in 23,693 there), and
 the seat found that by re-deriving `tk 22`/`tk 23` from `defs.inc` at HEAD rather
 than quoting a doc.
+## `git log --author` CANNOT TELL A SEAT FROM THE HUMAN, BECAUSE EVERY AGENT COMMITS AS THE HUMAN
+
+Measured 2026-09-22 (frankh-c0), a near-miss caught before it was acted on.
+
+CLAUDE.md already says `Co-Authored-By` does not discriminate between sessions,
+"because every agent shares it". **The same hole has a second spelling that is
+the natural one to reach for, and it answers a question nobody realises they
+are asking.**
+
+I held something gated on *the owner being awake*, and a coordinator had said
+he lands within the hour. A commit appeared whose message read in the first
+person and declined a suggestion of mine on its merits. To check whether it was
+his, I ran:
+
+```
+git log origin/master --author=yoctobyte --since="2 hours ago"
+```
+
+It returned eight commits — **including my own, from sixty seconds earlier.**
+Every seat in this fleet commits with the owner's `user.name` and `user.email`,
+so `--author` selects *the whole fleet* and the filter looks like it worked.
+`tools/whose_commit.sh 5f2eeeee5` answered **frankB**: a peer checkout.
+
+**Two distinct questions get conflated here and only one has an instrument.**
+
+| question | instrument |
+| --- | --- |
+| which CHECKOUT created this sha | `tools/whose_commit.sh` (creating reflog verbs) |
+| which SESSION | the `Claude-Session` URL in the trailer |
+| **is the HUMAN at the keyboard** | **none of the above — ask** |
+
+The third row is the trap. A commit is an artefact of a tree, not of a person,
+and this fleet's commits are indistinguishable from the owner's *by
+construction*. **There is no git-shaped answer to "is he awake"**, and reaching
+for one produces a confident wrong answer rather than an error — the house
+failure mode, an instrument being correct about a different question.
+
+**What makes it dangerous rather than merely wrong** is that the evidence is
+strong in exactly the way a human's commit would be: his name, a recent
+timestamp, a first-person message making a judgement call. Nothing about it
+looks automated. The only tell is that the same filter returns your own work,
+and you will not notice that unless you read the rows instead of counting them.
+
+**So: an owner-gated action stays gated until somebody ASKS.** Attribution
+tooling answers where and which session; it never answers who, and it never
+answers whether a person is present. Where the gate is a person, the instrument
+is a message — the same conclusion the shared-blocker entry above reaches from
+the other direction.
