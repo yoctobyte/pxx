@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `e70ec7bfc320` on borg, 2026-09-22T15:22:29Z (23m ago).**
+**Newest full tier in the fleet: `e70ec7bfc320` on borg, 2026-09-22T15:22:29Z (34m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `e70ec7bfc320` | RED | 23m | — (newest) |
+| borg | `e70ec7bfc320` | RED | 34m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -30,4 +30,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 ## Open regressions
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **test-aarch64#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `d36af549ea5b`, last good `481fb6d72ba0`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy** — test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy tools/expect_same.sh (borg): bad `a1feb75206e3`, last good `67ef6a2222b9`, 2 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy** — test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy tools/expect_same.sh (borg): bad `6b8b45af45d9`, last good `67ef6a2222b9`, 1 commit(s) in range
