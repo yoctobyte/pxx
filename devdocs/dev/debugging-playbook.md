@@ -21589,6 +21589,29 @@ have produced. And treat a value that walks like a clock across runs (`rax`
 increasing monotonically over sequential executions) as stale memory, never as a
 payload.
 
+#### SECOND SUBSYSTEM, SAME DAY, NO CODE IN COMMON — and it is a TIMING predicate, which is where this bites hardest
+
+`lekkerzeilen-7a` took the repeatability check into a perf decomposition within
+hours, unprompted and from a different lane, and supplied the number that makes
+the case better than the compiler one does:
+
+> *"A frame rate is precisely the predicate that can look stable and not be: my
+> own arm A this morning gave **1.758 and 1.927 on two runs of one binary, 8.8%
+> apart, which is larger than the effect I was measuring.**"*
+
+**One binary, two runs, and the spread exceeds the signal.** It restructured to
+two rounds per arm with the falsifier stated BEFORE the run: if round 1 and
+round 2 of the same pin disagree by more than the gap between pins, **it has a
+coin and will report that instead of a difference.** That is the discharge above,
+pre-registered, in a subsystem where the predicate is continuous rather than a
+crash — and a continuous predicate is worse, because it never looks like a coin.
+A segfault either happens or does not and at least invites the question; `1.758`
+looks like a measurement.
+
+**So state the repeatability falsifier before the run, not after a surprising
+result** — afterwards it is indistinguishable from explaining away a number you
+did not like.
+
 **Corollary for the level matrix specifically:** once the outcome is luck, *every*
 level's row is luck. c0 had correctly called `-O3`-is-clean a MASKING result
 rather than an absence, reasoning that the `>= N` ladder is monotone; 8e's probe
