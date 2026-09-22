@@ -366,7 +366,22 @@ and takes perf after it lands.
 
 **NOT a frame time any more — the owner retired that target.** What retires this
 umbrella is **a fresh profile of a ROOFS frame, taken after the current known
-perf issues have landed**, naming the main performance issues it finds. That is
+perf issues have landed**, naming the main performance issues it finds.
+
+**THE TREE THAT PROFILE MUST SIT ON IS NOW DEFINED: PIN v417**, `2b1a54397`,
+binary sha256 `734d10ec7b53`, source tip `819aab1db`. **Verified here by reading
+the pinned binary off disk after a pull, not off the commit message.** Cut
+specifically to unblock this re-profile: 7a caught that `6b8b45af4` and
+`247260d36` were on origin but **NOT in the pinned toolchain**, so a profile
+taken before it would have measured **v416** and been quoted as *"after the
+fixes"*. Graded `reds(1)` for the known atan differential, attributed and
+awaiting the owner's contract call.
+
+**AND A PROFILE ON A CONTENDED BOX DOES NOT RETIRE THIS EITHER.** 7a checked and
+found **3,789 MiB of VRAM in use with a live remote-desktop daemon**, and
+declined to run on a relayed *"he is out"*. **It has already published two
+contended numbers today**, which is why its own refusal is the standard here
+rather than a courtesy. That is
 his sequence stated as a criterion.
 
 **If anyone still wants the old bar for comparison:** a median at or under

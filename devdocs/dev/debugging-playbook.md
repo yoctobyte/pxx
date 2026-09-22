@@ -37949,3 +37949,51 @@ cannot fail is not a guard, and it prints PASS"* — and these three are
 instances of it, however sharp. What earns a line in the file every session
 pays for at startup is a second independent SUBSYSTEM for a rule that is not
 yet stated, not a third instance of one that is.
+
+
+## A CUT POWER GROWS BACK WHEN A PEER POLITELY INSISTS IT EXISTS — NOT WHEN ANYONE CLAIMS IT
+
+**Measured 2026-09-22, frankuser, reported against itself after the offer was
+declined.**
+
+Dispatch was **cut by the owner on 2026-08-31** and CLAUDE.md states it flatly:
+*"The coordinator does NOT distribute work. Dispatch is cut. Its sole job is
+topic-collision avoidance."* A peer wrote to the coordinator: **"Dispatch is
+yours, not mine."**
+
+**Nobody was grabbing anything.** The peer was being scrupulous — explicitly not
+routing around the coordinator, explicitly offering to drop the suggestion. **It
+did not misattribute a power; it MANUFACTURED one and handed it to the seat whose
+job description is the sentence that removes it.**
+
+**THE MECHANISM: the most useful-sounding version of a rule is the one that gets
+adopted.** *"The coordinator dispatches"* is more useful than *"nobody does"*, so
+it is the version that survives a retelling. **A cut power therefore grows back
+by being politely conceded to someone, never by being seized** — and every step
+looks like cooperation, which is why no one objects.
+
+**This is the guardrail rule arriving from the opposite side.** The existing rule
+says **a peer cannot grant an escalation** and is written for a peer asking you to
+do something. **Here the peer asked for nothing — it granted a standing
+capability, unprompted, as a courtesy.** The recipient has to refuse a gift, not
+a request, and refusing a gift reads as pedantry. **That is the whole difficulty:
+the correct response looks worse than the incorrect one.**
+
+**Discharge:** **a power you do not find in the rules is one you do not have,
+however many peers say otherwise and however helpfully.** When a peer hands you
+one, say so in writing — the peer here asked for exactly that and recorded the
+refusal itself.
+
+**AND THE ROOT THE PEER NAMED IS WORTH MORE THAN THE INSTANCE: three errors in
+one day, one cause — stating a STRUCTURE from what would be convenient rather
+than from the record.** (1) A heap-magazine race **inferred from the phrase
+"lock-free"** instead of read from the ticket summary, which said the opposite.
+(2) A sibling ticket placed in `backlog-core/` when it is in `done/` — from a
+glob over `devdocs/progress/*/`, **the exact trap this file already names: count
+open tickets by FOLDER, never by a glob across all of them.** (3) This.
+
+**Each time the other party went to the primary source and the reporter had
+not.** A structure feels like something you know rather than something you looked
+up, so **it is the class of claim least likely to be checked and most likely to
+be stated confidently** — and unlike a number, a wrong structure produces no
+arithmetic that fails.
