@@ -17313,19 +17313,35 @@ end;
   sign-and-magnitude form here: a negative value formats its minus sign and
   then the magnitude, exactly as CPython does for {-255:x} = -ff. }
 function PyFmtBase(v: Int64; base: Integer; upper: Boolean): AnsiString;
-var tmp: AnsiString; neg: Boolean; d: Integer;
+var tmp: AnsiString; neg: Boolean; d: Integer; u, b: QWord;
 begin
+  { THE DIGIT LOOP RUNS ON A QWORD, NOT ON THE NEGATED Int64. Low(Int64) is the
+    one value whose MAGNITUDE Int64 cannot hold, so the old `if neg then v := -v`
+    overflowed and left v NEGATIVE: `while v > 0` was false on arrival, tmp
+    stayed empty, and the function returned a bare '-' -- a sign with no digits,
+    for `"%d" % -9223372036854775808` and for every base. Every other value was
+    correct, Low(Int64)+1 included.
+
+    This is the same fix aarch64's WriteLn needed and for the same reason
+    (done/bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes): once
+    the sign has been taken off, what is left is a MAGNITUDE, and a magnitude
+    wants unsigned arithmetic. There it was sdiv -> udiv; here it is Int64 ->
+    QWord. Negating in the unsigned domain (0 - QWord(v)) is exact two's
+    complement for every input including Low(Int64), and never relies on signed
+    overflow behaviour.
+    bug-a-low-int64-renders-as-a-bare-minus-under-percent-d-and-abs-of-it-stays-negative }
   neg := v < 0;
-  if neg then v := -v;
+  if neg then u := QWord(0) - QWord(v) else u := QWord(v);
+  b := QWord(base);
   tmp := '';
-  if v = 0 then tmp := '0';
-  while v > 0 do
+  if u = 0 then tmp := '0';
+  while u > 0 do
   begin
-    d := v mod base;
+    d := Integer(u mod b);
     if d < 10 then tmp := Chr(Ord('0') + d) + tmp
     else if upper then tmp := Chr(Ord('A') + d - 10) + tmp
     else tmp := Chr(Ord('a') + d - 10) + tmp;
-    v := v div base;
+    u := u div b;
   end;
   if neg then Result := '-' + tmp else Result := tmp;
 end;

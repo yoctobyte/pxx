@@ -9,9 +9,11 @@
 # done, fixed by sdiv -> udiv AFTER the neg made the value a magnitude) and
 # NilPy's abs()/%d.
 #
-# DELIBERATELY ABSENT: `"%d" % -9223372036854775808`, which still emits a bare
-# `-` -- sign, no digits -- while print() and %s are both correct on the same
-# value. That half is open; this file must not be read as covering it.
+# Both halves are fixed now. The %-rows below were the second: PyFmtBase did
+# `if neg then v := -v` and then `while v > 0`, which is FALSE on arrival for
+# Low(Int64), so it returned a bare `-` -- a sign with no digits -- in every
+# base. The digit loop runs on a QWord now, the same shape as aarch64's
+# sdiv -> udiv fix. Every base is here because one negation served all of them.
 # bug-a-low-int64-renders-as-a-bare-minus-under-percent-d-and-abs-of-it-stays-negative
 
 LOW = -9223372036854775808
@@ -39,5 +41,29 @@ print("str          ", str(LOW))
 print("%s           ", "%s" % LOW)
 print("neg of it    ", -LOW)
 print("via shift    ", -1 << 63)
+
+# The RENDERERS, every base -- one negation served all of them, so a fix that
+# only covered %d would leave %x, %o and bin()/hex() still returning a bare
+# sign. These rows exist so the next change cannot repair one and miss four.
+print("%d low       ", "%d" % LOW)
+print("%d low+1     ", "%d" % (LOW + 1))
+print("%d low-1     ", "%d" % (LOW - 1))
+print("%d -2^62     ", "%d" % -4611686018427387904)
+print("%d +2^63     ", "%d" % 9223372036854775808)
+print("%d -1        ", "%d" % -1)
+print("%d 0         ", "%d" % 0)
+print("%x low       ", "%x" % LOW)
+print("%X low       ", "%X" % LOW)
+print("%o low       ", "%o" % LOW)
+print("%x -1        ", "%x" % -1)
+print("bin low      ", bin(LOW))
+print("hex low      ", hex(LOW))
+print("fstring d    ", "{:d}".format(LOW))
+
+# Width and flag paths, which pad AROUND the sign -- a bare "-" body would have
+# padded differently and hidden the defect behind alignment.
+print("%020d low    ", "%020d" % LOW)
+print("%-25d| low   ", "%-25d|" % LOW)
+print("%+d low      ", "%+d" % LOW)
 
 print("DONE")
