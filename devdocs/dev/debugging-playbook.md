@@ -41610,3 +41610,170 @@ mechanism with a count attached** rather than as a bare figure. A story reads
 as pre-verified; a number invites arithmetic. **That is exactly backwards, and
 it is the one to watch for**: the table is the part you can check in one
 command, the mechanism is the part you cannot.
+
+## "QUIET BOX" IS A CLAIM ABOUT A THIRD PARTY, AND THE OBSERVER'S OWN INACTIVITY IS NOT EVIDENCE FOR IT
+
+*2026-09-22, `frankz-e5` from a measurement by `frankuser`. The subject is the
+lekkerzeilen perf umbrella, and the phrase appears in its summary, in a factors
+table cell, in its measurement rules and in several body rows.*
+
+**Not one of those occurrences has a load figure behind it.** The owner mentioned
+that an unrelated project of his is using this workstation's GPU, storage and
+CPU. Measured the same evening: **load average 23.93 on a 24-thread box, GPU 4195
+of 6144 MiB, `/` at 95% with 8.3G free.**
+
+**Where the phrase came from, which is the whole finding.** Nobody invented it and
+nobody was careless. A seat about to take a timing asks itself whether the box is
+busy, observes that **it has not started anything else**, and writes *quiet box*.
+That inference is sound about the observer and says nothing about the machine —
+it is the process-table rule (*any instrument that scans a namespace the observer
+is also in counts the observer*) turned inside out: here the observer scans **only
+itself** and reports on the namespace. The failure needs no other party to be
+doing anything wrong, and on 2026-09-20 there was demonstrably another party —
+that incident is two entries up this file, under THE PARTY ADDING LOAD TO A
+SHARED BOX CANNOT PRICE IT, and the phrase was still written unmeasured two days
+later. **Knowing the rule did not fire it.**
+
+**Why this is not A STALE MEASUREMENT, which is the neighbour it will be filed
+under.** That entry is about prose that was TRUE when written and aged false. This
+prose was never true or false; **it was never a measurement at all**, so no
+re-check can recover it. That is the sharp edge: a stale tree, a stale binary, a
+stale ref can all be re-read today. **An environmental condition is gone the
+moment the run ends.** It is the one class of claim for which the instrument must
+be run *at measurement time* or never — there is no later.
+
+**What survives and what does not, and the split is by construction rather than
+by judgement.** A DELTA whose two arms were interleaved inside one session
+survives any common-mode load, because the load enters both arms and cancels in
+the difference: the 3% frame improvement and the 19.7x against CPython are both
+safe for exactly this reason. **A LEVEL has nothing to cancel against.** So
+`1.887 fps`, `530 ms` and CPython's `27 ms` are measurements of a box in an
+unrecorded state and may not be quoted as properties of an idle machine, nor
+compared against a number taken on one. Note the asymmetry in cost: the delta is
+the harder measurement and it is the one that travels; the level is the easy one
+and it does not.
+
+**Three discharges.**
+
+1. **Print the load average beside every absolute.** It costs one word at
+   measurement time and it is the only thing that makes a level quotable later.
+   For anything touching a GPU, print VRAM too — this box's contention was 68% of
+   VRAM with the CPU figure looking survivable.
+2. **When you find one, withdraw the assumption; do not refute the number.**
+   Whether the load was present during *that* run is unknown and unrecoverable,
+   so the absolutes are not thereby wrong. Writing "these numbers are invalid"
+   would be a second unmeasured claim replacing the first.
+3. **Reading, not just writing: a level with no environment beside it is
+   quotable but not falsifiable.** Treat it as conditional on arrival, the same
+   way you treat a count with no population. That is the same rule on an axis
+   nobody thinks of as a population — the machine is part of the population.
+
+**And a note on the count.** The correction section added to that ticket
+deliberately gives no number of occurrences, because its own heading spells the
+phrase so the section can be found by the same `grep` that finds the problem —
+so the note joined the population it is about. The criterion is published
+instead: *does any hit carry a load figure?* A question about the hits does not
+decay when the hits change; a number does, and a guard that is born red for
+everyone but its author teaches people to ignore it.
+
+## A CACHE OF PERMANENTLY-HELD HEAP BLOCKS IS A LEAK, AND EVERY GUARD YOU CHOOSE YOURSELF WILL SAY GREEN
+
+*2026-09-22, `franks-5b`, fixing the one-character-string allocation behind
+`pystr_charat`. Banked here by `frankz-e5` with 5b's measurements; the fix and
+every number in it are 5b's.*
+
+**The change.** A 256-entry table of one-character strings, built at startup and
+held permanently, so `s[i]` stops minting a fresh string per subscript.
+
+**Every guard 5b picked said green.** The correctness probe passed. The
+allocation slope went to `0.0000`. `make compiler/pascal26` printed `converged`
+— the real recompute verb, not the stamp path.
+
+**`make test-nilpy` went RED on `assert_no_leak`: live=262 against a bound of
+64** — 256 table entries plus the baseline 6, which is the arithmetic naming the
+cause exactly.
+
+**The finding, stated so it cannot be read as a special case:** a permanently
+held heap block is **indistinguishable from a leak because it is one.** The
+definition of the defect is *allocated and never returned*, and a cache satisfies
+it exactly. Nothing about the intent behind the allocation reaches the gauge, and
+nothing should — an instrument that exempted "blocks I meant to keep" would be
+exempting the thing it exists to find.
+
+**The tempting wrong fix is to raise the bound**, and it deserves a sentence
+because it is one edit and it is green immediately. **Raising a bound to
+accommodate your own change converts a guard into a record of what you did.**
+5b's fix instead made the table a `const` array, so the entries are static
+`MSTR_STATIC_RC` literals: zero allocation, zero free, zero refcount traffic —
+the bound is untouched and the table is now outside the gauge's subject matter
+rather than excused by it. Verified on i386, aarch64, arm32, riscv32, wasm32 and
+xtensa (both profiles), with a control establishing that xtensa's failure was the
+target's invocation and not the change.
+
+**AND THE HALF THAT GENERALISES PAST LEAKS, WHICH IS 5b'S OWN AND IS THE REASON
+THIS IS HERE.** CLAUDE.md already says *match the assertion class to the defect
+class* — a leak does not corrupt, so every value check still passes. That rule is
+about **what an assertion can physically observe.** This adds the axis it does
+not cover: **ownership.** Every guard in the green list above was **chosen by the
+author of the change**, and a self-chosen gate is bounded by its author's own
+imagination of what can go wrong. The instrument that caught it was one 5b had
+not thought to run — **and it exists in the suite because somebody met this
+before.**
+
+So a shared suite is not a slower version of your gate. **It is a record of
+failure modes you have not personally had yet**, which is precisely the set your
+own gate cannot contain. The corollary is the practical one and it is about
+REACH, not about diff size: **a builtin change reaches every NilPy program**, and
+`quick` cannot see that. Ask what your change is reachable FROM, and when the
+answer is "everything in a language", the full suite is the cheap option and not
+the thorough one.
+
+## A ZERO FROM A MICROBENCHMARK SUITE IS A CLAIM ABOUT ITS CELLS, NOT ABOUT THE PROGRAM — measured as 20 cells against 67 allocating callers
+
+*2026-09-22, `franks-5b`, taking the advice to run its patterns against a corpus
+rather than its own fixtures. Banked by `frankz-e5`; the measurement is 5b's.*
+
+5b had reported to the owner: **"indexing: 0.0000"** — no allocation. It had
+measured `lst[3]`.
+
+**String indexing is a different operation with the same name.** `s[i]` allocated
+**1.0054 per operation** at the shipped `-O2` — a fresh one-character string per
+subscript — and so did a `for`-in variable and `list(s)`, all three lowering to
+`pystr_charat`. The reported zero was true of the cell and false of the word
+printed beside it.
+
+**The instrument that found it is the transferable part.** Not a better fixture:
+a **reverse call graph on `PXXAlloc` over a real program**. It answered **67
+distinct allocating callers**, and the twenty cells of the suite could reach
+**almost none of them.** That is a coverage measurement of the benchmark itself,
+and it is the thing nobody runs, because a suite that produces clean numbers
+feels like it is working.
+
+**Why a suite produces this failure by construction rather than by oversight.** A
+cell is named for a SOURCE-LEVEL OPERATION — *indexing*, *iteration*, *compare* —
+and the compiler lowers one operation name to several different routines
+depending on the operand's type. **The name a reader reaches for is the name in
+the report**, so a zero measured on one lowering is read as a zero for the
+operation. This is CLAUDE.md's *the name is not the thing* with the extra sting
+that **the benchmark author picked the name**, so there is no second party whose
+spelling could disagree and expose it.
+
+**Two discharges, and the second is the cheap one.**
+
+1. **Before reporting a zero, measure what your suite REACHES.** A call graph
+   over one real run, intersected against the routines your cells call, gives a
+   coverage figure in minutes. A zero with no coverage figure beside it is the
+   numerical twin of a count with no population.
+2. **Enumerate the LOWERINGS, not the operations.** For every cell, ask which
+   runtime routine it actually calls, and then ask which other source spellings
+   call that routine and which routines the operation's OTHER operand types
+   reach. Here the same one-byte-string allocation had **three spellings** —
+   `pystr_charat`, the `for`-in variable, and a third the compiler emits itself
+   (`pystr_ofchar`, char-to-string promotion, wired at four sites). 5b is closing
+   all three deliberately, on this file's own rule that **two of three fixed is
+   worse than none**: the next person greps the construct, finds it handled, and
+   stops.
+
+**A negative result that names its exclusions is a finding; one that does not is
+a shrug.** The exclusions are the value, and they are only trustworthy once you
+have measured that the instrument could have reached them.
