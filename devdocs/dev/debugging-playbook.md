@@ -40635,3 +40635,54 @@ out not to be one"* — is the right instinct in both directions. It also declin
 to argue its OWN new class up, on the ground that it was the wrong seat to judge
 recurrence on a class it had just found. A class's owner is well placed to refuse
 a bad instance and badly placed to count good ones.
+
+## THE HIGHEST-VALUE PLACE FOR A FALSE NEGATIVE IS THE "IS THIS ALREADY WRITTEN DOWN" GREP — because its failure mode is silent, additive, and looks like diligence
+
+*2026-09-22, `frankz-e5`, caught one command before it cost anything. Banked as a
+placement finding, not as a new fact about `grep`: the mechanism is this file's
+own "every instrument that lies, lies by being CORRECT ABOUT SOMETHING ELSE",
+and what is new is WHERE it bites hardest.*
+
+A ticket body cited *"the playbook entry on a bisection predicate that is not a
+function of the search space"*. Checking before writing one, I ran
+
+    grep -n 'not a function of the search space' devdocs/dev/debugging-playbook.md
+
+which returned nothing. I read that as **the citation dangles and the entry needs
+writing** — and was one command from appending a duplicate section and from
+telling two peers their ticket carried a dead citation.
+
+The entry exists. `frankh-c0` had added it the same day, as section 3 of *TWO WAYS
+A BISECTION IS ALREADY WRONG BEFORE IT STARTS*, and its heading reads **THE
+PREDICATE WAS NOT A FUNCTION OF THE SEARCH SPACE AT ALL** — in capitals, which is
+this file's house style for headings. A case-sensitive grep for a lowercase
+phrase cannot match a heading, and **headings are exactly where a concept is
+named**, so the one place a "has this been said" search most needs to look is the
+one place house style guarantees it will miss. What saved it was reading the
+section the grep did not return, for an unrelated reason.
+
+**Why this placement is worse than the general case.** Most false negatives
+produce a missing action and you notice the gap. This one produces an ADDED
+artefact — a second section saying what the first already says, landed by someone
+who checked first and can point at the check. It is **indistinguishable from
+diligence**, it survives review because the content is correct, and it degrades
+the file the search runs over, so the next person's grep now returns two entries
+and neither is marked as the original. It is the duplicate-implementation shape
+that this file records elsewhere, arriving through the mechanism that was
+supposed to prevent it.
+
+**Discharge, and it is two habits, not a flag.** Search the HEADINGS as their own
+population and case-insensitively — `grep -in '^#' <file> | grep -i '<concept>'`
+— because a heading names the concept while the body only uses it. Then search
+for the **concept's distinctive NOUNS separately** (`search space`, `monotone`,
+`predicate`), never the remembered sentence: the sentence you remember is the one
+you are about to write, not the one somebody else wrote. And where the citation
+that sent you there came from a peer's ticket, **read the neighbourhood before
+declaring a dangle** — a citation written by someone who had the file open is
+better evidence that the entry exists than your grep is that it does not.
+
+**The general form, which is the part worth carrying:** when a search's NEGATIVE
+result is what authorises you to create something, that search needs a positive
+control like any other guard. Run it against a phrase you know is in the file. I
+did not, and the only reason this is a playbook entry rather than a duplicate
+section is that I happened to open the file for a different reason.
