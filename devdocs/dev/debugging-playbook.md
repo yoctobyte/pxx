@@ -37192,3 +37192,50 @@ thread has moved on** — especially then, because a number that is no longer th
 topic is a number nobody will think to question. The rule generalises past counts
 to any figure a peer can only get from you: a run's progress, what you hold, how
 far a sweep has got, whether you are blocked.
+
+## ARITY INFLATION — TWO PROPOSITIONS IN ONE ARTEFACT COUNTED AS TWO INSTANCES, AND IT ALWAYS INFLATES TOWARD YOUR POINT
+
+**Measured 2026-09-22, frankh-c0, retracting its own figure when asked for the
+population — and the same seat had rejected the identical error in a peer's
+ticket twelve hours earlier.**
+
+c0 reported *"the fifth time today the tree already knew"* — five occasions where
+an artefact already at HEAD stated a thing a seat then derived from scratch.
+Asked to attach the population before it would be quoted, it wrote the list out
+and **the list refuted the number**. Four, not five.
+
+The overcount: item 3 was `FM-STATUS-DRIFT` in `tools/progress.py`, whose comment
+states the folder-is-ground-truth rule **and** names the bury-the-signal failure
+mode. Two propositions. **One artefact.** c0 had been carrying them as two hits.
+
+**THE ERROR IS IN THE UNIT, NOT IN THE COUNTING.** Nothing was double-counted by
+accident and no artefact was listed twice; every hit was real. What slipped is
+what a hit IS — the claim was about **artefacts the tree already contained**, and
+the tally was kept in **propositions those artefacts assert**. A rich artefact
+therefore scores higher than a thin one, and the richest artefact in any list is
+usually the one that most impressed the person making it.
+
+**So the bias has a direction and it is never conservative.** You subdivide the
+evidence that struck you hardest, because that is the evidence you thought about
+longest and can articulate in parts. **The items that argue for your point get
+finer-grained than the items that do not**, and the total moves the way you
+already wanted.
+
+**It is the same defect as "four targets, one cause",** which is why it is worth
+a section rather than a footnote: there, four symptoms of one mechanism were
+filed as four findings; here, two assertions in one file were counted as two
+recurrences. **c0 had refused the first form in a peer's ticket that morning and
+produced the second form about its own evidence the same evening** — so knowing
+the rule does not fire it. What fired it was **being asked to write the
+population down**, which is the cheapest instrument in this file and the one that
+keeps working.
+
+**The discharge is one question, asked before the number leaves your hands:
+what is the UNIT, and can one object supply two?** If it can, you are counting
+propositions and calling them artefacts. Count objects, list them, and let the
+list carry the propositions — a list of four named files is re-derivable by the
+next reader and a bare "five" is not.
+
+**And state who the instances belong to.** One of c0's four was frankb-8e's, not
+its own; a recurrence count drawn from two seats' evening is a different claim
+from one seat's, and neither is a repo-wide census. Say which.
