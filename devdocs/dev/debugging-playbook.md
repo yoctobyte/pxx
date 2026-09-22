@@ -41483,3 +41483,61 @@ comment-only from the diff's appearance. It reported that the binary reproduced
 change was comment-only; reading the diff does not.** State it that way, because
 "comment-only" read off a diff is exactly the claim a stray brace falsifies while
 looking unchanged.
+
+## PEER REVIEW REACHES A CLAIM'S FACTS AND NOT ITS INSTRUMENT — because the query is the one part nobody puts in the message
+
+*2026-09-22, `frankz-e5` and `frankb-8e`, from a discrepancy of four that turned
+out not to be a discrepancy at all. The closing finding of a long day of mutual
+correction, and the one that explains why the day worked.*
+
+8e reported *"thirty top-level `test_rust_*.rs` subjects"*. I measured 26 and
+recorded both rows rather than overwriting its. The reconciliation: **30 `.rs`
+total = 26 top-level + 4 in a subdirectory.** Both numbers were right and were
+never in tension; what was wrong was a word — *top-level* — attached to a total.
+
+**The instrument was a `git ls-files` pathspec piped into `grep -c '/'`, and it
+appeared in nothing 8e sent.** It has two defects that compound into a plausible
+number:
+
+1. **`git ls-files` pathspecs are NOT shell globs — `*` crosses `/`.** A pathspec
+   meant to match one directory's files matches its subdirectories' too, so the
+   population was already wider than intended. Anyone reading that command as a
+   shell person reads it wrong.
+2. **`grep -c '/'` cannot fail.** Every path it is handed begins with the queried
+   directory and therefore contains a slash **by construction**, so the filter
+   meant to repair (1) was pre-satisfied and could only ever return the total. The
+   spelling that answers the question asked is an anchored inverse match that
+   excludes any path with a directory component after the root.
+
+Reproduced at `origin/master`: the slash count answers **30**, the anchored inverse
+answers **26**.
+
+**The general source, which is commoner than the arithmetic one CLAUDE.md already
+records** (`grep -o "663"` over a build log, where any 400-object log contains
+`663`): **a census piped from a directory-scoped file listing shares a prefix, so
+any filter matching on that prefix or on a separator inside it is guaranteed true
+before it runs.** The guarantee comes from the pipeline's own first stage. Ask of
+any filter: **does my query already guarantee this predicate?** If the filter's
+pattern mentions anything the glob mentioned, the answer is probably yes.
+
+**AND THE PART THAT GENERALISES PAST GREPS, WHICH IS THE ENTRY'S REASON FOR
+EXISTING.** A verification pass on stated facts cannot reach a quantifier nobody
+stated — **and it cannot reach an instrument nobody printed.** I verified 8e's
+numbers and the tree agreed, *because the numbers were true*. Reading its sentence
+more carefully would never have worked. **The query was not in the claim, and the
+query was the defect.**
+
+So peer review has a structural ceiling: it audits the FACTS a message contains,
+and a message contains facts, not methods. **The only thing that reaches the method
+is re-running it.** Three times on 2026-09-22 the recovery came from a seat
+re-measuring instead of reading — a pin's ancestry checked against a log's dates, a
+name search that returned only its own correction note, and this — and each time
+every other check had already passed.
+
+**Two discharges, and the second is for the reader rather than the author.** When
+you report a number, **report the command** — it costs one line and it is the only
+part of your claim that can be independently falsified. And when you check a peer's
+number, **re-derive it from the tree rather than reconciling it against your own**;
+if you get a different answer, the interesting question is not which number is
+right but **what the two queries each enumerated**, which is how this one resolved
+into `26 + 4` instead of into somebody being wrong.
