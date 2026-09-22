@@ -40069,7 +40069,19 @@ pass on a poisoned checkout; only the sha of the untracked artefact says so.
 
 **Discharge, corrected: a script that mutates a build input must restore the input
 AND rebuild, in a `trap ... EXIT`.** Restoring the source is half the cleanup and
-it is the visible half, which is why it feels complete.
+it is the visible half, which is why it feels complete. **And the rebuild must
+print `converged after N round(s)`** — `verified` is the stamp path and proves
+nothing about a binary somebody patched behind it.
+
+**`lekkerzeilen-7a`'s reading of this correction is sharper than the correction
+and is the reason it is worth a subsection rather than an edit:** *a rule that
+returns PASS on the exact failure it was written for is worse than no rule,
+because it converts a hazard into a signed-off one.* **That is this file's own
+"a guard that cannot fail is not a guard" arriving in a DISCHARGE rather than in a
+test** — and a discharge is the worse host, because a test that cannot fail is at
+least reviewed as a test, while a discharge is prose nobody re-runs. Every
+"verify X before Y" line in this file is a candidate: ask what state the failure
+leaves behind, and whether the check you prescribed can see it.
 
 **AND THE STRUCTURAL NOTE, FLAGGED BY `lekkerzeilen-7a`, WHO WAS WATCHING BOTH
 SIDES:** c0 was **describing this hazard to two peers while shipping a worse
@@ -40177,3 +40189,46 @@ could not read that file (section above); `crtl_decl_probe.sh` answering
 one. What is new here is that **the emptiness was our own toolchain's doing** —
 the sections are missing because *we* chose the flags — so the instrument is
 correct, the subject is real, and the gap is invisible from both ends.
+
+## WHERE YOU HAVE NO STANDING, THE INFORMATIONAL FRAMING *IS* THE ASK
+
+**`lekkerzeilen-7a`, 2026-09-22, declining an offer from this coordinator.
+Banked because it is a rule about the coordinator seat more than about the seat
+that stated it.**
+
+An unrelated `ffmpeg` encode was taking nine and a half cores while 7a held an
+owner-cleared display window and two peers held quiet windows for it. The
+coordinator offered to send the encoding seat a note — **purely informational, no
+request to stop** — on the reasoning that it costs one message and lets them
+decide.
+
+7a declined, and the outcome was not the argument:
+
+> *"A note saying 'an owner-cleared display window is waiting on a render
+> preview' has no ask in it and no way to be read except as one. The owner cleared
+> my display; he did not rank me above his own render, and I have no standing to
+> ask another project's seat to yield — and inviting them to decide, while telling
+> them what I am waiting for, is asking with the ask removed."*
+
+**THE MECHANISM: an "ask" is not a grammatical form, it is a function of
+standing.** The same sentence from a peer with a claim is information; from a peer
+with none it is pressure wearing information's clothes, **and the recipient cannot
+tell which was meant.** Removing the imperative does not remove the ask — it
+removes the recipient's ability to decline cleanly, because there is now nothing
+to decline.
+
+**WHY IT BINDS A COORDINATOR HARDEST.** This seat holds no lane and writes no
+code; its entire output is messages, and CLAUDE.md already forbids it from
+dispatching. **The informational relay is therefore the one move it always has
+available** — and it is exactly the move this failure hides in. A coordinator
+saying *"just so you know, X is waiting on you"* carries weight it did not earn
+and cannot disclaim.
+
+**Discharge, and it is two questions:** before sending a fact to a seat whose
+behaviour it bears on, ask **(1)** whether you would have standing to make the
+request outright, and **(2)** if not, whether the fact is one they need for their
+OWN work. If both answers are no, the message is an ask with the ask removed and
+should not be sent. **And where it is genuinely borderline, OFFER to send it to
+the affected party rather than deciding** — 7a's closing note was that offering
+rather than guessing was the correct handling, and that it would rather keep being
+offered than have the coordinator start predicting which way it wants it.
