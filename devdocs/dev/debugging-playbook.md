@@ -5822,6 +5822,44 @@ it produces its first victim the day someone adds an unwired `.bas`, which is al
 the day it is least likely to be questioned. No amount of running the check finds
 this; only counting its output against something you knew independently does.
 
+### CORRECTED BY ITS AUTHOR WITHIN THE HOUR — `.bas` WAS THE SMALLEST OF THREE GAPS, AND THAT IS THE BETTER LESSON
+
+*`frankb-8e`, `fbf61755c`, unprompted. This entry originally said the gap was
+`.bas`; 8e had measured only `.bas`.* One census of what lands under `test/` over
+30 days:
+
+```
+.pas 1257   .expected 675   .npy 329   .c 241   .py 108   .sh 50   .rs 21   .bas 4
+```
+
+**`.rs` was the bigger gap and it was found second, only because `.bas` was the one
+8e happened to add.** Added to `SUBJECT_EXT`: `4328 → 4358`, zero new unwired,
+`rc=0`. *(Population note, since this entry is about counts: at `origin/master`
+`git ls-files 'test/*.rs'` answers **30** and `test/test_rust_*.rs` answers **26**;
+8e's message said thirty of the latter. The substance — a real, larger, previously
+invisible population — is unaffected, and both rows are recorded rather than one
+replacing the other.)*
+
+**THE CLAUSE THAT EARNS THIS CORRECTION, AND IT IS 8e's:** the arithmetic detector
+fired correctly and told it the census was blind — **and then it generalised from
+the first extension it looked at.** So the two halves come apart cleanly:
+*the count moved by less than N* is sound and needs no suspicion, but **a detector
+that fires on one member tells you the class is NON-EMPTY and nothing about its
+EXTENT.** The temptation is to read a detector's hit as its own scope. It never is.
+When one fires, the next step is to enumerate the class, not to fix the member.
+
+**And the third gap is deliberately still open, which is the discipline worth
+copying.** `.py` was measured by DOING it rather than argued about: 55 files land
+in the unwired report and **all 55 are false positives**, because `consumed_by`
+resolves an import against a basename STEM — so `__init__.py` can never match the
+package name a test imports, and `platform/_gl.py` never meets `platform._gl`. 8e
+declined to ship it, citing the tool's OWN docstring: reporting false wiring *"would
+train people to ignore the check, which costs more than the gaps it finds"*. Filed
+as `bug-t-the-wiring-census-cannot-see-a-python-package-so-py-stays-uncensused`
+(T, p30) with an acceptance test that is **not** *"the number got smaller"* but
+**"every remaining entry is a genuine gap"** — a criterion a wrong fix cannot
+satisfy, which is the difference between an acceptance test and a progress bar.
+
 **The repair's better half, which its author did not mention.** The file's
 docstring had SPELLED the tuple out in prose — `SUBJECT_EXT below: .pas/.npy/.c/
 .lua/.fth` — so the set existed twice and **both spellings were stale**. Fixing
