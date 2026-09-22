@@ -40482,3 +40482,52 @@ author sent the paragraph back with its reasoning attached. **A scope error in a
 prohibition produces no failing observation** — everyone complies with the wider
 version and nothing happens — so it is only ever caught by a second reader who
 sees the text, never by the work.
+
+## A GUARANTEE KEYED ON THE ABSENCE OF A PROPERTY IS SILENTLY OPTED OUT OF BY ANYTHING THAT ACQUIRES THAT PROPERTY FOR AN UNRELATED REASON
+
+Measured 2026-09-22 (frankb-8e / franks-5b), from
+`bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised`. **One
+subsystem, so this is BANKED and not promoted** — the recurrence test is a second,
+independent subsystem, and until then this is a sharp anecdote with a mechanism.
+
+**The instance.** Four passes zero-initialise managed locals. Three of them are
+scoped to *compiler-synthesised* temps, and all three express that as
+`Syms[i].Name = ''` — a reasonable proxy, since the compiler's own temps are
+minted nameless. The fourth, `EmitManagedLocalsZeroInit`, has no name filter at
+all and would have covered everything, but runs before lowering-time symbols
+exist.
+
+`pyparser.inc` mints the `print()` argument temp with `PyHiddenName('parg')`,
+giving it `__py_parg_N` **for debuggability**. That name is the entire defect: it
+opted the symbol out of all three absence-keyed passes at once, and the fourth
+could not reach it. **The symbol satisfied zero of four**, and the result was a
+managed slot that nothing initialised while the epilogue released it.
+
+**Why this shape is hard to see from either end.** The passes are individually
+correct and their filters are individually well-reasoned. The mint site is
+individually correct and naming a temp is a kindness to the next debugger. **No
+single site is wrong, and no site's author had any reason to think about the
+other.** The coupling exists only in the negative space: `Name = ''` is not a
+statement about names, it is a stand-in for "the compiler made this", and the two
+diverge the moment anything makes a compiler-made thing legible.
+
+**The general form, which is what would earn promotion if it recurs:** wherever a
+guarantee is gated on something NOT being present — no name, no flag, no owner, no
+annotation, an empty field, a sentinel — **anything that later acquires that
+property for an unrelated purpose leaves the guarantee silently.** It does not
+error, because opting out is exactly what the filter is written to do. Debug
+names, tracing ids, provenance fields and display labels are the usual culprits
+precisely because they are added for the benefit of a human reader, by someone
+not thinking about codegen invariants.
+
+**The cheap check when you add one:** ask what the absent property is a PROXY for,
+then ask whether anything can acquire it without acquiring the thing it proxies.
+Where the answer is yes, key the guarantee on the real property — here a flag that
+says "compiler-synthesised", which `SymIsHiddenArgTemp` already was, and which the
+mint site simply had not set.
+
+**And the diagnostic tell, because the failure is silent by construction:** a
+symbol that satisfies NO pass looks identical to a symbol that needed none. Only
+an instrument that enumerates the candidates and prints which pass claimed each
+one can show the gap — `PXXDBG=a.htemp` exists for that reason and found this in
+one build after three hypotheses had failed.

@@ -3,7 +3,7 @@ slug: bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised
 track: A
 prio: 80
 type: bug
-status: working
+status: done
 owner: frankb-8e
 created: 2026-09-22
 found-by: franks-5b
@@ -769,3 +769,6 @@ regardless of kind, which fully covers a handle, a pointer and a promo tag, but 
 half of a `tyVariant` slot. Variants reaching this path are now zeroed where before
 they were not, so this is strictly an improvement — but it is not a claim that the
 variant case is complete, and I have not constructed one that proves it either way.
+
+## Log
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
