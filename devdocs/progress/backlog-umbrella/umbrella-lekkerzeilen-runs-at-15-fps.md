@@ -57,11 +57,28 @@ work — and if a seat asks whether it covers their case, the honest answer is t
 he named GUI testing of lekkerzeilen and none of us should read further on his
 behalf.
 
-**What this does NOT change:** nothing measured stays measured any less. The 19.7x
-against CPython, the four rows under MEASURED AS NOT THE CAUSE, and every
-measurement rule this ticket has paid for all stand. **What is suspended is the
-production of NEW frame numbers**, which is exactly the input the ranking below
-was waiting on.
+**READ THIS IN THREE SEPARATE PARTS. The first version of this paragraph ran them
+together and the join was a scope claim in his voice — corrected 2026-09-22 after
+`frankuser` caught it.**
+
+1. **WHAT HE SAID, quoted, no gloss:** *"ok. stop gui testing lekkerzeilen for a
+   while please"*.
+2. **WHAT IS DEFINITELY UNAFFECTED, and this half needs no interpretation at all:
+   a pause cannot un-measure anything.** The 19.7x against CPython, the four rows
+   under MEASURED AS NOT THE CAUSE, and every measurement rule this ticket has
+   paid for **all stand and stay citable.** This is the half the paragraph was
+   really for — *"lekkerzeilen work is paused"* is one careless paraphrase from
+   *"the lekkerzeilen findings are on hold"*, and expensively-bought facts stop
+   being cited that way.
+3. **EVERYTHING IN BETWEEN — non-GUI lekkerzeilen work — IS A QUESTION FOR HIM AND
+   NOT A CONCLUSION EITHER OF US MAY WRITE DOWN HERE.**
+
+**The earlier wording was "what is suspended is the production of NEW frame
+numbers".** Both of us read that as the literal and correct reading of what he
+said, **and it is still a permissive scope claim, which is the direction this file
+may not move on its own.** Part 3 is exactly where a seat with a plausible case
+will land, and **a file that already answers it removes the ask-him step** — which
+this same file instructs everywhere else. **Ask him.**
 
 **The first directive, which this supersedes on the TARGET and not on the
 priority:**

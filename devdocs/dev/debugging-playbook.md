@@ -40284,3 +40284,65 @@ should not be sent. **And where it is genuinely borderline, OFFER to send it to
 the affected party rather than deciding** — 7a's closing note was that offering
 rather than guessing was the correct handling, and that it would rather keep being
 offered than have the coordinator start predicting which way it wants it.
+
+## RELAYING A PROHIBITION WIDENS IT, BECAUSE THE SECOND SEAT RE-DERIVES THE SCOPE — AND A PAUSE NOTE OVER-READS IN BOTH DIRECTIONS
+
+**Measured 2026-09-22 between `frankuser` and `frankz-e5`, on an owner
+instruction, with the coordinator making the error and the relayer catching it.**
+
+This file already records that **the worst thing to relay verbatim is a
+PERMISSION**. This is the mirror and nobody had written it down: **a PROHIBITION
+relayed down a chain gets wider at every hop, and the widening happens by
+re-derivation rather than by grant.** Nobody hands anybody anything; the second
+seat simply works out what the instruction "must mean" and writes that down, and
+its judgement is now part of the rule.
+
+The owner said, verbatim: *"ok. stop gui testing lekkerzeilen for a while
+please"*. `frankuser` relayed it with the scope drawn tightly — *"stop"* is now,
+in-flight included; *"for a while"* is a pause, not a cancellation; no duration,
+no reason, not asked; **it names GUI testing of lekkerzeilen and nobody here
+widens it for him.**
+
+**THE COORDINATOR CARRIED THAT SCOPING VERBATIM RATHER THAN RE-DERIVING IT, WHICH
+WAS RIGHT — AND THEN WIDENED IT ANYWAY, IN A SENTENCE IT ADDED FOR A DIFFERENT
+REASON.**
+
+### The pause note over-reads in both directions and only one is obvious
+
+A pause recorded in a ticket invites misreading **two ways**:
+
+- **Too wide:** the pause spreads to work it never named. Everyone guards this.
+- **Too far:** the *findings* get read as suspended with the activity.
+  *"Lekkerzeilen work is paused"* is one careless paraphrase from *"the
+  lekkerzeilen findings are on hold"*, and **expensively-bought facts quietly
+  stop being cited.** Nobody guards this, and `frankuser` said outright it would
+  have missed the need for it.
+
+So the coordinator added a `What this does NOT change` paragraph — correct, and
+needed. **Its closing clause was `what is suspended is the production of NEW frame
+numbers`, and that is a SCOPE CLAIM IN THE PERMISSIVE DIRECTION**: it implies
+non-GUI work on that demo continues. Both seats believed it was the literal and
+correct reading. **It is still the direction a relayed prohibition may not move on
+its own**, and it was written by the seat that had just congratulated itself for
+not re-deriving the scope.
+
+### The form that works: three parts, and the join is the hazard
+
+1. **What he said** — quoted, no gloss.
+2. **What is definitely unaffected** — and pick only what needs *no
+   interpretation at all*. **A pause cannot un-measure anything**, so prior
+   measurements stay valid and citable. That is the half the paragraph is for.
+3. **Everything in between** — **a question for him, and not a conclusion anyone
+   in the chain writes down.**
+
+**Running 2 and 3 together is the whole failure.** Part 3 is exactly where a seat
+with a plausible case lands, and **a file that already answers it removes the
+ask-him step** — in a repo whose own rules say to ask him. `frankuser`'s test is
+the cheap one: *would I assert this sentence in his voice?* If not, it goes in
+part 3.
+
+**And note who caught it.** The relayer, not the author, and only because the
+author sent the paragraph back with its reasoning attached. **A scope error in a
+prohibition produces no failing observation** — everyone complies with the wider
+version and nothing happens — so it is only ever caught by a second reader who
+sees the text, never by the work.
