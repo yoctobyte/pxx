@@ -228,3 +228,46 @@ thread does not own, so the hook and the defeated marker meet at the same site.
 Still not a recommendation: no option is chosen here and no code changed. Three
 of the address-based shapes are now excluded on a reason that is measured rather
 than argued, and one exclusion already in the ticket has been corrected.
+
+## 2026-09-22 (frankh-c0) — WHAT A BLOCK COSTS, so the fork is a yes/no and not an architecture question
+
+Bounded deliberately to the question asked — **how many slots, how many bytes** —
+and stopping there. It is **derived from the definitions**, not measured off a
+binary, and it is labelled as such.
+
+| part | slots | bytes |
+| --- | --- | --- |
+| scalars (SELF, TID, STACK_LO/HI, 4 SIG, 4 EXC, MAGBUSY) | 13 | 104 |
+| padding to the magazine (13..15) | 3 | 24 |
+| heap magazine list heads (`HEAP_MAG_BINS` = 64) | 64 | 512 |
+| heap magazine counts | 64 | 512 |
+| **slot map total** (`TLS_USER_FIRST_OFF`, the source's own comment says 1152) | **144** | **1,152** |
+| `threadvar` area (`TLS_USER_BYTES_DEFAULT`, assigned at `ir_codegen.inc:1718`) | — | **3,072** |
+| **`TlsBlockSize` = `TLS_USER_FIRST_OFF + TlsUserBytes`** | | **4,224** |
+
+**TWO THINGS FALL OUT AND BOTH BEAR ON THE DECISION.**
+
+**1. 89% of the slot map is the heap magazine** — 1,024 of 1,152 bytes, 128 of
+144 slots. That is exactly the resource
+`bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine` is about. So
+"give a foreign thread its own block" and "stop a foreign thread sharing the
+magazine" are **the same allocation**, not two costs to weigh against each other.
+
+**2. 73% of the block is the `threadvar` area, and another open ticket says that
+area is usually unnecessary.** `feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar`
+(p70, track A, unowned) proposes sizing it on demand. **If that lands, a foreign
+thread's block falls from 4,224 to ~1,152 bytes**, and the knob already exists:
+`PXX_TLS_USER_0` sets it to zero today (`ir_codegen.inc:1720`).
+
+**So the cost side of this fork is not fixed, and it is cheaper than it looks in
+exactly the programs that would hit it.** A decision taken against 4,224 bytes
+is being taken against a number another ticket is already trying to move.
+
+**NOT MEASURED HERE, ON PURPOSE:** the SETUP cost (what installing a block
+costs in instructions/time). The box was at load average 14+ and a timing row
+taken there would look like evidence — see the deferral note in
+`perf-o-the-variant-hidden-dest-clear-...`. That half is outstanding and is the
+only thing missing before the fork can be stated in goal terms with costs
+attached.
+
+**This is NOT an audit of the TLS machinery** and must not become one.
