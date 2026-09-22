@@ -38044,10 +38044,28 @@ ranker evidently still read prio 95 and four edges. **The finding is that a
 malformed machine-readable field produced NO signal at all**, in the exact field
 5b had just demonstrated is the one that decides dispatch.
 
-**Population, so the number is quotable:** strict `yaml.safe_load` over the first
-frontmatter block of **4,465** tickets under `devdocs/progress/*/` answers
-**61 unparseable**, overwhelmingly in `done/`. **That is NOT 61 broken tickets** —
-the repo's parser is lenient by design and those tickets work. It is a count of
-files where a strict reader and the repo's reader disagree, and **nothing today
-establishes that any of them behaves wrongly.** Recorded so nobody quotes 61 as a
-defect count.
+**Population, so the number is quotable — AND THE FIRST VERSION OF THIS
+PARAGRAPH QUOTED A NUMBER FROM AN INSTRUMENT I HAD NOT VALIDATED, IN A SECTION
+ABOUT MACHINE-READABLE FIELDS.** It said **61**. That came from
+`s.split('---')[1]`, which does not find a frontmatter block — **it finds the
+text between the first two occurrences of three hyphens anywhere in the file**,
+so a ticket whose BODY contains a `---` rule gets a truncated block and fails to
+parse for a reason that has nothing to do with its frontmatter.
+
+**Delimiter-aware — first line `---`, block ends at the next line that is exactly
+`---` — the answer is 57**, over the same **4,465** tickets. **Four of the
+original 61 were artefacts of my splitter.** Both counts are reported here
+because replacing one with the other is what the population rule forbids: they
+measured different things.
+
+**NEITHER IS A DEFECT COUNT.** The repo's parser is lenient by design, those
+tickets work, and **nothing today establishes that any of the 57 behaves
+wrongly.** One is a genuine structural fault worth naming — a `done/` ticket with
+**no closing `---` at all** — and the rest are strict-versus-lenient
+disagreements. **Do not quote 57 or 61 as broken tickets.**
+
+**What would retire this row:** a check run by the tooling rather than by a seat,
+against the repo's OWN parser, asserting that every ticket's frontmatter yields
+the fields the ranker uses. **A per-seat habit of validating before committing is
+not that** — franks-5b does it, validated this very afternoon, and **a habit has
+the same detection profile as the defect above, which is none.**
