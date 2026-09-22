@@ -269,6 +269,17 @@ rather than refinement.
 
 ### E2 — why is `-O3` clean? The dead-local hypothesis
 
+> **DO NOT RUN THIS AS WRITTEN — the hypothesis below was REFUTED on 2026-09-22
+> by `frankh-c0`, see "E1 ANSWERED" further down. The IR is byte-identical at
+> `-O1`, `-O2` and `-O3`, and an eliminated local would change the IR, so `-O3`
+> does whatever it does BELOW the IR. The question "why is `-O3` clean" is also
+> answered in that section and the answer is MASKING, not absence.** Left
+> in place unedited, including its prediction, because a prediction written
+> before a run is only worth anything if it is still legible after the run
+> contradicts it. The trap it records — that `print(v0)` cannot test this,
+> because printing a plain `Int64` is itself a clean row — remains true and is
+> the part worth carrying forward.
+
 `v0` is written once and never read. **Hypothesis: `-O3` eliminates it**,
 leaving two locals — which is a composition measured CLEAN at `-O2`. That would
 explain the `-O3` row without any pass-ordering story at all.
