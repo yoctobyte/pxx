@@ -42869,3 +42869,62 @@ allowed to look.
    what stops being available in a fleet of one. **A single seat cannot run this
    guard at all**, so on a shrink the correct response is to raise the bar for
    promotion rather than to keep the test and lose its guard.
+
+## A REPLICATION THAT INHERITS ITS PREDECESSOR'S UNEXAMINED PREMISE IS WORSE THAN NO REPLICATION — it converts one unchecked claim into an established one
+
+*2026-09-22, `frankuser`'s formulation about a decision `frankz-e5` made, banked
+as the fleet shrank to one. The least visible correct act of the day, which is
+why it is written down.*
+
+**The setting.** A census of held tickets was run in the morning and produced two
+things: a **finding** (29 of 34 rows held by seats with no reachable session) and
+a **separation claim** (*"last touched today" separates live from dead with zero
+error*). A peer then established that the separation was **contaminated** — four
+of the five live rows were last-touched today *because a seat claimed today*, one
+of them the peer's own, twenty minutes before the run. The finding survived; the
+separation did not.
+
+Hours later the census was re-run. **The obvious thing to do was repeat both.**
+
+**WHY REPEATING IT WOULD HAVE BEEN WORSE THAN NOT RE-RUNNING AT ALL.** A second
+run carrying the same claim does not read as *one measurement, repeated*. It
+reads as **replicated** — and replication is the strongest word available for a
+number. The contamination would not have been re-examined by the second run,
+because the second run **shares the contaminant**: it too was taken on a day when
+seats were claiming. So the premise would have passed from *unchecked* to
+*established* **without anything having checked it**, purely by being stated
+twice.
+
+**The asymmetry that makes this worse than a single bad claim.** One unchecked
+number invites *"where did that come from?"*. Two agreeing numbers close that
+question — and they close it for the ORIGINAL author too, who now remembers
+having measured it twice. **Repetition is the cheapest way to make a claim
+unfalsifiable, and it requires no dishonesty and no new evidence.**
+
+**It is `CORROBORATION IS ONLY AS WIDE AS THE LAYER IT WAS TAKEN AT` in the time
+dimension.** That entry is about two instruments at one moment sharing a
+substrate. This is one instrument at two moments sharing a **condition** — and
+the condition is usually invisible, because nobody writes down what the world was
+doing while they measured. *Both runs happened on a busy day* is not in either
+run's output.
+
+**Discharge, and it is narrow enough to act on.**
+
+- **A re-run inherits every premise you do not re-derive.** Before repeating a
+  claim, ask which part of it the NEW run actually re-establishes. If the answer
+  is *none of it*, carry the finding forward and **leave the claim behind, in
+  writing** — a re-run that explicitly declines to repeat something is a stronger
+  artefact than one that silently drops it, because a later reader can tell the
+  omission was a decision.
+- **Say what the second run does NOT establish, in the second run's own
+  record.** The final census above states outright that no separation claim is
+  made and why. That sentence is what stops a future reader — including its
+  author — reconstructing a replication that never happened.
+- **On a shrink to one seat this stops being optional.** The contamination here
+  was found by a peer who knew it had claimed a ticket twenty minutes earlier —
+  a fact no instrument reports and the measuring seat could not have known.
+  **With one seat there is no such peer**, so the only available substitute is
+  the discipline of writing down what a run does not show. See also
+  `A SEAT HUNTING FOR THE THIRD INSTANCE OF ITS OWN PATTERN WILL FIND ONE`: both
+  guards require a second party by construction, and both must convert into
+  written restraint when there is not one.
