@@ -614,6 +614,19 @@ perf issues have landed**, naming the main performance issues it finds.
 **THE TREE THAT PROFILE MUST SIT ON IS PIN v418** (`000425392`, binary sha256
 `fda77c48b8ee`, source tip `db6d1bddb`), **superseding v417 after 100 minutes.**
 
+**CHALLENGED AND RE-VERIFIED AT REF LEVEL 2026-09-22.** `franks-5b` measured its
+own disk and reported the pin as v417 / `734d10ec7b53` — correct about that
+checkout, which had not pulled `000425392`. At origin:
+`git show origin/master:stable_linux_amd64/default/VERSION` -> **418**, and
+`git show origin/master:.../stable_pinned | sha256sum` -> **`fda77c48b8ee`**,
+matching `last.sha256` and `history.log`'s newest row
+(`2026-09-22T12:31:26Z v418 fda77c48b8ee... db6d1bddb`). 5b's pair is exactly
+v417's blobs (`git show 2b1a54397:...`). **Both rows are real and they measure
+different trees.** Carried rather than replaced, and the method is the point:
+`sha256sum <path>` answers about your last pull even when the identity you match
+is unforgeable, and `VERSION` cannot disagree with the binary because one commit
+writes both — **use `git show <ref>:<path>` for this question.**
+
 **ATTRIBUTION NOTE, because the pin's own body is wrong and cannot be edited:**
 `000425392` says *"lekkerzeilen-7a found (838e8eb45)"*. `838e8eb45` is
 **`frankZ`** (`tools/whose_commit.sh`, rc=0, confirmed independently by its

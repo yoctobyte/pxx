@@ -39313,3 +39313,71 @@ implementation what it decided, and assert the answer as part of the probe.**
 amount). "Is my probe's `v` a variant?" needs its own, and it is the cheap one:
 print the tag. If you cannot make a probe whose tag comes out *wrong*, you do
 not yet know the tag is being read at all.
+
+## A STALE CHECKOUT IS SELF-CONSISTENT — SO A CROSS-CHECK BETWEEN TWO ARTEFACTS ONE COMMIT WROTE CERTIFIES IT
+
+**Measured 2026-09-22 by `frankz-e5` and `franks-5b`, on the pin, with the
+instrument CLAUDE.md prescribes for exactly this question.**
+
+The coordinator relayed *"`fda77c48b8ee` is also the pin's binary"* — a fact taken
+from `frankuser`'s message and passed on unmeasured, which is this file's relay
+failure and is not what this section is about. 5b did the right thing and checked
+it:
+
+```
+sha256sum stable_linux_amd64/default/pinned   -> 734d10ec7b53c4a8
+stable_linux_amd64/default/VERSION            -> 417
+sha256sum compiler/pascal26                   -> fda77c48b8ee4b03
+```
+
+and reported the relay refuted: *"`fda77c48b8ee` is my HEAD-built compiler. The
+pin is v417."* **Every one of those three readings was correct about 5b's disk
+and the conclusion was false.** Re-run at REF level in a pulled checkout:
+
+```
+git show origin/master:.../VERSION                  -> 418
+git show origin/master:.../stable_pinned|sha256sum  -> fda77c48b8ee4b03
+git show origin/master:.../last.sha256              -> fda77c48b8ee4b03...
+git log -1 origin/master -- .../VERSION  -> 000425392 "pin v418 -- binary fda77c48b8ee"
+git show 2b1a54397:.../VERSION           -> 417          <- 5b's tree, exactly
+git show 2b1a54397:.../stable_pinned     -> 734d10ec7b53c4a8
+```
+
+**v418 superseded v417 at 12:31Z. 5b's checkout had not pulled `000425392`.**
+
+**THE PRESCRIBED DISCRIMINATOR IS A PATH READ, AND IT INHERITS TREE STALENESS IN
+FULL.** CLAUDE.md says *"prefer an identity the wrong population cannot imitate —
+for a pin that is the binary sha in its own commit subject, matched against
+`sha256sum` of the pinned binary on disk"*, and it says, elsewhere, *"anything
+reading a PATH is not"* correct after a fetch. **The second rule eats the first
+and neither says so.** An identity no wrong population can imitate is still
+answered by whichever tree you are standing in.
+
+**AND THE CROSS-CHECK IS WHAT MADE IT AIRTIGHT-LOOKING, WHICH IS THE PROMOTABLE
+HALF.** `VERSION` said 417 and the binary said `734d10ec` and **they agreed** —
+two independent-looking artefacts corroborating each other. They cannot disagree:
+**one commit writes both.** So that comparison can detect a torn pin and is
+*structurally incapable* of detecting a stale tree. It is
+`two readings that can go wrong the same way are one reading`, arriving in the
+place a careful seat reaches for corroboration, and both seats read the agreement
+as strength.
+
+**Discriminator: for a pin, read a REF — `git show origin/master:<path>`, or
+`history.log`'s newest row after a `git fetch`.** Never a path, however good the
+identity being matched. A path answers about your last pull; that is the whole
+question when the subject is *"which pin is live for the fleet."*
+
+**A COINCIDENCE USED TO SEPARATE TWO THINGS WAS THE EVIDENCE THEY WERE ONE.** 5b
+read its own `compiler/pascal26` = `fda77c48b8ee` as proving the sha was its HEAD
+build *and therefore not* the pin. Its source tip already contained `db6d1bddb`
+and the self-host build is deterministic, so **it had reproduced the pinned binary
+byte for byte** — the match was the strongest available evidence for the claim it
+was being used to refute. Where a build is deterministic, *"that sha is mine"* and
+*"that sha is the pin's"* are not alternatives, and only the seat that BUILDS can
+see it; the coordinator, who does not build, had no route to that reading at all.
+
+**Three relayed claims between these two seats went wrong the same day and the
+direction is the tell: each one flattered or reassured its recipient.** This one
+also produced a conclusion that was true for a different reason than the one
+given — the hardest kind to catch, because the thing you would check to test it
+comes out right.
