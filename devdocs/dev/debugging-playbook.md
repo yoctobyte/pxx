@@ -40580,3 +40580,58 @@ symbol that satisfies NO pass looks identical to a symbol that needed none. Only
 an instrument that enumerates the candidates and prints which pass claimed each
 one can show the gap — `PXXDBG=a.htemp` exists for that reason and found this in
 one build after three hypotheses had failed.
+
+## A CLASS NAMED FOR A MECHANISM GETS USED AS A BUCKET FOR A SYMPTOM — and the seat that recognises the symptom is, by construction, not the seat that measured the mechanism
+
+*2026-09-22, frankz-e5, one instance, my own. BANKED AND NOT PROMOTED — one
+subsystem, no second independent occurrence. What would promote it: a second
+instance in an unrelated lane where a new finding is filed into an existing
+named class and the class's own mechanism turns out not to be involved.*
+
+`bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice` is named
+for a MECHANISM: a width table that answers per type kind and has shipped one arm
+short three times. Its SYMPTOM is "a managed local is not zero-initialised and
+something later releases the garbage". When the NilPy `print()` promo argument
+temp produced exactly that symptom, I wrote into a p95 summary that it was *"the
+FOURTH ARM"* of that bug — and cited that ticket's own file comment recording the
+chain shipping one arm short three times, which made the fit read as confirmed.
+
+It is not that bug at all. `ManagedLocalZeroBytes` answers CORRECTLY for every
+kind involved, promo included; the pass that consults it is not even the pass
+that fails. The failing pass is the hidden-arg-temp walk, and it fails on a flag
+the mint site never set (`frankb-8e`, who measured it; I measured none of it).
+
+**The asymmetry is the finding, and it is structural rather than careless.** The
+person who measured a mechanism can tell whether a new instance is that
+mechanism. The person who RECOGNISES a symptom is a different person — usually a
+later one, often a coordinator or a triager, and usually one who has read the
+class's summary rather than its measurement. So the instance-to-class edge is
+routinely drawn by the one party who cannot check it, and it is drawn at
+precisely the moment everyone is pleased that a scattered finding has found its
+home. A class with a mechanism in its NAME reads as having already done the
+checking.
+
+**Three costs, and the middle one is the expensive one.** It sends a fixer to the
+wrong file. It grants the old class a spurious recurrence count — which is what
+CLAUDE.md's promotion test consumes, so a wrong edge can argue a rule up into the
+file every session pays for at startup. And when the real fix lands somewhere
+else entirely, the edge does not fail loudly: the old ticket is in `done/` and
+nothing re-reads it.
+
+**Discharge, and it is one question asked of the CLASS and not of the instance:**
+*does the named mechanism RUN on my subject, and what does it answer?* Not "does
+my symptom match" — symptoms are shared by construction, which is why classes
+exist. Here the answer was available in one probe: the walk answers `16` for
+promo and never sees the symbol. **Where you cannot run it, write the edge as a
+QUESTION addressed to the seat that can** — and when they answer, take the
+retraction rather than downgrading the claim to "open", because an open question
+in a summary sends the next reader to re-measure something already settled. My
+own intermediate wording did exactly that and 8e had to ask for it to be dropped
+rather than carried.
+
+**Corollary for whoever holds the class:** `frankb-8e`'s sentence when it voided
+this — *"I would rather you dropped it than carried a fourth instance that turns
+out not to be one"* — is the right instinct in both directions. It also declined
+to argue its OWN new class up, on the ground that it was the wrong seat to judge
+recurrence on a class it had just found. A class's owner is well placed to refuse
+a bad instance and badly placed to count good ones.
