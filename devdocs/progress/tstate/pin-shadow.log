@@ -1018,3 +1018,5 @@
 2026-09-22T08:33:04Z	borg	b2f3e65ef0506f652ec578df301554c2a1546187	would NOT pin b2f3e65ef050 — 2 red(s) the current pin does not have, 3 inherited from the current pin: test-aarch64#src:tools/compiler_srchash.sh, test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy
 2026-09-22T08:54:44Z	borg	41f94503bb89b424e7534d1c6e3aeb93bd3a9f4d	would NOT pin 41f94503bb89 — 2 red(s) the current pin does not have, 3 inherited from the current pin: test-aarch64#src:tools/compiler_srchash.sh, test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy
 2026-09-22T10:14:22Z	borg	7976a265d711a2d5316f0404f2b4d90540d2c6b3	would-pin PENDING 7976a265d711 — qualifies, streak 1/2
+2026-09-22T10:38:00Z	borg	5fccc890af91ec591286a54a4f81f56386d63514	WOULD PIN 5fccc890af91 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 2/2
+2026-09-22T10:38:00Z	borg	5fccc890af91ec591286a54a4f81f56386d63514	AUTO-PIN DECLINED — HEAD is f1a56f2410f9, not the tested 5fccc890af91
