@@ -4,7 +4,7 @@ track: A
 prio: 35
 status: working
 slug: perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob
-summary: "THE TITLE IS WRONG IN THE DIRECTION THAT INFLATES THE PRIZE AND THE FIX IS SMALLER THAN THE BODY CLAIMS (frankh-c0, 2026-09-22, re-read at HEAD). The store arm does NOT use an inline blob -- the blob is OUT OF LINE and reached by a call, and it exists because the inline spelling cost ~42% of output on a zero-byte .npy and ~99% of the text assembler's traffic. BOTH PATHS CALL. The real asymmetry is that IRBuildHiddenDest calls the PORTABLE Pascal proc (arg node + frame) while IR_VAR_STORE calls the TARGET'S OWN blob (no arg node, no frame, preserves rax) -- and a census of every backend shows ONLY x86-64 has a divergent fast spelling: four backends already call the portable proc from both paths and are uniform, aarch64 has its own helper. So the body's \"every backend needs the arm\" is true of the new-IR-kind approach and NOT of the asymmetry named here, which is x86-64-local. The saving is argument marshalling plus a frame, not a whole call. COST EVIDENCE IS SYNTHETIC AND SEVEN DAYS OLD (+14%/+8% against a binary that no longer exists) and the ticket's own retirement condition asks for a real program: lekkerzeilen-7a has been asked for dispatch as a share of a ROOFS frame. THE TIMING HALF IS DEFERRED ON PURPOSE -- load was 14.35, and 7a measured the same binary/scene/pin at 530ms quiet vs 624ms while peers merely COMPILED, with CPython moving 66% against pxx 18%, so contention is DIFFERENTIAL and a ratio is unbounded until both arms run interleaved on a quiet box."
+summary: "THE TITLE IS WRONG IN THE DIRECTION THAT INFLATES THE PRIZE AND THE FIX IS SMALLER THAN THE BODY CLAIMS (frankh-c0, 2026-09-22, re-read at HEAD). The store arm does NOT use an inline blob -- the blob is OUT OF LINE and reached by a call, and it exists because the inline spelling cost ~42% of output on a zero-byte .npy and ~99% of the text assembler's traffic. BOTH PATHS CALL. The real asymmetry is that IRBuildHiddenDest calls the PORTABLE Pascal proc (arg node + frame) while IR_VAR_STORE calls the TARGET'S OWN blob (no arg node, no frame, preserves rax) -- and a census of every backend shows ONLY x86-64 has a divergent fast spelling: four backends already call the portable proc from both paths and are uniform, aarch64 has its own helper. So the body's \"every backend needs the arm\" is true of the new-IR-kind approach and NOT of the asymmetry named here, which is x86-64-local. The saving is argument marshalling plus a frame, not a whole call. COST EVIDENCE IS SYNTHETIC AND SEVEN DAYS OLD (+14%/+8% against a binary that no longer exists) and the ticket's own retirement condition asks for a real program: lekkerzeilen-7a has been asked for dispatch as a share of a ROOFS frame. THE CARRIER IS PER CALL SITE, NOT PER CALL -- re-derived at HEAD 2026-09-22 with PXXDBG=a.ir: two k.m(t) sites mint two DISTINCT unnamed carriers (557, 558), each cleared by a call before its hidden-dest virtual_call, so a loop over one site reuses ONE slot. The dynamic cost is per CALL and a release sweep's population is per SITE; multiplying a per-slot win by call frequency mixes them. NOT measured: whether the carrier still owns a reference after the var_store -- that is perf-a's question. THE TIMING HALF IS DEFERRED ON PURPOSE -- load was 14.35, and 7a measured the same binary/scene/pin at 530ms quiet vs 624ms while peers merely COMPILED, with CPython moving 66% against pxx 18%, so contention is DIFFERENTIAL and a ratio is unbounded until both arms run interleaved on a quiet box."
 owner: frankh-c0
 ---
 
@@ -123,3 +123,55 @@ asymmetry argument is why that one run can settle this: the flag
 `PyModuleHasComputedGetattr` is TRUE today, so every method pays boxing — **if
 dispatch is small in the EXPENSIVE regime it is small in the cheap one too, so
 the measurement can retire this ticket but cannot confirm it.**
+
+## 2026-09-22 (frankh-c0) — the body's NilPy claim, RE-DERIVED at HEAD, and the denominator it hides
+
+Line 23 says *"every NilPy method call returns a Variant, so every method call
+pays it."* My re-read section above corrected the blob claim and the six-arm
+claim and **never touched this one**, so it was still inherited when frankz-e5
+relayed it to frankb-8e as a re-measured fact of mine. Measured now.
+
+`PXXDBG=a.ir:driver` on a NilPy class with two `k.m(t)` call sites, at HEAD:
+
+```
+16: lea a=557 [sym=]        <- unnamed compiler-minted carrier
+17: arg a=16
+18: call a=64 b=17          <- the clear
+19: lea a=557 [sym=]
+20: virtual_call ival=4     <- hidden dest
+21: var_store a=4 b=20
+
+34: lea a=558 [sym=]        <- a DIFFERENT unnamed carrier
+36: call a=64 b=35
+38: virtual_call ival=4
+```
+
+**The claim is TRUE and is now re-derived rather than inherited.** Each method
+call site mints an unnamed carrier and emits a clear call on it before the
+hidden-dest call; the `lea/arg/call` then `lea/virtual_call` shape is what
+`ir_codegen.inc` documents for this path, and the carriers are `[sym=]`.
+
+### THE CARRIER IS PER CALL SITE, NOT PER CALL — and that is two different denominators
+
+557 and 558 are distinct symbols for two **static** sites. A loop calling one
+method a million times reuses **one** slot. So:
+
+- the **dynamic** cost (what this ticket is about) is per CALL;
+- the **swept population** (what a release-sweep analysis counts) is per SITE.
+
+Anything that sizes a prize by multiplying a per-slot win by call frequency is
+mixing them, which is the umbrella's own do-not-multiply warning reached
+through this subsystem rather than its own. Recorded here because the two
+numbers are both about "variant carrier slots" and read as interchangeable.
+
+### What is measured here and what is NOT
+
+Measured: where the carrier is minted, that it is unnamed, that it is cleared
+by a call before the hidden-dest call, that it is distinct per site, and that
+it is `var_store`d into the user local afterwards.
+
+**NOT measured: whether the carrier still owns a reference after that store** —
+whether `var_store` of a variant retains or moves. That is the fact that
+decides whether a release on these slots can be SKIPPED rather than merely made
+cheaper, it is `perf-a`'s question and not this ticket's, and nothing here may
+be read as answering it.
