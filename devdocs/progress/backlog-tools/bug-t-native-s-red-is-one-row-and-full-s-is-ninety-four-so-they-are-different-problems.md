@@ -369,3 +369,99 @@ read the second as the first for ten minutes on plexus before checking.**
 no job-count field at all, so `wall` is the only job-set proxy available; seven
 carried `skips: 1` where borg carries `skips: 0`, so the two hosts did not even
 run the same set.
+
+## 2026-09-22 04:1x — THE LOAD HYPOTHESIS IS REFUTED IN THE OPPOSITE DIRECTION, AND THE ROW HAS NEVER BEEN MODIFIED SINCE IT WAS WRITTEN
+
+frankuser proposed that the real axis is **how long the box takes** — wall time
+riding as a proxy for the toolchain difference — because the failure rate is
+ordered like the wall (seven 184.3s / borg 313.5s). Two within-host tests, both
+on seven so the toolchain is held fixed. **The first looked like a confirmation
+and the distribution refutes it.**
+
+### The medians agree with the hypothesis and the buckets destroy it
+
+seven's 638 native reports, this row red versus not:
+
+    row RED   n=  9   median wall 223.4s   (217.4 .. 229.5)
+    row ok    n=629   median wall 153.2s   ( 67.3 .. 252.5)
+
+A 1.46x elevated median, which is exactly what load predicts. **But the rate is
+not monotone in wall — it is a BAND:**
+
+    wall band     reports   row RED   rate
+    0-120s            302        0      0%
+    120-150s            6        0      0%
+    150-180s          160        0      0%
+    180-200s          145        0      0%
+    200-215s            5        0      0%
+    215-230s           10        9     90%
+    230s+              10        0      0%
+
+**Ten reports are SLOWER than every red and not one of them is red.** A load
+gradient forbids that.
+
+### And dating the band shows the reds are the FASTER half of one day
+
+All twenty high-wall reports are 2026-09-04:
+
+    13:51..16:28Z   ten reports, wall 246.3 .. 252.5s   ALL CLEAN
+    17:00..18:34Z   nine reports, wall 217.4 .. 229.5s  ALL RED
+
+**On one host, one day, one toolchain: the slower runs passed and the faster
+runs failed.** So the elevated median was a DAY effect — every high-wall report
+in seven's history is from 09-04 — and wall is not the axis. The hypothesis was
+worth testing and it is dead.
+
+### THE ROW HAS ONE COMMIT IN ITS ENTIRE HISTORY: ITS OWN CREATION
+
+    git log --diff-filter=A -- test/c_crtl_wait.c
+    68d26ecb5  2026-09-04 18:54:32 +0200 (16:54:32Z)
+      fix(b): riscv32 has no wait4 at all — waitid arm, and the WIFSIGNALED cast it exposed
+
+`git log -- test/c_crtl_wait.c` returns **that commit and nothing else.** So:
+
+- the test was born at **16:54:32Z**;
+- it went red at **17:00:09Z**, six minutes later;
+- it was red for nine reports over 94 minutes;
+- **it stopped failing at 18:34:32Z with NOTHING landing that touches it or the
+  `waitid` path.** No commit between 18:34Z and the next clean report modifies
+  the test, and the test has never been modified since.
+
+**A test that stops failing without being changed was never fixed — that is the
+proof of nondeterminism, and it is stronger than the flake guard's retry.** The
+nine reds are the row's shakedown at birth, not a regression that was repaired.
+
+### What that does to the per-attempt arithmetic
+
+frankuser's amplification idea is right in form — a RED report means all three
+attempts failed, so `p_attempt = p_report^(1/3)` — and **it is not usable for
+seven, because the nine reds are ONE EPISODE rather than nine independent
+trials.** Naively: seven `p_report` 0.014 → `p_attempt` 0.242; borg 1.000 →
+1.000; plexus 1 failed attempt in 3. The seven figure is an episode masquerading
+as a rate and must not be quoted. **Effective n for seven is 1.**
+
+### Where this leaves the row, honestly
+
+Unchanged since birth, nondeterministic, and its failure probability differs by
+host for a reason that is **not** wall time and **not** established to be the
+toolchain:
+
+| host | reports | row red | note |
+| --- | --- | --- | --- |
+| seven | 638 | 9 — ONE 94-minute episode at the test's birth | qemu 10.2.1 |
+| plexus | — | flaky: 1 failed attempt of 3, one sitting, at HEAD | qemu 10.2.1 |
+| borg | 467 | **306, and 306/306 since un-retire** | qemu 8.2.2, `flaky: 0` always |
+
+borg never records a flake recovery (`flaky: 0` in every sampled report), so on
+borg the row appears to fail **all three attempts, every time** — which is a
+different regime from "flakes occasionally", and the thing to explain.
+
+**The lead is the race, not the version.** The test declares itself sleep-free
+with pipe handshakes precisely so it cannot be timing-sensitive; it flakes
+anyway, so the pipe discipline has a hole. That is a concrete bug with a
+concrete owner (Track B / crtl, `waitid` si_code conversion on riscv32) and it
+is not a tools ticket.
+
+**And the goal-1 lesson, which is frankuser's sentence:** a green bought by
+running on fast hardware is not a green. If a release is chased by moving to
+quicker boxes, the race ships.
