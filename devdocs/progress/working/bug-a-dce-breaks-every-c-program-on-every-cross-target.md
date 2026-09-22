@@ -108,3 +108,135 @@ The `-O2` promotion. PROMISE is measured at **-66%** over nine real
 fixedpoint converging. PROOF is a full tier, which is **RED with 101 hard
 FAILs** until this is fixed. Nothing else stands in the way:
 `bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce` records the rest.
+
+
+## 2026-09-22 (frankb-8e) — FIXED. One missing line, and a FOURTH broken target nobody listed
+
+`PatchEntryStubCall` (`symtab.inc`) recorded an entry ROOT on all five targets
+and recorded the call SITE on one. Those are two different questions:
+`RecordEntryRoot` keeps the CALLEE alive, `RecordCodeRefAt` keeps the CALL
+aimed at it. Only the second was missing, and only on the four cross arms.
+
+### The measurement
+
+aarch64, `int main(void){printf("%d\n", add(19,23));}`, `--dce`:
+
+```
+IN: 0x0040012c:  ... 9401d4d4        <- bl, imm26 = 0x1d4d4
+    target = 0x400138 + 0x75350 = 0x475488
+SIGSEGV si_addr=0x475488, si_code=1 (MAPERR), before ANY syscall
+```
+
+`0x475488` is inside the **pre-DCE** code segment (`0x400000-0x4c0000`) and
+above the top of the shrunken one (`0x430000`). The stub branched where `main`
+*used to be*. `main` was alive and correct the whole time —
+`--dce-why` on the broken binary prints `main <- [entry stub call]`, so the
+root that a previous fix installed was doing its job and was never the issue.
+
+### THE FIX IS ONE RECORD, HOISTED
+
+```pascal
+  RecordEntryRoot(procIdx);
+  if TargetArch = TARGET_XTENSA then
+    RecordCodeRefFull(patchPos, bodyAddr, 1, anchorPc)
+  else
+    RecordCodeRefFull(patchPos, bodyAddr, 1, -1);
+```
+
+**Every encoding this routine writes already had a matching arm in
+`PatchCodeRefSlot`** — arm32/aarch64 `BL` via `linkReg`, riscv32 via
+`PatchRv32LinkSlot`, xtensa's literal delta via the anchor. Nothing new had to
+be written to re-aim them; the pass simply was never told the sites existed.
+`linkReg = 1` because every site here is a CALL. The x86-64 arm ignores it.
+
+**It was present, in one branch, and that branch says why it is there:**
+*"...and on the rel32 targets, the SITE moves too when a pass compacts the code
+between here and the body. That is exactly what CodeRef records."* True of every
+target, written inside the `else`. Hoisted rather than copied into four
+branches — the same normalisation `EmitCallToCode`'s own header argues for.
+
+### A FOURTH TARGET: XTENSA. Measured, not inferred
+
+The report listed aarch64, arm32, riscv32. **xtensa was broken identically** and
+is fixed by the same line. Established by stash-and-rebuild, not by reading:
+without the fix, `qemu-xtensa` gives SIGSEGV; with it, `dce-c-cross 1729 1729 0`.
+It takes the **literal-anchor** form rather than a branch immediate, so it is
+the one arm the other three do not exercise.
+
+### AND A SECOND CALL SITE, also measured
+
+`PatchEntryStubCall` has two callers in `cparser.inc`: the call to `main`, and
+the call to `__pxx_run_initializers`, emitted only when the source mentions
+`environ` (`CNeedsEnvironInit` is a token scan). **Both were broken**; an
+`environ`-using C program segfaulted on aarch64 without the fix and prints
+correctly with it. One line fixed both because both go through the one routine.
+
+### CORRECTION TO THE MATRIX: riscv32 does NOT exit 0
+
+The report has `riscv32 -> no output, exit 0`. Measured here, riscv32 gives
+**rc=139, SIGSEGV**, like the other two — the compiler's rc is 0 and the
+program's is 139, which looks like the wrapper-versus-job confusion this repo
+keeps meeting. **So there is no quiet arm and the arity claim is simpler than
+feared: four targets, one cause, one symptom.**
+
+That does not retire the warning it came with, and the test is built to it
+anyway: **every leg asserts STDOUT, not the exit status.** A dropped body *can*
+produce an empty stdout and a clean exit, and a row asserting rc alone would
+call that a pass.
+
+### The enumeration, including the negatives
+
+Promised as a list rather than a diagnosis, because this family has now missed
+six times by someone checking the tables they happened to think of.
+
+| what references a proc body from outside it | recorded? |
+| --- | --- |
+| `CallFix` | yes |
+| `CodeRef` | yes |
+| `ProcAddrFix` | yes |
+| `MethodFixups` | yes |
+| `IramCallFix` | yes (`8417dc950`, frankh-c0) |
+| `PatchProgramEntryJump` | yes, all targets, per its own comment |
+| **`PatchEntryStubCall`** | **root yes / SITE x86-64 only — THIS BUG** |
+
+Checked and **not** affected, stated so the denominator is visible:
+
+- Every `Patch32`/`Patch24` in `emit.inc`, `exception_emit.inc`,
+  `asmtext*.inc` writing a branch: all **intra-body or intra-stub**. A body
+  moves as a unit and the stub region is contiguous, so a displacement wholly
+  inside one of them is invariant under DCE. `ExcLongJmpAddr` and its branches
+  are the largest such group and are all inside one stub.
+- Every `Procs[].BodyAddr` consumer in `elfwriter.inc`: those run at **write
+  time, after `DceRun`**, and read the final value. Correct by construction.
+
+So the live set was two sites in one routine, and both are fixed.
+
+### Verified
+
+| target | `--no-dce` | `--dce` | image |
+| --- | --- | --- | --- |
+| x86_64 (control) | `42` | `42` | 336520 -> 78472 (-77%) |
+| aarch64 | `42` | `42` | 799312 -> 209488 (-74%) |
+| arm32 | `42` | `42` | 848504 -> 156280 (-82%) |
+| riscv32 | `42` | `42` | 881248 -> 168544 (-81%) |
+| xtensa | `42` | `42` | code 674387 -> 120963 |
+
+The shrink column is half the claim: a "fix" that switched the pass off would
+also print 42.
+
+### The test, and it FAILS on the unfixed compiler
+
+`test/test_dce_c_cross_entry.c` in the **quick** tier, four cross legs plus the
+x86-64 control, each leg comparing `--dce` against **its own** `--no-dce` leg
+rather than a fixed string — one field legitimately differs per target, since
+`CNeedsEnvironInit` exits early on xtensa so `environ` is uninitialised there
+and the third number is 0 rather than 1. Each leg asserts the oracle printed
+`1729 1729` first, so it cannot pass on a broken reference, and asserts the
+image shrank, so it cannot pass on a pass that dropped nothing.
+
+**Mutation tested**: with the fix stashed and the compiler rebuilt, the job
+goes FAIL; restored, GREEN. It pins the defect rather than merely running
+beside the repair.
+
+The fixture reaches **both** call sites (it mentions `environ`) and prints 1729
+twice — not 0, not 1, not a length, not a pointer width.

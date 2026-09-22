@@ -17965,6 +17965,41 @@ procedure PatchEntryStubCall(patchPos, anchorPc, bodyAddr, procIdx: Integer);
 var rvHi, rvLo: Integer;
 begin
   RecordEntryRoot(procIdx);
+  { AND THE SITE, ON EVERY TARGET. RecordEntryRoot keeps the CALLEE alive;
+    this keeps the CALL aimed at it. They are two different questions and only
+    the first one used to be asked here on four targets out of five.
+
+    Measured 2026-09-22, aarch64, `int main(){printf("%d\n", add(19,23));}`
+    with --dce: the entry stub's `bl` at 0x400138 still carried imm26 0x1d4d4,
+    aiming 0x475488 -- an address inside the PRE-DCE code segment and past the
+    top of the shrunken one. SIGSEGV before any syscall, `main` correctly alive
+    the whole time. arm32 and riscv32 identically. The recording below is what
+    was missing; every encoding this routine writes already has a matching arm
+    in PatchCodeRefSlot, so nothing new had to be written to re-aim them.
+
+    IT WAS PRESENT AND IN ONE ARM, and the arm it was in says why it is there
+    in so many words -- "on the rel32 targets, the SITE moves too when a pass
+    compacts the code between here and the body". That sentence is true of
+    every target and it sat inside the `else`. Hoisted here rather than copied
+    into four branches, which is the same normalisation EmitCallToCode's own
+    header argues for: the only place a record can RELIABLY be made is the one
+    routine every caller already goes through.
+
+    WHY NO PASCAL PROGRAM EVER SAW IT: pasparser does not call this routine at
+    all, and rparser/zparser/eparser refuse every non-x86-64 target, so C is
+    the only frontend that reaches a cross arm here. The x86-64 arm was the
+    one with the record, so the whole live population was covered by the one
+    case that worked.
+
+    linkReg is 1 because every site this routine patches is a CALL: arm32/
+    aarch64 need BL rather than B, and riscv32 needs ra rather than zero. The
+    x86-64 arm ignores it. Xtensa carries its anchor, which is the runtime PC
+    its literal delta is measured from -- DceRun compacts CodeRefAnchor beside
+    the position, so it cannot go stale. }
+  if TargetArch = TARGET_XTENSA then
+    RecordCodeRefFull(patchPos, bodyAddr, 1, anchorPc)
+  else
+    RecordCodeRefFull(patchPos, bodyAddr, 1, -1);
   { XTENSA aims a REACH-INDEPENDENT long call, so what is patched is a 32-bit
     .text-offset DELTA in a literal, not a displacement in the instruction --
     which is why this is the one target that needs `anchorPc`. The anchor is
@@ -17994,10 +18029,9 @@ begin
   end
   else
   begin
-    { ...and on the rel32 targets, the SITE moves too when a pass compacts the
-      code between here and the body. That is exactly what CodeRef records, and
-      its patch formula (target - (pos+4)) is this same one. }
-    RecordCodeRefAt(patchPos, bodyAddr);
+    { The SITE moves too when a pass compacts the code between here and the
+      body -- recorded above now, for every target rather than only this one.
+      CodeRef's patch formula (target - (pos+4)) is this same one. }
     Patch32(patchPos, bodyAddr - (patchPos + 4));
   end;
 end;

@@ -36514,6 +36514,101 @@ test-quick: $(COMPILER)
 	    || { echo "test_dce_stub_calls[wasm32]: the --dce module does not validate"; exit 1; }; \
 	  echo "=== test_dce_stub_calls[wasm32]: module validates ==="; \
 	else echo "=== test_dce_stub_calls[wasm32]: wasm-validate absent, well-formedness NOT verified ==="; fi
+	# THE C ENTRY STUB ON A NON-rel32 TARGET. A separate fixture from the Pascal
+	# one above, and the reason is the whole bug: pasparser does not call
+	# PatchEntryStubCall at all, and rparser/zparser/eparser refuse every
+	# non-x86-64 target, so C is the ONLY frontend that reaches a cross arm of it.
+	# Every Pascal row above passes with this defect live.
+	#
+	# PatchEntryStubCall recorded an entry ROOT on all five targets (keeping
+	# `main` alive) and recorded the call SITE on one (re-aiming the branch at
+	# it). So --dce dropped the crtl bodies between the stub and `main`, the code
+	# after the hole slid down, and the stub branched at the old address:
+	# measured on aarch64, `bl` imm26 0x1d4d4 -> 0x475488, inside the pre-dce code
+	# segment and past the top of the shrunken one. SIGSEGV before the first
+	# syscall. Shipping since 2026-08-21 at -O3.
+	# bug-a-dce-breaks-every-c-program-on-every-cross-target
+	#
+	# EACH TARGET IS COMPARED AGAINST ITS OWN --no-dce LEG, not against a fixed
+	# string, because one field legitimately differs per target: CNeedsEnvironInit
+	# Exits early on xtensa, so `environ` is not initialised there and the third
+	# number is 0 rather than 1. A differential says "--dce changed the answer",
+	# which is the actual claim; a hardcoded string would have to encode that
+	# difference and would go stale the moment another target joins it.
+	#
+	# STDOUT, NOT THE EXIT STATUS. The riscv32 arm of this same defect was
+	# reported as "no output, exit 0" -- that turned out to be the COMPILER's rc
+	# read for the program's, and riscv32 segfaults like the others. But the
+	# warning stands on its own: a dropped body can produce an empty stdout and a
+	# clean exit, and a row asserting rc alone calls that a pass.
+	@for t in aarch64 arm32 riscv32; do \
+	  case $$t in arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --no-dce --target=$$t test/test_dce_c_cross_entry.c $(TESTTMP)/dcecc_off >/dev/null \
+	    && ./$(COMPILER) --dce --target=$$t test/test_dce_c_cross_entry.c $(TESTTMP)/dcecc_on >/dev/null \
+	    && off="$$(timeout 60 $$q $(TESTTMP)/dcecc_off 2>&1; echo "exit=$$?")" \
+	    && on="$$(timeout 60 $$q $(TESTTMP)/dcecc_on 2>&1; echo "exit=$$?")" \
+	    && case "$$off" in *"dce-c-cross 1729 1729"*) ;; \
+	         *) echo "test_dce_c_cross_entry[$$t]: the --no-dce ORACLE is wrong, so the"; \
+	            echo "  comparison below would be measuring a broken reference:"; \
+	            echo "$$off"; exit 1;; esac \
+	    && if [ "$$off" != "$$on" ]; then \
+	         echo "test_dce_c_cross_entry[$$t]: --dce changed the program's behaviour."; \
+	         echo "  --no-dce: $$off"; \
+	         echo "  --dce   : $$on"; \
+	         echo "  The entry stub's hand-patched branch to main is the first thing to"; \
+	         echo "  check: PatchEntryStubCall must RECORD the site, not just the root."; \
+	         exit 1; \
+	       fi \
+	    && szoff=$$(stat -c%s $(TESTTMP)/dcecc_off) && szon=$$(stat -c%s $(TESTTMP)/dcecc_on) \
+	    && if [ $$szon -ge $$szoff ]; then \
+	         echo "test_dce_c_cross_entry[$$t]: --dce did NOT shrink the image ($$szon >= $$szoff)."; \
+	         echo "  Equal output is also what a pass that dropped nothing produces."; \
+	         exit 1; \
+	       fi \
+	    && echo "=== test_dce_c_cross_entry[$$t]: OK ($$szoff -> $$szon bytes) ===" \
+	    || exit 1; \
+	  else echo "=== test_dce_c_cross_entry[$$t]: $$q absent, $$t C entry NOT verified ==="; fi; \
+	done
+	# AND XTENSA, which is the fourth cross arm and was NOT in the report that
+	# opened this. It was broken the same way and is fixed by the same line; it is
+	# here so the arm that nobody listed is not the arm that regresses. It takes
+	# the LITERAL-anchor form rather than a branch immediate, so it exercises the
+	# one encoding the three above do not. --xtensa-soft-mulhigh for the reason
+	# the Pascal block above states: qemu-xtensa's CPU model has no MULUH.
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --no-dce --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	      test/test_dce_c_cross_entry.c $(TESTTMP)/dcecx_off >/dev/null \
+	  && ./$(COMPILER) --dce --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	      test/test_dce_c_cross_entry.c $(TESTTMP)/dcecx_on >/dev/null \
+	  && off="$$(timeout 60 qemu-xtensa $(TESTTMP)/dcecx_off 2>&1; echo "exit=$$?")" \
+	  && on="$$(timeout 60 qemu-xtensa $(TESTTMP)/dcecx_on 2>&1; echo "exit=$$?")" \
+	  && case "$$off" in *"dce-c-cross 1729 1729"*) ;; \
+	       *) echo "test_dce_c_cross_entry[xtensa]: the --no-dce ORACLE is wrong:"; \
+	          echo "$$off"; exit 1;; esac \
+	  && if [ "$$off" != "$$on" ]; then \
+	       echo "test_dce_c_cross_entry[xtensa]: --dce changed the program's behaviour."; \
+	       echo "  --no-dce: $$off"; echo "  --dce   : $$on"; exit 1; \
+	     fi \
+	  && szoff=$$(stat -c%s $(TESTTMP)/dcecx_off) && szon=$$(stat -c%s $(TESTTMP)/dcecx_on) \
+	  && if [ $$szon -ge $$szoff ]; then \
+	       echo "test_dce_c_cross_entry[xtensa]: --dce did NOT shrink the image."; exit 1; \
+	     fi \
+	  && echo "=== test_dce_c_cross_entry[xtensa]: OK ($$szoff -> $$szon bytes) ==="; \
+	else echo "=== test_dce_c_cross_entry[xtensa]: qemu-xtensa absent, NOT verified ==="; fi
+	# And the x86-64 control, which is the case that ALWAYS worked. It is here to
+	# say so: if this row ever fails alongside the others the cause is the pass,
+	# and if it passes alone the cause is the per-target arm set.
+	@./$(COMPILER) --no-dce test/test_dce_c_cross_entry.c $(TESTTMP)/dcecc64_off >/dev/null \
+	  && ./$(COMPILER) --dce test/test_dce_c_cross_entry.c $(TESTTMP)/dcecc64_on >/dev/null \
+	  && off="$$($(TESTTMP)/dcecc64_off; echo "exit=$$?")" \
+	  && on="$$($(TESTTMP)/dcecc64_on; echo "exit=$$?")" \
+	  && if [ "$$off" != "$$on" ]; then \
+	       echo "test_dce_c_cross_entry[x86_64]: --dce changed the CONTROL target's"; \
+	       echo "  behaviour, so this is the pass and not a per-target arm."; \
+	       echo "  --no-dce: $$off"; echo "  --dce   : $$on"; exit 1; \
+	     fi \
+	  && echo "=== test_dce_c_cross_entry[x86_64]: OK (control) ==="
 	# --dce-why: THE POSITIVE CONTROL FOR THE REPORT ITSELF. `--dce-report` says
 	# which bodies DIED; --dce-why says why each SURVIVOR lived, and it exists
 	# because a 2 MB NilPy ESP image had 819,480 B rooted as "holds a stub
