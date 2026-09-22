@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:33 unfinished:18 blocked:9 backlog:38 backlog-umbrella:14 backlog-core:173 backlog-nilpy:186 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:28 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3920 rejected:87`
+`working:34 unfinished:18 blocked:9 backlog:38 backlog-umbrella:14 backlog-core:172 backlog-nilpy:186 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:28 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3920 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
@@ -39,6 +39,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-management-operators-nested-and-array` [P] — owner: frankA
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `perf-a-every-return-releases-every-managed-local-even-the-untouched-ones` [A] — owner: frank-subcoord
+- `perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob` [A] — owner: frankh-c0
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
@@ -76,12 +77,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 569, ranked
+## Ready — top 30 of 568, ranked
 
 - `[p 95] [B]` perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds (unblocks 1)
 - `[p 95] [N]` perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline (unblocks 1)
 - `[p 95] [N]` perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program (unblocks 1)
-- `[p 95] [A]` perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -108,5 +108,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
 - `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
+- `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 
-_539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_538 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
