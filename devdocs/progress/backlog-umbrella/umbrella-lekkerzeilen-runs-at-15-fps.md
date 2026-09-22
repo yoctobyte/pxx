@@ -314,12 +314,45 @@ measurement.
    spells the name.
 
 2. **`perf-a-every-return-releases-...`** — p70, already in `working/`,
-   **re-rank it, do not re-file it.** The SIZE half has landed on six backends
-   (−33% .text). The **runtime half is UNSTARTED and unstaffed, not blocked.**
-   The decomposition is the useful part: 3.772 ns/slot = prologue store 0.526 +
-   epilogue load 0.262 + **call/ret pair 2.984 (79%)**, body 0.879 inlined. **An
-   inline nil-test at the call site takes 3.772 → 1.667 — a 56% runtime saving
-   with NO liveness analysis.** That is the cheapest large win on the board.
+   **re-rank it, do not re-file it. UPDATED 2026-09-22 BY `frankb-8e`, AND THE
+   UPDATE CUTS BOTH WAYS: THE CHEAP HALF IS DONE AND THE EXPENSIVE HALF IS NO
+   LONGER A FIX.** This entry said the inline nil test was *"the cheapest large
+   win on the board"* and *"UNSTARTED"*; both are retired.
+
+   **DONE.** The SIZE half landed on six backends (−33% `.text`), and the inline
+   nil test has now landed on **all six** as well — 3 bytes/site on xtensa, 4 on
+   aarch64/riscv32/i386, 5 on x86-64, 8 on arm32. Measured **4.367 → 1.886
+   ns/slot on x86-64, 56.8% against a 55.8% prediction.** The other five arms run
+   under emulation here, so that is an x86-64 number and not a fleet one. **It is
+   a per-slot microbenchmark and 8e has explicitly refused to attach it to a
+   frame** — see the do-not-multiply section above; the frame decomposition
+   (`task-e-decompose-a-lekkerzeilen-roofs-frame-...`, which this umbrella now
+   `blocked-by`) is what would settle it.
+
+   **NOT ONE MORE PUSH AWAY — DO NOT RANK IT AS IF IT WERE.** The remaining half
+   is *skipping* the sweep, and `frankh-c0`'s measurement closed it in the
+   direction that stops work: **`var_store` of a variant retains
+   unconditionally** (verified by 8e at source, not on relay), so the carrier's
+   release is **REQUIRED** and skipping it is a **leak** — the failure class no
+   value assertion can observe. The MOVE variant was already built, measured with
+   `objtrace` and **reverted on 2026-09-15**; the block above its grave calls it
+   *"the fourth wrong predicate in this family"* and it segfaults a ten-line
+   program, because a variant carried out of a virtual call is **BORROWED** and
+   that is not visible in the node kind the predicate was reading.
+
+   **8e's count is the part that should change the ranking:** five mechanisms
+   (four live, one retracted) plus three backends that gave three different
+   answers to one question before being unified — **five things serving one
+   concept, *who owns this managed value*, and none of them states the
+   invariant**; each infers it from a node's shape. That is
+   `devdocs/dev/root-cause-over-microfix.md`'s own threshold (*two is a smell,
+   three is a design flaw*) at more than double, and that doc's other half
+   applies too: **the overhaul may be the SMALLER job, because it deletes cases.**
+   **And the sweep's question is strictly harder than the four that were wrong** —
+   they answer *"is this VALUE owned at a store"*, a property of a node; the sweep
+   needs *"does this SLOT still own its referent at scope exit"*, a property of a
+   **path**. So the remaining half needs **an ownership invariant in the IR, not
+   an analysis**, and nobody is starting it today.
 
 3. **`perf-b-the-inverse-trig-...`** — **SETTLED 2026-09-22 AND IT IS NOT A
    FRAME-RATE LEVER. Do not rank it here.** Double-double inverse trig at ~106
