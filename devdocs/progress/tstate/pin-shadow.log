@@ -1000,3 +1000,4 @@
 2026-09-22T00:32:27Z	borg	4e146d69873c2ea0fe80781ab4bf8770ed0feb49	AUTO-PIN DECLINED — HEAD is 9fbf9e4c5525, not the tested 4e146d69873c
 2026-09-22T00:55:24Z	borg	481fb6d72ba0d240873a2da164367be6e0f03756	WOULD PIN 481fb6d72ba0 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 5/2
 2026-09-22T00:55:24Z	borg	481fb6d72ba0d240873a2da164367be6e0f03756	AUTO-PIN DECLINED — HEAD is c53c05ba656c, not the tested 481fb6d72ba0
+2026-09-22T01:17:46Z	borg	d36af549ea5bf9d75cbdcf66a93874395a59f7f9	would NOT pin d36af549ea5b — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-aarch64#src:tools/compiler_srchash.sh

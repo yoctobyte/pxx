@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `d36af549ea5b` | 2026-09-22T01:01:15Z | RED (native) | 312.7s | `481fb6d72ba0` RED |
+| borg | `d36af549ea5b` | 2026-09-22T01:17:46Z | RED (full) | 970.3s | `d36af549ea5b` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `481fb6d72ba0` on borg, 2026-09-22T00:55:24Z (5m ago).**
+**Newest full tier in the fleet: `d36af549ea5b` on borg, 2026-09-22T01:17:46Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `481fb6d72ba0` | RED | 5m | — (newest) |
+| borg | `d36af549ea5b` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -31,3 +31,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
 - **optdiff#shard11/12** — tools/optdiff.sh (borg): bad `b291b321f185`, last good `ad85bf019f96`, 32 commit(s) in range
+- **test-aarch64#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `d36af549ea5b`, last good `481fb6d72ba0`, 1 commit(s) in range
