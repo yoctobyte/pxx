@@ -38948,3 +38948,61 @@ about and check your lever moves THAT and only that** — and write the correct
 lever into the ticket for whoever comes next, which is what was done here:
 *"to re-verify this, build with the initialiser forced False; do not reach for
 the define."*
+
+## THE EMITTED RUNTIME AND `lib/rtl` ARE INSIDE THE SELF-HOST PROOF'S OWN SOURCE SET — SO A LIBRARY EDIT REDS THE FIXEDPOINT GATE, CORRECTLY
+
+**Reported by `franks-5b` 2026-09-22 and re-derived here at HEAD rather than
+taken on report.**
+
+```
+Makefile:36  COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) \
+                             $(wildcard lib/rtl/*.pas) $(wildcard lib/asmcore/*.pas)
+```
+
+`tools/compiler_srchash.sh --list` prints **233** files; **13** are
+`compiler/builtin/`; `compiler/builtin/pylib.pas` is **number 27**.
+`compiler/.pascal26.fixedpoint` carries `srchash` and `srccount` beside the
+binary sha, so the stamp is bound to a SOURCE SET and not to an mtime.
+
+**SO A `gate.sh quick` RED ON THE FIXEDPOINT AFTER A BUILTIN OR `lib/rtl` EDIT IS
+CORRECT, NOT AN ARTEFACT.** The stamp was written for a different source set,
+`make` refuses the stamp path, and the gate says the binary is unproven. It is.
+Remedy: `make compiler/pascal26`, re-gate.
+
+**WHY IT SURPRISES: THE SEAT DOES NOT THINK IT TOUCHED A COMPILER INPUT.**
+`compiler/builtin/**` is the runtime the compiler EMITS — you are editing what
+programs link against, not code that runs inside `pascal26` — so **the red
+arrives looking like somebody else's breakage.** The file set says otherwise.
+**And `lib/rtl/*.pas` is in the same list, which is the case that will bite
+hardest**: that is Track B's OWN lane, edited daily by seats who have every
+reason to believe they are nowhere near the self-host proof. CLAUDE.md already
+notes `lib/rtl` is a compiler build input and calls it *"the part nobody
+expects"*; this is the mechanism and the file list behind that sentence.
+
+**A LIVE INSTANCE, FOUND WHILE CHECKING THE ABOVE:** this checkout's stamp reads
+`srccount 232` while `--list` answers **233**. The stamp is for a source set that
+no longer exists, so this binary is unproven by the gate's own test, and nothing
+about the tree looks wrong.
+
+**WHAT IS NOT ESTABLISHED, and 5b flagged it rather than asserting it:** whether a
+builtin-only edit changes the binary's BYTES or only the hash. *"It is in the
+hashed set"* and *"it changes the output"* are two claims and only the first is
+checked. **Do not write the second one down until someone runs it.**
+
+### And the class of three was manufactured by the reporter's own working label
+
+**5b had been calling all three of its gate reds "the stale-binary mtime
+artefact".** Measuring the third showed the label is wrong for it — that one is a
+correct red from a real source-set change. **So the equivalence class came from
+the LABEL, not from the causes.** This file already records that *a diagnostic
+can manufacture the equivalence class itself*; this is the same failure with the
+reporter's own shorthand in the diagnostic's place, and it is more available,
+because you apply your own label to every new instance the moment you see it.
+
+**5b then retracted the other two as unverified rather than folding them in**,
+and gave the reason one of them cannot share this mechanism: the `git rm
+--cached` commit changed no file content on disk, and the wildcard reads the
+filesystem, so the `srchash` should not have moved. **A retraction that names why
+an instance cannot belong is worth more than the instance was** — and this is the
+second time in one evening that a seat's retraction improved a row this
+coordinator had already agreed to bank.
