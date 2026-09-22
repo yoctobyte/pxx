@@ -34,7 +34,13 @@ summary: >
   and a row in `test-emit-obj`. The ORIGINAL framing below is kept and is still
   the reason this mattered. Note the residue it does NOT close: the -O2
   promotion still needs five Makefile control arms respelled `--no-dce` and a
-  full tier.
+  full tier. AND CREDIT WHERE IT IS DUE -- the original report's "Where to look
+  first" named both the cause ("a code offset that moves under compaction while
+  its IRAM mapping does not") and the instrument ("a relocation whose offset
+  falls outside its own section") before anyone looked. It was right on both.
+  EVERYTHING FROM HERE DOWN IS THE PRE-FIX FRAMING, KEPT AS HISTORY AND NO
+  LONGER TRUE OF THE TREE -- in particular "it cannot land" and the `blocked-by`
+  edge, which was cleared in the same commit that closed this:
   THIS WAS THE GATE ON A MEASURED -66% ACROSS EVERY PROGRAM, WHICH ITS OWN TITLE
   HID (frankh-c0, 2026-09-22). Promoting `--dce` from `-O3` to the default
   `-O2` takes nine real `examples/**` programs from 4,424,828 to 1,475,708 bytes
