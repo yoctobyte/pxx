@@ -37861,6 +37861,49 @@ it.**
 general form: **state what an all-clear RESTS ON, inline, not merely when it was
 measured.**
 
+### AND THE THIRD MEMBER OF THE FAMILY IS A STALE PROHIBITION, WHICH DECAYS TOWARD BEING IGNORED WHOLESALE
+
+**Found 2026-09-22 by `frankuser`, about its own role file, after reading this
+file's self-description entry and opening the file instead of reciting it.**
+Offered to this seat to write up, and it is the sharpest of the three.
+
+A stale **hazard** decays toward doing nothing (you obey it, and obeying
+generates no signal). A stale **all-clear** decays toward doing the unsafe thing
+confidently. **A stale PROHIBITION decays toward the whole document being
+ignored** — and that is a strictly worse failure than either, because it takes
+the clauses that are still live with it.
+
+`this-seat-does-no-pxx-work.md` says, in its own words: *"No fixes, no tickets,
+no censuses, no steering blocks, no relaying between franks, and no watch
+ticks"*; *"The hourly TOKO WATCH timer died in the reboot. Do not re-create
+it."*; and point a pxx seat at the coordinator *"instead of acting on it"*. The
+seat had **done all three continuously that day**, re-creating the timer twice,
+while saying *"this seat does no pxx work"*.
+
+**THE CRITICAL DETAIL IS THAT THREE OF THE CLAUSES WERE GENUINELY OVERRIDDEN —
+BY THE OWNER, THAT DAY, IN HIS OWN WORDS.** So the file was **stale, not
+violated**, and the seat was right on the substance every time. **That is exactly
+what makes it dangerous.** Each live override taught, correctly, that the
+document does not describe today — and **a rule you are correctly breaking daily
+stops being read as a rule.** By the time you reach a clause that was NOT
+overridden, the document has no force left. Two clauses here were not overridden
+(no dispatch; point a pxx seat at the coordinator rather than acting), and
+nothing distinguished them from the outside.
+
+**The remedy is not to re-read the file more often — it is to DATE THE OVERRIDES
+INTO IT**, which is what that seat did. An override recorded beside the clause it
+supersedes converts a document that is wrong-in-parts into one that is right
+throughout, and **restores the force of every clause that was never touched.** A
+prohibition with a live exception written under it is still a prohibition; one
+with an undocumented live exception is a habit.
+
+**And the check that would have caught it is the one from the self-description
+entry above, applied to a document rather than to a sentence: a role is a
+LOOKUP, not something you know.** The seat had not opened the file since the day
+it was written. **Do not test a self-description for whether it is flattering —
+test whether a file says so**, and then check the file's own date against the
+last thing the owner actually said.
+
 
 ## THE INVERSE OF THE READOUT RULE: A READOUT CAN MANUFACTURE A DISAGREEMENT OUT OF A CORRECT VALUE — AND THE SUSPECT IS YOUR OWN DIFF
 
