@@ -173,6 +173,58 @@ begin
   begin
     if Tokens[i].Kind in [tkUses, tkArray, tkClass] then
       needsHeap := True;
+    { A RECORD, on the four targets whose aggregate epilogue lowers a whole-
+      record copy onto builtinheap's PXXMemMove -- see
+      TargetCodegenCallsHeapRuntime (emit.inc), which owns that target set and
+      names both mechanisms. tkArray and tkClass are already in the line above
+      and record was simply missing; it is gated where they are not because
+      x86-64 and i386 copy a record inline and pay nothing.
+
+      THE REPORTED TRIGGER WAS A FUNCTION RETURNING A RECORD BY VALUE AND THAT
+      IS ONE SHAPE OF FOUR. frankh-c0 reduced it to that and proposed matching
+      the construct -- collect `<ident> = record` names, then match
+      `function ... : <that ident>`. Varying the shape first is what stopped a
+      precise rule from being written for a quarter of the defect. Measured
+      2026-09-22, riscv32 --platform=posix, one row each: `r := q` whole-record
+      assignment BREAKS, a record PARAMETER by value BREAKS, a record FUNCTION
+      RESULT breaks, `r := K` from a typed const BREAKS. Field-only use
+      (`r.a := 7`) is the single shape that builds, so the thing that needs the
+      unit is any record used as a VALUE, which no token-level rule can
+      separate from a record declaration without becoming a parser.
+
+      `object` IS CAUGHT BY NAME AND NOT BY KIND, and that is not a stylistic
+      choice: it lexes as an ordinary tkIdent (pasparser_generic.inc asks
+      `DGenIdentIs(j, ''object'')` everywhere), so a kind-only test misses
+      `TB = object ... end` entirely -- measured, same four shapes, same break.
+      Exactly the trap the `string`/tkString_T paragraph below describes, in a
+      second keyword. `packed record` needs nothing extra: the tkRecord is
+      still there.
+
+      OVER-DETECTION IS NOT FREE ON ONE PROFILE and it is the reason this arm
+      is worth re-reading rather than widening. On --esp-profile=bare pulling
+      builtinheap costs a 65,536 B EspArena, so a bare program that DECLARES a
+      record and only ever touches its fields now pays ~16% of the chip's SRAM
+      for a routine it never calls. Under-detection is a build break and
+      over-detection is that arena, so neither direction is free here and the
+      real repair is feature-a-pull-builtinheap-on-demand-instead-of-predicting
+      -it, which reacts to the emitted call instead of guessing from tokens.
+      Do NOT add a bare-ESP exclusion the way the write/writeln arm below has
+      one: writeln emits NOTHING on that profile, so there is no helper to
+      resolve, whereas a record copy there emits a real PXXMemMove call and
+      frankh-c0 measured it refusing on esp32c3 and esp32s3.
+
+      SECOND FRONTEND, SAME CLASS, AND THE FIRST ONE IS ALREADY IN done/:
+      bug-a-cfront-riscv32-byval-record-result-pxxmemmove -- C to riscv32, a
+      by-value record result emitting PXXMemMove with no builtinheap injected,
+      2026-07-20, p70, and it rooted an 18-job regression cascade. Two
+      frontends, two unrelated causes, one shape. So the thing to check when a
+      driver learns to decide builtinheap for itself is not this arm but the
+      question underneath it, and the answer belongs one layer down:
+      feature-a-pull-builtinheap-on-demand-instead-of-predicting-it. }
+    if ((Tokens[i].Kind = tkRecord) or
+        ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'object'))) and
+       TargetCodegenCallsHeapRuntime then
+      needsHeap := True;
     { `string` is a KEYWORD here, not an identifier: paslexer.inc maps it to
       tkString_T, so the CaseEqual arm below could never have seen it and the
       name-based catch alone would silently miss every `var s: string`. The

@@ -101,6 +101,50 @@ try "{\$Q+} overflow check" '{$Q+}
 var a, b: Integer;
 begin a := 2; b := 3; a := a * b; if a = 6 then Halt(0); end.'
 
+# A RECORD USED AS A VALUE, on a target whose aggregate epilogue lowers a
+# whole-record copy onto builtinheap's PXXMemMove. Live break shipped by the
+# evidence scan, reported by frankh-c0 2026-09-22 and reproduced on riscv32,
+# xtensa, arm32 and aarch64 -- the set TargetCodegenCallsHeapRuntime owns.
+#
+# FOUR ROWS BECAUSE THE DEFECT HAS FOUR SHAPES AND THE REPORT HAD ONE. It was
+# reduced to "a function whose RESULT TYPE is a record", which is a syntactic
+# corner, and the proposed repair matched that construct. Varying the shape
+# first is the only reason the other three were found: whole-record
+# assignment, a record PARAMETER by value, and assignment from a typed const
+# all break identically, and a rule aimed at the function result would have
+# fixed a quarter of it and closed the ticket. Field-only use is the single
+# shape that builds and it is NOT a row here -- it is the thing assertion 3
+# below protects.
+#
+# THE `object` ROW IS NOT A SPELLING VARIANT, IT IS A DIFFERENT TOKEN KIND.
+# `record` lexes as tkRecord; `object` lexes as an ordinary tkIdent, so a
+# scan written against the kind alone misses `TB = object ... end` completely
+# while passing every row above it. Same trap as `string`/tkString_T, in a
+# second keyword, and a fixture without this row certifies the half that works.
+try "record: whole-copy"   'type TB = record a, b, c: Integer; end;
+var r, q: TB;
+begin q.a := 7; r := q; if r.a = 0 then Halt(1); Halt(0); end.' \
+    --target=riscv32 --platform=posix
+try "record: param by value" 'type TB = record a, b, c: Integer; end;
+procedure F(v: TB); begin if v.a = 0 then Halt(1); end;
+var r: TB;
+begin r.a := 7; F(r); Halt(0); end.' \
+    --target=riscv32 --platform=posix
+try "record: function result" 'type TB = record a, b, c: Integer; end;
+function M(x: Integer): TB; begin M.a := x; M.b := x; M.c := x; end;
+var r: TB;
+begin r := M(7); if r.a = 0 then Halt(1); Halt(0); end.' \
+    --target=riscv32 --platform=posix
+try "record: from typed const" 'type TB = record a, b, c: Integer; end;
+const K: TB = (a: 1; b: 2; c: 3);
+var r: TB;
+begin r := K; if r.a = 0 then Halt(1); Halt(0); end.' \
+    --target=riscv32 --platform=posix
+try "object: whole-copy"   'type TB = object a, b, c: Integer; end;
+var r, q: TB;
+begin q.a := 7; r := q; if r.a = 0 then Halt(1); Halt(0); end.' \
+    --target=riscv32 --platform=posix
+
 # --- assertion 2: the saving must survive ----------------------------------
 # An empty program pulls no ambient unit and must stay tiny. The ceiling is
 # deliberately loose (the measured value is 37; the pre-fix unconditional
@@ -123,5 +167,41 @@ elif [ "$procs" -gt "$CEIL" ]; then
   fail=$((fail + 1))
 fi
 
+# --- assertion 3: the record arm must stay TARGET-GATED --------------------
+# Assertion 2 cannot see this one: its subject is an EMPTY program, which has
+# no record in it, so ungating the record trigger to every target leaves it
+# green. The record rows above pull in the opposite direction and would also
+# stay green -- widening the arm is the cheapest way to make them pass. This is
+# the row that makes that repair visible.
+#
+# x86-64 and i386 copy a record inline and call nothing, measured: the same
+# source is 38 procs here and 185 on riscv32, where the unit is genuinely
+# needed. The ceiling is the same loose 80 as assertion 2 for the same reason.
+#
+# THE COST THIS PROTECTS IS NOT ONLY x86-64 SIZE. On --esp-profile=bare
+# builtinheap brings a 65,536 B EspArena: measured 2026-09-22, a bare esp32c3
+# program that declares a record and only ever touches its FIELDS goes
+# bss 652 -> 66,824 B under the arm above, which is real over-detection that
+# nobody has removed. It is accepted here because the alternative is a build
+# break on four targets, and the actual repair is
+# feature-a-pull-builtinheap-on-demand-instead-of-predicting-it. Do not read
+# this assertion as blessing that arena -- it only stops the cost spreading to
+# the targets that never needed it.
+printf 'program r;\ntype TB = record a, b, c: Integer; end;\nvar r, q: TB;\nbegin q.a := 7; r := q; if r.a = 0 then Halt(1); end.\n' > "$TMP/amb_rec.pas"
+out=$("$PXX" "$TMP/amb_rec.pas" "$TMP/amb_rec.bin" 2>&1) || {
+  echo "FAIL: the x86-64 record program did not build."; echo "$out" | tail -3; exit 1; }
+recprocs=$(echo "$out" | sed -n 's/.*procs=\([0-9]*\).*/\1/p' | head -1)
+if [ -z "$recprocs" ]; then
+  echo "FAIL: could not read procs= from the record program's ok line."
+  echo "$out" | tail -2
+  fail=$((fail + 1))
+elif [ "$recprocs" -gt "$CEIL" ]; then
+  echo "FAIL: an x86-64 record program emits $recprocs procs, over $CEIL."
+  echo "      The record trigger in DetectPascalRuntimeNeeds has lost its"
+  echo "      TargetCodegenCallsHeapRuntime gate, so every target now pays for"
+  echo "      a copy x86-64 and i386 do inline. Re-gate it; do not raise CEIL."
+  fail=$((fail + 1))
+fi
+
 [ "$fail" -eq 0 ] || exit 1
-echo "  test: ambient units drag builtinheap; empty stays $procs procs (ceiling $CEIL)"
+echo "  test: ambient units drag builtinheap; empty stays $procs procs, x86-64 record $recprocs (ceiling $CEIL)"
