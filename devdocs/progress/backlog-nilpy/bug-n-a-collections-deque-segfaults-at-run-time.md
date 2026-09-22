@@ -53,3 +53,25 @@ call on a statically known container and the interesting question is what
 Note `TPyDeque` declares only `popleft` and `pop` (`compiler/builtin/pylib.pas:948-949`)
 and has no `append`-family entry visible in the same block; check whether
 `q.append(5)` bound to something else entirely before blaming `pop`.
+
+## A SECOND defect in the same object, found 2026-09-22 and NOT measurable while the segfault stands
+
+`TPyDeque.Compact` rebuilds the buffer and installs it with `FBuf := nb` — and
+**never releases the old `FBuf`**. Nothing else releases it either: `FBuf` does
+not appear in any release, destructor or finalizer arm in `pylib.pas`. So every
+`Compact` strands an entire buffer, and `Compact` is on the ordinary paths —
+`appendleft` when the front is full, and `popleft` once the dead prefix reaches
+half the buffer. A deque used as a queue would leak proportionally to traffic.
+
+**Found by censusing the unreleased-temporary shape for
+`bug-n-a-pylib-temporary-tpylist-is-never-freed`, not by running anything, and
+it is recorded here rather than fixed because I cannot verify it: `deque()`
+segfaults before it can leak.** Every other site in that census was confirmed by
+measuring bytes/call against CPython and re-measuring after the fix. This one
+has no such evidence and I am not patching an allocator path on a reading alone.
+
+**For whoever clears the segfault:** measure `Compact` before assuming this, and
+note the release must come BEFORE the field is overwritten, or the handle is
+gone. The sibling fixes landed the same day in `pylist_setslice` and the
+`pyiter_drain` family show the shape.
+

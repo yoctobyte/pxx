@@ -116,13 +116,13 @@ _none_
 | regression-test-nilpy-test-cpyext-hello-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_hello.npy at 523c10e42d90 in step 1/4, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_hello.npy /tmp/test_cpyext_hello26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-markupsafe-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_markupsafe.npy at 523c10e42d90 in step 1/15, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_markupsafe.npy /tmp/test_cpyext_markupsaf…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-dotted-package-import-3 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1 at 523c10e42d90 in step 1/8, `./compiler/pascal26 test/test_nilpy_dotted_package_import.npy /tmp/test_nilpy_dottedimport26` (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-float-repr-roundtrip | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_float_repr_roundtrip.npy at 3daf4bc16cc1 in step 1/4, `./compiler/pascal26 test/test_nilpy_float_repr_roundtrip.npy /tmp/test_nilpy_float_repr26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-math-atan-and-atan2-bit-for-bit | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy at b2f3e65ef050 in step 2/2, `tools/expect_same.sh test_nilpy_atan226 "$(/tmp/test_nilpy_atan226)" "$(python3 test/test_nilpy_math_atan_and_atan2_bit…` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 at cc03b4a51933 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 3/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
 | regression-test-record-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-record-abi-mixed-link#src:tools/compiler_srchash.sh at 4c7c88d3614b in step 1/25, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
+| regression-test-riscv32-cunsigned-semantics-sweep-b138 | A | 70 | regression | regression: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2 at c194231297b1 in step 20/33, `sz=$(sed -n 's/.*code=\([0-9]*\)B.*/\1/p' /tmp/rv32_bigbody.log); \ test -n "$sz" && test "$sz" -gt 1048576 \|\| \ { echo…` (auto-filed by twatch) | — |
 | regression-test-threads-test-a-threadvar-is-per-thread-2 | T | 70 | regression | regression: test-threads#src:test/test_a_threadvar_is_per_thread.pas at 6ce37dd94d7c in step 2/11, `tools/expect_same.sh test_threadvar_pt26 "$(/tmp/test_threadvar_pt26)" "$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-cro…` (auto-filed by twatch) | — |
 | regression-test-uforth-compiler-srchash | T | 70 | regression | regression: test-uforth#src:tools/compiler_srchash.sh@3 at 82e070429d30 in step 2/2, `if [ ! -f "/home/rene/projects/uforth/uforth.py" ]; then \ echo "test-uforth: SKIP — no uforth tree at /home/rene/proje…` (auto-filed by twatch) | — |
 | regression-tools-devtest-00-4 | T | 70 | regression | regression: tools-devtest#00 at fc2ce3d02553 in step 1/1, `n=0; bad=0; failed=''; \ for f in tools/*devtest*.py; do \ case "$f" in *bench_timing_devtest.py) continue ;; esac; \ p…` (auto-filed by twatch) | — |
@@ -1118,9 +1118,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3923)
+## done (3924)
 
-3923 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3924 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (87)
 
@@ -1292,13 +1292,13 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-cpyext-hello-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-markupsafe-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-dotted-package-import-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [N] regression-test-nilpy-test-nilpy-float-repr-roundtrip [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-nilpy-test-nilpy-math-atan-and-atan2-bit-for-bit
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-4
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5
 - [p 70] [T] regression-test-record-abi-mixed-link-compiler-srchash-2
+- [p 70] [A] regression-test-riscv32-cunsigned-semantics-sweep-b138
 - [p 70] [T] regression-test-threads-test-a-threadvar-is-per-thread-2
 - [p 70] [T] regression-test-uforth-compiler-srchash
 - [p 70] [T] regression-tools-devtest-00-4

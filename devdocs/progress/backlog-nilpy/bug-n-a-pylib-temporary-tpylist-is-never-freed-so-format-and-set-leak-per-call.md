@@ -127,3 +127,108 @@ program that calls the named function in a loop and reads
 `/proc/self/statm`. A wired regression test should assert a RELATION (bytes per
 call below a threshold, second pass equal to first) and never an absolute RSS,
 and must carry a retain-style positive control or it cannot fail.
+
+## 2026-09-22 — censused the shape, seven more sites fixed, one residual and one unreachable
+
+The ticket stayed open for "roughly 28 more temporaries remain unaudited".
+Censused rather than sampled: routines in `pylib.pas` with a local **declared in
+the routine's own `var` block**, assigned `T*.Create`, and neither released nor
+assigned to the result.
+
+**What the census enumerates, and what it cannot see.** A first pass answered
+**58** and was nearly all false positives — a local literally named `Result`
+IS the return value, and `F`-prefixed names are class fields. Restricting to
+the routine's own `var` block gives **5**. It is still blind to a temporary
+handed to something that does not retain, and its "returned" test was wrong for
+METHODS: `function TPyDict.itemlist` gave the regex the CLASS name, so
+`itemlist := r` did not look like a return. **Five is a candidate list, not a
+population.**
+
+| candidate | verdict |
+| --- | --- |
+| `TPyDict.most_common` — `pair` | **LEAK, fixed** |
+| `pylist_setslice` — `keep` | **LEAK, fixed** |
+| `TPyDict.itemlist` — `r` | false positive, returned (census mis-named the method) |
+| `pyexc_setargs` — `cargs` | not a leak, ownership passes to the exception's `argsv` |
+| `TPyDeque.Compact` — `nb` | **real defect, UNREACHABLE — see below** |
+
+### 1. `most_common` — the open question, answered
+
+Its own comment said the pairs reach `res` through `res.append(pair)` and that
+*"whether that retains is not established here and is not patched on an
+assumption."* That was the right call and the answer is **yes**:
+`append -> append_self -> PyVarSlotSet`, which does
+`if PyVarSlotIsObj(src^.VType) then PXXObjRetain(...)`. The result list takes
+its own reference and the constructor's was dropped by nothing.
+
+    most_common(4)                800 bytes/call     CPython 0
+    most_common() over 16 keys   3200 bytes/call     CPython 0
+
+**200 bytes per emitted pair, linear in the pair count** — which is what says
+one leaked list per pair rather than a per-call cost, and it is the same
+200 bytes/entry `itemlist` measured before its own fix.
+
+### 2. `pylist_setslice` — the temporary AND a dropped band
+
+`keep` (prefix + src + suffix) was copied back element by element and dropped:
+**584 bytes/call** on a 32-element list, **1096** when the assignment grew it
+past 32. The number tracks `keep`'s CAPACITY, not its length, which identifies
+one leaked list object per call.
+
+Separately, `FLen := 0` does not release the slots being dropped. It does not
+have to for indices below the new length — `append -> PyVarSlotSet` clears each
+destination — but the band ABOVE it is revisited by nothing, so a **shrinking**
+slice assignment over managed elements stranded their references. Now cleared
+with the finalizer's own spelling. **Int elements cannot expose this**; the
+measurement that found it used strings.
+
+### 3. The `pyiter_drain(pyiter_of_*(...))` family — seven sites, found by grep
+
+`list(r: TPyRange)` was `Result := pyiter_drain(pyiter_of_range(r))`. The cursor
+is built inline, drained, and dropped. **`pyiter_drain` cannot take ownership of
+its argument** — `list(it: TPyIter)` hands it a cursor the CALLER owns, so
+releasing there would over-release — hence each site must release its own.
+
+Grepping the shape found **seven**, and the four aggregates leaked TWICE,
+because `sum`/`tuple`/`any`/`all` only READ the drained list:
+
+    list(range)                384 bytes/call    cursor only; list is the result
+    sum/tuple/any/all(range)   968 = 384 cursor + 584 drained list
+
+**The arithmetic is the corroboration**: 384 is FLAT across `range(8)` through
+`range(128)` (a per-call object), and 584 is a 32-slot list — the same 584
+`keep` leaked. All five now measure 0.
+
+### Residual, measured and NOT fixed
+
+`list(<user iterable>)` went 447 -> **63 bytes/call** and is not zero. The
+remainder is in `pyiter_of_userobj`, not at the seven sites: the `itv: Variant`
+holding `__iter__`'s result is retained and never dropped. Isolated — the
+instance alone leaks 0, and binding it to a named local does not change the 63.
+**No fixture row for it, deliberately**: at 63 against a LEAK_LIMIT of 50 it
+would be red on arrival.
+
+### Verification
+
+Eight new fixture rows, each shown to FAIL on the unfixed compiler (799, 3200,
+583, 384, 967, 968, 968, 967 bytes/call) and pass on the fixed one — the
+positive control run before the result, not after. Slice assignment checked
+against CPython across same-length, shrink, grow, full-replace, insert, append,
+empty, delete and nested-list shapes, plus repeated shrink, identical under
+`-dPXX_HEAP_DEBUG`. **527 NilPy tests: 515 ok on both sides, one row moved and
+it was `select_stdin_ready`, which my runner does not feed stdin** — five runs
+give rc=217 without it and rc=0 with it, matching `.expected`. Zero regressions.
+
+### INERT UNTIL THE NEXT PIN
+
+All of this is `compiler/builtin/pylib.pas`, and the pin carries its **own** copy
+(`stable_linux_amd64/default/builtin/pylib.pas`, a different sha). Anything built
+with `$(PXX_STABLE)` — Track B and E demos — does not get these fixes until
+someone pins.
+
+### The ticket stays open
+
+The census is a candidate list and not a population; `TPyDeque.Compact` is a
+real defect nobody can reach yet; and `pyiter_of_userobj` has a measured
+residual with a named mechanism and no fix.
+

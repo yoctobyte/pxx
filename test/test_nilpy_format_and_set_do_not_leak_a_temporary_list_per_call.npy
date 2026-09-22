@@ -23,11 +23,44 @@
 # -- statm unreadable, the parse returning 0, the loop not running -- passes all
 # of them. retain deliberately keeps its allocations and MUST show growth.
 
+from collections import Counter
+
+
 def rss_kb():
     f = open("/proc/self/statm")
     s = f.read()
     f.close()
     return int(s.split()[1]) * 4
+
+# Counter.most_common builds a (key, count) pair per emitted row and appends
+# it to the result list. res.append(pair) reaches PyVarSlotSet, which retains an
+# object payload, so the result list takes its own reference and the
+# CONSTRUCTOR's rc=1 was never dropped -- one leaked TPyList per pair.
+# Measured 2026-09-22 before the fix: most_common(4) 800 bytes/call and
+# most_common() over 16 entries 3200, against 0/0 under CPython. PER PAIR and
+# linear in the pair count, which is what distinguishes it from a per-call
+# cost. BOTH ARITIES are asserted deliberately: a fix that dropped the pair
+# only on the truncating path would leave the full form leaking, and the n=4
+# row alone cannot tell the two apart.
+C16 = Counter()
+for i in range(16):
+    C16["c%d" % i] = i
+
+# pylist_setslice builds `keep` -- prefix + src + suffix -- copies it back into
+# the list element by element and drops it. Measured 2026-09-22 before the fix:
+# 584 bytes/call on a 32-element list, 1096 when the assignment grew it past 32.
+# The number tracks keep's CAPACITY rather than its length (32 slots x 16 bytes
+# plus header, then 64), which is what identifies one leaked list object per
+# call rather than a per-element cost. CPython 0.
+#
+# THE RECEIVER IS PERSISTENT AND THE REPLACEMENT IS SAME-LENGTH ON PURPOSE.
+# Building the list inside the loop would fold in `x = list(range(32))`, which
+# leaks 384 bytes/call on its own for an unrelated reason (reported separately)
+# -- the row would then be measuring two defects and could not be read. Holding
+# SS outside and replacing 4 elements with 4 keeps its length at 32 forever, so
+# the only thing that can move is setslice's own temporary.
+SS = ["s%d" % i for i in range(32)]
+SS4 = ["a", "b", "c", "d"]
 
 L = list(range(32))
 A32 = list(range(32))
@@ -92,6 +125,65 @@ def f_enum(n):
     for i in range(n):
         s = list(enumerate(L))
 
+def f_mostcommon(n):
+    for i in range(n):
+        s = C16.most_common(4)
+
+
+def f_mostcommon_all(n):
+    for i in range(n):
+        s = C16.most_common()
+
+
+def f_setslice(n):
+    for i in range(n):
+        SS[4:8] = SS4
+
+
+# THE pyiter_drain(pyiter_of_*(...)) FAMILY: seven sites built a cursor inline,
+# drained it and dropped it. pyiter_drain cannot take ownership of its argument
+# -- list(it: TPyIter) hands it a cursor the CALLER owns -- so each site has to
+# release its own. The four AGGREGATES leaked twice, the cursor and the drained
+# list, because sum/tuple/any/all only READ that list.
+#
+# Measured 2026-09-22 over range(32), bytes per call, CPython 0 for all:
+#     list(range)                384   cursor only; the list is the result
+#     sum/tuple/any/all(range)   968 = 384 cursor + 584 drained list
+# The 384 is FLAT across range(8) through range(128) and the 584 is a 32-slot
+# list (32 x 16 plus header) -- that is how the two were told apart, and it is
+# why all five arities are here rather than one representative. One site was
+# found first; the other six came from grepping for the shape.
+#
+# NOT COVERED HERE, DELIBERATELY: list(<user iterable>) still leaks ~63
+# bytes/call after this fix, in pyiter_of_userobj rather than at these sites --
+# the `itv` Variant holding __iter__'s result is retained and never dropped.
+# It is a different routine and a separate row in the ticket; a fixture row for
+# it would be red on arrival.
+def f_listrange(n):
+    for i in range(n):
+        x = list(range(32))
+
+
+def f_sumrange(n):
+    for i in range(n):
+        x = sum(range(32))
+
+
+def f_tuplerange(n):
+    for i in range(n):
+        x = tuple(range(32))
+
+
+def f_anyrange(n):
+    for i in range(n):
+        x = any(range(32))
+
+
+def f_allrange(n):
+    for i in range(n):
+        x = all(range(32))
+
+
 def f_retain(n):
     for i in range(n):
         held.append([0] * 16)
@@ -112,7 +204,15 @@ for name, fn in [("format1", f_format_one), ("format1", f_format_one),
                  ("dcopy", f_dcopy), ("dcopy", f_dcopy),
                  ("popitem", f_popitem), ("popitem", f_popitem),
                  ("zip", f_zip), ("zip", f_zip),
-                 ("enum", f_enum), ("enum", f_enum)]:
+                 ("enum", f_enum), ("enum", f_enum),
+                 ("mostcommon", f_mostcommon), ("mostcommon", f_mostcommon),
+                 ("mostcommonall", f_mostcommon_all), ("mostcommonall", f_mostcommon_all),
+                 ("setslice", f_setslice), ("setslice", f_setslice),
+                 ("listrange", f_listrange), ("listrange", f_listrange),
+                 ("sumrange", f_sumrange), ("sumrange", f_sumrange),
+                 ("tuplerange", f_tuplerange), ("tuplerange", f_tuplerange),
+                 ("anyrange", f_anyrange), ("anyrange", f_anyrange),
+                 ("allrange", f_allrange), ("allrange", f_allrange)]:
     fn(N)
     now = rss_kb()
     per = ((now - base) * 1024) // N
@@ -124,14 +224,20 @@ for name, fn in [("format1", f_format_one), ("format3", f_format_three), ("set",
                  ("dictcopy", f_dictcopy), ("dictrepr", f_dictrepr),
                  ("dictsorted", f_dictsorted), ("items", f_items),
                  ("dcopy", f_dcopy), ("popitem", f_popitem),
-                 ("zip", f_zip), ("enum", f_enum)]:
+                 ("zip", f_zip), ("enum", f_enum),
+                 ("mostcommon", f_mostcommon), ("mostcommonall", f_mostcommon_all),
+                 ("setslice", f_setslice), ("listrange", f_listrange),
+                 ("sumrange", f_sumrange), ("tuplerange", f_tuplerange),
+                 ("anyrange", f_anyrange), ("allrange", f_allrange)]:
     fn(N)
     now = rss_kb()
     second[name] = ((now - base) * 1024) // N
     base = now
 
 for name in ["format1", "format3", "set", "dictcopy", "dictrepr", "dictsorted",
-             "items", "dcopy", "popitem", "zip", "enum"]:
+             "items", "dcopy", "popitem", "zip", "enum",
+             "mostcommon", "mostcommonall", "setslice",
+             "listrange", "sumrange", "tuplerange", "anyrange", "allrange"]:
     if second[name] < LEAK_LIMIT:
         print("%s LEAKFREE" % name)
     else:
