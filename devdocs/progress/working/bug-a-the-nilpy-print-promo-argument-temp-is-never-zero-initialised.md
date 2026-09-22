@@ -647,12 +647,125 @@ is attribution, not a lock.
 **What 8e has already ruled out, so nobody repeats it:** a promo arm added to the
 per-caller subset at `ir_codegen.inc:13508` does NOT fire, and is the wrong shape
 anyway — the shared pass at `14710` using `ManagedLocalZeroBytes` already answers
-16 for promo. Neither reaches the temp because **the temp is not an enumerated
-symbol at all**: `PXXDBG=n.locals` lists three locals for `main`, and
-`PXXDBG=a.mlzero` is asked about `acc` and `i` and never about the `-0x40` slot.
-8e reverted that edit.
+16 for promo. Neither reaches the temp, and 8e reverted that edit. **THE REASON GIVEN HERE WAS
+WRONG AND IS RETRACTED BY ITS AUTHOR — corrected at the point a reader meets it,
+not in the section below.** 8e reported the temp as *"not an enumerated symbol at
+all"* from `PXXDBG=n.locals` listing three locals and `a.mlzero` never being asked
+about the `-0x40` slot. It IS an ordinary symbol (`a.ir:main` instruction 47 is
+`slotaddr a=557`). `a.mlzero` is silent about it **by design** — the `14710` walk
+skips `SymIsHiddenArgTemp` entries and its own comment says why — and that silence
+was read as a negative. The real reason those passes miss it is its NAME; see the
+FIXED section below.
 
 **And do not validate a candidate against any `-O` level's row** — all four are
 luck (see the playbook entry on a bisection predicate that is not a function of
 the search space). Validate against the emitted prologue: does it now initialise
 the slot.
+## FIXED — the temp is `__py_parg_N` and it fell through every zero-init pass on its NAME (frankb-8e, 2026-09-22)
+
+**`PXXDBG=a.htemp`, the probe this needed, settled it in one build. The rows:**
+
+```
+RANGE proc=main scopebase=553 symcount=559
+sym=553 in=1 name=[$pyresult]    tk=1  kind=0 htemp=0 off=-4
+sym=554 in=1 name=[v0]           tk=13 kind=0 htemp=0 off=-16
+sym=555 in=1 name=[acc]          tk=28 kind=0 htemp=0 off=-32
+sym=556 in=1 name=[i]            tk=28 kind=0 htemp=0 off=-48
+sym=557 in=1 name=[__py_parg_3]  tk=28 kind=0 htemp=0 off=-64     <- no STORE
+sym=558 in=1 name=[]             tk=28 kind=0 htemp=1 off=-80
+STORE sym=558 off=-80 form=qword                                  <- the control
+```
+
+**The answer was a FOURTH outcome none of the three of us enumerated**, and every
+prediction on this ticket — including mine — was wrong about the mechanism:
+
+- **`in=1`.** The walk's own bounds are 553..558, so 557 was visited. Not a range
+  or scope defect.
+- **`htemp=0`.** The flag was never set — so it was never CLEARED either, and the
+  symbol-slot-recycling hypothesis I recorded above is **dead, not merely
+  unproven.** Nothing clears this flag; nothing ever set it.
+- **`name=[__py_parg_3]`.** It is not an unnamed temp. **That is the whole
+  defect.**
+
+### Why my "only one `AllocVar` of a promo type" was a grep artefact
+
+`grep 'AllocVar([^)]*tyPromoInt'` returned exactly one hit and I reported the mint
+site as settled. The real site is `pyparser.inc:25826`:
+
+```pascal
+  pargTk := IntToTypeKind(ASTTk[CurASTNode]);     { a VARIABLE }
+  ...
+  pargTmp := AllocVar(PyHiddenName('parg'), pargTk);
+```
+
+**The type arrives in a variable, so no grep for the type NAME can ever reach it**,
+and the name is synthesised by `PyHiddenName`. This is CLAUDE.md's "grep for the
+OTHER SPELLING'S HANDLER, not for the feature" — and note the failure was silent
+and confident: one hit reads as an exhaustive answer.
+
+### Four passes, four misses, and the reason is the same in three of them
+
+| pass | filter | why it missed `__py_parg_3` |
+| --- | --- | --- |
+| `EmitManagedLocalsZeroInit` (`pasparser_expr.inc:471`) | `Kind = skLocal`, **no name filter** | would have covered it — it simply **runs before this symbol exists** |
+| hidden-arg-temp walk (`ir_codegen.inc:13512`) | `SymIsHiddenArgTemp` | flag never set at the mint site |
+| unnamed safety net (`ir_codegen.inc:13546`) | `Name = ''` | it has a name |
+| for-in/COM temp pass (`ir_codegen.inc:14717`) | `Name = ''` and not flagged | it has a name |
+
+**A compiler-synthesised temp acquired a NAME for debuggability and lost every
+guarantee that is keyed on not having one.** `EmitManagedLocalsZeroInit` is the one
+pass with no name filter and it is the one that runs too early — so the symbol
+satisfied exactly zero of the four.
+
+### The fix
+
+One line at the mint site, `pyparser.inc:25826`:
+
+```pascal
+  SymIsHiddenArgTemp[pargTmp] := True;
+```
+
+`SymIsHiddenArgTemp`'s own definition in `defs.inc:4859` is *"compiler-synthesised
+owning managed local ... allocated after the parser's prologue zero-init pass, so
+codegen nil-inits it before the body"* — which describes this temp exactly. It was
+not a new mechanism; it was a flag the site forgot to set. **This is why
+`pasparser_expr.inc:381`'s guarantee must still NOT be "corrected": it is accurate
+about the temps that carry the flag, and the bug was a temp that did not.**
+
+### Verified on the EMITTED PROLOGUE, not on a binary that stopped crashing
+
+`frankh-c0`'s acceptance condition, and it is the right one here because every
+"clean" row on this ticket was luck:
+
+```
+before: zeroed=[-0x20,-0x30,-0x50]        CLEARED-BUT-NEVER-ZEROED=[-0x40]
+after:  zeroed=[-0x20,-0x30,-0x40,-0x50]  CLEARED-BUT-NEVER-ZEROED=[]
+after:  a.htemp -> sym=557 htemp=1, STORE sym=557 off=-64 form=qword
+```
+
+Runtime rows, all previously-crashing shapes now correct — but read these as
+corroboration, not as the proof:
+
+    -O0/-O1/-O2/-O3/default   rc=0 out=3        (was 139 at -O2 and default)
+    pre_none pre_print pre_twice called_twice   rc=0   (all were 139)
+    two_locals four_locals pre_call dirty2      rc=0   (were clean by luck)
+    print(str, float, bignum, obj field)        rc=0   correct output
+
+The bignum row matters: `12345678901234567890` is a HEAP-tier promo, so it
+exercises the tag-1 path the crash was mis-taking.
+
+### Scope — this was never promo-specific
+
+`pargTk` is whatever the argument's type is, so **every managed `print()` argument
+kind was minted unzeroed**: `tyAnsiString`, `tyClass`, `tyVariant` and promo alike.
+Promo is simply where it was caught, because `PXXPromoClear` dereferences a
+stale tag where a nil string handle merely no-ops. The single flag fixes all of
+them, and the 8-byte store the walk emits is the established contract for a promo
+slot (tag word reads `PROMO_TAG_INLINE`) — the same one `IRPromoTempSlot` relies
+on for its own temps.
+
+**Residual, stated rather than assumed:** the walk's non-record arm stores 8 bytes
+regardless of kind, which fully covers a handle, a pointer and a promo tag, but is
+half of a `tyVariant` slot. Variants reaching this path are now zeroed where before
+they were not, so this is strictly an improvement — but it is not a claim that the
+variant case is complete, and I have not constructed one that proves it either way.

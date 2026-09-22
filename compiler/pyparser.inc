@@ -25824,6 +25824,29 @@ begin
         (bug-nilpy-print-string-literal-reserves-8mb-of-bss) }
       if pargTk = tyString then pargTk := tyAnsiString;
       pargTmp := AllocVar(PyHiddenName('parg'), pargTk);
+      { THIS TEMP IS BORN AFTER THE PARSER'S PROLOGUE ZERO-INIT PASS HAS RUN,
+        which is the exact condition SymIsHiddenArgTemp exists to name, so it
+        must carry the flag or it is zeroed by NOTHING and its first store
+        releases whatever the previous frame left.
+
+        It fell through all four passes and the reason is its NAME. The three
+        unnamed-temp walks (ir_codegen.inc's safety net and for-in/COM pass,
+        and the hidden-arg-temp walk) each require `Name = ''` or the flag;
+        PyHiddenName gives this one `__py_parg_N`, and AllocVar clears the
+        flag. EmitManagedLocalsZeroInit has no name filter at all and would
+        have covered it -- it simply runs before this symbol exists.
+
+        What it cost: `print(<promotable int>)` hoists its argument here, the
+        hoisted assignment lowers to PXXPromoCopy, and PXXPromoCopy CLEARS ITS
+        DESTINATION before writing it. A destination holding stale bytes that
+        read {PROMO_TAG_HEAP, <non-static pointer>} was released as a managed
+        string -- a SIGSEGV in the AnsiStrRelease blob, three layers from here.
+        It is not an -O2 defect and not a local-count defect, though it was
+        reported as both: the slot is uninitialised at every -O level and the
+        local count only decides which previous frame's bytes it inherits.
+        Every managed pargTk has this shape; promo is where it was caught.
+        bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised }
+      SymIsHiddenArgTemp[pargTmp] := True;
       if pargTk = tyClass then
       begin
         Syms[pargTmp].RecName := ResolveNodeRec(CurASTNode);

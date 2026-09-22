@@ -13482,6 +13482,33 @@ begin
     parser's prologue zero-init pass, so they would otherwise hold stale stack
     bytes and the first store's release-of-old would free garbage. Main-program
     temps are skGlobal (BSS, already zeroed), so only in-proc skLocal needs it. }
+  { PXXDBG a.htemp -- every symbol this walk iterates, with the three fields
+    that decide whether it gets its prologue zero. Added chasing a promo temp
+    that IS flagged at its mint site (ir.inc IRPromoTempSlot, the only AllocVar
+    of a promo type) and still reached the epilogue's PXXPromoClear holding
+    stale stack bytes. }
+  if PxxDbgEnabled('a.htemp') and (CurProc >= 0) then
+  begin
+    { Print the WALK'S OWN BOUNDS first, then a window that deliberately starts
+      BELOW ScopeBase. Iterating only the walk's range cannot distinguish "the
+      symbol is present and its flag is False" from "the symbol is outside the
+      range and was never visited" -- the two candidate causes predict exactly
+      those two different rows, and a probe drawn from the walk's own range
+      returns whichever one you were already looking at. `in=` is the
+      discriminator. (franks-5b caught this in the probe before it was built.) }
+    WriteLn('PXXDBG a.htemp RANGE proc=', Procs[CurProc].Name,
+            ' scopebase=', Procs[CurProc].ScopeBase,
+            ' symcount=', SymCount);
+    for i := 0 to SymCount - 1 do
+      if i >= Procs[CurProc].ScopeBase - 24 then
+      WriteLn('PXXDBG a.htemp sym=', i,
+              ' in=', Ord(i >= Procs[CurProc].ScopeBase),
+              ' name=[', Syms[i].Name, ']',
+              ' tk=', Ord(Syms[i].TypeKind),
+              ' kind=', Ord(Syms[i].Kind),
+              ' htemp=', Ord(SymIsHiddenArgTemp[i]),
+              ' off=', Syms[i].Offset);
+  end;
   if CurProc >= 0 then
     for i := Procs[CurProc].ScopeBase to SymCount - 1 do
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
@@ -13493,9 +13520,27 @@ begin
             full record so every managed field starts nil, not just the first
             qword. }
           EmitZeroLocalSlotForTarget(i, RecSize(SymTR[i].RecId));
+          if PxxDbgEnabled('a.htemp') then
+            WriteLn('PXXDBG a.htemp STORE sym=', i, ' off=', Syms[i].Offset,
+                    ' form=record');
         end
         else
+        begin
           EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);
+          { Reported from INSIDE the walk, so the table answers "was a store
+            emitted for this symbol" directly instead of by inference from the
+            flag. The pre-walk enumeration above can say a row was VISITED and
+            still-flagged; only this line can say a store came out. Without it,
+            "no store anywhere" is indistinguishable from a probe that never
+            prints stores -- and the row that proves it can is the OTHER promo
+            temp in the same frame, which does get zeroed. (franks-5b: the
+            outcome `in=1 htemp=1` is a third mechanism neither candidate
+            predicts, and it reads as the recycling row unless the flag and the
+            store are both on the line.) }
+          if PxxDbgEnabled('a.htemp') then
+            WriteLn('PXXDBG a.htemp STORE sym=', i, ' off=', Syms[i].Offset,
+                    ' form=qword');
+        end;
       end;
 
   { Safety net for lowering temps the flag missed: an UNNAMED managed skLocal
