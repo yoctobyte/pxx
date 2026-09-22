@@ -42557,11 +42557,37 @@ another subsystem was being over-generous.
 **Instance 2, frankb-8e, a report (silent).** `DceReachReport` sizes its
 accumulator `array[0..12]` and filters `DceWhy[i] <= 12`. Both were correct when
 12 was the top reason code. `DCE_WHY_VECTOR = 13` was added later without
-touching either, so an `interrupt;` body has **never** appeared in that table —
-not as a wrong number, as no row at all. The filter drops silently, and `total
-live` is computed from `liveB` elsewhere, so the rows were never required to sum
-to the total. **The one cross-check that would have caught it is the one the
-output format made unnecessary.**
+touching either, so a reason code above the bound is dropped **silently** — not
+as a wrong number, as no row at all. `total live` is computed from `liveB`
+elsewhere, so the rows were never required to sum to the total. **The one
+cross-check that would have caught it is the one the output format made
+unnecessary.**
+
+**CORRECTED 2026-09-22, and the correction is itself an instance of the
+quantifier rule.** This entry first said *"an `interrupt;` body has NEVER
+appeared in that table"*. Its author withdrew that and I had already published
+it. The accurate split:
+
+- **DEMONSTRATED** — the silent drop is real and was measured, via four other
+  new reason codes: **190 B / 2 bodies reported** against the same program's
+  **89,597 B / 149 bodies** actually live, i.e. ~89,400 B carrying no row at all.
+- **NOT DEMONSTRATED** — that any program in this tree reaches
+  `DCE_WHY_VECTOR` specifically. Code 13 is above the bound *provably, from the
+  source*, but across all five interrupt fixtures (`test_esp_bare_vector`,
+  `_vectorauto`, `_vectorauto_rv`, `_isrstack`, `test_esp_isr_register`) the
+  rows sum **exactly** to `total live` under both the pinned and the new
+  compiler. The vector root installs after VMT/@proc/IRAM and **first reason
+  wins**, so every interrupt body here is already claimed by an earlier root.
+  The VECTOR case is **latent, not observed.**
+
+A source-level inference stated as a measurement — the same failure this file
+records elsewhere, made by a careful author inside the message that was
+describing someone else's version of it. Worth keeping visible: knowing the rule
+does not fire it, and being the person currently explaining it to someone else
+does not either.
+
+**The detector, since it costs nothing:** sum the `dce-why:` rows and compare to
+`total live`. They are independent computations, so a gap IS the silent drop.
 
 **THE TWO SYMPTOMS ARE OPPOSITE AND THAT IS THE USEFUL PART.** The same
 structural defect fails LOUD when the unnamed precondition feeds an
