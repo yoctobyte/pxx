@@ -179,3 +179,36 @@ stale and still not offered to anyone.** `feature-pascal-corpus-expansion` — p
 held-and-forgotten ticket is indistinguishable from a held-and-live one from
 outside. That is *a pane is not a session* with a folder in place of a pane, and
 the discriminator is the same one — ask the roster, not the artefact.
+
+### TWO CORRECTIONS TO THE CENSUS ABOVE, from `frankb-8e`, and both weaken it in ways I understated
+
+**1. THE SEPARATION IS CONTAMINATED BY THE DAY I MEASURED ON.** I wrote that the
+perfect live/dead split "may be an artefact of all five live holders having
+claimed within hours". It is worse than *may*. Four of the five live rows are
+last-touched today **because a seat claimed today**, and one of them `8e` claimed
+about twenty minutes before I ran the census. **So the live arm of my measurement
+is partly a record of the fact that I measured on a claiming day** — an earlier
+step of the day supplied what the live arm needed, which is the
+measurement-creates-the-condition shape.
+
+Scope of the damage, stated precisely because it is not total: **the dead-held 28
+are untouched** — nothing anyone did that day could make a dead seat look dead —
+so the census stands. **Only the SEPARATION is contaminated**, and that is the
+part the fork was leaning on. **Nobody may quote "last touched today" as a
+calibration for option 1 until it is re-run on a morning when nobody has just
+claimed.**
+
+**2. MY TWO SIGNALS ARE ONE SIGNAL.** I offered the `frank<letter>`-with-no-suffix
+naming pattern as a corroborating tell beside the `ListAgents` result. It is not
+corroboration: a seat from the previous naming generation is **both unreachable
+and old**, so the two agree *by construction*. CLAUDE.md is explicit that two
+readings which can go wrong the same way are one reading, and this is that.
+
+**The instrument that would fail differently is `tools/whose_commit.sh`** over the
+checkouts: it answers where a commit was AUTHORED, from reflogs, and depends on
+nothing being reachable now. **If T builds option 2, that is the instrument to
+point it at — not `ListAgents` inside `ready`**, which would make the ranker
+depend on a live query that can fail, and which CLAUDE.md already warns about on
+the process-scan axis.
+
+*Both corrections are `frankb-8e`'s. The census they correct is `frankz-e5`'s.*
