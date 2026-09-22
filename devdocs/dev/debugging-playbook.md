@@ -31608,6 +31608,21 @@ candidate whose cost is spread across many small ones is nearly invisible to
 it. **A ranking instrument that is wrong in both directions cannot be corrected
 by a fudge factor.**
 
+**THE SAME RULE IS ALREADY IN CLAUDE.md, DERIVED FROM A DIFFERENT SUBSYSTEM IN
+A DIFFERENT MONTH BY A DIFFERENT SEAT — so read this section as the second
+worked example, not as a new finding.** The umbrella section says *"A
+FIRST-FAILURE CENSUS RANKS BY QUEUE POSITION, AND A COUNT OF UNITS BLOCKED IS
+NOT A COUNT OF WORK"*, about the FPC corpus, where clearing the four largest
+walls moved units-compiling by zero four times running; its remedy is *"Stub
+the wall; do not deepen the census."* Map it: first-FAILURE attribution against
+first-REASON attribution, *a count of units blocked is not a count of work*
+against *a count attributed to a first reason is not a cost*, *stub the wall*
+against *re-run with the candidate withheld*. **Both say an attribution table
+cannot be post-processed into a cost, and that the repair is to INTERVENE and
+re-measure rather than to correct the table.** Neither derivation had the other
+in hand. If you have landed here from a THIRD subsystem, you have the trigger
+this file asks for — and the thing to add is the link, not a third example.
+
 **AND COSTS ARE NOT ADDITIVE, SO A PER-CANDIDATE TABLE IS A GUIDE AND NEVER A
 PLAN.** `TPyList.*` as a class frees 70,544 B in 52 bodies, against 30,411 for
 its largest member — because a body reached by two slots dies only when BOTH
@@ -31636,11 +31651,20 @@ rows in `test-quick`, asserted as BODY COUNTS so they do not drift with code
 size: a slot costing 2 where a subtree sum says three or four; a live name that
 is not a slot and must cost 0; and a virtual method costing exactly 1. The
 negative control was RUN and is recorded in the fixture header rather than
-asserted — and the first attempt at it was itself defective, a `sed` aimed at
-one of two identical lines cutting the wrong one, which answered the same
-number as the passing case and read as the fixture being broken. **Build a
-control by naming a whole procedure body, not by matching a line that appears
-twice.**
+asserted.
+
+**AND A BROKEN NEGATIVE CONTROL DOES NOT READ AS A BROKEN CONTROL — IT READS AS
+A BROKEN SUBJECT, AND THAT IS WHERE THE HOUR GOES.** The first attempt here was
+a `sed` on a line that appears twice in the fixture; it cut the wrong one, so
+the arrangement that was supposed to CHANGE the answer produced the same number
+as the passing case. Nothing about that output says "your edit missed". It says
+the instrument cannot tell the two arrangements apart, which is a statement
+about the thing under test, and it sends you to debug working code — the same
+destination as the silent-instrument case above, reached from the opposite
+direction. **Build a control by naming a whole procedure body, or by an edit
+that fails loudly when it matches nothing, never by matching a line that
+appears twice.** A control is the one edit in the run that nothing else
+checks.
 
 **WHAT IT DOES NOT DO, and this is the open question:** it does not say a slot
 is REMOVABLE. It prices a candidate on the ASSUMPTION that the slot goes. When
