@@ -1003,3 +1003,4 @@
 2026-09-22T01:17:46Z	borg	d36af549ea5bf9d75cbdcf66a93874395a59f7f9	would NOT pin d36af549ea5b — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-aarch64#src:tools/compiler_srchash.sh
 2026-09-22T02:27:13Z	borg	dc9fca630b3f59d0eadaa22b512f35cc9ce86e13	would NOT pin dc9fca630b3f — 1 red(s) the current pin does not have, 4 inherited from the current pin: test-aarch64#src:tools/compiler_srchash.sh
 2026-09-22T03:07:08Z	borg	35f39bd732c8df0c08c291a84b299ae387bcf910	would NOT pin 35f39bd732c8 — 1 red(s) the current pin does not have, 4 inherited from the current pin: test-aarch64#src:tools/compiler_srchash.sh
+2026-09-22T03:29:50Z	borg	bc950a35e35f2b83622dc90d5a9440aa44bed31c	would NOT pin bc950a35e35f — 1 red(s) the current pin does not have, 4 inherited from the current pin: test-aarch64#src:tools/compiler_srchash.sh
