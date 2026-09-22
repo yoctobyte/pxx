@@ -142,6 +142,90 @@ tab-indented asm.
 All three need the writer. That is now the argument FOR building it, rather
 than a question blocking it.
 
+## How this gets verified, decided BEFORE writing the writer (2026-09-22, frankb-8e)
+
+frankuser's caution, and it is the right one to settle first: **a wrong
+relocation usually still LINKS.** A successful link is a default-shaped pass in
+exactly the sense that produced this ticket's own probe bug — it is what you
+get when the machinery did something plausible and something wrong. So the
+assertion has to be on the RESOLVED VALUE, not on `ld` returning 0.
+
+Two constraints turned up while designing that, and both change the plan.
+
+### 1. There is no aarch64 or arm32 linker on this box, so "link and run under qemu" cannot be built here
+
+Checked before claiming it, because "out of reach" is an inference from a probe:
+
+| candidate | result |
+| --- | --- |
+| `aarch64-linux-gnu-gcc`, `arm-linux-gnueabi{,hf}-gcc` | absent |
+| `ld.lld` / `lld`, `clang -fuse-ld=lld` | absent — `invalid linker name` |
+| GNU `ld` 2.46 emulations | `elf_x86_64 elf_i386 elf32_x86_64 elf_iamcu i386pep i386pe` — x86 only |
+| `objcopy` targets | x86 and raw formats only |
+| `qemu-aarch64`, `qemu-arm` | **present** |
+
+So the runner exists and the linker does not. The Makefile's existing note on
+`test-c-abi-mixed-link` ("no gcc cross for arm32, aarch64 or riscv32 on this
+box") is still accurate, and it applies to this ticket's verification too.
+
+### 2. clang cannot be the oracle for the relocation form pxx actually uses
+
+pxx reaches an aarch64 external through an ABSOLUTE GOT-slot address
+(`symtab.inc`, `EmitExternalCallA64`):
+
+```
+movz x16, #lo16        <- R_AARCH64_MOVW_UABS_G0_NC
+movk x16, #hi16, lsl 16 <- R_AARCH64_MOVW_UABS_G1_NC
+ldr  x16, [x16]
+blr  x16
+```
+
+clang, for the same source, emits `adrp`/`add` — `R_AARCH64_ADR_PREL_PG_HI21`
+plus `R_AARCH64_ADD_ABS_LO12_NC` — and `bl` with `R_AARCH64_CALL26`. Measured
+2026-09-22 against Ubuntu clang 21.1.8. **It never emits a `MOVW_UABS`
+relocation at all**, so a clang differential cannot validate the form pxx
+needs. It can validate `CALL26` for internal direct calls (pxx emits 606 `bl`
+in one test binary) and nothing else.
+
+That also fixes a property of the output worth stating out loud: a
+`MOVW_UABS`-relocated object is **absolute**, so it can only ever be linked
+`-no-pie`. The x86-64 writer has the same property (`R_X86_64_32S`), so this is
+consistency rather than a new limitation — but if a consumer ever needs PIE,
+the upgrade is to move the backend to `adrp`/`add`, which is backend work and
+is not in scope here.
+
+### 3. So the instrument is resolve-and-compare against pxx's own executable
+
+The oracle chain is: **qemu proves the executable, the executable proves the
+object.** pxx's aarch64 *executable* output is already validated by running
+under qemu in `test-aarch64`; the object path is a different code path over the
+same emission. So:
+
+1. build program P as an executable (`--target=aarch64`) and run it under qemu —
+   that leg is the existing, independent proof;
+2. build the same P with `--emit-obj`;
+3. apply the object's relocations at the executable's section addresses;
+4. assert the resulting `.text` is **byte-identical** to the executable's.
+
+This answers the resolved-value question with no linker, and it fails
+differently from a `readelf -r` type assertion — a wrong addend, a wrong
+bit-field position inside the `movz`/`movk` imm16, or a relocation aimed four
+bytes off all survive a type check and all go red here.
+
+**Positive control, mandatory before the row is believed:** perturb one
+relocation — wrong type, wrong addend, offset shifted by 4 — and the comparison
+must go red for each. Without that this is a guard that has never been shown
+able to fail, over a comparison of two things produced by one compiler.
+
+**What it does NOT establish, and the existing precedent does not either:** that
+a real linker agrees with our relocation semantics. Every ESP object in this
+tree (`riscv32`, `xtensa`) is verified today by `readelf -r` assertions on
+relocation type and symbol, and **nothing in the tree has ever linked or run
+one**. So the resolved value has never been checked for any pxx object outside
+x86-64/i386. That is a gap this ticket can close for aarch64 and arm32 and
+cannot close for the psABI-conformance question, which needs a cross-linker
+this box does not have.
+
 ## Umbrella
 
 [[meta-a-pxx-produces-linkable-code]]
