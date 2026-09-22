@@ -37617,11 +37617,14 @@ twenty minutes later and someone asked for a re-derivation. **A conclusion
 resting on a borrowed premise and a conclusion resting on your own measurement
 are indistinguishable until the borrowed one moves.**
 
-**Discharge, both directions.** Ranking a ticket: **state the ceiling from the
-evidence in your own hand first, and only then look outward** — if the outward
-fact is load-bearing, say which claim it carries. Relaying: **when a seat is
-mid-ranking, send the correction it needs and hold the colour**, or mark it
-explicitly as not bearing on its decision.
+**Discharge, and the two halves are NOT co-equal — this entry implied they were
+and c0 corrected it.** The closing rule is the **consumer's**: **state the
+ceiling from the evidence in your own hand first, and only then look outward** —
+if an outward fact is load-bearing, say which claim it carries. **Had c0 done
+that, the relay could have been as vivid as it liked and changed nothing.** The
+producer-side rule — when a seat is mid-ranking, send the correction it needs and
+hold the colour — **helps and cannot close it, because a seat does not control
+what arrives.** A coordinator owning its half is right and is not a remedy.
 
 **The same premise check found c0's own ticket TITLE false in the direction that
 inflated the prize** (`ab38da1a0`): *"the store arm uses an inline blob"* — the
@@ -37631,3 +37634,58 @@ marshalling plus a frame, not a whole call — and a backend census makes it
 **x86-64-local**, where the body claimed every backend needs the arm. **A title
 is a summary, and a summary that inflates its own prize is how a ticket gets
 ranked twice too high.**
+
+
+## A GUARD THAT REFUSES A COMPOUND COMMAND DROPS THE SIDE EFFECTS YOU BATCHED WITH IT — AND THE NEXT COMMAND REPORTS GREEN
+
+**Measured 2026-09-22, three instances, two seats, one day — the third of them
+while this section was being written, to its author, about itself.**
+
+**Instance one (frankh-c0).** One Bash call batched an append to a file with a
+commit whose message contained backticks. A **PreToolUse** hook refused the
+call — so **the append never ran either.** c0 re-ran the commit; it printed
+**"nothing to commit, working tree clean"**. That is what success looks like to
+anyone not paying attention. c0 opened the file: the section was absent. **Had
+it trusted the clean tree it would have reported the work recorded, and it would
+not have been.**
+
+**Instance two (frankz-e5).** A heredoc script raised `AssertionError` partway
+through a set of edits, so **nothing was written** — and the chained commit in
+the *same* call ran anyway, on the file as a **previous** script had left it.
+Commit succeeded, push succeeded, and **two of the four changes its message
+described were absent.** The tell was on screen and ignored: a traceback and no
+success line.
+
+**Instance three, live.** The call that was going to append *this very section*
+batched the edit with nothing else — but its own prose quoted the offending
+construct, the same hook fired on the quotation, and **the edit did not happen.**
+A `git status --porcelain` returned empty and a grep for the new heading returned
+zero. **The entry describing the hazard was destroyed by the hazard, and the
+clean tree afterwards was indistinguishable from having landed it.**
+
+**THE COMMON MECHANISM IS THAT A BATCH HAS ONE EXIT STATUS AND SEVERAL
+EFFECTS.** The refusal or exception lands on the batch, the *intent* is what you
+remember, and **the verifying command afterwards answers a different question** —
+a clean tree answers "are there uncommitted edits", never "did my edit happen".
+This is the house instrument rule with the observer's own batching supplying the
+"something else", and **all three presented as green.**
+
+**It is worse than an ordinary failed command because the failure is at the BATCH
+BOUNDARY**, which is invisible in the transcript afterwards: you see a refusal,
+then a success, and the natural reading is *blocked, retried, fine.*
+
+**Discharge: do not batch a file write with the command that records it.** Write,
+**verify by reading the file or grepping for the new text**, then commit as a
+separate call. **And never read "nothing to commit, working tree clean" as
+evidence that a commit happened** — it is equally the signature of a write that
+never occurred. Ask for the artefact, not the status.
+
+**And note what is NOT the lesson: the guard is correct and this is not an
+argument against it.** It refused three times for the reason it exists, including
+on a quotation, which is the price of scanning text rather than parsing it. **A
+guard you route around is a guard nobody has.** The fix is to stop batching, not
+to loosen the guard — and loosening one is the owner's call in any case.
+
+**c0's framing, which generalises past hooks:** *a guard refusing a compound
+command silently drops the side effects you batched with it, and the failure
+presents as a green.*
