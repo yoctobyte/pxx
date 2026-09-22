@@ -242,3 +242,124 @@ have closed arm32/aarch64 on evidence that could not have failed for the defect
 the ticket names.
 
 ## REMAINING after this: wasm32 only.
+
+
+## 2026-09-22 (frankb-8e) — wasm32: THE GATE'S STATED REASON IS TRUE AND IS NOT THE BLOCKER
+
+Taken from frankh-c0, who holds the emitted-size/DCE group and is not working
+this member. Measured before writing any compiler code, which is why this
+section exists before a fix does.
+
+**The refusal says `wasm32 references functions by INDEX, not by displacement`.
+That is a true sentence about wasm and it is not what stops the pass.** The
+index problem is *already solved*, by this backend's own design and for an
+unrelated reason:
+
+- `WasmIndexOfSlot` (`wasmenc.inc:441`) is **the single** slot->index
+  conversion in the compiler. It has four call sites: the call patcher, the
+  element segment, the export section and the asm-text writer. Nothing else
+  turns a slot into an index.
+- A call to a defined function is **never written at emission time**. It goes
+  out as a fixed-width 5-byte LEB placeholder plus a relocation
+  (`WasmCallRelPos`/`WasmCallRelSlot`), and `WasmPatchCalls` fills every one in
+  once the index space closes. The header says why, and it is not DCE: an
+  import is registered the first time a call to an external routine is lowered,
+  so `WasmImpFuncCount` is not final while bodies are being emitted.
+- `WasmCall` does not ACCEPT a function index, only a slot — *"the wrong form is
+  not merely avoided here, it is unspellable."*
+
+**So wasm32 already has, for free, the late-bound indirection that every ELF
+target had to grow displacement-patching machinery to fake.** Renumbering is a
+map lookup in one function. A reader who takes the refusal literally goes and
+writes an index-patching pass that the backend makes unnecessary — the same
+error this ticket already recorded once, when its own "What it costs" list sent
+a reader to write five branch-patch arms that `ApplyCallFixups` already had.
+
+### What ACTUALLY blocks it, measured
+
+`ir_codegen_wasm32.inc:7743`, in the code, in its own words:
+
+> *"Every routine is exported for now. A later phase narrows this to what the
+> host profile actually needs; until then an exported function is how the test
+> harness reaches a body at all."*
+
+**Every defined function is exported, so every function is a root, so DCE would
+drop nothing.** Counted on a Pascal hello world: **141 defined functions, 141 of
+them exported** (142 export entries; one function is exported twice). The root
+set is total. A DCE pass wired in today would run correctly, walk the whole
+module, and report zero dead bodies — a green, honest, worthless result.
+
+### The prize, measured from OUTSIDE the compiler
+
+`wasmreach.py` (scratch, not committed yet) computes reachability from wabt's
+own decoder rather than from pxx's tables, so it and any future in-compiler
+pass would agree from two decoders instead of one. Roots are the REAL entry
+points — the `_start` export plus every element-segment entry, which is every
+address-taken function and therefore every `call_indirect` target — and
+explicitly NOT the blanket per-routine export.
+
+| program | defined | code section | LIVE | DEAD | dead share |
+| --- | --- | --- | --- | --- | --- |
+| `hello` (WriteLn only) | 141 | 68,540B | 33 | 108 | **82.6%** |
+| classes + virtual + exceptions + IntToStr | 880 | 374,116B | 107 | 773 | **79.8%** |
+
+The code section is ~90% of the module (68,547B of 75,996B on `hello`), so this
+is roughly a **-75% module**, not a -75% of some minor part.
+
+**CORROBORATION FROM A PIPELINE WITH NOTHING IN COMMON:** `--dce` on x86-64 for
+the identical `hello` source reports `bodies 138  live 47  dead 90`, code
+`67486B -> 18790B`. Two backends, two liveness implementations, two decoders:
+34% live there against 23% live here. Not equal — the backends emit different
+helper sets and the wasm root set is smaller — but the same order, which is
+what makes the wasm number believable rather than merely large.
+
+**WHAT WOULD RETIRE THESE ROWS, and it is not a re-run.** They are STATIC
+estimates from wabt's disassembly. Neither has been validated by building a
+DCE'd module and running it. A missing root category would show up as a smaller
+live set here and a trap under `wasmtime` there, and this instrument cannot
+tell those apart. The numbers are a claim about the GRAPH, not about a program
+that works. Population: the two sources above at HEAD `319ccdade`, wabt
+`wasm-objdump`, module built with `--target=wasm32` and no other flags.
+
+### The design this points at, and why it needs no "later phase"
+
+The export-narrowing the backend comment defers is **not a prerequisite**.
+`--dce` is opt-in, and on wasm32 it is currently refused outright, so the
+default path is untouched either way. The whole thing collapses to one rule:
+
+> under `--dce`, the blanket per-routine export is **not a root**; roots are
+> `_start`/`main`, the element segment, and the usual graph-level roots
+> (`MethodFixups`, init/fini, `interrupt`, `EntryRootProc`). Exports for bodies
+> that do not survive are dropped with them.
+
+That keeps the harness's reach-by-export for every body that survives, and a
+body that does not survive is one the program cannot reach anyway. **It also
+means the deferred "later phase" is this work, arriving opt-in first.**
+
+One consequence worth stating for whoever promotes `--dce` to `-O2`: on wasm32
+the harness reaches bodies THROUGH exports, so a test that calls a routine by
+export name and nothing else would lose it. That is correct `--dce` behaviour
+and not a defect, but it is a reason wasm32 should not inherit a `-O2` default
+on the same day it gains the pass.
+
+### What the port needs, against dce.inc as it stands
+
+The graph core is keyed on **proc indices** and is backend-neutral: `DceMark`,
+the counting-sort edge build, the two-kind fixpoint, and roots for
+`MethodFixups`, init/fini, `interrupt` and `EntryRootProc` all carry over
+untouched. The single adapter is that `DceCallOwner[]`/`DceProcAddrOwner[]` are
+derived on ELF targets by `DceOwnerOf(CodePos)`, a binary search over byte
+ranges — and **wasm can supply the owner by construction**, because every call
+site is inside a function. `WasmProcSlot[p]` already maps proc -> slot.
+
+A note that cuts the right way: the pass's two documented approximation
+channels both exist because a call site can fall OUTSIDE every body's byte
+range (`DCE_WHY_FREECODE`, and the merged unowned-code node in the report). On
+wasm there is no unowned code, so **the wasm graph is strictly more precise
+than the native one**, and that machinery has nothing to do.
+
+Everything from `dce.inc`'s removable-range loop to the end — hole removal,
+`DceNewOff`, the eight compaction loops, `DceCodeAlign`, `ApplyCallFixups`,
+`PatchCodeRefSlot` — is byte-layout work with **no wasm analogue at all**. It is
+replaced by: mark dead slots, compact the slot numbering, and let
+`WasmIndexOfSlot` and the section writers honour it.
