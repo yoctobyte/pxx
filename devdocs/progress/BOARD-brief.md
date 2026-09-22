@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:36 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:170 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:50 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3933 rejected:88`
+`working:37 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:170 backlog-nilpy:184 backlog-tools:71 backlog-pascal:13 backlog-decide:50 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3933 rejected:88`
 
 ## Held now (working/ — do not touch these files)
 
@@ -20,6 +20,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P] — owner: frankA
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
+- `chore-t-the-bare-esp-runner-exercises-riscv32-only-so-xtensa-nilpy-has-no-routine-coverage` [T+S] — owner: frankb-8e
 - `decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package` [U] — owner: frankh-c0
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
@@ -80,7 +81,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 573, ranked
+## Ready — top 30 of 572, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -113,4 +114,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
 
-_543 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_542 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

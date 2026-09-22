@@ -31945,6 +31945,41 @@ test-xtensa: $(COMPILER)
 	tools/assert_alloc_ceiling.sh xtensa/static_string_literal 600 tools/run_target.sh xtensa $(TESTTMP)/ssl_xt
 	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_xt_x64
 	tools/expect_same.sh xtensa/test_static_string_literal "$$(tools/run_target.sh xtensa $(TESTTMP)/ssl_xt | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_xt_x64 | grep -v '^pxx-census')"
+	# NILPY ON XTENSA. THE FLAGS ARE THE TEST -- two seats concluded on
+	# 2026-09-22 that NilPy could not target xtensa AT ALL, independently, and
+	# one filed it at p70, because the default Call0 ABI overflows and there
+	# was no green xtensa NilPy row anywhere to contradict them. A green row is
+	# not only a regression detector; it is the thing that stops a reader
+	# inventing a broken target, and this one exists because that cost was
+	# already paid. See rejected/bug-a-nilpy-cannot-target-xtensa-at-all-an-
+	# empty-npy-file-refuses for the whole episode.
+	#
+	# WHY THE COMMAND IS SPELLED OUT RATHER THAN FACTORED INTO A VARIABLE:
+	# finding it is the expensive part. Default Call0 dies with `addi immediate
+	# displacement ... outside the encodable range` -- an ENCODING complaint,
+	# i.e. a flag, which both seats quoted while concluding the target was
+	# broken. --xtensa-abi=windowed clears the branch form, --xtensa-long-calls
+	# clears the +-512 KiB forward-call reach, and --emit-obj is the IDF
+	# profile's documented output: it emits an OBJECT for the IDF link, so
+	# asking it for a complete executable fails on `calloc` as an external.
+	# Three different failures on one command, each with its own remedy, is the
+	# arrangement that makes "this target is broken" feel confirmed.
+	#
+	# THE EMPTY FILE IS THE LOAD-BEARING ROW, not print(1): it is the floor, so
+	# a failure here cannot be blamed on anything in the program. Both are kept
+	# because the pair separates the runtime from user codegen.
+	: > $(TESTTMP)/nilpy_xtensa_empty.npy
+	printf 'print(1)\n' > $(TESTTMP)/nilpy_xtensa_print.npy
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls \
+	  --platform=esp --emit-obj $(TESTTMP)/nilpy_xtensa_empty.npy $(TESTTMP)/nilpy_xtensa_empty.o
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls \
+	  --platform=esp --emit-obj $(TESTTMP)/nilpy_xtensa_print.npy $(TESTTMP)/nilpy_xtensa_print.o
+	# NEGATIVE CONTROL, and without it the two rows above pass on a compiler
+	# that has stopped caring about the ABI at all. The default-ABI build MUST
+	# still refuse: if it ever starts succeeding, the flags above are no longer
+	# what makes this work and this comment has gone stale.
+	! ./$(COMPILER) --target=xtensa --platform=esp --emit-obj $(TESTTMP)/nilpy_xtensa_empty.npy $(TESTTMP)/nilpy_xtensa_default.o 2>/dev/null
+	@echo "=== test-xtensa: NilPy builds for xtensa (windowed + long-calls + emit-obj); default ABI still refuses ==="
 
 test-arm32: $(COMPILER)
 	# THE READ-ONLY DATA SEGMENT ON arm32 -- the same pair as test-aarch64's first
