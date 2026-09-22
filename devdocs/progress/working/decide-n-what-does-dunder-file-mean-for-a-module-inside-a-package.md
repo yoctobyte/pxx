@@ -157,3 +157,59 @@ re-opened on it — not on the argument that the August sentence said so.
 
 **Option 3 (the data root) is not closed by this** and remains worth having on
 its own terms; options 1 and 3 are not exclusive, as the ticket says.
+
+## MEASURED 2026-09-22: it is not an off-by-one, it is IMPORT-ORDER DEPENDENT
+
+The ticket's table records one value for pxx, `<root>/inner.py`. There are
+**two**, and which one you get depends on the order of two import statements
+elsewhere in the program.
+
+Two-file package, one module, two mains differing only in the order of their
+two imports:
+
+    # a_dotted_first.py            # b_rel_first.py
+    import mypkg.inner             import mypkg.sib      # sib does `from . import inner`
+    import mypkg.sib               import mypkg.inner
+    print(mypkg.inner.where())     print(mypkg.inner.where())
+
+| | `__file__` of `mypkg/inner.py` |
+| --- | --- |
+| pxx, dotted import first | `<dir>/mypkg_inner.py` |
+| pxx, relative import first | `<dir>/inner.py` |
+| CPython, either order | `<dir>/mypkg/inner.py` |
+
+**The same module in the same program reports two different `__file__` values,
+and neither matches CPython.** The `mypkg_inner.py` spelling is the worse of the
+two: it is a filename no file ever had, with an underscore where CPython has a
+separator, so `basename` is wrong as well as `dirname`.
+
+**Mechanism.** The unit name is mangled dots-to-underscores at
+`pyparser.inc:47335` (`PyConsumeDottedModule`) and again at `pyparser.inc:47783`
+(`PyPackageSubmoduleKey`), so a dotted import registers the unit as
+`mypkg_inner`; a relative `from . import inner` passes the bare `inner`. Whichever
+spelling compiles the file FIRST wins, because the second one hits the
+resolved-path dedupe at `pasparser_proc.inc:6886-6925` and becomes an alias
+without re-parsing — so `__file__` is lowered exactly once, from whichever name
+got there first.
+
+**This is the first-wins hazard CLAUDE.md names**, and it is a textbook
+instance: *"a first-wins table is exposed only by the arrangement that puts the
+correct entry last."* The ticket's original measurement took the relative arm,
+which produces the tidy-looking `inner.py` and reads as a clean off-by-one. The
+dotted arm produces a mangled name and does not read as an off-by-one at all.
+Both were reachable from the start; only one was measured.
+
+**What it changes.** Nothing about the decision — option 1 fixes both arms,
+because both should produce `mypkg/inner.py`. What it changes is the ARGUMENT:
+this is no longer "our convention differs from CPython's by one directory
+level", which is the kind of thing a project may legitimately choose. It is
+"the same source produces different `__file__` values depending on import
+order", which is not a convention at all. The fix must therefore be at the point
+where the fragment is COMPUTED, not a post-hoc adjustment of the mangled name —
+unmangling `mypkg_inner` is ambiguous anyway, since a module may legitimately
+contain an underscore.
+
+**Population and oracle, recorded so a re-run is comparable:** one two-file
+package plus one sibling module, `mypkg/{__init__,inner,sib}.py`, built with
+`compiler/pascal26` at 5f986d67044a, oracle CPython 3 on the same tree,
+executable and package both under one `mktemp -d`.
