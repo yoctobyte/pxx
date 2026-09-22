@@ -1,6 +1,55 @@
 # The goal: cross-language × cross-platform, proved by real programs
 
-## THE GOALS, IN THE OWNER'S OWN WORDS, 2026-09-10 — THIS IS THE CURRENT LIST
+## OWNER PIVOT, 2026-09-22 — WRAP UP, THEN ESP32. READ THIS BEFORE THE LIST BELOW.
+
+Relayed verbatim through `frankuser`. It **leads** this file rather than being
+appended to it, because the section below is the standing list and a seat that
+reads the first screen must not come away with a twelve-day-old ordering:
+
+> *"this seems harder work than expected. let's wrap up all loose ties.. then,
+> let's start focusing on ESP32 once more."*
+
+**Stated in three parts deliberately, because a relayed instruction gets wider at
+every hop and the widening happens by re-derivation, not by grant.**
+
+**1. WHAT HE SAID.** The quote above, with no gloss. Two clauses: wrap up loose
+ties, then focus on ESP32 again.
+
+**2. WHAT IS DEFINITELY UNAFFECTED, restricted to what needs no interpretation.**
+The six goals below are not withdrawn — this is a sequencing instruction about
+what to work on now, and nothing in it names a goal to drop. Measurements already
+taken stay taken; a pivot cannot un-measure anything. **And rule 2 below is
+strengthened rather than displaced:** "focus on ESP32" is an application target,
+so attempt it and let the failures name the tickets.
+
+**3. EVERYTHING ELSE IS A QUESTION FOR HIM, NOT A CONCLUSION ANYONE IN THE CHAIN
+WRITES DOWN.** Whether "wrap up" means finish what is in flight or close and park
+everything open; whether ESP32 outranks the lekkerzeilen and busybox demos or runs
+beside them; whether the full-green-pin goal moves. **Nobody should answer these
+on his behalf, and a seat with a plausible reading should ask rather than act** —
+if this file already answered them, the asking step would be gone.
+
+### The context he said it in, recorded because "harder than expected" is fair and should not be softened
+
+The preceding stretch was the lekkerzeilen perf push. **The only attributable
+frame number from it is 1.826 → 1.887 fps on the shipping scene — about 3%** —
+against a day largely spent repairing instruments rather than the program. That
+is an accurate summary of the record and it is the reading his sentence deserves.
+It is not a complaint and it is not a failure: several of those instrument
+repairs were real defects that would have made any later number wrong. But
+anybody re-reading this in a month should meet the 3% and not a story about
+throughput.
+
+### What this does NOT license, since a pivot invites exactly this
+
+**Do not fill `backlog-esp` by triage.** Five tickets are open there and that
+thinness is the EXPECTED state before an attempt, not a gap. Rule 2 below says
+an umbrella grows by attempting the target, and that what an attempt never
+touches was not blocking real-world usage. Filing ESP tickets in advance of an
+attempt inverts it. The umbrella to attempt against is
+`umbrella-an-esp32-image-is-as-small-as-it-can-be`.
+
+## THE GOALS, IN THE OWNER'S OWN WORDS, 2026-09-10 — THE STANDING LIST — SEQUENCED BY THE PIVOT ABOVE
 
 Asked point blank "so, what were our goals again?" and then answering it himself,
 which is the version that counts:
