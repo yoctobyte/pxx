@@ -1058,3 +1058,65 @@ one-directional rule does not permit.
 **What is NOT the fork:** which arm is cheaper. Both are priced and the prices
 are close enough that cost does not decide it. It is his because the two arms
 differ in what NilPy IS on a microcontroller.
+
+## 2026-09-22 EVENING — A THIRD ARM, FOUND BY MEASURING; AND MY OWN RECOMMENDATION WITHDRAWN
+
+The owner, unprompted and not naming this ticket: *"and about aritmethic..
+micropython even does away with bigint totally. now, we actually don't want to do
+that, we have a fine mechanism with our promotable ints."*
+
+**Read as ADJACENT, not deciding.** He rules out doing away with bigint
+**totally**; nobody proposed that, and this ticket's arm A is a narrow scope.
+Reading a language-scoped sentence as settling a thunk-scoped fork would be a
+scope widened by a second seat's judgement.
+
+**But it withdraws the recommendation already sent.** That recommendation was
+*machine's integers scoped to ISR handlers* — the MicroPython-shaped
+simplification, only narrower. His disposition is evidence against it even
+though his sentence does not decide it.
+
+### THE THIRD ARM: the language already has an inert slot for this
+
+Measured at HEAD, not reasoned. `pyparser.inc:1268` — `if lo = 'int' then
+Result := tyInt64   { NilPy int = a 64-bit cell }`. **NilPy already reads
+annotations and already maps `: int` to a 64-bit cell.** And it makes no
+difference to the arithmetic:
+
+    def f(a: int) -> int:  return a + 1      promotes
+    def g(a):              return a + 1      promotes, identically
+
+So there is a **programmer-declared machine integer that is currently inert.**
+
+> **Arm C — an explicit opt-in the programmer writes**, meaning the same thing
+> wherever it appears, inside a handler or outside. Not a semantics that follows
+> call context: a declaration, like every other annotation. `hits += 1` compiles
+> inside an ISR because the author said what kind of integer that counter is.
+
+**Why C survives the test arm A fails.** `nilpy-semantics-divergences.md` permits
+one direction: accepting what CPython rejects or ignores. CPython ignores
+annotations entirely, so giving one a defined meaning is **accepting more**. Arm
+A is **computing differently** — the forbidden direction. C keeps promotable ints
+as the default mechanism, which is the thing he just called fine.
+
+**Caveat that would bite: C must NOT be spelled `: int`.** That already means
+something in programs that work today, and making it suppress promotion would
+silently change them. It needs its own spelling; choosing it is engineering.
+
+### AND ARM B IS NO LONGER THE WEAK ARM
+
+He also framed the pivot as **complete-but-slow outranks incomplete** —
+*"lekkerzeilen does compile and run.. just we have performance issues .. however,
+work on ESP is incomplete."* Under that ranking a **loud compile-time refusal is
+a completed capability**, not a gap. This ticket had written B off as *"the guard
+becomes a promise"*. B-with-enforcement — keep Python's integers, refuse when a
+handler body might promote, accept that all five example ISRs stop compiling
+until rewritten — **is an honest hole with a diagnostic on it**, which beats a
+silent one. Not recommended over C; no longer dismissable.
+
+### Instrument caveat on the measurement above
+
+The annotated/unannotated comparison was a count of promo-related strings in the
+two binaries, 4 against 4. **That is a name-based census** and it is sound only
+for the claim made — **no difference between the two** — and silent about
+absolute reachability. The reachability half is measured elsewhere in this
+ticket: `+` reaches `PXXAlloc` via the promo runtime.
