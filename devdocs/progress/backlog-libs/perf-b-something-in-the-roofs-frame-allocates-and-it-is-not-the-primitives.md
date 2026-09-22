@@ -78,6 +78,30 @@ the call site.
 per character, one reallocation each, so its cost scales with string LENGTH and
 5 characters already cost 4.59. Anything formatting text per frame hits that.
 
+**THIS TABLE IS NOT A LOCATION AND MUST NOT BE READ AS ONE** (the shape is
+frankb-8e's, 2026-09-22, `ead9b069e`: *their exclusion of the program axis was
+rigorous, and the LOCATION of the cause inherited that rigour without earning
+it*). The exclusions above are MEASURED, with two controls, and they are
+exclusions. These rows are a different claim with a different standing: they
+say these operations allocate **in a microbenchmark**, not that the roofs frame
+performs them. **Nobody has checked whether roofs slices strings, calls
+`upper()`, or builds list literals per frame.** Sitting below a rigorous
+exclusion list, they read as continuous with it, and they are not. Establishing
+that a candidate is actually EXECUTED in the frame is the work; this table only
+says which operations are worth grepping the demo for.
+
+**AND THE 20.2% IS ITSELF AN UNSPLIT BUCKET -- two mechanisms added together.**
+8e's RTTI rung came apart the same way: of 174,350 B in a `vmt/rtti slot`
+bucket, 94.7% was reflection BY NAME and actual dispatch slots were 222 B,
+0.1%, with the proposed fix reaching only one of the five mechanisms inside.
+Here the bucket is `allocator/refcount`: 14.6 points allocator, the remainder
+refcount. **Removing an allocation does not remove refcount traffic.** A static
+`MSTR_STATIC_RC` block still has retain/release CALLED on it -- the calls
+no-op, they do not vanish -- so the `s[i]` fix should move the allocator half
+and leave the refcount half untouched. A re-profile that shows the total
+barely moving is therefore NOT evidence the fix failed; split the bucket before
+reading the result.
+
 ## FIRST MOVE, and it may answer the whole thing
 
 **`s[i]` allocated 1.0054/op at `-O2` until 2026-09-22** — a fresh one-character
