@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:33 unfinished:18 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:173 backlog-nilpy:186 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3914 rejected:86`
+`working:33 unfinished:18 blocked:9 backlog:37 backlog-umbrella:13 backlog-core:173 backlog-nilpy:186 backlog-tools:63 backlog-pascal:12 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3915 rejected:86`
 
 ## Held now (working/ — do not touch these files)
 
@@ -85,7 +85,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
-- `[p 80] [T]` bug-t-native-s-red-is-one-row-and-full-s-is-ninety-four-so-they-are-different-problems (unblocks 1)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
@@ -108,5 +107,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
+- `[p 70] [A]` bug-a-dce-refuses-every-target-except-x86-64 (unblocks 1)
 
 _534 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

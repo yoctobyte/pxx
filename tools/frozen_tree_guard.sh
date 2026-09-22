@@ -157,6 +157,19 @@ state_dir=${PXX_FROZEN_GUARD_DIR:-${TMPDIR:-/tmp}/pxx-frozen-guard-$(id -u)}
 # a run reads, and a WRONG aim fails silent -- the direction this file exists to
 # refuse. Aim only when you can name the inputs; if you are guessing, do not.
 fingerprint() {
+    # THIS SCRIPT'S OWN HASH, FIRST LINE, AND IT IS HERE FOR A MEASURED REASON.
+    # 2026-09-22: a `full` tier was armed, and while it ran the author added the
+    # `paths` line below. `start` and `check` therefore used DIFFERENT fingerprint
+    # FORMATS, so part of the resulting diff was an edit to the instrument rather
+    # than movement in the tree -- and the reader had to infer that from noise in
+    # a diff. Third instrument-touch of that night and the SECOND inside the tool
+    # written to prevent it, by the seat who wrote both the tool and the header.
+    #
+    # That is structural, not careless: the person maintaining a guard is the
+    # person using it, so the only defence that survives is one the guard
+    # performs ON ITSELF. Now the condition is NAMED -- `check` says
+    # INSTRUMENT CHANGED WHILE ARMED instead of leaving it to be spotted.
+    printf 'tool %s\n' "$(sha256sum "$0" 2>/dev/null | cut -d' ' -f1)"
     printf 'head %s\n' "$(git rev-parse HEAD 2>/dev/null || echo NO-GIT)"
     # The aim is part of the fingerprint, so a start and a check with different
     # pathspecs mismatch loudly instead of comparing two different questions.
@@ -244,6 +257,17 @@ check)
         echo "frozen-tree-guard: tree frozen for the whole run — verdict is attributable"
         exit 0
     fi
+    # Name this one specifically. A changed instrument means the two fingerprints
+    # may not even be comparable, which is a different and worse condition than
+    # the tree having moved -- and it is invisible unless said out loud.
+    if [ "$(sed -n 's/^tool //p' "$before")" != "$(sha256sum "$0" | cut -d' ' -f1)" ]; then
+        echo "frozen-tree-guard: INSTRUMENT CHANGED WHILE ARMED — $0 itself was" >&2
+        echo "frozen-tree-guard:   edited between 'start' and now, so the two" >&2
+        echo "frozen-tree-guard:   fingerprints may not be comparable at all. This" >&2
+        echo "frozen-tree-guard:   says NOTHING about the tree or the code. Re-arm" >&2
+        echo "frozen-tree-guard:   and re-run; do not interpret the diff below." >&2
+        exit 1
+    fi
     echo "frozen-tree-guard: CONTAMINATED — this run's inputs moved while it ran." >&2
     echo "frozen-tree-guard:   This is NOT a claim that the code is broken. It is" >&2
     echo "frozen-tree-guard:   a claim that the run cannot be attributed to one" >&2
@@ -328,6 +352,27 @@ selftest)
         echo "  ok   t_rearm_clears_the_frozen_verdict"
     fi
 
+    # An edited INSTRUMENT must be named, not left as noise in a diff.
+    "$0" start selftest >/dev/null 2>&1
+    sed -i 's/^tool .*/tool EDITED-WHILE-ARMED/' "$work/state/selftest.fp"
+    if "$0" check selftest 2>&1 | grep -q "INSTRUMENT CHANGED WHILE ARMED"; then
+        echo "  ok   t_edited_instrument_is_named_not_inferred"
+    else
+        echo "  FAIL t_edited_instrument_is_named_not_inferred   — reported as a plain tree move"
+        fails=$((fails + 1))
+    fi
+
+    # ...and its negative control: an unedited instrument must NOT claim it
+    # changed, or every ordinary contamination would be misreported as this.
+    "$0" start selftest >/dev/null 2>&1
+    sed -i 's/^head .*/head MOVED/' "$work/state/selftest.fp"
+    if "$0" check selftest 2>&1 | grep -q "INSTRUMENT CHANGED WHILE ARMED"; then
+        echo "  FAIL t_unedited_instrument_is_not_blamed   — blamed the tool for a tree move"
+        fails=$((fails + 1))
+    else
+        echo "  ok   t_unedited_instrument_is_not_blamed"
+    fi
+
     # `stop` must red on a tree that moved during the window.
     "$0" start selftest >/dev/null 2>&1
     sed -i 's/^head .*/head MOVED-DURING-RUN/' "$work/state/selftest.fp"
@@ -393,7 +438,7 @@ selftest)
         echo "frozen-tree-guard selftest: $fails red"
         exit 1
     fi
-    echo "frozen-tree-guard selftest: 12 guard(s), 0 red"
+    echo "frozen-tree-guard selftest: 14 guard(s), 0 red"
     ;;
 *)
     usage

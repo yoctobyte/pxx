@@ -3,7 +3,7 @@ slug: bug-t-native-s-red-is-one-row-and-full-s-is-ninety-four-so-they-are-differ
 track: T
 prio: 70
 type: bug
-status: backlog-tools
+status: done
 found: 2026-09-22
 found-by: frankh-c0
 owner: ""
@@ -1249,3 +1249,6 @@ GREEN at any sha after 2026-09-09."* **That is met** — `full`, GREEN, at
 `1ef9c9bcb`…`b4dd48d52`, off borg. The caveat that belongs with it: 40 jobs
 skipped for absent corpora, so it retires *this ticket's* question and does
 **not** satisfy goal 1's release-grade bar.
+
+## Log
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
