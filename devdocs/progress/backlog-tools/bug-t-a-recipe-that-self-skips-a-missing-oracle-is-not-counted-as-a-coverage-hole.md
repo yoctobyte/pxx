@@ -82,3 +82,25 @@ T's — the question for the owner is only whether it is worth the span now.
 **Positive control, when it is built:** a box with a tool removed must report a
 nonzero `skip_holes` for exactly the jobs that guard on it. A run where
 `skip_holes` stays 0 after removing a qemu is the instrument failing, not a pass.
+
+## 2026-09-22 (frankb-8e) — the 72 is 80 now, and BOTH rows stand
+
+`grep -c 'NOT verified' Makefile` answers **80** at `fda77c48b8ee`. Same
+command, same file, against the **72** this ticket measured on 2026-09-12 — so
+this is growth, not a correction, and I am carrying both rows rather than
+replacing the number: 72 @ 2026-09-12, 80 @ `fda77c48b8ee`, 8 sites added in
+ten days. The direction strengthens the ticket (more structurally uncountable
+holes, not fewer) and it means any figure derived from 72 — including the
+`skip_holes == 0` argument — should be re-derived rather than scaled.
+
+**A SKIP CODE ALREADY EXISTS AND THIS TICKET'S REMEDY SHOULD NOT INVENT A
+SECOND.** `tools/gate.sh:104` special-cases exit **77** (autotools SKIP) for
+`tools/selfhost_fixedpoint.sh`. `testmgr.py` does not honour it — no `77`
+anywhere in that file — and gate.sh maps it to `return 0`, a pass. So the state
+this ticket wants is not "skip", which exists, but **skip AND count as a
+coverage hole**; and the sibling
+`bug-t-a-probe-that-exits-2-to-say-its-instrument-is-broken-is-published-as-a-compiler-red`
+wants the same new state from the opposite direction (its probe exits 2 rather
+than 0 precisely to avoid laundering, and is published as a compiler red).
+**Read that ticket before routing the 80 guards through anything**: one channel
+serves both, three spellings would not.

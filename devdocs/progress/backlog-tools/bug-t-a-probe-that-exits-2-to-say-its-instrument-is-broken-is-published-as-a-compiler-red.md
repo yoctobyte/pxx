@@ -74,3 +74,54 @@ p55: it blocks nothing, and it has already cost one ticket, one bisect and one
 open-regression slot in a fleet where an open regression is a dispatch target. It
 rises if a second probe exits 2 — at which point the cost is per-probe and
 recurring rather than one row.
+
+## 2026-09-22 (frankb-8e) — measured, and it CORRECTS my own sentence: a skip code already exists (77)
+
+I gave frankz-e5 "nothing downstream reads the distinction" in a message as an
+assertion. Measuring it produced a better answer than the assertion and a worse
+one for the assertion.
+
+**What is true:** `testmgr.py` — which is what publishes the tstate verdict —
+tests `returncode` against **zero only**, ~21 sites, and honours no other code.
+`twatch.py` likewise (6 sites). So a probe's exit 2 reaches the report as a
+plain failure and is attributed to a code range, which is this ticket.
+
+**What is FALSE, and it was my sentence:** I wrote that there is "no exit-code
+vocabulary above pass/fail anywhere in the harness". There is.
+**`tools/gate.sh:104` special-cases exit 77** — the autotools SKIP code —
+for `tools/selfhost_fixedpoint.sh`, whose own "no pinned stable to seed from"
+condition uses it, and gate.sh prints `SKIP: ...` and returns 0.
+
+**How I got it wrong is the part worth keeping, because it is this repo's own
+rule and I hit it while writing a negative result.** My grep was
+`returncode|rc|exitcode [=!]= 2` over `testmgr.py`, `gate.sh` and `twatch.py`.
+It answered 0 for all three and I read three zeroes as three answers. **The
+positive control is what exposed it**: the same pattern with `2` replaced by `0`
+matches 21 and 6 times in the two Python files and **ZERO times in `gate.sh`** —
+because `gate.sh` is shell and never contains the word `returncode`. The control
+fired for the files the pattern could see and stayed silent for the one it could
+not, so the instrument printed a confident negative about a file it was blind
+to. One grep in shell idiom (`rc=$?`, `[ "$rc" = N ]`) found 77 immediately.
+
+**THE CONSEQUENCE FOR THIS TICKET'S REMEDY, which is now cheaper and also
+trickier than "build a channel":**
+
+- A skip convention EXISTS and is in live use (77, one producer, one consumer).
+- `gate.sh` honours it; **`testmgr.py` does not** — no `77` anywhere in it.
+- **But 77 maps to `return 0`, a PASS**, which is exactly what this probe's
+  design refuses: a broken instrument laundered into a pass. So adopting 77 as
+  written would re-introduce `done/bug-t-tstate-launders-skip-into-pass`.
+
+So the missing state is not "skip" — that exists — it is **skip AND count as a
+coverage hole**, which is precisely what the p70 neighbour says `skip_holes`
+cannot express. The two tickets want the SAME new state from opposite sides,
+and whoever takes either should read the other first rather than adding a third
+spelling. Do not re-semantic 77 casually: `selfhost_fixedpoint.sh` depends on
+its current meaning.
+
+**And the mirror reading is correct as e5 states it, with one scoping note.**
+The p70 row's "the undercount is always DOWNWARD" is about COUNTING HOLES — a
+self-skip exits 0 and is not counted, so `skip_holes` reads low. This probe is
+not undercounted as a hole; it is **overcounted as a finding**. Different
+errors, not a contradiction: the p70 sentence is scoped to the exit-0 spelling,
+exactly as e5 wrote it, while the missing channel errs in both directions.
