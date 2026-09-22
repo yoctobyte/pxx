@@ -37544,12 +37544,34 @@ answers question B is not discarded — it is silently recast as context for A**
 which is why it leaves no trace of having been missed. In 7a's case the recast
 was natural and almost right: R really does explain why Q fails.
 
-**Discharge, at reading time and not at design time:** before filing a verdict
-off a multi-arm probe, go through the arms and ask of each **"what question does
-this row answer, if not mine?"** An arm that varies something your question holds
-fixed is answering a different one by construction. **A yes/no question is the
-highest-risk shape**, because a binary answer feels complete and terminates the
-read.
+**AND THE DISCHARGE IS NOT SELF-ADMINISTERED — THIS ENTRY SAID IT WAS FOR HALF
+AN HOUR, AND 7a CORRECTED IT.** The first draft here said: go through the arms
+yourself and ask of each *"what question does this row answer, if not mine?"*
+That step is worth taking and **it is marking your own homework with the same
+filter still on.**
+
+**Note who built the instrument. 7a did not design that probe — `franks-5b` did,
+and 5b included an arm 7a's question did not require.** The design was **broader
+than the question**; the *reading* narrowed it back down. So the strong form is:
+**ask the person who built the instrument what else it shows.** Someone who chose
+an arm you would not have chosen is **the one reader whose filter differs from
+yours**, and they are usually still in the conversation.
+
+**That is also why this failure is invisible to every other check in this file.**
+Freshness, population, positive controls and isolation are all things you can run
+**on your own evidence with your own question still applied.** Nothing that stays
+inside one head reaches an under-read. **It needs a second reader or a second
+question, and the cheapest source of both is the instrument's author.**
+
+**THE SHAPE THAT TERMINATES A READ IS A VERDICT, NOT A BINARY.** The first draft
+claimed *"a yes/no question is the highest-risk shape"* — **a general rule drawn
+from one instance**, and the second time in one day this file's author did that
+(see the arity-inflation section, where the same author asserted a direction from
+n=1 and the same kind of correction followed). 7a's defensible narrowing: **a
+question whose answer CLOSES a ticket terminates the read.** *"Dead"* feels like
+a stopping point in a way *"3.3%"* does not — and **"dead" is a claim about the
+world, where the measurement only licensed a claim about the one change that was
+tried.**
 
 **And the corollary for the arms themselves:** in the same batch, one arm was
 **void, not null** — it planted a lex error in `_sdl2.py` while leaving

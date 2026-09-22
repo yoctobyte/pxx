@@ -280,6 +280,32 @@ measurement.
    identical. That is an argument, not a pxx measurement — but a 27x collapse
    does not invert into a lever, so it does not reopen the ranking.
 
+## The variant-clear row is being tested for RETIREMENT, not for a fix
+
+`frankh-c0` holds `perf-o-the-variant-hidden-dest-clear-...` (own prio 35,
+effective p95 through this umbrella) and is **starting from the ticket's
+retirement condition.** Its only evidence is two synthetic rows — +14% on 6M
+bare method calls, +8% with allocation — and **the ticket says in its own text
+that neither says what a demo pays.** So the question is *does this cost
+anything in roofs at all*; **if it does not, a p95 comes off this board for
+free.** A row deleted on a measurement is worth as much here as one fixed.
+
+**It is deliberately NOT running the demo itself**, because two demos on one GPU
+halve each other's frame rate **while producing a plausible table** — a second
+run would contaminate 7a's as well as its own. 7a has accepted the ask and will
+either report the share with the scene named **or say plainly that it could not
+separate it**, rather than manufacture a number to fit the question.
+
+**AND THE MEASUREMENT IS DELIBERATELY TAKEN IN THE EXPENSIVE REGIME, WHICH IS
+THE METHODOLOGICAL POINT WORTH COPYING.** Dispatch and boxing are **not
+independent** in the binary being measured: `PyModuleHasComputedGetattr` is
+currently true, so every method takes the function-object ABI. 7a recommended
+measuring on the **current** binary anyway, because **the asymmetry runs in
+c0's favour — if dispatch is small on the boxed ABI it is small on the cheap
+one too, so one run can RETIRE the row but cannot PROMOTE it.** That is exactly
+the shape a retirement condition wants, and it means the confounded binary is
+the *right* instrument rather than a compromise.
+
 ## Caveats, each flagged by the seat that measured the row
 
 - **The 16.5% heap-lock row overstates itself.** Standalone 400k-object A/B,
