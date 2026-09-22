@@ -1150,8 +1150,15 @@ allocator and free paths above, is the shape of the 96%.
   the branch that uses it fixes every program. Also: a 16-byte managed clear is
   emitted as `rep stosb`, 21 of them in one prologue.
 - `bug-a-pxxhighbits-recomputes-a-compile-time-constant-in-a-loop` — 5.1% of
-  this workload.
+  this workload. **SPENT: fixed `467b66a44` 2026-08-31, measured 6.0% here.**
 - `bug-n-a-function-created-by-exec-loses-its-globals-when-it-outlives-the-call`
+  — **NAMES NO TICKET, and it is NOT a spelling of the `exec` ticket linked above**
+  (`frankz-e5`, 2026-09-22): that one is about what `exec` PUBLISHES and about
+  calling host globals, and the word *outlive* appears in it zero times. Either this
+  is unfiled work or it is prose that was never a ticket — read it before assuming
+  the former. Left in backticks deliberately: it is slug-SHAPED but was never a
+  link, so `progress.sh check` cannot see it, which is why it outlived two dangles
+  in the same file that check did report.
   and the `pyeval: no RTTI for attribute vars` refusal — both are CPython
   programs pxx cannot run, so both are N bugs by the upward-compatibility rule,
   not compat items.
@@ -1245,12 +1252,25 @@ The arithmetic fix is worth having on its own and is not this ticket's answer.
   — the codegen cause behind `0c3ad8a10`; isolated 44x repro, 20M calls,
   0.294s vs 13.060s, identical semantics, same never-taken branch.
 - [[feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython]] (O p55)
-- [[bug-a-pxxhighbits-builds-a-constant-with-an-eight-iteration-loop]] (A p50) —
+- [[bug-a-pxxhighbits-recomputes-a-compile-time-constant-in-a-loop]] (A p50) —
+  **DONE, AND THIS ENTRY ADVERTISED IT AS PENDING HEADROOM UNTIL 2026-09-22.** Fixed
+  `467b66a44`, 2026-08-31, three weeks before this list was last touched: a `const`
+  keyed on CPU64/CPU32, byte-identical to what the loop produced on each width. It
+  delivered **6.0% ON THIS EXACT WORKLOAD** (`uforth tests/core.fr` 2.67s -> 2.51s)
+  against the 5.1% predicted below, so the 5.1% is SPENT and must not be counted
+  again in any remaining-headroom sum. Link corrected by `frankz-e5`; it read
+  `bug-a-pxxhighbits-builds-a-constant-with-an-eight-iteration-loop`, which is no
+  ticket — a slug that describes the MECHANISM where the real one describes the
+  DEFECT, and the two were never the same string.
   `builtinheap.pas:1608` builds `$8080808080808080` with a shift/or loop, per
   machine word of every string scan: **5.1% of total runtime, more than all of the
   user's compiled code.** Fix is a per-width `const`, not a literal — the loop
   exists to be right on 32-bit.
-- [[bug-n-exec-only-publishes-a-def-named-body]] (N p45) — and see below.
+- [[bug-n-exec-only-publishes-a-def-named-body-and-cannot-call-host-globals]]
+  (N p45, `status: new`) — and see below. *Slug corrected by `frankz-e5`: the link
+  read `bug-n-exec-only-publishes-a-def-named-body`, a TRUNCATED PREFIX of the real
+  slug. It is the cheapest dangle to create and the most expensive to spot, because
+  it reads as correct and a prefix grep finds the ticket.*
 
 ### One child is a guard that cannot fire
 

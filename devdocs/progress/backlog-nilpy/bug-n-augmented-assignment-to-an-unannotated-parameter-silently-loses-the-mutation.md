@@ -282,7 +282,31 @@ own prio, and merging would lose that. They should be worked together and closed
 together.
 
 
-## FIXED 2026-09-15 — the operator axis (`861b3ad34`, sha PENDING-COMMIT)
+## FIXED 2026-09-15 — the operator axis (`1416e9411`)
+
+*Sha corrected 2026-09-22 by `frankz-e5`. It read ``861b3ad34`, sha PENDING-COMMIT` — a
+GHOST, not on any remote ref and not even a valid object in this store, i.e. the
+pre-rebase id copied from a local reflog after a verified push. Note the
+`PENDING-COMMIT` marker was written BESIDE the sha rather than instead of it, so
+`sync.sh` had nothing to fill in and the ghost shipped with a label saying it was
+about to be replaced. Recovered by CONTENT and not by subject: `1416e9411` is the
+commit whose `defs.inc` diff introduces `PY_BINOP_AUGMENTED` with `PY_BINOP_AUGADD`
+as its alias, which is what the list below describes.*
+
+DANGLING SHAS BY DESIGN — the note above QUOTES the dead sha so a reader who finds
+it elsewhere lands here, and `progress.sh check` duly re-reported the correction as
+the defect. That is this repo's self-counting shape: **a note written to retire a
+pattern joins the population that the pattern is counted over.** The alternative,
+spelling the ghost so it cannot match, defeats the note's only purpose. Recorded
+rather than silently suppressed, because the marker is what stops the next seat
+re-investigating a closed dangle.
+
+**AND THE GENERALISATION WAS NOT COMPLETE AT THAT SHA, WHICH THIS SECTION READS AS
+IF IT WERE:** `14c3248e1`, two hours later the same day, found a THIRD site —
+`pasparser_expr.inc`'s compound-assign arm was still `+`-only after this commit
+widened the two `pyparser.inc` sites. Its own commit message says it was *“missed by
+the change written to stop exactly this”*. Read the two together; this section alone
+overstates the reach of the fix it describes.
 
 **The first fix was `+`-ONLY and the fixture passed.** `PY_BINOP_AUGADD` marked
 `tkPlus` alone, so ten sibling operators kept the identical defect while the
