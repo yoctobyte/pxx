@@ -40290,6 +40290,18 @@ you find as confirmation; an empty second round defeats it without announcing
 anything, and the first round's numbers sit there looking like the survivors of a
 check that never happened.
 
+**AND THE FILE LOOKED POPULATED, WHICH IS WHAT MAKES THIS THE SHARPEST OF THE
+SIX.** The harness writes its `=== SAMPLE` header **before** any record lands, so
+`prof-r2.raw` *presents as 20 samples and contains zero*, and `prof-r1.raw`
+presents as 150 and contains 89. **The instrument reported a count of loop
+iterations under the name of a count of results** — so the one number a reader
+would check to reassure themselves that the capture ran is the number that cannot
+tell them. The cause is a liveness test on the wrong pid: `kill -0 $GDBPID`
+watches gdb, not the inferior, and the inferior had exited normally at sample 89.
+**A count of attempts wearing the name of a count of outcomes is the same defect
+as a zero that cannot be distinguished from a miss**, one layer up: here the
+instrument cannot report the answer "nothing was captured" at all.
+
 **THE GENERAL FORM, which is what earns the extension:**
 
 > **An instrument that cannot produce one of its own answers makes the answer it
@@ -40353,7 +40365,18 @@ note on it: *"that is the third time today an instrument of mine was drawn from
 the population it was supposed to be testing, and the first one someone else
 caught before it ran."* **Knowing this rule demonstrably does not fire it** — two
 of the six were committed by the seat that was writing this section up at the
-time. Hand a probe to somebody else before you trust its zeroes.
+time, and there is a third data point with a timestamp on it. At 16:02 on the
+same day `lekkerzeilen-7a` wrote to a peer that it had *"reached for a stored
+lesson because it fit the shape, not because it fit the mechanism"*. **At 16:05
+it committed that identical error**, explaining a gap in its sample record by
+machine load — because load was plausible, because it matched an axis it had just
+been commended for, and because it had spent the afternoon being right about
+load. The refutation was one pass over a file it already had open, and the truth
+was a hard cliff rather than a gradient: **contention degrades, it does not
+stop.** Three minutes, from stating the rule in its own words to breaking it on
+the next question. **Having just articulated a failure mode is not protection
+against it and may be the opposite** — a seat pleased with a lesson reaches for
+it. Hand a probe to somebody else before you trust its zeroes.
 
 ## WHERE YOU HAVE NO STANDING, THE INFORMATIONAL FRAMING *IS* THE ASK
 
