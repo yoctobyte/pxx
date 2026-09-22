@@ -3,7 +3,7 @@
 """check_test_wiring.py — a file in test/ is not a test until a rule runs it.
 
 TWO CENSUSES, AND THEY ASK DIFFERENT QUESTIONS. The original one is over test
-SUBJECTS (SUBJECT_EXT below: .pas/.npy/.c/.lua/.fth) and asks whether a build
+SUBJECTS (SUBJECT_EXT below -- read the tuple, not this list) and asks whether a build
 rule reaches them. The second, added 2026-09-06, is over test RUNNERS -- the
 `.sh` scripts under test/ -- and asks whether ANY file that could invoke one
 names it at all. A runner is not a subject and was structurally invisible to the
@@ -64,7 +64,17 @@ _SELF_DOCS = (_SELF, _SELF[:-3] + "_devtest.py")
 # Extensions that are SUBJECTS of a test run. `.expected` is deliberately not
 # here: it is an assertion belonging to a subject, and it is checked through its
 # sibling instead, so a missing pair reports once rather than twice.
-SUBJECT_EXT = (".pas", ".npy", ".c", ".lua", ".fth")
+# .bas added 2026-09-22 (frankb-8e, Track A -- T owns this tool; this is a
+# tightening with a measured population of zero failures, so it is a fix rather
+# than a ticket). Every .bas in the tree was structurally invisible to this
+# census for as long as it has existed, which is the census's own founding
+# failure -- "the suite printed green one check smaller than its own directory"
+# -- in a second guise. Measured at the time of the change: seven .bas under
+# test/, all seven already named by the Makefile, so nothing reddens and
+# nothing was uncovered. That is what makes it cheap and it is also why nobody
+# found it by being bitten: a latent gap produces no victim until someone adds
+# the first unwired file. Found while adding two.
+SUBJECT_EXT = (".pas", ".npy", ".c", ".lua", ".fth", ".bas")
 
 # Directories under test/ that are inputs to a suite rather than test subjects:
 # a conformance corpus enumerates its own members, and a fixture is data.
