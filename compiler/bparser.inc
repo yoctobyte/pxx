@@ -718,7 +718,21 @@ function BSourceUsesAUnit: Boolean;
   here" and "does this source say USES" are the SAME question, and it is the
   only honest predicate for whether the shims can be emitted.
 
-  DetectPascalRuntimeNeeds cannot answer it, and THE REASON CHANGED ON
+  IT IS ONE OF TWO DOORS SINCE 2026-09-22, AND THE FUNCTION NAME NO LONGER
+  ANSWERS THE QUESTION ON ITS OWN. `USES` was the only way builtinheap could
+  reach a BASIC program while this driver was the one skeleton frontend that
+  never called PullTargetRuntimeUnits -- which is why `10 PRINT A` refused on
+  riscv32 and xtensa with `PXXWriteDecW not found`. Now that the call is here,
+  those two targets get builtinheap with no USES anywhere, so this scan is
+  still TRUE about what it measures and no longer sufficient for what the
+  caller needs. Read the caller's `bPullsBuiltinHeap`, not this: it ORs in
+  TargetCodegenCallsHeapRuntime and is the honest answer to "will builtinheap
+  be here". Deliberately NOT folded into this function, because a scan named
+  for a source construct that silently also answers about the target is the
+  shape that produced the bug above.
+  bug-a-a-basic-program-cannot-print-anything-on-riscv32-or-xtensa
+
+  DetectPascalRuntimeNeeds cannot answer it either, and THE REASON CHANGED ON
   2026-09-22 WHILE THE ANSWER DID NOT. What this paragraph used to say, and
   what was true when it was written: `needsAnsiRuntime` was
   `PasDefineExists('PXX_MANAGED_STRING')` first thing, PasInitDefines
@@ -752,7 +766,7 @@ procedure ParseBProgram;
 var
   stmtList: Integer;
   jmpPatch, i: Integer;
-  bNeedsHeap, bNeedsAnsi, bNeedsDiv: Boolean;
+  bPullsBuiltinHeap: Boolean;   { see its computation -- USES *or* the target }
 begin
   { The whole starting checklist, in one call. This driver is the reason the
     routine exists: it was caught missing SIX of these steps, one at a time,
@@ -767,14 +781,66 @@ begin
     of "this frontend is the one that did not make a call every other driver
     makes"; there is now no call for it to miss.
     refactor-a-one-program-driver-prologue-for-every-frontend }
-  DetectPascalRuntimeNeeds(bNeedsHeap, bNeedsAnsi, bNeedsDiv);
   { ...with ONE argument this driver has to compute itself: whether the emitted
-    AnsiString shims can be emitted at all. See BSourceUsesAUnit above --
-    bNeedsAnsi is a constant True for every program ever compiled, so it is the
-    wrong input here. A unit-free program gets no shims, emits no call into
-    them, and is SMALLER for it (933B -> 559B for `10 PRINT "hello"`).
-    bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits }
-  EmitProgramPrologue(False, BSourceUsesAUnit, True, jmpPatch);
+    AnsiString shims can be emitted at all, i.e. whether their BODIES will
+    arrive. A unit-free program gets no shims, emits no call into them, and is
+    SMALLER for it (933B -> 559B for `10 PRINT "hello"`).
+    bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits
+
+    TWO DOORS, ONE VARIABLE, COMPUTED ONCE. `USES` was the only door until
+    2026-09-22; PullTargetRuntimeUnits below is the second, and it opens on
+    target alone with nothing in the source to say so. Spelling the union once
+    here rather than asking each question where it happens to be needed is the
+    same repair the C driver took the same day (cParsesBuiltinHeap,
+    cparser.inc): two spellings of one condition that agree today are how that
+    one broke.
+
+    THE DEAD DetectPascalRuntimeNeeds CALL THAT USED TO SIT HERE IS GONE. Its
+    three outputs were never read by anything, and the comment explaining why
+    still said bNeedsAnsi "is a constant True for every program ever compiled"
+    -- which 523833fde retired, as BSourceUsesAUnit's own header already
+    records. A dead call under a stale justification is the arrangement where
+    the next reader repairs the comment and wires the call back in. }
+  bPullsBuiltinHeap := BSourceUsesAUnit or TargetCodegenCallsHeapRuntime;
+  EmitProgramPrologue(False, bPullsBuiltinHeap, True, jmpPatch);
+
+  { The units this TARGET's codegen calls into -- see PullTargetRuntimeUnits
+    (frontend_prologue.inc). BASIC never called it, so riscv32 and xtensa
+    lowered PRINT onto builtinheap routines that were never pulled and EVERY
+    BASIC PROGRAM THAT PRINTED ANYTHING refused on both targets. Measured over
+    four constructs x six targets: a program with no PRINT built everywhere,
+    while `10 PRINT A` and `10 PRINT "hi"` built on x86-64/i386/arm32/aarch64
+    and refused on riscv32 and xtensa -- the row saying this is the write path
+    and not the frontend.
+
+    POSITION IS LOAD-BEARING IN TWO DIRECTIONS AND I HIT BOTH WALLS. It must be
+    late enough that the pulled bodies exist before codegen asks FindProc, and
+    early enough that no AST has been built yet:
+
+      after EmitExit    -- `PXXWriteNL not found` on riscv32, UNCHANGED, from a
+                           binary that already had the fix. This is what the
+                           routine's own header tells you to do ("CALL IT AFTER
+                           THE PROGRAM'S EXIT, never before") and that header is
+                           written from the CALL-STUB drivers, where the body is
+                           not compiled between prologue and exit. aparser and
+                           gparser carry a warning about exactly this; read one
+                           before moving this line.
+      after ParseBBlock -- `invalid IR symbol reference in store_sym` on all
+                           four non-x86 targets, because parsing a Pascal unit
+                           moves the symbol table under an AST that already
+                           holds indices into it. `10 LET A = 1` was enough.
+      HERE              -- before the prescan, before any BASIC symbol is
+                           allocated and before any node exists. The units'
+                           globals land first and BASIC's are allocated after
+                           them, so nothing the AST references can move.
+
+    The re-registration block further down handles the OTHER direction of the
+    same hazard -- a `USES` met during the parse wiping the label table -- and
+    is unaffected: pulling here happens before that table is built at all.
+
+    Self-guards on TargetCodegenCallsHeapRuntime, so x86-64/i386 pay nothing.
+    bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
+  PullTargetRuntimeUnits;
 
   { GOTO/GOSUB: reset the shared label table (C resets it per function; the
     BASIC main program is one scope), prescan for jump targets, and allocate

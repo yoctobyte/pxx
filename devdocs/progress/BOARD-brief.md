@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:36 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:170 backlog-nilpy:184 backlog-tools:71 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:152 done:3934 rejected:88`
+`working:37 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:169 backlog-nilpy:184 backlog-tools:71 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:152 done:3934 rejected:88`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions` [A] — owner: frankb-8e
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
@@ -80,7 +81,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 571, ranked
+## Ready — top 30 of 570, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -103,7 +104,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 - `[p 70] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 70] [A]` bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program (unblocks 1)
@@ -112,5 +112,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
+- `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 
-_541 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_540 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

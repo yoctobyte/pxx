@@ -14626,27 +14626,50 @@ test-core: $(COMPILER)
 	# bug-a-basic-prints-a-string-variable-as-its-character-code
 	./$(COMPILER) test/test_basic_one_char_string_var.bas $(TESTTMP)/test_basic_ocs26
 	tools/expect_same.sh test_basic_ocs26 "$$($(TESTTMP)/test_basic_ocs26)" "$$(printf 'x\nhello\ny\n5')"
-	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
-	  for arch in i386 aarch64 arm32; do \
-	    ./$(COMPILER) --target=$$arch test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_gg_$$arch >/dev/null; \
+	# riscv32 AND xtensa ARE IN THIS LIST BECAUSE THEY WERE NOT, AND THAT IS THE
+	# WHOLE BUG. The list was `i386 aarch64 arm32` -- which is EXACTLY the set of
+	# cross targets on which the defect below does not reproduce, so five .bas
+	# fixtures ran cross and certified a frontend that could not print a single
+	# character on either of the other two. BASIC never called
+	# PullTargetRuntimeUnits, so riscv32 and xtensa lowered PRINT onto builtinheap
+	# routines nothing had pulled: `10 PRINT A` gave `PXXWriteDecW not found` and
+	# `10 PRINT "hi"` gave `PXXWriteNL not found`, while a .bas program with no
+	# PRINT built on all six targets. Measured 2026-09-22 over four constructs x
+	# six targets before the fix; 24/24 build and the riscv32 output is
+	# byte-identical to the x86-64 oracle after it.
+	# The fixtures did not need changing -- the TARGET LIST did. A suite written
+	# over the arrangements that pass is the population everyone writes.
+	# xtensa carries two extra flags and NEITHER is about this bug: --platform=posix
+	# because the default ESP/IDF profile emits an object for the IDF link rather
+	# than a complete executable, and --xtensa-soft-mulhigh because any numeric
+	# output SIGILLs without it (rc=132 on exactly the three fixtures that print
+	# numbers, rc=0 on the two that print only strings -- which is the control
+	# saying the flag is the cause and not the pull). Both are documented in
+	# tools/run_target.sh's own header.
+	# bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions
+	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1 \
+	   && command -v qemu-riscv32 >/dev/null 2>&1 && command -v qemu-xtensa >/dev/null 2>&1; then \
+	  for arch in i386 aarch64 arm32 riscv32 xtensa; do \
+	    case $$arch in xtensa) xf="--platform=posix --xtensa-soft-mulhigh";; *) xf="";; esac; \
+	    ./$(COMPILER) --target=$$arch $$xf test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_gg_$$arch >/dev/null; \
 	    tools/expect_same.sh $$arch/test_basic_gg_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_gg_$$arch)" "$$(printf 'A\nB\nlooped 3\nsub1\nsub2\nsub1 back\nafter gosub\nsub2\ndone')" \
 	      || { echo "cross .bas goto_gosub FAIL on $$arch"; exit 1; }; \
-	    ./$(COMPILER) --target=$$arch test/test_basic_comprehensive.bas $(TESTTMP)/test_basic_cmp_$$arch >/dev/null; \
+	    ./$(COMPILER) --target=$$arch $$xf test/test_basic_comprehensive.bas $(TESTTMP)/test_basic_cmp_$$arch >/dev/null; \
 	    tools/expect_same.sh $$arch/test_basic_cmp_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_cmp_$$arch | wc -l)" "21" \
 	      || { echo "cross .bas comprehensive FAIL on $$arch"; exit 1; }; \
-	    ./$(COMPILER) --target=$$arch test/test_basic_lexer.bas $(TESTTMP)/test_basic_lex_$$arch >/dev/null; \
+	    ./$(COMPILER) --target=$$arch $$xf test/test_basic_lexer.bas $(TESTTMP)/test_basic_lex_$$arch >/dev/null; \
 	    tools/expect_same.sh $$arch/test_basic_lex_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_lex_$$arch)" "$$(printf 'Hello, Traditional BASIC!\nHello, Modern BASIC!')" \
 	      || { echo "cross .bas lexer FAIL on $$arch"; exit 1; }; \
-	    ./$(COMPILER) --target=$$arch test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf_$$arch >/dev/null; \
+	    ./$(COMPILER) --target=$$arch $$xf test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf_$$arch >/dev/null; \
 	    tools/expect_same.sh $$arch/test_basic_uf_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_uf_$$arch)" "$$(printf 'unit-free\nline numbered too')" \
 	      || { echo "cross .bas unit-free FAIL on $$arch"; exit 1; }; \
-	    ./$(COMPILER) --target=$$arch test/test_basic_one_char_string_var.bas $(TESTTMP)/test_basic_ocs_$$arch >/dev/null; \
+	    ./$(COMPILER) --target=$$arch $$xf test/test_basic_one_char_string_var.bas $(TESTTMP)/test_basic_ocs_$$arch >/dev/null; \
 	    tools/expect_same.sh $$arch/test_basic_ocs_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_ocs_$$arch)" "$$(printf 'x\nhello\ny\n5')" \
 	      || { echo "cross .bas one-char string var FAIL on $$arch"; exit 1; }; \
 	    echo "cross .bas ok: $$arch"; \
 	  done; \
 	else \
-	  echo "=== test-core: qemu-user not present, skipping cross .bas ==="; \
+	  echo "=== test-core: a qemu-user runner is absent (need aarch64 arm riscv32 xtensa), skipping cross .bas -- SKIP, not a pass ==="; \
 	fi
 	# TObject virtual Destroy/Create override: FPC's universal `destructor Destroy; override;` compiles on a root class + dispatches; inherited Destroy/Create = root no-op
 	./$(COMPILER) test/test_tobject_destroy_override.pas $(TESTTMP)/test_tobject_destroy_override26

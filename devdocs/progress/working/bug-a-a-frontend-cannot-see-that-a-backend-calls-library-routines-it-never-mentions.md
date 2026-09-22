@@ -2,8 +2,8 @@
 track: A
 prio: 45
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankb-8e
 created: 2026-09-06
 found-by: frankA
 tags: [cross-target, riscv32, aarch64, arm32, frontends, builtinheap]
