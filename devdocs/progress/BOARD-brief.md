@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:18 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:173 backlog-nilpy:186 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3917 rejected:87`
+`working:34 unfinished:18 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:173 backlog-nilpy:186 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3918 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-dce-breaks-every-c-program-on-every-cross-target` [A] — owner: frankb-8e
-- `bug-a-dce-refuses-every-target-except-x86-64` [A] — owner: frankb-8e
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB

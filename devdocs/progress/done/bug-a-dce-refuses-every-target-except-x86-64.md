@@ -4,7 +4,7 @@ title: "`--dce` refuses every target except x86-64, so no cross target can strip
 track: A
 prio: 70
 type: bug
-status: working
+status: done
 created: 2026-09-18
 owner: frankb-8e
 summary: "FIVE OF SIX TARGETS DONE, and arm32/aarch64 needed NO WORK -- the REMAINING list below was stale when it was written (re-measured 2026-09-19, frankS). x86-64, riscv32, i386 and xtensa (both ABIs) as before, plus **arm32 and aarch64**: dce.inc's refusal gate never mentioned either of them -- it refuses wasm32, --shared, -g, a non-wired frontend and an .asm entry override, and nothing else -- so `--dce` was already running on both. What the list asked for ("each needs only its hand-built `SigInstallAddr` branch recorded") had ALREADY LANDED as the 2026-09-18 linkReg work in PatchCodeRefSlot, whose own comment records the exact failure: arm32 `hello` installing SIGINT and then taking SIGSEGV at si_addr=NULL because B was patched where BL was meant. VERIFIED BY RUNNING, which is the standard this ticket sets for itself: five fixtures per target, stdout and exit code identical with and without the pass (arm32 246072->37176 on hello, -85%; aarch64 200968->69896, -65%), plus lib_signals_fpc -- which INSTALLS a handler, RAISES SIGUSR1/SIGUSR2 and dispatches through the trampoline, so the signal path the list named is the one actually exercised rather than merely linked. REMAINING: wasm32 alone (genuinely different -- function indices, not displacements). ALSO CORRECTED: dce.inc's own comment said \"Xtensa is the one still refused\" three lines above a refusal list that does not contain xtensa -- stale prose against correct code, fixed here. AND A SEPARATE DEFECT FELL OUT OF THE VERIFICATION, fixed and not merely filed: the xtensa signal stub never stored BSS_SIG_NUM (five backends did, xtensa did not), so __pxxSigNum answered 0, 0 failed the trampoline's bounds check, and every delivery was dropped SILENTLY -- see the logbook entry for 2026-09-19. Owner directive, 2026-09-17: \"strip code and associated data where possible.\" Measured wins: riscv32 880020B->198572B, i386 456290B->86626B, xtensa call0 694520B->161840B / windowed 613087B->140323B."
@@ -467,3 +467,6 @@ retried: the wasm harness reaches bodies by export NAME, and `--dce` correctly
 drops an export nothing reaches. That is correct behaviour, not a defect, and
 it would arrive as a pile of harness failures in a tier being read as evidence
 about the pass. Recorded on the promotion ticket by frankh-c0.
+
+## Log
+- 2026-09-22 — resolved, commit d3c8320da.
