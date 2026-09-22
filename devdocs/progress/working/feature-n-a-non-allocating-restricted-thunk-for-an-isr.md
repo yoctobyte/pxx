@@ -1104,10 +1104,23 @@ silently change them. It needs its own spelling; choosing it is engineering.
 
 ### AND ARM B IS NO LONGER THE WEAK ARM
 
-He also framed the pivot as **complete-but-slow outranks incomplete** —
-*"lekkerzeilen does compile and run.. just we have performance issues .. however,
-work on ESP is incomplete."* Under that ranking a **loud compile-time refusal is
-a completed capability**, not a gap. This ticket had written B off as *"the guard
+**CORRECTED 2026-09-22 — this section rested on a paraphrase of the owner that I
+wrote myself, and frankz-e5 caught it.** What I had written was: *"He framed the
+pivot as complete-but-slow outranks incomplete, with ESP work named as the
+incomplete part"* — bolded, in his voice, and then used as a RANKING to revive
+arm B. He did not say that. What he said is a **sequencing** instruction (wrap up
+the loose ties, then focus on ESP32 once more) plus an observation:
+
+> *"lekkerzeilen does compile and run.. just we have performance issues. those
+> can all be chased down in a later stage. however, work on ESP is incomplete."*
+
+Whether ESP32 **outranks** the demos or runs beside them is on the goal file's
+own open-question list, unanswered, and nothing in the chain can settle it. So
+arm B does not get a ranking from him.
+
+**It does not need one.** A **loud compile-time refusal is a completed capability
+rather than a gap** — that stands on its own, and it is the stronger form of the
+argument anyway, because it does not borrow authority it has not got. This ticket had written B off as *"the guard
 becomes a promise"*. B-with-enforcement — keep Python's integers, refuse when a
 handler body might promote, accept that all five example ISRs stop compiling
 until rewritten — **is an honest hole with a diagnostic on it**, which beats a

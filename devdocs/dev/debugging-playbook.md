@@ -39569,6 +39569,58 @@ different disguise**: there the tell is a word like *always*, *cannot*,
 *either way* — words that announce their own scope. Here the tell is a word
 that sounds like colour.
 
+
+### AND THE UNAUDITED VOICE IS YOUR OWN — A PARAPHRASE OF SOMEONE ELSE ARRIVES ALREADY SOUNDING LIKE SOMETHING THEY SAID
+
+Measured 2026-09-22, caught by `frankz-e5` in `f35b44b8b`, my own commit.
+
+The section above is about a provenance claim only the subject can check. This
+is the sharper case, because there is **nothing to check against** — the claim is
+manufactured in the writing.
+
+Handling the owner's words on the ESP32 pivot, I did two things in one commit:
+
+- A **quote** he had actually sent about bigint was interrogated carefully. I
+  established it was *language-scoped* while the fork in front of me was
+  *thunk-scoped*, concluded no amount of careful reading makes one answer the
+  other, and withdrew my own recommendation on the strength of it. That is the
+  scope test applied correctly to a hard case.
+- A **paraphrase I wrote myself** — *"He framed the pivot as complete-but-slow
+  outranks incomplete"* — went in bolded, unquoted, in his voice, and was then
+  used as a **ranking** to revive a design arm. It appeared three times in the
+  commit, once as the named principle *"Complete-outranks-incomplete"*. He had
+  said no such thing: his words were a **sequencing** instruction (wrap up the
+  loose ties, then ESP32 again). Whether ESP32 outranks the demos is an open
+  question in the goal file that nobody in the chain can settle.
+
+**Both directions of one class, in one commit, and the harder one came out
+right.** e5's mechanism for why:
+
+> *A quote arrives marked as somebody else's and gets interrogated; a paraphrase
+> arrives in your own voice already sounding like something he said, and that is
+> the one voice nobody audits.*
+
+Two things make it worse than an ordinary misquote:
+
+- **A paraphrase acquires a NAME.** Mine became `Complete-outranks-incomplete`,
+  hyphenated, and a named principle gets cited rather than re-derived. That is
+  CLAUDE.md's "the name is not the thing" arriving in one's own prose, where the
+  80%-accurate name is one you minted.
+- **It launders authority in the direction you already wanted.** The paraphrase
+  did not revive a random arm; it revived the one I was arguing for. A quote that
+  cut against me would have been re-read.
+
+Discharge, and it is cheaper than the grep above: **if a sentence attributes a
+position to someone, it carries their words in quotation marks or it does not
+carry their authority.** Where the quote does not support the weight, say what
+the argument rests on instead — here, *a loud compile-time refusal is a completed
+capability rather than a gap*, which needed no ranking from him and was the
+stronger form anyway.
+
+And the tell for finding these after the fact: **look for your own bolded
+abstractions of someone else's sentence.** Bolding a phrase you coined is the
+act of converting a reading into a principle.
+
 ## THE EMITTED RUNTIME AND `lib/rtl` ARE INSIDE THE SELF-HOST PROOF'S OWN SOURCE SET — SO A LIBRARY EDIT REDS THE FIXEDPOINT GATE, CORRECTLY
 
 **Reported by `franks-5b` 2026-09-22 and re-derived here at HEAD rather than
