@@ -798,8 +798,13 @@ begin
   { --shared only. `-c` used to be refused beside it on the premise that an
     object "carries its own code-offset relocations"; it does, and every table
     those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,
-    DynCall, CodeRef and Procs[].BodyAddr -- is one this pass already compacts
-    and re-patches below, because an ET_EXEC image reads the same tables. The
+    DynCall, IramCallFix, CodeRef and Procs[].BodyAddr -- is one this pass
+    already compacts and re-patches below, because an ET_EXEC image reads the
+    same tables. IramCallFix WAS MISSING FROM THIS LIST UNTIL 2026-09-22 and
+    from the pass entirely, and the sentence claims completeness, so it read as
+    the evidence for the very decision it was wrong about; the compaction loop
+    below now exists and carries what that cost. An enumeration that asserts
+    "every table" is a census, and this one omitted a member. The
     half that was genuinely missing was not a relocation at all: it was the ROOT
     SET. An executable is rooted at its entry point, and an object's callers are
     outside it, so rooting an object the same way drops its entire reason to
@@ -1250,6 +1255,44 @@ begin
     Inc(i);
   end;
   CallFixCount := j;
+
+  { IramCallFix, and it is the FIFTH instance of this family's one omission --
+    found 2026-09-22 by grepping dce.inc for the sibling after the pass made
+    GNU ld segfault. Until this loop existed, `IramCallFix` appeared EXACTLY
+    ONCE in this file: the DceMark at the top, which roots an iram callee. The
+    array was marked and never compacted, so every entry kept its PRE-removal
+    CodePos.
+
+    What that costs is not a wrong value, it is a MALFORMED OBJECT. elfwriter
+    splits these entries by `CodePosToIramOff(CodePos)`: >= 0 goes to
+    .rela.iram1.text with the remapped offset, < 0 goes to .rela.text with the
+    CodePos verbatim. A stale CodePos misses the iram map, so the entry falls
+    into the .rela.text arm and is written at an offset from the OLD layout.
+    Measured on test/esp_obj_rodata_iram.pas, riscv32, --emit-obj --platform=esp:
+    two .rela.text entries at 0x3fd68 and 0x3fe74 against a .text of 0x8788 --
+    both inside the pre-DCE 0x3ff70 -- and the .rela.iram1.text entry that
+    should have relocated the PXXStrDecRef call at iram offset 0x50 simply
+    absent. GNU ld applies the first out-of-range entry and dies:
+    `collect2: fatal error: ld terminated with signal 11`.
+
+    THE SIZE FIELD AGREES WITH THE CONTENT, so nothing downstream can notice:
+    the writer counts these entries with the same predicate it later writes
+    them with (elfwriter.inc, relaIramCount/relaTextCount), so the section
+    header is honest about a set of relocations that is wrong.
+    bug-a-dce-under-emit-obj-emits-an-esp-iram-object-that-segfaults-the-linker }
+  j := 0;
+  i := 0;
+  while i < IramCallFixCount do
+  begin
+    if not DceIsRemoved(IramCallFix[i].CodePos) then
+    begin
+      IramCallFix[j].CodePos := DceNewOff(IramCallFix[i].CodePos);
+      IramCallFix[j].ProcIdx := IramCallFix[i].ProcIdx;
+      Inc(j);
+    end;
+    Inc(i);
+  end;
+  IramCallFixCount := j;
 
   j := 0;
   i := 0;
