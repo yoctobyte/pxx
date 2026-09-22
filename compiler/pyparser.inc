@@ -513,6 +513,20 @@ var
   PyEnclUp: array[0..PY_ENCL_MAX - 1] of Integer;
   PyEnclDisagreements: Integer;   { -dPXX_ENCL_CROSSCHECK only }
 
+  { Value-use candidate table. Every position in [0, MainProgramTokCount) that
+    could be a value use of SOME name -- the question PyDefUsedAsValue used to
+    answer by walking the whole token array once per definition, which crossed
+    every imported module's tokens (measured 2026-09-22: 200.0M token visits on
+    a 400-function imported arm against 10.9M inline, same call count).
+    Rebuilt when MainProgramTokCount moves, which is once per import, never per
+    def. }
+  PyDValN: Integer;
+  PyDValBuilt: Integer;      { MainProgramTokCount the table was built at; -1 = never }
+  PyDValOverflow: Boolean;   { capacity exceeded: use the scan }
+  PyDValTok: array[0..PY_DVAL_MAX - 1] of Integer;   { ascending }
+  PyDValKind: array[0..PY_DVAL_MAX - 1] of Byte;     { 1 = bare, 2 = dot candidate }
+  PyDValDisagreements: Integer;   { -dPXX_DVAL_CROSSCHECK only }
+
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
   upward-compatibility rule for a construct that carries no run-time meaning;
@@ -37174,6 +37188,199 @@ begin
     end;
 end;
 
+function PyDValKindAt(j: Integer; inImport: Boolean): Integer;
+{ THE ONE PREDICATE: what kind of value use, if any, Tokens[j] is -- asked
+  WITHOUT reference to any particular name.
+
+  That independence is the whole reason the whole-stream scan below can become
+  a table. Every condition here is about token j's NEIGHBOURS; the only part of
+  the original scan that mentioned `nm` was the name comparison itself. So the
+  set of candidate positions is the same for every def in the compilation, and
+  computing it once per stream instead of once per definition is a change of
+  cost and not of meaning.
+
+  Both the scan and the table builder call this. That is deliberate and it is
+  the point: a predicate spelled twice is the failure the handbook names --
+  a fix lands on one arm and its sibling keeps the bug, and no test
+  distinguishes them because both spellings mean the same thing to whoever
+  wrote the source.
+
+    0  not a value use
+    1  BARE value use -- decided entirely by neighbours, final
+    2  DOT candidate -- `base.nm` whose neighbours qualify. Whether `base` is a
+       MODULE is a question about the import alias table, NOT about the token
+       stream, so it is deliberately NOT answered here. See PyDValDotQualifies. }
+begin
+  Result := 0;
+  if inImport then Exit;
+  if Tokens[j].Kind <> tkIdent then Exit;
+  if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
+          ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
+          ((j > 0) and (Tokens[j - 1].Kind = tkFunction))) then
+  begin
+    Result := 1;
+    Exit;
+  end;
+  if ((j + 1 >= MainProgramTokCount) or
+      (not (Tokens[j + 1].Kind in [tkLParen, tkAssign]))) and
+     (j >= 2) and (Tokens[j - 1].Kind = tkDot) and
+     (Tokens[j - 2].Kind = tkIdent) then
+    Result := 2;
+end;
+
+function PyDValDotQualifies(j: Integer; const nm: AnsiString): Boolean;
+  { A MODULE-QUALIFIED value read is the SAME use, spelled with a dot:
+    `via(flat3.r_list)`, `cb = mod.run`, `handlers[k] = mod.on_key`. The dot
+    exclusion above is right about `self.items` and wrong about this, and
+    that is where a NilPy def whose result is a CONTAINER lost its value:
+    the def kept its concrete `TPyList` return, the `{code, recv}` pair
+    called it through a Variant-returning pointer, and the caller read a
+    16-byte Variant out of a hidden destination the callee never wrote.
+    Measured 2026-09-13 at 913d666f0, one module reached two ways:
+
+      from flat3 import r_list; via(r_list)     [7, 8, 9]
+      import flat3;             via(flat3.r_list)   an EMPTY LINE, rc=0
+
+    and per RETURN kind through the qualified spelling: int, str, float and
+    a def inferring a Variant (`return [..] or return 5`) were all correct,
+    while list, tuple, dict and bytes printed NOTHING and a class instance
+    answered `AttributeError: 'int' object has no attribute 'v'`. Silent
+    wrong values, and the scalar kinds only worked because
+    PyMakeFuncValueFor's wrapper adapts a SCALAR return and declines a class
+    one -- so the working half was carrying a different mechanism.
+
+    The BOUND-METHOD road has always had this: PyMethodUsedAsValue counts
+    exactly the dot form, keyed on the name alone, and `b.fresh` returning a
+    fresh list and `b.alias` returning `self.items` are both correct through
+    a callable value today. This is that same trigger for a plain def, and
+    normalisation rather than a wrapper is deliberately the fix: the boxing
+    then happens INSIDE the callee through the ordinary `return` coercion,
+    where the compiler knows whether the reference is fresh or an alias --
+    which a synthesized wrapper does not, and which is the recorded ARC gap
+    that made PyGetOrMakeCallableWrapper refuse a class result in the first
+    place.
+    bug-n-a-module-qualified-def-returning-a-container-is-broken-as-a-value }
+
+{ ASKED AT LOOKUP TIME, NEVER AT BUILD TIME, and that is a correctness
+  requirement rather than a preference. PyModuleQualifier reads the import
+  alias table, which GROWS as import statements are parsed. The scan this
+  replaces ran at def-parse time and therefore saw the aliases known at that
+  moment. A table built once at first call would freeze that answer earlier and
+  silently change the verdict for a `mod.run` value read whose module is
+  imported after the def -- and the failure mode here is not a diagnostic, it
+  is the wrong calling convention and a wrong value. So the POSITIONS are
+  precomputed and the QUALIFIER question is still asked when it was always
+  asked. }
+begin
+  if PxxDbgEnabled('n.dval') then
+    WriteLn('PXXDBG n.dval   dot-read of ', nm, ' base=', GetTokenStr(j - 2),
+            ' modqual=', PyModuleQualifier(GetTokenStr(j - 2)));
+  Result := PyModuleQualifier(GetTokenStr(j - 2));
+end;
+
+function PyDefUsedAsValueByScan(const nm: AnsiString): Boolean;
+{ The original whole-stream scan, kept as the fallback and as the ORACLE the
+  table is checked against under -dPXX_DVAL_CROSSCHECK. It walks [0,
+  MainProgramTokCount) per call; see PyDefUsedAsValue for why that is the cost
+  being removed. }
+var j: Integer;
+    atStmtStart, inImport: Boolean;
+begin
+  Result := False;
+  j := 0;
+  atStmtStart := True;
+  inImport := False;
+  while j < MainProgramTokCount do
+  begin
+    if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+    begin
+      atStmtStart := True;
+      inImport := False;
+    end
+    else if atStmtStart then
+    begin
+      inImport := (Tokens[j].Kind = tkUses) or
+                  ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
+      atStmtStart := False;
+    end;
+    if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, nm) then
+      case PyDValKindAt(j, inImport) of
+        1: begin Result := True; Exit; end;
+        2: if PyDValDotQualifies(j, nm) then
+           begin Result := True; Exit; end;
+      end;
+    Inc(j);
+  end;
+end;
+
+procedure PyBuildDValTable;
+{ One forward pass recording every position that COULD be a value use of some
+  name. The per-definition question then reads this list instead of the token
+  stream.
+
+  Rebuilt when MainProgramTokCount moves -- which is once per import, never per
+  definition -- exactly as PyBuildEnclTable keys on TokCount. }
+var j, k: Integer;
+    atStmtStart, inImport: Boolean;
+begin
+  PyDValN := 0; PyDValOverflow := False;
+  j := 0;
+  atStmtStart := True;
+  inImport := False;
+  while j < MainProgramTokCount do
+  begin
+    if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+    begin
+      atStmtStart := True;
+      inImport := False;
+    end
+    else if atStmtStart then
+    begin
+      inImport := (Tokens[j].Kind = tkUses) or
+                  ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
+      atStmtStart := False;
+    end;
+    k := PyDValKindAt(j, inImport);
+    if k <> 0 then
+    begin
+      if PyDValN >= PY_DVAL_MAX then
+      begin
+        PyDValOverflow := True;
+        Break;
+      end;
+      PyDValTok[PyDValN] := j;
+{$IFDEF PXX_DVAL_BREAK}
+      PyDValKind[PyDValN] := 0;   { POSITIVE CONTROL: deliberately wrong, so a
+                                    crosscheck run that reports ZERO
+                                    disagreements is proof of a dead
+                                    instrument rather than of a correct table }
+{$ELSE}
+      PyDValKind[PyDValN] := k;
+{$ENDIF}
+      Inc(PyDValN);
+    end;
+    Inc(j);
+  end;
+  PyDValBuilt := MainProgramTokCount;
+end;
+
+function PyDValLookup(const nm: AnsiString): Boolean;
+{ Ascending token order, same as the scan -- so the FIRST qualifying position
+  is the same one the scan would have found. For a Boolean result that does not
+  matter; it matters for which dot-read PyDValDotQualifies is asked about, and
+  therefore for what -dPXX_DVAL debug output says. }
+var m: Integer;
+begin
+  Result := False;
+  for m := 0 to PyDValN - 1 do
+    if TokenCaseEqual(PyDValTok[m], nm) then
+      case PyDValKind[m] of
+        1: begin Result := True; Exit; end;
+        2: if PyDValDotQualifies(PyDValTok[m], nm) then
+           begin Result := True; Exit; end;
+      end;
+end;
+
 function PyDefUsedAsValue(const nm: AnsiString): Boolean;
 { True iff the module mentions `nm` as a VALUE (a bare name that is not being
   called and is not the `def` line or an attribute) — i.e. the routine is
@@ -37199,93 +37406,54 @@ function PyDefUsedAsValue(const nm: AnsiString): Boolean;
   indirect call site expected a register result — the callee then wrote its
   variant through whatever the caller happened to leave in the destination
   register. See bug-nilpy-callable-return-abi-mismatch. }
-var j: Integer;
-    atStmtStart, inImport: Boolean;
+
+{ COST, and why this is a table and not a memo. The scan walks [0,
+  MainProgramTokCount) and only exits early when it FINDS something, so a MISS
+  -- the common answer -- pays the whole stream. It is called from
+  PyParseDefHeader, i.e. once per definition per pass. Measured 2026-09-22 on
+  a 400-function synthetic, identical call counts on both arms (800 calls, two
+  passes per def):
+
+      inline    width  13,611 tokens    10.9M token visits
+      imported  width 250,059 tokens   200.0M token visits   18.4x
+
+  The import does not make the routine run more often; it makes every run
+  wider, because an import APPENDS its module to the shared token array and
+  this scan starts at 0. On that synthetic the module's own tokens began at
+  236,458, so ~236k tokens of other modules were walked 800 times to answer a
+  question about 400 names. Third instance of the shape
+  perf-n-an-imported-npy-module-costs-13x-per-function names -- "any routine
+  that scans from 0, or to TokCount, or to MainProgramTokCount, once per
+  definition".
+
+  The scan survives as PyDefUsedAsValueByScan: it is the fallback on overflow
+  and the oracle under -dPXX_DVAL_CROSSCHECK. Three build switches, matching
+  the enclosing-table precedent:
+      -dPXX_DVAL_OFF         table disabled, scan only (measure the ceiling)
+      -dPXX_DVAL_CROSSCHECK  run BOTH, report every disagreement
+      -dPXX_DVAL_BREAK       build a deliberately wrong table (positive
+                             control: proves the crosscheck can fail) }
+var r: Boolean;
 begin
-  Result := False;
-  { PXXDBG=n.dval -- the RANGE this scan can see, which is the thing to print
-    first when a value use is not being found. The window is [PyScanLo,
-    MainProgramTokCount) for the MODULE being parsed, but the scan starts at 0,
-    so a read in an EARLIER-lexed module is in range and a read in a later one is
-    not. It is how the module-qualifier arm below was found to be seeing one
-    import statement out of 224707 tokens. }
   if PxxDbgEnabled('n.dval') then
     WriteLn('PXXDBG n.dval ', nm, ' scanlo=', PyScanLo,
-            ' mainTok=', MainProgramTokCount, ' tokCount=', TokCount);
-  j := 0;
-  atStmtStart := True;
-  inImport := False;
-  while j < MainProgramTokCount do
+            ' mainTok=', MainProgramTokCount, ' tokCount=', TokCount,
+            ' cands=', PyDValN);
+{$IFDEF PXX_DVAL_OFF}
+  r := PyDefUsedAsValueByScan(nm);
+{$ELSE}
+  if PyDValBuilt <> MainProgramTokCount then PyBuildDValTable;
+  if PyDValOverflow then r := PyDefUsedAsValueByScan(nm)
+  else r := PyDValLookup(nm);
+{$ENDIF}
+{$IFDEF PXX_DVAL_CROSSCHECK}
+  if PyDefUsedAsValueByScan(nm) <> r then
   begin
-    if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
-    begin
-      atStmtStart := True;
-      inImport := False;
-    end
-    else if atStmtStart then
-    begin
-      inImport := (Tokens[j].Kind = tkUses) or
-                  ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
-      atStmtStart := False;
-    end;
-    if (not inImport) and
-       (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, nm) then
-    begin
-      if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
-              ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
-              ((j > 0) and (Tokens[j - 1].Kind = tkFunction))) then
-      begin
-        Result := True;
-        Exit;
-      end;
-      { A MODULE-QUALIFIED value read is the SAME use, spelled with a dot:
-        `via(flat3.r_list)`, `cb = mod.run`, `handlers[k] = mod.on_key`. The dot
-        exclusion above is right about `self.items` and wrong about this, and
-        that is where a NilPy def whose result is a CONTAINER lost its value:
-        the def kept its concrete `TPyList` return, the `{code, recv}` pair
-        called it through a Variant-returning pointer, and the caller read a
-        16-byte Variant out of a hidden destination the callee never wrote.
-        Measured 2026-09-13 at 913d666f0, one module reached two ways:
-
-          from flat3 import r_list; via(r_list)     [7, 8, 9]
-          import flat3;             via(flat3.r_list)   an EMPTY LINE, rc=0
-
-        and per RETURN kind through the qualified spelling: int, str, float and
-        a def inferring a Variant (`return [..] or return 5`) were all correct,
-        while list, tuple, dict and bytes printed NOTHING and a class instance
-        answered `AttributeError: 'int' object has no attribute 'v'`. Silent
-        wrong values, and the scalar kinds only worked because
-        PyMakeFuncValueFor's wrapper adapts a SCALAR return and declines a class
-        one -- so the working half was carrying a different mechanism.
-
-        The BOUND-METHOD road has always had this: PyMethodUsedAsValue counts
-        exactly the dot form, keyed on the name alone, and `b.fresh` returning a
-        fresh list and `b.alias` returning `self.items` are both correct through
-        a callable value today. This is that same trigger for a plain def, and
-        normalisation rather than a wrapper is deliberately the fix: the boxing
-        then happens INSIDE the callee through the ordinary `return` coercion,
-        where the compiler knows whether the reference is fresh or an alias --
-        which a synthesized wrapper does not, and which is the recorded ARC gap
-        that made PyGetOrMakeCallableWrapper refuse a class result in the first
-        place.
-        bug-n-a-module-qualified-def-returning-a-container-is-broken-as-a-value }
-      if PxxDbgEnabled('n.dval') and (j >= 2) and (Tokens[j - 1].Kind = tkDot) and
-         (Tokens[j - 2].Kind = tkIdent) then
-        WriteLn('PXXDBG n.dval   dot-read of ', nm, ' base=',
-                GetTokenStr(j - 2), ' modqual=',
-                PyModuleQualifier(GetTokenStr(j - 2)));
-      if ((j + 1 >= MainProgramTokCount) or
-          (not (Tokens[j + 1].Kind in [tkLParen, tkAssign]))) and
-         (j >= 2) and (Tokens[j - 1].Kind = tkDot) and
-         (Tokens[j - 2].Kind = tkIdent) and
-         PyModuleQualifier(GetTokenStr(j - 2)) then
-      begin
-        Result := True;
-        Exit;
-      end;
-    end;
-    Inc(j);
+    WriteLn('DVAL-DISAGREE nm=', nm, ' table=', r);
+    PyDValDisagreements := PyDValDisagreements + 1;
   end;
+{$ENDIF}
+  Result := r;
 end;
 
 { Parses `def name(params) [-> ann]:` and leaves the cursor on the first BODY

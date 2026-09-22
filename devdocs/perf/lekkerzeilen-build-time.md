@@ -1138,3 +1138,127 @@ the number it has to beat.**
 Harness: `scratchpad/importcost.sh` (generates the 100/200/400 cases and
 interleaves the arms); it is scratch, not committed — the method above is the
 artefact, and it reproduces in about two minutes.
+
+---
+
+# THIRD INSTANCE OF THE SHAPE: PyDefUsedAsValue, 2026-09-22
+
+The section above said the two scans found by reading a profile were **not** the
+population, and named the thing to grep for: *any routine that scans from 0, or
+to `TokCount`, or to `MainProgramTokCount`, once per definition.* Censused
+rather than profiled, and there is a third.
+
+## The census, and what set it actually enumerates
+
+Loops in `compiler/pyparser.inc` that **start at 0/1 AND are bounded by
+`TokCount`/`MainProgramTokCount`** — four hits, three routines:
+
+| routine | verdict |
+| --- | --- |
+| `ParsePyProgram` (×2) | benign — runs once per program, not per definition |
+| `PyBuildEnclTable` | benign — it IS the one-forward-pass fix from `ffe476877` |
+| **`PyDefUsedAsValue`** | **live: called from `PyParseDefHeader`, once per def per pass** |
+
+Note what this census can and cannot see. `< TokCount` alone matches **330**
+sites, almost all ordinary cursor advance; the discriminating property is
+*starts at zero*, not *mentions the bound*. A scan bounded by a saved copy of
+the count, or by `Length(Tokens)`, is outside this set and was not looked for.
+
+## The measurement
+
+`PyDefUsedAsValue` only exits early when it **finds** a value use, so a MISS —
+the common answer — pays the whole stream. Via its own `PXXDBG=n.dval`:
+
+| arm | fns | calls | scan width | token visits |
+| --- | ---: | ---: | ---: | ---: |
+| inline | 400 | 800 | 13,611 | 10.9M |
+| imported | 400 | 800 | 250,059 | **200.0M** |
+
+**Identical call counts** (800 = 400 defs × two passes). The import does not
+make the routine run more often — it makes every run **18.4× wider**, because
+an import appends its module to the shared token array and this scan starts at
+0. On that synthetic the module's own tokens began at **236,458**, so ~236k
+tokens of *other* modules were walked 800 times to answer a question about 400
+names.
+
+## The fix, and the one thing that made it safe
+
+One forward pass records every position that could be a value use of *some*
+name; the per-def question reads that list. It is sound because **the predicate
+is name-independent** — every condition in both arms is about the token's
+*neighbours*, and the only mention of `nm` in the original was the name
+comparison itself.
+
+Three things deliberately kept:
+
+- **One predicate, `PyDValKindAt`**, called by both the scan and the builder, so
+  the two cannot drift into the two-spellings failure where a fix lands on one
+  arm and its sibling keeps the bug.
+- **`PyModuleQualifier` is still asked at LOOKUP time, never at build time.** It
+  reads the import alias table, which grows as imports are parsed; freezing its
+  answer at first call would change the verdict for a `mod.run` read whose
+  module is imported after the def. The *positions* are precomputed; the
+  qualifier question is asked when it always was.
+- **The scan survives** as `PyDefUsedAsValueByScan` — the overflow fallback and
+  the crosscheck oracle.
+
+## Verification: the crosscheck, with its positive control run FIRST
+
+`-dPXX_DVAL_CROSSCHECK` runs both and reports every disagreement;
+`-dPXX_DVAL_BREAK` builds a deliberately wrong table. Same instrument, same 223
+compiling tests:
+
+    -dPXX_DVAL_BREAK -dPXX_DVAL_CROSSCHECK   368 disagreements across 55 files
+    -dPXX_DVAL_CROSSCHECK                      0 disagreements across  0 files
+
+The control ran first on purpose: a crosscheck reporting zero is worth nothing
+until it has been seen to report nonzero. **55 of 223 files exercise this path**,
+so the aperture is real and not token. Separately, the 224-test value/Callable
+corpus is byte-identical to `.expected` before and after (223 ok, one test
+needing an `-Fu` root my runner lacks, constant on both sides).
+
+## What it bought
+
+Interleaved min-of-3, **same tree, one define apart** — so the delta is this
+change and nothing else that landed today. `8fa4f357ac2c` (table) against
+`a311328d2637` (`-dPXX_DVAL_OFF`), load 4.3-4.9:
+
+| case | ON (table) | OFF (scan) | |
+| --- | ---: | ---: | --- |
+| inline_100 | 2.273 | 2.200 | 0.97x |
+| inline_200 | 2.419 | 2.408 | 1.00x |
+| inline_400 | 2.777 | 2.855 | 1.03x |
+| main_100 | 2.568 | 3.133 | 1.22x |
+| main_200 | 3.096 | 4.305 | 1.39x |
+| **main_400** | **4.476** | **6.707** | **1.50x** |
+
+**The inline rows are the control and I did not have to build them** — no import
+closure, nothing for the table to save, and they sit flat at 0.97-1.03x. The
+imported rows grow with size, which is what removing a cost that scales with
+(defs x closure) looks like.
+
+Per function off the 100->400 span **within this one run**: OFF **5.46x**, ON
+**3.79x**. The OFF arm's 5.46x against this morning's 6.2x for the pre-change
+compiler is the cross-check that the harness measures the same thing; the two
+differ by load and are not subtracted.
+
+## Two levers left, both unbuilt, and the bigger one needs an argument first
+
+**Candidate density is 25.5%** — 63,820 positions of 250,059 tokens, no overflow
+at `PY_DVAL_MAX = 262144`. So the per-def walk fell 250,059 -> 63,820, a 3.9x
+cut in positions and 1.50x in wall clock. What is left:
+
+1. **The table still spans the builtin preamble.** ~236k of those 250k tokens
+   are planted builtin modules, and the candidates in them can only match a
+   user def name by coincidence. Starting at the first non-builtin token would
+   be worth far more than this change was. **It is not obviously safe** — the
+   routine's own comment records why narrowing to the current unit is wrong
+   (a def defined in a module and passed as a value by the main program is the
+   genuine case), so this needs the argument made properly, not a bound
+   changed.
+2. **A per-name memo.** 800 calls answer ~400 distinct names, two passes per
+   def, and there is no memo at all today. Keyed on (name, MainProgramTokCount)
+   it is worth up to 2x on top, and it is the cheap one.
+
+Neither is done. The ticket's structural one-pass parser remains a separate and
+larger question than either.

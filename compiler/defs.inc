@@ -1701,6 +1701,14 @@ const
   PY_PSMEMO_MAX = 8192;   { PyParamTypeFromSites memo entries }
   PY_ENCL_MAX   = 32768;  { enclosing-construct table entries (class/def tokens) }
   PY_ENCL_DEPTH = 256;    { nesting depth the table's build stack holds }
+  PY_DVAL_MAX   = 262144; { candidate value-use positions PyBuildDValTable holds.
+                            Sized for the whole import closure, not one module:
+                            the table spans [0, MainProgramTokCount), which is
+                            every planted module, and a NilPy program that
+                            imports anything at all already carries ~236k tokens
+                            of preamble. On overflow the table stands down and
+                            PyDefUsedAsValueByScan answers, so an undersized
+                            value is slow and never wrong. }
   PY_PS_HDR_MAX = 64;     { PyParamTypeFromSites: parameters per def it can attribute sites by arity for }
   { `Assigned(x)` desugars at PARSE time into the SAME `x <> 0` AN_BINOP that
     `x <> nil` produces — but FPC treats the two OPPOSITELY for a procedural

@@ -107,3 +107,35 @@ the same program modulo the import, which is what the comparison needs.
 **What would retire the remainder:** the parser scans are still O(tokens) per
 definition — only each step got cheaper — so the structural one-pass version
 is the open work, and this 6.2x is the number it has to beat.
+
+## 2026-09-22 — the shape was censused and there IS a third instance
+
+This ticket said, in its own words, *"there is no reason to believe two is the
+population."* Censused rather than profiled: loops in `pyparser.inc` that
+**start at 0/1 and are bounded by `TokCount`/`MainProgramTokCount`** — four
+hits in three routines. Two are benign (`ParsePyProgram` runs once per program;
+`PyBuildEnclTable` IS the one-pass fix). The third is **`PyDefUsedAsValue`**,
+called from `PyParseDefHeader` once per definition per pass, and it only exits
+early when it FINDS something, so the common answer pays the whole stream.
+
+    arm       fns  calls  width    token visits
+    inline    400  800     13,611   10.9M
+    imported  400  800    250,059  200.0M      18.4x, identical call count
+
+Fixed by the same transformation `ffe476877` applied twice: a one-pass
+candidate table. Sound because the predicate is **name-independent** — every
+condition is about a token's neighbours. Verified with a crosscheck against the
+scan it replaces: **0 disagreements, from an instrument shown to report 368
+across 55 files on a deliberately broken table**, plus the 224-test
+value/Callable corpus byte-identical to `.expected` on both sides.
+
+**Worth 1.50x on the 400-function imported arm** (interleaved min-of-3, same
+tree, one define apart). The inline arms sit at 0.97-1.03x — a control that
+came free, and the reason the win is attributable to the import closure rather
+than to load. Full write-up, both levers left, and the numbers with their
+conditions: `devdocs/perf/lekkerzeilen-build-time.md`.
+
+**This does NOT close the ticket and the census does not retire the warning.**
+The census is blind to a scan bounded by a saved copy of the count or by
+`Length(Tokens)`, and it only covered `pyparser.inc`. Three found is not a
+population either.
