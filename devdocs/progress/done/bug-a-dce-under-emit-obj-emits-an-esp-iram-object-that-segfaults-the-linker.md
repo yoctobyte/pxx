@@ -241,4 +241,4 @@ green, with `skip_holes == 0`. That is the O-lane's PROOF gate and it is
 satisfiable on plexus now that the corpora are installed.
 
 ## Log
-- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9c00efab2.
