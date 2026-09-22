@@ -2,10 +2,10 @@
 prio: 90
 track: C
 type: bug
-status: new
+status: working
 found: 2026-09-22
 found-by: frankh-c0
-owner: ""
+owner: frankh-c0
 blocked-by: []
 summary: "WHETHER A C TRANSLATION UNIT COMPILES TO AN OBJECT ON x86-64 AT HEAD DEPENDS ON WHETHER IT HAPPENS TO CONTAIN A WORD THAT IS A PASCAL KEYWORD. `int f(int x){return x+1;}` fails with `compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point)` pointing into builtinheap.pas, a file the C author never wrote; adding `int string;` -- or a LOCAL variable named `string`, anywhere -- makes the identical file build. Not a coincidence: the C driver gates x86-64 AnsiString-shim emission at cparser.inc:13079 on `DetectPascalRuntimeNeeds`, a PASCAL token pre-scan, run over a C token stream, and `string` lexes as tkString_T through the shared lexer. So the gate answers by accident in BOTH directions and is not measuring anything about the C program. Affects --emit-obj and --shared; a C EXECUTABLE is unaffected. x86-64 only (i386/aarch64/arm32/riscv32 all build the failing file clean), because only there are the shims emitted machine code rather than direct calls into builtinheap. Regression: pinned v418 builds every shape, because before 523833fde the scan answered True unconditionally. Independent of --dce (--no-dce fails identically on the same binary). Breaks `make test-emit-obj`, which dies at test_shared_lib.c -- and the tier's C rows split exactly on this: the four that fail have ZERO #include, the one that passes has one, so the single passing C row was passing ACCIDENTALLY and the tier never had coverage of the real predicate. The Pascal driver enforces the matching invariant (23fcd326f); the C driver is the sibling arm of that same double case and does not. AND THE TIER HAD A DETECTOR THAT DOWNGRADED ITSELF TO A SKIP: tools/reloc_resolve_check.py's x86_64 row AGREES with GNU ld on 250686 bytes of .text and 1641 relocations under the pinned compiler, with 3 of 3 controls reddening it, and at HEAD reports `SKIP -- pxx cannot emit an object here`, so the strongest x86-64 C row in the tier left the run without reddening anything. Its skip is honest about what it could not do and wrong about why, which is the difference between an unsupported target and a broken compiler; the tier asserts the supported-target list two rows earlier, so the discriminator is available where the skip is taken. MECHANISM traced and controlled, CAUSE NOT BISECTED -- 523833fde is the suspect on three grounds but its parent was never built."
 ---

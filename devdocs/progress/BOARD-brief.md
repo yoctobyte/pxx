@@ -5,12 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:35 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:170 backlog-nilpy:184 backlog-tools:70 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3932 rejected:87`
+`working:36 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:170 backlog-nilpy:184 backlog-tools:70 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3932 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-c-a-c-file-compiles-to-an-object-only-if-it-happens-to-contain-a-pascal-keyword` [C] — owner: frankh-c0
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
@@ -44,10 +45,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
-
-## urgent (1) — jump the queue
-
-- `bug-c-a-c-file-compiles-to-an-object-only-if-it-happens-to-contain-a-pascal-keyword` [C]
 
 ## unfinished (18) — parked mid-flight; re-claim, do not duplicate
 
@@ -83,9 +80,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 573, ranked
+## Ready — top 30 of 572, ranked
 
-- `[p 90] [C]` bug-c-a-c-file-compiles-to-an-object-only-if-it-happens-to-contain-a-pascal-keyword
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -115,5 +111,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 1)
 - `[p 70] [N]` bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
+- `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 
-_543 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_542 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
