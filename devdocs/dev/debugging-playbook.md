@@ -38638,3 +38638,65 @@ treatment rather than none**: every `MethodFixups[i].ProcIdx` is a DCE root
 **Each array gets exactly one of the two treatments and the right one.** The
 census cost one grep and returned a clean negative — **and the two live defects
 above fell out of running it anyway.**
+
+## A SELF-IMPLICATING REPORT IS NOT SELF-VERIFYING — HONESTY RECRUITS THE READER'S TRUST EXACTLY LIKE CAUTION DOES
+
+**Measured 2026-09-22, `frankb-8e`, retracted by its author after `frankh-c0`
+caught it in the message rather than in the code.**
+
+CLAUDE.md's rule is *hedge the premise, not just the inference*: a careful-sounding
+caveat on a CONCLUSION makes an unmeasured premise beside it **more** credible.
+**This is the same effect through a different door.** 8e reported a third
+instance of a class and volunteered that the instance was **its own mistake**.
+*"Here is a third instance and it is mine"* reads as scrupulous — **so nothing in
+it invites checking**, which is precisely what a well-hedged conclusion achieves
+through caution.
+
+**THE MISS WAS REPORTED ACCURATELY AND CLASSIFIED WRONGLY, AND THE
+CLASSIFICATION IS WHAT A READER ACTS ON.** The two were not one class.
+`frankS`'s case was generalising from the ONE arm where the choice does not
+exist — riscv32 has a single `CallToCode` helper, so a prescription written from
+it is silently under-specified for xtensa, which has two. 8e's was **not reading
+a note that was already there** (`dce.inc:799`, settled and deliberate).
+Different failure, different remedy: *"say which of the helper's jobs your reason
+covers"* against *"grep before you prescribe."* **Lumping them inflates the
+arity** — the exact thing that seat had been careful about all day, *"and then
+did anyway the moment the instance was my own."*
+
+**So the checks you apply to a claim in your favour do not fire on a claim
+against yourself.** A self-accusation feels like it has already paid its
+evidentiary cost. It has not: **the honesty is about the DISCLOSURE, never about
+the ANALYSIS**, and the analysis is the load-bearing half. Ask of a
+self-implicating report the one question its form suppresses — *is the
+CLASSIFICATION right?* — and note that the author is the least likely to ask it,
+because owning the error feels like the hard part and the hard part is done.
+
+**Count after the retraction: two, both `frankS`-shaped, one lane, one day** —
+which leaves the promotion answer for that class unchanged. **A retraction that
+restores a count to below a threshold is worth more than the instance would have
+been**, and it arrived unprompted.
+
+**Promotion: playbook, not CLAUDE.md** — one instance of this door, and the
+family rule is already there. What would promote it: a self-implicating report
+whose classification is wrong, in a lane this seat is not working.
+
+### And the mirror in the same message: the right conclusion reached by a wrong argument, twice in one day
+
+8e also reversed itself on a wasm carve-out. Its **original ticket sentence was
+right**, its **stated reason for it was wrong**, and its **later argument against
+it was wrong outright** — established by c0 promoting the rule and running
+`test/wasm/check_all.sh` (38 PASS / 7 FAIL / 1 SKIP, six of the seven one shape:
+JS calling `inst.exports.f()` with no pxx caller, which is what a wasm LIBRARY
+is). 8e's one checkable argument — that carving out suppresses an arm that caught
+a real bug — was checked and is **false**: that seventh failure is
+flag-INDEPENDENT, fails at HEAD unflipped, already filed at p45, and was
+established by two independent routes.
+
+**That is the second time in one day for this seat that a correct conclusion
+rested on an unsound derivation** (the first: reaching for the wrong fork test
+and landing on the right verdict). **A conclusion that keeps reading as sound
+applies no pressure to its inputs** — already in this file — and the extension is
+that **being repeatedly RIGHT is itself a mechanism for not re-deriving**, which
+no amount of care about conclusions detects. c0 landed it with a retirement
+condition and a note that on ELF the same pass is export-PRESERVING and must not
+generalise.
