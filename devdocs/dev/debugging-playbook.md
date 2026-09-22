@@ -39639,3 +39639,73 @@ says `skip_holes` cannot express. **Two tickets filed from opposite sides — on
 about an honest exit 0 losing a hole, one about an honest exit 2 gaining a false
 finding — turn out to want the same new state.** Neither seat could see that
 until the false sentence was measured.
+
+## REDUCTION DELETES THIS CLASS OF CAUSE ON ITS FIRST STEP — WHEN A BUG RESISTS MINIMISATION, GROW A PASSING CASE INSTEAD OF SHRINKING THE FAILING ONE
+
+**Measured 2026-09-22 by `franks-5b`, finding
+`bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2`:
+a nine-line NilPy program, rc=139 at the DEFAULT `-O2`, on pin v418 and at HEAD.**
+
+```python
+def main():
+    v0 = 0            # written once, never read, never in the loop
+    acc = 0
+    i = 0
+    while i < 3:
+        acc = acc + 1
+        i = i + 1
+    print(acc)
+```
+
+Trigger, 18 variants, order-independent: **exactly three locals of which exactly
+two are `tyPromoInt64`.** Two promo-ints plus zero, two or three others all run
+clean; plus exactly ONE crashes. The third local's type and position are
+irrelevant — `Int64`, `AnsiString` and `Double` all segfault.
+
+**`v0` IS THE TRIGGER AND `v0` IS WHAT EVERY REDUCER DELETES FIRST.** It is
+assigned once, never read, obviously irrelevant. Handed the crashing program cold,
+the first minimisation step removes it, **the crash vanishes, and the reduction
+concludes the bug is in whatever came out next.** A minimiser — automated or
+human — walks past this by construction.
+
+**5b got it only by reducing in the WRONG DIRECTION**: it started from a working
+program and added pieces back, so the dead local arrived as an *addition* and the
+transition was visible. Going the usual way it would have lost the cause on step
+one.
+
+**THIS IS DISTINCT FROM THE FIRST-WINS FAMILY AND THE DIFFERENCE IS WHY IT NEEDS
+ITS OWN ENTRY.** "A FIRST-WINS TABLE IS EXPOSED ONLY BY THE ARRANGEMENT THAT PUTS
+THE CORRECT ENTRY LAST" is about **arrangement**: the interesting element is
+present in every fixture anyone writes, sitting where it passes, and the discharge
+is a permutation — move it last, re-run. **This one is about ABSENCE, and no
+permutation reaches it.** You cannot reorder your way to a variable that is not
+there, and you would never add one on purpose: **in a fixture a dead local reads
+as noise and a reviewer asks you to delete it.** It is also not the
+"minimal case pins an axis nobody enumerated" clause — there the reduction keeps a
+real phenomenon and fixes an unlisted variable; **here the reduction removes the
+cause outright and the failure stops reproducing at all.**
+
+**THE GENERAL FORM, in 5b's words: a test suite samples the programs someone wrote
+ON PURPOSE, and real code is full of artefacts nobody wrote on purpose.** Dead
+locals, unused imports, a variable assigned in both branches and read in neither,
+an argument threaded through three frames and dropped. **Near-universal in real
+code and near-absent from fixtures, because a fixture is a minimised artefact and
+minimisation removes exactly them.**
+
+**Discharge: when a defect resists reduction, consider that reduction is removing
+the cause.** Grow a passing case toward the failing one and watch for the
+transition, rather than shrinking the failing one and watching it disappear.
+
+**Found in a BENCHMARK, not a test** — 5b was writing one and real programs have
+dead locals constantly. And its first instinct on the segfault was that its own
+compiler arm was broken; what separated them was that the **stock** compiler,
+byte-identical to `compiler/pascal26`, produced the identical crashing binary.
+That is the pinned-versus-HEAD control, reached under the one condition that makes
+it hard to reach — when the evidence reads like a confession.
+
+**Promotion test, said out loud per CLAUDE.md:** banked here on merit; **not
+promoted to CLAUDE.md**, because this is one subsystem and the bar there is a
+second independent one. 5b supplied the trigger itself and it is falsifiable:
+**it fires again the next time a bug is found in a benchmark or a real program and
+cannot be reproduced in a fixture.** At that point it is two subsystems and the
+argument is about recurrence rather than about how good the finding is.
