@@ -3826,23 +3826,39 @@ begin
             crtl_dd by value, and `sin(2)` SEGFAULTED on all three of
             i386/arm32/aarch64 for the one cause.
             The destination is evaluated LAST, after the argument registers are
-            loaded, so a nested call inside it cannot disturb them; on this arm
+            loaded, which is why the GP bank is saved around it; on this arm
             the args are already in x0..x7 and v0..v7, so x9 (the marshalling
-            scratch) and x8 are the only registers still free.
+            scratch) and x8 are the only registers still free. (The sibling arm
+            further down, which serves pxx's INTERNAL convention, evaluates the
+            destination FIRST and pushes it, and therefore needs no save at
+            all -- two spellings of one concept, and only this one pays.)
             bug-c-a-c-function-s-calling-convention-depends-on-the-target
 
-            THE SAVE BELOW COVERS x0..x7 AND NOT v0..v7, and the sentence above
-            is the one that says why that is a gap: a float argument sits in a
-            d register across the destination evaluation with nothing protecting
-            it. NOT FIXED HERE BECAUSE IT IS NOT REACHABLE TODAY and a codegen
-            change nothing can exercise is a change made on belief -- this arm
-            serves EXTERNALS and Pascal-mode C prototypes only (a bodied C
-            function in C mode takes the internal convention), and an external
-            that returns an aggregate BY VALUE and takes a float is a shape no
-            libc offers, so the probe for it cannot be written yet. The variadic
-            FP bank makes it wider than it was, which is why it is written down
-            rather than left implicit.
-            bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-argument-bank-unsaved }
+            THE SAVE BELOW COVERS x0..x7 AND NOT v0..v7, AND THAT ASYMMETRY IS
+            CORRECT -- it read as a gap for nineteen days because the sentence
+            above describes IRC[node] as something it can never be. Settled
+            2026-09-22 by reading the five sites that construct it: an
+            ABIRetViaHiddenDestProc call's IRC is ALWAYS
+            `IRAppend(IR_LEA, scratchSym, ...)` over a COMPILER-ALLOCATED
+            scratch symbol (IRAppendCall inlines it; IRBuildHiddenDest returns
+            it for the CALL_IND and VIRTUAL paths). It is never the user's
+            destination expression -- `v[idx()] = mk(...)` returns into the
+            scratch and the assignment is a separate copy afterwards -- so
+            "a nested call inside it" is not a shape the IR can hold. An IR_LEA
+            of a sym lowers here to integer address materialisation and touches
+            no v register, which is why x0 (and x9) need saving and d0..d7 do
+            not. Measured against an EXTERNAL of the reaching shape, not read:
+            `extern struct D2 mk(double,double)` with `v[idx()]` as the
+            destination emits this arm (differential on the stp: 1 with the
+            call, 0 without, so it is REACHED and not merely present), the
+            fmovs putting the arguments in d0/d1 sit just above the save
+            window, and the window itself holds only ldr/add/mov -- the nested
+            idx() call is hoisted well before them. A second destination shape
+            (a float computation) emits the identical window. The 2026-09-03
+            probe that filed the ticket used a BODIED C function, which takes
+            the internal convention and never reaches this arm at all, so it
+            established nothing about it either way.
+            bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-argument-bank-unsaved (rejected) }
           if ABIRetViaHiddenDestProc(procIdx) then
           begin
             EmitI32($A9BF07E0);              { stp x0, x1, [sp, #-16]! }

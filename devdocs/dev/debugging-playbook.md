@@ -16859,6 +16859,37 @@ accepts-invalid gap does not materialise, **and the verdict now rests on a measu
 instead of an unreachable one.** Same disposition, different footing, and only the second one
 survives the next person who widens something.
 
+## WHEN A TICKET'S BLOCKER IS REACHABILITY, GROUP IT BY WHAT WOULD REACH IT — not by what it touches
+
+**Proposed by frankuser 2026-09-22 and earned by an instance the same evening.**
+CLAUDE.md already says to work in GROUPS rather than lone tickets, and the
+obvious grouping key is the subsystem a ticket touches. For a ticket parked on
+*nothing can exercise this*, that key is the wrong one: it lands the ticket
+next to neighbours that share its FILE and are already reachable, where it
+will be skipped every time, and it puts distance between it and the only work
+that changes its status.
+
+**The instance.** `feature-a-object-output-for-arm32-and-aarch64` and
+`bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-
+argument-bank-unsaved` share no code and no cause. What they shared was an
+**unblocker**: both were parked because the falsifying program could not be
+constructed, and both dissolved in one evening under one question — *what
+declaration puts a call down this arm?* The feature's ABI gate turned out to be
+already satisfied, and the bug's premise turned out to be false by
+construction. Neither needed the object writer they were both waiting on.
+
+**The distinction worth keeping, because it is what the grouping buys.** A
+shared CAUSE means one fix closes several tickets. A shared UNBLOCKER means one
+*measurement* re-dispositions several tickets, usually in different directions
+— here one cleared and one rejected. The second is cheaper and is invisible to
+every grouping key based on code.
+
+**How to use it:** when you park something on reachability, write down the
+condition that would reach it in words a grep can find (`extern`, `--platform`,
+`a callee whose declaration satisfies X`), and put that sentence in the
+SUMMARY. Then a seat that is about to satisfy it finds the ticket, instead of
+the ticket waiting for someone to re-read it.
+
 ## A FEATURE CAN BE FULLY IMPLEMENTED, CORRECT, AND UNREACHABLE — and the ticket will name the wrong mechanism because reading found the plausible one
 
 Measured 2026-09-06 (frankS, `7fbf608ae`), correcting **its own ticket**.
@@ -27792,6 +27823,73 @@ reports the one you had in mind.
 Related: [A SELF-WRITTEN SUITE IS A MIRROR OF THE IMPLEMENTATION] — that is
 about which constructs a suite never NAMES; this is about a construct the probe
 does name and does not actually exercise.
+
+**A THIRD INSTANCE, 2026-09-22 (frankb-8e), aarch64 codegen, and it is the one
+where the route is a DECLARATION rather than a call shape.** The ticket
+`bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-
+argument-bank-unsaved` probed a C-ABI codegen arm with
+`struct D2 mk(double,double) { ... }` — a **bodied** C function, which
+`CProcUsesCAbi` sends down pxx's internal convention, so it never reaches the
+arm at all. The probe was isolated, minimal, named the construct, and reported
+`correct on native and aarch64`. That verdict was true and about a different
+code path, and it sat in the ticket for nineteen days as *NOT REPRODUCIBLE
+TODAY*. **One word changes the route: `extern`.** With the same call shape and
+an undefined `extern struct D2 mk(double,double)`, the arm is emitted — a
+differential on its signature instruction answers 1 with the call and 0
+without. Nothing needed to link, because the question was what is EMITTED.
+**Where an arm is selected by a predicate over the CALLEE's declaration —
+`ProcExternal`, `CProcUsesCAbi`, a convention flag — the route is chosen at the
+declaration and the call site cannot show you which one you took.** Read the
+selecting predicate and make the declaration satisfy it, then prove reach with
+a presence/absence differential on an instruction only that arm emits.
+
+## AN OPERAND'S PROVENANCE IS THE ONE CLAIM A COMMENT MAKES THAT YOU CANNOT CHECK AT THE SITE — and getting it wrong manufactures a defect that reviews clean
+
+**The shape.** A comment at a codegen site says what an operand *is*:
+"`IRC[node]`, which may contain a nested call", "the user's destination
+expression", "the caller's buffer". Every other claim a comment makes is
+checkable against the twenty lines under it. This one is not: the operand was
+constructed somewhere else entirely, and checking it means leaving the file and
+reading every site that builds it. So it is the claim that gets taken on trust,
+and it is load-bearing — **what an operand can contain is what decides whether
+the code around it is correct.**
+
+**Measured 2026-09-22 (frankb-8e), `ir_codegen_aarch64.inc`.** The direct C-ABI
+call arm saves `x0..x7` and not `v0..v7` around the hidden-destination
+evaluation, and its own comment said the args live in "x0..x7 **and v0..v7**"
+— so the code and the comment disagreed and the comment looked like the correct
+half. A ticket was filed, correctly by its own lights, with a standing
+instruction to add eight FP stores, a 64-byte `sub sp` and a matching restore
+to every aggregate-returning C-ABI call.
+
+**The provenance settles it in the other direction.** `IRC[node]` on a call
+with `ABIRetViaHiddenDestProc` true is set at exactly five places in `ir.inc`,
+and every one sets it to `IRAppend(IR_LEA, scratchSym, ...)` over a symbol
+`AllocVar`/`AllocArray` mints for the purpose — inlined in `IRAppendCall` for
+the direct path, returned by `IRBuildHiddenDest` for the three `IR_CALL_IND`
+sites and the virtual one. The aggregate returns into that scratch and the
+assignment to the user's lvalue is a **separate copy emitted afterwards**. So
+"a nested call inside the destination" is not a state the IR can hold, an
+`IR_LEA` of a sym lowers to a literal load and an `add` against x29, and the
+absent FP save is correct. The disassembly agrees — the window holds three
+integer instructions — but two destination shapes are a sample and the five
+construction sites are the reason.
+
+**Why it survives review.** Nothing is inconsistent. The code is right, the
+comment is grammatical and specific, and a reviewer who checks the comment
+against the code finds exactly the disagreement it describes. The only thing
+that refutes it is a grep for the operand's constructors, which nobody runs
+because the comment already told you what the operand is. **A comment that
+mis-describes an operand's provenance does not go stale — it was never true,
+and it generates work rather than blocking it**, which is the direction that
+produces no signal.
+
+**The discharge, and it is one grep.** When a comment tells you what an operand
+CAN BE, and something downstream depends on that, go find every site that
+assigns it and read what they put there. Name the count in the comment —
+"set at five sites, all `IR_LEA` of a compiler scratch sym" — so the next
+reader's check is `grep -c`, and so the sentence goes red if a sixth appears.
+State the constructor, never the possibility.
 
 ## TWO PREDICATES FOR ONE CONCEPT, AND THE INCOMPLETE ONE IS WIRED INTO THE HOT PATH
 

@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankC
 owner: frankb-8e
 blocked-by: []
-summary: "arm32 and aarch64 still have no object writer; i386 landed separately and x86-64 before it. Both are DIVERGENT targets on the C-ABI question, so each one is a second and third oracle for a ruling the i386 measurement has already made once -- worth having, not urgent. THE aarch64 ABI GATE IS CLEARED, 2026-09-22: it asked that the spill be made AAPCS or shown already to be, and it already is. A C function on aarch64 takes EmitParamSpillsForTarget's genuine AAPCS64 arm -- measured against clang as an external oracle, not read: for f(int,double,int,double) pxx's prologue reads w0/d0/w1/d1, byte-for-byte clang's placement, where positional would be w0/x1/w2/x3. Five register-passed signatures agree, including reordered, float and mixed; tools/aarch64_cabi_prologue_probe.sh is the instrument and its positive control is to disable the cdecl gate in cparser.inc, which makes pxx emit exactly w0/x1/w2/x3 and the probe report DIFFER. STILL UNSETTLED and NOT claimed: stack-passed arguments (an offset question the register probe skips by design) and by-value AGGREGATES -- both need the writer plus a gcc-compiled caller, so the falsifying test remains the reason to build it. Expect the shape to follow i386's, not the ESP writer's: check how each backend reaches an external before assuming."
+summary: "arm32 and aarch64 still have no object writer; i386 landed separately and x86-64 before it. Both are DIVERGENT targets on the C-ABI question, so each one is a second and third oracle for a ruling the i386 measurement has already made once -- worth having, not urgent. THE aarch64 ABI GATE IS CLEARED, 2026-09-22: it asked that the spill be made AAPCS or shown already to be, and it already is. A C function on aarch64 takes EmitParamSpillsForTarget's genuine AAPCS64 arm -- measured against clang as an external oracle, not read: for f(int,double,int,double) pxx's prologue reads w0/d0/w1/d1, byte-for-byte clang's placement, where positional would be w0/x1/w2/x3. Five register-passed signatures agree, including reordered, float and mixed; tools/aarch64_cabi_prologue_probe.sh is the instrument and its positive control is to disable the cdecl gate in cparser.inc, which makes pxx emit exactly w0/x1/w2/x3 and the probe report DIFFER. STILL UNSETTLED and NOT claimed: stack-passed arguments (an offset question the register probe skips by design) and by-value AGGREGATES -- both need the writer plus a gcc-compiled caller for the VALUE question, so the falsifying test remains the reason to build it, but a PLACEMENT question in that territory may not: the neighbouring aggregate-hidden-dest ticket was rejected on 2026-09-22 with no linking at all, by declaring the callee `extern` to route it down the arm and differencing the emitted code. Expect the shape to follow i386's, not the ESP writer's: check how each backend reaches an external before assuming."
 ---
 
 # Object output for arm32 and aarch64
@@ -123,7 +123,18 @@ tab-indented asm.
   from clang's own output shape rather than from an argument count of its own.
 - **By-value aggregates.** The shape that broke x86-64
   (`bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee`)
-  and the one the mixed-link pair exists for. Untested here.
+  and the one the mixed-link pair exists for. Untested here — *as a
+  correctness question*. One neighbouring question in that territory turned out
+  NOT to need the writer, and it is worth knowing why before assuming the rest
+  do: `bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-
+  argument-bank-unsaved` was parked as unreachable, and was settled the same
+  evening by asking what is **emitted** rather than what runs. Declaring the
+  aggregate-returning callee `extern` routes it down the C-ABI arm; a
+  presence/absence differential on an instruction only that arm emits proves
+  reach; and the rejection then came from reading the operand's five
+  construction sites. **Nothing linked.** So before waiting on the writer, ask
+  whether the question is about VALUES (it needs a caller) or about PLACEMENT
+  (it may not).
 - **The caller side on aarch64.** This measures a pxx CALLEE reading what a
   caller laid down. `relay_*`-shaped tests — pxx as CALLER into a gcc callee —
   fail independently and are not covered.

@@ -52,6 +52,13 @@ command -v "$CLANG" >/dev/null || { echo "probe: clang absent; aarch64 C-ABI pro
 "$CLANG" -print-targets 2>/dev/null | grep -q '^ *aarch64 ' || {
   echo "probe: this clang cannot target aarch64; NOT verified" >&2; exit 0; }
 
+# The oracle's identity is part of every verdict this prints. Two boxes running
+# different clangs can legitimately disagree at the margins, and a row quoted
+# into a ticket without it cannot be told apart from a pxx regression -- the
+# (TIER, HOST) confounder one layer over, where the axis is the TOOLCHAIN.
+CLANG_VER="$("$CLANG" --version 2>/dev/null | head -1)"
+echo "oracle: $CLANG_VER"
+
 # Default population. Each entry is a full parameter list; the body just has to
 # touch every parameter so none is optimised away at -O0.
 SIGS=(
@@ -181,7 +188,14 @@ EOF
     printf '  AGREE   %-72s  %s\n' "$sig" "$p"
     agreed=$((agreed + 1))
   else
-    printf '  DIFFER  %s\n            clang: %s\n            pxx:   %s\n' "$sig" "$c" "$p"
+    # The clang VERSION goes on the DIFFER row, not only in the header. A row
+    # gets quoted into a ticket or a message and travels alone, and a different
+    # clang can legitimately place arguments differently at the margins -- so a
+    # quoted DIFFER with no version is unreadable, and reads as a pxx
+    # regression. Record the method beside the number, never the number alone.
+    printf '  DIFFER  %s\n            clang: %s   (%s)\n            pxx:   %s\n' \
+      "$sig" "$c" "$CLANG_VER" "$p"
+    printf '            read this against the local clang BEFORE reading it as a pxx change\n'
     rc=1
   fi
 done
