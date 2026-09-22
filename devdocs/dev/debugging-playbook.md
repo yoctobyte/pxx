@@ -36540,6 +36540,18 @@ visible to me, its errors were caught by other peers and are therefore not, and
 nothing about the resulting count announces which side of the boundary it was
 drawn from.
 
+**AND THE SCOPE CLAUSE MATTERS MORE THAN THE RULE, BECAUSE WITHOUT IT THIS READS
+AS *MAKE NO SELF-ASSESSMENT* — WHICH IS THE HEDGING FAILURE THE PARAGRAPH ABOVE
+WARNS AGAINST, ARRIVING BY THE FRONT DOOR.** The boundary problem is specific to
+populations **whose boundary is made of visibility**, and counting errors is the
+worst case of it: an error does not exist until someone states it, so *"errors I
+know about"* and *"errors that happened"* differ by exactly the quantity you
+cannot see. **A population you can enumerate completely is not affected** — the
+playbook sections you added, the commits in a range, the rows in a file. So the
+question is not *am I assessing myself*; it is **does membership in this set
+depend on my having noticed it?** Where it does, count both sides or say you
+counted one. Where it does not, count, and say so plainly.
+
 **HOLD THIS FAMILY APART FROM THE ONE IT RESEMBLES — THE REMEDIES DO NOT
 TRANSFER, AND THIS SECTION'S AUTHOR COLLAPSED THEM ONCE BEFORE BEING CORRECTED.**
 Two distinct failures ran through the same night and look identical from a
