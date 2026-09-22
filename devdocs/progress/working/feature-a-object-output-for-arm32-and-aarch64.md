@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankC
 owner: frankb-8e
 blocked-by: []
-summary: "BOTH HALVES LANDED AND VERIFIED, 2026-09-22 (aarch64, then arm32). Each shares its ELF-class writer rather than cloning it -- aarch64 in writeELFRelX64General, arm32 in writeELFRel386General -- with byte-identity of four saved x86-64/i386 objects as the control for both lifts. THE PSABI WAS THE WRONG PLACE TO DESIGN FROM ON BOTH: these backends materialise addresses from an INLINE LITERAL POOL, so three of four sites are DATA WORDS in .text and only the external call is an instruction field, where one site takes TWO relocations. THE MECHANISM WORTH REMEMBERING IS THE SHARED READING: the aarch64 MOVW type numbers were wrong in the writer AND in its own harness, identically, so every comparison between them was green -- only clang's object could see it. Every arm32 number was therefore OBSERVED, never read, and R_ARM_ABS32 = 2 is the one an analogy gets wrong three times out of three (1 is R_ARM_PC24, which does not refuse). arm32 gives each GOT slot its OWN LOCAL SYMBOL with addend 0, because SHT_REL keeps the addend in a SIGNED 16-BIT split immediate and .data is 607044 bytes here -- a writer built the aarch64 way passes every test in this repo and fails on the first real program, since every probe is small enough to fit. Verified: aarch64 AGREE on 772256 bytes / 1355 relocations, arm32 AGREE on 835712 / 1354, 4 of 4 controls each, plus shape, coherence and split-addend oracles against clang. OPEN, FOUND HERE AND NOT CLOSED: an object carries a DUPLICATE .rel.data entry, harmless on RELA and a doubled base on SHT_REL -- measured against GNU ld on i386, 0x100a00b1 where 0x8054f51 was meant."
+summary: "BOTH HALVES LANDED AND VERIFIED, 2026-09-22 (aarch64, then arm32). Each shares its ELF-class writer rather than cloning it -- aarch64 in writeELFRelX64General, arm32 in writeELFRel386General -- with byte-identity of four saved x86-64/i386 objects as the control for both lifts. THE PSABI WAS THE WRONG PLACE TO DESIGN FROM ON BOTH: these backends materialise addresses from an INLINE LITERAL POOL, so three of four sites are DATA WORDS in .text and only the external call is an instruction field, where one site takes TWO relocations. THE MECHANISM WORTH REMEMBERING IS THE SHARED READING: the aarch64 MOVW type numbers were wrong in the writer AND in its own harness, identically, so every comparison between them was green -- only clang's object could see it. Every arm32 number was therefore OBSERVED, never read, and R_ARM_ABS32 = 2 is the one an analogy gets wrong three times out of three (1 is R_ARM_PC24, which does not refuse). arm32 gives each GOT slot its OWN LOCAL SYMBOL with addend 0, because SHT_REL keeps the addend in a SIGNED 16-BIT split immediate and .data is 607044 bytes here -- a writer built the aarch64 way passes every test in this repo and fails on the first real program, since every probe is small enough to fit. Verified: aarch64 AGREE on 772256 bytes / 1355 relocations, arm32 AGREE on 835712 / 1354, 4 of 4 controls each, plus shape, coherence and split-addend oracles against clang. FOUND HERE AND FIXED THE SAME DAY: an object carried a DUPLICATE .rel.data entry, harmless on RELA and a DOUBLED BASE on SHT_REL -- measured against GNU ld on i386, 0x100a00b1 where 0x8054f51 was meant. Collapsed in the shared method-fixup compaction pass, guarded by a pair invariant in structural_check whose positive control is the three pre-fix objects."
 ---
 
 # Object output for arm32 and aarch64
@@ -667,8 +667,40 @@ witness`, plus the split-addend oracle, the shape oracle and the GOT-slot
 coherence check with its own 2 of 2 controls. x86-64, i386, riscv32 and aarch64
 all unchanged and green in the same run. Wired into `test-emit-obj`.
 
+(Counts as of the arm32 landing. The duplicate-`.rel.data` fix below dropped
+every one of them by exactly one the same day: 1788/2047/1323/1355/1354 became
+1787/2046/1322/1354/1353. Both rows are recorded rather than one replacing the
+other, because they measure different trees.)
+
 **WHAT IS NOT CLAIMED.** No ARM linker exists on this box — no `ld.lld`, no
 cross binutils — so the oracle is pxx's own executable under qemu, exactly as
 for riscv32 and aarch64. That does NOT establish that a real linker agrees, and
-the run says so in its own last line. The `.rel.data` duplicate-offset note
-below is the one open question this work surfaced and did not close.
+the run says so in its own last line. The `.rel.data` duplicate-offset
+question this work surfaced is closed below.
+
+## The duplicate `.rel.data` entry this work surfaced, fixed 2026-09-22
+
+Every pxx object carried one relocation twice — identical offset, symbol, type
+and addend. Harmless on RELA, where the addend is explicit. **A doubled base on
+`SHT_REL`**, where the addend is the field and the second application re-reads
+the already-resolved word.
+
+Measured against GNU ld on i386 rather than argued: `.data+0xb0` resolved to
+`0x100a00b1` where `0x8054f51` was meant, and `0x8054f51 + 0x804b160` (ld's own
+`.text` base) is exactly that. After the fix, four of four slots resolve to the
+expected values.
+
+**Why nothing saw it**, which is the transferable part: `readelf -r` prints a
+duplicate that looks perfectly fine one entry at a time, because the invariant
+holds **between** two entries; the resolve harness compares `.text` and this
+lives in `.data`; and the one target with a linker here where it matters is
+i386, whose `.text` comparison is green either way. Same structural blindness as
+the section-bounds invariant the owner guarded the same morning.
+
+Fixed in `DropDuplicateMethodFixups`, beside `DropBodilessMethodFixups` and for
+the same stated reason — `MethodFixCount` sizes `.rela.data` in all four writers
+and six resolve loops walk it, so a writer that filtered while the count did not
+would truncate its own section. Keeping the **last**, because that is what the
+executable's last-write-wins does when two fixups name one slot with different
+procs. Guarded by a pair invariant in `structural_check`, whose positive control
+is the three pre-fix objects themselves.

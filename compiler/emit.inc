@@ -370,6 +370,76 @@ end;
   it leaves an entry in .rela.data for a slot with no target, and under
   --function-sections the whole point is that nothing names a section it does
   not mean. Dropping the fixup is the same value with nothing left over. }
+{ Collapse two fixups naming the SAME .data slot into the last of them.
+
+  THE DUPLICATE IS NOT A BUG AT THE RECORDING SITE. Several passes legitimately
+  fill one VMT slot -- a declaration and then an override sweep, an inherited
+  copy and then the class's own -- and for an EXECUTABLE that is harmless: each
+  writer patches the slot with PatchDataU64, so the last write wins and two
+  identical writes are one.
+
+  IT IS A BUG IN AN OBJECT, AND ONLY ON THE SHT_REL TARGETS, WHICH IS WHY
+  NOTHING SAW IT FOR A YEAR. RELA carries its addend explicitly, so applying an
+  identical entry twice writes the same value twice and x86-64/riscv32/aarch64
+  are unaffected -- they merely carry a redundant row. SHT_REL keeps the addend
+  IN THE FIELD, so the second application re-reads the ALREADY RESOLVED word as
+  the addend and adds the base again. MEASURED AGAINST GNU ld (2026-09-22,
+  i386, test/reloc_resolve_probe.c): .data+0xb0 came out 0x100a00b1 where
+  0x8054f51 was meant, and 0x8054f51 + 0x804b160 is exactly that. A doubled
+  base in a VMT slot, in an object that links, from a relocation table where
+  every single entry is individually correct.
+
+  THE HARNESS COULD NOT SEE IT EITHER, and that is the part worth keeping: it
+  resolves and compares .text, and this lives in .data. A per-entry assertion
+  cannot express it at all -- the invariant is about a PAIR of entries, like
+  the section-bounds one in reloc_resolve_check.py's structural_check.
+
+  Found while writing the arm32 writer, which is the second SHT_REL target;
+  fixed here rather than in either writer because MethodFixCount is what sizes
+  .rel.data in all four, and a writer that filtered while the count did not
+  would truncate its own section.
+
+  KEEPING THE LAST, NOT THE FIRST, because that is what the executable's
+  last-write-wins already does: where two fixups name one slot with DIFFERENT
+  procs, the object must resolve to the same routine the executable calls.
+  Open addressing over a power-of-two table, walked BACKWARD so the first entry
+  a slot's key reaches is its last registration. DataPos is 8-aligned, so the
+  low three bits carry no information and the key drops them. }
+procedure DropDuplicateMethodFixups;
+var i, keep, cap, h, dpos: Integer;
+    seenPos: array of Integer;
+    isDup: array of Boolean;
+begin
+  if MethodFixCount <= 1 then Exit;
+  cap := 64;
+  while cap < MethodFixCount * 2 do cap := cap * 2;
+  SetLength(seenPos, cap);
+  for i := 0 to cap - 1 do seenPos[i] := -1;
+  SetLength(isDup, MethodFixCount);
+  for i := MethodFixCount - 1 downto 0 do
+  begin
+    dpos := MethodFixups[i].DataPos;
+    h := (dpos shr 3) and (cap - 1);
+    while (seenPos[h] >= 0) and (seenPos[h] <> dpos) do
+      h := (h + 1) and (cap - 1);
+    if seenPos[h] = dpos then
+      isDup[i] := True          { a LATER fixup already claimed this slot }
+    else
+    begin
+      isDup[i] := False;
+      seenPos[h] := dpos;
+    end;
+  end;
+  keep := 0;
+  for i := 0 to MethodFixCount - 1 do
+    if not isDup[i] then
+    begin
+      MethodFixups[keep] := MethodFixups[i];
+      Inc(keep);
+    end;
+  MethodFixCount := keep;
+end;
+
 procedure DropBodilessMethodFixups;
 var i, keep: Integer;
 begin
@@ -382,6 +452,7 @@ begin
     end;
   MethodFixDropped := MethodFixCount - keep;
   MethodFixCount := keep;
+  DropDuplicateMethodFixups;
 end;
 
 procedure EmitI32(v: Int64);

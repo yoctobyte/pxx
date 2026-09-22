@@ -196,6 +196,7 @@ def structural_check(e):
             continue
         tgt = e.sh[s['info']]
         n = s['size'] // s['entsize']
+        seen_off = {}
         for k in range(n):
             o = s['off'] + k * s['entsize']
             if e.cls == 2:
@@ -210,6 +211,26 @@ def structural_check(e):
             if nsyms and sym >= nsyms:
                 bad.append(f"{s['sname']} entry {k}: symbol index {sym} "
                            f"exceeds .symtab ({nsyms} entries)")
+            # NO TWO RELOCATIONS MAY NAME ONE OFFSET, and this is the second
+            # invariant that lives BETWEEN entries rather than in one of them.
+            # On SHT_RELA a duplicate is redundant and harmless -- the addend is
+            # explicit, so applying it twice writes the same value twice. On
+            # SHT_REL the addend is the field, so the second application
+            # re-reads the ALREADY RESOLVED word and adds the base AGAIN.
+            # MEASURED against GNU ld (2026-09-22, i386): a VMT slot at
+            # .data+0xb0 came out 0x100a00b1 where 0x8054f51 was meant, and
+            # 0x8054f51 + 0x804b160 is exactly that. Every entry in that table
+            # was individually correct and readelf printed nothing odd.
+            # Found by the arm32 writer -- the SECOND SHT_REL target -- and the
+            # duplicate had been in every object for as long as the VMT emitter
+            # has registered a slot from two passes.
+            if off in seen_off:
+                bad.append(f"{s['sname']} entry {k}: offset 0x{off:x} is already "
+                           f"relocated by entry {seen_off[off]}; on SHT_REL the "
+                           f"second application re-reads the resolved word as "
+                           f"its addend and doubles the base")
+            else:
+                seen_off[off] = k
     return bad
 
 
