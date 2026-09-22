@@ -1381,6 +1381,46 @@ asked about edits.
 
 ## Assert the PRECONDITION, not just the comparison
 
+### EXTENSION 2026-09-22 — A GUARD WHOSE SUBJECT MUST BE *LARGE* IS FALSIFIED BY EVERY IMPROVEMENT, AND IMPROVEMENT IS THE DIRECTION NOBODY AUDITS GUARDS AGAINST
+
+*`frankb-8e`, found by running an unrelated tier rather than by looking. Verified
+independently by `frankz-e5` at `Makefile:8265` on `origin/master`, where the stale
+premise is still live.* **Promotion call, said out loud because 8e asked for one
+and deferred to it: this stays in the playbook and does NOT go to CLAUDE.md.** One
+subsystem; CLAUDE.md already carries the same mechanism in its summary form, and
+already carries the remedy (*a precondition you do not branch on is a comment*).
+A second subsystem would change that and it does not exist yet.
+
+`test_trunc26` sets `ulimit -f 40` (20,480 B), compiles `test/hello.pas`, and
+asserts the compiler **errors on a short write**. Its premise is stated in prose,
+in the comment directly above it:
+
+> ``ulimit -f 40`` *is well under hello's ~69KB in either block unit*
+
+`523833fde` made hello **4,520 B**. The write now fits, the compiler correctly says
+nothing, and the row reds with an eight-line diff whose real meaning is **"the
+subject shrank"** — which is not what any reader takes from it. The guard's own
+comment contains the number that falsifies it.
+
+**The asymmetry is the finding.** A guard asserting a failure needs its subject to
+stay BIG, BROKEN, SLOW or ABSENT. Every one of those is falsified by somebody doing
+good work — and **improvement is the direction nobody audits a guard against**,
+because the mental model of a stale guard is drift and neglect. Here the falsifier
+was a commit celebrated the same morning for a 93% size reduction. The two seats
+involved were the same seat.
+
+**It is the ticket-summary class in a worse host.** CLAUDE.md records that *a
+summary citing a currently-firing row acquires a dependency on that row staying
+broken*. A stale summary misroutes a reader; **a stale test premise REDS A TREE and
+points at the wrong commit** — and it fires for everyone, repeatedly, with an
+authoritative-looking diff.
+
+**Discharge, and it is the entry's own rule applied one level up:** the premise a
+guard depends on must be ASSERTED, not stated in prose above it. 8e's repair is
+the shape — `ulimit -f 1`, plus a row that fails **with its own sentence** if hello
+ever fits under the cap. A comment saying *well under ~69KB* cannot fail; a row
+saying *hello must exceed the cap* can, and says why when it does.
+
 The section above says what goes wrong. This is the form of the fix, and it
 generalises past any one tool: **a comparison whose INPUTS were never proven to
 exist is a guard that cannot fail.** It does not error, because the comparison
@@ -41010,6 +41050,25 @@ withdrawal and its reason first, then the facts. The append form feels more hone
 about the READER, and the record belongs in the body, which is append-only and
 which nobody must read. **Preserving history in the one field that is read by
 prefix is how you get a true document that misroutes.**
+
+### SECOND HOST, SAME DAY — A SOURCE COMMENT WITH ITS CORRECTION TWO PARAGRAPHS BELOW THE CLAIM
+
+`compiler/ir_codegen.inc:1848` asserts that the C arm of the threadvar allocator
+**WARNS** instead of erroring, and builds a safety argument on it. `402d61e0d` made
+it a hard **ERROR**. The retraction is present and correct — `{ RETIRED 2026-09-19
+... }` at `:1854` — and it is **two paragraphs below the claim it retracts.**
+`frankb-8e`'s own phrasing: *the file contradicts itself in the right direction, but
+only if you read to the end of it.* It reported getting the opposite answer from
+measuring to the one that comment would have given it.
+
+**So this failure is not a property of ticket summaries.** It is a property of any
+text read by prefix, and a long source comment is read by prefix exactly like a
+summary — a reader scans until they have what they came for. The discharge is
+unchanged and now has two hosts: **the correction LEADS.** Put `RETIRED`/`SUPERSEDED`
+at the top of the block, then the surviving argument. Appending preserves the record
+and loses the reader, and in a source comment there is no body to move the history
+into — so the history goes second, inside the same block, under a heading that says
+it is history.
 
 **Note who is worst placed to catch it.** I was the one who had corrected three
 other seats' summaries that day, including one of my own; I was checking for the
