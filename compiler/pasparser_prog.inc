@@ -109,12 +109,34 @@ begin
     hits and no code. Found by frankz-e5 reading a commit of mine that had just
     added the third. This file's own name-is-not-the-thing rule with the thing
     missing outright: a search matches prose about a routine as readily as the
-    routine, and here there was only prose. Grep before citing a name.
+    routine, and here there was only prose.
 
-    EVIDENCE, not the define. PasInitDefines (paslexer.inc:923) defines
-    PXX_MANAGED_STRING unconditionally, so asking PasDefineExists here
-    answered True for EVERY
-    program ever compiled and the whole AnsiString bundle -- plus the heap unit
+    A PHANTOM NAME IS NOT A DEGRADED NAME, WHICH IS WHY IT SURVIVES. An
+    80%-accurate name is worse than a 0%-accurate one because the part you
+    sample confirms it -- but an inaccurate name eventually MEETS a case it
+    describes wrongly, and the mismatch is the correction. A name with no
+    referent never meets anything. There is no ground truth anywhere in the
+    loop, every reader finds corroboration, and each new citation raises
+    apparent confidence without adding evidence, because the sources are each
+    other. That is an indefinite equilibrium, not slow decay.
+
+    DISCHARGE, one command at the one moment it is cheap:
+    `grep -rn 'procedure <Name>'`, NEVER `grep -rn <Name>`. The bare form
+    returns the prose and reads as confirmation -- which is the entire failure.
+    Here the discriminating form returns exactly one line, paslexer.inc:923.
+
+    AND DO NOT EXPECT A GREP FOR THE DEAD NAME TO RETURN ZERO. It returns ONE:
+    this note, which quotes it deliberately so a reader who meets the old name
+    elsewhere lands here. The commit that made this fix claimed `returns 0` in
+    its own verification line and was wrong, precisely BECAUSE the fix works
+    this way. Say "returns only the correction note". frankz-e5 hit the same
+    shape the same day on a ghost sha, where the correction quoting the dead id
+    made `progress.sh check` re-report the fix as the defect -- so expect one
+    rather than zero whenever a repair is PROSE rather than deletion. }
+  { EVIDENCE, not the define. PasInitDefines (paslexer.inc:923) defines
+    PXX_MANAGED_STRING unconditionally, so asking PasDefineExists here answered
+    True for EVERY program ever compiled, and the whole AnsiString bundle --
+    plus the heap unit
     it drags in through needsHeap below -- was emitted into sources that never
     name a string. Measured 2026-09-22 at fda77c48b8ee: x86-64 hello-world
     25016 -> 4472 bytes (-82.1%), and xtensa --esp-profile=bare 860 -> 58 bytes
