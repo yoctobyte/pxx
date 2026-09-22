@@ -36954,3 +36954,84 @@ all.
 obeys — an oracle sharing your implementation cannot fail differently. This is
 a worked instance of it in a new subsystem, plus two habits (test a lead on the
 shape you emit; fall back to internal coherence) that are playbook-sized.
+
+## A CORRECT GENERAL SENTENCE SCOPED TO A SPECIAL CASE — THE RULE IS WRITTEN DOWN, IN THE RIGHT FUNCTION, AND ITS OWN `else` HIDES IT
+
+Filed 2026-09-22 (frankb-8e), from `bug-a-dce-breaks-every-c-program-on-every-cross-target`.
+
+**The shape.** Somebody works out the general principle, writes it down
+correctly, and puts it inside the one branch they were standing in. The comment
+is true of every arm. The code is in one. Nobody forgot a table and nobody was
+careless — the reasoning is *right there*, and its position is what makes it
+invisible.
+
+**The instance.** `PatchEntryStubCall` (`compiler/symtab.inc`) patches the C
+entry stub's forward call to `main` by hand, per target. Its x86-64 `else`
+branch read:
+
+> *"...and on the rel32 targets, the SITE moves too when a pass compacts the
+> code between here and the body. That is exactly what CodeRef records, and its
+> patch formula (target - (pos+4)) is this same one."*
+
+`RecordCodeRefAt` was called there and nowhere else. The observation is true of
+arm32, aarch64, riscv32 and xtensa as well — **a site moves when code is
+compacted regardless of how its branch is encoded** — and the routine's other
+four arms patched without recording. Result: `--dce` dropped the crtl bodies
+between the stub and `main`, everything slid down, and the stub branched at the
+old address. aarch64, `bl` imm26 0x1d4d4 to 0x475488, inside the pre-DCE code
+segment and above the top of the shrunken one. SIGSEGV before the first
+syscall, every C program, every cross target, shipping for a month.
+
+**Why it survived review.** Read the `else` arm and the comment is correct.
+Read a cross arm and there is no comment claiming anything false — there is
+simply nothing there, and absence reads as "not applicable" rather than as
+"not done". The two halves are forty lines apart in one routine.
+
+**Why the usual instruments miss it.**
+
+- **Grepping for the feature finds the arm that HAS it.** `grep RecordCodeRefAt`
+  returns the working call site, which reads as confirmation.
+- **The sibling-spelling rule does not fire.** That rule says to grep for the
+  *other spelling's handler*. Here every handler exists — `PatchCodeRefSlot`
+  already had arm32, aarch64, riscv32 and xtensa arms, landed weeks earlier.
+  Nothing was missing downstream. What was missing was the *registration*, and
+  the registration's reason was documented in the one place it happened.
+- **The population hid it.** `pasparser` does not call this routine at all, and
+  the Rust, Zig and Erlang drivers refuse every non-x86-64 target. C is the only
+  frontend reaching a cross arm — and the x86-64 arm was the one with the
+  record. **The entire covered population was the single case that worked.**
+
+**The discharge, and it is cheap.** When a comment explains WHY a line is
+needed, check whether its reason mentions the thing it is scoped to. Here:
+*"the SITE moves when a pass compacts the code"* names **compaction**, not
+**rel32**. A reason that does not mention the branch's encoding cannot be a
+reason that only applies to one encoding. **If the justification is more
+general than its position, the line belongs where the justification is** —
+hoist it above the dispatch rather than copying it into the arms.
+
+The fix was one record moved above the target `if`, with `linkReg = 1` because
+every site there is a call. Nothing new had to be written to re-aim the
+branches.
+
+**A second, weaker form, from the same night (frankh-c0):** a rule stated in a
+comment **on the guard that enforces it** and re-derived from scratch an hour
+later by the person editing that exact function (`FM-STATUS-DRIFT` in
+`tools/progress.py`, whose comment already carried the consumer-side rule and
+the population). Same disease, different host: there the text is in the right
+place and is still not read; here the text is read and its scope is believed.
+**If a rule can be re-derived by someone standing on top of it, "read the other
+document" is not the remedy.**
+
+**Related and NOT the same:** `IramCallFix`, the riscv32 stub calls and the
+i386 eleven sites are all *an array touched in one phase and nowhere else* —
+something genuinely forgotten. This class is the opposite: nothing forgotten, a
+correct general statement filed under a special case.
+
+**Promotion decision, stated rather than assumed.** BANKED here on merit. NOT
+promoted to `CLAUDE.md` by me: that file is my own operating instruction, the
+write-up was suggested by a peer, and a peer cannot be the reason I edit it.
+If it belongs there it is a one-sentence extension of the existing
+"the sibling is usually a spelling, not a shape" rule — *and the sibling
+sometimes has every handler already, with the reason written in the arm that
+calls one* — and that is the owner's call to make, or a later session's on its
+own evidence.
