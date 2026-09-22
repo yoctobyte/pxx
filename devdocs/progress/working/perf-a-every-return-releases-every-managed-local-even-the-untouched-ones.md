@@ -1860,3 +1860,102 @@ older one came from a `TargetHasSweepThunk`-forced control and an objdump
 cross-check. **What would retire the disagreement** is running both
 instruments on one tree in one session — until then a reader should quote
 neither as "the" site count without saying which instrument produced it.
+
+## 2026-09-22 (frankb-8e) — THE REMAINING HALF IS NOT A PREDICATE, AND THE PROOF IS THAT FOUR HAVE BEEN WRONG
+
+The remaining half of (1) was going to start by asking whether a
+compiler-minted temp's ownership is decidable from what the IR already
+records. **It is already answered, twice, and the second answer is a
+retraction.** Verified at source rather than taken on relay.
+
+### `var_store` of a variant RETAINS, unconditionally
+
+`ir_codegen.inc`, the `IR_VAR_STORE` arm at `tk = tyVariant`:
+
+```
+IREmitNode(IRB[node]);         { rax = src addr }
+EmitVariantRetain;             <- unconditional, no predicate
+EmitB($50);
+IREmitNode(IRA[node]);         { rax = dest addr }
+EmitVariantReleasePayload;     <- releases what the dest displaced
+... mov rcx,16 ; rep movsb
+```
+
+Two references are accounted for after the store, so **the carrier's
+scope-exit release is REQUIRED and skipping it is a leak** — the direction
+that makes this unobservable to every value assertion in the tree.
+
+### THE MOVE VARIANT WAS BUILT, MEASURED AND REVERTED — IT SEGFAULTS A TEN-LINE PROGRAM
+
+`IRVariantCallResultIsOwned` was retracted on 2026-09-15 and the block above
+its old home calls it **"the fourth wrong predicate in this family"**. It read
+the DISPATCH kind and moved the result. `-dPXX_OBJTRACE`, same source, two
+binaries:
+
+```
+(retain)  list  R->4 R->5  r->4 r->3   net  0   BALANCED
+(move)    list  R->4       r->3 r->2   net -1   FREED at call 3
+```
+
+Its conclusion: **"the variant carried out of a virtual call is BORROWED."**
+That is not visible in the node kind, which is exactly what the predicate was
+reading.
+
+### THE FAMILY, COUNTED — and this is the finding
+
+| predicate | status |
+| --- | --- |
+| `IRNodeOwnsManagedStr` | live, 57 refs |
+| `IRNodeOwnsFreshCallResult` | live, 23 refs |
+| `IRNodeOwnsManagedObj` | live, 15 refs |
+| `IRStrCmpOwnsOperand` | live, 7 refs |
+| `IRVariantCallResultIsOwned` | **retracted, segfaults** |
+
+Plus three backends that each carried their own inline object arm and **gave
+three different answers to one question** before `IRNodeOwnsManagedObj`
+unified them — *"every one of them double-retained a construction, and i386
+double-retained an ordinary call result too."*
+
+**That is CLAUDE.md's own count: two is a smell, three is a design flaw.**
+Five mechanisms plus three divergent backend arms serve one concept — *who
+owns this managed value* — and not one of them states the invariant. Each
+INFERS it from the shape of a node.
+
+**And the question this ticket's remaining half asks is strictly harder than
+the one they answer.** The family answers *"is this VALUE owned at the point
+of a store"* — a property of a node, decidable by looking at it. The sweep
+needs *"does this SLOT still own its referent at scope exit"* — a property of
+a path. **Four attempts at the easier question were wrong.** Writing a fifth
+predicate for the harder one is the move this record exists to prevent.
+
+### SO THE REMAINING HALF IS A DESIGN QUESTION, AND IT IS OURS TO TAKE, NOT TO ESCALATE
+
+*Does the IR RECORD who owns a managed value, or does each site that needs to
+know work it out from the shape of the code?* Today it is the second, five
+times over. The first is what would make per-path liveness decidable at all.
+
+**This is not a Track U `decide`.** The test is whether the fork can be stated
+as a sentence about what we WANT with no implementation noun in it, and it
+cannot — every phrasing is about our own IR's internals, which makes it an
+engineering decision wearing a fork's clothes. It is taken here: **the next
+work on (1) is an ownership invariant, not a predicate**, and anybody reaching
+for a fifth `IRNodeOwns…` should read the retraction block at
+`ir_codegen.inc:5577` first.
+
+### THE INSTRUMENT HALF IS ALREADY SOLVED, AND IT IS THE MIRROR OF THIS TICKET'S OWN RULE
+
+This ticket says a leak is the defect class where every value assertion still
+passes. The retraction states the other half: **"RSS CANNOT TELL A REPAIRED
+LEAK FROM A PREMATURE FREE. Both give back memory and both read as '0 bytes
+per call'. All fourteen rows went green on a change that frees live objects,
+because not one of them READ the receiver's attribute again after the calls."**
+
+So a byte-reading fixture certifies **both** failure directions here, and the
+pair of rules closes: a value check cannot see a leak, and a byte check cannot
+see a premature free. Three fixtures exist and **all three are wired and
+asserting** (`VARCARRY` and `GETTERLIVE` read bytes, `RECVLIVE` reads values)
+— checked in the Makefile, not assumed, because `VARCARRY`'s own header still
+claimed it was unwired until `829d67389`.
+
+**Any future attempt at (1) must fail at least one of those three before it is
+believed.** That is the positive control this family has lacked four times.
