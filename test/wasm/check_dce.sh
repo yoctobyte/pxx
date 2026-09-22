@@ -94,4 +94,62 @@ if wasm-objdump -x -j Export "$work/on.wasm" | grep -q 'NeverReached'; then
 fi
 echo "ok  NeverReached was dropped, and was visible before it was"
 
+# THE .wat FORM IS THE SECOND SPELLING OF THIS MODULE AND IT HAD NO ROW HERE.
+# Everything above builds a .wasm. The text writer is a separate emitter over
+# the same tables, so it needs the same --dce filters -- and for one day it did
+# not have them: `--dce` built a .wasm off a source and REFUSED the .wat, with
+# an error naming the export table. A check that exercises one output form
+# cannot see a defect in the other, however thorough it is about the first.
+if command -v wat2wasm >/dev/null 2>&1; then
+  "$root/compiler/pascal26" --target=wasm32 --no-dce "$here/dce_slice.pas" "$work/off.wat" > /dev/null \
+    || { echo "FAIL the --no-dce .wat did not build, so the --dce row below"; \
+         echo "     would not be measuring --dce"; exit 1; }
+  "$root/compiler/pascal26" --target=wasm32 --dce "$here/dce_slice.pas" "$work/on.wat" > "$work/wat.err" 2>&1 \
+    || { echo "FAIL --dce could not write the .wat form (it writes the .wasm):"; \
+         cat "$work/wat.err"; exit 1; }
+  echo "ok  both .wat forms build"
+
+  # And it must still be an ORACLE, not merely a file: assembling it back has
+  # to produce the module the binary writer produced.
+  #
+  # WHAT IS COMPARED AND WHAT IS NOT, both measured rather than assumed. pxx
+  # writes FIXED 5-byte LEB size placeholders and wat2wasm writes minimal ones,
+  # so byte offsets differ everywhere and the CODE section's payload differs
+  # too -- one padded length prefix per function body, 0x3fc5 against 0x3de3 on
+  # this fixture, ~4 bytes x ~120 bodies. That is an encoding width, not a
+  # disagreement about the program.
+  #
+  # This row's first draft compared every section size and was RED on arrival
+  # for exactly that reason, after a hand check that had matched -- because the
+  # hand check read the first twelve lines of the header dump and Code is the
+  # thirteenth. The instrument caught the claim its author had already made.
+  #
+  # So: every section EXCEPT Code must agree byte-for-byte in payload size, and
+  # Code is held to the thing that actually matters -- the same functions, with
+  # the same names, exported in the same order.
+  wat2wasm "$work/on.wat" -o "$work/on_fromwat.wasm" \
+    || { echo "FAIL the --dce .wat does not assemble"; exit 1; }
+  for leg in on on_fromwat; do
+    # The section name is RIGHT-ALIGNED in this dump, so it carries leading
+    # spaces and an anchored `^Code` matches nothing -- which silently left
+    # Code in the comparison and made this row red for the encoding-width
+    # reason the comment above says it must not be red for.
+    wasm-objdump -h "$work/$leg.wasm" | grep -v 'Code start=' \
+      | sed -n 's/^ *\([A-Za-z]*\) .*(\(size=0x[0-9a-f]*\)).*/\1 \2/p' > "$work/sz.$leg"
+    wasm-objdump -x -j Export "$work/$leg.wasm" \
+      | sed -n 's/.*-> "\(.*\)"/\1/p' > "$work/exp.$leg"
+  done
+  [ -s "$work/sz.on" ] || { echo "FAIL no section sizes were extracted, so the diff below"; \
+                            echo "     would pass on two empty files"; exit 1; }
+  [ -s "$work/exp.on" ] || { echo "FAIL no exports were extracted, so the export diff"; \
+                             echo "     below would pass on two empty files"; exit 1; }
+  if diff -u "$work/sz.on" "$work/sz.on_fromwat" && diff -u "$work/exp.on" "$work/exp.on_fromwat"; then
+    echo "ok  the --dce .wat reassembles to the same module: $(wc -l < "$work/exp.on") exports, every non-Code section byte-identical"
+  else
+    echo "FAIL the .wat and .wasm forms of one --dce module disagree"; exit 1
+  fi
+else
+  echo "SKIP the .wat oracle rows (no wat2wasm)"
+fi
+
 echo "PASS check_dce"

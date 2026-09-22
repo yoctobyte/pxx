@@ -227,6 +227,17 @@ begin
 
   for i := 0 to WasmFuncCount - 1 do
   begin
+    { SKIPPED IF --dce DROPPED IT, the same line WasmEmitCodeSection and
+      WasmEmitFunctionSection carry. This writer is the ORACLE for the binary,
+      so it must render the module the binary renders and not the one the
+      emitter built: a dropped body left in here declares a function the
+      binary does not have, and its `call $name$slot` names a callee that is
+      not in the text either. Missing from here until 2026-09-22 and it is why
+      `--dce` built a .wasm and refused a .wat off the same source -- the
+      failure surfaced in WasmIndexOfSlot, which is a guard doing its job
+      about the export table three loops down rather than a bug where it
+      fired. }
+    if not WasmSlotSurvives(i) then continue;
     { NAME + SLOT, unconditionally. A WAT identifier space must be injective
       and Pascal's is not: overloads, two classes' methods of the same name,
       and the anonymous bodies the frontend emits for typed-const initialisers
@@ -285,9 +296,17 @@ begin
     oracle should mirror the structure it is checking, not the prettier
     spelling of it. }
   for i := 0 to WasmExpCount - 1 do
+  begin
+    { The twin of WasmEmitExportSection's own skip. A func export whose slot
+      --dce dropped has no index to name, and asking for one is what raised
+      `--dce dropped slot 0 (PXXHdrInit) and something live still references
+      it` on every .wat built with the pass on. Non-func exports (memory,
+      globals) have no slot and are never filtered. }
+    if (WasmExpKind[i] = WEK_FUNC) and not WasmSlotSurvives(WasmExpIdx[i]) then continue;
     WTLn('  (export "' + WasmExpName[i] + '" ('
          + WasmExportKindName(WasmExpKind[i]) + ' '
          + WasmIntTxt(WasmExportIndex(i)) + '))');
+  end;
 
   WTLn(')');
   WTFlush;
