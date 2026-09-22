@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+summary: 'A REAL RACE IN THREAD-LOCAL STORAGE SETUP, RATED 2026-09-22: `test/test_tls_base.pas` prints `errors=2` instead of `errors=0`/`TLS OK` on **54 of 500** runs at `870f9f6e1` (compiler `06255ab1878c`, plexus) -- 10.8%, 95% CI 8.1-13.5%. An earlier n=60 row gave 4/60 = 6.7% with a CI of 0.4-13.0%; BOTH ROWS ARE KEPT WITH THEIR POPULATIONS because the small one supports no decision and is not refuted by the large one. THIS BLOCKS GOAL 1 ON ITS OWN: the job is class `unit`, `RUN_RETRY_CLASSES` is `{qemu, corpus, conformance, opt}`, so `unit` is DELIBERATELY single-shot and `p_report = p_attempt` -- this single row turns roughly ONE `full` TIER IN NINE red with nothing absorbing it. DO NOT FIX IT BY MOVING THE ROW TO A RETRY CLASS: that converts a genuine nondeterminism bug into an invisible flake, which the selfhost half of testmgr''s own comment refuses in as many words (`a flake is a genuine nondeterminism bug to reseed, not retry`). The harness is behaving correctly; fix the race. RE-LANED T -> A: the auto-file''s `track: T` is an explicit FALLBACK because the failing step (`expect_same.sh`) names no owner, and the owner is the lane that built TLS (`done/feature-a-thread-local-storage-via-clone-settls`). NOT A REGRESSION FROM ANY RECENT COMMIT -- it is intermittent, therefore pre-existing; a near-miss is recorded in the body where it was nearly pinned on a peer''s section-base commit that really was in the range. ON PLEXUS THIS IS THE ONLY RED: the same `full` run is 4953 PASS / 1 FAIL / 0 SKIP / 0 FLAKY with skip_holes == 0, and the four rows that hold `full` red on borg all PASS here. WHAT WOULD RETIRE IT: a fix plus 200 consecutive clean local runs -- NOT one green tier, which at 10.8% is the expected outcome and carries almost no information.'
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 27 is `tools/expect_same.sh test_tls_base26 "$(/tmp/test_tls_base26)" "$(printf 'errors=0\nTLS OK')"`. The job's own `src` (`test/test_tls_base.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -106,3 +107,53 @@ the model was wrong by class rather than by arithmetic.
 A `full` tier green with this row passing, plus 200 consecutive local runs
 clean. **Do not retire it on one green run**: at 6.7% a single pass is the
 expected outcome and carries almost no information.
+
+## 2026-09-22 (later) — RE-RATED AT n=500: **10.8%**, CI **8.1–13.5%**, i.e. ONE FULL TIER IN NINE
+
+**Carry the interval, not the point** — frankuser's correction, and it was right
+in the direction that matters. Both rows, each with its population, because a
+later disagreement is not a refutation when neither denominator was recorded:
+
+| runs | fails | rate | 95% CI | reddens a tier |
+| --- | --- | --- | --- | --- |
+| 60 | 4 | 6.7% | 0.4 – 13.0% | 1 in 15 (1 in 8 … 1 in 282) |
+| **500** | **54** | **10.8%** | **8.1 – 13.5%** | **1 in 9 (1 in 7 … 1 in 12)** |
+
+Same binary, same tree (`870f9f6e1`, compiler `06255ab1878c`), same box, minutes
+apart. **The n=60 point estimate was LOW and its interval was nearly useless** —
+"somewhere between 1 run in 8 and 1 run in 282" supports no decision at all. At
+n=500 the answer is sharp and it is **not** a nuisance figure.
+
+**WHY THAT DECIDES SOMETHING.** `unit` is a single-shot class, so
+`p_report = p_attempt`: this one row alone turns roughly **one `full` tier in
+nine** red, with nothing absorbing it. A release-grade green is not a matter of
+waiting for a quiet box — at 10.8% it is a coin that comes up red about as often
+as a working week has days. **This blocks goal 1's "full green pin as release"
+on its own**, independent of every other row.
+
+## The near-miss, recorded because it is evidence the rule works
+
+**I nearly attributed this to another seat's commit.** The row passed in one
+`full` run and failed in the next, and between them a Track A change titled
+*"a runtime witness for every section base"* had arrived in a pull. **A TLS base
+and a section base sound like the same thing**, the timing was perfect, and the
+mechanism story wrote itself. `git merge-base --is-ancestor` confirmed the
+commit was genuinely in the range — so the range check did not exonerate it,
+it just stopped the story being told before the row had been run twice. **Sixty
+local runs settled it in under a minute: intermittent, therefore pre-existing,
+therefore nobody's commit.** CLAUDE.md's *attribute a tier delta to a RANGE
+before attributing it to yourself* has a third corner — attributing it to a
+PEER — and that is the one that also damages someone else's record.
+
+## And on this host, nothing else is red
+
+Measured in the same `full` run (plexus, qemu 10.2.1, `870f9f6e1`,
+4953 PASS / 1 FAIL / 0 SKIP / 0 FLAKY): the four rows that hold `full` red on
+borg — `demos#00`, `lib-test#00` (`crtl_reachability.py`),
+`test-pascal-conformance#shard3/6` and `test-aarch64#00` (the C-ABI prologue
+probe) — **all PASS here.** So **this race is the only thing between plexus and
+a green `full`**, and borg's remaining red set is environmental to borg.
+
+*(Method note, because it nearly went wrong again: `compiler_srchash.sh` matches
+**74** rows in this tier as a shared PREREQUISITE. The aarch64 subject is
+`test-aarch64#00`. A prerequisite is not a row.)*
