@@ -34078,6 +34078,21 @@ test-emit-obj: $(COMPILER)
 	@#     feature-a-a-target-generic-resolve-and-compare-harness-for-emit-obj-objects
 	PXX=./$(COMPILER) tools/reloc_resolve_check.py x86_64 test/reloc_resolve_probe.c
 	PXX=./$(COMPILER) tools/reloc_resolve_check.py i386   test/reloc_resolve_probe.c
+	@#     riscv32 has no linker here, so its oracle is pxx's own EXECUTABLE,
+	@#     which the riscv32 tier runs under qemu: qemu proves the executable
+	@#     and the executable proves the object. That only works where the two
+	@#     builds share a layout, which is MEASURED per target and not assumed
+	@#     -- on x86-64 they do not (296788 of 328517 bytes differ, an object
+	@#     has no _start and the export surface differs) and on riscv32 they
+	@#     correspond exactly. The harness establishes the correspondence from
+	@#     defined symbols first and SKIPs if it cannot, rather than comparing
+	@#     two layouts and reporting the difference as a relocation defect.
+	@#     Section bases are solved by majority vote over the relocations
+	@#     naming each section, and unanimity is the control: a single wrong
+	@#     addend is a minority vote rather than a shifted base.
+	PXX=./$(COMPILER) tools/reloc_resolve_check.py riscv32 test/reloc_resolve_probe.c
+	@#     xtensa is NOT here, and the reason is filed rather than routed past:
+	@#     bug-a-xtensa-cannot-lower-a-store-through-a-pointer-so-no-c-program-that-writes-through-a-parameter-compiles
 	rm -f $(TESTTMP)/test_emit_obj_x64.o
 	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64.o
 	readelf -h $(TESTTMP)/test_emit_obj_x64.o | grep -q 'REL (Relocatable file)'

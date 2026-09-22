@@ -72,6 +72,7 @@ class Elf:
     """Minimal ELF32/64 little-endian reader. Deliberately not a library: the
     point is that nothing here shares code with the writer under test."""
     def __init__(self, path):
+        self.path = path
         self.b = b = open(path, 'rb').read()
         if b[:4] != b'\x7fELF': raise SystemExit(f'{path}: not an ELF')
         self.cls = b[4]
@@ -85,17 +86,22 @@ class Elf:
         for i in range(shnum):
             o = shoff + i * shentsize
             if w64:
-                s = dict(name=rd(b,o,4), type=rd(b,o+4,4), addr=rd(b,o+16,8),
-                         off=rd(b,o+24,8), size=rd(b,o+32,8), link=rd(b,o+40,4),
-                         entsize=rd(b,o+56,8))
+                s = dict(name=rd(b,o,4), type=rd(b,o+4,4), flags=rd(b,o+8,8),
+                         addr=rd(b,o+16,8), off=rd(b,o+24,8), size=rd(b,o+32,8),
+                         link=rd(b,o+40,4), entsize=rd(b,o+56,8))
             else:
-                s = dict(name=rd(b,o,4), type=rd(b,o+4,4), addr=rd(b,o+12,4),
-                         off=rd(b,o+16,4), size=rd(b,o+20,4), link=rd(b,o+24,4),
-                         entsize=rd(b,o+36,4))
+                s = dict(name=rd(b,o,4), type=rd(b,o+4,4), flags=rd(b,o+8,4),
+                         addr=rd(b,o+12,4), off=rd(b,o+16,4), size=rd(b,o+20,4),
+                         link=rd(b,o+24,4), entsize=rd(b,o+36,4))
             self.sh.append(s)
-        st = self.sh[shstrndx]; strs = b[st['off']:st['off']+st['size']]
-        for s in self.sh:
-            s['sname'] = strs[s['name']:strs.index(b'\0', s['name'])].decode()
+        # A pxx EXECUTABLE carries program headers and NO section headers at
+        # all, so this has to tolerate shnum == 0 rather than assume a .symtab.
+        if shnum and shstrndx < shnum:
+            st = self.sh[shstrndx]; strs = b[st['off']:st['off']+st['size']]
+            for s in self.sh:
+                s['sname'] = strs[s['name']:strs.index(b'\0', s['name'])].decode()
+        else:
+            for s in self.sh: s['sname'] = ''
 
     def sec(self, n):
         return next((s for s in self.sh if s['sname'] == n), None)
@@ -165,6 +171,116 @@ def undef_addr(name):
     a = ((0x4000 + i) << 48) | ((0x3000 + i) << 32) | ((0x2000 + i) << 16) | (0x1000 + i)
     _UNDEF_SEEN[name] = a
     return a
+
+
+def exe_text_off(xe):
+    """File offset of the first executable PT_LOAD, and the vaddr it maps."""
+    b = xe.b; w64 = xe.cls == 2
+    phoff = rd(b, 0x20, 8) if w64 else rd(b, 0x1c, 4)
+    phentsize = rd(b, 0x36 if w64 else 0x2a, 2)
+    phnum = rd(b, 0x38 if w64 else 0x2c, 2)
+    for i in range(phnum):
+        o = phoff + i * phentsize
+        if rd(b, o, 4) != 1: continue                   # PT_LOAD
+        flags = rd(b, o + 4, 4) if w64 else rd(b, o + 24, 4)
+        if not (flags & 0x1): continue                  # PF_X
+        off = rd(b, o + 8, 8) if w64 else rd(b, o + 4, 4)
+        va  = rd(b, o + 16, 8) if w64 else rd(b, o + 8, 4)
+        return (off, va)
+    return None
+
+
+def exe_bytes(xe, xoff, va, n):
+    off, base_va = xoff
+    start = off + (va - base_va)
+    return xe.b[start:start + n]
+
+
+def solve_bases(e, syms, xe, xoff, text):
+    """Where each of the object's sections landed in the executable, derived
+    from the executable's own bytes rather than from anything pxx reports.
+
+    For each relocation naming a section other than .text, the executable
+    already holds the RESOLVED word at that site, so
+    base = resolved - (sym.value + addend). Every relocation naming one section
+    is an independent vote. UNANIMITY IS THE CONTROL: a single wrong addend is
+    a minority vote rather than a shifted base, and a genuinely split vote
+    means the two builds do not share a layout and this oracle does not apply.
+
+    .text's own base comes from a defined FUNC symbol, which needs no
+    relocation and so cannot be circular."""
+    from collections import Counter
+    ti = e.sh.index(text)
+    tbase = None
+    for s in syms:
+        if s['shndx'] == ti and s['name'] and s['value']:
+            for xs in xe.symbols() if xe.sec('.symtab') else []:
+                if xs['name'] == s['name']:
+                    tbase = xs['value'] - s['value']; break
+            if tbase is not None: break
+    if tbase is None:
+        tbase = _tbase_from_map(xe.path + '.map', syms, ti)
+    if tbase is None: return None, {}
+    et = exe_bytes(xe, xoff, tbase, e.sec('.text')['size'])
+    if len(et) < e.sec('.text')['size']: return None, {}
+    votes = {}
+    for r in e.relocs('text'):
+        s = syms[r['sym']]
+        if s['shndx'] in (0, ti): continue
+        try: have = struct.unpack_from('<I', et, r['off'])[0]
+        except Exception: continue
+        votes.setdefault(s['shndx'], Counter())[have - (s['value'] + (r['addend'] or 0))] += 1
+    base = {ti: tbase}
+    for k, c in votes.items():
+        top = c.most_common(2)
+        # A base carried by a bare majority is not a base; it is two layouts.
+        if len(top) > 1 and top[1][1] > top[0][1] * 0.02:
+            return None, votes
+        base[k] = top[0][0]
+    return base, votes
+
+
+def _tbase_from_map(mappath, syms, ti):
+    """pxx writes a .map beside every executable and its executables carry NO
+    section headers, so this is the normal path rather than a fallback.
+
+    It matches a FUNC symbol the object defines against the same name in the
+    map. Two independent names must agree, or the layouts do not correspond
+    and saying so is the answer -- one name can be right by coincidence in a
+    way two cannot."""
+    if not os.path.exists(mappath): return None
+    m = {}
+    for ln in open(mappath):
+        p = ln.split()
+        if len(p) == 2 and p[0].startswith('0x'):
+            try: m[p[1]] = int(p[0], 16)
+            except ValueError: pass
+    cands = []
+    for s in syms:
+        if s['shndx'] == ti and s['name'] in m and s['value']:
+            cands.append(m[s['name']] - s['value'])
+        if len(cands) >= 3: break
+    if len(cands) < 2 or len(set(cands)) != 1: return None
+    return cands[0]
+
+
+def alloc_sections(e):
+    """Every SHF_ALLOC section with content, in file order.
+
+    NOT a hardcoded .text/.data/.bss list, and the reason is measured: the
+    first version of this harness seeded exactly those three and reported 264
+    riscv32 relocations as naming UNDEFINED symbols that only a linker could
+    place. They were nothing of the kind -- they named `.rodata`, an ordinary
+    defined section the list had simply left out, and the harness described its
+    own omission as a property of the object. A census that enumerates a
+    hardcoded set answers honestly about that set and says nothing about what
+    it left out. Ask the ELF what sections it has."""
+    SHF_ALLOC = 0x2
+    out = []
+    for i, sh in enumerate(e.sh):
+        if sh['type'] in (1, 8) and (sh['flags'] & SHF_ALLOC):
+            out.append(i)
+    return out
 
 
 def apply_relocs(e, secname, secdata, base_of, sec_va, syms, unhandled):
@@ -345,27 +461,67 @@ def main():
         return 1
 
     if gccflag is None:
-        print(f'reloc-resolve[{tname}]: {nrel} relocations, no linker on this box -- '
-              f'applier-only mode')
-        base = {e.sh.index(text): 0x400000}
-        if data: base[e.sh.index(data)] = 0x500000
-        if bss:  base[e.sh.index(bss)]  = 0x600000
-        unhandled = {}
+        # EXECUTABLE-ORACLE MODE, for the targets with no linker on this box.
+        #
+        # The oracle chain is: qemu proves the EXECUTABLE (the per-target tiers
+        # run these), and the executable proves the OBJECT. It works only where
+        # the two builds share a layout, which is a property to MEASURE and not
+        # to assume -- on x86-64 they do not (296788 of 328517 bytes differ,
+        # because an object has no _start and the export surface differs) and
+        # on riscv32 they correspond exactly. So the mode establishes the
+        # correspondence first, from defined symbols, and refuses if it cannot.
+        exe = os.path.join(work, 'exe')
+        er = subprocess.run([pxx] + pxxflag.split() + [src, exe],
+                            capture_output=True, text=True)
+        if er.returncode != 0:
+            print(f'reloc-resolve[{tname}]: SKIP -- pxx cannot build an executable here')
+            return 0
+        xe = Elf(exe)
+        # Section bases come from the EXECUTABLE, by majority vote over the
+        # relocations that name each section. Unanimity is the control: one
+        # wrong addend shows up as a minority vote rather than shifting the
+        # base, and a split vote means the layouts do NOT correspond.
+        xoff = exe_text_off(xe)
+        if xoff is None:
+            print(f'reloc-resolve[{tname}]: SKIP -- no loadable segment found in the executable')
+            return 0
+        base, votes = solve_bases(e, syms, xe, xoff, text)
+        if base is None:
+            print(f'reloc-resolve[{tname}]: SKIP -- the object and the executable do '
+                  f'not share a layout here, so the executable cannot be the oracle')
+            return 0
+        for k, c in sorted(votes.items()):
+            top = c.most_common(2)
+            extra = (f', runner-up {top[1][0]:#x} x{top[1][1]}' if len(top) > 1
+                     else ' (unanimous)')
+            print(f'   base {e.sh[k]["sname"]:<14} {top[0][0]:#x}  '
+                  f'{top[0][1]} votes{extra}')
+        unh = {}
         tb = e.data(text)
-        apply_relocs(e, 'text', tb, base, 0x400000, syms, unhandled)
-        undef = unhandled.pop('_undef', 0)
-        synth = unhandled.pop('_synth', 0)
-        if unhandled:
-            print(f'reloc-resolve[{tname}]: BROKEN -- unhandled relocation types {unhandled}')
+        apply_relocs(e, 'text', tb, base, base[e.sh.index(text)], syms, unh)
+        undef = unh.pop('_undef', 0); synth = unh.pop('_synth', 0)
+        if unh:
+            print(f'reloc-resolve[{tname}]: BROKEN -- unhandled relocation types {unh}')
             return 1
-        if undef:
-            print(f'reloc-resolve[{tname}]: BROKEN -- {undef} relocations against '
-                  f'undefined symbols could not be given an address')
+        theirs = exe_bytes(xe, xoff, base[e.sh.index(text)], len(tb))
+        diff = [i for i in range(len(tb)) if tb[i] != theirs[i]]
+        if diff:
+            print(f'reloc-resolve[{tname}]: DIFFER -- {len(diff)} of {len(tb)} bytes '
+                  f'disagree with pxx\'s own executable')
+            for i in diff[:6]:
+                print(f'   off={i:#x} harness={tb[i]:02x} exe={theirs[i]:02x}')
             return 1
-        print(f'reloc-resolve[{tname}]: applied {nrel} relocations '
-              f'({synth} against externals, at addresses this harness chose)')
-        print(f'   NOT a correctness claim yet: no linker here, and no external '
-              f'decoder is reading the fields back. Coverage only.')
+        if not control_suite(e, text, base, {'.text': base[e.sh.index(text)]},
+                             syms, theirs, tname):
+            return 1
+        print(f'reloc-resolve[{tname}]: AGREE with pxx\'s own executable on {len(tb)} '
+              f'bytes, {nrel} relocations; 3 of 3 controls reddened it')
+        if synth:
+            print(f'   {synth} relocations named UNDEFINED symbols and were resolved at '
+                  f'addresses THIS HARNESS chose, so those rows are pxx graded against '
+                  f'pxx and cannot fail on value -- only on field placement')
+        print(f'   oracle: the executable, which the {tname} tier runs under qemu. '
+              f'This does NOT establish that a real linker agrees.')
         return 0
 
     # LINKER-ORACLE MODE. This is the calibration that licenses the mode above.
