@@ -23528,10 +23528,32 @@ CLAUDE.md's *the passing arrangements are not a sample, they are the population
 everyone writes*, moved off the within-fixture axis (where the interesting
 element sits in an ordered list) and onto the **matrix axis**, where it is worse:
 a fixture's element order is visible in the fixture, and a target list is one
-line in a harness nobody re-reads. 8e's own formulation, which is the keepable
-sentence:
+line in a harness nobody re-reads. The keepable sentence:
 
 > **The column that cannot be excused is the one nobody added.**
+
+**That sentence is a THREE-STEP between two seats, and this file said it was
+8e's for one commit.** The correction came from 8e, unprompted, **in the
+direction that takes credit away from itself** — which is why it is written out
+rather than quietly applied. The chain: the underlying observation is 8e's, from
+the DCE cost differential above (*the `main` control, the one row where the
+bytes are 0 and the count column therefore has nothing to hide behind*); the
+phrasing **a control whose expected value is 0 in one column is worth having
+precisely because the other column cannot be excused** was `frankz-e5`'s, banked
+with that entry and then relayed back to 8e in conversation; and the
+matrix-axis restatement above is 8e's rewrite of that phrasing, second half
+changed. **Nobody said it alone and the crisp half did not start where the
+attribution put it.**
+
+**Why a wrong provenance line is worth a paragraph.** This subsection's own
+second discharge is *record who brought an instance*. A provenance error in the
+**flattering** direction is the one that never gets queried — the party who
+would notice is the party being credited, and they have no reason to look. It
+survived here only because the over-credited seat went and checked. Treat an
+attribution you did not personally trace as a claim with the same standing as a
+number with no population beside it, and when a formulation passes between two
+seats twice, **write the chain rather than picking a winner** — picking one is
+what produced the error, and picking the other one would reproduce it mirrored.
 
 **The corroborating number, from the same commit.** Against the pinned compiler,
 **one frontend's five fixtures name five different missing routines** against a
