@@ -38,7 +38,33 @@
 # constant does not work -- pxx puts large immediates in a literal pool, so the
 # marker appears in the pool and not in the code that loads it.
 #
-# Exit 0 if every signature agrees with clang, 1 on the first disagreement.
+# Exit 0 if every signature agrees with clang, 1 on a real disagreement, and
+# 2 when the INSTRUMENT failed and nothing could be compared.
+#
+# THE THREE EXITS ARE THE POINT AND THE THIRD ONE WAS MISSING UNTIL 2026-09-22.
+# Before then a BROKEN row -- one where a side produced NO register list at all
+# -- set rc=1, so the run ended by printing `verdict: DISAGREEMENT` having
+# compared ZERO signatures, three lines under its own correct prose saying
+# `this is an INSTRUMENT failure, not a result`. It diagnosed itself and then
+# discarded the diagnosis. Found on borg 2026-09-22 by a peer reading the row's
+# reason text: `clang extracted: []`, `pxx extracted: []`, `0 signature(s)
+# agree with clang, 0 skipped`, `verdict: DISAGREEMENT`. That is CLAUDE.md's
+# comparison-whose-inputs-were-never-proven-to-exist, and it does not merely
+# fail to fail -- it fails in the WRONG DIRECTION, manufacturing a verdict
+# about pxx out of an environment failure. It was one of the rows holding the
+# `full` tier red on the only breadth host we had.
+#
+# AND THE ATTRIBUTION IS BY SIDE, not by row, because the two sides mean
+# opposite things. An empty list from CLANG is the oracle failing: we learn
+# nothing, exit 2. An empty list from PXX with clang's list present is a real
+# finding about our own prologue, exit 1. The old code could not tell them
+# apart, so a genuine pxx defect and a broken box both printed BROKEN.
+#
+# NOT exit 0. Matching the CLANG-ABSENT arm above (the `command -v "$CLANG"`
+# guard) was the obvious move and it
+# is wrong: an ABSENT clang is a declared host limitation, while a clang that
+# is present and yields nothing is an UNDIAGNOSED condition, and exiting 0
+# would launder it into a pass. See done/bug-t-tstate-launders-skip-into-pass.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,6 +75,52 @@ trap 'rm -rf "$WORK"' EXIT
 
 [ -x "$PXX" ] || { echo "probe: compiler not built ($PXX)" >&2; exit 2; }
 command -v "$CLANG" >/dev/null || { echo "probe: clang absent; aarch64 C-ABI prologue NOT verified" >&2; exit 0; }
+# THE SECOND TOOL WAS NEVER GATED, AND ITS ABSENCE FAILS INTO THE WRONG
+# CHANNEL. `pxx_regs` disassembles with `llvm-objdump-21` -- a HARD-CODED LLVM
+# major version -- and until 2026-09-22 nothing checked it existed. On a host
+# with an older toolchain that command is simply missing, its output is empty,
+# and the PXX side of every comparison comes back with no register list. That
+# is indistinguishable, downstream, from pxx emitting a broken prologue: it
+# reaches the BROKEN branch and gets attributed to the compiler.
+#
+# The probe gated the oracle it had thought about and not the one it had
+# forgotten, and the ungated one is the one whose failure blames us. Borg's
+# rows show BOTH sides empty, which is only reachable when the pxx side is
+# empty too -- the stack-passed SKIP requires clang empty AND pxx non-empty --
+# so a missing objdump is a live candidate for that host and this gate is how
+# it will say so instead of being read as a compiler defect.
+#
+# Accept an unsuffixed `llvm-objdump` as a fallback rather than demanding the
+# exact major: the disassembly this parses is stable across versions, and
+# pinning a major by NAME is what made the dependency invisible.
+# AND THE GATE MUST PROVE THE TOOL RUNS, NOT THAT THE NAME IS NON-EMPTY. The
+# first version of this guard checked `[ -n "$OBJDUMP" ]`, which an explicit
+# `LLVM_OBJDUMP=/nonexistent/llvm-objdump` satisfies -- so the guard passed,
+# the disassembly produced nothing, and the run printed
+# `verdict: DISAGREEMENT -- 5 pxx-side broken`. That is the EXACT defect this
+# gate was added to prevent, reproduced by the gate itself within minutes of
+# writing it, because a name standing in for the thing it names is not a check.
+# Run it and require success.
+objdump_works() { "$1" --version >/dev/null 2>&1; }
+OBJDUMP=""
+if [ -n "${LLVM_OBJDUMP:-}" ]; then
+  objdump_works "$LLVM_OBJDUMP" && OBJDUMP="$LLVM_OBJDUMP" || {
+    echo "probe: LLVM_OBJDUMP=$LLVM_OBJDUMP does not run; refusing to guess." >&2
+    echo "       INSTRUMENT failure -- this is NOT a statement about pxx." >&2
+    exit 2; }
+else
+  for cand in llvm-objdump-21 llvm-objdump; do
+    if command -v "$cand" >/dev/null 2>&1 && objdump_works "$cand"; then
+      OBJDUMP="$cand"; break
+    fi
+  done
+fi
+[ -n "$OBJDUMP" ] || {
+  echo "probe: no working llvm-objdump (tried llvm-objdump-21, llvm-objdump);" >&2
+  echo "       the PXX side cannot be disassembled, so NOTHING can be compared." >&2
+  echo "       This is an INSTRUMENT failure and is NOT a statement about pxx." >&2
+  echo "       Set LLVM_OBJDUMP=<path> or install llvm-objdump." >&2
+  exit 2; }
 "$CLANG" -print-targets 2>/dev/null | grep -q '^ *aarch64 ' || {
   echo "probe: this clang cannot target aarch64; NOT verified" >&2; exit 0; }
 
@@ -91,12 +163,45 @@ clang_regs() {
                 else if (F[1]=="ldr"||F[1]=="ldur"||F[1]=="ret") exit }' || true
 }
 
+# PXX_SIDE_BLAMEABLE says whether an empty pxx list is OUR fault. It is set per
+# call and read by the loop, because the same empty list has two causes that a
+# register comparison cannot tell apart:
+#
+#   pxx failed to COMPILE          -> a real result about pxx      (blameable)
+#   pxx compiled, disassembly empty -> the disassembler did nothing (instrument)
+#
+# Until 2026-09-22 neither was checked: both compiles sent their output to
+# /dev/null and their exit status was discarded, and the disassembly was never
+# asserted non-empty -- so a host without a working llvm-objdump produced an
+# empty pxx list for every signature and the run blamed the compiler. That is
+# this file's own "assert the precondition, not just the comparison", and the
+# precondition here is that the two artefacts the comparison reads EXIST.
+# COMMUNICATED THROUGH A FILE, NOT A VARIABLE, AND THAT IS NOT STYLE. The
+# caller reads this helper as `p=$(pxx_regs ...)`, and a command substitution
+# runs in a SUBSHELL -- so a global assigned in here is discarded on return and
+# the caller silently keeps the previous value. The first version of this flag
+# was a plain variable and it never propagated: the wrong-tool control still
+# printed `5 pxx-side broken`, i.e. the exact false accusation the flag exists
+# to prevent, with nothing erroring. A file in $WORK crosses the subshell.
+pxx_blameable() { [ "$(cat "$WORK/blameable" 2>/dev/null || echo 1)" = 1 ]; }
 pxx_regs() {
   local withf="$1" nof="$2" a="$WORK/a.a64" b="$WORK/b.a64"
-  "$PXX" --target=aarch64 --system-libs=c "$withf" "$a" >/dev/null 2>&1
-  "$PXX" --target=aarch64 --system-libs=c "$nof"   "$b" >/dev/null 2>&1
-  llvm-objdump-21 -d --triple=aarch64 "$a" 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/a.txt"
-  llvm-objdump-21 -d --triple=aarch64 "$b" 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/b.txt"
+  echo 1 > "$WORK/blameable"
+  if ! "$PXX" --target=aarch64 --system-libs=c "$withf" "$a" >/dev/null 2>&1 \
+     || ! "$PXX" --target=aarch64 --system-libs=c "$nof" "$b" >/dev/null 2>&1; then
+    # A compile failure IS a result about pxx: leave it blameable and return
+    # nothing. The caller reports it as a pxx-side BROKEN row.
+    return 0
+  fi
+  "$OBJDUMP" -d --triple=aarch64 "$a" 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/a.txt"
+  "$OBJDUMP" -d --triple=aarch64 "$b" 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/b.txt"
+  # Both objects compiled, so a disassembly with no lines at all is the TOOL
+  # failing, not pxx. Checked on both files: one empty is enough, since the
+  # comparison is a diff of the two.
+  if [ ! -s "$WORK/a.txt" ] || [ ! -s "$WORK/b.txt" ]; then
+    echo 0 > "$WORK/blameable"
+    return 0
+  fi
   # `x8, x29, x9` is the slot-address setup both arms emit; the store right
   # after it names the register the argument arrived in, which is the one thing
   # the two conventions disagree about.
@@ -107,6 +212,9 @@ pxx_regs() {
 rc=0
 skipped=0
 agreed=0
+oracle_broke=0
+pxx_broke=0
+differed=0
 for sig in "${SIGS[@]}"; do
   names=$(printf '%s' "$sig" | tr ',' '\n' | awk '{print $NF}' | tr -d '*')
   sum=$(printf '%s' "$names" | awk '{printf " + (double)%s", $1}')
@@ -143,8 +251,17 @@ EOF
   # possible agreement: two failed extractions compare equal and every row
   # prints AGREE with a blank register list. Both of this probe's first-run
   # bugs produced exactly that, so the check is not hypothetical -- it is the
-  # failure that actually happened, caught only because rc=1 arrived with no
-  # rows at all. A register list is also never shorter than the argument count.
+  # failure that actually happened, caught only because a nonzero exit arrived
+  # with no rows at all. A register list is also never shorter than the
+  # argument count.
+  #
+  # AND NOTE WHICH DIRECTION THIS GUARD COVERS, because the 2026-09-22 defect
+  # was the OTHER one. This line stops an empty extraction reading as AGREE.
+  # Nothing stopped it reading as DISAGREEMENT, so the same empty extraction
+  # that is correctly refused here went on to produce a confident verdict
+  # about pxx at the end of the run. One insight, two directions, guarded in
+  # one -- which is why the verdict below is now derived from counters that
+  # name the SIDE that failed.
   nargs=$(printf '%s' "$names" | grep -c .)
   # STACK-PASSED ARGUMENTS ARE OUT OF SCOPE, and the probe decides that from
   # CLANG'S OWN OUTPUT rather than from an argument count of its own. Once a
@@ -165,14 +282,36 @@ EOF
   if [ -z "$c" ] || [ -z "$p" ]; then
     printf '  BROKEN  %s\n            clang extracted: [%s]\n            pxx   extracted: [%s]\n' \
       "$sig" "$c" "$p"
-    printf '            one side produced no register list; this is an INSTRUMENT failure, not a result\n'
-    rc=1
+    if [ -z "$c" ]; then
+      # The ORACLE produced nothing. We learn nothing about pxx from this row,
+      # so it must not reach the disagreement channel.
+      printf '            THE ORACLE produced no register list; this is an INSTRUMENT failure, not a result\n'
+      oracle_broke=$((oracle_broke + 1))
+    elif ! pxx_blameable; then
+      # pxx compiled both objects and the DISASSEMBLER returned nothing. The
+      # list is empty for a reason that has nothing to do with our prologue.
+      printf '            the DISASSEMBLER (%s) produced no output for objects that compiled;\n' "$OBJDUMP"
+      printf '            this is an INSTRUMENT failure, not a result about pxx\n'
+      oracle_broke=$((oracle_broke + 1))
+    else
+      # clang extracted a list and pxx did not, and pxx's own compile is the
+      # reason: that IS a finding about our prologue, and it is the half the
+      # old single BROKEN label hid.
+      printf '            PXX produced no register list while clang did; this is a RESULT about pxx\n'
+      pxx_broke=$((pxx_broke + 1))
+    fi
     continue
   fi
   if [ "$(printf '%s' "$c" | wc -w)" -lt "$nargs" ] || [ "$(printf '%s' "$p" | wc -w)" -lt "$nargs" ]; then
     printf '  BROKEN  %s\n            fewer stores than arguments (%d): clang [%s] pxx [%s]\n' \
       "$sig" "$nargs" "$c" "$p"
-    rc=1
+    if [ "$(printf '%s' "$c" | wc -w)" -lt "$nargs" ]; then
+      printf '            THE ORACLE is short; instrument failure, not a result\n'
+      oracle_broke=$((oracle_broke + 1))
+    else
+      printf '            PXX is short while clang is not; this is a RESULT about pxx\n'
+      pxx_broke=$((pxx_broke + 1))
+    fi
     continue
   fi
   # Compare exactly the first nargs stores. The parameter spill is by
@@ -196,17 +335,52 @@ EOF
     printf '  DIFFER  %s\n            clang: %s   (%s)\n            pxx:   %s\n' \
       "$sig" "$c" "$CLANG_VER" "$p"
     printf '            read this against the local clang BEFORE reading it as a pxx change\n'
-    rc=1
+    differed=$((differed + 1))
   fi
 done
 
 echo "aarch64 C-ABI prologue: $agreed signature(s) agree with clang, $skipped skipped (stack-passed)"
-if [ $rc -eq 0 ]; then
+# THE VERDICT IS DERIVED FROM THE COUNTERS, never from a single rc flag that
+# three unrelated branches were free to set. A verdict must not be able to say
+# DISAGREEMENT when nothing was compared.
+if [ $differed -eq 0 ] && [ $pxx_broke -eq 0 ] && [ $oracle_broke -eq 0 ]; then
+  if [ $agreed -eq 0 ]; then
+    # Zero agreed, zero broken, zero differed: every signature was SKIPped.
+    # Green here would be a guard that cannot fail.
+    echo "  verdict: NOT VERIFIED -- no signature was actually compared ($skipped skipped)."
+    exit 2
+  fi
   echo "  verdict: pxx's C prologue reads its REGISTER arguments where clang puts them."
   echo "  NOT established here: stack-passed arguments (offsets, not registers), and"
   echo "  aggregates by value -- both need an object writer and a gcc-compiled caller"
   echo "  to settle honestly, which is what this probe's ticket exists to build."
-else
-  echo "  verdict: DISAGREEMENT -- see the rows marked DIFFER or BROKEN."
+  exit 0
 fi
-exit $rc
+if [ $differed -gt 0 ] || [ $pxx_broke -gt 0 ]; then
+  echo "  verdict: DISAGREEMENT -- $differed differing, $pxx_broke pxx-side broken."
+  if [ $oracle_broke -gt 0 ]; then
+    echo "  ALSO $oracle_broke row(s) failed in the INSTRUMENT (the oracle produced no"
+    echo "  list); those are NOT part of this verdict and say nothing about pxx."
+  fi
+  exit 1
+fi
+# Only the oracle failed. Nothing was learned about pxx, either way.
+# AND DO NOT MINE THE OTHER COUNTERS ON THIS PATH. `$skipped` is DERIVED from
+# clang's extracted shape, so when extraction fails it is 0 for that reason and
+# for no other -- it is downstream of the failure and carries no independent
+# information. This is a real trap and was spotted 2026-09-22 on the borg tail:
+# the one visible BROKEN row was `double b1..b9, int a1`, i.e. precisely the
+# signature that exhausts v0-v7 and forces the ninth argument onto the stack,
+# printed beside `0 skipped (stack-passed)`. That reads exactly like a
+# stack-passed classifier failing on the case built to trigger it, and it is
+# not: you cannot classify a row as stack-passed having extracted nothing from
+# it. A derived counter that looks like an ABI observation is a small trap
+# sitting inside a bigger one.
+echo "  verdict: INSTRUMENT FAILURE -- $oracle_broke row(s) produced no usable register"
+echo "  list from the INSTRUMENT side, so $agreed of $((agreed + oracle_broke)) signature(s) could be compared."
+echo "  THIS IS NOT A STATEMENT ABOUT PXX and must not be read as one. The per-row"
+echo "  lines above say which side failed: read them before touching the compiler."
+echo "  Two candidates, in the order they bite: the DISASSEMBLER ($OBJDUMP) emitting"
+echo "  nothing for objects that compiled, and the ORACLE ($CLANG) emitting asm this"
+echo "  probe cannot extract from (version, aarch64 target, asm format)."
+exit 2

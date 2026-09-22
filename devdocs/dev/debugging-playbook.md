@@ -1444,6 +1444,132 @@ you did not just assert exists. Join the stages of a scripted edit with `&&`,
 never `;`. And when a comparison run is all-green, ask which row in it was
 supposed to be red — if there is none, you have not measured yet.
 
+### INSTANCE 5, AND IT IS THE MIRROR: THE PRECONDITION WAS CHECKED, AND THE VERDICT WENT THE WRONG WAY ANYWAY
+
+**Everything above is about a guard that cannot FAIL. This one fires in the
+wrong DIRECTION, which is worse, because it produces a confident accusation
+instead of a silent pass.** Measured 2026-09-22 in
+`tools/aarch64_cabi_prologue_probe.sh`, found by a peer reading a row's stored
+reason text rather than by anyone running it.
+
+The probe compares a register list extracted from clang's asm against one
+extracted from pxx's. **Its author had already found this exact hazard and
+guarded it** — the comment is still there and says so:
+
+> *"EMPTY IS NOT AGREEMENT, and without this line it reads as the loudest
+> possible agreement: two failed extractions compare equal and every row prints
+> AGREE with a blank register list."*
+
+**So the empty-input case was understood, guarded, and documented — in ONE
+direction.** Nothing stopped the same empty extraction reaching the *other*
+channel. On a box where extraction failed, the run printed:
+
+```
+BROKEN  double b1..b9, int a1
+        clang extracted: []
+        pxx   extracted: []
+        one side produced no register list; this is an INSTRUMENT failure, not a result
+aarch64 C-ABI prologue: 0 signature(s) agree with clang, 0 skipped
+  verdict: DISAGREEMENT
+```
+
+**It diagnosed itself correctly in prose and discarded the diagnosis one line
+later**, because the BROKEN branch set the same `rc=1` that a genuine
+disagreement sets, and the verdict text keyed off that single flag. A
+`DISAGREEMENT` verdict over **zero compared signatures** — and it was one of
+the rows holding a whole tier red on the only breadth host available, read by
+everyone downstream as a statement about the compiler.
+
+**Three things to take from it, none of which the four instances above cover:**
+
+- **A guard's insight has as many directions as the value has consumers.**
+  Guarding `AGREE` against empty inputs and leaving `DISAGREE` open is not
+  half-done, it is *inverted* — the unguarded path is the one that assigns
+  blame. **When you refuse an input, grep for every other branch that input can
+  still reach.**
+- **Attribute by SIDE, not by row.** The old code could not distinguish "the
+  oracle produced nothing" (learn nothing, instrument error) from "pxx produced
+  nothing while the oracle did" (a real finding), so a broken box and a genuine
+  defect printed the identical `BROKEN` label. One exit code per *meaning*:
+  0 agreed, 1 a result about us, 2 the instrument failed.
+- **DO NOT MINE A DERIVED COUNTER ON A FAILED PATH.** That output's `0 skipped
+  (stack-passed)` sits beside the one signature engineered to force a
+  stack-passed argument, and reads irresistibly as a classifier failing on its
+  own trigger case. It is not: `skipped` is computed *from* the extracted
+  shape, so extraction failing sets it to 0 for that reason and no other. **A
+  derived counter that looks like a domain observation is a small trap inside
+  the bigger one**, and the peer who spotted it flagged it as self-defeating in
+  the same breath — which is the discipline, not the luck.
+
+**AND THE CONTROL FOUND A WORSE BUG ON THE OTHER BRANCH OF THE SAME CAUSE — A
+FALSE GREEN, WHICH HAD NEVER BEEN OBSERVED.** Writing the positive control
+meant manufacturing a clang that is present, targets aarch64, and emits an
+**empty** asm file. The result was not the DISAGREEMENT above:
+
+```
+OLD exit=0
+aarch64 C-ABI prologue: 0 signature(s) agree with clang, 7 skipped (stack-passed)
+  verdict: pxx's C prologue reads its REGISTER arguments where clang puts them.
+```
+
+**A confident green, exit 0, with zero signatures compared.** The reason is the
+coupling: the stack-passed classifier reads **clang's own shape** — deliberately,
+and the probe documents why — so an oracle that emits *nothing* looks exactly
+like an oracle saying *"this signature spills no registers"*, and every row is
+SKIPped rather than BROKEN.
+
+**So one root cause had both directions, selected by nothing more than which
+branch the empty output happened to land in:**
+
+| oracle emits nothing and… | branch | old verdict | reading |
+| --- | --- | --- | --- |
+| is NOT stack-shaped | `BROKEN` | `DISAGREEMENT`, exit 1 | false **accusation** |
+| IS stack-shaped | all `SKIP` | the green sentence, exit 0 | false **exoneration** |
+
+**The false green is the dangerous one and it is the one nobody would have
+found, because nobody investigates a green.** The accusation was found within
+days by a peer reading a stored reason; the exoneration had to be *constructed*.
+**That asymmetry is the argument for building the control even when you already
+know what the bug is** — the control's job turned out not to be confirming the
+known failure but discovering its mirror.
+
+Both are now `exit 2` with a verdict that names the instrument, guarded by
+`tools/aarch64_cabi_prologue_probe_devtest.sh`, whose fake oracles manufacture
+each branch. **The control had to be manufactured rather than sampled:** the
+real failure lives on a host this checkout cannot reach, and a control drawn
+from a working box cannot produce the outcome under test.
+
+**AND THE FIX REPRODUCED THE BUG TWICE WHILE BEING WRITTEN, WHICH IS THE PART
+TO REMEMBER.** Each was caught only by running a control, never by reading:
+
+1. **The gate checked the NAME, not the TOOL.** The probe disassembles with a
+   hard-coded `llvm-objdump-21` that nothing had ever gated — so a host without
+   that exact major silently empties the *pxx* side of every comparison and the
+   run blames the compiler. The new gate read `[ -n "$OBJDUMP" ]`, which
+   `LLVM_OBJDUMP=/nonexistent/llvm-objdump` satisfies: the guard passed and the
+   run printed `DISAGREEMENT — 5 pxx-side broken`. **A guard written minutes
+   earlier, against that exact failure, reproduced it.** The repair is to *run*
+   the tool and require success — and note the nastier sibling the control also
+   caught, `/bin/true`: a tool that exists, exits 0, and emits nothing, which
+   only an assertion that the *output* is non-empty can catch.
+2. **The flag was set in a subshell and silently discarded.** The caller reads
+   `p=$(pxx_regs …)`, and a command substitution runs in a subshell, so a
+   global assigned inside never reaches the parent. Nothing errored; the
+   attribution simply stayed wrong. **A variable is not a channel across
+   `$( )`** — a file in the work dir is.
+
+**Both were found by running a control that should have passed and did not.**
+Neither is visible by inspection, and both were written by someone who had the
+failure mode in front of them, in the same hour, in the file they were fixing.
+
+**The generalisation, and it is the one-line version of this whole section:**
+*an assertion that an input exists must gate every conclusion drawn from that
+input, not just the flattering one* — and **when you guard one branch, go and
+find out what the other branch does with the same input**, because a shared
+cause does not produce a shared symptom. **Then run the guard against the
+failure it was written for**, because knowing the bug is not protection from
+writing it again three lines lower.
+
 ## A RADIX is part of a value, and `db 65` was hex
 
 Measured 2026-08-31, and it is small enough to be worth stating plainly because

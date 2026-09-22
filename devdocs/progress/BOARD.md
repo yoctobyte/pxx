@@ -121,7 +121,7 @@ _none_
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
 | regression-test-record-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-record-abi-mixed-link#src:tools/compiler_srchash.sh at 4c7c88d3614b in step 1/25, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
 | regression-test-threads-test-a-threadvar-is-per-thread-2 | T | 70 | regression | regression: test-threads#src:test/test_a_threadvar_is_per_thread.pas at 6ce37dd94d7c in step 2/11, `tools/expect_same.sh test_threadvar_pt26 "$(/tmp/test_threadvar_pt26)" "$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-cro…` (auto-filed by twatch) | — |
-| regression-test-threads-test-tls-base-2 | T | 70 | regression | regression: test-threads#src:test/test_tls_base.pas at 165473bf9e30 in step 2/27, `tools/expect_same.sh test_tls_base26 "$(/tmp/test_tls_base26)" "$(printf 'errors=0\nTLS OK')"` (auto-filed by twatch) | — |
+| regression-test-threads-test-tls-base-2 | A | 70 | regression | regression: test-threads#src:test/test_tls_base.pas at 165473bf9e30 in step 2/27, `tools/expect_same.sh test_tls_base26 "$(/tmp/test_tls_base26)" "$(printf 'errors=0\nTLS OK')"` (auto-filed by twatch) | — |
 | regression-test-uforth-compiler-srchash | T | 70 | regression | regression: test-uforth#src:tools/compiler_srchash.sh@3 at 82e070429d30 in step 2/2, `if [ ! -f "/home/rene/projects/uforth/uforth.py" ]; then \ echo "test-uforth: SKIP — no uforth tree at /home/rene/proje…` (auto-filed by twatch) | — |
 | regression-tools-devtest-00-4 | T | 70 | regression | regression: tools-devtest#00 at fc2ce3d02553 in step 1/1, `n=0; bad=0; failed=''; \ for f in tools/*devtest*.py; do \ case "$f" in *bench_timing_devtest.py) continue ;; esac; \ p…` (auto-filed by twatch) | — |
 
@@ -1292,7 +1292,7 @@ _none_
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5
 - [p 70] [T] regression-test-record-abi-mixed-link-compiler-srchash-2
 - [p 70] [T] regression-test-threads-test-a-threadvar-is-per-thread-2
-- [p 70] [T] regression-test-threads-test-tls-base-2
+- [p 70] [A] regression-test-threads-test-tls-base-2
 - [p 70] [T] regression-test-uforth-compiler-srchash
 - [p 70] [T] regression-tools-devtest-00-4
 - [p 68] [N] bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-when-called-back-from-the-pascal-side (unblocks 1)
