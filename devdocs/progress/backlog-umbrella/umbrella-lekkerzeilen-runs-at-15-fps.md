@@ -12,7 +12,6 @@ blocked-by:
   - task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize
   - perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program
   - perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
-  - perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
   - perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob
 summary: "**15 FPS IS RETIRED AS A TARGET -- OWNER, 2026-09-22, HIS OWN WORDS: `15fps is not written in stone, just a wishful figure`.** NOTHING MAY BE RANKED BY DISTANCE TO IT, and any ticket justified as `gets us to 15` needs re-justifying on something else. The slug keeps the number so citations resolve; the GOAL is now: find the main performance issues. HIS SEQUENCE IS FINISH-THEN-MEASURE, NOT MEASURE-THEN-PICK: `i think when all current known issues are done, just profile it again`. So do NOT grow new perf tickets off the 2026-09-21 `--region rijn` profile -- that scene has now produced THREE levers measuring to approximately zero on the scene that ships, and the re-profile must be on ROOFS. WHERE WE ACTUALLY ARE, and these rows stand on their own without any target: pxx median 1.887 fps = 530 ms/frame over 19 windows on `world/roofs`, vsync ON, audio ON, quiet box; CPython 3.14.4 on the SAME scene, box and session, median 37.140 fps (27 ms) over 414 windows. THAT 19.7x AGAINST A WORKING ORACLE IS THE REAL FINDING and it needs no wishful number: the gap is OURS and it is structural. `lekkerzeilen@devdocs/perf/ROOFS-2026-09-22.md`, `62859ff`. MEASUREMENT RULES THIS TICKET HAS PAID FOR, all still binding: a factor is a property of the SCENE and the MACHINE STATE it was measured on (four factors in one day, every one arithmetically correct on a different frame); treat a single timing as ~20% soft and a RATIO of two arms with different load sensitivity as UNBOUNDED until both run interleaved on a quiet box; and NEVER rank by `per-call cost x calls per frame` -- 7a predicted 12% from a 12.3x per-call win and measured 3.3% inside its own 8.8% noise, because `Soundscape.update` caps the audio queue at a fixed BYTE target so work per frame does not grow as the frame slows. MEASURED AS NOT THE CAUSE: vsync, audio, the RNG (8.16x per shift, in-situ value nil), inverse trig (0.22%), and heap contention (the render loop is ONE thread; the 16.5% rijn heap-lock row is UNCONTENDED and a 400k-object A/B bought +4.9% with overlapping error bars). STILL LIVE: the computed-getattr flag has a shippable off switch (`fn = lib[name]`, zero computed sites) worth 112,180 bytes STATIC with its runtime value UNMEASURED; and the managed-local release sweep, whose inline nil-test landed at 56.8% off the per-slot cost against a 55.8% prediction, x86-64 and SXR_STR only. DO NOT REVERT the computed-getattr widening -- it stops a SIGSEGV in imported modules."
 ---
@@ -229,6 +228,48 @@ flattering direction.
 **What would retire this row:** a pin carrying `be65bc3e3` or later. Re-derive
 the 135 before quoting it; the two files move independently and the number is a
 snapshot.
+
+## THE npy IMPORT-COST EDGE IS REMOVED — IT IS A COMPILE-TIME TICKET AND THIS UMBRELLA MEASURES A FRAME
+
+**Removed 2026-09-22 by the seat that wired it: `frankz-e5`. This is my own
+error, and it is the error this umbrella already has a section about** — an edge
+carrying p95 to work that cannot move the stated goal, which is exactly what
+`franks-5b` found here this morning with the inverse-trig row, from prose
+instead of from a lane mismatch.
+
+`perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline`
+is a **compiler** ticket. Every mechanism in it is a parse-time scan —
+`PyDefSiteMode`'s backward walk, `PyDefUsedAsValue`'s per-identifier compare,
+`FindUClass`'s flat class-table scan — and its headline **38.72% on
+lekkerzeilen** is 38.72% off the time it takes to COMPILE lekkerzeilen, not off a
+frame.
+
+**MEASURED, because a name is not the thing.** `FindUClass*` is declared in
+`compiler/symtab.inc`; `PyDefUsedAsValue` and `PyClsAttrWriteScan` live in
+`compiler/pyparser.inc` and `compiler/defs.inc`. A grep does put both names in
+the EMITTED runtime — `compiler/builtin/pylib.pas` and `builtinheap.pas` — and
+**all six of those matches are prose in comments**, which is this file's own
+"a search for a NAME matches PROSE ABOUT the thing" arriving in the check that
+was meant to settle it. Nothing in the emitted runtime calls them. The program
+is compiled once and then runs; the scans cannot be in the frame.
+
+**SO IT INHERITED p95 FROM A GOAL IT CANNOT SERVE.** Its own prio is 60 and that
+is what it now ranks at — a 38.72% compile win ranks perfectly well on merit, and
+the fleet's inner loop is a real beneficiary. **Nothing about the ticket is
+downgraded; only the claim that it moves this umbrella's number is.**
+
+**THE SCOPE QUESTION, SETTLED HERE RATHER THAN ESCALATED, AND THE AMBIGUITY WAS
+MINE:** I retitled this umbrella from *"runs at 15 fps"* to *"lekkerzeilen
+performance"* when the owner retired the target, and that broadened the title
+past the evidence. **Every measured row in this file is a frame**: 1.887 fps,
+530 ms, 19 windows, against CPython's 37.140. The owner's directive was about the
+frame rate. **So this umbrella means the FRAME, and build time is a different
+quantity that deserves its own umbrella if anyone wants one.**
+
+**WHAT WOULD RESTORE THE EDGE:** a declaration that this umbrella's goal includes
+build time, or a measurement showing one of these routines executing inside a
+frame. Neither exists today. **Do not restore it on the strength of the ticket
+being good** — it is.
 
 ## What nobody has, and it probably outranks every edge below
 
