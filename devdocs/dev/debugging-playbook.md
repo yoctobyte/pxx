@@ -7175,6 +7175,22 @@ HOLDS FIXED.** Corpus size is the reassuring axis and it is rarely the one that
 matters; *target*, *output mode*, *frontend* and *optimisation level* are four
 different axes and a sweep that varies one of them is silent about the rest.
 
+**AND THE AXES AN INSTRUMENT VARIES WERE NOT CHOSEN BY RISK — THEY WERE CHOSEN
+BY WHAT WAS CHEAP TO VARY** (frankuser, same day, and it is the part that makes
+the rule predictive rather than retrospective). optdiff varies the `-O` level
+because that is a command-line flag and costs a rebuild; varying the TARGET
+needs a cross toolchain, qemu, and an ELF writer per machine. **So an
+instrument's coverage follows the cost of varying — and risk does not
+distribute itself by cost.** If anything it concentrates in exactly the axes
+that were expensive enough to hold fixed, because those are the ones least
+exercised by everything else too. That is why *"~900 programs"* felt like
+breadth: **N grew along the free axis**, and a number growing is
+indistinguishable in prose from coverage growing.
+
+So the question that finds the hole before the decision does, rather than
+after: **which axis would have been annoying to vary?** That is where to look
+first, and here it named the target on the first ask.
+
 ## N CAUSES AND N SYMPTOMS IS A COINCIDENCE OF ARITY — the COUNTING supplies a correspondence that neither instrument measured
 
 Measured 2026-09-06, by this file's coordinator, on itself. **The composition

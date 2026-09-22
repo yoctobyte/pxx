@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:18 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:173 backlog-nilpy:186 backlog-tools:63 backlog-pascal:13 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3917 rejected:87`
+`working:35 unfinished:18 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:172 backlog-nilpy:186 backlog-tools:63 backlog-pascal:13 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3917 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-dce-breaks-every-c-program-on-every-cross-target` [A] — owner: frankb-8e
 - `bug-a-dce-refuses-every-target-except-x86-64` [A] — owner: frankb-8e
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
@@ -77,7 +78,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 566, ranked
+## Ready — top 30 of 565, ranked
 
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
@@ -93,7 +94,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
-- `[p 75] [A]` bug-a-dce-breaks-every-c-program-on-every-cross-target (unblocks 1)
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
@@ -109,5 +109,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 - `[p 70] [A+S]` bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal (unblocks 1)
+- `[p 70] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 
-_536 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_535 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -5,8 +5,8 @@ track: A
 prio: 75
 type: bug
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankb-8e
 created: 2026-09-22
 found-by: frankh-c0
 summary: "`--dce` MISCOMPILES EVERY C PROGRAM ON EVERY CROSS TARGET, and a seven-line hello world is enough: `int add(int a,int b){return a+b;} int main(void){printf(\"%d\\n\", add(19,23));}` segfaults under qemu on aarch64 and arm32, and on riscv32 prints NOTHING and exits 0 -- the loud arm and the silent arm of one defect. `--no-dce` prints 42 on all three. PASCAL IS UNAFFECTED on the same three targets with the same flag, so this is the C FRONTEND crossed with a non-host backend and not DCE in general. PRE-EXISTING AND SHIPPING: reproduced with the pre-promotion compiler asking for `--dce` EXPLICITLY, so no default is implicated and `-O3` carries it today. WHY NOTHING SAW IT, AND IT IS A POPULATION HOLE RATHER THAN AN OVERSIGHT: the argument that licensed DCE into the free tier is that `tools/optdiff.sh` sweeps ~900 programs at -O0/-O2/-O3 and therefore makes the opt tier a whole-corpus `--dce` differential. That corpus DOES include `test/*.c` -- but optdiff builds for the HOST ONLY, so the differential is x86-64-shaped and cannot contain this. `compiler.pas`'s own comment already states the general form (\"the x86-64 whole-corpus differential that -O3 buys says nothing about xtensa\") and the same sentence covers aarch64, arm32 and riscv32. Separately, `bug-a-dce-refuses-every-target-except-x86-64` recorded arm32/aarch64 as VERIFIED BY RUNNING with five fixtures per target; those fixtures are Pascal, which is exactly the arm that still works, so that verification is sound about what it measured and silent about this. WHAT IT COSTS: it is the wall behind the `-O2` promotion measured at -66% over nine real programs -- promoting the pass and running a full tier gives 101 hard FAILs on plexus, concentrated in cross-target C (33 test-core, 20 test-riscv32, 13 test-aarch64, 12 test-arm32, 18 c-conformance), and this is the cause of essentially all of them. ONE OF THE 101 IS NOT THIS and is paperwork: `c_dce_entry_root` asserts the `-O3` image is strictly smaller than the `-O2` one, which a promotion empties. REPRO IS THREE LINES AND NEEDS NO FIXTURE -- see the body."
@@ -74,6 +74,16 @@ first, and **a fix verified there can leave riscv32 silently wrong while every
 exit-status assertion passes.** Same class as the leak that printed
 `OPENARRAYFRESH OK` with 1504 of 3000 arrays leaked: the assertion was
 physically unable to observe the defect. Assert the bytes.
+
+**AND THE TWO ARMS MAY NOT BE ONE CAUSE — SEPARATE THEM BEFORE CALLING EITHER
+FIXED** (frankb-8e, 2026-09-22, taking the ticket). aarch64/arm32 crashing says
+the entry path went somewhere invalid. riscv32 exiting 0 with no output is
+consistent with that **and equally consistent with a BODY dropped whose absence
+merely skips the `printf`** — two different defects that the matrix above
+cannot tell apart, because both produce an empty stdout. The matrix is evidence
+that something is wrong on three targets, not evidence that it is the same
+something. **Say in the resolution which arm each assertion actually
+exercises.**
 
 ## Where to look
 
