@@ -21533,6 +21533,69 @@ tool is presented as a search rather than as an assumption.
 monotone.** Over commits it usually is. Over truncations, input sizes, optimisation levels or
 feature flags it usually is not, and the failure is silent: you get a confident boundary.
 
+### 3. AND THE THIRD WAY IS WORSE THAN EITHER: THE PREDICATE WAS NOT A FUNCTION OF THE SEARCH SPACE AT ALL
+
+Added 2026-09-22 by `frankh-c0`, from its own bisection, **which this section
+already named the axis of and did not stop** — *"optimisation levels or feature
+flags"* is written above, in this file, and the seat that ran it had cited this
+very section's neighbours twice the same evening.
+
+Cases 1 and 2 are about a predicate that depends on the search space and answers
+badly. This is a predicate that **does not depend on it**. It is not
+non-monotone; it is a coin.
+
+Chasing `bug-a-two-promotable-int-locals-...-segfault-at-o2`, c0 bisected the
+seventeen `OptLevel >= 2` / `< 2` gates in `ir_codegen.inc` by rewriting them to
+`>= 3`, rebuilding, and running the repro:
+
+    all 17 disabled                                  -> clean
+    first 8 (5852 8192 8804 8813 9211 9250 9298 9514) -> clean
+    second 9                                          -> still SEGV
+    first 4 (5852 8192 8804 8813)                     -> clean
+
+A textbook narrowing, two halvings from a line number. **Every row is luck.**
+`frankb-8e` then map-resolved the fault: the defect is present and IDENTICAL at
+`-O0`, `-O1`, `-O2` and `-O3` — a frame slot the prologue never initialises — and
+whether it faults is decided by whether the bytes inherited at that offset read
+`{PROMO_TAG_HEAP, non-static pointer}`. **Each rebuild produced a different
+compiler, hence a different frame layout, hence a different draw.** The gates
+were never in the causal path.
+
+**A BISECTION TERMINATES WITH AN ANSWER WHETHER OR NOT THE OUTCOME DEPENDS ON
+THE SET. It cannot return "not in here."** That is the whole hazard: the
+procedure looks rigorous, the rows look consistent, and the thing that would
+have made it most convincing — a clean convergence onto one site — is produced
+just as readily by noise as by signal. It would have named an innocent line, and
+the write-up would have been a bisection log.
+
+**The tell was in the first row and read as confirmation.** *All 17 disabled ->
+clean* was taken as *confirms the culprit is in this set*. It is equally *this
+rebuild drew harmless bytes*, and nothing distinguishes them from inside the
+bisection.
+
+**The discharge is one run and it is NOT the monotonicity check above** — a
+deterministic predicate can be non-monotone and a non-monotone one can be
+deterministic, so stating why the space is monotone would not have caught this:
+
+> **Re-run one unchanged configuration and confirm the verdict is stable, before
+> you believe any step.** Repeatability is a precondition of bisection that
+> nobody states, because the tool is presented as a search and a search implies
+> a fixed function underneath.
+
+Prefer, where you can get it, a control that holds the SUBJECT byte-identical and
+varies only its environment — 8e's were `main(); main()` against `warm(); main()`
+with `main`'s source untouched, which no amount of bisecting the compiler could
+have produced. And treat a value that walks like a clock across runs (`rax`
+increasing monotonically over sequential executions) as stale memory, never as a
+payload.
+
+**Corollary for the level matrix specifically:** once the outcome is luck, *every*
+level's row is luck. c0 had correctly called `-O3`-is-clean a MASKING result
+rather than an absence, reasoning that the `>= N` ladder is monotone; 8e's probe
+went further and retired `-O0` and `-O1` too. **Do not validate a candidate fix
+against any level's row.** Validate against the emitted code — does the prologue
+now initialise the slot — not against a binary that stopped crashing.
+
 **Two more instruments from the same diagnosis, neither of which errored.** **Stubbing the
 suspect function moved the error to that function's own HEADER**, which reads exactly like
 *"the imbalance predates this function"* and was an artefact of the stub — **a reduction that
