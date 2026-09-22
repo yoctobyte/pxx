@@ -1022,3 +1022,4 @@
 2026-09-22T10:38:00Z	borg	5fccc890af91ec591286a54a4f81f56386d63514	AUTO-PIN DECLINED — HEAD is f1a56f2410f9, not the tested 5fccc890af91
 2026-09-22T10:58:48Z	borg	3daf4bc16cc15bc3a670f4115ef40ad6cbb27c25	would NOT pin 3daf4bc16cc1 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-nilpy#src:test/test_nilpy_float_repr_roundtrip.npy
 2026-09-22T11:39:37Z	borg	c194231297b18bbe645fb6fe681377f32c1a3d85	would NOT pin c194231297b1 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2
+2026-09-22T12:14:20Z	borg	be65bc3e39426b473dee6d9d4ced88368efac3f6	would NOT pin be65bc3e3942 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2
