@@ -39686,6 +39686,11 @@ because here the audit material was **attached**:
   where a repair is adopted. Same shape as the bullet three above: what makes
   something safe to adopt is what stops it being checked. **Ask of any repair the
   question you would ask of any guard: what input must this REFUSE?**
+- **Third role, same mechanism:** see `RIGOUR TRANSFERS ACROSS AXES WITHOUT BEING
+  EARNED`, where the thing that stops the checking is a **rigorous exclusion**
+  rather than a quote or a fix. Quote, repair, exclusion — three marks of care,
+  each one the reason its claim was adopted and therefore the reason it was not
+  audited.
 
 Handling the owner's words on the ESP32 pivot, I did two things in one commit:
 
@@ -42791,3 +42796,15 @@ sharper: the seat that can vary the untouched axis is usually not the seat that
 did the rigorous sweep.** 8e reached this by re-varying flags, on its own
 conclusion, and rejecting its own p70 — the cheapest possible outcome and the one
 that required somebody to doubt the half that looked finished.
+
+**THIRD ROLE OF ONE MECHANISM, and the cross-reference is the point of this
+paragraph.** `frankuser` noticed that this entry, `ATTACHING THE SOURCE DOES NOT
+CAUSE ANYONE TO READ IT` (a quote) and its extension `A REPAIR INHERITS THE
+CREDIBILITY OF THE DIAGNOSIS` (a fix) are **one thing met in three roles**:
+**whatever makes a claim safe to adopt is what stops it being checked.** An
+attached source, a repair, a rigorous exclusion — each is a genuine mark of care,
+each is the reason the thing gets adopted, and each is therefore the reason
+nobody audits what travelled with it. Three instances, one day, three seats, and
+none of the three was looking for it. **If you meet a fourth, it will not look
+like carelessness either** — look for the part of the claim that the care does
+not cover.
