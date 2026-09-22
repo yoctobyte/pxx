@@ -35090,11 +35090,21 @@ test-emit-obj: $(COMPILER)
 	  n=$$(readelf -sW $(TESTTMP)/espx_c_$$t.o | grep -cE "GLOBAL +DEFAULT +[0-9]+ app_main$$"); \
 	  [ "$$n" = 1 ] || { echo "test-emit-obj: $$t object has $$n GLOBAL app_main definitions -- the writer's entry symbol and the source's own proc collide"; exit 1; }; \
 	 done; echo "test-emit-obj: an ESP object exports a cdecl routine and a global, with exactly one app_main (riscv32, xtensa)"
+	# THE EXTERNAL THIS ROW GREPS FOR IS DECLARED BY THE FIXTURE, NOT INHERITED
+	# FROM THE RTL. It was `free` until 2026-09-22, which reached the object only
+	# because the RTL was pulled into every program unconditionally; 523833fde
+	# made that pull evidence-based, the fixture (an integer increment: no
+	# string, no array, no uses) correctly stopped qualifying, the object went
+	# 41696 -> 1688 bytes and the row went red with the symbol-index arithmetic
+	# it tests working perfectly. A row whose input is a side effect of another
+	# subsystem's over-pull fails when that subsystem is FIXED. esp_rom_delay_us
+	# is an ESP ROM routine we never define, so it cannot stop being external.
+	# See test/esp_obj_export.pas for the long form.
 	@for t in riscv32 xtensa; do \
 	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_export.pas $(TESTTMP)/espx_p_$$t.o >/dev/null || { echo "test-emit-obj: the Pascal ESP fixture FAILED to build for $$t"; exit 1; }; \
 	  readelf -SW $(TESTTMP)/espx_p_$$t.o | grep -q '\.iram1\.text' || { echo "test-emit-obj: $$t Pascal ESP object has no .iram1.text -- it went through the PLAIN writer, so this row re-tested the one above instead of the two-text-section one"; exit 1; }; \
 	  readelf -sW $(TESTTMP)/espx_p_$$t.o | grep -qE "OBJECT +GLOBAL +DEFAULT +[0-9]+ EspCount$$" || { echo "test-emit-obj: the two-text-section $$t writer does not export the cvar global"; exit 1; }; \
-	  readelf -rW $(TESTTMP)/espx_p_$$t.o | grep -qE ' free( |$$)' || { echo "test-emit-obj: no relocation in the $$t iram object names free -- the external symbol base did not move past the exported symbols, so the calls name the wrong callee"; exit 1; }; \
+	  readelf -rW $(TESTTMP)/espx_p_$$t.o | grep -qE ' esp_rom_delay_us( |$$)' || { echo "test-emit-obj: no relocation in the $$t iram object names esp_rom_delay_us -- the external symbol base did not move past the exported symbols, so the calls name the wrong callee"; exit 1; }; \
 	 done; echo "test-emit-obj: the two-text-section ESP writer exports a cvar global and still resolves its externals"
 	# BASELINE for feature-pal-esp-posix-fd-semantics, to be diffed against
 	# after the rewrite to exact POSIX fd semantics.
@@ -35697,18 +35707,24 @@ test-emit-obj: $(COMPILER)
 	  rel=$$(readelf -rW $(TESTTMP)/test_emit_obj_xt.o | grep -cE 'lwip_|vTaskDelay|esp_timer_get_time' || true); \
 	  if [ "$$pal" != 0 ]; then \
 	    echo "test-emit-obj: NOTE -- the xtensa object imports $$pal ESP-IDF symbols, named by $$rel relocations, for a routine it never calls."; \
-	    echo "test-emit-obj:         That is bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal (prio 65, bisected to f0a1a8be9), NOT this row."; \
+	    echo "test-emit-obj:         The IMPORTS are expected and are not a defect here: DCE removes code, not symbol-table"; \
+	    echo "test-emit-obj:         entries, so a name with no remaining reference still sits in .symtab. The number that"; \
+	    echo "test-emit-obj:         says whether the object still ASKS the linker for the PAL is the RELOCATION count."; \
+	    echo "test-emit-obj:         Retention is still PER-UNIT (naming platform at all costs the whole unit) --"; \
+	    echo "test-emit-obj:         feature-a-pull-builtinheap-on-demand-instead-of-predicting-it, NOT this row."; \
 	  fi; \
-	  if [ "$$rel" -gt 24 ]; then \
-	    echo "test-emit-obj: the xtensa ESP-IDF RELOCATION count GREW, $$rel against a ratchet of 24."; \
-	    echo "test-emit-obj:   The ratchet is the count measured on 2026-09-18, not a target. It is here because the"; \
-	    echo "test-emit-obj:   link step stopped reporting this defect when its stub shim became generated, and a"; \
-	    echo "test-emit-obj:   gate at ZERO would manufacture a red that never existed -- this row never reported the"; \
-	    echo "test-emit-obj:   over-import on purpose, an accident of hand-written stubs did, and that accident is"; \
-	    echo "test-emit-obj:   why the shim went stale in the first place."; \
-	    echo "test-emit-obj:   If you INTENDED to change what the RTL imports, move the 24 to the new measured"; \
+	  if [ "$$rel" -gt 0 ]; then \
+	    echo "test-emit-obj: the xtensa ESP-IDF RELOCATION count GREW, $$rel against a ratchet of ZERO."; \
+	    echo "test-emit-obj:   The ratchet was 24 -- the count measured on 2026-09-18 -- and 24 was correct then."; \
+	    echo "test-emit-obj:   It is ZERO since 2026-09-22, because --emit-obj now defaults --dce on (96366af9b) and"; \
+	    echo "test-emit-obj:   the measured count at that tree is 0, not because zero is an aspiration. The number"; \
+	    echo "test-emit-obj:   was read off the built object, not predicted: a ratchet written from an intention"; \
+	    echo "test-emit-obj:   pins the intention. Holding it at 24 after the fix would have let 24 relocations"; \
+	    echo "test-emit-obj:   creep back silently, which is the one thing a ratchet exists to stop."; \
+	    echo "test-emit-obj:   If you INTENDED to change what the RTL imports, move the 0 to the new MEASURED"; \
 	    echo "test-emit-obj:   number in the same commit and say why -- the same re-baselining the size canary uses."; \
-	    echo "test-emit-obj:   Otherwise something just widened the PAL surface an --emit-obj object retains."; \
+	    echo "test-emit-obj:   Otherwise something just widened the PAL surface an --emit-obj object retains, or"; \
+	    echo "test-emit-obj:   the --dce default stopped reaching this object."; \
 	    exit 1; \
 	  fi; \
 	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
