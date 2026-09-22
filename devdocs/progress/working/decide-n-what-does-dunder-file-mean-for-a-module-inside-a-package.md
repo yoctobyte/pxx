@@ -4,6 +4,8 @@ prio: 60
 type: decision
 blocked-by: []
 summary: "A compiled NilPy module inside a PACKAGE reports __file__ with the package directory COLLAPSED — `<exe_dir>/world.py` where CPython says `<root>/lekkerzeilen/world.py` — so `dirname(dirname(abspath(__file__)))`, which is how a packaged module names its repo root, overshoots by one level. Measured 2026-09-12: lekkerzeilen's runtime package has FOUR __file__ sites and ALL FOUR are that two-dirname form, all naming the same data root, and all four come out wrong; `--starts` then prints `open water: nowhere in particular` instead of listing the region, with nothing raised. This is NOT a re-litigation of decide-nilpy-dunder-file-for-a-compiled-program: that ticket never mentions packages, its rule says `<exe_dir>/<original module basename>`, and its stated payoff (`dirname(abspath(__file__))` yields the executable's directory for every module) is only reachable by collapsing the package — which is exactly what breaks the other idiom. It also deferred an application data root `until something needs it`, and lekkerzeilen is the first program that does, so its own trigger has fired. THE FORK IN ONE SENTENCE: do we want a compiled program's modules to find their data laid out the way the SOURCE tree is, or laid out the way the shipped binary's directory is? Both options are stated below with what each costs, and there is a third (a data root) the earlier decision already sketched."
+status: working
+owner: frankh-c0
 ---
 
 # `__file__` for a module inside a package
@@ -98,3 +100,60 @@ about which layout a compiled program's data is expected to follow. Stated with
 no implementation noun in it: **do we want a compiled program to find its data
 the way the source tree is laid out, or the way the binary's own directory is
 laid out?**
+
+## DECIDED 2026-09-22 (frankh-c0): option 1, and NOT escalated. Here is why.
+
+I am taking this rather than sending it up, and the reason is the one CLAUDE.md
+predicts: *"writing it usually reveals that an existing rule already decides
+it."* This ticket did the hard part — it states the fork as a sentence about
+what we want, with no implementation noun in it — and stating it that well is
+what shows the fork is not a fork.
+
+**THE STATED FORK HAS AN ARM THAT IS NOT AN INTENT.** The sentence is *"do we
+want a compiled program to find its data the way the SOURCE tree is laid out, or
+the way the BINARY'S directory is laid out?"* Option 1 does not choose the first
+arm. It keeps the binary's-directory frame exactly — `<exe_dir>` substitutes for
+`<root>` — and applies it at the level CPython uses. Under option 1 a packaged
+module's `__file__` is `<exe_dir>/<pkg>/<mod>.py`, which is the August rule
+unchanged, read one level deeper. The two arms are not two intentions; one is
+the intention and the other is where a sentence written without packages in mind
+happens to land.
+
+So what option 1 costs is not an intent. It is the August ticket's **payoff
+sentence** — *"`dirname(abspath(__file__))` yields the executable's directory for
+EVERY module"* — which was true of every module that existed when it was
+written, because none of them were in a package. That is a claim with a date on
+it, not a decision.
+
+**AND THREE STANDING RULES DECIDE IT, none of which needed the owner:**
+
+1. **NilPy is UPWARD compatible with CPython, one direction.** Accepting what
+   CPython rejects is a feature; code that runs correctly under CPython and
+   wrongly under us is a **bug**. Four sites in one real program, silently
+   wrong, is the bug side of that line and not a compat item.
+2. **"Real code compiling or running wrong is a bug."** `--starts` prints `open
+   water: nowhere in particular` and exits 0. Nothing raises.
+3. **The goal list names lekkerzeilen as a demo.** Option 2 makes the demo
+   depend on a patched copy of the program, which is the "fix the program" arm
+   the umbrella's own fork exists to refuse.
+
+**WHAT I AM NOT DOING:** I am not editing or overruling
+`decide-nilpy-dunder-file-for-a-compiled-program`. That is the owner's decision
+and it stands. This extends it to a case it does not mention — its own text
+never says "package" — and I will say so in its Log rather than rewriting its
+rule.
+
+**REVERSIBILITY, which is the actual test.** This is a few dozen lines in two
+lowering sites plus a fixture. If the owner reads it and wants the collapsed
+path back, it is one revert. A big reversible change is mine; a small
+irreversible one would not be. Reported rather than asked.
+
+**WHAT WOULD MAKE ME WRONG:** a real program that relies on
+`dirname(abspath(__file__))` naming the executable's directory *from inside a
+package*. The population we have is 4 of 4 the other way, and the single
+one-dirname site in the tree is under `tests/`, which the closure does not
+compile. If someone finds such a program, that is evidence and this should be
+re-opened on it — not on the argument that the August sentence said so.
+
+**Option 3 (the data root) is not closed by this** and remains worth having on
+its own terms; options 1 and 3 are not exclusive, as the ticket says.
