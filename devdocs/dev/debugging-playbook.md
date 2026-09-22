@@ -37912,6 +37912,50 @@ comment says is handled, and watch whether anything actually objects. It did not
 The guard is now in with a verified positive control (a one-line refusal in
 `DceMark` forcing a called body to be dropped makes it fire by name).
 
+**AND THE NASTIEST PLACE FOR A WRONG ROUTE IS UNDERNEATH A SAFETY CLAIM, BECAUSE
+OBEYING ONE PRODUCES NOTHING TO CONTRADICT IT.** Measured 2026-09-22,
+`frankb-8e`, `b823a08d6`. CLAUDE.md's *isolation guards the RUN, not the ROUTE*
+already covers a probe reaching its subject by the wrong path — but its instances
+are probes chasing a DEFECT, **where a real failing artefact eventually
+disagrees with you.** Here the wrong route sat under *"the failure direction is
+safe: under-detecting produces a COMPILE error, never a wrong binary"*, which is
+an assertion that **no check is needed**. Nobody checks, nothing fails, **the
+route is never contradicted** — the hazard-block decay shape wearing a safety
+claim instead of a warning.
+
+**AND TWO SEATS REACHED FOR THE SAME WRONG INSTRUMENT INDEPENDENTLY, BECAUSE IT
+IS NAMED AFTER THE THING.** The ticket's original evidence simulated
+under-detection with `-uPXX_MANAGED_STRING`; 8e reached for the same flag without
+reading that, and got what looked like a clean refutation — a concat loop builds,
+rc=0, no diagnostic, silently prints `len=255` against an owed 260, boundary
+exactly at 255, three magnitudes checked. **A wrong binary, which the claim says
+cannot happen.** It is not a refutation: that flag decides what `string` MEANS,
+so undefining it makes `string` a frozen 255-byte type and the truncation is the
+TYPE changing, correctly. **Under-detection changes exactly one consumer**
+(`needsAnsiRuntime`) and never touches the type. **This is why "two readings
+agreed" is not corroboration: a name-shaped instrument attracts independent seats
+to the same wrong route**, and their convergence is caused by the naming, not by
+the fact.
+
+**THE DISCRIMINATOR IS ONE GREP, ASKED BEFORE THE PROBE RATHER THAN AFTER: does
+the mechanism I am simulating have ONE consumer or fifteen?** Measured here to
+check 8e's own figure: `PXX_MANAGED_STRING` occurs **39 times across 14 files**
+under `compiler/`; `needsAnsiRuntime` occurs **11**. (Occurrences, not consumers —
+the population is `grep -r` over `compiler/`, and the ratio is the point, not the
+integers.) 8e ran that grep **only afterwards**. A simulation flag that is
+touched everywhere is simulating a different mechanism from the one-site decision
+you meant.
+
+**THE OUTCOME IS THE POSITIVE CASE THIS SECTION OTHERWISE LACKS.** 8e set out to
+TEST the safety claim rather than inherit it, explicitly applying *a comment
+explaining why a check is unnecessary is a guard with no positive control*.
+Simulated properly — a compiler built with the initialiser forced False — **the
+claim holds and is better evidenced than it was stated**: 36 of 36 string shapes
+x targets refused, 0 built, by two structurally independent guards, plus nine
+builtin expressions with 0 silently wrong. **Running the discharge upgraded a
+believed claim to a proven one and cost nothing but the run** — which is the
+argument for running it on claims you expect to survive.
+
 ### AND THE THIRD MEMBER OF THE FAMILY IS A STALE PROHIBITION, WHICH DECAYS TOWARD BEING IGNORED WHOLESALE
 
 **Found 2026-09-22 by `frankuser`, about its own role file, after reading this
