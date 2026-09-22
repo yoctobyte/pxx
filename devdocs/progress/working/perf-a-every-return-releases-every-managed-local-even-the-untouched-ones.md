@@ -1988,3 +1988,31 @@ claimed it was unwired until `829d67389`.
 
 **Any future attempt at (1) must fail at least one of those three before it is
 believed.** That is the positive control this family has lacked four times.
+
+## PIN v417 CARRIES FOUR OF THE SIX BACKENDS, NOT ALL SIX
+
+`frankz-e5`, 2026-09-22, confirmed by `frankuser` who cut the pin. Recorded here
+because this is the ticket a reader of the series lands on, and because this file
+says *all six backends* in eleven places — all of them true of HEAD and, for three
+hours and twenty minutes, none of them true of `$(PXX_STABLE)`.
+
+Checked by ancestry (`git merge-base --is-ancestor <sha> 2b1a54397`), not by
+comparing timestamps, since a rebase preserves a log's dates and not its order:
+
+```
+x86-64 022739dce  IN v417      riscv32 63fdda88d  NOT in v417
+i386   2aa7e7159  IN v417      xtensa  1d0ee74fe  NOT in v417
+arm32  a0f4facd8  IN v417
+aarch64 ec82fc0de IN v417
+```
+
+**Window: v417 at 2026-09-22T09:12:49Z to v418 at 12:31:26Z.** A `$(PXX_STABLE)`
+measurement of this change on riscv32 or xtensa inside that window reads the
+pre-series release sequence. **An ambiguity with a bounded window, not a known
+contamination** — nobody has established that either target was measured in it,
+and v418 carries all six, so the exposure is closed going forward.
+
+Full write-up in `STABLES.md` under *Caveat: a pin can be PARTIAL for one logical
+change*, and the general form in `debugging-playbook.md`. **Nothing here asks for a
+change to this series, which is correct at HEAD.**
+

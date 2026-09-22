@@ -2,6 +2,47 @@
 
 Mid-dev we keep only the **latest** stable in the working tree (`stable_latest`/`stable_pinned`, fixed-name overwrite). The historical per-version binaries `v1…v36` were removed from the tree but are **not lost** — every blob stays in git history. This manifest makes each one findable + extractable in one line.
 
+## Caveat: a pin can be PARTIAL for one logical change
+
+A pin is one binary, but a single logical change is often landed as **one commit
+per backend**. A pin cut mid-series freezes a compiler that implements that change
+on some targets and not others, and **nothing in the source, the build log or the
+table below shows it.**
+
+**Recorded instance — v417, and it is the only one anybody has checked for:** the
+series *"inline nil test at the managed-local release site"* landed 2026-09-22 as
+six commits in 65 minutes. **v417 (`09:12:49Z`) sits between the fourth and the
+fifth.**
+
+```
+08:32:32Z  022739dce  x86-64    IN v417
+08:44:39Z  2aa7e7159  i386      IN v417
+08:51:45Z  a0f4facd8  arm32     IN v417
+09:04:41Z  ec82fc0de  aarch64   IN v417
+09:12:49Z  ---------  PIN v417
+09:23:08Z  63fdda88d  riscv32   NOT in v417
+09:37:18Z  1d0ee74fe  xtensa    NOT in v417   ("all six backends now carry it")
+```
+
+So a `$(PXX_STABLE)` measurement on **riscv32 or xtensa** taken between
+**09:12:49Z and 12:31:26Z** (when v418 landed, carrying all six) is about a
+different compiler than the person taking it is likely to think. **Stated as an
+ambiguity with a bounded window, not as a contaminated result** — nobody has
+established that either target was measured inside it.
+
+**If you are quoting a pinned measurement on a non-x86-64 target, check the change
+is in that pin by ANCESTRY** — `git merge-base --is-ancestor <sha> <pin-commit>` —
+not by the pin being recent, and not by comparing dates in a log, whose ordering a
+rebase does not preserve. And when landing a per-target series, name the carrying
+pin in the last commit, or land it as one commit: the sixth commit above says *all
+six backends now carry it* and that sentence was false for pinned consumers for the
+next three hours and twenty minutes.
+
+*Found 2026-09-22 by `frankz-e5` while checking for topic collisions; confirmed by
+`frankuser`, who cut v417. Deliberately NOT added to `history.log`: that file is
+the pin ledger and `tools/factsheet.sh` counts its LINES, so a prose line there
+would report an extra pin.*
+
 ## Extract a historical stable
 
 ```sh

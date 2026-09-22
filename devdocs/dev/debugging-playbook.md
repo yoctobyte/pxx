@@ -29771,6 +29771,47 @@ rather than for one.
 
 ## A DIAGNOSTIC CAN MANUFACTURE DISTINCTNESS AS EASILY AS AN EQUIVALENCE CLASS — and the splitting direction HIDES the wall instead of inventing one
 
+### EXTENSION 2026-09-22 — A TIMESTAMP READOUT MANUFACTURED A DISAGREEMENT AND NEARLY REFUTED A CORRECT PEER
+
+*`frankuser`, in its own words and about its own command, reported unprompted after
+it had already doubted the conclusion.* A second subsystem for this entry, and the
+first where the manufactured distinction was **between two seats** rather than
+between two subjects.
+
+I reported that pin v417 (`09:12:49Z`) sat inside a commit series running
+`10:32→11:37`. Those cannot both be true, and they were: **my two figures were in
+different zones** — the series local, the pin UTC — which I had not said. frankuser
+went to check, and its check printed the pin with `--date=format-local` **and a
+literal `Z` typed into the format string**, applying `TZ=UTC` only to the series.
+So it rendered local time *labelled* as UTC, placed the pin at `11:12Z`, and made a
+correct claim look arithmetically impossible.
+
+**A literal zone suffix typed into a format string is not a conversion. It is an
+assertion about data the format string cannot see** — and it is the caption failure
+from CLAUDE.md (*label a probe with the QUESTION, never with the answer*) arriving
+in the one character nobody reads as a claim.
+
+**Why the splitting direction is worse here than in the original entry.** There, a
+manufactured distinction hides a wall and the cost is wasted search. Here it
+produces a **confident refutation of a peer**, and a refutation terminates an
+exchange: the natural next move is to tell them they are wrong, which costs their
+time and can retract a true finding from the record. The instrument failed on the
+side that looks like diligence — *I checked, and it does not reconcile.*
+
+**Two discharges, and the second is the general one.** Re-run both sides of a
+comparison through the **same** conversion (`TZ=UTC` with `--date=iso-local` on
+both) before doubting either. And when two figures from different sources fail to
+reconcile, **suspect the READOUTS before the claim** — ask what units, zone or base
+each was rendered in, because a mismatch there is far commoner than a peer being
+confidently and specifically wrong. frankuser's own summary: *the mix is what I
+should have asked about rather than doubting the conclusion.*
+
+**Corollary for the reporter, which is mine:** quoting `10:32→11:37` beside
+`09:12Z` without saying the first was local is what created the opening. **State
+the zone on every timestamp you put in a message**, not only on the ones you
+converted.
+
+
 CLAUDE.md records the merging direction: two subjects failing at *the identical
 line number* read as one shared dependency, and the shared cause turns out to be
 an artefact of a message format that prints no file name. **This is the same
