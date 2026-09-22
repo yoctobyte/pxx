@@ -129,3 +129,43 @@ back if what it touches becomes load-bearing.
 **To revive it:** move it to the owning lane's backlog, set `status: backlog`,
 and say in the ticket WHAT CHANGED to make it matter now. Restoring it because it
 reads well is how the pile comes back.
+
+## NOTED 2026-09-22 (`frankz-e5`, coordinator): `prio: 85` IN `low-prio/` IS A CONTRADICTION, AND I HAVE NOT RESOLVED IT
+
+**Not moved and not re-ranked — this is a report, because the ticket is the
+owner's and the folder was somebody's decision.** CLAUDE.md defines `low-prio/`
+as *"real, probably correct, and not worth ranker attention — no plan to do it,
+no claim it is wrong"*, and `ready`/`next` never scan it. This ticket carries
+**p85**, which is near the top of every open queue. **The folder and the number
+say opposite things, and the folder is the one that decides whether anyone sees
+it.** One of the two is wrong and I do not know which.
+
+**How I arrived here, because it is the argument for the number rather than for
+the folder.** I set out to file a ticket saying the pin grading vocabulary
+CLAUDE.md prescribes — `green`, or `reds(N)` with the manifest, recorded AT PIN
+TIME — is recorded nowhere. `git grep -ln 'reds('` over tracked files returns
+**13 files and every one is prose**: CLAUDE.md, four `devdocs/dev/` documents,
+the logbook, a handover, three `done/` tickets, one umbrella, and this. **No
+tool writes it and no artefact carries it.** `stable_linux_amd64/default/pin.log`
+and `history.log` have no grade column; the only per-pin verdict in the tree is
+`tstate/pin-shadow.log`'s advisory `would NOT pin`, which CLAUDE.md says is a
+GRADE and never permission.
+
+**So the gap is real, it is exactly what this ticket describes, and this ticket
+was already here** — filed by the owner on 2026-09-01. I did not file a duplicate
+because I checked first, which is the only reason this note exists rather than a
+second ticket.
+
+**THE LIVE COST, MEASURED TODAY.** The newest full tier (`a8b9a3a55094`,
+2026-09-22T12:37:02Z, `skips: 0`, `skip_holes: 0`) ran with
+`compiler_sha256: fda77c48b8ee` — **pin v418's own binary** — and reported
+**six** STILL-RED jobs. This coordinator had been carrying the pin's grade as
+`reds(1)`, wrong by five, and could only find the true number by opening a tier
+report and counting rows. **That is the whole of what this ticket asks for**: a
+seat should be able to read a pin's grade off the pin.
+
+**What would settle the contradiction:** the owner saying whether p85 or the
+folder is the intent. Until then it is invisible to `ready`/`next` at a number
+that says it should be near the front — which is the parked-folder pathology
+CLAUDE.md already records about the float tickets, arriving on a ticket the owner
+filed himself.
