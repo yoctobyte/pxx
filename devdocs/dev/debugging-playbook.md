@@ -37822,3 +37822,58 @@ aarch64 printed all 19 digit bytes as `Ord('0') - d`. **Same value, same class �
 the value is right and the rendering is wrong — found by a per-backend sweep, on
 a different renderer.** `Low(Int64)` is a renderer boundary this repo has now hit
 twice through two different formatters.
+
+
+## A TRUE CLAIM WITH A VOID INSTRUMENT LOOKS WRONG FROM NEITHER END — AND A BLAST-RADIUS CHECK IS THE PERFECT HOST FOR ONE
+
+**Measured 2026-09-22, frankb-8e, across three landed commits
+(`2aa7e7159` i386, `a0f4facd8` arm32, `ec82fc0de` aarch64).**
+
+8e's method for a per-backend change is a **blast-radius bound**: convert one
+target, rebuild all six, and assert the other five are **byte-identical**. Its
+loop was `pascal26 cross.pas out.bin --target=$t`. **pxx reads the output
+positionally and silently discards every argument after it — so all six legs
+built x86-64.**
+
+**Every leg exited 0 and printed an `ok:` line. The table printed six IDENTICAL
+rows.** That is **five of the six rows the method was hoping for.**
+
+**THE STRUCTURAL POINT IS THAT A BLAST-RADIUS CHECK IS ALMOST ENTIRELY NEGATIVE
+SPACE.** Its result is *nothing changed*, so **a dead instrument and a clean
+result are nearly the same picture.** The only row that cannot be faked by doing
+nothing is **the converted target, which must CHANGE** — and that row is the
+**positive control, not a result.** It is what caught this, and it is the row a
+reader skims past because it is the one they expected.
+
+**Second instance, one hour later, same seat:** `--target=x86-64` is `unknown
+option` — it is spelled `x86_64`. **That leg wrote nothing, so `cmp` compared two
+LEFTOVERS from the previous broken run and reported IDENTICAL.** A stale file
+standing in for an output that was never produced, inside a check whose expected
+answer is "identical".
+
+**AND HERE IS THE PART THAT MAKES IT WORTH A SECTION RATHER THAN A FIX.** 8e
+re-derived the claim retroactively with each landed compiler and **the claim is
+TRUE in both earlier commits** — same shas from the pre-change control and from
+the x86-64, arm32 and aarch64 builds alike. **What was void was the command that
+backed it.**
+
+**A true claim with a void instrument is invisible from both directions.** The
+claim survives every later check, because it is true. The instrument leaves no
+failing row, because it never ran. **It is findable only by re-deriving with a
+DIFFERENT command — which nobody does for a row that says what they expect.**
+Contrast every other entry in this file: those are false claims, and something
+eventually contradicts them.
+
+**Discharge:** in any check whose expected answer is *no change*, **name the row
+that must change and read it first.** If no row must change, the check cannot
+distinguish itself from not running. **And assert that each leg PRODUCED its
+output in this run** — a timestamp, a fresh directory, a removed-then-recreated
+file — because `cmp` on two leftovers is the cheapest possible false identical.
+
+**8e fixed the driver rather than only its own loop:** it now **REFUSES a third
+positional** and names each ignored word, matching the existing *"output may not
+start with `-`"* guard — which was itself written after two agents lost a
+measurement to a misplaced `-o`. **Positive control: the exact shape that lost
+the measurement now exits 1**, and no in-tree invocation passes a third
+positional. **A silently discarded argument is a guard-shaped hole, and this is
+the second one found in that same argument position.**
