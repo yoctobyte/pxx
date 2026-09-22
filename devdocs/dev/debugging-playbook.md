@@ -36034,3 +36034,66 @@ a host is only a stable proxy for its toolchain until someone runs `apt`.
 **What would retire this section:** verdict metadata that records the toolchain
 fingerprint in a way a split on time or wall cannot alias — at which point the
 collinearity is visible in the data rather than needing to be suspected.
+
+## A PARSER'S TAG VOCABULARY IS ENUMERABLE IN ONE COMMAND, AND GUESSING IT MISCOUNTS SILENTLY — THE MISS ARRIVES AS DATA
+
+**The rule.** When you classify records by a tag, heading or status string, **do
+not write the list of tags from memory or from the records you happened to
+open.** Enumerate the whole vocabulary first — one `grep | sort | uniq -c` — and
+then make the list **closed**, so an unrecognised tag ABORTS instead of falling
+into whichever bucket your `else` implies. The two error directions are not
+symmetric: a crash costs a minute, and a misclassification gets published and
+argued from.
+
+**Why it is worse than an ordinary bug: the miss does not look like a gap, it
+looks like a finding.** A record whose tag you failed to recognise is not
+reported as unparseable — it is silently scored as the *other* thing, so it
+arrives as clean, quotable data with a story attached. That is the shape that
+survives review, because there is nothing anomalous to interrogate.
+
+**Measured three times on one archive (`devdocs/progress/tstate/reports/`), the
+last two on 2026-09-22 by one seat who had already been burned by the first:**
+
+1. Counting rows under `## STILL-RED` and dropping `## NEW-RED`. Native's
+   distinct red rows went **14 -> 33** and full's **94 -> 129** when fixed, and
+   greedy coverage percentages moved with them.
+2. A toolchain cross-tab that scored **four reports as PASSES** because their
+   red list is headed `## RED — no baseline at this sha, so none of these is
+   classified as new or inherited`. Published as `541 RED / 4 ok (99.3%)`;
+   actually `546 / 1 (99.8%)`. Those four were written up in a ticket as *"the
+   0.7% and unexplained"* — a real anomaly invented out of a parser bug, and a
+   peer had to ask about it before anyone looked.
+3. The same census's `## FIXED` sections, which name rows that went **GREEN**:
+   a matcher loose enough to catch every red spelling inverts those, so
+   "just match anything with RED in it" is not the fix either.
+
+The whole vocabulary, 6365 headings, one command:
+
+```
+$ grep -h '^## ' devdocs/progress/tstate/reports/*.md | sed 's/ —.*//' | sort | uniq -c
+   2473 ## STILL-RED
+   1455 ## first failure
+   1247 ## failure detail
+    605 ## NEW-RED
+    581 ## FIXED
+      4 ## RED
+```
+
+**FOUR OCCURRENCES OUT OF 6365 WERE THE ENTIRE ANOMALY.** A long-tail spelling
+is exactly what a guessed matcher misses, and exactly what sampling cannot find
+— open twenty reports at random and the probability of meeting `## RED` is under
+1.3%.
+
+**The discharge is two lines of code and it is an ASSERTION, not a longer
+guess:** keep a closed set of recognised tags plus a closed set of deliberately
+ignored ones, and `raise`/`exit` on anything in neither, naming the file and the
+tag. Then a vocabulary that grows stops the run instead of skewing it.
+
+**Related:** "A GUARD THAT CANNOT FAIL IS NOT A GUARD" — this is its parsing
+form, and note the positive control does NOT catch it: a control drawn from
+records you can already classify passes happily while the unrecognised tail is
+misfiled.
+
+**What would retire this section:** a shared reader for these reports that owns
+the vocabulary, so each new census does not re-implement the classification and
+re-make this mistake.
