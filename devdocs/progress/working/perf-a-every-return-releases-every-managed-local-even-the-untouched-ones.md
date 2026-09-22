@@ -1776,3 +1776,87 @@ split is exactly whether the architecture has condition codes. The measured
 runtime win remains the x86-64 one — **4.367 → 1.886 ns/slot, 56.8% against a
 55.8% prediction** — and no other target has a ns/slot figure because every
 one of them runs under emulation here.
+
+## 2026-09-22 (frankb-8e) — WHAT THE SWEPT POPULATION IS MADE OF, BY PROGRAM CLASS — and the census that nearly confirmed a peer's hypothesis while broken
+
+First measurement of the remaining half, and it starts by settling a question
+a peer raised: whether the ~98%-are-compiler-minted-temps figure is really a
+count of NilPy **variant carrier** slots, since every NilPy method call mints
+and clears one.
+
+**It is not, for the program that figure was measured on**, and the tk number
+says so without any new measurement: the 98% was *"ParseFactorCore: 10 named
+vs 609 unnamed **tk=23** syms"*, and `defs.inc`'s `TTypeKind` (re-derived at
+HEAD, not quoted from memory) puts **tk 22 = `tyVariant`, tk 23 =
+`tyAnsiString`**. ParseFactorCore is in `compiler.pas`, which runs no NilPy.
+
+Measured directly, release **sites** by arm, x86-64, at HEAD:
+
+| arm | `compiler.pas` | NilPy with method calls |
+| --- | --- | --- |
+| `SXR_STR` | **23531 — 99.3%** | **2387 — 53.5%** |
+| `SXR_VAR` (`PXXVarClear`) | 3 — 0.01% | **1229 — 27.5%** |
+| `SXR_RECORD` | 23 | 731 — 16.4% |
+| `SXR_OBJ` / `PROMO` / `ARRIMM` / `INTF` | 136 | 118 |
+| **total sites** | **23693** | **4465** |
+
+**So the composition is a property of the FRONTEND, not of the mechanism.** A
+Pascal program's sweep is essentially all strings; a NilPy program's is half
+strings and a quarter variants. The ticket's "the non-string arms are a ~2%
+tail" conclusion is **correct for `compiler.pas` and wrong for NilPy**, and
+the earlier section that derived it from the tk-23 count should be read with
+that scope attached. **Which program the fix is FOR decides which arm matters.**
+
+### THE INSTRUMENT WAS BROKEN, AND ITS BROKEN ANSWER CONFIRMED THE HYPOTHESIS
+
+The first run of that census reported **`PXXStrDecRef` 18 sites, 0.9%** and
+**`PXXVarClear` 58.6%** — i.e. *"a NilPy sweep is mostly variants"*, which is
+exactly what the peer had proposed and exactly what I was checking.
+
+It was wrong because **the x86-64 string arm does not call `PXXStrDecRef`.**
+It calls `AnsiStrReleaseAddr`, a compiler-emitted blob at a code offset
+(`ir_codegen.inc:5045`), so a census matching the Pascal RTL symbol finds only
+the 18 unrelated direct calls and misses all 2387. **A census that enumerates
+call targets by NAME cannot see a callee that has no name.**
+
+**What caught it was a second instrument that fails differently**: counting the
+nil-test byte signature this session added — `48 85 C0 74 05 E8` — which
+answered 2387 against the census's 18. Two instruments, one subject, a 130x
+disagreement. Its own negative control is clean: the pre-nil-test compiler
+(`38692871f17e`) contains **zero** occurrences of that signature in an entire
+8.5 MB binary, so the pattern is exclusively this change's.
+
+**This is the fourth instrument failure of the day and the worst-placed one.**
+The previous three produced answers nobody wanted: six identical rows, a
+`CHANGED` where nothing changed, a near-miss count. **This one produced the
+answer a trusted peer had predicted**, in the subsystem they had predicted it
+for, to a seat that had gone looking for it. Had the signature count not been
+sitting beside it for an unrelated reason, *"NilPy sweeps are 58.6% variants"*
+would have gone back as a confirmation, and the peer would have had no way to
+doubt it — they had the hypothesis, not the instrument.
+
+**The rule this is an instance of is already in CLAUDE.md** — *"a census built
+on the hypothesis it is testing will agree with it"* — but the mechanism here
+is narrower and worth naming: **the filter did not restate the hypothesis, the
+ENUMERATION was simply blind to the arm that would have refuted it.** A
+name-based census is silent about anything nameless, and silence reads as zero.
+
+### A DENOMINATOR NOTE, BEFORE ANYONE MULTIPLIES
+
+**These are SITE counts — per call site, not per call.** A loop calling one
+method a million times reuses ONE carrier slot. `perf-o`'s cost is per-CALL;
+this ticket's 98% and the table above are per-SLOT. **Multiplying one by the
+other is the umbrella's own do-not-multiply error**, and it is easy to make
+here precisely because the two tickets sound like they count the same thing.
+
+### AND THE TOTAL DISAGREES WITH THIS TICKET'S OWN EARLIER NUMBER — BOTH ROWS KEPT
+
+The 2026-09-06 section records **43,508** release sites in the thunked
+`compiler.pas`; this census counts **23,693**. I am not replacing one with the
+other. They measured different things at different times with different
+instruments: mine counts *sites carrying a scope-exit release* in a self-built
+`compiler/pascal26` at HEAD, by nil-test signature plus named-callee scan; the
+older one came from a `TargetHasSweepThunk`-forced control and an objdump
+cross-check. **What would retire the disagreement** is running both
+instruments on one tree in one session — until then a reader should quote
+neither as "the" site count without saying which instrument produced it.
