@@ -4,7 +4,7 @@ prio: 70
 status: working
 type: perf
 blocked-by: []
-summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. COST (2) IS NOW LANDED on all six flat-code backends, one commit each (x86-64 50e25f5f0, i386 3d7cde305, arm32 4a1a80184, aarch64 5f89103c9, riscv32 b1554c59a, xtensa Call0 dde109a7a); wasm32 is not a seventh and has its own ticket. Measured like-for-like on one instrument with TargetHasSweepThunk forced False for the control: compiler.pas release sites 349,581 -> 43,508 (8.03x), code= 11,075,352 -> 7,376,664 (-33.4%), artefact -31.9% -- and the control lands within 0.07% of the 349,322 counted independently by objdump, two instruments that fail differently. THAT DISSOLVES THE T=400 THRESHOLD rather than confirming it: at the measured +5.06 B/site the inline nil-test on EVERY site now costs +2.98% of .text against +15.97% before, i.e. a third of what the T=400 gate cost without the sharing, while covering 100% of sites instead of 56.6%. Recommendation recorded in the ticket: build the nil-test UNGATED and keep a threshold in reserve only if the built artefact's size cost comes in materially above 2.98%. THE BRANCH-WIDTH CAVEAT IS CLOSED and is structural, not a frequency: the per-slot sequence is `mov`+`call` with the argument already in rax, so a nil-test skips exactly one 5-byte `call rel32` and the displacement is 5 on every site in the binary -- cost is exactly 5 B/site, and a 7.23% figure for site-to-site gaps over 127 bytes measures a DIFFERENT quantity (gaps between sweeps, which the branch never spans). The emitter for (1) is UNSTARTED and unstaffed, not blocked. (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. WHOLE-PROGRAM, MODEL-FREE (2026-09-07): the thunked build compiles compiler.pas 2.04% and 2.51% faster than the inline build across two runs -- the SAME PROGRAM built two ways, cmp-gated so a pair can never be reported for builds that disagree. That is the -31.9% size win showing up as SPEED, with the call/ret cost INSIDE the figure rather than absent from it; it does not decompose them and nothing here lets it. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
+summary: "MEASURED, two independent methods agreeing. `EmitManagedLocalCleanup` releases EVERY managed local at EVERY return, whether or not that path ever touched it, and the sweep is emitted INLINE at each return. Two separable costs, and conflating them will misdirect the fix: (1) RUNTIME — the full sweep EXECUTES on every call, measured linear at 3.87ns per local per call even when every slot is nil, which is ~4.5% of a compile for ParseFactorCore's 532 locals alone; (2) CODE SIZE — 308,112 release call sites binary-wide = ~36% of the compiler's 10.2MB .text. A shared epilogue fixes (2) and NOT (1): the sweep still runs in full. COST (2) IS NOW LANDED on all six flat-code backends, one commit each (x86-64 50e25f5f0, i386 3d7cde305, arm32 4a1a80184, aarch64 5f89103c9, riscv32 b1554c59a, xtensa Call0 dde109a7a); wasm32 is not a seventh and has its own ticket. Measured like-for-like on one instrument with TargetHasSweepThunk forced False for the control: compiler.pas release sites 349,581 -> 43,508 (8.03x), code= 11,075,352 -> 7,376,664 (-33.4%), artefact -31.9% -- and the control lands within 0.07% of the 349,322 counted independently by objdump, two instruments that fail differently. THAT DISSOLVES THE T=400 THRESHOLD rather than confirming it: at the measured +5.06 B/site the inline nil-test on EVERY site now costs +2.98% of .text against +15.97% before, i.e. a third of what the T=400 gate cost without the sharing, while covering 100% of sites instead of 56.6%. That recommendation -- build it UNGATED, keep a threshold in reserve only if the BUILT artefact's size cost came in materially above 2.98% -- was followed and its condition did not fire: measured +1.39%. THE BRANCH-WIDTH CAVEAT IS CLOSED and is structural, not a frequency: the per-slot sequence is `mov`+`call` with the argument already in rax, so a nil-test skips exactly one 5-byte `call rel32` and the displacement is 5 on every site in the binary -- cost is exactly 5 B/site, and a 7.23% figure for site-to-site gaps over 127 bytes measures a DIFFERENT quantity (gaps between sweeps, which the branch never spans). THE CHEAP HALF OF (1) IS BUILT ON x86-64 (2026-09-22, frankb-8e): the inline nil-test at the release call site, ungated, on the scalar AnsiString arm -- 4.367 -> 1.886 ns/slot/call, 56.8%, against the 55.8% the calibrated model predicted, and +1.39% of artefact against the +2.98% predicted, so the frame-size threshold's own trigger condition is measured and NOT met and T=400 is retired rather than deferred. The ratio transfers between boxes and the absolute does not: the control marginal reads 4.367 here under load against 3.821 on an idle box, both rows kept. WHAT REMAINS OF (1) IS THE EXPENSIVE HALF AND IT IS STILL UNSTARTED -- the full sweep still RUNS on every return; this removed the cost of ASKING about a slot, not the asking, and per-path liveness over compiler-minted temps is untouched. Also still open: the other five register backends (each its own arm, one per commit, the other five byte-identical as the blast-radius bound), the non-string arms (SXR_VAR/SXR_OBJ/interface/array -- a string-slot decomposition does not transfer to a call that does real work), and the prologue nil-init store (0.526 ns/slot on all seven targets, which no fix on this ticket reaches). (1) needs per-path liveness. (2) applies to FIVE backends: wasm32 already has the shared epilogue because structured control flow forced it (franka-29, measured), which makes it an existence proof rather than an exception. (1) applies to all SIX. MEASURED 2026-09-06 (was flagged unexplained): the model reproduces 3.772 against 3.821 real, and it decomposes as prologue nil-init store 0.526 (14%) + epilogue load 0.262 (7%) + THE CALL/RET PAIR 2.984 (79%). franka-29 was right that the helper body is cheap -- that body costs 0.879 inlined; the cost is getting there and back. An inline nil-test at the call site takes it 3.772 -> 1.667, a 56% runtime saving with NO liveness. MEASURED 2026-09-07 BY TWO METHODS THAT FAIL DIFFERENTLY: ~98% of the swept slots are COMPILER-MINTED UNNAMED TEMPS, not locals anybody wrote -- 98.4% by direct count (ParseFactorCore: 10 named vs 609 unnamed tk=23 syms in the IR) and 98.2% by subtraction (757 released slots off the binary, 14 declared off the source). So per-path liveness over USER locals addresses 14 of 757 slots, 1.8% of the worst sweep, and cost (1) is a question about temps. NOT settled: whether temps can be skipped -- :13838's 'does not outlive the statement' is about the temp's VALUE, while the release loop needs a claim about OWNERSHIP of what it references, and skipping without that is a leak no value assertion catches. Note the prologue store is a THIRD cost that neither fix (1) nor (2) touches, and it is PER-SLOT ON ALL SEVEN TARGETS (measured 2026-09-07 by return-count separation, no disassembler needed) -- so one liveness analysis serves both halves. wasm32's release term is 0.062 B/slot/return, the first actual MEASUREMENT of its shared epilogue rather than an inference, and it still pays the full per-slot prologue. WARNING: the compiler's `code=` is page-quantised (65536 on aarch64, where it reads 196376 for both N=4 and N=532) and on wasm32 reports 3582 flat while the code section grows 13707 bytes -- use artefact size, never `code=`, for anything per-slot. WHOLE-PROGRAM, MODEL-FREE (2026-09-07): the thunked build compiles compiler.pas 2.04% and 2.51% faster than the inline build across two runs -- the SAME PROGRAM built two ways, cmp-gated so a pair can never be reported for builds that disagree. That is the -31.9% size win showing up as SPEED, with the call/ret cost INSIDE the figure rather than absent from it; it does not decompose them and nothing here lets it. Found from the Track P ticket perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor, whose premise this refutes for the third time."
 owner: frank-subcoord
 ---
 
@@ -1061,3 +1061,143 @@ lines, could not attribute it from `readelf` (neither binary carries section
 headers), and handed it over rather than either ignoring a favourable delta or
 guessing at a cause. An unattributed improvement is the direction CLAUDE.md says
 goes unchecked because it flatters whoever is holding it.
+
+---
+
+## 2026-09-22 (frankb-8e) — COST (1)'s CHEAP HALF IS BUILT ON x86-64: 4.367 -> 1.886 ns/slot, 56.8%, and the size bill came in at LESS THAN HALF what was predicted
+
+The inline nil-test at the release call site, **ungated**, as the 2026-09-07
+recommendation asked for. `EmitManagedLocalCleanup`'s `SXR_STR` arm only —
+the scalar `AnsiString` local, which is the arm the 3.772 decomposition was
+measured on. The variant, object, interface and array arms are untouched and
+are a separate question (see *what this does not do*, below).
+
+### What it emits
+
+```
+  mov  rax, [rbp+off]
+  test rax, rax          <- 3 bytes
+  je   .skip             <- 2 bytes, displacement 5 on every site
+  call AnsiStrRelease    <- 5 bytes
+.skip:
+```
+
+`EmitAcquireHeapLock`'s pattern verbatim, including the assert: the `je` is
+**patched from the emitted length, never hand-counted**, and the call is
+asserted to be exactly 5 bytes. That assert is not decoration — its own
+neighbour's comment records that `jnz +10` over a store that grew to 7 bytes
+is how the I/O unlock once landed a byte past its `ret`.
+
+### The number, and it is within a point of the prediction
+
+frank-subcoord's 2026-09-06 shape, reproduced deliberately rather than
+reinvented so the rows line up: **N = 4 against N = 532 AnsiString locals,
+exactly one assigned, 2,000,000 calls, min of 5 interleaved.** One source,
+built by BOTH compilers — the subject is the code the compiler emits, not one
+binary timed twice.
+
+| leg | t(N=4) | t(N=532) | marginal |
+| --- | --- | --- | --- |
+| control | 0.233440 s | 4.845080 s | **4.367 ns/slot/call** |
+| nil-test | 0.234876 s | 2.226693 s | **1.886 ns/slot/call** |
+
+**56.8% off the per-slot cost. The ticket predicted 55.8%** (3.772 -> 1.667,
+from the calibrated C model). The prediction was made from a model and holds
+against the built emitter to within one point.
+
+**The N=4 row is the control and it is flat** — 0.2334 against 0.2349, i.e.
+where there are almost no slots to skip, the test costs nothing measurable.
+A saving that showed up at N=4 as well would have meant the instrument was
+measuring something other than the sweep.
+
+**CARRY BOTH ABSOLUTE ROWS, DO NOT REPLACE ONE WITH THE OTHER.** My control
+marginal is 4.367 where 2026-09-06 measured 3.821 on the same box. That is not
+a regression and not a refutation: this run was taken with Track T tooling
+live (load 6-9) and that one on an idle box. **The RATIO is what transfers
+between box states; the absolute ns/slot is a property of the day.** Anyone
+re-running should expect their own absolute and should compare the ratio.
+
+### Size: +1.39%, against +2.98% predicted
+
+`compiler/pascal26`, x86-64, same tree, one variable:
+
+| | artefact | binary |
+| --- | --- | --- |
+| control (`ac7926db7`) | 8,541,420 | `38692871f17e` |
+| nil-test | 8,660,348 | `0301d450c73b` |
+| | **+118,928, +1.39%** | |
+
+The 2026-09-07 recommendation was to build it ungated and **keep the
+frame-size threshold in reserve only if the built artefact's cost came in
+materially above 2.98%.** It came in at **less than half** of that. So the
+threshold is not built, and the condition that would have justified building
+it is now measured and not met. `T = 400` can be retired as a design option
+rather than left as an open choice.
+
+### Whole-program: 5.4%, and the spread is reported because the box was not quiet
+
+Both compilers compiling the same `compiler/compiler.pas`, min of 7
+interleaved: control **22.211 s**, nil-test **21.013 s**.
+
+Per-round deltas: +13.1, +2.1, **-6.9**, +6.0, +4.5, +6.1, +2.4 percent. **Six
+of seven rounds favour the nil-test and one runs the other way**, and both
+legs drift upward together as the box loads. Min-of-N absorbs that, which is
+why it is the statistic, but a 5.4% whole-program figure with one round of the
+opposite sign is not a number to quote to three digits. **The per-slot row
+above is the sharp one; this one is the honest end-to-end check that the size
+cost does not eat the win.** It does not.
+
+### Correctness
+
+- **self-host fixedpoint: converged in 2 rounds.** Two rather than one is
+  expected and is the evidence, not a warning: the emitter changed, so round
+  one's output differs from the seed and round two is what proves closure.
+- **Leaks, differentially, on five fixtures** — `allocs`/`frees`/`live`
+  **identical on every row** between control and nil-test, *including the three
+  fixtures named for leaking*. Those are the control that matters: their known
+  leaks are unchanged, so the pass neither fixed nor worsened anything, which
+  is exactly what "skip the call when the slot is nil" must do.
+  This assertion class is not optional here and the reason is on this ticket
+  already: a sweep that stops running does not corrupt, it just never gives
+  memory back, and every output check still passes.
+  Run BEFORE as well as after, on the same corpus: `live=5` afterwards alone is
+  flat for an unknown reason.
+- Three frontends probed by hand beyond the quick tier: `.npy` (`"a" * 3` ->
+  `aaa 3`), `.c` (`c-ok 42`), `.pas` (`Concat` -> `abcd`).
+- `tools/gate.sh quick`: **GREEN**, read from the log.
+
+### A GUARD I WROTE THAT COULD NOT HAVE FAILED, recorded because it printed a scary word
+
+The A/B script gated on both output binaries being self-reproducing and
+printed `niltest: NOT self-reproducing`. **That row is meaningless and the
+binary is fine.** The tree held the CONTROL sources during the A/B — that is
+what made it a one-input, two-compiler comparison — so self-reproduction was
+available to the control *by construction* and unavailable to the other leg
+whatever it did. An assertion written from a prediction about what the run
+would look like pins the prediction. The real fixedpoint evidence is `make`'s
+own `converged after 2 round(s)` on the nil-test tree.
+
+### What this does NOT do, stated so nobody reads it as more than it is
+
+- **Cost (1) is not fixed.** The full sweep still RUNS on every return; this
+  removes the cost of *asking* about a slot, not the asking. Per-path liveness
+  is still unstarted and is still a question about compiler-minted temps
+  (~98% of swept slots), not about user locals.
+- **The prologue nil-init store is untouched** — 0.526 ns/slot, 14%, on all
+  seven targets. Neither fix (1) nor (2) nor this reaches it.
+- **x86-64 only.** The other five register backends emit their sweep through
+  `EmitManagedLocalCleanupForTarget` and each needs its own arm, one per
+  commit, with the other five byte-identical as the blast-radius bound — the
+  method the thunk landing established.
+- **`SXR_STR` only.** `SXR_VAR`, `SXR_OBJ`, the interface arm and the array
+  element walk all still call unconditionally. Whether they are worth the same
+  treatment is a measurement nobody has taken: the 3.772 decomposition is a
+  string-slot number and does not transfer to a `PXXArrayReleaseImmediate`
+  call that does real work.
+- **NO FRAME-TIME CLAIM.** This is reported against its own baseline. Its share
+  of a lekkerzeilen `roofs` frame is unmeasured — the 14.0% refcount row in
+  `PROFILE-2026-09-21.md` is a `rijn` measurement and nobody has decomposed a
+  roofs frame. `umbrella-lekkerzeilen-runs-at-15-fps` is **not met** and this
+  does not move it toward met. Reporting a fraction of an 18x (or 9.4x) target
+  would be arithmetically defensible and would tell the owner something true
+  while leaving him expecting 15 fps.

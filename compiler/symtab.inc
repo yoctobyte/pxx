@@ -15902,6 +15902,7 @@ procedure EmitManagedLocalCleanup(retSymIdx: Integer);
 var i, procIdx, mek: Integer;
     act, a1, a2, a3: Integer;
     recSz, q, pRecZero: Integer;
+    jzPatch, callStart: Integer;
 begin
   if CurProc < 0 then Exit;
   { A STACKLESS GENERATOR step function RETURNS at every yield and is re-entered
@@ -16004,7 +16005,46 @@ begin
           backends' epilogues already carry this guard; x86-64 was the outlier.
           bug-a-local-dynamic-array-of-string-is-released-as-a-string-handle }
         x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);   { mov rax, [rbp+off] }
+        { INLINE NIL TEST, so a slot the path never touched costs a predicted
+          branch instead of a call/ret pair.
+
+          WHY THIS IS THE CHEAP HALF. The sweep releases every managed local at
+          every scope exit whether or not the path touched it, and the full
+          sweep still RUNS -- that is cost (1) and it needs per-path liveness,
+          which this is not. What it removes is the cost of ASKING: measured at
+          3.772 ns per slot per call, decomposing as prologue nil-init store
+          0.526 + epilogue load 0.262 + call/ret pair 2.984, i.e. 79% of it is
+          getting to a callee whose body costs 0.879 inlined. Hoisting the
+          callee's own nil test to the call site takes 3.772 -> 1.667 with NO
+          liveness analysis.
+
+          UNGATED, and the frame-size threshold the ticket once specified is
+          deliberately not built. Cost is strictly linear in sites -- exactly
+          5 bytes each, `test` 3 plus a short `je` 2 -- so there is no
+          efficiency sweet spot and a threshold is purely a blast-radius cap.
+          It was a cap on a 15.97% .text bill, and the shared sweep thunk
+          (50e25f5f0 and its five siblings) cut the site count 8.03x, which
+          takes the same full-coverage bill to ~2.98%. A third the cost of the
+          T=400 gate, at 100% of sites instead of 56.6%.
+
+          THE BRANCH IS SHORT ON EVERY SITE IN THE BINARY, structurally rather
+          than by frequency: the argument is already in rax, so nothing sits
+          between the test and the call, and the jump skips exactly one 5-byte
+          `call rel32`. The `je` displacement is 5 everywhere.
+
+          PATCHED, NOT HAND-COUNTED, and the assert is the reason -- this is
+          EmitAcquireHeapLock's pattern verbatim, whose own comment records
+          that `jnz +10` over a store that grew to 7 bytes is how the I/O
+          unlock landed one byte past its `ret`.
+          perf-a-every-return-releases-every-managed-local-even-the-untouched-ones }
+        EmitAsmX64(['test rax, rax']);
+        EmitB($74); jzPatch := CodeLen; EmitB(0);   { je over the call }
+        callStart := CodeLen;
         IREmitCodeCall(AnsiStrReleaseAddr);
+        if CodeLen - callStart <> 5 then
+          Error('compiler error: the managed-local release call must be exactly '
+                + '5 bytes for the inline nil test to branch over it');
+        PatchRel8(jzPatch);
       end
       else if act = SXR_VAR then
       begin
