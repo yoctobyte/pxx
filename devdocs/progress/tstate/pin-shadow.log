@@ -1024,3 +1024,4 @@
 2026-09-22T11:39:37Z	borg	c194231297b18bbe645fb6fe681377f32c1a3d85	would NOT pin c194231297b1 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2
 2026-09-22T12:14:20Z	borg	be65bc3e39426b473dee6d9d4ced88368efac3f6	would NOT pin be65bc3e3942 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2
 2026-09-22T12:37:02Z	borg	a8b9a3a55094dd6be72a80c22542290571546bed	would NOT pin a8b9a3a55094 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2
+2026-09-22T13:30:13Z	borg	32676fb80897d999b6717d9d02f564cebf4cdab1	would-pin PENDING 32676fb80897 — qualifies, streak 1/2
