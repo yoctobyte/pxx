@@ -31,6 +31,38 @@ do not -- aarch64, arm32, riscv32 and xtensa have no linker here at all (GNU ld
 
 The three perturbation controls below are separate and test something else:
 they show the COMPARISON can fail, not that the applier is right.
+
+AND BE PRECISE ABOUT WHAT THE ld CALIBRATION LICENSES, BECAUSE IT IS LESS THAN
+IT SOUNDS (frankuser, 2026-09-22). Agreeing with GNU ld on x86-64 and i386
+validates the SHARED FRAMEWORK -- the ELF reader, section addressing, the apply
+loop, the control discipline -- and it does NOT validate the PER-TARGET
+ARITHMETIC, which is written fresh from each psABI and is exactly the part that
+differs per target. When the aarch64 arm runs, its movz/movk field maths has no
+external check from this calibration at all. Half of that gap is closable
+cheaply and should be closed when that arm lands: clang cannot EMIT a MOVW_UABS
+relocation, but it can ASSEMBLE the instruction, so `movz x0, #0x1234, lsl #16`
+through clang's assembler is an external oracle for FIELD ENCODING, leaving
+only WHICH VALUE goes in the field resting on one reading of the psABI.
+
+NO EMULATOR AND NO WALL-TIME QUANTITY LIVE ANYWHERE IN THIS MEASUREMENT, and
+that is a property to preserve rather than a coincidence. It resolves bytes and
+compares bytes, then runs the NATIVELY linked x86-64 and i386 binaries -- so
+neither machine load nor a qemu version can move a verdict. Measured 2026-09-22
+while a peer put deliberate load on this box and then ran an unnice'd full
+tier: a `gate.sh quick` went from ~2min to ~9min and this harness's output did
+not change by a byte. A future aarch64 or arm32 leg that runs under qemu would
+be the FIRST emulator dependency here, and it would inherit a real hazard --
+on seven a qemu 8.2.2 -> 10.2.1 upgrade on 2026-09-05 flipped a red row green
+and moved a tier wall from ~227s to ~151s in the same instant, so wall time and
+emulator version are collinear across that date (frankh-c0, 2026-09-22).
+Record `toolchain:` with any such row; its ABSENCE is a date stamp, not missing
+data.
+
+A RELOCATION AGAINST AN UNDEFINED SYMBOL IS APPLIED, NOT SKIPPED. A linker's
+only contribution to one is choosing the address, so the harness chooses it --
+see undef_addr. Skipping them would have excluded the entire class this exists
+for on aarch64, where an extern is reached through movz/movk and every one of
+those relocations names an undefined symbol.
 """
 import os, subprocess, sys, struct, tempfile
 
@@ -106,6 +138,35 @@ class Elf:
         return out
 
 
+_UNDEF_SEEN = {}
+SYNTH_UNDEF = True   # off in linker-oracle mode: ld picks the number there
+
+def undef_addr(name):
+    """A synthetic address for an undefined symbol, so a relocation against an
+    extern can still be applied and checked.
+
+    EVERY 16-BIT FIELD IS DISTINCT AND NON-ZERO, deliberately. aarch64 splits an
+    absolute address across MOVW_UABS_G0_NC/G1_NC/G2_NC/G3, one 16-bit chunk
+    each; an address with a zero chunk, a repeated chunk, or a chunk equal to
+    another symbol's would let a G0/G1 SWAP, a dropped write, or a
+    wrong-symbol resolution pass. Same reason the C-ABI probe passes 11/22/33
+    rather than 1/1/1: a value that collides with the failure value is a row
+    that cannot fail.
+
+    The addresses are stable per name within a run so two relocations against
+    one symbol must agree."""
+    if not SYNTH_UNDEF:
+        return None
+    if name in _UNDEF_SEEN:
+        return _UNDEF_SEEN[name]
+    i = len(_UNDEF_SEEN) + 1
+    if i >= 0x0f00:
+        return None          # ran out of distinct chunks; say so, do not wrap
+    a = ((0x4000 + i) << 48) | ((0x3000 + i) << 32) | ((0x2000 + i) << 16) | (0x1000 + i)
+    _UNDEF_SEEN[name] = a
+    return a
+
+
 def apply_relocs(e, secname, secdata, base_of, sec_va, syms, unhandled):
     for r in e.relocs(secname):
         _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled)
@@ -120,13 +181,22 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled):
     s = syms[r['sym']]
     b_ = base_of.get(s['shndx'])
     if b_ is None:
-        # SHN_UNDEF: a real external, which only a linker can place. Counted
-        # and reported, never silently skipped -- an object whose relocations
-        # are MOSTLY external is one this harness barely checks, and the
-        # denominator has to say so.
-        unhandled.setdefault('_undef', 0)
-        unhandled['_undef'] += 1
-        return
+        # SHN_UNDEF. A LINKER'S ONLY CONTRIBUTION HERE IS CHOOSING THE NUMBER,
+        # so the harness chooses it instead and checks the bytes encode THAT.
+        # Skipping these instead would have excluded exactly the class this
+        # harness exists for on aarch64: pxx reaches an EXTERN through a
+        # movz/movk pair, so MOVW_UABS_G0_NC/G1_NC are relocations against
+        # UNDEFINED symbols, and a run that skipped them would report a green
+        # over the resolvable majority while never touching the subject.
+        # (frankuser, 2026-09-22 -- caught before the aarch64 writer existed.)
+        b_ = undef_addr(s['name'])
+        if b_ is None:
+            unhandled.setdefault('_undef', 0)
+            unhandled['_undef'] += 1
+            return
+        unhandled.setdefault('_synth', 0)
+        unhandled['_synth'] += 1
+        s = dict(s, value=0)
     S = b_ + s['value']
     P = sec_va + r['off']
     m = e.machine
@@ -284,15 +354,23 @@ def main():
         tb = e.data(text)
         apply_relocs(e, 'text', tb, base, 0x400000, syms, unhandled)
         undef = unhandled.pop('_undef', 0)
+        synth = unhandled.pop('_synth', 0)
         if unhandled:
             print(f'reloc-resolve[{tname}]: BROKEN -- unhandled relocation types {unhandled}')
             return 1
-        print(f'reloc-resolve[{tname}]: applied {nrel - undef} of {nrel} relocations '
-              f'({undef} name an UNDEFINED symbol only a linker can place)')
-        print(f'   NOT a correctness claim: with no linker there is no oracle here yet.')
+        if undef:
+            print(f'reloc-resolve[{tname}]: BROKEN -- {undef} relocations against '
+                  f'undefined symbols could not be given an address')
+            return 1
+        print(f'reloc-resolve[{tname}]: applied {nrel} relocations '
+              f'({synth} against externals, at addresses this harness chose)')
+        print(f'   NOT a correctness claim yet: no linker here, and no external '
+              f'decoder is reading the fields back. Coverage only.')
         return 0
 
     # LINKER-ORACLE MODE. This is the calibration that licenses the mode above.
+    global SYNTH_UNDEF
+    SYNTH_UNDEF = False        # ld chooses the addresses in this mode
     mapf = os.path.join(work, 'ld.map'); exe = os.path.join(work, 'exe')
     lr = subprocess.run(['gcc'] + gccflag.split() + ['-o', exe, obj, f'-Wl,-Map={mapf}'],
                         capture_output=True, text=True)
@@ -323,10 +401,17 @@ def main():
         for i in diff[:6]:
             print(f'   off={i:#x} harness={tb[i]:02x} ld={theirs[i]:02x}')
         return 1
-    print(f'reloc-resolve[{tname}]: AGREE with GNU ld on {len(tb)} bytes, '
-          f'{nrel - undef} relocations resolved here ({undef} undefined, ld-only)')
+    # THE CONTROLS RUN BEFORE THE VERDICT IS PRINTED, and the verdict names
+    # them. "0 differing bytes" is the twin of "0 of 1768 correct": total
+    # failure is what an instrument prints when nothing works, and TOTAL
+    # SUCCESS is what it prints when nothing RAN. The green here is
+    # trustworthy because three perturbations redden it, not because it is
+    # clean -- so a reader who sees only the number is reading the wrong half.
     if not control_suite(e, text, base, addrs, syms, theirs, tname):
         return 1
+    print(f'reloc-resolve[{tname}]: AGREE with GNU ld on {len(tb)} bytes, '
+          f'{nrel - undef} relocations ({undef} undefined, ld-only); '
+          f'3 of 3 controls reddened it')
     # And the program has to RUN, because bytes agreeing with ld says nothing
     # about whether ld and pxx agreed about the right thing.
     rr = subprocess.run([exe], capture_output=True, text=True, timeout=120)

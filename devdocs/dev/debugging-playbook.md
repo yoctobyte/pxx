@@ -16859,6 +16859,45 @@ accepts-invalid gap does not materialise, **and the verdict now rests on a measu
 instead of an unreachable one.** Same disposition, different footing, and only the second one
 survives the next person who widens something.
 
+## A GUARD THAT REFUSES A BUNDLED COMMAND REFUSES THE WHOLE BUNDLE, AND THE UNGUARDED HALF'S ABSENCE IS SILENT — then you wait forever on something that was never started
+
+**A new member of the `pgrep` family in CLAUDE.md, and it is not a process-table
+problem at all.** That rule is about an instrument that counts the observer.
+This one is about a job that **does not exist**, and the two produce the same
+symptom: a wait that cannot end, indistinguishable from a wait that has not
+ended yet.
+
+**Measured 2026-09-22 (frankb-8e).** One Bash call bundled two things: a
+backgrounded `nohup tools/gate.sh quick > gate9.log` and a
+`make test-emit-obj`. The full-suite hook matched the `make test-*` half and
+**refused the entire call** — so the gate never started, `gate9.log` was never
+created, and the refusal text said nothing about the gate because the hook was
+not talking about the gate. The next call was
+`until grep -qE '^gate: (GREEN|RED)' gate9.log; do sleep 15; done`, which sat
+for ten minutes on a file that could never appear, then another ten, before a
+bounded retry printed `No such file or directory` and ended it in one line.
+
+**Two transferable halves, and the second is the one that saved it:**
+
+- **Never bundle a backgrounded job with anything else in one call.** A guard
+  that fires on any part of a compound command kills every part, and the parts
+  fail differently: the guarded half produces a loud refusal, the unguarded
+  half produces *nothing at all*. You read the refusal, understand it, deal
+  with it — and the silent half is gone without ever having been mentioned.
+- **Bound every wait.** An unbounded `until` cannot distinguish *not yet* from
+  *never*, and those are the only two states it can be in. A bound converts an
+  indefinite hang into one line naming what was missing. The bound does not
+  have to be right — it has to exist.
+
+**Note what did NOT catch it.** The tree was under real contention at the time
+(a peer running an unnice'd full tier), so "the gate is slow tonight" was a
+true, available and completely wrong explanation, and it was the first one
+reached for. **A plausible reason for slowness is what makes an impossible
+wait survive** — the same shape as CLAUDE.md's rule that a wrapper's exit code
+reports the wrapper, arriving from the other side: there the job had finished
+and the instrument said running; here the job never began and the instrument
+said running.
+
 ## WHEN A TICKET'S BLOCKER IS REACHABILITY, GROUP IT BY WHAT WOULD REACH IT — not by what it touches
 
 **Proposed by frankuser 2026-09-22 and earned by an instance the same evening.**
