@@ -1,7 +1,9 @@
 ---
 prio: 70
 track: A
-summary: 'A REAL RACE IN THREAD-LOCAL STORAGE SETUP, RATED 2026-09-22: `test/test_tls_base.pas` prints `errors=2` instead of `errors=0`/`TLS OK` on **54 of 500** runs at `870f9f6e1` (compiler `06255ab1878c`, plexus) -- 10.8%, exact 95% CI 8.2-13.9% (Clopper-Pearson; RECORD THE ESTIMATOR BESIDE THE INTERVAL, because a reader who re-derives one with a different method gets a different number for no other reason). An earlier n=60 row gave 4/60 = 6.7%, exact CI 1.8-16.2% -- and its NORMAL-approximation interval of 0.4-13.0% was INVALID, np=4 against the np>=5 rule of thumb, with a 0.4% lower bound that is an artefact rather than a belief. The two exact intervals OVERLAP, so the rows agree and the point estimate did not really move; both are kept with their populations because a number whose interval spans a factor of thirty is not weak evidence, it is not evidence, and it looks identical to a strong one at a glance. WHAT IT DOES AND DOES NOT BLOCK, AND THE FIRST VERSION OF THIS SUMMARY HAD IT BACKWARDS: at 10.8% per attempt **EIGHT `full` TIERS IN NINE ARE GREEN ON THIS ROW**, so it does NOT block reaching a green -- it blocks TRUSTING one. The two readings prescribe opposite actions, which is why the error mattered: ''this blocks goal 1'' tells the owner to WAIT for a green that is already the likely outcome of any single run, when the true hazard is that **a green is easy to obtain and would be green BY LUCK, with a live threading race shipped inside it**. Goal 1 is a full green pin AS A RELEASE, so the defect is not tier colour -- it is that the colour stops carrying the information the release is meant to rest on. CLASS AND RETRIES: the job is class `unit` and `RUN_RETRY_CLASSES` is `{qemu, corpus, conformance, opt}`, so `unit` is DELIBERATELY single-shot and `p_report = p_attempt` -- nothing absorbs it. DO NOT MOVE THE ROW TO A RETRY CLASS: that converts a genuine nondeterminism bug into an invisible flake, which the selfhost half of testmgr''s own comment refuses in as many words (`a flake is a genuine nondeterminism bug to reseed, not retry`). The harness is behaving correctly; fix the race. RE-LANED T -> A: the auto-file''s `track: T` is an explicit FALLBACK because the failing step (`expect_same.sh`) names no owner, and the owner is the lane that built TLS (`done/feature-a-thread-local-storage-via-clone-settls`). NOT A REGRESSION FROM ANY RECENT COMMIT -- it is intermittent, therefore pre-existing; the body records where it was nearly pinned on a peer''s section-base commit that really was in the range. NOT AN ESCALATION YET, AND DO NOT MAKE IT ONE: nobody has attempted a fix, and asking the owner to rule on shipping a known race before any engineering has been tried is the expensive path for no reason. IF a fix is attempted and proves deep, THEN it becomes a one-sentence question in goal terms -- do we ship beta 0.1 with a threading race that reddens one tier in nine -- with the release window running to about 2026-09-30. ON PLEXUS THIS IS THE ONLY RED: the same `full` run is 4953 PASS / 1 FAIL / 0 SKIP / 0 FLAKY with skip_holes == 0, and the four rows that hold `full` red on borg all PASS here. WHAT WOULD RETIRE IT: a fix plus 200 consecutive clean local runs -- NOT one green tier, which at 10.8% is the expected outcome and carries almost no information.'
+summary: 'NOT A RACE IN TLS SETUP -- THE TEST ASSERTED A PROCESS-WIDE PROPERTY THAT IS ONLY TRUE OF THREADS THAT ARE ALIVE AT THE SAME TIME. FIXED 2026-09-22. `test/test_tls_base.pas` phase A recorded each child''s stub-carved `__pxxTlsBase` and required all four to differ. That block is carved off the top of the child''s STACK, and a dead thread''s stack is munmap''d -- by `PalThreadJoin`, and since `f3b9be658` (2026-09-15) also by `ReapSweep`, which `PalThreadCreate` runs once per call -- after which Linux hands the same address straight back to the next mmap of the same size. So two phase-A children that NEVER COEXISTED legitimately reported one base, the symmetric (i,j)/(j,i) comparison fired twice, and the run printed `errors=2`. MEASURED on plexus at `fc8e9870f`, compiler `f7dedaea694f`: 10 failures in 300 runs, and instrumenting all 16 error sites showed the distinctness loop as the ONLY site that ever fired, always exactly 2 -- every per-thread check (self-pointer, zeroed block, 20000-iteration churn) passed in every failing run, which is what a shared LIVE base could not do. CAUSE CONFIRMED BY MUTATION: stubbing `ReapSweep` turns four identical bases into four distinct ones 1052672 bytes apart (exactly `h.StackSize`), and a sequential create-join probe repeats one base on 200 of 200 runs. FIX: phase A holds its four threads on a bounded futex barrier until the last has started, so the comparison has the overlap it always needed, and a child that gives up waiting is counted as an ERROR rather than silently weakening the check; a new phase A2 runs the same body serially so the recycled-block path -- the stub must re-zero it and re-write its self-pointer -- is exercised deliberately every run instead of about 7% of them by luck. 500 of 500 clean on the fixed tree; 0 of 600 on the barrier prototype; 10 of 300 before. WHAT WOULD REOPEN IT: an `errors=2` whose instrumented site is the distinctness loop AGAIN, which would mean two CONCURRENTLY LIVE threads share a base -- the aliasing bug this file exists for, and which nothing here has ever observed. NOT REOPENED BY a differing failure rate: the 6.7% and 10.8% rows measured how often the run happened to serialise, not how often TLS is wrong.'
+status: done
+owner: frankb-8e
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 27 is `tools/expect_same.sh test_tls_base26 "$(/tmp/test_tls_base26)" "$(printf 'errors=0\nTLS OK')"`. The job's own `src` (`test/test_tls_base.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -218,3 +220,128 @@ terms: **do we ship beta 0.1 with a threading race that reddens one tier in
 nine?** That sentence contains no implementation noun and is answerable in a
 word, which is the test for whether it is his at all.
 - 2026-09-22 — the borg watcher saw `test-threads#src:test/test_tls_base.pas` GREEN at b88b481c0b34 (tier full) and did NOT close this: the green is at the SAME sha the red was found at (`b88b481c0b34`), so no tree change separates them — the job returned two different answers about one tree, which is nondeterminism rather than evidence of a fix. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+---
+
+## 2026-09-22 (frankb-8e) — RESOLVED: THE TEST WAS ASSERTING THE WRONG SCOPE, AND THE 2026-09-15 STACK-RECLAIM FIX IS WHAT MADE IT VISIBLE
+
+**Reproduced first, at HEAD `fc8e9870f`, compiler `f7dedaea694f`, plexus:
+10 failures in 300 runs of the instrumented build (7.0% in 200 runs of the
+unmodified one), consistent with both earlier rows and with their intervals.**
+
+### WHICH CHECK FIRED — the thing nobody had asked
+
+The published rows all say `errors=2` and stop there. `errors` is a single
+counter over **sixteen** distinct `Inc` sites, so "2" names no mechanism at all.
+Instrumenting every site with its own counter answers it in one run:
+
+```
+run 6:   errors=2 | site 12 = 2
+run 19:  errors=2 | site 12 = 2      (10 failures, 300 runs, site 12 every time)
+```
+
+Site 12 is the distinctness loop:
+
+```pascal
+for j := 0 to NTHREADS - 1 do
+  if (i <> j) and (AutoBase[i] = AutoBase[j]) then Inc(errors);
+```
+
+It is **symmetric**, which is why the count is always exactly 2 for one
+colliding pair, and 4 for two — `errors=4` appeared once in 200 runs and is the
+same mechanism, not a second one.
+
+**Everything else passed in every failing run**: each child's self-pointer
+check, each child's "the stub zeroed my block" check, and each child's
+20000-iteration churn loop over its own tag. **A genuinely shared LIVE base
+could not produce that** — four threads writing four different tags into one
+block tear the churn loop immediately. The only surviving reading is that two
+children reported the same base *without ever overlapping*.
+
+### THE MECHANISM
+
+`__pxxTlsBase` for a cloned thread is carved off **the top of that thread's
+stack**. The stack is given back when the thread dies:
+
+- `PalThreadJoin` munmaps it, and
+- since **`f3b9be658`, 2026-09-15** (*"a thread nobody joins never gave back its
+  1028 kB stack mapping"*), `ReapSweep` munmaps the stack of any thread the
+  kernel has confirmed dead — and `PalThreadCreate` runs one sweep **per call**.
+
+Linux then hands that address straight back to the next mmap of the same size.
+So in phase A's create loop, a child that finishes its 20000 iterations before
+the last `PalThreadCreate` runs has its stack swept and re-issued, and the next
+child's TLS base is **the same pointer**. Correct behaviour; the test forbade it.
+
+### THREE MEASUREMENTS, EACH ANSWERING A DIFFERENT QUESTION
+
+| probe | result | what it establishes |
+| --- | --- | --- |
+| barrier prototype (hold all four phase-A threads alive across the comparison) | **0 / 600** vs 10 / 300 | the collision needs non-overlap |
+| `reuse.pas` — six threads, create **and join** each before the next | one base, **200 / 200** runs | an address really is re-issued |
+| `reaper.pas` — four threads, **no join between**, 50 ms apart | one base, `duplicate-pairs=12` | the route is **ReapSweep**, not Join |
+
+The third probe exists because the second one takes the wrong route: phase A
+joins nothing until after the create loop, so a probe that joins proves a
+mechanism the failing path never uses.
+
+**Positive control on the cause, not just on the correlation:** stubbing
+`ReapSweep` to `Exit` immediately and rebuilding the third probe gives **four
+distinct bases, `duplicate-pairs=0`**, each `1052672` bytes apart — exactly
+`h.StackSize` (1024 kB + guard page). Restored with `git checkout HEAD --`.
+
+### THE FIX
+
+1. **Phase A establishes its precondition instead of assuming it.**
+   `PalThreadCreate` already blocks until the child has published its identity,
+   so when the create loop ends all four children exist; each is parked in a
+   bounded futex wait, so none can have exited. The parent sets the release word
+   at that instant. The comparison now has the overlap it always needed.
+2. **A child that gives up waiting is an ERROR.** `BarrierLate[i]` is added to
+   `errors`. Skipping the comparison instead would make an unestablished
+   precondition print the same `errors=0` as an established one — the shape this
+   whole ticket is about.
+3. **Bounded, so it fails rather than hangs.** 100 × 50 ms = 5 s against a
+   parent that sets the word microseconds later. Verified by removing the
+   release: `errors=4` in 5.0 s, no hang.
+4. **New phase A2 keeps the coverage the barrier would otherwise delete.** The
+   recycled-block path *was* being exercised — about 7% of runs — and the stub's
+   re-zeroing and re-self-pointering passed every time it was. A2 runs the same
+   body serially (create, join, create, join) so that path is reached **on
+   purpose every run**. Measured: all four A2 bases identical, `errors=0`.
+   A2 sets the release word itself rather than inheriting phase A's, so one
+   phase cannot supply what another needs.
+
+**Deliberately NOT asserted: that the address comes back.** It does, 200/200
+here, but that is a claim about one kernel's mmap policy, and pinning it would
+be a host-dependent control — the class that reddens a working instrument on
+somebody else's box. A host that hands out fresh addresses exercises fresh
+blocks and the checks still hold.
+
+### VERIFICATION, WITH ITS POPULATION
+
+- **500 / 500 clean** on the final tree (`fc8e9870f` + this change, compiler
+  `f7dedaea694f`, plexus, otherwise-idle-ish box). Against a 7–11% prior rate,
+  P(0 in 500) is ~1e-16.
+- Earlier: 0 / 600 on the barrier prototype, 10 / 300 with instrumentation,
+  14 / 200 on the unmodified test.
+- **The distinctness check still fires**: forcing `AutoBase[1] := AutoBase[0]`
+  in the parent gives `errors=2` — the same signature the tier reported, so the
+  guard was not disabled, only given its precondition.
+- `tools/gate.sh quick`: **`gate: GREEN`**, read from the log.
+
+### WHAT THE RETIREMENT CONDITION ASKED FOR, AND WHAT IT CANNOT COVER
+
+The ticket asked for *a fix plus 200 consecutive clean runs, not one green
+tier*. That is met at 500. The one thing it cannot cover: this box. If the row
+reds again, **instrument the sites before rating it** — `errors=2` from site 12
+means two concurrently live threads share a base, which is the aliasing bug and
+a different ticket; `errors` from anywhere else is not this at all.
+
+### AND THE EARLIER RATES ARE NOT REFUTED — THEY MEASURED A DIFFERENT QUESTION
+
+6.7% (n=60) and 10.8% (n=500) are both kept and both correct. They measure **how
+often phase A happened to serialise**, which depends on box load, core count and
+scheduler, not on how often TLS is wrong — TLS was never wrong. A future run
+disagreeing with either is not a regression and not a refutation.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

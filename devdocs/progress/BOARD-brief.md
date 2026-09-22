@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:33 unfinished:18 blocked:9 backlog:38 backlog-umbrella:14 backlog-core:173 backlog-nilpy:186 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3919 rejected:87`
+`working:33 unfinished:18 blocked:9 backlog:37 backlog-umbrella:14 backlog-core:173 backlog-nilpy:186 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:27 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3920 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
@@ -76,7 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 568, ranked
+## Ready — top 30 of 567, ranked
 
 - `[p 95] [B]` perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds (unblocks 1)
 - `[p 95] [N]` perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline (unblocks 1)
@@ -109,4 +109,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
 - `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
 
-_538 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_537 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
