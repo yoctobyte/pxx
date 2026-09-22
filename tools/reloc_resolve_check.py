@@ -1232,10 +1232,20 @@ def clang_arm_split_addend_oracle():
       - the SIGN. -1 must come back as -1 and not as 65535, because the field
         is signed and a linker computes S + A.
 
-    And the ceiling is asserted from the other side: clang must REFUSE 0x8000
-    and 0x10000. If it accepted them the field would not be 16-bit signed and
-    pxx's whole local-symbol design would be answering a question that does not
-    exist."""
+    And the ceiling is asserted from the other side -- but on the FIELD, never
+    on clang's diagnostics. This check asserted "clang must REFUSE 0x8000 and
+    0x10000" from 2026-09-22 until the same day, and it reddened the full tier
+    on borg, where clang accepted one of them: a control drawn from the wrong
+    population, because the claim is about what the ARM split field can HOLD
+    and a refusal is a third-party tool's error-reporting policy, which varies
+    by version and by host. Whether an assembler chooses to diagnose an
+    unrepresentable addend or to encode it and wrap is its business; what the
+    field can carry is not. So either outcome settles the ceiling: a refusal,
+    or an acceptance whose addend does NOT come back intact through
+    _inplace_addend. Only an acceptance that DOES come back intact would mean
+    the field is not 16-bit signed and pxx's whole local-symbol design answers
+    a question that does not exist -- and that is the one case this returns
+    WRONG for."""
     cc = shutil.which('clang')
     if not cc: return None, 'clang not found'
     work = tempfile.mkdtemp(prefix='armadd-')
@@ -1269,22 +1279,61 @@ def clang_arm_split_addend_oracle():
         return False, ('the contiguous reader (insn & 0xffff) agreed on every '
                        'addend in the set, so this check cannot tell the split '
                        'field from a flat one -- the SET is what is wrong')
-    # CONTROL 2: clang must refuse what the field cannot hold.
-    refused = []
+    # CONTROL 2: the ceiling, measured on the FIELD. An addend the field cannot
+    # hold must either be refused by the assembler or be encoded lossily -- and
+    # "lossily" is read back with the same _inplace_addend the applier uses, so
+    # the arm that fires is the arm under test. The predicate "the recovered
+    # addend equals the one that went in" is already shown to be REACHABLE and
+    # TRUE above: 0x7fff is in ARM_SPLIT_ADDENDS and the loop returns False if
+    # it does not come back intact. So this is not a guard that can only pass.
+    ceiling = []
     for n in (0x8000, 0x10000):
         open(src, 'w').write(f'        .text\nf:\n'
                              f'        movw r0, #:lower16:sym+({n})\n')
         rr = subprocess.run([cc, '--target=arm-linux-gnueabihf', '-c', src,
                              '-o', obj], capture_output=True, text=True)
-        refused.append(rr.returncode != 0)
-    if not all(refused):
-        return False, ('clang ACCEPTED an addend the 16-bit signed field cannot '
-                       'hold, so the ceiling this writer is designed around is '
-                       'not where it was measured')
+        if rr.returncode != 0:
+            ceiling.append(f'+{n:#x} refused')
+            continue
+        e2 = Elf(obj); tb2 = e2.data(e2.sec('.text'))
+        rr2 = [x for x in e2.relocs('text') if x['type'] == 43]
+        if len(rr2) != 1:
+            return False, (f'addend {n} assembled but produced {len(rr2)} '
+                           f'MOVW_ABS_NC entries, so the ceiling is unmeasured')
+        back = _inplace_addend(e2, rr2[0], tb2)
+        if back == n:
+            return False, (f'clang encoded addend {n:#x} into the movw field and '
+                           f'_inplace_addend recovered it INTACT, so the field is '
+                           f'not 16-bit signed and the local-symbol design in '
+                           f'ObjGotStrOff answers a question that does not exist')
+        ceiling.append(f'+{n:#x} wrapped to {back}')
+    # And force the ACCEPT arm to run even where clang refuses the mnemonic
+    # form, so it is not dead code on this host and live only on the host that
+    # reddened the tier. `.reloc` hands the assembler the addend directly and
+    # it takes it: measured 2026-09-22, clang 21.1.8 encodes sym+65536 here and
+    # the field reads back 0. If this ever reads back 65536 the ceiling is not
+    # where the writer assumes.
+    open(src, 'w').write('        .text\nf:\n        movw r0, #0\n'
+                         '        .reloc f, R_ARM_MOVW_ABS_NC, sym+65536\n')
+    rr = subprocess.run([cc, '--target=arm-linux-gnueabihf', '-c', src, '-o', obj],
+                        capture_output=True, text=True)
+    if rr.returncode != 0:
+        ceiling.append('.reloc form unsupported by this assembler')
+    else:
+        e2 = Elf(obj); tb2 = e2.data(e2.sec('.text'))
+        rr2 = [x for x in e2.relocs('text') if x['type'] == 43]
+        back = _inplace_addend(e2, rr2[0], tb2) if len(rr2) == 1 else None
+        if back == 65536:
+            return False, ('the assembler carried addend +0x10000 through the '
+                           'movw field intact via .reloc, so the field is not '
+                           '16-bit signed and the local-symbol design in '
+                           'ObjGotStrOff answers a question that does not exist')
+        ceiling.append(f'.reloc +0x10000 wrapped to {back}')
     return True, (f'recovered {got} through the split field (imm4@19:16, '
                   f'imm12@11:0, signed); a contiguous read disagrees on '
                   f'{sum(1 for nv, n in zip(naive, ARM_SPLIT_ADDENDS) if nv != (n & 0xffff))} '
-                  f'of {len(got)}; clang refuses +0x8000 and +0x10000')
+                  f'of {len(got)}; ceiling: {", ".join(ceiling)} '
+                  f'(+0x7fff came back intact, so the predicate can say yes)')
 
 
 # Per-machine MOVW group shape. The pair's two types, and the predicate that

@@ -55,3 +55,67 @@ reloc-resolve[aarch64]: AGREE with pxx's own executable on 772256 bytes, 1355 re
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolution (frankb-8e, 2026-09-22)
+
+**The failing step is mine and the cause is my CONTROL, not the arm32 writer.**
+Re-verified at HEAD first, as the ticket's own third caveat instructs: all five
+`reloc_resolve_check` targets are green on this box, before and after the fix.
+So this is a **host-dependent** red, which is why it fired on borg and never
+here.
+
+`clang_arm_split_addend_oracle()`'s CONTROL 2 asserted that **clang REFUSES**
+`movw r0, #:lower16:sym+0x8000` and `+0x10000` — the reasoning being that if
+the assembler accepted them, the ARM split field would not be 16-bit signed and
+`ObjGotStrOff`'s local-symbol-per-GOT-slot design would be answering a question
+that does not exist. The reasoning is sound. **The instrument was not.**
+
+The claim is about **what the ARM split field can HOLD** — a property of the
+ARM ELF ABI. What I measured is **whether a particular clang chooses to
+diagnose an unrepresentable addend**, which is that tool's error-reporting
+policy and varies by version and by host. Ubuntu clang 21.1.8 here refuses
+both; borg's clang accepted one. Both assemblers are correct; only my control
+was wrong about what it was reading. This is CLAUDE.md's "a control from the
+wrong population passes and certifies the broken instrument" with the sign
+flipped — it did not certify a broken instrument, it **reddened a working
+one**, which costs a tier row and an investigation.
+
+**Fixed by measuring the ceiling on the FIELD.** An addend the field cannot
+carry must either be refused by the assembler, *or* be encoded lossily — and
+lossily is read back through `_inplace_addend`, the same function the applier
+uses. Either outcome settles the ceiling. The only outcome that falsifies the
+design is an addend that comes back **intact**, and that is now the one case
+that returns WRONG.
+
+**And the accept arm is no longer dead code on hosts where clang refuses.**
+`.reloc f, R_ARM_MOVW_ABS_NC, sym+65536` hands the assembler the addend
+directly and it takes it — measured here, clang 21.1.8 encodes it and the field
+reads back **0**. That reproduces borg's condition locally by a different door,
+so the arm that only borg could reach now runs on every host, every time. The
+verdict line prints all three outcomes:
+
+```
+ceiling: +0x8000 refused, +0x10000 refused, .reloc +0x10000 wrapped to 0
+(+0x7fff came back intact, so the predicate can say yes)
+```
+
+The parenthetical is the positive control for the accept arm's predicate:
+`+0x7fff` is in `ARM_SPLIT_ADDENDS` and the main loop returns False if it does
+not come back intact, so "the recovered addend equals the one that went in" is
+demonstrably reachable and true. The predicate can say yes, so its saying no is
+information.
+
+**Scope of the claim:** five targets re-run green at HEAD
+(`x86_64`, `i386`, `riscv32`, `aarch64`, `arm32`), `gate.sh quick` green. I
+have NOT reproduced on borg — I cannot reach it — so this is a fix derived from
+the log tail's exact message plus a local reproduction of the accepting
+behaviour by another route, not from a failing run I watched. What would retire
+that caveat: the next full tier on borg passing step 106/589.
+
+**Two of the ticket's own three caveats were right and worth recording as
+having paid off.** The slug names `compiler_srchash`, which is not what broke.
+The named sha `387782d9166f` cannot be the cause. The third — "re-verify at
+HEAD" — was the one that did NOT apply: HEAD was green here all along, and
+believing that would have closed this as fixed-by-events. **A green re-verify
+on the wrong host is not a re-verify**, which is the same class of error as the
+bug itself.
