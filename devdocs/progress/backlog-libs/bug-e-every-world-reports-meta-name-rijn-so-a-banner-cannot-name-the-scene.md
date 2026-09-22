@@ -89,7 +89,13 @@ nearest neighbour defeats it.
 ## The remaining fix
 
 1. **Emit the world DIRECTORY.** Unique by construction; cannot drift from a
-   copied field.
+   copied field. **The argument for this over any fingerprint is the one-row
+   margin above, in 7a's framing:** `rijn` against `rijn-v9` is *"not a
+   discriminator, it is a coincidence that has not collapsed yet"*. The `twins`
+   field reports `none` for `rijn` today and **would silently begin reporting a
+   twin after a single world edit** — correct behaviour, and the proof that no
+   shape scheme is a fix. **Every shape scheme is a stopgap that announces its
+   own expiry date.**
 2. **Record the shape in every perf stamp.** This is the half that pays: fixing
    the banner alone makes future logs trustworthy and leaves every existing one
    permanently unadjudicable.
@@ -111,7 +117,17 @@ quotes `atan2` calls per frame at **46.0 on `roofs`** against **1,258.4 on
 Settled 2026-09-22 by reading the source at both ends; **do not carry 6.8 as a
 second row.**
 
-**Its provenance is worth more than the correction.** 6.8 originated in 7a's
+**ITS ORIGIN IS A NUMBER WITH NO SOURCE AT ALL**, found by 7a grepping its own
+tree rather than its memory: `6.8` occurs twice in `devdocs/perf/*.md` and
+neither is a call count — once inside `121.7 against 96.8`, once as
+`assets/facades.lzx — 6.8 MB, generated` (`RESUME-HERE.md:381`). **A megabyte
+count off a file-size line, emitted as an atan2 call rate.** Not stale, not
+misremembered: **invented at the moment of writing, from adjacent context,
+wearing the units of the thing under discussion.** Re-reading its supposed
+source would have cleared it, because it was never there. **Only grepping for
+the literal digits reaches this class.**
+
+**And the relay half is worth more than the correction.** 6.8 originated in 7a's
 message and was passed on by a relaying seat **that had already read the correct
 figure the same day** — the commit body of `2efde35a3` says in plain text
 *"rijn 1258.4/frame, roofs 46.0"*, and that seat had quoted that commit to the
@@ -140,6 +156,19 @@ world (4 tiles, everything resident, nothing streaming)"*. **An 80%-accurate
 name carried next to a 100%-accurate measurement, and the measurement is what
 identifies the run.** Every document that did this is adjudicable today; every
 one that recorded only the name is not.
+
+## The three-way collision is worse than the pair, and for a reason the pair does not show
+
+`revet-control`, `revet-test` and `skel-test` are indistinguishable in output.
+**A CONTROL and a TEST world that cannot be told apart is a mislabelled A/B
+waiting to happen, not merely a mislabelled row** — the pair case costs you an
+attribution, this one can invert a result.
+
+**7a's flag, and its own limit on it, kept as stated: it has NOT checked whether
+any comparison in the repo ever distinguished `revet-control` from `revet-test`
+on banner evidence, and is not claiming it happened.** If one did, that pair
+wants the same audit the leak documents got. **Unmeasured, and recorded so
+somebody measures it rather than assuming either way.**
 
 ## The destructive step that took the oracle out, and the lesson is not "scope your globs"
 

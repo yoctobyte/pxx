@@ -37331,6 +37331,29 @@ sense. It is a PRECEDENCE failure: a peer's recollection was quoted over the
 seat's own read of the source.** Its own summary: *"I relayed a wrong number
 while holding the right one."*
 
+**AND THE ORIGIN IS A THIRD MECHANISM, NASTIER THAN THIS ONE, FOUND BY THE
+ORIGINATING SEAT GREPPING ITS OWN TREE RATHER THAN ITS MEMORY.** `6.8` was not a
+recalled measurement at all. It appears exactly twice in that repo's perf
+documents and **neither is a call count**: once as a substring of `96.8`, and
+once as `assets/facades.lzx — 6.8 MB, generated`. **The seat lifted a megabyte
+count off a file-size line in a document it had open and emitted it as an atan2
+call rate.**
+
+**That is a failure to HAVE a source, not a failure to re-check one** — and the
+two are not treated alike. A stale or misremembered figure can be caught by
+re-reading the artefact it came from. **This number came from nowhere, so
+re-reading its supposed source finds nothing wrong there and clears it.** It was
+invented at the moment of writing, from adjacent context, wearing the units of
+the thing actually under discussion, and **it is indistinguishable from a
+recalled figure by inspection.**
+
+**The only instrument that reaches it is grepping for the literal digits before
+repeating them** — which is what caught it, twice, independently. Note the full
+chain: one seat invents a number from a neighbouring line, a second relays it
+over its own correct read, and a third catches it only because two values for
+one quantity happened to arrive in one place. **Three different failures, one
+figure, and each stage was individually unremarkable.**
+
 **The mechanism is that the two facts are not competing in the same register.**
 Your own earlier read is *filed* — it has been used, reported, and mentally
 closed. A peer's number arrives as *news*, attached to a live question, in
