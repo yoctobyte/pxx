@@ -14727,6 +14727,7 @@ end;
 procedure EmitManagedLocalCleanupForTarget(retSymIdx: Integer);
 var i, procIdx, mek: Integer;
     act, a1, a2, a3: Integer;   { the ONE classification -- ScopeExitReleaseAction, symtab.inc }
+    jzPatch: Integer;           { the inline nil test's forward branch, per arm }
 begin
   { The release-side twin of EmitZeroFrameSlot's arm, and named here for the
     same reason: this chain's final `end` is an unnamed fall-through, and an
@@ -14815,12 +14816,33 @@ begin
               bug-a-local-dynamic-array-of-string-is-released-as-a-string-handle,
               which i386 and arm32 shared. }
             EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);   { mov eax, [ebp+off] }
+            { INLINE NIL TEST — the i386 twin of EmitManagedLocalCleanup's,
+              landed second by the one-backend-per-commit method. Same reason:
+              the sweep releases every managed local at every scope exit
+              whether or not the path touched it, and 79% of the per-slot cost
+              is reaching a callee that immediately finds nil. Measured on
+              x86-64 at 4.367 -> 1.886 ns/slot/call (56.8%); NOT re-measured
+              here, because every i386 binary in this tree runs under qemu and
+              a qemu timing is not a statement about the hardware.
+
+              WHAT IS DIFFERENT FROM x86-64, and it is why this is not a copy:
+              the argument goes on the STACK, so the branch skips a push, the
+              call AND the stack adjust — twelve bytes rather than five — and
+              the test therefore costs 4 bytes per site here against 5 there.
+              PatchRel8 measures the real span, so the number is never written
+              down; CheckRel8 turns a span that outgrows a signed byte into a
+              compile-time refusal rather than a jump into the middle of an
+              instruction, which is the failure that file exists for.
+              perf-a-every-return-releases-every-managed-local-even-the-untouched-ones }
+            EmitB($85); EmitB($C0);                            { test eax, eax }
+            EmitB($74); jzPatch := CodeLen; EmitB(0);           { je over the release }
             EmitB($50);                                        { push eax }
             procIdx := FindProc('PXXStrDecRef');
             if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
             EmitCallProc(procIdx);
             { add esp, 4 }
             EmitB($81); EmitB($C4); EmitI32(4);
+            PatchRel8(jzPatch);
           end
           else if act = SXR_VAR then
           begin

@@ -1201,3 +1201,74 @@ own `converged after 2 round(s)` on the nil-test tree.
   does not move it toward met. Reporting a fraction of an 18x (or 9.4x) target
   would be arithmetically defensible and would tell the owner something true
   while leaving him expecting 15 fps.
+
+## 2026-09-22 (frankb-8e) — i386 JOINS, and the blast-radius control is the whole method
+
+Second backend, one commit, the method the thunk landing established: **the
+five targets not being converted must come out byte-identical.**
+
+| target | before -> after |
+| --- | --- |
+| x86-64 | IDENTICAL |
+| arm32 | IDENTICAL |
+| aarch64 | IDENTICAL |
+| riscv32 | IDENTICAL |
+| xtensa (`--platform=posix`) | IDENTICAL |
+| **i386** | **changed, as intended** |
+
+One fixture through all six, `sha256` before and `cmp` after. That control is
+the reason this can be done one arm at a time without a full tier per step: if
+a sixth object moves, the step is wrong rather than interesting.
+
+### It is not a copy of the x86-64 arm, and the difference is the branch span
+
+i386 passes the handle on the STACK, so the sequence is `push` / `call` /
+`add esp, 4` and the nil test skips **twelve bytes** rather than five. So the
+test costs **4 bytes per site here against 5 on x86-64** — `test eax,eax` is
+2 bytes on i386 against 3 on x86-64 (no REX), and the jump is 2 either way.
+
+**The twelve is never written down.** `PatchRel8` measures the real span, and
+`CheckRel8` turns a span that outgrows a signed byte into a compile-time
+refusal — which is exactly what `rel8.inc` was carved out to guarantee, after
+a `jns` that grew to 181 bytes stored as -75 and faulted mid-instruction.
+
+### Measured
+
+- **Size**: `code=` 109001 -> 109065 on the six-frame fixture, **+64 bytes =
+  16 sites x 4**, which is the per-site cost arriving exactly. The ELF file
+  size is unchanged at 115064 because the segment padding absorbs it — **do
+  not read artefact size on a small i386 program; read `code=`.**
+- **Behaviour**: `cross=3` under `qemu-i386`, before and after.
+- **Leaks, differentially, five fixtures under qemu-i386**: `allocs`/`frees`/
+  `live` **identical on every row**, including the three named for leaking.
+- `tools/gate.sh quick`: GREEN.
+- Self-host fixedpoint: converged in 1 round — **one rather than two, and that
+  is correct here**: the x86-64 emitter did not change, so the compiler's own
+  bytes do not move and the seed is already the fixedpoint. The x86-64 step
+  needed two for the opposite reason. A round count is a fact about which
+  emitter moved, not a quality signal.
+
+### NOT re-measured, deliberately
+
+No ns/slot figure for i386. Every i386 binary in this tree runs under qemu, and
+a qemu timing is a statement about the emulator's dispatch, not about the
+hardware this would run on. The structural argument transfers — the callee's
+first act is still a nil test, and the caller still pays a full call/ret to
+reach it — and the number does not. Quoting a qemu-derived ns/slot beside the
+x86-64 4.367 -> 1.886 would put two incomparable rows in one table.
+
+### THE REMAINING FOUR ARE NOT ALL THE SAME DECISION, and xtensa/riscv32 need a size question answered first
+
+arm32 and aarch64 are hosted-shaped and the trade is the same one x86-64 made.
+**xtensa and riscv32 are the ESP targets, where image size is a tracked
+constraint with its own open tickets**, and "+4-5 bytes per release site" is a
+trade nobody has priced there. The x86-64 decision to go ungated rests on
++1.39% of an 8.5 MB artefact; that argument does not transfer to an image
+measured in tens of kilobytes.
+
+**So the next step for those two is a MEASUREMENT, not an emitter**: build a
+representative bare-profile image and count its release sites first. If the
+count is small the question dissolves; if it is not, the frame-size threshold
+that x86-64 correctly retired may be the right answer *there* — and that would
+be a target-specific decision with a measurement behind it, not the revival of
+a retired global option.
