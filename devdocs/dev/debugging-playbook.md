@@ -38758,3 +38758,69 @@ gap** — there is a control, it passed, it is even the right one for something.
 and check that it is the one in doubt.** Where a NEW instrument produces a
 finding, the proposition in doubt is the instrument, and no amount of varying
 your own diff reaches it.
+
+## A TWO-SIDED REVERT ANSWERS AUTHORSHIP, NEVER SOUNDNESS — AND THOSE FEEL IDENTICAL WHEN YOUR INSTRUMENT IS NEW
+
+Measured 2026-09-22, three rows in one day, two seats, and the discriminator is
+**not the technique**. Instance found by `frankb-8e`, which asked for the
+statement to be recorded in this form rather than its own.
+
+**Revert your change, rebuild, see whether the finding survives.** It is a good
+control and nothing here argues against it. What it establishes is exactly
+*"my edit did not cause this"* — and when the finding comes out of an
+instrument you have just written, the proposition actually in doubt is **the
+instrument**, which a revert of your own diff cannot reach: a broken instrument
+stays broken across the revert and reproduces beautifully, at the identical
+offset, with the identical message.
+
+| row | control | question it answered | right question? |
+| --- | --- | --- | --- |
+| `frankb-8e`, a NEW live-set closure guard firing on `D_EXPF` | reverted the predicate change, reproduced identically | "did my edit cause this" | **no** — the guard read `Procs[].BodyAddr` AFTER the loop that remaps it, comparing post-compaction offsets against pre-compaction ranges. `D_EXPF` does not exist as a defect. |
+| `frankh-c0`, wasm `check_nilpy_generator_slot` red under a promoted default | reverted the `-O` flip, rebuilt, ran the check | "did my edit cause this" | **yes** — pre-existing, independently established in its own ticket by stash-and-rebuild |
+| `frankh-c0`, `test-nilpy#675` atan red in a full tier | ran the subject under `--dce`, `--no-dce` and the default | "did my edit cause this" | **yes** — byte-identical all three ways; Track T had it as NEW-RED at pin v417 |
+
+**Same control, three times, one wrong answer — and the difference was whether
+the INSTRUMENT was new.** 8e's guard was hours old. My two instruments (a
+compiler flag, a tier row) predate the question by weeks, so authorship was the
+only live proposition and the revert was sufficient.
+
+**The lesson is NOT "be suspicious of two-sided reverts"** — that is false, and
+expensive, and would have cost both of my rows their (correct) answer. The
+lesson is to ask which proposition is in doubt:
+
+- **instrument older than the question** → a revert settles authorship, and
+  authorship is what you wanted. Use it.
+- **instrument written for this investigation** → a revert settles nothing that
+  matters. Reach for something that can impeach the instrument itself: a
+  positive control that must FIRE, a case where the answer is known
+  independently, or a second reading that fails differently.
+
+## A SAFETY CLAIM DECAYS TOWARDS BEING FOUND BY THE ONE PERSON IT WAS WRITTEN TO STOP
+
+CLAUDE.md already has *a stale hazard block is the expensive kind, because
+obeying one produces no signal*. Two instances on 2026-09-22 add the decay
+profile and, more usefully, a **predictor**.
+
+- `compiler/compiler.pas`: a block refusing the `--emit-obj` DCE default because
+  `--dce --emit-obj --platform=esp` on an IRAM fixture segfaulted GNU ld. Its
+  ticket was in `done/`; all four links return rc=0. Found by a promotion
+  attempt that had to read past it.
+- `compiler/dce.inc`: a header stating that a dropped body's `BodyAddr := -1`
+  makes `ApplyCallFixups` refuse by name. It does not — `CallFixTarget` holds a
+  resolved snapshot that gets clamped, so the `-1` is never consulted and the
+  compiler prints `ok:` and emits the binary. **That false claim is why five
+  targets had no closure check.** Found by the seat adding the check it said was
+  unnecessary.
+
+**The mechanism (frankb-8e's phrasing, and it is the good part): a safety claim
+is only exercised by someone doing the thing it forbids — and the people most
+likely to do that thing are the ones who have just read the claim and been
+reassured.** So the finder is, structurally, the one person the document was
+written to stop. That is a decay profile rather than a mistake, and it tells you
+where to look:
+
+> **Any comment whose content is "this case is handled" and whose consequence is
+> "so do not add a check".**
+
+When you write one, date it and name the measurement that would retire it. When
+you obey one, notice that you are the population it was written about.
