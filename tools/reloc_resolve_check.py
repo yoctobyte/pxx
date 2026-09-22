@@ -280,7 +280,45 @@ def exe_text_off(xe):
     return None
 
 
+def exe_loads(xe):
+    """Every PT_LOAD as (file offset, vaddr, filesz). A pxx executable carries
+    program headers and no section headers, so this is the only map there is."""
+    b = xe.b; w64 = xe.cls == 2
+    phoff = rd(b, 0x20, 8) if w64 else rd(b, 0x1c, 4)
+    phentsize = rd(b, 0x36 if w64 else 0x2a, 2)
+    phnum = rd(b, 0x38 if w64 else 0x2c, 2)
+    out = []
+    for i in range(phnum):
+        o = phoff + i * phentsize
+        if rd(b, o, 4) != 1: continue
+        if w64:
+            out.append((rd(b, o + 8, 8), rd(b, o + 16, 8), rd(b, o + 32, 8)))
+        else:
+            out.append((rd(b, o + 4, 4), rd(b, o + 8, 4), rd(b, o + 16, 4)))
+    return out
+
+
 def exe_bytes(xe, xoff, va, n):
+    """Bytes at a virtual address in the executable.
+
+    IT SEARCHES EVERY PT_LOAD RATHER THAN EXTRAPOLATING FROM ONE. The old body
+    was `off + (va - base_va)` against the FIRST EXECUTABLE segment, which is
+    correct for .text and for anything the same segment maps, and silently
+    wrong for an address in another segment -- it returns bytes from whatever
+    that file offset happens to hold, or an empty slice past the end.
+
+    That is exactly the shape pxx executables have: .data is loaded in TWO
+    pieces, a read-only tail inside the code segment and a 32-byte writable
+    prefix in a segment of its own. Measured 2026-09-22 -- the first .data
+    comparison on aarch64 and arm32 reported "the oracle has no bytes for
+    .data[0x0:0x20]", and the missing bytes were in the executable all along,
+    in a segment this function could not address. The fallback keeps the old
+    behaviour ONLY when no segment claims the address, so a caller that was
+    relying on extrapolation still gets what it got."""
+    for off, va0, fsz in exe_loads(xe):
+        if va0 <= va and va + n <= va0 + fsz:
+            start = off + (va - va0)
+            return xe.b[start:start + n]
     off, base_va = xoff
     start = off + (va - base_va)
     return xe.b[start:start + n]
@@ -677,6 +715,135 @@ def alloc_sections(e):
         if sh['type'] in (1, 8) and (sh['flags'] & SHF_ALLOC):
             out.append(i)
     return out
+
+
+def data_compare(e, data, base, syms, tname, regions, fetch, oracle, ctlsite):
+    """Resolve .data's OWN relocations and compare them. A separate function
+    because for a year nothing did it at all.
+
+    WHY IT WAS MISSING AND WHY THAT MATTERED. This harness resolved `.text`
+    and printed a verdict that counted `len(relocs('text')) + len(relocs('data'))`
+    -- so every `.data` row was in the DENOMINATOR of "N relocations" and in no
+    comparison, on every target including the two with a real linker. The words
+    said "relocations" and the number was a `.text` claim wearing a whole-object
+    denominator.
+
+    IT IS NOT HYPOTHETICAL: THE DUPLICATE-RELOCATION BUG LIVED HERE. A VMT slot
+    at .data+0xb0 resolved to 0x100a00b1 where 0x8054f51 was meant, in every
+    pxx object, and this harness could not see it -- it was found by linking
+    with GNU ld by hand and reading the word out. That is the existence proof
+    that `.text` agreement does not imply `.data` agreement, and the reason
+    this runs on every target rather than only where a linker exists.
+    (frankuser, 2026-09-22, asking the population question about the headline
+    number rather than accepting it.)
+
+    `fetch(va, n)` returns the oracle's bytes at a vaddr, so the two modes --
+    GNU ld's linked output and pxx's own executable -- share this body. A pxx
+    executable may load .data in SEVERAL pieces, so the comparison walks the
+    regions content_regions found rather than assuming one contiguous run.
+
+    ITS OWN POSITIVE CONTROL, because a comparison that has never been red is
+    not evidence: `ctlsite` is perturbed and must redden it. A .data section
+    with no relocations at all returns SKIP rather than a green, since a
+    comparison over zero sites is the shape that passes without running.
+
+    AND HERE IS WHAT IT CANNOT SEE, WHICH IS THE BUG THAT MOTIVATED IT. Run
+    against the PRE-FIX i386 object -- the one where GNU ld resolved .data+0xb0
+    to 0x100a00b1 -- this function answers `5 .data relocation(s) agree with
+    GNU ld`. It is not broken; it is honest about the wrong thing. It applies
+    the object's relocations in the object's own order, so it applies the
+    DUPLICATE too and doubles the base exactly as ld does. Two implementations
+    of one spec agree on a malformed input, because the malformation is in the
+    input rather than in either of them.
+    Measured 2026-09-22, and it is the house rule arriving in this session's
+    own new guard: a second source only counts if it FAILS DIFFERENTLY.
+
+    SO THE DIVISION OF LABOUR IS EXPLICIT. This checks that each relocation
+    resolves to the RIGHT VALUE. It says nothing about whether the SET of
+    relocations is right, and a wrong set -- a duplicate, a missing entry, two
+    entries whose order matters -- is invisible to any resolve-and-compare,
+    because both sides consume the same set. The set is structural_check's job,
+    and its no-two-entries-at-one-offset invariant is what actually catches the
+    duplicate. Neither guard subsumes the other and neither should be quoted as
+    covering .data on its own."""
+    if data is None: return None, 'the object has no .data section'
+    rels = e.relocs('data')
+    if not rels: return None, 'the object has no .data relocations'
+    di = e.sh.index(data)
+    rs = (regions or {}).get(di) or [(0, data['size'], base.get(di))]
+    if any(r[2] is None for r in rs): return None, 'no base for .data'
+    # A SPLIT .data IS A PERMUTED .data, AND THEN THIS COMPARISON HAS NOTHING
+    # TO COMPARE. Not a skip for convenience -- a measured refusal. When pxx's
+    # EXECUTABLE writer splits .data into read-only and writable parts it calls
+    # RoPermuteData, which rebuilds the image out of RoPieceCount pieces in a
+    # new order; an OBJECT cannot express that and keeps one flat .data. The
+    # relocated words are exactly what moves, so every site this function would
+    # check is at a different offset in the two builds.
+    #
+    # MEASURED 2026-09-22 rather than inferred, because the first version DID
+    # compare and reported `.data+0xb8 resolves to 18df400000000000 and pxx's
+    # executable has 0000000000000000` on aarch64 -- which reads as a writer
+    # emitting a relocation the executable does not honour. The value is in the
+    # executable: at vaddr 0x4d3298, inside the writable piece, 0x28 into a
+    # region content_regions attributes only 0x20 bytes to. Reporting that as a
+    # relocation defect is precisely the mistake this harness exists to avoid,
+    # and it is the second time the same correspondence assumption has produced
+    # a confident wrong DIFFER in one session (the movz/movk value check was
+    # the first).
+    #
+    # Locating each moved word by its expected CONTENT would close it and must
+    # not be done: a search for the value you predict is a census built on the
+    # hypothesis it is testing. The honest position is that `.data` is checked
+    # where a real linker lays it out flat, and stated as unchecked elsewhere.
+    if len(rs) > 1:
+        return None, ('this executable loads .data in %d pieces and permutes it '
+                      '(RoPermuteData), so an object offset and an executable '
+                      'offset are not the same place -- .data can only be '
+                      'compared against a real linker' % len(rs))
+
+    def resolve():
+        db = bytearray(e.data(data))
+        unh = {}
+        apply_relocs(e, 'data', db, base, rs[0][2], syms, unh, regions)
+        unh.pop('_undef', None); unh.pop('_synth', None)
+        return db, unh
+
+    db, unh = resolve()
+    if unh: return False, f'unhandled .data relocation types {unh}'
+    checked = 0
+    for lo, hi, bs in rs:
+        theirs = fetch(bs + lo, hi - lo)
+        if len(theirs) < hi - lo:
+            return None, f'the oracle has no bytes for .data[{lo:#x}:{hi:#x}]'
+        for r in rels:
+            if not (lo <= r['off'] < hi): continue
+            w = 8 if r['type'] in (1, 257) and e.cls == 2 else 4
+            mine = bytes(db[r['off']:r['off'] + w])
+            got = bytes(theirs[r['off'] - lo:r['off'] - lo + w])
+            if mine != got:
+                return False, (f'.data+{r["off"]:#x} resolves to {mine.hex()} '
+                               f'and {oracle} has {got.hex()}')
+            checked += 1
+    if checked == 0:
+        return None, 'no .data relocation fell inside a located region'
+    # THE CONTROL. Move one site's target and the same comparison must reject
+    # it -- drawn from how this writer really goes wrong (a wrong addend), not
+    # from what is easy to perturb.
+    saved = dict(ctlsite)
+    db2 = bytearray(e.data(data))
+    unh2 = {}
+    for r in rels:
+        rr = dict(r, addend=(r['addend'] + 4) if r['addend'] is not None else r['addend'])
+        if r['off'] == saved['off'] and r['addend'] is None:
+            # SHT_REL: the in-place word IS the addend, so that is what moves.
+            struct.pack_into('<i', db2, r['off'],
+                             struct.unpack_from('<i', db2, r['off'])[0] + 4)
+        _apply_one(e, rr if r['off'] == saved['off'] else r, db2, base,
+                   rs[0][2], syms, unh2, regions)
+    if bytes(db2) == bytes(db):
+        return False, ('the .data control did not redden the comparison, so it '
+                       'has not been shown able to fail')
+    return True, f'{checked} .data relocation(s) agree with {oracle}'
 
 
 def apply_relocs(e, secname, secdata, base_of, sec_va, syms, unhandled,
@@ -1583,6 +1750,17 @@ def main():
         # movz/movk relocations, because pxx resolves printf from its own crtl
         # and emits no undefined symbol at all. Printing the census is what
         # stops the headline standing in for coverage it does not have.
+        drels = e.relocs('data')
+        dok, ddetail = (None, 'no .data relocations') if not drels else data_compare(
+            e, data, base, syms, tname, regions,
+            lambda va, n: exe_bytes(xe, xoff, va, n), "pxx's executable", drels[0])
+        if dok is None:
+            print(f'   .data: NOT COMPARED -- {ddetail}')
+        elif dok:
+            print(f'   .data: {ddetail} (VALUES; a wrong SET is structural_check\'s job)')
+        else:
+            print(f'reloc-resolve[{tname}]: DIFFER in .data -- {ddetail}')
+            return 1
         from collections import Counter as _C
         cen = _C(r['type'] for r in e.relocs('text'))
         print('   applied: ' + ', '.join(f'type {t} x{n}'
@@ -1653,8 +1831,9 @@ def main():
                           'relocation, so the run above says nothing about '
                           'that arm; the clang row is the only evidence here')
         print(f'reloc-resolve[{tname}]: AGREE with pxx\'s own executable on {len(tb)} '
-              f'bytes, {nrel} relocations; 4 of 4 controls reddened it, and every '
-              f'section base has an independent runtime witness')
+              f'bytes of .text, {len(e.relocs("text"))} .text relocations; 4 of 4 '
+              f'controls reddened it, and every section base has an independent '
+              f'runtime witness')
         if synth:
             print(f'   {synth} relocations named UNDEFINED symbols and were resolved at '
                   f'addresses THIS HARNESS chose, so those rows are pxx graded against '
@@ -1704,9 +1883,25 @@ def main():
     # clean -- so a reader who sees only the number is reading the wrong half.
     if not control_suite(e, text, base, addrs, syms, theirs, tname):
         return 1
-    print(f'reloc-resolve[{tname}]: AGREE with GNU ld on {len(tb)} bytes, '
-          f'{nrel - undef} relocations ({undef} undefined, ld-only); '
-          f'3 of 3 controls reddened it')
+    # .data's OWN relocations, which this harness counted and never checked --
+    # and which is where the duplicate-relocation bug lived.
+    drels = e.relocs('data')
+    dok, ddetail = (None, 'no .data relocations') if not drels else data_compare(
+        e, data, base, syms, tname, None,
+        lambda va, n: le.b[le.sec('.data')['off'] + (va - le.sec('.data')['addr']):
+                           le.sec('.data')['off'] + (va - le.sec('.data')['addr']) + n]
+        if le.sec('.data') else b'',
+        'GNU ld', drels[0])
+    if dok is None:
+        print(f'   .data: NOT COMPARED -- {ddetail}')
+    elif dok:
+        print(f'   .data: {ddetail} (VALUES; a wrong SET is structural_check\'s job)')
+    else:
+        print(f'reloc-resolve[{tname}]: DIFFER in .data -- {ddetail}')
+        return 1
+    print(f'reloc-resolve[{tname}]: AGREE with GNU ld on {len(tb)} bytes of '
+          f'.text, {len(e.relocs("text")) - undef} .text relocations '
+          f'({undef} undefined, ld-only); 3 of 3 controls reddened it')
     # And the program has to RUN, because bytes agreeing with ld says nothing
     # about whether ld and pxx agreed about the right thing.
     rr = subprocess.run([exe], capture_output=True, text=True, timeout=120)
