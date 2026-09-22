@@ -2,12 +2,12 @@
 prio: 40
 track: T
 type: chore
-status: working
+status: done
 found: 2026-09-22
 found-by: frankh-c0
 owner: frankb-8e
 blocked-by: []
-summary: "tools/esp_run_bare.sh defaults to `--chip esp32c3`, which is riscv32, so the routine ESP path exercises ONE of the two ESP targets and xtensa NilPy has no regular coverage at all. This is a COVERAGE gap and explicitly NOT a break: NilPy builds for xtensa fine with `--xtensa-abi=windowed --xtensa-long-calls --emit-obj` (empty .npy 975,588 B, `print(1)` 975,740 B, measured 6fb91c73e88e and matching frankb-8e byte for byte). The cost of the gap is measured rather than hypothetical: on 2026-09-22 TWO seats independently concluded that NilPy could not target xtensa AT ALL and one filed it at p70, because both reproduced a default-ABI flag mistake and neither had a working xtensa NilPy row anywhere to contradict them -- the whole episode is written up in rejected/bug-a-nilpy-cannot-target-xtensa-at-all-an-empty-npy-file-refuses. A green row is not only a regression detector; it is the thing that stops a reader inventing a broken target. NOTE THE ASYMMETRY IS SHARPER THAN `one chip untested`: xtensa is the PRIMARY ESP target per the S-lane rule (riscv32 merely also works), so the untested one is the one that matters more. NOT PROPOSING A DEFAULT CHANGE -- flipping the default to esp32s3 would move the blind spot rather than close it, and c3 is the cheaper chip to run. The ask is one xtensa NilPy row somewhere that runs regularly, with the windowed/long-calls/emit-obj flags recorded in it so the next reader finds the working command instead of re-deriving it."
+summary: "DONE ae7cba641 -- one xtensa NilPy row now runs in `test-xtensa`, with the working command spelled out IN the recipe and a NEGATIVE CONTROL asserting the default ABI still refuses (without which the green rows would pass on a compiler that had stopped caring about the ABI, while the comment explaining the flags went stale silently). tools/esp_run_bare.sh defaults to `--chip esp32c3`, which is riscv32, so the routine ESP path exercised ONE of the two ESP targets and xtensa NilPy had no regular coverage at all. This is a COVERAGE gap and explicitly NOT a break: NilPy builds for xtensa fine with `--xtensa-abi=windowed --xtensa-long-calls --emit-obj` (empty .npy 975,588 B, `print(1)` 975,740 B, measured 6fb91c73e88e and matching frankb-8e byte for byte). The cost of the gap is measured rather than hypothetical: on 2026-09-22 TWO seats independently concluded that NilPy could not target xtensa AT ALL and one filed it at p70, because both reproduced a default-ABI flag mistake and neither had a working xtensa NilPy row anywhere to contradict them -- the whole episode is written up in rejected/bug-a-nilpy-cannot-target-xtensa-at-all-an-empty-npy-file-refuses. A green row is not only a regression detector; it is the thing that stops a reader inventing a broken target. NOTE THE ASYMMETRY IS SHARPER THAN `one chip untested`: xtensa is the PRIMARY ESP target per the S-lane rule (riscv32 merely also works), so the untested one is the one that matters more. NOT PROPOSING A DEFAULT CHANGE -- flipping the default to esp32s3 would move the blind spot rather than close it, and c3 is the cheaper chip to run. The ask is one xtensa NilPy row somewhere that runs regularly, with the windowed/long-calls/emit-obj flags recorded in it so the next reader finds the working command instead of re-deriving it."
 ---
 
 # The bare ESP runner exercises riscv32 only
@@ -110,3 +110,6 @@ to esp32s3 moves the blind spot rather than closing it, and the ticket says so.
 Verified: `make -n test-xtensa` expands all five lines; all three assertions run
 green by hand at `6fb91c73e88e`; `tools/gate.sh quick` GREEN, read from the
 job's own summary.log.
+
+## Log
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
