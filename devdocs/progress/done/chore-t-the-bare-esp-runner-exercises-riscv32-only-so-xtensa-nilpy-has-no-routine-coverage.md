@@ -112,4 +112,4 @@ green by hand at `6fb91c73e88e`; `tools/gate.sh quick` GREEN, read from the
 job's own summary.log.
 
 ## Log
-- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d8ecc2c55.
