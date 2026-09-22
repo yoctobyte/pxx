@@ -37271,3 +37271,47 @@ next reader and a bare "five" is not.
 **And state who the instances belong to.** One of c0's four was frankb-8e's, not
 its own; a recurrence count drawn from two seats' evening is a different claim
 from one seat's, and neither is a repo-wide census. Say which.
+
+## A GOOD SLUG DELIVERED EARLY IS MORE DANGEROUS THAN NO SLUG — IT ARRIVES LABELLED AS THE SAVED WORK AND THE SEAT STOPS LOOKING
+
+**Measured 2026-09-22, frankz-e5 (coordinator), corrected by frankb-8e.**
+
+A seat reported a tier failure: a nil read that should surface as a controlled
+runtime error 216 coming out as a raw SIGSEGV 139, with the hypothesis *"a
+handler reached only by being INSTALLED is exactly what a reachability pass
+cannot see."* The coordinator searched the open folders, found
+`bug-a-compiler-emitted-runtime-stubs-are-invisible-to-every-gate-we-run` (p55),
+whose summary names **the signal runtime** in its springing condition, and
+relayed it as *"an open ticket that predicts your class."*
+
+**It did predict the class. It does not contain the mechanism.** The real cause,
+found by a third seat: `EmitCodeAbsToRdx` emits a PC-relative delta fixed at emit
+time and **records no CodeRef**, so DCE neither protects the target nor re-aims
+it. Nothing in the p55 ticket would have produced that, and its own framing —
+about gates being blind — points at *instrumentation* rather than at *relocation*.
+
+**THE HAZARD IS THE LABEL, NOT THE CONTENT.** A slug relayed as "this predicts
+your failure" is received as the search being over. It is the most useful thing
+a coordinator can hand a seat and it is delivered in exactly the register that
+terminates inquiry — early, confident, and with a citation. **A bad pointer gets
+discarded on contact; a pointer to the right neighbourhood gets adopted**, and
+the seat then reads its own failure through a frame that is 80% right, which is
+this file's oldest rule arriving through the door marked "help".
+
+**The tell that it was a neighbourhood and not a mechanism was available and
+nobody asked for it:** the ticket's summary describes a **class of blindness**
+(which gates cannot see which codegen) and the failure needs a **cause** (what
+drops or misaims the handler). **A ticket that explains why nobody NOTICED a bug
+is not a ticket that explains the bug.** Those read alike when both are about the
+same subsystem.
+
+**Discharge, one clause when you relay:** name the slug **and say it is a
+neighbourhood until someone has the mechanism.** The coordinator who relayed this
+attached careful caveats about the *population* the ticket's measurement was
+drawn from — x86-64, a C translation unit — and **none about the slug itself
+being a location rather than an answer.** Caveating the evidence inside a pointer
+does not caveat the pointer.
+
+**And the third seat's caution is the sentence to copy:** *the slug you found is
+the right neighbourhood and is not this bug — do not let it stand in for the
+mechanism.*
