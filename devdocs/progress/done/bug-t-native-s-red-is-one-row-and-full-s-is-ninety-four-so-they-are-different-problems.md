@@ -1251,4 +1251,4 @@ skipped for absent corpora, so it retires *this ticket's* question and does
 **not** satisfy goal 1's release-grade bar.
 
 ## Log
-- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c899f0c26.
