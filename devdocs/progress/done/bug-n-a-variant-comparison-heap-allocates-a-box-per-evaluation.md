@@ -116,4 +116,4 @@ if it was masked rather than repaired, the fixture reddens when the mask lifts.
 
 
 ## Log
-- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 986d2d30d.
