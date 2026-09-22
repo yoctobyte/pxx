@@ -15422,19 +15422,22 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-21T20:54:55Z",
+  "date": "2026-09-22T09:46:44Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
    "test-core#src:test/c_crtl_wait.c",
+   "test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy",
+   "test-aarch64#src:tools/compiler_srchash.sh",
    "tools-devtest#00",
-   "demos#00",
-   "test-pascal-conformance#shard3/6"
+   "demos#00"
   ],
-  "sha": "4f33700019d0090abf18aa5a8fab61478d848649",
+  "sha": "819aab1dbb148fe7a842544607ce5c50d32a49f9",
   "tier": "full",
-  "ver": "v416",
+  "ver": "v417",
   "verdict": "RED",
   "why": {
+   "test-aarch64#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), 734d10ec7b53 (stamp read back; sources match it) | probe: no working llvm-objdump (tried llvm-objdump-21, llvm-objdump); | the PXX side cannot be disassemb",
+   "test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy": "-100000000.0 7.0 -1.5707962567948965 | --100000000.0 -7.0 -1.5707963967948966 | +-100000000.0 -7.0 -1.5707963967948968 | -100000000.0 1e-08 -1.5707963267948966 | -100000000.0 -1e-08 -1.570796326794896",
    "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
   }
  },
