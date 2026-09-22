@@ -8,7 +8,7 @@ status: backlog
 found: 2026-09-01
 found-by: frankZ
 owner: unassigned
-summary: "RE-MEASURED AND STILL LIVE 2026-09-19 (frankS) at HEAD, and the SCOPE HAS NARROWED since filing: a thread that never runs pxx's own entry code — neither the __pxxclone stub nor PxxPthreadStart — inherits its creator's gs, so every `gs:` slot it touches is the creator's. "A LIBC PTHREAD" IS NO LONGER THE RIGHT DESCRIPTION AND WAS WHEN THIS WAS FILED: 934ba0418 (2026-09-14, 13 days after the original measurement) routes pxx's own threads through pthread_create with PxxPthreadStart as the start routine, and that trampoline mmaps a block and installs it with arch_prctl(ARCH_SET_GS) exactly as the clone stub's child leg does. So a pthread pxx created is FINE; what is still broken is a thread whose start routine pxx never wrapped — a direct `external 'libpthread.so.0'` pthread_create, or a thread a linked external .so starts on its own. Measured today with BOTH routes in one program as each other's control: four BeginThread threads report four DISTINCT bases, four threads from a direct libpthread pthread_create all report the MAIN thread's base (10 duplicate pairs of 10). The original measurement stands unchanged because its subject, test/test_multithreading.pas, declares pthread_create as `external 'libpthread.so.0'` and is therefore on the still-broken route. ORIGINAL: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (ba2682d2f made the heap magazine's guard atomic, so a shared magazine is correct); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine."
+summary: "RE-MEASURED AND STILL LIVE 2026-09-19 (frankS) at HEAD, and the SCOPE HAS NARROWED since filing: a thread that never runs pxx's own entry code — neither the __pxxclone stub nor PxxPthreadStart — inherits its creator's gs, so every `gs:` slot it touches is the creator's. "A LIBC PTHREAD" IS NO LONGER THE RIGHT DESCRIPTION AND WAS WHEN THIS WAS FILED: 934ba0418 (2026-09-14, 13 days after the original measurement) routes pxx's own threads through pthread_create with PxxPthreadStart as the start routine, and that trampoline mmaps a block and installs it with arch_prctl(ARCH_SET_GS) exactly as the clone stub's child leg does. So a pthread pxx created is FINE; what is still broken is a thread whose start routine pxx never wrapped — a direct `external 'libpthread.so.0'` pthread_create, or a thread a linked external .so starts on its own. Measured today with BOTH routes in one program as each other's control: four BeginThread threads report four DISTINCT bases, four threads from a direct libpthread pthread_create all report the MAIN thread's base (10 duplicate pairs of 10). The original measurement stands unchanged because its subject, test/test_multithreading.pas, declares pthread_create as `external 'libpthread.so.0'` and is therefore on the still-broken route. ORIGINAL: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (6b3b54ce4 made the heap magazine's guard atomic, SO A SHARED MAGAZINE IS CORRECT -- this clause is the one most often read past, and on 2026-09-22 a seat escalated this ticket as an unguarded data race on the magazine, which is the opposite of the record); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine."
 ---
 
 # A foreign thread has no TLS block of its own
@@ -39,7 +39,7 @@ reset gs, so the child starts life pointing at its creator's block.
 
 ## What is already fixed, and what is not
 
-`ba2682d2f` made the magazine's ownership guard an `xchg r64, m64`. A shared
+`6b3b54ce4` made the magazine's ownership guard an `xchg r64, m64`. A shared
 magazine is now *correct* — mutual exclusion holds, a loser takes the global
 locked path, and blocks may migrate between threads, which a heap allows.
 That closed a crash of 20 runs in 20.
@@ -70,7 +70,7 @@ shapes worth weighing, none of them free:
    that is exactly why `gs` was chosen. A `__thread`-style model needs the
    loader, which `--emit-obj`/`--shared` do not have (`TlsMainInstalled` is
    already false there).
-3. **Accept sharing and make every slot safe**, as `ba2682d2f` did for the
+3. **Accept sharing and make every slot safe**, as `6b3b54ce4` did for the
    magazine. Cheapest, and it means the block stops being "thread-local" in
    anything but name — which is the reason to decide it deliberately rather
    than one slot at a time.
@@ -141,7 +141,7 @@ numbers are on
 This ticket has been the top of `ready --track A` for two days and `next` has
 handed it to every Track A session that asked, because it carried
 `blocked-by: []`. Its residual is not work: the crash it was filed for is fixed
-(`ba2682d2f`), and everything left is the sentence at the end of "Why this is
+(`6b3b54ce4`), and everything left is the sentence at the end of "Why this is
 not just call the stub" — *"This is a fork of intent about the TLS design and it
 is worth a `decide-` if whoever picks it up cannot settle it from the code."*
 

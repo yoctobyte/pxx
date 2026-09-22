@@ -913,6 +913,28 @@ the row it replaces:
 ```
 git merge-base --is-ancestor HEAD <real commit, not an ancestor>   -> exit 1,   silent
 git merge-base --is-ancestor HEAD 992065f21f33                     -> exit 128, "fatal: Not a valid object name"
+
+##### But the RC IS A FACT ABOUT THE CHECKOUT, NOT ABOUT THE SHA — so neither value identifies a ghost
+
+**Measured 2026-09-22, two seats, one sha, two answers.** A ticket cited
+`ba2682d2f` for a fix. In one checkout that answers **exit 1** (the object is
+present, from some earlier fetch, and simply is not an ancestor); in another it
+answers **exit 128, `fatal: Not a valid object name`** (the object was never
+there). **Same sha, same question, same moment, two different exit codes** — and
+this seat had just written *"rc=1, not 128, so it exists in my object store and
+was never pushed"* as though the value were the discriminator.
+
+**It is not.** A pre-rebase ghost looks like **128** from a checkout that never
+received the object and like **1** from one that did. **The rc distinguishes what
+YOUR store holds, which is the question the rules already warn is the wrong
+one.** The section above is still right that the two codes mean different things
+to `git`; what does not follow is that either one tells you a sha is a ghost.
+
+**The discriminator is the one the rules prescribe and it is checkout-independent:
+match the commit SUBJECT on `origin/master`.** Here that recovered `6b3b54ce4`,
+same subject, same day — and both seats reached it that way, from opposite exit
+codes.
+
 ```
 
 **The tool draws the distinction cleanly and says so out loud. What collapses it
