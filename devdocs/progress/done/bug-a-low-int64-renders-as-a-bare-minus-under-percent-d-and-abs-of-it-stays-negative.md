@@ -113,3 +113,22 @@ folded in.
 
 ## Log
 - 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 02a288e45.
+
+## Pin state at close — one half is INERT until the next pin
+
+Both fixes are in `compiler/builtin/`, and the pin carries its own copy of
+those units (`stable_linux_amd64/default/builtin/`), so a fix there does
+nothing for anything built with `$(PXX_STABLE)` until a pin picks it up.
+Checked against pin **v417** (`2b1a54397`, binary `734d10ec7b53`) rather than
+assumed:
+
+| fix | in v417 |
+| --- | --- |
+| `abs()` promo arm, `185a81621` | **yes** |
+| promotable shift inline arm, `247260d36` | **yes** |
+| `PyFmtBase` QWord digit loop, `8f1cf3341` | **NO — landed after the pin** |
+
+So `"%d" % Low(Int64)` still returns a bare `-` under the pinned compiler, and
+`stable_linux_amd64/default/builtin/pylib.pas` still reads `if neg then v := -v`.
+**Nothing to do about it and no reason to wait** — it clears on the next pin.
+Recorded so a later reader measuring under the pin does not reopen this.
