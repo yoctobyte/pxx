@@ -36533,7 +36533,19 @@ Chasing a riscv32 `wait4` red, the tstate archive gave a table nobody could faul
 ```
 
 Two versions ever recorded, partitioning **perfectly** by host, no crossover in
-1,082 reports. It reads as *the old qemu is the cause* — and the archive cannot
+1,082 reports.
+
+**CORRECTED WITHIN THE HOUR BY ITS OWN AUTHOR, AND THE CORRECTION IS THE POINT:
+THERE ARE THREE COLLINEAR VARIABLES, NOT TWO.** Every one of those rows also pairs
+`gcc=13.3.0` with `qemu=8.2.2` and `gcc=15.2.0` with `qemu=10.2.1` — no other
+combination exists. I wrote *"host and qemu version are the same variable"* while
+holding a dump that had a third column in it. **A confound has no natural arity,
+and naming two makes the set feel enumerated**; the honest form is "everything
+that changes together", counted from the record rather than from the two variables
+the argument happens to be about. `frankb-8e` then made the mirror error in the
+other direction on the same data, crediting a new row with eliminating gcc — so
+one dump produced an under-count and an over-credit within an hour, from two seats
+who had each just been told about the other's failure mode. It reads as *the old qemu is the cause* — and the archive cannot
 say that, because **host and qemu version are the same variable in it.** Every
 borg report is an 8.2.2 report. There are ZERO rows in which the two disagree, so
 there are zero rows that could separate *"borg's emulator is old"* from *"borg
@@ -40792,6 +40804,22 @@ or that version goes"*. That one clause turns an invisible expiry into something
 reader of the closed ticket can check. And when a HOST RETIRES, the closed tickets
 whose remedy lived on it are a population somebody should walk; nothing in this
 repo currently does.
+
+**THE MEASURED HALF, added 2026-09-22 by `frankb-8e`.** `plexus` — the host seven
+retired to, itself retired 20:19:53Z the same day — carries `qemu-riscv32 10.2.1`,
+and the row runs GREEN there (`tree=3e381e41d`, `compiler=59b5bf39acd1`, diffed
+against that box's own gcc oracle, identical, rc=0). So the remedy's EFFECT is
+reproducible on a second machine and the closed ticket was never wrong; what
+expired is its reach. **Note the measurement itself is perishable for the same
+reason it was worth taking:** plexus is retired too, so that green is from a host
+the fleet no longer runs, and nobody was going to measure its toolchain later. The
+archive holds 613 plexus reports and not one records a `qemu=` value.
+
+**8e's framing, which is stronger than the one this entry opened with:** this is
+not a ticket that ILLUSTRATES the class, it is a **completed instance** of it. The
+remedy was an environment; the environment was decommissioned; the claim went
+quietly out of force; the row came back on the host that replaced it. Every step
+happened, in order, and no artefact in the repository moved at any point.
 
 **Corollary for the open sibling:** do not read its age or its persistence as
 evidence about the code. *"It has survived four sampled shas today"* was offered as
