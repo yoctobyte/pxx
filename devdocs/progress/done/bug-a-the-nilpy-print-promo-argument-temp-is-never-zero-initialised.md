@@ -759,7 +759,26 @@ exercises the tag-1 path the crash was mis-taking.
 `pargTk` is whatever the argument's type is, so **every managed `print()` argument
 kind was minted unzeroed**: `tyAnsiString`, `tyClass`, `tyVariant` and promo alike.
 Promo is simply where it was caught, because `PXXPromoClear` dereferences a
-stale tag where a nil string handle merely no-ops. The single flag fixes all of
+stale tag where a nil string handle merely no-ops.
+
+**AND THAT IS NOW A MEASUREMENT RATHER THAN AN ARGUMENT FROM READING `pargTk`**,
+which matters because three claims on this ticket were argued from reading and all
+three were wrong. The regression guard's negative control — the one-line fix
+reverted and rebuilt — printed the unzeroed temps by kind:
+
+```
+sym=559 in=1 name=[__py_parg_9]  tk=28 htemp=0   no store     { promo }
+sym=560 in=1 name=[__py_parg_10] tk=23 htemp=0   no store     { ANSISTRING }
+sym=561 in=1 name=[__py_parg_11] tk=28 htemp=0   no store
+sym=562 in=1 name=[__py_parg_12] tk=28 htemp=0   no store
+```
+
+**`tk=23` is an ansistring parg minted unzeroed on the shipped compiler.** A
+string handle released from stale bytes is the quieter half of the same defect —
+it does not fault on a tag, it decrements a refcount through a pointer the slot
+never owned, which is the shape that surfaces days later as a use-after-free
+somewhere else. Nobody has looked for an instance of that and this ticket does not
+claim one; what it claims is that the slot was uninitialised, which the row shows. The single flag fixes all of
 them, and the 8-byte store the walk emits is the established contract for a promo
 slot (tag word reads `PROMO_TAG_INLINE`) — the same one `IRPromoTempSlot` relies
 on for its own temps.
