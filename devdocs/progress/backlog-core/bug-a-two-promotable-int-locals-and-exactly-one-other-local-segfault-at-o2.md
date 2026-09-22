@@ -336,12 +336,27 @@ on the DCE arm. 5b's level matrix reproduces exactly.
    `>= 3`), rebuilding, gives a clean run. c0 is bisecting that set and will send
    the site.
 
-**THIS REFUTES E2's HYPOTHESIS AS STATED.** E2 supposed that `-O3` eliminates the
-dead local, leaving a two-local composition already measured clean at `-O2`.
-**An eliminated local would change the IR, and the IR is byte-identical across all
-three levels** — so whatever `-O3` does, it does it below the IR. E2's *question*
-stands; its proposed mechanism does not, and the trap E2 recorded (making `v0`
-live without changing what is printed) is no longer the thing to solve first.
+**THIS NARROWS E2, AND THE FIRST VERSION OF THIS PARAGRAPH OVERSTATED IT.
+CORRECTED SAME DAY BY `frankh-c0`, WHOSE MEASUREMENT IT WAS.**
+
+I wrote *"an eliminated local would change the IR, therefore E2 is refuted
+outright."* **That is stronger than the instrument supports.** `PXXDBG=a.ir:main`
+dumps the IR for `main` AFTER whatever IR-level work runs. Identical at all three
+levels means **no IR-level pass distinguishes them**, so an **IR-visible**
+dead-local elimination is out. **It does not exclude a BACKEND-LOCAL elimination
+that never reaches the IR dump** — a codegen pass noticing `v0` is never read and
+skipping its slot or its release would be invisible to that instrument and would
+still be *"-O3 eliminates the dead local"* in substance.
+
+**So: E2's mechanism is out IN ITS IR FORM and its question survives in a BACKEND
+form. Do not drop the line of inquiry.** The error was the coordinator's — a
+quantifier asserted past what the probe enumerates, in the field a dispatched seat
+reads, which is this file's own most-repeated failure.
+
+**The trap E2 recorded gets cheaper either way:** since the three levels share IR,
+a fixture that makes `v0` live can be checked for having changed the IR **at
+all** — one dump, rather than a reasoned argument about whether the change was
+the intended one.
 
 **E3 IS UNCHANGED AND STILL THE HARDEST HOLD.** The inline-payload reading remains
 5b's interpretation of `rax` plus four instructions. The suspect has now moved
