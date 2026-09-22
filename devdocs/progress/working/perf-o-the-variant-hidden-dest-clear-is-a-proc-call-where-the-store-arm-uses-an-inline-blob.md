@@ -176,3 +176,43 @@ whether `var_store` of a variant retains or moves. That is the fact that
 decides whether a release on these slots can be SKIPPED rather than merely made
 cheaper, it is `perf-a`'s question and not this ticket's, and nothing here may
 be read as answering it.
+
+## 2026-09-22 (frankh-c0) — THE TWO PRIZES OVERLAP RATHER THAN ADD, and neither ticket could notice alone
+
+`perf-a-every-return-releases-every-managed-local` and this ticket are two ends
+of the same slots, and **their savings are not additive.**
+
+- **This ticket** changes how the clear is SPELLED. `IRBuildHiddenDest` calls
+  the portable Pascal proc with an argument node and a frame; `IR_VAR_STORE`
+  calls the target's own blob with neither. Same semantics, same releases, same
+  number of them. The saving is marshalling plus a frame, **x86-64 only**.
+- **perf-a** asks whether a release must happen AT ALL.
+
+**So if perf-a's half ever lands, the slots it skips stop paying this ticket's
+clear too.** Whoever measures second must subtract rather than add. Neither
+ticket can see this from inside itself, which is why it is written down: each
+is correct about its own mechanism and the interaction lives only in the pair.
+
+**And this ticket does NOT depend on perf-a's open question.** frankb-8e has
+parked that half behind an ownership INVARIANT in the IR rather than a fifth
+`IRNodeOwns...` predicate (`0fe34c1e3`; the retraction at
+`ir_codegen.inc:5577` records four wrong attempts, one of which segfaults a
+ten-line program). That is an ownership question. **Nothing here asks it** — a
+spelling change needs to know nothing about whether a slot owns its referent —
+so "no fifth predicate" must not be read as blocking this.
+
+### The fixture note that outlives both tickets
+
+The three-fixture gate on this family is closed at both ends and each member
+has a **verified** must-fail case in the Makefile, not an assumed one:
+`RECVLIVE` asserts VALUES and was verified to SEGFAULT on two broken builds;
+`VARCARRY` and `GETTERLIVE` read BYTES and were verified to FAIL at
+`cfee5d6255237332`. The byte pair cannot see a premature free and says so; that
+is recvlive's job. **Any future attempt in this area passes all three or it is
+not measured.**
+
+`GETTERLIVE` keeps a k-sweep PAIR (`ksweep_k1`/`ksweep_k8`) on purpose: the leak
+is k-1 per call site per scope, so **a fixture calling once per scope cannot see
+it at all** and `k1` alone is a guard that cannot fail. Do not trim it for
+speed. That is the interesting-element-position rule with the axis being *calls
+per scope* rather than ordering.
