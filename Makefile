@@ -8716,6 +8716,16 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# An ambient unit that is Pascal over managed strings must drag builtinheap,
+	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
+	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union
+	# being too narrow (the bug), the second catches the cheapest repair for
+	# the first -- widening it until everything pulls builtinheap again, which
+	# is the 63KB hello-world this work removed. Each direction has a measured
+	# negative control; see the script's header.
+	# $(COMPILER), not $(PXX_STABLE): the fix is a compiler change and is inert
+	# in the pin until one carries it.
+	sh test/pascal_ambient_unit_needs_heap.sh ./$(COMPILER) $(TESTTMP)
 	# An interface name in a DECLARATION initialiser means its GUID. All four
 	# cells were wrong and in opposite directions: var accepted and stored an
 	# AN_CLASSREF VMT address (silent, and interface identity is matched BY GUID

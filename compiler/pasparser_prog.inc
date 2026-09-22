@@ -101,7 +101,32 @@ procedure DetectPascalRuntimeNeeds(var needsHeap, needsAnsiRuntime, needsDivStub
 var i, j, depth: Integer; name: AnsiString;
 begin
   needsHeap := False;
-  needsAnsiRuntime := PasDefineExists('PXX_MANAGED_STRING');
+  { EVIDENCE, not the define. PasApplyDefaults defines PXX_MANAGED_STRING
+    unconditionally, so asking PasDefineExists here answered True for EVERY
+    program ever compiled and the whole AnsiString bundle -- plus the heap unit
+    it drags in through needsHeap below -- was emitted into sources that never
+    name a string. Measured 2026-09-22 at fda77c48b8ee: x86-64 hello-world
+    25016 -> 4472 bytes (-82.1%), and xtensa --esp-profile=bare 860 -> 58 bytes
+    of code with procs 88 -> 0.
+
+    THE FAILURE DIRECTION IS SAFE, AND THAT IS WHAT MAKES AN EVIDENCE SCAN
+    TRACTABLE HERE: under-detecting cannot produce a wrong binary, only a
+    compile error. Two independent guards enforce it, which is why this is not
+    resting on one measurement. On x86-64 the stub address stays 0 and
+    IREmitCodeCall refuses by name ("call to a runtime stub that was never
+    emitted"); on the five cross targets the builtin unit is simply absent and
+    the symbol lookup refuses ("PXXStrDecRef not found", "PXXStrConcat",
+    "PXXStrEq", "PXXWriteStrMW"). Measured over six string shapes x six
+    targets: 36 of 36 refused, 0 built. Measured over nine string-valued
+    builtin expressions naming no type: 3 constant-folded and agreed with the
+    oracle, 6 refused, 0 silently wrong.
+
+    So a name missing from this scan is a BUILD BREAK, never a miscompile --
+    loud, attributable, and fixed by adding the name. Over-detecting costs
+    only size. Every name below was verified to need the bundle by building it
+    against a needsAnsiRuntime := False compiler and watching it refuse; do the
+    same before deleting one. }
+  needsAnsiRuntime := False;
   { div-by-zero abort stub (feature-opt-div0-stub-on-use): only integer
     `div`/`mod` sites can branch to it, and only when no builtinheap
     PXXDivZero is in the program — a unit-bearing program (tkUses => heap)
@@ -115,6 +140,100 @@ begin
   begin
     if Tokens[i].Kind in [tkUses, tkArray, tkClass] then
       needsHeap := True;
+    { `string` is a KEYWORD here, not an identifier: paslexer.inc maps it to
+      tkString_T, so the CaseEqual arm below could never have seen it and the
+      name-based catch alone would silently miss every `var s: string`. The
+      ident spelling is matched there as well, because that 6-char keyword
+      table only recognises `string` and `String` -- an all-caps STRING lexes
+      as tkIdent and Pascal is case-insensitive. Catching both closes the gap
+      for this scan without touching the lexer. }
+    if Tokens[i].Kind = tkString_T then
+      needsAnsiRuntime := True;
+    { write/writeln route through the builtinheap formatters on riscv32 and
+      xtensa -- PXXWriteNL for a bare newline, PXXWriteDecW for an integer --
+      so the statement's own token pulls the unit there. FOURTH instance in
+      this routine of what the float, readln and frozen-field-width paragraphs
+      below all describe: THE DEPENDENCY WAS MOVED AND THIS IS WHERE IT HAS TO
+      BE PAID. It only surfaced now because needsAnsiRuntime was unconditional
+      and forced needsHeap through the tail of this routine, so these two
+      targets have been riding on a flag that had nothing to do with writing.
+
+      Measured 2026-09-22, `WriteLn('lit')` and `WriteLn(i)` against a
+      needsAnsiRuntime := False compiler, all seven targets: x86-64, i386,
+      arm32, aarch64 and wasm32 build and run; riscv32 and xtensa refuse with
+      "PXXWriteNL not found" / "PXXWriteDecW not found". A program with no I/O
+      at all builds on all seven, which is the row that keeps this narrow.
+
+      EXCEPT ON THE BARE ESP PROFILE, WHERE write/writeln EMIT NOTHING AT ALL
+      -- pasparser_stmt.inc warns about exactly that ("there is no console")
+      and then emits no call, so there is no helper to resolve and forcing the
+      unit here would cost the whole prize on the one target that needs it
+      most. Measured: bare xtensa hello-world stays at code=860B procs=88 with
+      this arm unguarded, against code=58B procs=0 with it guarded. }
+    if (Tokens[i].Kind in [tkwrite, tkwriteln]) and
+       ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+       (not ((TargetPlatform = PLATFORM_ESP) and EspBareBoot)) then
+      needsHeap := True;
+    { A `:w` / `:w:d` FORMAT SPEC on any target. `writeln(r.a:0:0)` lowers to
+      PXXWriteFloatFixed, which lives in builtinheap, and the width form
+      reaches the padding writers the same way -- none of which the arm above
+      sees, because it is target-gated and this is not about the target.
+      Measured 2026-09-22: test/test_cross_aggregate_stackargs.pas died at its
+      line 57 with `unresolved forward: PXXWriteFloatFixed`, and it is a
+      writeln of THREE `:0:0` fields with no float literal and no `/` anywhere
+      in the file -- so neither the tkFloat nor the tkSlash arm below can see
+      it. The colon must be at the argument list's OWN depth: a nested call's
+      colon belongs to that call, and a `case` label or a type annotation
+      inside the parens would otherwise read as a format spec. }
+    if (Tokens[i].Kind in [tkwrite, tkwriteln]) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) then
+    begin
+      j := i + 1; depth := 0;
+      while j < TokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth <= 0 then Break;
+        end
+        else if (Tokens[j].Kind = tkColon) and (depth = 1) then
+        begin
+          needsHeap := True;
+          Break;
+        end;
+        Inc(j);
+      end;
+    end;
+    { {$Q+} OVERFLOW CHECKS, which are not a token at all -- the switch is
+      lexically scoped and recorded per token in TokQChecks, read at BINOP
+      creation. An arithmetic BINOP under it emits a call to builtinheap's
+      PXXOverflow, so the unit has to be there. Measured 2026-09-22:
+      test_qplus_narrowing_store.pas and test_qplus_survives_ambient_units.pas
+      both died with `{$Q+}: PXXOverflow runtime helper not found (builtinheap
+      not loaded)` -- and the second is a test NAMED for surviving ambient
+      units, i.e. a guard already written against this class, catching it.
+
+      {$R+} IS NOT A SIBLING AND I CHECKED RATHER THAN PAIRING THEM: a range
+      check is emitted inline and needs no helper. `{$R+}` with `b: Byte;
+      i: Integer; b := i` builds at 38 procs. My first R probe used
+      `array[0..3]` and reported 149 -- tkArray forces the heap on its own, so
+      the setup had destroyed the thing under test and the row would have
+      justified a trigger that does nothing. }
+    if (i < Length(TokQChecks)) and TokQChecks[i] then
+      needsHeap := True;
+    { A string LITERAL is not evidence on its own -- `WriteLn('Hello')` is the
+      program this whole change exists to shrink, and it needs nothing. A
+      literal standing next to a concat or a comparison IS evidence: measured,
+      `WriteLn('ab' + 'cd')` refuses without the bundle while WriteLn of a bare
+      literal builds and runs. So the test is the OPERATOR beside the literal,
+      never the literal itself. }
+    if (Tokens[i].Kind = tkString) and
+       (((i > 0) and (Tokens[i - 1].Kind in
+           [tkPlus, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe])) or
+        ((i + 1 < TokCount) and (Tokens[i + 1].Kind in
+           [tkPlus, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]))) then
+      needsAnsiRuntime := True;
     if (Tokens[i].Kind = tkDiv) or (Tokens[i].Kind = tkMod) then
       needsDivStub := True;
     { read/readln/Eof reach stdin through the ONE shared line buffer that lives
@@ -199,7 +318,48 @@ begin
     if Tokens[i].Kind = tkIdent then
     begin
       name := GetTokenStr(i);
-      if CaseEqual(name, 'AnsiString') or CaseEqual(name, 'Variant') then
+      { The managed-string type NAMES, taken from BuiltinScalarTypeKind in
+        pasparser_lval.inc -- that function is the authority on which spelling
+        yields tyAnsiString/tyVariant, and this list is its shadow. Every one
+        was measured to refuse against a needsAnsiRuntime := False compiler,
+        including ShortString and string[N]: a frozen string still reaches the
+        bundle for its concat and write helpers, so there is no win in trying
+        to tell frozen from managed here and the scan does not try. }
+      if CaseEqual(name, 'AnsiString') or CaseEqual(name, 'Variant') or
+         CaseEqual(name, 'string') or CaseEqual(name, 'ShortString') or
+         CaseEqual(name, 'UnicodeString') or CaseEqual(name, 'WideString') or
+         CaseEqual(name, 'UTF8String') or CaseEqual(name, 'RawByteString') or
+         CaseEqual(name, 'OleVariant') then
+        needsAnsiRuntime := True;
+      { String-VALUED intrinsics that name no type. `Copy('abc',1,2)` in a
+        program with no string declaration is otherwise invisible to this
+        scan -- measured refusing, as did Pos, Concat and UpCase. Length, Chr
+        and Ord are deliberately absent: measured constant-folding to the same
+        answer as the oracle with no bundle present, so listing them would buy
+        nothing but size. }
+      { PromoInt's runtime, promocore, is written in ordinary Pascal OVER
+        MANAGED STRINGS -- ParseProgram's own `if needsPromoInt` block says so
+        in those words while setting only needHeapUnit. It must be detected
+        HERE, in the pre-scan, and not at that block: needHeapUnit is computed
+        from this routine's answers, and the helper-registration block and
+        EmitAnsiStringRuntime both run BEFORE ParseProgram learns about
+        PromoInt. Setting it late gets builtinheap emitted with its string
+        helpers unregistered, which is a second, later refusal rather than a
+        fix -- measured 2026-09-22, both arms, on
+        test/test_promoint_bitwise.pas: builtinheap.pas:5979 "stub that was
+        never emitted" when set nowhere, "PXXStrFromLit helper not found in
+        builtin unit" when set at the ParseProgram site. }
+      if CaseEqual(name, 'PromoInt') or CaseEqual(name, 'PromoInt64') or
+         CaseEqual(name, 'PromoInt32') then
+        needsAnsiRuntime := True;
+      if CaseEqual(name, 'Copy') or CaseEqual(name, 'Pos') or
+         CaseEqual(name, 'Concat') or CaseEqual(name, 'UpCase') or
+         CaseEqual(name, 'LowerCase') or CaseEqual(name, 'UpperCase') or
+         CaseEqual(name, 'Delete') or CaseEqual(name, 'Insert') or
+         CaseEqual(name, 'Str') or CaseEqual(name, 'Val') or
+         CaseEqual(name, 'StringOfChar') or CaseEqual(name, 'SetString') or
+         CaseEqual(name, 'IntToStr') or CaseEqual(name, 'FloatToStr') or
+         CaseEqual(name, 'Format') or CaseEqual(name, 'Trim') then
         needsAnsiRuntime := True;
       if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
           (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
@@ -221,7 +381,22 @@ begin
     end;
     Inc(i);
   end;
+  { THE TWO FLAGS ARE ONE FLAG, IN BOTH DIRECTIONS, AND THE SECOND DIRECTION IS
+    NOT SYMMETRY FOR ITS OWN SAKE -- builtinheap's OWN BODY calls the string
+    stubs, so emitting that unit without the AnsiString runtime leaves a call
+    to address 0 inside code the compiler appended itself. Measured 2026-09-22:
+    test/test_promoint_bitwise.pas declares PromoInt, which loads promocore,
+    which pulls builtinheap; with only the first implication the build died at
+    builtinheap.pas:5979 -- a Variant helper in a unit the programmer never
+    wrote and cannot see. The gate caught it in the quick tier, which is the
+    failure direction this change was designed to have.
+
+    Coupling costs nothing this change was trying to win: a program that needs
+    the heap unit ALREADY paid for the bundle under the old unconditional
+    behaviour, and the programs the prize comes from -- hello-world, bare ESP
+    code -- need NEITHER flag and are measured at procs=0. }
   if needsAnsiRuntime then needsHeap := True;
+  if needsHeap then needsAnsiRuntime := True;
 end;
 
 procedure FixupTVarRecLayout;
@@ -1261,9 +1436,44 @@ begin
     features not yet on every target). }
   { Plain AnsiString needs only builtinheap (allocator + PXXStr*), not the full
     builtin conversions. Variant/Str/Val/uses pull builtin in the token loop. }
+  { ANY AMBIENT RTL UNIT PULLS THE STRING RUNTIME WITH IT, and that has to be
+    decided HERE. Those units -- textfile, math, palthreadobj, builtinwide --
+    are ordinary Pascal written over managed strings, so emitting one without
+    EmitAnsiStringRuntime leaves a call to address 0 inside code the programmer
+    never wrote. Measured 2026-09-22: test_external_proc_addr_callable.pas died
+    at lib/rtl/textfile.pas:1344 on exactly that.
+
+    It is THIS line and not the emission site because the ordering is fixed and
+    tight: these four flags are set by the token loop above (1103-1380), this
+    line computes needHeapUnit, the helper-REGISTRATION block runs immediately
+    below it, and EmitAnsiStringRuntime runs later still. A flag decided after
+    this line -- needsPromoInt, needsEntropy, the later needsBuiltin rows --
+    cannot be repaired here and has to be caught as EVIDENCE in
+    DetectPascalRuntimeNeeds instead, which is why PromoInt is a name in that
+    scan rather than a clause in this one.
+
+    This costs nothing the change was trying to win: a program pulling any of
+    these already paid for the bundle under the old unconditional behaviour,
+    and the programs the prize comes from pull NO unit at all (procs=0). }
+  if needsTextfile or needsMath or needsThreads or needsWide then
+    needsAnsiRuntime := True;
   needHeapUnit := needsHeap or needsAnsiRuntime or ComInterfaceUsed;
 
-  if needHeapUnit then
+  { REGISTRATION IS UNCONDITIONAL AND THE EMISSION IS NOT -- they used to share
+    needHeapUnit and they cannot, because EmitAnsiStringRuntime references
+    these signatures and its condition (see its call site) depends on ambient
+    flags that are still False up here. Gating registration on needHeapUnit
+    made the broad emission fail with "PXXIntfAddRefAny not registered before
+    EmitAnsiStringRuntime" instead of building.
+
+    Registering a signature is not emitting a body: it adds symbol-table
+    entries for a unit that may never be compiled, and nothing references them
+    unless the emission below runs. MEASURED, not assumed -- x86-64
+    hello-world builds and runs either way and costs 4472 -> 4520 bytes, 48
+    bytes against a 20,544-byte saving. That 1% is the price of the ordering
+    and it is paid here rather than by moving this ~150-line block below the
+    token loop, which is the tidier fix and a bigger one. }
+  if True then
   begin
     savedUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := InternStr('builtinheap');
@@ -1826,7 +2036,22 @@ begin
     an acquire emitted while HeapLockSlowAddr is 0 takes the undiagnosed
     fallback. See EmitHeapLockSlowStub on why this is a per-driver call. }
   if ThreadSafeMode and (TargetArch = TARGET_X86_64) then EmitHeapLockSlowStub;
-  if needsAnsiRuntime and (TargetArch = TARGET_X86_64) then EmitAnsiStringRuntime;
+  { EVERY AMBIENT UNIT, NOT JUST needsAnsiRuntime. This is the one site that
+    can ask the whole question: every ambient-unit flag is settled by here
+    (the latest, needsEntropy, at ~1770), while needHeapUnit is computed far
+    above and cannot see the late ones. Those units -- textfile, builtinwide,
+    builtin, promocore, math, palthreadobj -- are Pascal written over managed
+    strings, so pulling one without this call leaves a call to address 0
+    inside code the programmer never wrote.
+
+    Measured 2026-09-22, each refusing at lib/rtl/textfile.pas:1344 before
+    this list existed: `var p: PChar`, `var c: WideChar`, `var s: set of Char`,
+    and test_external_proc_addr_callable.pas. The trigger is never the string
+    type the scan looks for -- it is a unit arriving behind it -- which is why
+    the answer is a flag set here and not more names in the pre-scan. }
+  if (needsAnsiRuntime or needHeapUnit or needsBuiltin or needsTextfile or
+      needsMath or needsThreads or needsWide or needsPromoInt or needsEntropy)
+     and (TargetArch = TARGET_X86_64) then EmitAnsiStringRuntime;
   { Integer div-by-zero abort stub (Runtime error 200): referenced by div/mod
     sites that have no builtinheap PXXDivZero to call. Emitted only when the
     pre-scan saw a div/mod token (feature-opt-div0-stub-on-use) — division-free
@@ -1918,6 +2143,101 @@ begin
     needHeapUnit := True;
     needsBuiltin := True;
   end;
+  { …and the SAME IS TRUE OF `builtin`, for the same reason and one flag over.
+    The block above is `needsPromoInt`; this is its sibling, and the sibling is
+    the one that stayed broken — which is what normalise-dont-special-case.md
+    means by fixing one arm of a double case. compiler/builtin/builtin.pas is
+    ordinary Pascal over managed strings (its float formatting assigns string
+    literals: `digs := '00000000000000000'` beside PxxSciDigits17), so pulling
+    it without builtinheap leaves PXXStrFromLit forward-declared and never
+    defined.
+
+    IT MUST BE HERE AND NOT A NAME IN THE PRE-SCAN. The registration block far
+    above says in its own words that "a flag decided after this line -- the
+    later needsBuiltin rows -- cannot be repaired here and has to be caught as
+    EVIDENCE in DetectPascalRuntimeNeeds instead". That is true of needHeapUnit
+    AT THAT LINE and it is not the only place the question can be asked: by
+    HERE every needsBuiltin row has run, so the flag is simply known, exactly
+    as needsPromoInt is known immediately above.
+
+    MEASURED 2026-09-22 (frankb-8e), against the evidence-scan compiler and on
+    the TYPES whose only crime is being declarable. Each built a binary before
+    the scan landed, each refused after it, each builds again with this line:
+
+      var v: WideChar   -> unresolved forward: PXXStrFromLit (builtin.pas)
+      var v: PChar      -> unresolved forward: PXXStrFromLit (builtin.pas)
+      var v: UCS4Char   -> unresolved forward: PXXStrFromLit (builtin.pas)
+
+    NOT the textfile.pas:1344 family the clause at the emission site already
+    covers -- a different unit, a different symbol, and it survives that fix.
+    The control that says so is `var v: PWideChar`, `var f: Text` and
+    `var v: PromoInt`, which build at 158 / 592 / 689 procs either way: those
+    reach builtinheap by a route this line does not touch.
+
+    AND IT IS ONE CONDITION AND NOT THREE, WHICH IS THE WHOLE POINT. I wrote
+    `if needsBuiltin then` first, and then did what normalise-dont-special-case
+    asks and grepped for the sibling before closing. There were two more, both
+    named in the registration block's own comment as flags decided too late for
+    it, and both failing the same way for the same reason:
+
+      if __pxxHwRandom64(v)      -> unresolved forward: PXXStrFromLit (builtinentropy)
+      Assert, --esp-profile=bare -> unresolved forward: PXXStrDecRef  (espassert, xtensa AND riscv32)
+
+    A DIFFERENT SYMBOL IN THE THIRD CASE, which is why a grep for the symbol
+    would have found two of three and read as complete.
+
+    NEGATIVE CONTROL, RUN RATHER THAN ASSERTED: narrowing this back to
+    `if needsBuiltin then` and rebuilding makes the entropy row and BOTH
+    espassert rows fail again with the symbols above, while `var v: WideChar`
+    keeps building at 592 procs -- so the two extra arms are each load-bearing
+    on their own and are not padding. The narrowed build reproduced the earlier
+    needsBuiltin-only binary sha EXACTLY (e36d1600de4c) and restoring
+    reproduced 8b2a3da93d27, so the control measured the same tree and not
+    merely a similar one.
+
+    A NOTE ON THE ENTROPY PROBE, because the first one lied in the safe
+    direction: `v := __pxxhwrandom64` is not a valid program -- the intrinsic
+    is `function __pxxHwRandom64(var v: UInt64): Boolean`. The bad spelling
+    still set needsEntropy (the trigger is a TOKEN match, which is why the
+    defect showed at all) and still reproduced PXXStrFromLit, but after the fix
+    it failed with `undefined variable` instead of building, which would have
+    read as the fix not working. Both spellings are recorded so the next reader
+    does not re-derive that. The invariant is not
+    about any symbol: an ambient unit that is Pascal over managed strings needs
+    builtinheap's bodies, full stop. So this deliberately mirrors the emission
+    condition below, because the two questions are the same question asked of
+    the same set, and letting them drift apart is how this got three arms in
+    the first place.
+
+    THE ONE FLAG THE TWO LISTS DO NOT SHARE IS needsEspAssert, AND THAT
+    ASYMMETRY IS CORRECT RATHER THAN AN OVERSIGHT -- I checked the emission
+    list rather than assuming it matched, having just been caught asserting
+    exactly such a supporting clause unmeasured. The emission is guarded by
+    `TargetArch = TARGET_X86_64`; espassert is pulled only under EspBareBoot,
+    i.e. xtensa/riscv32, so it can never be the flag that decides the x86-64
+    emission. It has to be HERE because the unit pull has no such guard, and
+    the measured failure is on both ESP targets.
+
+    FOUR OF THE NINE FLAGS ARE REDUNDANT TODAY AND ARE KEPT ON PURPOSE.
+    needsTextfile/needsMath/needsThreads/needsWide already force
+    needsAnsiRuntime ~600 lines up, and needsAnsiRuntime already forces
+    needHeapUnit on the line right after that, so today only needsBuiltin,
+    needsPromoInt, needsEntropy and needsEspAssert can change this outcome.
+    They are spelled out anyway because the redundancy is a property of those
+    two EARLIER lines, not of this invariant: the moment someone narrows the
+    1410 clause -- which is exactly the kind of tightening this ticket's whole
+    direction invites -- the four stop being redundant, silently, and the
+    failure lands here. Do not prune them back to the load-bearing four
+    without checking what 1410 still does.
+
+    IF YOU ADD AN AMBIENT UNIT, ADD ITS FLAG TO BOTH LINES unless it is
+    target-gated away from one of them, and say which. The failure is
+    loud (a build abort naming a PXXStr* symbol, never a wrong answer), which
+    is the only reason this class is cheap to find. }
+  if needsAnsiRuntime or needsBuiltin or needsTextfile or needsMath or
+     needsThreads or needsWide or needsPromoInt or needsEntropy or
+     needsEspAssert then
+    needHeapUnit := True;
   if needHeapUnit then ParseUsesUnitAmbient('builtinheap');
   { …and the UTF-16 runtime on top of it, only when the token scan above found a
     program that can reach it. AFTER builtinheap, which it uses. Never on a bare
