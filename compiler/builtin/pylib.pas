@@ -18768,6 +18768,24 @@ begin
   if (t = 1) or (t = 2) or (t = 4) then   { VT_INT / VT_INT64 / VT_BOOL }
   begin
     i := pyvar_to_int(v);
+    { Low(Int64) is the ONE value in the type whose MAGNITUDE the type cannot
+      hold, so `-i` overflows and leaves it negative: abs() answered
+      -9223372036854775808 where CPython gives 9223372036854775808. Every other
+      value, including Low(Int64)+1, was correct -- which is why nothing caught
+      it. 2^63 needs the promotable path, the same one the VT_PROMO_INT64 arm
+      above takes, and this is precisely the boundary promotable ints exist to
+      cross: CPython's ints are unbounded and ours must grow here or lie.
+      Checked BEFORE the negation, because after it there is nothing left to
+      distinguish -- the wrong answer and the input are the same bits.
+      bug-a-low-int64-renders-as-a-bare-minus-under-percent-d-and-abs-of-it-stays-negative }
+    if i = Low(Int64) then
+    begin
+      PXXPromoInit(@pa);
+      PXXPromoFromStr(@pa, '9223372036854775808');
+      PXXPromoToVariant(@Result, @pa);
+      PXXPromoClear(@pa);
+      Exit;
+    end;
     if i < 0 then i := -i;
     Result := i;
     Exit;

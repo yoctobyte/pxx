@@ -4964,6 +4964,13 @@ test-nilpy: $(COMPILER)
 	# boundary as readily as a correct one. Oracle is CPython on the same file.
 	./$(COMPILER) test/nilpy_promo_shift_boundary.py $(TESTTMP)/test_nilpy_shiftbound26
 	tools/expect_same.sh test_nilpy_shiftbound26 "$$($(TESTTMP)/test_nilpy_shiftbound26)" "$$(python3 test/nilpy_promo_shift_boundary.py)"
+	# Low(Int64) is the one value whose MAGNITUDE its own type cannot hold, so
+	# any path taking |v| by negating in place is wrong there and correct at
+	# both neighbours -- these rows sit ON it. abs() returned a NEGATIVE number
+	# until pylib.pas grew the promo arm. The `"%d" %` half is still open and
+	# the fixture says so rather than covering it.
+	./$(COMPILER) test/nilpy_low_int64_boundary.py $(TESTTMP)/test_nilpy_lowint26
+	tools/expect_same.sh test_nilpy_lowint26 "$$($(TESTTMP)/test_nilpy_lowint26)" "$$(python3 test/nilpy_low_int64_boundary.py)"
 	./$(COMPILER) test/test_nilpy_callable_builtin.npy $(TESTTMP)/test_nilpy_callable26
 	$(TESTTMP)/test_nilpy_callable26 | diff -u test/test_nilpy_callable_builtin.expected -
 	# __file__ / sys.executable from the RESOLVED executable (freezer
