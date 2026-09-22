@@ -38069,3 +38069,45 @@ against the repo's OWN parser, asserting that every ticket's frontmatter yields
 the fields the ranker uses. **A per-seat habit of validating before committing is
 not that** — franks-5b does it, validated this very afternoon, and **a habit has
 the same detection profile as the defect above, which is none.**
+
+### And the same gap makes a SHARED BLOCKER invisible while every seat behaves correctly
+
+**Measured 2026-09-22, two seats, two lanes, found by asking rather than by any
+instrument.** The section above is about prose and an edge disagreeing. This is
+the case where **there is no edge at all and nobody wrote anything wrong.**
+
+`frankh-c0` deferred the timing half of `perf-o` because its own cost rows were
+synthetic, seven days old and measured against a binary that no longer exists;
+its stated retirement condition is a share-of-frame number from a real program.
+`frankb-8e` landed a six-backend change measuring 4.367 -> 1.886 ns/slot and
+**refused to attach it to a frame**, citing the umbrella's *do not rank by
+per-call cost x calls per frame*. **Both refusals are exactly what the umbrella
+asks for.** Both seats recorded their reason in their own ticket. Neither knew
+the other existed, and **the seat they were both waiting on did not know either**
+— so one absent measurement was holding two tickets in two lanes, silently, with
+no row anywhere saying so.
+
+**THE FAILURE IS NOT A STALE FIELD, IT IS A MISSING ONE, AND CORRECT BEHAVIOUR IS
+WHAT PRODUCES IT.** *"Deferred pending X"* in a ticket's body creates **no link
+from X**. The dependency is real, both authors stated it, and it is invisible
+from the only end that could act on it: the seat producing X cannot see who is
+standing on it, so it cannot know what its measurement is worth, and nobody is
+notified when it lands. **A stale summary misroutes a reader; an unlinked
+deferral routes nobody at all** — which is why no audit finds it. There is
+nothing wrong to find.
+
+**Membership is an edge. So is waiting.** If a ticket defers on a measurement,
+`blocked-by:` the ticket that produces it, even when the producer is another
+lane's or another seat's, and **especially when the producer is not a ticket you
+would otherwise rank**. Where the producer is a person and not a ticket, the
+edge does not exist and the only instrument is **asking** — which cost one
+message here and returned a fact neither seat could have derived.
+
+**And the second-order finding is the one to carry:** *two independent seats
+deferring for the same reason is EVIDENCE ABOUT THE MEASUREMENT'S VALUE, and it
+is evidence that only exists in aggregate.* Each seat holds one instance and
+correctly reads it as a local decision about its own ticket. Nobody holds the
+pair. **A shared blocker is only visible to whoever is looking across tickets**,
+which is the one thing a seat working a group is structurally not doing — and if
+that is nobody's job in a given week, the answer is not more discipline per
+ticket, it is the edge.
