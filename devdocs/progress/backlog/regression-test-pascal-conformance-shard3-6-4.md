@@ -41,3 +41,6 @@ test-pascal-conformance: FAILURES: terecs4.pp(accepted-invalid)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-22 — the borg watcher saw `test-pascal-conformance#shard3/6` GREEN at 6a75f7659fd6 (tier full) and did NOT close this: this is a repeat stub (`regression-test-pascal-conformance-shard3-6-4`, not `regression-test-pascal-conformance-shard3-6`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
