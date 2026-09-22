@@ -8,7 +8,7 @@ found: 2026-09-22
 found-by: frankh-c0
 owner: ""
 blocked-by: []
-summary: "`umbrella-one-full-tier-run-with-no-red-tier` closed 2026-09-07 saying in its own last line `If it regresses, that is a new ticket`. IT HAS: measured at pinned ref `ad275f0d96c3` over all 2898 tstate reports in the tree, the last `full` GREEN is 2026-09-09T08:21:39Z and the last `native` GREEN is 2026-09-11T16:28:30Z. THE USEFUL FINDING IS NOT THAT BOTH ARE RED -- IT IS THAT THEY ARE RED IN COMPLETELY DIFFERENT SHAPES, which no aggregate verdict can say and which decides how much work `full green expected` actually is. NATIVE IS A FINISHING JOB: 33 distinct rows ever red in 306 RED reports since its last green, and `test-core#src:test/c_crtl_wait.c` is red in 306 of 306; clearing that one row alone would have made 42% of those reports GREEN, four rows reaches 73% and eight reaches 90%. FULL IS BROAD: 129 distinct rows over 313 RED reports, median 6 per report, and the best eight rows together reach only 32% -- a long tail, not a few chronic blockers. So native is a finishing job and full is not, and quoting one tier's difficulty for the other is the error this ticket exists to prevent. Every one of the top rows ALREADY HAS AN OPEN TICKET (c_crtl_wait, crtl_reachability, threadsafe_heap_lock_deadlock_diag, crtl_atexit, compiler_srchash), so this state is UN-FINISHED, not un-triaged, and the fix is not more filing. SETTLED FOR `native` 2026-09-22: A FULL NATIVE TIER AT HEAD IS GREEN ON A NON-BORG HOST, 2580/2580 (plexus, tree e5408b0e6, compiler 06255ab1878c, frozen-tree guard green, 417.3s). So the never-green record is NOT a statement about the tree, and the fear that borg's chronic rows and seven's chronic rows were two disjoint populations needing separate campaigns is REFUTED -- both sets pass on one machine in one run. MY RECORDED PREDICTION WAS `probably RED` AND WAS WRONG. BUT THE ONE ROW THIS TICKET WAS BUILT AROUND FLAKED INSIDE THAT GREEN: test/c_crtl_wait.c failed attempt 1 of 3 and passed on attempt 2, so WITHOUT THE FLAKE GUARD THIS TIER WOULD HAVE BEEN RED ON EXACTLY BORG'S ROW, and the earlier single-job PASS was one draw from a nondeterministic test. Across three hosts that row is 9/638 on seven, flaky on plexus, 306/306 on borg -- ONE NONDETERMINISTIC TEST WHOSE FAILURE RATE IS HOST-DEPENDENT, not a clean passes/fails split, and borg's median native wall is 313.5s against seven's 184.3s. The test's OWN HEADER predicted this misreading -- it declares itself timing-independent (`NO sleep() ANYWHERE`, pipe handshakes) because `a flaky row in a cross-target matrix reads as a target bug` -- which is exactly what this ticket concluded twice, first as a code regression and then as a toolchain defect. The flake is also evidence the pipe discipline has a hole, since a test with no sleeps should not flake. OUTSTANDING: `full` is untested on a non-borg host and stays open; the native green is ONE sample and wants repeats; and nothing here says borg reports falsely -- if the cause is a real race then borg is the honest instrument and the fast hosts hide it. EARLIER, AND STILL TRUE: the population is (TIER, HOST) and the first counts pooled it -- THE POPULATION IS (TIER, HOST) AND I POOLED IT: the last native GREEN is seven's LAST REPORT EVER, not a run that happened to be green -- the tiers did not stop going green, the host that was going green stopped REPORTING, and borg, which took over, has published no native GREEN since July. The 4h11m window contains three HOST-MIGRATION commits, so it is a handover rather than a bisect range. The always-red row splits by machine, not by time: c_crtl_wait is red in 9 of 638 seven reports (one 94-minute burst) and 306 of 467 borg reports, and IT PASSES AT HEAD ON THIS BOX -- measured, expectation recorded first, `testmgr --tier native --job test-core#src:test/c_crtl_wait.c` = GREEN on plexus. So it is not a code regression. seven and plexus run gcc 15.2.0 / qemu 10.2.1; borg runs gcc 13.3.0 / qemu 8.2.2, and the failure is a riscv32 waitid/si_code conversion under emulation -- qemu is the plausible member of three differing components and IS NOT PROVEN. The greedy percentages below stand as arithmetic and now describe how BORG's reds are distributed rather than how much compiler work exists. THE ONE MEASUREMENT THAT SETTLES IT: run a native tier on a non-borg host at HEAD; the two hosts overlap on exactly one day, so no amount of archive reading can attribute this. ALSO CORRECTED 2026-09-22 02:5x, and the first-published numbers (14/94 rows, 51%/37%) were LOW because they counted `## STILL-RED` and ignored `## NEW-RED` -- the union is what a report means by red, and a NEW-RED row is the most interesting kind to have dropped. Three discharges also landed there: the tier does NOT abort early (testmgr.py:591 names selfhost-fixedpoint as the only aborting job, and 0 of 306 and 0 of 313 reports are such an abort), so rows-per-report is a fact about the tier and not about the reporting; the native bisect window is 4h11m rather than eleven days; and the apparent green-count disagreement with frankuser was NEITHER parser -- 'newest 1500 commits' is a fixed-SIZE sliding window whose tail dropped exactly one opt and one slow green, reproduced exactly at the earlier tip. WHAT WOULD RETIRE THIS TICKET: a `full` report with verdict GREEN at any sha after 2026-09-09. WHAT WOULD RETIRE ITS NUMBERS: any re-run at a different pinned ref -- carry both rows rather than replacing, since a count whose ref was not recorded is unquotable rather than refuted."
+summary: "`umbrella-one-full-tier-run-with-no-red-tier` closed 2026-09-07 saying in its own last line `If it regresses, that is a new ticket`. IT HAS: measured at pinned ref `ad275f0d96c3` over all 2898 tstate reports in the tree, the last `full` GREEN is 2026-09-09T08:21:39Z and the last `native` GREEN is 2026-09-11T16:28:30Z. THE USEFUL FINDING IS NOT THAT BOTH ARE RED -- IT IS THAT THEY ARE RED IN COMPLETELY DIFFERENT SHAPES, which no aggregate verdict can say and which decides how much work `full green expected` actually is. NATIVE IS A FINISHING JOB: 33 distinct rows ever red in 306 RED reports since its last green, and `test-core#src:test/c_crtl_wait.c` is red in 306 of 306; clearing that one row alone would have made 42% of those reports GREEN, four rows reaches 73% and eight reaches 90%. FULL IS BROAD: 129 distinct rows over 313 RED reports, median 6 per report, and the best eight rows together reach only 32% -- a long tail, not a few chronic blockers. So native is a finishing job and full is not, and quoting one tier's difficulty for the other is the error this ticket exists to prevent. Every one of the top rows ALREADY HAS AN OPEN TICKET (c_crtl_wait, crtl_reachability, threadsafe_heap_lock_deadlock_diag, crtl_atexit, compiler_srchash), so this state is UN-FINISHED, not un-triaged, and the fix is not more filing. SETTLED FOR `native` 2026-09-22: A FULL NATIVE TIER AT HEAD IS GREEN ON A NON-BORG HOST, 2580/2580 (plexus, tree e5408b0e6, compiler 06255ab1878c, frozen-tree guard green, 417.3s). So the never-green record is NOT a statement about the tree, and the fear that borg's chronic rows and seven's chronic rows were two disjoint populations needing separate campaigns is REFUTED -- both sets pass on one machine in one run. MY RECORDED PREDICTION WAS `probably RED` AND WAS WRONG. BUT THE ONE ROW THIS TICKET WAS BUILT AROUND FLAKED INSIDE THAT GREEN: test/c_crtl_wait.c failed attempt 1 of 3 and passed on attempt 2, so WITHOUT THE FLAKE GUARD THIS TIER WOULD HAVE BEEN RED ON EXACTLY BORG'S ROW, and the earlier single-job PASS was one draw from a nondeterministic test. Across three hosts that row is 9/638 on seven, flaky on plexus, 306/306 on borg -- ONE NONDETERMINISTIC TEST WHOSE FAILURE RATE IS HOST-DEPENDENT, not a clean passes/fails split, and borg's median native wall is 313.5s against seven's 184.3s. The test's OWN HEADER predicted this misreading -- it declares itself timing-independent (`NO sleep() ANYWHERE`, pipe handshakes) because `a flaky row in a cross-target matrix reads as a target bug` -- which is exactly what this ticket concluded twice, first as a code regression and then as a toolchain defect. The flake is also evidence the pipe discipline has a hole, since a test with no sleeps should not flake. THE LOAD READING IS THE BEST-SUPPORTED EXPLANATION AND IT IS frankuser's: restricted to the test's own lifetime (it was created 2026-09-04T16:54:32Z), seven separates PERFECTLY at ~215s wall -- 9 of 9 reports above it have the row red, 0 of 190 below it do -- and borg's median native wall is 313.5s, far above that, with plexus's HEAD tier at 417.3s flaking once in three attempts. That unifies the seven episode, borg's standing condition and the plexus flake without invoking gcc or qemu. IT IS A HYPOTHESIS AND NOT A RESULT: the nine reds are one contiguous 94-minute episode so wall and time stay confounded, and an absolute threshold does not transfer between machines. AN EARLIER SECTION CLAIMED THIS WAS REFUTED AND THAT CLAIM WAS BUILT ON A BUCKET WHERE A RED WAS IMPOSSIBLE -- the ten `clean` high-wall reports it rested on all PREDATE the test, so the row was absent rather than passing, and the post-birth 230s+ bucket is empty; heading withdrawn in place rather than deleted. KEEP THE TWO REGIMES APART, since merging them has misread this row three times: seven's nine reds are a BIRTH SHAKEDOWN, borg's 306/306 with flaky:0 always is a STANDING condition where all three attempts fail every time, and any explanation yielding `sometimes` does not explain borg. OUTSTANDING: `full` is untested on a non-borg host and stays open; the native green is ONE sample and wants repeats; and nothing here says borg reports falsely -- if the cause is a real race then borg is the honest instrument and the fast hosts hide it. EARLIER, AND STILL TRUE: the population is (TIER, HOST) and the first counts pooled it -- THE POPULATION IS (TIER, HOST) AND I POOLED IT: the last native GREEN is seven's LAST REPORT EVER, not a run that happened to be green -- the tiers did not stop going green, the host that was going green stopped REPORTING, and borg, which took over, has published no native GREEN since July. The 4h11m window contains three HOST-MIGRATION commits, so it is a handover rather than a bisect range. The always-red row splits by machine, not by time: c_crtl_wait is red in 9 of 638 seven reports (one 94-minute burst) and 306 of 467 borg reports, and IT PASSES AT HEAD ON THIS BOX -- measured, expectation recorded first, `testmgr --tier native --job test-core#src:test/c_crtl_wait.c` = GREEN on plexus. So it is not a code regression. seven and plexus run gcc 15.2.0 / qemu 10.2.1; borg runs gcc 13.3.0 / qemu 8.2.2, and the failure is a riscv32 waitid/si_code conversion under emulation -- qemu is the plausible member of three differing components and IS NOT PROVEN. The greedy percentages below stand as arithmetic and now describe how BORG's reds are distributed rather than how much compiler work exists. THE ONE MEASUREMENT THAT SETTLES IT: run a native tier on a non-borg host at HEAD; the two hosts overlap on exactly one day, so no amount of archive reading can attribute this. ALSO CORRECTED 2026-09-22 02:5x, and the first-published numbers (14/94 rows, 51%/37%) were LOW because they counted `## STILL-RED` and ignored `## NEW-RED` -- the union is what a report means by red, and a NEW-RED row is the most interesting kind to have dropped. Three discharges also landed there: the tier does NOT abort early (testmgr.py:591 names selfhost-fixedpoint as the only aborting job, and 0 of 306 and 0 of 313 reports are such an abort), so rows-per-report is a fact about the tier and not about the reporting; the native bisect window is 4h11m rather than eleven days; and the apparent green-count disagreement with frankuser was NEITHER parser -- 'newest 1500 commits' is a fixed-SIZE sliding window whose tail dropped exactly one opt and one slow green, reproduced exactly at the earlier tip. WHAT WOULD RETIRE THIS TICKET: a `full` report with verdict GREEN at any sha after 2026-09-09. WHAT WOULD RETIRE ITS NUMBERS: any re-run at a different pinned ref -- carry both rows rather than replacing, since a count whose ref was not recorded is unquotable rather than refuted."
 ---
 
 # `native` and `full` are both never-green, and that is where the resemblance ends
@@ -370,7 +370,7 @@ no job-count field at all, so `wall` is the only job-set proxy available; seven
 carried `skips: 1` where borg carries `skips: 0`, so the two hosts did not even
 run the same set.
 
-## 2026-09-22 04:1x — THE LOAD HYPOTHESIS IS REFUTED IN THE OPPOSITE DIRECTION, AND THE ROW HAS NEVER BEEN MODIFIED SINCE IT WAS WRITTEN
+## 2026-09-22 04:1x — [HEADING WITHDRAWN 04:3x: THE REFUTATION BELOW WAS BUILT ON A BUCKET IN WHICH A RED WAS IMPOSSIBLE. SEE THE NEXT SECTION -- THE LOAD HYPOTHESIS IS SUPPORTED, NOT REFUTED.] The row has never been modified since it was written
 
 frankuser proposed that the real axis is **how long the box takes** — wall time
 riding as a proxy for the toolchain difference — because the failure rate is
@@ -465,3 +465,80 @@ is not a tools ticket.
 **And the goal-1 lesson, which is frankuser's sentence:** a green bought by
 running on fast hardware is not a green. If a release is chased by moving to
 quicker boxes, the race ships.
+
+## 2026-09-22 04:3x — UN-RETRACTING THE LOAD HYPOTHESIS. MY REFUTATION HAD **ZERO** POST-BIRTH EVIDENCE, AND THE FILTERED DATA SEPARATES PERFECTLY.
+
+frankuser caught it from the timeline in my own section above, and the arithmetic
+is three characters wide: **the test was created at `2026-09-04T16:54:32Z`, and
+the ten "ALL CLEAN" high-wall reports run `13:51..16:28Z`. 16:28 is before
+16:54:32.** Every one of them **predates the test's existence**, so the row is
+not in them. They are not clean — **the row is ABSENT**, and that bucket could
+not have produced a red under any hypothesis whatsoever.
+
+**So the instrument that refuted the load hypothesis was one in which the
+refuting outcome was impossible.** Honest reports, correctly computed buckets,
+real wall times, and a population that cannot contain the subject. This is the
+same class as everything else tonight, in its purest form — and **the `git log`
+line I wrote to explain the episode is what invalidates the analysis two
+paragraphs above it.**
+
+### Sized, then re-run with one filter: `date >= 2026-09-04T16:54:32Z`
+
+    reports BEFORE the test existed (row ABSENT, not passing):  439
+    reports AFTER  the test existed (row could fail):           199
+    of the ten 230s+ "clean" reports, pre-birth:                 10 of 10
+
+**The `230s+` bucket post-birth is EMPTY, n=0.** The refutation rested entirely
+on pre-birth reports.
+
+    row RED   n=  9   median 223.4s   (217.4 .. 229.5)
+    row ok    n=190   median 169.6s   ( 71.2 .. 201.9)
+
+    wall band     reports  row RED  rate
+    0-120s             1        0     0%
+    120-150s           2        0     0%
+    150-180s         117        0     0%
+    180-200s          69        0     0%
+    200-215s           1        0     0%
+    215-230s           9        9   100%
+    230s+              0        0     -
+
+**PERFECT SEPARATION AT ~215s: 9 of 9 above it are red, 0 of 190 below it are.**
+And the ok-median moved 153.2s -> 169.6s exactly as frankuser predicted, because
+the pre-birth reports were dragging it down. **Both numbers in my 1.46x were
+computed over the wrong set.**
+
+### So the load reading is the best-supported explanation, and it is frankuser's
+
+| host | native wall | this row |
+| --- | --- | --- |
+| seven, below its threshold | < 215s | **0 of 190 red** |
+| seven, above it | 215–230s | **9 of 9 red** |
+| **borg** | **median 313.5s** | **306 of 306 red** |
+| plexus, HEAD tier | 417.3s | **flaked — 1 failed attempt of 3** |
+
+borg's every run sits far above the wall at which seven's row failed **100%** of
+the time. That unifies the seven episode, borg's standing condition and tonight's
+plexus flake without invoking gcc or qemu at all.
+
+**Two limits that keep this a strong hypothesis rather than a result.** The nine
+reds are still ONE CONTIGUOUS 94-MINUTE EPISODE, so within the post-birth set
+wall and time remain confounded and the effective n is small. And **an absolute
+wall threshold does not transfer between machines** — 215s on seven is not 215s
+on plexus, since wall measures the box as much as the load; plexus ran 417.3s
+and only flaked. What transfers is the *within-host* ordering, not the number.
+
+### What was never affected by any of this
+
+The row has **one commit in its history, its own creation**; it went red six
+minutes after birth; it was red for nine reports over 94 minutes; **it stopped
+failing with nothing landing that touches it or the `waitid` path, and has never
+been modified since.** *A test that stops failing without being changed was never
+fixed.* Independent of every wall-time question.
+
+**And keep the two regimes apart** — merging them is how this row has been
+misread three times now. seven's nine reds are a **birth shakedown**; borg's
+306/306 with `flaky: 0` in every sampled report is a **standing condition in
+which all three attempts fail every time.** Any explanation that yields
+"sometimes" does not explain borg. The Track B / crtl routing for the `waitid`
+`si_code` conversion on riscv32 is unchanged by all of it.
