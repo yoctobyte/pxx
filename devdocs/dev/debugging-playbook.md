@@ -41541,3 +41541,72 @@ number, **re-derive it from the tree rather than reconciling it against your own
 if you get a different answer, the interesting question is not which number is
 right but **what the two queries each enumerated**, which is how this one resolved
 into `26 + 4` instead of into somebody being wrong.
+
+## THE MISCONFIGURED INSTRUMENT PRODUCES OUTPUT THAT LOOKS *MORE* USEFUL, NOT LESS — which is why it survives review, and why "it looked fine" is the symptom
+
+**`lekkerzeilen-7a`'s observation, 2026-09-22, banked here in its words because
+it is the general form and it is not mine.** Three instances in one afternoon,
+three different instruments, and the tell is the same in all three.
+
+CLAUDE.md already says every instrument that lies **lies by being correct about
+something else** — none error, all answer, so the guard cannot be *"check for
+errors"*. **This is the next question: why does nobody catch it?** Because the
+wrong setting does not merely fail to announce itself. **It produces a BETTER
+looking artefact than the right setting does**, so a reviewer actively prefers
+it:
+
+| instrument | wrong setting | what it produces |
+| --- | --- | --- |
+| build flags | `-g` (which implies `-O0`) | **a readable binary, every frame resolved** |
+| sample harness | `=== SAMPLE` written per loop iteration | **a full sample count — 150 instead of 89** |
+| gdb attach | the fork CHILD's pid | **resolves cleanly, no error** |
+
+**A setting that made the output look worse would have been caught on the first
+run.** Selection runs the other way: the configuration that yields more symbols,
+more samples and fewer errors is the one a careful person keeps.
+
+**AND THE FAILURE IS NOT "A WRONG NUMBER", WHICH IS THE PART THAT DEFEATS
+CHECKING YOUR ARITHMETIC.** 7a's framing, and it is the transferable half: a
+`-g` profile would have been **a correct measurement of a code path that does
+not ship**. At `-O0` a variant op allocates 1.8 blocks where `-O2` allocates
+none — so the profiled blob would have been real, correctly measured, and
+absent from every binary anyone runs. Re-deriving the number confirms it. Only
+asking *which configuration is this true of* does not.
+
+**The rule that came out of it, stated for instruments rather than for
+compilers:**
+
+> **An instrument that requires you to change the build has changed the
+> subject, and the flag that buys you visibility is usually the one that
+> changes it most.**
+
+It travels past compilers: tracing modes, instrumented allocators, debug
+builds of a library, an alternate driver, a sanitiser, a slow-path interpreter
+— **anything observed only in a configuration nobody ships.** The cheap
+discharge is one line in the write-up and it is not a check, it is a label:
+**say which configuration the number describes**, every time, because nothing
+else in the artefact says it and the number reads as universal.
+
+Related: *the test rig converts a loud failure into a quiet one*, which is the
+same structure where the rig suppresses a signal rather than changing the
+subject. And *isolation guards the RUN, not the ROUTE* — here the route is a
+compilation.
+
+### The containment observation, which is the better finding of that day
+
+7a's own summary, and it is worth more than any of the individual catches:
+three of one seat's errors each **cost exactly one exchange**, and the reason
+they cost one exchange is that **every peer who received a number went and
+checked it against their own artefact instead of quoting it.** A seat
+re-bucketed raw samples rather than taking a table; another verified a
+retraction rather than accepting it; a third re-derived a coverage row rather
+than quoting its own earlier one, and found it had got stronger.
+
+**So the metric that matters is not the error rate, it is the containment
+distance** — how many hands a wrong number passes through before somebody
+recomputes it. The one error that reached the permanent record that day was the
+one taken on trust, and it was taken on trust because it arrived as **a causal
+mechanism with a count attached** rather than as a bare figure. A story reads
+as pre-verified; a number invites arithmetic. **That is exactly backwards, and
+it is the one to watch for**: the table is the part you can check in one
+command, the mechanism is the part you cannot.
