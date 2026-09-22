@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:172 backlog-nilpy:184 backlog-tools:70 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3930 rejected:87`
+`working:34 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:172 backlog-nilpy:184 backlog-tools:70 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3931 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
@@ -24,7 +24,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-object-output-for-arm32-and-aarch64` [A] — owner: frankb-8e
 - `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A] — owner: frankA
-- `feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar` [A] — owner: frankb-8e
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
@@ -79,7 +78,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 573, ranked
+## Ready — top 30 of 574, ranked
 
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
@@ -112,4 +111,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 1)
 - `[p 70] [N]` bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)
 
-_543 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_544 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
