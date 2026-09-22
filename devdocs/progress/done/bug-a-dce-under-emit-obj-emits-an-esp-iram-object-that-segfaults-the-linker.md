@@ -3,14 +3,40 @@ slug: bug-a-dce-under-emit-obj-emits-an-esp-iram-object-that-segfaults-the-linke
 track: A
 type: bug
 prio: 60
-status: backlog
+status: done
 created: 2026-09-21
 found-by: frankb-8e
 owner: ""
 blocked-by: []
 summary: >
-  THIS IS THE GATE ON A MEASURED -66% ACROSS EVERY PROGRAM, WHICH ITS OWN TITLE
-  HIDES (frankh-c0, 2026-09-22). Promoting `--dce` from `-O3` to the default
+  FIXED 2026-09-22 (frankh-c0). ROOT CAUSE: `DceRun` never compacted
+  `IramCallFix` -- it appeared EXACTLY ONCE in dce.inc, in the MARK phase that
+  roots an iram callee, while every sibling array (Fixups, GlobFix, CallFix,
+  ProcAddrFix, DynCall, CodeRef, Procs[].BodyAddr) was remapped. Entries kept
+  their PRE-removal CodePos; elfwriter splits them by `CodePosToIramOff`, so a
+  stale CodePos misses the iram map, falls into the `.rela.text` arm and is
+  written at an offset from the OLD layout. Measured, riscv32: two entries at
+  0x3fd68 and 0x3fe74 against a `.text` of 0x8788 -- both inside the pre-DCE
+  0x3ff70 -- and the `.rela.iram1.text` relocation for the `PXXStrDecRef` call
+  at iram offset 0x50 dropped entirely. ld applies the first out-of-range entry
+  and dies. NOTHING DOWNSTREAM COULD SEE IT because elfwriter COUNTS these
+  entries with the same predicate it WRITES them with, so `sh_size` is honest
+  about a wrong set and `readelf -r` prints entries that look ordinary one at a
+  time. Fifth instance of this family's one omission, found by grepping dce.inc
+  for the sibling. VERIFIED: both ESP targets, `--dce --emit-obj
+  --platform=esp`, 0 out-of-range relocations and link rc=0 under the real
+  esp-elf gcc against rc=1 signal 11 before; self-host fixedpoint converges;
+  gate quick GREEN. GUARDED, so instance six is caught rather than rediscovered:
+  `reloc_resolve_check.py --check-object` asserts that every relocation points
+  inside the section it relocates -- an invariant that holds BETWEEN two
+  structures, which is why no per-entry assertion and no `readelf -r` could
+  express it -- with `tools/reloc_structure_devtest.py` as its positive control
+  and a row in `test-emit-obj`. The ORIGINAL framing below is kept and is still
+  the reason this mattered. Note the residue it does NOT close: the -O2
+  promotion still needs five Makefile control arms respelled `--no-dce` and a
+  full tier.
+  THIS WAS THE GATE ON A MEASURED -66% ACROSS EVERY PROGRAM, WHICH ITS OWN TITLE
+  HID (frankh-c0, 2026-09-22). Promoting `--dce` from `-O3` to the default
   `-O2` takes nine real `examples/**` programs from 4,424,828 to 1,475,708 bytes
   (-66%; hello -66%, raytracer -64%, maze -72%) and the self-host fixedpoint
   still converges, two rounds, on a 4978-proc compiler. It cannot land because
@@ -213,3 +239,6 @@ measuring nothing.
 the five control arms respelled, then a full tier at `-O2` with the pass on,
 green, with `skip_holes == 0`. That is the O-lane's PROOF gate and it is
 satisfiable on plexus now that the corpora are installed.
+
+## Log
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
