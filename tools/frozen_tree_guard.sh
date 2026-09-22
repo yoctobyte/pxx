@@ -60,9 +60,15 @@
 # nothing.
 #
 # USAGE
-#   tools/frozen_tree_guard.sh start <tag>     # before the first job
+#   tools/frozen_tree_guard.sh start <tag> [pathspec...]   # before the first job
 #   tools/frozen_tree_guard.sh stop  <tag>     # the moment the LAST job ends
 #   tools/frozen_tree_guard.sh check <tag>     # after the last one; exit 1 if moved
+#
+# With no pathspec the diff covers the whole tree: over-reports, never
+# under-reports, and that is the default. With pathspecs it covers only those,
+# which is how you aim it at what a run actually reads -- see the fingerprint
+# function for why aiming is opt-in and why a wrong aim is the dangerous
+# direction.
 #
 # WHY `stop` EXISTS, AND IT IS THIS SCRIPT'S OWN HAZARD ARRIVING IN THIS SCRIPT.
 # Measured 2026-09-22, by the seat that wrote the file: every measurement ran on
@@ -105,6 +111,15 @@
 # window must not redden the verdict) and that row's own negative control
 # (re-arming must clear the frozen verdict, or `stop` would be a way to switch
 # the guard off permanently and every later run would pass on stale state).
+#
+# The three AIMING rows work differently and deliberately so: pathspec scoping
+# is decided by `git status`, which no amount of editing the recorded
+# fingerprint can exercise, so those rows build a SCRATCH GIT REPO and make real
+# edits in and out of scope. Never the checkout this script guards. Each has its
+# counterpart -- an out-of-scope edit must be ignored AND an in-scope one must be
+# caught, or "aimed" would just mean "switched off" -- plus one asserting the aim
+# is read back from the state file, since a `check` that re-derived it could be
+# pointed elsewhere and would compare two different questions and call it green.
 
 set -u
 
@@ -118,15 +133,38 @@ mode=$1
 
 state_dir=${PXX_FROZEN_GUARD_DIR:-${TMPDIR:-/tmp}/pxx-frozen-guard-$(id -u)}
 
-# The three quantities, printed one per line. Kept in ONE function so `start`
-# and `check` cannot drift apart -- two spellings of the same measurement is the
-# failure this repo names most often.
+# The quantities, printed one per line. Kept in ONE function so `start` and
+# `check` cannot drift apart -- two spellings of the same measurement is the
+# failure this repo names most often. $@ is the pathspec list to scope the diff
+# to; empty means the whole tree.
+#
+# WHY THE DIFF CAN BE AIMED, AND WHY UNAIMED IS STILL THE DEFAULT. Measured
+# 2026-09-22: a `full` tier was in flight while its operator committed a
+# docs-only correction, and the unaimed guard reds -- correctly about the TREE
+# and uselessly about the RUN, whose jobs read test/**, lib/** and a compiler
+# binary snapshotted at start. That is a guard crying wolf on a run whose real
+# inputs were frozen, and this repo already records what that teaches: a guard
+# that reds when it is used correctly gets ignored.
+#
+# So `start <tag> [pathspec...]` scopes the diff to what the run actually reads,
+# which is the "a guard must be AIMED" rule applied to this guard. The pathspec
+# list is RECORDED IN THE STATE FILE and read back by `check`/`stop`, so the two
+# ends cannot be aimed differently -- an aimed guard whose aim drifts between
+# start and check would be the worse bug.
+#
+# UNAIMED REMAINS THE DEFAULT ON PURPOSE. Passing no pathspec watches everything,
+# which over-reports and never under-reports. Aiming is an assertion about what
+# a run reads, and a WRONG aim fails silent -- the direction this file exists to
+# refuse. Aim only when you can name the inputs; if you are guessing, do not.
 fingerprint() {
     printf 'head %s\n' "$(git rev-parse HEAD 2>/dev/null || echo NO-GIT)"
+    # The aim is part of the fingerprint, so a start and a check with different
+    # pathspecs mismatch loudly instead of comparing two different questions.
+    printf 'paths %s\n' "${*:-ALL}"
     # Tracked modifications only. Untracked files are excluded deliberately: a
     # sweep writes scratch output and a temp file appearing is not the tree
     # moving. The compiler binary is untracked and is covered by its own line.
-    printf 'diff %s\n' "$(git status --porcelain --untracked-files=no 2>/dev/null \
+    printf 'diff %s\n' "$(git status --porcelain --untracked-files=no -- "$@" 2>/dev/null \
                           | sha256sum | cut -d' ' -f1)"
     if [ -f compiler/pascal26 ]; then
         printf 'cc %s\n' "$(sha256sum compiler/pascal26 | cut -d' ' -f1)"
@@ -135,18 +173,32 @@ fingerprint() {
     fi
 }
 
+# Re-read the aim recorded by `start`, so `check` and `stop` ask the same
+# question `start` did rather than whatever the caller remembers.
+recorded_paths() {
+    p=$(sed -n 's/^paths //p' "$1")
+    [ "$p" = "ALL" ] && p=""
+    echo "$p"
+}
+
 case "$mode" in
 start)
-    [ $# -eq 2 ] || usage
+    [ $# -ge 2 ] || usage
     mkdir -p "$state_dir" || exit 2
     # Clear any frozen verdict from a PREVIOUS run under this tag. Without this
     # a re-armed tag would inherit the old run's `closed` marker and `check`
     # would report attributable without having compared anything -- a guard
     # passing on stale state, which is the one outcome worse than a false red.
     rm -f "$state_dir/$2.closed"
-    fingerprint > "$state_dir/$2.fp"
-    echo "frozen-tree-guard: armed for '$2' — what this run's verdict is about:"
-    sed 's/^/frozen-tree-guard:   /' "$state_dir/$2.fp"
+    tag=$2
+    shift 2
+    fingerprint "$@" > "$state_dir/$tag.fp"
+    echo "frozen-tree-guard: armed for '$tag' — what this run's verdict is about:"
+    sed 's/^/frozen-tree-guard:   /' "$state_dir/$tag.fp"
+    if [ $# -gt 0 ]; then
+        echo "frozen-tree-guard:   AIMED: the diff above covers only those paths."
+        echo "frozen-tree-guard:   A change anywhere else will NOT red this run."
+    fi
     ;;
 stop)
     [ $# -eq 2 ] || usage
@@ -155,7 +207,7 @@ stop)
         echo "frozen-tree-guard: NOT ARMED for '$2' — nothing to close." >&2
         exit 2
     fi
-    if [ "$(fingerprint)" = "$(cat "$before")" ]; then
+    if [ "$(fingerprint $(recorded_paths "$before"))" = "$(cat "$before")" ]; then
         # Freeze the verdict. A later `check` reads this rather than re-comparing
         # against a tree the author has since written the results into.
         : > "$state_dir/$2.closed"
@@ -167,7 +219,7 @@ stop)
     echo "frozen-tree-guard:   Not a claim the code is broken; a claim this run" >&2
     echo "frozen-tree-guard:   cannot be attributed to one tree. Re-run settled." >&2
     diff "$before" - <<EOF >&2 || true
-$(fingerprint)
+$(fingerprint $(recorded_paths "$before"))
 EOF
     exit 1
     ;;
@@ -187,7 +239,7 @@ check)
         echo "frozen-tree-guard:   whether the tree moved. Call 'start' first." >&2
         exit 2
     fi
-    after=$(fingerprint)
+    after=$(fingerprint $(recorded_paths "$before"))
     if [ "$after" = "$(cat "$before")" ]; then
         echo "frozen-tree-guard: tree frozen for the whole run — verdict is attributable"
         exit 0
@@ -286,11 +338,62 @@ selftest)
         echo "  ok   t_stop_reds_on_a_moved_tree"
     fi
 
+    # THE AIMING ROWS NEED A REAL REPO AND REAL EDITS. The rows above move the
+    # RECORDED fingerprint, which cannot test a pathspec -- scoping is decided by
+    # `git status`, so proving it needs files that actually change. A scratch
+    # repo, never the checkout this script guards.
+    self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+    repo="$work/repo"
+    mkdir -p "$repo/watched" "$repo/elsewhere"
+    (
+        cd "$repo" || exit 1
+        git init -q . 2>/dev/null
+        git config user.email s@s; git config user.name s
+        echo one > watched/f; echo one > elsewhere/g
+        git add -A; git commit -qm init
+    ) >/dev/null 2>&1
+
+    # An edit OUTSIDE the aim must not red an aimed run.
+    ( cd "$repo" && "$self" start aimed watched >/dev/null 2>&1 \
+        && echo changed > elsewhere/g \
+        && "$self" check aimed >/dev/null 2>&1 )
+    if [ $? -eq 0 ]; then
+        echo "  ok   t_aimed_guard_ignores_an_out_of_scope_edit"
+    else
+        echo "  FAIL t_aimed_guard_ignores_an_out_of_scope_edit   — red on a path it was not aimed at"
+        fails=$((fails + 1))
+    fi
+
+    # ...and its negative control, or the row above would pass against an aim
+    # that simply disables the diff check: an edit INSIDE the aim must red.
+    ( cd "$repo" && "$self" start aimed watched >/dev/null 2>&1 \
+        && echo changed > watched/f \
+        && "$self" check aimed >/dev/null 2>&1 )
+    if [ $? -ne 0 ]; then
+        echo "  ok   t_aimed_guard_catches_an_in_scope_edit"
+    else
+        echo "  FAIL t_aimed_guard_catches_an_in_scope_edit   — missed a watched path"
+        fails=$((fails + 1))
+    fi
+
+    # The aim must come from the STATE FILE, not from the caller's memory. A
+    # `check` that re-derived the aim could be pointed somewhere else and would
+    # then compare two different questions and call it green.
+    ( cd "$repo" && git checkout -q HEAD -- . \
+        && "$self" start aimed watched >/dev/null 2>&1 \
+        && grep -q '^paths watched$' "$work/state/aimed.fp" )
+    if [ $? -eq 0 ]; then
+        echo "  ok   t_aim_is_recorded_in_the_state_file"
+    else
+        echo "  FAIL t_aim_is_recorded_in_the_state_file   — check could drift from start"
+        fails=$((fails + 1))
+    fi
+
     if [ "$fails" -gt 0 ]; then
         echo "frozen-tree-guard selftest: $fails red"
         exit 1
     fi
-    echo "frozen-tree-guard selftest: 9 guard(s), 0 red"
+    echo "frozen-tree-guard selftest: 12 guard(s), 0 red"
     ;;
 *)
     usage
