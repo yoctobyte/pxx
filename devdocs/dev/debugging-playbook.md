@@ -37877,3 +37877,33 @@ measurement to a misplaced `-o`. **Positive control: the exact shape that lost
 the measurement now exits 1**, and no in-tree invocation passes a third
 positional. **A silently discarded argument is a guard-shaped hole, and this is
 the second one found in that same argument position.**
+
+**AND THERE IS A THIRD INSTANCE, ALREADY COMMENTED IN THE TREE BY ANOTHER SEAT,
+WHICH IS WHAT MAKES THIS AN ANIMAL AND NOT AN ANECDOTE.**
+`tools/esp_run_bare.sh` carries its own note, measured 2026-09-19: the script
+read `PXX` from the environment, so `PXX=<pinned> tools/esp_run.sh` **silently
+ran HEAD** and a pinned-versus-HEAD control **compared HEAD with itself** — on
+a fix whose pinned control then *"passed"*. Its fix was to rename the variable
+`ESP_RUN_PXX`, on the reasoning *"a distinct name cannot be inherited by
+accident."*
+
+Three instances, three subsystems, three seats: **a differential whose two legs
+were never established to be two different things.** The flag that was
+discarded, the leg that never built, the variable that was ignored — **none of
+them error, all of them produce a comparison, and the comparison is honest
+about two things that happen to be identical.** So the discharge generalises
+past "read the row that must change": **whatever the legs are supposed to
+differ BY, assert they differ by it before reading what they agree on.**
+
+**The cheapest form of that assertion, and the one that would have answered in
+one line here:** `sha256sum <the N inputs> | sort -u | wc -l` **must equal N.**
+It is strictly stronger than checking each leg produced a file, because it
+catches N files that were all produced and are all the same — which is exactly
+what happened: six fresh artefacts, six `ok:` lines, **one distinct sha.**
+
+**NOT promoted to CLAUDE.md, and the test it failed is worth naming so nobody
+re-argues it on quality.** The general rule is already there — *"a guard that
+cannot fail is not a guard, and it prints PASS"* — and these three are
+instances of it, however sharp. What earns a line in the file every session
+pays for at startup is a second independent SUBSYSTEM for a rule that is not
+yet stated, not a third instance of one that is.
