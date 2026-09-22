@@ -40213,6 +40213,35 @@ one. What is new here is that **the emptiness was our own toolchain's doing** �
 the sections are missing because *we* chose the flags — so the instrument is
 correct, the subject is real, and the gap is invisible from both ends.
 
+**AND THE HARDEST MEMBER OF THIS FAMILY IS A SILENCE THAT IS DELIBERATE,
+DOCUMENTED AND CORRECT** (franks-5b, same day, on the same investigation). The
+three instances above are instruments that answer about an empty set by ACCIDENT:
+a pattern that cannot read a file, a census over a population that cannot contain
+the symbol, a disassembler with no section table. Nothing explains their quiet, so
+eventually somebody asks why it is quiet and finds the hole.
+
+The same day's fourth instance had an explanation waiting. `PXXDBG=a.mlzero` was
+read as reporting that a promo temp had no zero-init entry. It is silent about
+that temp **by design**: the walk that consults `ManagedLocalZeroBytes`
+(`ir_codegen.inc:14710`) deliberately SKIPS `SymIsHiddenArgTemp` entries, its own
+comment says so, and **the reason is good** — doing them there as well doubled
+every such store, ~112 KB on the compiler's own code, for no change in behaviour.
+
+**So the exclusion is correct engineering, and that is exactly what makes the
+probe a liar about this question.** Going to find out why the probe is quiet
+returns a satisfying, true, load-bearing answer — and you stop there, because the
+design note explains the silence so completely that it never occurs to you the
+silence is ALSO an answer to a different question you were asking. The accidental
+silent zeros get caught because there is nothing to find; this one is protected by
+its own justification.
+
+**The discriminator is the same one that caught the other two and it is worth
+stating as the general move: a silent instrument is only informative when a
+SECOND instrument, failing differently, agrees.** Here the second was
+`PXXDBG=a.ir:main`, which showed the temp as an ordinary symbol
+(`slotaddr a=557`) and refuted the "it is not an enumerated symbol at all"
+conclusion the silence had produced. **Before reading a probe's silence as a
+negative, find out what it is DOCUMENTED not to look at.**
 ## WHERE YOU HAVE NO STANDING, THE INFORMATIONAL FRAMING *IS* THE ASK
 
 **`lekkerzeilen-7a`, 2026-09-22, declining an offer from this coordinator.

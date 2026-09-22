@@ -555,3 +555,78 @@ wants the fix or is already at the mint site, offering its candidates
 (`ir.inc:5984`, `ir.inc:14261`, `pyparser.inc:61658`). `franks-5b` filed the
 ticket and owns it but is off the box at `lekkerzeilen-7a`'s request. **The
 coordinator does not dispatch and has not.**
+
+## Mint site found — and it is flagged, so `:381` is NOT the false part (frankb-8e, 2026-09-22)
+
+**Banking this before the fix, because it corrects a sentence in this ticket's own
+summary and a claim I sent to two seats.**
+
+**`ir.inc:1880 IRPromoTempSlot` is the only producer of a promo temp in the
+compiler** — `grep 'AllocVar([^)]*tyPromoInt' compiler/*.inc` returns exactly one
+hit, `ir.inc:1883`, inside it — and it sets the flag two lines later:
+
+```pascal
+  tmpSym := AllocVar('', tyPromoInt64);
+  { First-touch init: ONE prologue zero via the hidden-arg-temp machinery ... }
+  SymIsHiddenArgTemp[tmpSym] := True;
+```
+
+So the temp IS flagged at birth, and `pasparser_expr.inc:381`'s assertion that
+these temps are covered by `SymIsHiddenArgTemp`'s prologue zero **describes the
+mint site accurately.** The summary above calls that assertion FALSE; that was my
+report and it is too strong. **Do not "correct" the comment at `:381` — it is
+true about the thing it is talking about.** What fails is downstream of it.
+
+### What is actually open, and it is narrower than anything in this ticket so far
+
+From `PXXDBG=a.ir:main` (which also retires my "the temp is not an enumerated
+symbol" claim outright — instruction 47 is `slotaddr a=557`):
+
+| sym | what it is | slot | prologue emits |
+| --- | --- | --- | --- |
+| 557 | the `PXXPromoCopy` destination — the `print()` argument temp | `-0x40` | **nothing** |
+| 558 | the literal-`3` temp for `i < 3` | `-0x50` | `movq $0x0,-0x50(%rbp)` |
+
+**Both are minted by `IRPromoTempSlot`, both are therefore flagged, both are
+`skLocal`** (`AllocVar` takes `skLocal` whenever `CurProc >= 0`,
+`symtab.inc:145-148`, and a `skGlobal` temp would be in BSS rather than at
+`rbp-0x40`), **both are inside `main`'s scope, and they are adjacent indices.**
+The hidden-arg-temp prologue walk (`ir_codegen.inc:13487`) fired **once**.
+
+So something between *flag set at mint* and *flag read at emit* drops 557 and
+keeps 558. That is the whole remaining question.
+
+**One hypothesis with a mechanism, NOT a finding, and recorded as such:** symbol
+slots are recycled across procs (`symtab.inc:5876`, `SymCount := keepTo`), and
+`AllocVar` resets `SymIsHiddenArgTemp[SymCount] := False` for the slot it hands
+out — so a later proc reusing index 557 would clear `main`'s flag before `main`'s
+codegen reads it. **Against it:** `DbgRecordVar`'s own comment says slot capture
+must run while the proc's scope is live, which implies codegen does. I have not
+watched either happen and the next step is a probe (`PXXDBG=a.htemp`) printing
+every symbol that walk iterates with its flag, kind and offset.
+
+### Two instrument failures of mine, both the same shape, recorded so the next reader does not inherit them
+
+1. **`PXXDBG=a.mlzero` is silent about this temp BY DESIGN**, and I read the
+   silence as absence. The walk that consults `ManagedLocalZeroBytes`
+   (`ir_codegen.inc:14710`) explicitly SKIPS `SymIsHiddenArgTemp` entries — its
+   own comment gives the reason (doing them there too doubled every such store,
+   ~112 KB on the compiler's own code). **A probe that is silent by construction
+   read as a probe reporting a negative.**
+2. **A disassembly probe answered `zeroed=[]` and every call count `0` for seven
+   rows**, because pxx writes no ELF section headers without `-g`, so `objdump`
+   had no section containing the address and exited 0 with no output. Written up
+   at `8dca96acb`, `debugging-playbook.md`.
+
+**Both are the silent-zero shape, and I hit the second while writing up the
+first.** Knowing the rule did not fire it; in each case what caught it was a
+number from a *different source* disagreeing — the hand disassembly for (2), and
+the IR dump for (1).
+
+### Binary provenance for every number above
+
+Measurements were taken with two different compilers and agree on the load-bearing
+row: `fda77c48b8ee` (pin v418, tree `14760b8e0`) and `9839a38adf35` (a local build
+carrying an experimental arm that never fired, since reverted). **`-0x40` is
+cleared-but-never-zeroed under both.** The `a.ir:main` and `a.mlzero` dumps above
+were taken with `9839a38adf35`.
