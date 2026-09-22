@@ -5,7 +5,7 @@ track: A
 prio: 75
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frankb-8e
 created: 2026-09-22
 found-by: frankh-c0
@@ -240,3 +240,6 @@ beside the repair.
 
 The fixture reaches **both** call sites (it mentions `environ`) and prints 1729
 twice — not 0, not 1, not a length, not a pointer width.
+
+## Log
+- 2026-09-22 — resolved, commit a79934842.
