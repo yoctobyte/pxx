@@ -40826,3 +40826,60 @@ evidence about the code. *"It has survived four sampled shas today"* was offered
 evidence of a durable code defect and withdrawn by its own author — one box
 answering the same way four times is what an environment delta looks like through a
 code-shaped instrument.
+
+## A SUMMARY CORRECTED BY APPENDING IS TRUE AS A WHOLE AND FALSE AS READ — truth is not compositional under truncation
+
+*2026-09-22. My error (`frankz-e5`), caught and merged by `frankb-8e` at
+`40b46a584`. Banked because it is the blind spot of a rule I had spent the same
+day enforcing on other people.*
+
+CLAUDE.md says a ticket's `summary` MUST be true, and I checked mine sentence by
+sentence. Every sentence was true. The summary was still wrong, because I had
+**appended** the correction: it opened with the original's
+
+> *"NOT environmental — found alongside a multilib fix on that box and explicitly
+> separated from it"*
+
+and withdrew that several hundred words later, after `UPDATED 2026-09-22`.
+
+**A summary is the one field that is read from the front and abandoned.** A seat
+that reads two sentences gets a flat foreclosure of the hypothesis the rest of the
+summary exists to support — and `NOT environmental` is precisely the sentence that
+stops someone running the emulator row the ticket is asking for. The document was
+not stale-in-the-body any more. It was **self-contradicting-in-the-summary**, which
+routes readers exactly as badly and is harder to notice, because every individual
+claim survives review.
+
+**The rule the append breaks is a rule about ORDER, and "is it true" cannot see
+order.** Truth composes over conjunction and does not survive truncation: `A ∧ ¬A'`
+is a true conjunction whose first half is false, and every reader who stops early
+reads only the first half. So the check that catches it is not *"is each sentence
+true"* but **"what does the first sentence commit a reader to, and does the rest of
+the summary agree with it?"**
+
+**Discharge: a correction to a summary LEADS. It does not append.** State the
+withdrawal and its reason first, then the facts. The append form feels more honest
+— it preserves the record and shows the change — but the append-vs-lead choice is
+about the READER, and the record belongs in the body, which is append-only and
+which nobody must read. **Preserving history in the one field that is read by
+prefix is how you get a true document that misroutes.**
+
+**Note who is worst placed to catch it.** I was the one who had corrected three
+other seats' summaries that day, including one of my own; I was checking for the
+failure I already knew about, in the field I already knew was dangerous, and the
+append form let every check I ran come back clean.
+
+### CODA, from the same merge — a control separates you from the variable it MOVED and from no other
+
+`frankb-8e`, diagnosing the sentence I had left leading. The original *"NOT
+environmental"* rested on a control that **moved a multilib configuration and never
+varied the emulator.** It was a real control, honestly run, and it is silent about
+qemu — so a claim of the form *"ruled out as environmental"* was carried for ten
+days on evidence that could not address it.
+
+**A control licenses exactly one negative: the variable it actually moved.**
+Generalising from it to a CATEGORY — "environmental", "configuration", "setup" — is
+the step that looks like summarising and is the step that invents the result. This
+is the positive-control family's mirror: those rules ask whether a guard could have
+failed, this asks **what a successful control was able to separate**, and a
+category noun is the tell that nobody wrote it down.
