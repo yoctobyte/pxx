@@ -36149,3 +36149,55 @@ instrument is worth far more than four that did not.
 **What would retire this section:** classifiers over this archive that share one
 reader owning the vocabulary, so a novel tag cannot be silently bucketed by each
 new census in turn.
+
+## AN IDENTIFIER MATCHED BY SUBSTRING SILENTLY BECOMES AN AGGREGATE WEARING A ROW'S CLOTHES — ASK A NAME'S CARDINALITY BEFORE TREATING IT AS A ROW
+
+**The rule.** Before you compute a rate, a trend or a comparison "for X", find
+out **how many distinct things answer to X in your data**. A substring match
+over identifiers does not fail when it is ambiguous; it **pools** the matches
+and returns one confident, well-behaved number about a set you never chose. And
+because pooling smooths, the fabricated row often looks *better* behaved than a
+real one.
+
+**The two structural tells, both one lookup, both cheaper than any analysis:**
+
+1. **A shared PREREQUISITE is not a SUBJECT.** A test file, a fixture, a subject
+   under test appears in the identifier of *one* job. A tool, a script, a
+   generated header, a lockfile, a shared library is listed by *dozens*. If the
+   name you are analysing is something many jobs DEPEND on rather than something
+   one job IS, its "rate" is a mixture by construction.
+2. **When a row's failure detail names something other than the row, the row is
+   not a row.** This is the cheapest check of all and it needs no counting.
+
+**Measured 2026-09-22.** A toolchain cross-tab reported `compiler_srchash` at
+34.9% red under one emulator and 7.8% under another, and that **reversal was
+published as the control proving the cross-tab could discriminate** — then
+carried into a pre-registration a peer was about to hand the project owner.
+`tools/compiler_srchash.sh` is the stamp guard's hashing script: a **source
+prerequisite listed by 28+ distinct job ids** — `test-uforth`, `test-zlib`,
+`test-lua`, `test-cjson`, `test-c-abi-mixed-link` and twenty more — failing for
+entirely unrelated reasons. One glance at a failure detail showed the actual
+failure was `00184.c` in a C-conformance shard.
+
+**Four sibling rows in the same table were fine — one job id each** — so the
+table was not uniformly broken, which is exactly why nothing looked wrong. The
+one bad row was bad *because* it was a dependency rather than a subject.
+
+**IT REPEATED INSIDE THE CROSS-CHECK WRITTEN TO CLEAN IT UP**, one hour later,
+by the same seat: verifying the corrected rows against a passing tier matched
+`test_cross_record` against **`test_cross_record_2darray.pas`**, a different
+file. **Knowing the rule does not fire it** — the discharge has to be mechanical.
+
+**The discharge, and it is an assertion:** collect the identifiers your pattern
+matched, **print them**, and **abort when there is more than one** unless the
+caller explicitly asked to aggregate. Then pooling is a decision in the command
+line instead of an accident in the data. Where you must match loosely, anchor on
+the full identifier (`job#src:path`) rather than a fragment of it.
+
+**Related:** "A PARSER'S TAG VOCABULARY IS ENUMERABLE IN ONE COMMAND" — same
+family, the other end. There the classifier misread a value it did not
+recognise; here it recognised too many. Both produce a clean number, and neither
+errors.
+
+**What would retire this section:** analyses over this archive taking a job id
+rather than a name, so ambiguity is unrepresentable rather than caught.
