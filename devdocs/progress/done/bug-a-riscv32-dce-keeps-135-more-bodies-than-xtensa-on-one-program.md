@@ -2,11 +2,11 @@
 track: A
 prio: 25
 type: bug
-status: open
+status: done
 found: 2026-09-19
 found-by: frankS
 blocked-by: []
-summary: "CLOSED 2026-09-22 (frankb-8e) -- ALL THREE SURVIVING ITEMS LANDED. The optimisation this ticket specified is done (372dd5113): DceRangeHoldsStub answered on GEOMETRY, and now asks whether anything OUTSIDE the range refers to the target. A sweep thunk sits inside its own body and is called from that body alone, so every qualifying body pinned ITSELF. examples/esp32/nilpy-c3 riscv32 --platform=esp --dce: 2,093,100 -> 931,552 B, -55.5%, which puts riscv32 BELOW windowed xtensa (847,167 B) instead of 344 KB above it. Sound for a LOCAL reason and not a reachability argument: live body -> not removed -> the thunk survives with it; dead body -> its only caller is dead. The two latent items went earlier the same day (5fccc890a, 73b1ade90) and THIS TICKET PRESCRIBED THE WRONG HELPER FOR ONE OF THEM -- EmitXtensaCallToCode is the CALL0 helper, the stub is entered with a2 = &jmpbuf and ends in RETW and the site loads a10, so CALL0 passes the argument in the wrong register and retw rotates no window back; EmitXtensaCall8ToCode is the one, and the site also hardcoded a beq displacement the helper may invalidate, so fixing it as written would have made a latent bug live. THE VERIFICATION IS THE PART WORTH READING. A 116-program riscv32-under-qemu differential returned 116 same / 0 differ AND IS WORTHLESS: the positive control (disabling the root entirely) returned 116 same / 0 differ too, and the root fired for NONE of the 116 -- the population could not contain the subject. So the verification is an INVARIANT instead of a corpus: the live set must be closed under the call graph, now checked on every target across CallFix, ProcAddrFix AND CodeRef, where only wasm had such a check. Checking only CallFix would have passed this very commit, since DceRangeHoldsStub decides CodeRef targets. Positive control fires by name via a one-line forced drop in DceMark. NOT ESTABLISHED, and said out loud: `Result := False` -- the most aggressive possible predicate -- leaves every measurable artefact byte-identical and passes all three arms, so both True arms are unexercised in this tree; that BOUNDS the risk (the landed version roots a strict superset of one measured safe) rather than leaving it open. AND `D_EXPF` IS NOT A DEFECT -- the first version of the closure check read Procs[].BodyAddr AFTER the loop that remaps it and fired on riscv32 and windowed xtensa; reverting my other change reproduced it identically, which is a sound control for "did my edit cause this" and blind to "is my instrument sound". Also corrected: dce.inc claimed ApplyCallFixups reports a dropped-and-called body by name. It does not -- CallFixTarget is a clamped snapshot -- and that false all-clear is why five targets had no closure check. ORIGINAL ANALYSIS BELOW, still correct: the in-body targets are sweep thunks, the riscv32/xtensa asymmetry is an ABI consequence via TargetHasSweepThunk, and the SIZE half was answered working-as-designed."
+summary: "CLOSED 2026-09-22 (frankb-8e) -- ALL THREE SURVIVING ITEMS LANDED. The optimisation this ticket specified is done (372dd5113): DceRangeHoldsStub answered on GEOMETRY, and now asks whether anything OUTSIDE the range refers to the target. A sweep thunk sits inside its own body and is called from that body alone, so every qualifying body pinned ITSELF. examples/esp32/nilpy-c3 riscv32 --platform=esp --dce: 2,093,100 -> 931,552 B, -55.5%. THE TITLE'S CLAIM -- the 135-body gap -- IS CLOSED: re-measured 2026-09-22 at fda77c48b8ee, riscv32 and windowed xtensa both report LIVE 496 bodies, zero gap. AND A SENTENCE THAT STOOD HERE WAS FALSE: it said the fix puts riscv32 BELOW windowed xtensa's 847,167 B, and 931,552 > 847,167 -- it never did. Same 496 bodies, riscv32 still 84,413 B larger (931,708 vs 847,295 at this tree, --emit-obj --platform=esp --dce, xtensa needing --xtensa-long-calls), because riscv32 ENCODES the same bodies bigger. Body parity and byte parity are different claims and I conflated them; the gap this ticket is named for is the body one and it is gone. Sound for a LOCAL reason and not a reachability argument: live body -> not removed -> the thunk survives with it; dead body -> its only caller is dead. The two latent items went earlier the same day (5fccc890a, 73b1ade90) and THIS TICKET PRESCRIBED THE WRONG HELPER FOR ONE OF THEM -- EmitXtensaCallToCode is the CALL0 helper, the stub is entered with a2 = &jmpbuf and ends in RETW and the site loads a10, so CALL0 passes the argument in the wrong register and retw rotates no window back; EmitXtensaCall8ToCode is the one, and the site also hardcoded a beq displacement the helper may invalidate, so fixing it as written would have made a latent bug live. THE VERIFICATION IS THE PART WORTH READING. A 116-program riscv32-under-qemu differential returned 116 same / 0 differ AND IS WORTHLESS: the positive control (disabling the root entirely) returned 116 same / 0 differ too, and the root fired for NONE of the 116 -- the population could not contain the subject. So the verification is an INVARIANT instead of a corpus: the live set must be closed under the call graph, now checked on every target across CallFix, ProcAddrFix AND CodeRef, where only wasm had such a check. Checking only CallFix would have passed this very commit, since DceRangeHoldsStub decides CodeRef targets. Positive control fires by name via a one-line forced drop in DceMark. NOT ESTABLISHED, and said out loud: `Result := False` -- the most aggressive possible predicate -- leaves every measurable artefact byte-identical and passes all three arms, so both True arms are unexercised in this tree; that BOUNDS the risk (the landed version roots a strict superset of one measured safe) rather than leaving it open. AND `D_EXPF` IS NOT A DEFECT -- the first version of the closure check read Procs[].BodyAddr AFTER the loop that remaps it and fired on riscv32 and windowed xtensa; reverting my other change reproduced it identically, which is a sound control for "did my edit cause this" and blind to "is my instrument sound". Also corrected: dce.inc claimed ApplyCallFixups reports a dropped-and-called body by name. It does not -- CallFixTarget is a clamped snapshot -- and that false all-clear is why five targets had no closure check. ORIGINAL ANALYSIS BELOW, still correct: the in-body targets are sweep thunks, the riscv32/xtensa asymmetry is an ABI consequence via TargetHasSweepThunk, and the SIZE half was answered working-as-designed."
 ---
 
 # riscv32 DCE keeps 135 more bodies than xtensa on one program
@@ -214,8 +214,26 @@ ITSELF.
 | --- | ---: | ---: |
 | `examples/esp32/nilpy-c3` riscv32 `--platform=esp --dce` | 2,093,100 B | **931,552 B** |
 
-**−55.5%**, and riscv32 now lands *below* windowed xtensa's 847,167 B rather
-than 344 KB above it. Windowed xtensa is unaffected by construction
+**−55.5%**.
+
+**CORRECTED 2026-09-22 — a sentence here said riscv32 now lands *below* windowed
+xtensa's 847,167 B, and that is false on its own numbers: 931,552 > 847,167.**
+Caught by franks-5b asking why a ticket whose TITLE is a parity claim was closed
+on a SIZE result, which is the right question and not one the folder could
+answer. Re-measured at `fda77c48b8ee`, `--platform=esp --emit-obj --dce`, xtensa
+needing `--xtensa-long-calls` at this image size:
+
+| | live bodies | live bytes | code |
+| --- | ---: | ---: | ---: |
+| riscv32 | **496** | 928,380 B | 931,708 B |
+| xtensa windowed | **496** | 833,344 B | 847,295 B |
+
+**The 135-body gap this ticket is named for is CLOSED — 496 against 496.** What
+is not closed, and was never what the title claimed, is the byte difference:
+the same 496 bodies cost riscv32 84,413 B more, because it encodes them larger.
+That is an ISA property, not retained dead code, and there is no body left for
+this ticket's mechanism to remove. Body parity and byte parity are different
+claims; the close is correct and the sentence comparing bytes was not. Windowed xtensa is unaffected by construction
 (`TargetHasSweepThunk` is false); x86-64 is unaffected in fact — 0 of 19 stub
 targets land inside a body, so the sweep thunk it does emit is not reached by a
 CodeRef there.

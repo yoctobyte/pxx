@@ -95,3 +95,42 @@ line, and that line is four screens down. **A fixture that refuses to silently
 stop covering its wall is the healthy inverse of "a guard that cannot fail" — it
 noticed it could no longer fail and said so — and it arrives wearing a
 regression's clothes.**
+
+## 2026-09-22 (frankb-8e) — the pair IS bisected, and it is not my commit
+
+frankz-e5 left which-of-the-two unestablished rather than guessing. It is
+**`39ca6ac2a` (the promotion), not `372dd5113` (the stub-target predicate)**, and
+the compiler's own instrument says so rather than my recollection of what my
+change does.
+
+Regenerated the fixture from the Makefile's own `awk` generator (260,818 B of
+source) and measured at `fda77c48b8ee`, wall = 1,048,576:
+
+| arm | code | vs wall |
+| --- | ---: | --- |
+| `--no-dce` | 1,162,916 B | above — the test's premise |
+| `--dce` | 931,632 B | **below** — guard fires |
+| default | 931,632 B | below (i.e. `--dce` is the default now) |
+
+So DCE-at-default is the whole mechanism, which is `39ca6ac2a`. **My predicate
+is INERT on this program**, and that is measured, not argued:
+
+    dce-why: stub targets 2, of which 0 land inside a body
+
+`DceRangeHoldsStub` only decides targets that land INSIDE a body, so with zero
+such targets it has nothing to answer. **The positive control, because a zero
+from an instrument I have not seen produce a non-zero is worth nothing** — the
+same flag on `examples/esp32/nilpy-c3` riscv32, where that predicate is the
+whole point, reports `stub targets 148, of which 144 land inside a body`. The
+instrument discriminates; the zero is real.
+
+This does not change the remedy, which is why e5 was right that it was safe to
+leave open — enlarge the fixture, or build that one job `--no-dce`. It changes
+only who to ask and what not to revert.
+
+**And it retires the 80-byte coincidence explicitly.** This fixture reads
+931,632 B and the `372dd5113` logbook row reads 931,552 B on nilpy-c3 — 80 bytes
+apart, different programs, and e5 flagged it as corroboration of magnitude only.
+It is not even that: nilpy-c3 at this tree measures **931,708 B**, so the two
+numbers were never the same quantity and the near-match was arithmetic accident
+between two unrelated images.
