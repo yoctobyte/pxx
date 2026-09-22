@@ -1,5 +1,60 @@
 # The goal: cross-language × cross-platform, proved by real programs
 
+## OWNER DIRECTIVE, 2026-09-22, LATE — SLOW DOWN, FINISH, THEN **ONE** SEAT ON ESP32
+
+**This is the newest thing in this file and it changes the SHAPE of the work, not
+just its order. It supersedes the sequencing of the pivot below; the pivot's
+content stands.** Relayed verbatim through `frankuser`:
+
+> *"so, for now.. we are gently slowing down. once all current work is done, 1
+> frank is allowed to proceed on ESP32. reasoning: in 30 hour we spend 40% of
+> weekly tokens (other projects working too). so, we go work a bit slower and
+> more efficient (single frank running = no syncing overhead)."*
+
+**1. WHAT HE SAID, needing no interpretation.** Gently slowing down. Current work
+may be FINISHED. Then **one** seat proceeds on ESP32. The reason is token spend —
+40% of a week in 30 hours, with other projects of his also drawing — and he names
+**syncing overhead** as the specific inefficiency a single seat removes.
+
+**2. WHAT THIS MEANS FOR ANYONE READING THIS FILE LATER.** If you are that seat,
+you are probably **alone**, and everything below about coordination, relay and
+collision avoidance is inert. It is kept because a fleet may return, not because
+it applies to you.
+
+**3. WHAT NOBODY IN THE CHAIN MAY DECIDE: WHICH SEAT.** That is his, and a peer
+naming one does not make it so. It looks like a coordination call and it is not.
+
+### THE THING A SHRINK BREAKS, and it is measured rather than predicted
+
+**A seat that stops does not release its tickets, and `working/` is excluded from
+every ranked queue.** Measured 2026-09-22: **29 of the 34 tickets in `working/`
+were held by seats with no reachable session** — the largest a **p80** that had
+been out of every queue since 09-06, and one at p75 held by a seat that
+`progress.sh check` has been naming as its own worked example of a dead holder
+for seventeen days. See
+`bug-t-a-claim-removes-a-ticket-from-every-queue-permanently-and-nothing-re-checks-the-holder`.
+
+**The shrink manufactures more of exactly that, out of the most valuable rows in
+the folder.** At the time of this directive, five `working/` tickets are held by
+the three seats being asked to finish — two by `frankb-8e`, two by `frankh-c0`,
+one by `franks-5b`. **When they stop, those five become indistinguishable from
+the 29**, and they are current work, not abandoned work.
+
+**So the last act of a seat that is finishing is not to finish — it is to make
+its ticket findable by somebody who was in none of these conversations.** State
+in the SUMMARY what is done, what is not, and what the next step is; a body that
+records its own state is the evidence nobody reaches. **CLAUDE.md is explicit that
+`owner:` is ATTRIBUTION and not a claim, so the single seat may take any of
+them** — but only if it can see them, and today it cannot.
+
+### Banking beats staffing
+
+`frankuser`'s formulation and it is the right one to carry into a shrink: **a
+single seat loses its own record at every context boundary**, so notes stop being
+coordination and become the only memory. That is an argument for the FILES, not
+for the seats. Where tokens remain during a wind-down, the highest-value spend is
+making a finding legible to a reader who was present for none of it.
+
 ## OWNER PIVOT, 2026-09-22 — WRAP UP, THEN ESP32. READ THIS BEFORE THE LIST BELOW.
 
 Relayed verbatim through `frankuser`. It **leads** this file rather than being
