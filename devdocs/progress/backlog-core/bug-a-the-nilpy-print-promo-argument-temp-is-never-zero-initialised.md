@@ -1,5 +1,5 @@
 ---
-slug: bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2
+slug: bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised
 track: A
 prio: 80
 type: bug
@@ -7,12 +7,12 @@ status: backlog
 owner: ""
 created: 2026-09-22
 found-by: franks-5b
-tags: [nilpy, promotable-int, o2, codegen, refcount, segfault]
+tags: [nilpy, promotable-int, codegen, refcount, segfault, uninitialised, stack-garbage]
 blocked-by: []
-summary: "THE SLUG NAMES TWO THINGS THAT ARE BOTH ARTEFACTS -- NOT `-O2` AND NOT THE LOCAL COUNT. SUPERSEDED 2026-09-22 by frankb-8e's disassembly (E3), the reading this ticket said no fix could be written without; kept at this slug because it is cited. THE DEFECT: main's epilogue clears FOUR promo slots and the prologue initialises THREE. The uninitialised one is the print() ARGUMENT TEMP. The fault is the AnsiStrRelease blob (EmitAnsiStrReleaseLocked, ir_codegen.inc:654) reached from PXXPromoClear, whose body is a managed-string assign releasing the old payload; at that call tag=0x1 (PROMO_TAG_HEAP) and payload=0x338c2665, stale. compiler/pasparser_expr.inc:381 ALREADY DESCRIBES THIS FAILURE and asserts these temps are covered by SymIsHiddenArgTemp's prologue zero -- FALSE for this one. So this is the FOURTH ARM of bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice (done/), whose own file comment records the chain shipping one arm short three times. BOTH EARLIER FRAMINGS ARE RETIRED AND SO IS THE BISECTION: never-zeroed=[-0x40] is IDENTICAL at -O0/-O1/-O2/-O3 and only the rc differs, so ALL FOUR 'clean' rows are LUCK and no candidate fix may be validated against any of them; two_locals and four_locals carry the same defect at -0x38 and -0x48 and run clean; and with main's source byte-identical, putting one function call in front of it turns rc=139 into rc=0, because a slot left by an earlier PXXPromoClear holds the STATIC EMPTY LITERAL and the saturation guard skips it. The seventeen OptLevel>=2 gates in ir_codegen.inc CANNOT REACH THIS and that bisection is stopped. RETRACTED BY ITS OWN AUTHOR: the earlier 'promo payload dereferenced as a bignum pointer' reading is wrong -- rax varies per run and climbs monotonically across sequential runs, so it is STALE STACK, not any live value. WHAT STANDS FROM THE ORIGINAL REPORT, as symptom-selectors rather than as the defect: the nine-line repro segfaults at the shipped default on pin v418 and at HEAD; `print(str(acc))` runs CLEAN where `print(acc)` segfaults, which is what names the ARGUMENT TEMP as the uninitialised slot. Found while benchmarking perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program, whose coarse arm MASKS this by boxing to tyVariant -- so narrowing that arm turns working programs into segfaults until this is fixed. ATTRIBUTION: repro and selector table franks-5b; level matrix, IR-identity and gate set frankh-c0; mechanism and all four retirements frankb-8e; this summary edited by frankz-e5 (coordinator), who measured NONE of it and corroborated only that pasparser_expr.inc:381 says what 8e reports."
+summary: "THE NilPy `print()` PROMO ARGUMENT TEMP IS NEVER ZERO-INITIALISED, AND THE CLEANUP PATH RELEASES IT. `main`'s epilogue clears FOUR promo slots (-0x20 -0x30 -0x40 -0x50) while the prologue initialises THREE; the uninitialised one, -0x40, is the print() ARGUMENT TEMP. PXXPromoCopy clears its destination before writing, so PXXPromoClear -- whose body is a managed-string assign releasing the old payload -- runs a release over whatever the PREVIOUS frame left on the stack, and it faults iff those bytes read {tag=1 PROMO_TAG_HEAP, non-static pointer} (observed at that call: tag=0x1, payload=0x338c2665, stale). Emitter is EmitAnsiStrReleaseLocked (ir_codegen.inc:636-665); $40000000 is MSTR_STATIC_RC (defs.inc:122), the saturated refcount a STATIC literal is born with, so the `jae` skips a slot holding the static empty literal -- which is why a warm-up call cures it. THIS IS THE FOURTH ARM OF bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice (done/), whose own file comment records that chain shipping one arm short THREE times: compiler/pasparser_expr.inc:381 already describes this failure and asserts these temps are covered by SymIsHiddenArgTemp's prologue zero -- FALSE for this one, so correct that comment in the same commit as the fix or the next reader rules the class out. RENAMED 2026-09-22 from bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2, which named two artefacts and no cause; search that string to land here. BOTH EARLIER FRAMINGS ARE RETIRED AND SO IS THE BISECTION: never-zeroed=[-0x40] is IDENTICAL at -O0/-O1/-O2/-O3 and only the rc differs, so ALL FOUR "clean" rows are LUCK and NO CANDIDATE FIX MAY BE VALIDATED AGAINST ANY OF THEM; two-locals and four-locals carry the same defect at -0x38 and -0x48 and run clean; and with main's source BYTE-IDENTICAL, putting one function call in front of it turns rc=139 into rc=0. The seventeen OptLevel>=2 gates in ir_codegen.inc CANNOT REACH THIS -- no gate creates a defect that is already present at -O0 -- and that bisection is stopped. RETRACTED BY ITS OWN AUTHOR: the "promo-int inline payload dereferenced as a heap bignum pointer" reading is wrong in both halves. rax is STALE STACK, climbing monotonically across sequential runs of ONE binary (0x080a77bf 0x120491cc 0x1cbb96b6 0x2720f0fb 0x33463c57) where a live promo payload could only be 0..3; and the heap tier of a promo int is a MANAGED STRING, not a bignum, so a grep for bignum lowering finds nothing and reads as staleness. WHAT STANDS FROM THE ORIGINAL REPORT, as symptom-selectors rather than as the defect: the nine-line repro segfaults at the shipped default on pin v418 and at HEAD, and `print(str(acc))` runs CLEAN where `print(acc)` segfaults -- which is what names the ARGUMENT TEMP as the uninitialised slot. STILL OPEN: where the PXXPromoCopy destination temp is minted (ir.inc:5984/14261, pyparser.inc:61658) and why it gets a frame slot with no Sym that the zero-init walks can see. Found while benchmarking perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program, whose coarse arm MASKS this by boxing the promo pair to tyVariant -- so narrowing that arm turns working programs into segfaults until this is fixed. ATTRIBUTION: repro and selector table franks-5b; level matrix, IR-identity and gate set frankh-c0; mechanism and all four retirements frankb-8e; summary merged by franks-5b from frankz-e5's rewrite, which measured none of it and corroborated only that pasparser_expr.inc:381 says what 8e reports."
 ---
 
-# Two promotable-int locals plus exactly one other local segfault at -O2
+# The NilPy `print()` promo argument temp is never zero-initialised, and the cleanup path releases it
 
 ## The repro, complete
 
@@ -47,6 +47,17 @@ defect is downstream of it.
 
 ## The trigger, measured rather than reasoned
 
+>  **RETRACTED 2026-09-22 — THIS IS NOT A TRIGGER. Every row below is a real
+>  measurement of a quantity that is not the cause.** `frankb-8e`'s disassembly
+>  shows the local count only decides which `rbp` offset the `print()` argument
+>  temp lands on, and therefore which bytes the PREVIOUS frame left there. **Two
+>  locals and four locals carry the IDENTICAL defect at -0x38 and -0x48 and run
+>  clean.** The decisive control is not in this table and could not have been,
+>  because every variant here changes `main`'s own source: with `main`
+>  BYTE-IDENTICAL, `main()` gives rc=139 and `warm(); main()` gives rc=0. Left
+>  unedited — it is the evidence for how a reproducible table can map a lottery,
+>  and deleting it would hide that.
+
 Holding the two promo-ints fixed and varying the OTHER locals:
 
 | other locals | rc |
@@ -77,6 +88,16 @@ nothing else about the third local matters.
 
 ## Optimisation level
 
+>  **RETRACTED 2026-09-22 — `-O2` IS NOT THE TRIGGER AND THE OTHER THREE ROWS ARE
+>  MASKING.** `frankb-8e` probed the slots at every level: zeroed
+>  `[-0x20,-0x30,-0x50]`, cleared `[-0x20,-0x30,-0x40,-0x50]`, never-zeroed
+>  `[-0x40]` — **identical at -O0, -O1, -O2 and -O3. Only the rc differs.** The
+>  missing zero-init exists at every level; the level only changes the emitted
+>  code and hence the garbage. **Corollary, and it retires a line of
+>  investigation:** no `OptLevel >= 2` gate can be the culprit, so the seventeen
+>  `ir_codegen.inc` gates and every halving below them are garbage-lottery rows,
+>  not narrowings. `frankh-c0` has been told to stop.
+
 | level | rc |
 | --- | --- |
 | -O0 | 0 |
@@ -88,6 +109,27 @@ nothing else about the third local matters.
 `-O2` is the proven default, so every ordinary invocation hits it.
 
 ## Where it faults
+
+>  **THE INSTRUCTIONS ARE RIGHT AND BOTH STORIES ATTACHED TO THEM ARE WRONG —
+>  `franks-5b`, retracting its own reading, 2026-09-22.** Confirmed to the
+>  emitter by `frankb-8e`: this is `EmitAnsiStrReleaseLocked`
+>  (`ir_codegen.inc:636-665`) and `$40000000` is `MSTR_STATIC_RC`
+>  (`defs.inc:122`) — the saturated refcount a STATIC literal is born with, not a
+>  numeric threshold — so the `jae` skips a static empty literal, which is why a
+>  warm-up call cures the crash.
+>
+>  **(1) `rax` IS NOT ANY PROMO-INT'S INLINE PAYLOAD. It is stale stack bytes.**
+>  Five sequential runs of ONE binary gave `0x080a77bf 0x120491cc 0x1cbb96b6
+>  0x2720f0fb 0x33463c57` — monotonic and clock-shaped. My `0x2aa6428c` and 8e's
+>  `0x12a2cf7a` are the same slot at different wall-clock times. **A live promo
+>  payload in this program could only be 0..3**, and I never asked that question
+>  of my own number — one sample of a per-run quantity, read as a value with
+>  meaning.
+>
+>  **(2) "HEAP BIGNUM POINTER" MIS-NAMES THE REPRESENTATION.** The heap tier of a
+>  promo int IS a managed string, which is why the release is the AnsiString blob
+>  and nothing bignum-specific. A reader grepping for bignum lowering finds
+>  nothing and concludes the ticket is stale.
 
 Built `-g -O2`, under gdb:
 
@@ -271,8 +313,15 @@ rather than refinement.
 
 > **DO NOT RUN THIS AS WRITTEN — the hypothesis below was REFUTED on 2026-09-22
 > by `frankh-c0`, see "E1 ANSWERED" further down. The IR is byte-identical at
-> `-O1`, `-O2` and `-O3`, and an eliminated local would change the IR, so `-O3`
-> does whatever it does BELOW the IR. The question "why is `-O3` clean" is also
+> `-O1`, `-O2` and `-O3`. **SCOPED, per `frankh-c0` correcting `frankz-e5`:**
+> `a.ir:main` dumps the IR *after* IR-level work, so identical-at-all-levels
+> rules out an **IR-visible** elimination and does NOT exclude a
+> **backend-local** one — a codegen pass noticing `v0` is never read would be
+> invisible to that instrument and would still be "-O3 eliminates the dead
+> local" in substance. **Probably moot either way:** `frankb-8e` has since shown
+> `-O3` is clean for the same reason `warm()` is clean — different code, different
+> stack garbage — rather than because anything was eliminated. "Probably" is
+> doing real work there; 8e has not tested that specific claim. The question "why is `-O3` clean" is also
 > answered in that section and the answer is MASKING, not absence.** Left
 > in place unedited, including its prediction, because a prediction written
 > before a run is only worth anything if it is still legible after the run
