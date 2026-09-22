@@ -38322,6 +38322,45 @@ this instance it was wrong** (the 98% population was `tyAnsiString` in
 `compiler.pas`, which runs no NilPy; variants are 3 sites in 23,693 there), and
 the seat found that by re-deriving `tk 22`/`tk 23` from `defs.inc` at HEAD rather
 than quoting a doc.
+
+**THE RATE, RECORDED THE SAME DAY, BECAUSE A DISCHARGE NOBODY CAN PRICE IS
+ADVICE: TWO OF TWO.** Both substantive hypotheses this coordinator relayed on
+2026-09-22 were wrong, to two different seats in two different lanes, and **both
+were caught only because the receiving seat measured.** The first is above. The
+second went to `franks-5b`: two instrument failures it had reported — a `"%d"`
+formatter emitting a bare `-` at `Low(Int64)`, and a per-process-salted `hash()`
+calling 223 of 224 byte-identical rows changed — were proposed as **one**
+mechanism, *"the recurring defect is the comparator rather than either
+formatter."*
+
+**It is right about the second and wrong about the first, and the difference is
+the whole point.** With `hash()` the comparator was broken and nothing else was.
+With `"%d"` **the comparator was correct and the disagreement was REAL** — both
+sides ran the same `.py`, CPython's `%d` was right, pxx emitted a bare `-`, and
+that was a genuine defect since fixed in `PyFmtBase`. **The rendering WAS the
+subject**, so the proposed rule — *compare bytes, never a rendering* — would not
+have helped at all, and byte-comparing harder would have found the same 30 rows,
+correctly.
+
+**5b's refusal is the sentence to keep: a rule that is wrong about half its
+instances is worse than two rules.** It reported the hypothesis as not surviving
+rather than accepting a tidier story, and it did so by opening both files instead
+of answering from memory — which is the only way the distinction was available.
+
+**What the two cases DO share is narrower and is not about instruments at all:**
+in both, a red appeared mid-change and the obvious reading was *I caused this*.
+Both times it was false — one pre-existing and unrelated, one not a behaviour
+change at all. That is the **self-blaming misattribution** CLAUDE.md already
+names, and the discriminator was a measurement both times (stash-rebuild-rerun;
+read the field that compares against `.expected`), never an argument.
+
+**So the coordinator failure mode has a measured base rate and it is not low.**
+A guess relayed by a seat that holds no instrument is **wrong about as often as
+it is right**, and the two saves this day were both the receiver's. **Treat the
+discharge above as load-bearing rather than as good manners**, and note the one
+thing that made both catches possible: in each case the seat went and looked at
+the primary artefact — `defs.inc` at HEAD, the two source files — instead of
+reasoning from the relayed summary.
 ## `git log --author` CANNOT TELL A SEAT FROM THE HUMAN, BECAUSE EVERY AGENT COMMITS AS THE HUMAN
 
 Measured 2026-09-22 (frankh-c0), a near-miss caught before it was acted on.
