@@ -1570,6 +1570,49 @@ cause does not produce a shared symptom. **Then run the guard against the
 failure it was written for**, because knowing the bug is not protection from
 writing it again three lines lower.
 
+### AND THE COMMONEST SPELLING OF IT: THE GUARD'S PRECONDITION SET IS A *SUBSET* OF THE ASSERTION'S
+
+Everything above is about an input that was never proven to exist. This is the
+input you *did* guard, beside the one you did not, and it is invisible where
+you develop **by construction** — which is why it survives review by the person
+best placed to catch it.
+
+```sh
+if command -v clang && clang -print-targets | grep -q aarch64 ; then
+    rc=$(run_probe clang)
+    [ "$rc" = 0 ] || bad "expected 0"        # needs clang AND a disassembler
+```
+
+**The gate names ONE dependency; the asserted outcome needs TWO.** Measured
+2026-09-22: that guard reddened a full tier on the one host with no
+`llvm-objdump-21`, where the probe *correctly* answered `exit 2` — its own code
+for *the instrument cannot run here*. The box it was written on has the
+disassembler installed, so there was never a run on which the gap could show.
+
+**Same family as this project's measured-on-x86-64 class**, in a domain that
+class does not mention: the missing precondition is not a target, it is a
+second tool. **When you write `if <precondition>; then assert <outcome>`,
+enumerate everything the OUTCOME depends on, not the one thing that prompted
+the guard.**
+
+**AND THE REPAIR HAS A TRAP OF ITS OWN, WHICH IS WORTH MORE THAN THE RULE.**
+Two fixes were obvious: (a) treat the instrument-failure code as a SKIP, and
+(b) print the rc on failure so the next reader can tell *"cannot run here"*
+from *"a real disagreement"*. **They cancel exactly where both are needed** —
+once (a) lands, the failure branch is not taken on the only host where this
+fires, so (b) never prints. **Print the value BEFORE routing it**, then route.
+A peer caught that; neither half is wrong alone.
+
+**And the reason the rc matters at all is the discrimination, not the
+diagnostics.** The old row failed on `rc != 0`, which is identical for *the
+tool is missing* and *pxx and clang genuinely disagree on that host* — two
+conclusions that prescribe opposite investigations. **So the red was evidence
+only that `rc != 0`, which was already known**, and a claim that it
+corroborated the missing-tool hypothesis was drawing support from an outcome
+equally consistent with the alternative. A SKIP that names its reason turns a
+tier into an instrument that fetches an answer from a machine nobody has to
+visit; a silent one closes the only channel that was about to answer it.
+
 ## A RADIX is part of a value, and `db 65` was hex
 
 Measured 2026-08-31, and it is small enough to be worth stating plainly because
@@ -7093,6 +7136,44 @@ it — the missing kind was a `var` section reopening a field list after a neste
 Confirming an edit by grepping for the value you just wrote asks *"is the new
 value present"*, and the answer is yes whether you changed one line or three.
 Read the diff — it is the only instrument whose population is exactly the change.
+
+### AND THE MOST EXPENSIVE ONE IS A COMPLETENESS CLAIM THAT LICENSES A DECISION — the corpus was right and the AXIS it sweeps was never stated
+
+Measured 2026-09-22, and it is this family's deepest instance because nobody
+was careless at any step. A pass was allowed into the experimental tier on a
+stated argument: *"tools/optdiff.sh sweeps ~900 programs demanding identical
+behaviour at -O0/-O2/-O3, so from here the opt tier IS a whole-corpus
+differential for this pass."* Every clause is true. The corpus is ~900
+programs. It **does** include `test/*.c`, which was the first thing checked and
+the check that made it look settled.
+
+**It builds for the HOST ONLY.** The sweep varies the `-O` level and holds the
+TARGET fixed, and the sentence names the corpus, which is the axis that is
+fine. Promoting the pass to the default and running a full tier returned **101
+hard failures**, and a seven-line C hello world was enough to reduce them:
+SIGSEGV on aarch64 and arm32, no output and exit 0 on riscv32, correct with the
+pass off, **correct in Pascal on the same three targets**, correct in C on the
+host. A shipping path, broken for a month, behind a differential that could not
+contain it.
+
+**The tell was already written down and read approvingly four hours earlier.**
+The same source file says *"the x86-64 whole-corpus differential that -O3 buys
+says nothing about xtensa"* — the general form, stated by the author, naming
+one target where it applies to every non-host target. **A caveat attached to an
+example gets filed as being about the example.**
+
+**A second instrument agreed for the same reason**, which is what made it feel
+corroborated: the ticket clearing that pass for arm32/aarch64 recorded them
+**VERIFIED BY RUNNING**, five fixtures per target — and the fixtures are
+Pascal, which is exactly the arm that still works. Sound about what it
+measured, silent about this.
+
+**So when a completeness claim is doing load-bearing work for a decision, do
+not check that the population is big or that it contains your subject's KIND.
+Name every axis the claim quantifies over, and say which ones the instrument
+HOLDS FIXED.** Corpus size is the reassuring axis and it is rarely the one that
+matters; *target*, *output mode*, *frontend* and *optimisation level* are four
+different axes and a sweep that varies one of them is silent about the rest.
 
 ## N CAUSES AND N SYMPTOMS IS A COINCIDENCE OF ARITY — the COUNTING supplies a correspondence that neither instrument measured
 
