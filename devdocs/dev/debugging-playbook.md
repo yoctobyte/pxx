@@ -35957,3 +35957,80 @@ qemu.
 **What would retire this section:** verdict metadata that carries the host in a
 way a naive count cannot drop — at which point the pooling is impossible rather
 than avoidable, which is the better fix.
+
+## AN OBSERVABILITY FIELD'S MISSING "BEFORE" SIDE IS A DATED POINTER AT THE INVESTIGATION THAT ADDED IT, NOT DAMAGE TO YOUR POPULATION
+
+**The rule.** When you split a population on a metadata field and the older
+half has the field EMPTY, the reflex is to treat those records as unusable and
+either drop them or caveat them. Do the opposite first: **find out why the
+field was added.** An observability field is a dated record of a past
+investigation. If you are looking at that field, it is very probably *the same
+investigation*, and its author left you a conclusion.
+
+**Measured 2026-09-22**, and the cost was a whole evening. A cross-target test
+row was red on one sweeping host and green on another. Nine consecutive reds,
+then greens, with nothing landing in the repo in between — so "a test that
+stops failing without being changed was never fixed", and the search went
+looking for a race. Every one of those nine reds had **no `toolchain:` field**,
+which both seats read as a hole in the archive.
+
+It was not a hole. `tools/twatch.py`'s comment introducing that very field,
+dated the same day as the reds:
+
+> *"`c_crtl_wait.c`'s riscv32 rusage row was red on one and green on the other
+> from BYTE-IDENTICAL compiler bytes, and no field in the archive could tell a
+> reader that."*
+
+**The field exists BECAUSE of the row being investigated.** Its absence from
+the nine reds is not missing data — it *dates the upgrade*, because the field
+was added in response to that failure. One `git log -S 'toolchain:'` would have
+replaced hours of wall-time archaeology.
+
+**The generalisation, and it is the part to carry:** the SCHEMA question (*when
+was each field introduced?*) and the CAUSAL question (*why did this row stop
+failing?*) can be **the same question**. A field is added by someone who was
+confused in the way you are confused now. Treating schema history as hygiene —
+which is how it was raised, and how it was taken — is what hides that.
+
+**What would retire this section:** archive metadata that records each field's
+introduction commit inline, so the pointer is in the data instead of in a
+comment nobody greps.
+
+## WHEN AN UPGRADE MOVES TWO QUANTITIES AT ONCE, THE ONE YOU MEASURED LOOKS CAUSAL — AND PERFECT SEPARATION IS THE TELL
+
+**The rule.** A software upgrade rarely changes one observable. If it changes
+both the thing you are measuring and the thing you are explaining, those two
+are **collinear across the boundary**, and a clean split on either one is the
+same split. **A dose-response relationship has exceptions; a step at a version
+boundary does not.** So treat a divider with ZERO exceptions as evidence
+*against* a graded mechanism, not as unusually strong evidence for it.
+
+**Measured 2026-09-22.** One host's reports separated at ~215s tier wall: **9
+of 9 above it had the row red, 0 of 190 below it did.** That is a perfect
+divider over 199 records, and it was written up as a load-induced race —
+plausible, because a slower box is a more contended box.
+
+The host had been upgraded from qemu 8.2.2 to 10.2.1 in a 23-hour gap. The
+upgrade made it **faster** and made the row **pass**, in the same instant:
+walls of 217–229s and RED before, 151–153s and ok after. Wall time was a proxy
+for the emulator version with a correlation of 1. Cross-tabbing on the version
+instead: **8.2.2 -> 541 red / 4 ok; 10.2.1 -> 0 red / 361 ok**, and 0 of 600
+per-attempt draws on a third 10.2.1 box.
+
+**The diagnostic question that separates the two readings costs nothing:** a
+graded cause should produce a *gradient* — some reds below the line, some
+greens above it, a rate that climbs. Ask **"how many exceptions does my divider
+have?"** None at all means look for a boundary, not a dose. And the cheap
+follow-up: **hold the host and vary the suspected cause deliberately.** Loading
+the box on purpose produced 1–2% per-attempt failures across **all five** target
+arms — real, generic, and therefore not the single-target mechanism under
+investigation. That falsifier was registered before the data, which is the only
+reason it could fire.
+
+**Related:** "THE POPULATION OF A TIER VERDICT IS (TIER, HOST)" — same subject,
+one level up. The population unit is really **(tier, host, toolchain era)**, and
+a host is only a stable proxy for its toolchain until someone runs `apt`.
+
+**What would retire this section:** verdict metadata that records the toolchain
+fingerprint in a way a split on time or wall cannot alias — at which point the
+collinearity is visible in the data rather than needing to be suspected.

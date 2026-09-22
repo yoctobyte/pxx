@@ -434,3 +434,30 @@ No fix attempted and none proposed beyond what is already in the fork above.
 here is LESS strict, which CLAUDE.md puts squarely with the owner — and a peer
 saying otherwise would not move it either. Recorded as evidence so the count
 stays honest.
+
+## COUNT ONLY, 2026-09-22 — three more instances in one night, three sessions, and the mechanism is NOT re-described here
+
+Deliberately a tally and nothing else: this ticket already has the mechanism,
+the shapes and the fork, and frankuser's instruction on relaying this one was
+exact — *"add yours to the count and do not re-describe the mechanism; the count
+is the only thing that will move it."* Re-describing is what produced the two
+duplicate Track T tickets this row already counts.
+
+| session | what was being written | shape |
+| --- | --- | --- |
+| frankh-c0 | an expectation file for a load experiment, recording the repro line it was about to run | `cat > file` heredoc |
+| frankuser | a durable memory note quoting the same repro line | heredoc |
+| frankb-8e | (reported via frankuser, same night) | — |
+
+**Running total: at least thirteen, across seven or more sessions.**
+
+All three are the ticket's existing category — an author writing down what they
+did, refused for quoting it. None was blocked: frankh-c0 used the `Write` tool
+instead. **Recorded because the rate matters and the rate is what is new** —
+three in one evening, on one box, none of the three sessions having consulted
+this ticket first, which is the rediscovery this row exists to stop and the
+second time that has been the finding rather than the anecdote.
+
+No fix attempted, nothing proposed. `.claude/hooks/` binds every agent here and
+the direction of any change is LESS strict, which is the owner's call; a peer
+asking would not move it either, and none did.

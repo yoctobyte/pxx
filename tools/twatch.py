@@ -8087,6 +8087,25 @@ def host_toolchain():
     rusage row was red on one and green on the other from BYTE-IDENTICAL
     compiler bytes, and no field in the archive could tell a reader that.
 
+    THE HOST NAMES IN THAT SENTENCE WENT STALE THE NEXT DAY AND THE MECHANISM
+    DID NOT. seven was upgraded to qemu 10.2.1 / gcc 15.2.0 in a 23-hour gap on
+    2026-09-05 -- the row went green and its native tier wall fell from ~227s to
+    ~151s in the same step -- and **borg**, which took over the sweeping, is the
+    8.2.2 box now. Measured 2026-09-22 over every native/full report since the
+    test's only commit: qemu 8.2.2 -> 541 red / 4 ok, qemu 10.2.1 -> 0 red / 361
+    ok, and 0 of 600 per-attempt draws on plexus. So read the VERSIONS as the
+    variable and the host names as a dated example: a seat that took "seven runs
+    8.2.2" literally in 2026-09-22 would look on the wrong machine, and the
+    absence of this very field from a report is itself the pre-upgrade tell,
+    because the field was added in response to this failure.
+
+    AND THE FIELD'S ABSENCE IS WHY THE FAILURE WAS RE-DIAGNOSED THREE TIMES.
+    Wall time and emulator version are perfectly COLLINEAR across that upgrade,
+    so nine consecutive reds separated from 190 greens at ~215s wall without a
+    single exception -- which reads as a load-induced race and is a step at a
+    software boundary. Perfect separation is a confound, not a gradient.
+    bug-t-native-s-red-is-one-row-and-full-s-is-ninety-four-so-they-are-different-problems
+
     So "cross-target red on seven, green locally" had a standing environmental
     explanation and no way to check it, and it looks like a compiler bug every
     time. Same family as run_target.sh discarding its exit code: there a

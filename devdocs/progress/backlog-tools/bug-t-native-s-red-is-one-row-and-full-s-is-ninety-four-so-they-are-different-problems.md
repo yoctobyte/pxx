@@ -8,7 +8,7 @@ found: 2026-09-22
 found-by: frankh-c0
 owner: ""
 blocked-by: []
-summary: "`umbrella-one-full-tier-run-with-no-red-tier` closed 2026-09-07 saying in its own last line `If it regresses, that is a new ticket`. IT HAS: measured at pinned ref `ad275f0d96c3` over all 2898 tstate reports in the tree, the last `full` GREEN is 2026-09-09T08:21:39Z and the last `native` GREEN is 2026-09-11T16:28:30Z. THE USEFUL FINDING IS NOT THAT BOTH ARE RED -- IT IS THAT THEY ARE RED IN COMPLETELY DIFFERENT SHAPES, which no aggregate verdict can say and which decides how much work `full green expected` actually is. NATIVE IS A FINISHING JOB: 33 distinct rows ever red in 306 RED reports since its last green, and `test-core#src:test/c_crtl_wait.c` is red in 306 of 306; clearing that one row alone would have made 42% of those reports GREEN, four rows reaches 73% and eight reaches 90%. FULL IS BROAD: 129 distinct rows over 313 RED reports, median 6 per report, and the best eight rows together reach only 32% -- a long tail, not a few chronic blockers. So native is a finishing job and full is not, and quoting one tier's difficulty for the other is the error this ticket exists to prevent. Every one of the top rows ALREADY HAS AN OPEN TICKET (c_crtl_wait, crtl_reachability, threadsafe_heap_lock_deadlock_diag, crtl_atexit, compiler_srchash), so this state is UN-FINISHED, not un-triaged, and the fix is not more filing. SETTLED FOR `native` 2026-09-22: A FULL NATIVE TIER AT HEAD IS GREEN ON A NON-BORG HOST, 2580/2580 (plexus, tree e5408b0e6, compiler 06255ab1878c, frozen-tree guard green, 417.3s). So the never-green record is NOT a statement about the tree, and the fear that borg's chronic rows and seven's chronic rows were two disjoint populations needing separate campaigns is REFUTED -- both sets pass on one machine in one run. MY RECORDED PREDICTION WAS `probably RED` AND WAS WRONG. BUT THE ONE ROW THIS TICKET WAS BUILT AROUND FLAKED INSIDE THAT GREEN: test/c_crtl_wait.c failed attempt 1 of 3 and passed on attempt 2, so WITHOUT THE FLAKE GUARD THIS TIER WOULD HAVE BEEN RED ON EXACTLY BORG'S ROW, and the earlier single-job PASS was one draw from a nondeterministic test. Across three hosts that row is 9/638 on seven, flaky on plexus, 306/306 on borg -- ONE NONDETERMINISTIC TEST WHOSE FAILURE RATE IS HOST-DEPENDENT, not a clean passes/fails split, and borg's median native wall is 313.5s against seven's 184.3s. The test's OWN HEADER predicted this misreading -- it declares itself timing-independent (`NO sleep() ANYWHERE`, pipe handshakes) because `a flaky row in a cross-target matrix reads as a target bug` -- which is exactly what this ticket concluded twice, first as a code regression and then as a toolchain defect. The flake is also evidence the pipe discipline has a hole, since a test with no sleeps should not flake. THE LOAD READING IS THE BEST-SUPPORTED EXPLANATION AND IT IS frankuser's: restricted to the test's own lifetime (it was created 2026-09-04T16:54:32Z), seven separates PERFECTLY at ~215s wall -- 9 of 9 reports above it have the row red, 0 of 190 below it do -- and borg's median native wall is 313.5s, far above that, with plexus's HEAD tier at 417.3s flaking once in three attempts. That unifies the seven episode, borg's standing condition and the plexus flake without invoking gcc or qemu. IT IS A HYPOTHESIS AND NOT A RESULT: the nine reds are one contiguous 94-minute episode so wall and time stay confounded, and an absolute threshold does not transfer between machines. AN EARLIER SECTION CLAIMED THIS WAS REFUTED AND THAT CLAIM WAS BUILT ON A BUCKET WHERE A RED WAS IMPOSSIBLE -- the ten `clean` high-wall reports it rested on all PREDATE the test, so the row was absent rather than passing, and the post-birth 230s+ bucket is empty; heading withdrawn in place rather than deleted. KEEP THE TWO REGIMES APART, since merging them has misread this row three times: seven's nine reds are a BIRTH SHAKEDOWN, borg's 306/306 with flaky:0 always is a STANDING condition where all three attempts fail every time, and any explanation yielding `sometimes` does not explain borg. OUTSTANDING: `full` is untested on a non-borg host and stays open; the native green is ONE sample and wants repeats; and nothing here says borg reports falsely -- if the cause is a real race then borg is the honest instrument and the fast hosts hide it. EARLIER, AND STILL TRUE: the population is (TIER, HOST) and the first counts pooled it -- THE POPULATION IS (TIER, HOST) AND I POOLED IT: the last native GREEN is seven's LAST REPORT EVER, not a run that happened to be green -- the tiers did not stop going green, the host that was going green stopped REPORTING, and borg, which took over, has published no native GREEN since July. The 4h11m window contains three HOST-MIGRATION commits, so it is a handover rather than a bisect range. The always-red row splits by machine, not by time: c_crtl_wait is red in 9 of 638 seven reports (one 94-minute burst) and 306 of 467 borg reports, and IT PASSES AT HEAD ON THIS BOX -- measured, expectation recorded first, `testmgr --tier native --job test-core#src:test/c_crtl_wait.c` = GREEN on plexus. So it is not a code regression. seven and plexus run gcc 15.2.0 / qemu 10.2.1; borg runs gcc 13.3.0 / qemu 8.2.2, and the failure is a riscv32 waitid/si_code conversion under emulation -- qemu is the plausible member of three differing components and IS NOT PROVEN. The greedy percentages below stand as arithmetic and now describe how BORG's reds are distributed rather than how much compiler work exists. THE ONE MEASUREMENT THAT SETTLES IT: run a native tier on a non-borg host at HEAD; the two hosts overlap on exactly one day, so no amount of archive reading can attribute this. ALSO CORRECTED 2026-09-22 02:5x, and the first-published numbers (14/94 rows, 51%/37%) were LOW because they counted `## STILL-RED` and ignored `## NEW-RED` -- the union is what a report means by red, and a NEW-RED row is the most interesting kind to have dropped. Three discharges also landed there: the tier does NOT abort early (testmgr.py:591 names selfhost-fixedpoint as the only aborting job, and 0 of 306 and 0 of 313 reports are such an abort), so rows-per-report is a fact about the tier and not about the reporting; the native bisect window is 4h11m rather than eleven days; and the apparent green-count disagreement with frankuser was NEITHER parser -- 'newest 1500 commits' is a fixed-SIZE sliding window whose tail dropped exactly one opt and one slow green, reproduced exactly at the earlier tip. WHAT WOULD RETIRE THIS TICKET: a `full` report with verdict GREEN at any sha after 2026-09-09. WHAT WOULD RETIRE ITS NUMBERS: any re-run at a different pinned ref -- carry both rows rather than replacing, since a count whose ref was not recorded is unquotable rather than refuted."
+summary: '`native` and `full` are both never-green and the resemblance ends there -- which no aggregate verdict can say and which decides how much work `full green expected` actually is. MEASURED at pinned ref `ad275f0d96c3` over all 2898 tstate reports: NATIVE IS A FINISHING JOB (33 distinct rows ever red across 306 RED reports; clearing one row makes 42% of them green, four rows 73%, eight rows 90%) and FULL IS BROAD (129 distinct rows over 313 RED reports, median 6 per report, best eight reach only 32% -- a long tail, not a few chronic blockers). Quoting one tier''s difficulty for the other is the error this ticket exists to prevent. Every top row already has an open ticket, so this state is UN-FINISHED rather than un-triaged and the fix is not more filing. SETTLED 2026-09-22 FOR `native`, AND THE MECHANISM IS AN EMULATOR VERSION RATHER THAN ANYTHING IN OUR CODE: a cross-target row can be red on one host and green on another FROM BYTE-IDENTICAL COMPILER BYTES, because a tstate verdict is a statement about a qemu as much as about a tree. Censused over every native/full report since the subject test''s only commit (population, tree and skips printed in the body): qemu 8.2.2 -> 541 RED / 4 ok (99.3%), qemu 10.2.1 -> 0 RED / 361 ok, plus 0 DIFF in 600 per-attempt draws on a 10.2.1 box. borg runs 8.2.2 and IS Track T''s breadth instrument, so a whole class of its reds has been arriving as code reds. A FULL NATIVE TIER AT HEAD IS GREEN ON A NON-BORG HOST (2580/2580, plexus, tree e5408b0e6, compiler 06255ab1878c, frozen-tree guard green, 417.3s), so the never-green record is not a statement about the tree, and the fear that borg''s chronic rows and seven''s were two disjoint populations needing separate campaigns is REFUTED. THE CONDITION THAT WOULD SPRING THIS AGAIN, stated as a mechanism because a named row decays: any verdict compared across a host whose toolchain moved, since WALL TIME AND EMULATOR VERSION ARE COLLINEAR ACROSS AN UPGRADE -- one host''s upgrade took its tier wall from ~227s to ~151s AND its red to green in the same instant, which separated 9 reds from 190 greens at ~215s wall with no exceptions and reads as a load-induced race. PERFECT SEPARATION IS THE SIGNATURE OF A CONFOUND, NOT OF A GRADIENT (frankuser, predicted before the data). An earlier load reading in this ticket is REFUTED on that ground and its heading is withdrawn in place; an earlier refutation OF that reading was itself withdrawn for resting on a bucket where a red was impossible. THE `toolchain:` FIELD EXISTS BECAUSE OF THIS ROW -- so its ABSENCE from the nine oldest reds is not missing data, it dates the upgrade, and the general form is worth more than this ticket: when a comparison''s `before` side is empty because a field did not exist yet, find out WHY THE FIELD WAS ADDED, because an observability field is a dated record of a past investigation and it is probably the same one. SEPARATE AND REAL FINDING, not merged with the above: deliberate load DOES induce failures -- 1-2% per attempt across ALL FIVE target arms at load ~24 against 0 of 600 at ambient ~5 -- which fires the falsifier registered before the data (if it moves every arm it is not the one target''s conversion) and is the better explanation for the single flake inside the plexus green. Its consequence is GOAL-1 arithmetic: with three attempts a per-attempt rate p gives 1-(1-p^3)^2580 for a 2580-job tier, ~2% at p=0.02 but ~92% at p=0.10, so RUNNING A RELEASE-GRADE TIER ON AN IDLE BOX IS ARITHMETIC RATHER THAN FASTIDIOUSNESS and belongs in the release criteria; treat the table as an upper bound since it assumes the rate is generic. ONE OWNER ACTION, stated in goal terms and needing no design fork: our breadth instrument reports failures that are not in our code, and upgrading one host''s emulator removes a whole class -- that needs sudo on borg, which is authority only he holds. Nothing else here waits on him. OUTSTANDING: `full` is still untested on a non-borg host and stays open; the native green is ONE sample and wants repeats; the four borg `full` reports of 2026-09-11 20:02-20:59 that pass under 8.2.2 are the 0.7% and are unexplained. WHAT WOULD RETIRE THIS TICKET: a `full` report with verdict GREEN at any sha after 2026-09-09. WHAT WOULD RETIRE ITS NUMBERS: any re-run at a different pinned ref -- carry both rows rather than replacing, since a count whose ref was not recorded is unquotable rather than refuted.'
 ---
 
 # `native` and `full` are both never-green, and that is where the resemblance ends
@@ -542,3 +542,253 @@ misread three times now. seven's nine reds are a **birth shakedown**; borg's
 which all three attempts fail every time.** Any explanation that yields
 "sometimes" does not explain borg. The Track B / crtl routing for the `waitid`
 `si_code` conversion on riscv32 is unchanged by all of it.
+
+## SETTLED 2026-09-22: THE ROW IS A qemu VERSION DIFFERENCE, NOT A RACE — AND THE TREE HAD SAID SO SINCE 2026-09-04
+
+**The load reading in the section above is REFUTED, and this time by the right
+instrument rather than by a bucket where a red was impossible.** frankuser
+predicted the refutation before seeing any data, from the shape of my own
+numbers: *"9 of 9 above and 0 of 190 below is TOO CLEAN for the mechanism I
+proposed. Perfect separation is the signature of a confound, not of a
+gradient."* It was a confound. The confounder is the **emulator version**.
+
+### What borg actually fails on — one line, and not the line the header predicts
+
+```
+expect_same: MISMATCH [riscv32/c_wait26]
+-wait4-rusage     rusage=written
++wait4-rusage     rusage=UNTOUCHED
+```
+
+Deterministic, riscv32 only, and it is the **rusage** row — *not* the
+stopped/continued `si_code` reconstruction that the test's own header nominates
+as the fragile part, and not anything a pipe handshake could race on. Every
+earlier reading of this ticket, mine included, guessed the header's row.
+
+### The census, with its population printed
+
+`devdocs/progress/tstate/reports/*.md` at tree `cb22d13034fb`, restricted to
+`tier in {native, full}` (the only tiers that run `test-core`) and to
+`date >= 2026-09-04T16:54:32Z` — the test's one and only commit, `68d26ecb5`.
+2903 files; 161 skipped as another tier, 1822 as pre-birth, 14 with no
+`toolchain:` field. A report lists only its reds, so for a report that ran the
+row, absence is a pass; that is the one soft step and it is stated, not hidden.
+
+| qemu | gcc | RED | ok | red % |
+| --- | --- | --- | --- | --- |
+| 10.2.1 | 15.2.0 | **0** | 361 | 0.0% |
+| 8.2.2 | 13.3.0 | **541** | 4 | 99.3% |
+
+| host | qemu | RED | ok | red % | first red |
+| --- | --- | --- | --- | --- | --- |
+| borg | 8.2.2 | 541 | 4 | 99.3% | 2026-09-11T19:51:21Z |
+| seven | 10.2.1 | 0 | 361 | 0.0% | — |
+
+Plus, from this box: **plexus, qemu 10.2.1, 0 DIFF in 600 per-attempt draws.**
+
+### The 215s "threshold" was the wall-time SHADOW of an upgrade
+
+seven's native reports, post-birth, in date order — the table that dissolves it:
+
+| date | row | wall | `toolchain:` |
+| --- | --- | --- | --- |
+| 2026-09-04T17:00:09Z | RED | 217.4 | ABSENT |
+| … 7 more consecutive REDs … | RED | 218.3–227.0 | ABSENT |
+| 2026-09-04T18:34:32Z | RED | 227.0 | ABSENT |
+| *— 23-hour gap —* | | | |
+| 2026-09-05T17:58:11Z | **ok** | **153.2** | ABSENT |
+| 2026-09-05T18:04:47Z | ok | 151.3 | `gcc=15.2.0 qemu=10.2.1` |
+| … 188 more, to 2026-09-11T16:28:30Z … | ok | 151–202 | `qemu=10.2.1` |
+
+**The row went green and the tier wall fell 33% at the same instant**, in a gap
+with nothing landing in the repo. qemu 8.2.2 was slower AND red; 10.2.1 is
+faster AND green. So on that host **wall time and emulator version are
+perfectly collinear**, and every number in the superseded section above was
+measuring the upgrade. A step at a software boundary, not a gradient — which is
+exactly why it separated without a single exception.
+
+**My earlier note contained the tell and drew the opposite conclusion from it:**
+*"it stopped failing at 18:34:32Z with nothing landing — a test that stops
+failing without being changed was never fixed."* The instinct was right. What I
+did not consider is that **the change can be in the MACHINE rather than in the
+tree**, and the archive could not tell me because the field that would have
+said so did not exist yet.
+
+### AND THE ANSWER WAS ALREADY WRITTEN DOWN, BY THE FIELD'S OWN AUTHOR
+
+`tools/twatch.py`, in the comment that introduces `toolchain:`, dated
+2026-09-04 — before the nine reds had finished:
+
+> *"`c_crtl_wait.c`'s riscv32 rusage row was red on one and green on the other
+> from BYTE-IDENTICAL compiler bytes, and no field in the archive could tell a
+> reader that."*
+
+**The `toolchain:` field exists BECAUSE of this row.** Its absence from the
+nine reds is not missing data — it is the timestamp of the upgrade, because the
+field was added in response to this failure. frankuser had asked, the night
+before, for the schema to record when each field was introduced; the answer
+here is that the field was introduced *by this ticket's own row*, and one
+lookup would have replaced the whole wall-time investigation.
+
+**One correction to that comment, landed with this:** it names **seven** as the
+8.2.2 box and plexus as 10.2.1. True when written, stale within a day — seven
+was upgraded on 2026-09-05 and **borg** is the 8.2.2 box now. A worked example
+decaying in the direction that sends the next reader to the wrong host.
+
+### The load arms, kept and labelled for what they can prove
+
+Per-attempt instrument (the recipe's own comparison, one gcc oracle,
+`expect_same` per arm, one attempt per invocation — the tier reports a 3-attempt
+aggregate and so cannot give a per-attempt rate). Two positive controls, both
+firing: a mutated oracle makes all five arms DIFF; a deliberately wrong riscv32
+binary makes riscv32 alone DIFF.
+
+| condition | load1 | native | i386 | arm32 | aarch64 | riscv32 |
+| --- | --- | --- | --- | --- | --- | --- |
+| ambient, n=120 | 4.7–5.7 | 0% | 0% | 0% | 0% | 0% |
+| 24 burners nice 19, n=100 | 20.2–26.8 | 2% | 1% | 1% | 0% | 2% |
+
+**Load does induce real failures — and it moves all five arms about equally,
+which fires the falsifier registered before the data: if it moves all five it
+is not the riscv32 `waitid` conversion.** So generic load-induced flakiness is a
+SEPARATE and real finding, and it is the better explanation for the single flake
+inside the 2580/2580 plexus green. **The two are not merged.**
+
+Scope limit, frankuser's and 8e's jointly and it is a fair one: `nice 19` is
+specifically the load that does not take CPU from a nice-0 subject, so a NULL
+from this arm would have proved nothing. It was not null, which is the only
+reason the row is quotable. Anyone needing the real dose-response curve should
+throttle the subject (`CPUQuota`) rather than load the box.
+
+### What this changes about the ticket
+
+- `native`'s chronic row is **not compiler work and not a race**. It is one
+  target's `rusage` result under an emulator four minor versions old.
+- **Routing stays Track B / crtl** — the `wait4`/`waitid` rusage path on
+  riscv32 — but the priority drops: no correct Pascal or C program is
+  mis-compiled, and the green tier at HEAD on 10.2.1 is not bought by fast
+  hardware, which was the worry.
+- The greedy percentages earlier in this ticket describe **how borg's reds are
+  distributed under qemu 8.2.2**, which is a statement about one host's
+  emulator, not about how much work `full green expected` is.
+- **`full` is still untested off borg** and that stays open.
+
+### What would retire THIS section
+
+A report with `qemu=8.2.2` where the row is **ok**, at any sha, other than the
+four borg `full` reports of 2026-09-11 20:02–20:59 already counted above — those
+four are the 0.7% and are unexplained. Or a `qemu=10.2.1` report where it is
+RED. Either would mean the emulator version is not the variable.
+
+## THE GOAL-1 CONSEQUENCE: TIER GREENNESS IS A STEEP FUNCTION OF MACHINE LOAD
+
+frankuser's arithmetic off the load arms, and it is the deliverable from the
+arm that nearly did not run. With three attempts, a per-attempt failure rate
+`p` gives a per-job red of `p^3`, and over 2580 jobs the chance of at least one
+red is `1 - (1 - p^3)^2580`:
+
+| per-attempt `p` | chance a 2580-job tier has >= 1 red |
+| --- | --- |
+| 0.02 (measured at load ~24) | ~2% |
+| 0.05 | ~28% |
+| 0.10 | ~92% |
+
+**STATED AS AN UPPER BOUND, NOT AN ESTIMATE, AND THE CAVEAT IS FRANKUSER'S
+OWN:** this assumes the measured rate is generic across jobs. Most jobs are
+surely deterministic and immune, so the real figure is lower — the table's
+value is the SHAPE, not the numbers. What the shape says is that the retry's
+cube is doing enormous work, and that tier greenness falls off a cliff as load
+rises.
+
+**SO "RUN THE RELEASE-GRADE TIER ON AN IDLE BOX" IS ARITHMETIC, NOT
+FASTIDIOUSNESS, AND IT BELONGS IN THE RELEASE CRITERIA AS A STATED
+REQUIREMENT.** Goal 1 is *"making a full green pin as release"*, and the pin
+rule since 2026-09-07 is *"full green expected"*. If a release-grade tier is run
+on a contended box, a red is the expected outcome rather than a finding, and
+whoever sees it first goes looking for a compiler bug — which is exactly the
+several hours this ticket has now consumed twice. **Record the achieved load
+beside a tier verdict, the way a population line goes beside a count.**
+
+## RECOMMENDATION FOR THE OWNER — one number, one action, no design fork
+
+**Stated in goal terms because that is the form that is answerable:** *our
+breadth instrument is reporting failures that are not in our code, and
+upgrading one host's emulator removes a whole class of them.*
+
+- borg runs **qemu 8.2.2**; seven and plexus run **10.2.1**.
+- On 8.2.2 this class is **541 RED / 4 ok**. On 10.2.1 it is **0 RED / 361 ok**.
+- borg is Track T's breadth instrument — the machine whose reds every lane is
+  told to trust — so every one of those 541 reds has been arriving as a code
+  red, and this ticket is the second investigation to have chased one.
+
+**Why it is an escalation and not ours to do:** upgrading a package on borg
+needs sudo on that host, which is authority only the owner holds. It is not a
+fork of intent and it is not a cost trade-off; it is one action. Nothing else
+in this ticket is waiting on him.
+
+**What it does NOT claim:** that borg reports falsely. borg is honest about
+qemu 8.2.2. The question is whether we want our breadth instrument to be a
+statement about a 2024 emulator, and only he can action the answer.
+
+## THE REUSABLE FINDING, and it is frankuser's phrasing
+
+> **When a comparison's "before" side is empty because a field did not exist
+> yet, go and find out WHY the field was added. An observability field is a
+> dated record of a past investigation — and if you are looking at that field,
+> it is probably the same investigation.**
+
+Both of us read the nine reds' missing `toolchain:` as **damage to the
+population**. It was the opposite: the field's absence dated the upgrade, and
+the commit that added the field named this row as its reason. The schema
+question (*when was each field introduced?*) and the causal question (*why did
+this row stop failing?*) were **the same question**, and the one I treated as
+hygiene was the one that held the answer.
+
+## THE CONTROL THAT STOPS THIS BEING "borg IS RED AT EVERYTHING" — AND THE ONE ROW THAT RUNS BACKWARDS
+
+**The problem with everything above, stated before anyone else has to:** in this
+window **host and toolchain are 1:1** — borg is the only 8.2.2 box and seven the
+only 10.2.1 one — so a split on toolchain and a split on *host* are the SAME
+split, and nothing in the cross-tab can tell them apart. That is this repo's own
+"correct instrument, wrong population" arriving in my own table, and a 99.3%
+versus 0.0% row is exactly the kind of number nobody interrogates.
+
+**Two things break the tie, and only the second is a measurement of mine.**
+
+**1. The within-host flip.** seven itself was on the OLD toolchain before
+2026-09-05 and red, and on the new one after and green — same machine, same
+sweeper, toolchain changed underneath. That is a within-host control and it is
+the strongest single fact here. **Its one inferential link, named rather than
+buried:** the nine pre-upgrade reds carry no `toolchain:` field, so that they
+ran 8.2.2 comes from `twatch.py`'s own dated statement of 2026-09-04 rather
+than from the reports. That is a recorded measurement by the field's author,
+not an assumption — but it is testimony, not data, and it is the one place this
+argument leans on something outside the archive.
+
+**2. Other chronic rows do NOT separate this way** — same instrument, same
+population, same two toolchains, `tools/tstate_row_by_toolchain.py`:
+
+| row | qemu 10.2.1 | qemu 8.2.2 |
+| --- | --- | --- |
+| `c_crtl_wait` | **0.0%** (0/361) | **99.3%** (541/545) |
+| `crtl_reachability` | 27.1% | 42.8% |
+| `threadsafe_heap_lock_deadlock_diag` | 1.1% | 42.2% |
+| `crtl_atexit` | 0.0% | 12.8% |
+| `compiler_srchash` | **34.9%** | **7.2%** |
+
+**`compiler_srchash` is MORE red on the NEWER toolchain, and that reversal is
+the control doing its job.** If the cross-tab were simply reporting "borg reds a
+lot", every row would lean the same way and the instrument would be unfalsifiable
+— a guard that cannot fail. One row leaning the other way, and three leaning
+weakly, means the table has discriminating power and that `c_crtl_wait`'s
+99.3%/0.0% is genuinely exceptional rather than an artefact of which box was
+sweeping.
+
+**What this control does NOT establish:** that the emulator is the *mechanism*
+rather than the gcc or the kernel, all three of which moved together. The
+failing observable is a `rusage` struct left untouched by a `waitid`-based path
+under user-mode emulation, which makes qemu the plausible member — and that is
+an argument, not a measurement. **Naming it: PLAUSIBLE, NOT PROVEN.** What would
+prove it is one run of this row under qemu 8.2.2 and 10.2.1 *on the same host
+with the same gcc*, which needs a second emulator installed and is a cheap job
+for whoever has that box.
