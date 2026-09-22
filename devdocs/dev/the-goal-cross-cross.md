@@ -77,7 +77,7 @@ the mechanism we keep. Anyone sizing an ESP32 image may not reach for that
 saving. It is stated as a preference about what we ARE, which is exactly the kind
 of fork that is his and not ours.
 
-**What it is NOT recorded as deciding, and `frankc-c0` supplied the reason this
+**What it is NOT recorded as deciding, and `frankh-c0` supplied the reason this
 sentence can be written at all** (`f35b44b8b`, its own words): *he rules out
 doing it **totally** and nobody proposed that, so treating a **language-scoped**
 sentence as settling a **thunk-scoped** fork would be a scope widened by a second
