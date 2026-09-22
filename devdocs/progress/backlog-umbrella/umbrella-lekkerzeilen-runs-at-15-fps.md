@@ -193,9 +193,19 @@ control. **Do not quote 58.6% from anywhere; it never existed.**
 
 ## THE PIN'S `pylib.pas` IS 135 LINES BEHIND HEAD — SO A RE-PROFILE MEASURES A NilPy RUNTIME THAT NO LONGER EXISTS
 
+**RETIRED SAME DAY BY PIN v418 (`000425392`, binary `fda77c48b8ee`, source tip
+`db6d1bddb`) — its own condition was "a pin carrying `be65bc3e3` or later" and
+that is met. Re-checked here: `cmp` of the pinned `pylib.pas` against
+`compiler/builtin/pylib.pas` is now IDENTICAL.** The section stays because the
+MECHANISM recurs and the retirement is the evidence that it was real, not
+because the gap is open.
+
 **Measured here 2026-09-22, at the artefacts rather than from the handbook:**
 `sha256sum` of `stable_linux_amd64/default/builtin/pylib.pas` against
-`compiler/builtin/pylib.pas` differ, and `diff` counts **135 changed lines**.
+`compiler/builtin/pylib.pas` differed, and `diff` counted **135 changed lines**.
+(`frankuser` independently counted **137** as insertions-plus-deletions; two
+instruments, two populations — mine counts changed lines on both sides, and
+neither refutes the other.)
 `$(PXX_STABLE)` consumers — every Track B and E demo, **lekkerzeilen included** —
 get the PINNED one. This matters to this umbrella specifically because
 **lekkerzeilen runs under nilpy**, so `pylib.pas` is its runtime, not a detail.
@@ -217,7 +227,8 @@ allocation behaviour, which is what a frame decomposition would notice. The othe
 two are **wrong VALUES** that a demo built against the pin still produces today.
 
 **CONSEQUENCE FOR `task-e-decompose-a-lekkerzeilen-roofs-frame-...`, and it is
-not a reason to wait:** a decomposition taken on pin v417 is a true measurement
+not a reason to wait — AND SUPERSEDED BY v418, WHICH CLOSED THIS GAP:** a
+decomposition taken on pin v417 was a true measurement
 of the tree the demos actually run, and it is **not** a measurement of HEAD's
 NilPy runtime. Say which, in the report. **NEVER WAIT FOR A PIN** — that is the
 owner's standing rule and this paragraph does not soften it. What it asks is one
@@ -600,7 +611,27 @@ and takes perf after it lands.
 umbrella is **a fresh profile of a ROOFS frame, taken after the current known
 perf issues have landed**, naming the main performance issues it finds.
 
-**THE TREE THAT PROFILE MUST SIT ON IS NOW DEFINED: PIN v417**, `2b1a54397`,
+**THE TREE THAT PROFILE MUST SIT ON IS PIN v418** (`000425392`, binary sha256
+`fda77c48b8ee`, source tip `db6d1bddb`), **superseding v417 after 100 minutes.**
+
+**AND THE REASON v418 EXISTS IS A CRITERION THIS SECTION DID NOT HAVE: A PIN IS A
+BINARY *AND* A FROZEN COPY OF `builtin/**`, AND THE TWO HAVE SEPARATE STALENESS
+CLOCKS.** v417 closed the gap between origin and the pinned BINARY. The same gap
+was already open in the pinned BUILTIN SOURCES — `pylib.pas` 135 lines behind —
+and **a seat checking "is my fix in the pin" by the binary's provenance answers
+YES while the builtin half is behind.** One pin closes both, but only at the
+moment it is cut. `frankuser`'s framing, and it is the sharp one: this is
+*"origin is not the pin" recurring one layer down.*
+
+**SO THE CRITERION IS NOW: a re-profile must name the pin's BINARY and the pin's
+`builtin/pylib.pas`, and say they agreed.** What made it urgent rather than
+tidy: `be65bc3e3` is a LEAK fix, and **leaks are the class a performance profile
+mis-measures** — leaked temporaries land in the allocator and heap-lock rows,
+two of the largest rows in the profile this umbrella is about to rank from. A
+roofs decomposition against v417 would have attributed an already-fixed leak to
+the runtime and been quoted as *"after the fixes"*.
+
+**v417's own record, kept because the pattern is the point:** `2b1a54397`,
 binary sha256 `734d10ec7b53`, source tip `819aab1db`. **Verified here by reading
 the pinned binary off disk after a pull, not off the commit message.** Cut
 specifically to unblock this re-profile: 7a caught that `6b8b45af4` and
