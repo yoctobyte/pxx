@@ -37514,3 +37514,47 @@ restatement is where the design's constraints get forgotten.
 actually vary, and **keep the incident in the ticket** rather than silently
 removing it — 8e did, on the grounds that the frightening word will otherwise be
 re-derived by the next reader.
+
+## AN INSTRUMENT BUILT TO SETTLE ONE QUESTION ROUTINELY ANSWERS A SECOND — AND THE SECOND IS INVISIBLE IF YOU ONLY READ FOR YOUR OWN
+
+**Measured 2026-09-22, lekkerzeilen-7a, retracting a verdict it had published an
+hour earlier (`lekkerzeilen@507340f` retracting `83bb324`).**
+
+7a asked a yes/no question — *can unrolling `gfx.py:349` flip
+`PyModuleHasComputedGetattr`* — of a probe set with four arms. The answer was
+**no**: arm Q unrolls `gfx.py`, `platform/_sdl2.py:212` still holds the flag, and
+the flag stays true. It published *"the lever is dead"*.
+
+**Arm R de-computed `_sdl2.py:212` as well, and the flag went FALSE** — 112,180
+bytes of code. **7a read arm R as the EXPLANATION for arm Q**, because an
+explanation is what it had asked the instrument for. It is also **an existence
+proof that the flag has an off switch**, which is the opposite verdict.
+
+**THIS IS NOT THE FAILURE MODE THE REST OF THIS FILE IS ABOUT.** Every other
+entry here concerns evidence that is wrong, stale, drawn from the wrong
+population, or incomplete. **Here the evidence was complete and correct and the
+reader under-read it.** No freshness check, population check, positive control or
+isolation question reaches this: the probe was sound, the arms were right, and
+the result contained both answers.
+
+**The mechanism is that a question is a FILTER, and it is applied at reading time
+rather than at design time.** You built the instrument for question A, so every
+row gets interpreted as evidence-for-A or evidence-against-A. **A row that
+answers question B is not discarded — it is silently recast as context for A**,
+which is why it leaves no trace of having been missed. In 7a's case the recast
+was natural and almost right: R really does explain why Q fails.
+
+**Discharge, at reading time and not at design time:** before filing a verdict
+off a multi-arm probe, go through the arms and ask of each **"what question does
+this row answer, if not mine?"** An arm that varies something your question holds
+fixed is answering a different one by construction. **A yes/no question is the
+highest-risk shape**, because a binary answer feels complete and terminates the
+read.
+
+**And the corollary for the arms themselves:** in the same batch, one arm was
+**void, not null** — it planted a lex error in `_sdl2.py` while leaving
+`gfx.py:349` standing, so the flag was held regardless and **no result from it
+could have discriminated.** A void arm reads exactly like a negative one.
+Separately, a grep-based probe in that set reported the site count as **6/5/4**
+where the true counts are **2/1/0** — a name-matching search counting prose and
+comments, which is this file's oldest rule, in the same batch as its newest.

@@ -201,20 +201,43 @@ measurement.
    name, so every method in the program takes the function-object ABI and pays
    boxing. lekkerzeilen has exactly one — `lekkerzeilen/gfx.py:349`,
    `handle = getattr(self, attr)`.
-   **THE SOURCE-SIDE UNROLL IS DEAD AS OF 2026-09-22 AND THIS ITEM DROPS BELOW
-   ITEM 2.** The plan was to remove that one call and flip the flag. **`5b` ran
-   `PXXDBG=a.srcmap:*` against the pin and all four ladder rungs came back
-   PLANTED — including the two it had predicted absent — so `_sdl2.py:212`
-   holds `PyModuleHasComputedGetattr` true whatever happens to `gfx.py`.**
-   Killed for one compile and no display time; `lekkerzeilen@83bb324` — **that
-   sha is in the lekkerzeilen repo, not this one.** 7a's pre-registered
-   prediction is **unspent, not resolved** (antecedent false) and **must not be
-   scored either way.**
-   **WHAT SURVIVES IS THE COMPILER-SIDE NARROWING, AND IT HAS NO KNOWN
-   MECHANISM** — the ticket's own honest answer is that the coarse arm probably
-   cannot be narrowed by name, because a computed getattr is exactly the case
-   where no token spells the name. **What died is the cheap way to MEASURE the
-   lever, not an estimate of its size**, and that is what moves it below item 2.
+   **THE LEVER IS ALIVE. A "DEAD" VERDICT STOOD HERE FOR ABOUT AN HOUR AND WAS
+   RETRACTED BY THE SEAT THAT MADE IT** (`lekkerzeilen@507340f`; the earlier
+   `83bb324` is superseded — **both shas are in the lekkerzeilen repo, not this
+   one**).
+   **What is established, proved off the binary rather than inferred:**
+   unrolling `gfx.py:349` **alone** cannot flip the flag, because
+   `platform/_sdl2.py:212` also holds it — arm Q unrolls `gfx.py`, leaving
+   `_sdl2:212` as the only computed site in the tree, and the flag is still
+   true. **What was mis-read as confirming that: arm R de-computes `_sdl2:212`
+   TOO, and the flag goes FALSE** — 114,864 bytes of binary, **112,180 bytes of
+   code**. That is an existence proof that the flag has an off switch.
+   **AND THE OFF SWITCH IS SHIPPABLE, which is what makes this a live row:**
+   `fn = getattr(lib, name)` → `fn = lib[name]`. `lib` is a `ctypes.CDLL` and
+   `CDLL.__getitem__` is the documented lower-level accessor; **verified against
+   the real library rather than reasoned** — both return `_FuncPtr`s wrapping
+   the **same function address**, and `restype`/`argtypes` are assignable on
+   both, which is everything `_declare` does with it. **It holds no `getattr`
+   token at all, so it is invisible to the scan by construction.** With the
+   `gfx.py:349` unroll, the tree reaches **zero** computed sites.
+   **KEEP THIS OUT OF ANY RANKING: 112,180 bytes is a STATIC figure and nobody
+   has measured what flipping the flag does to a frame.** This ticket has
+   already made one 4x error converting a static win into a dynamic one. **7a's
+   pre-registered prediction moves from UNSPENT to SPENDABLE and stands
+   UNADJUSTED — under 37%, plausibly under 10% — deliberately not revised upward
+   now that a big number is known to sit behind it.** That is what the
+   pre-registration is for.
+   **So the row reads: lever ALIVE, path identified and verified at the source
+   level, runtime value UNMEASURED, A/B unbuilt and display-blocked. Not a
+   ranked lever until it has a frame-rate pair.**
+   **Two probe corrections, for anyone carrying numbers from that batch:** a
+   fourth arm is **void, not null** — it planted a lex error in `_sdl2.py` while
+   leaving `gfx.py:349` standing, so the flag was held regardless and no result
+   could have discriminated. And a probe reported computed-getattr sites as
+   **6/5/4** from a grep; **the true counts are 2/1/0. Do not quote 6/5/4.**
+   **And there is NO program-wide builtin tax** — verified against the compiler
+   source: `PyPyRangeAt` (`pyparser.inc:41776`) filters through `PyPathIsPython`,
+   `.py`/`.npy` only, so planted `promocore.pas` and friends are skipped.
    **Boxing sits upstream of refcount,
    allocator and variant-dispatch — 37% between them — rather than beside
    them.** Controlled measurement exists for **SIZE only** (`5b1045dad`:
