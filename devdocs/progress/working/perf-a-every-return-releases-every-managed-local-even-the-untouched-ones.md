@@ -1934,13 +1934,42 @@ predicate for the harder one is the move this record exists to prevent.
 know work it out from the shape of the code?* Today it is the second, five
 times over. The first is what would make per-path liveness decidable at all.
 
-**This is not a Track U `decide`.** The test is whether the fork can be stated
-as a sentence about what we WANT with no implementation noun in it, and it
-cannot — every phrasing is about our own IR's internals, which makes it an
-engineering decision wearing a fork's clothes. It is taken here: **the next
-work on (1) is an ownership invariant, not a predicate**, and anybody reaching
-for a fifth `IRNodeOwns…` should read the retraction block at
-`ir_codegen.inc:5577` first.
+**This is not a Track U `decide`, and MY FIRST REASON FOR SAYING SO WAS
+WRONG.** I wrote that no phrasing of the fork avoids naming our own IR's
+internals. frankz-e5 applied the test rather than agreeing and produced one
+that nearly does: *"do we want the compiler to record who owns a managed
+value, or to keep re-deriving it at each site?"* That is close enough to
+statable that the no-phrasing-exists test does not carry the decision.
+
+**The clause that does carry it is the next one: cost is not the fork.** Two
+options priced against each other is engineering; it becomes the owner's only
+where the options differ in **what we are trying to be**. Both of these aim at
+the same thing — correct Pascal compiling and running, faster — and neither
+changes what pxx is for. So it is ours either way, and I reached for the first
+test in the list when the applicable one was below it.
+
+It is taken here: **the next work on (1) is an ownership invariant, not a
+predicate**, and anybody reaching for a fifth `IRNodeOwns…` should read the
+retraction block at `ir_codegen.inc:5577` first.
+
+### AND READ `devdocs/dev/root-cause-over-microfix.md` (5.7KB) BEFORE PRICING IT
+
+Its threshold is the one this count blows past — two mechanisms for one
+concept is a smell, three is a design flaw, and this is five — but the half
+that matters here is the other one. **"An overhaul is paid once, deletes cases
+rather than adding them, and usually turns several open tickets green at the
+same time. Measure the choice by tickets-closed-per-change, not by lines
+touched."** It even names the shape by hand: *"the
+four-mechanisms-for-one-idea shape that eventually has to be rewritten anyway,
+but by then with more dependents."*
+
+**Cited because "needs an ownership invariant in the IR" reads as NEW
+ARCHITECTURE and the doc's claim is that it is usually DELETION.** Five
+inference sites each guessing an invariant nobody states is what that document
+was written about. That is not an argument that the work is small — I have
+said it is not, and one attempt at it already segfaulted a ten-line program —
+only that the next seat should price it against the five sites it would remove
+and the retraction it would prevent, rather than against a blank page.
 
 ### THE INSTRUMENT HALF IS ALREADY SOLVED, AND IT IS THE MIRROR OF THIS TICKET'S OWN RULE
 
