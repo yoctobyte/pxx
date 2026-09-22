@@ -23499,12 +23499,21 @@ test-core: $(COMPILER)
 	# graph has no edge to it -- the pass dropped main and the program SIGSEGVed
 	# before printing anything (43 of 792 bodies live, MEASURED).
 	# bug-a-dce-on-a-c-program-drops-main-because-nothing-roots-the-c-entry-path
-	# -O3 is the level that turns DCE on, so the two rows are the test: same
-	# output, smaller image. EQUALITY ALONE IS NOT THE TEST -- a pass that
+	# Same output, smaller image. EQUALITY ALONE IS NOT THE TEST -- a pass that
 	# dropped nothing also produces equal output, which is what this looked like
 	# before the frontend was wired in at all.
-	./$(COMPILER) -O2 test/c_dce_entry_root.c $(TESTTMP)/c_dceroot_o2
-	./$(COMPILER) -O3 test/c_dce_entry_root.c $(TESTTMP)/c_dceroot_o3
+	# NAME THE PASS, NOT THE LEVEL. These two rows used to be `-O2` against
+	# `-O3` on the premise that "-O3 is the level that turns DCE on". That is a
+	# fact about today's default, not about the subject, and the moment the
+	# pass is promoted BOTH arms get it, the images are identical and the
+	# strict `-lt` below fails -- measured 2026-09-22 while probing exactly that
+	# promotion. It is the sixth row of that shape found in one day (the other
+	# five are the --no-dce control arms in test-quick and test-esp-idf), and it
+	# is the only one that spelled the condition as an -O LEVEL rather than as
+	# the default invocation, which is why a grep for the others missed it.
+	# Asking for the pass by name is level-independent and says what is meant.
+	./$(COMPILER) -O2 --no-dce test/c_dce_entry_root.c $(TESTTMP)/c_dceroot_o2
+	./$(COMPILER) -O2 --dce   test/c_dce_entry_root.c $(TESTTMP)/c_dceroot_o3
 	tools/expect_same.sh c_dceroot_o2 "$$($(TESTTMP)/c_dceroot_o2)" "$$(printf 'chain 42\ndone')"
 	tools/expect_same.sh c_dceroot_o3 "$$($(TESTTMP)/c_dceroot_o3)" "$$(printf 'chain 42\ndone')"
 	test $$(stat -c%s $(TESTTMP)/c_dceroot_o3) -lt $$(stat -c%s $(TESTTMP)/c_dceroot_o2)

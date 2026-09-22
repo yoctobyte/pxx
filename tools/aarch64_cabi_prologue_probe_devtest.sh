@@ -103,14 +103,40 @@ echo "case 1: the REAL clang on this box -- the probe must still work"
 if command -v clang >/dev/null 2>&1 \
    && clang -print-targets 2>/dev/null | grep -q '^ *aarch64 '; then
     rc=$(run_probe clang)
-    if [ "$rc" = 0 ]; then
-        ok "real clang: exit 0"
-    else
-        bad "real clang: exit $rc, expected 0" "$(tail -3 "$WORK/out")"
+    # THE GATE ABOVE CHECKS ONE DEPENDENCY AND THIS ASSERTED AN OUTCOME THAT
+    # NEEDS TWO. The probe needs clang AND a working disassembler; `command -v
+    # clang` says nothing about the second, and on the box this was written on
+    # llvm-objdump-21 is installed, so the gap was SILENT BY CONSTRUCTION where
+    # it was developed. It reddened borg's full tier on 2026-09-22 -- the host
+    # with no llvm-objdump-21, which is precisely the condition the probe's
+    # `exit 2` was created to report. A guard that calls a correctly-reported
+    # instrument failure a failure is the three-outcomes hole one level up,
+    # inside the thing written to close it.
+    #
+    # PRINT THE rc BEFORE ROUTING IT, and do not put the print on the failure
+    # branch: once 2 is a SKIP that branch is not taken on the only host where
+    # this fires, and the two repairs would cancel exactly where both are
+    # needed. The value is the whole point -- 2 means "the instrument cannot
+    # run here" and corroborates the missing-disassembler candidate for
+    # test-aarch64#00 on a host nobody has to visit; 1 means a REAL pxx/clang
+    # disagreement there and points somewhere else entirely. Failing on `rc !=
+    # 0` cannot tell those apart, so the old row was evidence of nothing.
+    if [ "$rc" != 0 ]; then
+        printf '       probe exit=%s -- %s\n' "$rc" \
+               "$(grep -iE 'verdict|does not run|INSTRUMENT' "$WORK/out" | tail -1)"
     fi
-    grep -q 'agree with clang' "$WORK/out" \
-        && ok "real clang: printed a comparison" \
-        || bad "real clang: no comparison line"
+    case "$rc" in
+      0) ok "real clang: exit 0"
+         grep -q 'agree with clang' "$WORK/out" \
+             && ok "real clang: printed a comparison" \
+             || bad "real clang: no comparison line" ;;
+      2) echo "  SKIP real clang present but the probe cannot run here (exit 2:"
+         echo "       instrument failure, almost certainly no llvm-objdump). NOT a"
+         echo "       pass and NOT a pxx result -- the rc is printed above so the"
+         echo "       next reader can tell 2 from 1 without re-running." ;;
+      *) bad "real clang: exit $rc, expected 0 or a clean SKIP at 2" \
+             "$(tail -3 "$WORK/out")" ;;
+    esac
     # A green here must have compared something. This is the guard that the
     # false-exoneration bug defeated.
     if grep -qE '^aarch64 C-ABI prologue: 0 signature' "$WORK/out" \
