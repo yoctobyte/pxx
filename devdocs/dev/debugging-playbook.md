@@ -39983,6 +39983,75 @@ said it would **verify the tree is clean before stopping, and say so.** A stop
 that reports its own tree state converts "the box went quiet" into "the box went
 quiet and the next measurement can be trusted", which is what the asker actually
 needed.
+
+### CORRECTED WITHIN THE HOUR, BY THE SAME AUTHOR, AND THE CORRECTION BREAKS THE DISCHARGE ABOVE: A CLEANUP THAT RESTORES SOURCES BUT NOT BUILD PRODUCTS IS NOT A CLEANUP
+
+**The paragraph above is scoped to being KILLED and that scoping is wrong.** c0
+went and looked at its own script after describing the hazard, and found it leaves
+a crippled `compiler/pascal26` behind **on NORMAL COMPLETION too** — it restores
+`compiler/ir_codegen.inc` and **never rebuilds**. The run ends, reports its
+result, exits 0, and the binary on disk was built from patched sources.
+
+**AND "VERIFY THE TREE IS CLEAN" — THE DISCHARGE THIS ENTRY RECORDED ONE HOUR
+EARLIER, IN THE AUTHOR'S OWN WORDS — CANNOT CATCH IT.** The tree *is* clean. The
+source was restored. **The binary is untracked, so `git status` is silent about
+the only artefact that is wrong**, which is CLAUDE.md's "a clean tree is not
+evidence about the binary" arriving as the failure mode of a rule written to
+prevent exactly this.
+
+**The check that works is the one c0 actually ran:**
+`sha256sum compiler/pascal26` against the pin — `fda77c48b8ee`, v418 — after
+restoring **and rebuilding to convergence.** A `git status` and a `git diff` both
+pass on a poisoned checkout; only the sha of the untracked artefact says so.
+
+**Discharge, corrected: a script that mutates a build input must restore the input
+AND rebuild, in a `trap ... EXIT`.** Restoring the source is half the cleanup and
+it is the visible half, which is why it feels complete.
+
+**AND THE STRUCTURAL NOTE, FLAGGED BY `lekkerzeilen-7a`, WHO WAS WATCHING BOTH
+SIDES:** c0 was **describing this hazard to two peers while shipping a worse
+version of it** — it reported the kill-unsafety and did not check the
+normal-completion path of the same script. That is CLAUDE.md's "authorship is not
+protection" in its cheapest host: **the sentence you most need to check is the one
+you have just finished writing**, because explaining a mechanism feels like having
+audited it.
+
+## A PRECONDITION TRAVELS MORE EASILY THAN A RESULT, BECAUSE IT READS AS A PROPERTY OF THE APPARATUS RATHER THAN OF THE QUESTION
+
+**`frankh-c0`'s own diagnosis of its own error, 2026-09-22, banked in its words
+because it is sharper than anything said to it.**
+
+c0 wrote a quiet-box precondition into
+`task-e-decompose-a-lekkerzeilen-roofs-frame` and then honoured it at cost,
+yielding the box. **The precondition was derived from a different measurement.**
+It came from an fps **RATIO between two implementations** — CPython moving 66%
+under load against pxx's 18%, so the ratio is unbounded on a loaded box and
+interleaving does not rescue it. The measurement it was applied to is a
+**SHARE-OF-ONE-FRAME decomposition**, computed within a single run, where a
+uniformly slower box moves every bucket alike.
+
+**Same subsystem, same seat, same day, and the requirement crossed anyway.**
+
+**WHY IT CROSSES: a result is obviously about its own question and gets
+re-derived. A precondition presents as hygiene** — *the box should be quiet when
+you measure* — **which sounds like a fact about measuring rather than a fact about
+one comparison.** Nothing in its wording carries the question it was computed for,
+so nothing resists the copy.
+
+**What survives the move here is narrower and worth stating**, because
+"the precondition was wrong" is not what happened: load can still inflate GPU-wait
+and scheduler time, which lands in the library bucket. **So load is not irrelevant
+to a share decomposition, just far less lethal than it is to a cross-implementation
+ratio.** A precondition carried without its derivation is not merely
+over-strict — it is unpriced, and nobody can tell whether relaxing it costs a
+rounding error or the whole result.
+
+**Discharge: write the QUESTION into the precondition, not just the threshold.**
+Not *"requires load < 2.0"* but *"requires load < 2.0 because this is a ratio
+between implementations with differing load sensitivity"*. Then the next
+measurement that inherits it can check whether its own question has that shape —
+and 7a's relaxation to `< 3.0` with the load stamped beside every row is what that
+looks like when it works.
 ## A DISASSEMBLER ANSWERS ABOUT AN EMPTY SECTION TABLE, AND THE BUILD FLAG THAT EMPTIES IT IS NOT ONE ANYBODY CALLS A MEASUREMENT PARAMETER
 
 Measured 2026-09-22 (frankb-8e, Track A), chasing the promo-temp segfault
