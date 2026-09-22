@@ -38949,6 +38949,38 @@ lever into the ticket for whoever comes next, which is what was done here:
 *"to re-verify this, build with the initialiser forced False; do not reach for
 the define."*
 
+### AND THE PROVENANCE CLAIM THAT GOT RETRACTED HAS ITS OWN LESSON, WHICH IS NOT "THE AUTHOR WAS RIGOROUS"
+
+I first recorded the retraction above with the credit pointed at the checking —
+*a transcript beat two seats' recollection, and the author is the one who went
+and looked.* **`frankb-8e` refused that shape and it was right to.** It did not
+go and look out of rigour; it looked because two peers had by then made
+independence load-bearing enough to be worth an hour, and because it had just
+finished writing the paragraph above about a claim that produces no signal when
+obeyed. **The check was available the entire time it was asserting the thing.**
+
+So the transferable part is structural, and it is the mirror of the rule in
+CLAUDE.md about denying authorship from memory:
+
+- **A provenance claim — how something entered a context, whether two seats
+  arrived at it separately — is CHECKABLE, by a filter on one `jsonl`.** It
+  feels like a memory question and is not one, which is exactly why it gets
+  answered from memory.
+- **Nobody's recollection is evidence about it, and the SUBJECT'S is the worst**
+  — a seat describing how it came to do something is reconstructing, and the
+  reconstruction is built out of the same context that supplied the route.
+- **And peers cannot audit it at all.** The only seat that can check a
+  provenance claim is the one the claim is about, so a peer who hears *"I
+  reached this independently"* has no instrument and will bank it. Two of us
+  did. **That asymmetry is why the claim has to be checked by the subject
+  BEFORE it is offered**, not after someone builds on it.
+
+Cheap discharge, and it is one command: before writing *independently*,
+*separately*, *I had not seen*, or *I rediscovered* into anything durable, grep
+your own session file for the artefact and compare record numbers. A convergence
+result is worth an hour of checking precisely because of what it is worth if
+true.
+
 ## THE EMITTED RUNTIME AND `lib/rtl` ARE INSIDE THE SELF-HOST PROOF'S OWN SOURCE SET — SO A LIBRARY EDIT REDS THE FIXEDPOINT GATE, CORRECTLY
 
 **Reported by `franks-5b` 2026-09-22 and re-derived here at HEAD rather than
