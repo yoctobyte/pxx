@@ -285,3 +285,30 @@ evidence.
 **AND THE ONE THING A THIRD ATTEMPT MUST NOT REPEAT:** the self-host fixedpoint
 converges at the promoted setting, in 2 rounds, and it converged while both
 correctness regressions above were live. It is not evidence about this class.
+
+## A CONSEQUENCE OF THE REFUSAL THAT IS NOT ABOUT SIZE (raised by frankz-e5, 2026-09-22)
+
+Refusing the promotion also declines to answer an open owner fork by the back
+door, which is worth more than it costs.
+
+`decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit` asks
+one question: *do we promise that a pxx object can supply the runtime for
+SOMETHING ELSE, or only for ITSELF?* Its own summary records the consequence —
+answer "for something else" and per-object DCE stays off the table until the
+runtime is shared.
+
+**The `-O` rule is unconditional on OUTPUT MODE.** That is deliberate, and
+frankuser confirmed it should not be special-cased away. So `--dce` arriving at
+the default `-O2` turns per-object DCE on **by the back door** — enacting one of
+the two answers to a question the owner has not been asked.
+
+The exposure is narrow and the decide ticket says so: the pxx-to-pxx pair is
+**not** at risk, both objects carrying everything they reach with zero undefined
+symbols; the risk is a **non-pxx consumer** or the `libcrtl.a` direction. **And
+it is not source-auditable** — 20 of the 298 exports that would vanish under the
+re-rooted model are routines a backend lowers onto and **no source names**, so no
+consumer can grep for whether it is affected.
+
+**A third attempt must say which half it enacts, in the commit**, so the
+decision reads as MADE rather than BYPASSED. It is not this ticket's question
+and is not answered here.
