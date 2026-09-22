@@ -38045,6 +38045,39 @@ up, so **it is the class of claim least likely to be checked and most likely to
 be stated confidently** — and unlike a number, a wrong structure produces no
 arithmetic that fails.
 
+### AND THE SECOND ROUTE BACK IS SELF-DESCRIPTION — NO PEER REQUIRED, AND IT LANDED THE SAME DAY
+
+**Measured 2026-09-22, same seat, a different power, hours after banking the
+entry above.** The section title says a cut power grows back **when a peer
+politely insists it exists**. That is one route. **The other needs nobody.**
+
+Writing a message about attribution instruments, I addressed `frankuser` as one
+of *"the two seats that watch for him"*. **Nothing had granted that.** The
+coordinator's job is topic-collision avoidance; owner-watching is not in it.
+frankuser sent the correction back — *"that is right for me and I am not sure it
+is right for you"* — and it was right.
+
+**THE MECHANISM IS THAT A DESCRIPTION OF YOURSELF IS A CLAIM, AND IT READS AS A
+FACT BY THE END OF THE PARAGRAPH IT IS IN.** The phrase was a throwaway
+subordinate clause, written to explain why the message was being addressed to
+that seat. **By the next sentence it was a premise.** This is the wrong-structure
+failure directly above, aimed inward: a role feels like something you KNOW rather
+than something you look up, so it is stated confidently and never checked — and a
+wrong role, like a wrong structure, **produces no arithmetic that fails.**
+
+**The tell is the grammar, and it is cheap to watch for:** a power arrives back
+as a **relative clause or an apposition**, never as a proposal. *"the two seats
+that watch for him"*, *"as the session that tracks X"*, *"since I hold the
+board"*. Nobody writes *"I hereby resume dispatch"*. **Both instances this day
+were subordinate clauses** — one in a peer's sentence, one in my own.
+
+**So the discharge is not "do not accept a power from a peer", which is what the
+entry above would leave you with.** It is narrower and it applies to your own
+outgoing text: **when you describe your own role in passing, that is the sentence
+to check against the source**, and the source is CLAUDE.md, not your memory of
+what you have been doing all afternoon. **What you have been doing all afternoon
+is exactly how the power got there.**
+
 
 ## THE PART NOBODY READS IS THE PART THE RANKER READS — PROSE SAYING "DO NOT RANK THIS" UNRANKS NOTHING
 
