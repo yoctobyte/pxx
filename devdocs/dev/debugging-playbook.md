@@ -41265,3 +41265,33 @@ remedy has to name the thing it is retiring, so it cannot be excluded by a searc
 for that thing. **State such a check as "returns only the correction note", never
 as "returns 0"** — and expect the count to be one, not zero, whenever your fix is
 prose rather than deletion.
+
+## "COMMENT-ONLY" IS A CLAIM ABOUT A DIFF THAT ONLY THE COMPILER CAN CONFIRM — and in a `{ }` language a comment edit moves the code/prose boundary
+
+*2026-09-22, `frankb-8e`, reported as a near miss rather than quietly fixed.*
+
+Writing a correction note into `pasparser_prog.inc`, 8e's first cut closed the
+comment with `}` **mid-block**, which turns the prose that follows into code. It
+could not have compiled. `make compiler/pascal26` caught it as a **side effect** —
+the fixedpoint build is a syntax check before it is anything else.
+
+**The trap is the category, not the typo.** "Comment-only" is the label under which
+a build gets skipped, and it is self-applied: you decide a change is risk-free and
+that decision is what suppresses the check. **The belief and the skipped
+verification are the same act.** CLAUDE.md already says `make compiler/pascal26` is
+mandatory and is not a test — it is the build; this is the case where the reason to
+run it is most obviously absent and most actually present.
+
+**And in Pascal the category is not even coherent.** With `{ }` comments, the
+comment delimiters *are* syntax: a stray `}` does not corrupt a comment, it
+**reassigns which text is code**. There is no such thing as an edit inside a
+comment that cannot change the program. The same holds for `/* */` in C, for any
+block-comment language, and for a docstring in Python that stops being one.
+
+**The discipline 8e used, which is the reusable half:** it did not assert
+comment-only from the diff's appearance. It reported that the binary reproduced
+**`7ed7bc249672` byte-identically** across both prose commits — the same binary the
+2312-file sweep and the gate had run against. **A byte-identical binary proves a
+change was comment-only; reading the diff does not.** State it that way, because
+"comment-only" read off a diff is exactly the claim a stray brace falsifies while
+looking unchanged.
