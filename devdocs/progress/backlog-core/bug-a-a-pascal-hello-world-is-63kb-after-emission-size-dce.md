@@ -163,9 +163,13 @@ Tree `fda77c48b8ee`, compiler sha printed beside every row below. Parked patch:
 **The lexing question this ticket asks is answered.** `string` is **`tkString_T`,
 a keyword token** (`paslexer.inc:166-167`), not `tkIdent` — so the `CaseEqual`
 arm the ticket points at could never have seen it, and the test is a token
-KIND. Note the 6-char table matches only `string` and `String`: an all-caps
-`STRING` lexes as `tkIdent` while Pascal is case-insensitive, so a scan wanting
-both must test both. `ShortString`/`WideString`/`UnicodeString`/`UTF8String`/
+KIND. Note the 6-char table matches only `string` and `String`, so a scan wanting
+every spelling must test the token kind AND the ident name, which is what the
+parked patch does. **There is no defect behind that observation** — measured by
+frankh-c0, 2026-09-22: `string[20]`, `String[20]`, `STRING[20]` and `StRiNg[20]`
+all compile and run correctly, because the ident path resolves the other
+spellings case-insensitively. Real observation, nothing reachable behind it;
+`rejected/`, not a low prio, if anyone writes it up. `ShortString`/`WideString`/`UnicodeString`/`UTF8String`/
 `RawByteString`/`OleVariant` are ordinary identifiers and were all measured to
 need the bundle, as was `string[N]` — a frozen string still reaches the concat
 and write helpers, so there is no win in telling frozen from managed here.
@@ -223,7 +227,21 @@ riscv32 row above.** Under-detection cannot produce a wrong binary:
 
 **AND THE MEASUREMENT OFFERED FOR THAT CLAIM TESTS A DIFFERENT MECHANISM —
 BOTH TIMES IT WAS TAKEN.** The row above cites `-uPXX_MANAGED_STRING`, and so
-did the seat re-checking it today, independently, before noticing. That flag is
+did the seat re-checking it today, before noticing.
+
+**NOT INDEPENDENTLY — CORRECTED 2026-09-22 BY THE SEAT THAT CLAIMED IT, AGAINST
+ITS OWN TRANSCRIPT.** That seat told two peers the two of us had reached the
+wrong lever independently, from recollection, and it is false: in its session
+jsonl the literal `-uPXX_MANAGED_STRING` is in context at record 29522 — its own
+`cat` of THIS FILE, carrying the claim and, in the same paragraph, this route
+offered as how to check it — and the first invocation is at record 30640, 1,118
+records later. The route was inherited, not converged on. **Which makes the
+mechanism worse rather than better: a wrong verification route recorded beside a
+claim is picked up by exactly the person who comes to AUDIT that claim, because
+auditing means reading the claim and the route is the adjacent sentence.** The
+audit inherits the instrument the audit is about, it needs no second seat, and
+it recurs on every future re-check until the route is corrected in place — which
+is what the paragraph above is for. That flag is
 consulted in ~15 places to decide what `string` **means** (`util.inc:148`
 `BareStringKind`, `symtab.inc:3297/3349`); undefining it makes `string` a frozen
 255-byte type. Under-detection changes **one** consumer, `needsAnsiRuntime`,
