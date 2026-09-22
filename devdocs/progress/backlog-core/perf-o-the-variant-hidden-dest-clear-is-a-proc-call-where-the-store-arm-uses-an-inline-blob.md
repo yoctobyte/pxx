@@ -327,3 +327,30 @@ reads as already-measured in a way a bare table does not, which is precisely
 backwards: **the table is the part I can check cheaply, and the mechanism is the
 part I cannot.** The discriminator here was one pass over a file I already had
 open.
+
+### THE HOLD IS RELEASED FROM 7a's END, AND TWO LABELS THE NUMBER NEEDS
+
+`lekkerzeilen-7a`, 2026-09-22, page `9db2e38`: *"do not wait on my roofs row"* —
+GUI testing is paused by the owner and the fleet has pivoted to ESP32, so the
+repeat is not coming soon. **This ticket is parked, not held**, and the only
+thing that retires it is an **in-situ A/B**, which needs the pause lifted.
+
+**WHICH LOWERING THE NUMBER DESCRIBES, because nothing else labels it.** The
+profiled build was **default `-O2`, no `-g`** (gdb printed *"No debugging symbols
+found"*). That matters and it is not bookkeeping: `franks-5b` measured that `-g`
+implies `-O0`, and at `-O0` a variant op allocates **1.8 blocks** where `-O2`
+allocates **none**. So a `-g` build would have made this ticket's whole subject
+an artefact of the debug lowering. It was not — but the row is only about `-O2`
+and must be quoted that way.
+
+**AND 11.2% OF MAIN-THREAD TIME IS NOT 11.2% OF HEADROOM.** 7a's own last miss on
+this exact question was **12.3x per call and 3.3% in the frame**, because a queue
+capped the work. **A share says where time IS; it does not say what removing it
+BUYS.** Those differ whenever anything downstream is the real limiter — which on
+a GPU-fed frame loop is the default case, not the exception. This is why the
+retirement condition is an A/B and not a bigger profile: no amount of additional
+sampling converts a share into a saving.
+
+**What must NOT be taken from the row:** it as a pair (one arm), or as repeatable
+(one round, 89 samples, a contiguous prefix ending at the program's exit, and the
+pre-registered two-rounds-per-arm check has never run — not failed, not passed).
