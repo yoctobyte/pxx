@@ -79,7 +79,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 569, ranked
 
-- `[p 95] [B]` perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds (unblocks 1)
 - `[p 95] [N]` perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline (unblocks 1)
 - `[p 95] [N]` perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
@@ -109,5 +108,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
 - `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
+- `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 
 _539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

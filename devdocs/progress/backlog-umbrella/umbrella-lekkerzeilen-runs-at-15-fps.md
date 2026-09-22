@@ -11,7 +11,6 @@ tags: [perf, lekkerzeilen, nilpy, frame-rate, amdahl]
 blocked-by:
   - perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program
   - perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
-  - perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds
   - perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
   - perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob
 summary: "**15 FPS IS RETIRED AS A TARGET -- OWNER, 2026-09-22, HIS OWN WORDS: `15fps is not written in stone, just a wishful figure`.** NOTHING MAY BE RANKED BY DISTANCE TO IT, and any ticket justified as `gets us to 15` needs re-justifying on something else. The slug keeps the number so citations resolve; the GOAL is now: find the main performance issues. HIS SEQUENCE IS FINISH-THEN-MEASURE, NOT MEASURE-THEN-PICK: `i think when all current known issues are done, just profile it again`. So do NOT grow new perf tickets off the 2026-09-21 `--region rijn` profile -- that scene has now produced THREE levers measuring to approximately zero on the scene that ships, and the re-profile must be on ROOFS. WHERE WE ACTUALLY ARE, and these rows stand on their own without any target: pxx median 1.887 fps = 530 ms/frame over 19 windows on `world/roofs`, vsync ON, audio ON, quiet box; CPython 3.14.4 on the SAME scene, box and session, median 37.140 fps (27 ms) over 414 windows. THAT 19.7x AGAINST A WORKING ORACLE IS THE REAL FINDING and it needs no wishful number: the gap is OURS and it is structural. `lekkerzeilen@devdocs/perf/ROOFS-2026-09-22.md`, `62859ff`. MEASUREMENT RULES THIS TICKET HAS PAID FOR, all still binding: a factor is a property of the SCENE and the MACHINE STATE it was measured on (four factors in one day, every one arithmetically correct on a different frame); treat a single timing as ~20% soft and a RATIO of two arms with different load sensitivity as UNBOUNDED until both run interleaved on a quiet box; and NEVER rank by `per-call cost x calls per frame` -- 7a predicted 12% from a 12.3x per-call win and measured 3.3% inside its own 8.8% noise, because `Soundscape.update` caps the audio queue at a fixed BYTE target so work per frame does not grow as the frame slows. MEASURED AS NOT THE CAUSE: vsync, audio, the RNG (8.16x per shift, in-situ value nil), inverse trig (0.22%), and heap contention (the render loop is ONE thread; the 16.5% rijn heap-lock row is UNCONTENDED and a 400k-object A/B bought +4.9% with overlapping error bars). STILL LIVE: the computed-getattr flag has a shippable off switch (`fn = lib[name]`, zero computed sites) worth 112,180 bytes STATIC with its runtime value UNMEASURED; and the managed-local release sweep, whose inline nil-test landed at 56.8% off the per-slot cost against a 55.8% prediction, x86-64 and SXR_STR only. DO NOT REVERT the computed-getattr widening -- it stops a SIGSEGV in imported modules.""
@@ -285,8 +284,10 @@ measurement.
    share under `--silent` (Dd\* 8 → 17 samples) **on `rijn`**. The share
    question did not need the roofs decomposition — it needed the call count, and
    7a had it: **`atan2` runs 1,258.4/frame on `rijn` and 46.0/frame on `roofs`,
-   a 27x collapse** (`PROFILE-2026-09-21.md:222`). Against today's 624 ms frame:
-   **46 × 29,463 ns = 1.36 ms, 0.22%.**
+   a 27x collapse** (`PROFILE-2026-09-21.md:222`). Against the **530 ms** frame
+   (7a's quiet-box pair, arm B, 19 windows — 624 ms was the load-27-30
+   reading and is carried as superseded, not replaced):
+   **46 × 29,463 ns = 1.36 ms, 0.26%.**
    **`franks-5b` landed `6b8b45af4` with "THIS IS NOT A FRAME-RATE LEVER" in the
    commit body and the ticket summary**, and re-ranked it as a
    **correctness-of-effort** fix — ~106 bits for a 53-bit answer, `ArcCos` at
@@ -298,6 +299,14 @@ measurement.
    call counts are CPython's**, on the argument that the program logic is
    identical. That is an argument, not a pxx measurement — but a 27x collapse
    does not invert into a lever, so it does not reopen the ranking.
+   **THE `blocked-by` EDGE TO THIS TICKET WAS REMOVED 2026-09-22 and must not
+   be restored.** It was still in this file's frontmatter while this very
+   section said "do not rank it here", so the ranker went on inheriting p95
+   to it and `tools/progress.sh next` dispatched a seat to it — which is how
+   this was found. **Prose saying "do not rank" does not unrank anything;
+   membership is the EDGE.** The ticket keeps its own prio 45 and is reachable
+   on its own merits. If a roofs re-profile ever puts inverse trig above the
+   noise, re-add the edge and say which measurement did it.
 
 ## The variant-clear row is being tested for RETIREMENT, not for a fix
 
