@@ -27974,6 +27974,19 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh i386 $(TESTTMP)/genpromo_i386)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
 
 test-aarch64: $(COMPILER)
+	# DOES A C FUNCTION READ ITS ARGUMENTS WHERE A REAL aarch64 COMPILER PUTS
+	# THEM? clang compiles the same signature and the two prologues are compared
+	# on register placement. It is the only row here with an opinion from
+	# OUTSIDE pxx: a pxx caller and a pxx callee agree with each other under
+	# either convention, so every existing aarch64 row passes whatever the
+	# answer is. AAPCS and pxx's internal positional convention also COINCIDE
+	# for every all-integer and all-pointer signature -- the shape of every libc
+	# callback -- so the discriminator has to interleave int and float.
+	# Skips (does not pass) stack-passed signatures: those are a question about
+	# offsets and need their own instrument. SKIPS ENTIRELY if clang is absent
+	# or cannot target aarch64, and says so rather than printing a pass.
+	# feature-a-object-output-for-arm32-and-aarch64
+	@tools/aarch64_cabi_prologue_probe.sh
 	# THE READ-ONLY DATA SEGMENT ON aarch64: the string-literal pool loads through
 	# an R-only PT_LOAD, so a store into a literal faults instead of silently
 	# rewriting every later use of it. --no-ro-data is the control: the same

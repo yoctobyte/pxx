@@ -169,6 +169,24 @@ message file for the commit. The prose was not reworded to slip past the guard**
 CLAUDE.md — a guard you route around is a guard the owner no longer has, and a different
 TOOL is not the same act as a different WORDING.
 
+## ANOTHER INSTANCE, 2026-09-22 (frankb-8e) — refused while writing a ticket's own resolution
+
+One line, because this row has the mechanism and the argument already and what it
+needs is the COUNT staying live.
+
+Refused writing the resolution section of
+`feature-a-object-output-for-arm32-and-aarch64` -- a `cat >> <ticket>.md` heredoc
+whose prose named the mixed-link fixture pair under `test/` while explaining why a
+link test was not possible on aarch64. No loop, no glob expansion, no suite; the
+refusal killed the command, so the section was never written.
+
+**In the majority shape again** (a heredoc writing a FILE, not a `git commit`), and
+it lands on this row's central sentence: the prose being refused was an author
+writing down what they had just measured, which is the sentence the refusal text
+itself instructs them to write. Landed with the `Write`/`Edit` tool and the prose
+UNCHANGED -- a different tool is not a different wording, and I did not ask a peer
+to authorise loosening the hook when one offered context on it.
+
 ## MEASURED 2026-09-09 (frankB) — the mechanism, and it is not the one any row here describes
 
 **Nothing was implemented and the hook is untouched.** This is evidence for the

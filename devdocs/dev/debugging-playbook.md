@@ -35719,3 +35719,54 @@ Companion to "print the set your instrument enumerates and check the subject is
 IN it" (CLAUDE.md): that is about a population that cannot contain the subject.
 This is about one that contains only its history, which is worse, because the
 history answers.
+
+## TWO INSTRUMENTS THAT PASS BY PRODUCING NOTHING, AND ONE OF THEM DIES ON ITS OWN SUCCESS
+
+Measured 2026-09-22 building `tools/aarch64_cabi_prologue_probe.sh`, which
+compares where pxx's aarch64 C prologue expects its arguments against where
+clang puts them (`feature-a-object-output-for-arm32-and-aarch64`).
+
+CLAUDE.md already says to assert that the thing under test actually RAN before
+comparing its output, and to branch on that assert. This is that rule, hit
+twice in one afternoon, in two shapes that the banked form does not describe.
+
+**1. BOTH SIDES COLLAPSED TO THE SAME EMPTY, SO THE COMPARATOR PASSED.** The
+banked failure is one side never running. This one is symmetric: two failed
+extractions both yield the empty string, `[ "$c" = "$p" ]` is TRUE, and the row
+prints `AGREE` with a blank register list. That is a *stronger* false pass than
+the asymmetric kind, because the output looks like a comparison that happened
+and agreed. A reader skimming a column of `AGREE` has no reason to look at the
+width of the evidence column.
+
+Both of the probe's first-run bugs produced exactly this, and **it was caught by
+luck rather than by method**: the script happened to exit 1 with no rows
+printed at all, which was noticeable. Had it exited 0, or had one signature
+produced output, the blank rows would have read as a clean result. The guard
+now refuses an empty extraction, and refuses one SHORTER than the argument
+count, as `BROKEN` — a distinct verdict from `DIFFER`, because an instrument
+failure and a real disagreement are different news.
+
+**2. `set -o pipefail` ABORTED THE RUN ON `diff`'s EXIT 1 — AND AN INSTRUMENT
+DYING ON ITS OWN SUCCESS LOOKS IDENTICAL TO ONE FINDING NOTHING.** The probe
+locates a function by diffing two disassemblies. `diff` exits **1 when the
+files differ**, which is the case the probe exists to produce, so under
+`pipefail` the pipeline "failed" every time it worked, `set -e` killed the
+script, and the observable was: no rows, exit 1.
+
+This is a new member of the family in CLAUDE.md — *every instrument that lies,
+lies by being CORRECT ABOUT SOMETHING ELSE*. `pipefail` was correct about a
+process exit status. The question was whether two files differ. Those coincide
+for most commands and are opposites for `diff`, `grep -q`, `cmp`, and every
+other tool whose exit code encodes an ANSWER rather than a FAILURE.
+
+**The check that separates them costs one line:** before trusting a comparison,
+assert that each side produced a non-empty result of the expected SHAPE, and
+give that failure its own name. And when a helper's nonzero exit is an answer
+rather than an error, spell it `{ cmd || true; }` at the point of use, with a
+comment saying which it is — the next reader cannot tell from the pipeline.
+
+**The positive control remains the thing that settles it.** Once both bugs were
+fixed the probe reported AGREE on every signature, which is exactly what a
+still-broken probe reports. It only became a result after being made to FAIL on
+purpose: disabling the compiler's cdecl gate, rebuilding, and watching the same
+rows come back `DIFFER` with the positional registers.
