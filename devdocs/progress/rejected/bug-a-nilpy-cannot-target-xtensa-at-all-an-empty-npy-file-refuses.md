@@ -1,13 +1,13 @@
 ---
-prio: 70
+prio: 0
 track: A
 type: bug
-status: new
+status: rejected
 found: 2026-09-22
 found-by: frankh-c0
 owner: ""
 blocked-by: []
-summary: "NILPY CANNOT TARGET XTENSA AT ALL, AND THE FLOOR CASE IS AN EMPTY FILE. A zero-byte `.npy` refuses with `pascal26:3380: error: target xtensa: addi immediate displacement 128 is outside the encodable range -128..127; the code is too large for this branch form`. Because the empty program fails, nothing a user writes can avoid it -- this is not a construct that trips it, it is the NilPy runtime (pyeval.pas) failing to encode for this backend. SCOPE, measured one row each: all three xtensa spellings fail (`--target=xtensa` alone, `+ --platform=esp`, `+ --esp-profile=bare`); riscv32 builds the same files clean; and a Pascal `program p; begin end.` and a C `int main(void){return 0;}` BOTH compile fine on the identical xtensa flags, so it is NilPy-specific and not a broken xtensa backend in general. NOT TODAY'S WORK -- the PINNED compiler refuses at the same line with the identical message. That is ALL that is established: this ticket first said `pre-existing, not a regression` and the second half was an overstatement, corrected the same day. Whether xtensa NilPy EVER built is unmeasured, and there is a concrete lead saying it may have: frankb-8e's RTTI ticket carries a headline number it describes as measured on a NilPy ESP target at 857dcdaac, which is 2026-09-20 and 1233 commits back. If that measurement really did require building NilPy for xtensa, this is a REGRESSION inside a two-day window and therefore bisectable and far cheaper to fix than a standing gap. Nobody has built 857dcdaac to check, and the phrase in that ticket is ambiguous about which chip it names (its directory is nilpy-c3, and c3 is riscv32), so this is recorded as a LEAD and not as a finding. WHY IT MATTERS more than the line count suggests: xtensa is the PRIMARY ESP target per the S-lane rule (riscv32 merely also works), so the entire NilPy-on-ESP32-S3 path is closed while esp32c3 is fine -- and that asymmetry is invisible to anyone measuring on c3, which is the default chip in tools/esp_run_bare.sh. The diagnostic is honest and names the cause (a branch form chosen too narrow to reach), so this is a backend encoding/relaxation gap rather than a mystery. NOT DIAGNOSED BEYOND THAT: I did not find which routine in pyeval.pas exceeds the range, nor whether the fix is a wider branch form, a relaxation pass, or splitting the offending body."
+summary: "REJECTED 2026-09-22 BY ITS OWN AUTHOR -- THE PREMISE IS FALSE. NilPy builds for xtensa. The default Call0 ABI overflows the addi range; `--xtensa-abi=windowed --xtensa-long-calls` clears it, and with `--emit-obj` (the IDF profile's documented output form -- it emits an object for the IDF link, not a complete executable) an empty .npy builds at 975,588 B and `print(1)` at 975,740 B. Measured by frankh-c0 at 6fb91c73e88e and matching frankb-8e's independent figures byte for byte. The ticket's subject also re-measures clean: vmt/rtti slot 174,350 B / 149 bodies, total live 833,482 B, agreeing to the body with an earlier same-day run at fc53bd2bd. So there is NO break, NO regression and NOTHING to bisect, and the two-day-regression lead recorded here yesterday is dead. WHAT WENT WRONG, because it is the reusable part: the scope table had three xtensa rows (`--target=xtensa`, `+ --platform=esp`, `+ --esp-profile=bare`) and ALL THREE SHARE THE DEFAULT ABI. The platform axis was varied and the axis that decides the outcome was held fixed, so a table with three rows was a table with one. The empty-file floor case -- which was good method and correctly proved the failure was not in user code -- is exactly what produced the confidence, because excluding one axis rigorously was read as locating the cause on another. The diagnostic named the right axis in its own words the whole time (`the code is too large for this BRANCH FORM` is a statement about an encoding choice, i.e. a flag) and this ticket quoted that sentence twice while concluding the target was broken. THE ONE REAL RESIDUAL IS SPLIT OUT AND IS NOT THIS: tools/esp_run_bare.sh defaults to --chip esp32c3 (riscv32), so xtensa NilPy has no routine coverage, which is why two seats believed a flag mistake was a broken target -- see chore-t-the-bare-esp-runner-exercises-riscv32-only-so-xtensa-nilpy-has-no-routine-coverage."
 ---
 
 # NilPy cannot target xtensa at all — an empty `.npy` file refuses
@@ -116,3 +116,58 @@ different and much better ticket than the one filed here. One person building
 was taken on riscv32 (in which case this is a standing gap and the lead is
 dead), or a build of `857dcdaac` that compiles an empty `.npy` for xtensa (in
 which case reopen this at a higher priority as a regression).
+
+## REJECTED BY ITS OWN AUTHOR, 2026-09-22 — the premise is false
+
+    empty .npy  --target=xtensa --platform=esp                     FAIL (addi displacement)
+    empty .npy  + --xtensa-abi=windowed --xtensa-long-calls        FAIL (in the WRITER, not codegen)
+    empty .npy  + those two + --emit-obj                           BUILDS, 975,588 B
+    print(1)    + those two + --emit-obj                           BUILDS, 975,740 B
+
+Measured at `6fb91c73e88e`; byte-identical to frankb-8e's independent run, which
+is why this is stated flatly. The middle row matters: windowed + long-calls gets
+past the codegen limit, and what then fails is the IDF profile being asked for a
+complete executable when its documented output is an OBJECT for the IDF link.
+`--emit-obj` is the right form and it builds.
+
+**Everything above this section is retained and is wrong.** It is left in place
+rather than deleted because the measurements in it are real — they are just
+measurements of one ABI, presented as measurements of a target.
+
+## The axis error, which is the only thing worth keeping
+
+Three "xtensa spellings" were tested and **all three share the default Call0
+ABI**. The platform axis was varied; the ABI axis — the one that decides the
+outcome — was held fixed and never listed. A table with three rows that all fix
+the deciding axis is a table with one row.
+
+**The floor case is what produced the confidence, and it was answering a
+different question.** An empty `.npy` proves the failure is not in the user's
+program. It says nothing about whether the cause is the TARGET or the FLAGS.
+Excluding one axis rigorously got read as locating the cause on another, and
+because the exclusion was genuinely rigorous, the location inherited its
+credibility. That is the hedge-the-premise failure with premise and inference on
+different axes.
+
+Worse, the author had been *pleased* with the floor case — it was the one
+quantifier checked carefully all day, after three earlier failures of exactly
+that kind. **Checking the quantifier on the axis you thought of does not protect
+the axis you did not.**
+
+**The diagnostic named the right axis the whole time.** *"The code is too large
+for this branch form"* is a statement about an ENCODING CHOICE. This ticket
+quoted that sentence twice while concluding the target was broken. A message
+naming a *form*, *mode*, *encoding* or *model* is pointing at a flag, not at a
+capability.
+
+## Before calling a target or subsystem broken
+
+List the axes varied and the axes held fixed, and name the ones you have no
+reason to trust. For a compiler invocation that is at minimum: target,
+platform/profile, **ABI**, output form (`--emit-obj` vs executable), and
+optimisation level.
+
+## What survives
+
+Nothing about a compiler defect. One coverage gap, split out at its real size:
+`chore-t-the-bare-esp-runner-exercises-riscv32-only-so-xtensa-nilpy-has-no-routine-coverage`.

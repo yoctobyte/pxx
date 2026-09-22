@@ -42667,3 +42667,66 @@ BEHAVIOUR rather than a restated constant — i.e. a second instance of *instanc
 1's* half specifically. At that point it should land as an EXTENSION of the
 existing guard rules rather than as a neighbour, because it is the
 positive-control discipline reaching a precondition the guard does not own.
+
+## ISOLATING A FAILURE AWAY FROM ONE AXIS DOES NOT LOCATE IT ON ANOTHER — AND A GOOD FLOOR CASE IS WHAT MAKES YOU SURE
+
+Measured 2026-09-22, two seats, independently, on the same subject, both wrong
+the same way for half an hour.
+
+**The claim.** `bug-a-nilpy-cannot-target-xtensa-at-all-an-empty-npy-file-refuses`,
+filed p70, with what looked like unusually good method:
+
+    $ : > empty.npy
+    $ pascal26 --target=xtensa --platform=esp empty.npy empty.o
+    pascal26:3380: error: target xtensa: addi immediate displacement 128 ...
+
+A **zero-byte source**. I had even checked the quantifier this time — my first
+seven probes all contained a `print`, I noticed the shared property, dropped it,
+then dropped all user code. The empty file is what let me write "every NilPy
+program" as a measurement instead of a guess from a sample. That reasoning was
+correct and the conclusion was still wrong.
+
+**What was actually wrong.** The default Call0 ABI overflows.
+`--xtensa-abi=windowed --xtensa-long-calls` clears it, and NilPy builds for
+xtensa fine. My "scope" table had three xtensa rows — `--target=xtensa`,
+`+ --platform=esp`, `+ --esp-profile=bare` — and **all three share the default
+ABI.** I varied the platform axis and held fixed the axis that decides the
+outcome.
+
+**THE FLOOR CASE IS WHAT PRODUCED THE CONFIDENCE, AND IT WAS ANSWERING A
+DIFFERENT QUESTION.** An empty file proves the failure is not in the user's
+program. It says nothing whatever about whether the failure is in the TARGET or
+in the FLAGS. I had excluded one axis cleanly and read that as having located
+the cause on another — and because the exclusion was rigorous, the location felt
+rigorous too. **A strong negative result about axis A lends its credibility to
+an unexamined claim about axis B**, which is this file's hedge-the-premise rule
+with the premise and the inference on different axes.
+
+**The tell I had and did not read.** The diagnostic says *"the code is too large
+for this branch form"*. "This branch form" is a statement about an ENCODING
+CHOICE, i.e. about flags, and I quoted that sentence in the ticket twice while
+writing that the target was broken. The message named the right axis in its own
+words.
+
+**And the answer was already written down.** The peer who first reported the
+subject as unbuildable had, earlier the same day, written a section in their own
+ticket recording both failures in order and printing the working command with
+both flags. They then reported it as unbuildable from a failure reproduced with
+the flags their own section calls insufficient. That is this repo's *"when the
+grep returns prose, READ the prose"* — with the prose authored by the person who
+needed it.
+
+**What to do.** Before concluding that a target, a platform or a subsystem is
+broken, **list the axes you varied and the axes you held fixed, and say which
+ones you have no reason to trust.** For a compiler invocation the axes are at
+minimum: target, platform/profile, ABI, output form (`--emit-obj` vs
+executable), and optimisation. A table with three rows that all fix four of
+those is a table with one row.
+
+**And prefer the diagnostic's own vocabulary as a hint about which axis to
+vary.** A message naming a *form*, a *mode*, an *encoding* or a *model* is
+pointing at a flag, not at a capability.
+
+**STATUS: BANKED.** This is one subject, found twice by two seats, which is a
+recurrence of the MISTAKE but not across independent subsystems — the two of us
+were looking at the same thing and one report seeded the other. Not promoted.

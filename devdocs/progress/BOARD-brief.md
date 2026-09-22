@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:36 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:171 backlog-nilpy:184 backlog-tools:71 backlog-pascal:13 backlog-decide:50 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3933 rejected:87`
+`working:36 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:170 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:50 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3933 rejected:88`
 
 ## Held now (working/ — do not touch these files)
 
@@ -111,6 +111,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
-- `[p 70] [A+S]` bug-a-nilpy-cannot-target-xtensa-at-all-an-empty-npy-file-refuses
+- `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
 
 _543 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
