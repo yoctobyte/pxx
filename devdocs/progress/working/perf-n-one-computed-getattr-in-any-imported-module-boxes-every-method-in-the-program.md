@@ -242,3 +242,83 @@ leave that composition.
 **So narrowing this arm will turn working programs into segfaults until that bug
 is fixed.** Whoever takes this ticket needs it closed first, or the reds will
 look like their own work.
+
+### MY OWN BENCHMARK PINS AN AXIS I DID NOT ENUMERATE — the 4.01x is a FLOOR for the dispatch half, not a measurement of it
+
+Source reading only, 2026-09-22, no box time, **unmeasured and flagged as such**.
+Recording it against my own number before someone else finds it.
+
+The boxed call does not merely widen the ABI. It routes through a **run-time
+method lookup that the direct call does not have**. `pyparser.inc:16940` names
+the chain: the emitted `pydyn_meth<n>(recv, 'name', a0..)` goes to `PyDynMethL`,
+which resolves *a declared METHOD first (`PyFindMethCI` + `PyHostCall`), then
+`pydynattr_get` for a callable ATTRIBUTE, then AttributeError*. And
+`PyFindMethCI` (`compiler/builtin/pyeval.pas:973`) is a **linear scan with a
+case-insensitive compare per entry, walking the parent chain, with no cache and
+no interning**:
+
+```pascal
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+        if PyEqCI(meths[i].NamePtr^, name) then ...
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+```
+
+O(methods x inheritance depth) per dispatched call.
+
+**WHY THIS DOES NOT CONTRADICT THE ALLOCATION ROW.** `PyEqCI` is explicitly
+allocation-free and says so at its own definition — a previous
+lowercase-both-then-compare version cost two `PXXStrFromLit` buffers per call
+and was removed. So `allocations IDENTICAL at 7` stands, and the lookup is pure
+CPU. The two measurements agree.
+
+**WHY THE 4.01x UNDERSTATES THE DISPATCH HALF.** `PyEqCI` rejects on a **length
+mismatch before comparing a single character**. My fixture's receiver is a
+three-method `Vec` with a shallow hierarchy and distinct-length method names, so
+the scan is roughly three integer compares and a hit. **That is the cheapest
+value this axis can take, and my benchmark holds it there by construction** —
+not by choice, but because a fixture is a minimised artefact and a minimal class
+has few methods, short chains, and names that differ. The axis is a property of
+the RECEIVER'S CLASS SHAPE, which nothing in the fixture varies and nothing in
+the write-up named.
+
+This is CLAUDE.md's "a minimal case pins an axis you did not enumerate" landing
+on my own measurement, one section below where I said the cost was ABI width and
+tag dispatch. **That attribution may still be right for MY fixture and cannot be
+carried to lekkerzeilen**, whose classes are neither three-method nor shallow.
+
+### E4 — vary the receiver's class shape, prediction written first
+
+**Setup:** widen `Vec` from 3 methods to ~30, give them **equal-length names** so
+`PyEqCI`'s length short-circuit cannot fire, and put the called method **LAST**
+in the table (CLAUDE.md's interesting-element-last rule — first-position is the
+arrangement that passes). Hold the loop, the arity and the argument types fixed.
+Re-run both arms interleaved, min-of-5.
+
+**PREDICTION:**
+1. The **unboxed arm stays flat** — a direct call is statically resolved and
+   never enters `PyFindMethCI`.
+2. The **boxed arm inflates**, so the ratio rises **above 4.01x**.
+
+**WHAT WOULD FALSIFY IT:** the ratio not moving. That would mean the boxed path
+does not reach this lookup at all — in which case my "variant tag dispatch"
+attribution is naming something I have not identified, and the mechanism is
+unestablished rather than merely unquantified.
+
+**Either outcome is worth the run**, because a ratio that is a function of class
+shape cannot be quoted as a single number, which is what this ticket currently
+does.
+
+### NOT FILED AS ITS OWN TICKET, DELIBERATELY
+
+No open ticket mentions `PyFindMethCI`'s cost (checked `urgent working
+unfinished blocked backlog-nilpy backlog-core low-prio rainy-day`; the only open
+hit is a prose aside in the nested-class ticket, and every other hit is in
+`done/`). It is **not filed separately because it is unmeasured**, and a perf
+ticket whose number is a source reading is the thing this repo files instead of
+measuring. It belongs here, where the measurement that would settle it is
+already set up.
