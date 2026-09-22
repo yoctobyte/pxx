@@ -37997,3 +37997,57 @@ not.** A structure feels like something you know rather than something you looke
 up, so **it is the class of claim least likely to be checked and most likely to
 be stated confidently** — and unlike a number, a wrong structure produces no
 arithmetic that fails.
+
+
+## THE PART NOBODY READS IS THE PART THE RANKER READS — PROSE SAYING "DO NOT RANK THIS" UNRANKS NOTHING
+
+**Measured 2026-09-22, franks-5b, and it surfaced only because the seat was
+handed back a ticket it had settled that morning.**
+
+`umbrella-lekkerzeilen-runs-at-15-fps` said in its body, in capitals:
+*"SETTLED 2026-09-22 AND IT IS NOT A FRAME-RATE LEVER. Do not rank it here."*
+Its frontmatter still listed that ticket under `blocked-by`. **So the ranker went
+on inheriting p95 to it, and `tools/progress.sh next` dispatched a seat to a
+ticket whose own summary says in capitals that it must not be ranked.**
+
+**THIS IS THE STALE-SUMMARY RULE INVERTED.** That rule says the part *everyone
+reads* is what carries prio into the ranker, so a stale summary misroutes a
+reader. **Here the opposite: the part NOBODY reads is what the ranker reads.**
+Membership is an **edge**, not prose — and **where prose and edge disagree, the
+machine-readable half wins, silently and indefinitely**, because the prose reads
+as though the job is already done. The author writes the capitals and feels
+finished.
+
+**It was not found by an audit and could not have been.** 5b finished its work,
+asked for the next ticket, and **was handed back the row it had closed that
+morning.** Nothing else in the system was going to complain: the ranker was
+behaving correctly on the data it had.
+
+**5b's fix is the shape to copy:** remove the **edge**, leave the ticket its own
+prio so it stays reachable on merit, **and add a note saying not to restore the
+edge WITH the measurement that would justify restoring it** — here, a roofs
+re-profile putting inverse trig above the noise. **An instruction with no
+retirement condition is the thing that goes stale next**, which is this file's
+own all-clear rule applied to a negative instruction.
+
+### And a malformation the tooling accepts is the same failure one layer down
+
+**Found while checking 5b's edit, and it was this coordinator's own.** An earlier
+rewrite of that umbrella's summary left a **doubled closing quote**, so the
+frontmatter is **not valid YAML** — `yaml.safe_load` raises `ScannerError`,
+*"found unexpected end of stream"*. **`tools/progress.sh board-md` regenerated
+without a word, and `next` kept dispatching sensibly**, because the repo's own
+parser is lenient.
+
+**So the damage here is UNMEASURED and I am not claiming there was any** — the
+ranker evidently still read prio 95 and four edges. **The finding is that a
+malformed machine-readable field produced NO signal at all**, in the exact field
+5b had just demonstrated is the one that decides dispatch.
+
+**Population, so the number is quotable:** strict `yaml.safe_load` over the first
+frontmatter block of **4,465** tickets under `devdocs/progress/*/` answers
+**61 unparseable**, overwhelmingly in `done/`. **That is NOT 61 broken tickets** —
+the repo's parser is lenient by design and those tickets work. It is a count of
+files where a strict reader and the repo's reader disagree, and **nothing today
+establishes that any of them behaves wrongly.** Recorded so nobody quotes 61 as a
+defect count.
