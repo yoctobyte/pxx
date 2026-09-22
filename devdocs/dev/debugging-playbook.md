@@ -37381,3 +37381,50 @@ producer where the other came from. If the other turns out to measure something
 real, carry both rows; if it turns out to be nothing, **overwrite it rather than
 preserving it out of politeness** — a second row for a number that was never
 measured is a permanent invitation to re-litigate.
+
+## A TABLE CARRIES ITS LABELS STRUCTURALLY; QUOTING IT INTO PROSE DROPS THEM, AND A CELL GIVES NO CUE THAT IT WAS CONDITIONAL
+
+**Measured 2026-09-22, franks-5b, against its own work, while confirming someone
+else's error.** Third distinct mechanism in one day's chain around a single
+figure, and the only one where every input was correct.
+
+5b had a two-column table, **both scenes labelled**, with headers: `atan2`, `asin`
+and `acos` counts per frame for `roofs` and for `rijn`. It then quoted itself into
+prose — and **attached the wrong column to two of the three functions.** `asin`
+went into a ticket as *"0.2 calls/frame"*; 0.2 is the **`rijn`** figure, and on
+the shipping scene `asin` is **3.5**, 17x higher. `acos` was wrong the same way
+(*"24 calls in 150 s"* is `rijn`; on `roofs` it is ~0).
+
+**NOTHING WAS MISREAD AND NOTHING WAS MISREMEMBERED.** The table was right, it
+was the seat's own, it was correctly labelled, and it was available. **The loss
+happened at the FLATTENING STEP**, where a structure that carries its
+conditionality in its geometry is rewritten into sentences that must restate it.
+In 5b's words: *a table carries its labels structurally; a sentence has to
+restate them, and a cell gives you no cue that it is conditional.*
+
+**So the failure is invisible in both directions.** Looking at the table, nothing
+is wrong. Looking at the sentence, `0.2 calls/frame` is a complete, plausible,
+well-formed claim with no dangling reference — **a dropped label leaves no hole
+where it used to be.** Contrast a dropped unit or a dropped date, which read as
+incomplete.
+
+**Ordering is the only recoverable cue and it is fragile.** The document fixes
+column order by its first row (`atan2` roofs-then-rijn); every later row inherits
+it silently. **A reader who joins at row two has nothing.**
+
+**Discharge:** when you lift a value out of a multi-column source, **carry the
+column name INTO the sentence** — "3.5/frame on `roofs`", never "3.5/frame" — and
+where a ticket summary quotes several, keep the table. **And when you correct
+one, name the old value's true column** rather than silently editing, so a future
+reader sees the swap instead of a changed number; 5b did that at `50aa99893`.
+
+**AND THE REASON IT SURVIVED IS A RULE THAT ARRIVED TWICE INDEPENDENTLY TODAY,
+IN TWO SUBSYSTEMS AND TWO SEATS, WHICH IS WHY IT IS RESTATED HERE RATHER THAN
+CROSS-REFERENCED: a wrong number supporting a right conclusion never gets
+re-derived.** 5b's decision — keep `ArcSin`/`ArcCos` on the double-double path,
+since the plain-double identity measures up to 8 ulp and `acos` up to 1099 via
+`pi/2 - asin`, for ~0.02% of a frame — is **unchanged by the correction**, and
+the corrected figures support it just as well. **A conclusion that keeps reading
+as sound applies no pressure to its inputs.** The other arrival the same day: a
+call-rate figure that was actually a megabyte count off a file-size line, which
+travelled because the argument held at either value.
