@@ -37771,3 +37771,54 @@ it.**
 **That makes the sentence self-invalidating instead of permanent**, which is the
 general form: **state what an all-clear RESTS ON, inline, not merely when it was
 measured.**
+
+
+## THE INVERSE OF THE READOUT RULE: A READOUT CAN MANUFACTURE A DISAGREEMENT OUT OF A CORRECT VALUE — AND THE SUSPECT IS YOUR OWN DIFF
+
+**Measured 2026-09-22, franks-5b, while landing a change to the very code path
+the fixture was testing.**
+
+The known rule is that a readout can **collapse** a disagreement into an
+agreement — a `WriteLn` truncating two compilers' extremes to the same width, so
+a differential probe reports parity on the one row where they differ completely.
+**This is that rule run backwards, and it is the more expensive direction.**
+
+5b's fixture printed its rows with `"%d" %` for column alignment. That formatter
+has a real defect at exactly `Low(Int64)` — it emits a **bare `-`**, sign and no
+digits — so **30 rows came out as differences while every value was correct.**
+`print(v)` and `"%s" % v` render the same value correctly; `-2^62`, `-2^63+1`,
+`+2^63` and `-2^64` all render fine. One value out of 2^64.
+
+**THE COST IS NOT THE FALSE RED, IT IS WHO IT ACCUSES.** The red appeared while
+5b was landing a change **to that same code path**, so the obvious suspect was
+its own diff — and this file's own standing line says **the self-blaming reading
+terminates the search.** It would have sent a seat hunting a codegen bug inside a
+correct change. A false green at least leaves a number someone may later query; a
+false red aimed at your own work closes the question.
+
+**5b settled attribution by measurement rather than by argument, and said so:**
+*"by construction my inline arm cannot reach those rows"* was **true and was
+still reasoning.** It stashed the change, rebuilt, re-ran — **byte-identical
+output across all 269 rows, the same 30 failures.** Only then was the readout the
+suspect.
+
+**And the repair kept the coverage.** Changing the readout to `print(a, b, c)`
+made the **identical population** pass with zero differences — `Low(Int64)` and
+every straddle row still present. **Dropping the offending rows would have looked
+the same in the diff and destroyed the coverage**, which is the tempting fix
+precisely because it is indistinguishable from the correct one afterwards.
+
+**Discharge:** when a differential reddens on rows you did not touch, **change
+the READOUT before you change anything else**, and re-run the same population. If
+the rows pass under a second spelling, the values were never wrong. **And never
+narrow the population to clear a red** — the diff cannot tell that apart from a
+fix, and the coverage is gone silently.
+
+**The defect the fixture surfaced on the way is filed** —
+`bug-a-low-int64-renders-as-a-bare-minus-under-percent-d-and-abs-of-it-stays-negative`,
+p40, backlog-core — and it has a **closed sibling worth reading first**:
+`done/bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes`, where
+aarch64 printed all 19 digit bytes as `Ord('0') - d`. **Same value, same class —
+the value is right and the rendering is wrong — found by a per-backend sweep, on
+a different renderer.** `Low(Int64)` is a renderer boundary this repo has now hit
+twice through two different formatters.
