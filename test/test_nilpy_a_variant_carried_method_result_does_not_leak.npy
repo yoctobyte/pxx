@@ -18,11 +18,23 @@
 # instrument satisfies perfectly -- statm unreadable, the parse returning 0, the
 # loop never running. retain deliberately keeps its allocations and MUST move.
 #
-# DELIBERATELY NOT WIRED INTO THE MAKEFILE YET. This file prints VARCARRY FAIL
-# at HEAD -- that is the bug -- so wiring it now would put a known red into
-# every lib-test run and train readers to ignore it. Wire the row IN THE COMMIT
-# THAT FIXES THIS, asserting tail -n 1 == "VARCARRY OK", built with
-# ./$(COMPILER) rather than $(PXX_STABLE) since the pin will predate the fix.
+# WIRED, AND THE INSTRUCTION BELOW WAS CARRIED OUT -- this paragraph said
+# "DELIBERATELY NOT WIRED INTO THE MAKEFILE YET" until 2026-09-22, and the row
+# had been added on 2026-09-15 in the commit that fixed the bug, exactly as it
+# prescribed. Makefile:37634 builds it and the next line asserts
+# tail -n 1 == "VARCARRY OK", with ./$(COMPILER) rather than $(PXX_STABLE)
+# because the fix is in compiler/ir.inc and no pin carried it.
+#
+# Left as a worked example rather than deleted: an instruction that has been
+# OBEYED reads exactly like one still outstanding, and a "not yet" in a comment
+# is the shape that produces no signal when believed -- a reader who trusts it
+# goes and wires an already-wired row, or worse, treats the absence of coverage
+# as established and writes their own. Original wording kept below so the
+# prescription can still be read as the reasoning it was:
+#
+#   "This file prints VARCARRY FAIL at HEAD -- that is the bug -- so wiring it
+#    now would put a known red into every lib-test run and train readers to
+#    ignore it. Wire the row IN THE COMMIT THAT FIXES THIS."
 # Its sibling borrowvar.npy IS wired, because that one passes at HEAD and
 # guards against the wrong fix.
 #
