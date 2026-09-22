@@ -39699,7 +39699,7 @@ until the false sentence was measured.
 ## REDUCTION DELETES THIS CLASS OF CAUSE ON ITS FIRST STEP — WHEN A BUG RESISTS MINIMISATION, GROW A PASSING CASE INSTEAD OF SHRINKING THE FAILING ONE
 
 **Measured 2026-09-22 by `franks-5b`, finding
-`bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2`:
+`bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised`:
 a nine-line NilPy program, rc=139 at the DEFAULT `-O2`, on pin v418 and at HEAD.**
 
 ```python

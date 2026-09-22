@@ -81,7 +81,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 569, ranked
 
 - `[p 95] [E]` task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize (unblocks 2)
-- `[p 95] [A]` bug-a-two-promotable-int-locals-and-exactly-one-other-local-segfault-at-o2 (unblocks 1)
+- `[p 95] [A]` bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
