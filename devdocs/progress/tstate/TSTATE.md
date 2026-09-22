@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `c194231297b1` | 2026-09-22T11:22:50Z | RED (native) | 317.1s | `3daf4bc16cc1` RED |
+| borg | `c194231297b1` | 2026-09-22T11:39:37Z | RED (full) | 985.9s | `c194231297b1` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `3daf4bc16cc1` on borg, 2026-09-22T10:58:48Z (24m ago).**
+**Newest full tier in the fleet: `c194231297b1` on borg, 2026-09-22T11:39:37Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `3daf4bc16cc1` | RED | 24m | — (newest) |
+| borg | `c194231297b1` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -31,4 +31,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **test-aarch64#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `d36af549ea5b`, last good `481fb6d72ba0`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy** — test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy tools/expect_same.sh (borg): bad `b2f3e65ef050`, last good `67ef6a2222b9`, 4 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_float_repr_roundtrip.npy** — test/test_nilpy_float_repr_roundtrip.npy tools/expect_same.sh (borg): bad `3daf4bc16cc1`, last good `5fccc890af91`, 4 commit(s) in range
+- **test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2** — test/cunsigned_semantics_sweep_b138.c tools/run_target.sh +2 (borg): bad `c194231297b1`, last good `3daf4bc16cc1`, 2 commit(s) in range
