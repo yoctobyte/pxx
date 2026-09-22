@@ -38158,3 +38158,62 @@ pair. **A shared blocker is only visible to whoever is looking across tickets**,
 which is the one thing a seat working a group is structurally not doing — and if
 that is nobody's job in a given week, the answer is not more discipline per
 ticket, it is the edge.
+
+## A NAME-BASED CENSUS IS SILENT ABOUT ANYTHING NAMELESS — THE FILTER NEED NOT RESTATE THE HYPOTHESIS IF THE ENUMERATION CANNOT REACH THE REFUTING ARM
+
+**Measured 2026-09-22, `frankb-8e`, banked at `c09551004`.** CLAUDE.md already
+has *a census built on the hypothesis it is testing will agree with it* — that
+rule is about a **FILTER** that restates the claim. **This is a narrower door
+into the same room and the filter is innocent: the ENUMERATION was blind to the
+arm that would have refuted the hypothesis.**
+
+8e censused managed-local release sites in a NilPy program by callee name and got
+`PXXVarClear` **58.6%**, `PXXStrDecRef` **0.9%** — *a NilPy sweep is mostly
+variants.* **The x86-64 string arm does not call `PXXStrDecRef`.** It calls
+`AnsiStrReleaseAddr`, **a compiler-emitted blob with no symbol**, so the census
+found 18 unrelated direct calls and **missed all 2387**. The true composition is
+`SXR_STR` 2387 (53.5%), variants 1229, records 731. **Silence read as zero**, and
+zero is a number a census prints without complaint.
+
+**WHAT CAUGHT IT WAS NOT A REVIEW.** The nil-test byte signature from 8e's own
+unrelated change happened to be sitting beside the census and answered **2387
+against 18** — a **130x disagreement between two instruments on one subject**,
+with a clean negative control (the pre-change compiler has zero occurrences of
+that pattern in 8.5MB). **Had that signature not been there, the broken number
+would have shipped.**
+
+**THE DISCHARGE IS ABOUT THE ENUMERATION, NOT THE ASSERTION:** before trusting a
+census, ask **what in this population has no name** — a compiler-emitted blob, an
+inlined body, an indirect call through a table, an arm reached by address. A
+symbol-name query is structurally incapable of seeing any of them and **reports
+their absence as a count of zero**, which is indistinguishable from a real zero.
+Where a second instrument exists that keys on something other than the name — a
+byte signature, a disassembly, an IR dump — **run both and treat agreement as the
+finding**; 130x is not a discrepancy you reason about, it is one that decides.
+
+### AND THE HYPOTHESIS CAME FROM A COORDINATOR, WHICH IS THE WORST PLACE FOR ONE TO COME FROM
+
+**The broken census produced the answer a peer had predicted, to a seat that had
+gone looking for it, and the peer was me.** I had relayed *"a NilPy sweep is
+probably mostly your carriers"* as a cross-ticket observation. 8e's own summary
+of the danger is the sharpest statement of it: *"you had the hypothesis and not
+the instrument, so nothing on your side could have doubted it."*
+
+**A COORDINATOR GENERATES HYPOTHESES AND HOLDS NO INSTRUMENTS, BY CONSTRUCTION** —
+it writes no code, so **every guess it relays is unfalsifiable at its own end,
+permanently**, and it arrives carrying whatever authority the relay has. A
+hypothesis from a peer is a thing to test. **A hypothesis from the seat that has
+just correctly connected two tickets is a thing to confirm** — the credibility
+earned by the connection transfers to the guess, and the guess is the part that
+was never measured. That is the credible-carrier-lending-credibility-to-a-passenger
+shape, with the carrier being *a role* rather than a sentence.
+
+**Two-sided discharge, because the one-sided version does not work.** The relayer
+marks a guess as a guess and states confidence — necessary and **not sufficient**,
+since the authority is structural and survives the disclaimer. The receiver
+treats anything from a coordinator that is not attributed to a measurement as a
+**question**, including — especially — when it later turns out to be right. **In
+this instance it was wrong** (the 98% population was `tyAnsiString` in
+`compiler.pas`, which runs no NilPy; variants are 3 sites in 23,693 there), and
+the seat found that by re-deriving `tk 22`/`tk 23` from `defs.inc` at HEAD rather
+than quoting a doc.

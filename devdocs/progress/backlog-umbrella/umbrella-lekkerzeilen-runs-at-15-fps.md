@@ -150,6 +150,48 @@ files — and labelled a hypothesis in 7a's own doc.)
 **So a call count must be a SEPARATELY MEASURED quantity, never one derived from
 frame duration.** Any lever on this list ranked that way inherits the same hole.
 
+## THE SWEPT POPULATION IS A PROPERTY OF THE FRONTEND — A "2% TAIL" MEASURED ON `compiler.pas` DOES NOT DESCRIBE THIS PROGRAM
+
+**Measured by `frankb-8e` at HEAD, banked at `c09551004` (verified on
+origin/master), and recorded here because the next seat to read this umbrella
+would otherwise inherit the wrong program class.** These are **SITE counts**, not
+call counts — see the do-not-multiply section directly above.
+
+Managed-local release sites by arm, x86-64:
+
+| program class | `SXR_STR` | variants | records |
+| --- | --- | --- | --- |
+| `compiler.pas` | 23531 (99.3%) | 3 | 23 |
+| NilPy with calls | 2387 (53.5%) | 1229 | 731 (16.4%) |
+
+**`perf-a`'s own "the non-string arms are a ~2% tail" is correct for
+`compiler.pas` and wrong for NilPy** — and **lekkerzeilen runs under nilpy**, so
+the tail claim is about a program class this umbrella does not care about. 8e has
+scoped the claim in its own ticket rather than leaving it standing. **Variants
+plus records are ~26% of a NilPy program's release sites**, which is the
+population `perf-o`'s carrier lives in.
+
+**WHAT THIS DOES NOT SAY, and the boundary is the point:** it does not rank
+anything. A site count is per CALL SITE — `frankh-c0` measured at HEAD
+(`PXXDBG=a.ir`) that two `k.m(t)` sites mint two distinct unnamed carriers, and a
+loop calling one method a million times reuses **one** slot. `perf-o`'s cost is
+per CALL. **Multiplying a per-site population by a call frequency is this
+umbrella's own do-not-multiply error arriving through a neighbouring
+subsystem**, and the frame decomposition
+(`task-e-decompose-a-lekkerzeilen-roofs-frame-...`) is still the thing that would
+settle it.
+
+**AND THE NUMBER ABOVE NEARLY CAME OUT THE OTHER WAY, WHICH IS WHY ITS
+PROVENANCE IS ATTACHED.** 8e's first census answered `PXXVarClear` 58.6% and
+`PXXStrDecRef` 0.9% — *a NilPy sweep is mostly variants* — which was **a
+hypothesis this coordinator had supplied to that seat**. It was broken: the
+x86-64 string arm does not call `PXXStrDecRef`, it calls `AnsiStrReleaseAddr`, a
+compiler-emitted blob with **no symbol**, so a name-based census found 18
+unrelated direct calls and missed all 2387. **Silence read as zero.** It was
+caught by an unrelated byte signature answering 2387 against 18 — a 130x
+disagreement between two instruments on one subject, with a clean negative
+control. **Do not quote 58.6% from anywhere; it never existed.**
+
 ## What nobody has, and it probably outranks every edge below
 
 **~470 ms OF A 530 ms FRAME IS UNACCOUNTED FOR once vsync is removed, and
