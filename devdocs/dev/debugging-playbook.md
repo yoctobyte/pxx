@@ -35770,3 +35770,63 @@ fixed the probe reported AGREE on every signature, which is exactly what a
 still-broken probe reports. It only became a result after being made to FAIL on
 purpose: disabling the compiler's cdecl gate, rebuilding, and watching the same
 rows come back `DIFFER` with the positional registers.
+
+## THE POPULATION OF A TIER VERDICT IS (TIER, HOST) — three honest instruments agreed and all three described a machine handover as a code event
+
+Measured 2026-09-22 (frankh-c0, frankuser). The usual wrong-population failure
+has one broken instrument. **This one had three correct ones.**
+
+Three independent counts asked "do the `native` and `full` tiers ever publish a
+GREEN verdict": frankuser's at 01:40 over commit subjects, mine at 02:34 over
+2898 report files at a pinned ref, and mine again at 02:44 after fixing a
+`STILL-RED`/`NEW-RED` union bug. All three said **zero greens**, and all three
+were right about what they measured. All three **pooled hosts**.
+
+What the archive actually holds:
+
+    tier    host    reports  GREEN  last GREEN     newest report
+    native  seven      638     62   2026-09-11     2026-09-11   <- its LAST report
+    native  borg       467     49   2026-07-31     2026-09-22
+    full    seven      512      5   2026-09-09     2026-09-11
+    full    borg       426     34   2026-07-28     2026-09-22
+
+**The last GREEN is the retiring host's LAST REPORT, not a run that happened to
+be green.** The tiers did not stop going green — the host that was going green
+stopped reporting, and its replacement had not gone green since July. The
+"eleven day regression" was a handover, and the 20 commits between the last
+green and the first red include three `tstate(...): retire/un-retire` commits.
+
+**THE TELL, AND IT IS AVAILABLE WITHOUT KNOWING ABOUT HOSTS:** a chronic row
+that is red in 100% of reports "since the regression" but has an earlier red
+BEFORE the last green is not red-then-green-then-red in time. Split by machine:
+
+    test-core#src:test/c_crtl_wait.c   seven   9/638 red (one 94-minute burst)
+                                       borg  306/467 red (100% since un-retire)
+
+Pooled, that is an unbisectable flapping row. Split, it is a host property. And
+the row **PASSES AT HEAD** on a third host (`testmgr --tier native --job` =
+GREEN on plexus), so it was never a code regression at all.
+
+**WHY AGREEMENT WAS WORTHLESS HERE, which is the transferable part.** Two
+readings corroborate only if they can fail differently. These three could not:
+the population had a dimension none of them named, so agreement was guaranteed
+in advance and carried no information. **"Three instruments agree" is a claim
+about the instruments; it says nothing about a dimension all three are blind
+to.** The thing that broke it open was not a fourth count — it was asking how
+many COMMITS the window contained and reading their subjects.
+
+**Ask of any aggregate: what else changed at the boundary I am attributing to?**
+Where the answer is "the machine", the metric was never about the tree.
+
+**And a rule that names a HOST cannot survive a migration.** A note from
+2026-08-29 said *"pin or record the gcc version if seven ever runs Track T
+jobs"* — correct when written, aimed at seven because seven was then the odd
+toolchain. Seven was upgraded on 09-06, the skew closed, borg arrived and became
+the exception, and **the rule went quiet because the host it named had stopped
+being the thing it was about.** It did not decay; it was never aimed at the
+property. Name the property: any host publishing verdicts records its gcc and
+qemu.
+
+**What would retire this section:** verdict metadata that carries the host in a
+way a naive count cannot drop — at which point the pooling is impossible rather
+than avoidable, which is the better fix.
