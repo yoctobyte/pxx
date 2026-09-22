@@ -36526,6 +36526,37 @@ produces no correction and reads as caution.** So when you find yourself rating
 your own contribution against a collaborator's, ask the same question you would
 ask of any rate: **over what set, and did I count both sides?**
 
+**AND THE FRAME THAT GENERALISES IT, WHICH THE PEER SUPPLIED AND IS BETTER THAN
+THE INSTANCE: ANY SELF-ASSESSMENT IS A CENSUS WHOSE POPULATION IS THE OBSERVER'S
+OWN VISIBILITY.** That is the same animal CLAUDE.md already names for process
+tables — *any instrument that scans a namespace the observer is also in counts
+the observer* — and for a transcript grep that cannot tell a denial from a
+search for one. **The rules file applies that class to `pgrep` and to `grep` and
+never to judgement, and judgement is where it is least visible, because a census
+over what you can see does not feel like a census at all.** In the process-table
+case the observer is one row inside the population; in the ledger case **the
+observer IS the boundary** — my errors were caught by a peer and are therefore
+visible to me, its errors were caught by other peers and are therefore not, and
+nothing about the resulting count announces which side of the boundary it was
+drawn from.
+
+**HOLD THIS FAMILY APART FROM THE ONE IT RESEMBLES — THE REMEDIES DO NOT
+TRANSFER, AND THIS SECTION'S AUTHOR COLLAPSED THEM ONCE BEFORE BEING CORRECTED.**
+Two distinct failures ran through the same night and look identical from a
+distance:
+
+| | shape | what is wrong | remedy |
+| --- | --- | --- | --- |
+| **(A)** | a number over an **unstated set** | the number is **un-interpretable** | **state the population** |
+| **(B)** | a **true** number carrying a claim about a **different quantity** | the number is **fine**; the predicate is wrong | **ask what ACTION the phrasing implies** |
+
+(A) is the banner subtraction, the `+4` denominator, a filename-scoped grep.
+(B) is *blocks* versus *trusting*, the class-scoped `p^3`, *doing more work*.
+**(B) survives every arithmetic re-check and every request for the population**,
+which is exactly why stating the set does not save you from it; **(A) at least
+fails the moment someone asks what you counted.** Two rules, and reaching for
+the wrong one feels like diligence.
+
 **Half-discharged in the tool, 2026-09-22, and the remaining half is named.**
 `tools/tstate_toolchain_reversals.py` now prints `[longest run N, last red
 <date>]` beside every rate it reports, so the shape arrives with the number and
