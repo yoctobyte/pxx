@@ -36518,6 +36518,44 @@ produces, and it is *also* precisely what an interesting minority looks like.
 The two are indistinguishable from the output, so the prior has to do the work,
 and the prior should be: **a suspiciously tidy anomaly is a bug in me.**
 
+### EXTENSION — THE SAME TIDINESS IN A *DIFFERENTIAL* IS PERFECT CONFOUNDING, AND IT READS AS PROOF OF CAUSE
+
+*2026-09-22, `frankb-8e` measured it, `frankz-e5` re-counted it. The entry above is
+about a tidy anomaly inside ONE population. This is a tidy split BETWEEN two, and
+the failure runs the other way: there the cleanliness makes you invent a
+phenomenon, here it makes you believe a cause.*
+
+Chasing a riscv32 `wait4` red, the tstate archive gave a table nobody could fault:
+
+```
+700  borg    qemu=8.2.2      (red on this row)
+382  seven   qemu=10.2.1     (green on this row)
+```
+
+Two versions ever recorded, partitioning **perfectly** by host, no crossover in
+1,082 reports. It reads as *the old qemu is the cause* — and the archive cannot
+say that, because **host and qemu version are the same variable in it.** Every
+borg report is an 8.2.2 report. There are ZERO rows in which the two disagree, so
+there are zero rows that could separate *"borg's emulator is old"* from *"borg
+differs from seven in kernel, gcc, CPU, filesystem or load"*. **The table would
+look exactly the same if qemu were irrelevant.**
+
+**The inversion worth carrying: the more perfect the split, the LESS it can tell
+you about cause.** A ragged one — a few borg runs on the new qemu, a seven run on
+the old — would be far weaker-looking evidence and far stronger evidence, because
+those crossover rows are the only rows that carry any causal information at all. A
+clean 2x2 with an empty diagonal is not a strong result; it is a design with no
+control arm, and it arrives wearing the appearance of one.
+
+**Discharge, and it is cheap because it is one row and not a study.** Ask *"which
+cell of this table is empty, and what would fill it?"* Then fill ONE: same host,
+same kernel, same binary, the suspected variable moved by hand — here, invoking a
+10.2.1 `qemu-riscv32` on borg without installing it. One crossover row decides what
+1,082 confounded rows cannot. **And say which half you measured**: 8e stated
+outright that it had verified which host ran which version and NOT that the version
+moves the row, which is the sentence that stopped the causal half travelling as
+though it were the measured half.
+
 **Why the ordinary instinct fails here.** A real phenomenon usually arrives
 ragged — mixed magnitudes, a few near-misses, some records that half-qualify. A
 misclassification arrives *perfect*, because every record with the unrecognised
@@ -40715,3 +40753,48 @@ result is what authorises you to create something, that search needs a positive
 control like any other guard. Run it against a phrase you know is in the file. I
 did not, and the only reason this is a playbook entry rather than a duplicate
 section is that I happened to open the file for a different reason.
+
+
+## A `done/` WHOSE REMEDY WAS AN ENVIRONMENT CHANGE STOPS BEING IN FORCE WHEN THAT ENVIRONMENT RETIRES — AND NOTHING RE-READS A CLOSED TICKET
+
+*2026-09-22, `frankz-e5` from `frankb-8e`'s measurement. One instance, banked and
+NOT promoted. What would promote it: a second closed ticket in an unrelated lane
+whose resolution was an environment, a host, a toolchain or an external service
+that has since changed.*
+
+`done/regression-test-core-c-crtl-wait.md` was resolved 2026-09-06, honestly and
+correctly, and its resolution says so in its own words: *"RESOLVED by the owner's
+dist-upgrade of seven (route 2), not by a code change."* The riscv32
+`wait4-rusage rusage=UNTOUCHED` row went green on seven under qemu 10.2.1.
+
+**`seven` was retired 2026-09-11T16:29:49Z.** The row has been red ever since on
+borg, which runs 8.2.2, and a separate open ticket was filed for it on 09-12 — the
+day after the only host carrying the remedy left the fleet. Two tickets for one
+row, one closed and one open, both accurate, and the archive quietly answering a
+question about a machine that no longer exists.
+
+**The mechanism is that `done/` encodes a claim about the WORLD, not about the
+tree.** A code fix is carried by the repository: it travels to every host, survives
+every retirement, and a revert is a visible commit. An environment fix is carried
+by a machine. When the machine goes, the fix goes, **and the artefact recording it
+does not move** — it is in `done/`, which is exactly the folder nothing re-reads.
+There is no event that could notice: no commit reverts it, no test newly fails that
+was passing *in that tree*, and the row's red looks like an ordinary open bug.
+
+**It is the stale-hazard-block failure with the polarity flipped.** A stale warning
+says stop when you could go; this says settled when it is not. Both decay silently
+in the direction of nobody generating an observation.
+
+**Discharge, at CLOSE time, because no reading discipline reaches this later:** if
+a resolution's remedy is not in the repository, say so in the summary and name
+**what would un-do it** — *"green on seven under qemu 10.2.1; reverts if that host
+or that version goes"*. That one clause turns an invisible expiry into something a
+reader of the closed ticket can check. And when a HOST RETIRES, the closed tickets
+whose remedy lived on it are a population somebody should walk; nothing in this
+repo currently does.
+
+**Corollary for the open sibling:** do not read its age or its persistence as
+evidence about the code. *"It has survived four sampled shas today"* was offered as
+evidence of a durable code defect and withdrawn by its own author — one box
+answering the same way four times is what an environment delta looks like through a
+code-shaped instrument.
