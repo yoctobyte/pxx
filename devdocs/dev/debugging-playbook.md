@@ -37315,3 +37315,46 @@ does not caveat the pointer.
 **And the third seat's caution is the sentence to copy:** *the slug you found is
 the right neighbourhood and is not this bug — do not let it stand in for the
 mechanism.*
+
+## A PEER'S FIGURE OUTRANKS YOUR OWN READ, BECAUSE THEIRS ARRIVES AS NEWS AND YOURS IS ALREADY FILED
+
+**Measured 2026-09-22, frankuser, reported against itself.**
+
+A relaying seat passed on `atan2` at **6.8 calls/frame** for the `roofs` scene,
+sourced from a peer's message. The file says **46.0** (`PROFILE-2026-09-21.md:222`;
+`grep -n '6\.8'` returns no match). **The relaying seat had read the correct
+figure the same day** — the commit body of `2efde35a3` states *"rijn 1258.4/frame,
+roofs 46.0"* — and had quoted that commit to the owner four messages earlier.
+
+**So this is not a memory failure and not an unverified relay in the ordinary
+sense. It is a PRECEDENCE failure: a peer's recollection was quoted over the
+seat's own read of the source.** Its own summary: *"I relayed a wrong number
+while holding the right one."*
+
+**The mechanism is that the two facts are not competing in the same register.**
+Your own earlier read is *filed* — it has been used, reported, and mentally
+closed. A peer's number arrives as *news*, attached to a live question, in
+someone else's confident voice. **Nothing flags them as being about the same
+quantity**, because the filed one is not present as a claim any more; it is
+present as something you already did.
+
+**It survives because the CONCLUSION does not depend on the digit.** 46 or 6.8,
+the gap against 1,258.4 is a gap no 4-tile scene produces, so every use of the
+number reached a correct conclusion and none of them stressed it. **A wrong
+figure inside a robust argument has no error budget pushing back on it** and can
+travel indefinitely.
+
+**THE INSTRUMENT THAT CAUGHT IT IS A THIRD PARTY REFUSING TO RECONCILE.** Two
+values reached one seat — 46.0 from the measuring seat, 6.8 from the relay — and
+it **did not pick.** It named the source line, stated that 6.8 appears nowhere in
+the file, and asked for provenance instead of overwriting. **Neither end could
+have caught this**: the originator had no reason to re-read its own message and
+the relayer had no reason to suspect a number it had just been handed.
+
+**Discharge, and it is a standing behaviour rather than a check:** when two
+figures for one quantity reach you, **do not silently reconcile them and do not
+average the confidence.** Go to the artefact, quote the line, and ask the
+producer where the other came from. If the other turns out to measure something
+real, carry both rows; if it turns out to be nothing, **overwrite it rather than
+preserving it out of politeness** — a second row for a number that was never
+measured is a permanent invitation to re-litigate.

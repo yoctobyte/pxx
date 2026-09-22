@@ -106,9 +106,20 @@ list of twins is the same failure a second time.
 quotes `atan2` calls per frame at **46.0 on `roofs`** against **1,258.4 on
 `rijn`** (`:222`) — a 27x gap no 4-tile run can produce. That label stands.
 
-**Two values were in circulation for the roofs side and only one is in the
-document: 46.0.** A relay of this finding quoted **6.8**, which appears nowhere
-in the file (`asin` is 3.5 and 0.2). Read off the source here, 2026-09-22.
+**Two values were in circulation for the roofs side and only one is real: 46.0.**
+`grep -n '6\.8'` over the file returns **no match** (`asin` is 3.5 and 0.2).
+Settled 2026-09-22 by reading the source at both ends; **do not carry 6.8 as a
+second row.**
+
+**Its provenance is worth more than the correction.** 6.8 originated in 7a's
+message and was passed on by a relaying seat **that had already read the correct
+figure the same day** — the commit body of `2efde35a3` says in plain text
+*"rijn 1258.4/frame, roofs 46.0"*, and that seat had quoted that commit to the
+owner four messages earlier. **So a wrong number was relayed by someone holding
+the right one**, having quoted a peer's recollection over their own read. It
+survived because **the conclusion never depended on the digit** — 46 or 6.8, the
+gap against 1,258.4 is a gap no 4-tile run produces — which is exactly the shape
+that lets a wrong figure travel a long way.
 **And the counts are CPython's**, stated at `:222` — they transfer on the
 argument that the program logic is identical, which is an argument and not a
 measurement under pxx. `franks-5b` raised that limit against its own row before
