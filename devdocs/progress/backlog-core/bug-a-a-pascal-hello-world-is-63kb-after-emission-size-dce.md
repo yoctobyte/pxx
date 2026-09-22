@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: ""
 created: 2026-08-25
-summary: "THE TWO CORRECTNESS REGRESSIONS THAT REFUSED THE PROMOTION ARE FIXED (frankb-8e, 5fccc890a, 2026-09-22) AND WHAT IS LEFT IS THE TIER RE-RUN. `--fpc-float-errors` div0 and `--fpc-mem-errors` nilread both give their owed 208/216 under `--dce` now, on all arms (0/208/205/207 and five modes at 216), with `--no-dce` unchanged as the control. The mechanism was EmitCodeAbsToRdx recording no CodeRef for a `call +0 / pop rdx / add rdx, imm32` delta, so the pass neither protected the target nor re-aimed it; the i386 twin and two latent siblings went with it (see bug-a-two-code-to-code-references-are-unrecorded-and-are-safe-only-by-where-they-happen-to-sit, now done). THE EVIDENCE IS THE SLOT BYTES, NOT THE EXIT CODE: before the fix the four deltas were byte-identical in the --dce and --no-dce binaries of one program while the code between them had moved; after, exactly one moves (-66886 -> -24082, 42,804 bytes dropped in that gap) and three do not -- which is the three-survive/two-break split this ticket measured and could not explain. OF THE SIX FAILS FROM ATTEMPT 2, FOUR REMAIN AND NONE IS A CORRECTNESS BUG: two are the `test-emit-obj` `t Hidden` control arms whose subject the promotion deletes and whose repair is `--no-dce` on those rows, NOT weakening the assertion (dropping the row leaves a guard that passes when the symbol is absent); one is test-core#1008, frankb-8e's own wasm32 renumbering guard firing correctly on an unclosed live set; one is not ours (test-riscv32#180, identical rc either way). SO A THIRD ATTEMPT IS: respell those two rows, carve wasm32 out of the default, re-run the tier. THE WASM32 CARVE-OUT IS STILL REQUIRED and is not a defect -- the harness reaches bodies by EXPORT NAME and `--dce` correctly drops an export nothing reaches, so those rows would arrive as failures and read as evidence against the pass. AND THE TRAP IS UNCHANGED: the self-host fixedpoint converges at the promoted setting and converged while both regressions were live -- it converged at all seven builds of the fix too, including the unfixed ones. It is not evidence about this class and it reads exactly like evidence. A THIRD ATTEMPT MUST ALSO SAY WHICH HALF OF decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit IT ENACTS, in the commit, because the `-O` rule is unconditional on OUTPUT MODE and promoting to -O2 turns per-object DCE on by the back door. PROMISE, WITH ITS POPULATION THIS TIME: at tree fd6965890102, x86-64, `program h; begin WriteLn('hello'); end.`, code= from the ok line, 67,541 B -> 18,790 B, -72.2%. That does not refute the earlier -66% / 74,096 -> 24,944 row -- different tree, moving floor -- so both stand, each with what it measured. THE ORIGINAL MECHANISM THIS TICKET NAMES IS STILL UNTOUCHED AND IS NOT THE BLOCKER: PasApplyDefaults defines PXX_MANAGED_STRING unconditionally so every Pascal program still PULLS builtinheap, and DCE removes the consequence rather than the pull; frankS scoped that half on 2026-09-18 (-98% code on bare esp32c3) and its one concrete blocker is that the `string` KEYWORD is not in DetectPascalRuntimeNeeds' scan. EARLIER HISTORY BELOW."
+summary: "THE TWO CORRECTNESS REGRESSIONS THAT REFUSED THE PROMOTION ARE FIXED (frankb-8e, 5fccc890a, 2026-09-22) AND WHAT IS LEFT IS THE TIER RE-RUN. `--fpc-float-errors` div0 and `--fpc-mem-errors` nilread both give their owed 208/216 under `--dce` now, on all arms (0/208/205/207 and five modes at 216), with `--no-dce` unchanged as the control. The mechanism was EmitCodeAbsToRdx recording no CodeRef for a `call +0 / pop rdx / add rdx, imm32` delta, so the pass neither protected the target nor re-aimed it; the i386 twin and two latent siblings went with it (see bug-a-two-code-to-code-references-are-unrecorded-and-are-safe-only-by-where-they-happen-to-sit, now done). THE EVIDENCE IS THE SLOT BYTES, NOT THE EXIT CODE: before the fix the four deltas were byte-identical in the --dce and --no-dce binaries of one program while the code between them had moved; after, exactly one moves (-66886 -> -24082, 42,804 bytes dropped in that gap) and three do not -- which is the three-survive/two-break split this ticket measured and could not explain. OF THE SIX FAILS FROM ATTEMPT 2, FOUR REMAIN AND NONE IS A CORRECTNESS BUG: two are the `test-emit-obj` `t Hidden` control arms whose subject the promotion deletes and whose repair is `--no-dce` on those rows, NOT weakening the assertion (dropping the row leaves a guard that passes when the symbol is absent); one is test-core#1008, frankb-8e's own wasm32 renumbering guard firing correctly on an unclosed live set; one is not ours (test-riscv32#180, identical rc either way). SO A THIRD ATTEMPT IS: respell those two rows, carve wasm32 out of the default, re-run the tier. THE WASM32 CARVE-OUT IS STILL REQUIRED and is not a defect -- the harness reaches bodies by EXPORT NAME and `--dce` correctly drops an export nothing reaches, so those rows would arrive as failures and read as evidence against the pass. AND THE TRAP IS UNCHANGED: the self-host fixedpoint converges at the promoted setting and converged while both regressions were live -- it converged at all seven builds of the fix too, including the unfixed ones. It is not evidence about this class and it reads exactly like evidence. THE OBJECT-MODEL GATE IS MEASURED AWAY AND IT WAS MINE (frankh-c0, 2026-09-22): the promotion enacts NEITHER half of decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit, so a third attempt says THAT in the commit rather than picking a side. I had written that promoting turns per-object DCE on by the back door and therefore answers the fork silently. The first clause is true and the second does not follow. Measured at fd6965890102, x86-64, `--emit-obj` of a C TU pulling the runtime: `--dce` drops 269 of 540 LOCAL FUNC bodies and the export surface is INVARIANT -- 323 exports, 312 of them WEAK FUNC, IDENTICAL NAME SETS, UND 0 both ways; a second TU drops 436 of 489 locals with 2 exports unchanged. The bodies DCE removes are LOCAL and were never part of the object's external contract, so an object still supplies exactly what it supplied before under EITHER answer. The fork's model B -- 298 of 307 exports vanishing -- requires RE-ROOTING at the TU's own exports, which the decide itself had to SIMULATE because `--dce` does not do it; promoting an -O level does not do it either. SCOPE, stated because the decide flags it: x86-64. The xtensa row is VACUOUS and is not counted -- exports were identical there but `--dce` dropped ZERO bytes (390 B both), so it cannot tell a preserved export from a pass that did nothing. PROMISE, WITH ITS POPULATION THIS TIME: at tree fd6965890102, x86-64, `program h; begin WriteLn('hello'); end.`, code= from the ok line, 67,541 B -> 18,790 B, -72.2%. That does not refute the earlier -66% / 74,096 -> 24,944 row -- different tree, moving floor -- so both stand, each with what it measured. THE ORIGINAL MECHANISM THIS TICKET NAMES IS STILL UNTOUCHED AND IS NOT THE BLOCKER: PasApplyDefaults defines PXX_MANAGED_STRING unconditionally so every Pascal program still PULLS builtinheap, and DCE removes the consequence rather than the pull; frankS scoped that half on 2026-09-18 (-98% code on bare esp32c3) and its one concrete blocker is that the `string` KEYWORD is not in DetectPascalRuntimeNeeds' scan. EARLIER HISTORY BELOW."
 ---
 
 # The measurement
@@ -381,3 +381,53 @@ made this session, including the ones carrying both live regressions. The
 evidence is the two repros, their `--no-dce` controls, and the slot bytes.
 
 Tree `fd6965890102`; `gate.sh quick` green.
+
+## 2026-09-22 (frankh-c0) — THE OBJECT-MODEL GATE WAS MINE AND IT IS MEASURED AWAY
+
+I wrote the blocker this retires, in `8f0a...`'s neighbour section and in this
+ticket's summary: *the `-O` rule is unconditional on OUTPUT MODE, therefore
+`--dce` arriving at the default `-O2` enacts one half of
+`decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit`
+silently.* **The first clause is true. The second does not follow, and I never
+measured it — I reasoned from the rule to the consequence.**
+
+Measured at tree `fd6965890102`, x86-64, `--emit-obj`, `readelf -sW`:
+
+| TU | flag | LOCAL FUNC | exports | UND | export NAME sets |
+| --- | --- | --- | --- | --- | --- |
+| C TU pulling the runtime | `--no-dce` | 540 | 323 (312 WEAK FUNC) | 0 | — |
+| same | `--dce` | **271** | **323 (312 WEAK FUNC)** | 0 | **IDENTICAL** |
+| leaf C TU | `--no-dce` | 489 | 2 | 0 | — |
+| same | `--dce` | **53** | **2** | 0 | **IDENTICAL** |
+
+**The pass removed 269 and 436 local bodies and not one export.** That is the
+decide's own finding — *"`--dce` does not move the export surface at all; the
+exports ARE the root set"* — reproduced at HEAD, after today's `CodeRef` fix,
+on two TUs it did not use.
+
+### Why it follows that neither half is enacted
+
+The bodies `--dce` removes are **LOCAL**. They were never linkable from outside
+and were never part of the object's external contract. So after the pass the
+object supplies **exactly what it supplied before**, and that is true under
+answer A (*it supplies the runtime for something else*) and under answer B
+(*only for itself*) alike. Nothing about the promise changes.
+
+What WOULD change it is model B's **re-rooting** at the TU's own two exports —
+298 of 307 weak exports vanishing. The decide had to **SIMULATE** that off the
+object's relocations precisely because `--dce` does not do it. **Promoting an
+`-O` level does not do it either.** A third attempt therefore states in its
+commit that it enacts **neither** half, and the fork stays open and untouched.
+
+### Scope, and one row I am NOT counting
+
+x86-64. The decide flags a Pascal/xtensa object as the gap most likely to
+matter, so I tried it: exports came out identical — **and `--dce` dropped zero
+bytes on that TU (390 B both), so the row cannot tell a preserved export from a
+pass that did nothing.** It is the *"would this still pass if the machinery did
+nothing at all?"* case and it is vacuous. The x86-64 rows are the evidence; the
+xtensa question is still open and wants a TU with something to remove.
+
+**What would retire this section:** an `--emit-obj` TU on any target where
+`--dce` demonstrably removes bodies AND an export disappears. That has not been
+observed on any target.
