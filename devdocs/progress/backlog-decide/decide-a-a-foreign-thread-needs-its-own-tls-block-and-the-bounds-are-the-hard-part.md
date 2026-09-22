@@ -263,6 +263,15 @@ thread's block falls from 4,224 to ~1,152 bytes**, and the knob already exists:
 exactly the programs that would hit it.** A decision taken against 4,224 bytes
 is being taken against a number another ticket is already trying to move.
 
+> **A FORK PRICED AGAINST A LIVE NUMBER ACQUIRES A DEPENDENCY ON NOBODY
+> IMPROVING THAT NUMBER.** Same family as a ticket summary citing a
+> currently-firing row: the sentence is true when written and is falsified by
+> someone else's fix, silently, in the direction that makes the decision look
+> already-made. **So whoever sends this up must send the RANGE — 4,224 today,
+> ~1,152 if the threadvar area is sized on demand, and `PXX_TLS_USER_0` proves
+> the floor is reachable now** — not the single number. Answering against 4,224
+> alone is answering a question that expires.
+
 **NOT MEASURED HERE, ON PURPOSE:** the SETUP cost (what installing a block
 costs in instructions/time). The box was at load average 14+ and a timing row
 taken there would look like evidence — see the deferral note in
