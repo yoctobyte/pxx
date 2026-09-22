@@ -1533,3 +1533,81 @@ happens to be the conservative one.
 density approaches `compiler.pas`'s 5.90/1000 B. Nothing in the tree is close,
 and the honest limit on the row above is that `cross.pas` is fifteen lines —
 it prices the MECHANISM at a known density, it does not predict an app.
+
+## 2026-09-22 (frankb-8e) — riscv32 JOINS, and I ran the blast radius against a binary the tree said nothing about
+
+Fifth backend. RISC-V compares and branches in one instruction and has **no
+condition codes at all**, so like aarch64's `CBZ` there is nothing to clobber
+and no ABI argument to make — only x86-64, i386 and arm32 need one.
+
+| target | before -> after |
+| --- | --- |
+| **riscv32** | **CHANGED — read first, it is the positive control** |
+| x86_64 | IDENTICAL |
+| i386 | IDENTICAL |
+| arm32 | IDENTICAL |
+| aarch64 | IDENTICAL |
+| xtensa (`--platform=posix`) | IDENTICAL |
+
+All six legs asserted BUILT; the six pre-images asserted **6 distinct shas**.
+Both assertions are new this commit and both come from the previous section.
+
+### The encoder is reused because it carries the refusal
+
+`EncodeRISCVBEQ` already holds `RISCVRelCheck(offset, -4096, 4094)`, so a call
+that outgrows a B-type immediate is a **compile-time refusal**, not a truncated
+offset. That is not hypothetical here: `IR_JUMP_IF_FALSE`'s own comment records
+a lone `beq` silently truncating and landing inside unrelated code — *"chess
+perft counted 164"* — which is why that site emits `bne`-skip + `jal` instead.
+A release site spans one call, so `beq` is right; the guard is what makes it
+safe to keep being right.
+
+### Measured, and it matched a prediction made before the emitter existed
+
+| | predicted by the NOP probe | delivered by the emitter |
+| --- | --- | --- |
+| hosted riscv32, `cross.pas` | 16 sites | `code=` 267884 -> 267948 = **+64 = 16 x 4** |
+| bare riscv32, `cross.pas` | 5 sites | `code=` 12400 -> 12420 = **+20 = 5 x 4** |
+
+The pricing section above counted sites by emitting a NOP and dividing. The
+emitter then delivered exactly those counts at 4 B each. **A prediction made
+by one instrument and confirmed by a different one**, which is worth more than
+either number alone.
+
+- **Behaviour**: `cross=3` under `qemu-riscv32`, before and after.
+- **Leaks, five fixtures under `qemu-riscv32`**: identical on **every progress
+  line**, not merely the final row — the census prints a running
+  `allocs/frees/live` and all ~400 lines match per fixture.
+- `tools/gate.sh quick`: GREEN.
+
+### THE CONTROL BINARY WAS THE SCRATCH EXPERIMENT, AND ONLY THE BLAST RADIUS SAW IT
+
+The first run of this table said **`xtensa CHANGED`** — a target this commit
+does not touch. It was not a breach. **`cp compiler/pascal26 <control>` had
+copied the NOP-probe build**: I reverted the probe SOURCE with `git checkout`,
+committed, and never rebuilt, so `git status` was clean and
+`compiler/pascal26` was still the experiment. The xtensa row moved because the
+*control* had probe NOPs in it, and the riscv32 row was contaminated the same
+way — **its number would have been the probe's NOPs plus my branch, reported
+as my branch.**
+
+CLAUDE.md names this exactly — *"a clean tree is not evidence about the
+binary"* — and lists five routes to a stale one. **This is a sixth: reverting
+an experiment's source without rebuilding.** It is nastier than a stale pull
+because the tree is not merely old, it is *correct*, and the binary is a
+deliberate experiment that no longer has any source backing it. Nothing in
+`git status`, `git diff` or the stamp can see it: the stamp said
+`sources match it` about sources that did match — **of the NEXT build.**
+
+**What caught it was the row that had no business moving.** A single-target
+before/after would have read the contamination as the change. That is the
+second thing the five IDENTICAL rows have now caught that the converted row
+could not, and it is the opposite direction from the previous section: there
+the instrument was dead and printed agreement, here it was live and printed a
+disagreement that was real and not mine.
+
+**Discharge, added to the two from the previous section**: after reverting any
+experimental source, **rebuild before copying the binary anywhere**, and print
+`sha256sum` of the control beside the number it produced. The control here was
+`b47aec0b26be` when it should have been `2c5b821bbf05`, and one printed sha
+would have said so before the first `cmp` ran.

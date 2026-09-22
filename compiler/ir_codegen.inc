@@ -15605,9 +15605,30 @@ begin
                 (act = SXR_STR) then
         begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
+          { Inline nil test, ungated, at the release call site. Like aarch64's
+            CBZ this is one instruction and touches no flags -- RISC-V compares
+            and branches in the same instruction and has no condition codes at
+            all, so there is nothing to clobber and no ABI argument to make.
+
+            PRICED BEFORE IT WAS WRITTEN, because this is an ESP target where
+            image size is tracked: 5 sites in a 12,400 B --esp-profile=bare
+            image, 0.16%, against a compiler.pas density of 5.90 sites per
+            1000 B where the ungated decision was already taken. A bare image
+            is 15x less site-dense because the bare RTL contributes almost
+            none. perf-a-every-return-releases-every-managed-local
+
+            The span is not hand-counted and the encoder is not re-spelled:
+            EncodeRISCVBEQ carries RISCVRelCheck(-4096..4094), so a call that
+            outgrows a B-type immediate is a compile-time REFUSAL rather than
+            a truncated offset landing inside unrelated code -- which is the
+            failure IR_JUMP_IF_FALSE's own comment records (chess perft counted
+            164 before it stopped using a lone beq for a long span). }
+          jzPatch := CodeLen; EmitI32(0);          { beq a0, x0, past the call }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           EmitCallProc(procIdx);
+          Patch32(jzPatch,
+                  EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - jzPatch));
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (act = SXR_VAR) then
