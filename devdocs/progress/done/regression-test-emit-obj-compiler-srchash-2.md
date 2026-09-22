@@ -121,3 +121,18 @@ believing that would have closed this as fixed-by-events. **A green re-verify
 on the wrong host is not a re-verify**, which is the same class of error as the
 bug itself.
 - 2026-09-22 — resolved, commit c9b0fd4b5.
+
+## CAVEAT RETIRED 2026-09-22 — confirmed on borg, by the instrument that filed it
+
+The resolution above named exactly one thing that would retire its own caveat:
+*"the next full tier on borg passing step 106/589."*
+
+It has. The Track T watcher's `8036816a2` (`tstate(borg): 0f005c7b5597 RED
+(full)`) carries `FIXED:test-emit-obj#src:tools/compiler_srchash.sh` in its
+subject — a full tier on **borg**, the host I could not reach and whose clang
+was the whole cause, reporting this job as fixed.
+
+So the fix is no longer "derived from the log tail plus a local reproduction by
+another route". It is confirmed on the machine that produced the red, by the
+instrument that filed the ticket. The tier is still RED overall on other rows;
+this job is not one of them.
