@@ -1,0 +1,57 @@
+# `__file__` for a module INSIDE a package.
+# decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package
+#
+# test_nilpy_file_dunder covers a TOP-LEVEL module and stays green either way --
+# a flat module has no package directory to lose, so it cannot see this defect.
+# That is why it sat green while every packaged module was wrong.
+#
+# THE IMPORT ORDER BELOW IS LOAD-BEARING AND IS NOT TIDINESS. `sib` reaches
+# `inner` by a RELATIVE import, which registers the unit under the bare name
+# `inner`; the dotted `import nilpy_filedunderpkg.inner` registers the mangled
+# `nilpy_filedunderpkg_inner`. Whichever spelling compiles the file FIRST wins,
+# because the second hits the resolved-path dedupe and becomes an alias without
+# re-parsing -- so __file__ is lowered exactly once, from whichever name got
+# there first. Before the fix the SAME module reported
+# `<dir>/nilpy_filedunderpkg_inner.py` with the dotted import first and
+# `<dir>/inner.py` with the relative one first, and neither matched CPython.
+#
+# So the sib-first arm is the one that pins the relative spelling and the
+# direct arm pins the dotted one. A test that imported only one way would
+# certify half the bug -- "a first-wins table is exposed only by the
+# arrangement that puts the correct entry last".
+#
+# NOTHING ABSOLUTE IS PRINTED: the answers are basenames and one relation, so
+# the .expected file does not carry a build directory.
+import os
+
+import nilpy_filedunderpkg.sib
+import nilpy_filedunderpkg.inner
+
+exe_dir = os.path.dirname(os.path.abspath(__file__))
+
+f, one, two = nilpy_filedunderpkg.inner.probe()
+
+# The package directory must be IN the virtual path. This is the whole fix:
+# collapsing it gave `inner.py` here and `<exe_dir>` for the one-dirname form.
+print("module basename:", os.path.basename(f))
+print("module dir name:", os.path.basename(one))
+
+# The idiom that found this. A packaged module names its own root with TWO
+# dirnames; with the package collapsed this overshot by one level, so
+# lekkerzeilen's four call sites all resolved above their data root and
+# `--starts` printed "open water: nowhere in particular" with nothing raised.
+print("two dirnames is exe dir:", two == exe_dir)
+
+# Reached through the relative import instead. Must agree exactly: the two
+# spellings are the two arms of the first-wins hazard, and disagreement here is
+# the defect returning by the other door.
+g, gone, gtwo = nilpy_filedunderpkg.sib.viasib()
+print("relative arm agrees:", (g, gone, gtwo) == (f, one, two))
+
+# The virtual path is under the executable's directory -- the freezer
+# convention this project chose, unchanged by the fix. Asserted as a RELATION
+# rather than as a string so it carries no build path.
+print("under exe dir:", os.path.dirname(os.path.dirname(os.path.abspath(f))) == exe_dir)
+
+# Still virtual: no file is written beside the binary.
+print("module file exists:", os.path.exists(f))

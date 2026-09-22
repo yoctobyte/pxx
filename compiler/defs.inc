@@ -6348,6 +6348,39 @@ var
     unit references (uses './sub/unit') resolve relative to it. Saved/restored
     around each nested unit parse, like CurSrcBaseName. }
   CurUnitDir : AnsiString;
+  { The PACKAGE-RELATIVE virtual path of the Python module being parsed, as
+    `__file__` should report it: `mypkg/inner.py` for a module inside a package,
+    `inner.py` for a top-level one, '' while not parsing a Python module.
+    Saved/restored around each nested unit parse exactly like CurUnitDir, which
+    is set beside it.
+
+    WHY A SEPARATE GLOBAL RATHER THAN DERIVING IT AT THE LOWERING SITE. The unit
+    NAME cannot answer this: dots are mangled to underscores when a module is
+    reached by a dotted import (PyConsumeDottedModule, PyPackageSubmoduleKey), so
+    `import mypkg.inner` registers `mypkg_inner` while `from . import inner`
+    registers the bare `inner` -- and whichever spelling compiles the file FIRST
+    wins, because the second hits the resolved-path dedupe and becomes an alias
+    without re-parsing. Measured 2026-09-22, one program, two import orders:
+    `__file__` came back `<dir>/mypkg_inner.py` or `<dir>/inner.py` for the SAME
+    module, neither matching CPython's `<dir>/mypkg/inner.py`. Unmangling is not
+    a repair either -- a module name may legitimately contain an underscore, so
+    `mypkg_inner` is ambiguous between `mypkg/inner` and a top-level
+    `mypkg_inner`. The resolved PATH is the only unambiguous source, and it is
+    only in scope where the unit is parsed.
+
+    RELATIVE, NEVER THE RESOLVED PATH. Interning a unit's absolute path baked
+    ExeDir into every binary and made our output argv0-dependent
+    (bug-a-the-compilers-output-depends-on-argv0; see CompiledUnitFile above).
+    Only the fragment below SourceFileDir is emitted, so two builds of the same
+    tree from different directories produce identical bytes. A module resolved
+    from a -Fu library root has no meaningful fragment and falls back to its
+    basename, which is the pre-2026-09-22 behaviour.
+
+    The extension is forced to `.py` rather than taken from the file, because a
+    NilPy source is `.npy` on disk and Python code that inspects `__file__`
+    expects `.py`. test_nilpy_file_dunder asserts exactly that.
+    decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package }
+  CurUnitPyRel : AnsiString;
   { -fsigned-char / -funsigned-char: 1 = signed, 0 = unsigned, -1 = follow the
     target's psABI (see CPlainCharSigned in cparser.inc). }
   CCharSignedOpt : Integer;

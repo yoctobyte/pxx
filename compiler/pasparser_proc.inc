@@ -4801,6 +4801,97 @@ begin
     else Result := Result + dotted[i];
 end;
 
+{ The package-relative virtual path `__file__` should report for a Python module
+  resolved to `path` — `mypkg/inner.py` inside a package, `inner.py` at top
+  level. See CurUnitPyRel in defs.inc for why the unit NAME cannot answer this
+  (dots are mangled to underscores, and unmangling is ambiguous).
+
+  Relative to SourceFileDir, never the resolved path: only this fragment is
+  emitted, so two builds of one tree from different directories produce
+  identical bytes (bug-a-the-compilers-output-depends-on-argv0).
+
+  A module found under a -Fu library root does not sit below SourceFileDir and
+  has no meaningful package fragment, so it falls back to its basename — the
+  behaviour every module had before 2026-09-22.
+
+  The extension is FORCED to .py: a NilPy source is .npy on disk and Python code
+  reading __file__ expects .py. `__init__` keeps its own name, so a package's
+  own module reports `mypkg/__init__.py` as CPython does. }
+function PyDunderFileRel(const path: AnsiString): AnsiString;
+var dir, base: AnsiString; i: Integer;
+begin
+  dir := GetFilePath(path);
+  base := GetFileBaseName(path);
+  { Strip the main script's directory when the module sits below it. Compared as
+    a literal prefix because both sides are built by this resolver from the same
+    roots -- neither is user input and neither has been normalised away. }
+  if (Length(SourceFileDir) > 0) and (Length(dir) >= Length(SourceFileDir)) then
+  begin
+    i := 1;
+    while (i <= Length(SourceFileDir)) and (dir[i] = SourceFileDir[i]) do Inc(i);
+    if i > Length(SourceFileDir) then
+      dir := Copy(dir, Length(SourceFileDir) + 1, Length(dir) - Length(SourceFileDir))
+    else
+      dir := '';
+  end
+  else if Length(SourceFileDir) > 0 then
+    dir := '';
+  { An absolute leftover means the module came from somewhere else entirely (a
+    -Fu root with no relation to the script's tree); emitting it would bake a
+    build path into the binary, so drop to the basename. }
+  if (Length(dir) > 0) and (dir[1] = '/') then dir := '';
+  Result := dir + base + '.py';
+end;
+
+{ `__file__`, lowered once for every frontend that can parse a Python
+  expression. pyparser.inc and pasparser_expr.inc carried byte-identical copies
+  of this until 2026-09-22 (see the forward in frontend_forwards.inc).
+
+  MAIN module -> pysys_file(), the resolved executable, so os.path.exists is
+  True. IMPORTED module -> pysys_module_file(<rel>), which prepends the
+  executable's directory to whatever literal it is handed and does nothing else,
+  so a fragment with a separator in it already produces <exe_dir>/mypkg/inner.py
+  with no runtime change. The freezer convention (PyInstaller/cx_Freeze).
+
+  The fragment comes from CurUnitPyRel -- the resolved path made relative --
+  NOT from the unit name, which is mangled and order-dependent. The fallback
+  keeps the old spelling for any path that never set it. }
+procedure PyEmitDunderFile;
+var idx, node, valNode, argSeq: Integer; frag: AnsiString;
+begin
+  if CurrentUnitIdx >= 0 then
+  begin
+    idx := FindProc('pysys_module_file');
+    if idx < 0 then
+      Error('Nil Python: pylib (pysys_module_file) not loaded');
+    frag := CurUnitPyRel;
+    if Length(frag) = 0 then
+      frag := LowerCase(Strs[CurrentUnitIdx].Text) + '.py';
+    valNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[valNode] := StoredName(frag);
+    { DERIVED from the string actually stored, never restated. Both old copies
+      said `Length(Strs[CurrentUnitIdx].Text) + 3`, correct only because
+      LowerCase preserves length -- a restated length that a package prefix
+      would have falsified silently, in two places at once. }
+    ASTSLen[valNode] := Length(frag);
+    ASTTk[valNode] := Ord(tyString);
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := valNode;
+    ASTRight[argSeq] := -1;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := idx;
+    ASTTk[node] := Ord(tyAnsiString);
+    ASTLeft[node] := argSeq;
+    CurASTNode := node; LastExprTk := tyAnsiString;
+    Exit;
+  end;
+  node := AllocNode(AN_CALL);
+  idx := FindProc('pysys_file');
+  if idx < 0 then Error('Nil Python: pylib (pysys_file) not loaded');
+  ASTIVal[node] := idx; ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := -1;
+  CurASTNode := node; LastExprTk := tyAnsiString;
+end;
+
 { The unit name a dotted path mangles to, lowercased — used to CHECK that a
   carried-over dotted spelling really belongs to the import being resolved. }
 function PyDottedMangled(const dotted: AnsiString): AnsiString;
@@ -6300,6 +6391,7 @@ var
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
   savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
+  savedUnitPyRel: AnsiString;
   savedUnitContent: AnsiString;
   cdir, bdir, rtldir, lcldir, asmdir, probeContent, probePath, probeFile: AnsiString;
   basePath, ext, emsg: AnsiString;
@@ -6944,6 +7036,11 @@ begin
     savedCurTokLine := CurTok.Line;
     savedUnitDir := CurUnitDir;
     CurUnitDir := GetFilePath(path);
+    { The virtual path __file__ reports for THIS module, computed here because
+      `path` is the only unambiguous source and it is in scope only here. See
+      CurUnitPyRel in defs.inc. }
+    savedUnitPyRel := CurUnitPyRel;
+    CurUnitPyRel := PyDunderFileRel(path);
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
     { A `.py` MODULE has no interface/implementation split, so nothing it
@@ -6976,6 +7073,7 @@ begin
     CurrentUnitIdx := savedCurrentUnitIdx;
     InUnitImpl := savedUnitImplCU;
     CurUnitDir := savedUnitDir;
+    CurUnitPyRel := savedUnitPyRel;
     TokPos := savedTokPos;
     CurTok.Kind := savedCurTokKind;
     CurTok.SVal := savedCurTokSVal;

@@ -56043,31 +56043,7 @@ begin
           CurrentUnitIdx is the seam: >= 0 means "parsing an imported unit",
           which is the same test every other main-module-only NilPy rule uses. }
         Next;
-        if CurrentUnitIdx >= 0 then
-        begin
-          idx := FindProc('pysys_module_file');
-          if idx < 0 then
-            Error('Nil Python: pylib (pysys_module_file) not loaded');
-          valNode := AllocNode(AN_STR_LIT);
-          ASTSOffset[valNode] :=
-            StoredName(LowerCase(Strs[CurrentUnitIdx].Text) + '.py');
-          ASTSLen[valNode] := Length(Strs[CurrentUnitIdx].Text) + 3;
-          ASTTk[valNode] := Ord(tyString);
-          argSeq := AllocNode(AN_ARG);
-          ASTLeft[argSeq] := valNode;
-          ASTRight[argSeq] := -1;
-          node := AllocNode(AN_CALL);
-          ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyAnsiString);
-          ASTLeft[node] := argSeq;
-          CurASTNode := node; LastExprTk := tyAnsiString;
-          Exit;
-        end;
-        node := AllocNode(AN_CALL);
-        idx := FindProc('pysys_file');
-        if idx < 0 then Error('Nil Python: pylib (pysys_file) not loaded');
-        ASTIVal[node] := idx; ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := -1;
-        CurASTNode := node; LastExprTk := tyAnsiString;
+        PyEmitDunderFile;
         Exit;
       end;
       if (name = 'pystr_of') and (TokPos < TokCount) and

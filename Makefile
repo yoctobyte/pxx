@@ -4984,6 +4984,21 @@ test-nilpy: $(COMPILER)
 	# convention) -- deliberately not CPython's source paths.
 	./$(COMPILER) test/test_nilpy_file_dunder.npy $(TESTTMP)/test_nilpy_filedunder26
 	$(TESTTMP)/test_nilpy_filedunder26 | diff -u test/test_nilpy_file_dunder.expected -
+	# ...and the same for a module INSIDE A PACKAGE, which the row above cannot
+	# see: a flat module has no package directory to lose, so that test stayed
+	# green while every packaged module reported the wrong path. Three rows here
+	# differ under the pre-fix compiler (module dir name, two-dirnames, under-exe)
+	# -- checked against the pin, not assumed.
+	#
+	# The fixture imports the package BOTH ways round on purpose. A relative
+	# `from . import inner` registers the bare name, a dotted import registers the
+	# mangled `pkg_inner`, and whichever compiles the file first wins -- so before
+	# the fix the same module answered `<dir>/nilpy_filedunderpkg_inner.py` or
+	# `<dir>/inner.py` depending on import ORDER. Importing one way only would
+	# certify half the defect.
+	# decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package
+	./$(COMPILER) test/test_nilpy_file_dunder_package.npy $(TESTTMP)/test_nilpy_filedunderpkg26
+	$(TESTTMP)/test_nilpy_filedunderpkg26 | diff -u test/test_nilpy_file_dunder_package.expected -
 	# repr() escapes non-printables as \xNN, like CPython
 	./$(COMPILER) test/test_nilpy_repr_escapes_non_printables.npy $(TESTTMP)/test_nilpy_represcape26
 	$(TESTTMP)/test_nilpy_represcape26 | diff -u test/test_nilpy_repr_escapes_non_printables.expected -

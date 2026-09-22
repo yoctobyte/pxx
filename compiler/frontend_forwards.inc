@@ -31,6 +31,13 @@ function TokSliceStr(off, len: Integer): AnsiString; forward;
   --tier quick both passed, while FPC is single-pass and had not seen it. }
 function GetFilePath(const path: AnsiString): AnsiString; forward;
 function GetFileBaseName(const path: AnsiString): AnsiString; forward;
+{ ONE lowering for `__file__`, forwarded because BOTH expression parsers reach
+  it -- pyparser.inc and pasparser_expr.inc held byte-identical copies of this
+  block, differing only by a NilPyUserCode guard, until 2026-09-22. That is the
+  sibling-spelling shape normalise-dont-special-case warns about: two arms of
+  one construct, so a fix to either leaves the other broken. Body beside
+  PyDunderFileRel in pasparser_proc.inc, with the rest of the __file__ logic. }
+procedure PyEmitDunderFile; forward;
 procedure NormalizePath(var p: AnsiString); forward;
 procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString); forward;
 procedure ExpandPasMacros(var src: AnsiString); forward;
