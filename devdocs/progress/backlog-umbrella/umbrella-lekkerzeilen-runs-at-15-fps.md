@@ -14,7 +14,7 @@ blocked-by:
   - perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds
   - perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
   - perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob
-summary: "OWNER DIRECTIVE 2026-09-22: `all performance issues have the highest prio right now. file appropiate tickets and lets start working on them. hopefully, by the end of the day we have 15+ fps`. This umbrella exists so the perf tickets inherit that rank through edges rather than by hand-editing prios. READ THE ARITHMETIC BEFORE PICKING ANYTHING: the frame is 391 ms of work and 15 fps needs 67 ms, so the target is ~18x, and the profile is FLAT -- no row exceeds 16.5% and the largest four sum to 43.5%, which if deleted ENTIRELY gives 391 -> 221 ms = 4.5 fps. A sum of 10% wins cannot reach 15 fps; only something structural can. Ranked first is therefore NOT the biggest measured row but `perf-n-one-computed-getattr...`, because it is the only candidate whose upside is UNMEASURED rather than already bounded below the target, and because boxing sits UPSTREAM of refcount, allocator and variant-dispatch (three rows totalling 37%) rather than beside them. Its first action is a MEASUREMENT, not a fix, and the controlled harness already exists. THREE CAVEATS THAT MUST NOT BE RE-DISCOVERED, each from the measuring seat's own hand: the 16.5% heap-lock row OVERSTATES itself (standalone 400k-object A/B, interleaved, 12 rounds: +4.9% with overlapping distributions -- sampling skid on a serialising `lock xchg`, so nobody may rank on 16.5% as headroom); the 13% software-numerics row SPLITS and half is already fixed (every bignum sample was the audio xorshift, `8cbec7eab`, in pin v416 -- the survivor is double-double inverse trig at ~106 bits where a scene needs ~24, and it GROWS as a share under `--silent`); and refcount is CALL overhead not atomic overhead (3.772 ns/slot = 79% call/ret pair, and an inline nil-test takes it to 1.667, a 56% runtime saving with NO liveness analysis). DO NOT REVERT the computed-getattr widening -- it is what stops a SIGSEGV in imported modules. This RE-RANKS the release and ESP32 window recorded in demo-timebox-close-2026-09-21.md; it does not replace it."
+summary: "OWNER DIRECTIVE 2026-09-22: `all performance issues have the highest prio right now. file appropiate tickets and lets start working on them. hopefully, by the end of the day we have 15+ fps`. This umbrella exists so the perf tickets inherit that rank through edges rather than by hand-editing prios. THE NUMBER IS 9.4x AND IT IS A PROPERTY OF A NAMED SCENE, NEVER A BARE FACTOR -- 7a's stamped baseline, pin v416, world/roofs, windowed, vsync ON, audio ON, no interaction: pxx median 1.603 fps = 624 ms/frame over 11 windows; 15 fps is 66.7 ms; 9.4x. EARLIER VERSIONS OF THIS SECTION SAID 18x AND 5.9x AND BOTH WERE COMPUTED ON A FRAME NOBODY SHIPS (a v413 vsync-off `--region rijn` row at 391 ms); each was arithmetically correct and each was taken on the wrong scene, so carry the factor WITH its scene and pin or not at all. THE STRONGEST FACT IS THE ORACLE, NOT THE FACTOR: CPython runs the SAME scene on the SAME box in the SAME session at median 22.40 fps (45 ms). So 15 fps is NOT a physics question and this umbrella is NOT fatalistic -- it is a 14.0x compiler gap against a working oracle, and that is the frame to carry. WHAT NOBODY HAS: a decomposition of a roofs frame. Every lever below was identified on a profile of `--region rijn`, so the flat-profile picture (no row over 16.5%, largest four sum 43.5%) is a property of a scene nobody runs and MAY NOT DESCRIBE THE SHIPPING FRAME AT ALL. Decomposing a roofs frame therefore likely outranks every edge on this ticket and is the honest first action. NOT THE CAUSE, MEASURED: vsync (a tenth of a 624 ms frame -- remove it entirely and 8.5x remains), audio (ON in every row above), and the RNG (~6 ms of 624 at v416). THREE CAVEATS ON THE OLD PROFILE'S ROWS, each from the measuring seat's own hand: the 16.5% heap-lock row OVERSTATES itself (+4.9% with overlapping distributions on a controlled A/B -- nobody may rank on 16.5% as headroom); the 13% software-numerics row SPLITS and half is already fixed (`8cbec7eab`, in v416); refcount is CALL overhead not atomic overhead (3.772 ns/slot = 79% call/ret, and an inline nil-test takes it to 1.667 with NO liveness analysis). DO NOT REVERT the computed-getattr widening -- it is what stops a SIGSEGV in imported modules. This RE-RANKS the release and ESP32 window recorded in demo-timebox-close-2026-09-21.md; it does not replace it."
 ---
 
 # Umbrella: lekkerzeilen runs at 15 fps
@@ -30,26 +30,69 @@ says the window from 2026-09-22 is the release and stabilising ESP32. The owner
 re-opened performance explicitly and did not close those; read this umbrella as
 moving perf to the front of the same queue.
 
-## The arithmetic, and it is the first thing to read
+## The arithmetic, on the scene that actually ships
 
-    frame today        391 ms of work
-    15 fps needs        67 ms
-    required            ~18x
+**7a's stamped roofs baseline at v416.** Windowed, **vsync ON, audio ON**,
+default boat, no interaction:
 
-    the four largest rows, deleted ENTIRELY:
-      heap lock 16.5 + refcount 14.0 + software numerics 13.0 + allocator 11.5  =  43.5%
-      391 ms -> 221 ms -> 4.5 fps
+    pxx        11 windows   min 1.498   median 1.603   max 1.714 fps   median frame 624 ms
+    CPython    55 windows   min 10.43   median 22.40   max 38.46 fps   median frame  45 ms
 
-**The profile is flat. There is no 90% block.** Amdahl therefore says a sum of
-10% wins cannot reach the target, however many of them land. **15 fps is not
-reachable today by the levers on this list**, and that is stated here rather
-than discovered at 23:00. What IS reachable is a real multiple, and the way to
-get one is a structural change rather than a stack of slices.
+    15 fps needs 66.7 ms      ->  pxx is 9.4x away
+    ratio at the medians      ->  14.0x, pxx against CPython
 
-## The authoritative profile
+    pin v416 fddc21e7e6615f80, promocore fa1e57a9b1e5564c, source 5c34d02,
+    arms A c91f50b560d56230 / B 7a24e6c56255e93e, scene world/roofs (4 tiles),
+    session 90c77059f105dacb, SDL_VIDEODRIVER=wayland
 
-`lekkerzeilen@devdocs/perf/PROFILE-2026-09-21.md`. **Most seats do not know it
-exists and it is a FULL SCENE, not a synthetic loop.**
+**THE ORACLE IS THE POINT, NOT THE FACTOR.** CPython runs **this** scene, on
+this box, in the same session, at 22.4 fps. **15 fps is therefore not a physics
+question and this umbrella is not a fatalistic document.** It is a **14x
+compiler gap against a working oracle running the same program.** Anyone who
+reads this ticket as "the target is unreachable" has read the wrong half.
+
+## The factor has moved three times today and every version was correct
+
+Recorded because it is the reason the number above is written with its scene and
+pin attached, and because the next seat will otherwise quote a bare factor.
+
+| said | frame it was computed on | status |
+| --- | --- | --- |
+| **18x** | 391 ms, v413, **vsync OFF**, `--region rijn` | correct arithmetic, scene nobody ships |
+| **5.9x** | an open-water frame where the vsync wait was most of it | correct arithmetic, scene nobody ships |
+| **9.4x** | **624 ms, v416, vsync ON, `world/roofs`** | the first frame that belongs in the calculation |
+
+**All three were arithmetically correct. The error was never the arithmetic.**
+**A reachability factor is a property of the scene it was measured on**, so it
+does not survive being quoted without one. Do not carry the 18x/5.9x pair
+forward at all.
+
+**And vsync is no longer the story.** On a 66 ms open-water frame the 52–68 ms
+wait was most of the frame; on a 624 ms frame it is a tenth. **Remove it
+entirely and ~564 ms of work remains — still 8.5x.**
+
+## What nobody has, and it probably outranks every edge below
+
+**NOBODY HAS DECOMPOSED A ROOFS FRAME.** Every lever in this umbrella was
+identified on a profile of **`--region rijn`** — a different scene, two pins
+ago, vsync off. **So the flat-profile picture below is a property of a scene
+nobody runs, and it may not describe the shipping frame at all.** The 43.5%
+figure in particular is an answer about `rijn`.
+
+**Decomposing a roofs frame is therefore the honest first action**, and it is
+the only way to learn which levers the shipping scene actually has. `7a` has
+proposed it, in its own lane and on its own display. **Nothing here dispatches
+it and nobody may treat this paragraph as a grant.**
+
+**Also NOT the cause, all three measured rather than assumed:** vsync (above),
+**audio** (ON in every row of the baseline), and **the RNG** (~6 ms of 624 at
+v416). Those are the three things today was spent near, and the gap is none of
+them.
+
+## The old profile — `rijn`, and read it as history now
+
+`lekkerzeilen@devdocs/perf/PROFILE-2026-09-21.md`. **It is a full scene, not a
+synthetic loop, and it is the wrong scene.**
 
 **Population, because a row without one is unquotable:** `--region rijn`,
 interactive, settled 25 s, **200 main-thread leaf samples**, gdb SIGINT
@@ -60,7 +103,22 @@ pinned. **n=200, so every row is ±3-5 points.**
     14.0  refcount / ARC       11.5  allocator                    4.5  frame pacing (not work)
     13.0  software numerics     8.5  long tail (17 syms, 1 each)  7.5  library (libc 14, GL 1)
 
+**AND THE WORD `rijn` IN THAT POPULATION LINE IS ITSELF SUSPECT.**
+`world/roofs` and `world/rijn` **both record `meta.name='rijn'`** in their
+`index.lzi`, and the directory never appears in any output — **verified here by
+query, not relayed**: `roofs` answers `meta.name=rijn` with **4** tiles, `rijn`
+answers `meta.name=rijn` with **432**. So a banner reading "rijn" proves
+nothing about which scene ran. **Discriminate on tile count, 4 versus 432.**
+Anyone re-quoting a `rijn`-labelled measurement should first establish where the
+label came from — a `--region` argument, or a banner.
+
 ## Why the ranking is not the profile order
+
+**All five edges were ranked on the `rijn` profile and none has been checked
+against a roofs frame.** That does not make them wrong — they are real defects
+with measured costs — but it means **the ORDER below is provisional and a roofs
+decomposition may reorder it entirely.** Take one, by all means; do not defend
+its position on the strength of a percentage measured elsewhere.
 
 **The largest row is not the first ticket, and the reason is not a preference.**
 Each of the big rows has a measured or bounded upside that is already too small,
@@ -140,9 +198,11 @@ and takes perf after it lands.
 
 ## What would retire this umbrella
 
-A measured frame time at or under 67 ms on a shipped scene, with the region,
-sample count and pin version stated beside it. **A sum of percentage claims does
-not retire it**; the arithmetic above is why.
+A measured frame time at or under **66.7 ms on `world/roofs`**, windowed, vsync
+ON, audio ON — **the same configuration as the baseline above** — with the
+scene, tile count, window count and pin stated beside it. **Not `rijn`, and not
+a `rijn`-labelled run whose label came from a banner.** **A sum of percentage
+claims does not retire it**; the table above is why.
 
 **HOW TO REPORT PARTIAL PROGRESS, AND IT IS NOT AS A FRACTION** (frankh-c0,
 2026-09-22). An 18x target makes every accumulated win **un-bankable until the
