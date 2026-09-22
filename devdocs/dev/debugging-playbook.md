@@ -39930,3 +39930,56 @@ section below it, inside the hour. It was caught by an outside prompt — c0's
 discriminator offer making it re-read its own table — not by knowing the rule.
 **Corrected count while there: the trigger is EXACTLY two promo-ints, not at least
 two.** One is clean, three is clean.
+
+## A RESTORE STEP AT THE END OF A SCRIPT MAKES THAT SCRIPT UNSAFE TO KILL — AND THE PEER IS THE ONLY ONE WHO KNOWS
+
+**Reported by `frankh-c0` 2026-09-22 while yielding the box to an owner-cleared
+display window, about its own bisect script. Banked here rather than in the
+roster because it is an instrument-hygiene fact that outlives any coordination
+episode, and because the tell it describes is a `git status` one.**
+
+c0's bisect patches `compiler/ir_codegen.inc`, rebuilds, tests, and **restores the
+file at the END**. Killed mid-run it leaves behind:
+
+- a modified `compiler/ir_codegen.inc`, **and**
+- a `compiler/pascal26` built from it.
+
+**`compiler/pascal26` is untracked, so `git status` is silent about the binary**,
+and the modified source is the only visible trace — which a seat that did not run
+the bisect has no reason to read as anything but somebody's edit. **The next
+measurement taken in that checkout would be taken with a deliberately-crippled
+compiler and no tell.** That is a sixth route to a stale or wrong binary beside
+the five CLAUDE.md already lists, and it is the only one that arrives by someone
+being *helpful*.
+
+**THE COORDINATION HALF, AND IT IS THE PART THAT GENERALISES: "stop the noisy
+peer" and "leave the box in a state the next measurement can trust" are different
+requests, and from outside they look identical.** An observer can see that a peer
+is consuming the box. It cannot see whether the peer's process is at a point where
+stopping is safe. **Only the peer knows**, because only the peer knows whether its
+cleanup is a `trap ... EXIT` or a line at the bottom of the file.
+
+**This is the health-checks-are-read-only rule one layer down.** That rule says
+never send keys into a peer's pane because you cannot tell a pending dialog from
+running work. This says the same thing about the *filesystem*: you cannot tell a
+script that is safe to interrupt from one whose last line is the only thing
+keeping the tree honest. **Both failures are invisible from outside and both are
+cheap to avoid by asking.**
+
+**Two discharges, and they are for different people:**
+
+- **Writing a script that mutates a tracked file: put the restore in a
+  `trap ... EXIT`, not at the bottom.** Then a kill is safe and nobody has to
+  know. `tools/*.sh` already do this, which is why they never trip it.
+- **Asking a peer to stop: ask for a TIME, not for silence, and let the peer
+  choose the moment.** `lekkerzeilen-7a`'s own phrasing is the model —
+  *"if either seat is inside a sweep, finishing it is better than killing it"*
+  and *"a reply of 'we'll be quiet from X' is worth more to me than silence,
+  because I can gate on it."* A named time is something the asker can gate on and
+  the peer can meet without abandoning state.
+
+**And the peer's closing move is the one that makes the request auditable:** c0
+said it would **verify the tree is clean before stopping, and say so.** A stop
+that reports its own tree state converts "the box went quiet" into "the box went
+quiet and the next measurement can be trusted", which is what the asker actually
+needed.

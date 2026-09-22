@@ -384,3 +384,35 @@ the `-O2` gates filtered out the `and`-form conditions and returned **4 sites
 where there are 17** — a pattern written for `if OptLevel >= 2 then` is silent
 about `(OptLevel >= 2) and (...)`, **and the short list looked complete.** The
 seventeen-site result above is from the corrected set.
+
+### BISECT STATE, PAUSED NOT ABANDONED — `frankh-c0`, 2026-09-22
+
+Recorded here because the bisect yielded the box to an owner-cleared display
+window and **a paused bisect whose state lives only in a peer's context is a
+restart**, not a pause.
+
+Seventeen candidate `OptLevel >= 2` / `< 2` sites in `compiler/ir_codegen.inc`:
+
+```
+all seventeen disabled                                  -> clean
+first eight: 5852 8192 8804 8813 9211 9250 9298 9514    -> clean
+second nine                                             -> still SEGV
+```
+
+**So the culprit is in the FIRST EIGHT** and two halvings remain. The in-flight
+command was testing `5852 8192 8804 8813` against `9211 9250 9298 9514`.
+
+**Candidate set by kind, c0's characterisation and deliberately not reasoned
+further:** the statement-level and call-path gates — a static-literal handle pass,
+an indirect-call last-argument collapse, and two array-index forms. **If it lands
+on the last-argument collapse that would bear directly on the `print(str(acc))`
+row**, since that row is a one-argument call with a conversion in argument
+position. c0 stopped reasoning there on purpose: *"this is exactly the shape where
+a prediction written before the measurement gets pinned instead of the tree."*
+
+**Safety note that belongs with the state, not with the coordination:** that script
+patches a tracked file and restores it **at the end**, so killing it mid-run leaves
+a modified `ir_codegen.inc` **and** a `compiler/pascal26` built from it — and the
+binary is untracked, so `git status` shows only the source edit. c0 is verifying
+the tree is clean before stopping and will say so. Anyone resuming this should
+check both.
