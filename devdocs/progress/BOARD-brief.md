@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:37 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:169 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:152 done:3934 rejected:88`
+`working:36 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:169 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:152 done:3935 rejected:88`
 
 ## Held now (working/ — do not touch these files)
 
@@ -24,7 +24,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package` [U] — owner: frankh-c0
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
-- `feature-a-object-output-for-arm32-and-aarch64` [A] — owner: frankb-8e
 - `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A] — owner: frankA
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
 - `feature-a-unreferenced-class-rtti-keeps-every-method-alive` [A] — owner: frankb-8e
@@ -81,7 +80,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 571, ranked
+## Ready — top 30 of 572, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -94,6 +93,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - `[p 80] [N]` bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
+- `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
@@ -112,6 +112,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
-- `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 
-_541 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_542 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

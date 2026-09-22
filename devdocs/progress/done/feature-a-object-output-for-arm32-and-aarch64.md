@@ -2,7 +2,7 @@
 track: A
 prio: 45
 type: feature
-status: working
+status: done
 found: 2026-08-31
 found-by: frankC
 owner: frankb-8e
@@ -704,3 +704,6 @@ would truncate its own section. Keeping the **last**, because that is what the
 executable's last-write-wins does when two fixups name one slot with different
 procs. Guarded by a pair invariant in `structural_check`, whose positive control
 is the three pre-fix objects themselves.
+
+## Log
+- 2026-09-22 — resolved, commit Both halves landed and verified 2026-09-22: aarch64 AGREE on 772256 bytes / 1355 relocations, arm32 AGREE on 835712 / 1354, four controls each, plus the duplicate .rel.data fix this work surfaced. Nothing remains; the sections the body still frames as open questions are the design record, not outstanding work. Resolved by frankb-8e before standing down, so the row does not become one of the 29 working/ rows held by a seat that no longer exists..

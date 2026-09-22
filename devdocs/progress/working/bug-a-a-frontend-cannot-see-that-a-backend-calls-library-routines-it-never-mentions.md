@@ -8,7 +8,7 @@ created: 2026-09-06
 found-by: frankA
 tags: [cross-target, riscv32, aarch64, arm32, frontends, builtinheap]
 blocked-by: []
-summary: "FIXED FOR RUST AND ZIG, OPEN FOR THE CLASS. Some backends lower ordinary constructs onto routines that live in `builtinheap`, and a frontend driver cannot see it: riscv32 routes EVERY integer write through PXXWriteDecW, and the aggregate-result epilogue lowers onto PXXMemMove on aarch64/arm32/riscv32. A driver that does not pull the unit produces a working binary on the targets whose codegen happens to be inline and `compiler error: <routine> not found` -- an internal-fault-shaped diagnostic -- on the rest, for a program whose source mentions neither strings nor the heap. Measured: `fn main(){ println!(\"{}\", x); }` ran on x86-64/i386/aarch64/arm32 and failed on riscv32, while the SAME print from Pascal worked there, because a Pascal program pulls builtinheap ambiently. Rust and Zig now ask `TargetCodegenCallsHeapRuntime` (emit.inc). STILL OPEN: eparser pulls nothing and has the same hole; the predicate is a hand-maintained union of two known mechanisms; and its xtensa entry is taken from cparser.inc's comment rather than measured."
+summary: "FIXED FOR RUST, ZIG AND BASIC; OPEN FOR THE CLASS -- AND THE CLASS IS MUCH LARGER THAN THIS TICKET'S TABLE OF TWO. MECHANISM: any backend may lower an ordinary construct onto a routine that lives in `builtinheap`, and no frontend can see which, so a driver that does not pull the unit emits a working binary on the targets whose codegen happens to be inline and an internal-fault-shaped `compiler error: <routine> not found` on the rest -- for a program whose source mentions neither strings nor the heap. The guard is `TargetCodegenCallsHeapRuntime` (emit.inc), a HAND-MAINTAINED UNION that documents two routines (`PXXWriteDecW`, `PXXMemMove`). SIZE OF THE SURFACE, measured 2026-09-22 at e7e925193 and this is the ticket's central number now: ONE frontend's five committed .bas fixtures, built against pinned fda77c48b8ee, name FIVE different missing things (`PXXWriteCharW`, `PXXWriteNL`, `PXXWriteFrozen[B]W`, `PXXWriteDecW`, and the softfloat kernel `__pxx_l2d`); and a census over the five non-x86 backends counts 374 `FindProc('PXX...'|'__pxx...')` call sites, 276 of which raise `not found`, naming 71 DISTINCT ROUTINES -- a count of call sites is not a count of routines, so 71 is the figure to quote. SO EXTENDING THE LIST IS NOT THE FIX AND THE NEXT SEAT SHOULD NOT DO IT: the two entries are the corner of the surface that someone happened to trip over. RETIREMENT CONDITION, unchanged and now argued rather than asserted: the union stops being hand-maintained -- either every skeleton driver pulls unconditionally and the predicate is deleted, or the routine set is derived from the backend that emits it instead of restated beside it. A seat that appends a third routine has made the ticket harder to close. STILL OPEN: eparser pulls nothing and has the same hole; the predicate's xtensa entry is still inherited from cparser.inc's comment rather than measured."
 ---
 
 # A frontend cannot see that a backend calls library routines
@@ -161,3 +161,66 @@ only to whoever ran it. **Wherever stdin, strings or the heap are involved, the
 frozen-string model deserves a row**, because it is the one mode where the
 managed-string runtime is absent and every dependency that was quietly riding on
 it comes due.
+
+
+## 2026-09-22 (frankb-8e) — BASIC fixed, and the size of the surface measured
+
+**Landed `e7e925193`.** `bparser.inc` was the last skeleton driver with no
+`PullTargetRuntimeUnits` call, so **every BASIC program that printed anything
+refused on riscv32 and xtensa.** Four constructs x six targets before the fix:
+a program with no `PRINT` built on all six; `PRINT` of a number and of a string
+literal built on x86-64/i386/arm32/aarch64 and refused on the other two. After:
+24/24 build, and riscv32's runtime output under qemu is byte-identical to the
+x86-64 oracle on all four.
+
+### Why the suite could not have caught it — the target list, not the fixtures
+
+Five `.bas` fixtures ALREADY ran cross, over `i386 aarch64 arm32`, which is
+**exactly the set of cross targets on which this defect does not reproduce.**
+The list now reads `i386 aarch64 arm32 riscv32 xtensa` and both additions
+**run** rather than merely building — `qemu-xtensa` executes a hosted `.bas`
+today. Nothing about the fixtures needed to change.
+
+### The number this ticket should be ranked on
+
+| instrument | population | result |
+| --- | --- | --- |
+| five `.bas` fixtures vs pinned `fda77c48b8ee`, riscv32 | one frontend | **5** distinct missing routines |
+| `FindProc('PXX…'\|'__pxx…')` census, five non-x86 backends | riscv32 83, arm32 56, aarch64 54, xtensa 36, wasm32 5 | **374 sites**, 276 erroring, **71 distinct routines** |
+| this ticket's own table | — | **2** |
+
+Tree for both: `e7e925193`. **Quote 71, not 374** — a count of call sites is not
+a count of routines, and the two get confused precisely because 374 is the
+bigger number.
+
+The five from one frontend: `PXXWriteCharW`, `PXXWriteNL`,
+`PXXWriteFrozen[B]W`, `PXXWriteDecW`, and the softfloat kernel `__pxx_l2d`.
+**The residual on this ticket predicted exactly this** — *"a third mechanism, or
+a new backend that lowers a construct onto a library routine, will not announce
+itself here"* — and three arrived at once, from the frontend that happened to be
+next.
+
+### Position of the pull is load-bearing in TWO directions
+
+Recorded because the shared routine's own header sends you to the first wall:
+
+| placement | outcome |
+| --- | --- |
+| after `EmitExit` | `PXXWriteNL not found`, **unchanged**, from a binary that already had the fix. This is what `PullTargetRuntimeUnits`' header prescribes; that header was written from the CALL-STUB drivers. |
+| after `ParseBBlock` | `invalid IR symbol reference in store_sym` on all four non-x86 targets — parsing a Pascal unit moves the symbol table under an AST already holding indices into it. `10 LET A = 1` trips it. |
+| before the prescan | correct — no BASIC symbol allocated, no node built. |
+
+`aparser.inc` and `gparser.inc` already carried a measured warning about the
+first wall. **I hit it anyway, because I read the shared routine's header and
+not the sibling call site.** That is this repo's own sibling rule failing in the
+direction it usually fails: I grepped for the routine, not for the other
+spelling's handler.
+
+### Residual, for whoever takes the class
+
+`eparser` still pulls nothing. The xtensa entry in the predicate is still
+inherited from a comment. **And the thing that would retire this ticket is not
+a bigger list** — it is removing the need for one. The cheapest honest version:
+have every skeleton driver pull unconditionally and delete
+`TargetCodegenCallsHeapRuntime`, paying the unit cost on x86-64 to buy the
+whole class. That trade has NOT been measured and is the next thing to measure.
