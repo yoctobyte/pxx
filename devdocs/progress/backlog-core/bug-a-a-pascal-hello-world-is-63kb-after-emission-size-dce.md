@@ -229,6 +229,21 @@ neither reaches the three above. **The fix is to settle the emission after unit
 pulls, or to emit the stubs on demand** — the tidy version moves the ~150-line
 registration block below the token loop, which is its own verified pass.
 
+**THE CHECK THAT WOULD HAVE CAUGHT THIS FROM EITHER END, AND NEITHER END RAN
+IT.** This ticket's blocker was stated as a place to add something — *the
+`string` keyword is not in `DetectPascalRuntimeNeeds`' scan*. It was relayed as
+a task and implemented as a task, and it was neither: **a blocker phrased as a
+PLACE TO ADD SOMETHING is a CLAIM about where the decision is made**, and here
+that claim was false twice over — the construct is not an identifier, and the
+decision is not in the scan at all. Checking the claim costs one `grep` of
+`paslexer.inc`; the work it authorises cost an evening and ended parked. So
+before treating "add X to Y" as the job, establish that Y is where the outcome
+is decided. It is available to whoever relays the blocker and to whoever
+implements it, it is cheaper than the work either way, and on this ticket
+neither seat ran it. (frankh-c0 relayed, frankb-8e implemented; the
+apportionment is recorded only because the check is the same one from both
+sides, and that is the part worth reusing.)
+
 **The failure direction is safe — confirmed, and on far more than the one
 riscv32 row above.** Under-detection cannot produce a wrong binary:
 
