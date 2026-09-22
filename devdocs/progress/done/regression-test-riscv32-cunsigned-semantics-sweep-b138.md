@@ -192,4 +192,4 @@ not have to re-derive the paragraph above.
 
 e5 correctly flagged that p70 would dispatch a seat to hunt a miscompile. Rather
 than re-rank fixture maintenance, it is done.
-- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ea48d8877.
