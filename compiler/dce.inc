@@ -166,13 +166,84 @@ begin
 end;
 
 function DceRangeHoldsStub(a, b: Integer): Boolean;
-var i: Integer;
+{ "Does [a,b) hold a stub target that something OUTSIDE [a,b) can reach?" --
+  which is the question this root was always asking and not the one it asked
+  until 2026-09-22. It used to answer on GEOMETRY alone: any stub target
+  landing inside a body rooted that body.
+
+  THE SELF-REFERENCE IS THE COMMON CASE ON TWO TARGETS AND IT ROOTED 39.6% OF A
+  LIVE IMAGE. A managed-local SWEEP THUNK is placed by
+  EmitProcScopeExitCleanupForTarget after a body's second return, inside that
+  body, and is called from that same body and from nowhere else -- so on
+  riscv32 and call0 xtensa every body with >= SWEEP_THUNK_MIN_SLOTS releasable
+  slots and two returns pinned ITSELF, permanently, whether or not anything
+  reached it. Measured on the nilpy-c3 demo: riscv32 had 143 stub targets of
+  which 139 landed inside a body, rooting 819,480 B across 128 bodies, against
+  windowed xtensa's zero -- and the asymmetry is an ABI consequence
+  (TargetHasSweepThunk is false when sp is constant and a0 is live), not a pass
+  running blind. bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program
+
+  WHY DROPPING THE SELF-REFERENCE IS SOUND, and the argument is local rather
+  than about reachability: the thunk lives INSIDE [a,b). If the body is live it
+  is not removed, so the thunk's bytes survive with it and DceRun re-aims the
+  call through DceNewOff like any other CodeRef. If the body is dead then its
+  only caller is dead, so the thunk is dead too. Neither arm needs this root.
+
+  A TARGET WITH NO CodeRef AT ALL STILL ROOTS, and that is not a fallback --
+  it is the init/fini thunks, which are registered as stub targets precisely
+  because no edge points at them and they fall inside the removable range of
+  whatever proc precedes them. "No reference" cannot mean "no external
+  reference" here, so they are answered True explicitly rather than by
+  reaching the end of a loop.
+
+  NEITHER OF THE TWO ARMS THAT ANSWER *True* IS EXERCISED BY ANY PROGRAM IN
+  THIS TREE, AND THAT IS SAID HERE RATHER THAN LEFT TO BE DISCOVERED. Measured
+  2026-09-22 by replacing this whole function with `Result := False` -- the most
+  aggressive version possible -- and rebuilding: `--dce --emit-obj
+  test/test_emit_obj.pas` and `examples/esp32/nilpy-c3` on riscv32 and on
+  windowed xtensa all come out BYTE-IDENTICAL to this version, and all pass the
+  three-table closure check below. So in this tree every in-body stub target is
+  a sweep thunk reached only from its own body, and both True arms are
+  answering a case that does not currently arise.
+
+  THAT BOUNDS THE RISK RATHER THAN LEAVING IT OPEN, which is why the arms stay.
+  This predicate roots a STRICT SUPERSET of what `Result := False` roots, and
+  `Result := False` already violates no closure invariant on anything that can
+  be built here. So this version cannot be less safe than a version already
+  measured safe, and the arms cost nothing but the scan.
+
+  They are kept and not deleted because deleting code believed dead is still
+  deleting code that was not proven dead: a target whose references cannot be
+  enumerated cannot be judged by WHERE its references are, so True is the only
+  answer this function can honestly give for one, and the init/fini thunks are
+  the documented reason DceAddStubTarget is called for them at all. Whoever
+  builds a fixture that reaches either arm should replace this paragraph with
+  the measurement. }
+var i, j, t: Integer;
+    sawRef: Boolean;
 begin
   Result := False;
   i := 0;
   while i < DceStubCount do
   begin
-    if (DceStubTgt[i] >= a) and (DceStubTgt[i] < b) then begin Result := True; Exit; end;
+    t := DceStubTgt[i];
+    if (t >= a) and (t < b) then
+    begin
+      sawRef := False;
+      j := 0;
+      while j < CodeRefCount do
+      begin
+        if CodeRefTarget[j] = t then
+        begin
+          sawRef := True;
+          if (CodeRefPos[j] < a) or (CodeRefPos[j] >= b) then
+            begin Result := True; Exit; end;
+        end;
+        Inc(j);
+      end;
+      { reached only by code inside this very range, or by nothing at all }
+      if not sawRef then begin Result := True; Exit; end;
+    end;
     Inc(i);
   end;
 end;
@@ -1318,6 +1389,90 @@ begin
     end;
     Inc(i);
   end;
+
+  { THE LIVE SET MUST BE CLOSED UNDER THE CALL GRAPH, AND ONLY WASM CHECKED IT.
+    wasmenc.inc refuses with "the live set is not closed under the call graph"
+    when a surviving site names a dropped slot; every other target just wrote
+    the displacement and shipped. That asymmetry is an accident of wasm needing
+    a slot INDEX -- it cannot express a call to a dropped body, so it noticed --
+    while an ELF target can express one perfectly well and it means "jump into
+    whatever slid up into the hole".
+
+    THIS IS THE ONE FAILURE SHAPE THE PASS CAN PRODUCE AND NO TEST CAN SEE
+    CHEAPLY, which is why it is asserted rather than tested: a wrongly dropped
+    body is invisible to every program that does not happen to call it, so a
+    green suite is evidence about the suite's coverage and not about the pass.
+    Added 2026-09-22 while changing DceRangeHoldsStub, precisely because a
+    116-program riscv32 differential came back clean and a positive control
+    then showed the root under test fired for NONE of them -- the population
+    could not contain the subject. An invariant checked on every build does not
+    have that problem.
+
+    A surviving CALL SITE naming a body whose bytes were removed is the
+    violation. Sites inside removed ranges are not violations -- they went with
+    the code -- which is what the enclosing test already establishes.
+
+    THREE TABLES, NOT ONE, because a body is reachable three ways and checking
+    only calls would have left this guard blind to the very change it was added
+    beside. CallFix is a direct call; ProcAddrFix is an address TAKEN, which can
+    be called from anywhere later; CodeRef names a code OFFSET, and that is the
+    one DceRangeHoldsStub decides the fate of -- so a mistake in THAT predicate
+    lands in the CodeRef arm and in no other. Checking only CallFix would have
+    given this guard a clean bill of health on exactly the change it was
+    written to police.
+
+    ALL THREE FAIL SILENTLY RATHER THAN LOUDLY if they survive pointing into a
+    hole, because DceNewOff CLAMPS a position inside a removed range to that
+    range's start: the reference does not become invalid, it becomes a
+    confident reference to whatever slid up. }
+  i := 0;
+  while i < CallFixCount do
+  begin
+    if (not DceIsRemoved(CallFix[i].CodePos))
+       and (CallFix[i].ProcIdx >= 0) and (CallFix[i].ProcIdx < ProcCount)
+       and (Procs[CallFix[i].ProcIdx].BodyAddr > 0)
+       and DceIsRemoved(Procs[CallFix[i].ProcIdx].BodyAddr) then
+      Error('compiler error: --dce dropped the body of '
+            + Procs[CallFix[i].ProcIdx].Name
+            + ' and a surviving call site at code offset '
+            + AIntToStr(CallFix[i].CodePos)
+            + ' still calls it -- the live set is not closed under the call '
+            + 'graph. This is the pass reaching a wrong answer, not a bad '
+            + 'input: re-check whatever root or reachability edge was changed '
+            + 'last.');
+    Inc(i);
+  end;
+  i := 0;
+  while i < ProcAddrFixCount do
+  begin
+    if (not DceIsRemoved(ProcAddrFix[i].CodePos))
+       and (ProcAddrFix[i].ProcIdx >= 0) and (ProcAddrFix[i].ProcIdx < ProcCount)
+       and (Procs[ProcAddrFix[i].ProcIdx].BodyAddr > 0)
+       and DceIsRemoved(Procs[ProcAddrFix[i].ProcIdx].BodyAddr) then
+      Error('compiler error: --dce dropped the body of '
+            + Procs[ProcAddrFix[i].ProcIdx].Name
+            + ' and its address is still TAKEN at code offset '
+            + AIntToStr(ProcAddrFix[i].CodePos)
+            + ' -- the live set is not closed under the call graph. An address '
+            + 'that is taken can be called from anywhere, so this is a root '
+            + 'that was not applied.');
+    Inc(i);
+  end;
+  i := 0;
+  while i < CodeRefCount do
+  begin
+    if (not DceIsRemoved(CodeRefPos[i]))
+       and DceIsRemoved(CodeRefTarget[i]) then
+      Error('compiler error: --dce removed the code at offset '
+            + AIntToStr(CodeRefTarget[i])
+            + ' and a surviving reference at offset '
+            + AIntToStr(CodeRefPos[i])
+            + ' still names it -- the live set is not closed. A range holding '
+            + 'a stub target must never be dropped while anything outside it '
+            + 'refers to that target; see DceRangeHoldsStub.');
+    Inc(i);
+  end;
+
 
   { --- everything that names a code offset -------------------------------- }
   i := 0;
