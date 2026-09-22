@@ -97,6 +97,24 @@ silently means `-O0`), then attribute each call site to its enclosing proc via
 an ADDRESS-SORTED map. pxx writes the map in neither address nor name order, so
 taking "the next line" yields a plausible wrong range.
 
+**READ THAT GRAPH AS A CENSUS, NEVER AS A RANKING** (frankb-8e, 2026-09-22,
+relayed by frankz-e5). It enumerates every direct call site, so it has no
+first-wins step -- but it credits the DIRECT callee, and a proc that allocates
+through a shared helper is credited to the HELPER, not to itself. That is
+8e's `--dce-why` inversion one subsystem over: measured against a differential,
+its first-reason totals over-stated `TPyFile.writelines` 8.6x because it heads
+a shared path and under-stated `TPyDict.update` 3.3x because cost spread thin
+across small bodies is invisible to a top-twenty listing. **Wrong in both
+directions at once, so no fudge factor rescues it.** A call-graph census
+answers "does this allocate at all" honestly and answers "how much" not at all.
+
+**AND KEEP A CONTROL WHOSE EXPECTED VALUE IS ZERO** (8e, same message). Not
+merely so fixed cost is not attributed to the loop -- that is the defensive
+reading. A row whose expected value is 0 **admits no explaining-away**, so it
+is the row that catches an instrument the agreeing rows would have certified.
+8e's body-count column was out by 4 while its byte column agreed exactly, and
+the only row that exposed it was the one where bytes were 0.
+
 ## What would make this ticket wrong
 
 A re-profile showing the allocator share was always small and 20.2% was a
