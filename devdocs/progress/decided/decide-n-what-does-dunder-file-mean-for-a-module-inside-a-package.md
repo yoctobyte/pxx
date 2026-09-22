@@ -215,4 +215,4 @@ package plus one sibling module, `mypkg/{__init__,inner,sib}.py`, built with
 executable and package both under one `mktemp -d`.
 
 ## Log
-- 2026-09-22 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit 4ecca09ec.
