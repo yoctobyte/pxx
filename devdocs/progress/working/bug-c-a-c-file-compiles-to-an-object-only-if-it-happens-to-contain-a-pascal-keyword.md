@@ -5,9 +5,9 @@ type: bug
 status: working
 found: 2026-09-22
 found-by: frankh-c0
-owner: frankh-c0
+owner: frankb-8e
 blocked-by: []
-summary: "WHETHER A C TRANSLATION UNIT COMPILES TO AN OBJECT ON x86-64 AT HEAD DEPENDS ON WHETHER IT HAPPENS TO CONTAIN A WORD THAT IS A PASCAL KEYWORD. `int f(int x){return x+1;}` fails with `compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point)` pointing into builtinheap.pas, a file the C author never wrote; adding `int string;` -- or a LOCAL variable named `string`, anywhere -- makes the identical file build. Not a coincidence: the C driver gates x86-64 AnsiString-shim emission at cparser.inc:13079 on `DetectPascalRuntimeNeeds`, a PASCAL token pre-scan, run over a C token stream, and `string` lexes as tkString_T through the shared lexer. So the gate answers by accident in BOTH directions and is not measuring anything about the C program. Affects --emit-obj and --shared; a C EXECUTABLE is unaffected. x86-64 only (i386/aarch64/arm32/riscv32 all build the failing file clean), because only there are the shims emitted machine code rather than direct calls into builtinheap. Regression: pinned v418 builds every shape, because before 523833fde the scan answered True unconditionally. Independent of --dce (--no-dce fails identically on the same binary). Breaks `make test-emit-obj`, which dies at test_shared_lib.c -- and the tier's C rows split exactly on this: the four that fail have ZERO #include, the one that passes has one, so the single passing C row was passing ACCIDENTALLY and the tier never had coverage of the real predicate. The Pascal driver enforces the matching invariant (23fcd326f); the C driver is the sibling arm of that same double case and does not. AND THE TIER HAD A DETECTOR THAT DOWNGRADED ITSELF TO A SKIP: tools/reloc_resolve_check.py's x86_64 row AGREES with GNU ld on 250686 bytes of .text and 1641 relocations under the pinned compiler, with 3 of 3 controls reddening it, and at HEAD reports `SKIP -- pxx cannot emit an object here`, so the strongest x86-64 C row in the tier left the run without reddening anything. Its skip is honest about what it could not do and wrong about why, which is the difference between an unsupported target and a broken compiler; the tier asserts the supported-target list two rows earlier, so the discriminator is available where the skip is taken. MECHANISM traced and controlled, CAUSE NOT BISECTED -- 523833fde is the suspect on three grounds but its parent was never built."
+summary: "EVERY x86-64 C BUILD AT HEAD FAILS UNLESS THE SOURCE HAPPENS TO CONTAIN A WORD THE SHARED LEXER CLASSIFIES AS A PASCAL KEYWORD. `int f(int x){return x+1;}` refuses with `compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point)` pointing into builtinheap.pas, a file the C author never wrote; adding `int string;` -- or a LOCAL variable named `string`, anywhere, any case -- makes the identical file build. Controls: the word in a COMMENT and inside a STRING LITERAL both leave it failing, so it is a TOKEN effect and not a text effect. CAUSE: the C driver gated x86-64 AnsiString-shim emission (cparser.inc:13079) on DetectPascalRuntimeNeeds, a PASCAL token pre-scan, run over a C token stream, in which `string` IS tkString_T -- so the gate answered by accident in BOTH directions and was never measuring anything about the C program, while builtinheap is pulled regardless and its own body calls the shims. BISECTED by frankb-8e: 523833fde^ builds, 523833fde does not. x86-64 only; i386/aarch64/arm32/riscv32 build the failing file clean, because only x86-64 emits the shims as machine code. Independent of --dce. FIX LANDING (frankb-8e, owns it): the scan is REMOVED from cparser.inc rather than corrected, and the gate becomes `cPullsBuiltinHeap and x86-64`, computed once and shared with the default-RTL guard so the two spellings cannot drift apart again -- that drift is the mechanism. Priced by 8e and the cost is ZERO: exe.c is 21928 B with DCE and byte-identical to the pinned compiler's output, because DCE drops the shims when nothing calls them. It also closes an older converse bug: on the PIN, `--no-default-rtl --emit-obj` on x86-64 refused for EVERY C file, because the shims' forwards are resolved BY builtinheap, so an OR-shaped fix would have left that half broken -- only deleting the scan closes both directions. TWO CORRECTIONS TO THIS TICKET'S OWN EARLIER TEXT, both mine and both in the direction that UNDERSTATED the bug: (a) it said a plain C EXECUTABLE was unaffected and that is FALSE -- `int main(void){return 0;}` refuses identically, so the scope is every x86-64 C build and not just --emit-obj/--shared; (b) it said the emit-obj tier's C rows split on #include count and they do NOT -- Makefile:34666 generates `int plain_add(int a,int b){return a+b;}` with no include and no keyword and had real coverage of the predicate. So the tier was NOT blind; the reason it did not protect anyone is that `gate.sh quick` never runs the emit-obj tier, which is the guard question actually worth asking and is not answered by adding a row."
 ---
 
 # Whether a C file builds to an object depends on whether it contains a Pascal keyword
@@ -213,3 +213,44 @@ unsupported target from a broken compiler will mask the next one too. The tier
 already knows which targets support object emission — `emit-obj-target-set`
 asserts the list two rows earlier, x86-64 included — so the discriminator is
 available at the point the skip is taken.
+
+## CORRECTIONS TO THIS TICKET, 2026-09-22, both understating the bug
+
+I filed this and got two things wrong. Both are recorded here rather than
+silently edited, because both were wrong in the direction that made the bug look
+smaller than it is, and because they are the same mistake twice.
+
+**(a) "A plain C EXECUTABLE is unaffected" is FALSE.** `int main(void){return
+0;}` refuses identically at HEAD. Both the executable and the object path take
+the same gate and neither survives it. The scope is **every x86-64 C build**.
+
+I had a row saying `plain C executable ok` and it was measured on a file that
+carried a header — so it was a true measurement of a contaminated sample, read
+as a statement about the path. frankb-8e caught it, and my own probe reached the
+same result independently one command earlier; the two agreeing is the only
+reason it is stated flatly here rather than hedged.
+
+**(b) "The tier's C rows split on `#include` count" is FALSE.** `Makefile:34666`
+generates
+
+    printf 'int plain_add(int a,int b){return a+b;}\n' > .../test_emit_obj_noinit.c
+    ./pascal26 --emit-obj .../test_emit_obj_noinit.c .../test_emit_obj_noinit.o
+
+— no include, no Pascal keyword, x86-64, and it was red. The tier **did** have
+real coverage of the predicate. I enumerated the C fixture FILES in `test/` and
+generalised to "the tier's C rows", and the counterexample is generated inline by
+a recipe, so it is not a file and no listing of `test/*.c` can contain it.
+
+That is the third population error of this session in one direction: **name the
+set the instrument enumerates, and check the subject is in it.** Here the set was
+"C fixtures on disk" and the subject was "C compiles the tier performs", and
+those are not the same set.
+
+**What (b) changes about the lesson.** The `reloc_resolve_check` SKIP finding
+below still stands on its own — that row really did downgrade itself and really
+did mask this. But the conclusion I was drifting toward, that the tier lacked
+coverage, is wrong. It had coverage and the coverage was red. **What failed is
+that `gate.sh quick` does not run the emit-obj tier at all**, so a seat can be
+green on its own gate while having broken every x86-64 C build. That is a
+question about which instruments the fast path reaches, and the answer is not
+"add another row" — the row existed.

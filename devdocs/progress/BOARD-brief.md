@@ -11,7 +11,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
-- `bug-c-a-c-file-compiles-to-an-object-only-if-it-happens-to-contain-a-pascal-keyword` [C] — owner: frankh-c0
+- `bug-c-a-c-file-compiles-to-an-object-only-if-it-happens-to-contain-a-pascal-keyword` [C] — owner: frankb-8e
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
