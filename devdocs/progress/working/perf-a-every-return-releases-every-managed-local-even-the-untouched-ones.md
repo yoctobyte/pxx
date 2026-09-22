@@ -1272,3 +1272,92 @@ count is small the question dissolves; if it is not, the frame-size threshold
 that x86-64 correctly retired may be the right answer *there* — and that would
 be a target-specific decision with a measurement behind it, not the revival of
 a retired global option.
+
+## 2026-09-22 (frankb-8e) — arm32 JOINS, and clobbering the flags is free FOR AN ABI REASON
+
+Third backend, one commit, same blast-radius control.
+
+| target | before -> after |
+| --- | --- |
+| x86-64 | IDENTICAL |
+| i386 | IDENTICAL |
+| aarch64 | IDENTICAL |
+| riscv32 | IDENTICAL |
+| xtensa (`--platform=posix`) | IDENTICAL |
+| **arm32** | **changed, as intended** |
+
+### The flags clobber is settled by AAPCS, not by looking at the surrounding code
+
+`cmp r0, #0` destroys the condition flags, and on a RISC target that is the
+question this arm raises and x86-64/i386 did not have to answer twice. **The
+answer is the ABI and it needs no inspection of what is around the site: the
+sequence this branches over CONTAINS A CALL, and AAPCS does not preserve the
+condition flags across one.** So anything the `cmp` could damage is already
+damaged on the path that does NOT take the branch — which means it cannot have
+been live across this point in the first place.
+
+Worth writing down because it is not locally obvious: the nil path is exactly
+the path that SKIPS the call, so "a call happens here anyway" reads as false
+at a glance. It is true of the path that would have observed the difference.
+
+### The branch span is not hand-counted, and that is the load-bearing part
+
+It is three instructions today — `push {r1,r2,r3}` / `bl` / `pop {r1,r2,r3}` —
+but `EmitCallProc` may emit a literal-pool form for a far target, and a
+hardcoded `beq +2` would then land **inside** the sequence it was meant to
+skip. The displacement is `PatchCodeRefSlot`'s own arm32 expression character
+for character:
+
+```pascal
+Patch32(jzPatch, $0A000000 or ((((CodeLen - jzPatch) div 4) - 2) and $00ffffff));
+```
+
+so there is ONE spelling of this architecture's PC-reads-8-ahead arithmetic in
+the tree rather than a second that drifts out of step with it. That is this
+file's own sibling-spelling rule applied at write time instead of at
+regression time.
+
+### Measured
+
+- **Size**: `code=` 240056 -> 240184 on the six-frame fixture, **+128 bytes =
+  16 sites x 8** — `cmp` 4 + `beq` 4, arriving exactly. arm32 is the most
+  expensive of the three so far (x86-64 5, i386 4) because fixed-width
+  encoding has no cheap form of either instruction.
+- **Behaviour**: `cross=3` under `qemu-arm`, before and after.
+- **Leaks, differentially, four fixtures under qemu-arm**: `allocs`/`frees`/
+  `live` **identical on every row**, including the two named for leaking.
+- `tools/gate.sh quick`: GREEN.
+- Self-host fixedpoint: converged in 1 round — correct, the x86-64 emitter did
+  not move.
+
+### THE CONTROL FOR THIS STEP IS AN EARLIER BINARY, and that is sound rather than convenient
+
+The pre-arm32 compiler no longer exists in the tree, so the differential
+control is the **x86-64-only** build saved during that step. Its arm32 output
+is provably the pre state — **because the i386 step established by `cmp` that
+arm32 came out byte-identical across it.** The blast-radius control from the
+previous commit is what makes this commit's control legitimate; without it the
+saved binary would be an assumption about a target nobody had checked.
+
+### NOT re-measured, deliberately
+
+No ns/slot figure, same reason as i386: arm32 runs under qemu here and a qemu
+timing measures the emulator's dispatch. The structural argument transfers and
+the number does not.
+
+## THE NON-STRING ARMS ARE A TAIL, AND THE TICKET ALREADY HELD THE NUMBER
+
+The "extend to `SXR_VAR`/`SXR_OBJ`/interface/array" question above can be
+closed from data already in this file rather than by a new census.
+`compiler/defs.inc`'s `TTypeKind` puts **tk 23 = `tyAnsiString`** (tk 22 is
+`tyVariant`). The 2026-09-07 decomposition counted ParseFactorCore's swept
+population as *"10 named vs 609 unnamed tk=23 syms"* — i.e. **the 98% figure
+that motivated this whole ticket was already a count of ANSISTRING slots.**
+
+So `SXR_STR`, which is the only arm these three commits touch, covers ~98% of
+the swept population in the worst sweep in the compiler, and the other arms
+are a ~2% tail. That does not make them wrong to do — a `PXXArrayRelease`
+call does real work and its nil path may be worth more per site — but it
+retires the idea that the string arm is a partial fix waiting on the others.
+**It is the fix; the others are an increment.** Anyone picking them up should
+re-derive the tk number before quoting this paragraph.
