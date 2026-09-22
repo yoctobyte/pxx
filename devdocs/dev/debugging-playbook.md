@@ -36465,6 +36465,39 @@ frozen because the host is retired.* So the discipline is not "build a better
 tell" — it is **ask what population your new tell is reading, every time,
 including when the tell is your own repair for the last one.**
 
+**AND ONCE YOU HAVE A SOUND RATE, TWO MORE THINGS CAN GO WRONG WITH IT, BOTH
+MEASURED 2026-09-22 ON THE SAME NUMBER.**
+
+**(a) STATE THE COMPLEMENT THE DECISION ACTUALLY TURNS ON — the same rate
+supports opposite actions depending on which way you say it.** A row failing
+**10.8%** of runs was written up as *"this blocks a full green tier"*. It does
+not: **8 tiers in 9 are GREEN on that row.** It blocks *trusting* a green, not
+*reaching* one — and the two readings prescribe opposite things. "Blocks" tells
+the reader to **wait** for a green that is the likely outcome of any single run;
+the truth is that a green is **easy to get and would be green by luck**, with
+the defect shipped inside it. **The error is not arithmetic and re-checking the
+sum cannot find it.** Note which reading is the seductive one: *blocks* sounds
+more urgent, so it is the one that gets written when you are summarising a real
+defect you want taken seriously. **Ask what ACTION each phrasing implies, and
+whether the number supports that action.**
+
+**(b) RECORD THE ESTIMATOR BESIDE THE INTERVAL, exactly as you record the
+population beside a count.** The same two rows, normal approximation against
+exact (Clopper–Pearson):
+
+| runs | fails | rate | normal | exact | np |
+| --- | --- | --- | --- | --- | --- |
+| 60 | 4 | 6.7% | 0.4 – 13.0% | **1.8 – 16.2%** | 4 |
+| 500 | 54 | 10.8% | 8.1 – 13.5% | **8.2 – 13.9%** | 54 |
+
+The normal approximation is **invalid at np = 4** (np ≥ 5 is the usual
+threshold) and its 0.4% lower bound is an artefact nobody believes. **A bare
+interval is exactly like a bare count: not refuted by a differing one, simply
+unquotable**, because the next reader re-derives it with another estimator and
+cannot tell a method difference from a real change. And **check whether two
+intervals OVERLAP before anyone reads a moved point estimate as a regression** —
+these do, so the rows agree and 6.7% → 10.8% is not a change in the world.
+
 **Half-discharged in the tool, 2026-09-22, and the remaining half is named.**
 `tools/tstate_toolchain_reversals.py` now prints `[longest run N, last red
 <date>]` beside every rate it reports, so the shape arrives with the number and

@@ -1,7 +1,7 @@
 ---
 prio: 70
 track: A
-summary: 'A REAL RACE IN THREAD-LOCAL STORAGE SETUP, RATED 2026-09-22: `test/test_tls_base.pas` prints `errors=2` instead of `errors=0`/`TLS OK` on **54 of 500** runs at `870f9f6e1` (compiler `06255ab1878c`, plexus) -- 10.8%, 95% CI 8.1-13.5%. An earlier n=60 row gave 4/60 = 6.7% with a CI of 0.4-13.0%; BOTH ROWS ARE KEPT WITH THEIR POPULATIONS because the small one supports no decision and is not refuted by the large one. THIS BLOCKS GOAL 1 ON ITS OWN: the job is class `unit`, `RUN_RETRY_CLASSES` is `{qemu, corpus, conformance, opt}`, so `unit` is DELIBERATELY single-shot and `p_report = p_attempt` -- this single row turns roughly ONE `full` TIER IN NINE red with nothing absorbing it. DO NOT FIX IT BY MOVING THE ROW TO A RETRY CLASS: that converts a genuine nondeterminism bug into an invisible flake, which the selfhost half of testmgr''s own comment refuses in as many words (`a flake is a genuine nondeterminism bug to reseed, not retry`). The harness is behaving correctly; fix the race. RE-LANED T -> A: the auto-file''s `track: T` is an explicit FALLBACK because the failing step (`expect_same.sh`) names no owner, and the owner is the lane that built TLS (`done/feature-a-thread-local-storage-via-clone-settls`). NOT A REGRESSION FROM ANY RECENT COMMIT -- it is intermittent, therefore pre-existing; a near-miss is recorded in the body where it was nearly pinned on a peer''s section-base commit that really was in the range. ON PLEXUS THIS IS THE ONLY RED: the same `full` run is 4953 PASS / 1 FAIL / 0 SKIP / 0 FLAKY with skip_holes == 0, and the four rows that hold `full` red on borg all PASS here. WHAT WOULD RETIRE IT: a fix plus 200 consecutive clean local runs -- NOT one green tier, which at 10.8% is the expected outcome and carries almost no information.'
+summary: 'A REAL RACE IN THREAD-LOCAL STORAGE SETUP, RATED 2026-09-22: `test/test_tls_base.pas` prints `errors=2` instead of `errors=0`/`TLS OK` on **54 of 500** runs at `870f9f6e1` (compiler `06255ab1878c`, plexus) -- 10.8%, exact 95% CI 8.2-13.9% (Clopper-Pearson; RECORD THE ESTIMATOR BESIDE THE INTERVAL, because a reader who re-derives one with a different method gets a different number for no other reason). An earlier n=60 row gave 4/60 = 6.7%, exact CI 1.8-16.2% -- and its NORMAL-approximation interval of 0.4-13.0% was INVALID, np=4 against the np>=5 rule of thumb, with a 0.4% lower bound that is an artefact rather than a belief. The two exact intervals OVERLAP, so the rows agree and the point estimate did not really move; both are kept with their populations because a number whose interval spans a factor of thirty is not weak evidence, it is not evidence, and it looks identical to a strong one at a glance. WHAT IT DOES AND DOES NOT BLOCK, AND THE FIRST VERSION OF THIS SUMMARY HAD IT BACKWARDS: at 10.8% per attempt **EIGHT `full` TIERS IN NINE ARE GREEN ON THIS ROW**, so it does NOT block reaching a green -- it blocks TRUSTING one. The two readings prescribe opposite actions, which is why the error mattered: ''this blocks goal 1'' tells the owner to WAIT for a green that is already the likely outcome of any single run, when the true hazard is that **a green is easy to obtain and would be green BY LUCK, with a live threading race shipped inside it**. Goal 1 is a full green pin AS A RELEASE, so the defect is not tier colour -- it is that the colour stops carrying the information the release is meant to rest on. CLASS AND RETRIES: the job is class `unit` and `RUN_RETRY_CLASSES` is `{qemu, corpus, conformance, opt}`, so `unit` is DELIBERATELY single-shot and `p_report = p_attempt` -- nothing absorbs it. DO NOT MOVE THE ROW TO A RETRY CLASS: that converts a genuine nondeterminism bug into an invisible flake, which the selfhost half of testmgr''s own comment refuses in as many words (`a flake is a genuine nondeterminism bug to reseed, not retry`). The harness is behaving correctly; fix the race. RE-LANED T -> A: the auto-file''s `track: T` is an explicit FALLBACK because the failing step (`expect_same.sh`) names no owner, and the owner is the lane that built TLS (`done/feature-a-thread-local-storage-via-clone-settls`). NOT A REGRESSION FROM ANY RECENT COMMIT -- it is intermittent, therefore pre-existing; the body records where it was nearly pinned on a peer''s section-base commit that really was in the range. NOT AN ESCALATION YET, AND DO NOT MAKE IT ONE: nobody has attempted a fix, and asking the owner to rule on shipping a known race before any engineering has been tried is the expensive path for no reason. IF a fix is attempted and proves deep, THEN it becomes a one-sentence question in goal terms -- do we ship beta 0.1 with a threading race that reddens one tier in nine -- with the release window running to about 2026-09-30. ON PLEXUS THIS IS THE ONLY RED: the same `full` run is 4953 PASS / 1 FAIL / 0 SKIP / 0 FLAKY with skip_holes == 0, and the four rows that hold `full` red on borg all PASS here. WHAT WOULD RETIRE IT: a fix plus 200 consecutive clean local runs -- NOT one green tier, which at 10.8% is the expected outcome and carries almost no information.'
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 27 is `tools/expect_same.sh test_tls_base26 "$(/tmp/test_tls_base26)" "$(printf 'errors=0\nTLS OK')"`. The job's own `src` (`test/test_tls_base.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -157,3 +157,63 @@ a green `full`**, and borg's remaining red set is environmental to borg.
 *(Method note, because it nearly went wrong again: `compiler_srchash.sh` matches
 **74** rows in this tier as a shared PREREQUISITE. The aarch64 subject is
 `test-aarch64#00`. A prerequisite is not a row.)*
+
+## 2026-09-22 (later still) — TWO CORRECTIONS TO THE SECTION ABOVE, BOTH FROM frankuser, AND THE FIRST ONE INVERTS ITS CONCLUSION
+
+### 1. "Blocks goal 1" was backwards
+
+At 10.8% per attempt, **8 `full` tiers in 9 are GREEN on this row.** So it does
+**not** block reaching a green. It blocks *trusting* one.
+
+**The two readings prescribe opposite actions**, which is the whole reason this
+needed catching before it went to the owner:
+
+| reading | what he would do |
+| --- | --- |
+| *"this row blocks goal 1"* | **wait** for a green that is already the likely outcome of any single run |
+| the true statement | **distrust** a green, because it is easy to obtain and would be green *by luck* with a live threading race inside it |
+
+**Goal 1 is a full green pin AS A RELEASE.** The defect is therefore not the
+tier's colour — it is that the colour **stops carrying the information the
+release is meant to rest on.** A pin whose green is 89% luck certifies nothing
+about threading.
+
+**The retirement condition in the section above was already right** — *a fix
+plus 200 consecutive clean runs, not one green tier* — and that is precisely a
+statement about **certifying a fix**, not about reaching a green. The headline
+generalised it into a claim about *reachability*, and those are different
+things. The correct standard survived; the sentence drawn from it did not.
+
+### 2. The n=60 interval used an estimator that is invalid at n=60
+
+Both earlier intervals were the **normal approximation**. For the 500-run row
+that is fine (np = 54). For the 60-run row **np = 4**, below the np ≥ 5 rule of
+thumb, and it produced a lower bound of **0.4%** — an artefact, not a belief
+anyone holds. Exact (Clopper–Pearson):
+
+| runs | fails | rate | normal 95% CI | **exact 95% CI** | np |
+| --- | --- | --- | --- | --- | --- |
+| 60 | 4 | 6.7% | 0.4 – 13.0% *(invalid)* | **1.8 – 16.2%** | 4 |
+| 500 | 54 | 10.8% | 8.1 – 13.5% | **8.2 – 13.9%** | 54 |
+
+**The conclusion is unchanged and slightly strengthened:** the small sample was
+consistent with a rate *higher* than the normal approximation allowed, and the
+two exact intervals **overlap** — so the rows agree and the point estimate did
+not really move. Worth saying explicitly, because a reader comparing 6.7% to
+10.8% may otherwise suspect a regression between them.
+
+**RECORD THE ESTIMATOR BESIDE THE INTERVAL**, the same way this project already
+records the population beside a count. Someone will re-derive one of these and
+get a different number for no reason but the method, and — exactly like a bare
+count — a bare interval is not refuted by a differing one, it is simply
+unquotable.
+
+### Not an escalation yet
+
+Nobody has attempted a fix. Asking the owner to rule on shipping a known race
+**before any engineering has been tried** is the expensive path for no reason —
+it is laned to A and the release window runs to roughly **2026-09-30**. If a fix
+is attempted and proves deep, *then* it becomes a one-sentence question in goal
+terms: **do we ship beta 0.1 with a threading race that reddens one tier in
+nine?** That sentence contains no implementation noun and is answerable in a
+word, which is the test for whether it is his at all.
