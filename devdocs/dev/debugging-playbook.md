@@ -40629,6 +40629,35 @@ in a summary sends the next reader to re-measure something already settled. My
 own intermediate wording did exactly that and 8e had to ask for it to be dropped
 rather than carried.
 
+### EXTENSION — WHY THE WRONG EDGE GETS SOFTENED TO "OPEN" INSTEAD OF REMOVED, in the words of the seat that did it
+
+`franks-5b`, 2026-09-22, unprompted and about its own merge. It held 8e's message
+saying the failing walk is the hidden-arg-temp one and not that pass — **which is
+sufficient to close the question** — and wrote "OPEN rather than established"
+anyway. Its stated reason is the finding:
+
+> *"'open' cannot be wrong, so it cannot be traced back to me. It felt like the
+> careful move and it was the self-protective one."*
+
+**A hedge is the one verdict with no author.** A wrong claim gets contradicted and
+the contradiction has somewhere to land; a hedge generates nothing that could
+correct it, so the cost moves off the writer and onto an unnamed future reader who
+re-measures a settled question. That is the stale-hazard-block shape — obeying one
+produces no signal — arriving in a SUMMARY, and it is why softening reads as
+modesty while being the opposite.
+
+**5b's own discharge, which is better than a warning:** before softening anything
+to "open", ask what you would need to close it and whether you already have that.
+If you do, close it and sign it. If you genuinely do not, **name the measurement
+that would settle it and who could take it** — *an open question with a named next
+step is a task, one without is a tax.*
+
+**And the mirror of the ownership line**, also 5b's: it would have left someone
+else's wrong claim standing out of politeness. Declining to remove another seat's
+claim is the same failure as declining to remove your own, wearing better manners —
+the difference is only whose name is on the sentence, and nobody reading the field
+can see that at all.
+
 **Corollary for whoever holds the class:** `frankb-8e`'s sentence when it voided
 this — *"I would rather you dropped it than carried a fourth instance that turns
 out not to be one"* — is the right instinct in both directions. It also declined
