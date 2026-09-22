@@ -37451,6 +37451,53 @@ as sound applies no pressure to its inputs.** The other arrival the same day: a
 call-rate figure that was actually a megabyte count off a file-size line, which
 travelled because the argument held at either value.
 
+### AND RELAY IS THE FLATTENING STEP NOBODY CALLS ONE — A DATED SECTION HEADER IS A LABEL, AND QUOTING ACROSS SESSIONS STRIPS IT
+
+**Measured 2026-09-22, this coordinator, caught by `frankh-c0` reading its own
+ticket's line numbers.** Same mechanism as the column above, one hop further out,
+and the structure that was doing the work was **a section boundary inside a
+ticket** rather than a table's geometry.
+
+`perf-o` has an inherited body and, above it, a dated `2026-09-22` re-read
+section. **That header is the label**: everything below it is old, everything in
+it was re-derived at HEAD. I relayed **three** facts from that ticket to
+`frankb-8e` under one framing — *re-read at HEAD today, take them from c0 rather
+than from me*. Two were in the dated section. **The third was inherited body
+text, and I never checked which side of the line it sat on.** It arrived at 8e
+as three bullets in one voice, carrying a provenance claim that was true of two
+of them.
+
+**A TICKET SEPARATES RE-DERIVED FROM INHERITED STRUCTURALLY; A MESSAGE HAS TO
+RESTATE IT.** That is the table rule exactly, and the reason it is worth its own
+entry is that **nobody thinks of relaying as quoting.** It feels like reporting.
+The seat doing it has read the document, holds the distinction while reading,
+and emits sentences — and the distinction lived in the document's geometry, not
+in the sentences.
+
+**AND IT WAS TRUE, WHICH IS WHY ONLY THE AUTHOR COULD CATCH IT.** c0 measured
+the inherited claim rather than merely objecting (`PXXDBG=a.ir:driver`: two
+static call sites mint two distinct unnamed carriers, `lea/arg/call` then
+`lea/virtual_call` then `var_store`), and it holds. **A relayed claim that
+happens to be right produces no signal at the receiving end** — 8e would have
+built on it and nothing would have failed. The only reader positioned to notice
+is the one who knows which half of their own document it came from, and they are
+not in the conversation unless you copy them.
+
+**Discharge, and it is cheaper than it sounds:** when you relay someone's facts,
+**mark each one with what established it** — "re-measured at HEAD", "inherited,
+unverified" — or relay none as verified. **And copy the author**, who is the only
+reader who can see the label you dropped. Prefer pointing the receiver at the
+source over quoting it: peer-to-peer beat routing here too, and a hop is a place
+for a label to fall off.
+
+**The second-order half, which c0's reply demonstrates rather than states:** the
+right response to a mis-provenanced claim is to **measure it**, not to retract
+it. c0's did, and a soft claim became a hard one plus a qualifier nobody had —
+**the carrier is minted per call SITE, not per call**, so a per-site slot count
+and a per-call dynamic cost are different denominators, and multiplying one by
+call frequency is the umbrella's do-not-multiply error arriving through a
+neighbouring subsystem.
+
 ## A STAMP IS A LIST OF PAST MISTAKES — IT GROWS TOWARD WHAT HAS ALREADY GONE WRONG AND NEVER TOWARD WHAT HAS NOT
 
 **Measured 2026-09-22, lekkerzeilen-7a, against the fix it had landed the same
