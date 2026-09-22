@@ -4809,7 +4809,7 @@ procedure ObjBuildTextRelocsA64(firstGlobal, extSym0, impSym0,
 
     EmitDataRef     8-byte literal   ABS64 (257) vs .data + DataOff
     EmitGlobRef     4-byte literal   ABS32 (258) vs .data/.bss + offset
-    DynCall         movz+movk        MOVW_UABS_G0_NC/G1_NC (263/264) vs .data
+    DynCall         movz+movk        MOVW_UABS_G0_NC/G1_NC (264/266) vs .data
     ProcAddrFix     8-byte literal   ABS64 (257) vs .text
 
   TWO RELOCATIONS FOR ONE SITE, and it is the only place in any writer here
@@ -4877,11 +4877,29 @@ begin
     The operand names OUR GOT slot in .data, never the callee -- the slot's own
     ABS64 against the extern's UND symbol goes into .rela.data in the caller,
     exactly as on x86-64. }
+  { 264 = R_AARCH64_MOVW_UABS_G0_NC, 266 = G1_NC. NOT 263 and 264, which is
+    what this emitted for two hours on 2026-09-22 and is wrong TWICE: 263 is
+    MOVW_UABS_G0 -- the OVERFLOW-CHECKED G0 -- so a linker would refuse any
+    slot address above 0xffff, and 264 on the movk is still a G0, writing bits
+    15:0 into the field that must hold bits 31:16. The result is a call to a
+    plausible address in the wrong 64 KiB, or a refused link.
+
+    THE HARNESS HELD THE SAME WRONG TABLE, SO THE TWO AGREED. It was found
+    only by asking clang to emit a MOVW group of its own (-fno-pic
+    -mcmodel=large over `&extern_var`) and reading the types off ITS object:
+    llvm prints them by name, G0_NC then G1_NC, at 0x108 and 0x10a. An oracle
+    that shares your constants is not an oracle -- this is that hazard, caught
+    in the one arm of this writer no other check could reach.
+
+    The numbering is G0=263, G0_NC=264, G1=265, G1_NC=266, G2=267, G2_NC=268,
+    G3=269: _NC alternates, so an off-by-one lands on the checked variant of
+    the SAME group rather than on a different group, which is why the mistake
+    reads as plausible. }
   for i := 0 to DynCallCount-1 do
   begin
-    ObjRelPush(DynCallCodePos[i], 2, 263,
+    ObjRelPush(DynCallCodePos[i], 2, 264,
                ExternalGotOff[DynCallExtIdx[i]]);
-    ObjRelPush(DynCallCodePos[i] + 4, 2, 264,
+    ObjRelPush(DynCallCodePos[i] + 4, 2, 266,
                ExternalGotOff[DynCallExtIdx[i]]);
   end;
   { @proc: an 8-byte literal, absolute against .text. The x86-64 sibling is

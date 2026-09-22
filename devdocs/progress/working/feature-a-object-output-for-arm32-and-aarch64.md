@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankC
 owner: frankb-8e
 blocked-by: []
-summary: "THE aarch64 OBJECT WRITER IS LANDED AND VERIFIED, 2026-09-22; arm32 is what remains. aarch64 shares writeELFRelX64General's body -- e_machine, the absolute-pointer type and .rela.text construction are the only differences, so the block was lifted into ObjBuildTextRelocsX64/A64 rather than cloned a third time, with byte-identity of four saved x86-64 and i386 objects as the control. THE PSABI WAS THE WRONG PLACE TO DESIGN FROM: this backend materialises addresses from an INLINE LITERAL POOL, so three of the four relocation sites are DATA WORDS in .text (ABS64 for an 8-byte literal, ABS32 for the 4-byte `ldr w0,[pc+8]` form) and only the external call is an instruction field, where one site takes TWO relocations (MOVW_UABS_G0_NC + G1_NC). Grepping ir_codegen_aarch64.inc for the fixup arrays returns nothing -- it reaches them through the shared emitters in emit.inc -- so the sites are invisible at the file with the target name on it. Verified by tools/reloc_resolve_check.py: AGREE with pxx's own executable on 772256 bytes and 1355 relocations, 4 of 4 controls reddening it, both section bases carrying a runtime witness. --function-sections is REFUSED on aarch64 (it needs CALL26) rather than half-served. KNOWN GAP, stated because the count does not show it: the probe applies ZERO movz/movk relocations, since pxx resolves printf from its own crtl and emits no undefined symbol, so the external-call arm rests on the clang field oracle alone and wants an extern-driving probe."
+summary: "THE aarch64 OBJECT WRITER IS LANDED AND VERIFIED, 2026-09-22; arm32 is what remains. It shares writeELFRelX64General's body (e_machine, the absolute-pointer type and .rela.text construction are the only differences) with byte-identity of four saved x86-64/i386 objects as the control. THE PSABI WAS THE WRONG PLACE TO DESIGN FROM: this backend materialises addresses from an INLINE LITERAL POOL, so three of four sites are DATA WORDS in .text (ABS64, and ABS32 for the 4-byte `ldr w0,[pc+8]` form -- 1077 of 1355 relocations) and only the external call is an instruction field, where one site takes TWO relocations. AND THE FIRST VERSION GOT THOSE TWO TYPE NUMBERS WRONG IN BOTH THE WRITER AND THE HARNESS, IDENTICALLY, SO THEY AGREED: MOVW_UABS is G0=263 G0_NC=264 G1=265 G1_NC=266, interleaving checked and unchecked, and reading it as four consecutive numbers from 263 put the OVERFLOW-CHECKED G0 on the movz and a second G0 on the movk. Found by clang -fno-pic -mcmodel=large over `&extern_var`, whose object names the types -- an external emitter was the only thing that could see it. Verified: AGREE with pxx's own executable on 772256 bytes and 1355 relocations, 4 of 4 controls reddening it; plus test/reloc_movw_probe.c for the arm the main probe cannot reach, with clang as a shape oracle and a GOT-slot coherence check carrying its own two controls. --function-sections is REFUSED on aarch64 (it needs CALL26) rather than half-served."
 ---
 
 # Object output for arm32 and aarch64
@@ -368,3 +368,71 @@ does not implement, so the arm is exercised end to end rather than by
 assertion. `extern int some_undefined_helper(int)` already produces 2 G0 + 2
 G1 relocations and 2 UND symbols on aarch64 — the shape works, it just is not
 wired into a checked run.
+
+
+## The relocation type numbers were wrong, in both places, identically
+
+Landed 2026-09-22 and corrected the same evening. `ObjBuildTextRelocsA64`
+emitted `263` on the `movz` and `264` on the `movk`, and
+`tools/reloc_resolve_check.py` resolved with `{263: 0, 264: 16}`. Both had
+read the MOVW_UABS family as four consecutive numbers from 263. It
+interleaves:
+
+    263 G0   264 G0_NC   265 G1   266 G1_NC   267 G2   268 G2_NC   269 G3
+
+`263` is the **overflow-checked** G0 — a linker refuses any slot address above
+`0xffff` — and `264` on the `movk` is **still a G0**, writing bits 15:0 into
+the field that must carry bits 31:16. Correct is `264` and `266`.
+
+**The two were written days apart and share no code; they shared a reading of
+the document.** Every comparison between them was therefore green. This is
+exactly the hazard frankuser raised before the writer existed — an oracle that
+shares your implementation cannot fail differently — arriving in the one arm no
+other check reached.
+
+**It needed two things in order.** The main probe produces 1355 relocations and
+**zero** `movz`/`movk`, because pxx resolves `printf` from its own crtl, so the
+arm was unexercised while the headline said AGREE. `test/reloc_movw_probe.c`
+reaches it with `extern void *dlopen(...)` and `dlclose`, never called, guarded
+by `argc > 99` so DCE keeps the sites. Then `clang -fno-pic -mcmodel=large`
+over `&extern_var` emits a real MOVW group whose types llvm prints by name.
+
+**The lead was half wrong and still decisive:** `-mcmodel=large` does NOT give
+a MOVW group for a CALL — clang emits `bl` with `CALL26` and leaves range to a
+veneer — only for a DATA address, which is what pxx's GOT-slot reference is.
+Test a lead on the shape you actually emit.
+
+### What the movw probe checks, and what it deliberately does not
+
+- **Shape, against clang (external).** One entry per instruction, four bytes
+  apart, `G0_NC` then `G1_NC`, and the SAME ADDEND on every entry of a group.
+  That last invariant is the one worth having: a right addend on one entry and
+  a wrong one on the other still links, and calls a plausible address in the
+  wrong 64 KiB.
+- **Coherence, from the object alone.** The addend must name a `.data` offset
+  where an `ABS64` against an UNDEFINED symbol lives. **Two externs, not one** —
+  with one, every site names the only slot there is and a writer pointing
+  everything at slot zero would pass. It carries its own controls: an addend
+  off by one slot, and every site on one slot, both asserted rejected.
+- **NOT the value against the executable.** That comparison was written, it
+  DIFFERED, and the object was right: the executable places GOT slots in its
+  writable segment while the object carries them inside `.data`, so the two
+  builds legitimately disagree about where the slot is. Reporting that as a
+  relocation defect would have been this harness's own worst failure mode.
+
+**pxx emits two entries where clang emits four** (`G0_NC` `G1_NC` against
+`G0_NC G1_NC G2_NC G3`), because only `movz`+`movk` are emitted. That is a
+documented limit, not a defect — it is correct while `.data` lands below 4 GiB,
+which a `-no-pie` static link does. Worth knowing: `_NC` means **no check**, so
+above 4 GiB this truncates silently, where the `ABS32` the same writer emits
+for a `.bss` reference would refuse.
+
+### One more instrument fix this turned up
+
+`solve_bases` voted on every relocation, reading four bytes at the site as a
+resolved address. At a MOVW site those bytes are an **instruction**, which
+contributed a junk vote of `0xd2827fb0`, split the `.data` vote three ways and
+made the mode refuse with *"the layouts differ"* — an honest message about the
+wrong thing. The vote now runs over an explicit allowlist of absolute
+data-word relocation types per machine, so a new type is ignored by the vote
+rather than corrupting it.

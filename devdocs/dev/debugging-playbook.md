@@ -36570,10 +36570,38 @@ the other end — there a passing step supplies what a failing one needs; here
 the failing baseline supplies the failure the control was going to claim
 credit for.
 
-**Not promoted to CLAUDE.md.** It is one subsystem, on one day, and the
-guard-family rules there already carry the positive-control requirement; this
-is the second half of one of them and it earns a line there only if a second
-independent subsystem produces it.
+**THE COUNT IS NOW TWO, AND I CHECKED THE SECOND RATHER THAN TAKING IT.**
+frankuser offered `tools/aarch64_cabi_prologue_probe.sh` (frankh-c0, different
+seat, different lane, same night) and I read it: `rc=1` is set by both the
+DIFFER arm and the BROKEN arm, and the closing line prints
+`verdict: DISAGREEMENT` either way — so a run that compared ZERO signatures
+because the instrument broke announces the same word as a run that compared
+five and found a real divergence.
+
+**The shared shape: a channel where "the mechanism worked" and "the mechanism
+never ran" are spelled identically.** Mine is a control's `red (good)`; c0's is
+a verdict's `DISAGREEMENT`.
+
+**They are not the same defect and the difference is worth keeping.** c0's
+output DOES carry the distinction one line up — the BROKEN row says *"this is
+an INSTRUMENT failure, not a result"* and the count line says `0 signature(s)
+agree` — so the information exists and the HEADLINE erases it. Mine carried
+the distinction nowhere at all; no line of output could have told you. c0's is
+a reporting collapse, mine an epistemic hole.
+
+**What unifies them is the remedy, and that is the version worth stating:
+an instrument has THREE outcomes — ran and passed, ran and failed, did not
+run — and every bug here is two of them sharing a spelling.** c0's fix is a
+distinct exit status for the third; mine is a baseline assert that makes the
+third detectable at all.
+
+**Still not promoted to CLAUDE.md, and the reason is no longer the count.**
+The count test is met. The remaining reason is authority: this file's rules are
+what every session pays for at startup, the prompt to promote came from a peer,
+and a peer cannot authorise a CLAUDE.md edit. It is recorded here as a
+candidate for the owner, phrased as an extension of the existing
+*"A GUARD THAT CANNOT FAIL IS NOT A GUARD, AND IT PRINTS PASS"* rule rather
+than a neighbour to it, which is what that section asks for.
 
 ## A CENSUS OF THE FILE WITH THE TARGET'S NAME ON IT ANSWERS ABOUT THE WRONG SET
 
@@ -36614,3 +36642,66 @@ and this is a third instance of it rather than a new mechanism. It is banked
 here because the *specific* form — scoping a grep by filename when the
 behaviour is in shared code — is worth recognising by shape, and because the
 design half is a separate, useful habit.
+
+
+## AN ORACLE THAT SHARES YOUR CONSTANTS IS NOT AN ORACLE — AND THE AGREEMENT IS WHAT HIDES IT
+
+The warning is old and the instance is worth having because **the agreeing
+pair were written days apart, by the same seat, from the same document, and
+neither was a copy of the other.** No shared code, no shared file. They shared
+a *reading*.
+
+Measured 2026-09-22 (frankb-8e), aarch64 object writer. `elfwriter.inc` emitted
+`263` on the `movz` and `264` on the `movk`; `tools/reloc_resolve_check.py`
+resolved with `{263: shift 0, 264: shift 16}`. Both had read
+"MOVW_UABS_G0_NC, G1_NC, G2_NC, G3" as four consecutive numbers from 263. The
+real table interleaves the checked and unchecked forms:
+
+    263 G0   264 G0_NC   265 G1   266 G1_NC   267 G2   268 G2_NC   269 G3
+
+So `263` is the **overflow-checked** G0 — a real linker refuses any slot
+address above `0xffff` — and `264` on the `movk` is **still a G0**, writing
+bits 15:0 into the field that must carry bits 31:16. Two independent defects in
+two instructions, and **the harness reproduced both, so every comparison
+between them was green.**
+
+**The off-by-one lands on the checked variant of the SAME group, which is why
+it reads as plausible.** A wrong constant that landed on an unrelated
+relocation would have failed loudly and early.
+
+**What found it was an external emitter, and only after the probe was changed
+to reach the arm at all.** The main probe produces 1355 relocations and ZERO
+`movz`/`movk` — pxx resolves `printf` from its own crtl — so the entire arm was
+unexercised while the headline said AGREE. The find needed two things in order:
+a probe that reaches it (`extern void *dlopen(...)`, never called, guarded by
+`argc > 99`), and `clang -fno-pic -mcmodel=large` over `&extern_var`, whose
+object names the types symbolically: `R_AARCH64_MOVW_UABS_G0_NC` at `0x108`,
+`G1_NC` at `0x10a`.
+
+**The lead that produced it was half wrong and still decisive**, which is the
+part worth copying. `-mcmodel=large` was proposed for the CALL case and does
+NOT work there — clang still emits `bl` with `R_AARCH64_CALL26` and leaves
+range to a linker veneer. It works for a DATA address, which is the shape pxx's
+GOT-slot reference actually is. **Test the lead on the shape you actually
+emit**, not the one the suggestion names.
+
+**And the comparison that then DIFFERED was the invalid one.** Resolving the
+pair and comparing with the executable's own `PatchDynCallSites` bytes
+disagreed — and the object was right: the executable puts GOT slots in its
+writable segment while the object carries them inside `.data` at their own
+offsets, so the two builds legitimately place the slot differently. Reporting
+that as a relocation defect would have been the harness's own worst failure
+mode. **What is checkable from the object alone is COHERENCE**: the
+`movz`/`movk` addend must name a `.data` offset where an `ABS64` against an
+undefined symbol actually lives. Two externs, not one — with a single extern
+every site names the only slot there is and a writer that pointed everything
+at slot zero would pass.
+
+**The general habit: when an external oracle is unavailable for the VALUE, ask
+what the artefact must be internally consistent WITH.** A relocation that
+points at nothing is checkable without any oracle at all.
+
+**Not promoted to CLAUDE.md.** The file already states the rule this instance
+obeys — an oracle sharing your implementation cannot fail differently. This is
+a worked instance of it in a new subsystem, plus two habits (test a lead on the
+shape you emit; fall back to internal coherence) that are playbook-sized.

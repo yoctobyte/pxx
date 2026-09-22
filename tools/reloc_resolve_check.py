@@ -329,6 +329,24 @@ def base_at(base_of, regions, shndx, off):
     return base_of.get(shndx)
 
 
+# THE VOTE'S MODEL IS "THE EXECUTABLE HOLDS THE RESOLVED ADDRESS AT THIS
+# SITE", AND THAT IS ONLY TRUE FOR AN ABSOLUTE DATA WORD. Measured 2026-09-22
+# on the movz/movk probe: a MOVW site's four bytes are an INSTRUCTION, so
+# reading them as an address contributed a junk vote of 0xd2827fb0, the vote
+# became three-way, and solve_bases refused with "the layouts differ" -- an
+# honest message about the wrong thing. PC-relative and instruction-field
+# relocations are excluded for the same reason. Keeping this as an explicit
+# allowlist rather than a denylist means a new relocation type is silently
+# ignored by the vote instead of silently corrupting it.
+VOTE_ABSOLUTE = {
+    62:  {1, 11},          # EM_X86_64: R_X86_64_64, _32S
+    3:   {1},              # EM_386:    R_386_32
+    243: {1},              # EM_RISCV:  R_RISCV_32
+    94:  {1},              # EM_XTENSA: R_XTENSA_32
+    183: {257, 258},       # EM_AARCH64: ABS64 (low word), ABS32
+}
+
+
 def solve_bases(e, syms, xe, xoff, text, regions=None):
     """Where each of the object's sections landed in the executable, derived
     from the executable's own bytes rather than from anything pxx reports.
@@ -357,9 +375,11 @@ def solve_bases(e, syms, xe, xoff, text, regions=None):
     et = exe_bytes(xe, xoff, tbase, e.sec('.text')['size'])
     if len(et) < e.sec('.text')['size']: return None, {}
     votes = {}
+    absset = VOTE_ABSOLUTE.get(e.machine, set())
     for r in e.relocs('text'):
         s = syms[r['sym']]
         if s['shndx'] in (0, ti): continue
+        if r['type'] not in absset: continue
         try: have = struct.unpack_from('<I', et, r['off'])[0]
         except Exception: continue
         votes.setdefault(s['shndx'], Counter())[have - (s['value'] + (r['addend'] or 0))] += 1
@@ -563,8 +583,15 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions=None):
                 unhandled['aarch64:ABS32-overflow'] = \
                     unhandled.get('aarch64:ABS32-overflow', 0) + 1
             struct.pack_into('<I', secdata, r['off'], v & 0xffffffff)
-        elif r['type'] in (263, 264, 265, 266):
-            shift = {263: 0, 264: 16, 265: 32, 266: 48}[r['type']]
+        elif 263 <= r['type'] <= 269:
+            # G0=263 G0_NC=264 G1=265 G1_NC=266 G2=267 G2_NC=268 G3=269.
+            # _NC ALTERNATES WITH THE CHECKED FORM, so the naive reading
+            # "263,264,265,266 are G0..G3" is off by a factor of two and lands
+            # on the checked variant of the same group -- which is exactly the
+            # table this harness and the writer both held until clang's own
+            # object was read for the names (2026-09-22).
+            shift = {263: 0, 264: 0, 265: 16, 266: 16,
+                     267: 32, 268: 32, 269: 48}[r['type']]
             insn = struct.unpack_from('<I', secdata, r['off'])[0]
             imm = ((S + A) >> shift) & 0xffff
             struct.pack_into('<I', secdata, r['off'],
@@ -638,6 +665,179 @@ def clang_movw_oracle():
                           'literals in symtab.inc]'))
 
 
+def clang_movw_entries():
+    """What a MOVW_UABS GROUP looks like when an external assembler emits one.
+
+    clang_movw_oracle above answers "which bits does the value go in". This
+    answers the OTHER half, which that one explicitly leaves open: which
+    relocation ENTRIES describe a movz/movk sequence -- their types, their
+    offsets relative to each other, and their addends. Entries need no linker,
+    which is what makes this reachable on a box with no aarch64 ld.
+
+    THE OBSTACLE AND THE WAY ROUND IT (frankuser's lead, 2026-09-22, and it
+    held only for the second half). At the default code model clang
+    materialises an address with adrp/add, so its entries are ADR_PREL_PG_HI21
+    and ADD_ABS_LO12_NC and are not comparable to pxx's by construction.
+    `-fno-pic -mcmodel=large` was the proposed fix. Measured: it does NOT work
+    for a CALL -- clang still emits `bl` with an R_AARCH64_CALL26 and leaves
+    range to a linker veneer -- and it DOES work for a DATA address, which is
+    the shape pxx's GOT-slot reference actually is. So the oracle exists, and
+    the source that produces it is `&extern_var`, not a call.
+
+    Returns a list of (offset, type, addend) or None."""
+    import shutil
+    cc = shutil.which('clang') or shutil.which('clang-21')
+    if not cc: return None
+    d = tempfile.mkdtemp(prefix='movwent-')
+    src, obj = os.path.join(d, 'a.c'), os.path.join(d, 'a.o')
+    open(src, 'w').write('extern int ext_var;\nint *get(void){ return &ext_var; }\n')
+    r = subprocess.run([cc, '--target=aarch64-linux-gnu', '-fno-pic',
+                        '-mcmodel=large', '-c', src, '-o', obj],
+                       capture_output=True, text=True)
+    if r.returncode != 0: return None
+    e = Elf(obj)
+    return [(x['off'], x['type'], x['addend'] or 0)
+            for x in e.relocs('text') if 263 <= x['type'] <= 269]
+
+
+def movw_value_check(pxx, pxxflag, src, work, tname):
+    """The external-call arm, end to end, on a source that REACHES it.
+
+    Two questions and two different answers, and conflating them is how this
+    would become a tautology:
+
+      SHAPE, against clang -- an external assembler. A MOVW_UABS group is one
+      entry per instruction, four bytes apart, types ascending G0_NC, G1_NC
+      (clang's own group runs on to G2_NC and G3 for a full 64-bit address),
+      and THE SAME ADDEND ON EVERY ENTRY. That last one is the invariant worth
+      having: get the addend right on one entry and wrong on the other and the
+      link still succeeds, and the program calls a plausible address in the
+      wrong 64 KiB.
+
+      VALUE, against pxx's own PatchDynCallSites -- and this is NOT an
+      independent oracle, it is a cross-check between two implementations
+      inside one compiler. It is worth running and worth labelling: the
+      executable's patcher computes the slot address by a completely different
+      route from this harness's psABI arithmetic, so agreement is evidence,
+      and it is not the evidence a linker would give.
+
+    THE EXECUTABLE HERE IS NEVER RUN. pxx's binary for this source is
+    dynamically linked and this box has no /lib/ld-linux-aarch64.so.1, so it is
+    read for its bytes only -- no witness, and none is claimed.
+
+    PXX EMITS TWO ENTRIES WHERE CLANG EMITS FOUR, AND THAT IS A REAL LIMIT
+    RATHER THAN A DEFECT. G0_NC + G1_NC cover the low 32 bits of the GOT slot
+    address, which is correct while .data lands below 4 GiB and is what a
+    -no-pie static link does. It is worth knowing that the _NC suffix means NO
+    CHECK: above 4 GiB this truncates SILENTLY, where the ABS32 relocation the
+    same writer emits for a .bss reference would refuse. Noted, not fixed --
+    there are only two instructions to hang relocations on."""
+    obj = os.path.join(work, 'movw.o'); exe = os.path.join(work, 'movw.elf')
+    for out, extra in ((obj, ['--emit-obj']), (exe, [])):
+        r = subprocess.run([pxx] + pxxflag.split() + extra + [src, out],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f'   movw arm: SKIP -- pxx refused: '
+                  f'{(r.stdout + r.stderr).strip().splitlines()[-1][:90]}')
+            return 0
+    e = Elf(obj); syms = e.symbols()
+    grp = [r for r in e.relocs('text') if 263 <= r['type'] <= 269]
+    if not grp:
+        print('   movw arm: BROKEN -- the probe written to reach this arm '
+              'produced no movz/movk relocation')
+        return 1
+    grp.sort(key=lambda r: r['off'])
+    ok = True
+    for i in range(0, len(grp), 2):
+        a, b = grp[i], grp[i+1] if i+1 < len(grp) else None
+        if b is None or b['off'] != a['off'] + 4 or \
+           a['type'] != 264 or b['type'] != 266 or \
+           (a['addend'] or 0) != (b['addend'] or 0):
+            ok = False
+    ce = clang_movw_entries()
+    if ce:
+        ce.sort()
+        cstep = all(ce[j+1][0] == ce[j][0] + 4 for j in range(len(ce)-1))
+        csame = len({t[2] for t in ce}) == 1
+        ctypes = [t[1] for t in ce]
+        print(f'   movw shape oracle: clang group = {len(ce)} entries, '
+              f'types {ctypes}, 4-byte step {cstep}, one addend {csame}')
+        if not (cstep and csame and ctypes[:2] == [264, 266]):
+            print('   movw arm: BROKEN -- clang\'s own group does not have the '
+                  'shape this check assumes; the assumption is what is wrong')
+            return 1
+    else:
+        print('   movw shape oracle: SKIP -- clang cannot emit a MOVW group here')
+    print(f'   movw shape: pxx group = {len(grp)} entries, '
+          f'{"MATCHES clang\'s invariants" if ok else "VIOLATES them"} '
+          f'(pairwise G0_NC/G1_NC, +4 apart, equal addends)')
+    if not ok:
+        return 1
+    # COHERENCE, and it replaces a comparison that was never valid. The first
+    # version resolved the pair here and compared with the bytes pxx's own
+    # PatchDynCallSites produced in the executable. It DIFFERS, and the object
+    # is right: measured 2026-09-22, the executable places its GOT slots in the
+    # writable segment while the object carries them inside .data at their own
+    # offsets, so the two builds legitimately disagree about WHERE the slot is.
+    # Comparing them tests the correspondence assumption, not the writer, and
+    # reporting that as a relocation defect is the mistake this whole harness
+    # exists to avoid.
+    #
+    # What IS checkable from the object alone is the invariant the two-
+    # relocation design rests on: the movz/movk addend names a .data offset
+    # where a real GOT slot lives -- an ABS64 against an UNDEFINED symbol. A
+    # wrong addend points into .data at no slot at all, or at another
+    # extern's, and this sees both. With two externs it also sees every site
+    # collapsing onto one slot.
+    slots = {r['off']: syms[r['sym']]
+             for r in e.relocs('data')
+             if syms[r['sym']]['shndx'] == 0}
+    bad = []
+    seen = {}
+    for i in range(0, len(grp), 2):
+        a = grp[i]; ad = a['addend'] or 0
+        tgt = slots.get(ad)
+        if tgt is None:
+            bad.append(f'{a["off"]:#x} -> .data+{ad:#x} where no GOT slot is defined')
+        else:
+            seen.setdefault(tgt['name'], []).append(a['off'])
+    if bad:
+        print('   movw coherence: BROKEN -- ' + '; '.join(bad))
+        return 1
+    print(f'   movw coherence: every group\'s addend names a real GOT slot '
+          f'{dict((k, len(v)) for k, v in seen.items())} -- each slot an ABS64 '
+          f'against an UNDEFINED symbol, which is the invariant the two-'
+          f'relocation design rests on')
+    if len(slots) > 1 and len(seen) < 2:
+        print('   movw coherence: BROKEN -- the object defines '
+              f'{len(slots)} extern slots and every call site points at '
+              f'{len(seen)}; the sites have collapsed onto one slot')
+        return 1
+    # ITS OWN POSITIVE CONTROL, because a coherence check over a correct object
+    # is exactly the shape that passes without being able to fail. Two
+    # perturbations, both drawn from how this writer would really go wrong: an
+    # addend off by one slot, and every site pointing at the same slot.
+    def coherent(gs):
+        sn = {}
+        for j in range(0, len(gs), 2):
+            t = slots.get(gs[j]['addend'] or 0)
+            if t is None: return False
+            sn.setdefault(t['name'], 0)
+        return not (len(slots) > 1 and len(sn) < 2)
+    off1 = [dict(r, addend=(r['addend'] or 0) + 8) if j < 2 else r
+            for j, r in enumerate(grp)]
+    allone = [dict(r, addend=sorted(slots)[0]) for r in grp]
+    ctl = [('addend off by one slot', coherent(off1)),
+           ('every site one slot', coherent(allone))]
+    if any(ok for _, ok in ctl):
+        print('   movw coherence: BROKEN -- a control it must reject was '
+              f'accepted: {[n for n, ok in ctl if ok]}')
+        return 1
+    print(f'   movw coherence controls: {len(ctl)} of {len(ctl)} rejected '
+          f'(addend off by one slot; every site on one slot)')
+    return 0
+
+
 def uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname,
                           regions=None):
     """Prove the uniform-offset hole is real AND that the witness closes it."""
@@ -654,7 +854,7 @@ def uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname,
     for r in e.relocs('text'):
         s = syms[r['sym']]
         rr = dict(r, addend=(r['addend'] or 0) + N) if s['shndx'] == target else r
-        if s['shndx'] == target:
+        if s['shndx'] == target and r['type'] in VOTE_ABSOLUTE.get(e.machine, set()):
             have = struct.unpack_from('<I', et, r['off'])[0]
             votes[have - (s['value'] + (rr['addend'] or 0))] += 1
     if not votes:
@@ -918,10 +1118,23 @@ def main():
             else:
                 print(f'   movw field oracle: clang DISAGREES -- {detail}')
                 return 1
-            if not any(t in (263, 264, 265, 266) for t in cen):
-                print('   NOTE: this probe applied NO movz/movk relocation, so '
-                      'the run above says nothing about that arm; the clang '
-                      'row is the only evidence for it here')
+            if not any(263 <= t <= 269 for t in cen):
+                # The arm this probe cannot reach gets its OWN probe rather
+                # than a caveat. A source that reaches it exists and is
+                # checked here; saying "not covered" and stopping would leave
+                # the newest part of the writer resting on an assertion.
+                mp = os.path.join(os.path.dirname(os.path.dirname(
+                        os.path.abspath(__file__))), 'test',
+                        'reloc_movw_probe.c')
+                if os.path.exists(mp):
+                    print('   the movz/movk arm is unreached by this probe; '
+                          'running test/reloc_movw_probe.c for it')
+                    if movw_value_check(pxx, pxxflag, mp, work, tname):
+                        return 1
+                else:
+                    print('   NOTE: this probe applied NO movz/movk '
+                          'relocation, so the run above says nothing about '
+                          'that arm; the clang row is the only evidence here')
         print(f'reloc-resolve[{tname}]: AGREE with pxx\'s own executable on {len(tb)} '
               f'bytes, {nrel} relocations; 4 of 4 controls reddened it, and every '
               f'section base has an independent runtime witness')
