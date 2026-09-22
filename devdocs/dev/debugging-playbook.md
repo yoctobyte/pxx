@@ -36097,3 +36097,55 @@ misfiled.
 **What would retire this section:** a shared reader for these reports that owns
 the vocabulary, so each new census does not re-implement the classification and
 re-make this mistake.
+
+## A SMALL, CLEAN, HOMOGENEOUS EXCEPTION CLASS IS MORE LIKELY AN UNHANDLED SPELLING THAN A REAL PHENOMENON — TIDINESS IS THE TELL
+
+**The rule, and the framing is frankuser's.** When a census turns up a handful
+of records that all behave the same way and differ from everything else, the
+instinct is to explain them. **Check the parser first.** That shape — few,
+uniform, cleanly separated — is *precisely* what an unhandled tag spelling
+produces, and it is *also* precisely what an interesting minority looks like.
+The two are indistinguishable from the output, so the prior has to do the work,
+and the prior should be: **a suspiciously tidy anomaly is a bug in me.**
+
+**Why the ordinary instinct fails here.** A real phenomenon usually arrives
+ragged — mixed magnitudes, a few near-misses, some records that half-qualify. A
+misclassification arrives *perfect*, because every record with the unrecognised
+spelling is misfiled **identically**. So the very cleanliness that makes an
+exception class feel like a finding is evidence against it being one.
+
+**Measured 2026-09-22.** A toolchain cross-tab reported four reports out of 547
+as passing where every other report failed. I wrote them into a ticket as *"the
+0.7% and unexplained"* — a real anomaly, invented, and a peer had to ask about
+it before anyone looked. All four head their red list with a third spelling
+(`## RED`) that my matcher did not know, **4 occurrences out of 6365 headings**.
+My own account of it afterwards is the sentence to keep: **the miss presented as
+DATA — four clean passes that invited a story, and I wrote the story rather than
+checking the matcher.**
+
+**The check costs one command and it is not "re-read the code":**
+
+- **Enumerate the tag vocabulary** and look for a long tail
+  (`grep -h '^## ' … | sort | uniq -c`). A count of 4 against counts in the
+  thousands is the whole answer.
+- **Ask what bucket an unrecognised value falls into.** If your classifier has
+  an `else`, the exception class and the `else` branch are the same set until
+  proven otherwise.
+- **Then make the vocabulary CLOSED and abort on anything outside it**, so the
+  next new spelling stops the run instead of skewing it. See "A PARSER'S TAG
+  VOCABULARY IS ENUMERABLE IN ONE COMMAND".
+
+**Note the positive control does not catch this**, which is why it needs its own
+heading: a control drawn from records you can already classify passes happily
+while the unrecognised tail is misfiled. The instrument is correct about
+everything it recognises.
+
+**And the residual, because an exception class CAN be real:** after fixing the
+matcher, exactly one of the four survived as a genuine exception. So the rule is
+about the ORDER of suspicion, not about disbelieving anomalies — check the
+parser, then explain what is left, and the one that survives a corrected
+instrument is worth far more than four that did not.
+
+**What would retire this section:** classifiers over this archive that share one
+reader owning the vocabulary, so a novel tag cannot be silently bucketed by each
+new census in turn.
