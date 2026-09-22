@@ -473,6 +473,11 @@
   }
  ],
  "host": "borg",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "db6d1bddb3b3059547fd8669b988e6731ad10198"
+ },
  "job_last_pass": {
   "fpc-bootstrap#src:compiler/compiler.pas": "4b8fa6041eb30285b8750a50b45cd642d43db08d",
   "lib-fpc-clean#00": "4b8fa6041eb30285b8750a50b45cd642d43db08d",
