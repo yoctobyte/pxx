@@ -17149,6 +17149,41 @@ GREEN` is the same rule; this is the maintenance form of it. **Name the partner 
 because the two tests will be read years apart by people who will not know the other exists,
 and the guard is only as good as the pair.
 
+
+### EXTENSION 2026-09-22 — the cheapest completeness census is an edit tool REFUSING for ambiguity, and it is free
+
+*`frankh-c0`, ESP arena drop.* The design rested on a stated completeness
+condition: `bssBase + GlobFix[i].BSSoff` is the only place a BSS address is
+formed from an offset. `EmitGlobRef` (`emit.inc:1150`) really is the single
+funnel for emitting one, and the per-backend helpers really do route through it
+(`EmitLoadGlobAddrRISCV32` -> `EmitGlobRef`).
+
+**And the address is FORMED in two places, not one** — `ApplyImageFixups`, and a
+second inside `writeELF32`, which is the writer riscv32 and xtensa actually use.
+**Patching the 64-bit site alone would have produced a change that does nothing
+on precisely the targets it was written for**, with a green build and a size
+column that never moves: the partial fix wearing a full green, in the arrangement
+where the fixed half is the one you can run locally.
+
+**What caught it was not a grep and not a review. The edit tool refused the first
+replacement as AMBIGUOUS** — two identical matches — *"which is the only reason I
+looked"*.
+
+**So a uniqueness-checking editor is a completeness census you are already
+running.** An exact-match replacement that refuses on a second occurrence answers
+*how many sites spell this* every time you touch one, for nothing, at the moment
+you are best placed to act. The habits that discard the signal are the ones that
+feel efficient: reaching straight for `sed -i` or `replace_all`, or adding
+surrounding context to disambiguate until the match is unique. **Widening the
+context to make an ambiguous edit apply is deleting a finding to silence a
+warning** — the second site is still there and now nothing will mention it again.
+
+**Discharge: treat "ambiguous match" as a result, not an obstacle.** Before
+disambiguating, look at the other hit and decide whether it needs the same edit.
+On a cross-target change the question has a sharper form, because the sites are
+usually NOT symmetric: **which of these spellings does the target I cannot run
+locally actually use?**
+
 ## TO ORDER A SET OF LIMITS, ASK THE SYSTEM WHICH ONE IT HITS FIRST — a grep gives you a SET, an oversized input gives you a SEQUENCE
 
 Measured 2026-09-06 (frankH), converting the fixed-cap families. **One input shape, five
@@ -42290,3 +42325,118 @@ because it is not in the message. Here the reviewer cannot reach the provenance
 because it is not in the world — it is in a transcript they have no access to.
 **Facts are shared, instruments are omitted, and provenance is unreachable**, and
 the confidence a reviewer feels is the same in all three cases.
+
+## THE HAZARD YOU ENUMERATE IS NOT THE ONE THAT GETS YOU — prefer the shape that DISSOLVES the class over the one that makes you list its members, and the proof is the member you never listed
+
+*2026-09-22, `frankh-c0` implementing, `frankz-e5` relaying the precedent. The
+ESP bare-profile heap arena: 66,812 B of BSS down to **1,276 B**, −65,536
+exactly, running byte-identically against the x86-64 oracle on esp32c3 and
+esp32s3.*
+
+**Two shapes were available for reclaiming a dropped BSS range.**
+
+- **Rewrite stored offsets in place** — shift later globals down, rewrite their
+  `GlobFix` entries, `Dec(BSSSize)`. Requires knowing *everything* that could
+  already hold a BSS offset.
+- **Leave every stored offset alone and resolve through a remap function** — the
+  shape `Data[]` already used, whose invariant is stated in `defs.inc`: *"fixups
+  resolve through `DataRemap`, so nothing that records an offset has to know the
+  split exists."*
+
+The implementer had named ONE hazard for the in-place version and intended to
+test rather than argue it: whether any BSS address is resolved into `.data`
+before `DceRun`, an RTTI or VMT table being the shape that would do it.
+
+**THAT HAZARD DID NOT EXIST.** `Fixups[]` target `Data[]` coordinates only.
+
+**THE ONE THAT DID WAS NEVER NAMED BY ANYBODY.** `BSS_SIG_ALTSTK`, `BSS_INTBUF`,
+`XtExcSlotOff` and their neighbours are **allocated during CODEGEN**, so they sit
+ABOVE a Pascal unit global. The in-place rewrite would have had to reason about
+them separately, and nothing in the plan pointed at them. Under the remap they
+shift with everything else because nothing shifts at all — **the implementer did
+not have to think about it, and that is the measurable difference between the two
+shapes.**
+
+**So the argument for construction-over-testing is not that testing is
+unreliable.** The test would have been fine. It is that **a test can only cover
+the members you enumerated, and the reason a hazard is dangerous is usually that
+it is not on your list.** A shape that removes the CLASS removes the members you
+never thought of, for free, and it removes them silently — which is why this
+argument is hard to make in advance and easy to demonstrate afterwards.
+
+**The tell, before you have the afterwards:** if your plan contains the sentence
+*"I will test whether X"*, ask what else is in X's class and whether you can name
+its members. **If you cannot list them confidently, you are not choosing between
+a tested design and an untested one — you are choosing between a design whose
+failures are bounded by your imagination and one whose failures are bounded by
+the code.**
+
+**AND THE POSITIVE CONTROL HERE IS WORTH COPYING, because a size column alone
+would have proved nothing.** The measurement that settles it is not the byte
+count. It is a bare program printing through UART MMIO with **no `AnsiString`
+anywhere** — so `builtinheap` links, `HeapMmap` dies, the arena drops — carrying
+**three scalar globals and an eight-element array global**, every one of them a
+user global sitting ABOVE the dropped range and therefore shifted. Its output
+matches the x86-64 oracle byte for byte on both SoCs. **If the remap were wrong
+those globals would print garbage rather than fail to build**, which is exactly
+the failure a size column cannot see. Negative control: a program that calls
+`SetLength` keeps all 66,812 B, because `HeapMmap` is live. Control for the
+control: `--no-dce` keeps it everywhere.
+
+**One more instance of the route rule, and the size column is what caught it.**
+The first attempt at that program did not exercise the drop at all — `PutS(const
+s: AnsiString)` materialises a string and keeps `HeapMmap` alive, so the program
+measured 66,848 B, ran perfectly, and would have certified nothing. **A runtime
+check that does not reach the changed path passes for the wrong reason**, and
+here the *size* column was the instrument that noticed, because the byte count is
+the one number that cannot be produced by a program taking the other branch.
+
+## AN EARLY EXIT LEAVES A PREDICATE'S STATE UNALLOCATED, AND AN EMPTY DYNAMIC ARRAY ANSWERS "NO" TO EVERY QUESTION — which is the dangerous answer exactly when the pass is switched off
+
+*2026-09-22, `frankh-c0`, guarding the ESP arena drop.*
+
+`DceRun` exits at its **first line** when DCE is off. That leaves `DceLive` an
+**unallocated dynamic array** — so every membership query against it answers
+*not live*, for every body, with no error and no tell.
+
+A predicate built on it (*is `HeapMmap` live after DCE?*) therefore answers
+**"nothing is live"** in the one configuration where **everything** is. Acting on
+it would have dropped an arena the program was about to use — a heap based at a
+dropped address, which is the plausible-wrong-value failure rather than a crash.
+The fix is a gate on `DceEnabled`, **and that gate is not belt-and-braces; it is
+the whole correctness of the predicate when the pass does not run.**
+
+**THE SHAPE, and it is not "initialise your variables".** An early exit is
+written to mean *this pass did nothing*. The state it leaves behind is read as
+*this pass ran and found nothing*. **Those two are opposite claims and the
+representation is identical** — an empty array, a zero count, a `nil` map. The
+representation of *no information* collides with the representation of *negative
+information*, which is this file's expected-value-collides-with-the-default rule
+moved from a test's expectations onto a pass's output.
+
+**The direction is what makes it expensive.** Where the negative answer is the
+permissive one (*not live → droppable*, *no references → unused*, *no overrides →
+devirtualise*), the uninitialised state reads as **licence to remove things**.
+The failure is therefore maximally destructive in precisely the configuration a
+developer selects to be conservative: **turning the optimiser OFF is what arms
+it.**
+
+**Three questions, and the second is the one nobody asks.**
+
+1. Can this pass exit before populating its output?
+2. **If it did, would a consumer be able to tell "did not run" from "ran and
+   found nothing"?** If the answer is no, you have two meanings on one value.
+3. Is the ambiguous answer the PERMISSIVE one? If so, the consumer must be gated
+   on *did the pass run*, not on *what the pass found*.
+
+**Discharge:** gate the consumer on the pass's own enable flag, or give the pass
+a tri-state — *not run* / *ran, empty* / *ran, populated*. A separate boolean is
+cheaper than the bug and it makes the early exit honest about what it did.
+
+**A companion refusal from the same change, worth copying.** `BssRemap` **refuses
+loudly** on an offset inside the dropped hole rather than clamping it to the
+nearest valid address. Clamping would resolve a live reference into dropped
+storage as a **neighbouring variable** — a wrong value that reads as deliberate.
+A live reference into a hole means the liveness predicate was wrong, and the
+correct response to a falsified predicate is to stop, not to produce the nearest
+plausible answer.
