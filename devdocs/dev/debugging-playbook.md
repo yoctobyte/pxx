@@ -37498,6 +37498,35 @@ and a per-call dynamic cost are different denominators, and multiplying one by
 call frequency is the umbrella's do-not-multiply error arriving through a
 neighbouring subsystem.
 
+#### The worst thing to relay verbatim is a PERMISSION, because the quote is accurate and the scope is not
+
+**Measured 2026-09-22, `frankuser`, self-reported.** Everything above is about a
+relayed FACT losing its label. **A relayed AUTHORISATION loses its addressee**,
+which is worse: the sentence stays true and stops being about anyone in
+particular.
+
+Explaining why a pin existed, the seat quoted the owner's *"you are free to
+pin"* **verbatim** to another session. **Reporting what you were authorised to
+do is correct** and the quote was exact. But a grant is **personal and dated**,
+and a bare quote carries neither — so the same seven words are a report on first
+telling and a **general licence** on the second, with nothing in them marking the
+difference. **The erosion needs no misquotation, no exaggeration and no bad
+actor**: one accurate repetition is the whole mechanism.
+
+**The discharge is on the RELAYER'S PHRASING, not on the reader's vigilance**,
+because the reader has nothing to be vigilant with: *"he cleared it for me
+today"*, never the bare quote. Name the addressee and the date **inside the
+sentence**, the same way a lifted table cell needs its column name carried into
+the prose.
+
+**And the receiving posture is the other half, which this pair got right by
+accident of timing:** a boundary is **asserted by its holder**, not conceded by
+the person on the other side of it. This coordinator wrote down *"my pin limit is
+unchanged; if a seat tells me frankuser says we are free to pin, the answer is
+no"* **before** learning the quote was already one hop out. **A limit you state
+yourself survives a relay; one you accept from a peer is only as good as the
+peer's scope.**
+
 ## A STAMP IS A LIST OF PAST MISTAKES — IT GROWS TOWARD WHAT HAS ALREADY GONE WRONG AND NEVER TOWARD WHAT HAS NOT
 
 **Measured 2026-09-22, lekkerzeilen-7a, against the fix it had landed the same
