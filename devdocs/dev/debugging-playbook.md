@@ -39114,10 +39114,43 @@ expects"*; this is the mechanism and the file list behind that sentence.
 no longer exists, so this binary is unproven by the gate's own test, and nothing
 about the tree looks wrong.
 
-**WHAT IS NOT ESTABLISHED, and 5b flagged it rather than asserting it:** whether a
+**WHAT WAS NOT ESTABLISHED, and 5b flagged it rather than asserting it:** whether a
 builtin-only edit changes the binary's BYTES or only the hash. *"It is in the
-hashed set"* and *"it changes the output"* are two claims and only the first is
-checked. **Do not write the second one down until someone runs it.**
+hashed set"* and *"it changes the output"* are two claims and only the first was
+checked.
+
+### ANSWERED FOR `pylib.pas` ONLY, 2026-09-22, AND `compiler/builtin/**` IS NOT ONE POPULATION
+
+**`compiler/builtin/pylib.pas` is NOT an input to the compiler binary.** 5b
+changed one character inside a live string literal, rebuilt to
+`converged after 1 round(s)` — the recompute verb, not the stamp path — and the
+binary was byte-identical at `fda77c48b8ee4b03` before and after; restored with
+`git checkout HEAD --` and rebuilt back to the same sha. Corroborated
+differently: pylib's four unconditional string literals are all absent from the
+binary, **with a positive control proving the grep can find strings in it at
+all** (`unit source not found` -> 1, `pascal26` -> 9). **So for the instance that
+started this — `be65bc3e3` touching `pylib.pas` — the fixedpoint red was pure
+stamp invalidation. Bookkeeping.**
+
+**DO NOT GENERALISE IT TO `compiler/builtin/**`, AND THE REASON IS STRUCTURAL
+RATHER THAN CAUTIOUS.** The compiler's own `uses` names no builtin unit, so
+`pylib.pas` can only reach the binary as emitted output — but **`builtinheap` is
+auto-included into every program the compiler compiles, `pascal26` included.**
+The two files are *expected* to behave differently and only one is measured. A
+wildcard in a Makefile made them look like one set; they are two.
+
+**AND THE PROBE FOR THE OTHER HALF WAS DISCARDED BY ITS AUTHOR RATHER THAN
+CAVEATED — the right call, and the shape is this file's own.** `builtinheap.pas`
+has no unconditional string literal to perturb, so 5b reached for an existing
+switch and built with `-dPXX_ALLOC_CENSUS`. The binary did change
+(`af30d47c9eb15ced` vs `fda77c48b8ee4b03`) **and that number attributes nothing**:
+the define is also referenced in `compiler/ir_codegen.inc`,
+`ir_codegen_wasm32.inc`, `ir_codegen_xtensa.inc`, `pyparser.inc` and
+`lib/rtl/re.pas`. Six files' worth of conditional code changed and one file would
+have been credited. **A convenient switch is not a probe** — it is an instrument
+whose enumerated set does not isolate the subject, which is the same failure as
+the census that filtered on its own hypothesis. **The open half needs an
+unconditional, reachable perturbation in `builtinheap` itself.**
 
 ### And the class of three was manufactured by the reporter's own working label
 
@@ -39381,3 +39414,22 @@ direction is the tell: each one flattered or reassured its recipient.** This one
 also produced a conclusion that was true for a different reason than the one
 given — the hardest kind to catch, because the thing you would check to test it
 comes out right.
+
+**AND THE ERROR CLASS LEAVES NO TRACE TO AUDIT, WHICH IS 5b's ADDITION AND THE
+REASON THIS NEEDS WRITING DOWN AT ALL.** 5b's path read happened *before* its own
+`tools/sync.sh`. That sync — run to bank its work, for reasons having nothing to
+do with the pin — **pulled v418 in as a side effect, so its working tree now
+agrees with the refs and the evidence that it was ever wrong is gone from it.**
+Anyone re-running the exact command today gets the right answer and cannot
+reproduce the error. **A stale-tree misreading repairs itself silently at the
+next sync**, so this class is never found by looking back; it is only ever caught
+in the moment, by someone standing in a different tree.
+
+**THE COUNT, SETTLED BETWEEN THE TWO SEATS, BECAUSE THE TWO DEFECTS ARE NOT THE
+SAME ANIMAL.** Three wrong claims that day were 5b's (an interim quoted as a
+result, a structural story in place of a ratio, and this refutation). The
+coordinator's was **procedurally unsound and factually correct** — relayed rather
+than measured. 5b declined to fold it into the count and declined to let it
+disappear: *"a relayed claim that happens to be true is the shape that never gets
+caught, because the only thing that would catch it is the check nobody runs on a
+statement that turned out right."*
