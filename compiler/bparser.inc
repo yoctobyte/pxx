@@ -719,8 +719,8 @@ function BSourceUsesAUnit: Boolean;
   only honest predicate for whether the shims can be emitted.
 
   DetectPascalRuntimeNeeds cannot answer it. Its `needsAnsiRuntime` is
-  `PasDefineExists('PXX_MANAGED_STRING')` first thing, and PasApplyDefaults
-  defines PXX_MANAGED_STRING unconditionally -- so for EVERY program, in every
+  `PasDefineExists('PXX_MANAGED_STRING')` first thing, and PasInitDefines
+  (paslexer.inc) defines PXX_MANAGED_STRING unconditionally -- so for EVERY program, in every
   frontend, it returns True and then sets needsHeap from it. It is not a
   discriminator; it is a constant. That is why a unit-free `10 PRINT "hello"`
   got the shim, and the shim called a builtinheap body that was never going to

@@ -101,8 +101,19 @@ procedure DetectPascalRuntimeNeeds(var needsHeap, needsAnsiRuntime, needsDivStub
 var i, j, depth: Integer; name: AnsiString;
 begin
   needsHeap := False;
-  { EVIDENCE, not the define. PasApplyDefaults defines PXX_MANAGED_STRING
-    unconditionally, so asking PasDefineExists here answered True for EVERY
+  { THE ROUTINE IS `PasInitDefines` AND IT IS SPELLED THAT WAY ON PURPOSE.
+    Three comments in this tree -- this one, builtinheap.pas and bparser.inc --
+    called it `PasApplyDefaults` until 2026-09-22, and there has never been a
+    procedure by that name anywhere in compiler/. They cited each other, and a
+    dozen tickets cited them, so a grep for the name returned nine confident
+    hits and no code. Found by frankz-e5 reading a commit of mine that had just
+    added the third. This file's own name-is-not-the-thing rule with the thing
+    missing outright: a search matches prose about a routine as readily as the
+    routine, and here there was only prose. Grep before citing a name.
+
+    EVIDENCE, not the define. PasInitDefines (paslexer.inc:923) defines
+    PXX_MANAGED_STRING unconditionally, so asking PasDefineExists here
+    answered True for EVERY
     program ever compiled and the whole AnsiString bundle -- plus the heap unit
     it drags in through needsHeap below -- was emitted into sources that never
     name a string. Measured 2026-09-22 at fda77c48b8ee: x86-64 hello-world

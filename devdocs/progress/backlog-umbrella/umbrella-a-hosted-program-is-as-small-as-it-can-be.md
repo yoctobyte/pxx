@@ -46,8 +46,13 @@ RLIMIT_STACK, clamp to 64 MiB, `gettid`, build a four-qword thread block,
 The owner's recollection was *"like 267 bytes of executable memory"* for a
 Pascal hello world without ansistrings. It is 195. **That property has not
 regressed; it has improved.** What regressed is the DEFAULT, and the mechanism is
-known: `PasApplyDefaults` defines `PXX_MANAGED_STRING` unconditionally, so every
-Pascal program pulls `builtinheap` and `{$H-}` cannot reach it.
+known: `PasInitDefines` (`paslexer.inc:923`) defines `PXX_MANAGED_STRING`
+unconditionally, so every Pascal program pulls `builtinheap` and `{$H-}` cannot
+reach it. **FIXED 2026-09-22** — that define is now evidence-based; see
+[[bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]], `WriteLn('hello')`
+63,760 → 4,528 B. (The routine was called `PasApplyDefaults` here and in three
+code comments until the same day. No such procedure has ever existed; the name
+was carried only by comments citing each other.)
 
 # The rungs
 
