@@ -37598,6 +37598,17 @@ lib-test: pxx-stable-check
 	# fixture is only meaningful against the tree's own builtin.
 	./$(COMPILER) -Fulib/rtl test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy $(TESTTMP)/test_nilpy_noleak
 	tools/expect_same.sh test_nilpy_noleak "$$($(TESTTMP)/test_nilpy_noleak | tail -n 1)" "PYLEAK OK"
+	@# A VARIANT COMPARISON must not heap-allocate per evaluation. Measured at
+	@# 91466 allocations for 100000 iterations of `while i < n` with a variant
+	@# bound (bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation);
+	@# re-measured 2026-09-22 at 727-818 for 600000 evaluations across all six
+	@# comparison operators. A ceiling and not zero because the fixture holds a
+	@# deliberate allocator -- assert_alloc_ceiling refuses a program that
+	@# allocates nothing, since "no census line" is a verdict that measured
+	@# nothing. Floor ~800, ceiling 3000, and the defect would put it near
+	@# 600000, so the three are not close together.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/nilpy_variant_comparison_allocates_nothing_per_evaluation.py $(TESTTMP)/test_nilpy_varcmp26
+	tools/assert_alloc_ceiling.sh nilpy_variant_comparison 3000 $(TESTTMP)/test_nilpy_varcmp26
 	# A USER-CLASS instance must not leak because of HOW its value is consumed.
 	# `c = a + b` on a class declaring __add__ leaked the whole result, once per
 	# operation, while the IDENTICAL body reached as `c = a.add(b)` was clean --

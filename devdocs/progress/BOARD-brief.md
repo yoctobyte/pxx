@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:18 blocked:9 backlog:39 backlog-umbrella:14 backlog-core:171 backlog-nilpy:186 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3924 rejected:87`
+`working:34 unfinished:18 blocked:9 backlog:39 backlog-umbrella:14 backlog-core:171 backlog-nilpy:185 backlog-tools:64 backlog-pascal:13 backlog-decide:51 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:5 experimental:20 rainy-day:48 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:151 done:3925 rejected:87`
 
 ## Held now (working/ — do not touch these files)
 
@@ -77,7 +77,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 569, ranked
+## Ready — top 30 of 568, ranked
 
 - `[p 95] [E]` task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize (unblocks 2)
 - `[p 95] [N]` perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline (unblocks 1)
@@ -99,7 +99,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
-- `[p 75] [N]` bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation
 - `[p 75] [N]` bug-n-an-unused-import-edge-makes-a-method-receive-an-instance-of-the-wrong-class
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
@@ -109,5 +108,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
 - `[p 70] [A]` feature-a-unreferenced-class-rtti-keeps-every-method-alive (unblocks 2)
 - `[p 70] [A]` bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions (unblocks 1)
+- `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 
-_539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_538 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
