@@ -37,8 +37,23 @@ contended. It is not assigned here.
 
 ## The preconditions, and why each one exists
 
-- **A quiet box.** Differential contention, numbers in the summary. Not a
-  preference.
+- **A quiet box — BUT SCOPED CORRECTLY, AND I HAD IT TOO STRONG.** Corrected
+  2026-09-22 by `lekkerzeilen-7a`, whose numbers I derived it from in the first
+  place. The 530 ms / 624 ms evidence is an **fps RATIO between two
+  implementations with different load sensitivity** (CPython moving 66% against
+  pxx's 18%), and a ratio like that is unbounded on a busy box. **A
+  decomposition is not that measurement.** Shares are computed WITHIN a single
+  run, so a uniformly slower box moves every bucket alike and the shares
+  survive. What load can still do is inflate GPU-wait and scheduler time into
+  the library bucket — real, and bounded.
+  So the gate 7a actually runs is `load < 2.5` with a twelve-minute cap,
+  stamping `PROCEEDING UNSETTLED` with the measured load beside every row rather
+  than blocking forever. **That is the right call and this ticket should not have
+  implied otherwise:** a row with its load attached is quotable, and lets each
+  consumer discount it themselves instead of having the producer decide. I had
+  carried a precondition from the measurement it was derived from to a different
+  measurement, which is the "a claim scopes to exactly what was checked" rule
+  applied to a PRECONDITION rather than to a result.
 - **Scene from the invocation, never the banner.**
   `bug-e-every-world-reports-meta-name-rijn` — `world/roofs` and `world/rijn`
   both print `rijn`, so a banner-sourced scene label is unfalsifiable.
