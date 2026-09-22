@@ -8056,6 +8056,49 @@ underneath it. Re-running **both** sides back to back gave 48/48 identical.
 
 ## INTERLEAVING CANCELS DRIFT, NOT DIFFERENTIAL SENSITIVITY — when the RATIO is a function of load, no amount of min-of-N fixes it
 
+### EXTENSION 2026-09-22 — THE POSITIVE CASE, AND THE DISCRIMINATOR IS A PROPERTY OF THE PAIR, NOT OF THE METHOD
+
+*`frankb-8e`, measured, offered as a caveat to a seat about to measure the same
+path. This entry states when a ratio is NOT safe; that reads as "ratios are not
+safe", and the complement is what a reader needs in order to quote anything at
+all.*
+
+8e's A/B was the inlined nil test ahead of `call AnsiStrRelease` versus the
+unguarded call — **two arms that differ by one branch on otherwise identical
+code**. Its numbers:
+
+- **ratio held:** `4.367 → 1.886 ns/slot/call`, −56.8%, against a calibrated-C
+  prediction of 55.8%.
+- **absolute did not:** the same control marginal read **4.367** where 2026-09-06
+  read **3.821 on the same box** — ~14% apart, no regression, the earlier run
+  having had Track T tooling live at load 6–9.
+
+**So: the ratio transferred between box states and the absolute `ns/slot` was a
+property of the day.** Which is not a counterexample to this entry — it is the
+other arm of the same rule. **Whether a ratio survives a change of box state
+depends on whether the two arms have SIMILAR LOAD SENSITIVITY, and that is a fact
+about the PAIR you chose, never about interleaving or min-of-N.** Two builds of one
+program differing by a branch are about as similar as two arms get, so their ratio
+is robust. The case this entry was written from — CPython at 66% against pxx at
+18%, unbounded on a loaded box — is two different runtimes, and its ratio is not.
+
+**The practical rule, which is quotable in a way "be careful" is not:** state the
+RATIO as the finding and attach the **load** to any ABSOLUTE you publish. An
+absolute without a box state is not re-derivable by anyone, including you a
+fortnight later, and it is the number that will be diffed against a future run by
+someone who was not there. **Ask of your own pair: would a uniformly slower box
+move both arms by the same factor?** If you cannot argue yes, this entry's negative
+case applies and the ratio is a finding about a box.
+
+**And carry the control that makes the ratio mean anything.** 8e's was the **N=4
+row, flat** — `0.23344` against `0.23488`. A saving visible where there are no
+slots to skip would have meant the instrument was measuring something else, and the
+flat row is the only thing that rules it out. Its size row got the same treatment,
+`+1.39%` measured against `+2.98%` predicted, which is what retired a frame-size
+threshold as a design option instead of leaving it open. **A prediction you can
+miss is worth more than a measurement you cannot.**
+
+
 The section above says: time every variant inside one interleaved loop, take
 each one's minimum. That is correct and it is **not sufficient for every
 comparison**, and the gap is not noise-shaped.
