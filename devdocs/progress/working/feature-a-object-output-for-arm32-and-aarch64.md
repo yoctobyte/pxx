@@ -480,3 +480,67 @@ Remaining unknowns for the writer, all to be observed rather than read: which
 relocation the 4-byte `EmitGlobRef` literal takes (`R_ARM_ABS32` is the
 candidate), and whether `ProcAddrFix`'s literal is 4 bytes here as the ELF32
 class implies.
+
+
+## The arm32 addend is SIGNED 16-BIT, and that decides the writer's design
+
+Measured 2026-09-22, before a line of the arm32 writer exists, on frankuser's
+point that a `SHT_REL` probe must carry a NON-ZERO addend — *a writer that
+skips the read and simply writes `S` is wrong by exactly `A`, and with `A = 0`
+it is indistinguishable from the correct one on every row.* Chasing that
+turned up a constraint rather than a test gap.
+
+**What clang accepts for `movw r0, #:lower16:sym+N`:**
+
+| N | result | in-field A |
+| --- | --- | --- |
+| 8 | OK | 8 in BOTH entries |
+| 4096 | OK | 4096 in both |
+| 32767 | OK | 32767 in both |
+| 65535 | **`Relocation Not In Range`** | — |
+| 65536, 131072 | **refused** | — |
+
+So the addend is **signed 16-bit**, and — the part that is not obvious —
+**both entries of a `movw`/`movt` pair carry the SAME FULL addend**, not a
+half each. The relocation computes `S + A` and then takes the low or the high
+16 bits.
+
+**THIS BREAKS THE DESIGN aarch64 USES.** There the pair relocates against the
+`.data` SECTION symbol with `ExternalGotOff` as the addend, which `RELA`
+carries at full width. Under `SHT_REL` that addend has to fit in 16 bits, and
+it will not:
+
+- `.data` in the self-hosted compiler is **607044 bytes** (`make
+  compiler/pascal26` prints it).
+- GOT slots sit **near the end of `.data`** — measured twice, 9320 of 12992
+  (72%) in `test/reloc_movw_probe.c` and 1448 of 1456 (99%) in a synthetic
+  case.
+
+A GOT offset of ~600 KB against a 32767 ceiling is not a margin, it is
+eighteen times over. The current probes stay under it (9320) purely because
+they are small, so **a writer built the aarch64 way would pass every test here
+and fail on the first real program.**
+
+**The design that avoids the question entirely: give each GOT slot its own
+LOCAL symbol and relocate against THAT with addend 0.** The offset then lives
+in the symbol's `st_value`, which is 32 bits, and no addend ever needs to be
+large. It costs one local symbol per external, and it removes the ceiling
+rather than moving it.
+
+**What is still to be observed for arm32**, and none of it from a header:
+whether `EmitGlobRef`'s 4-byte literal takes `R_ARM_ABS32` (likely, 2), what
+`ProcAddrFix`'s literal takes, and whether the same 16-bit ceiling applies to
+`R_ARM_ABS32` — it should not, since there the whole 32-bit word is the field,
+but that is a prediction and the point of this section is that predictions
+about relocation encodings have been wrong twice tonight.
+
+**And the probe for it must carry a non-zero addend on a MOVW pair**, or the
+read half of the split-field arithmetic is untested: writing a split field is
+already covered (inserting `0x1234`/`0x5678` into clang's zero forms
+reproduces `0xe301c234`/`0xe345c678`), reading one is not.
+
+**The equivalent hole does NOT exist for i386, checked rather than assumed:**
+2042 of 2042 relocations in the i386 probe object carry a non-zero in-place
+addend, and that object agrees with GNU ld byte for byte, so the `SHT_REL`
+read path is thoroughly exercised there. The gap is specific to arm32's SPLIT
+field, which i386's flat 32-bit one does not have.
