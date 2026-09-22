@@ -8,7 +8,7 @@ found: 2026-09-22
 found-by: franks-5b
 owner: ""
 blocked-by: []
-summary: "A make target whose recipe is one long list of test lines ABORTS AT THE FIRST FAILURE and runs none of the rest, and NOTHING IN THE OUTPUT SAYS HOW MUCH DID NOT RUN. `make -k` does not reach it -- it continues past failed TARGETS, and this is one target. So any standing red converts the tail of that target into silent non-coverage for every seat that runs it, and a seat reading RED believes it gated. MECHANISM, not a row: this springs whenever a one-target recipe carries a red, whoever left it and wherever it sits; the earlier the red, the more is lost. Measured 2026-09-22 on test-nilpy (Makefile:511, recipe 512-7189, 6614 recipe lines): a red at Makefile:4718 left 2470 lines -- 37.3% -- unexecuted, with the run reporting only the one mismatch. The remedy is a harness property (run all, report a tally) and does NOT require narrowing or removing any test."
+summary: "A make target whose recipe is one long list of test lines ABORTS AT THE FIRST FAILURE and runs none of the rest, and NOTHING IN THE OUTPUT SAYS HOW MUCH DID NOT RUN. `make -k` does not reach it -- it continues past failed TARGETS, and this is one target. So any standing red converts the tail of that target into silent non-coverage for every seat that runs it, and a seat reading RED believes it gated. MECHANISM, not a row: this springs whenever a one-target recipe carries a red, whoever left it and wherever it sits; the earlier the red, the more is lost. Measured 2026-09-22 on test-nilpy (Makefile:511, recipe 512-7189, 6614 recipe lines): a red at Makefile:4718 left 2470 lines -- 37.3% -- unexecuted, with the run reporting only the one mismatch. The remedy is a harness property (run all, report a tally) and does NOT require narrowing or removing any test. THE TERRITORY BEHIND THE RED IS MEASURED AND GREEN: a `make -i` run the same day reached the end of the recipe with EXACTLY ONE failure, the red itself -- so this asks for a harness that can TELL you that, not for an investigation of what is hiding."
 ---
 
 # A one-target test recipe truncates silently on its first failure
@@ -61,6 +61,21 @@ to recognise it.
 "more than half", from an assumed denominator -- I took the span from the abort
 line to the target's end and never measured the recipe's length. The run that
 aborted got 62.7% of its coverage. The number is bad enough true.
+
+## THE TERRITORY BEHIND THE RED IS MEASURED AND IT IS GREEN
+
+**Run under `make -i` on 2026-09-22 (compiler `c0d363f340c8`): 6709 lines,
+reached the end of the recipe, EXACTLY ONE failure — the `atan2` row itself.**
+Everything in the 37% that no ordinary run reached that day passes.
+
+That is worth stating because it changes what this ticket asks for. It is not
+*"a red hides unknown territory"* — the territory is known and clean. It is
+*"the harness cannot TELL you that, and will not tell you next time either."*
+Clearing the one red restores the full gate for everyone, so the decision that
+unblocks it is cheaper than the truncation makes it look, not scarier.
+
+**Re-take this line when the recipe changes.** It is a measurement of one tree
+on one day and it is the kind of fact that silently stops being true.
 
 **And the affected population is UNMEASURED.** `.claude/hooks/no-full-suite.sh`
 denies `make test*` by default, so running this target at all requires setting
