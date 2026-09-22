@@ -64,6 +64,26 @@ ELF="$(mktemp).elf"
 if ! "$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" "$ELF" >"$ELF.buildlog" 2>&1; then
   echo "esp_run_bare: $CHIP build FAILED for $PAS" >&2
   cat "$ELF.buildlog" >&2
+  # AND ON STDOUT TOO, WHICH IS NOT REDUNDANT: the stderr above was this
+  # script's own fix for swallowing build errors, and EVERY CALLER UNDOES IT.
+  # All 34 test-esp-bare invocations are `esp_run_bare.sh ... > out 2>/dev/null`
+  # and none of them branches on our exit status, so a build failure reaches the
+  # reader as `out` being EMPTY -- which `diff -u oracle out` renders as
+  # `@@ -1,5 +0,0 @@` and the recipe reports as "MISMATCH". A build break and a
+  # wrong value send the reader to opposite halves of the system, and the wrong
+  # half is the expensive one. Measured 2026-09-22: a record-by-value
+  # regression (523833fde, fixed in 23fcd326f) presented exactly that way and
+  # cost a pass spent looking at codegen before anyone looked at stderr.
+  #
+  # So the diagnostic goes where the caller is actually reading. This CANNOT
+  # break a passing row -- it runs only when the build already failed, and a
+  # failed build's stdout was empty by construction. The correct fix is for the
+  # callers to branch on our exit status; until they do, this makes the failure
+  # self-describing rather than silent. The older fix moved the swallowing one
+  # level up rather than removing it.
+  echo "esp_run_bare: BUILD FAILED for $PAS -- the rows below are a COMPILER DIAGNOSTIC,"
+  echo "esp_run_bare: not device output. This is a BUILD BREAK, not a value mismatch."
+  sed -n '1,5p' "$ELF.buildlog"
   exit 1
 fi
 # ...and the SAME swallowing applied to a WARNING on a SUCCESSFUL build, which
