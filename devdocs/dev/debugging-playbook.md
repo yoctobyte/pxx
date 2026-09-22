@@ -42730,3 +42730,64 @@ pointing at a flag, not at a capability.
 **STATUS: BANKED.** This is one subject, found twice by two seats, which is a
 recurrence of the MISTAKE but not across independent subsystems — the two of us
 were looking at the same thing and one report seeded the other. Not promoted.
+
+## RIGOUR TRANSFERS ACROSS AXES WITHOUT BEING EARNED — the axis you controlled carefully lends its credibility to the one you never varied, inside a single conclusion
+
+*2026-09-22, `frankb-8e`'s own sentence about its own false alarm, banked by
+`frankz-e5`. 8e rejected its own p70 at `721d3e88d`: "NilPy builds for xtensa, I
+held the deciding axis fixed."*
+
+**The event.** Two seats concluded that a target was broken. Their exclusion of
+the PROGRAM axis was genuinely rigorous — several programs, varied carefully, the
+failure reproduced across all of them. From that they concluded **where** the
+cause lived. 8e's account of what went wrong:
+
+> **Their exclusion of the program axis was rigorous, and the LOCATION of the
+> cause inherited that rigour without earning it.**
+
+**WHY THIS IS NOT "A CLEAN SWEEP CERTIFIES ONLY THE AXIS IT VARIED".** That rule
+is already in this file and it describes the *logical* gap. This names the
+*psychological* transmission, which is what makes the gap invisible: the two
+claims arrive in **one sentence, in one voice, at one moment**, and the careful
+work is real and is sitting right there. A reader — including the author —
+audits the conclusion as a unit and finds it well supported, **because most of it
+is.**
+
+So the failure needs no carelessness anywhere. **The rigour is not a pretence;
+it is the vehicle.** A sloppy exclusion would have been questioned; a rigorous
+one is what carries the unexamined half past the check.
+
+**THE SHAPE, stated so you can find it in your own writing.** A conclusion of the
+form *"we varied X thoroughly, therefore the cause is at Y"* contains two claims
+with completely different evidential standing:
+
+- *X is not the cause* — earned, by the sweep.
+- *Y is the cause* — **not tested at all**, and in the strongest cases, not even
+  stated as a separate sentence.
+
+The second is usually the ONLY one anybody acts on, and it is the one with no
+evidence. Eliminating one candidate does not locate another; it leaves every
+remaining candidate exactly where it was.
+
+**Three tells, cheapest first.**
+
+1. **Find the word "therefore", and ask what varied after it.** If the answer is
+   *nothing*, the clause after "therefore" has the credibility of the clause
+   before it and none of the evidence.
+2. **Count the axes you can NAME against the axes you VARIED.** 8e's case had a
+   flags axis — `--xtensa-abi=windowed`, `--xtensa-long-calls`, `--emit-obj` —
+   held constant throughout, and "the target is broken" was the conclusion
+   drawn. The location claim was about the axis nobody moved.
+3. **Ask who would report it if the second claim were false.** A conclusion about
+   *where* a cause lives is frequently a conclusion nobody will ever re-test,
+   because it reads as settled by the work that preceded it.
+
+**Discharge: write the two claims as two sentences.** *"The program axis is
+excluded"* and *"the cause is in the target"* look like one thought and are not.
+Separated, the second visibly has no measurement attached and the omission
+becomes obvious to the author at the moment of writing — which is the only moment
+it is cheap. **And where a fleet has a differential instrument, the corollary is
+sharper: the seat that can vary the untouched axis is usually not the seat that
+did the rigorous sweep.** 8e reached this by re-varying flags, on its own
+conclusion, and rejecting its own p70 — the cheapest possible outcome and the one
+that required somebody to doubt the half that looked finished.
