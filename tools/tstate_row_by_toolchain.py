@@ -40,6 +40,7 @@ sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
 files = sorted(glob.glob("devdocs/progress/tstate/reports/*.md"))
 tab = collections.defaultdict(lambda: [0, 0])   # key -> [red, ok]
 byhost = collections.defaultdict(lambda: [0, 0])
+matched_ids = set()
 skipped_tier = 0
 skipped_early = 0
 nofield = 0
@@ -96,7 +97,15 @@ for f in files:
                 "A section this script does not classify is a silent miscount "
                 "waiting to happen; add it to RED_SECS or OTHER_SECS."
                 % (f, seg.split("\n", 1)[0][:70]))
-    red = ROW in "\n".join(redsec)
+    body = "\n".join(redsec)
+    red = ROW in body
+    # WHICH JOB IDS DID THE PATTERN ACTUALLY MATCH. Recorded so the run can
+    # refuse an ambiguous one, and printed either way -- "print the set your
+    # instrument enumerates" is the rule this script broke.
+    for line in body.split("\n"):
+        mm = re.match(r"- ([a-z0-9-]+#[^ ]+)", line)
+        if mm and ROW in mm.group(1):
+            matched_ids.add(mm.group(1))
 
     key = (qemu, gcc)
     tab[key][0 if red else 1] += 1
@@ -106,6 +115,30 @@ for f in files:
 
 print("row: %s" % ROW)
 print("tree: %s" % sha)
+
+# A SUBSTRING THAT MATCHES SEVERAL JOB IDS IS NOT A ROW, AND AGGREGATING THEM
+# PRODUCES A CONFIDENT NUMBER ABOUT NOTHING. Measured 2026-09-22: `compiler_srchash`
+# matched 35 distinct job ids, because tools/compiler_srchash.sh is a SOURCE
+# PREREQUISITE listed by dozens of unrelated jobs rather than a test -- so its
+# "red rate" mixed test-uforth, test-zlib, test-cjson and thirty more, failing
+# for unrelated reasons. It was published as a control and reached a
+# pre-registration before anyone read a failure detail and saw the actual
+# failure was a different job entirely.
+#
+# So ambiguity ABORTS rather than averaging. Pass --aggregate if a pooled rate
+# over several ids is genuinely what you want; then the pooling is a decision
+# in the command line instead of an accident in the data.
+print("matched job ids: %d" % len(matched_ids))
+for j in sorted(matched_ids)[:8]:
+    print("  %s" % j)
+if len(matched_ids) > 8:
+    print("  ... and %d more" % (len(matched_ids) - 8))
+if len(matched_ids) > 1 and "--aggregate" not in sys.argv:
+    raise SystemExit(
+        "\nREFUSING: %r matches %d distinct job ids, so the rates below would\n"
+        "pool unrelated jobs. Name one id exactly, or pass --aggregate if a\n"
+        "pooled rate is what you want."
+        % (ROW, len(matched_ids)))
 print("population: tstate reports, tier in {native,full}, date >= %s" % BIRTH)
 print("  files total %d | skipped other-tier %d | skipped pre-birth %d | no toolchain field %d"
       % (len(files), skipped_tier, skipped_early, nofield))
