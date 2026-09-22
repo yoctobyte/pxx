@@ -112,4 +112,4 @@ through a numeric helper, not a magnitude overflow), so it is noted rather than
 folded in.
 
 ## Log
-- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-22 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 02a288e45.
