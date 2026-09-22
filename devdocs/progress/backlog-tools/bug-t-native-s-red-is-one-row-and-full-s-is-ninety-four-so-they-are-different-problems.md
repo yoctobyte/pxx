@@ -8,7 +8,7 @@ found: 2026-09-22
 found-by: frankh-c0
 owner: ""
 blocked-by: []
-summary: '`native` and `full` are both never-green and the resemblance ends there -- which no aggregate verdict can say and which decides how much work `full green expected` actually is. MEASURED at pinned ref `ad275f0d96c3` over all 2898 tstate reports: NATIVE IS A FINISHING JOB (33 distinct rows ever red across 306 RED reports; clearing one row makes 42% of them green, four rows 73%, eight rows 90%) and FULL IS BROAD (129 distinct rows over 313 RED reports, median 6 per report, best eight reach only 32% -- a long tail, not a few chronic blockers). Quoting one tier''s difficulty for the other is the error this ticket exists to prevent. Every top row already has an open ticket, so this state is UN-FINISHED rather than un-triaged and the fix is not more filing. SETTLED 2026-09-22 FOR `native`, AND THE MECHANISM IS AN EMULATOR VERSION RATHER THAN ANYTHING IN OUR CODE: a cross-target row can be red on one host and green on another FROM BYTE-IDENTICAL COMPILER BYTES, because a tstate verdict is a statement about a qemu as much as about a tree. Censused over every native/full report since the subject test''s only commit (population, tree and skips printed in the body): qemu 8.2.2 -> 541 RED / 4 ok (99.3%), qemu 10.2.1 -> 0 RED / 361 ok, plus 0 DIFF in 600 per-attempt draws on a 10.2.1 box. borg runs 8.2.2 and IS Track T''s breadth instrument, so a whole class of its reds has been arriving as code reds. A FULL NATIVE TIER AT HEAD IS GREEN ON A NON-BORG HOST (2580/2580, plexus, tree e5408b0e6, compiler 06255ab1878c, frozen-tree guard green, 417.3s), so the never-green record is not a statement about the tree, and the fear that borg''s chronic rows and seven''s were two disjoint populations needing separate campaigns is REFUTED. THE CONDITION THAT WOULD SPRING THIS AGAIN, stated as a mechanism because a named row decays: any verdict compared across a host whose toolchain moved, since WALL TIME AND EMULATOR VERSION ARE COLLINEAR ACROSS AN UPGRADE -- one host''s upgrade took its tier wall from ~227s to ~151s AND its red to green in the same instant, which separated 9 reds from 190 greens at ~215s wall with no exceptions and reads as a load-induced race. PERFECT SEPARATION IS THE SIGNATURE OF A CONFOUND, NOT OF A GRADIENT (frankuser, predicted before the data). An earlier load reading in this ticket is REFUTED on that ground and its heading is withdrawn in place; an earlier refutation OF that reading was itself withdrawn for resting on a bucket where a red was impossible. THE `toolchain:` FIELD EXISTS BECAUSE OF THIS ROW -- so its ABSENCE from the nine oldest reds is not missing data, it dates the upgrade, and the general form is worth more than this ticket: when a comparison''s `before` side is empty because a field did not exist yet, find out WHY THE FIELD WAS ADDED, because an observability field is a dated record of a past investigation and it is probably the same one. SEPARATE AND REAL FINDING, not merged with the above: deliberate load DOES induce failures -- 1-2% per attempt across ALL FIVE target arms at load ~24 against 0 of 600 at ambient ~5 -- which fires the falsifier registered before the data (if it moves every arm it is not the one target''s conversion) and is the better explanation for the single flake inside the plexus green. Its consequence is GOAL-1 arithmetic: with three attempts a per-attempt rate p gives 1-(1-p^3)^2580 for a 2580-job tier, ~2% at p=0.02 but ~92% at p=0.10, so RUNNING A RELEASE-GRADE TIER ON AN IDLE BOX IS ARITHMETIC RATHER THAN FASTIDIOUSNESS and belongs in the release criteria; treat the table as an upper bound since it assumes the rate is generic. ONE OWNER ACTION, stated in goal terms and needing no design fork: our breadth instrument reports failures that are not in our code, and upgrading one host''s emulator removes a whole class -- that needs sudo on borg, which is authority only he holds. Nothing else here waits on him. OUTSTANDING: `full` is still untested on a non-borg host and stays open; the native green is ONE sample and wants repeats; the four borg `full` reports of 2026-09-11 20:02-20:59 that pass under 8.2.2 are the 0.7% and are unexplained. WHAT WOULD RETIRE THIS TICKET: a `full` report with verdict GREEN at any sha after 2026-09-09. WHAT WOULD RETIRE ITS NUMBERS: any re-run at a different pinned ref -- carry both rows rather than replacing, since a count whose ref was not recorded is unquotable rather than refuted.'
+summary: '`native` and `full` are both never-green and the resemblance ends there -- which no aggregate verdict can say and which decides how much work `full green expected` actually is. MEASURED at pinned ref `ad275f0d96c3` over all 2898 tstate reports: NATIVE IS A FINISHING JOB (33 distinct rows ever red across 306 RED reports; clearing one row makes 42% of them green, four rows 73%, eight rows 90%) and FULL IS BROAD (129 distinct rows over 313 RED reports, median 6 per report, best eight reach only 32% -- a long tail, not a few chronic blockers). Quoting one tier''s difficulty for the other is the error this ticket exists to prevent. Every top row already has an open ticket, so this state is UN-FINISHED rather than un-triaged and the fix is not more filing. SETTLED 2026-09-22 FOR `native`, AND THE MECHANISM IS AN EMULATOR VERSION RATHER THAN ANYTHING IN OUR CODE: a cross-target row can be red on one host and green on another FROM BYTE-IDENTICAL COMPILER BYTES, because a tstate verdict is a statement about a qemu as much as about a tree. Censused over every native/full report since the subject test''s only commit (population, tree and skips printed in the body): qemu 8.2.2 -> 546 RED / 1 ok (99.8%), qemu 10.2.1 -> 0 RED / 361 ok, plus 0 DIFF in 600 per-attempt draws on a 10.2.1 box. borg runs 8.2.2 and IS Track T''s breadth instrument, so a whole class of its reds has been arriving as code reds. A FULL NATIVE TIER AT HEAD IS GREEN ON A NON-BORG HOST (2580/2580, plexus, tree e5408b0e6, compiler 06255ab1878c, frozen-tree guard green, 417.3s), so the never-green record is not a statement about the tree, and the fear that borg''s chronic rows and seven''s were two disjoint populations needing separate campaigns is REFUTED. THE CONDITION THAT WOULD SPRING THIS AGAIN, stated as a mechanism because a named row decays: any verdict compared across a host whose toolchain moved, since WALL TIME AND EMULATOR VERSION ARE COLLINEAR ACROSS AN UPGRADE -- one host''s upgrade took its tier wall from ~227s to ~151s AND its red to green in the same instant, which separated 9 reds from 190 greens at ~215s wall with no exceptions and reads as a load-induced race. PERFECT SEPARATION IS THE SIGNATURE OF A CONFOUND, NOT OF A GRADIENT (frankuser, predicted before the data). An earlier load reading in this ticket is REFUTED on that ground and its heading is withdrawn in place; an earlier refutation OF that reading was itself withdrawn for resting on a bucket where a red was impossible. THE `toolchain:` FIELD EXISTS BECAUSE OF THIS ROW -- so its ABSENCE from the nine oldest reds is not missing data, it dates the upgrade, and the general form is worth more than this ticket: when a comparison''s `before` side is empty because a field did not exist yet, find out WHY THE FIELD WAS ADDED, because an observability field is a dated record of a past investigation and it is probably the same one. SEPARATE AND REAL FINDING, not merged with the above: deliberate load DOES induce failures -- 1-2% per attempt across ALL FIVE target arms at load ~24 against 0 of 600 at ambient ~5 -- which fires the falsifier registered before the data (if it moves every arm it is not the one target''s conversion) and is the better explanation for the single flake inside the plexus green. Its consequence is GOAL-1 arithmetic: with three attempts a per-attempt rate p gives 1-(1-p^3)^2580 for a 2580-job tier, ~2% at p=0.02 but ~92% at p=0.10, so RUNNING A RELEASE-GRADE TIER ON AN IDLE BOX IS ARITHMETIC RATHER THAN FASTIDIOUSNESS and belongs in the release criteria; treat the table as an upper bound since it assumes the rate is generic. ONE OWNER ACTION, stated in goal terms and needing no design fork: our breadth instrument reports failures that are not in our code, and upgrading one host''s emulator removes a whole class -- that needs sudo on borg, which is authority only he holds. Nothing else here waits on him. OUTSTANDING: `full` is still untested on a non-borg host and stays open; the native green is ONE sample and wants repeats; the four borg reports once thought to pass under 8.2.2 were a PARSER BUG of mine (a third red-section spelling, `## RED`, 4 occurrences archive-wide); corrected to 546/1, and the ONE surviving exception is report 20260911T200220Z-1d8db86-borg, whose tier did reach the row. WHAT WOULD RETIRE THIS TICKET: a `full` report with verdict GREEN at any sha after 2026-09-09. WHAT WOULD RETIRE ITS NUMBERS: any re-run at a different pinned ref -- carry both rows rather than replacing, since a count whose ref was not recorded is unquotable rather than refuted.'
 ---
 
 # `native` and `full` are both never-green, and that is where the resemblance ends
@@ -577,11 +577,11 @@ row, absence is a pass; that is the one soft step and it is stated, not hidden.
 | qemu | gcc | RED | ok | red % |
 | --- | --- | --- | --- | --- |
 | 10.2.1 | 15.2.0 | **0** | 361 | 0.0% |
-| 8.2.2 | 13.3.0 | **541** | 4 | 99.3% |
+| 8.2.2 | 13.3.0 | **546** | 1 | 99.8% |
 
 | host | qemu | RED | ok | red % | first red |
 | --- | --- | --- | --- | --- | --- |
-| borg | 8.2.2 | 541 | 4 | 99.3% | 2026-09-11T19:51:21Z |
+| borg | 8.2.2 | 546 | 1 | 99.8% | 2026-09-11T19:51:21Z |
 | seven | 10.2.1 | 0 | 361 | 0.0% | — |
 
 Plus, from this box: **plexus, qemu 10.2.1, 0 DIFF in 600 per-attempt draws.**
@@ -716,7 +716,7 @@ breadth instrument is reporting failures that are not in our code, and
 upgrading one host's emulator removes a whole class of them.*
 
 - borg runs **qemu 8.2.2**; seven and plexus run **10.2.1**.
-- On 8.2.2 this class is **541 RED / 4 ok**. On 10.2.1 it is **0 RED / 361 ok**.
+- On 8.2.2 this class is **546 RED / 1 ok**. On 10.2.1 it is **0 RED / 361 ok**.
 - borg is Track T's breadth instrument — the machine whose reds every lane is
   told to trust — so every one of those 541 reds has been arriving as a code
   red, and this ticket is the second investigation to have chased one.
@@ -750,7 +750,7 @@ hygiene was the one that held the answer.
 window **host and toolchain are 1:1** — borg is the only 8.2.2 box and seven the
 only 10.2.1 one — so a split on toolchain and a split on *host* are the SAME
 split, and nothing in the cross-tab can tell them apart. That is this repo's own
-"correct instrument, wrong population" arriving in my own table, and a 99.3%
+"correct instrument, wrong population" arriving in my own table, and a 99.8%
 versus 0.0% row is exactly the kind of number nobody interrogates.
 
 **Two things break the tie, and only the second is a measurement of mine.**
@@ -770,18 +770,18 @@ population, same two toolchains, `tools/tstate_row_by_toolchain.py`:
 
 | row | qemu 10.2.1 | qemu 8.2.2 |
 | --- | --- | --- |
-| `c_crtl_wait` | **0.0%** (0/361) | **99.3%** (541/545) |
-| `crtl_reachability` | 27.1% | 42.8% |
-| `threadsafe_heap_lock_deadlock_diag` | 1.1% | 42.2% |
+| `c_crtl_wait` | **0.0%** (0/361) | **99.8%** (546/547) |
+| `crtl_reachability` | 27.1% | 43.3% |
+| `threadsafe_heap_lock_deadlock_diag` | 1.1% | 42.0% |
 | `crtl_atexit` | 0.0% | 12.8% |
-| `compiler_srchash` | **34.9%** | **7.2%** |
+| `compiler_srchash` | **34.9%** | **7.9%** |
 
 **`compiler_srchash` is MORE red on the NEWER toolchain, and that reversal is
 the control doing its job.** If the cross-tab were simply reporting "borg reds a
 lot", every row would lean the same way and the instrument would be unfalsifiable
 — a guard that cannot fail. One row leaning the other way, and three leaning
 weakly, means the table has discriminating power and that `c_crtl_wait`'s
-99.3%/0.0% is genuinely exceptional rather than an artefact of which box was
+99.8%/0.0% is genuinely exceptional rather than an artefact of which box was
 sweeping.
 
 **What this control does NOT establish:** that the emulator is the *mechanism*
@@ -792,3 +792,64 @@ an argument, not a measurement. **Naming it: PLAUSIBLE, NOT PROVEN.** What would
 prove it is one run of this row under qemu 8.2.2 and 10.2.1 *on the same host
 with the same gcc*, which needs a second emulator installed and is a cheap job
 for whoever has that box.
+
+## CORRECTION, SAME NIGHT: THE FOUR "PASSES" UNDER 8.2.2 WERE A PARSER BUG OF MINE, AND IT IS THE THIRD INSTANCE OF ONE MISTAKE
+
+**Published an hour earlier: `8.2.2 -> 541 RED / 4 ok (99.3%)`. Corrected:
+`546 RED / 1 ok (99.8%)`.** The 10.2.1 column is unchanged at `0 RED / 361 ok`.
+Both rows are carried rather than one replacing the other, per this repo's own
+rule, and the reason the first was wrong is more useful than the delta.
+
+**The bug.** My matcher counted a row as red if it appeared under `## STILL-RED`
+or `## NEW-RED`. Four reports head their red list `## RED — no baseline at this
+sha, so none of these is classified as new or inherited`, and that spelling
+exists in **exactly four files archive-wide** — the same four I had scored as
+passes and then written up in the ticket as "the 0.7% and unexplained". They
+were never unexplained. They were mine.
+
+**AND THIS IS THE THIRD TIME THE SAME MISTAKE HAS BEEN MADE ON THIS ARCHIVE,
+ALWAYS BY GUESSING THE SPELLINGS INSTEAD OF ENUMERATING THEM.** First,
+counting `STILL-RED` and dropping `NEW-RED` — which moved native's distinct rows
+from 14 to 33 and full's from 94 to 129. Then this. The whole vocabulary is one
+command:
+
+```
+$ grep -h '^## ' devdocs/progress/tstate/reports/*.md | sed 's/ —.*//' | sort | uniq -c
+   2473 ## STILL-RED
+   1455 ## first failure
+   1247 ## failure detail
+    605 ## NEW-RED
+    581 ## FIXED
+      4 ## RED
+```
+
+**Four occurrences out of 6365 headings, and they were the whole anomaly.** A
+long-tail spelling is exactly what a guessed matcher misses and exactly what a
+census cannot notice, because the miss presents as *data* — four clean passes
+that invite a story. I wrote the story.
+
+**THE FIX IS AN ASSERTION, NOT A LONGER GUESS.** `tools/tstate_row_by_toolchain.py`
+now holds a CLOSED vocabulary and **aborts on any heading it does not
+classify**, naming the file and the heading. A new section spelling can no
+longer be silently scored as a pass; it stops the run. The distinction matters
+because the two error directions are not symmetric here: a crash costs a minute,
+a silent miscount got published and argued from.
+
+**What the correction changes downstream:** nothing in the mechanism, and the
+control table only in the third digit — `crtl_reachability` 27.1%/43.3%,
+`threadsafe_heap_lock_deadlock_diag` 1.1%/42.0%, `crtl_atexit` 0.0%/12.8%,
+`compiler_srchash` 34.9%/7.9%. **`compiler_srchash` still runs backwards**, so
+the control still discriminates and that argument is untouched.
+
+**THE ONE SURVIVING EXCEPTION, and it is now a real one.** Report
+`20260911T200220Z-1d8db86-borg`, `full`, wall 597.4s, `skips: 0`, verdict RED:
+its red list holds **4 rows and the row is not among them**, and it names
+`test-core` three times, so the tier did reach that job. So the row genuinely
+passed once under 8.2.2 in 547 reports. Its red list is unusually short and its
+wall unusually low for a borg `full`, which is worth noting and is not an
+explanation. **What would settle it:** re-running that sha on an 8.2.2 host.
+
+**Population note, because it moved under me:** this correction reads 2905
+reports at tree `1ef9c9bcb` where the first pass read 2903 at `cb22d13034fb` —
+two reports arrived in my own `sync.sh` pull between the two runs. That is the
+push-is-a-pull hazard, and it is why both rows carry their tree.
