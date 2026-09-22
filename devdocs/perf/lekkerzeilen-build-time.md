@@ -1262,3 +1262,25 @@ cut in positions and 1.50x in wall clock. What is left:
 
 Neither is done. The ticket's structural one-pass parser remains a separate and
 larger question than either.
+
+## Two things NOT to build, measured rather than guessed
+
+**A hash prefilter on the candidate walk is worthless — the prefilter already
+exists.** The obvious next move is to store a hash of each candidate's
+identifier and compare integers before calling `TokenCaseEqual`. Do not:
+`TokenCaseEqual` opens with `Tokens[idx].SLen = len`, an integer reject that
+costs two loads and fires for every candidate whose name is the wrong length,
+which is most of them. A hash would be a second prefilter in front of a
+perfectly good first one. I was about to add it and read the routine instead.
+
+**A per-name memo is NOT safe in the obvious form, and this is the trap the
+table was designed around.** 800 calls answer ~400 distinct names, so caching
+by name looks like a free 2x. It is not free, because the cached value would
+freeze `PyModuleQualifier`'s answer. The two calls per def are two PASSES, and
+an import parsed between them legitimately moves a `mod.run` read from
+not-a-value to a value. Keying the memo on `(name, MainProgramTokCount)` does
+not fix it either: an alias can be registered without the token count moving.
+The candidate table deliberately precomputes POSITIONS and re-asks the
+qualifier every time for exactly this reason — a memo would give back the
+property that makes the table safe. If someone wants this 2x, it needs a
+generation counter on the alias table, not a token count.
