@@ -15389,7 +15389,7 @@
    "status": "fail"
   },
   {
-   "bad": "b2f3e65ef0506f652ec578df301554c2a1546187",
+   "bad": "a1feb75206e37fd411477ca5671025fb1e3e93f0",
    "bad_untestable": true,
    "first_seen": false,
    "good": "67ef6a2222b9104157b3a2b9dd60a7181fcb3fcb",
@@ -15402,9 +15402,7 @@
    "pin_built": false,
    "range": [
     "6b8b45af45d9e178f7759fcb221bdedaba1251d3",
-    "a1feb75206e37fd411477ca5671025fb1e3e93f0",
-    "a9887d23a145d8a85241d1a174016fb186889461",
-    "ac7926db76c7d93819325756fd9c182226d57bd4"
+    "a1feb75206e37fd411477ca5671025fb1e3e93f0"
    ],
    "range_non_causal": false,
    "src": "test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy tools/expect_same.sh",
