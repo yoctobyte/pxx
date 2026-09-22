@@ -9,7 +9,7 @@ created: 2026-09-22
 found-by: franks-5b
 tags: [nilpy, promotable-int, o2, codegen, refcount, segfault]
 blocked-by: []
-summary: "A NINE-LINE NilPy program with no classes, no imports and no library calls SEGFAULTS at -O2, which is the shipped default level, and it reproduces identically on pin v418 (fda77c48b8ee) and at HEAD. TRIGGER, order-independent and measured across 18 variants: a function frame with EXACTLY THREE locals of which EXACTLY TWO are tyPromoInt64 (tk=28). Two promo-ints plus zero, two or three other locals all run clean; plus exactly ONE other local crashes, and the third local's type does not matter -- Int64 (tk=13), AnsiString (tk=23) and Double (tk=19) all segfault -- nor does its declaration position (first, middle, last all crash). Reducing to ONE promo-int makes it run. LEVEL MATRIX: -O0 clean, -O1 clean, -O2 SEGV, -O3 clean; the default with no -O flag is -O2 and therefore crashes. FAULTING INSTRUCTION is a refcount release sequence -- `cmpq $0x40000000,-0x10(%rax)` (the saturation check) then `decq -0x10(%rax)` -- with rax=0x2aa6428c, i.e. a promo-int's INLINE payload being dereferenced as a heap bignum pointer. So a release is emitted against a slot whose tag says the payload is not on the heap, or against the wrong slot entirely. NOT a missing tag check in general, because the same two promo-ints are clean at every other local count. NOT yet attributed to a pass: the compiler exposes no per-pass flags, so isolating it needs Track A instrumentation. Found while building a benchmark for perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program, where the coarse getattr arm MASKED it -- boxing every method to tyVariant removes the promo-int pair, so the arm that ticket wants narrowed is currently hiding this crash."
+summary: "A NINE-LINE NilPy program with no classes, no imports and no library calls SEGFAULTS at -O2, which is the shipped default level, and it reproduces identically on pin v418 (fda77c48b8ee) and at HEAD. TRIGGER, THREE CONDITIONS, all required and all measured: (1) a function frame with EXACTLY THREE locals, (2) EXACTLY TWO of them tyPromoInt64 (tk=28) -- one promo-int runs clean and so do THREE -- and (3) a promo-int reaching `print` WITHOUT an explicit str(). Condition 3 was missing from this ticket's first version: every variant in the original table happened to end `print(acc)`, so the print read as scaffolding. `print(str(acc))` runs CLEAN on the identical frame where `print(acc)` segfaults, which puts the defect in the IMPLICIT promo-int -> AnsiString conversion on the write path rather than in the frame layout or the loop. Two promo-ints plus zero, two or three other locals all run clean; plus exactly ONE other local crashes, and the third local's type does not matter -- Int64 (tk=13), AnsiString (tk=23) and Double (tk=19) all segfault -- nor does its declaration position (first, middle, last all crash). Reducing to ONE promo-int makes it run. LEVEL MATRIX: -O0 clean, -O1 clean, -O2 SEGV, -O3 clean; the default with no -O flag is -O2 and therefore crashes. FAULTING INSTRUCTION is a refcount release sequence -- `cmpq $0x40000000,-0x10(%rax)` (the saturation check) then `decq -0x10(%rax)` -- with rax=0x2aa6428c, i.e. a promo-int's INLINE payload being dereferenced as a heap bignum pointer. So a release is emitted against a slot whose tag says the payload is not on the heap, or against the wrong slot entirely. NOT a missing tag check in general, because the same two promo-ints are clean at every other local count. NOT yet attributed to a pass: the compiler exposes no per-pass flags, so isolating it needs Track A instrumentation. Found while building a benchmark for perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program, where the coarse getattr arm MASKED it -- boxing every method to tyVariant removes the promo-int pair, so the arm that ticket wants narrowed is currently hiding this crash."
 ---
 
 # Two promotable-int locals plus exactly one other local segfault at -O2
@@ -173,3 +173,76 @@ requested from `frankb-8e`** (Track A, builds), because *"a promo-int's inline
 payload dereferenced as a heap bignum pointer"* is 5b's interpretation of the
 instruction sequence and register, and 5b flagged it as such rather than as
 established.
+## 2026-09-22, same day — the trigger is SHARPER and the third condition was missing
+
+The section above is correct and incomplete, and the missing condition changes
+where to look. **A promotable int must reach `print` without an explicit
+`str()`.** Every variant in the original table happened to end `print(acc)`, so
+the print read as scaffolding rather than as part of the trigger.
+
+Holding the frame at three locals, two of them `tyPromoInt64`, and varying only
+what is printed:
+
+| what is printed | rc |
+| --- | --- |
+| `print(acc)` — a promo-int | **139** |
+| `print(i)` — the other promo-int | **139** |
+| `print(acc + 0)` — a promo-int expression | **139** |
+| `print(acc)` then `print(i)` | **139** |
+| `print(v0)` — the plain `Int64` | 0 |
+| `print(7)` — a literal | 0 |
+| `print('done')` — a string | 0 |
+| `print(str(acc))` — **the same promo-int, explicitly converted** | 0 |
+| no `print` at all (`return acc`) | 0 |
+
+**`print(str(acc))` running clean while `print(acc)` segfaults is the sharpest
+row here.** The value, the frame and the local composition are identical; only
+the route to a string differs. So the defect is in the IMPLICIT promo-int ->
+string conversion on the write path, not in `str()` and not in the loop.
+
+And the promo-int count is **exactly two**, not "at least two":
+
+| promo-ints among 3 locals | rc |
+| ---: | --- |
+| 1 | 0 |
+| **2** | **139** |
+| 3 | 0 |
+
+## What the IR shows
+
+`PXXDBG=a.ir:main` on the crashing program, at function exit:
+
+    52: slotaddr a=557 ... tk=17
+    53: arg      a=52  ... tk=17
+    54: call     a=635 b=53 ... tk=23      { promo-int -> AnsiString }
+    55: write    a=54  b=0  c=-2 ival=1 tk=23
+    56: writeln  a=55  b=55 ...
+
+`call 635` returns `tk=23`, a **managed AnsiString**, which must be released
+after the write. The faulting instruction is a refcount release with a
+non-pointer in `rax`. Declared locals in this program are `553 $pyresult`,
+`554 v0`, `555 acc`, `556 i`; **`557` is a temporary**, and the composition of
+the frame decides which slot that temporary lands in.
+
+**That is a hypothesis with a confirmed prediction, not a conclusion.** The
+prediction was stated before testing: *if the faulting release is the
+post-print string release, removing the print removes the crash.* It does. What
+is still unproven is which slot the release actually targets — the IR above is
+pre-backend, and no one has read the emitted release site.
+
+## A confound named rather than resolved
+
+The four clean cases that introduce an intermediate (`s = str(acc)`,
+`b = acc`) each add a local **and** route through a named variable, so those two
+axes are entangled and those rows cannot separate them. `print(str(acc))` is
+the row that does separate them — it keeps the frame at three locals and still
+runs clean — which is why it carries the argument above and the others do not.
+
+## Correction to this ticket's own earlier text
+
+The first section says the third local's type does not matter. That is still
+true as measured (Int64, AnsiString and Double all segfault) — but every one of
+those variants printed a promo-int, so the table was varying one thing while a
+second, unnamed condition was held fixed throughout. **The reduction had an
+axis nobody enumerated, in a ticket whose own summary warns about a dead local
+being one.**
