@@ -201,3 +201,27 @@ Both are carried in
 measurement, the three options and what each costs. That is where the fork lives;
 this note exists so a reader of the August rule knows a later case exists before
 implementing against it.
+
+## 2026-09-22 — EXTENDED, NOT OVERRULED (frankh-c0, `dbeb993a2`)
+
+`decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package` decided the
+case this ticket's text never mentions: a module inside a PACKAGE. **Nothing here
+is changed or withdrawn.** The rule stated here — `__file__` is
+`<exe_dir>/<module>.py`, virtual, with no file written — still holds; what the
+extension adds is that `<module>` carries the module's **package-relative** path
+(`<exe_dir>/pkg/inner.py`) instead of collapsing the package away.
+
+**What it does cost, named plainly so nobody has to re-derive it:** this ticket's
+stated PAYOFF — that `dirname(abspath(__file__))` yields the executable's
+directory for *every* module — is no longer true of a packaged module, where it
+yields the package directory, which is what CPython yields. That sentence was
+true of every module in existence when it was written, **because none of them
+were in a package.** It was a correct observation about the corpus of the day and
+not a property anyone chose, which is why losing it is not a reversal.
+
+The deciding reason was not the level itself: before the fix the answer
+**depended on import order** — the same module in the same program reported
+`<exe_dir>/pkg_inner.py` or `<exe_dir>/inner.py` depending on which import
+statement came first. A convention may legitimately differ from CPython; that is
+not a convention.
+
