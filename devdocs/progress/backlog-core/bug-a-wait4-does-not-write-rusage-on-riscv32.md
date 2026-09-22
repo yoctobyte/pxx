@@ -3,7 +3,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-summary: "`wait4()` does not write its `rusage` out-parameter on riscv32, and does on every other cross target. MEASURED 2026-09-12 on borg, full native tier, job `test-core#2020` (`test/c_crtl_wait.c`): `expect_same MISMATCH [riscv32/c_wait26]`, `- wait4-rusage rusage=written` / `+ wait4-rusage rusage=UNTOUCHED`. i386, arm32 and aarch64 all OK on the same row, so it is the riscv32 syscall path and not the C test or the crtl shim. NOT environmental — found alongside a multilib fix on that box and explicitly separated from it: the other two rows in that tier went green when multilib landed, this one did not move. One-target width/ABI shape, which is the class x86-64-only development is structurally blind to. No skip was added and nothing was deleted. UPDATED 2026-09-22 -- THE HOST/VERSION HALF IS SETTLED AND THE CAUSAL HALF IS NOT, SO DO NOT PICK THIS UP AS A SYSCALL FIX WITHOUT READING THE LAST SECTION. Across the tstate reports that record a toolchain (1,082 of 2,971), qemu version partitions PERFECTLY by host: 700 borg all qemu=8.2.2, 382 seven all qemu=10.2.1, no crossover either way. The sibling done/regression-test-core-c-crtl-wait.md resolved this exact row on 2026-09-06 by the owner's dist-upgrade of SEVEN to 10.2.1 -- and seven was RETIRED 2026-09-11T16:29:49Z (plexus 20:19:53Z, both to borg), so this ticket's 09-12 borg measurement is the day after the last host carrying the remedy left the fleet. A done/ whose remedy was an ENVIRONMENT CHANGE is in force only while that environment exists, and nothing re-reads a closed ticket when a host retires. BUT THE PERFECT SPLIT IS PRECISELY WHY THE ARCHIVE CANNOT NAME THE CAUSE: host and qemu version are the SAME VARIABLE in this data, so zero rows separate 'borg's qemu is old' from 'borg differs from seven some other way', and the table would look identical if qemu were irrelevant. NOBODY HAS VERIFIED THAT 10.2.1-vs-8.2.2 MOVES THIS ROW -- frankb-8e verified only which host ran which version and says so. THE WHOLE QUESTION IS ONE RUN: c_crtl_wait.c on borg under a 10.2.1 qemu-riscv32, invoked not installed, which breaks the confound by moving one variable. If that is the remedy it is sudo and therefore the OWNER'S, not a seat's -- deliberately NOT escalated yet, because asking him for sudo on an unverified premise spends the one resource that cannot be parallelised on a question a single run answers. Not re-ranked: the previous author's prio-55 reasoning is untouched. Host pairing and retirement dates measured by frankb-8e, re-counted by frankz-e5; neither has run the row."
+summary: "`wait4()` does not write its `rusage` out-parameter on riscv32, and does on every other cross target. MEASURED 2026-09-12 on borg, full native tier, job `test-core#2020` (`test/c_crtl_wait.c`): `expect_same MISMATCH [riscv32/c_wait26]`, `- wait4-rusage rusage=written` / `+ wait4-rusage rusage=UNTOUCHED`. i386, arm32 and aarch64 all OK on the same row, so it is the riscv32 syscall path and not the C test or the crtl shim. NOT environmental — found alongside a multilib fix on that box and explicitly separated from it: the other two rows in that tier went green when multilib landed, this one did not move. One-target width/ABI shape, which is the class x86-64-only development is structurally blind to. No skip was added and nothing was deleted. UPDATED 2026-09-22 -- THE HOST/VERSION HALF IS SETTLED AND THE CAUSAL HALF IS NOT, SO DO NOT PICK THIS UP AS A SYSCALL FIX WITHOUT READING THE LAST SECTION. Across the tstate reports that record a toolchain (1,082 of 2,971), qemu version partitions PERFECTLY by host: 700 borg all qemu=8.2.2, 382 seven all qemu=10.2.1, no crossover either way. The sibling done/regression-test-core-c-crtl-wait.md resolved this exact row on 2026-09-06 by the owner's dist-upgrade of SEVEN to 10.2.1 -- and seven was RETIRED 2026-09-11T16:29:49Z (plexus 20:19:53Z, both to borg), so this ticket's 09-12 borg measurement is the day after the last host carrying the remedy left the fleet. A done/ whose remedy was an ENVIRONMENT CHANGE is in force only while that environment exists, and nothing re-reads a closed ticket when a host retires. BUT THE PERFECT SPLIT IS PRECISELY WHY THE ARCHIVE CANNOT NAME THE CAUSE: host and qemu version are the SAME VARIABLE in this data, so zero rows separate 'borg's qemu is old' from 'borg differs from seven some other way', and the table would look identical if qemu were irrelevant. NOBODY HAS VERIFIED THAT 10.2.1-vs-8.2.2 MOVES THIS ROW -- frankb-8e verified only which host ran which version and says so. THE WHOLE QUESTION IS ONE RUN: c_crtl_wait.c on borg under a 10.2.1 qemu-riscv32, invoked not installed, which breaks the confound by moving one variable. If that is the remedy it is sudo and therefore the OWNER'S, not a seat's -- deliberately NOT escalated yet, because asking him for sudo on an unverified premise spends the one resource that cannot be parallelised on a question a single run answers. Not re-ranked: the previous author's prio-55 reasoning is untouched. Host pairing and retirement dates measured by frankb-8e, re-counted by frankz-e5; neither has run the row. REFINED LATER THE SAME DAY: gcc IS A THIRD PERFECTLY COLLINEAR VARIABLE, so the confound is THREE-WAY, not two. Every report recording a toolchain pairs gcc=13.3.0 with qemu=8.2.2 (700, borg, RED) or gcc=15.2.0 with qemu=10.2.1 (382, seven, GREEN); no other pairing exists. frankb-8e ran the row on PLEXUS and it is GREEN (qemu 10.2.1, gcc 15.2.0, tree 3e381e41d) and labelled it NOT decisive, which is right -- it lands in the cell seven already occupied, so it REPLICATES that cell on a second machine rather than adding one. It does eliminate 'something about seven the machine'; it does NOT touch gcc, contra 8e's own stated reason, since seven was also 15.2.0. Mechanistic plausibility favours qemu (rusage is syscall emulation) but that is REASONING, not measurement, and the data cannot separate them. THE DECISIVE ROW IS UNCHANGED AND NOW BREAKS A THREE-WAY COLLINEARITY: c_crtl_wait.c on BORG under a 10.2.1 qemu-riscv32, invoked not installed, moves qemu alone because borg keeps gcc 13.3.0. AND NOBODY REACHABLE CAN RUN IT -- all ten peer sessions are tmux panes on plexus, which retired 2026-09-11 to borg, so there is no interactive seat on borg. It is a borg-side operation, i.e. Track T's box or the owner's, which is a different KIND of item from what this prio implies. Still not escalated and still not re-ranked. Archive gap closed: plexus's qemu is 10.2.1 as of today (measured; its 613 reports record none), which also means 8e's green is from a host the fleet no longer runs."
 ---
 
 # wait4 leaves rusage untouched on riscv32
@@ -191,3 +191,80 @@ dates and nothing else; the row itself I have never run. Lane note for the recor
 8e read this as Track C off the failing step — a `.c` file under crtl — and the
 fleet laned it A. It is A because the discriminator is the riscv32 syscall path,
 which is CLAUDE.md's "do not guess the lane from the failing step".*
+
+## 2026-09-22, LATER — gcc IS A THIRD COLLINEAR VARIABLE, THE PLEXUS ROW IS A REPLICATION NOT A NARROWING, AND NO REACHABLE SEAT IS ON borg
+
+`frankb-8e` ran the row on **plexus** and labelled it, correctly and unprompted, as
+NOT the decisive row:
+
+```
+host=plexus  qemu-riscv32=10.2.1  gcc=15.2.0  tree=3e381e41d  compiler=59b5bf39acd1
+pascal26 --target=riscv32 test/c_crtl_wait.c + tools/run_target.sh riscv32
+diffed against this box's own gcc oracle: IDENTICAL, rc=0
+```
+
+It could not meet the same-host condition because **this seat and 8e are both on
+plexus**, not borg. Its self-assessment was right and its stated REASON was wrong,
+in the direction that matters.
+
+### The correction: gcc is not eliminated, it is confounded
+
+8e wrote that the row raises the price of the rival hypothesis *"because plexus is
+gcc 15.2.0 and seven is not"*. Seven **is** 15.2.0. Counted over every report that
+records a toolchain (`frankz-e5`, `devdocs/progress/tstate/reports/*.md`):
+
+```
+700  gcc=13.3.0  qemu=8.2.2     (borg,  this row RED)
+382  gcc=15.2.0  qemu=10.2.1    (seven, this row GREEN)
+```
+
+**No other pairing exists.** So host, gcc and qemu version are not merely
+confounded pairwise — all three are **perfectly collinear**, and the plexus row
+lands in the cell seven already occupied (`gcc=15.2.0`, `qemu=10.2.1`, green). It
+is a REPLICATION of that cell on a second physical machine, not a new cell.
+
+**What it therefore does and does not buy.** It does eliminate *"something about
+seven the machine"* — a different box with the same toolchain gives the same
+verdict, which is worth having and was not knowable before. It does **not** touch
+gcc, which stands as an equal-standing rival to the qemu explanation on exactly the
+same evidence.
+
+**Mechanistic plausibility favours qemu** — whether `wait4` writes its `rusage`
+out-parameter is syscall emulation, and the compiler that built the oracle has no
+obvious route to it. **That is reasoning, not measurement, and it is recorded here
+as the weaker thing it is.** The whole point of this section is that the data
+cannot distinguish them.
+
+### The decisive row is now MORE decisive, for a new reason
+
+One run of `c_crtl_wait.c` on **borg** under a 10.2.1 `qemu-riscv32`, invoked and
+not installed, breaks a **three-way** collinearity rather than a two-way: borg
+stays at `gcc=13.3.0` and at its own kernel and hardware, so qemu moves alone.
+Green indicts qemu; red leaves gcc and the unnamed-host-difference hypotheses
+standing together.
+
+### AND NOBODY REACHABLE CAN RUN IT
+
+`frankz-e5`, 2026-09-22: **all ten peer sessions are local tmux panes on plexus**,
+and plexus was retired 2026-09-11T20:19:53Z to borg. There is no interactive seat
+on borg to ask. So the decisive row is not "a two-minute ask" of anyone in this
+fleet — it is a **borg-side operation**, which makes it Track T's box or the
+owner's, and that is a different kind of item from what this ticket's prio implies.
+Recorded rather than escalated, per the reasoning in the section above: the run is
+free for whoever is on borg and the premise is still unverified.
+
+### Archive gap closed, with its own expiry noted
+
+This ticket previously recorded that **613 plexus reports carry no `qemu=` field**.
+8e measured plexus's value today: `/usr/bin/qemu-riscv32` `10.2.1 Debian
+1:10.2.1+ds-1ubuntu3.2`, the only one on PATH (`tools/run_target.sh riscv32` is a
+bare `exec qemu-riscv32`); the espressif fork at 9.2.2 is a different fork and off
+PATH. Worth banking because plexus is retired and nobody was going to measure it
+later — **and for the same reason 8e's green is not "the fleet is green here"**, it
+is a green on a host the fleet no longer runs.
+
+*8e declined to install qemu 8.2.2 on plexus to do the same-host flip: it leaves
+the machine and is not a seat's call. Recorded because declining was correct and
+the alternative would have produced a same-host crossover row obtained by an act
+nobody authorised.*
+
