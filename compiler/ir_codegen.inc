@@ -15019,11 +15019,38 @@ begin
         begin
           { `not IsArray`: see the i386 arm — arm32 shared that bug. }
           EmitLoadVarArm32(i);                         { r0 = handle }
+          { INLINE NIL TEST — third arm. See EmitManagedLocalCleanup
+            (symtab.inc) for why: 79% of the per-slot sweep cost is reaching a
+            callee whose first act is this same test. Measured on x86-64 at
+            4.367 -> 1.886 ns/slot/call; not re-measured here, because arm32
+            runs under qemu in this tree and a qemu timing is about the
+            emulator's dispatch.
+
+            CLOBBERING THE FLAGS IS FREE HERE AND THE REASON IS THE ABI, not
+            an inspection of the surrounding code: the sequence this branches
+            over CONTAINS A CALL, and AAPCS does not preserve the condition
+            flags across one. So anything that could be damaged by the `cmp`
+            is already damaged on the path that does not take the branch --
+            which means it cannot have been live. Same argument as the x86-64
+            arm's `test`, under System V.
+
+            THE SPAN IS NOT HAND-COUNTED. It is three instructions today
+            (push / bl / pop) but EmitCallProc is free to emit a literal-pool
+            form for a far target, and a hardcoded `beq +2` would then land
+            inside the sequence it was meant to skip. The displacement
+            expression is PatchCodeRefSlot's own arm32 one, character for
+            character, so there is ONE spelling of this architecture's
+            PC-reads-8-ahead arithmetic in the tree rather than a second that
+            drifts. }
+          EmitI32($E3500000);                          { cmp r0, #0 }
+          jzPatch := CodeLen; EmitI32(0);              { beq over the release }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           EmitCallProc(procIdx);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
+          Patch32(jzPatch,
+                  $0A000000 or ((((CodeLen - jzPatch) div 4) - 2) and $00ffffff));
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (act = SXR_VAR) then
