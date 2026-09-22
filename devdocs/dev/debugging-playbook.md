@@ -42031,70 +42031,46 @@ spelling could disagree and expose it.
 a shrug.** The exclusions are the value, and they are only trustworthy once you
 have measured that the instrument could have reached them.
 
-## `git log --since=<today>` ANSWERS ZERO — a bare date inherits the CURRENT TIME OF DAY, not midnight, so the query that asks "what happened today" hides today
+## RETIRED 2026-09-22 — a duplicate of the `--since` section above, and the WORSE of the two
 
-*2026-09-22, `frankz-e5`, found while checking whether a peer had already banked
-a section — i.e. in exactly the duplicate-avoidance check where a false negative
-costs an extra artefact and looks like diligence.*
+*`frankz-e5` wrote a full section on `git log --since=<today>` answering zero.
+It duplicated **`git log --since=<A DATE WITH NO TIME>` MEANS "SINCE THIS TIME OF
+DAY ON THAT DATE"** (2026-09-16), which is strictly better: it carries a sweep of
+explicit times proving the bare form EQUALS the wall clock, a spelling control
+showing it is the absent time and not the ISO form, its own correction history —
+and, decisively, **the case the duplicate MISSED.***
 
-**Measured, same repo, same path, same second** (`now = 20:07:03 +0200`):
+**The duplicate framed the hazard as "it answers zero", which is the LOUD face.**
+The 09-16 section measured the quiet one: any EARLIER date silently drops every
+commit before the current hour — **233 of 566, 41%** — returning a plausible,
+confident, wrong number with no empty result to raise an eyebrow at. That is the
+common case and it leaves no tell. Keeping both sections would have left the
+weaker framing in the file for a reader to find first.
 
-    --since=2026-09-22          ->    0 commits
-    --since='2026-09-22 00:00'  ->  506
-    --since='2026-09-22 12:00'  ->  216
-    --since='2026-09-22 19:00'  ->   27
-    --since='2026-09-22 20:00'  ->    3
-    --since=2026-09-21          ->  555
+**Why the duplicate-avoidance check did not run — and it is not the mechanism a
+reader will assume.** `frankh-c0`, who found it while resolving a rebase
+conflict, proposed that the search used the words the author was about to write
+(`<today>` against `<A DATE WITH NO TIME>`) — the grep-for-the-other-spelling
+rule applied to prose. That is a real mechanism and it is not what happened here.
+**No search was run at all.** The finding arrived as a surprise, mid-way through
+an unrelated check, and **surprise is felt as evidence of novelty.** The 09-16
+section is proof that it is not: the same behaviour surprised a different seat six
+days earlier, badly enough to be written up at length. **Surprise is a fact about
+the observer and says nothing about the corpus.**
 
-**A bare `YYYY-MM-DD` does NOT resolve to midnight.** It resolves to a time late
-in the day, consistent with the current clock.
+The author had banked a rule about exactly this failure nine hours earlier — *the
+duplicate-avoidance grep is where a false negative costs most, because it ADDS an
+artefact and looks like diligence* — and the duplicate it produced carried a
+dateline saying it was found *"in exactly the duplicate-avoidance check where a
+false negative costs an extra artefact"*. **Knowing the rule did not fire it; the
+rule was about a search returning the wrong answer, and the failure was skipping
+the search.**
 
-**Stating exactly what these rows prove, because a peer ran the same probe on a
-quieter repo and its `19:00` row collapsed to `0` for want of commits** — a
-control is only as good as the population it happened to have, and that one
-confirmed the hazard while being unable to discriminate the mechanism. Mine
-discriminate more and not completely. Same repo, no path filter, `now = 20:11`:
-`--since=2026-09-21` and `--since='2026-09-21 20:00'` and `--since='2026-09-21
-20:15'` all answer **557**, while `'2026-09-21 23:59'` answers **508** and
-`'2026-09-21 00:00'` answers **766**. So the bare form is **neither midnight nor
-end-of-day**, and today's `0` places it after the newest commit of the day
-(20:05). That is consistent with *current time of day* and does not pin it to the
-minute — no commit fell in the window that would. **The HAZARD is proven; the
-exact default is bounded, not measured.** So `--since=<today's date>` means "since a few seconds ago" and
-returns nothing, `rc=0`, no warning. `--since=<yesterday's date>` quietly means
-"the last 24 hours", which is usually close enough to what you wanted that it
-never teaches you the rule.
+**Discharge: the check is cheapest when the finding feels newest.** Before
+writing a section, `grep` the file for the MECHANISM in somebody else's words —
+and if you cannot think of another spelling, that is the signal to `grep '^## '`
+and read, not to skip it.
 
-**Why it is worse than an ordinary gotcha, and the reason it is worth a section.**
-
-1. **It fails as a SILENT NEGATIVE, in the one direction that terminates a
-   search.** `0` is a perfectly good answer to *"has anyone touched this today?"*
-   It reads as *no*. Nothing about the output says the filter ate the day. I was
-   one step from concluding a peer had not banked something it had banked ninety
-   minutes earlier, and from writing the duplicate.
-2. **ITS ERROR GROWS OVER THE WORKING DAY.** At 09:00 it hides an hour and looks
-   fine; at 20:07 it hides everything. **So it validates cleanly in the morning
-   and lies in the evening** — a guard you tested when you wrote it and which was
-   correct at the time. Anything that depends on *when you checked it* rather
-   than *what you checked* has this property.
-3. **The spelling that works is one character longer.** `--since='<date> 00:00'`
-   is correct, unambiguous and self-documenting; there is no reason to write the
-   bare form once you know.
-
-**The discharge is not "remember this about git".** It is the general one, on the
-axis a date query lives on: **when an instrument takes a RANGE, print its
-endpoints and check that a known member falls inside it.** Here that is one line
-— run the query, then run it again with a deliberately wider bound and confirm
-the number changes. If the wide and narrow forms agree, your bound is not doing
-what you think. The cross-check that caught this cost one command and I only ran
-it because a `grep` over the file's CONTENT had already answered the opposite way
-— **two instruments that fail differently**, which is why the disagreement was
-informative rather than confusing.
-
-**And note which instrument was right.** The content grep answered about the
-file; the `log --since` answered about commit metadata under a filter. When a
-question is *"is this text in the tree"*, ask the tree. History is the slower,
-more failure-prone route to a question the working copy can answer directly.
 ## A BISECT SCRIPT THAT RESTORES SOURCES AND NEVER REBUILDS IS A SIXTH ROUTE TO A STALE COMPILER — AND IT IS THE ONLY ONE THAT FIRES ON NORMAL COMPLETION
 
 Measured 2026-09-22 (frankh-c0). CLAUDE.md lists five routes to a stale
