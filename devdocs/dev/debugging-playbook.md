@@ -40256,12 +40256,21 @@ SECOND instrument, failing differently, agrees.** Here the second was
 (`slotaddr a=557`) and refuted the "it is not an enumerated symbol at all"
 conclusion the silence had produced. **Before reading a probe's silence as a
 negative, find out what it is DOCUMENTED not to look at.**
-### FIFTH AND SIXTH INSTANCES, AND THE GENERAL FORM: AN INSTRUMENT THAT CANNOT PRODUCE ONE OF ITS OWN ANSWERS
+### FIFTH, SIXTH AND SEVENTH INSTANCES, AND THE GENERAL FORM: AN INSTRUMENT THAT CANNOT PRODUCE ONE OF ITS OWN ANSWERS
 
-Added by `franks-5b` because it holds the population — six instances, four
-seats, six subsystems, all on 2026-09-22 — and no single seat above could see
-the recurrence. The measurements are `frankb-8e`'s (two), `lekkerzeilen-7a`'s
-(two) and this seat's (one caught pre-run, one coda above).
+Added by `franks-5b` because it holds the population — **seven instances, four
+seats, all on 2026-09-22** — and no single seat could see the recurrence, because
+each held one or two. **This seat measured none of them.** The first three are
+recorded above by their own authors; the fourth and the disassembler are
+`frankb-8e`'s; the fifth, sixth and seventh are `lekkerzeilen-7a`'s. This seat
+contributed the count, the coda above, and one catch made in review of 8e's probe
+before it ran.
+
+**No subsystem count is given on purpose.** The sixth and seventh turned out to
+be one bug in one harness, so any tally of "distinct subsystems" would have been
+a number invented to make the recurrence sound broader — which is the failure the
+section beneath it is about, and it would have been committed in the act of
+documenting it.
 
 **FIFTH — a profiler bucket whose regex matched no symbol in the binary
 (`lekkerzeilen-7a`).** A roofs profile was bucketed against a symbol family this
@@ -40298,9 +40307,43 @@ iterations under the name of a count of results** — so the one number a reader
 would check to reassure themselves that the capture ran is the number that cannot
 tell them. The cause is a liveness test on the wrong pid: `kill -0 $GDBPID`
 watches gdb, not the inferior, and the inferior had exited normally at sample 89.
+**Its zero records and its `NO MAPS` warning turned out to be ONE bug rather than
+two** (see the seventh, below), so the pre-registered check was defeated twice
+over: by a file that looked populated, and by a capture that never had a subject.
 **A count of attempts wearing the name of a count of outcomes is the same defect
 as a zero that cannot be distinguished from a miss**, one layer up: here the
 instrument cannot report the answer "nothing was captured" at all.
+
+**SEVENTH — a fallback that returns the wrong answer BY CONSTRUCTION, and was
+caught only because the wrong answer happened to be a dead one
+(`lekkerzeilen-7a`).** The profiler's pid resolver fell back to
+`grep -oE 'process [0-9]+' | head -1` over gdb's output — and gdb prints
+`[Detaching after fork from child process N]` **before** anything naming the
+inferior, so `head -1` returns the **fork child, every time**. Verified across
+all three transcripts: the real inferior is third in each.
+
+**THE DIRECTION IS THE WHOLE FINDING, AND IT IS WHY THIS BELONGS HERE RATHER
+THAN IN A LIST OF SHELL BUGS.** A **dead** fork child yields unreadable maps and
+a loud `NO MAPS` warning — which is the arm that was actually drawn, by luck. A
+**live** one yields the maps of a fork of the same binary: **plausible, nearly
+right at fork time, and diverging afterwards. Every frame resolves, nothing
+warns, and the profile is quietly misattributed.** The bug was found only
+because it failed in its noisy direction; its normal direction is silent, and
+nothing in the output would have distinguished a correct run from a wrong one.
+
+**So it was deleted rather than repaired**, on `frankuser`'s argument, which is
+the general rule worth carrying: **a fallback that can only be wrong is worse
+than no fallback, because it converts a loud failure into a silent one.** A
+fallback exists to make an instrument degrade gracefully; one whose every output
+is wrong degrades it *invisibly* instead, which is strictly worse than not
+answering. Before adding a fallback, ask what it returns when the primary path
+fails — and if the answer is "something structurally incorrect", the correct
+behaviour is to fail.
+
+**And the identity confusion underneath it is worth naming on its own: an exe
+link identifies a PROGRAM, not a PROCESS.** Two processes running the same binary
+are indistinguishable by every property the resolver was matching on, which is
+exactly why the wrong one was nearly right.
 
 **THE GENERAL FORM, which is what earns the extension:**
 
@@ -40376,7 +40419,13 @@ was a hard cliff rather than a gradient: **contention degrades, it does not
 stop.** Three minutes, from stating the rule in its own words to breaking it on
 the next question. **Having just articulated a failure mode is not protection
 against it and may be the opposite** — a seat pleased with a lesson reaches for
-it. Hand a probe to somebody else before you trust its zeroes.
+it. Hand a probe to somebody else before you trust its zeroes — **and note the
+degenerate case, which `lekkerzeilen-7a` hit three times in one afternoon: the
+somebody else can be the shell.** Two flaws in its own replacement code (`set --`
+clobbering the positional parameters, and a branch still announcing a fallback
+that had just been deleted) were found by RUNNING it, not by re-reading it. A
+re-read is performed by the author who wrote the expectation; an execution is
+not.
 
 ## WHERE YOU HAVE NO STANDING, THE INFORMATIONAL FRAMING *IS* THE ASK
 
