@@ -14,7 +14,7 @@ blocked-by:
   - perf-b-the-inverse-trig-functions-have-no-fast-arm-and-cost-16-microseconds
   - perf-n-an-imported-npy-module-costs-13x-per-function-versus-the-same-code-inline
   - perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob
-summary: "OWNER DIRECTIVE 2026-09-22: `all performance issues have the highest prio right now. file appropiate tickets and lets start working on them. hopefully, by the end of the day we have 15+ fps`. This umbrella exists so the perf tickets inherit that rank through edges rather than by hand-editing prios. THE NUMBER IS 9.4x AND IT IS A PROPERTY OF A NAMED SCENE, NEVER A BARE FACTOR -- 7a's stamped baseline, pin v416, world/roofs, windowed, vsync ON, audio ON, no interaction: pxx median 1.603 fps = 624 ms/frame over 11 windows; 15 fps is 66.7 ms; 9.4x. EARLIER VERSIONS OF THIS SECTION SAID 18x AND 5.9x AND BOTH WERE COMPUTED ON A FRAME NOBODY SHIPS (a v413 vsync-off `--region rijn` row at 391 ms); each was arithmetically correct and each was taken on the wrong scene, so carry the factor WITH its scene and pin or not at all. THE ORACLE CLAIM IS **UNBACKED AS OF 2026-09-22 -- ARTEFACT DESTROYED, RE-RUN IN FLIGHT** and must not be quoted until it is re-confirmed: CPython at median 22.40 fps on the shipping scene, and the 14.0x ratio derived from it, survive only as 7a's recollection of a reduction it read at the time (55 windows, min 10.428 / median 22.396 / max 38.462) because the run file was deleted by its own harness. 7a's ruling, unsoftened: a number without a population, and being the measurer's own recollection does not improve it. IF IT RE-CONFIRMS, the frame to carry is that 15 fps is NOT a physics question but a ~14x compiler gap against a working oracle. THE 9.4x IS NOT AFFECTED AND NEEDS NO CPYTHON NUMBER -- it is 624 ms against a 66.7 ms target, off `diag-B.txt`, which is still on disk with its full stamp. WHAT NOBODY HAS: a decomposition of a roofs frame. Every lever below was identified on a profile of `--region rijn`, so the flat-profile picture (no row over 16.5%, largest four sum 43.5%) is a property of a scene nobody runs and MAY NOT DESCRIBE THE SHIPPING FRAME AT ALL. Decomposing a roofs frame therefore likely outranks every edge on this ticket and is the honest first action. NOT THE CAUSE, MEASURED: vsync (a tenth of a 624 ms frame -- remove it entirely and 8.5x remains), audio (ON in every row above), and the RNG (~6 ms of 624 at v416). THREE CAVEATS ON THE OLD PROFILE'S ROWS, each from the measuring seat's own hand: the 16.5% heap-lock row OVERSTATES itself (+4.9% with overlapping distributions on a controlled A/B -- nobody may rank on 16.5% as headroom); the 13% software-numerics row SPLITS and half is already fixed (`8cbec7eab`, in v416); refcount is CALL overhead not atomic overhead (3.772 ns/slot = 79% call/ret, and an inline nil-test takes it to 1.667 with NO liveness analysis). DO NOT REVERT the computed-getattr widening -- it is what stops a SIGSEGV in imported modules. This RE-RANKS the release and ESP32 window recorded in demo-timebox-close-2026-09-21.md; it does not replace it."
+summary: "summary: "OWNER DIRECTIVE 2026-09-22: `all performance issues have the highest prio right now. file appropiate tickets and lets start working on them. hopefully, by the end of the day we have 15+ fps`. This umbrella exists so the perf tickets inherit that rank through edges rather than by hand-editing prios. THE NUMBER IS 8.0x, MEASURED ON THE SCENE THAT SHIPS, AND IT IS A PROPERTY OF THAT SCENE -- never quote a bare factor. 7a, `lekkerzeilen@devdocs/perf/ROOFS-2026-09-22.md` (`62859ff`), `world/roofs`, windowed, vsync ON, audio ON, quiet box: pxx median 1.887 fps = 530 ms/frame over 19 windows; 15 fps is 66.7 ms; 8.0x. THE GAP IS 19.7x AGAINST A WORKING ORACLE: CPython 3.14.4 runs the SAME scene at median 37.140 fps (27 ms) over 414 windows, same box, same session. So 15 fps is NOT a physics question -- it is a compiler gap, and that is the frame to carry. THIS TICKET HAS CARRIED FOUR FACTORS IN ONE DAY (18x, 5.9x, 9.4x, now 8.0x) AND EVERY ONE WAS ARITHMETICALLY CORRECT ON A DIFFERENT FRAME; the 391 ms was a v413 vsync-off `--region rijn` row, and the 624 ms pair it replaced was taken while the box was at load 27-30. TREAT ANY TWO TIMINGS TAKEN AT DIFFERENT TIMES ON THIS BOX AS 20% APART FOR FREE, and do not report a ratio change smaller than that as a finding -- load is NOT in the stamp. AND DO NOT RANK BY `per-call cost x calls per frame`: 7a predicted 12% from a 12.3x per-call win and measured 3.3% (P(B faster)=0.653, z=1.57, its own within-arm noise 8.8%), because `Soundscape.update` tops the audio queue to a fixed BYTE target, so work per frame is capped and does not grow as the frame slows. A call count must be a SEPARATELY MEASURED quantity, never one derived from frame duration. WHAT NOBODY HAS: a decomposition of a roofs frame -- ~470 ms of 530 is unaccounted for once vsync is removed, every lever below was identified on `--region rijn`, and the 43.5% flat-profile figure is an answer about a scene nobody runs. That decomposition outranks every edge here and 7a has it next. NOT THE CAUSE, measured: vsync, audio (ON throughout), the RNG (~6 ms), and inverse trig (SETTLED, 0.22% -- do not rank it). Refcount is CALL overhead not atomic overhead (3.772 ns/slot = 79% call/ret; an inline nil-test takes it to 1.667 with NO liveness analysis). The 16.5% heap-lock row OVERSTATES itself (+4.9%, overlapping distributions). DO NOT REVERT the computed-getattr widening -- it stops a SIGSEGV in imported modules. This RE-RANKS the release and ESP32 window in demo-timebox-close-2026-09-21.md; it does not replace it."
 ---
 
 # Umbrella: lekkerzeilen runs at 15 fps
@@ -32,73 +32,77 @@ moving perf to the front of the same queue.
 
 ## The arithmetic, on the scene that actually ships
 
-**7a's stamped roofs baseline at v416.** Windowed, **vsync ON, audio ON**,
-default boat, no interaction:
+**7a, `lekkerzeilen@devdocs/perf/ROOFS-2026-09-22.md`, commit `62859ff`** —
+`world/roofs`, windowed, **vsync ON, audio ON**, default boat, no interaction,
+**quiet box**. Each window is one interval between `FPSMARK` lines, 20 frames
+apart.
 
-    pxx        11 windows   min 1.498   median 1.603   max 1.714 fps   median frame 624 ms
-    CPython    55 windows   min 10.43   median 22.40   max 38.46 fps   median frame  45 ms
+    arm  what                       windows   min      median        max      frame
+    A    pxx, `<<`/`>>` spelling         17   1.355    1.826 fps     1.991    548 ms
+    B    pxx, `*`/`//` spelling          19   1.734    1.887 fps     1.925    530 ms
+    C    CPython 3.14.4                 414  14.524   37.140 fps    49.628     27 ms
 
-    15 fps needs 66.7 ms      ->  pxx is 9.4x away
-    ratio at the medians      ->  14.0x, pxx against CPython
+    15 fps needs 66.7 ms      ->  pxx is 8.0x away
+    ratio at the medians      ->  19.7x, pxx against CPython
 
-    pin v416 fddc21e7e6615f80, promocore fa1e57a9b1e5564c, source 5c34d02,
-    arms A c91f50b560d56230 / B 7a24e6c56255e93e, scene world/roofs (4 tiles),
-    session 90c77059f105dacb, SDL_VIDEODRIVER=wayland
+    region=roofs tiles=4 worldindex=5cb61f3753c90cb6 twins=uv
+    compiler=fddc21e7e6615f80 promocore=fa1e57a9b1e5564c source=5c34d02
+    armA=c91f50b560d56230 armB=7a24e6c56255e93e session=90c77059f105dacb
 
-### UNBACKED AS OF 2026-09-22 — artefact destroyed, re-run in flight
-
-**The CPython row above, and the 14.0x with it, must not be quoted until the
-re-run lands.** 7a's harness step opened with `rm -f "$R"/run-*.txt` to clear
-what it was about to rewrite, and that glob was wider than the set the step
-owned: `run-C1.txt`, the CPython baseline measured an hour earlier, matched it.
-**What survives is the reduction 7a read at the time** — 55 windows, min 10.428,
-median 22.396, max 38.462 fps. **What is gone is the file, and with it the
-stamp, the scene banner and the session sha.** 7a's own ruling, recorded
-unsoftened at its request: *a number without a population, and the fact that it
-is my recollection rather than someone else's does not improve it.*
-
-**THE 9.4x IS NOT AFFECTED.** It is 624 ms against a 66.7 ms target and needs no
-CPython number at all; the pxx side comes from `diag-B.txt`, which did not match
-the glob and is still on disk with its full stamp.
-
-**IF THE RE-RUN CONFIRMS** — it is scheduled at 150 s rather than the original
-60 s, so it will be better evidence than what was lost — then the frame to carry
-is the one below, and nothing in this section changes.
-
-**THE ORACLE WOULD BE THE POINT, NOT THE FACTOR.** CPython running **this**
-scene, on this box, in the same session, at ~22 fps would mean **15 fps is not a
-physics question and this umbrella is not a fatalistic document** — a **~14x
+**THE ORACLE IS THE POINT, NOT THE FACTOR.** CPython runs **this** scene, on
+this box, in the same session, at 37.1 fps. **15 fps is therefore not a physics
+question and this umbrella is not a fatalistic document.** It is a **19.7x
 compiler gap against a working oracle running the same program.** Anyone who
 reads this ticket as "the target is unreachable" has read the wrong half.
 
-**And the destructive-step lesson is 7a's and is not "scope your globs":** a
-step may clear **what it is about to rewrite and nothing else.** 7a had a note
-to itself, written three days earlier, about taking a baseline before something
-overwrites it — and did not apply it to a destructive line in its own tool.
+## Four factors in one day, every one arithmetically correct
 
-## The factor has moved three times today and every version was correct
+**Recorded because the next seat will otherwise quote a bare factor**, and
+because the pattern is the finding: **the arithmetic was never the error.**
 
-Recorded because it is the reason the number above is written with its scene and
-pin attached, and because the next seat will otherwise quote a bare factor.
-
-| said | frame it was computed on | status |
+| said | frame it was computed on | why it was wrong |
 | --- | --- | --- |
-| **18x** | 391 ms, v413, **vsync OFF**, `--region rijn` | correct arithmetic, scene nobody ships |
-| **5.9x** | an open-water frame where the vsync wait was most of it | correct arithmetic, scene nobody ships |
-| **9.4x** | **624 ms, v416, vsync ON, `world/roofs`** | the first frame that belongs in the calculation |
+| **18x** | 391 ms, v413, **vsync OFF**, `--region rijn` | different scene, different pin |
+| **5.9x** | an open-water frame where the vsync wait dominated | different scene |
+| **9.4x** | 624 ms, v416, `world/roofs` | **right scene, loaded box** |
+| **8.0x** | **530 ms, `world/roofs`, quiet box** | current |
 
-**All three were arithmetically correct. The error was never the arithmetic.**
-**A reachability factor is a property of the scene it was measured on**, so it
-does not survive being quoted without one. Do not carry the 18x/5.9x pair
-forward at all.
+**A reachability factor is a property of the scene AND the machine state it was
+measured on.** The 9.4x row is the instructive one: **right scene, right pin,
+correct arithmetic, and still 18% out** — and it was the row nobody had marked
+as doubtful, because the pxx side had a full stamp.
 
-**And vsync is no longer the story.** On a 66 ms open-water frame the 52–68 ms
-wait was most of the frame; on a 624 ms frame it is a tenth. **Remove it
-entirely and ~564 ms of work remains — still 8.5x.**
+## TREAT ANY TWO TIMINGS ON THIS BOX AS 20% APART FOR FREE
+
+The 624 ms/22.4 fps pair was taken while the box sat at **load 27–30** with
+other sessions compiling; this pair ran quiet because `franks-5b` held off the
+CPU. Same binaries, same scene, same pin. **CPython got 66% faster and pxx only
+18%** — consistent with CPython being CPU-bound at 27 ms while pxx at 530 ms is
+bound by something that contends less, which would also explain the ratio moving
+14.0 → 19.7. **Hypothesis only: load was not recorded, so it cannot be checked.**
+
+**Do not report a ratio change smaller than 20% as a finding** until load is in
+the stamp.
+
+## DO NOT RANK BY "per-call cost x calls per frame"
+
+**7a predicted 12% from a 12.3x per-call win and measured 3.3%** — within-arm
+run-to-run noise is 8.8%, Mann-Whitney over 17x19 windows gives
+**P(B faster) = 0.653, z = 1.57. Its own A/B does not resolve.** Wrong by four
+times, **in the direction that flattered its own change.**
+
+**The mechanism: `Soundscape.update` tops the audio queue to a fixed BYTE
+target, not to a frame's worth of audio**, so work per frame is **capped** and
+does not grow as the frame slows. (Unmeasured — no audio diagnostics in the run
+files — and labelled a hypothesis in 7a's own doc.)
+
+**So a call count must be a SEPARATELY MEASURED quantity, never one derived from
+frame duration.** Any lever on this list ranked that way inherits the same hole.
 
 ## What nobody has, and it probably outranks every edge below
 
-**NOBODY HAS DECOMPOSED A ROOFS FRAME.** Every lever in this umbrella was
+**~470 ms OF A 530 ms FRAME IS UNACCOUNTED FOR once vsync is removed, and
+NOBODY HAS DECOMPOSED A ROOFS FRAME.** Every lever in this umbrella was
 identified on a profile of **`--region rijn`** — a different scene, two pins
 ago, vsync off. **So the flat-profile picture below is a property of a scene
 nobody runs, and it may not describe the shipping frame at all.** The 43.5%
@@ -246,9 +250,12 @@ and takes perf after it lands.
 ## What would retire this umbrella
 
 A measured frame time at or under **66.7 ms on `world/roofs`**, windowed, vsync
-ON, audio ON — **the same configuration as the baseline above** — with the
-scene, tile count, window count and pin stated beside it. **Not `rijn`, and not
-a `rijn`-labelled run whose label came from a banner.** **A sum of percentage
+ON, audio ON, **on a quiet box** — the same configuration as arm B above — with
+the full stamp beside it (`region`, `tiles`, `worldindex`, `twins`, compiler,
+promocore, source, session) and the window count. **Not `rijn`, and not a
+`rijn`-labelled run whose label came from a banner.** **And not a single run:**
+within-arm run-to-run noise here is 8.8% and machine load moves a timing 20%,
+so a retirement claim wants windows and a median, not a best frame. **A sum of percentage
 claims does not retire it**; the table above is why.
 
 **HOW TO REPORT PARTIAL PROGRESS, AND IT IS NOT AS A FRACTION** (frankh-c0,

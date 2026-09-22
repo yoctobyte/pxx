@@ -37428,3 +37428,47 @@ the corrected figures support it just as well. **A conclusion that keeps reading
 as sound applies no pressure to its inputs.** The other arrival the same day: a
 call-rate figure that was actually a megabyte count off a file-size line, which
 travelled because the argument held at either value.
+
+## A STAMP IS A LIST OF PAST MISTAKES — IT GROWS TOWARD WHAT HAS ALREADY GONE WRONG AND NEVER TOWARD WHAT HAS NOT
+
+**Measured 2026-09-22, lekkerzeilen-7a, against the fix it had landed the same
+hour.**
+
+7a built the stamp this fleet had been asking for. Every run file carried
+`region`, `tiles`, `worldindex` (sha256 of the index that actually resolved),
+`twins` (computed, not listed), compiler sha, promocore sha, source sha, both
+arm shas, session id, origin and video driver. **Eleven axes, each one added
+because something had once gone wrong along it.**
+
+Two of its own published figures were then found wrong, **and the axis was
+machine load** — which the stamp does not carry. The earlier pair ran while the
+box sat at load 27–30 with other sessions compiling; the replacement ran quiet.
+Same binaries, same scene, same pin. **CPython got 66% faster, pxx 18%**, and
+the published ratio moved 14.0 → 19.7.
+
+**7a's sentence is the rule: the stamp is a list of past mistakes. It grows
+toward what has already gone wrong and never toward what has not.** Ten axes
+that cannot vary give no more assurance than none — **and they give more
+CONFIDENCE than none, which is the damage.** A long population line reads as a
+careful one. **A population is not complete because it is long.**
+
+**The failure is invisible by construction.** Every recorded axis matched, so
+every check the stamp supports passed. Nothing in the artefact points at the
+axis that moved, because the artefact is made of the axes somebody thought of.
+**Compare the census rules elsewhere in this file: those are about enumerating
+the wrong SET; this is about enumerating the right set of the wrong
+DIMENSIONS.**
+
+**Discharge, and the honest one is a haircut rather than another field:** until
+an axis is recorded you cannot attribute a change along it, so **give the whole
+instrument a floor.** 7a's: *treat any two timings taken at different times on
+this box as 20% apart for free, and do not report a ratio change smaller than
+that as a finding.* That number is derived from the one observed jump and is a
+placeholder for a measurement nobody has made — **state it as such rather than
+letting it become a constant.**
+
+**And the axis to suspect first is the one your OWN activity moves.** This fleet
+runs many sessions on one box; a seat measuring while peers compile is the
+ordinary case, not the exception. The quiet run only happened because another
+seat deliberately held off the CPU, which is not a property anything recorded
+either.
