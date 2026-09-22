@@ -75,9 +75,20 @@ _SELF_DOCS = (_SELF, _SELF[:-3] + "_devtest.py")
 # That is the quantifier error: the extension I had tripped over, asserted as
 # the extent of the problem. One census of what actually lands under test/
 # (git log --diff-filter=A --name-only, 30 days) answered it and the answer was
-# bigger: .rs 30 files with 27 Makefile compile sites and thirty top-level
-# test_rust_*.rs subjects, and .py 140 files. .bas was 7 -- the smallest of the
-# three, found first only because I happened to add one.
+# bigger: .rs 30 files with 27 Makefile compile sites, and .py 140 files. .bas
+# was 7 -- the smallest of the three, found first only because I happened to
+# add one.
+#
+# THE .rs BREAKDOWN, CORRECTED BY frankz-e5 THE SAME DAY: 30 = 26 top-level
+# test_rust_*.rs + 4 under test/rust_unity/. I had written "thirty top-level",
+# and the number came from `git ls-files 'test/*.rs' | grep -c '/'` -- a filter
+# that CANNOT FAIL, because every path it is given begins with `test/` and so
+# contains a slash by construction. It returned the total and I read it as a
+# partition. The spelling that answers the question is
+# `grep -vc '^test/[^/]*/'`. Recorded here rather than silently repaired
+# because it is the third instance in one day of a query whose pattern is
+# guaranteed to match, and the number it produced looked exactly like an
+# answer.
 #
 # .py IS A REAL GAP AND IS DELIBERATELY NOT HERE, because adding it is not a
 # tightening. Measured by doing it: 55 files land in the unwired report, and

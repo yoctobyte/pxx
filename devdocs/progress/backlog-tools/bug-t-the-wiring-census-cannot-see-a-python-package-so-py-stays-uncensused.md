@@ -82,3 +82,17 @@ quantifier: `.pas` 1257, `.expected` 675, `.npy` 329, `.c` 241, **`.py` 108**,
 `.sh` 50, **`.rs` 21**, `.bas` 4. The extension found first was the smallest of
 the three real gaps, and it was found first only because somebody happened to
 add one.
+
+**And then a third error of the same family, inside the correction.** The
+commit message said *"thirty top-level `test_rust_*.rs` subjects"*. At
+`origin/master` the breakdown is **30 `.rs` total = 26 top-level
+`test_rust_*.rs` + 4 under `test/rust_unity/`** — caught by frankz-e5, who
+re-ran it rather than taking it. The bad number came from
+`git ls-files 'test/*.rs' | grep -c '/'`, **a filter that cannot fail**: every
+path it is handed begins with `test/` and therefore contains a slash by
+construction, so the grep could only ever return the total. It returned 30 and
+I read it as a partition of 30. `grep -vc '^test/[^/]*/'` is the spelling that
+answers the question. Nothing downstream moved — `.rs` is still the larger,
+previously invisible population and it is wired now — but the tell is worth
+keeping: **a filter whose pattern the whole population satisfies returns a
+count that looks like a partition and is a total.**
