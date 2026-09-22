@@ -9,7 +9,7 @@ created: 2026-09-22
 found-by: franks-5b
 tags: [nilpy, promotable-int, o2, codegen, refcount, segfault]
 blocked-by: []
-summary: "A NINE-LINE NilPy program with no classes, no imports and no library calls SEGFAULTS at -O2, the shipped default level, identically on pin v418 (fda77c48b8ee) and at HEAD. THIS IS PURE x86-64 CODEGEN: frankh-c0 measured the IR BYTE-IDENTICAL at -O1, -O2 and -O3 (PXXDBG=a.ir:main, 72 lines, only the size banner differs), so no IR-level pass is involved, and disabling all seventeen `OptLevel >= 2` / `< 2` gates in ir_codegen.inc at once runs CLEAN -- the culprit is inside that set and c0 is bisecting it. TRIGGER, THREE CONDITIONS, all required and all measured: (1) a frame with EXACTLY THREE locals, (2) EXACTLY TWO of them tyPromoInt64 (tk=28) -- one runs clean and so do three -- and (3) a promo-int reaching `print` WITHOUT an explicit str(). `print(str(acc))` runs CLEAN on the identical frame where `print(acc)` segfaults, so the construct that selects the bad code is the IMPLICIT promo-int -> AnsiString conversion on the write path, NOT the frame layout and NOT the loop -- both of which this ticket blamed first. The third local's TYPE does not matter (Int64, AnsiString and Double all segfault) nor does its position. LEVEL MATRIX: -O0 clean, -O1 clean, -O2 SEGV, -O3 clean. READ -O3 AS MASKING, NOT AS ABSENCE: every gate is `OptLevel >= N`, so the ladder is monotonic and -O3 does everything -O2 does and more; a fix validated by "-O3 is clean" would be validating a mask. DCE IS EXONERATED IN BOTH DIRECTIONS: -O2 --no-dce still SEGVs and -O3 --no-dce is still clean. THE FAULT SITE IS AN UNCONFIRMED READING AND NO FIX MAY BE WRITTEN AGAINST IT: a refcount release sequence (`cmpq $0x40000000,-0x10(%rax)` then `decq -0x10(%rax)`) with rax=0x2aa6428c reads as a promo-int INLINE payload dereferenced as a heap bignum pointer -- but that is an interpretation of one register and four instructions, nobody has disassembled the emitted release site, and the suspect has already moved twice (off frame layout, then off the IR). Found while benchmarking perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program, whose coarse arm MASKS this crash by boxing the promo-int pair to tyVariant -- so narrowing that arm turns working programs into segfaults until this is fixed."
+summary: "THE SLUG NAMES TWO THINGS THAT ARE BOTH ARTEFACTS -- NOT `-O2` AND NOT THE LOCAL COUNT. SUPERSEDED 2026-09-22 by frankb-8e's disassembly (E3), the reading this ticket said no fix could be written without; kept at this slug because it is cited. THE DEFECT: main's epilogue clears FOUR promo slots and the prologue initialises THREE. The uninitialised one is the print() ARGUMENT TEMP. The fault is the AnsiStrRelease blob (EmitAnsiStrReleaseLocked, ir_codegen.inc:654) reached from PXXPromoClear, whose body is a managed-string assign releasing the old payload; at that call tag=0x1 (PROMO_TAG_HEAP) and payload=0x338c2665, stale. compiler/pasparser_expr.inc:381 ALREADY DESCRIBES THIS FAILURE and asserts these temps are covered by SymIsHiddenArgTemp's prologue zero -- FALSE for this one. So this is the FOURTH ARM of bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice (done/), whose own file comment records the chain shipping one arm short three times. BOTH EARLIER FRAMINGS ARE RETIRED AND SO IS THE BISECTION: never-zeroed=[-0x40] is IDENTICAL at -O0/-O1/-O2/-O3 and only the rc differs, so ALL FOUR 'clean' rows are LUCK and no candidate fix may be validated against any of them; two_locals and four_locals carry the same defect at -0x38 and -0x48 and run clean; and with main's source byte-identical, putting one function call in front of it turns rc=139 into rc=0, because a slot left by an earlier PXXPromoClear holds the STATIC EMPTY LITERAL and the saturation guard skips it. The seventeen OptLevel>=2 gates in ir_codegen.inc CANNOT REACH THIS and that bisection is stopped. RETRACTED BY ITS OWN AUTHOR: the earlier 'promo payload dereferenced as a bignum pointer' reading is wrong -- rax varies per run and climbs monotonically across sequential runs, so it is STALE STACK, not any live value. WHAT STANDS FROM THE ORIGINAL REPORT, as symptom-selectors rather than as the defect: the nine-line repro segfaults at the shipped default on pin v418 and at HEAD; `print(str(acc))` runs CLEAN where `print(acc)` segfaults, which is what names the ARGUMENT TEMP as the uninitialised slot. Found while benchmarking perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program, whose coarse arm MASKS this by boxing to tyVariant -- so narrowing that arm turns working programs into segfaults until this is fixed. ATTRIBUTION: repro and selector table franks-5b; level matrix, IR-identity and gate set frankh-c0; mechanism and all four retirements frankb-8e; this summary edited by frankz-e5 (coordinator), who measured NONE of it and corroborated only that pasparser_expr.inc:381 says what 8e reports."
 ---
 
 # Two promotable-int locals plus exactly one other local segfault at -O2
@@ -385,7 +385,32 @@ where there are 17** — a pattern written for `if OptLevel >= 2 then` is silent
 about `(OptLevel >= 2) and (...)`, **and the short list looked complete.** The
 seventeen-site result above is from the corrected set.
 
-### BISECT STATE, PAUSED NOT ABANDONED — `frankh-c0`, 2026-09-22
+### BISECT STATE — RELABELLED 2026-09-22: THESE ARE GARBAGE-LOTTERY ROWS, NOT NARROWINGS
+
+**READ THIS BEFORE THE NUMBERS BELOW.** They were recorded as a localisation and
+they are not one. `frankb-8e`'s disassembly (see the E3 section) shows
+`never-zeroed=[-0x40]` is present at **`-O0` too**, so **no `OptLevel >= 2` gate
+creates this defect and none of them can be the culprit.** What toggling a gate
+does is change the emitted code, which changes the frame layout and what the
+previous frame left behind — **it re-rolls the garbage.**
+
+**So "the culprit is in the first eight" is exactly as informative as "two locals
+clean, three locals SEGV": a real, reproducible measurement of a quantity that is
+not the cause.** `franks-5b` asked for this relabelling explicitly, so that the
+next reader does not treat it as live and spend a day inside `ir_codegen.inc`.
+
+**THE CONTROL THAT KILLS EVERY FLAG-BISECT, and it is not a codegen experiment at
+all:** with `main`'s source **byte-identical**, `main()` gives rc=139 and
+`warm(); main()` gives rc=0, where `warm()` is one function with one string local.
+Nothing about the compiler changed. **The same binary gives both answers**, so no
+bisect over compiler flags can survive it.
+
+**The runs themselves were competent and the method was right** — c0 reached
+halving before anyone suggested it, and halving is what would have found a real
+single-gate cause in ~5 rebuilds. The rows are preserved below as history, marked
+for what they measure.
+
+#### Historical rows — `frankh-c0`, 2026-09-22
 
 Recorded here because the bisect yielded the box to an owner-cleared display
 window and **a paused bisect whose state lives only in a peer's context is a
@@ -416,3 +441,68 @@ a modified `ir_codegen.inc` **and** a `compiler/pascal26` built from it — and 
 binary is untracked, so `git status` shows only the source edit. c0 is verifying
 the tree is clean before stopping and will say so. Anyone resuming this should
 check both.
+
+## E3 ANSWERED 2026-09-22 BY `frankb-8e` — AND IT RETIRES BOTH FRAMINGS IN THE SLUG, THE BISECTION, AND ONE OF ITS OWN EARLIER CLAIMS
+
+**This is the disassembly this ticket said no fix could be written without.**
+Recorded by the coordinator, who measured none of it. Every number below is 8e's,
+with `--map` resolving every address.
+
+### The mechanism
+
+**`main`'s epilogue clears FOUR promo slots; the prologue initialises THREE. The
+uninitialised one is the `print()` ARGUMENT TEMP.** The fault is the
+`AnsiStrRelease` blob (`EmitAnsiStrReleaseLocked`, `ir_codegen.inc:654`), reached
+from `PXXPromoClear`, whose body is a managed-**string** assign releasing the old
+payload. `PXXPromoCopy` clears its destination before writing it. gdb at that
+call: `tag=0x1` (`PROMO_TAG_HEAP`), `payload=0x338c2665`, stale.
+
+**`compiler/pasparser_expr.inc:381` ALREADY DESCRIBES THIS FAILURE** — *"a local
+left unwritten on the executed path was cleared with stale stack bytes, and bytes
+that happened to read `{1, <a live pointer>}` freed a block nobody had freed"* —
+**and asserts the temps satisfy `PXXPromoClear`'s own precondition through
+`SymIsHiddenArgTemp`'s prologue zero. That is false for this one.** Corroborated
+here by reading that file; it is the only thing in this section the coordinator
+checked.
+
+### Three retirements, and none of them is a refinement
+
+1. **NOT `-O2`.** `never-zeroed=[-0x40]` is **IDENTICAL at `-O0`, `-O1`, `-O2` and
+   `-O3`** — only the rc differs. **All four "clean" rows are LUCK.** The
+   coordinator's "clean at -O3 is masking, not absence" call was right and
+   generalises to *every* clean level. **No candidate fix may be validated against
+   any row in that matrix.**
+2. **NOT THE LOCAL COUNT.** `two_locals` and `four_locals` carry the same defect at
+   `-0x38` and `-0x48` and run clean. **With `main`'s source byte-identical,
+   putting one function call in front of it turns rc=139 into rc=0** — a slot left
+   by an earlier `PXXPromoClear` holds the STATIC EMPTY LITERAL and the saturation
+   guard skips it.
+3. **THE SEVENTEEN `OptLevel >= 2` GATES CANNOT REACH THIS.** That bisection is
+   stopped; 8e messaged `frankh-c0` directly. The 17-site *observation* was real —
+   disabling them all does run clean — which is exactly how a true measurement
+   points at the wrong mechanism.
+
+### And a retraction by its own author
+
+**8e's earlier report that the fault dereferences a promo payload is WRONG.**
+`rax` varies per run and **climbs monotonically across sequential runs**, so it is
+**stale stack, not any live value** — which is also why 5b's `rax` and 8e's
+differ. Self-reported before anyone built on it.
+
+### The suspect has now moved four times
+
+Off the loop and frame layout (`print(str(acc))`), off DCE (`-O2 --no-dce`), off
+the IR entirely (`a.ir:main` identity), and now off the optimisation level and the
+local count together. **Each move invalidated a fix someone could plausibly have
+written in between, and the last one invalidates a per-level fix anyone could have
+written this afternoon.** This is the argument for E3 having gated the fix, and it
+is worth reading before the next ticket where a bisected site arrives without a
+disassembly.
+
+### Routing — recorded, not decided
+
+`frankb-8e` holds the mechanism and has asked `frankh-c0` directly whether it
+wants the fix or is already at the mint site, offering its candidates
+(`ir.inc:5984`, `ir.inc:14261`, `pyparser.inc:61658`). `franks-5b` filed the
+ticket and owns it but is off the box at `lekkerzeilen-7a`'s request. **The
+coordinator does not dispatch and has not.**
