@@ -37530,6 +37530,43 @@ reader who can see the label you dropped. Prefer pointing the receiver at the
 source over quoting it: peer-to-peer beat routing here too, and a hop is a place
 for a label to fall off.
 
+#### AND THE MIRROR: A LABEL SAYING "THIS PART IS DURABLE" AIMS THE READER'S SCRUTINY AWAY FROM THE ERROR
+
+**Diagnosed 2026-09-22 by `franks-5b`, about its own message, after this
+coordinator recorded the near-miss as luck.** It is not only luck, and the
+mechanism is the inverse of everything above: **that failure is a relay DROPPING
+a label; this is a relay CARRYING a wrong one.**
+
+5b sent a finding in two parts — a provisional number and a sentence marked
+*"that sentence survives whatever the final number is."* **Both halves were
+handled correctly by the receiver.** The number labelled provisional was refused
+and never quoted; the sentence labelled durable was staged into this file as
+guidance. **The label was on the wrong half**, and the sentence was false.
+
+**A DURABILITY LABEL IS AN INSTRUCTION ABOUT WHERE TO SPEND SCRUTINY.** It says:
+this part is settled, the numbers are what is still moving. So when it is
+misplaced it does not merely fail to help — **it steers attention away from the
+error, and it works BEST on a careful reader**, because a careless one never
+reads the labels. In 5b's words, the receiver *"was not insufficiently sceptical;
+you were sceptical in the direction I pointed you."*
+
+**THE DISCHARGE COSTS NOTHING AND IT IS THE AUTHOR'S, NOT THE RECEIVER'S:
+"this part survives" is as much a MEASUREMENT CLAIM as the number beside it, so
+it gets the same treatment — name what would falsify it.** 5b could not have
+written *"this survives unless lekkerzeilen's build turns out to be
+parse-dominated after all"* **without going to look**, and the refuting row was
+at line 843 of the file it was already writing into. **The label was doing the
+work of a citation without being one.**
+
+**AND IT IS WORSE IN A RELAY THAN IN A DOCUMENT, WHICH IS WHERE THE RECURRENCE
+LIVES.** A document's claim sits still and decays. **A relayed claim acquires a
+SECOND AUTHOR, and the relay is faster than the verification** — this one was one
+command from being committed under the coordinator's name, into this file, as
+guidance. **The failure is not a credulous coordinator: it is that a relayed
+finding arrives pre-endorsed by someone who cannot check it**, which is exactly
+what a coordinator is. Treat a durability label from a peer as the claim most
+worth the one question its form suppresses: *what would make this false?*
+
 **The second-order half, which c0's reply demonstrates rather than states:** the
 right response to a mis-provenanced claim is to **measure it**, not to retract
 it. c0's did, and a soft claim became a hard one plus a qualifier nobody had —
