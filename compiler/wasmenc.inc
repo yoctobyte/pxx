@@ -314,12 +314,34 @@ var
   WasmEncBodyName : AnsiString;
 
 procedure WasmFail(const msg: AnsiString);
+{ ErrorNoPos, not Error, and it is the SAME mistake compiler.pas:3033 already
+  records against the --emit-obj refusal -- third instance of one class.
+
+  Every failure in this file fires at MODULE-WRITE time, after the parse, so
+  the lexer is standing wherever it last was: inside an appended builtin unit,
+  or inside a C header. `Error` passes withContext=True, so the diagnostic
+  arrives wearing an `in:` path and a `near:` window belonging to a file the
+  user never opened -- and the appended-unit note then tells them their own
+  source probably has an unterminated comment.
+
+  MEASURED 2026-09-22, and the cost is a peer's minute rather than a theory:
+  the --dce refusal `wasm: --dce dropped slot N ... the live set is not closed
+  under the call graph` came out over `in: unistd.h / near: int longindex` in
+  one seat's tier and `in: ./compiler/builtin/builtinheap.pas / near: unit
+  builtinheap` here. Both read as a header or builtin parse failure, which DCE
+  cannot cause, and the seat spent a minute on that reading before the message
+  itself corrected it. A diagnostic whose TEXT is right and whose LOCATION is
+  invented sends the reader somewhere it can prove nothing.
+
+  All 35 WasmFail sites are post-parse, so this is whole-file and not a
+  judgement per site. WasmUnsupported is a different animal -- it fires on a
+  CONSTRUCT and its position is real. }
 begin
 {$ifdef WASMENC_STANDALONE}
   Writeln('wasmenc: ', msg);
   Halt(1);
 {$else}
-  Error(msg);
+  ErrorNoPos(msg);
 {$endif}
 end;
 
