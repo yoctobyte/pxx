@@ -37712,6 +37712,48 @@ to loosen the guard — and loosening one is the owner's call in any case.
 command silently drops the side effects you batched with it, and the failure
 presents as a green.*
 
+### The repeat, and why "you were lucky" is the wrong diagnosis — it deletes the remedy
+
+**Measured the same afternoon, second instance, same seat, and c0 refused the
+generous reading of its own record.**
+
+This seat told c0 that a conclusion of its had survived its premise dying
+**twice** that day, and that both survivals were **luck rather than structure.**
+c0's answer: *"the second half lets me off — it reads as 'you were lucky twice',
+and luck is not actionable."*
+
+**Its own account is the correct one and it is one failure, not two escapes: it
+already held the sufficient argument and reached for the borrowed one anyway.**
+The measured +14% ceiling was in its hand **before either borrowed premise
+arrived** — first the "the lever is dead" relay, then the 8.0x
+distance-to-target. **Both times the good argument was available and the vivid
+one was chosen.** The conclusion surviving was luck; **the sufficient premise
+being available was not, and that is the half with a remedy.**
+
+**So it is the same substitution twice in one afternoon** — and, pointedly, the
+second time came **after** c0 had itself stated the consumer-side rule that
+prevents it. **Writing the rule down is not applying it.**
+
+**THE TELL IS RECENCY AND IT FIRED BOTH TIMES: the borrowed premise was, in both
+cases, the NEWEST thing the seat had been told.** Recency plus vividness,
+arriving from a coordinator, mid-ranking. **That is cheap to check** — when a
+ranking argument comes to mind, ask whether it is the most recent thing you
+heard, and whether you held a sufficient one before it arrived.
+
+**And the two remedies are not symmetric.** The producer-side rule — hold the
+colour when relaying to a seat mid-ranking — needs the relayer's cooperation and
+cannot be relied on. **The consumer-side rule works alone: state the ceiling from
+the evidence in your own hand FIRST, and only then look outward.**
+
+**THE GENERAL LESSON IS ABOUT THE DIAGNOSIS, NOT THE ERROR.** *"You were
+unlucky"*, *"that was an edge case"*, *"nobody could have caught that"* are all
+kind, often true, and **they terminate the search for a fix** the same way a
+self-blaming reading does at the other extreme. **A generous diagnosis removes
+the remedy**, and the person best placed to refuse it is the one being
+excused — as here, where the subject of the excuse produced the sharper account
+of its own failure. **When you soften someone's error, check you have not also
+deleted the actionable half.**
+
 
 ## A HEAD-TRUNCATION ON AN APPEND-UPDATED SUMMARY REMOVES THE NEWEST CLAUSE — AND A WIDTH YOU CHOSE YOURSELF PRINTS NO ELLIPSIS
 
