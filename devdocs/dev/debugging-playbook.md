@@ -38305,3 +38305,71 @@ that a worked example decays faster than the rule it illustrates.** Re-derive th
 200-of-200 before quoting it; **the day it stops being 100% someone has changed
 the commit identity**, and that is worth knowing on its own.
 
+
+## THE FIXTURE PARAMETER THAT HIDES THE DEFECT IS NOT ALWAYS A POSITION — IT CAN BE A COUNT, AND THE NATURAL COUNT IS 1
+
+Extends the first-wins section above (line ~27396) and CLAUDE.md's *"where a
+construct takes an ordered list, the position of the interesting element is a
+variable — so put it somewhere other than last"*. Every measured instance of
+that rule so far is an ORDERING: an import order, a guarded-import order, a
+`uses` order. **This one is a repetition count, and the rule's own phrasing
+does not reach it.**
+
+Measured 2026-09-22, found by frankh-c0 reading
+`test/test_nilpy_a_method_returning_an_attribute_leaks_one_reference_per_call.npy`
+and verified at source here. The file keeps a deliberate PAIR of rows,
+`ksweep_k1` and `ksweep_k8`, differing only in how many times one call site
+executes inside one enclosing scope:
+
+```python
+def _frame8(p):
+    for j in range(8):
+        z = p.refresh()
+    return 1
+
+def _frame1(p):
+    for j in range(1):
+        z = p.refresh()
+    return 1
+```
+
+Its own note says why: *"One call site, k executions per enclosing scope, and
+the function RETURNS between invocations — the arrangement that reads clean at
+k=1. At k=8 it must leak 7/8 of a full leak per call, so the ordinary
+LEAK_LIMIT catches it; at k=1 the same code is clean, which is the pair."*
+
+**The defect is `k-1` leaked referents per site per scope.** One slot per call
+SITE, overwritten per EXECUTION, drained once at SCOPE EXIT — so at `k=1` the
+single drain is exactly right and the fixture is honest, isolated, correctly
+aimed, and blind. **`k=1` is what everybody writes**, because a fixture
+demonstrating a call writes one call.
+
+### The generalisation, which is the point
+
+**A fixture has parameters, and the defect is a function of them.** Position in
+a list is one parameter; a repetition count is another; so are nesting depth,
+how many units away a declaration lives (measured elsewhere, same class), and
+how many elements an aggregate has. **The natural value of each — first, one,
+shallow, adjacent, small — is the value most likely to hide a bug**, because
+the natural value is what the feature's own author reached for while it worked.
+
+So the question generalises from *"is the interesting element last?"* to:
+**"what is this fixture a function of, and did I pick the convenient value of
+each?"** Where you cannot name the parameter, you have not found the axis yet —
+and if you can name it, varying it costs one extra row.
+
+### Keep the pair, and the reason is a guard that cannot fail
+
+`ksweep_k1` looks redundant next to `ksweep_k8` and would be the first row
+trimmed for speed. **It is not the redundant one — it is the control.** Its job
+is to record, in the suite, that this shape passes at `k=1`; dropping `k8`
+instead would leave a file that **passes on the unfixed compiler**, which is
+this playbook's standing definition of a guard that cannot fail.
+
+**NOT PROMOTED to CLAUDE.md, and the test it failed is worth naming.** The
+parent rule is already there with three measured instances, and this is a
+fourth in a subsystem (NilPy) that already supplies one of the three — what is
+new is the AXIS, not the recurrence. If a count-shaped or depth-shaped fixture
+parameter hides a defect in an unrelated subsystem, that is the second row and
+the parent rule's phrasing should widen from "position" to "parameter" then.
+Banked here on merit, which is the other test and which it clearly meets.

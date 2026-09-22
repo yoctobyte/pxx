@@ -351,6 +351,39 @@ measurement.
    on its own merits. If a roofs re-profile ever puts inverse trig above the
    noise, re-add the edge and say which measurement did it.
 
+## perf-a AND perf-o OVERLAP RATHER THAN ADD — whoever measures second must SUBTRACT
+
+Recorded here 2026-09-22 by frankb-8e, from frankh-c0's own analysis, **because
+it is true of the PAIR and therefore belongs in neither ticket.** c0 said so
+explicitly and then put it only in a message; a message is not a record, and
+this board is the one place where someone would sum the two prizes.
+
+- **`perf-a`** (managed-local sweep) is about whether a slot's release
+  **happens at all**.
+- **`perf-o`** (variant hidden-dest clear) is about how a release is
+  **SPELLED** — `IRBuildHiddenDest` calls the portable Pascal proc with an
+  argument node and a frame where `IR_VAR_STORE` calls the target's own blob
+  with neither. Same semantics, same releases, same NUMBER of them.
+
+**So they are not additive.** If the ownership invariant `perf-a`'s remaining
+half now waits on ever lands and the sweep can skip slots, **the skipped slots
+stop paying `perf-o`'s clear too** — the second fix's prize shrinks by whatever
+the first one removed. Adding the two published figures would double-count the
+intersection.
+
+**Neither ticket can state this**, which is exactly why it kept nearly going
+unrecorded: each is correct about its own subject and the overlap is a property
+of the pair. **Whoever measures second subtracts, and says what they
+subtracted.**
+
+**Two further reasons not to size either from what is published today**, both
+from the tickets themselves: `perf-o`'s asymmetry is **x86-64-local** (four
+backends already call the portable proc from both paths; aarch64 has its own
+helper), so it is not a six-arm prize; and `perf-a`'s landed win is a
+**per-slot microbenchmark** figure (4.367 -> 1.886 ns/slot, 56.8%) with **no
+frame share measured**. Both seats are holding their frame claims for the
+decomposition wired above, and both are right to.
+
 ## The frame decomposition is wired HERE, not under the two tickets waiting on it
 
 `task-e-decompose-a-lekkerzeilen-roofs-frame-...` (frankh-c0, `f1e9d0fa8`) is
