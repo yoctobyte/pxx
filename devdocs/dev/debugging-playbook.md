@@ -7829,9 +7829,15 @@ The section above gets you call counts. When you want *shares* — where the tim
 actually goes — the trap is one line of `compiler.pas`:
 
 ```
-compiler.pas:739    OptLevel := 2;        { the default }
-compiler.pas:1536   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
+OptLevel := 2;                                          { the default }
+if DebugInfo and not OptLevelExplicit then OptLevel := 0;
 ```
+
+**Grep for those two lines rather than trusting a line number.** This block cited
+`compiler.pas:739` and `:1536` until 2026-09-22, and by then they were **1057**
+and **2160** — `:1536` had drifted onto a comment about the `{$MODE}` directive,
+which explains nothing and does not announce itself. A stale line number does not
+error; it points somewhere.
 
 So **`make pxx-debug` builds a `-O0` compiler.** For gdb that is the point (1:1
 codegen keeps breakpoints on the lines you set them on). For a profile it is a
@@ -7852,6 +7858,51 @@ and the parser's share moved with it. The *ranking* happened to survive; the
 numbers did not, and there is no way to tell which you are holding from the
 report alone. **Record the `-O` level of the profiled binary the way you already
 record its sha.**
+
+**AND THE TIME-SHARE EXAMPLE ABOVE UNDERSTATES IT: FOR ALLOCATION THE `-O0`
+QUANTITY DOES NOT EXIST AT `-O2` AT ALL.** Measured 2026-09-22 (`franks-5b`,
+compiler `59b5bf39acd1` at HEAD, not the pin), answering the owner's question of
+whether we allocate where no allocation is needed. Allocations **per loop
+iteration**, from `(allocs@11000 - allocs@1000) / 10000` under
+`-dPXX_ALLOC_CENSUS`, so every fixed cost cancels:
+
+| operation | `-O0` | `-O2` (default) |
+| --- | ---: | ---: |
+| variant `==` | 1.01 | **0.00** |
+| variant `<` | 1.79 | **0.00** |
+| variant `+` | 1.79 | **0.00** |
+| variant `* 2` | 3.63 | **0.00** |
+| `lst[i % 5]` | 1.79 | **0.00** |
+| `for e in lst` | 9.31 | **0.00** |
+| string compare, all six | 0.00 | **0.00** |
+| attribute read, `len()` | 0.00 | **0.00** |
+| *control:* object per iteration | 1.01 | 1.01 |
+| *control:* string concat | 1.01 | 1.01 |
+
+A share that moves 53.5% -> 48.1% still reads as the same kind of quantity. **A
+rate that goes from 9.31 per iteration to zero does not** — at `-O2` the variant
+path is narrowed and the allocation is not merely cheaper, it is absent. So a
+profile taken on a `-g` build does not just reweight the allocator; it invents a
+population for it. Note also which rows do NOT move: string comparison is an
+inline `repz cmpsb` with no call and no allocation at **both** levels, so a
+`-O0` profile is not uniformly pessimistic either — it is wrong unevenly, which
+is worse, because the rows that survive lend credibility to the rows that do not.
+
+**The trap is sharper than "remember to pass `-O2`", because the two needs are
+coupled: pxx emits NO SECTION HEADERS without `-g`**, so anything that has to
+read the emitted code must pass it, and `-g` alone is what silently drops you to
+`-O0`. Wanting to *look* at the program is what changes the program. `-g -O2`
+gets both, and the `OptLevelExplicit` guard above is exactly what makes that
+work.
+
+**This section already existed and was rediscovered from scratch**, over four
+experiments chasing a global-versus-local difference that did not exist, by a
+seat that had been quoting other sections of this file all day. The `--help`
+text is where it was looked for and it says only `-g  DWARF line info (x86-64)`.
+Two controls, both of which passed, are what eventually forced the flag to be
+suspected: a must-allocate cell reading 1.01 at both levels, and a must-not cell
+reading 0.00 at both. **Neither control could detect the flag**, because the flag
+moved the rows between them.
 
 ### `tools/pxxprof` — when `perf` AND gdb-attach are both refused
 
