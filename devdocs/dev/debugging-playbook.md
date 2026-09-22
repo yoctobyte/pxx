@@ -38265,3 +38265,43 @@ tooling answers where and which session; it never answers who, and it never
 answers whether a person is present. Where the gate is a person, the instrument
 is a message — the same conclusion the shared-blocker entry above reaches from
 the other direction.
+
+### The population, the causation, and why this is not in CLAUDE.md
+
+**Population, so the filter's emptiness is quotable and not an impression:** over
+the last **200** commits on `origin/master`, `git log --format='%an <%ae>'`
+answers `yoctobyte <rene.tegel@gmail.com>` for **200 of 200**, and
+`--author=yoctobyte` returns all 200. **A filter that filters nothing while
+looking like it filtered.** `--since` supplies the only real narrowing — and a
+time window over a fleet of agents is exactly the window the agents fill.
+Measured independently by two seats before either accepted the other's.
+
+**THE QUESTION WAS MANUFACTURED UPSTREAM, AND THAT IS THE ROOT CAUSE THIS ENTRY
+WOULD OTHERWISE MISS.** `frankuser` has put it on the record in its own words:
+the owner said *"i'll be back in a couple of hours"*, and the relay went out as
+*"he is back in an hour or so"* — **a compression in the direction of urgency,
+stated with a precision the original never had.** c0 went looking for evidence
+he was awake because it had been handed a deadline that was not his. **The same
+afternoon a second seat was sent after the same phantom**: told *"he is out for
+the afternoon"*, `lekkerzeilen-7a` checked the box instead, found 3,789 MiB of
+VRAM in use and a live remote-desktop daemon, and declined to profile. **Two
+seats, two routes, one bad input, and both did better with the claim than its
+author did.**
+
+**AND THE TWO PROXIES FAIL DIFFERENTLY, SO NEITHER BACKS THE OTHER UP.** The
+machine answers *is the box busy* — a real question, and the right one for 7a's
+purpose, but **not this one**; he may be connected from elsewhere. Git authorship
+answers **nothing at all**. So a seat that tries the second after the first feels
+like it is corroborating and is not.
+
+**The discharge is on the RELAY, not only on the reader:** the honest brief is
+**"he has not said anything since &lt;time&gt;"**, never a prediction, and when you
+have his words you **quote them in his units**, not in yours.
+
+**Why this is not in CLAUDE.md:** the general form is already there — *nothing in
+the COMMIT maps an id to a session name*, and `Co-Authored-By` does not
+discriminate. What this adds is a worked example, and **CLAUDE.md's own rule is
+that a worked example decays faster than the rule it illustrates.** Re-derive the
+200-of-200 before quoting it; **the day it stops being 100% someone has changed
+the commit identity**, and that is worth knowing on its own.
+
