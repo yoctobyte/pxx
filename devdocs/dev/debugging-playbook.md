@@ -41206,3 +41206,62 @@ direction is still a claim, and it is the one nobody audits, including its
 author.** Scope a warning to what your own verification section supports, and when
 you relay someone else's, check its scope against their evidence rather than
 forwarding the sentence.
+
+## A NAME WITH NO REFERENT AT ALL IS MORE STABLE THAN AN INACCURATE ONE — citations corroborate each other and never meet the code
+
+*2026-09-22. Found by `frankz-e5` while scoping a warning, diagnosed and fixed by
+`frankb-8e` (`d597cd47d`). One subsystem, BANKED AND NOT PROMOTED. What would
+promote it: a second identifier, in an unrelated lane, that exists only in prose
+citing prose.*
+
+CLAUDE.md records that **an 80%-accurate name is worse than a 0%-accurate one,
+because the part you sample confirms it.** This is the case that sentence does not
+cover: not a name that describes its referent badly, but a name with **no referent
+in the tree at all.**
+
+`PasApplyDefaults` was cited in three compiler comments and a dozen tickets as the
+routine defining `PXX_MANAGED_STRING`. **There has never been a procedure by that
+name anywhere in `compiler/`.** The real one is `PasInitDefines`,
+`paslexer.inc:923` — and one ticket confidently placed the phantom in `lexer.inc`,
+so the location was invented too.
+
+**Why it is MORE stable than an inaccurate name, which is the finding.** An
+80%-accurate name eventually meets a case it describes wrongly, and the mismatch is
+the correction. A name with no referent **never meets anything**. Every reader who
+checks it finds corroboration — three code comments and the tickets citing them —
+and **each new citation raises apparent confidence without adding evidence**,
+because the sources are each other. There is no ground truth in the loop to
+contradict it, so the equilibrium is indefinite.
+
+**And the seat least likely to check a name is the one writing about the mechanism
+it names.** 8e added the *third* code comment an hour before this was caught, in a
+fix whose entire subject is that define. Writing authoritatively about a mechanism
+produces exactly the confidence that skips a `grep` for the identifier — the same
+shape as *explaining a hazard feels like having audited it*.
+
+**Discharge, and it is one command at the one moment it is cheap:** before citing a
+routine by name in a comment or a ticket, `grep` for its **declaration**, not for
+the name. A bare `grep -rn <Name>` returns the prose and reads as confirmation;
+`grep -rn 'procedure <Name>'` returns nothing and settles it. Cheapest precisely
+when you are writing about the mechanism, which is when nobody does it.
+
+### AND THE FIX'S OWN VERIFICATION CLAIM WAS FALSE, BY THE MECHANISM THIS FILE RECORDED THIS MORNING
+
+8e reported *"`grep -rn PasApplyDefaults compiler/` returns 0"*. At `origin/master`
+it returns **one** — `pasparser_prog.inc:106`, 8e's own correction note, which
+quotes the dead name on purpose so a reader who meets it elsewhere lands there. The
+live umbrella ticket carries a second, for the same reason.
+
+**This is the second independent instance in one day of a note written to retire a
+pattern joining the population that pattern is counted over** — the first was a
+corrected ghost sha at `a1769fce0` this morning, a different seat and a different
+subsystem, and it needed a `DANGLING SHAS BY DESIGN` marker for the same reason.
+**The new position is what makes it worth a second entry: there it broke a GUARD's
+baseline, here it broke a VERIFICATION CLAIM in a commit message**, where nothing
+re-runs and the falsification surfaces only if a peer happens to repeat the grep.
+
+The fix is right and the claim about it is not, which is the ordinary shape: the
+remedy has to name the thing it is retiring, so it cannot be excluded by a search
+for that thing. **State such a check as "returns only the correction note", never
+as "returns 0"** — and expect the count to be one, not zero, whenever your fix is
+prose rather than deletion.
