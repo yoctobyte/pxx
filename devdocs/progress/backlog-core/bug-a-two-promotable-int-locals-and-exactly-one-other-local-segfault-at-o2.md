@@ -246,3 +246,58 @@ those variants printed a promo-int, so the table was varying one thing while a
 second, unnamed condition was held fixed throughout. **The reduction had an
 axis nobody enumerated, in a ticket whose own summary warns about a dead local
 being one.**
+
+## QUEUED EXPERIMENTS AND THEIR PREDICTIONS, WRITTEN BEFORE RUNNING — franks-5b
+
+Recorded ahead of the measurements deliberately. A prediction written first is a
+control; the same sentence written afterwards is a story, and this ticket has
+already carried one of each today.
+
+**Not run yet because `lekkerzeilen-7a` has the box for a frame-rate
+measurement.** No compiles from this seat until it reports.
+
+### E1 — c0's discriminator: `-O2 --no-dce`
+
+**Prediction: it still CRASHES.** My reading puts the defect in the implicit
+promo-int -> AnsiString conversion on the write path, and DCE has no plausible
+role in choosing that path. Under e5's source reading (DCE is ON at both `-O2`
+and `-O3`), a crash here exonerates DCE outright.
+
+**What would falsify my whole line:** `-O2 --no-dce` coming back CLEAN. That
+would mean DCE participates, and the conversion-path reading needs rework
+rather than refinement.
+
+### E2 — why is `-O3` clean? The dead-local hypothesis
+
+`v0` is written once and never read. **Hypothesis: `-O3` eliminates it**,
+leaving two locals — which is a composition measured CLEAN at `-O2`. That would
+explain the `-O3` row without any pass-ordering story at all.
+
+**Test, and it has a trap worth stating:** make the third local LIVE and see
+whether `-O3` then crashes. The obvious way to do that — `print(v0)` — is
+USELESS here, because printing a plain `Int64` is itself one of the clean rows
+(condition 3 fails). The third local must be made live **without** changing what
+is printed:
+
+```python
+    v0 = 1
+    acc = 0
+    i = 0
+    while i < 3:
+        acc = acc + v0      # v0 is now read, and still not printed
+        i = i + 1
+    print(acc)
+```
+
+**Prediction: this crashes at `-O2` (unchanged) and ALSO crashes at `-O3`.** If
+`-O3` stays clean with a live third local, the dead-local hypothesis is dead and
+`-O3` differs for some other reason.
+
+### E3 — the fault site, which is the one thing nobody has read
+
+Disassemble the emitted release after the `writeln` and establish **which slot**
+it targets. The IR above is pre-backend; the claim that a promo-int's inline
+payload is being dereferenced is an interpretation of `rax` and the instruction
+sequence, not a reading of the code. A second opinion is already requested from
+`frankb-8e`. **Until someone reads that site, "which slot" is unestablished and
+no fix should be written against the guess.**
