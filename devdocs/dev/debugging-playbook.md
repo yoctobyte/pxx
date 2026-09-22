@@ -37580,3 +37580,54 @@ could have discriminated.** A void arm reads exactly like a negative one.
 Separately, a grep-based probe in that set reported the site count as **6/5/4**
 where the true counts are **2/1/0** — a name-matching search counting prose and
 comments, which is this file's oldest rule, in the same batch as its newest.
+
+## A BORROWED IMPRESSIVE FACT DISPLACES THE NUMBER YOU ALREADY HOLD — AND THE COORDINATOR WHO SUPPLIED IT IS HALF THE CAUSE
+
+**Measured 2026-09-22, frankh-c0, reported against itself after being asked to
+re-derive a conclusion whose premise had been retracted.**
+
+c0 held a ticket with a measured ceiling: **+14% on 6M bare method calls.** That
+number alone settles the ranking — removing the cost entirely buys at most a
+1.16x on a frame that was *entirely* bare method dispatch, and no real frame is.
+Against an 8.0x target it is not a route, and **the arithmetic is about the
+ticket, not about what else is on the board.**
+
+What c0 actually wrote was *"the only structural candidate is dead, therefore my
+14% worst case is not a route"* — **ranking on a relayed fact about ANOTHER
+ticket rather than on the measurement in its own hand.** The relayed fact was
+then retracted, and the conclusion looked like it fell with it. It did not; it
+had never needed it.
+
+**c0's own diagnosis is the entry: *"it was the more impressive fact in your
+earlier message and I built my ranking on it instead of on the number I already
+held."*** A borrowed fact arrives with narrative weight — it is news, it is about
+the wider board, and it explains something. **Your own number is none of those
+things: you measured it, so it feels like background rather than argument.**
+
+**THE COORDINATOR IS HALF THE CAUSE AND SHOULD OWN THAT HALF.** The relay that
+supplied the impressive fact was this seat's, sent as context. **Context sent to
+a seat that is mid-ranking is not inert** — it competes with the seat's own
+evidence, and it wins on vividness. Sending a seat a dramatic fact about a
+neighbouring ticket, while it is deciding the rank of its own, is an intervention
+whether or not it was meant as one.
+
+**And the failure is invisible while the borrowed fact holds**, because the
+conclusion is correct. It only surfaced because the premise was retracted
+twenty minutes later and someone asked for a re-derivation. **A conclusion
+resting on a borrowed premise and a conclusion resting on your own measurement
+are indistinguishable until the borrowed one moves.**
+
+**Discharge, both directions.** Ranking a ticket: **state the ceiling from the
+evidence in your own hand first, and only then look outward** — if the outward
+fact is load-bearing, say which claim it carries. Relaying: **when a seat is
+mid-ranking, send the correction it needs and hold the colour**, or mark it
+explicitly as not bearing on its decision.
+
+**The same premise check found c0's own ticket TITLE false in the direction that
+inflated the prize** (`ab38da1a0`): *"the store arm uses an inline blob"* — the
+blob is **out of line and reached by a call**, because inlining it cost ~42% of a
+zero-byte `.npy`'s output. **Both paths call.** The real asymmetry is argument
+marshalling plus a frame, not a whole call — and a backend census makes it
+**x86-64-local**, where the body claimed every backend needs the arm. **A title
+is a summary, and a summary that inflates its own prize is how a ticket gets
+ranked twice too high.**
