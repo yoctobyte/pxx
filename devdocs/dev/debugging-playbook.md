@@ -35610,3 +35610,54 @@ same commit. The control worth copying: **the emitted image is byte-identical
 across the refactor**, which proves the extraction changed nothing while the
 fixtures prove the feature works — two separate claims needing two separate
 instruments.
+
+## AN ADDRESS REGISTER THAT REUSES ITS LOW BITS ACCEPTS EVERY VALUE YOU GIVE IT, AND MISALIGNMENT CHANGES THE BEHAVIOUR RATHER THAN THE ADDRESS
+
+Measured 2026-09-22, making `interrupt;` self-installing on bare riscv32
+(`feature-s-the-xtensa-raw-isr-install-has-no-vecbase-write-and-no-isr-stack`).
+Banked here rather than left in the commit message, because the thing it guards
+is invisible at the point where someone would break it.
+
+riscv32's `mtvec` holds the trap handler's address **and** its dispatch mode in
+one word: bits [1:0] are MODE (0 Direct, 1 Vectored, 2–3 reserved), and the
+address occupies the rest. So a handler body that is not 4-aligned does not
+produce a slightly wrong address, and it does not fault. **It installs a
+different address in a different mode, from a single write the hardware accepts
+silently.** In Vectored mode the CPU then dispatches through a table that was
+never emitted.
+
+Nothing in this compiler aligns `Procs[].BodyAddr` — it is assigned a bare
+`CodeLen`. Today every riscv32 body lands 4-aligned anyway, and that is **an
+accident of the instruction encoding rather than a guarantee**: measured
+2026-09-22, `rv32enc.inc` and `ir_codegen_riscv32.inc` contain **zero** `EmitB`
+calls between them, the inline assembler has no `.byte` or `.align` directive,
+and the bare entry sits at offset 116. So every path that currently reaches
+`CodeLen` on this target moves it by four. **What would retire that and arm the
+hazard:** compressed instructions (`rv32imc` — the ISA allows 2-byte forms this
+compiler does not emit), a byte-granular pad, an `.align` directive, or any
+data interleaved into the code section.
+
+**THE CHOICE THAT MATTERS IS ASSERT VERSUS MASK, AND MASKING IS THE TEMPTING
+ONE.** Writing `addr and not 3` makes the symptom go away and is what the
+hardware documentation's phrasing invites. It is wrong: it installs **an
+address the source never named**, so the handler silently stops being the
+routine the programmer wrote, and the one artefact that could have revealed it
+— a refused build — is the thing the mask removed. A wrong answer dressed as a
+correction. `elfwriter.inc` asserts instead.
+
+**And the assert was proven reachable before being trusted**, which is the only
+reason it is a guard and not decoration: tightened to `mod 8` it refuses a real
+build and names `MyIsr` at `0x40380124`, then restored to `mod 4` with the
+binary sha returning to its pre-control value. A guard for a condition that
+cannot currently occur is exactly the guard nobody ever sees fail.
+
+**The general form, and it is a checklist item rather than a story:** whenever
+you write a code or data address into an architectural register, ask what the
+hardware does with the bits the address does not need. The answer is often "a
+mode, a flag, or nothing, depending on the register", and all three accept your
+write. `mtvec` is the only live instance in this tree today — xtensa's VECBASE
+constrains alignment but has no MODE field, and it is guarded separately — but
+the family is large and familiar elsewhere: ARM's Thumb bit in a branch target,
+aarch64 VBAR's reserved low bits, tagged pointers, and any "aligned pointer
+plus flags" encoding. **Derive the alignment requirement from the register's
+layout, assert it against the FINAL address, and never repair it by masking.**
