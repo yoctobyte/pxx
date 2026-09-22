@@ -5790,6 +5790,46 @@ number is not measuring the mechanism.
 
 ## A CENSUS is a predicate, not a number — and the number is what gets relayed
 
+### EXTENSION 2026-09-22 — THE CHEAPEST DETECTOR FOR A WRONG POPULATION IS ARITHMETIC ON A COUNT YOU ALREADY KNOW
+
+*`frankb-8e`, found while doing something else; verified by `frankz-e5`.* **Judged
+NOT a new rule and recorded as a DISCHARGE, on 8e's own suggestion and my call:**
+it is CLAUDE.md's population rule (*print the set your instrument enumerates and
+check the subject is IN it*), and the remedy is unchanged. What is new is a way to
+catch it **without suspecting it**, which the rule as written cannot give you.
+
+`tools/check_test_wiring.py` — the census whose entire job is catching unwired
+tests — had `SUBJECT_EXT = (".pas", ".npy", ".c", ".lua", ".fth")`. **Every `.bas`
+in the tree was invisible to it**, for as long as `.bas` tests have existed.
+
+**It did not report zero. It reported `PASS this push wires the tests it adds`, in
+a run that could not see either of the two files just added.** Both passed
+vacuously. That is *a guard that cannot fail prints PASS* and the population rule
+arriving together, in the one instrument whose job is enumeration — so the usual
+defence, *did I check the population*, reads as already discharged by the tool
+itself.
+
+**How it was actually caught, and this is the transferable part:** after adding two
+fixtures, the subject count **moved by less than the number of files added**. Not a
+suspicion, not an audit — arithmetic on a number already on screen. **You know how
+many things you just added; make the instrument tell you how many it saw, and
+subtract.** A census that under-counts by exactly the files you contributed is
+announcing its blind spot in the one run where you can still attribute it.
+
+**And note why nobody found it earlier: seven `.bas` files, all seven already
+wired.** `4321 → 4328`, `rc=0`, nothing reddens. **A latent gap with no victim** —
+it produces its first victim the day someone adds an unwired `.bas`, which is also
+the day it is least likely to be questioned. No amount of running the check finds
+this; only counting its output against something you knew independently does.
+
+**The repair's better half, which its author did not mention.** The file's
+docstring had SPELLED the tuple out in prose — `SUBJECT_EXT below: .pas/.npy/.c/
+.lua/.fth` — so the set existed twice and **both spellings were stale**. Fixing
+only the tuple would have left an authoritative-looking prose list that was wrong.
+It now reads *"read the tuple, not this list"*. That is CLAUDE.md's *derive the
+second spelling from the first rather than restating it*, applied preventively to a
+duplicate nobody had been bitten by yet.
+
 Measured 2026-08-30, when a count of `-O3` gate sites was about to be adopted as
 a checksum for "how much code sits behind the self-host blind spot". **Six counts
 of the same population existed, spanning 13 to 45. Five were correct about what
