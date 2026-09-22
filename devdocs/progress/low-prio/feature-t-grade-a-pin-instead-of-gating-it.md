@@ -169,3 +169,36 @@ folder is the intent. Until then it is invisible to `ready`/`next` at a number
 that says it should be near the front — which is the parked-folder pathology
 CLAUDE.md already records about the float tickets, arriving on a ticket the owner
 filed himself.
+
+### SHARPENED 2026-09-22 AFTER `frankuser` RE-MEASURED: THE RULE AND ITS IMPLEMENTATION WERE WRITTEN IN THE SAME COMMIT
+
+The note above said the folder placement was a bulk sweep. Both of us then
+checked with rename detection, and the real path is better evidence than either
+of our first readings:
+
+```
+fcbfc02f5  created in backlog-tools/, prio 85
+           subject: "rules+ticket: a valid pin is the fixedpoint; grade a pin, never gate it"
+215debee6  modified, prio 85
+696c9fab1  09:53  -> rejected/    "cut the Track T tooling backlog -- 69 rejected, 4 kept"
+1d3da6ae9  09:57  -> low-prio/    with 70 others, four minutes later
+```
+
+**`fcbfc02f5` wrote the CLAUDE.md rule AND this ticket to implement it, in one
+commit.** So the standing state is: the rule is live in the file every session
+pays for at startup, prescribing a grading vocabulary; its implementation sits at
+p85 where `ready` and `next` never look; and **the vocabulary is recorded nowhere
+in the tree** — `git grep -ln 'reds('` returns 13 tracked files, all prose.
+
+**Neither folder move was a judgement about this ticket.** It was bulk-cut into
+`rejected/` with 68 others and bulk-corrected out of it four minutes later, the
+second step reversing the first — `rejected/` means *the report is WRONG*,
+`low-prio/` means *real, not wrong, not now*. `prio: 85` was never edited at any
+point.
+
+**And the instrument that produced both of our first readings is itself the
+finding:** `git log --diff-filter=A` does no rename detection and reported the
+1d3da6ae9 rename as this file's creation, while `git show --name-only | grep -c`
+counted 71 renames as 71 new tickets. Banked with CLAUDE.md's own decayed example
+in `debugging-playbook.md`, "`git log --diff-filter=A` DATES A FILE'S ARRIVAL IN A
+FOLDER, NOT ITS BIRTH".
