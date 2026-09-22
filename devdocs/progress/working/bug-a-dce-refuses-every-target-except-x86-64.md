@@ -363,3 +363,107 @@ Everything from `dce.inc`'s removable-range loop to the end — hole removal,
 `PatchCodeRefSlot` — is byte-layout work with **no wasm analogue at all**. It is
 replaced by: mark dead slots, compact the slot numbering, and let
 `WasmIndexOfSlot` and the section writers honour it.
+
+
+## 2026-09-22 (frankb-8e) — wasm32 LANDS, and the measured prize was right
+
+Built, validated and RUN, which is the standard this ticket sets for itself.
+**wasm32 was the last target; this gate now turns no architecture away.**
+
+### What it does
+
+| program | functions | module bytes | |
+| --- | --- | --- | --- |
+| `hello` (WriteLn only) | 141 -> 33 | 75,996 -> 17,477 | **-77%** |
+| classes + virtual + exceptions + IntToStr | 880 -> 111 | 426,801 -> 118,395 | **-72%** |
+| `test_dce_riscv32_stub_calls.pas` | 879 -> 112 | 426,487 -> 118,950 | **-72%** |
+
+All three validate under `wasm-validate`. The first two were run under
+`wasmtime` and print output **identical to their `--no-dce` build** — `hello`,
+and `area=49` / `caught x` through a virtual call and an exception.
+
+**And the `--no-dce` path is BYTE-IDENTICAL to the pre-change compiler** on
+both Pascal programs. That is the control that says this is additive: the
+default build of every existing wasm32 program is the same file it was.
+
+### The static estimate was right, and where it was not
+
+The census above predicted 33 live on `hello` and the pass computes **33**.
+Two decoders, two implementations, same answer, and the hard number here is
+the one that ran.
+
+On the bigger program they differ: the census said 107 live, the pass keeps
+**111**. That is the in-compiler pass being MORE conservative, which is the
+safe direction — it also roots `MethodFixups`, `InitProcs`, `FiniProcs`,
+`FiniRunnerProc`, `EntryRootProc` and `interrupt` bodies, which the external
+census (roots = `_start` + element segment) does not know about. **Both rows
+stay; neither replaces the other**, because they measured different root sets.
+
+### The pass runs at MODULE-WRITE TIME, not from DceRun, and that is forced
+
+`writeWasm` adds functions *after* `DceRun` has been and gone:
+`WasmEmitMainWrapper` and `WasmEmitCEntry` each add one, and `WasmFinishMemory`
+hands out table indices — which **reserves a slot** for any proc whose address
+is taken but whose body the backend was never asked to emit, and puts it in the
+element segment, i.e. **adds a root**. A live set computed at `DceRun` time
+would be missing both slots and roots, and its slot numbering would be indexed
+past its own end. So `DceRun` exits early on wasm32 and `WasmDceRun` is called
+from `writeWasm`, after `WasmFillEmptyBodies`. This is the same reason the
+index space itself does not close until write time.
+
+### SLOTS, not proc indices
+
+Three of the four `WasmAddFunc` sites are synthetic — the `main$N` program-body
+chunks, the Pascal `main`/`_start` wrapper, the C `_start` — so they have no
+`Procs[]` entry and `DceLive`, sized by `ProcCount`, cannot represent them.
+Those three are exactly the entry points, i.e. exactly the roots, so a
+proc-keyed walk starts from nothing. Cost, stated rather than discovered later:
+**`--dce-why`'s proc-keyed chain does not work on this target**; `--dce-report`
+does.
+
+### The guard on the renumbering seam found the bug
+
+`WasmIndexOfSlot` refuses, loudly, if a surviving site names a dropped slot —
+on the stated ground that a wrong index **validates** and calls the wrong
+function. It fired on the first run: `WasmPatchCalls` was patching relocations
+belonging to *dropped* bodies, whose callees may also be gone. Fixed by
+skipping a relocation whose owner did not survive.
+
+**`WasmCallRelOwner` paid twice.** It was added so the call graph could be
+built without attributing sites to bodies by address — dce.inc's `DceOwnerOf`
+binary search, which wasm does not need because a body is flushed as a unit and
+its slot is in hand. It turned out to be the only way to tell whether a
+relocation still belongs to anything.
+
+### Two things found beside it, both filed rather than fixed here
+
+- [[bug-a-a-nilpy-generator-slice-faults-out-of-bounds-under-wasm32]] —
+  `check_nilpy_generator_slot.sh` is RED at HEAD and has nothing to do with
+  this. **Established pre-existing by stash-and-rebuild**, not by reasoning.
+  Note `check_all.sh` prints `at least one check FAILED` and **exits 0**, which
+  is why it could sit there.
+- [[bug-t-forwardlint-has-no-notion-of-nested-scope]] — the FPC-seed lint
+  collects nested declarations with no notion of scope and flagged a nested
+  `procedure Mark` against a local variable `mark` 38k lines away. Worked
+  around by naming the nested routines distinctively; the lint is load-bearing
+  and the ask is scope awareness, **not** a looser match.
+
+### The assertion that caught this change was the old one, working
+
+`test_dce_riscv32_stub_calls`'s Makefile recipe asserted the wasm32 REFUSAL,
+*"so it stays a decision rather than becoming an oversight"*. It reddened the
+quick tier the moment the pass learned the target — which is the guard doing
+exactly its job. Inverted rather than deleted: the pass must now run AND shrink
+the module AND the module must validate.
+
+### What is left on wasm32
+
+The blanket per-routine export is still the default. `--dce` is the narrowing,
+opt-in, so the deferred "later phase" that `ir_codegen_wasm32.inc:7743`
+anticipates has arrived as an option rather than as a policy change.
+
+**wasm32 must not inherit a `--dce` default** if the `-O2` promotion is
+retried: the wasm harness reaches bodies by export NAME, and `--dce` correctly
+drops an export nothing reaches. That is correct behaviour, not a defect, and
+it would arrive as a pile of harness failures in a tier being read as evidence
+about the pass. Recorded on the promotion ticket by frankh-c0.

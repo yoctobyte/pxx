@@ -36476,13 +36476,44 @@ test-quick: $(COMPILER)
 	    || exit 1; \
 	  else echo "=== test_dce_stub_calls[$$t]: $$q absent, $$t DCE NOT verified ==="; fi; \
 	done
-	# wasm32 is the one target the pass REFUSES, and the refusal is asserted so it
-	# stays a decision rather than becoming an oversight. Function indices are not
-	# a displacement; nothing above applies to them.
-	@./$(COMPILER) --target=wasm32 --dce-report test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce_wasm 2>&1 \
-	  | grep -q 'dce: off: wasm32 references functions by INDEX' \
-	  || { echo "test_dce_stub_calls[wasm32]: expected --dce to refuse wasm32 and say why"; exit 1; }
-	@echo "=== test_dce_stub_calls[wasm32]: correctly refused ==="
+	# wasm32 USED TO BE REFUSED HERE and this row asserted the refusal, so that it
+	# stayed a decision rather than becoming an oversight. It was the right guard
+	# and it did its job: it is what reddened when the pass learned this target on
+	# 2026-09-22, rather than the change sliding in unremarked.
+	#
+	# The refusal's stated reason -- "function indices are not a displacement" --
+	# was true about wasm and was never what blocked the pass. WasmIndexOfSlot is
+	# the single place a slot becomes an index, and calls are emitted as
+	# fixed-width LEB placeholders plus a relocation, so renumbering is a map
+	# lookup in one function. What blocked it was that the backend exported EVERY
+	# routine, making every function a root.
+	#
+	# So the assertion is inverted rather than deleted: the pass must RUN here and
+	# it must DROP something. The shrink is the half that matters, for the reason
+	# the riscv32 block above states -- on this target "dropped nothing" was the
+	# default outcome for as long as the export table rooted everything, and a
+	# report line alone would be green on exactly that.
+	@./$(COMPILER) --target=wasm32 --dce --dce-report test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce_wasm_on 2>&1 \
+	  | grep -q 'dce: wasm32: functions' \
+	  || { echo "test_dce_stub_calls[wasm32]: --dce did not run on wasm32"; exit 1; }
+	@./$(COMPILER) --target=wasm32 --no-dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce_wasm_off >/dev/null
+	@szoff=$$(stat -c%s $(TESTTMP)/dce_wasm_off); szon=$$(stat -c%s $(TESTTMP)/dce_wasm_on); \
+	  if [ $$szon -ge $$szoff ]; then \
+	    echo "test_dce_stub_calls[wasm32]: --dce did NOT shrink the module ($$szon >= $$szoff)."; \
+	    echo "  Check whether something is rooting every function again -- the"; \
+	    echo "  blanket per-routine export is what did it before."; exit 1; \
+	  fi; \
+	  echo "=== test_dce_stub_calls[wasm32]: OK ($$szoff -> $$szon bytes) ==="
+	# The module must also still be WELL-FORMED, which size cannot see. Running it
+	# is test/wasm/check_dce.sh's job (it asserts identical stdout against the
+	# --no-dce leg through a virtual call, which is the root category most likely
+	# to be wrong); this row keeps the cheap structural half in the quick tier,
+	# where that suite does not run.
+	@if command -v wasm-validate >/dev/null 2>&1; then \
+	  wasm-validate $(TESTTMP)/dce_wasm_on \
+	    || { echo "test_dce_stub_calls[wasm32]: the --dce module does not validate"; exit 1; }; \
+	  echo "=== test_dce_stub_calls[wasm32]: module validates ==="; \
+	else echo "=== test_dce_stub_calls[wasm32]: wasm-validate absent, well-formedness NOT verified ==="; fi
 	# --dce-why: THE POSITIVE CONTROL FOR THE REPORT ITSELF. `--dce-report` says
 	# which bodies DIED; --dce-why says why each SURVIVOR lived, and it exists
 	# because a 2 MB NilPy ESP image had 819,480 B rooted as "holds a stub

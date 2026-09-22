@@ -767,6 +767,162 @@ begin
   end;
 end;
 
+{ ===== --dce on wasm32 =====
+
+  NOTHING BELOW THIS POINT IN DceRun APPLIES HERE, and the refusal that used to
+  sit in its gate named the wrong reason. It said "wasm32 references functions
+  by INDEX, not by displacement", which is true about wasm and is not what was
+  stopping the pass. The index problem was already solved by this backend, for
+  an unrelated reason: WasmIndexOfSlot (wasmenc.inc) is the SINGLE place a slot
+  becomes a function index, because an import is registered lazily and so the
+  bias is not final while bodies are being emitted. Renumbering is therefore a
+  map lookup in one function, where every ELF target had to grow a
+  displacement re-encode at every call site.
+
+  What actually blocked it was the root set. ir_codegen_wasm32.inc exports
+  EVERY routine so the test harness can reach bodies by name -- 141 of 141 on a
+  Pascal hello world -- so every function was a root and a correctly wired pass
+  would have walked the whole module and reported nothing dead. Under --dce the
+  blanket export is NOT a root; the roots are the program body, the synthesised
+  entry, the element segment and the usual graph-level roots below, and an
+  export naming a body that does not survive is dropped with it. A body no root
+  reaches is one no caller and no host can reach either.
+
+  SLOTS, NOT PROC INDICES, and that is not a shortcut. Three of the four
+  WasmAddFunc sites are synthetic -- the `main$N` program-body chunks, the
+  Pascal `main`/`_start` wrapper and the C `_start` -- so they have no entry in
+  Procs[] at all and DceLive, which is sized by ProcCount, cannot represent
+  them. Those three are exactly the entry points, i.e. exactly the roots, so a
+  proc-keyed walk would start from nothing. The slot graph is also the more
+  precise one: dce.inc's two documented approximations, DCE_WHY_FREECODE and
+  the merged unowned-code node in the report, both exist because a call site
+  can fall outside every body's byte range, and on wasm every instruction is
+  inside a function.
+
+  The cost of that choice, stated rather than discovered later: --dce-why's
+  proc-keyed chain does not work on this target, because the walk does not
+  populate DceWhy/DceVia. --dce-report says what was dropped. }
+procedure WasmDceRun;
+var
+  live    : array of Boolean;
+  work    : array of Integer;
+  workN, i, s, p, n, liveN, deadN: Integer;
+  liveB, deadB, newN: Integer;
+
+  { NAMED DISTINCTIVELY, and not for style. tools/forwardlint.py -- the
+    FPC-seed hazard lint, which check_forwards.sh runs and which exists because
+    pxx resolves across a unit while FPC resolves in source order -- collects
+    every `procedure NAME` in the include chain INCLUDING NESTED ONES, with no
+    notion of scope, and then flags any earlier textual use of that identifier
+    whether it is a call or not. These two were `Mark` and `MarkProc` for one
+    build, and `mark` is a local variable in pyparser.inc 38k lines earlier, so
+    the lint reported a forward-reference violation that cannot exist: a nested
+    routine is not visible outside its parent. A generic name on a nested
+    routine is what makes that collide. }
+  procedure WasmDceMark(slot: Integer);
+  begin
+    if (slot < 0) or (slot >= WasmFuncCount) then Exit;
+    if live[slot] then Exit;
+    live[slot] := True;
+    work[workN] := slot;
+    Inc(workN);
+  end;
+
+  procedure WasmDceMarkProc(pi: Integer);
+  begin
+    if (pi < 0) or (pi >= ProcCount) then Exit;
+    WasmDceMark(WasmProcSlot[pi]);
+  end;
+
+begin
+  WasmDceActive := False;
+  if not DceEnabled then Exit;
+  if TargetArch <> TARGET_WASM32 then Exit;
+  if DebugInfo then begin DceReportLine('off: -g line/frame tables carry code offsets'); Exit; end;
+  if EmitSharedMode then begin DceReportLine('off: --shared'); Exit; end;
+  if WasmFuncCount = 0 then Exit;
+
+  n := WasmFuncCount;
+  SetLength(live, n);
+  SetLength(work, n);
+  for i := 0 to n - 1 do live[i] := False;
+  workN := 0;
+
+  { --- roots ------------------------------------------------------------- }
+
+  { the program body. Emitted as one or more `main$N` chunks; the `main` a host
+    calls is synthesised from these. }
+  for i := 0 to WasmMainChunkCount - 1 do WasmDceMark(WasmMainChunk[i]);
+
+  { the synthesised entry, whichever frontend produced it. Matched by EXPORT
+    NAME rather than by remembering a slot, because the Pascal wrapper and the
+    C entry are two different emitters and only one of them runs. }
+  for i := 0 to WasmExpCount - 1 do
+    if (WasmExpKind[i] = WEK_FUNC) and
+       ((WasmExpName[i] = '_start') or (WasmExpName[i] = 'main')) then
+      WasmDceMark(WasmExpIdx[i]);
+
+  { every element-segment entry: address-taken, so reachable by call_indirect,
+    which names a TYPE and not a function. This is the whole of the indirect
+    call graph in one root set, and it is why a virtual method survives without
+    this pass understanding dispatch. }
+  for i := 0 to WasmTabCount - 1 do WasmDceMark(WasmTabElem[i]);
+
+  { the graph-level roots dce.inc installs on every target. A VMT slot holds a
+    table index here, so MethodFixups is already covered by the element segment
+    above -- marked anyway, because "already covered" is a claim about
+    WasmFinishMemory that this pass would rather not depend on. }
+  for i := 0 to MethodFixCount - 1 do WasmDceMarkProc(MethodFixups[i].ProcIdx);
+  for i := 0 to InitProcCount - 1 do WasmDceMarkProc(InitProcs[i]);
+  for i := 0 to FiniProcCount - 1 do WasmDceMarkProc(FiniProcs[i]);
+  WasmDceMarkProc(FiniRunnerProc);
+  for i := 0 to EntryRootCount - 1 do WasmDceMarkProc(EntryRootProc[i]);
+  for p := 0 to ProcCount - 1 do
+    if ProcIsInterrupt[p] then WasmDceMarkProc(p);
+
+  { --- reachability ------------------------------------------------------ }
+  { One edge kind and one sweep. Every call to a defined function is recorded
+    with its OWNER, by construction, at the moment the body was flushed -- so
+    there is no address attribution here and no fixpoint over a second edge
+    kind: an address taken on wasm is an element-segment entry, and those are
+    roots above rather than edges. }
+  while workN > 0 do
+  begin
+    Dec(workN);
+    s := work[workN];
+    for i := 0 to WasmCallRelLen - 1 do
+      if WasmCallRelOwner[i] = s then WasmDceMark(WasmCallRelSlot[i]);
+  end;
+
+  { --- the surviving numbering ------------------------------------------- }
+  { Ascending, so survivors keep their relative order and the function and code
+    sections stay positionally parallel by walking the same way. }
+  newN := 0;
+  liveN := 0; deadN := 0; liveB := 0; deadB := 0;
+  for i := 0 to n - 1 do
+    if live[i] then
+    begin
+      WasmSlotNew[i] := newN; Inc(newN);
+      Inc(liveN); liveB := liveB + WasmFuncCodeLen[i];
+    end
+    else
+    begin
+      WasmSlotNew[i] := -1;
+      Inc(deadN); deadB := deadB + WasmFuncCodeLen[i];
+    end;
+
+  if deadN = 0 then
+  begin
+    DceReportLine('wasm32: ' + AIntToStr(liveN) + ' functions, none dead');
+    Exit;
+  end;
+  WasmDceActive := True;
+  DceReportLine('wasm32: functions ' + AIntToStr(n) + ' -> ' + AIntToStr(liveN) +
+                ' (dropped ' + AIntToStr(deadN) + ')');
+  DceReportLine('wasm32: body bytes ' + AIntToStr(liveB + deadB) + ' -> ' +
+                AIntToStr(liveB));
+end;
+
 procedure DceRun;
 var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
     why: AnsiString; src, dst: Integer; progressed: Boolean;
@@ -791,10 +947,14 @@ begin
     and nobody re-reads the paragraph. What it describes is real and was DONE:
     the slot needs both a delta ANCHOR and a per-site FORM (call0 vs call8,
     chosen by the callee's own return instruction), and both columns exist now.
-    wasm32 is the only architecture this gate turns away.
-    See bug-a-dce-refuses-every-target-except-x86-64 for what remains. }
+    WASM32 IS NO LONGER REFUSED EITHER, and this gate is now empty of targets.
+    It ran the pass at module-write time instead of here, because writeWasm
+    adds functions AND roots after this point -- see WasmDceRun above for the
+    ordering and for why its refusal's stated reason ("references functions by
+    INDEX") was true about wasm and was not what blocked it. }
   if TargetArch = TARGET_WASM32 then
-    why := 'wasm32 references functions by INDEX, not by displacement'
+    { handled by WasmDceRun, from writeWasm, where the index space closes }
+    Exit
   { --shared only. `-c` used to be refused beside it on the premise that an
     object "carries its own code-offset relocations"; it does, and every table
     those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,

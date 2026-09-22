@@ -8255,6 +8255,21 @@ begin
   WasmAddExport('_start', WEK_FUNC, slot);
 end;
 
+{ --dce for wasm32. Defined in dce.inc, beside every other root rule, and
+  forward-declared here because writeWasm is the only correct place to CALL it
+  and this file is included before that one.
+
+  It runs at module-write time and not from DceRun, and that is forced rather
+  than chosen: writeWasm below adds functions AFTER DceRun has been and gone.
+  WasmEmitMainWrapper and WasmEmitCEntry each add one, and WasmFinishMemory
+  hands out table indices -- which RESERVES A SLOT for any proc whose address
+  is taken but whose body this backend was never asked to emit, and puts it in
+  the element segment, i.e. adds a ROOT. A liveness set computed before those
+  would be missing both slots and roots, and the slot numbering it produced
+  would be indexed past its own end. Run here, everything is final; this is the
+  same reason the index space itself does not close until write time. }
+procedure WasmDceRun; forward;
+
 procedure writeWasm(const outPath: AnsiString);
 begin
   { ORDER MATTERS, and it is the reverse of the obvious one. WasmFinishMemory
@@ -8274,6 +8289,9 @@ begin
     WasmFail('wasm32: the C program entry could not be synthesised');
   WasmFinishMemory;
   WasmFillEmptyBodies;
+  { AFTER the two passes above, for the reason in WasmDceRun's forward
+    declaration: both add functions, and WasmFinishMemory adds roots. }
+  WasmDceRun;
   WasmReportCoverage;
   if WasmFuncCount = 0 then
     WasmFail('wasm32: nothing to write — no code was generated for this module '

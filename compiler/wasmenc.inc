@@ -232,7 +232,33 @@ var
   WFCallLen      : Integer;
   WasmCallRelPos : array[0..MAX_WASM_CALLREL-1] of Integer;    { pool offsets }
   WasmCallRelSlot: array[0..MAX_WASM_CALLREL-1] of Integer;
+  { The slot whose BODY contains this call site. Parallel to the two above BY
+    INDEX, and the two loops that touch that trio must all touch three arrays.
+
+    Recorded here rather than derived later on purpose. --dce needs a call
+    GRAPH, and on every ELF target dce.inc recovers the caller by binary-search
+    over byte ranges (DceOwnerOf) because a relocation there knows only its
+    address. A wasm body is flushed as a unit and its slot is in hand at that
+    moment, so the owner is free by construction and exact -- there is no
+    "unowned code" node on wasm, and so none of the approximation that node
+    forces on the native graph. }
+  WasmCallRelOwner: array[0..MAX_WASM_CALLREL-1] of Integer;
   WasmCallRelLen : Integer;
+
+  { ---- --dce: the surviving slot numbering ----
+
+    WasmDceActive is False for every build that does not pass --dce, and then
+    WasmSlotNew is never read and the module is emitted exactly as before.
+
+    WasmSlotNew[slot] is the slot's position among the SURVIVORS, or -1 if it
+    was dropped. It is the only thing dead-code elimination leaves behind on
+    this target: there is no hole to close, no offset to slide and no branch
+    field to re-encode, because nothing in a wasm module encodes a byte
+    distance to another function. dce.inc's entire second half -- removable
+    ranges, DceNewOff, the eight compaction loops, DceCodeAlign,
+    ApplyCallFixups, PatchCodeRefSlot -- has no analogue here and is not run. }
+  WasmDceActive  : Boolean = False;
+  WasmSlotNew    : array[0..MAX_WASM_FUNCS-1] of Integer;
 
   { ---- the function table ----
 
@@ -423,6 +449,16 @@ begin
   Inc(WasmFuncCount);
 end;
 
+{ WasmIntStr is defined near the bottom of this file and the first CALLER is
+  now WasmIndexOfSlot's --dce refusals just below -- it was the params ceiling
+  message, and before that WasmAddLocal's. FPC resolves in source order and pxx
+  resolves across the unit, so a forward that sits between two callers
+  self-hosts and breaks the bootstrap seed -- which is precisely what gate.sh's
+  FPC seed canary caught here. Keep this ABOVE the first caller, not above the
+  second; this comment has now been moved twice for that reason, so check what
+  the first caller IS before trusting the name in this sentence. }
+function WasmIntStr(v: Int64): AnsiString; forward;
+
 { The wasm function INDEX of a defined function slot — imports come first, so
   the index is WasmImpFuncCount + slot.
 
@@ -440,16 +476,73 @@ end;
   wants an index has to be a write-time site to get one. }
 function WasmIndexOfSlot(slot: Integer): Integer;
 begin
+  { --dce compacts the slot numbering: WasmSlotNew maps a surviving slot to its
+    position among the survivors, and -1 to a slot that was dropped. Because
+    the bias is applied in exactly ONE place -- the paragraph above is the
+    reason, and it was written for the lazy-import problem, not for this -- the
+    whole of dead-code elimination's renumbering is these three lines. Every
+    site that stores a slot keeps storing a slot and never learns that any of
+    this happened.
+
+    A -1 reaching here means something that survived still names something that
+    did not, i.e. the live set is not closed under the call graph. That is a
+    miscompile and not a diagnostic, so it fails loudly rather than emitting an
+    index: a wrong index VALIDATES and calls the wrong function. }
+  if WasmDceActive then
+  begin
+    if (slot < 0) or (slot >= WasmFuncCount) then
+      WasmFail('wasm: slot ' + WasmIntStr(slot) + ' is out of range with --dce active');
+    if WasmSlotNew[slot] < 0 then
+      WasmFail('wasm: --dce dropped slot ' + WasmIntStr(slot) + ' (' +
+               WasmFuncName[slot] + ') and something live still references it' +
+               ' -- the live set is not closed under the call graph');
+    WasmIndexOfSlot := WasmImpFuncCount + WasmSlotNew[slot];
+    Exit;
+  end;
   WasmIndexOfSlot := WasmImpFuncCount + slot;
 end;
 
-{ WasmIntStr is defined near the bottom of this file and the first CALLER is
-  now the params ceiling message below, not WasmAddLocal's. FPC resolves in
-  source order and pxx resolves across the unit, so a forward that sits
-  between two callers self-hosts and breaks the bootstrap seed -- which is
-  precisely what gate.sh's FPC seed canary caught here. Keep this ABOVE the
-  first caller, not above the second. }
-function WasmIntStr(v: Int64): AnsiString; forward;
+{ Did this slot survive --dce? True for everything when the pass did not run,
+  which is what keeps every section writer below a single code path rather
+  than a pair. }
+function WasmSlotSurvives(slot: Integer): Boolean;
+begin
+  if not WasmDceActive then
+    WasmSlotSurvives := True
+  else
+    WasmSlotSurvives := (slot >= 0) and (slot < WasmFuncCount) and
+                        (WasmSlotNew[slot] >= 0);
+end;
+
+{ How many defined functions the module will actually carry. The function and
+  code sections are two vectors that must agree on this count AND on the order,
+  and a validator checks the first but not the second -- a module whose two
+  vectors have equal length and different membership loads and runs the wrong
+  bodies. Both writers below iterate slots ascending and skip non-survivors,
+  which is the same order WasmSlotNew is built in, so they agree by
+  construction rather than by arithmetic. }
+function WasmLiveFuncCount: Integer;
+var i, n: Integer;
+begin
+  if not WasmDceActive then begin WasmLiveFuncCount := WasmFuncCount; Exit; end;
+  n := 0;
+  for i := 0 to WasmFuncCount - 1 do
+    if WasmSlotNew[i] >= 0 then Inc(n);
+  WasmLiveFuncCount := n;
+end;
+
+{ Exports naming a dropped function go with it. Counted separately because the
+  export vector also carries the memory and the `sp` global, which --dce never
+  touches. }
+function WasmLiveExpCount: Integer;
+var i, n: Integer;
+begin
+  if not WasmDceActive then begin WasmLiveExpCount := WasmExpCount; Exit; end;
+  n := 0;
+  for i := 0 to WasmExpCount - 1 do
+    if (WasmExpKind[i] <> WEK_FUNC) or WasmSlotSurvives(WasmExpIdx[i]) then Inc(n);
+  WasmLiveExpCount := n;
+end;
 
 { Name a PARAMETER of the most recently added function. Call once per param, in
   order, before any WasmAddLocal — params occupy the low local indices. }
@@ -1140,6 +1233,7 @@ begin
     begin
       WasmCallRelPos[j] := WasmCallRelPos[i];
       WasmCallRelSlot[j] := WasmCallRelSlot[i];
+      WasmCallRelOwner[j] := WasmCallRelOwner[i];   { parallel BY INDEX }
       Inc(j);
     end;
   WasmCallRelLen := j;
@@ -1197,6 +1291,7 @@ begin
   begin
     WasmCallRelPos[WasmCallRelLen] := WasmCodeLen + WFCallPos[i];
     WasmCallRelSlot[WasmCallRelLen] := WFCallSlot[i];
+    WasmCallRelOwner[WasmCallRelLen] := slot;   { the caller, by construction }
     Inc(WasmCallRelLen);
   end;
   WFCallLen := 0;
@@ -1329,11 +1424,14 @@ end;
 procedure WasmEmitFuncSection;
 var i, p: Integer;
 begin
-  if WasmFuncCount = 0 then Exit;
+  if WasmLiveFuncCount = 0 then Exit;
   WOutB(WSEC_FUNC);
   p := WOutSizePlaceholder;
-  WOutU32(WasmFuncCount);
-  for i := 0 to WasmFuncCount - 1 do WOutU32(WasmFuncType[i]);
+  WOutU32(WasmLiveFuncCount);
+  { ascending slot order, survivors only -- the same order WasmSlotNew numbers
+    them in, and the same order WasmEmitCodeSection walks }
+  for i := 0 to WasmFuncCount - 1 do
+    if WasmSlotSurvives(i) then WOutU32(WasmFuncType[i]);
   WPatchSize(p, WBLen - p - 5);
 end;
 
@@ -1413,12 +1511,16 @@ end;
 procedure WasmEmitExportSection;
 var i, p: Integer;
 begin
-  if WasmExpCount = 0 then Exit;
+  if WasmLiveExpCount = 0 then Exit;
   WOutB(WSEC_EXPORT);
   p := WOutSizePlaceholder;
-  WOutU32(WasmExpCount);
+  WOutU32(WasmLiveExpCount);
   for i := 0 to WasmExpCount - 1 do
   begin
+    { an export of a dropped function goes with it; everything else -- the
+      memory, the `sp` global -- is untouched by --dce }
+    if (WasmExpKind[i] = WEK_FUNC) and not WasmSlotSurvives(WasmExpIdx[i]) then
+      continue;
     WOutName(WasmExpName[i]);
     WOutB(Byte(WasmExpKind[i]));
     WOutU32(WasmExportIndex(i));
@@ -1437,6 +1539,16 @@ var i, j, pos: Integer; x: Int64; b: Byte;
 begin
   for i := 0 to WasmCallRelLen - 1 do
   begin
+    { A relocation inside a body --dce dropped names a callee that may also
+      have been dropped, and its bytes are not emitted either way. Patching it
+      would ask WasmIndexOfSlot for the index of a function that is not in the
+      module, which is the one thing that refuses rather than answering.
+
+      This is the second thing WasmCallRelOwner pays for. It was recorded so
+      the call GRAPH could be built without attributing sites to bodies by
+      address; it turns out to be the only way to tell, here, whether a
+      relocation still belongs to anything. }
+    if not WasmSlotSurvives(WasmCallRelOwner[i]) then continue;
     pos := WasmCallRelPos[i];
     x := WasmIndexOfSlot(WasmCallRelSlot[i]);
     for j := 0 to 4 do
@@ -1452,12 +1564,15 @@ end;
 procedure WasmEmitCodeSection;
 var i, j, p, bp, runStart, groups: Integer; vt: Byte;
 begin
-  if WasmFuncCount = 0 then Exit;
+  if WasmLiveFuncCount = 0 then Exit;
   WOutB(WSEC_CODE);
   p := WOutSizePlaceholder;
-  WOutU32(WasmFuncCount);
+  WOutU32(WasmLiveFuncCount);
   for i := 0 to WasmFuncCount - 1 do
   begin
+    { ascending slot order, survivors only -- positionally parallel to the
+      function section, which walks the same order and skips the same slots }
+    if not WasmSlotSurvives(i) then continue;
     bp := WOutSizePlaceholder;
     { count run-length groups first — the vector needs its length up front }
     groups := 0; j := 0;
