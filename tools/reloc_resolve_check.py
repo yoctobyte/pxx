@@ -58,6 +58,14 @@ emulator version are collinear across that date (frankh-c0, 2026-09-22).
 Record `toolchain:` with any such row; its ABSENCE is a date stamp, not missing
 data.
 
+A SKIP CARRIES THE COMPILER'S OWN DIAGNOSTIC, ALWAYS. A silent skip is a
+hiding place: a whole target's crtl was unreachable on xtensa behind one, and
+nothing in the tier drove it, so nobody had read the refusal. Printing it is
+what turned "this target has no probe yet" into
+bug-a-xtensa-cannot-lower-a-store-through-a-pointer-... A skip that names its
+reason is a finding generator; a skip that does not is where findings go to
+die.
+
 A RELOCATION AGAINST AN UNDEFINED SYMBOL IS APPLIED, NOT SKIPPED. A linker's
 only contribution to one is choosing the address, so the harness chooses it --
 see undef_addr. Skipping them would have excluded the entire class this exists
@@ -264,6 +272,58 @@ def _tbase_from_map(mappath, syms, ti):
     return cands[0]
 
 
+def runtime_witness(exe, runner, e, syms):
+    """Section bases as the RUNNING program reports them.
+
+    THIS IS THE ONLY CHANNEL THAT CAN SEE A UNIFORM OFFSET ERROR. Where no
+    linker exists the harness derives a section's base by majority vote over
+    the relocations naming it, and a base derived FROM the relocations and then
+    used to CHECK them agrees by construction: if every reference to one
+    section is wrong by the same N, the vote lands on true_base - N, all votes
+    agree, and the byte comparison is clean. Unanimity is blind to it BECAUSE
+    it is unanimous -- the minority is the only channel carrying signal, so a
+    zero minority is zero signal, not maximum confidence.
+
+    The probe prints &g and msg. Subtracting the OBJECT's own symbol values
+    from the addresses the program printed yields a base that no relocation
+    arithmetic here produced, so a uniform shift becomes a mismatch.
+    (frankuser, 2026-09-22.)"""
+    cmd = ([runner] if runner else []) + [exe]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except Exception as ex:
+        return None, f'could not run: {ex}'
+    parts = r.stdout.split()
+    if len(parts) < 4 or not parts[1].startswith('0x'):
+        return None, f'unexpected output {r.stdout.strip()[:40]!r}'
+    if parts[0] != '42':
+        return None, f'the probe computed {parts[0]!r}, not 42'
+    out = {}
+    for nm, txt in (('g', parts[1]), ('msg', parts[2])):
+        sym = next((x for x in syms if x['name'] == nm), None)
+        if sym is None: return None, f'no symbol {nm} in the object'
+        out.setdefault(sym['shndx'], []).append(int(txt, 16) - sym['value'])
+    # A string literal carries no symbol, so it is located by CONTENT. It must
+    # occur EXACTLY ONCE or the offset is ambiguous, and an ambiguous witness
+    # is worse than none -- it would pick one occurrence and look definite.
+    needle = b'pxx-reloc-rodata-witness-do-not-duplicate'
+    for i in alloc_sections(e):
+        blob = bytes(e.data(e.sh[i]))
+        n = blob.count(needle)
+        if n == 1:
+            out.setdefault(i, []).append(int(parts[3], 16) - blob.index(needle))
+        elif n > 1:
+            return None, (f'the .rodata witness string occurs {n} times in '
+                          f'{e.sh[i]["sname"]}, so its offset is ambiguous')
+    bases = {}
+    for shndx, vals in out.items():
+        if len(set(vals)) != 1:
+            return None, (f'two symbols in {e.sh[shndx]["sname"]} imply different '
+                          f'bases {[hex(v) for v in set(vals)]}')
+        bases[shndx] = vals[0]
+    return bases, None
+
+
 def alloc_sections(e):
     """Every SHF_ALLOC section with content, in file order.
 
@@ -358,6 +418,50 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled):
         unhandled[f'machine{m}:{r["type"]}'] = unhandled.get(f'machine{m}:{r["type"]}', 0) + 1
 
 
+def uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname):
+    """Prove the uniform-offset hole is real AND that the witness closes it."""
+    from collections import Counter
+    ti = e.sh.index(text)
+    target = next((k for k in wit if k != ti and k in base), None)
+    if target is None:
+        print('   CONTROL uniform shift    -> BROKEN: no witnessed section to shift')
+        return False
+    N = 4
+    tb2 = e.data(text)
+    votes = Counter()
+    et = exe_bytes(xe, xoff, base[ti], e.sec('.text')['size'])
+    for r in e.relocs('text'):
+        s = syms[r['sym']]
+        rr = dict(r, addend=(r['addend'] or 0) + N) if s['shndx'] == target else r
+        if s['shndx'] == target:
+            have = struct.unpack_from('<I', et, r['off'])[0]
+            votes[have - (s['value'] + (rr['addend'] or 0))] += 1
+    if not votes:
+        print('   CONTROL uniform shift    -> BROKEN: no relocation names that section')
+        return False
+    shifted = dict(base); shifted[target] = votes.most_common(1)[0][0]
+    unh = {}
+    for r in e.relocs('text'):
+        s = syms[r['sym']]
+        rr = dict(r, addend=(r['addend'] or 0) + N) if s['shndx'] == target else r
+        _apply_one(e, rr, tb2, shifted, base[ti], syms, unh)
+    bytes_blind = bytes(tb2) == et
+    witness_sees = shifted[target] != wit[target]
+    nm = e.sh[target]['sname']
+    print(f'   CONTROL uniform shift    -> bytes {"MISS it (as predicted)" if bytes_blind else "caught it"}'
+          f', witness {"CATCHES it" if witness_sees else "MISSES IT"}   [{nm} +{N}]')
+    if not witness_sees:
+        print(f'   CONTROLS: BROKEN -- a uniform +{N} on every {nm} reference was '
+              f'invisible to BOTH the byte comparison and the witness')
+        return False
+    if not bytes_blind:
+        # Not a failure: it means the vote did not fully absorb the shift here,
+        # so the byte comparison happens to catch it too. Worth printing,
+        # because it means this target is less exposed than the general case.
+        pass
+    return True
+
+
 def control_suite(e, text, base, addrs, syms, theirs, tname):
     """POSITIVE CONTROLS. The AGREE above is a comparison; these show it can
     FAIL, which is a separate claim and the one a guard most often cannot make.
@@ -415,13 +519,14 @@ def control_suite(e, text, base, addrs, syms, theirs, tname):
 
 
 TARGETS = {
-    # name:      (pxx flag,          gcc flag or None if unlinkable here)
-    'x86_64':   ('',                 '-no-pie'),
-    'i386':     ('--target=i386',    '-m32 -no-pie'),
-    'riscv32':  ('--target=riscv32', None),
-    'xtensa':   ('--target=xtensa',  None),
-    'aarch64':  ('--target=aarch64', None),
-    'arm32':    ('--target=arm32',   None),
+    # name:      (pxx flag,          gcc flag or None if unlinkable here,
+    #             runner for the executable-oracle witness or None if native)
+    'x86_64':   ('',                 '-no-pie',       None),
+    'i386':     ('--target=i386',    '-m32 -no-pie',  None),
+    'riscv32':  ('--target=riscv32', None,            'qemu-riscv32'),
+    'xtensa':   ('--target=xtensa',  None,            None),
+    'aarch64':  ('--target=aarch64', None,            'qemu-aarch64'),
+    'arm32':    ('--target=arm32',   None,            'qemu-arm'),
 }
 
 
@@ -441,7 +546,7 @@ def main():
         raise SystemExit(__doc__)
     tname, src = sys.argv[1], sys.argv[2]
     if tname not in TARGETS: raise SystemExit(f'unknown target {tname}')
-    pxxflag, gccflag = TARGETS[tname]
+    pxxflag, gccflag, runner = TARGETS[tname]
     pxx = os.environ.get('PXX', './compiler/pascal26')
     work = tempfile.mkdtemp(prefix='relocchk-')
     obj = os.path.join(work, 'o.o')
@@ -490,12 +595,39 @@ def main():
             print(f'reloc-resolve[{tname}]: SKIP -- the object and the executable do '
                   f'not share a layout here, so the executable cannot be the oracle')
             return 0
+        # THE WITNESS RUNS BEFORE THE COMPARISON AND CAN VETO IT. Without it
+        # the vote is checked against the relocations it was derived from.
+        wit, why = runtime_witness(exe, runner, e, syms)
+        if wit is None:
+            print(f'reloc-resolve[{tname}]: BROKEN -- no runtime witness for the '
+                  f'section bases ({why}), so a UNIFORM offset error in every '
+                  f'reference to a section would pass unanimously')
+            return 1
         for k, c in sorted(votes.items()):
             top = c.most_common(2)
             extra = (f', runner-up {top[1][0]:#x} x{top[1][1]}' if len(top) > 1
                      else ' (unanimous)')
+            w = wit.get(k)
+            if w is None:
+                mark = 'NO WITNESS'
+            elif w == top[0][0]:
+                mark = 'witness agrees'
+            else:
+                mark = f'WITNESS SAYS {w:#x}'
             print(f'   base {e.sh[k]["sname"]:<14} {top[0][0]:#x}  '
-                  f'{top[0][1]} votes{extra}')
+                  f'{top[0][1]} votes{extra}  [{mark}]')
+        bad = [e.sh[k]['sname'] for k, v in wit.items()
+               if k in base and base[k] != v]
+        if bad:
+            print(f'reloc-resolve[{tname}]: DIFFER -- the vote-derived base '
+                  f'disagrees with the running program for {bad}. That is the '
+                  f'signature of a UNIFORM offset error, which the byte '
+                  f'comparison cannot see.')
+            return 1
+        unwitnessed = [e.sh[k]['sname'] for k in votes if k not in wit]
+        if unwitnessed:
+            print(f'   NOTE: {unwitnessed} have no runtime witness -- their bases '
+                  f'rest on the vote alone and a uniform shift there is invisible')
         unh = {}
         tb = e.data(text)
         apply_relocs(e, 'text', tb, base, base[e.sh.index(text)], syms, unh)
@@ -514,8 +646,18 @@ def main():
         if not control_suite(e, text, base, {'.text': base[e.sh.index(text)]},
                              syms, theirs, tname):
             return 1
+        # THE FOURTH CONTROL, and it is the one the other three cannot make:
+        # shift EVERY relocation naming one section by the same amount. The
+        # vote then derives a base shifted by exactly the same amount, the
+        # bytes still match, and only the runtime witness disagrees. It
+        # asserts BOTH halves -- that the byte comparison misses it, and that
+        # the witness catches it -- because either half alone would let the
+        # control pass for the wrong reason.
+        if not uniform_shift_control(e, text, base, wit, syms, xe, xoff, tname):
+            return 1
         print(f'reloc-resolve[{tname}]: AGREE with pxx\'s own executable on {len(tb)} '
-              f'bytes, {nrel} relocations; 3 of 3 controls reddened it')
+              f'bytes, {nrel} relocations; 4 of 4 controls reddened it, and every '
+              f'section base has an independent runtime witness')
         if synth:
             print(f'   {synth} relocations named UNDEFINED symbols and were resolved at '
                   f'addresses THIS HARNESS chose, so those rows are pxx graded against '

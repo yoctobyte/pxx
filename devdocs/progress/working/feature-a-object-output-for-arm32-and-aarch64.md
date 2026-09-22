@@ -240,6 +240,20 @@ says which relocations have an external oracle and which rest on
 resolve-and-compare, so a later reader cannot quote the weaker tier as the
 stronger.
 
+**AND THE WAY THIS DESIGN DIED AND CAME BACK IS THE TRANSFERABLE PART, not
+that it came back.** Self-comparison against pxx's own executable was dropped
+on real x86-64 evidence — 296,788 of 328,517 bytes differing, no `_start`, a
+different export surface — and carried forward as *"it does not work"*. **The
+true statement was narrower: it fails where pxx's export surface diverges, and
+that is exactly the set of targets which already have a linker to compare
+against.** So the measurement was correct and the QUANTIFIER was the invention,
+and the tool was discarded precisely on the population that did not need it —
+where an alternative existed, so nothing would ever have forced a second look.
+This file's own rule about hedging the premise rather than the inference, in
+its most expensive form: not an over-claimed green, but **a working instrument
+thrown away.** When a design fails, record the POPULATION it failed on beside
+the verdict. (frankuser, 2026-09-22.)
+
 **BUILD ORDER, CHANGED 2026-09-22: the harness comes FIRST and is
 target-generic.** It is filed separately as
 [[feature-a-a-target-generic-resolve-and-compare-harness-for-emit-obj-objects]]
