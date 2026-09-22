@@ -1,0 +1,41 @@
+# feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar
+#
+# A NilPy program PAYS THE FULL 3,072-byte per-thread variable area, so
+# __pxxTlsBlockSize is 4224 (TLS_USER_FIRST_OFF 1152 + 3072) and NOT 1152.
+# This row exists to keep it that way.
+#
+# RENAMED 2026-09-22. It was `..._pays_no_threadvar_area.npy` and asserted
+# `block=4224` -- a filename claiming the exact opposite of the assertion
+# underneath it. The automatic NilPy arm shipped 2026-09-19 and was retired the
+# same day; whoever retired it updated the ASSERTION correctly and left the
+# NAME, the job id and this header behind. A reader grepping for "a nilpy
+# program pays no threadvar area" found a test proving it pays.
+#
+# WHY IT PAYS, which is the thing this guard is really protecting. 402d61e0d
+# made the AREAFULL reason a hard ERROR and c5ae069c5 made `errno` a
+# `__thread`, so EVERY C unit now declares a thread-local -- and a NilPy
+# program reaches C units through -Fu. With a zero-byte area every mixed
+# NilPy+C build refused. The repair that must NOT be made quietly is letting
+# the C arm degrade instead: that hands a NilPy program ONE errno shared across
+# every thread, which is precisely the race c5ae069c5 removed -- a silent wrong
+# answer traded for a loud refusal, in the one configuration nobody re-measures.
+#
+# WHAT `block=1152` WOULD MEAN IF YOU SEE IT: somebody re-added the automatic
+# NilPy arm. That is what this row fails on, and it is the whole point of it.
+#
+# THE IMPORT IS NOT DECORATION. isNilPy is true for the entire compilation
+# including the Pascal units a NilPy program drags in, so "this frontend has no
+# such keyword" is NOT the same claim as "this compilation cannot declare one".
+# The import below puts a real Pascal unit on the chain on purpose. The path is
+# relative to THIS file's own directory, which is why it reads 'units/...' and
+# not 'test/units/...'.
+#
+# THE OLD HEADER CITED A POSITIVE CONTROL THAT NO LONGER DISCRIMINATES, and it
+# is removed rather than reworded: "the pinned compiler answers 4224" was a
+# control only while HEAD answered 1152. Both answer 4224 now, so agreement
+# between them is not evidence of anything -- it is two compilers doing the same
+# correct thing. The live control is the assertion itself: re-introduce the
+# automatic arm and this row goes red at 1152.
+import 'units/utlsblock.pas'
+
+print("block=%d" % TlsBlock())

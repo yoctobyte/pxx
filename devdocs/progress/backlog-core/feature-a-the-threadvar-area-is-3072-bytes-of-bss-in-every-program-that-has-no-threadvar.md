@@ -7,7 +7,7 @@ prio: 45
 status: new
 created: 2026-09-18
 owner: ""
-summary: "ROUTES C AND A SHIPPED, AND THE NILPY ARM WITH THEM. A Pascal program naming neither `threadvar` nor `uses`, and EVERY NilPy program, now get a ZERO-byte threadvar area automatically -- hello.pas goes bss 38,396 -> 35,324 and a NilPy hello 62,724 -> 59,652, both a flat -3,072, with __pxxTlsBlockSize 1152 instead of 4224. On top of that -dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K sets it explicitly and always wins. THE PASCAL SCAN READS THE SOURCE TEXT, NOT TOKENS, and that is forced: the token array is EMPTY at the only moment the size may be chosen, and the call cannot move down because EmitTlsMainInstall bakes the size into the BSS reservation and the fold captures it. Source is include-expanded by then, which is why the text scan is Pascal-only. THE NILPY ARM NEEDS NO SCAN -- the language has no thread-local spelling -- and the blocker this ticket recorded for it turned out not to exist: a threadvar in a Pascal unit a NilPy program imports reaches the PASCAL allocator, which ERRORS at 0 bytes, naming the unit, the line and the flag. The worst case is a LOUD acceptance regression carrying its own remedy, never a silent collision, and today over a population of zero. C IS EXCLUDED FOR A MEASURED REASON: it has __thread, its #includes expand after the size is chosen, and its arm of the allocator WARNS rather than errors -- the declaration becomes one copy shared by every thread and the program still runs. Guards: test_tlsnone26 (Pascal) and test_tlsnonenp26 (NilPy, which imports a real Pascal unit on purpose to put one on the ambient chain). The `uses` rule stays on the Pascal side because dropping it would REFUSE a program that compiles today, capping that arm's reach at unit-free programs, 11 of 49 under examples/. STILL OPEN: the long-tail frontends (one `or Is<X>Frontend` term each, unrequested), and route B, still the only unsound route. Found on the way and fixed separately: bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero, which was really the -O2 inliner retaining a threadvar read as a plain global."
+summary: "THE NILPY ARM WAS RETIRED THE SAME DAY IT SHIPPED AND THIS SUMMARY ADVERTISED IT AS LIVE FOR THREE DAYS -- corrected 2026-09-22 (frankb-8e) after MEASURING it, not reading it. Re-measured at HEAD: a NilPy hello is bss 62,740 by default and 59,668 under -dPXX_TLS_USER_0, i.e. it still carries the full 3,072 and the flag is the only way to get it back. The retirement is correct and is recorded in ir_codegen.inc's own words: 402d61e0d made the AREAFULL reason a hard ERROR and c5ae069c5 made errno `__thread`, so EVERY C unit now declares a thread-local, and a NilPy program reaches C units through -Fu -- every mixed NilPy+C build refused at HEAD. Letting the C arm degrade instead would hand a NilPy program ONE errno shared across every thread, which is the race c5ae069c5 removed, so the 3,072 bytes are the price (~0.2% of a NilPy program's ~1.35 MB code segment). ONLY ONE ARM IS LIVE AND IT IS `IsPascalFrontend`; there is no NilPy condition in the routine at all. ROUTES C AND A SHIPPED AND ARE UNAFFECTED. A Pascal program naming neither `threadvar` nor `uses` gets a ZERO-byte threadvar area automatically -- hello.pas bss 38,396 -> 35,324 at the time, and 34,600 at HEAD now that bug-a-a-pascal-hello-world-is-63kb has landed -- with __pxxTlsBlockSize 1152 instead of 4224. On top of that -dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K sets it explicitly and always wins. THE PASCAL SCAN READS THE SOURCE TEXT, NOT TOKENS, and that is forced: the token array is EMPTY at the only moment the size may be chosen, and the call cannot move down because EmitTlsMainInstall bakes the size into the BSS reservation and the fold captures it. Source is include-expanded by then, which is why the text scan is Pascal-only. THE ARGUMENT THAT ONCE JUSTIFIED THE NILPY ARM IS PRESERVED BELOW AS HISTORY AND IS NOT THE STATE -- it reasoned only about a threadvar in a PASCAL unit a NilPy program imports (which does error loudly at 0 bytes, naming the unit, the line and the flag), and it never considered a C unit, which is what retired it. The C exclusion's old wording said the C allocator arm WARNS rather than errors; that was true when written and 402d61e0d made it a hard error. Guards: test_tlsnone26 (Pascal, asserts block=1152 -- the arm that IS live) and test_tlsnonenp26 (NilPy, asserts block=4224, i.e. that the area is still PAID). The NilPy fixture was named `test_a_nilpy_program_pays_no_threadvar_area.npy` while asserting the opposite, and was renamed to `..._pays_the_full_threadvar_area.npy` on 2026-09-22 with its header rewritten: whoever retired the arm updated the assertion correctly and left the name and header behind, so a grep for the old sentence found a test proving its negation. Its stated positive control -- \"the pinned compiler answers 4224\" -- was also removed rather than reworded, because it discriminated only while HEAD answered 1152; both answer 4224 now, so that agreement is two compilers doing the same correct thing and not evidence. The `uses` rule stays on the Pascal side because dropping it would REFUSE a program that compiles today, capping that arm's reach at unit-free programs, 11 of 49 under examples/. STILL OPEN: the long-tail frontends (one `or Is<X>Frontend` term each, unrequested), and route B, still the only unsound route. Found on the way and fixed separately: bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero, which was really the -O2 inliner retaining a threadvar read as a plain global."
 ---
 
 # Why it is a fixed cap, in the code's own words
@@ -125,6 +125,23 @@ under every setting.
 
 ## THE NILPY ARM SHIPPED 2026-09-19, AND THE BLOCKER I RECORDED DOES NOT EXIST
 
+> **RETIRED THE SAME DAY IT SHIPPED. HISTORY FROM HERE TO THE END OF THIS
+> SECTION — DO NOT READ IT AS STATE** (frankb-8e, 2026-09-22, measured). There
+> is no NilPy condition in `ApplyTlsUserBytesOption` at HEAD; a NilPy hello
+> still carries the full 3,072. The sentence below saying `test_tlsnonenp26`
+> "asserts `block=1152`" is the one a reader is most likely to land on by
+> grepping the fixture name, and it is **inverted**: that row asserts
+> `block=4224`, and the fixture was renamed on 2026-09-22 because its NAME also
+> claimed the opposite of its assertion. Its "pinned compiler answers 4224"
+> positive control no longer discriminates — HEAD answers 4224 too. What
+> retired the arm is in the dated `2026-09-22` section at the end of this file
+> (cited by DATE, not by heading, because I first wrote a heading here that
+> does not exist — the same phantom-name class this ticket is being corrected
+> for): `errno`
+> became `__thread`, so every C unit declares one, and a NilPy program reaches
+> C units through `-Fu`. The reasoning preserved here only ever considered a
+> threadvar in a PASCAL unit, which is why it did not see it coming.
+
 The section below said this arm was gated on `defs.inc`'s `PyImportLang`
 caveat -- `isNilPy` is true for the WHOLE compilation including the Pascal RTL
 units a NilPy program drags in, so "the frontend has no such keyword" is not
@@ -178,13 +195,20 @@ separate decision about a frontend I do not own.
 
 The ticket stays OPEN on two remaining pieces, in value order:
 
-1. ~~**The other frontends.**~~ **NilPy SHIPPED (see the section above); C is
-   excluded for a measured reason and is not coming back without a decision
-   about its allocator arm.** What remains of this item is the LONG TAIL --
-   BASIC, Rust, Zig, Erlang, Ada, Algol, Fortran, Lol, Ws -- each a flat -3,072
-   and each worth exactly one `or Is<X>Frontend` term once someone confirms that
-   frontend's ambient chain refuses loudly the way NilPy's does. Nobody has
-   asked for those, so they are not scheduled. The original text follows.
+1. **The other frontends. CORRECTED 2026-09-22 — this item said "NilPy
+   SHIPPED", and by the time it was written the arm had already been reverted.**
+   NilPy is back on this list, not off it, and it is the one row here with a
+   KNOWN reason it is hard rather than merely unrequested: a NilPy program
+   reaches C units through `-Fu` and every C unit now declares a `__thread`
+   errno, so the zero-byte area refuses the whole mixed build. Do not re-add it
+   without answering that. C is excluded for a measured reason and is not
+   coming back without a decision about its allocator arm.
+   The LONG TAIL is BASIC, Rust, Zig, Erlang, Ada, Algol, Fortran, Lol, Ws --
+   each a flat -3,072 and each worth exactly one `or Is<X>Frontend` term once
+   someone confirms that frontend's ambient chain refuses loudly. **BASIC is
+   the one actually worth doing and it has its own section below**, with the
+   three prerequisites in order; the rest are unrequested and unscheduled.
+   The original text follows.
 
    The other frontends. NilPy, BASIC, Rust, Zig, Erlang, Ada, Algol,
    Fortran and the rest cannot declare a thread-local at all — only Pascal
@@ -286,3 +310,65 @@ derived rather than restated whichever route is taken.
   rlimit` scratch past the end). Only the 3,072 is reclaimable; the slot map is
   an ABI other code reads.
 - `--emit-obj` and `--shared` already skip the whole thing.
+
+---
+
+## 2026-09-22 — RE-MEASURED PER FRONTEND, AND BASIC IS THE ONE NOBODY HAS LOOKED AT
+
+The summary claimed the NilPy arm was live. It is not, and has not been since
+the day it landed. Found by measuring rather than reading, while `next` handed
+me this ticket at effective prio 70.
+
+Every row at HEAD (`7ed7bc249672`), one hello per frontend, `bss=` from the ok
+line, default against `-dPXX_TLS_USER_0`:
+
+| frontend | default | `-dPXX_TLS_USER_0` | delta | automatic arm? |
+| --- | --- | --- | --- | --- |
+| Pascal (`hello.pas`) | 34,600 | 34,600 | **0** | YES — route A already gave it back |
+| BASIC (`10 PRINT`) | 37,632 | 34,560 | **3,072** | no |
+| NilPy (`print()`) | 62,740 | 59,668 | **3,072** | no — retired, correctly |
+| C (`puts`) | 72,448 | — | — | no — `__thread` errno, by design |
+
+**The Pascal row is the control and it is the one that proves the instrument
+works**: it shows zero delta because route A has already taken the area away,
+so the flag has nothing left to give. A table where every row moved by 3,072
+would not have distinguished "the arm is off" from "the flag does nothing".
+
+### BASIC is a real open row and it is NOT the same question as NilPy's
+
+Nobody has assessed it — the ticket's "long-tail frontends" line treats them as
+one undifferentiated group of `or Is<X>Frontend` terms, and they are not one
+group. The retirement reasoning above is specific: it is about **C units
+reached through `-Fu`**, because `errno` is `__thread`. Whether that exposure
+exists for BASIC is **unmeasured**, and I am not going to assert it either way
+from the fact that it retired NilPy.
+
+**What has to be established before a BASIC arm is written**, in this order:
+
+1. Can a BASIC program reach a C unit at all? If it cannot, the errno hazard
+   that retired the NilPy arm does not apply and the row is cheap.
+2. Can a BASIC program reach a Pascal unit that declares a `threadvar`? If it
+   can, the Pascal arm's own `uses` test is the precedent, not an obstacle —
+   that arm refuses loudly and names the flag.
+3. BASIC has no thread-local spelling of its own, which is the NilPy arm's
+   starting premise and the only part of it that survived.
+
+**Do not write the arm from the analogy.** The NilPy arm was written from a
+sound argument about Pascal units and retired by a C unit nobody had
+considered; repeating that with BASIC substituted is the same mistake with a
+different letter.
+
+### And the 3,072 is now a larger fraction than the ticket assumed
+
+`bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce` landed today, so a
+Pascal hello is 4,528 bytes rather than 25,024. The threadvar area was ~12% of
+a hello's bss when this ticket was written and the floor has moved underneath
+it. That does not change any decision here, but it does mean **a number quoted
+off this ticket before 2026-09-22 has a different denominator** — recorded
+because the ticket's own tables carry absolute bss figures with no tree beside
+them.
+
+*frankb-8e (Track A). Measured, not implemented: I corrected the summary and
+did not write the BASIC arm, because step 1 above is unanswered and the ticket
+already contains one arm that was written from an argument and retired by a
+measurement.*

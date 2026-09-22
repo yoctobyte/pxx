@@ -7589,8 +7589,13 @@ test-threads: $(COMPILER)
 	# unit on purpose to put one on the chain. Measured rather than argued: at a
 	# zero-byte area a threadvar in an imported .pas unit ERRORS, naming the
 	# unit, the line and the flag, exit 1. So the worst case is a loud refusal
-	# with its own fix in the message, never a silent collision. The pinned
-	# compiler answers 4224 for this same file.
+	# with its own fix in the message, never a silent collision.
+	# THE POSITIVE CONTROL THIS BLOCK CITED IS REMOVED, NOT REWORDED (2026-09-22):
+	# "the pinned compiler answers 4224 for this same file" discriminated only
+	# while HEAD answered 1152. HEAD answers 4224 too now, so the agreement is
+	# two compilers doing the same correct thing and is evidence of nothing. The
+	# live control is the assertion below -- re-add the automatic NilPy arm and
+	# this row goes red at 1152.
 	# THE NILPY SAVING IS RETIRED 2026-09-19 AND THIS ROW NOW PINS THE OPPOSITE.
 	# The paragraph below is kept as written because it is the premise that
 	# retired it, not because it is still true: "its arm of the allocator WARNS
@@ -7611,7 +7616,7 @@ test-threads: $(COMPILER)
 	# decided later. Letting the C arm degrade here instead would hand a NilPy
 	# program ONE errno shared across every thread -- the exact race c5ae069c5
 	# removed -- so this row exists to stop that repair being made quietly.
-	./$(COMPILER) test/test_a_nilpy_program_pays_no_threadvar_area.npy $(TESTTMP)/test_tlsnonenp26
+	./$(COMPILER) test/test_a_nilpy_program_pays_the_full_threadvar_area.npy $(TESTTMP)/test_tlsnonenp26
 	tools/expect_same.sh test_tlsnonenp26 "$$($(TESTTMP)/test_tlsnonenp26)" "block=4224"
 	# AND THE ROW THAT WOULD HAVE CAUGHT IT: a NilPy program pulling a C unit.
 	# No gate had this combination, which is why three individually-correct
