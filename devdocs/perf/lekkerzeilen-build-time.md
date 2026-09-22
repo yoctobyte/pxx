@@ -1082,3 +1082,59 @@ are different claims and the sentence must distinguish them.
 that tree (`MAX_PROC_PARAMS`, a >32-parameter C function out of the GL headers).
 Its row is this lane's, on this lane's binaries. **Only the ratios travel
 between the two harnesses; the absolute seconds do not.**
+
+---
+
+# RE-MEASURED 2026-09-22: the 13x is 6.2x — halved, not gone
+
+The section above is the original finding. Three causes named under it were
+fixed and landed, and **nobody had re-run the observable**, so the ticket
+(`perf-n-an-imported-npy-module-costs-13x-...`) could not say whether it
+survived. Re-run with the method above — identical bodies inline vs moved into
+one imported module, same compiler, CWD at the repo root, **min-of-3 with the
+two arms interleaved** so drift hits both equally:
+
+| functions | inline | through 1 import | ratio | (was) |
+|---|---:|---:|---|---|
+| 100 | 2.30 s | 3.25 s | 1.4x | 2.4x |
+| 200 | 2.50 s | 4.52 s | 1.8x | 3.9x |
+| 400 | 2.93 s | 7.13 s | **2.4x** | **5.4x** |
+
+    per function, off the 100->400 span:  inline 2.10 ms   imported 12.93 ms   6.2x
+    implied fixed cost:                   inline 2.09 s    imported 1.96 s
+    compiler 734d10ec7b53, commit cbb8f81c0, CWD repo root, load ~4, stable
+
+**Against the original `3.4 ms / 45 ms = 13.2x`. The observable is not gone; it
+more than halved.**
+
+**What may be quoted and what may not.** The two arms here were interleaved
+inside one session, so shared load divides out of a **ratio** — comparing 6.2x
+against 13.2x is sound, and so is the per-row column above. The original's
+per-function **milliseconds** were taken in another session at a load nobody
+recorded, so `45 ms -> 12.93 ms` is **not** a clean 3.5x speedup and must not be
+stated as one. Both rows stand with their own conditions; neither replaces the
+other.
+
+**Why the slope is believable.** Solving each arm for its fixed term
+independently gives 2.09 s and 1.96 s. A fixed cost that agrees across arms is
+what says the *per-function* slope is the thing that differs — if the ratio were
+an artefact of a large constant, these would not land together.
+
+**The inline arm improved too** (3.4 -> 2.10 ms), so some of what was fixed was
+never import-specific. That is why the ratio is the honest headline and the
+imported arm's own improvement is not.
+
+**Output check:** at 400 functions the binaries are 2,039,100 and 2,043,324
+bytes, 0.2% apart. The original recorded **18 bytes**; this is not that
+near-identity and I am not claiming it. The arms build the same program modulo
+import bookkeeping, which is what the comparison requires, but anyone re-running
+should expect the kilobyte, not the 18 bytes.
+
+**What this does NOT discharge.** The parser scans are still O(tokens) per
+definition — each step got cheaper, the structure did not change — so the
+one-pass version named in the ticket remains available and unbuilt. **6.2x is
+the number it has to beat.**
+
+Harness: `scratchpad/importcost.sh` (generates the 100/200/400 cases and
+interleaves the arms); it is scratch, not committed — the method above is the
+artefact, and it reproduces in about two minutes.
