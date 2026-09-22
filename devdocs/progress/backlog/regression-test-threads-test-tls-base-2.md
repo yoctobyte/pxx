@@ -217,3 +217,4 @@ is attempted and proves deep, *then* it becomes a one-sentence question in goal
 terms: **do we ship beta 0.1 with a threading race that reddens one tier in
 nine?** That sentence contains no implementation noun and is answerable in a
 word, which is the test for whether it is his at all.
+- 2026-09-22 — the borg watcher saw `test-threads#src:test/test_tls_base.pas` GREEN at b88b481c0b34 (tier full) and did NOT close this: the green is at the SAME sha the red was found at (`b88b481c0b34`), so no tree change separates them — the job returned two different answers about one tree, which is nondeterminism rather than evidence of a fix. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
