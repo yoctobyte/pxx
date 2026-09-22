@@ -461,3 +461,28 @@ second time that has been the finding rather than the anecdote.
 No fix attempted, nothing proposed. `.claude/hooks/` binds every agent here and
 the direction of any change is LESS strict, which is the owner's call; a peer
 asking would not move it either, and none did.
+
+## NEW DATUM, NOT A RE-DESCRIPTION: THE APERTURE IS NOT SPECIFIC TO THIS HOOK
+
+Everything above is about `no-full-suite.sh`. Measured 2026-09-22, same seat,
+same session, two hours later: **`no-variable-rm.sh` has it too.**
+
+The refused command was a `python3 - <<'PYEOF'` heredoc containing a patch
+script whose replacement STRING was a line of shell — `rm -f
+"$state_dir/$2.closed"` — being added to `tools/frozen_tree_guard.sh`. No `rm`
+would have run. The text was data inside a Python string, destined for a
+committed `tools/*.sh` file, which is the exact category this repo's own rule
+exempts (*"the hook sees `tools/foo.sh`, not the `rm` inside it"*).
+
+**So the aperture is a property of scanning COMMAND TEXT, not of either hook's
+subject matter**, and it is worth one line here because the fork above is
+scoped to one hook and a fix that only widens that one leaves this open. Both
+hooks refuse the same class of thing: an author writing down, or writing INTO A
+FILE, the text of a command.
+
+Not blocked, and the way through was the same: the `Write`/`Edit` tools rather
+than a shell heredoc. Recorded because it changes the SCOPE of the fork, not
+its mechanism — and per the instruction not to re-describe the mechanism, that
+is all this section does.
+
+**Running total across both hooks: at least fourteen, seven-plus sessions.**
