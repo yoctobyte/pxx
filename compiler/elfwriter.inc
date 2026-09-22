@@ -4891,10 +4891,21 @@ begin
     that shares your constants is not an oracle -- this is that hazard, caught
     in the one arm of this writer no other check could reach.
 
-    The numbering is G0=263, G0_NC=264, G1=265, G1_NC=266, G2=267, G2_NC=268,
-    G3=269: _NC alternates, so an off-by-one lands on the checked variant of
-    the SAME group rather than on a different group, which is why the mistake
-    reads as plausible. }
+    THE NUMBERING IS OBSERVED, NOT READ, AND THAT MATTERS BECAUSE THE FIRST
+    CORRECTION WAS ONLY HALF OBSERVED. G0=263, G0_NC=264, G1=265, G1_NC=266,
+    G2=267, G2_NC=268, G3=269 -- every row assembled from its own named
+    specifier (`movk x0, #:abs_g1_nc:sym` and its six siblings) and read back
+    off the object. The first pass observed only the four clang emits for
+    `&extern_var` and recovered the checked three BY RE-READING THE PSABI,
+    which is the same source of belief that had just failed. tools/
+    reloc_resolve_check.py's check_movw_table re-derives all seven from the
+    assembler on every aarch64 run, so this comment cannot quietly drift back
+    into being a reading.
+
+    _NC alternates with the checked form, so an off-by-one lands on the
+    checked variant of the SAME group rather than on a different group, which
+    is why the mistake read as plausible and survived review. The checked/_NC
+    distinction is also exactly what the 4 GiB limit above turns on. }
   for i := 0 to DynCallCount-1 do
   begin
     ObjRelPush(DynCallCodePos[i], 2, 264,

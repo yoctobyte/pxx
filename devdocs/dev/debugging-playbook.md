@@ -36734,6 +36734,54 @@ at slot zero would pass.
 what the artefact must be internally consistent WITH.** A relocation that
 points at nothing is checkable without any oracle at all.
 
+### INDEPENDENCE FOR VERIFICATION IS INDEPENDENCE OF THE SOURCE OF BELIEF
+
+The generalisation, and it is frankuser's (2026-09-22). CLAUDE.md already says
+two readings that can go wrong the same way are one reading. This instance
+extends it in the direction that matters, because **every conventional
+independence check passed**: different files, different days, no shared code,
+no copy-paste, and the harness was deliberately written not to call into the
+compiler. They were one instrument anyway.
+
+**Two implementations written separately from ONE DOCUMENT are, for the
+purpose of checking that document, one implementation.** Authorship, timing
+and code-sharing are proxies for independence; the thing itself is where the
+belief came from.
+
+**The corollary is why the external oracle worked at all: clang does not test
+your code, it tests your READING** — and its own reading has been under
+pressure from real linkers for years. That is a different KIND of oracle from
+a byte comparison, and it is the only kind that could have reached this.
+
+### AND ASK WHICH ROWS OF THE CORRECTED TABLE ARE OBSERVED AND WHICH ARE RE-READ
+
+The follow-up question, and the first correction here failed it. clang emits
+four MOVW entries for `&extern_var` at `-mcmodel=large`, so `G0_NC`, `G1_NC`,
+`G2_NC` and `G3` were grounded in output — and the checked three, `G0`, `G1`,
+`G2`, were recovered **by re-reading the psABI**, which is the same source of
+belief that had just failed. **Re-reading carefully is precisely the remedy
+this instance disproves.**
+
+It is not pedantry about rows nothing uses today: the `_NC`-versus-checked
+distinction is exactly what the writer's documented 4 GiB limit turns on, so
+`G2` and `G3` are what a future reader leans on at the moment that limit
+springs.
+
+**The discharge was to go and observe them, not to label them.** aarch64
+assembly can name each relocation explicitly — `movk x0, #:abs_g1_nc:sym` and
+its six siblings — so the assembler's own name-to-number mapping is
+recoverable for all seven rows, in one file, with no readelf parsing (the
+entries come back in the order the directives were written). `check_movw_table`
+now re-derives the whole table on every aarch64 run and asserts the harness's
+shift map against it, with the shift DERIVED FROM THE SPECIFIER NAME — so the
+check is not "do two copies of my reading agree" but "does my reading agree
+with the assembler's".
+
+**When a table is found wrong, the correction inherits the original's
+provenance unless you go back to an emitter for every row.** Mark each row
+with how it was obtained, or better, arrange that it cannot be a reading at
+all.
+
 **Not promoted to CLAUDE.md.** The file already states the rule this instance
 obeys — an oracle sharing your implementation cannot fail differently. This is
 a worked instance of it in a new subsystem, plus two habits (test a lead on the

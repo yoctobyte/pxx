@@ -590,8 +590,7 @@ def _apply_one(e, r, secdata, base_of, sec_va, syms, unhandled, regions=None):
             # on the checked variant of the same group -- which is exactly the
             # table this harness and the writer both held until clang's own
             # object was read for the names (2026-09-22).
-            shift = {263: 0, 264: 0, 265: 16, 266: 16,
-                     267: 32, 268: 32, 269: 48}[r['type']]
+            shift = MOVW_SHIFT[r['type']]
             insn = struct.unpack_from('<I', secdata, r['off'])[0]
             imm = ((S + A) >> shift) & 0xffff
             struct.pack_into('<I', secdata, r['off'],
@@ -663,6 +662,77 @@ def clang_movw_oracle():
                           'hand-written movz/movk words]' if same else
                           '  [NOTE: clang\'s zero forms differ from the '
                           'literals in symtab.inc]'))
+
+
+MOVW_SHIFT = {263: 0, 264: 0, 265: 16, 266: 16, 267: 32, 268: 32, 269: 48}
+# EVERY ROW OF THIS TABLE IS OBSERVED, NOT READ, AND clang_movw_table() BELOW
+# RE-OBSERVES IT ON EVERY RUN. That distinction is the whole reason this
+# constant is not just written down: the table WAS read, from the psABI, into
+# the writer and into this harness independently -- days apart, no shared code
+# -- and both got it wrong the same way, because the family interleaves the
+# checked and unchecked forms and "G0 G0_NC G1 G1_NC" reads naturally as four
+# consecutive groups. Two implementations written separately from ONE
+# DOCUMENT are, for the purpose of checking that document, one implementation.
+# Independence that matters is independence of the SOURCE OF BELIEF, not of
+# authorship or of code. (frankuser's formulation, 2026-09-22.)
+
+
+def clang_movw_table():
+    """The MOVW_UABS type numbers, ASSEMBLED rather than read.
+
+    aarch64 assembly can name each relocation explicitly -- `#:abs_g1_nc:sym`
+    and its six siblings -- so the assembler's own mapping from NAME to NUMBER
+    is recoverable without trusting any reading of the psABI, and without
+    parsing readelf's output: the entries come back in the order the
+    directives were written, so entry i belongs to specifier i.
+
+    This answers the question that should be asked of any table recovered
+    after a table was found wrong: WHICH ROWS ARE OBSERVED AND WHICH ARE
+    RE-READ? The first correction here observed only four rows (G0_NC, G1_NC,
+    G2_NC, G3 -- the ones clang emits for `&extern_var` at -mcmodel=large) and
+    recovered the checked three by re-reading, which is the same source of
+    belief that had just failed. All seven are observed now. It is not
+    pedantry about unused rows: the _NC/checked distinction is exactly what
+    the writer's documented 4 GiB limit turns on, so G2 and G3 are what a
+    future reader leans on at the moment that limit springs.
+
+    Returns {type_number: specifier_name} or None."""
+    import shutil
+    cc = shutil.which('clang') or shutil.which('clang-21')
+    if not cc: return None
+    names = ['abs_g0', 'abs_g0_nc', 'abs_g1', 'abs_g1_nc',
+             'abs_g2', 'abs_g2_nc', 'abs_g3']
+    body = ['movz x0, #:abs_g0:sym'] + \
+           [f'movk x0, #:{n}:sym' for n in names[1:]]
+    d = tempfile.mkdtemp(prefix='movwtab-')
+    src, obj = os.path.join(d, 't.s'), os.path.join(d, 't.o')
+    open(src, 'w').write('\n'.join(body) + '\n')
+    r = subprocess.run([cc, '--target=aarch64-linux-gnu', '-c', src, '-o', obj],
+                       capture_output=True, text=True)
+    if r.returncode != 0: return None
+    e = Elf(obj)
+    rels = sorted(e.relocs('text'), key=lambda x: x['off'])
+    if len(rels) != len(names): return None
+    return {rels[i]['type']: names[i] for i in range(len(names))}
+
+
+def check_movw_table():
+    """Assert this harness's shift table against the assembler's numbering.
+
+    The shift is DERIVED FROM THE SPECIFIER NAME -- g0 -> 0, g1 -> 16,
+    g2 -> 32, g3 -> 48 -- so the check is not "do two copies of my reading
+    agree" but "does my reading agree with the assembler's"."""
+    tab = clang_movw_table()
+    if tab is None: return None, 'clang cannot assemble a MOVW group here'
+    bad = []
+    for num, nm in sorted(tab.items()):
+        want = {'0': 0, '1': 16, '2': 32, '3': 48}[nm.split('_g')[1][0]]
+        got = MOVW_SHIFT.get(num)
+        if got != want:
+            bad.append(f'{num} is {nm} (shift {want}) and this table says {got}')
+    if bad: return False, '; '.join(bad)
+    return True, ', '.join(f'{n}={t}' for t, n in sorted(tab.items(),
+                                                          key=lambda x: x[0]))
 
 
 def clang_movw_entries():
@@ -1110,6 +1180,14 @@ def main():
         print('   applied: ' + ', '.join(f'type {t} x{n}'
                                          for t, n in sorted(cen.items())))
         if e.machine == 183:
+            tok, tdetail = check_movw_table()
+            if tok is None:
+                print(f'   movw type table: SKIP -- {tdetail}')
+            elif tok:
+                print(f'   movw type table: assembler AGREES -- {tdetail}')
+            else:
+                print(f'   movw type table: WRONG -- {tdetail}')
+                return 1
             ok, detail = clang_movw_oracle()
             if ok is None:
                 print(f'   movw field oracle: SKIP -- {detail}')

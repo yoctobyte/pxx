@@ -436,3 +436,47 @@ made the mode refuse with *"the layouts differ"* — an honest message about the
 wrong thing. The vote now runs over an explicit allowlist of absolute
 data-word relocation types per machine, so a new type is ignored by the vote
 rather than corrupting it.
+
+
+## arm32 groundwork, OBSERVED before a line of the writer is written
+
+Done 2026-09-22, straight after the aarch64 type-number bug, because the same
+question arises here and the header is exactly what must not answer it.
+
+**Every number below came out of an assembler, not a document.**
+`clang --target=armv7-linux-gnueabi` over
+`movw r0, #:lower16:sym` / `movt r0, #:upper16:sym` / `.word sym`:
+
+| relocation | number | how |
+| --- | --- | --- |
+| `R_ARM_MOVW_ABS_NC` | 43 (`0x2b`) | assembled, named by llvm |
+| `R_ARM_MOVT_ABS` | 44 (`0x2c`) | assembled, named by llvm |
+| `R_ARM_ABS32` | **2** | assembled, named by llvm |
+
+**`R_ARM_ABS32` is 2 and not 1, and 1 would have been the natural guess** —
+`R_386_32` is 1, `R_RISCV_32` is 1, `R_XTENSA_32` is 1, so analogy from the
+three ELF32 targets already wired here gives the wrong answer. `R_ARM_PC24`
+is 1. That is the aarch64 mistake's twin, available for free before it could
+be made.
+
+**The section is `.rel.text`, not `.rela`** — SHT_REL, so the addend lives in
+the instruction's own immediate field, and for `movw`/`movt` that field is
+SPLIT: `imm4` at bits 19:16, `imm12` at bits 11:0. Verified against clang the
+same way the aarch64 field was:
+
+    movw r12,#0x1234 -> 0xe301c234     movt r12,#0x5678 -> 0xe345c678
+
+and inserting those immediates into clang's own zero forms reproduces both
+words exactly. **So an arm32 writer must READ a split addend out of the bytes
+and WRITE it back split** — which is a genuinely different job from aarch64's
+contiguous 16 bits at 5..20, and the reason `_apply_one`'s arm arm is still
+empty rather than guessed.
+
+**And the same bonus as aarch64:** clang's `movw ip,#0` is `0xe300c000` and
+`movt ip,#0` is `0xe340c000`, byte-identical to the literals
+`EmitExternalCallArm32` writes by hand in `symtab.inc`.
+
+Remaining unknowns for the writer, all to be observed rather than read: which
+relocation the 4-byte `EmitGlobRef` literal takes (`R_ARM_ABS32` is the
+candidate), and whether `ProcAddrFix`'s literal is 4 bytes here as the ELF32
+class implies.

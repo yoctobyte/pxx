@@ -12,9 +12,14 @@
  * dlopen and dlclose each produce one R_AARCH64_MOVW_UABS_G0_NC and one G1_NC
  * over their own UND symbol.
  *
- * TWO EXTERNS AND NOT ONE, DELIBERATELY. With a single extern every call site
- * necessarily names the only GOT slot there is, so a writer that pointed every
- * site at slot zero would pass. Two make "each site names ITS OWN slot" a
+ * TWO EXTERNS AND NOT ONE, DELIBERATELY -- DO NOT REDUCE THIS TO ONE. With a
+ * single extern every call site necessarily names the only GOT slot there is,
+ * so a writer that pointed every site at slot zero would PASS. It is the
+ * expected value colliding with the failure value, at the level of CARDINALITY
+ * rather than of a width or a default: one is the answer a correct writer
+ * gives and also the answer a writer that does nothing per-site gives. The
+ * next person reducing this to a minimal case will delete the second extern
+ * for exactly the reasons that usually make a probe better. Two make "each site names ITS OWN slot" a
  * claim that can fail, and the coherence check in the harness asserts exactly
  * that -- with its own control that an addend moved by one slot is rejected.
  *
