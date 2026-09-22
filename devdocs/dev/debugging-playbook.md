@@ -41149,3 +41149,60 @@ existing "seven allocations in both arms" total instead of appearing to contradi
 it. And a pass whose control cell misbehaves is **discarded, not annotated**:
 otherwise every `0.00` in the table is unfalsifiable, and an annotated bad control
 is a row that gets quoted with the annotation stripped.
+
+## A SETUP LINE CAN DESTROY THE PRECONDITION BY TYPE CHOICE, NOT ONLY BY OPERATION — and nobody reads "which type did I declare" as an act
+
+*2026-09-22, `frankb-8e`, self-caught before it landed, offered rather than
+promoted. EXTENSION to a rule CLAUDE.md already carries (the gdb watchpoint whose
+`UniqueString(b)` gave the subject a heap copy, so the probe reported zero writes
+over 20,000 iterations). **Deliberately NOT promoted to CLAUDE.md: the rule is
+already there and the promotion test is recurrence, not quality.** What this adds
+is one clause.*
+
+Landing the heap-unit evidence scan, 8e nearly added a `{$R+}` trigger to pair with
+the `{$Q+}` one it had measured. Its probe declared `array[0..3]` and reported 149
+procs — apparently confirming that `{$R+}` pulls the heap. **`tkArray` forces the
+heap on its own.** Re-probed with a plain subrange: **38 procs, no helper needed.**
+The trigger would have been real-looking, permanent, and a no-op.
+
+**The clause this adds.** The existing instance destroys the precondition with an
+explicit *operation* — a `UniqueString`, a copy, a reset, a defensive clone — and
+the discharge is phrased as *does anything before the assertion make the subject
+stop being the thing I am testing?* That question is asked of **statements**. Here
+nothing was done to the subject at all: the precondition was destroyed by **which
+type the fixture declared**. A declaration is not read as an act, it precedes the
+"before the assertion" window a reader scans, and it is chosen for convenience —
+`array[0..3]` is what anyone writes when they need a variable and do not care what
+kind.
+
+**So ask it of the DECLARATIONS too: does any type in my fixture imply the effect I
+am attributing to the trigger?** The tell is cheap and general — **vary the
+incidental choice while holding the trigger fixed.** Swap the array for a subrange,
+the `AnsiString` for a `ShortString`, the class for a record. If the effect
+survives, the trigger is real; if it vanishes, you were measuring your own
+scaffolding. 8e's two numbers, 149 against 38, are that swap.
+
+**And note where this sat in the work.** It was the FIFTH trigger, found while
+tidying up a change that was otherwise finished and verified — the point at which a
+row that confirms the pattern is least likely to be interrogated, because four
+genuine ones have established that the pattern is real. **A confirming instance
+arriving late in a series is the one to re-probe**, not the first.
+
+### Related, from the same message — an over-broad warning is a claim in the direction nobody audits
+
+8e sent a baseline warning that a landed change would move 5b's measurement, while
+its own verification section recorded BASIC, NilPy and C hello as byte-identical to
+the pin and called the change *provably Pascal-driver-only*. The diff touches one
+compiler source file, the Pascal program parser. Forwarded as written, it would
+have had a seat re-baseline a sweep for a change **not present in the binary it was
+measuring with**.
+
+**CLAUDE.md records that a stale hazard block is expensive because obeying one
+generates no signal. An over-broad one has the identical property while being
+freshly written**, so re-measuring it is not even available as a remedy — there is
+nothing stale to find. Both of the day's instances from one seat erred toward
+caution, which is exactly why neither was checked: **a claim made in the cautious
+direction is still a claim, and it is the one nobody audits, including its
+author.** Scope a warning to what your own verification section supports, and when
+you relay someone else's, check its scope against their evidence rather than
+forwarding the sentence.
