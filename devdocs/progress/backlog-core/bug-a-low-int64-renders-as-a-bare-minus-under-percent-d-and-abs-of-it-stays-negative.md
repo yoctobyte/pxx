@@ -9,7 +9,7 @@ owner: ""
 created: 2026-09-22
 found-by: franks-5b
 blocked-by: []
-summary: "MECHANISM: Low(Int64) is the one value whose magnitude does not fit the type that holds it, so any path that renders or negates a promotable int by taking |v| into an Int64 is wrong at that single value and correct at every other. It SPRINGS wherever a promo path negates before it widens. Two live instances, both at exactly -9223372036854775808 and neither at any neighbour: `\"%d\" % v` emits a bare `-` (sign, no digits) where CPython gives -9223372036854775808; and `abs(v)` returns -9223372036854775808 where CPython gives 9223372036854775808. `print(v)` and `\"%s\" % v` are both CORRECT on the same value, so the readout decides whether the defect appears -- which is how it survived: the ordinary spelling works. Neighbours verified clean: -2^62, -2^63+1, +2^63 and -2^64 all render correctly under %d. Found while landing 247260d36 (the promotable-shift inline arm); NOT caused by it -- reproduced with that change stashed and the compiler rebuilt, byte-identical output both ways."
+summary: "MECHANISM: every path that takes |v| by NEGATING IN PLACE is wrong at exactly Low(Int64) and correct at every other input, because it is the one value in the type whose magnitude the type cannot hold -- so -v overflows and leaves the sign bit set. It SPRINGS wherever a renderer or a numeric helper negates before it widens, and the population is that class, NOT the two instances below. This repo has now hit it through THREE paths: aarch64 WriteLn (done/bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes -- emitted -, did neg x0,x0, then ran the digit loop with sdiv where arm32 correctly used udiv); NilPy abs() (FIXED 2026-09-22, 185a81621 -- pyabs_v now routes 2^63 to the promotable arm it already had); and NilPy '%d' formatting, STILL OPEN -- \"%d\" % -9223372036854775808 emits a bare - with no digits. NARROWED: print(v) and \"%s\" % v are both CORRECT on the same value, and Pascal-side Format('%d', [Low(Int64)]) is correct too, so the open half is NilPy-specific and PER-FORMATTER, not per-value -- which is the shape that produces a fourth instance. Neighbours verified clean throughout: -2^62, -2^63+1, +2^63, -2^64. Grep for the other formatters' handlers, not for the value: the sibling is a SPELLING, not a shape."
 ---
 
 # A promotable int at exactly Low(Int64) prints as `-` under `%d`
@@ -70,3 +70,39 @@ Both instances answering CPython on the row above, plus one row asserting
 `abs(Low(Int64))` widens rather than negates in place. The fix wants to be in
 whatever helper takes the magnitude, not in the two call sites, or the third
 caller will have it too.
+
+## Status 2026-09-22
+
+- **`abs()` — FIXED**, `185a81621`. `pyabs_v` (`compiler/builtin/pylib.pas`)
+  tested `i = Low(Int64)` **before** the negation and routed it to the
+  promotable arm the same function already had for `VT_PROMO_INT64`. Checked
+  before rather than after because afterwards the wrong answer and the input
+  are the same bits. Regression test `test/nilpy_low_int64_boundary.py`, wired
+  into the Makefile, asserts **arithmetic** on the result (`+1`, `//2`, `*2`,
+  `-1`, and a compare past `High(Int64)`) rather than only its printed form —
+  an `abs()` returning text that happens to print right would pass a
+  printed-value check and fail every use.
+- **`"%d" %` — OPEN.** Not fixed here, and the fixture says so explicitly so it
+  cannot be read as covering it.
+
+## The sibling was already fixed, and it holds the mechanism
+
+`done/bug-a-aarch64-writeln-of-low-int64-prints-negated-digit-bytes` is the
+same boundary through a different renderer, and its resolution is the clearest
+statement of the class available: `EmitwriteIntA64` handles the sign first —
+emit `-`, then `neg x0, x0` — so by the digit loop the register holds a
+**magnitude**, and unsigned division is what a magnitude wants. aarch64 said
+`sdiv`; arm32 said `udiv` with the comment *"divides the non-negative
+magnitude"*. Signed division agreed for every value except the one where the
+`neg` does not produce a non-negative result.
+
+**So the fix shape is: after negating, treat the bits as UNSIGNED — or widen
+instead of negating.** Both open and closed instances are that sentence.
+
+## A separate residual, measured here and deliberately not fixed
+
+`abs(True)` gives `True` where CPython gives `1`. **Pre-existing** — verified by
+stashing the `abs` fix, rebuilding and re-running: that row is unchanged and
+only the `Low(Int64)` row moved. Different mechanism (a bool keeping its tag
+through a numeric helper, not a magnitude overflow), so it is noted rather than
+folded in.
