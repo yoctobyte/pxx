@@ -4359,8 +4359,7 @@ begin
           EmitI32($E59D0000);                { ldr r0, [sp] (dest) }
           EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
           EmitCallProc(procIdx);
-          procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found (arm32)');
+          procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'arm32');
           EmitI32($E59D0000);                { ldr r0, [sp] (dest) }
           EmitLoadImmArm32(1, IRIVal[node]); { r1 = count }
           EmitCallProc(procIdx);
@@ -4368,8 +4367,7 @@ begin
         end
         else
         begin
-          procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found (arm32)');
+          procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'arm32');
           EmitLoadImmArm32(1, IRIVal[node]); { r1 = count }
           EmitCallProc(procIdx);
         end;
@@ -5087,8 +5085,7 @@ begin
           EmitLoadImmArm32(0, Syms[i].Offset);
           EmitI32($E08B0000);    { add r0, fp, r0 (dest) }
           EmitLoadImmArm32(1, RecSize(SymTR[i].RecId));   { r1 = count }
-          procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found (arm32)');
+          procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'arm32');
           EmitCallProc(procIdx);
         end
         else
@@ -5318,8 +5315,7 @@ begin
               EmitLoadImmArm32(0, Syms[si].Offset);
               EmitI32($E08B0000);                 { add r0, fp, r0 (dest) }
               EmitLoadImmArm32(1, sz);            { r1 = count }
-              procIdx := FindProc('PXXMemZero');
-              if procIdx < 0 then Error('compiler error: PXXMemZero not found (arm32)');
+              procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'arm32');
               EmitI32($E92D000C);                 { push {r2,r3} }
               EmitCallProc(procIdx);
               EmitI32($E8BD000C);                 { pop {r2,r3} }

@@ -745,11 +745,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 
-## backlog-esp (2)
+## backlog-esp (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-s-the-bare-esp-refusal-for-c-that-needs-the-rtl-is-an-internal-assertion | S | 15 | bug | The bare ESP profile correctly pulls no default RTL, so C that needs a builtin cannot build there -- but it says so as an INTERNAL ASSERTION naming a compiler-private symbol: `pascal26:11: error: compiler error: PXXMemZero not found (xtensa)` for `#include <stdio.h>` plus a printf under --esp-profile=bare, on both ISAs. THE CONTRACT IS RIGHT AND ONLY THE MESSAGE IS WRONG: the Pascal driver has the same situation and answers it with a diagnostic naming a `uses` clause to add, which C has no equivalent of -- so a C programmer gets a symbol they did not write, a `compiler error:` prefix that reads as a compiler defect rather than a refusal, and no action. Deliberately NOT to be fixed by defining PXXMemZero anywhere (see the parent): the symbol exists, the unit is intentionally absent. The remedy is a refusal raised where the POLICY lives, naming the profile and what it excludes, instead of fifteen codegen sites discovering it. Residual of bug-s-c-on-the-esp-profile-cannot-reach-crtl, whose IDF half is fixed. | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | HARDWARE-GATED AND NOT WORK ANYONE CAN PICK UP TODAY -- the prio is 25 for that reason and NOT because the ticket is unimportant. It is the row that decides whether the ESP work pays: two of the fleet's open technical claims live here and neither can be closed without a board on USB. (1) UART: tools/esp_flash.sh gained a --project pass/hang verdict (7d4f7ea33) and all four NilPy demos are OK in qemu against pin v413 -- but the log filter was written against QEMU output, so a filter tuned to qemu can strip a line a physical part prints and report a clean pass, which is this ticket's own first acceptance row failing silently. (2) ISR: the acceptance asks that a peripheral/ISR FIRE, and firing is necessary and not sufficient -- boxing ALLOCATES, an allocation inside an interrupt handler faults later on another context's heap, and every timing number in between is correct because the timing IS correct. A run printing tick=1..5 status=0 satisfies the row as written and says nothing about the contract; what settles it is an assertion on the ALLOCATOR (allocation count unchanged across N ticks), a different assertion class from expect_same. THE CONDITION THAT SHOULD MOVE THIS PRIO is a board existing on the box -- the owner said 2026-09-20 that ESP32 is priority and that he will try to set hardware up later; until then a high rank would send seats to work they cannot start. Raise it the day silicon arrives, not before. WHY VISIBLE-BUT-LOW BEATS HIDDEN, and this is the argument that survives someone disagreeing about how likely a misdispatch is: THE TWO FAILURES HAVE DIFFERENT HALF-LIVES. Unpickability is short-lived and SELF-RESOLVING -- the moment a board exists the objection evaporates on its own. Invisibility is not: a ticket nobody can see stays unseen after the condition lifts, and the lifting event produces no notification. So the asymmetry favours ranked-and-low even if the misdispatch risk were higher than it is. AND NOT blocked/: that folder's convention is ticket-to-ticket via `blocked-by:` (sampled 3 of 3), and "no board exists on this box" names no ticket; rainy-day/ fits the deferral but is unranked and unscanned, which trades a small failure for the larger one. frankS holds both claims and can close neither. | — |
 
 ## backlog-rust (0)
@@ -1125,9 +1124,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3942)
+## done (3943)
 
-3942 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3943 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (88)
 
@@ -1770,7 +1769,6 @@ _none_
 - [p 20] [B] task-b-four-fpc-build-artefacts-are-committed-under-lib-asmcore
 - [p 18] [C+S] feature-c-esp-conformance-coverage
 - [p 18] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
-- [p 15] [S] bug-s-the-bare-esp-refusal-for-c-that-needs-the-rtl-is-an-internal-assertion
 - [p 15] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 15] [N] compat-n-repr-does-not-escape-non-printables-above-u007f
 - [p 15] [P] compat-pascal-the-strict-fpc-flag-family-is-incomplete

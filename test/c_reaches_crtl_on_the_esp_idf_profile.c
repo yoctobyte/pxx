@@ -26,12 +26,24 @@
  * the contract rather than corrected the predicate -- and that widening is
  * invisible in a suite that only checks the targets it wants to work.
  *
- * KNOWN AND NOT FIXED HERE: on bare the refusal is still spelled as an
- * internal assertion with no remedy a C programmer could act on (there is no
- * `uses` clause in C). That is the remaining half of the ticket, and it is the
- * diagnostic, not the contract -- so the bare row below greps for the SYMBOL
- * NAME rather than the full wording, and is expected to change when that half
- * lands.
+ * THAT HALF LANDED 2026-09-24, and the foresight in the line below paid for
+ * itself: the bare row greps for the SYMBOL NAME rather than the full wording,
+ * so rewriting the message did not break it. What it also shows is why that row
+ * was not enough on its own -- asserting only that bare REFUSES was satisfied by
+ * the bad message too, so two rows now pin the message itself: it must name the
+ * profile that excluded the unit, and it must NOT be spelled `compiler error:`,
+ * which this tree reserves for internal faults. Both were verified to FAIL
+ * against the old wording.
+ *
+ * The refusal lives in FindHeapHelperOrRefuse (symtab.inc), which fifteen
+ * codegen sites across six backends now route through, and it BRANCHES on
+ * whether policy explains the absence -- a profile exclusion gets an actionable
+ * refusal, a genuinely missing builtinheap keeps the internal-fault spelling.
+ * It is NOT at the cPullsBuiltinHeap gate its ticket proposed, because that gate
+ * knows the policy and cannot know the demand; see
+ * test/c_freestanding_on_bare_esp_needs_no_rtl.c, which is the row an
+ * unconditional refusal there would have broken.
+ * bug-s-the-bare-esp-refusal-for-c-that-needs-the-rtl-is-an-internal-assertion
  */
 
 #include <stdio.h>

@@ -11010,6 +11010,62 @@ end;
 
   Scans rather than walking the hash chain in one pass because it must consider
   EVERY same-named entry, not stop at the first. }
+{ THE ONE PLACE A MISSING COMPILER-PRIVATE HEAP HELPER IS DIAGNOSED, and the
+  message BRANCHES ON WHETHER POLICY EXPLAINS THE ABSENCE. Sixteen sites across
+  six backends plus symtab and cparser each used to spell
+  `if procIdx < 0 then Error('compiler error: PXXMemZero not found (<arch>)')`,
+  so a DELIBERATE exclusion was reported in the vocabulary this tree reserves
+  for INTERNAL FAULTS -- naming a symbol the user never wrote, with no action in
+  it. Measured 2026-09-23 on the bare ESP profile, both ISAs:
+  `pascal26:11: error: compiler error: PXXMemZero not found (xtensa)` for
+  `#include <stdio.h>` plus a printf.
+
+  WHY IT IS HERE AND NOT BESIDE cPullsBuiltinHeap, which is where its ticket
+  proposed it: that gate knows the POLICY but cannot know the DEMAND. The pull
+  is decided once, at parse time, from tokens; the need for a memzero is
+  discovered at CODEGEN, when an aggregate or managed-record temp has to be
+  zeroed, and there is NO token that signals it -- unlike the softfloat pull a
+  few lines below it, whose demand really is a `float`/`double` token. A refusal
+  at the gate would therefore have to be unconditional, and that would break
+  FREESTANDING bare C, which is the supported shape and has a negative-control
+  row pinning it in test-emit-obj. So the choke point has to be where demand is
+  known, and the fix is to have ONE of them rather than sixteen.
+
+  THE BRANCH IS THE POINT, NOT THE WORDING. Where `NoDefaultRtl` or
+  `TargetIsEspClass` is true, the unit's absence is a decision someone took and
+  the user gets a refusal naming the profile and an action. Where neither holds,
+  builtinheap should be present and its absence IS an internal fault -- so that
+  arm keeps the old `compiler error:` spelling exactly. Collapsing both into one
+  friendly message would have destroyed a real signal.
+
+  IT DOES NOT SUGGEST `uses builtinheap`, AND THAT IS CHECKED RATHER THAN
+  ASSUMED: `uses builtin;` on a bare ESP boot does not compile, deliberately --
+  22 arms of needsBuiltin carry `(not TargetIsEspClass)` and
+  feature-bare-esp-supports-uses-builtin is open precisely because making it
+  work is an open-ended sequence of judgement calls, measured four steps deep.
+  Advising it would send the reader into that.
+  bug-s-the-bare-esp-refusal-for-c-that-needs-the-rtl-is-an-internal-assertion }
+function FindHeapHelperOrRefuse(const nm, siteArch: AnsiString): Integer;
+begin
+  Result := FindProc(nm);
+  if Result >= 0 then Exit;
+  if NoDefaultRtl or TargetIsEspClass then
+    Error(nm + ' is provided by the builtinheap unit, and this build excludes '
+      + 'the default RTL, so nothing here can provide it. That exclusion is '
+      + 'deliberate: --esp-profile=bare (and --no-default-rtl) produce a '
+      + 'freestanding image, and builtinheap is the heap/string runtime. This '
+      + 'translation unit is not freestanding -- something in it needs an '
+      + 'aggregate or a managed record zeroed, which is what ' + nm + ' does. '
+      + 'Either build it for the ESP-IDF profile (drop --esp-profile=bare), '
+      + 'where the RTL is pulled and crtl is reachable, or keep the unit '
+      + 'freestanding and do not call into crtl (in C, that means no '
+      + '<stdio.h>/<stdlib.h> calls such as printf or malloc). Adding a `uses` '
+      + 'of the builtin unit is NOT an option on a bare ESP boot today -- see '
+      + 'feature-bare-esp-supports-uses-builtin.')
+  else
+    Error('compiler error: ' + nm + ' not found (' + siteArch + ')');
+end;
+
 { FindProcArity, narrowed to the overload whose parameters are all DOUBLE.
   Arity alone cannot tell `Power(base, exponent: Integer): Integer` from
   `Power(base, exponent: Double): Double` — both take two — and the integer one
@@ -16270,8 +16326,7 @@ begin
     Exit;
   end;
 
-  helperPi := FindProc('PXXMemZero');
-  if helperPi < 0 then Error('compiler error: PXXMemZero not found (symtab)');
+  helperPi := FindHeapHelperOrRefuse('PXXMemZero', 'symtab');
   if TargetArch = TARGET_I386 then
   begin
     EmitB($8D); EmitB($85); EmitI32(frameOff);   { lea eax, [ebp+off] }

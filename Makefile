@@ -36116,6 +36116,24 @@ test-emit-obj: $(COMPILER)
 	@# message is expected to change and the contract is not.
 	! ./$(COMPILER) --target=xtensa --esp-profile=bare --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_bare.o >$(TESTTMP)/c_crtl_bare.err 2>&1
 	grep -q "PXXMemZero" $(TESTTMP)/c_crtl_bare.err
+	# AND IT IS A REFUSAL, NOT AN INTERNAL ASSERTION. Until 2026-09-24 this said
+	# `compiler error: PXXMemZero not found (xtensa)` -- the spelling this tree
+	# reserves for internal faults -- naming a compiler-private symbol with no
+	# action in it, for what is a deliberate profile exclusion. The `!` row above
+	# only ever asserted that bare REFUSES, which the bad message satisfied too.
+	# These two rows are what make the message itself the tested thing: it must
+	# name the profile that excluded the unit, and it must NOT be spelled as an
+	# internal fault. The `compiler error:` spelling is still correct for a
+	# genuine missing-builtinheap-with-no-policy case, which is why the branch
+	# exists in FindHeapHelperOrRefuse rather than the message being softened.
+	grep -q "esp-profile=bare" $(TESTTMP)/c_crtl_bare.err
+	! grep -q "compiler error:" $(TESTTMP)/c_crtl_bare.err
+	# FREESTANDING bare C must still BUILD -- the row a blanket refusal at the
+	# cPullsBuiltinHeap gate would have broken, which is why the refusal lives
+	# where DEMAND is known (codegen) instead of where policy is decided.
+	./$(COMPILER) --target=xtensa --esp-profile=bare --emit-obj test/c_freestanding_on_bare_esp_needs_no_rtl.c $(TESTTMP)/c_free_xt.o
+	./$(COMPILER) --target=riscv32 --esp-profile=bare --emit-obj test/c_freestanding_on_bare_esp_needs_no_rtl.c $(TESTTMP)/c_free_rv.o
+	nm $(TESTTMP)/c_free_xt.o | grep -q ' T add$$'
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained

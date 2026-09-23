@@ -3871,8 +3871,7 @@ begin
           PXXRecordRelease path the hosted targets take for managed fields. }
         IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
         EmitLoadImmRISCV32(reg_a1, Integer(IRIVal[node]));  { a1 = byte count }
-        procIdx := FindProc('PXXMemZero');
-        if procIdx < 0 then Error('compiler error: PXXMemZero not found (riscv32)');
+        procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'riscv32');
         EmitCallProc(procIdx);
       end;
 
@@ -4751,8 +4750,7 @@ begin
         begin
           EmitSlotAddrRISCV32(reg_a0, i);
           EmitLoadImmRISCV32(reg_a1, RecSize(SymTR[i].RecId));
-          procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found (riscv32)');
+          procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'riscv32');
           EmitCallProc(procIdx);
         end
         else
@@ -4945,8 +4943,7 @@ begin
             begin
               EmitSlotAddrRISCV32(reg_a0, si);
               EmitLoadImmRISCV32(reg_a1, sz);
-              procIdx := FindProc('PXXMemZero');
-              if procIdx < 0 then Error('compiler error: PXXMemZero not found (riscv32)');
+              procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'riscv32');
               EmitCallProc(procIdx);
             end;
           end;

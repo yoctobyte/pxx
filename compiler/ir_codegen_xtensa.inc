@@ -4225,8 +4225,7 @@ begin
         { Zero IRIVal bytes at dest. ESP has no managed records yet, so skip the
           PXXRecordRelease path the hosted targets take for managed fields. }
         IREmitNodeXtensa(IRA[node]);             { a2 = dest }
-        procIdx := FindProc('PXXMemZero');
-        if procIdx < 0 then Error('compiler error: PXXMemZero not found (xtensa)');
+        procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'xtensa');
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
           xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);        { arg0 = dest }
@@ -5755,8 +5754,7 @@ begin
            (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
         begin
           EmitSlotAddrXtensa(reg_xtensa_a2, i);
-          procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found (xtensa)');
+          procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'xtensa');
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
