@@ -7,7 +7,7 @@ status: done
 owner: frank
 created: 2026-09-21
 resolved: 2026-09-23
-commit: PENDING-COMMIT
+commit: 60b3e800f
 found-by: frankb-8e
 blocked-by: []
 summary: "FIXED 2026-09-23. A DIRECT CALL to a routine declared `interrupt;` is now refused at the AN_CALL convergence point (ir.inc) -- the sibling spelling of the `@proc` refusal in d305e1afa and the same fault: such a body returns via a trap-return (riscv32 `mret`, xtensa `rfe`), so any normal entry restores a caller-saved set the caller never saved and returns through mepc/EPC instead of the return address, with no diagnostic at link or run time. UNCONDITIONAL where the @proc arm is narrowed to bare riscv32/xtensa, because an address has one legitimate consumer (installing a vector) and a call has none on any target or profile. Placed AHEAD OF IRInlineExpand: at -O2 an inline-eligible body is spliced in before a call node exists, so a predicate below the inliner is bypassed on exactly the builds that ship -- there is a -O2 row as that ordering's positive control. THE BLOCKER THIS TICKET WAS PARKED ON WAS CORRECT WHEN FILED AND FALSE 15 HOURS LATER: it required an emission-forcing mechanism before the fixture could drop its always-false `if counter < 0 then MyIsr;`, and 57af7aa10 made every `interrupt;` body an unconditional DCE root (DCE_WHY_VECTOR) as a side effect of bare xtensa's vector table -- the very option this ticket named as probably right. Nobody recorded that it closed the blocker; found by running --dce-why, not by reading. The fixture's two existing rows asserted only that the compiler exited 0, so the probe that existed to prove the ISR is emitted never checked that it was; rows now assert MyIsr is FUNC at shndx=3 and that [ 3] is .iram1.text, on both ISAs, and fail against an ISR-less object. THE CONDITION THAT WOULD SPRING THIS AGAIN: the DCE_WHY_VECTOR root being removed or gated, which would delete an uncalled handler and leave a vector pointing at the hole -- fix the root, never by reintroducing a call."
@@ -170,4 +170,4 @@ remains the `@proc` refusal's narrowed arm (bare riscv32/xtensa, vector-install
 operand only) and the dedicated-ISR-stack condition recorded there.
 
 ## Log
-- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 60b3e800f.
