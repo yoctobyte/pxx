@@ -42,6 +42,21 @@ const
 {$ifdef CPUI386}
   SYS_gettid = 224; SYS_tkill = 238;
 {$endif}
+{$ifdef CPUXTENSA}
+  { xtensa has its OWN numbering and is not asm-generic: gettid 127, tkill 124.
+    NOT copyable from any arm above -- 224 is `sigaltstack` here, where it is
+    gettid on ARM and i386, and 130 is `prctl`, where it is tkill under
+    asm-generic. Copying either arm would call a real but wrong syscall and get
+    a plausible return.
+    MEASURED 2026-09-23 by two instruments that fail differently: qemu-xtensa
+    -strace names 124 `tkill` and 127 `gettid` (one syscall per PROCESS, so a
+    number that terminates the probe costs only its own row); and functionally,
+    tkill(gettid(), 0) = 0 while tkill(999999, 0) = -1 errno=3 ESRCH. Controls:
+    120 getpid, 126 set_tid_address, 150 getppid, 224 sigaltstack all reproduce
+    the numbers already settled in the tree.
+    bug-a-xtensa-tkill-syscall-number-is-unlocated }
+  SYS_gettid = 127; SYS_tkill = 124;
+{$endif}
 
 var seen: array[0..64] of Integer; r: Int64;
 procedure SendSig(s: Int64);
