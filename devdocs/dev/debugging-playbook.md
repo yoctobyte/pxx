@@ -5433,6 +5433,84 @@ have separated them.
 test, and a nonzero exit cannot tell you whether it did.* Ask what the arm
 would print if it had bailed before starting, and go look for that string.
 
+## A `uses` CLAUSE IS AN ORDERED LIST, SO A BARE CALL NAMES A UNIT YOU DID NOT CHOOSE — and the fixture passes when the units are listed the other way round
+
+**2026-09-24, frankS.** Building the drain pump for
+`feature-s-interrupt-events-reach-python-outside-interrupt-context`, the fixture
+was `uses interrupts, mimic_time, sysutils;` and called a bare `sleep(0)` to
+reach the blocking point. The drain row read:
+
+    after-sleep delivered 0 pending 3 seen 0
+
+which reads as **the pump is broken**: three events pushed, a blocking point
+crossed, nothing delivered. I was one step from debugging the queue.
+
+**The pump was fine.** `sleep` resolves to the LAST unit in the uses clause that
+exports it, and both `mimic_time` (`sleep(seconds: Double)`, what `time.sleep`
+binds to from NilPy) and `sysutils` (`Sleep(Milliseconds: Cardinal)`, what a
+Pascal program writes) export one. It bound to `sysutils.Sleep` — which I had
+not wired.
+
+### Two independent rules meet here, and neither one names a `uses` clause
+
+**1. Arrangement-dependence.** CLAUDE.md: *where a construct takes an ordered
+list, the position of the interesting element is a variable, so put it somewhere
+other than last, and run it.* A `uses` clause is exactly such a list, and the
+rule is written about imports, table entries and initializer lists. Written the
+other way round —
+
+    uses interrupts, sysutils, mimic_time;
+
+— the identical fixture **passes**, because the bare `sleep` then binds to the
+unit that was wired. The bug is invisible and ships. The passing arrangement is
+not a sample; it is the one most people would write, since `sysutils` is
+conventionally listed last.
+
+**2. The sibling is a spelling.** `normalise-dont-special-case`: *both spellings
+mean the same thing to the person who wrote the source, so neither the construct
+name nor the test corpus distinguishes them.* `sleep` and `Sleep` both mean "I
+am about to stop doing work". Wiring the drain into one and not the other leaves
+every **Pascal** program permanently unpumped while every NilPy program works —
+a half-built feature that tests green on whichever half you happened to exercise.
+
+**The instance is one line of code and it is in a place neither rule mentions.**
+That is the reason it earns a section: both rules were present, correct and
+known to me, and the thing that fired was the fixture reading 0.
+
+### Why the failure direction was lucky, and would usually not be
+
+This one failed LOUDLY, because the unwired unit happened to be last. The
+symmetric case is the one to fear: had `mimic_time` been last, the row would
+have been green, the feature would have been half-built, and the gap would have
+surfaced whenever a Pascal program first registered a handler — far from here,
+with no reason to suspect the uses clause. **A name-resolution bug reports as a
+behaviour bug in whichever component you were not thinking about.**
+
+### What to do
+
+- **Qualify the call in a fixture that is testing a specific routine.**
+  `mimic_time.sleep(0)` and `sysutils.Sleep(0)` are now separate asserted rows.
+  A bare call in a test is an assertion about name resolution that you did not
+  mean to make, and it silently re-binds when someone adds a unit to the clause.
+- **When you wire a cross-cutting hook into "the" blocking point, grep for the
+  other spellings first.** `grep -n "procedure Sleep\|function Sleep"` over
+  `lib/rtl` answers in one command; I ran it only after the row read 0.
+- **Ask which unit a bare name resolved to before debugging the callee.** The
+  observation "the feature did nothing" is identical for a broken feature and a
+  correctly-working different routine, and the second is cheaper to check.
+- **Reorder the clause as a control.** If moving a unit changes a row, the row
+  was about name resolution and not about the thing you meant to test.
+
+**Where this recurs: every RTL facility with both a Pascal and a Python
+spelling.** That is a large and growing set here — `mimic_*` units exist
+precisely to carry a Python surface beside a Pascal one — so any hook installed
+at "the" RTL entry point for some concept has this shape by construction.
+
+Sibling sections: "Assert the PRECONDITION, not just the comparison"; "A SCRIPT
+COPIED OUT OF THE TREE LOCATES ITSELF AND THEREFORE LOCATES NOTHING";
+"A FIRST-WINS TABLE IS EXPOSED ONLY BY THE ARRANGEMENT THAT PUTS THE CORRECT
+ENTRY LAST".
+
 ## A GREEN THAT NAMES ITS OWN SKIPS IS STILL A GREEN ABOUT A SMALLER CORPUS — and the line that says so is written to be reassuring
 
 **2026-09-11, frankS, and it is the THIRD round of one error in one ticket.**
