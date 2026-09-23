@@ -43142,3 +43142,75 @@ a pattern — and it reads as a STRENGTHENING of "A GUARD THAT CANNOT FAIL IS NO
 A GUARD" rather than a neighbour of it, since the novelty is precisely that
 these guards *can* fail. Banked here rather than promoted by the seat that
 found it; the rules-file call is the owner's.
+
+## A CONFIDENT CORRECTION SOURCED FROM MEMORY IS WORSE THAN NO CORRECTION — and naming the right instrument is the delivery mechanism, not a safeguard
+
+Measured 2026-09-23/24, on this seat's own error, and recorded because the seat
+that made it is the one least able to notice it.
+
+A peer wrote *"the ISR stack landed — you landed it, both ISAs"*. I replied that
+it was not mine, listed my session's arc, and told the peer that
+`git log --format=%an` is `yoctobyte` for every commit in this repo so author
+name cannot separate seats — **`tools/whose_commit.sh` is the instrument that
+can.** The peer re-ran it, got `frankB`, accepted my correction, and relayed it
+to the coordinator, who relayed it onward with an endorsement.
+
+**I am frankB.** `whose_commit.sh` had answered correctly both times. The peer's
+original claim was right, and my correction inverted it.
+
+The transcript settles it in one command:
+`b8aadb25-…jsonl`, a session in this same checkout, contains the assistant
+`git commit` for `feat(S): a dedicated ISR stack for interrupt; on bare
+riscv32…` at `2026-09-21T21:22:48Z`; the commit is stamped `21:22:55Z`.
+
+### Three failures, and the first is the one to watch for
+
+1. **I dismissed the instrument I had just recommended, because its answer
+   conflicted with recollection.** And the answer was my own checkout's name,
+   which I read as another seat's. Citing the right instrument did not protect
+   me — I overrode it.
+2. **I reasoned from a SUMMARY of my own session, not its transcript.** CLAUDE.md
+   says a seat's recollection of what it did is not evidence about what it did.
+   The work was from 09-21; this context window opened after it, so it sat
+   "before I started" and read as somebody else's — the documented failure,
+   arriving exactly as written.
+3. **A scope word hid the disagreement.** I wrote *"my arc today is…"*, which was
+   TRUE. The peer's claim had no date on it. Two correct statements about
+   different questions, and one word made the conflict invisible to both of us.
+   CLAUDE.md's remedy — name the date, never the session-relative period — fired
+   on someone who was quoting CLAUDE.md in the same message.
+
+### Why it propagated, which is the part a lone seat cannot fix
+
+**The methodological confidence WAS the delivery mechanism.** The correction
+named an instrument, cited a rule and drew a distinction, so it read as the
+checked half of the message — and the peer's weaker inference (*"you told me
+about it, so you built it"*) was the one that had the right answer. A reader
+cannot tell a careful-sounding claim from a checked one.
+
+Then **a relay without verification amplified it.** The coordinator passed it on
+with *"you were right to catch it"* having checked nothing, with the transcript,
+the sha and `whose_commit.sh` all one command away. Its own summary: *a relay
+that does not verify is an amplifier.* That is the step that turned confident
+into authoritative.
+
+### What to actually do
+
+- **Before denying authorship of anything outside the current context window,
+  grep the transcripts.** `~/.claude/projects/<proj>/*.jsonl`, filtered to
+  `role == "assistant"`, and for authorship specifically look for a **tool_use
+  that COMMITS** — a mere mention is not authorship, and you will match your own
+  earlier reading of the same string.
+- **Check whether the checkout name an instrument returns is your own** before
+  reading it as another seat.
+- **Put a DATE on a claim about who did what.** "This session", "today", "my arc"
+  each silently narrow to your visible horizon, which is the horizon in dispute.
+- **When a peer overrides an instrument you ran yourself, ask what population
+  their claim was drawn from** before adopting it. Mine was drawn from a summary.
+- **If you relay a correction, verify it first or say you have not.** An
+  unverified relay is indistinguishable from a confirmed one at the far end.
+
+**Nothing committed was affected here** — the hardening map row this touched
+names no seat for the mechanism — so the whole cost was three messages and the
+time to unwind them. That is the cheap version; the expensive version is the same
+sentence inside a ticket summary, where it becomes a routing instruction.
