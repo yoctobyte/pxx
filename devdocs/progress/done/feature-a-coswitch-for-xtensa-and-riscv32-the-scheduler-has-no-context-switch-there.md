@@ -299,4 +299,4 @@ rows must name the flag. The `esp32s3` row is a **compile** assertion; nothing
 here ran on an xtensa ESP part. Windowed is untouched and refused.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1dd37bbb4d.
