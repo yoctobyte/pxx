@@ -162,4 +162,4 @@ Low prio, and lower still under the owner's 2026-09-23 ruling that IDF is the
 assumed profile and bare is a test vehicle.
 
 ## Log
-- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e65ee9a5d.
