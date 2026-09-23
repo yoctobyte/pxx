@@ -187,4 +187,4 @@ glibc.
 This row halted `make test-nilpy` at 2470 of 6614 recipe lines; 5b's earlier
 `make -i` run found it the only failure in 6709 lines, so the territory behind
 it was already measured green.
-- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5c405c23b.
