@@ -172,4 +172,4 @@ xtensa Linux — is still worth having. Nothing here depends on it.
   in the implementation file, where the namespace restriction does not apply.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4c662862d.
