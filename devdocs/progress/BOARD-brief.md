@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:18 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:168 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3941 rejected:88`
+`working:36 unfinished:17 blocked:10 backlog:41 backlog-umbrella:14 backlog-core:168 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3941 rejected:88`
 
 ## Held now (working/ — do not touch these files)
 
@@ -32,6 +32,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-n-a-non-allocating-restricted-thunk-for-an-isr` [N] — owner: frankh-c0
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
+- `feature-pal-esp-posix-fd-semantics` [B+S] — owner: frankS
 - `feature-pascal-corpus-expansion` [P] — owner: frankD
 - `feature-pascal-corpus-fpc-testsuite` [P] — owner: frankS
 - `feature-pascal-corpus-generics` [P] — owner: frankS
@@ -45,7 +46,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 
-## unfinished (18) — parked mid-flight; re-claim, do not duplicate
+## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
@@ -59,7 +60,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-enum-class` [N]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-nilpy-user-defined-decorators` [N]
-- `feature-pal-esp-posix-fd-semantics` [B+S]
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P]
@@ -79,7 +79,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 570, ranked
+## Ready — top 30 of 569, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -112,4 +112,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
 
-_540 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
