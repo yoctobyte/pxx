@@ -54,6 +54,36 @@ surfaces** — `re.pas` with **42** Python-shaped entry points, plus `json`,
 `pathlib`, `sockets`, `base64`, `markdown`, `mimic_array`, `mimic_string` — and
 **fifteen more carry a Python surface only.**
 
+> **BUT CARRYING A PYTHON SURFACE IS NOT WHAT MAKES `import X` REACH IT — AN
+> ALLOWLIST IN THE COMPILER IS** (measured 2026-09-24, frankS). A bare NilPy
+> import of a Pascal unit is **refused outright** unless the name appears in
+> `PyRtlUnitServesPython` (`compiler/pasparser_proc.inc`), a hardcoded list of
+> ~18 names. The refusal is explicit — *"`sockets` is the Pascal unit
+> lib/rtl/sockets.pas, not a Python module"* — and **`sockets` is on the list of
+> nine above**, so the paragraph you just read names a unit whose bare import
+> does not work. Measured at `9b25305cc`: `base64`, `re`, `json`, `pathlib` and
+> `markdown` import; `sockets` is refused.
+>
+> **Sampling the worked examples confirms the wrong model**, which is why this
+> is worth a paragraph: every unit anyone reaches for as an example — `base64`,
+> `re`, `json` — is on the list, so the rule "the unit name is the module name"
+> is 80% accurate and the part you check always agrees. The discriminator is a
+> unit that is *not* on it.
+>
+> **Adding a name is a one-line compiler change and the criterion is stated in
+> that function's own comment:** a unit earns the entry by having a surface
+> NilPy can *speak*. `png` and `image` are documented there as deliberately
+> absent for exactly that reason — their entry points take `hashing.TByteArray`,
+> which NilPy has no spelling for, so importing them would trade a wrong answer
+> for a useless one. `lib/rtl/interrupts.pas` was added on that criterion when
+> its Python surface landed
+> (feature-s-interrupt-events-reach-python-outside-interrupt-context).
+>
+> Two consequences worth knowing before you plan work: a new dual-surface unit
+> is **not** reachable from NilPy until that line lands, and because the line is
+> in `compiler/**` the import **stays refused under `$(PXX_STABLE)` until a pin
+> carries it** — so a test row for it must use `./$(COMPILER)` and say why.
+
 ### The marshalling types, which are the whole trick
 
 `TPyBytes`, `TPyList`, `TPyDict`, `Variant`. A Pascal declaration using these is
