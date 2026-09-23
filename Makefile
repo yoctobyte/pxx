@@ -26581,15 +26581,33 @@ test-core: $(COMPILER)
 	# FALSE 80 24 with the old table and TRUE 132 40 through the PAL, same binary
 	# otherwise; that pair is the whole claim.
 	#
-	# wasm32 and xtensa expect FALSE 80 24 and the reasons DIFFER. wasi has no
-	# ioctl (PAL_ERR_UNSUPPORTED, a defined failure the caller handles) -- before
-	# this change all five bodies were refused at codegen and the module trapped,
-	# 45 of the 518 IR_SYSCALL refusals in the corpus census. xtensa answers
-	# -ENOTTY under qemu-xtensa for BOTH the generic $$5413 and the BSD-style
-	# $$40087468 spelling of TIOCGWINSZ, and on x86-64 that same probe separates
-	# them (0 vs -25) -- so the xtensa result is consistent with either a wrong
-	# command constant or an absent tty and this row cannot tell which. It is
-	# recorded as FALSE because that is what was measured, not because it is right.
+	# wasm32 expects FALSE 80 24: wasi has no ioctl (PAL_ERR_UNSUPPORTED, a defined
+	# failure the caller handles) -- before this change all five bodies were
+	# refused at codegen and the module trapped, 45 of the 518 IR_SYSCALL refusals
+	# in the corpus census.
+	#
+	# XTENSA NOW HAS A PTY ROW AND IT EXPECTS TRUE 132 40 LIKE EVERY OTHER TARGET.
+	# This paragraph used to say the xtensa result "is consistent with either a
+	# wrong command constant or an absent tty and this row cannot tell which".
+	# Settled 2026-09-24: it was the CONSTANT, and neither of the two candidates
+	# the ticket named. The old probe tried $$40087468, the BSD spelling -- but
+	# Linux's _IOC_READ is 2, so a Linux arch using the 't' encoding wants
+	# $$80087468. That constant was wrong under BOTH hypotheses, which is exactly
+	# why it answered -25 like the generic one and separated nothing.
+	#
+	# What settled it was asking an ioctl of a fd where tty-ness CANNOT be the
+	# answer. Two rows did it: ioctl on a BAD FD returned -25 on xtensa where the
+	# kernel must return -9 EBADF (so -25 there was never ENOTTY at all -- it is
+	# what qemu-xtensa returns for a command not in its table, fd unexamined),
+	# and TCGETS $$5401 SUCCEEDED on fd 1, which only a real terminal does. So the
+	# tty was real and the generic encoding was fine; only this one command
+	# differed. xtensa takes asm-generic for TCGETS/TCSETS and keeps the BSD-style
+	# 't' family for the window size -- measured, not assumed.
+	#
+	# THE X86-64 PTY ROW IS THIS ROW'S CONTROL, which is why both must stay. A
+	# missing pty makes a CORRECT constant answer FALSE 80 24, indistinguishable
+	# from the bug. Both red => the harness lost its pty; xtensa alone red => the
+	# constant regressed.
 	NOTTY="$$(printf 'write-through-pal\nsize FALSE 80 24\nraw round-trip survived\nkey 0')"; \
 	PTY="$$(printf 'write-through-pal\nsize TRUE 132 40\nraw round-trip survived\nkey 0')"; \
 	./$(COMPILER) test/test_cross_ansiterm_through_the_pal.pas $(TESTTMP)/atpal26 >/dev/null; \
@@ -26610,7 +26628,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh atpal/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/atpal.wasm </dev/null)" "$$NOTTY" || exit 1; \
 	if command -v qemu-xtensa >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_ansiterm_through_the_pal.pas $(TESTTMP)/atpal_xt >/dev/null || { echo "atpal xtensa compile FAIL"; exit 1; }; \
-	  tools/expect_same.sh atpal/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/atpal_xt </dev/null)" "$$NOTTY" || exit 1; \
+	  tools/expect_same.sh atpal/xtensa-no-tty "$$(tools/run_target.sh xtensa $(TESTTMP)/atpal_xt </dev/null)" "$$NOTTY" || exit 1; \
+	  if command -v script >/dev/null 2>&1; then \
+	    tools/expect_same.sh atpal/xtensa-pty "$$(script -qec "stty rows 40 cols 132; tools/run_target.sh xtensa $(TESTTMP)/atpal_xt" /dev/null </dev/null | tr -d '\r')" "$$PTY" || exit 1; \
+	  fi; \
 	else echo "  atpal: qemu-xtensa absent, xtensa NOT verified"; fi
 	# ...and test_ansiterm_raw_write now has a wasm32 row, which it could not have
 	# had before: all five bodies were refused and the module trapped on the first

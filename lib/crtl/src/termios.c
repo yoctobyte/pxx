@@ -9,6 +9,14 @@
 
 #include <termios.h>
 #include <errno.h>
+/* pid_t, for the tcgetsid/tcgetpgrp/tcsetpgrp definitions below. <termios.h>
+   declares those with __pid_t deliberately -- a public header may not define
+   the unprefixed POSIX name -- but this file DEFINES them spelled `pid_t`, and
+   nothing it included provided that, so `#include <termios.h>` alone failed to
+   build at all (`near: pid_t tcgetsid`). An implementation file has no such
+   namespace restriction, so the include is the fix rather than respelling the
+   definitions; the two spellings are the same type. */
+#include <sys/types.h>
 
 extern int __pxx_ioctl(int fd, long request, void *argp);
 

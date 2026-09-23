@@ -212,15 +212,42 @@ struct termios {
 #define TCIOFF 2
 #define TCION  3
 
+/* Guarded because <sys/ioctl.h> declares it too, as glibc does: TIOCGWINSZ is
+   useless without the struct, and `#include <sys/ioctl.h>` then `struct winsize
+   ws;` is the canonical way C code asks for the terminal size. Whichever header
+   is included first wins and the second is a no-op. */
+#ifndef __struct_winsize_defined
+#define __struct_winsize_defined 1
 struct winsize {
   unsigned short ws_row;
   unsigned short ws_col;
   unsigned short ws_xpixel;
   unsigned short ws_ypixel;
 };
+#endif
 
+/* THE WINDOW-SIZE PAIR IS NOT ONE NUMBER ACROSS ARCHES. xtensa keeps the
+   BSD-style 't' encoding for this family while taking asm-generic for
+   everything else -- TCGETS 0x5401 and TCSETS 0x5402 ARE the generic numbers on
+   xtensa, measured, which is why only these two are conditional.
+
+   The direction bits are the trap: Linux's _IOC_READ is 2 so _IOR sets
+   0x80000000, where BSD's sets 0x40000000. _IOR('t',104,struct winsize) is
+   therefore 0x80087468 and _IOW('t',103,...) is 0x40087467.
+
+   Measured 2026-09-24 through the PAL on all six targets in a pty, x86-64
+   native and the rest under qemu user-mode: 0x5413 answers 0 on x86-64, i386,
+   arm32, aarch64 and riscv32 and -ENOTTY on xtensa; 0x80087468 is the exact
+   mirror. Both xtensa values verified to return the real geometry and to
+   round-trip a set.
+   bug-b-terminalsize-answers-enotty-on-xtensa-and-the-probe-cannot-say-why */
+#if defined(__XTENSA__)
+#define TIOCGWINSZ 0x80087468
+#define TIOCSWINSZ 0x40087467
+#else
 #define TIOCGWINSZ 0x5413
 #define TIOCSWINSZ 0x5414
+#endif
 /* Also in <sys/ioctl.h>, exactly as TIOCGWINSZ above already is and as glibc
    has it: both headers reach the same asm-generic number, and a program that
    includes either gets the constant. Same token sequence in both places, which

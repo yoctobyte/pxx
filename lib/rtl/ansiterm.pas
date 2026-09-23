@@ -209,6 +209,45 @@ begin
   if rd = 1 then Result := c;
 end;
 
+const
+  { TIOCGWINSZ IS NOT ONE NUMBER ACROSS LINUX ARCHES, AND XTENSA IS THE ONE OF
+    OURS THAT DIFFERS. Most arches take asm-generic's $5413; xtensa keeps the
+    BSD-style 't' encoding for the window-size family while using asm-generic
+    for everything else -- TCGETS $5401 and TCSETS $5402 are the generic numbers
+    on xtensa too, measured, which is why only this one constant is conditional.
+
+    $80087468 is _IOR('t', 104, struct winsize) under LINUX's macro, and the
+    direction bits are the whole trap: Linux's _IOC_READ is 2, so _IOR sets
+    $80000000, where BSD's sets $40000000. (2<<30)|(8<<16)|('t'<<8)|104 lands
+    exactly on $80087468.
+
+    bug-b-terminalsize-answers-enotty-on-xtensa-and-the-probe-cannot-say-why
+    tried $40087468 -- the BSD spelling of the same idea -- and got -25, the
+    same answer the generic constant gives, so the probe refuted nothing. It was
+    testing a constant that is wrong under BOTH hypotheses it was meant to
+    separate.
+
+    Measured 2026-09-24 at HEAD, all six targets, each in a pty under
+    `script -qec 'stty rows 40 cols 132'`, x86-64 native and the rest under
+    qemu user-mode:
+
+      target                     $5413    $80087468
+      x86-64, i386, arm32,
+      aarch64, riscv32              0          -25
+      xtensa                      -25     0 (rows=40 cols=132)
+
+    THE XTENSA ROWS ARE QEMU-XTENSA, NOT SILICON, and qemu's target ioctl table
+    is derived from the kernel's uapi headers rather than being an independent
+    witness. What raises it above "qemu says so" is that the accepted value is
+    exactly the canonical _IOR('t',104,8) encoding, which is what a kernel header
+    generates, and that qemu decoded and NAMED the request. A run on real xtensa
+    Linux would still be worth having. }
+{$ifdef CPU_XTENSA}
+  TIOCGWINSZ = $80087468;
+{$else}
+  TIOCGWINSZ = $5413;
+{$endif}
+
 function TerminalSize(var cols, rows: Integer): Boolean;
 type
   TWinSize = record
@@ -222,7 +261,7 @@ begin
   Result := False;
   ws.Row := 0;
   ws.Col := 0;
-  if PalIoctl(1, $5413, @ws) = 0 then                { TIOCGWINSZ }
+  if PalIoctl(1, TIOCGWINSZ, @ws) = 0 then
     if (ws.Col > 0) and (ws.Row > 0) then
     begin
       cols := ws.Col;

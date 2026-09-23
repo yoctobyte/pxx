@@ -48,8 +48,36 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
 #define TIOCSPGRP          0x5410
 #define TIOCOUTQ           0x5411
 #define TIOCSTI            0x5412
+/* glibc's <sys/ioctl.h> provides this (via bits/ioctl-types.h) and ours did
+   not, so `#include <sys/ioctl.h>` followed by `struct winsize ws;` -- the
+   canonical way C code asks for the terminal size -- got an INCOMPLETE TYPE.
+   pxx's C frontend accepts that silently today and reads garbage from it
+   (gcc: "storage size of 'ws' isn't known"), filed separately as
+   bug-c-an-undeclared-struct-type-compiles-and-reads-garbage; declaring the
+   struct here is the right fix regardless of what that frontend bug does. */
+#ifndef __struct_winsize_defined
+#define __struct_winsize_defined 1
+struct winsize {
+  unsigned short ws_row;
+  unsigned short ws_col;
+  unsigned short ws_xpixel;
+  unsigned short ws_ypixel;
+};
+#endif
+
+/* Conditional for the same measured reason as the copy in <termios.h>, which
+   carries the full note: xtensa keeps the BSD-style 't' encoding for the
+   window-size family while using asm-generic for TCGETS/TCSETS, and Linux's
+   _IOR sets 0x80000000 where BSD's sets 0x40000000. Both headers must agree --
+   a program that includes either one gets the constant.
+   bug-b-terminalsize-answers-enotty-on-xtensa-and-the-probe-cannot-say-why */
+#if defined(__XTENSA__)
+#define TIOCGWINSZ         0x80087468
+#define TIOCSWINSZ         0x40087467
+#else
 #define TIOCGWINSZ         0x5413
 #define TIOCSWINSZ         0x5414
+#endif
 #define TIOCMGET           0x5415
 #define TIOCMBIS           0x5416
 #define TIOCMBIC           0x5417
