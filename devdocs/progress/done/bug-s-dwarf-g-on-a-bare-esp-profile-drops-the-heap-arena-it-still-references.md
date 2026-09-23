@@ -7,7 +7,7 @@ status: done
 owner: frank
 created: 2026-09-23
 resolved: 2026-09-23
-commit: PENDING-COMMIT
+commit: 334aa5ec1
 blocked-by: []
 summary: "FIXED 2026-09-23. `-g` on a bare ESP profile refused with `internal: BSS offset 1264 is inside the dropped region [1264,66800) -- the drop predicate was wrong`, on BOTH ESP ISAs, so no bare-ESP program could be built with debug info. DropEspArenaIfAllocatorDead gated on `DceEnabled` -- the OPTION -- where the question is whether liveness was actually COMPUTED. DceRun opts out at runtime for six further reasons with the option still True, and `-g` is one of them (`line/frame tables carry code offsets`). DceLive is SetLength'd in symtab.inc beside every other per-proc array, so after an opt-out it is allocated, sized and ALL FALSE, which reads as `every proc is dead`: the predicate concluded HeapMmap's only reader was dead and punched out the 64 KiB arena, while DCE having not run meant HeapMmap's body was still emitted and still referenced it. The routine's own header asserted DceLive would be `an unallocated dynamic array` in that case -- which would at least have made its `procIdx >= Length(DceLive)` test fire -- and that was FALSE, so the one guard that could have caught this could never fire. Fix is a DceLiveValid flag, the native twin of the WasmDceActive that already existed in the same file."
 ---
