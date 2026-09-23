@@ -1,0 +1,64 @@
+# Interrupt events reach PYTHON outside interrupt context.
+# feature-s-interrupt-events-reach-python-outside-interrupt-context
+#
+# WHAT THIS ASSERTS, AND WHAT IT DELIBERATELY DOES NOT. It asserts ORDERING
+# (nothing is delivered at push time -- the property that makes the feature
+# exist, and the one no count can see) and COUNT (pushed == delivered + dropped,
+# exactly). It does NOT assert "the callback ran", because that row passes just
+# as well on an implementation that runs the callback FROM the interrupt, which
+# is the one outcome this design exists to prevent.
+#
+# There is no CPython differential here on purpose: `interrupts` has no CPython
+# counterpart, so tools/pydiff.py has no oracle to offer and an expected file is
+# the only instrument available.
+
+import interrupts
+import time
+
+seen = []
+
+
+def h(ev):
+    seen.append(ev.seq)
+
+
+interrupts.on_event(99, h)
+
+# --- 1. ordering: a push delivers NOTHING, however many you make -------------
+interrupts.push(99, 11)
+interrupts.push(99, 12)
+interrupts.push(99, 13)
+print("after-push delivered", interrupts.delivered(), "pending", interrupts.pending(), "seen", len(seen))
+
+# --- 2. a blocking point drains, outside interrupt context -------------------
+time.sleep(0)
+print("after-sleep delivered", interrupts.delivered(), "pending", interrupts.pending(), "seen", len(seen))
+print("order-preserved", seen[0], seen[1], seen[2])
+
+# --- 3. the explicit pump is the same drain ----------------------------------
+interrupts.push(99, 14)
+n = interrupts.poll()
+print("poll-drained", n, "seen", len(seen), "pending", interrupts.pending())
+
+# --- 4. accounting: nothing is invented and nothing vanishes -----------------
+print("accounted", interrupts.delivered() + interrupts.dropped() == 4)
+
+# --- 5. events() iterates with NAMES and runs NO callback --------------------
+# The callback count must not move across this loop: events() hands the caller
+# the events instead of dispatching them.
+before = len(seen)
+interrupts.push(99, 21)
+interrupts.push(99, 22)
+count = 0
+for ev in interrupts.events():
+    print("ev", ev.source, ev.id, ev.seq)
+    count = count + 1
+print("iterated", count, "callbacks-run", len(seen) - before, "pending", interrupts.pending())
+
+# --- 6. None unregisters -----------------------------------------------------
+interrupts.on_event(99, None)
+interrupts.push(99, 31)
+time.sleep(0)
+print("unregistered seen", len(seen), "pending", interrupts.pending())
+
+print("INTERRUPT-PY-OK")

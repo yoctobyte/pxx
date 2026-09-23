@@ -39383,6 +39383,31 @@ endif
 	# produces byte-identical output to HEAD's on this fixture (checked before
 	# landing).
 	$(TESTTMP)/test_interrupt_pump | diff -u test/test_interrupt_events_drain_outside_isr.expected -
+	# The PYTHON half of the same feature -- the half the ticket is named for.
+	# `import interrupts` + `interrupts.on_event(99, h)`, with h a plain Python
+	# def, and the events reaching it on ordinary control flow.
+	#
+	# ./$(COMPILER) AND NOT $(PXX_STABLE), DELIBERATELY, AND THIS ROW WILL GO RED
+	# UNDER THE PIN UNTIL ONE CARRIES IT. A bare NilPy import of a Pascal unit is
+	# refused unless the name is in PyRtlUnitServesPython (pasparser_proc.inc);
+	# `interrupts` was added there in the same commit as the surface. Measured
+	# against the pin in place at landing: the Pascal row above still passes, this
+	# one is refused with "interrupts is the Pascal unit ..., not a Python module".
+	# Move it to $(PXX_STABLE) once a pin includes the entry.
+	#
+	# SAME DISCIPLINE AS THE PASCAL ROWS: ordering and count, never "the callback
+	# ran". `after-push delivered 0 ... seen 0` is the ordering claim -- a Python
+	# callable is registered and three events are pushed, and NOTHING runs until a
+	# blocking point. `accounted True` is pushed == delivered + dropped.
+	# `iterated 2 callbacks-run 0` asserts events() hands the caller the events
+	# instead of dispatching them, and it is asserted at a point in the run where
+	# the callback is demonstrably live (seen is already 4), so it is not a row
+	# that passes because nothing works.
+	#
+	# Positive control, measured: disabling the pycallback dispatch arm turns
+	# `after-sleep ... seen 3` into `seen 0` and the run then dies on seen[0].
+	./$(COMPILER) -Fulib/rtl test/test_interrupt_events_reach_python.npy $(TESTTMP)/test_interrupt_py
+	$(TESTTMP)/test_interrupt_py | diff -u test/test_interrupt_events_reach_python.expected -
 	# uuid.uuid4().hex, which That Space Program names universe objects with.
 	# PREDICATES, not values (a uuid4 is random): 32 lowercase hex digits, version
 	# nibble 4, RFC 4122 variant, the 8-4-4-4-12 str, 200 distinct. Dropping the

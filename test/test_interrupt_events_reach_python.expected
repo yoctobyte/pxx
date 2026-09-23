@@ -1,0 +1,10 @@
+after-push delivered 0 pending 3 seen 0
+after-sleep delivered 3 pending 0 seen 3
+order-preserved 1 2 3
+poll-drained 1 seen 4 pending 0
+accounted True
+ev 99 21 5
+ev 99 22 6
+iterated 2 callbacks-run 0 pending 0
+unregistered seen 4 pending 1
+INTERRUPT-PY-OK

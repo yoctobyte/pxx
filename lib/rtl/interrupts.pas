@@ -26,13 +26,43 @@ unit interrupts;
   input path). Everything in this unit is exercised on x86-64 against a
   synthetic source instead, which needs no board.
 
-  THE PUMP IS INSTALLED, NOT LINKED IN. `platform.PalPendingDrain` is a nil
-  procedure variable that the RTL's blocking points call when it is set; this
-  unit assigns it when the FIRST handler is registered. A program that never
-  registers one keeps a nil pointer and its behaviour exactly, and DCE can drop
-  this whole unit. That is deliberate: making mimic_time `uses interrupts`
-  would root the queue in every program that imports `time`, which on ESP is a
-  real cost paid by programs that never asked for it.
+  THE PUMP IS INSTALLED, NOT LINKED IN -- AND THAT IS A CLAIM ABOUT THE HOOK,
+  NOT ABOUT THIS UNIT'S OWN SIZE. `platform.PalPendingDrain` is a nil procedure
+  variable that the RTL's blocking points call when it is set; this unit assigns
+  it when the FIRST handler is registered. A program that never registers one
+  keeps a nil pointer and its behaviour exactly. That is deliberate: making
+  mimic_time `uses interrupts` would root the queue in every program that
+  imports `time`, which on ESP is a real cost paid by programs that never asked
+  for it.
+
+  WHAT IT DOES *NOT* MEAN, MEASURED 2026-09-24 AT 584644986 BECAUSE THE SENTENCE
+  ABOVE READS AS IF IT DID: `uses interrupts` now costs ~300 KB of code, because
+  the Python surface below names pylib and PYLIB CANNOT BE DROPPED BY DCE. One
+  Pascal program registering one handler and never mentioning Python:
+
+      target            without the Python surface   with it
+      x86-64                     23,097 B          320,881 B
+      esp32c3 --platform=posix   62,028 B          765,604 B
+      xtensa  --platform=posix   52,496 B          671,044 B  (*)
+
+      (*) crosses the 512 KiB CALL0/CALL8 forward-call reach, so xtensa needs
+          --xtensa-long-calls, which other lib/rtl cross rows already pass.
+
+  The cost is pylib's and not this unit's: a bare `uses pylib` program measures
+  316,004 B, and moving pylib to the implementation section changes nothing
+  (316,023 B with the only pylib-using routine unreachable). So there is no
+  arrangement of this file that is cheaper.
+
+  IT IS PAID ANYWAY AND A SPLIT WOULD NOT HELP. `import X` binds unit `X` first
+  and falls back to `mimic_X` only on a miss (pasparser_proc.inc:6851), so an
+  `interrupts.pas` without the Python surface would still win the import and
+  hand NilPy the Pascal spellings -- IntPush, TIntEvent, a procedure-type
+  callback it cannot supply. One unit is the only structure that resolves. A
+  NilPy program links pylib regardless, so the Python surface costs the intended
+  consumer nothing; the payer is a PASCAL program that uses this unit, and the
+  bare ESP profile -- the SRAM-constrained one -- does not consume lib/rtl at all
+  (no bare Makefile row passes -Fulib/rtl). Revisit if a Pascal ESP program ever
+  needs the pump under a flash budget this does not fit.
 
   NOT BUILT HERE, DELIBERATELY: the owner's "hidden loop" for a script that
   registers handlers and then falls off the end. It needs two things settled
@@ -43,6 +73,9 @@ unit interrupts;
   The ticket says not to land it in the same commit as the pump. }
 
 interface
+
+uses pylib;   { Variant, TPyList -- the Python surface below is part of the
+                interface, so the types it names have to be visible here }
 
 const
   { Source tags. A bare pin number cannot distinguish two sources on one pin
@@ -105,14 +138,97 @@ function IntNext(var ev: TIntEvent): Boolean;
   that wants a clean slate after reconfiguring its sources. }
 procedure IntReset;
 
+{ ---- the Python module surface ------------------------------------------- }
+
+{ `import interrupts` resolves to THIS unit -- the unit name IS the module name,
+  which is the established convention (lib/rtl/base64.pas is the worked example
+  and devdocs/dev/pxx-crash-course.md states the rule).
+
+  THAT CONVENTION IS AN ALLOWLIST IN THE COMPILER AND NOT AN AUTOMATIC RULE,
+  which this unit had to learn the expensive way: a bare NilPy import of a
+  Pascal unit is REFUSED ("is the Pascal unit ..., not a Python module") unless
+  the name appears in PyRtlUnitServesPython (pasparser_proc.inc). `interrupts`
+  was added there in the same commit as this surface, on that function's own
+  stated criterion -- a unit earns the entry by having a Python surface NilPy
+  can SPEAK, which is exactly why png and image are deliberately absent from it.
+  So this DOES touch the import mechanism, by one line, and a reader who assumes
+  "the unit name is the module name" holds without it will find the import
+  refused.
+
+  THE SPELLINGS ARE BORROWED AND THE ARCHITECTURE IS NOT. The owner's ruling,
+  2026-09-22: "don't re-invent wheels, use existing naming where possible" AND
+  "no, we will _not_ do what micropython does. that is their approach and it's
+  fair, but we are a compiler." So there is no `machine.Pin` and no
+  `Pin.irq(handler=...)` here, deliberately. The reason is not taste: MicroPython
+  is an interpreter, so a pending-work check between bytecodes is free and
+  "no allocation in a handler" is a mode bit. We emit native code, where the same
+  check has to be EMITTED -- which is why the drain sits at blocking points we
+  already own rather than everywhere. A `machine`-shaped surface is separate work
+  that nobody has ranked, and it must not arrive as a side effect of this.
+
+  A PYTHON CALLABLE REGISTERED HERE CANNOT RUN IN INTERRUPT CONTEXT. That is
+  structural and not a warning to heed: `on_event` stores the callable, and the
+  only thing that invokes it is `poll`, reached from ordinary control flow. The
+  producer side is IntPush, which holds no callable and dispatches nothing. There
+  is no path from a trap to this table. }
+
+type
+  { What `for ev in interrupts.events()` yields.
+
+    A CLASS WITH NAMED FIELDS rather than a tuple, following
+    lib/rtl/mimic_shutil.pas's terminal_size and for its reason: a TPyList would
+    give indexing while losing the names, and the names are the half that code
+    actually reads. `ev.source` and `ev.id` are the spellings; `ev[0]` is not
+    supported and no caller wants it. }
+  event = class
+  public
+    source: Integer;
+    id:     Integer;
+    seq:    Int64;
+    ms:     Int64;
+    constructor Create(const e: TIntEvent);
+  end;
+
+{ Drain and RETURN the events, without running callbacks. The iteration half of
+  the surface: `for ev in interrupts.events():`. Returns an empty list when
+  nothing is queued -- never None, so the `for` is always well formed. }
+function events: TPyList;
+
+{ Drain and RUN the registered callbacks. Returns how many were delivered.
+  This is the explicit pump for a program that wants to service work without
+  blocking; the RTL's blocking points call the same drain by themselves. }
+function poll: Integer;
+
+function pending: Integer;
+function dropped: Int64;
+function delivered: Int64;
+
+{ Register a PYTHON callable for one source. Pass None to unregister.
+  The callable is invoked with one argument, an `event`. }
+procedure on_event(source: Integer; const cb: Variant);
+
+{ Push an event as a source would. This is the SYNTHETIC source: it is what a
+  host test uses in place of an edge nobody can generate here, and it is also
+  the entry point a user's own Pascal or C handler calls. It is deliberately NOT
+  named for GPIO -- there is no GPIO edge source in this tree yet, and a name
+  that implied one would be the plausible-wrong-value failure this design exists
+  to avoid. }
+function push(source, id: Integer): Boolean;
+
 implementation
 
-uses platform;
+uses platform;   { PalPendingDrain -- the blocking-point hook }
 
 type
   THandlerSlot = record
     Source: Integer;
-    Cb:     TIntCallback;
+    Cb:     TIntCallback;   { a Pascal handler }
+    { ...or a Python one. ONE TABLE AND ONE DISPATCH POINT for both, rather than
+      a second registry beside the first: two mechanisms serving one concept is
+      the smell CLAUDE.md names, and it would give source->handler two answers
+      that could disagree. pycallback_is() is what makes a slot's Python half
+      live, so an unset Variant is simply not a handler. }
+    PyCb:   Variant;
   end;
 
 const
@@ -215,36 +331,57 @@ begin
     PalPendingDrain := nil;
 end;
 
+{ A slot is live while EITHER half is set, so unregistering one does not take
+  the other's registration with it. }
+function SlotIsLive(idx: Integer): Boolean;
+begin
+  Result := (Handlers[idx].Cb <> nil) or pycallback_is(Handlers[idx].PyCb);
+end;
+
+procedure DropSlot(idx: Integer);
+begin
+  while idx < NHandlers - 1 do
+  begin
+    Handlers[idx] := Handlers[idx + 1];
+    idx := idx + 1;
+  end;
+  NHandlers := NHandlers - 1;
+end;
+
+function EnsureSlot(source: Integer): Integer;
+begin
+  Result := FindHandler(source);
+  if Result >= 0 then Exit;
+  if NHandlers >= MAX_HANDLERS then
+  begin
+    Result := -1;
+    Exit;
+  end;
+  Handlers[NHandlers].Source := source;
+  Handlers[NHandlers].Cb := nil;
+  Handlers[NHandlers].PyCb := pynone;
+  Result := NHandlers;
+  NHandlers := NHandlers + 1;
+end;
+
 procedure IntOnEvent(source: Integer; cb: TIntCallback);
 var idx: Integer;
 begin
   idx := FindHandler(source);
   if cb = nil then
   begin
-    { unregister: compact, so NHandlers stays the live count }
+    { unregister the PASCAL half only; drop the slot when nothing is left }
     if idx >= 0 then
     begin
-      while idx < NHandlers - 1 do
-      begin
-        Handlers[idx] := Handlers[idx + 1];
-        idx := idx + 1;
-      end;
-      NHandlers := NHandlers - 1;
+      Handlers[idx].Cb := nil;
+      if not SlotIsLive(idx) then DropSlot(idx);
     end;
     InstallHook;
     Exit;
   end;
-  if idx >= 0 then
-  begin
-    Handlers[idx].Cb := cb;
-    InstallHook;
-    Exit;
-  end;
-  if NHandlers >= MAX_HANDLERS then
-    Exit;
-  Handlers[NHandlers].Source := source;
-  Handlers[NHandlers].Cb := cb;
-  NHandlers := NHandlers + 1;
+  idx := EnsureSlot(source);
+  if idx < 0 then Exit;
+  Handlers[idx].Cb := cb;
   InstallHook;
 end;
 
@@ -256,6 +393,7 @@ end;
 function IntPoll: Integer;
 var ev: TIntEvent;
     idx, n, lim: Integer;
+    pcb: TIntCallback;
 begin
   Result := 0;
   { REFUSE A RE-ENTRANT DRAIN. A callback that calls time.sleep would otherwise
@@ -275,8 +413,19 @@ begin
   begin
     idx := FindHandler(ev.Source);
     if idx >= 0 then
-      if Handlers[idx].Cb <> nil then
-        Handlers[idx].Cb(ev);
+    begin
+      { THROUGH A LOCAL, because a procedure variable held in a RECORD FIELD is
+        not callable in place here -- `Handlers[idx].Cb(ev)` parses as an
+        assignment target and asks for `:=`. The copy is the spelling, not a
+        workaround for a bug: the field is read once and called once. }
+      pcb := Handlers[idx].Cb;
+      if pcb <> nil then
+        pcb(ev);
+      { The Python half of the SAME slot. Invoked here, on ordinary control
+        flow, which is the whole design -- see the unit header. }
+      if pycallback_is(Handlers[idx].PyCb) then
+        pycallback_call1(Handlers[idx].PyCb, event.Create(ev));
+    end;
     Delivered := Delivered + 1;
     n := n + 1;
   end;
@@ -330,9 +479,84 @@ begin
   begin
     Handlers[i].Source := INT_SRC_NONE;
     Handlers[i].Cb := nil;
+    Handlers[i].PyCb := pynone;
   end;
   NHandlers := 0;
   InstallHook;
+end;
+
+{ ---- the Python module surface ------------------------------------------- }
+
+constructor event.Create(const e: TIntEvent);
+begin
+  source := e.Source;
+  id     := e.Id;
+  seq    := e.Seq;
+  ms     := e.StampMs;
+end;
+
+function events: TPyList;
+var ev: TIntEvent;
+    n, lim: Integer;
+begin
+  Result := TPyList.Create;
+  { Bounded by the same budget as the callback drain, for the same reason: a
+    fast source must not be able to hand back an unbounded list to a program
+    that asked for "the events". What is left stays queued. }
+  n := 0;
+  lim := CurrentBudget;
+  while (n < lim) and IntNext(ev) do
+  begin
+    Result.append_self(event.Create(ev));
+    Delivered := Delivered + 1;
+    n := n + 1;
+  end;
+end;
+
+function poll: Integer;
+begin
+  Result := IntPoll;
+end;
+
+function pending: Integer;
+begin
+  Result := IntPending;
+end;
+
+function dropped: Int64;
+begin
+  Result := IntDropped;
+end;
+
+function delivered: Int64;
+begin
+  Result := IntDelivered;
+end;
+
+procedure on_event(source: Integer; const cb: Variant);
+var idx: Integer;
+begin
+  if not pycallback_is(cb) then
+  begin
+    { None (or anything not callable) unregisters the Python half. }
+    idx := FindHandler(source);
+    if idx >= 0 then
+    begin
+      Handlers[idx].PyCb := pynone;
+      if not SlotIsLive(idx) then DropSlot(idx);
+    end;
+    InstallHook;
+    Exit;
+  end;
+  idx := EnsureSlot(source);
+  if idx < 0 then Exit;
+  Handlers[idx].PyCb := cb;
+  InstallHook;
+end;
+
+function push(source, id: Integer): Boolean;
+begin
+  Result := IntPush(source, id);
 end;
 
 end.

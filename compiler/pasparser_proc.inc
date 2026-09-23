@@ -4778,8 +4778,18 @@ begin
     is real and belongs to its own ticket
     (bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing),
     not to a half-fix here. }
+  { `interrupts` earns the entry on the criterion this list's own png/image note
+    states: lib/rtl/interrupts.pas carries a Python surface NilPy can speak --
+    events() yields a class with named fields, on_event() takes a Variant
+    callable, and the counters are plain Integer/Int64 -- rather than a Pascal
+    one NilPy has no spelling for. Without it a bare `import interrupts` is
+    refused outright ("is the Pascal unit ..., not a Python module"), which is
+    the correct refusal for a unit that has no Python face and the wrong one
+    for a unit whose whole ticket is that events reach Python
+    (feature-s-interrupt-events-reach-python-outside-interrupt-context). }
   Result := (lo = 'ast') or (lo = 'atexit') or (lo = 'base64') or
             (lo = 'collections') or (lo = 'configparser') or (lo = 'html') or
+            (lo = 'interrupts') or
             (lo = 'io') or (lo = 'json') or (lo = 'markdown') or
             (lo = 'math') or (lo = 'pathlib') or (lo = 'pil') or
             (lo = 'random') or
