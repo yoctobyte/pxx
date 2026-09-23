@@ -31510,6 +31510,29 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_xtensa_pcrw "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_pcrw)" "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_sp_rewrite.pas $(TESTTMP)/test_xtensa_sprw
 	tools/expect_same.sh xtensa/test_xtensa_sprw "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	# THE LAST THREE MEMBERS OF THE SIGNAL FAMILY, and they arrive late for a
+	# reason worth keeping: they were held out on
+	# bug-a-xtensa-emits-muluh-for-an-integer-multiply because all three PRINT A
+	# NUMBER and hosted xtensa SIGILLs on integer formatting -- measured, real,
+	# and measured WITHOUT `--xtensa-soft-mulhigh`, which every row above this
+	# one already passes. The wall is the DEFAULT lowering, not the target, and
+	# the flag was shipped and documented weeks before the hold-out was written.
+	# So the instrument was correct about a configuration nothing in this target
+	# uses. Re-measured 2026-09-24: all three byte-identical to the x86-64 build.
+	# Expected values are the literals the i386/aarch64/arm32/riscv32 rows use,
+	# deliberately, so the four targets stay diffable against one another.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_signal_siginfo.pas $(TESTTMP)/test_xtensa_siginfo
+	tools/expect_same.sh xtensa/test_xtensa_siginfo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# usr1=2 is the row that matters -- a hook that merely counted deliveries
+	# would pass with the slot stuck at any single value -- and zero=0 catches a
+	# dispatch stub that never parks the number at all.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_signal_num.pas $(TESTTMP)/test_xtensa_signum
+	tools/expect_same.sh xtensa/test_xtensa_signum "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_signum)" "usr1=2 usr2=1 int=1 zero=0"
+	# A signal delivery must not disturb BSS offset 0. test_signal_num CANNOT
+	# see that (store and load agree on the wrong slot), so this asserts on the
+	# NEIGHBOUR -- which is why it is a separate row and not a duplicate.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_signal_bss_alias.pas $(TESTTMP)/test_xtensa_bssalias
+	tools/expect_same.sh xtensa/test_xtensa_bssalias "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_bssalias)" "hit=1 argv-intact=TRUE"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_stack_overflow_raise.pas $(TESTTMP)/test_xtensa_sovf
 	tools/expect_same.sh xtensa/test_xtensa_sovf "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sovf)" "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# xtensa was the ONE target without this row -- i386, aarch64, arm32 and

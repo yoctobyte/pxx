@@ -3,12 +3,12 @@ slug: bug-a-xtensa-emits-muluh-for-an-integer-multiply-and-no-stock-qemu-core-im
 track: A+S
 type: bug
 prio: 40
-status: open
+status: done
 owner: ""
 created: 2026-09-23
 found-by: frank (adding the xtensa arm to the signal tests)
 blocked-by: []
-summary: "ANY integer multiply in a hosted xtensa program dies with SIGILL on stock qemu-user, so `--target=xtensa --platform=posix` cannot run a program that multiplies -- which includes anything that PRINTS A NUMBER, because integer-to-decimal multiplies. The backend emits `muluh` (MUL32_HIGH) and NO core model in stock qemu-xtensa implements it (dc232b, dc233c, de212, de233_fpu, dsp3400, lx106, sample_controller and the default all SIGILL identically), so this is not a -cpu fix. `mull` decodes and the instruction after it does not, because MUL32_HIGH is a SEPARATE option from MUL32. THE WIDTH QUESTION IS CLOSED AS OF 2026-09-24 AND THE ANSWER IS LEAVE IT ALONE -- do not narrow the binop. Integer binops are typed tyInt64 with tyInteger operands and a tyInteger destination (measured: PXXDBG=a.ir gives tk=1/tk=1/binop tk=13/tk=1), riscv32 emits the IDENTICAL four-instruction expansion and survives only because RV32M always has `mulhu`, and ir_codegen.inc:6106 documents the reason: the binop is computed at 64-bit width so the mathematically exact result exists, which is what {$Q+} overflow detection is built on as a range test. Narrowing the type would silently remove that on every target. SO THE DEFECT IS NARROWER THAN THE TITLE: the lowering assumes an OPTIONAL ISA feature with no fallback. The high half IS dead for a 32-bit destination (only the low word is stored), and all four declared widths emit 4 multiplies against a 0-multiply negative control, so the recommended fix is CONSUMER-AWARE NARROWING -- emit only the low multiply where the result is provably consumed at <=32 bits, which leaves the binop type untouched and is a win on riscv32/arm32/i386 too rather than a trade. ESP IS UNAFFECTED (Espressif qemu and LX6/LX7 have MUL32_HIGH), which is why this stayed invisible: the axis is WHICH EMULATOR. THE CONDITION THAT RETIRES IT: a hosted xtensa program that multiplies and runs to completion under a stock qemu-xtensa core, or a decision that hosted xtensa is build-only by design."
+summary: "CLOSED 2026-09-24 -- THE MITIGATION SHIPPED BEFORE THIS TICKET WAS FILED AND I DID NOT GREP FOR IT. `--xtensa-soft-mulhigh` expands high(a*b) into a shift/mask/mull sequence with no MUL32_HIGH, it is wired into every existing test-xtensa row, and defs.inc has carried the same measurement this ticket re-derived (no qemu-xtensa core implements MUL32HIGH, all eight SIGILL) since 2026-08-29 under feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle. So this ticket's own stated retirement condition -- a hosted xtensa program that multiplies and runs to completion under a stock core -- was ALREADY MET: measured at close, `i*j` then WriteLn prints 21 and 123456 correctly under bare `qemu-xtensa`. The flag is opt-in DELIBERATELY, because it is a property of the emulator and of no chip (every shipping LX6/LX7 has MUL32_HIGH), so a verdict taken under it must name it -- it LABELS the divergence rather than removing it. WHAT LANDED HERE: the three signal tests this ticket held out (test_signal_num, test_signal_siginfo, test_signal_bss_alias) are now wired into test-xtensa, byte-identical to the x86-64 oracle, with a positive control proving the rows can fail. THE HOLD-OUT REASON WAS THE DEFECT: it was measured without the flag its five sibling signal rows already passed, so the instrument was correct about a configuration nothing in this target uses. THE PERF HALF MOVED and is the only live work: bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough. The width half stays CLOSED -- do not narrow the binop type; {$Q+} overflow detection is built on the wide evaluation."
 ---
 
 # xtensa emits `muluh` for an integer multiply, and no stock qemu core implements it
@@ -253,3 +253,95 @@ the pre-existing fact that hosted xtensa cannot multiply under stock qemu.
 MUL32_HIGH), so this still blocks only the hosted-xtensa profile — but option 2
 would make it a performance win on riscv32, arm32 and i386 as well, which is a
 better reason to do it than the wall is.
+
+---
+
+# Closed 2026-09-24 (frank) — the mitigation predates the ticket, and the hold-out reason was the defect
+
+**Read every section above this line as the 2026-09-23/24 report, not as current
+state.** Two of them are now false and are left in place because this file is
+append-only below the summary: *"Consequence to record"* (hosted xtensa cannot
+print a number) and its claim that three tests are *"deliberately NOT wired
+into the suite"*. Both are true only of the **default** lowering.
+
+## What I failed to do
+
+`--xtensa-soft-mulhigh` exists, ships, and is passed by **every**
+`test-xtensa` row. `compiler/defs.inc` documents it beside `XtensaSoftDivide`
+and carries the *same measurement this ticket re-derived from scratch* —
+
+> *It exists because NO qemu-xtensa core implements MUL32HIGH: measured
+> 2026-08-29 against qemu-xtensa 10.2.1, all EIGHT cores it exposes SIGILL on
+> `muluh` while all eight run quos/rems.*
+
+— under [[feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle]]. The
+`test-xtensa` recipe says it outright: *"It is required — without it integer
+formatting takes an illegal instruction on qemu's core."* And
+[[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]] (`done/`,
+2026-08-31) records the standing convention: hosted-xtensa sweep conditions are
+`--platform=posix --xtensa-soft-mulhigh`, both flags load-bearing.
+
+I re-derived the instruction encoding, the eight-core census and the MUL32 /
+MUL32_HIGH split, and filed it at p40, without grepping for a mitigation.
+**One `grep -rn soft-mulhigh compiler/` would have ended it.** That is
+CLAUDE.md's crash-course rule — *"before proposing a mechanism, grep for it"* —
+and my option 3 (*"target-capability gating — a flag for cores without
+MUL32_HIGH"*) was a proposal to build the thing I was already standing in.
+
+## The retirement condition was already met
+
+This ticket's own condition, measured at close under bare `qemu-xtensa`, no
+`-cpu`:
+
+```
+$ pascal26 --target=xtensa --platform=posix --xtensa-soft-mulhigh m.pas m
+$ qemu-xtensa m
+21
+123456
+```
+
+Asserting the **values**, as the ticket's positive control demanded, not the
+exit status. Without the flag the same source is `SIGILL`, rc=132 — so the
+mitigation is what moved, and the wall is real and configuration-dependent.
+
+## The hold-out reason was the actual defect, and it generalises
+
+The three signal tests were held out **because they print a number**. That was
+measured without the flag — while the five sibling signal rows sitting directly
+above them in `test-xtensa` (`sigdfl`, `sigcb`, `sigalt`, `pcrw`, `sprw`) all
+pass it. So the measurement was honest, reproducible, and **about a
+configuration nothing in this target uses**: the population was the default
+lowering, and the subject was a test suite that never runs the default lowering.
+
+This is CLAUDE.md's *"every instrument that lies, lies by being CORRECT ABOUT
+SOMETHING ELSE"*, with the something-else being **a flag the surrounding rows
+already set**. The cheap discriminator I skipped: *how do the tests next to this
+one invoke the compiler?* Not a fact about xtensa, about multiplies, or about
+qemu — a fact about the neighbours, which is where the answer was.
+
+**Worth promoting only if it recurs**: banked here and in the logbook, not in
+CLAUDE.md, per its own promotion test — one instance, one subsystem.
+
+## What landed in the closing commit
+
+- **Three rows wired into `test-xtensa`**: `test_signal_siginfo`,
+  `test_signal_num`, `test_signal_bss_alias`, with the flag, asserting the same
+  literal expected values the i386/aarch64/arm32/riscv32 rows use so the five
+  targets stay diffable against each other.
+- **Verified**: all three byte-identical to the x86-64 build of the same source;
+  run through `tools/run_target.sh` + `expect_same.sh`, not by hand.
+- **Positive control**: a deliberately wrong expected value makes the row report
+  `MISMATCH` and exit 1, and `od -c` confirms `run_target.sh` emits real output
+  rather than skipping — so the rows can fail, in both of the ways they could
+  have been vacuous.
+
+## What is still open, and it is not this
+
+[[bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough]]
+— the perf half, which is real, measured, and on four targets rather than one.
+The **width** half stays closed: do not narrow the binop's type, because `{$Q+}`
+overflow detection is built on the wide evaluation. The section above headed
+*"the WIDTH question is CLOSED"* is the evidence for that and remains current.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
