@@ -6,6 +6,25 @@ Box: plexus. ESP-IDF **is** installed here (`~/esp/esp-idf`) and Espressif qemu
 is present for **both** ISAs (`qemu-system-riscv32`, `qemu-system-xtensa`,
 `esp_develop_9.2.2_20250817`).
 
+> **REFRESHED 2026-09-23 by frankS** at `48292a9d6`, `compiler/pascal26` =
+> `d410fb592c39` (built from that tree, CWD at repo root). **Five rows were
+> stale and every one of them in the direction that produces no signal** — a
+> reader who obeyed them would have stopped, and stopping generates nothing
+> that reveals the row was wrong. §1.1, §1.2, §2.3 and §2.4 are rewritten
+> below with the retired text kept and struck rather than deleted, because the
+> argument each made is the one a later reader reconstructs. The
+> denominator warning immediately below is the fifth and was the worst of
+> them, because it is the row this document tells you to COPY INTO OTHER
+> DOCUMENTS.
+>
+> **This was two days, not two months.** The map was written 09-21 and four of
+> the five rows were retired by work that landed 09-21 and 09-22 — in two
+> cases the SAME DAY the row was measured, by the seat that measured it.
+> **Read every date in here as a claim with a shelf life**, and re-measure a
+> row before obeying it rather than after. The generic form of this is in
+> CLAUDE.md: a stale fact gets contradicted by the next measurement, a stale
+> WARNING succeeds at stopping people and is never contradicted at all.
+
 **THE ORDERING AXIS IS WHO CAN ANSWER A ROW, NOT HOW BAD IT IS.** That is the
 axis that decides where the owner's board time goes, and severity is not. Three
 buckets:
@@ -35,24 +54,101 @@ missing subsystem as *not yet looked at*, never as *clean*.
 Put this in such a table's own header, not in a footnote, because the header is
 what the next reader is holding:
 
-> Any per-feature SRAM delta on ESP is measured with the 64 KiB `EspArena`
+> ~~Any per-feature SRAM delta on ESP is measured with the 64 KiB `EspArena`
 > present (`builtinheap.pas`, `HEAP_ARENA = 65536`, unconditional under
 > `{$ifdef PXX_ESP}`). It is 97.1% of an empty bare program's 67,464 B of
-> `data+bss`. **So a column of small per-feature deltas is small for a reason
-> that has nothing to do with the features in it** — they are being compared
-> against a fixed 64 KiB floor. Do not read "this feature costs almost nothing"
-> off such a column without saying the floor is there.
+> `data+bss`.~~ **RETIRED 2026-09-22 — THE ARENA IS NO LONGER UNCONDITIONAL**
+> (`feature-s-the-64-kib-esp-heap-arena-is-reserved-even-when-dce-proves-the-allocator-unreachable`,
+> done). It is dropped when `HeapMmap` — its only reader in the tree — does not
+> survive DCE.
+>
+> **THE WARNING GOT WORSE, NOT BETTER, AND THE REPLACEMENT IS NOT "THE FLOOR IS
+> GONE".** A fixed floor under every row is ugly and at least it is UNIFORM: it
+> inflates every number by the same 64 KiB and cancels out of any comparison
+> between two rows. What is there now is a **CLIFF**, and it does not cancel —
+> a program lands on one side of it or the other according to whether anything
+> can still reach the allocator. So a table whose rows are not all on the same
+> side of it has a **65,536 B step wired into it that belongs to no feature in
+> the table**, and the feature that happens to sit at the step gets charged the
+> whole arena. That is a worse artefact than the old one because it is not
+> uniform and therefore does not look like an artefact.
+>
+> **So the header line to copy is: state which side of the cliff each row is
+> on** — whether `HeapMmap` survives DCE for that program — and never mix the
+> two sides in one column without saying so.
 
-(The arena itself is
-`feature-s-the-64-kib-esp-heap-arena-is-reserved-even-when-dce-proves-the-allocator-unreachable`,
-p60, unblocked. See the caution recorded there before implementing its
-predicate — DCE reporting DROPPED is not the same claim as "unreachable".)
+Re-measured 2026-09-23 by frankS at `48292a9d6`, `compiler/pascal26`
+`d410fb592c39`, bare profile, `bss=` off the compiler's own line, both ISAs:
+
+| program (riscv32) | default | `--no-dce` |
+| --- | --- | --- |
+| `s: string; s := 'hello'` (frozen constant, never allocates) | **1,276 B** | 66,812 B |
+| `s: string[16]; s := 'hello'` | **1,296 B** | 66,832 B |
+| `s: string; SetLength(s, 8)` (allocates) | **66,812 B** | 66,812 B |
+
+The third row is the one that shows the predicate is right rather than merely
+effective: with a live `HeapMmap` the arena is correctly KEPT at the default,
+so the pass is not just deleting a big thing it found.
+
+**AND THE FIRST CONTROL I REACHED FOR WAS DRAWN FROM THE WRONG POPULATION,
+which is worth a sentence because it prints a clean, confident, wrong number.**
+`begin WriteLn('x') end.` gives `bss=640 B` at the default **and 640 B under
+`--no-dce`** — which reads exactly like "the arena is gone unconditionally, and
+DCE is not what removed it". It is neither. That program never links
+`builtinheap` at all, so it has no arena to keep or drop and cannot answer the
+question. The paying population is programs that link `builtinheap` for a
+**non-allocating** reason, and one frozen string constant is enough to be in
+it. A control has to be able to show the OLD behaviour, and that one could not.
 
 ---
 
 # 1. INTERRUPTS — the owner's must-have
 
-## 1.1 [SRC] A PXX `interrupt;` handler has never been entered by a trap, anywhere, on any instrument
+## 1.1 ~~[SRC] A PXX `interrupt;` handler has never been entered by a trap, anywhere, on any instrument~~ — **RETIRED 2026-09-22, ON BOTH ISAs**
+
+> **A PXX `interrupt;` handler is now installed and entered by a real trap on
+> bare riscv32 AND bare xtensa.** Re-measured by frankS 2026-09-23 at
+> `48292a9d6`, running `test/test_esp_bare_isrstack.pas` under the Espressif
+> qemu on each chip — not read off a ticket:
+>
+> ```
+> esp32c3 (riscv32)        esp32s3 (xtensa)
+>   isr hits 2               isr hits 2
+>   a call from the handler returned
+>   isr stack is above the task stack
+>   ISRSTACK-OK              ISRSTACK-OK
+> ```
+>
+> **I ran the second chip because this document's own subject burned two
+> tickets on exactly that omission** — an effect measured on one target only,
+> written up as a property of the PROFILE when it was a property of the ISA, or
+> the reverse. The second chip is one command. It was not a formality here:
+> riscv32 landed 09-21 and xtensa 09-22 as a separate ticket
+> (`feature-s-the-xtensa-raw-isr-install-has-no-vecbase-write-and-no-isr-stack`,
+> done), so on 09-21 the two chips genuinely answered differently and the
+> single-ISA reading would have been wrong for a day.
+>
+> What landed, in three pieces that are useless separately: general CSR
+> access (`csrw $305, t0` — **Pascal `$` hex, not C `0x`**, which the asm
+> tokenizer splits into `0` and an identifier `x305`), a reachable `mret`, and
+> a **dedicated ISR stack** that the `interrupt;` prologue switches to before
+> pushing anything — riscv32 via an `mscratch` round-trip, xtensa via
+> `EXCSAVE_1`. The stack is the part that mattered for safety; the install was
+> only the capability.
+>
+> **NOT retired for the ESP-IDF profile, either ISA**, and that is a reason of
+> its own rather than a gap: under the IDF the port owns `mscratch` and expects
+> `rtos_int_enter` to have run, so `@<interrupt proc>` is still refused there —
+> deliberately, because the `interrupt;`-instead-of-`iram;` mistake in §1.2 is
+> the commonest way to reach that error and must keep reaching it.
+>
+> **WHAT WOULD RETIRE THE REPLACEMENT:** an ISR stack and install path for the
+> IDF profile, at which point the refusal in `ir.inc`'s `AN_PROCADDR` arm
+> narrows again. The condition is written beside the predicate there.
+
+**The retired reasoning is kept below.** It is correct about 2026-09-21 and it
+is the argument a later reader will reconstruct; what follows the table is now
+false, and the table itself still holds.
 
 **This is the headline row and it is not a board question.**
 
@@ -65,7 +161,10 @@ What IS verified, by me, by disassembly (`--emit-obj`, both ISAs, pin v414):
 | returns via | `mret` (`30200073`) | `rfe` (`003000`) |
 | section | `.iram1.text` | `.iram1.text` |
 
-That is a correct raw trap routine. **It has never run.** Nothing in the tree
+That is a correct raw trap routine. **It has never run.** *(False since
+2026-09-21/22 — see the retirement block above. `test_esp_bare_isrstack.pas`
+installs one and takes two traps through it on both chips. The table above this
+paragraph is still accurate.)* Nothing in the tree
 installs it, and nothing executes it: `test/test_esp_interrupt.pas` says so in
 its own header and is explicit that it is a *structural* probe — the handler is
 referenced behind a runtime-false guard so that it gets emitted, and is never
@@ -88,13 +187,26 @@ its own purpose as *"Needed for raw ISR install (mtvec) and @isr ->
 esp_intr_alloc"*. The feature is complete at both ends and missing exactly one
 instruction in the middle.
 
-**WHAT WOULD MOVE IT:** a general `csrr`/`csrw` encoding in `EmitAsmRv32` (and
+~~**WHAT WOULD MOVE IT:** a general `csrr`/`csrw` encoding in `EmitAsmRv32` (and
 `wsr`/`rsr` on xtensa) moves this row **[SRC] -> [QEMU]** — at which point
 vector install + a deliberate trap is a fixture that runs on this box. It never
 becomes [BOARD]. Fixing the asm lexer's hex literal is a separate, smaller bug
-and is worth doing regardless.
+and is worth doing regardless.~~
 
-Filed: `feature-s-a-csr-write-is-not-expressible-from-pascal-so-no-raw-isr-can-be-installed` (p60).
+**THAT IS WHAT HAPPENED, AND THE PREDICTION WAS RIGHT ABOUT THE ROUTE AND WRONG
+ABOUT ONE INPUT.** The row did move [SRC] -> [QEMU] and the fixtures do run on
+this box (`test_esp_bare_csr.pas`, `test_esp_bare_isrstack.pas`, both wired into
+`make test-esp-bare`). The asm lexer's hex literal was **never a blocker**: the
+ticket claimed it was for a day, and Pascal `$305` always worked — only the
+C spelling `0x305` is split by the tokenizer. A smaller bug that is real is
+still not on the critical path, and this row asserted it was.
+
+~~Filed:~~ **DONE:**
+`feature-s-a-csr-write-is-not-expressible-from-pascal-so-no-raw-isr-can-be-installed`
+(riscv32, 2026-09-21) and
+`feature-s-the-xtensa-raw-isr-install-has-no-vecbase-write-and-no-isr-stack`
+(xtensa, 2026-09-22). **Both in `done/`. Neither was open when this line said
+`Filed: … (p60)`, which is what a reader would have acted on.**
 
 **A design question this exposes, for Track U rather than for silicon:** an
 `interrupt;` routine has no way to adjust the return address. For an
@@ -103,7 +215,29 @@ illegal instruction, a load fault) `mret` returns to the faulting instruction
 and re-faults forever. So `interrupt;` as it stands is an *asynchronous-only*
 facility, and nothing in its surface says so.
 
-## 1.2 [SRC] `esp_intr_alloc` is NOT the install path for `interrupt;`, and the two tests disagree about which directive to use
+## 1.2 ~~[SRC]~~ `esp_intr_alloc` is NOT the install path for `interrupt;`, and the two tests disagree about which directive to use — **THE RULE IS NOW ENFORCED, 2026-09-21/23**
+
+> **The class is closed, both spellings.** Verified by frankS 2026-09-23 by
+> reading the predicates, not the tickets:
+>
+> - `@<an interrupt; routine>` is refused at the single `AN_PROCADDR` site
+>   every spelling converges on (`d305e1afa`, 09-21).
+> - a **DIRECT CALL** to one is refused at the top of the `AN_CALL` arm
+>   (`60b3e800f`, 09-23) — the same fault by another spelling, and it was still
+>   accepted until that landed.
+> - both tickets are in `done/`
+>   (`bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-via-mret-with-no-diagnostic`,
+>   `bug-s-a-direct-call-to-an-interrupt-routine-is-the-same-trap-return-fault-by-another-spelling`).
+>
+> **The refusal is NARROWED, not blanket, and this is the part a status-only
+> refresh would have carried forward wrong.** The predicate is
+> `ProcIsInterrupt[…] and not (EspBareBoot and (RISCV32 or XTENSA))`: the
+> address is **permitted on bare riscv32 and bare xtensa** and refused
+> everywhere else. It narrowed on the axis it argues from — the stated hazard
+> is "runs on the interrupted code's stack with no ISR stack", which the bare
+> prologue's dedicated ISR stack made false — and explicitly **not** on the
+> strength of an install path existing. A capability landing does not make a
+> path safe.
 
 `test_esp_isr_register.pas` registers with `iram;`. `test_esp_interrupt.pas`
 uses `interrupt;`. **Both are right, for different mechanisms**, and nothing
@@ -114,14 +248,29 @@ states the rule:
   routine with a normal return.
 - An `interrupt;` routine returns via `mret`/`rfe`. **Registering one with
   `esp_intr_alloc` would return out of a normal call via a trap-return
-  instruction.** That is not a diagnostic today; it compiles.
+  instruction.** ~~That is not a diagnostic today; it compiles.~~ **It is a
+  diagnostic since `d305e1afa`, and the direct-call spelling since
+  `60b3e800f`.**
 
-**WHAT WOULD MOVE IT:** this is a compiler-side refusal (reject
+~~**WHAT WOULD MOVE IT:** this is a compiler-side refusal (reject
 `@an_interrupt_proc` passed to an external, or at minimum warn) plus one
 sentence of documentation. Stays [SRC]. Cheap, and it is the kind of mistake
-that costs a silicon session to diagnose.
+that costs a silicon session to diagnose.~~ **Both halves done.**
 
-Filed: `bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-via-mret-with-no-diagnostic` (p60). Note the refusal is cheap *today* precisely because §1.1 is open: with no raw install path in existence, EVERY `@interrupt_proc` is currently a mistake, so the predicate is trivial now and refinable when the install lands.
+~~Filed: `bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-via-mret-with-no-diagnostic` (p60). Note the refusal is cheap *today* precisely because §1.1 is open: with no raw install path in existence, EVERY `@interrupt_proc` is currently a mistake, so the predicate is trivial now and refinable when the install lands.~~
+
+**THAT TRAILING NOTE IS THE SUBTLE ONE AND IT IS THE REASON THIS SECTION GOT A
+REWRITE RATHER THAN A STATUS EDIT.** Its premise — *"with no raw install path
+in existence, EVERY `@interrupt_proc` is currently a mistake, so the predicate
+is trivial"* — was retired the same day it was written. There **is** an install
+path, so the predicate is not trivial and "every one is a mistake" is false on
+bare. The note also predicted the right next move (*"refinable when the install
+lands"*) and got the TRIGGER wrong: the refusal was refined when the **ISR
+stack** landed, not when the install did, and the code says so beside the
+predicate. **A note that is right about the action and wrong about the
+condition still sends the next reader to do the wrong thing at the wrong
+time** — and this one would have survived any refresh that only chased the
+`Filed:` lines, because it does not contain a ticket state.
 
 ## 1.3 [QEMU] The `iram;` + `esp_intr_alloc` path is checked only as a *relocation*, never executed
 
@@ -465,21 +614,63 @@ same commit**, exactly as CLAUDE.md requires of a ticket summary, and for the
 same reason: the question is where a reader looks, and the answer being elsewhere
 in the same document does not help them.
 
-## 2.3 [SRC] The 64 KiB arena — see the denominator warning above
+## 2.3 ~~[SRC] The 64 KiB arena~~ — **DONE 2026-09-22**, see the rewritten denominator warning above
 
-p60, unblocked, mechanism and precedent already in the ticket. Deliberately
-**not** done here: it stays cheap, and survey work does not.
+~~p60, unblocked, mechanism and precedent already in the ticket. Deliberately
+**not** done here: it stays cheap, and survey work does not.~~
 
-## 2.4 [SRC] The bare-image ceilings in the Makefile are now far too loose
+`EspArena` is dropped when `HeapMmap` — its only reader in the whole tree, so
+the predicate is the true referent and not a proxy — does not survive DCE.
+Implemented as a **BSS remap** rather than an in-place rewrite, which dissolved
+a hazard nobody had enumerated: `BSS_SIG_ALTSTK`, `BSS_INTBUF` and
+`XtExcSlotOff` are allocated during codegen and sit ABOVE a Pascal unit global,
+so under a remap they shift with everything else instead of each needing its own
+reasoning. Re-measured at HEAD in the table above.
 
-I set `esp32c3) cap=18700` / `esp32s3) cap=15200` earlier today against
+**The win is narrow and the ticket says so itself:** nothing for a program that
+allocates. The paying population is programs that link `builtinheap` for a
+non-allocating reason — one frozen string constant is enough.
+
+## 2.4 ~~[SRC] The bare-image ceilings in the Makefile are now far too loose~~ — **RE-DERIVED 2026-09-21 (`106b27620`), AND THIS ROW OUTLIVED ITS OWN FIX BY TWO DAYS**
+
+~~I set `esp32c3) cap=18700` / `esp32s3) cap=15200` earlier today against
 measurements of 16988 / 13788 B. The `PXXDynSetLen` dedup then landed
 (`2c59f8326`) and the empty-program figures fell to 848 B (xtensa) / 336 B
 (riscv32). **The ceilings are stale in the loose direction, which is the
 direction that produces no signal** — exactly the stale-hazard shape CLAUDE.md
-warns about. They should be re-derived against the current fixture.
+warns about. They should be re-derived against the current fixture.~~
 
-**WHAT WOULD MOVE IT:** one measurement and one commit. [SRC].
+~~**WHAT WOULD MOVE IT:** one measurement and one commit. [SRC].~~
+
+**The measurement and the commit both happened, on 2026-09-21, hours after this
+row was written** — `106b27620`, *"re-derive the bare-image ceilings, which had
+gone stale in the silent direction"*. The live ceilings are `esp32c3) cap=5920`
+/ `esp32s3) cap=5450` (`Makefile`, the `test-esp-bare` recipe), set ~10% above
+a measured 5,380 / 4,952 B.
+
+**Verified live by frankS 2026-09-23** at `48292a9d6`, `compiler/pascal26`
+`d410fb592c39`, `test/test_esp_bare.pas` built `--esp-profile=bare` at the
+default `-O` with DCE on, `code=` read off the compiler's own line:
+
+| chip | image | ceiling | headroom |
+| --- | --- | --- | --- |
+| esp32c3 (riscv32) | 5,380 B | 5,920 B | 540 B (ceiling is 110.0% of actual) |
+| esp32s3 (xtensa) | **4,964 B** | 5,450 B | 486 B (109.8%) |
+
+**The ceilings are live, tight, and one of them has already caught movement:**
+esp32s3 is 4,964 B today against the 4,952 B it was re-derived from — 12 bytes
+of drift in two days, well inside the ceiling and exactly the size of thing the
+old 3.1x-headroom ceiling could never have reported. Nothing to do.
+
+**WHY THIS ROW IS WORTH KEEPING RATHER THAN DELETING.** A row that says *"this
+guard is too loose to fire"* is itself a guard, and it went stale in the same
+direction as the thing it was complaining about: it sat here for two days
+telling readers to go re-derive ceilings that had already been re-derived, and
+obeying it costs a rebuild and produces the numbers that are already in the
+Makefile. **The fix landed the same day as the complaint and nothing connected
+them.** Before acting on a "[SRC], one measurement and one commit" row anywhere
+in this document, `git log -S` the constant it names — that is one command and
+it is what turned this row over.
 
 ---
 
@@ -552,12 +743,23 @@ Flags come from each demo's own `build.sh` invocation line, not from a grep of
 flags in the file — an early pass of mine read `--esp-profile=bare` out of the
 NilPy scripts' *prose* while their actual compile line carries no such flag.
 
-**A KNOWN LOOSENESS, MEASURED IN THIS POPULATION.** `nilpy-c3` and `nilpy-s3` are
+~~**A KNOWN LOOSENESS, MEASURED IN THIS POPULATION.** `nilpy-c3` and `nilpy-s3` are
 **byte-identical sources** (`cmp`), and riscv32 reports `PalBackendWrite` live
 while xtensa reports it dead. That is
 `bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program` showing up
 here. **Every riscv32 row below is therefore an UPPER BOUND** — the true reached
-set is this size or smaller, which means the wall count is a ceiling, not a floor.
+set is this size or smaller, which means the wall count is a ceiling, not a floor.~~
+
+**THE LOOSENESS IS GONE — that ticket closed 2026-09-22 (`372dd5113`).**
+Re-measured there at `fda77c48b8ee`, riscv32 and windowed xtensa both report
+**496 live bodies, zero gap**. So the upper-bound caveat no longer applies to
+the riscv32 rows below and they can be read as counts.
+
+**Carry one correction with it, because the ticket had to make it about
+itself:** body parity is not byte parity. Same 496 bodies, riscv32 is still
+~84 KB larger than windowed xtensa (931,708 vs 847,295 B), because riscv32
+**encodes** the same bodies bigger. The gap this ticket was named for is the
+body one. Do not re-open it from a size comparison.
 
 ### 3.2 The population of programs
 
