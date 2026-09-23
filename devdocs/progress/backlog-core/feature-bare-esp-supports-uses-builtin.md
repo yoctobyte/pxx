@@ -296,3 +296,25 @@ profile, explains why, and points at `docs/targets/esp32.md`. Restating the two
 `Str` errors in that register is a small, verifiable job with no design fork in
 it, and `docs/targets/esp32.md` documents the console no-op while being silent
 about `Str`. Neither needs the 2,863-line cascade this ticket is about.
+
+## THE RANKING TEST IS MET FOR ONE SLICE, AND THE SLICE IS NOW ITS OWN TICKET
+
+"The measure to apply" above asks for a named program that wants `builtin` on a
+bare boot, and says to rank this against that. **There is one, and it is in-tree:
+the RTL's own `Assert`.** `espassert.pas` hand-rolls a UART write so that a bare
+assertion can be heard at all, and then the message can only contain string
+literals -- `Assert(n > 99, 'count too low')` compiles and boots, while the same
+assertion carrying the value that failed is refused, because the `Str(n, s)` that
+would render it needs `StrInt` from the unit bare does not link.
+
+That is a **bounded slice** and it is filed separately as
+[[feature-a-non-float-str-on-the-bare-esp-profile]] (p40): the five non-float
+`TextStrArg` arms are pure AnsiString-and-integer code, `espassert.pas` is the
+precedent for the shape, and its own header already prescribes an include over a
+copy for exactly the moment a second caller appears.
+
+**It does not retire this ticket and it does not need it.** `Str` needs five
+routines out of `builtin`; this ticket is about making the whole unit compile,
+Variants included. Read the ranking test as satisfied **for the slice only** --
+the cascade still has no named consumer, and the Variant half still has none at
+all.
