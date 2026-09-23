@@ -12119,7 +12119,30 @@ begin
         test/test_esp_bare_csr.pas installs a raw vector and takes two traps
         through it under qemu. So there IS an install path on riscv32, and
         "you cannot install a vector anyway" is no longer a reason for
-        anything. (The xtensa `wsr a4, vecbase` half is still unlanded.)
+        anything. (The xtensa half landed too — test/test_esp_bare_vector.pas
+        is "the xtensa completion of what test_esp_bare_csr.pas did for
+        riscv32", booted under the Espressif qemu. This aside said "the xtensa
+        `wsr a4, vecbase` half is still unlanded" until 2026-09-23; note the
+        SYMBOLIC spelling it names still does not assemble — asmtext_xtensa.inc
+        says `wsr a4, vecbase` fails upstream with "unknown symbol: vecbase"
+        and the dotted `wsr.vecbase a4` is a different unsupported thing — so
+        the sentence stayed plausible after the capability it denied had
+        shipped, because the spelling in it really is still wrong.)
+
+        AND THE USER-FACING STRING BELOW WENT STALE WHILE THIS COMMENT STAYED
+        RIGHT, WHICH IS THE HARDER DIRECTION AND THE REASON THIS NOTE EXISTS.
+        Until 2026-09-23 the message told its reader that an `interrupt;` body
+        "stays refused until a dedicated ISR stack lands" — after the ISR stack
+        had landed on both ISAs and this very predicate had been narrowed onto
+        it. Every reader who can still SEE that message is on IDF or off-ESP,
+        i.e. exactly the population for whom waiting for the ISR stack is the
+        wrong advice and the port's ownership of mscratch is the real reason.
+        **A narrowing moves the population a diagnostic is read by, so the
+        message has to be rewritten for whoever is LEFT, not merely left
+        true of whoever was there before.** Anyone auditing this block reads the
+        comment and finds it correct, which is why the string survived: found by
+        franks-5b reading the predicate and the string against each other rather
+        than reading either against the tickets.
 
         WHY THE REFUSAL STILL STANDS, AS A MECHANISM RATHER THAN AS A ROW THAT
         HAPPENS TO FIRE TODAY: an `interrupt;` body gets the trap prologue and
@@ -12205,11 +12228,15 @@ begin
               'by a normal call. If this address is for esp_intr_alloc, the ESP-IDF dispatcher ' +
               'calls its handler as an ordinary void(*)(void*) -- declare the handler `iram;` ' +
               'and NOT `interrupt;`, or it will execute a trap-return to leave a normal call. ' +
-              'A raw vector CAN now be installed on riscv32 (`csrw $305, t0`), but not with an ' +
-              '`interrupt;` body: such a handler would run on the interrupted task''s stack with ' +
-              'no ISR stack and no nesting counter, so this address stays refused until a ' +
-              'dedicated ISR stack lands. To install a raw vector today, write the handler as an ' +
-              '`assembler` routine and take ITS address; see test/test_esp_bare_csr.pas.');
+              'A raw vector with an `interrupt;` body IS supported, but only on the BARE profile ' +
+              '(--esp-profile=bare) on riscv32 or xtensa, where the prologue switches to a ' +
+              'dedicated ISR stack first. You are not on it, so this address is refused. Under ' +
+              'ESP-IDF the reason is the port and not a missing feature: the handler would run ' +
+              'under a port that owns mscratch and expects rtos_int_enter to have run, which a ' +
+              'raw vector never reaches -- so on IDF the answer is `iram;` plus esp_intr_alloc, ' +
+              'never `interrupt;`. To install a raw vector on a profile this refusal covers, ' +
+              'write the handler as an `assembler` routine and take ITS address; see ' +
+              'test/test_esp_bare_csr.pas.');
       Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);
     end;
 

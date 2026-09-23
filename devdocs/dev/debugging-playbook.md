@@ -42996,3 +42996,64 @@ run's output.
   `A SEAT HUNTING FOR THE THIRD INSTANCE OF ITS OWN PATTERN WILL FIND ONE`: both
   guards require a second party by construction, and both must convert into
   written restraint when there is not one.
+
+## AN EXIT CODE STANDING IN FOR THE PROPERTY — the guard CAN fail, just never for the reason you care about, and it certifies the premise that kept a ticket parked
+
+Measured 2026-09-23, three subsystems, two seats, one day. This is NOT the
+"a guard that cannot fail prints PASS" case and it is the reason that rule did
+not catch any of the three: **every one of these guards can fail.** A broken
+compiler exits nonzero; a missing tool fails `--version`; an unset option reads
+False. They all pass the *can-this-ever-go-red* test, and they are still blind
+to the property under test, because **the thing they observe is satisfied by
+something other than that property.**
+
+The shape: **an assertion whose proxy is not disturbed by the subject's
+absence.**
+
+| subsystem | the row asserts | it is satisfied by | the property it cannot see |
+| --- | --- | --- | --- |
+| `test_esp_interrupt.pas` (Makefile) | compiler exited 0 | the compiler running at all | `MyIsr` reaching the object, in `.iram1.text` |
+| `DropEspArenaIfAllocatorDead` (dce.inc) | `DceEnabled` | the OPTION being set | whether liveness was actually COMPUTED (`DceRun` opts out for six further reasons) |
+| llvm-objdump tool gate | `--version` rc=0 | the binary existing | whether it can disassemble a sectionless single-PT_LOAD image (it cannot, at any version) |
+
+**THE EXPENSIVE PART IS NOT THE FALSE GREEN, IT IS THAT THE ROW CERTIFIES A
+PREMISE.** The ESP interrupt fixture existed to prove the ISR codegen is
+emitted, and never checked that it was. So the always-false `if counter < 0 then
+MyIsr;` that was believed to be forcing emission **could never be shown
+unnecessary** — removing it looked risky forever, and a ticket sat at p35 for two
+days on an "emission-forcing mechanism" that had already shipped (57af7aa10 made
+every `interrupt;` body an unconditional DCE root as a side effect of bare
+xtensa's vector table). A row that asserts nothing about the subject does not
+merely fail to catch a regression; **it protects whatever workaround is standing
+next to it**, because nobody can measure that the workaround is dead.
+
+**The question that finds it**, and it is not "can this guard fail":
+
+> **If the thing under test were entirely absent, would this row still pass?**
+
+For all three, yes. Compare with the sibling question for a defaults collision
+("if the machinery did nothing at all, would this row still pass?") — same
+family, different door: there the expected VALUE collides with the failure
+value, here the OBSERVED QUANTITY is a proxy.
+
+**The discharge is one extra row, and it must be negative-controlled.** For the
+fixture: `readelf -sW … | grep 'FUNC.*MyIsr' | grep -q ' 3 MyIsr'` plus
+`readelf -SW … | grep -q '\[ 3\] \.iram1\.text'` — **verified to FAIL against an
+object built from a program with no ISR**, which is what separates it from
+another decorative row. For a tool gate, assert the tool does the JOB on a real
+artefact, not that it answers `--version`. For an option, gate on the OUTCOME:
+`DceLiveValid`, set False before the option test and True only once marking is
+complete.
+
+**Where to look for more of these:** any row whose whole assertion is `rc=0`, a
+`--version`, a `which`, an option flag, or "it compiled". Each is a claim about
+the INSTRUMENT'S AVAILABILITY wearing the shape of a claim about the SUBJECT.
+The tell is that the row names a tool or a flag and never names the thing the
+test is about.
+
+**Promotion status, stated so nobody re-argues it as merit:** recurrence is met
+on CLAUDE.md's own test — three independent subsystems, none of them looking for
+a pattern — and it reads as a STRENGTHENING of "A GUARD THAT CANNOT FAIL IS NOT
+A GUARD" rather than a neighbour of it, since the novelty is precisely that
+these guards *can* fail. Banked here rather than promoted by the seat that
+found it; the rules-file call is the owner's.
