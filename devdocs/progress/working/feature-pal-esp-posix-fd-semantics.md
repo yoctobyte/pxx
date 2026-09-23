@@ -364,7 +364,18 @@ rc=0
 ```
 
 A real ESP-IDF link, merged flash image, booted on **esp32c3 under the
-Espressif qemu fork**, output diffed against a stored baseline. IDF is v6.0.1 at
+Espressif qemu fork**, output diffed against a stored baseline.
+
+**SAY WHICH QEMU, because there are two on this box and they disagree.** This
+ran Espressif's `qemu-system-riscv32`
+(`~/.espressif/tools/qemu-riscv32/esp_develop_9.2.2_20250817/`), not a stock
+system qemu. The distinction is not pedantry: frankb-8e measured the same week
+that stock `qemu-xtensa` implements `MUL32_HIGH` in NO core model and SIGILLs on
+an ordinary integer multiply, while Espressif's `qemu-system-xtensa -M esp32s3`
+has it (`bug-a-xtensa-emits-muluh-for-an-integer-multiply-and-no-stock-qemu-core-implements-it`,
+p40). So "this box cannot run it" can be true of one qemu and false of the
+other, and a bare `qemu` in a park note does not say which was tried. Same
+which-instrument axis as the objdump-versus-llvm-objdump split on plexus/borg. IDF is v6.0.1 at
 `~/esp/esp-idf`; both Espressif qemus are installed. It is wired into
 `make test-esp-idf` and has been running there.
 
