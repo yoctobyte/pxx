@@ -101,25 +101,123 @@ command -v "$CLANG" >/dev/null || { echo "probe: clang absent; aarch64 C-ABI pro
 # gate was added to prevent, reproduced by the gate itself within minutes of
 # writing it, because a name standing in for the thing it names is not a check.
 # Run it and require success.
-objdump_works() { "$1" --version >/dev/null 2>&1; }
-OBJDUMP=""
+#
+# ^^ AND `--version` IS STILL AN EXIT CODE STANDING IN FOR A CAPABILITY, which
+# is this same lesson one level further in. Measured 2026-09-23 across two
+# hosts: llvm-objdump-18 and -20 on borg, and llvm-objdump-21 on plexus, ALL
+# pass `--version` and ALL decode exactly nothing on `native/pxx-aarch64` --
+# `error: The end of the file was unexpectedly encountered`, zero mnemonics.
+# A gate that cannot come out false for the failure it was written for is not
+# a gate.
+#
+# THE DISCRIMINATOR IS NOT THE VERSION AND NOT SECTIONLESSNESS, and both of
+# those were live diagnoses until the crossing control was run. Two seats
+# measured honestly and disagreed because each called its own file "pxx's
+# aarch64 image" and neither reported its VINTAGE: one tested a committed
+# August binary under -18/-20, the other a fresh HEAD build under -21. Crossed,
+# -21 fails on the old artefact on the host where it succeeds on the new one.
+# What actually decides it is `memsz` >> `filesz` on the segment carrying the
+# code. llvm-objdump synthesises a `PT_LOAD#N` pseudo-section spanning MEMSZ
+# and then reads past the end of a shorter file:
+#
+#   native/pxx-aarch64 (old emitter): ONE rwx LOAD, filesz 0x462c60, memsz 0x8690f0b
+#   fresh build at HEAD:              R E LOAD,     filesz == memsz == 0x10000
+#                                     RW  LOAD carries the bss, away from the code
+#
+# The modern emitter separates text from bss, so the text segment is fully
+# backed by the file and decodes at every version tested. `-b binary` is not
+# an escape -- llvm-objdump has no such option -- but it was never the reason.
+#
+# SO GATE ON DECODED MNEMONICS FROM A REAL PXX AARCH64 IMAGE. Not on the name,
+# not on `--version`, and not on non-empty OUTPUT either: disassembly starts at
+# the load address, so the ELF and program headers decode first and yield ~118
+# lines of `<unknown>`/`udf` before any code. "Produced output" is satisfied by
+# a run that found no instructions at all.
+#
+# AND ACCEPT GNU objdump WHERE IT CAN DO THE TARGET. Measured the same day:
+# plexus has GNU binutils 2.46, whose objdump is SINGLE-TARGET x86-64
+# (`objdump --info | grep -ci aarch64` = 0) and has llvm-objdump-21; borg has
+# binutils 2.42, which DOES list elf64-littleaarch64, and has no llvm-objdump
+# under either probed spelling. Neither host can use the other's tool, and the
+# newer host is the weaker one -- so "upgrade binutils" is the wrong reflex and
+# a candidate list cannot express this at all. A capability probe can.
+# The two flavours need different flags: GNU objdump has no `--triple=`.
+disas() {  # $1 = tool, $2 = flavour, $3 = file
+  case "$2" in
+    llvm) "$1" -d --triple=aarch64 "$3" 2>/dev/null ;;
+    gnu)  "$1" -d "$3" 2>/dev/null ;;
+  esac
+}
+# Real aarch64 mnemonics, not `<unknown>` and not `udf` (which is what a
+# misaligned or past-EOF decode yields while still looking like output).
+count_mnemonics() {
+  grep -cE '[[:space:]](stp|ldp|ldr|str|mov|movz|movk|add|sub|ret|bl|cbz|cmp|adrp)([[:space:]]|$)' || true
+}
+# A canary the candidate must actually disassemble: built by THIS pxx, for this
+# target, so the capability question is asked about the artefact class the probe
+# will really hand it.
+printf 'program canary;\nbegin\n  WriteLn(1);\nend.\n' > "$WORK/canary.pas"
+if ! "$PXX" --target=aarch64 --system-libs=c "$WORK/canary.pas" "$WORK/canary.a64" >/dev/null 2>&1; then
+  echo "probe: pxx cannot build an aarch64 canary; NOT verified" >&2; exit 2
+fi
+objdump_decodes() {  # $1 = tool, $2 = flavour
+  command -v "$1" >/dev/null 2>&1 || return 1
+  [ "$(disas "$1" "$2" "$WORK/canary.a64" | count_mnemonics)" -ge 10 ]
+}
+OBJDUMP=""; OBJDUMP_KIND=""
+TRIED=""
+try_cand() {  # $1 = tool, $2 = flavour
+  TRIED="$TRIED $1"
+  if objdump_decodes "$1" "$2"; then OBJDUMP="$1"; OBJDUMP_KIND="$2"; return 0; fi
+  return 1
+}
 if [ -n "${LLVM_OBJDUMP:-}" ]; then
-  objdump_works "$LLVM_OBJDUMP" && OBJDUMP="$LLVM_OBJDUMP" || {
-    echo "probe: LLVM_OBJDUMP=$LLVM_OBJDUMP does not run; refusing to guess." >&2
+  # An explicit override still has to prove it decodes; naming a tool is not
+  # evidence it can read this target, which is the whole point above.
+  try_cand "$LLVM_OBJDUMP" llvm || try_cand "$LLVM_OBJDUMP" gnu || {
+    echo "probe: LLVM_OBJDUMP=$LLVM_OBJDUMP does not DECODE a pxx aarch64 image" >&2
+    echo "       (it may run and still find no instructions); refusing to guess." >&2
     echo "       INSTRUMENT failure -- this is NOT a statement about pxx." >&2
     exit 2; }
 else
-  for cand in llvm-objdump-21 llvm-objdump; do
-    if command -v "$cand" >/dev/null 2>&1 && objdump_works "$cand"; then
-      OBJDUMP="$cand"; break
-    fi
-  done
+  # GNU objdump first where it is multi-target: it is the one tool that is
+  # already present on every box here, and where it works it needs nothing
+  # installed. Then llvm-objdump, VERSION-GLOBBED so this does not break again
+  # at the next major -- a baked-in number is what made the dependency
+  # invisible in the first place, and 21 was already wrong for borg.
+  if objdump --info 2>/dev/null | grep -qi aarch64; then
+    try_cand objdump gnu || true
+  fi
+  if [ -z "$OBJDUMP" ]; then
+    # Scan PATH by hand rather than with `compgen -c`: compgen leans on bash's
+    # completion machinery, and this has to behave the same on a host I cannot
+    # test. Highest major first, then the unsuffixed name.
+    llvm_cands() {
+      local d
+      local IFS=:
+      for d in $PATH; do
+        [ -d "$d" ] || continue
+        for f in "$d"/llvm-objdump-[0-9]*; do
+          [ -x "$f" ] && basename "$f"
+        done
+      done | sort -u -t- -k3,3nr
+      echo llvm-objdump
+    }
+    for cand in $(llvm_cands); do
+      try_cand "$cand" llvm && break
+    done
+  fi
 fi
 [ -n "$OBJDUMP" ] || {
-  echo "probe: no working llvm-objdump (tried llvm-objdump-21, llvm-objdump);" >&2
-  echo "       the PXX side cannot be disassembled, so NOTHING can be compared." >&2
+  echo "probe: no disassembler can DECODE a pxx aarch64 image." >&2
+  echo "       Tried:$TRIED" >&2
+  echo "       A tool that runs is not a tool that decodes: every llvm-objdump" >&2
+  echo "       tested passes --version and returns zero instructions on an image" >&2
+  echo "       whose code segment has memsz >> filesz. GNU objdump is accepted" >&2
+  echo "       when \`objdump --info\` lists aarch64 (binutils 2.42 does; the" >&2
+  echo "       single-target 2.46 build on plexus does not)." >&2
   echo "       This is an INSTRUMENT failure and is NOT a statement about pxx." >&2
-  echo "       Set LLVM_OBJDUMP=<path> or install llvm-objdump." >&2
+  echo "       Set LLVM_OBJDUMP=<path>, or install a multi-target binutils." >&2
   exit 2; }
 "$CLANG" -print-targets 2>/dev/null | grep -q '^ *aarch64 ' || {
   echo "probe: this clang cannot target aarch64; NOT verified" >&2; exit 0; }
@@ -193,8 +291,8 @@ pxx_regs() {
     # nothing. The caller reports it as a pxx-side BROKEN row.
     return 0
   fi
-  "$OBJDUMP" -d --triple=aarch64 "$a" 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/a.txt"
-  "$OBJDUMP" -d --triple=aarch64 "$b" 2>/dev/null | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/b.txt"
+  disas "$OBJDUMP" "$OBJDUMP_KIND" "$a" | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/a.txt"
+  disas "$OBJDUMP" "$OBJDUMP_KIND" "$b" | sed 's/^[^\t]*\t[^\t]*\t//' > "$WORK/b.txt"
   # Both objects compiled, so a disassembly with no lines at all is the TOOL
   # failing, not pxx. Checked on both files: one empty is enough, since the
   # comparison is a diff of the two.
