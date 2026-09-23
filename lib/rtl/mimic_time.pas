@@ -169,8 +169,26 @@ begin
     this will not port back unchanged. That asymmetry is the point of the rule,
     not an oversight -- and it is why the differential fixture does NOT include
     a negative row: it would be a row the oracle cannot run. }
+  { A BLOCKING POINT IS A PUMP POINT. Deferred work registered through
+    platform.PalPendingDrain is delivered here, AFTER the wait rather than
+    before it, because the events worth delivering are the ones that arrived
+    DURING the window we just spent not looking. Draining first would run the
+    callbacks on the queue as it was before the sleep and leave everything the
+    sleep covered sitting until the next one.
+
+    `sleep(0)` drains too and is the deliberate yield spelling: it returns at
+    once, so a program that wants to service pending work without waiting has a
+    spelling that costs nothing. It is also why the drain is on BOTH exits from
+    this routine and not only the tail.
+
+    Nil unless something installed it -- see platform.PalDrainPending. A program
+    that registers no handler pays one pointer test.
+    feature-s-interrupt-events-reach-python-outside-interrupt-context }
   if seconds <= 0.0 then
+  begin
+    PalDrainPending;
     Exit;
+  end;
   whole := Int(seconds);
   sec := Trunc(whole);
   nsec := Trunc((seconds - whole) * Double(NSEC_PER_SEC));
@@ -184,6 +202,7 @@ begin
   if nsec < 0 then
     nsec := 0;
   PalNanosleep(sec, nsec);
+  PalDrainPending;
 end;
 
 function perf_counter: Double;

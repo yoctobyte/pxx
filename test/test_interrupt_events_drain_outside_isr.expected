@@ -1,0 +1,20 @@
+handlers 1
+after-push delivered 0 pending 3 seen 0
+after-py-sleep delivered 3 pending 0 seen 3
+order-preserved TRUE
+before-pas-sleep pending 1 seen 0
+after-pas-sleep pending 0 seen 1
+filled pending 64 dropped 0
+push-when-full FALSE dropped 1
+drained 64 seen 64 pending 0
+accounted TRUE
+budget-bounded 4 pending-after 6
+second-drain 4 pending-after 2
+reentrant-observed TRUE nested-delivered 0
+outer-delivered 3 seen 3 pending 0
+no-handler handlers 0
+no-handler delivered 0 pending 1 seen 0
+ev source 99 id 7 seq 1
+ev source 99 id 8 seq 2
+iterated 2 callbacks-run 0 pending 0
+INTERRUPT-PUMP-OK

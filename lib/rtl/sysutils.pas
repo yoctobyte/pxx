@@ -2144,6 +2144,22 @@ var ignored: Integer;
 begin
   ignored := PalNanosleep(Milliseconds div 1000,
                           Int64(Milliseconds mod 1000) * 1000000);
+  { THE SIBLING SPELLING OF A BLOCKING POINT, and it is the one a PASCAL program
+    writes. `mimic_time.sleep` is what `time.sleep` binds to from NilPy and it
+    pumps too; both mean "I am about to stop doing work" to whoever wrote the
+    source, so wiring only one leaves the other permanently unpumped -- the
+    normalise-dont-special-case sibling case, where the second path is the one
+    that stays broken and no test corpus distinguishes them by name.
+
+    MEASURED, NOT REASONED: the fixture for this feature wrote
+    `uses interrupts, mimic_time, sysutils` and its bare `sleep(0)` bound HERE,
+    to sysutils, because the last unit in a uses clause wins. The drain row read
+    0 and looked like a broken pump. Had the two units been listed the other way
+    round the same fixture would have passed and this gap would have shipped
+    unseen -- which is exactly the arrangement-dependence CLAUDE.md warns about,
+    arriving in a uses clause.
+    feature-s-interrupt-events-reach-python-outside-interrupt-context }
+  PalDrainPending;
 end;
 
 { Move/FillChar bodies removed — now compiler builtins (see interface note). }

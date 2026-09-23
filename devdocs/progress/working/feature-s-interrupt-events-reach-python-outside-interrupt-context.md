@@ -3,8 +3,8 @@ slug: feature-s-interrupt-events-reach-python-outside-interrupt-context
 track: S
 type: feature
 prio: 35
-status: backlog
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-23
 found-by: frankb-8e
 blocked-by: []
@@ -214,3 +214,106 @@ adding the edge to this one.
   and **would lie about a raw one**. Read that before writing the
   outside-interrupt-context assertion above; it is the obvious instrument and it
   is the wrong one for a raw handler.
+
+---
+
+## 2026-09-24, frankS — THE PUMP HALF IS BUILT. The GPIO source is not, and the hidden loop is not.
+
+Measured on plexus, x86-64, `compiler/pascal26` `d3d6ee833089`, fixedpoint
+`converged after 1 round(s)`.
+
+**Re-checked this ticket's own gap claim before building, because it says to:**
+`ls lib/rtl/ | grep -iE 'interrupt|^machine|gpio'` still returns nothing and
+`grep -rln '^unit interrupts' lib/` finds none. The gap was real.
+
+### What landed
+
+- **`lib/rtl/interrupts.pas`** — the queue. `IntPush(source, id)` is the only
+  thing an ISR calls: it takes no callback, never allocates, never blocks and
+  never dispatches. Callbacks run only from `IntPoll`, which an ISR cannot
+  reach. **The invariant is structural, not a rule anyone maintains.**
+- Events carry `(Source, Id, StampMs, Seq)` — the source tag from proposal 1,
+  plus a push ordinal so loss is detectable rather than inferable.
+- **Re-entrancy refused** (proposal 2), **per-drain budget** (proposal 3), and
+  the ring-full policy **chosen and documented**: drop the NEWEST and count it
+  (proposal 4), because overwriting the oldest silently rewrites history a
+  consumer has not seen and leaves a `Seq` gap with no record of where.
+  `IntDropped` is the observable count.
+- **`platform.PalPendingDrain` / `PalDrainPending`** — a nil-by-default hook in
+  the layer that owns blocking. `interrupts` installs it on the first
+  registration and clears it on the last.
+- **Pumped at `mimic_time.sleep` AND `sysutils.Sleep`**, after the wait.
+
+### The design decision worth recording: the pump is INSTALLED, not linked
+
+Making `mimic_time` `uses interrupts` would have been three lines and would
+have rooted the queue in **every program that imports `time`**, including every
+program that never asked for it — SRAM on ESP paid by someone else. A nil
+procedure variable costs one pointer test per blocking call and lets DCE drop
+the whole unit when nothing installed it. The fixture asserts this directly:
+`no-handler delivered 0 pending 1`.
+
+### A REAL DEFECT THE FIXTURE FOUND BY ACCIDENT, AND IT IS THE SIBLING-SPELLING CASE
+
+The first run's drain row read 0 and looked like a broken pump. It was not: the
+fixture wrote `uses interrupts, mimic_time, sysutils` and its bare `sleep(0)`
+bound to **`sysutils.Sleep`**, because the last unit in a uses clause wins —
+and `sysutils.Sleep` was unwired.
+
+**Both spellings mean "I am about to stop doing work" to whoever wrote the
+source**, so wiring only the Python-facing one leaves every Pascal program
+permanently unpumped. That is `normalise-dont-special-case`'s sibling case
+arriving in a `uses` clause, and neither the construct name nor any corpus
+distinguishes them. Both are wired now and **asserted separately, qualified**
+(`mimic_time.sleep(0)`, `sysutils.Sleep(0)`).
+
+**Had the two units been listed the other way round, the same fixture would have
+passed and the gap would have shipped unseen.** That is the arrangement-
+dependence CLAUDE.md warns about, in a place it does not name.
+
+### Acceptance: ORDERING and COUNT, not "the callback ran"
+
+`test/test_interrupt_events_drain_outside_isr.pas`, wired into `lib-test`.
+
+| row | claim |
+| --- | --- |
+| `after-push delivered 0 pending 3 seen 0` | **ORDERING** — nothing delivered at push time |
+| `after-py-sleep delivered 3 pending 0 seen 3` | delivered at the blocking point |
+| `order-preserved TRUE` | Seq contiguous, 1..3 |
+| `before/after-pas-sleep` | the Pascal spelling pumps too |
+| `push-when-full FALSE dropped 1` | the refusal is visible |
+| `accounted TRUE` | **COUNT** — pushed == delivered + dropped, exactly |
+| `budget-bounded 4 / second-drain 4` | bounded, and the rest deferred not lost |
+| `reentrant-observed TRUE nested-delivered 0` | re-entrant drain refused |
+| `no-handler delivered 0 pending 1` | the nil-hook negative control |
+
+**POSITIVE CONTROL, measured both ways rather than asserted:** deleting the
+`mimic_time` drain flips `after-py-sleep` to `delivered 0 pending 3 seen 0` and
+`order-preserved` to FALSE, while the `sysutils` rows keep working — so the two
+pumps are independently observable and neither row is passing for the other's
+reason. Restored and re-verified identical afterwards.
+
+**NOT inert waiting for a pin:** lib-only change, and the pinned compiler
+produces byte-identical output to HEAD's on this fixture.
+
+### What is deliberately NOT here
+
+- **The GPIO edge source.** Blocked on hardware, not on this work. Nothing on
+  this box can observe an edge, and no row here may stand in for one — which is
+  why the fixture pushes from `INT_SRC_TEST` and never `INT_SRC_GPIO`.
+- **The hidden loop.** The ticket says not to land it with the pump and that is
+  right: the host-exit half is the dangerous one, and getting it wrong hangs
+  every NilPy script that imports this unit at exit on x86-64. `IntHandlerCount`
+  exists so whoever builds it has the "is anything registered" predicate ready.
+- **The Python surface** (`interrupts.on_falling(pin=9)`, `for ev in
+  interrupts.events()`). The unit name is already the module name, so nothing
+  about the import mechanism needs building — but `events()` returning objects
+  with attributes needs the marshalling types, and I would rather land the core
+  with its controls than guess at the sugar. **This is the next increment**, and
+  it is why this ticket is not closed.
+
+### Suggested split, per this ticket's own instruction
+
+It says to split before promoting: this section is the `-pump` half and is done.
+What remains is `-gpio-source` (blocked on the slice), the Python surface, and
+the hidden loop.

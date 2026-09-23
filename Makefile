@@ -39334,6 +39334,37 @@ endif
 	# leap rules; breaking the weekday offset by one turns 18 rows red.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_time_calendar.npy $(TESTTMP)/lib_mimic_time_calendar
 	$(TESTTMP)/lib_mimic_time_calendar | diff -u test/lib_mimic_time_calendar.expected -
+	$(PXX_STABLE) -Fulib/rtl test/test_interrupt_events_drain_outside_isr.pas $(TESTTMP)/test_interrupt_pump
+	# The PUMP half of interrupt events reaching application code OUTSIDE
+	# interrupt context (feature-s-interrupt-events-reach-python-outside-
+	# interrupt-context). Synthetic source, x86-64, no board: the GPIO edge
+	# source is blocked on hardware and nothing here may stand in for it, which
+	# is why the fixture pushes from INT_SRC_TEST and never INT_SRC_GPIO.
+	#
+	# THE TWO ROWS THAT CARRY IT ARE `after-push` AND `accounted`, and neither is
+	# a value check. `after-push delivered 0` is the ORDERING claim -- nothing is
+	# delivered at push time, so no callback can run in the context that produced
+	# the event, which is the entire design. A row asserting "the callback ran"
+	# passes on an implementation that runs it in trap context, and on ESP that
+	# costs a silicon session to find. `accounted` is the COUNT claim: pushed ==
+	# delivered + dropped, exactly, so a silently lost edge cannot hide.
+	#
+	# `no-handler delivered 0 pending 1` is the negative control for the cost
+	# argument: with nothing registered the hook stays nil and a blocking point
+	# behaves exactly as it did before this feature existed. If that row ever
+	# shows a delivery, every program that imports `time` is paying for a queue
+	# it never asked for.
+	#
+	# BOTH SLEEP SPELLINGS ARE ASSERTED SEPARATELY and the fixture qualifies
+	# them, because a bare `sleep(0)` binds to whichever unit is LAST in the uses
+	# clause. It bound to sysutils while sysutils was unwired; listing the units
+	# the other way round would have made the same fixture pass and shipped the
+	# gap. Removing either drain call reddens only its own rows -- measured.
+	#
+	# NOT inert waiting for a pin: lib-only change, and the pinned compiler
+	# produces byte-identical output to HEAD's on this fixture (checked before
+	# landing).
+	$(TESTTMP)/test_interrupt_pump | diff -u test/test_interrupt_events_drain_outside_isr.expected -
 	# uuid.uuid4().hex, which That Space Program names universe objects with.
 	# PREDICATES, not values (a uuid4 is random): 32 lowercase hex digits, version
 	# nibble 4, RFC 4122 variant, the 8-4-4-4-12 str, 200 distinct. Dropping the

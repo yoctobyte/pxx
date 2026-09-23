@@ -310,6 +310,38 @@ function PalAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
 function PalMonotonicMillis: Int64;
 procedure PalYield;
 
+type
+  { A hook the RTL's BLOCKING points call, so deferred work can be delivered on
+    ordinary control flow instead of in the context that produced it. Declared
+    here, in the layer that owns blocking, rather than in the unit that uses it.
+
+    NIL BY DEFAULT AND THAT IS THE DESIGN, not laziness. The alternative --
+    having mimic_time and friends `uses` the consumer directly -- roots that
+    consumer in every program that imports `time`, including every program that
+    never asked for it, which on ESP is SRAM somebody else pays for. A nil
+    procedure variable costs one test per blocking call and lets DCE drop the
+    consumer entirely when nothing installed it.
+
+    The current installer is lib/rtl/interrupts.pas, which assigns this when the
+    first handler is registered and clears it when the last one goes away
+    (feature-s-interrupt-events-reach-python-outside-interrupt-context). Nothing
+    here knows that, deliberately: a second consumer would chain rather than
+    fight, and this declaration stays as it is.
+
+    A HANDLER RUNS ON THE CALLER'S STACK, at a point where the caller was about
+    to block. It must not assume it is at top level and it must not block
+    indefinitely. It may be called with no work pending. }
+  TPalDrainProc = procedure;
+
+var
+  { Zero-initialised: a program that installs nothing sees nil forever. }
+  PalPendingDrain: TPalDrainProc;
+
+{ Call the hook if one is installed. The RTL's blocking points use this rather
+  than testing the variable themselves, so the nil convention lives in ONE
+  place and a second caller cannot get it subtly different. }
+procedure PalDrainPending;
+
 function PalFork: Integer;
 function PalExecve(path: PChar; argv, envp: Pointer): Integer;
 function PalPipe2(var pipefd: array of Integer; flags: Integer): Integer;
@@ -901,6 +933,12 @@ end;
 function PalMonotonicMillis: Int64;
 begin
   Result := PalBackendMonotonicMillis;
+end;
+
+procedure PalDrainPending;
+begin
+  if PalPendingDrain <> nil then
+    PalPendingDrain;
 end;
 
 procedure PalYield;
