@@ -1,15 +1,50 @@
-# math.atan / math.atan2 against CPython, BIT FOR BIT.
+# math.atan / math.atan2 against CPython, within 2 ulp -- and EXACT on
+# everything that is not an accuracy question.
 #
 # The oracle is not a stored .expected: the Makefile row runs THIS file under
-# CPython and diffs, so it is regenerated on every run and cannot go stale.
+# CPython and compares, so it is regenerated on every run and cannot go stale.
 #
-# ## Why a printed comparison is a bit comparison here, and only because of
-# ## HOW it prints
+# ## This file asserted BIT FOR BIT until 2026-09-23, and the owner retired
+# ## that claim rather than the fast kernel
 #
-# NilPy's float repr is the SHORTEST decimal that round-trips -- CPython's own
-# rule, pinned by test_nilpy_float_repr_roundtrip. Shortest-round-tripping repr
-# is a bijection with the bit pattern for every finite double, so two lines
-# agree exactly when the two doubles agree in all 64 bits.
+# 6b8b45af45d9 gave ArcTan/ArcTan2 the fdlibm fast arm -- 133x, measured at max
+# 1 ulp over ~15600 rows against glibc. That is a deliberate trade and the
+# owner ruled on it directly: "yes, performance. screw insignificant bits pls.
+# we learned our lesson." Track T bisected this file's red to that commit
+# alone, so the divergence is ours and it is intended.
+#
+# Measured here at 2702b4abebca: 272 lines, 657 float tokens, 20 differing from
+# CPython, and EVERY ONE of the 20 exactly 1 ulp. The row halted `make
+# test-nilpy` at 2470 of 6614 recipe lines for a last-place digit.
+#
+# The comparison is now tools/expect_close.py at 2 ulp. The 2 is not a new
+# number: test/lib_math_fast_tolerance.pas already states this contract for
+# these same fast kernels -- "ACCURACY is a TOLERANCE. Within 2 ulp of glibc,
+# and that is all" -- and it leaves one ulp of headroom over what is measured
+# above, so the gate is not born at its own limit.
+#
+# ## What the tolerance does NOT buy, which is the half that matters
+#
+# A tolerance is for ACCURACY. It must not quietly buy BEHAVIOUR, so
+# expect_close.py still compares these exactly, and each one guards something
+# this file is specifically about:
+#
+#   - nan and inf. A nan facing a number is a mismatch at any tolerance, which
+#     is what keeps the positive control below alive.
+#   - THE SIGN BIT, including on zero -- +0.0 and -0.0 are zero ulp apart under
+#     the usual monotone mapping, so a bare ulp check would mask exactly the
+#     signed-zero defect the DELIBERATELY ABSENT note below is watching.
+#   - every token that is not a float on both sides: the raw struct bytes, the
+#     integers, the printed arguments.
+#
+# ## Why the printed value is still a faithful readout of the bits
+#
+# Unchanged, and it is what makes an ulp count meaningful at all: NilPy's float
+# repr is the SHORTEST decimal that round-trips -- CPython's own rule, pinned
+# by test_nilpy_float_repr_roundtrip -- which is a bijection with the bit
+# pattern for every finite double. So parsing a printed row recovers the exact
+# double, and the ulp distance between two rows is the true distance between
+# two bit patterns, not an artefact of formatting.
 #
 # That is a property of THIS readout and not a general licence, and the
 # opposite readout is what kept math.atan2 out of the frontend's table for a
@@ -19,9 +54,10 @@
 # the instrument manufactured a disagreement out of one value. Re-measured
 # 2026-09-10: 3FDDAC670561BB4F in both.
 #
-# So the last section prints the RAW BYTES through struct as well. If float
-# printing ever changes, the repr rows go red for a formatting reason and the
-# struct rows stay honest.
+# So the last section prints the RAW BYTES through struct as well. Those rows
+# are compared with NO tolerance, because they are bytes and not floats: if
+# float printing ever changes, the repr rows go red for a formatting reason and
+# the struct rows stay honest.
 #
 # DELIBERATELY ABSENT: negating a float that a LIST or a PARAMETER holds, where
 # the value may be zero. `-x` for a local variable or a literal is correct, but

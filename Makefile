@@ -4954,15 +4954,31 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_frozenset26 | diff -u test/test_nilpy_frozenset.expected -
 	./$(COMPILER) test/test_nilpy_math_log.npy $(TESTTMP)/test_nilpy_mathlog26
 	$(TESTTMP)/test_nilpy_mathlog26 | diff -u test/test_nilpy_math_log.expected -
-	# math.atan2 and math.atan against CPython, BIT FOR BIT. The oracle is
-	# CPython run on the SAME file, not a stored .expected, so it cannot go
-	# stale -- and the file's own header says why a repr comparison is a bit
-	# comparison here (shortest round-tripping repr is a bijection with the
-	# bits) and prints the raw struct bytes as well, since it was a
-	# fixed-width readout that manufactured the 1-ulp "gap" keeping
-	# math.atan2 out of the table for a month.
-	./$(COMPILER) test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy $(TESTTMP)/test_nilpy_atan226
-	tools/expect_same.sh test_nilpy_atan226 "$$($(TESTTMP)/test_nilpy_atan226)" "$$(python3 test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy)"
+	# The comparator's own positive control, and it runs BEFORE its only
+	# consumer on purpose: a tolerance that cannot reject is not a tolerance,
+	# it is an unconditional pass wearing one. --selftest asserts the
+	# rejections that matter here -- nan facing a number, +0.0 facing -0.0, a
+	# sign flip, 3 ulp at a tolerance of 2, differing raw bytes, differing
+	# integers, a line- or token-count change -- and asserts that 1 and 2 ulp
+	# still pass.
+	tools/expect_close.py --selftest
+	# math.atan2 and math.atan against CPython, within 2 ulp and EXACT on
+	# everything else. The oracle is CPython run on the SAME file, not a
+	# stored .expected, so it cannot go stale.
+	#
+	# This row asserted BIT FOR BIT until 2026-09-23 and the owner retired
+	# that claim rather than the 133x fast arm 6b8b45af45d9 gave ArcTan:
+	# "yes, performance. screw insignificant bits pls." Every one of the 20
+	# differing tokens was exactly 1 ulp, and it halted test-nilpy at 2470 of
+	# 6614 recipe lines. The 2 comes from lib_math_fast_tolerance.pas, which
+	# already states the contract for these kernels.
+	#
+	# expect_close.py is soft ONLY on the last bits of a float both sides
+	# call finite and same-signed: nan, inf, the sign bit (including on
+	# zero), the raw struct bytes and the integers are all still exact. Its
+	# --selftest row above proves it can still say no.
+	./$(COMPILER) test/test_nilpy_math_atan_and_atan2_against_cpython.npy $(TESTTMP)/test_nilpy_atan226
+	tools/expect_close.py test_nilpy_atan226 2 "$$($(TESTTMP)/test_nilpy_atan226)" "$$(python3 test/test_nilpy_math_atan_and_atan2_against_cpython.npy)"
 	# A promotable shift has an INLINE arm as well as the bignum one
 	# (promocore.pas PXXPromoShl/Shr). The risk is not slowness, it is the two
 	# arms DISAGREEING, so the rows STEP ACROSS the guard -- lim-1, lim, lim+1,

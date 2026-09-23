@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: T
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_nilpy_atan226 "$(/tmp/test_nilpy_atan226)" "$(python3 test/test_nilpy_math_atan_and_atan2_bit_`. The job's own `src` (`test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -144,3 +145,46 @@ seat the same way. **If it is going to sit at F priority it should not also be
 able to stop the tier** — either give it a tolerance, per CLAUDE.md's own rule
 that a byte-exact float diff reddens ~7% of rows for no defect, or move it behind
 the rows that can still be verified.
+
+## Resolution (2026-09-23, frank)
+
+**Not a defect — the test asserted a contract the owner has since traded away,
+and the TEST is what changed.**
+
+Reproduced at 2702b4abebca: 272 lines, 665 tokens, 657 of them parsed as float,
+**20 differing from CPython and every one of the 20 exactly 1 ulp**. The raw
+`struct` byte rows and every behaviour row matched. Track T's bisect had already
+narrowed the range to `6b8b45af45d9` alone ("perf(B): a fast arm for ArcTan and
+ArcTan2 -- the fdlibm kernel, 133x"), which also disposes of the theory that the
+unpinned CPython oracle moved: a bisect varies the tree while holding the oracle
+fixed.
+
+The owner ruled on the contract directly, 2026-09-22: *"yes, performance. screw
+insignificant bits pls. we learned our lesson."* So the fast arm stays.
+
+**What landed:**
+- `tools/expect_close.py` — a ULP-tolerant comparator. Soft ONLY on the last
+  bits of a value both sides call a finite float of the same sign. nan, inf,
+  the sign bit *including on zero*, raw bytes, integers, line count and token
+  count are all still exact. The sign-of-zero rule is load-bearing: ±0.0 are
+  0 ulp apart under the monotone mapping, so a bare ulp check would have masked
+  the signed-zero defect this very file's `DELIBERATELY ABSENT` note watches.
+- Tolerance **2**, taken from `test/lib_math_fast_tolerance.pas` ("within 2 ulp
+  of glibc, and that is all") rather than invented, and one ulp above the
+  measured max so the gate is not born at its own limit.
+- `--selftest`, wired as its own Makefile row ahead of the consumer, asserting
+  the rejections. Verified against the real population as well: reinstating the
+  Dekker-split `nan` (this file's own positive control), a signed-zero flip, and
+  a 3-ulp drift each redden; 1 and 2 ulp pass.
+- The file is renamed `..._against_cpython.npy`. `bit_for_bit` was the claim
+  that just stopped being true, and its header argued that claim at length.
+
+**Population note:** the 20/657 figure is this file at 2702b4abebca under
+CPython 3.x on plexus. It is not a claim about the ArcTan kernel generally —
+`6b8b45af45d9` measured that separately at max 1 ulp over ~15600 rows against
+glibc.
+
+This row halted `make test-nilpy` at 2470 of 6614 recipe lines; 5b's earlier
+`make -i` run found it the only failure in 6709 lines, so the territory behind
+it was already measured green.
+- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
