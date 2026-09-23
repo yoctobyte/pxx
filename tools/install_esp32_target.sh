@@ -84,6 +84,16 @@ install_host_packages() {
   # ESP-IDF's own install.sh fails loudly later if something is genuinely
   # missing -- but a silent drop would turn a packaging change into a mystery
   # build error, which is what the `warn:` line is for.
+  #
+  # An entry may be a `a|b` ALTERNATIVES GROUP: the first name with a candidate
+  # wins and the group is only reported missing when NO member resolves. That
+  # is a rename across releases, which is a different thing from the t64 suffix
+  # transition above and cannot be expressed by it. Measured on plexus
+  # (Ubuntu 26.04.1, 2026-09-23): `qemu-user-static` is PURE VIRTUAL on 26.04 --
+  # `apt-cache policy` says `Candidate: (none)` while `show`, `showpkg` and
+  # `dpkg-query` all succeed -- and `qemu-user-binfmt` is the real package.
+  # Listing both, newest first, keeps one script correct on both releases
+  # without asking it which release it is on.
   pkgs=''
   missing=''
   for pkg in \
@@ -93,13 +103,21 @@ install_host_packages() {
     libffi-dev libssl-dev \
     dfu-util libusb-1.0-0 \
     libgcrypt20 libglib2.0-0 libpixman-1-0 libsdl2-2.0-0 libslirp0 \
-    qemu-user qemu-user-static binfmt-support
+    qemu-user 'qemu-user-binfmt|qemu-user-static' binfmt-support
   do
-    if apt_has_candidate "$pkg"; then
-      pkgs="$pkgs $pkg"
-    elif apt_has_candidate "${pkg}t64"; then
-      say "note: $pkg -> ${pkg}t64 (time_t transition)"
-      pkgs="$pkgs ${pkg}t64"
+    chosen=''
+    for alt in $(printf '%s\n' "$pkg" | tr '|' ' '); do
+      if apt_has_candidate "$alt"; then
+        chosen="$alt"
+        break
+      elif apt_has_candidate "${alt}t64"; then
+        say "note: $alt -> ${alt}t64 (time_t transition)"
+        chosen="${alt}t64"
+        break
+      fi
+    done
+    if [ -n "$chosen" ]; then
+      pkgs="$pkgs $chosen"
     else
       missing="$missing $pkg"
     fi
