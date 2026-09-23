@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-23
 found-by: frank (adding the xtensa arm to the signal tests)
 blocked-by: []
-summary: "ANY integer multiply in a hosted xtensa program dies with SIGILL on stock qemu-user, so `--target=xtensa --platform=posix` cannot run a program that multiplies -- which includes anything that PRINTS A NUMBER, because integer-to-decimal multiplies. The backend emits `muluh` (MUL32_HIGH) and NO core model in stock qemu-xtensa implements it: dc232b, dc233c, de212, de233_fpu, dsp3400, lx106 and sample_controller all SIGILL identically, so this is not a -cpu selection fix. The faulting instruction is the one AFTER `mull`, which decodes fine -- MUL32 is present and MUL32_HIGH is a separate option -- and the emitted sequence `mull a8,a4,a2 / muluh a9,a4,a2 / mull a10,a4,a3 / mull a11,a5,a2` is a 64x64 expansion for two 32-bit Integer operands, so the high word is being computed for a multiply whose declared result is 32 bits. TWO SEPARATE QUESTIONS AND THEY HAVE DIFFERENT OWNERS: whether a 32-bit multiply should reach MUL32_HIGH at all (Track A, and it may be deliberate if Int64 is the native integer evaluation width -- do NOT assume it is a defect), and that hosted xtensa has no runnable multiply on this box either way (Track S/T, a test-infrastructure wall). NOT A SILICON BUG AS FAR AS MEASURED: ESP32 LX6/LX7 have MUL32_HIGH and the ESP profile runs under Espressif's qemu-system-xtensa, so the ESP rows are unaffected -- which is exactly why this stayed invisible. THE CONDITION THAT WOULD RETIRE IT: a hosted xtensa program that multiplies and runs to completion under a stock qemu-xtensa core, or a decision that hosted xtensa is not a supported run profile and the `--platform=posix` xtensa rows are build-only by design."
+summary: "ANY integer multiply in a hosted xtensa program dies with SIGILL on stock qemu-user, so `--target=xtensa --platform=posix` cannot run a program that multiplies -- which includes anything that PRINTS A NUMBER, because integer-to-decimal multiplies. The backend emits `muluh` (MUL32_HIGH) and NO core model in stock qemu-xtensa implements it (dc232b, dc233c, de212, de233_fpu, dsp3400, lx106, sample_controller and the default all SIGILL identically), so this is not a -cpu fix. `mull` decodes and the instruction after it does not, because MUL32_HIGH is a SEPARATE option from MUL32. THE WIDTH QUESTION IS CLOSED AS OF 2026-09-24 AND THE ANSWER IS LEAVE IT ALONE -- do not narrow the binop. Integer binops are typed tyInt64 with tyInteger operands and a tyInteger destination (measured: PXXDBG=a.ir gives tk=1/tk=1/binop tk=13/tk=1), riscv32 emits the IDENTICAL four-instruction expansion and survives only because RV32M always has `mulhu`, and ir_codegen.inc:6106 documents the reason: the binop is computed at 64-bit width so the mathematically exact result exists, which is what {$Q+} overflow detection is built on as a range test. Narrowing the type would silently remove that on every target. SO THE DEFECT IS NARROWER THAN THE TITLE: the lowering assumes an OPTIONAL ISA feature with no fallback. The high half IS dead for a 32-bit destination (only the low word is stored), and all four declared widths emit 4 multiplies against a 0-multiply negative control, so the recommended fix is CONSUMER-AWARE NARROWING -- emit only the low multiply where the result is provably consumed at <=32 bits, which leaves the binop type untouched and is a win on riscv32/arm32/i386 too rather than a trade. ESP IS UNAFFECTED (Espressif qemu and LX6/LX7 have MUL32_HIGH), which is why this stayed invisible: the axis is WHICH EMULATOR. THE CONDITION THAT RETIRES IT: a hosted xtensa program that multiplies and runs to completion under a stock qemu-xtensa core, or a decision that hosted xtensa is build-only by design."
 ---
 
 # xtensa emits `muluh` for an integer multiply, and no stock qemu core implements it
@@ -144,3 +144,112 @@ population that wants this, and each prints a number.
 # Umbrella
 
 [[meta-a-pxx-produces-linkable-code]]
+
+---
+
+# Investigated 2026-09-24 (frank) — the WIDTH question is CLOSED, and the answer is "leave it alone"
+
+This ticket left two questions open and cautioned against filing the first as a
+defect. **It is now answered, and the answer is the opposite of the tempting
+fix.** Recorded here specifically so the next seat does not "fix" this by
+narrowing the multiply.
+
+## The widening is target-independent, deliberate, documented, and load-bearing
+
+**riscv32 emits the IDENTICAL expansion** — so this was never an xtensa quirk:
+
+| | sequence |
+| --- | --- |
+| xtensa | `mull a8,a4,a2` / `muluh a9,a4,a2` / `mull a10,a4,a3` / `mull a11,a5,a2` |
+| riscv32 | `mul t2,t0,a0` / `mulhu t3,t0,a0` / `mul t4,t0,a1` / `mul t5,t1,a0` |
+
+riscv32 survives only because **RV32M always provides `mulhu`**, while xtensa's
+**MUL32_HIGH is an optional configuration option** — separate from MUL32, which
+is why `mull` decodes and `muluh` does not.
+
+**The IR says it plainly.** `PXXDBG=a.ir:Mul` for `q := i * j`, all three
+`Integer`:
+
+```
+0: load_sym  tk=1  [sym=i]      tk=1  = tyInteger  (4-byte signed)
+1: load_sym  tk=1  [sym=j]
+2: binop  a=0 b=1 c=72 tk=13    tk=13 = tyInt64    (8 bytes)
+3: store_sym a=4 b=2 tk=1 [sym=q]
+```
+
+Operands `tyInteger`, destination `tyInteger`, **binop `tyInt64`**.
+
+**And it is the documented architecture, not an accident.**
+`ir_codegen.inc:6106`, `EmitOvfCheckNarrowX64`:
+
+> *The binop was computed at 64-bit register width on sign/zero-extended
+> operands, so rax holds the mathematically exact result and the 64-bit OF/CF
+> never fire for a 32-bit wrap (bug-a-qplus-misses-32bit-overflow). The check is
+> therefore a range test.*
+
+So the wide evaluation is **what `{$Q+}` overflow detection is built on**: the
+exact result exists, and the check is "re-extend the low width and compare". This
+is the integer analogue of CLAUDE.md's *"DOUBLE IS THE NATIVE EVALUATION TYPE …
+an expression being typed or evaluated at double width is the architecture, not a
+defect"*, and it has a mechanism depending on it.
+
+**DO NOT NARROW THE BINOP TYPE.** It would silently remove the exact-result
+property `{$Q+}` depends on, on every target, to save instructions on three.
+That is the change this section exists to prevent.
+
+## What IS measured, and what it costs
+
+The high half really is dead for a 32-bit destination — the store is one 32-bit
+word:
+
+```
+add a1,t3,t4     ┐ high half assembled...
+add a1,a1,t5     ┘
+mv  a0,t2
+lw  t0,8(t0)
+sw  a0,0(t0)     <- only a0 (the LOW word) is stored; a1 is never used
+```
+
+Four multiplies and two adds where one `mul` would do, **on every integer
+multiply, at every declared width**. Measured on riscv32 by counting multiply
+instructions in the executed trace, `Integer*literal`, `Integer*Integer`,
+`Int64*Int64` and `SmallInt*SmallInt` — **all four emit 4**. Negative control: a
+program whose only change is `+` instead of `*` emits **0**, so the instrument is
+counting the expression and not the RTL.
+
+**This is a cost that is FREE on the primary target and paid only by the
+secondaries** — a 64-bit `imul` on x86-64 is one instruction. That is CLAUDE.md's
+measured-on-x86-64 blind spot arriving in a performance decision rather than in a
+correctness one.
+
+## So the defect is narrower than this ticket's title, and it is not the width
+
+**The lowering assumes an OPTIONAL ISA feature with no fallback.** MUL32_HIGH is
+configurable on xtensa; the backend emits `muluh` unconditionally. That is true
+regardless of how the width question is decided, and it is what should be fixed.
+
+Options, and the choice needs a decision this ticket cannot take alone:
+
+1. **A MUL32_HIGH-free high-word path on xtensa** (16x16 partial products, or a
+   soft helper). Correct everywhere, costs code size on a flash-constrained
+   target. Note `mul16u`/`mul16s` are ALSO optional — do not assume them.
+2. **A consumer-aware narrowing**: emit only the low multiply when the result is
+   provably consumed at <= 32 bits. Fixes the wall AND the cost on all four
+   32-bit targets, and does NOT touch the binop's type, so `{$Q+}` keeps its
+   exact result wherever the result is actually used wide. **This is the one to
+   price first** — it is the only option that is a win rather than a trade.
+3. **Target-capability gating** — a flag for cores without MUL32_HIGH. Cheapest,
+   and it pushes the problem onto whoever builds for such a core.
+
+## Scope correction to this ticket's own framing
+
+Its summary says the two questions "have different owners" and names the width
+one as possibly deliberate. **It is deliberate — confirmed — so that half is
+closed and should not be re-opened.** What remains is one Track A question
+(option 2 above, which is an optimisation with a correctness precondition) and
+the pre-existing fact that hosted xtensa cannot multiply under stock qemu.
+
+**Priority unchanged.** ESP is unaffected (Espressif's emulator and LX6/LX7 have
+MUL32_HIGH), so this still blocks only the hosted-xtensa profile — but option 2
+would make it a performance win on riscv32, arm32 and i386 as well, which is a
+better reason to do it than the wall is.
