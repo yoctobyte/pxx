@@ -124,6 +124,21 @@ const
 
   PROT_NONE     = 0;        { guard page: no access }
   PROT_RW       = 3;        { PROT_READ or PROT_WRITE }
+  { $22 IS CORRECT HERE AND IS NOT THE MISSING ARCH SPLIT IT LOOKS LIKE.
+    MAP_ANONYMOUS is $800 on xtensa, not $20, and getting that wrong does not
+    fail loudly -- $22 decodes as MAP_PRIVATE|0x20, the kernel takes fd -1
+    literally, mmap returns EBADF and the caller silently falls back to a heap
+    allocation with no guard page. scheduler.pas carried exactly that bug and
+    1dd37bbb4d split it (xtensa $802); platform/posix/platform_backend.pas
+    splits it too (2050 vs 34).
+    THIS FILE IS THE THIRD PLACE AND IT IS CLEAN, checked 2026-09-24: the only
+    targets that reach this constant are x86-64, i386, aarch64 and arm32, where
+    $22 is right. Everything else is refused before it matters, and the refusal
+    is the --threadsafe gate rather than anything in this file -- verified, not
+    read: `--threadsafe --target=xtensa` answers "--threadsafe is
+    x86-64/i386/aarch64/arm32 only", and without the flag every target stops at
+    the __pxxclone error above. So do NOT "fix" this to $802 or add an arch
+    split: on the four targets that get here, $802 would be the wrong value. }
   MAP_ANON_PRIV = $22;      { MAP_PRIVATE or MAP_ANONYMOUS }
   PAGE_SIZE     = 4096;
 
