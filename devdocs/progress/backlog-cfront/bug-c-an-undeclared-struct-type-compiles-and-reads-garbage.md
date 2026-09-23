@@ -148,3 +148,48 @@ anything**. The legal shapes it must not touch are already pinned by
 `test/c_incomplete_type_legal_shapes.c` — pointers to incomplete types, `extern`
 declarations of them, forward-then-defined tags, self-referential nodes — and
 that file is the place to add a row for any new legal shape found.
+
+## 2026-09-24, later — a THIRD state, and a correction that was worse than the bug
+
+The section above says an undeclared tag and a typo'd member reach one
+not-found path. That is true and it is **incomplete**, and the missing part
+shipped as a regression for one commit.
+
+**There are three ways a record can lack the member being asked for, and
+`RecSize` and the field count cannot tell any of them apart:**
+
+| state | how it arises | who is wrong |
+| --- | --- | --- |
+| no body ever seen | `struct nosuchtype v;` — forward record minted for the tag | the source: definition missing |
+| body seen, **layout dropped** | `SkipBraceBlock` — "keep the tag, drop the layout" | **us**: pxx declined to lay it out |
+| body laid out, genuinely empty | `struct E { };`, a GNU extension gcc accepts | the source: the member name |
+
+The middle row is the one that bit. `struct S { int a; int b; }
+__attribute__((aligned));` is **valid C that gcc compiles**, `CStructBodyIsSimple`
+returns False for an alignment attribute with no parsed value, and the record
+reaches the field tables with zero fields — indistinguishable from an undefined
+tag. The two-arm check duly refused `v.a` with *"the struct/union has no
+definition in scope"*, which is false; the definition is on the line above.
+
+**THE FIRST CORRECTION WAS WORSE THAN THE BUG, and this is the part to keep.**
+The obvious repair is to suppress the diagnostic where the layout is unknown —
+we cannot know a member is missing from a struct we never laid out. That
+compiles the program, and it **prints `9 9` where gcc prints `7 9`**: with the
+layout dropped every member resolves to offset 0, and `sizeof` answers 0 against
+gcc's 16. It trades a loud wrong MESSAGE for a silent wrong VALUE — this
+ticket's own bug, reintroduced by the guard written to prevent a regression. It
+was caught only by building the binary and **running** it rather than stopping
+at "it compiles again".
+
+**All three states refuse.** Two flags carry the distinction (`UClsBodySeen`,
+set in `ParseCStructInto`, the one place a body is laid out; `UClsLayoutDropped`,
+set at the `SkipBraceBlock` arm) and `CRecMissingFieldKind` reads them, so each
+arm says something true: the member NAME is wrong, the DEFINITION is missing, or
+the layout is ours to explain.
+
+**The false-positive census could not have caught this.** 48 files of zlib and
+`lib/crtl/src` contain no struct with an unparsed alignment attribute, so the
+sweep was **silent about the case rather than clearing it** — an honest
+measurement over a population that cannot contain the subject. The number was
+re-taken after the third arm existed (still 0 of 48) instead of being carried
+forward.
