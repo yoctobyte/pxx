@@ -1031,6 +1031,20 @@ begin
   FpcMemErrors := False;
   DbgMainTokEnd := TOK_UNBOUNDED;   { every token is main-file until a unit is appended }
   CCharSignedOpt := -1;   { -1 = follow the target psABI; see CPlainCharSigned }
+  { The pointee-shape carriers say "else -1" in their own declarations, and a
+    Pascal global starts at 0 -- which is a VALID ArrType row and a VALID alias
+    index, the same default/sentinel collision the four Alloc* sites already
+    spell out ("-1, not 0: zero is a VALID ArrType row"). They were correct at
+    every site that WRITES a symbol and wrong at the one place nobody looked:
+    before anything has been parsed at all.
+    Only ParseTypeKindInner ever sets them, so a compile that parses NO Pascal
+    type -- a C program on a target whose prelude pulls no Pascal unit -- runs
+    the whole way with 0, and SetPtrElemArrayInfo then reads ArrType row 0 for
+    every pointer it records. That is why `*d = 0` on `char *d` refused only on
+    xtensa: every other target parses the RTL first and is left holding -1 by
+    accident. bug-a-xtensa-cannot-lower-a-store-through-a-pointer }
+  LastTypePointerElemArrAi := -1;
+  LastTypePointerElemAlias := -1;
   DumpIR := False;
   DumpProcMap := False;
   DceEnabled := False;

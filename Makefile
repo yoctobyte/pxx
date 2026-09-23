@@ -36016,6 +36016,44 @@ test-emit-obj: $(COMPILER)
 	# a grep of an empty log.
 	! ./$(COMPILER) test/library_program_needs_a_main_body_fail.pas $(TESTTMP)/lib_prog_nobody >$(TESTTMP)/lib_prog_nobody.err 2>&1
 	grep -q "expected 'begin'" $(TESTTMP)/lib_prog_nobody.err
+	@# A STORE AND A READ THROUGH A POINTER PARAMETER, in a unit that pulls no
+	@# Pascal unit in. `*d = 0` on `char *d` was IR_UNSUPPORTED (kind 5) for
+	@# xtensa while compiling everywhere else, and it was never an xtensa
+	@# codegen bug: LastTypePointerElemArrAi says "else -1" and starts at 0,
+	@# which is a VALID ArrType row, so a compile that parses no Pascal TYPE
+	@# ran holding 0 and CDerefDecayStride rewrote every `*p` as `p + 0`.
+	@# Every other target parses the RTL first and is left holding -1 by
+	@# accident, which is exactly why it looked target-specific.
+	@#
+	@# THE TWO CONDITIONS ARE THE TARGET AND THE ABSENT PRELUDE, and the
+	@# second is the one that generalises: --no-default-rtl reproduces it on
+	@# riscv32, so this is not an xtensa row wearing a general name. Both
+	@# spellings are asserted because a fix that keyed on the arch would pass
+	@# one and fail the other. Measured against pinned v416: both REFUSE
+	@# there, so these two rows have a real positive control.
+	./$(COMPILER) --target=xtensa --emit-obj test/c_store_and_read_through_a_pointer_param.c $(TESTTMP)/c_ptrparam_xt.o
+	./$(COMPILER) --target=riscv32 --emit-obj --no-default-rtl test/c_store_and_read_through_a_pointer_param.c $(TESTTMP)/c_ptrparam_rv.o
+	@# ...and the VALUES, on a target that can run. The refusal was the safe
+	@# half: a READ through the rewritten `p + 0` lowered fine and returned the
+	@# POINTER. No compile row can see that, so each read is checked twice with
+	@# the pointer held fixed and the value moved -- a broken read yields the
+	@# same address both times and cannot equal 65 and then 66. NOTE this row
+	@# passes under the pin too, because the default target's prelude masks the
+	@# defect: it guards the semantics, it is NOT a control for this bug.
+	./$(COMPILER) test/c_store_and_read_through_a_pointer_param.c $(TESTTMP)/c_ptrparam_native
+	$(TESTTMP)/c_ptrparam_native
+	@# The silent half, asserted STRUCTURALLY, because it is the one a
+	@# compile-only row cannot reach and the one a wrong fix would leave
+	@# behind: special-casing the LVALUE path would green every row above and
+	@# still read an address. Reads-only on purpose -- the file above refuses
+	@# at its first store under the unfixed compiler, so its dump comes back
+	@# EMPTY and the assertion would fail for the wrong reason. This one
+	@# compiles under pinned v416 and prints the defect: kind=5 ival=70
+	@# (AN_BINOP tkPlus) where there must be kind=36 (AN_DEREF).
+	tools/expect_same.sh c_read_ptr_param_is_a_load "$$(PXXDBG='a.ast:read_char' ./$(COMPILER) --target=riscv32 --emit-obj --no-default-rtl test/c_read_through_a_pointer_param_is_a_load.c $(TESTTMP)/c_rdptr_rv.o 2>&1 | grep -oE 'kind=(36|5) tk=[0-9]+ ival=[0-9]+' | head -1)" "kind=36 tk=3 ival=0"
+	tools/expect_same.sh c_read_ptr_param_is_a_load_xt "$$(PXXDBG='a.ast:read_char' ./$(COMPILER) --target=xtensa --emit-obj test/c_read_through_a_pointer_param_is_a_load.c $(TESTTMP)/c_rdptr_xt.o 2>&1 | grep -oE 'kind=(36|5) tk=[0-9]+ ival=[0-9]+' | head -1)" "kind=36 tk=3 ival=0"
+	./$(COMPILER) test/c_read_through_a_pointer_param_is_a_load.c $(TESTTMP)/c_rdptr_native
+	$(TESTTMP)/c_rdptr_native
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained
