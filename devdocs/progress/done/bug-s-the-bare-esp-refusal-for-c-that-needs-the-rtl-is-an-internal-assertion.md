@@ -7,7 +7,7 @@ status: done
 owner: frank
 created: 2026-09-23
 resolved: 2026-09-24
-commit: PENDING-COMMIT
+commit: cf7e5a5e99
 blocked-by: []
 summary: "FIXED 2026-09-24. The bare ESP profile correctly pulls no default RTL, and it said so as an INTERNAL ASSERTION naming a compiler-private symbol -- `compiler error: PXXMemZero not found (xtensa)` for `#include <stdio.h>` plus a printf, on both ISAs -- i.e. a deliberate exclusion reported in the vocabulary this tree reserves for compiler defects, with no action in it. Now a refusal that names the profile and gives two actions (build for IDF, or keep the unit freestanding), raised from ONE place: FindHeapHelperOrRefuse in symtab.inc, which fifteen codegen sites across six backends plus symtab now route through. THE BRANCH IS THE FIX, NOT THE WORDING -- where NoDefaultRtl or TargetIsEspClass holds the absence is a decision and the user gets a refusal; where neither holds, builtinheap should be present and its absence IS an internal fault, so that arm keeps `compiler error:` unchanged. Softening both would have destroyed a real signal. THIS TICKET`S PROPOSED LOCATION DOES NOT WORK AND THE REASON IS RECORDED: the cPullsBuiltinHeap gate knows the POLICY but cannot know the DEMAND -- the pull is decided once at parse time from tokens while a memzero is needed at CODEGEN, with no token signalling it (unlike the softfloat pull beside it, whose demand really is a float token) -- so a refusal there would be unconditional and would break FREESTANDING bare C, which is the supported shape. Deliberately does NOT advise `uses builtinheap`: checked, not assumed -- that does not compile on bare by design (feature-bare-esp-supports-uses-builtin). Controls: freestanding bare C still builds on both ISAs (new fixture), IDF still builds, bare Pascal still builds, x86-64 unaffected. The pre-existing bare row survived because it greps the SYMBOL not the wording, and was NOT sufficient -- asserting only that bare refuses was satisfied by the bad message too, so two rows now pin the message and both were verified to fail against the old one. NOT CONTROLLED, said plainly: the `compiler error:` arm has no positive control because builtinheap absent with no policy is not constructible."
 ---
@@ -156,4 +156,4 @@ otherwise.
 `make test-emit-obj` GREEN, `gate.sh quick` GREEN, fixedpoint converged.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit cf7e5a5e99.
