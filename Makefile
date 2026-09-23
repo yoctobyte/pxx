@@ -30889,7 +30889,15 @@ test-xtensa: $(COMPILER)
 	# These rows are the only coverage the xtensa `-101`
 	# SetLength arm has (bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32
 	# was filed riscv32-only; xtensa refused the identical builtin). Verified
-	# under BOTH xtensa ABIs -- the windowed default and --xtensa-abi=call0 --
+	# under BOTH xtensa ABIs -- the CALL0 DEFAULT and --xtensa-abi=windowed --
+	# (this said "the windowed default" until 2026-09-24, naming the wrong one:
+	# compiler.pas sets XtensaABI := XTENSA_ABI_CALL0 and ONLY an explicit
+	# --xtensa-abi=windowed moves it. Measured on this very row's source -- the
+	# flagless build is BYTE-IDENTICAL to --xtensa-abi=call0 and differs from
+	# --xtensa-abi=windowed, so the pair is a real differential and not a
+	# vacuous match. The row below is therefore the Call0 arm, not the windowed
+	# one, and a reader picking "the default" off this comment got the opposite
+	# of what runs.)
 	# because XtensaSlotOff exists precisely because they index the expression
 	# stack in opposite directions, so a hand-written offset is silently wrong
 	# on exactly one of them.
@@ -32057,6 +32065,76 @@ test-xtensa: $(COMPILER)
 	# what makes this work and this comment has gone stale.
 	! ./$(COMPILER) --target=xtensa --platform=esp --emit-obj $(TESTTMP)/nilpy_xtensa_empty.npy $(TESTTMP)/nilpy_xtensa_default.o 2>/dev/null
 	@echo "=== test-xtensa: NilPy builds for xtensa (windowed + long-calls + emit-obj); default ABI still refuses ==="
+	# COROUTINES AND ASYNC ON XTENSA -- the six rows riscv32 has had and xtensa
+	# has never had. Until 2026-09-24 every one of these refused at
+	# `uses scheduler` with `coroutines are not implemented for target xtensa`.
+	# feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there
+	#
+	# ASSERTED AGAINST THE x86-64 BUILD OF THE SAME SOURCE, not against literal
+	# strings, which is a deliberate difference from four of the riscv32 rows.
+	# These carry no per-target constant, so the pair is a RELATION: the two
+	# targets must agree, and neither side's expected output has to be edited
+	# when a test changes. It also means a row cannot silently encode a
+	# xtensa-specific wrong answer as its own expectation.
+	#
+	# CALL0 ONLY, AND THAT IS THE WHOLE SCOPE. The windowed ABI keeps
+	# callee-saved state in a rotating register window, so a switch has to spill
+	# the window before another context can own the stack -- a materially
+	# different problem, refused BY NAME in coroutine_emit.inc and sequenced
+	# rather than bundled. The negative control for that refusal is the row
+	# further down; do not "fix" it by widening the stub.
+	#
+	# WHY THESE ROWS ARE NOT VACUOUS, measured before landing them: perturbing
+	# the priming in lib/rtl/scheduler.pas by one slot (writing @CoStart to
+	# top+4 instead of top+8) makes test_scheduler and test_asyncecho SEGFAULT
+	# under qemu. So they really do exercise the CoSwitch contract rather than
+	# merely importing the unit.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_scheduler.pas $(TESTTMP)/test_xt_scheduler
+	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_xt_scheduler_x64
+	tools/expect_same.sh xtensa/scheduler "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_scheduler)" "$$($(TESTTMP)/test_xt_scheduler_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_scheduler_exc.pas $(TESTTMP)/test_xt_scheduler_exc
+	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_xt_scheduler_exc_x64
+	tools/expect_same.sh xtensa/scheduler_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_scheduler_exc)" "$$($(TESTTMP)/test_xt_scheduler_exc_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_channel.pas $(TESTTMP)/test_xt_channel
+	./$(COMPILER) test/test_channel.pas $(TESTTMP)/test_xt_channel_x64
+	tools/expect_same.sh xtensa/channel "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_channel)" "$$($(TESTTMP)/test_xt_channel_x64)"
+	# test_timer is the row that pins the TIMERFD half, and xtensa is NOT
+	# riscv32 here: rv32 is time64-only and needs timerfd_settime64(411) with a
+	# 64-bit itimerspec, while xtensa has a live timerfd_settime(313) taking the
+	# 32-bit one (410 is `Unknown syscall`). So xtensa deliberately does not set
+	# SCHED_TIME64, and this row is what would catch that being copied wrongly.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_timer.pas $(TESTTMP)/test_xt_timer
+	./$(COMPILER) test/test_timer.pas $(TESTTMP)/test_xt_timer_x64
+	tools/expect_same.sh xtensa/timer "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_timer)" "$$($(TESTTMP)/test_xt_timer_x64)"
+	# test_reactor is what asserts the epoll_event LAYOUT, and it is the only
+	# row that can: `data` carries the parked coroutine's id back out of
+	# epoll_wait, so a packed-instead-of-padded record does not fault -- it
+	# returns a garbage id and wakes the wrong coroutine.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_reactor.pas $(TESTTMP)/test_xt_reactor
+	./$(COMPILER) test/test_reactor.pas $(TESTTMP)/test_xt_reactor_x64
+	tools/expect_same.sh xtensa/reactor "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_reactor)" "$$($(TESTTMP)/test_xt_reactor_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_xt_asyncecho
+	./$(COMPILER) -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_xt_asyncecho_x64
+	tools/expect_same.sh xtensa/asyncecho "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_asyncecho)" "$$($(TESTTMP)/test_xt_asyncecho_x64)"
+	# THE ESP PARITY THIS WAS ACTUALLY FOR: esp32c3 (riscv32) has built
+	# lib_asyncnet6 all along and esp32s3 (xtensa) could not. Both must now, and
+	# it is an --emit-obj row on purpose -- it asserts the COMPILE reaches the
+	# end on the real ESP target triple, with no emulator in the question.
+	./$(COMPILER) --target=esp32s3 --emit-obj test/lib_asyncnet6.pas $(TESTTMP)/test_xt_asyncnet6_s3.o
+	./$(COMPILER) --target=esp32c3 --emit-obj test/lib_asyncnet6.pas $(TESTTMP)/test_xt_asyncnet6_c3.o
+	# NEGATIVE CONTROL for the ABI scope, and it is the row that keeps the
+	# comment above honest: the WINDOWED ABI must still refuse, by name. If this
+	# ever starts succeeding, a windowed CoSwitch has appeared without anyone
+	# updating the claim that Call0 is the only implemented arm.
+	# `>` AND NOT `2>`, AND THAT IS NOT A TYPO TO TIDY: pascal26 writes its
+	# diagnostics to STDOUT. This row was first written as `2>...err` by analogy
+	# with the `2>/dev/null` rows elsewhere in this file, and it was a guard that
+	# COULD NOT PASS -- the .err file came back 0 bytes and the grep failed while
+	# the refusal was working perfectly. Those other rows get away with it
+	# because they only assert a nonzero exit and never read the text.
+	! ./$(COMPILER) --target=xtensa --platform=posix --xtensa-abi=windowed --emit-obj test/lib_asyncnet6.pas $(TESTTMP)/test_xt_an6_win.o >$(TESTTMP)/test_xt_an6_win.out 2>&1
+	grep -q "xtensa WINDOWED ABI" $(TESTTMP)/test_xt_an6_win.out
+	@echo "=== test-xtensa: coroutines/async on Call0 (6 rows vs the x86-64 oracle), esp32s3 asyncnet parity, windowed still refused ==="
 
 test-arm32: $(COMPILER)
 	# THE READ-ONLY DATA SEGMENT ON arm32 -- the same pair as test-aarch64's first

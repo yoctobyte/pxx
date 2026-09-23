@@ -4850,6 +4850,45 @@ begin
         AsmXtensaBlockResolve;
       end;
 
+    IR_COSWITCH:
+      begin
+        { __pxxcoswitch(pfrom, pto): pfrom -> a2, pto -> a3, call0 the stub that
+          coroutine_emit.inc emits. riscv32's arm is the model; the register
+          pair and the spill window are xtensa's, taken from IR_SET_SIGNAL
+          below, which has the same two-argument shape.
+
+          THIS ARM AND THE STUB ARM LAND TOGETHER, AND THE ORDER IS NOT A
+          PREFERENCE. A lowering without a stub calls CoSwitchAddr = 0, which on
+          this backend is offset 0 of .text — the program entry — reached from
+          inside user code, so the failure is a hang or a re-entered program
+          rather than a diagnostic. Until today the ONLY thing preventing that
+          was this node being unsupported here, which is what
+          coroutine_emit.inc's tail comment predicted would stop being true the
+          moment a backend gained a lowering. It has. The guard that replaced it
+          is the windowed refusal in that file: this arm is reached only when a
+          stub was emitted, because EmitCoroutineRuntime errors on every xtensa
+          configuration it does not implement.
+
+          NO ABI GUARD IS NEEDED HERE and that is deliberate rather than an
+          omission — compare IR_SET_SIGNAL below, which has to ask
+          TargetHasSignalRuntime because its stub is emitted on some xtensa
+          builds and not others. Coroutine emission has no such split: any
+          build that reaches this node has already been through
+          EmitCoroutineRuntime, which refuses --xtensa-abi=windowed by name. A
+          second check here would be a guard that cannot fail.
+          feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there }
+        argNode := IRA[node];                           { IR_ARG pfrom }
+        IREmitNodeXtensa(IRA[argNode]);                 { a2 = pfrom }
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+        xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);   { spill pfrom }
+        argNode := IRB[argNode];                        { IR_ARG pto }
+        IREmitNodeXtensa(IRA[argNode]);                 { a2 = pto }
+        xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);       { a3 = pto }
+        xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0);   { a2 = pfrom }
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+        EmitXtensaCallToCode(CoSwitchAddr);
+      end;
+
     IR_SET_SIGNAL:
       begin
         { SetSignalHandler(sig, handler): a2 = sig, a3 = handler -> the sethook

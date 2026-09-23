@@ -165,25 +165,101 @@ begin
     rv32_addi(reg_sp, reg_sp, 16);
     rv32_jalr(reg_zero, reg_ra, 0);       { ret }
   end
+  else if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_CALL0) then
+  begin
+    { xtensa Call0: pfrom=a2, pto=a3 (Call0 passes arg0..arg5 in a2..a7). The
+      saved frame is SIXTEEN bytes — exc_top, a15, a0, pad — and the pad is what
+      keeps sp 16-byte aligned, which the Call0 ABI requires at every call
+      boundary. Same size and same slot ORDER as riscv32's, deliberately, so the
+      RTL's priming block can be one arch-split with two register names rather
+      than two layouts.
+
+      THREE SLOTS, AND THE AUTHORITY FOR THAT IS exception_emit.inc, NOT A
+      GUESS AT THE ABI. Call0's callee-saved set is nominally a12-a15, and this
+      backend uses a15 as its frame pointer while treating a12/a13 as
+      expression scratch (see the soft-mulhigh expansion, which movi's into
+      both). The jmpbuf this compiler actually ships saves exactly
+      (a15, sp, a0) — the direct mirror of riscv32's (s0, sp, ra) — so a
+      setjmp/longjmp pair already asserts that nothing else survives a call
+      here. A CoSwitch saving MORE than the jmpbuf would be claiming a
+      guarantee the exception runtime does not make; saving less would break
+      both. If that ever stops being true, the exception stub is wrong in the
+      same way and the two move together — which is riscv32's own note, and it
+      is load-bearing on xtensa rather than merely tidy.
+
+      THE nop PADDING IS NOT COSMETIC AND riscv32 HAS NO EQUIVALENT. CoSwitch
+      is reached by `call0`, whose target must be 4-BYTE ALIGNED — Call0 encodes
+      the low two bits of the target as zero, so an unaligned entry silently
+      enters at a DIFFERENT address rather than faulting. Every stub in
+      exception_emit.inc pads for this reason; a coroutine switch that skipped
+      it would work or not depending on how much code happened to precede it.
+
+      BSS_EXC_TOP travels with the stack, as on arm32/aarch64/riscv32: each
+      coroutine owns its own exception chain, so a `raise` inside a coroutine
+      walks that coroutine's handlers. The address comes from the literal-pool
+      idiom the raise stub uses (XtensaEmitLitHeader jumps over a 4-aligned
+      literal slot; l32r with imm16=-1 word reads it back) rather than
+      riscv32's auipc trick, because xtensa has no PC-relative add.
+      feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there }
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    CoSwitchAddr := CodeLen;
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+    xtensa_s32i(reg_xtensa_a15, reg_xtensa_sp, 4);
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 8);
+    XtensaEmitLitHeader;                            { a4 = &BSS_EXC_TOP }
+    EmitGlobRef(BSS_EXC_TOP);
+    xtensa_l32r(reg_xtensa_a4, $FFFF);
+    xtensa_l32i(reg_xtensa_a5, reg_xtensa_a4, 0);   { a5 = exc_top }
+    xtensa_s32i(reg_xtensa_a5, reg_xtensa_sp, 0);   { save it on THIS stack }
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 0);   { *pfrom = sp }
+    xtensa_l32i(reg_xtensa_sp, reg_xtensa_a3, 0);   { sp <- *pto }
+    xtensa_l32i(reg_xtensa_a5, reg_xtensa_sp, 0);   { the other stack's exc_top }
+    xtensa_s32i(reg_xtensa_a5, reg_xtensa_a4, 0);   { BSS_EXC_TOP = it }
+    xtensa_l32i(reg_xtensa_a15, reg_xtensa_sp, 4);
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 8);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+    xtensa_ret;
+  end
+  else if TargetArch = TARGET_XTENSA then
+    { WINDOWED, and refused SEPARATELY from the generic tail below so the
+      message names the ABI rather than the target. The target is supported;
+      this ABI is not, and the two want different answers from the reader.
+
+      Why it is genuinely harder and not just unwritten: the windowed ABI keeps
+      callee-saved state in a ROTATING REGISTER WINDOW rather than on the stack
+      the way this switch assumes, so handing a stack to another context
+      requires spilling the window first (and the spill area lives at [sp-16],
+      which a switch that moves sp invalidates). It is not Call0's twin and the
+      ticket says to sequence the two rather than bundle them. }
+    Error('coroutines are not implemented for the xtensa WINDOWED ABI '
+          + '(--xtensa-abi=windowed): a context switch has to spill the '
+          + 'register window before another context can own the stack. The '
+          + 'CALL0 ABI is supported and is the DEFAULT — drop '
+          + '--xtensa-abi=windowed, or pass --xtensa-abi=call0 explicitly.')
   else if TargetArch = TARGET_WASM32 then
     Error('wasm32: coroutine context switch not implemented (a wasm module has '
           + 'no addressable stack pointer to swap)')
   else
-    { xtensa lands in a later phase -- its windowed ABI keeps callee-saved state
-      in a rotating register window rather than on the stack the way this switch
-      assumes, so it has to spill the window first and is not riscv32's twin.
-      Falling through leaves CoSwitchAddr
-      at 0 while the caller (EnableCoroutineRuntime) has already set
-      CoroutineUsed — but MEASURED 2026-08-31, that is not a live miscompile
-      today: it is masked downstream, because both backends refuse IR_COSWITCH
-      ('unsupported node in IR codegen: coswitch'), so any program that gets a
-      stub emitted also gets a node they reject. Two reasons to close it here
-      anyway. The diagnostic: 'coroutines are not implemented for target
-      xtensa' is the true statement; the codegen one names an internal node for
-      something the user did not do wrong. And the masking is the fragile half —
-      it holds only while the backends have NO coswitch lowering. Give riscv32
-      one without adding a stub arm here and the downstream guard disappears,
-      leaving exactly the call-to-address-zero this else now prevents.
+    { FAIL-CLOSED DEFAULT FOR A TARGET THAT DOES NOT EXIST YET. As of
+      2026-09-24 every target this compiler has reaches an arm above — x86-64,
+      i386, aarch64, arm32, riscv32, xtensa (Call0 implemented, windowed
+      refused by name) and wasm32 — so nothing routes here today and that is
+      the point: a new TARGET_* lands with a refusal rather than with silence.
+
+      WHAT SILENCE WOULD COST, and it is why this else is an Error and not a
+      comment: falling through leaves CoSwitchAddr at 0 while the caller
+      (EnableCoroutineRuntime) has already set CoroutineUsed, so the program
+      CALLS ADDRESS ZERO — offset 0 of .text, i.e. the entry point, from inside
+      user code. That is a hang or a re-entered program, not a diagnostic.
+
+      Until 2026-09-24 the miscompile was masked downstream, because the
+      backends refused IR_COSWITCH ('unsupported node in IR codegen: coswitch')
+      so any program that got a stub also got a node they rejected. THAT MASK
+      IS NOW GONE on xtensa — the lowering exists — which is exactly the
+      fragility the 2026-08-31 note predicted: 'give riscv32 one without adding
+      a stub arm here and the downstream guard disappears'. The same sentence
+      now applies to the next backend that gains a lowering, so add the stub arm
+      and the IR arm in ONE commit.
       refactor-a-target-dispatch-chains-fail-open }
     Error('coroutines are not implemented for target '
           + TargetArchName(TargetArch));

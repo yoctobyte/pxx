@@ -109,6 +109,12 @@ const
 {$ifdef CPU_AARCH64} const SYS_gettid = 178; {$endif}
 {$ifdef CPU_ARM32} const SYS_gettid = 224; {$endif}
 {$ifdef CPU_RISCV32} const SYS_gettid = 178; {$endif}
+{ xtensa is NOT asm-generic and NOT arm32 -- it has its own numbering, and 127
+  sits in an ABANDONED range (118 exit, 119 exit_group, 124 tkill) rather than
+  anywhere a neighbouring table would put it. MEASURED, not read off a table:
+  qemu-xtensa -strace names syscall 127 `gettid()` and returns the pid.
+  bug-a-xtensa-tkill-syscall-number-is-unlocated found the same range. }
+{$ifdef CPU_XTENSA} const SYS_gettid = 127; {$endif}
 
 { exit_group — the reactor-exhaustion fatal below terminates the PROCESS itself
   rather than going through Halt. Same inline-rather-than-uses reason as gettid.
@@ -120,6 +126,11 @@ const
 {$ifdef CPU_AARCH64} const SYS_exit_group = 94; {$endif}
 {$ifdef CPU_ARM32} const SYS_exit_group = 248; {$endif}
 {$ifdef CPU_RISCV32} const SYS_exit_group = 94; {$endif}
+{ 119 on xtensa. Measured TWO WAYS that fail differently, because the whole
+  point of this constant is that a wrong number exits 0 instead of failing:
+  qemu-xtensa -strace names it `exit_group(7)`, and the process really does
+  leave rc=7. The i386 lesson in the comment above is what that guards against. }
+{$ifdef CPU_XTENSA} const SYS_exit_group = 119; {$endif}
 
 { Reactor flags are identical across all Linux targets; only the syscall
   numbers and the epoll_event layout vary per arch. }
@@ -165,7 +176,36 @@ const
   PAGE_SIZE     = 4096;
   PROT_NONE     = 0;
   PROT_RW       = 3;        { PROT_READ or PROT_WRITE }
-  MAP_ANON_PRIV = $22;      { MAP_PRIVATE or MAP_ANONYMOUS }
+{ MAP_PRIVATE or MAP_ANONYMOUS, and XTENSA IS THE SOLE OUTLIER -- it spells
+  MAP_ANONYMOUS $800, not $20. This is the SIBLING of the landmine recorded on
+  feature-a-coswitch-for-xtensa-and-riscv32 for palthread.pas:84, found in this
+  file by looking for it after fixing that one. It was inert until 2026-09-24
+  because xtensa had no syscall block here at all and the missing SYS_gettid
+  errored first; adding the block below is what arms it.
+
+  WHY IT IS WORSE THAN A WRONG NUMBER: the $22 spelling does not fail loudly on
+  xtensa. It decodes as MAP_PRIVATE|0x20 -- 0x20 is not a named flag there -- so
+  the kernel takes fd -1 literally and returns EBADF, `mapBase > 0` is False,
+  and the code below falls back to GetMem. The coroutine then runs on an
+  UNGUARDED heap stack, which is the one outcome the guard-page machinery above
+  exists to prevent, reached silently. The "fail CLOSED" note at the mprotect
+  below covers a guard that cannot be installed; it does not cover a mapping
+  that was never requested correctly.
+
+  MEASURED under qemu-xtensa -strace on this file's exact call shape (mmap2,
+  fd -1, len 4096): $22 -> MAP_PRIVATE|0x20, EBADF; $802 ->
+  MAP_PRIVATE|MAP_ANONYMOUS, maps. That is qemu's own flag decoder naming the
+  bit, not a table.
+
+  DO NOT "TIDY" THIS BY GIVING riscv32 $802 TOO. riscv32's $22 is already
+  correct (it is asm-generic, like x86-64/i386/aarch64/arm32), and changing it
+  reintroduces exactly the EBADF that 97e96fc1b removed from PalBackendMmapAnon.
+  The two 32-bit ESP targets are NOT symmetric here. }
+{$ifdef CPU_XTENSA}
+  MAP_ANON_PRIV = $802;
+{$else}
+  MAP_ANON_PRIV = $22;
+{$endif}
 
 { Per-arch Linux syscall numbers (verified against the FPC RTL sysnr tables).
   aarch64 / arm32 have no epoll_wait — they use epoll_pwait (two extra args:
@@ -253,6 +293,39 @@ const
   SYS_mprotect        = 226;
   SYS_munmap          = 215;
 {$endif}
+{ xtensa has its OWN numbering and is neither asm-generic nor arm32 -- the two
+  tables this file's shape invites you to copy. EVERY NUMBER BELOW WAS MEASURED
+  BY NAME, one probe program under `qemu-xtensa -strace`, which prints the
+  kernel's own identity for the number instead of my belief about it. Two of
+  them would have been wrong from any plausible guess: 222 (the asm-generic
+  mmap) is `Unknown syscall 222` here, and 64 -- which looks like an mmap2 --
+  is `utime`.
+
+  UNLIKE riscv32 IT IS NOT TIME64. `timerfd_settime` 313 answers EFAULT (i.e.
+  it exists and tried to read the itimerspec), while 410, the settime64 number,
+  is `Unknown syscall`. So xtensa deliberately does NOT get SCHED_TIME64 and
+  takes the 32-bit itimerspec arm, the same as i386/arm32. Copying riscv32's
+  block here -- the obvious move, since both are 32-bit ESP targets -- would
+  have produced an ENOSYS at runtime and no compile error, which is precisely
+  the failure the riscv32 note above warns about.
+
+  AND IT HAS BOTH epoll_wait AND epoll_pwait (18 and 274), so it takes the x86
+  arm rather than the aarch64/arm32 one. mmap is mmap2 (page offset in the last
+  argument; we pass 0, so the call is identical -- see the i386 note). }
+{$ifdef CPU_XTENSA}
+const
+  SYS_fcntl           = 67;
+  SYS_epoll_create1   = 275;
+  SYS_epoll_ctl       = 19;
+  SYS_epoll_wait      = 18;
+  SYS_read            = 12;
+  SYS_close           = 9;
+  SYS_timerfd_create  = 312;
+  SYS_timerfd_settime = 313;
+  SYS_mmap            = 80;         { mmap2 -- page offset, 0 here }
+  SYS_mprotect        = 82;
+  SYS_munmap          = 81;
+{$endif}
 
 type
   { Linux epoll_event: u32 events then u64 data. Only x86 packs it (data at
@@ -274,6 +347,16 @@ type
 { riscv32 aligns a u64 to 8 like aarch64/arm32 do, so it takes the PADDED shape
   (data at offset 8, size 16), not i386's packed one. }
 {$ifdef CPU_RISCV32}
+  TEpollEvent = record events: LongWord; _pad: LongWord; data: Int64; end;
+{$endif}
+{ xtensa takes the PADDED shape too. __EPOLL_PACKED is an x86-only definition in
+  the kernel headers, and xtensa aligns a u64 to 8 like every other non-x86
+  target, so data sits at offset 8 and the record is 16 bytes. The end-to-end
+  check on this is the reactor itself: `data` carries the waiting coroutine's id
+  back out of epoll_wait, so a wrong layout does not fault -- it returns a
+  garbage id and marks the wrong coroutine runnable. The async rows are what
+  assert it. }
+{$ifdef CPU_XTENSA}
   TEpollEvent = record events: LongWord; _pad: LongWord; data: Int64; end;
 {$endif}
 
@@ -543,6 +626,30 @@ begin
   PW(top + 0)^  := 0;                { exc_top }
   PW(top + 36)^ := Int64(@CoStart);  { lr -> CoStart }
 {$else}
+{$ifdef CPU_XTENSA}
+  { xtensa Call0 restores: exc, a15, a0, pad — SIXTEEN bytes, and the pad is
+    what keeps sp 16-byte aligned as the Call0 ABI requires. Three slots because
+    the jmpbuf in compiler/exception_emit.inc saves exactly (a15, sp, a0), which
+    is the authority on what survives a call on this backend; the CoSwitch stub
+    matches it rather than the ABI's nominal a12-a15.
+
+    BYTE-FOR-BYTE THE SAME LAYOUT AS riscv32 BELOW, ON PURPOSE. The two stubs
+    were written to one slot order so that this priming is one shape with two
+    register names, instead of two shapes a reader has to diff. That is worth
+    saying out loud because the natural reading of two identical arms is that
+    one is a copy-paste mistake -- it is not, and merging them into a single
+    conditional naming both CPU symbols would be fine while the offsets agree
+    and a trap the moment either stub changes. Keep them separate and equal.
+
+    This layout and the xtensa arm of EmitCoroutineRuntime in
+    compiler/coroutine_emit.inc are ONE contract: the stub pops what this writes,
+    so change either and change both. CoSwitch's `ret` jumps to a0.
+    Only exc_top (a fresh chain on this stack) and the a0 slot matter on first
+    entry; a15 is dead until the body establishes its own frame. }
+  top := top - 16;
+  PW(top + 0)^ := 0;                 { exc_top }
+  PW(top + 8)^ := Int64(@CoStart);   { a0 -> CoStart }
+{$else}
 {$ifdef CPU_RISCV32}
   { riscv32 restores: exc, s0, ra, pad — SIXTEEN bytes, and the pad is what
     keeps sp 16-byte aligned as the psABI requires. Three slots rather than
@@ -566,6 +673,7 @@ begin
   PW(top + 40)^ := 0;                { rbx }
   PW(top + 48)^ := 0;                { rbp }
   PW(top + 56)^ := Int64(@CoStart);  { return address -> CoStart }
+{$endif}
 {$endif}
 {$endif}
 {$endif}
@@ -810,6 +918,12 @@ begin
 {$endif}
 {$ifdef CPU_RISCV32}
       n := Integer(__pxxrawsyscall(SYS_epoll_pwait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+{$endif}
+{ xtensa has a real epoll_wait (18), so it takes the four-argument x86 form
+  rather than riscv32's pwait -- measured by name, not inferred from being
+  32-bit. }
+{$ifdef CPU_XTENSA}
+      n := Integer(__pxxrawsyscall(SYS_epoll_wait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
 {$endif}
       for k := 0 to n - 1 do
       begin
