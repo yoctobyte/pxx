@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `a4a8e7fd1e4e` on borg, 2026-09-23T12:28:01Z (45m ago).**
+**Newest full tier in the fleet: `a4a8e7fd1e4e` on borg, 2026-09-23T12:28:01Z (47m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `a4a8e7fd1e4e` | RED | 45m | — (newest) |
+| borg | `a4a8e7fd1e4e` | RED | 47m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -311,4 +311,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
   - `test-pascal-conformance#shard3/6`
   - `test-record-abi-mixed-link#src:tools/compiler_srchash.sh`
   </details>
-- **test-debug-g#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `74b2c8d0e2e0`, last good `68dfff97ef98`, 3 commit(s) in range
+- **test-debug-g#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `74b2c8d0e2e0`, last good `23fcd326f211`, 2 commit(s) in range
