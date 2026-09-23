@@ -135,4 +135,4 @@ list returns 1, and the script would appear to exit before
 right.
 
 ## Log
-- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 613d9818a.
