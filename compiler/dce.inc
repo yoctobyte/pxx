@@ -1297,6 +1297,9 @@ procedure DceRun;
 var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
     why: AnsiString; src, dst: Integer; progressed: Boolean;
 begin
+  { Before the option test, not after: every `Exit` below this line leaves
+    DceLive allocated and all-False, which reads as "everything is dead". }
+  DceLiveValid := False;
   if not DceEnabled then Exit;
   why := '';
   { WHICH REFERENCE SHAPES PatchCodeRefSlot AND ApplyCallFixups CAN RE-AIM.
@@ -1422,6 +1425,12 @@ begin
     end;
   end;
   DceMarkAll(False);
+
+  { Marking is complete and DceLive is now authoritative -- set here rather
+    than at the end of the procedure, because everything below only REMOVES
+    bytes and re-patches, and a reader that runs after DceRun wants to know
+    that liveness was computed, not that the removal phase finished. }
+  DceLiveValid := True;
 
   { --- removable ranges --------------------------------------------------- }
   DceRemCount := 0;
@@ -1886,19 +1895,39 @@ procedure DropEspArenaIfAllocatorDead;
   reason: HeapMmap is the arena-refill call and the only route to a HeapPtr
   read. Two arenas, two seats, one predicate, arrived at independently.
 
-  GATED ON DceEnabled AND THAT IS NOT BELT-AND-BRACES. DceRun exits at its
-  first line when DCE is off, so DceLive is an unallocated dynamic array and
-  every entry would read as "not live" -- i.e. the predicate would come out
-  TRUE for every program and drop an arena the program is about to use. The
-  guard is the difference between a size win and a heap based at a dropped
-  address. --no-dce keeping the arena is also the positive control for this
-  routine: it must still measure 66,812 B on the frozen-string witness. }
+  GATED ON DceLiveValid AND THAT IS NOT BELT-AND-BRACES. If DceLive was never
+  computed, every entry reads as "not live" -- so the predicate comes out TRUE
+  for every program and drops an arena the program is about to use. The guard
+  is the difference between a size win and a heap based at a dropped address.
+  --no-dce keeping the arena is also the positive control for this routine: it
+  must still measure 66,812 B on the frozen-string witness.
+
+  IT WAS GATED ON DceEnabled UNTIL 2026-09-23 AND THAT WAS THE WRONG FLAG, for
+  a reason the paragraph above had exactly backwards. It claimed DceLive is "an
+  unallocated dynamic array" when the pass does not run, which would at least
+  make the `procIdx >= Length(DceLive)` test below fire. It is not: symtab.inc
+  SetLengths it beside every other per-proc array, so after an opt-out it is
+  allocated, correctly sized and ALL FALSE. The length test can therefore never
+  fire, and the array's content is maximally misleading rather than obviously
+  absent.
+
+  And DceEnabled is the OPTION, not the outcome. DceRun opts out at RUNTIME for
+  six further reasons -- `-g`, `--shared`, an unwired frontend, an .asm entry
+  override -- with the option still True. `-g` on a bare ESP profile is the
+  measured case: DCE turned itself off because "line/frame tables carry code
+  offsets", so HeapMmap's body was still emitted, and this predicate read the
+  all-False array, concluded its only reader was dead, and punched out the
+  64 KiB arena that body still references. BssRemap then refused the live
+  reference -- doing its job, and naming this predicate as the culprit, which
+  is exactly what its own header promised it would do.
+  bug-s-dwarf-g-on-a-bare-esp-profile-drops-the-heap-arena-it-still-references }
 var procIdx, arenaIdx, usedIdx, heapUnit: Integer;
 begin
   BssDropOff := 0;
   BssDropLen := 0;
   if not EspBareBoot then Exit;
-  if not DceEnabled then Exit;
+  { DceLiveValid, NOT DceEnabled -- the outcome, not the option. See the header. }
+  if not DceLiveValid then Exit;
 
   procIdx := FindProc('HeapMmap');
   { No builtinheap in this build -- there is no arena to drop. Common: a bare

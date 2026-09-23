@@ -5,7 +5,7 @@ prio: 30
 type: feature
 blocked-by: []
 status: backlog
-summary: "EmitCoroutineRuntime covers x86-64/i386/aarch64/arm32 and refuses wasm32; xtensa and riscv32 fall through SILENTLY by design, so CoSwitchAddr is never set. Today that is harmless because the scheduler cannot compile for either target anyway — it has no syscall block for them. The moment either gets one, six programs stop erroring and start jumping into code that was never emitted, onto a stack primed with the x86-64 frame layout. Found while filling xtensa's syscall table; the numbers were deliberately NOT added for this reason."
+summary: "SCOPE IS XTENSA ONLY, and the danger this was filed for is gone — re-measured 2026-09-23, both halves of the old summary were stale. RISCV32 HAS A COSWITCH: coroutine_emit.inc sets CoSwitchAddr in its own arm (landed fc70d0cbe), and `--target=esp32c3` and `--target=riscv32` both build test/lib_asyncnet6.pas today, so coroutines and async already work on the ESP SoC every example in the tree actually uses. AND XTENSA NO LONGER FALLS THROUGH SILENTLY: it answers `error: coroutines are not implemented for target xtensa`. So the hazard the ticket was written about — a target quietly acquiring a syscall block and then jumping into code that was never emitted, onto a stack primed with the x86-64 frame layout — CANNOT happen now; a refusal stands between. What remains is a plain feature gap of half the original size: esp32s3/esp32 (xtensa) cannot run coroutines. Ranked as a feature and not as a trap. The condition that would make it a trap again is the refusal at coroutine_emit.inc's tail being removed or bypassed without an xtensa arm landing in the same commit."
 owner: unassigned
 ---
 
@@ -138,3 +138,37 @@ for the profile where `PalBackendMmapAnon` and the thread-stack mmap actually
 run. Read it as **measured under qemu-xtensa 10.2.1, the execution target for
 the hosted profile** — not as a claim about silicon. The bare/ESP profile never
 reaches mmap, so nothing there depends on it.
+
+# Re-measured 2026-09-23 (frank) — half the work is done and the trap is defused
+
+Summary rewritten. Both load-bearing claims in the old one had gone stale, in
+the direction that OVERSTATES the work and misreads its urgency.
+
+**riscv32 has a coswitch.** `coroutine_emit.inc` has arms for x86-64, i386,
+aarch64, arm32 and **riscv32**, each setting `CoSwitchAddr`; the riscv32 one
+landed in `fc70d0cbe`. Verified from the code and then from behaviour rather
+than from either summary:
+
+| target | `--emit-obj test/lib_asyncnet6.pas` |
+| --- | --- |
+| `esp32c3` | ok (649 procs) |
+| `riscv32` | ok (649 procs) |
+| `xtensa` | `error: coroutines are not implemented for target xtensa` |
+
+Since **esp32c3 is riscv32** and every ESP example in the tree is a -c3,
+coroutines and async work today on the target we actually exercise. The hole is
+esp32/esp32s2/esp32s3 — the xtensa parts.
+
+**And the silence is gone, which is what this ticket was really about.** The
+body below is written around a *trap*: a silent fall-through that would turn
+into "six programs stop erroring and start jumping into code that was never
+emitted" the moment a syscall block appeared. There is now a loud refusal in
+the way, so acquiring a syscall block cannot spring anything. This is a feature
+gap, not an armed trap, and it should be ranked as one.
+
+**What would make it a trap again** — stated as a mechanism so it does not
+decay the way the old summary did: the refusal at `coroutine_emit.inc`'s tail
+being removed or routed around without an xtensa arm landing in the same
+commit. Nothing about a syscall table matters any more.
+
+Read the sections below as the ORIGINAL 2026-09 report, not as current state.

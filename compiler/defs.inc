@@ -4806,6 +4806,23 @@ var
     that distinction in front of whoever reads it. }
   DceReachFrom  : AnsiString;
   DceLive       : array of Boolean;
+  { Whether DceLive actually MEANS anything, i.e. DceRun got far enough to
+    finish marking. The native twin of WasmDceActive, and it exists because
+    `DceEnabled` answers a DIFFERENT question: it is the OPTION, and DceRun
+    opts out at runtime for six further reasons (-g, --shared, an unwired
+    frontend, an .asm entry override...) long after the option said yes.
+
+    DceLive is SetLength'd in symtab.inc beside every other per-proc array, so
+    after an opt-out it is allocated, sized and ALL FALSE -- which reads as
+    "every proc is dead" to anything that consults it. A reader guarding on
+    `procIdx >= Length(DceLive)` is therefore not protected at all; that test
+    only ever fires when the array was never sized, which does not happen.
+    Measured 2026-09-23: `-g` on a bare ESP profile dropped the 64 KiB heap
+    arena on exactly this reading, while -g had also turned the pass off, so
+    the code that reads the arena was still emitted -- and BssRemap refused the
+    live reference into the dropped region. Consult THIS before DceLive.
+    bug-s-dwarf-g-on-a-bare-esp-profile-drops-the-heap-arena-it-still-references }
+  DceLiveValid  : Boolean;
   { WHY a body is live: the FIRST thing that reached it, and through whom.
     `--dce-report` answers which bodies DIED; nothing answered this, and
     without it every size question about a big image is guesswork
