@@ -7,7 +7,7 @@ status: backlog
 owner: ""
 created: 2026-06-30
 blocked-by: []
-summary: "HARDWARE-GATED AND NOT WORK ANYONE CAN PICK UP TODAY -- the prio is 25 for that reason and NOT because the ticket is unimportant. It is the row that decides whether the ESP work pays: two of the fleet's open technical claims live here and neither can be closed without a board on USB. (1) UART: tools/esp_flash.sh gained a --project pass/hang verdict (7d4f7ea33) and all four NilPy demos are OK in qemu against pin v413 -- but the log filter was written against QEMU output, so a filter tuned to qemu can strip a line a physical part prints and report a clean pass, which is this ticket's own first acceptance row failing silently. ONE INSTANCE OF THAT IS NOW FIXED AND THE ROW IS NOT CLOSED (2026-09-24, frankS): the filter dropped `^[IWE] (nnn)` and that class includes E, IDF's ERROR prefix, so a capture carrying a task-watchdog trigger and a corrupt-heap report -- a hung ISR and an allocation inside a handler, i.e. row 2's entire subject -- came out clean and the verdict printed OK, reproduced end to end. Both copies (tools/esp_flash.sh and examples/esp32/nilpy-c3/build.sh) now scan for E lines BEFORE the strip and fail naming them, outside the --project and --verify conditions because the ISR step runs --no-verify and compares nothing; esp_flash.sh also gained the reboot check its sibling already had. W only reports, deliberately: zero E and zero W measured in a real Espressif-qemu boot of the nilpy-c3 image (59 lines, 46 I-lines, app_main reached, so logging was live enough to show them) and the real harness still passes at HEAD, but that is QEMU and silicon may warn routinely. WHAT REMAINS FOR THE BOARD is unchanged and is the actual row: whether the filter matches what a physical part emits. This removed one way for the validation to lie; it validated nothing against silicon. (2) ISR: the acceptance asks that a peripheral/ISR FIRE, and firing is necessary and not sufficient -- boxing ALLOCATES, an allocation inside an interrupt handler faults later on another context's heap, and every timing number in between is correct because the timing IS correct. A run printing tick=1..5 status=0 satisfies the row as written and says nothing about the contract; what settles it is an assertion on the ALLOCATOR (allocation count unchanged across N ticks), a different assertion class from expect_same. THE CONDITION THAT SHOULD MOVE THIS PRIO is a board existing on the box -- the owner said 2026-09-20 that ESP32 is priority and that he will try to set hardware up later; until then a high rank would send seats to work they cannot start. Raise it the day silicon arrives, not before. WHY VISIBLE-BUT-LOW BEATS HIDDEN, and this is the argument that survives someone disagreeing about how likely a misdispatch is: THE TWO FAILURES HAVE DIFFERENT HALF-LIVES. Unpickability is short-lived and SELF-RESOLVING -- the moment a board exists the objection evaporates on its own. Invisibility is not: a ticket nobody can see stays unseen after the condition lifts, and the lifting event produces no notification. So the asymmetry favours ranked-and-low even if the misdispatch risk were higher than it is. AND NOT blocked/: that folder's convention is ticket-to-ticket via `blocked-by:` (sampled 3 of 3), and "no board exists on this box" names no ticket; rainy-day/ fits the deferral but is unranked and unscanned, which trades a small failure for the larger one. frankS holds both claims and can close neither."
+summary: "HARDWARE-GATED AND NOT WORK ANYONE CAN PICK UP TODAY -- the prio is 25 for that reason and NOT because the ticket is unimportant. It is the row that decides whether the ESP work pays: two of the fleet's open technical claims live here and neither can be closed without a board on USB. (1) UART: tools/esp_flash.sh gained a --project pass/hang verdict (7d4f7ea33) and all four NilPy demos are OK in qemu against pin v413 -- but the log filter was written against QEMU output, so a filter tuned to qemu can strip a line a physical part prints and report a clean pass, which is this ticket's own first acceptance row failing silently. ONE INSTANCE OF THAT IS NOW FIXED AND THE ROW IS NOT CLOSED (2026-09-24, frankS): the filter dropped `^[IWE] (nnn)` and that class includes E, IDF's ERROR prefix, so a capture carrying a task-watchdog trigger and a corrupt-heap report -- a hung ISR and an allocation inside a handler, i.e. row 2's entire subject -- came out clean and the verdict printed OK, reproduced end to end. Both copies (tools/esp_flash.sh and examples/esp32/nilpy-c3/build.sh) now scan for E lines BEFORE the strip and fail naming them, outside the --project and --verify conditions because the ISR step runs --no-verify and compares nothing; esp_flash.sh also gained the reboot check its sibling already had. W only reports, deliberately: zero E and zero W measured in a real Espressif-qemu boot of the nilpy-c3 image (59 lines, 46 I-lines, app_main reached, so logging was live enough to show them) and the real harness still passes at HEAD, but that is QEMU and silicon may warn routinely. WHAT REMAINS FOR THE BOARD is unchanged and is the actual row: whether the filter matches what a physical part emits. This removed one way for the validation to lie; it validated nothing against silicon. (2) ISR: the acceptance asks that a peripheral/ISR FIRE, and firing is necessary and not sufficient -- boxing ALLOCATES, an allocation inside an interrupt handler faults later on another context's heap, and every timing number in between is correct because the timing IS correct. A run printing tick=1..5 status=0 satisfies the row as written and says nothing about the contract; what settles it is an assertion on the ALLOCATOR (allocation count unchanged across N ticks), a different assertion class from expect_same. AND THE PRESCRIBED DEMO CANNOT REACH THE HAZARD AT ALL, WHICH IS THE SAME COLLISION ONE LEVEL DEEPER (2026-09-24, frankS, measured from source, no board needed): the timer-c3 step goes through esptimer.pas, which hardcodes dispatch_method := ESP_TIMER_TASK (line 141), and IDF's own header defines that as dispatched from the esp_timer TASK, not from an interrupt handler (esp_timer.h:61 vs :63) -- so no pxx code enters interrupt context on that path and there is no handler for an allocation to happen inside of. The demo's own header said so all along ("esp_timer callbacks run in task context") while this ticket claimed the opposite; the demo was right. The step is still worth running, it just is not the ISR row. THE PROGRAM THAT DOES EXERCISE IT EXISTS AND IS NOT THIS TICKET'S: examples/esp32/isrctx-c3 registers BOTH dispatch methods in one image so the task arm reproduces the 0 and the ISR arm must not, wired into the esp-idf tier at Makefile:36597, and it belongs to feature-n-a-non-allocating-restricted-thunk-for-an-isr (frankb-8e's). A board session should use it for the ISR row and expect a NON-ZERO ctx. THE CONDITION THAT SHOULD MOVE THIS PRIO is a board existing on the box -- the owner said 2026-09-20 that ESP32 is priority and that he will try to set hardware up later; until then a high rank would send seats to work they cannot start. Raise it the day silicon arrives, not before. WHY VISIBLE-BUT-LOW BEATS HIDDEN, and this is the argument that survives someone disagreeing about how likely a misdispatch is: THE TWO FAILURES HAVE DIFFERENT HALF-LIVES. Unpickability is short-lived and SELF-RESOLVING -- the moment a board exists the objection evaporates on its own. Invisibility is not: a ticket nobody can see stays unseen after the condition lifts, and the lifting event produces no notification. So the asymmetry favours ranked-and-low even if the misdispatch risk were higher than it is. AND NOT blocked/: that folder's convention is ticket-to-ticket via `blocked-by:` (sampled 3 of 3), and "no board exists on this box" names no ticket; rainy-day/ fits the deferral but is unranked and unscanned, which trades a small failure for the larger one. frankS holds both claims and can close neither."
 ---
 
 # ESP32 real-hardware flash + boot validation (S2/S3, C3)
@@ -128,9 +128,49 @@ PXX timer: done ticks=5 status=0
 ```
 
 (`--no-verify` because the demo has no meaningful x86-64 run: it is all SDK
-calls.) That satisfies the acceptance's "a basic peripheral/ISR fires" — the
+calls.) ~~That satisfies the acceptance's "a basic peripheral/ISR fires" — the
 callback is dispatched by the SDK's timer interrupt, which is the real thing on
-silicon and only emulated in qemu. `make test-esp-idf` guards the qemu side.
+silicon and only emulated in qemu.~~ The esp-idf tier guards the qemu side.
+
+> **THE STRUCK SENTENCE IS WRONG AND IT WOULD HAVE TICKED THE ISR BOX WITHOUT
+> ENTERING AN ISR** (2026-09-24, frankS; board-independent, measured from source
+> on this box). `timer-c3` goes through `lib/rtl/platform/esp/esptimer.pas`,
+> which **hardcodes** `args.dispatch_method := ESP_TIMER_TASK` (line 141). IDF's
+> own header defines that enumerator as *"Callback is dispatched from esp_timer
+> **task**"* (`esp_timer.h:61`), against `ESP_TIMER_ISR` — *"dispatched from
+> **interrupt handler**"* (`:63`). The SDK's timer interrupt fires and then
+> **queues to the esp_timer task**; the pxx callback runs there. **No pxx code
+> executes in interrupt context on this path, on silicon or in qemu.**
+>
+> The tree already disagreed with itself and the demo was the half that was
+> right: `examples/esp32/timer-c3/main/main.pas` says in its own header
+> *"esp_timer callbacks run in task context and need no IRAM placement"*. Two
+> sources in the repo, opposite claims, and IDF's header settles it.
+>
+> **So the step is worth running and is not the ISR row.** What it establishes —
+> a periodic callback is created, dispatched and returns correctly across both
+> ISAs — is real and it is what the 2026-08-02 `esp_timer` fix was about. What it
+> does NOT establish is anything about interrupt context, which means row 2's
+> allocation hazard *cannot be triggered by this demo at all*: there is no
+> handler for an allocation to happen inside of.
+>
+> **This is the ticket's own expected-value collision one level deeper.** The
+> 2026-09-20 note asked *"if the machinery did nothing about allocation, would
+> this row still pass?"* — yes. Add: it also passes if there is no interrupt
+> context anywhere in the image, which is the case for this program.
+>
+> **THE PROGRAM THAT DOES EXERCISE IT ALREADY EXISTS**, and it belongs to
+> `feature-n-a-non-allocating-restricted-thunk-for-an-isr`, not here:
+> `examples/esp32/isrctx-c3` registers BOTH dispatch methods in ONE image and
+> reports both, so the task arm reproduces the 0 and the ISR arm must not — the
+> asymmetry is the result and neither half is a result alone. It is wired into
+> the esp-idf tier (`Makefile:36597`, `build.sh qemu-assert`). **A board session
+> should run that one for the ISR row**, and should expect
+> `PXX isrctx: isr hits=5 ctx=1` with a NON-ZERO ctx; a `-1` means the callback
+> never fired, which is why the sentinel is `-1` and not `0`.
+>
+> Not touched here and deliberately: that probe and the thunk question are
+> frankb-8e's. This note corrects THIS ticket's procedure and nothing else.
 
 Still worth watching on hardware: qemu's systimer is not the S2/S3 silicon's, so
 a timer that works in emulation and not on the board would be new information.
