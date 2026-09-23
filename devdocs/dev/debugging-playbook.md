@@ -43292,3 +43292,78 @@ into authoritative.
 names no seat for the mechanism — so the whole cost was three messages and the
 time to unwind them. That is the cheap version; the expensive version is the same
 sentence inside a ticket summary, where it becomes a routing instruction.
+
+## THE POPULATION THAT CONVICTS AN INSTRUMENT IS OFTEN THE ROWS NEXT TO IT
+
+Measured 2026-09-24, frankb-8e, Track A/S, xtensa.
+
+**The failure.** Three signal tests were held out of `test-xtensa` on the
+grounds that all three PRINT A NUMBER and hosted xtensa takes an illegal
+instruction on integer formatting. The measurement was real: `WriteLn(i)` does
+SIGILL there, the backend emits `muluh` (MUL32_HIGH), and no stock `qemu-xtensa`
+core implements it — eight cores censused, all eight fault. A p40 bug was filed
+on the strength of it, re-deriving the instruction encoding and the core census
+from scratch.
+
+**`--xtensa-soft-mulhigh` had shipped weeks earlier**, expands `high(a*b)` with
+no MUL32_HIGH, and is passed by **every single existing row in the target the
+tests were being held out of** — including the five sibling signal rows
+(`sigdfl`, `sigcb`, `sigalt`, `pcrw`, `sprw`) sitting directly above the gap.
+The `test-xtensa` recipe says so in its own comment: *"It is required — without
+it integer formatting takes an illegal instruction on qemu's core."* With the
+flag, all three tests are byte-identical to the x86-64 oracle.
+
+**Why this is not just "grep first".** Read it against the existing rule that
+every instrument lies by being CORRECT ABOUT SOMETHING ELSE. The something-else
+here is not a stale tree, a stale binary, or a wrong version — it is **a
+COMPILER FLAG that the surrounding rows all set and the probe did not.** So:
+
+- Every freshness check passes. The tree is current, the binary is current.
+- The population is right — hosted xtensa really is the subject.
+- The reproduction is honest and repeats forever.
+- And the configuration measured is one that **nothing in the target under
+  discussion ever uses.**
+
+**The discriminator, and it costs one command.** It is not a fact about xtensa,
+about multiplies, or about qemu. It is:
+
+> **How do the rows NEXT TO THIS ONE invoke the compiler?**
+
+A hand-rolled probe inherits your command line; a suite row inherits the
+suite's. When you are deciding whether a test can join a suite, the suite's
+OTHER rows are the correct population, and your own invocation is a sample of
+one drawn from outside it. The seat here ran `pascal26 --target=xtensa
+--platform=posix m.pas` — a perfectly reasonable command that no row in
+`test-xtensa` resembles.
+
+**The generalisable shape:** whenever a finding's conclusion is *"X cannot be
+tested here"*, the cheapest falsification is not re-measuring X. It is reading
+how the nearest passing neighbour is invoked. A capability flag, an include path,
+a `-Fu`, a platform selector, a soft-float or soft-multiply switch — any of them
+can make your probe and the suite disagree while both are honest.
+
+**Corollary for filing.** The ticket proposed, as its own option 3,
+*"target-capability gating — a flag for cores without MUL32_HIGH"*: a proposal to
+build the thing it was standing in. **When your remedy list contains "add a flag
+for X", grep for that flag before ranking the ticket** — `grep -rn soft-mulhigh
+compiler/` would have ended the whole investigation. This is the crash-course
+rule (*"before proposing a mechanism, grep for it"*) arriving in a place nobody
+looks for it: not while designing a mechanism, but while writing the OPTIONS
+section of a bug report, where the options read as future work rather than as
+claims about the present.
+
+**And it had a second cost that is easy to miss.** The hold-out was recorded in
+the ticket as a REASON, so it propagated: the three tests sat unwired, and the
+ticket's stated retirement condition ("a hosted xtensa program that multiplies
+and runs to completion") had already been satisfiable the whole time. A
+measurement taken in the wrong configuration does not merely fail to help — it
+manufactures a blocker, and a blocker in a summary is what a queue ranks on.
+
+Closed as `bug-a-xtensa-emits-muluh-...` (`3252e8d59d`); the genuine residual
+(four multiplies per integer multiply on the four 32-bit backends where one
+would do) was split out as
+`bug-o-every-integer-multiply-emits-four-multiplies-on-the-32-bit-backends-and-one-is-enough`.
+
+**Not promoted to CLAUDE.md**, by its own promotion test: one instance, one
+subsystem. If a second independent subsystem produces a probe that disagrees
+with its neighbouring suite rows over a capability flag, promote it then.
