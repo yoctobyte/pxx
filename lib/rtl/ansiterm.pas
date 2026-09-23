@@ -241,7 +241,14 @@ const
     witness. What raises it above "qemu says so" is that the accepted value is
     exactly the canonical _IOR('t',104,8) encoding, which is what a kernel header
     generates, and that qemu decoded and NAMED the request. A run on real xtensa
-    Linux would still be worth having. }
+    Linux would still be worth having.
+
+    IT TRACKS, WHICH IS A SEPARATE CLAIM FROM "IT ANSWERED 40x132" (frankb-8e,
+    independently, same day): three pty sizes read back exactly -- 132x40, 80x24
+    and 200x50 -- and two calls in a row give the same answer, so it is a GET and
+    not a setter that happens to leave data behind. It also returns -25 correctly
+    when stdout is a plain file. One size alone cannot distinguish a real
+    TIOCGWINSZ from a constant that reports something plausible. }
 {$ifdef CPU_XTENSA}
   TIOCGWINSZ = $80087468;
 {$else}
@@ -261,6 +268,14 @@ begin
   Result := False;
   ws.Row := 0;
   ws.Col := 0;
+  { THE Col/Row GUARD IS LOAD-BEARING ON XTENSA, NOT DEFENSIVE -- do not fold it
+    into the rc check as redundant. Measured 2026-09-24: on an xtensa pty there
+    are ioctl encodings that return rc = 0 and leave the struct ZEROED ($40087467
+    is one; four exist in the read-direction 't'/'T' space). So rc alone would
+    report SUCCESS with an 0x0 terminal, and every consumer would scale its UI to
+    nothing. The dimensions, not the return code, are what identify this ioctl --
+    which is also why any future candidate constant must be validated against a
+    pty of KNOWN size rather than against rc = 0. }
   if PalIoctl(1, TIOCGWINSZ, @ws) = 0 then
     if (ws.Col > 0) and (ws.Row > 0) then
     begin
