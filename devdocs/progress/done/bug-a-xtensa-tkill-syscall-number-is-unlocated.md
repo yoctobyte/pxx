@@ -8,7 +8,7 @@ blocked-by: []
 created: 2026-09-05
 resolved: 2026-09-23
 owner: frank
-commit: PENDING-COMMIT
+commit: 9a701a66d2
 found-by: frankS (settling the xtensa getpid/gettid set)
 summary: "SETTLED 2026-09-23: xtensa `SYS_tkill = 124` (and `gettid = 127`, already known). IT WAS IN THE ABANDONED 118-136 RANGE, AND THE RANGE EXPLAINS ITS OWN ABANDONMENT -- 118 is `exit` and 119 is `exit_group`, so an in-process sweep starting at 118 calls exit(0) on its FIRST iteration and terminates with nothing traced, which is exactly the reported symptom. The conclusion (something there ends the program) was right; the inference that the range could not be probed was not. What changed is the INSTRUMENT, not the range: ONE SYSCALL PER PROCESS, a technique already recorded in the coswitch ticket and simply not applied here -- per process, a number that kills the probe costs its own row and nothing after it. Confirmed by two instruments that fail differently: qemu -strace names 124 `tkill`, and functionally tkill(gettid(),0)=0 while tkill(999999,0)=-1 ESRCH, which a wrong number cannot both do. Controls 120/126/127/150/224 all reproduce the tree`s settled numbers. test_signal_num, test_signal_siginfo and test_signal_bss_alias gain a CPUXTENSA arm and NOW BUILD for xtensa, with x86-64 and riscv32 verified unchanged. THEY STILL DO NOT RUN and that residual is owned, not buried: all three deliver the signal and run the handler, then SIGILL downstream on bug-a-xtensa-emits-muluh-for-an-integer-multiply-and-no-stock-qemu-core-implements-it, so they are deliberately NOT wired into the suite for xtensa -- doing so would add three red rows for a cause unrelated to signals."
 ---
@@ -156,4 +156,4 @@ to revisit when the `muluh` ticket closes — they are its named positive-contro
 population.
 
 ## Log
-- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-23 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9a701a66d2.
