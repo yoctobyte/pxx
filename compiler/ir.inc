@@ -12147,13 +12147,26 @@ begin
         bug-s-an-interrupt-directive-proc-reached-through-a-normal-call-returns-via-mret-with-no-diagnostic
         feature-s-a-csr-write-is-not-expressible-from-pascal-so-no-raw-isr-can-be-installed
 
-        KNOWN SIBLING, DELIBERATELY NOT REFUSED HERE, so that closing one arm
-        does not read as closing the class: a DIRECT CALL to an `interrupt;`
-        routine is the same fault by a different spelling, and
-        test/test_esp_interrupt.pas relies on one (behind a runtime-false guard)
-        as its only way to force the body to be emitted. Refusing it needs an
-        alternative emission-forcing mechanism first, which is a design question
-        and not a predicate. Recorded in the ticket rather than left silent. }
+        THE SIBLING SPELLING IS NOW REFUSED TOO, at the top of the AN_CALL arm
+        (ir.inc, search DCE_WHY_VECTOR in the message) -- a DIRECT CALL is the
+        same fault, and the class is closed rather than half-closed.
+
+        WHAT THIS PARAGRAPH SAID UNTIL 2026-09-23, AND WHY IT IS WORTH KEEPING:
+        that refusing the direct call "needs an alternative emission-forcing
+        mechanism first, which is a design question and not a predicate",
+        because test/test_esp_interrupt.pas called its handler behind an
+        always-false guard as its only way to force the body to be emitted.
+        That was TRUE WHEN WRITTEN and false 15 hours later: 57af7aa10 made
+        every `interrupt;` body an unconditional DCE root (DCE_WHY_VECTOR) as a
+        side effect of bare xtensa's vector table -- see dce.inc's own comment
+        there, which explains that the root was previously unnecessary because
+        a program had to write `@MyIsr` to install a vector, so the body stayed
+        alive as DCE_WHY_PROCADDR. The awkwardness this refusal removed was
+        what had been masking the gap. Nothing recorded that it also retired
+        the blocker, and the design question it describes never needed
+        answering. Measured, not read: `--dce-why=MyIsr` on the fixture with
+        the guarded call deleted reports `MyIsr <- [interrupt; -- entered by
+        hardware]` while DCE drops 129 other bodies. }
       { NARROWED 2026-09-21, NOT DELETED, and narrowed on the exact axis the
         refusal argues from. The stated hazard is "this handler would run on
         the interrupted code's stack, with no ISR stack and no nesting
@@ -15801,6 +15814,45 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       cpi := ASTIVal[node];
       item := ASTLeft[node];
       PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
+      { REFUSE A DIRECT CALL to a routine declared `interrupt;` -- the sibling
+        spelling of the AN_PROCADDR refusal further down this same case, and the
+        same fault. Such a body returns via a trap-return (riscv32 `mret`,
+        xtensa `rfe`), so ANY normal entry restores a caller-saved set this
+        caller never saved and returns through mepc / EPC instead of the return
+        address. `@f` was the commonest spelling, never the only one.
+
+        AT THE TOP OF THIS ARM, AHEAD OF IRInlineExpand, DELIBERATELY. At -O2 an
+        inline-eligible body is spliced in before any call node exists, so a
+        predicate placed lower would be bypassed by the OPTIMISER -- silently,
+        and on exactly the builds that ship. Positive control for that
+        ordering: test-esp-isr's `-O2` row, which must refuse too.
+
+        UNCONDITIONAL, WHERE THE @proc REFUSAL IS NARROWED to bare riscv32 /
+        xtensa. That narrowing exists because an address has one legitimate
+        consumer -- installing a vector -- and a CALL has none, on any target or
+        profile: hardware entry through a vector table is the only correct entry
+        there is. So there is no arm to carve out here and no EspBareBoot test.
+
+        AN_CALL IS THE CONVERGENCE SITE for the same reason AN_PROCADDR is for
+        the address: a procedure statement and a function call in an expression
+        both allocate AN_CALL. The other call kinds cannot reach an `interrupt;`
+        routine at all -- AN_VIRTUAL_CALL / AN_INTF_CALL need a method and the
+        directive is only accepted on a plain routine (pasparser_proc.inc), and
+        AN_CALL_IND needs an address that the refusal below already denies.
+        bug-s-a-direct-call-to-an-interrupt-routine-is-the-same-trap-return-fault-by-another-spelling }
+      if (cpi >= 0) and (cpi < Length(ProcIsInterrupt)) and ProcIsInterrupt[cpi] then
+        ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
+              'cannot call ' + Procs[cpi].Name + ' directly: it is declared `interrupt;`, so it ' +
+              'returns via a trap-return (mret / rfe) and can only be entered by hardware ' +
+              'through a vector table. A normal call into it restores a caller-saved set this ' +
+              'caller never saved and returns through mepc / EPC rather than to the return ' +
+              'address -- with no diagnostic at link or at run time, which is why it is ' +
+              'refused here. If you meant a handler the ESP-IDF dispatcher calls, declare it ' +
+              '`iram;` and NOT `interrupt;`. If you are calling it behind an always-false ' +
+              'guard to force the body to be EMITTED for a structural test, you no longer ' +
+              'need to: an `interrupt;` body is a DCE root in its own right (dce.inc, ' +
+              'DCE_WHY_VECTOR; `--dce-why` reports it as "interrupt; -- entered by ' +
+              'hardware"), so it survives with nothing referencing it at all.');
       { Inline expansion (feature-inline-routines, -O2): splice a retained inline
         body in place of the call when the target is inline-eligible and all args
         are side-effect-free. Falls through to a normal call if IRInlineExpand

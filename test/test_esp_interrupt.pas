@@ -8,9 +8,23 @@ program test_esp_interrupt;
   routines must be IRAM-resident so a trap during a flash-cache stall doesn't
   re-fault). Installing the handler in the vector table + triggering a real trap
   needs CSR / vecbase setup not yet expressible in PXX, so this is a STRUCTURAL
-  probe: it forces the handler to be emitted (referenced behind a runtime-false
-  guard, never executed — calling an ISR directly would mret/rfe into nowhere) so
-  the .iram1.text section + the mret/rfe epilogue can be verified by disassembly. }
+  probe: the handler is emitted with NOTHING referencing it, so the .iram1.text
+  section + the mret/rfe epilogue can be verified by disassembly.
+
+  NOTHING REFERENCES MyIsr AND THAT IS THE POINT. Until 2026-09-23 this file
+  carried `if counter < 0 then MyIsr;` — a call behind an always-false guard —
+  believed to be the only way to force the body to be emitted. It was not, and a
+  direct call to an `interrupt;` routine is now REFUSED (ir.inc, AN_CALL): it is
+  the same trap-return-out-of-a-normal-call fault as `@MyIsr`, which has been
+  refused since d305e1afa. An `interrupt;` body is an unconditional DCE root of
+  its own (dce.inc, DCE_WHY_VECTOR — `--dce-why=MyIsr` prints `MyIsr <-
+  [interrupt; -- entered by hardware]`), and it has been one since 57af7aa10,
+  which added the root for bare xtensa's vector table. So the guard was dead
+  weight that also demonstrated the very mistake the compiler now rejects.
+
+  DO NOT "FIX" A FUTURE DCE REGRESSION BY CALLING THE HANDLER AGAIN. If MyIsr
+  ever stops appearing in .iram1.text, the root is what broke; the Makefile rows
+  for this file assert its presence and its section for exactly that reason. }
 {$ifdef CPU_RISCV32}{$define PXX_ESP}{$endif}
 {$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
 
@@ -38,9 +52,6 @@ end;
 begin
   counter := 0;
   PutC(83); PutC(10);          { 'S' }
-  { Reference the ISR so it is emitted, but never run it (mret would fault here):
-    counter is 0, so the guard is always false at runtime, yet the compiler still
-    emits MyIsr and the cross-section call to it. }
-  if counter < 0 then MyIsr;
+  { MyIsr is deliberately not named here — see the header. }
   PutC(69); PutC(10);          { 'E' }
 end.

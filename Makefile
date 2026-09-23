@@ -35936,6 +35936,35 @@ test-emit-obj: $(COMPILER)
 	# answer and not a gap. So this one is an ESP-build check only.
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_interrupt.pas $(TESTTMP)/esp_interrupt_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_interrupt.pas $(TESTTMP)/esp_interrupt_rv.o
+	# THE ROWS BELOW ARE THE ONES THAT WERE MISSING, and their absence is why the
+	# ticket believed the fixture's always-false `if counter < 0 then MyIsr;` was
+	# load-bearing: the two rows above assert only that the compiler EXITED 0,
+	# which the handler being deleted would not have disturbed. Nothing checked
+	# that MyIsr reached the object at all, let alone that it landed in IRAM. An
+	# `interrupt;` body is an unconditional DCE root (dce.inc, DCE_WHY_VECTOR,
+	# since 57af7aa10), so it survives with NOTHING referencing it -- these rows
+	# are what makes that a tested property instead of an incidental one. If a
+	# future change breaks the root, fix the root: do NOT reintroduce a call,
+	# which is now refused for the reason the next rows assert.
+	readelf -sW $(TESTTMP)/esp_interrupt_xt.o | grep 'FUNC.*MyIsr' | grep -q ' 3 MyIsr'
+	readelf -SW $(TESTTMP)/esp_interrupt_xt.o | grep -q '\[ 3\] \.iram1\.text'
+	readelf -sW $(TESTTMP)/esp_interrupt_rv.o | grep 'FUNC.*MyIsr' | grep -q ' 3 MyIsr'
+	readelf -SW $(TESTTMP)/esp_interrupt_rv.o | grep -q '\[ 3\] \.iram1\.text'
+	# A DIRECT CALL to an `interrupt;` routine is REFUSED -- the sibling spelling
+	# of the `@MyIsr` refusal (d305e1afa), and the same trap-return-out-of-a-
+	# normal-call fault. Both ISAs, because the refusal is target-independent and
+	# a one-ISA row would not have caught the @proc arm's own narrowing.
+	! ./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_interrupt_direct_call_fail.pas $(TESTTMP)/esp_isrcall_rv.o > $(TESTTMP)/esp_isrcall_rv.log 2>&1
+	grep -q 'cannot call MyIsr directly' $(TESTTMP)/esp_isrcall_rv.log
+	! ./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_interrupt_direct_call_fail.pas $(TESTTMP)/esp_isrcall_xt.o > $(TESTTMP)/esp_isrcall_xt.log 2>&1
+	grep -q 'cannot call MyIsr directly' $(TESTTMP)/esp_isrcall_xt.log
+	# -O2 IS A SEPARATE ROW, NOT A DUPLICATE: the refusal sits ahead of
+	# IRInlineExpand in the AN_CALL arm on purpose, because an inline-eligible
+	# body is spliced in before any call node exists. A predicate placed after
+	# the inliner would pass every row above and be bypassed at -O2 -- i.e. on
+	# the builds that ship. This row is that ordering's positive control.
+	! ./$(COMPILER) -O2 --target=riscv32 --platform=esp --emit-obj test/test_esp_interrupt_direct_call_fail.pas $(TESTTMP)/esp_isrcall_o2.o > $(TESTTMP)/esp_isrcall_o2.log 2>&1
+	grep -q 'cannot call MyIsr directly' $(TESTTMP)/esp_isrcall_o2.log
 	# ---- the three PXX_ESP_BARE programs: --esp-profile=bare, not the IDF ----
 	./$(COMPILER) test/test_esp_procaddr.pas $(TESTTMP)/esp_procaddr26
 	tools/expect_same.sh esp_procaddr26 "$$($(TESTTMP)/esp_procaddr26)" "$$(printf '1\n1\n1')"
