@@ -17566,15 +17566,16 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/c_incomplete_type_member_refused.c $(TESTTMP)/c_incmember26 \
 	   > $(TESTTMP)/c_incmember.log 2>&1; \
 	 test $$? -ne 0 \
-	   || { echo 'c_incomplete_type_member_refused: FAIL - six member accesses against unknown layout must refuse'; \
+	   || { echo 'c_incomplete_type_member_refused: FAIL - seven member accesses against unknown layout must refuse'; \
 	        cat $(TESTTMP)/c_incmember.log; exit 1; }
 	# PER ARM, NOT IN TOTAL: one check that collapsed both wordings into one
 	# message would still produce six diagnostics and pass a total.
 	@test "$$(grep -c 'INCOMPLETE type' $(TESTTMP)/c_incmember.log)" = 3 \
 	   && test "$$(grep -c 'no member named' $(TESTTMP)/c_incmember.log)" = 3 \
-	   || { echo 'c_incomplete_type_member_refused: FAIL - want 3 incomplete-type and 3 no-such-member diagnostics, one per access'; \
+	   && test "$$(grep -c 'OPAQUE' $(TESTTMP)/c_incmember.log)" = 1 \
+	   || { echo 'c_incomplete_type_member_refused: FAIL - want 3 incomplete-type, 3 no-such-member and 1 opaque diagnostic, one per access'; \
 	        cat $(TESTTMP)/c_incmember.log; exit 1; } \
-	   && echo "c_incomplete_type_member_refused: 6 accesses, 3+3 refusals"
+	   && echo "c_incomplete_type_member_refused: 7 accesses, 3+3+1 refusals"
 	# THE CASE THAT MUST NOT BREAK, and it matters more than the refusal: a
 	# pointer to an incomplete type is how every opaque handle is spelled, and a
 	# forward declaration that is later defined is not incomplete when a member

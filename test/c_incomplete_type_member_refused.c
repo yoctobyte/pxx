@@ -39,6 +39,18 @@ int inc_write(void)  { struct nosuchtype v; v.field = 3; return 0; }
 int inc_read(void)   { struct nosuchtype v; return v.field; }
 int inc_arrow(struct nosuchtype *p) { return p->field; }
 
+/* THE OPAQUE ARM -- OUR limitation, not the source's, and it must say so.
+   The body below is a perfectly good C definition that gcc compiles; pxx
+   declines to lay it out (an alignment attribute with no parsed value) and
+   keeps the tag with NO FIELDS. The record is then indistinguishable in the
+   field tables from an undefined tag and from an empty one, which is why
+   UClsLayoutDropped exists. Refusing is not a choice between a message and
+   silence: with the layout dropped, sizeof answers 0 against gcc's 16 and
+   every member reads at offset 0, so `v.a=7; v.b=9' PRINTS 9 9. Staying quiet
+   here was tried and reintroduced this ticket's own bug. */
+struct dropped { int a; int b; } __attribute__((aligned));
+int opaque_read(void) { struct dropped v; return v.a; }
+
 /* THE TYPO ARM -- the struct is fully known and the member is not its. */
 int typo_write(void) { struct known v; v.typo = 3; return 0; }
 int typo_read(void)  { struct known v; return v.typo; }

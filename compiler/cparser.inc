@@ -157,6 +157,7 @@ procedure ParseCSubroutine; forward;
   until the global-variable path started asking the same question, and pxx
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
+function CRecMissingFieldKind(recId: Integer): Integer; forward;
 function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
 function CDeclSawThreadLocal(typeIdx: Integer): Boolean; forward;
 function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
@@ -4862,7 +4863,7 @@ function ParseCPostfixTail(node: Integer): Integer;
 var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si: Integer;
+    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind: Integer;
     sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
     done: Boolean; fieldName: AnsiString;
 begin
@@ -5174,10 +5175,15 @@ begin
         bug-c-an-undeclared-struct-type-compiles-and-reads-garbage }
       if (recId <> REC_NONE) and (not RecHasField(recId, fieldName)) then
       begin
-        if RecSize(recId) = 0 then
+        missKind := CRecMissingFieldKind(recId);
+        if missKind = 1 then
           ErrorRecover('C: ''' + fieldName + ''' taken from an INCOMPLETE type'
             + ' -- the struct/union has no definition in scope, so its layout'
             + ' is unknown and the member would read at offset 0')
+        else if missKind = 2 then
+          ErrorRecover('C: ''' + fieldName + ''' is unreachable -- pxx kept this'
+            + ' struct/union OPAQUE and dropped its layout, so no member of it'
+            + ' can be addressed (every one would read at offset 0)')
         else
           ErrorRecover('C: no member named ''' + fieldName + ''' in this'
             + ' struct/union');
@@ -5540,6 +5546,11 @@ begin
   ci := AddUClass(0, 0);
   UClsIsRecord[ci] := True;
   UClsCaseSensFields[ci] := True; { C: `b` != `B` }
+  { Explicitly NOT a definition: a forward tag. Reset rather than assumed zero,
+    because UClass slots are allocated from a counter and a stale True here
+    would make an undefined tag look defined. }
+  UClsBodySeen[ci] := False;
+  UClsLayoutDropped[ci] := False;
   rec := REC_UCLASS_BASE + ci;
   AddCTag(name, rec);
   Result := rec;
@@ -15814,6 +15825,34 @@ end;
       dropped, shifting offsets.
   Plain POD (scalars, pointers, fixed arrays, typedef-named-type fields incl.
   nested-struct-by-value) returns True. }
+function CRecMissingFieldKind(recId: Integer): Integer;
+{ WHY does this record not have the member just asked for? Three answers, and
+  they are three different bugs -- two in the source, one in us:
+
+    0  the layout is KNOWN (it has fields, or a body was laid out and is
+       genuinely empty) -- so the member NAME is the mistake.
+    1  no body was ever seen for this tag -- an INCOMPLETE type, definition
+       missing, usually a header that was not included.
+    2  a body WAS seen and the frontend DECLINED to lay it out
+       (UClsLayoutDropped; an unparsed alignment attribute is the live route).
+       That is OUR limitation, not the programmer's, and the message says so.
+
+  ALL THREE REFUSE, and staying silent on 2 was tried on 2026-09-24 and is
+  strictly worse than any message: with the layout dropped the record has no
+  fields, so every member resolves to offset 0, sizeof answers 0 against gcc's
+  16, and `v.a=7; v.b=9' prints 9 9 where gcc prints 7 9. Trading a loud wrong
+  message for a silent wrong VALUE is not an improvement -- it is this ticket's
+  own bug, reintroduced by the guard meant to prevent a regression.
+
+  A builtin record (below REC_UCLASS_BASE) is laid out by construction. }
+begin
+  Result := 0;
+  if recId < REC_UCLASS_BASE then Exit;
+  if UClsFCount[recId - REC_UCLASS_BASE] > 0 then Exit;
+  if UClsLayoutDropped[recId - REC_UCLASS_BASE] then Result := 2
+  else if not UClsBodySeen[recId - REC_UCLASS_BASE] then Result := 1;
+end;
+
 function CStructBodyIsSimple(startIdx: Integer): Boolean;
 var i, depth, declStart: Integer;
 begin
@@ -16052,6 +16091,9 @@ begin
 end;
 
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
+{ THE BODY WAS SEEN -- marked here rather than at the four call sites, because
+  this is the one place a braced body is actually laid out. See UClsBodySeen in
+  defs.inc for why "has fields" is not the same question. }
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
@@ -16080,6 +16122,7 @@ var
   startIdx, endIdx, declStartIdx, attrEndIdx, fieldStartIdx, fieldAlign, structAlign: Integer;
   isBitField, structPacked, fieldPacked: Boolean;
 begin
+  UClsBodySeen[ci] := True;   { a braced body is being laid out here }
   { Redefinition guard for the NESTED / inline / global-var struct-layout paths
     (the bare `struct Tag {...};` path guards at its own call site). The C driver
     runs the token stream MORE THAN ONCE — pass 1 (signatures), pass 2 (bodies),
@@ -17229,7 +17272,14 @@ begin
       else if CStructBodyIsSimple(TokPos - 1) then   { field pool is dynamic — no cap term }
         ParseCStructInto(ci, isUnion)
       else
-        SkipBraceBlock;   { opaque: keep the tag, drop the layout }
+      begin
+        { OPAQUE: keep the tag, drop the layout. The body was SEEN -- the
+          programmer defined this struct and we declined to lay it out -- so
+          anything that refuses on a missing field must not treat this record
+          like an undefined tag. It looks identical in the field tables. }
+        UClsLayoutDropped[ci] := True;
+        SkipBraceBlock;
+      end;
     end;
   end
   else if hasTag then

@@ -7925,6 +7925,24 @@ var
   UClsPBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsPCount : array[0..MAX_UCLASS-1] of Integer;
   UClsIsRecord : array[0..MAX_UCLASS-1] of Boolean;
+  { Was a BRACED BODY ever seen for this record? NOT the same question as
+    `UClsFCount > 0', and the difference is the whole reason this exists: the C
+    frontend deliberately drops the layout of a body it cannot lay out
+    (SkipBraceBlock -- an unparsed alignment attribute is one route), so a
+    struct the programmer fully DEFINED can reach the field tables with zero
+    fields, exactly like a tag that was never defined at all. Anything that
+    refuses on "this record has no such field" must consult this first, or it
+    refuses valid C. }
+  UClsBodySeen : array[0..MAX_UCLASS-1] of Boolean;
+  { ...and the body the frontend DECLINED to lay out, which is a third state
+    and not a shade of the other two. `struct S { int a; int b; }
+    __attribute__((aligned));' takes this arm: the tag is kept, the layout is
+    dropped, and the record then looks exactly like an undefined tag AND
+    exactly like an empty one. Measured 2026-09-24 -- sizeof answers 0 against
+    gcc's 16 and every member reads at offset 0, so `v.a=7; v.b=9' prints 9 9
+    where gcc prints 7 9. A member access here cannot be made to work; it can
+    only be refused with an honest message, which is what this flag is for. }
+  UClsLayoutDropped : array[0..MAX_UCLASS-1] of Boolean;
   UClsSealed : array[0..MAX_UCLASS-1] of Boolean;   { `class sealed`: no descendants, and no abstract methods (there could never be an override to supply them) }
   UClsAbstractCls : array[0..MAX_UCLASS-1] of Boolean; { `class abstract`: cannot be instantiated. Distinct from a method's `abstract`. }
   UClsForward : array[0..MAX_UCLASS-1] of Boolean; { forward stub `TFoo = class;` — the full decl reuses this entry (else its base/fields land on a shadowed duplicate; FindUClass returns the first match) }
