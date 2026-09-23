@@ -43367,3 +43367,85 @@ would do) was split out as
 **Not promoted to CLAUDE.md**, by its own promotion test: one instance, one
 subsystem. If a second independent subsystem produces a probe that disagrees
 with its neighbouring suite rows over a capability flag, promote it then.
+
+## A CONTROL THAT FAILS IDENTICALLY TO ITS SUBJECT IS NOT A CONTROL — and the verdict it produces is "no difference", which is a real answer
+
+The control sections around this one are about a control drawn from the wrong
+population, a control resolved through the wrong search path, and a broken
+instrument reporting the null. This is a fourth shape and it is the one that
+survives review: **the control and the subject both fail, for the SAME reason,
+and that reason has nothing to do with the question.** The comparison is then
+vacuous — and a vacuous comparison does not look empty. It looks like
+**parity**, which is a result people act on.
+
+The tell is that the two arms agree *perfectly*. Two arms that genuinely differ
+in one variable almost never produce byte-identical failures.
+
+**Three instances, one seat, one session, 2026-09-24 — which is the recurrence
+that earns the section.** All three were caught, none by noticing the rule.
+
+**1. A control that shares an unrelated refusal with its subject.** Checking
+whether `lib/rtl/palthread.pas`'s bare `MAP_ANON_PRIV = $22` was an xtensa
+landmine (its sibling in `scheduler.pas` had just been fixed, where the wrong
+value gives EBADF and a silent fallback to an unguarded heap stack). The xtensa
+arm refused; the x86-64 control refused too, so the constant looked irrelevant
+on both. **Both had omitted `--threadsafe`, and without that flag EVERY target
+stops at `__pxxclone`** — the arms were identical because neither had reached
+the code under test. With the flag, the asymmetry appears immediately: xtensa is
+refused by name (`--threadsafe is x86-64/i386/aarch64/arm32 only`) and x86-64
+proceeds. The constant is correct; the finding is only worth having because the
+second run could have disagreed with the first.
+
+**2. A control whose environment breaks the subject too.** An A/B on
+`lib/rtl/interrupts.pas`, run by copying `lib/rtl` into a scratch directory and
+swapping one file. Both arms failed — the copy broke `platform_backend`
+resolution for the ESP profile, which neither arm's *content* had anything to do
+with. Fixed by swapping only the one file **in-tree** and restoring it, with the
+restore verified byte-identical rather than assumed. A scratch copy feels like
+isolation and is a second variable.
+
+**3. The degenerate form: a control run against a subject that never executed.**
+`grep -c PXXPROBE` over a compiler run, answering **0**. The compiler had
+rejected the command line — pxx takes its output positionally and I had passed
+`-o` — so the count was correct about a run that did not happen. This is the
+same animal wearing the silent-negative coat, and it is worth listing beside the
+other two because it is the cheapest to produce and the easiest to believe: a
+zero from a grep is exactly what a clean subject also produces.
+
+**The general question, and it is not "did I have a control":**
+
+> **If the property under test did not exist at all, would my two arms still
+> differ?**
+
+Ask it of the arms, not of the assertion. Instance 1 passes every
+"is my control drawn from the right population" check — the control *was*
+x86-64, which is the right population — and still proved nothing.
+
+**The cheap discriminator is to make the control succeed at something.** A
+control that only ever *fails differently* is one bit; a control that PASSES on
+a case the subject must fail tells you the route is live. In instance 1 that was
+one flag; in instance 3 it was printing the compiler's own verdict line instead
+of grepping for the probe, which would have shown the usage error immediately.
+Relatedly, **when a sweep reports zero failures, report the denominator in the
+same breath** — a sweep of busybox's 685 TUs answered "0 bad member accesses"
+the same session, and every file had died in a header before reaching a function
+body. Counting the *resolved* accesses alongside the failing ones turned a
+confident 0 into a visible 0-of-0.
+(`bug-c-an-undeclared-struct-type-compiles-and-reads-garbage`,
+`bug-b-terminalsize-answers-enotty-on-xtensa-and-the-probe-cannot-say-why`.)
+
+**Two further instances are owed here from frankb-8e** and are not yet written
+in, because they are the shapes my three do not cover: a discriminator built on
+qemu naming behaviour that a **riscv32 control killed** — the case where the
+control WORKED, which is what makes it worth quoting — and an xtensa pty ioctl
+that returns **rc=0 with a zeroed struct**, where success itself is the vacuous
+control and the data is simply absent. Until those land this section is three
+instances of one shape.
+
+**Not promoted to CLAUDE.md**, by the promotion test: this is one seat and one
+session, and the file already carries "a positive control drawn from the wrong
+population" and "a guard that cannot fail" — which an author reads as covering
+this, and which measurably did not, three times in one evening. **Promote it if
+a second seat produces a vacuous comparison that both of those rules would have
+passed**; 8e's two instances above are the candidate, and if they land here they
+are that second seat.
