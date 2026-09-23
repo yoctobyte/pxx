@@ -5143,6 +5143,45 @@ begin
       ASTLeft[fnode] := baseFld;
       ASTSOffset[fnode] := fldOff;
       ASTSLen[fnode] := fldLen;
+      { A MEMBER THAT DOES NOT EXIST RESOLVES TO OFFSET 0 AND READS THE FIRST
+        FIELD. RecFieldOffset answers 0 both for "the field is at 0" and for
+        "no such field" -- a not-found that is indistinguishable from a correct
+        answer -- so `v.typo = 99' silently CLOBBERS v's first member and
+        `v.typo' silently reads it. Measured 2026-09-24 on `struct real { int a;
+        int b; }': after `v.a=11; v.b=22; v.typo=99' pxx printed a=99 b=22
+        typo=99 and gcc refuses the program.
+
+        THE UNDECLARED-TAG CASE ARRIVES HERE TOO, which is why one check covers
+        both and there is no second arm for it. `struct nosuchtype v;' does NOT
+        leave recId at REC_NONE as one might expect: the frontend allocates an
+        EMPTY record for the unseen tag, so recId is valid, every member misses,
+        and the whole struct reads at offset 0. RecSize tells the two apart for
+        the message only -- a record of size 0 was never defined.
+
+        FALSE-POSITIVE POPULATION, MEASURED BEFORE THIS WAS ARMED, because the
+        cost of being wrong here is refusing valid C: zlib (15 files) and
+        lib/crtl/src (32 files) at 36d63c8e0 make 17043 member accesses that
+        resolve and ZERO that do not, with zero REC_NONE bases. The denominator
+        is the load-bearing half -- an earlier sweep of busybox answered "0 bad"
+        from 685 files that had ALL died in libbb.h before reaching a function
+        body, and only counting the resolved accesses too showed that 0 was
+        0-of-0. busybox is therefore NOT in the population above: its tree needs
+        busybox_diff.sh to regenerate include/autoconf.h per run, and
+        ENABLE_FEATURE_VERBOSE is absent from the one checked in.
+
+        RECOVERING, not fatal: gcc reports every bad member in a file and so
+        should we, and the node built below is well-formed either way.
+        bug-c-an-undeclared-struct-type-compiles-and-reads-garbage }
+      if (recId <> REC_NONE) and (not RecHasField(recId, fieldName)) then
+      begin
+        if RecSize(recId) = 0 then
+          ErrorRecover('C: ''' + fieldName + ''' taken from an INCOMPLETE type'
+            + ' -- the struct/union has no definition in scope, so its layout'
+            + ' is unknown and the member would read at offset 0')
+        else
+          ErrorRecover('C: no member named ''' + fieldName + ''' in this'
+            + ' struct/union');
+      end;
       if recId <> REC_NONE then
       begin
         ASTTk[fnode] := Ord(RecFieldType(recId, fieldName));

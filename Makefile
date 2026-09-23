@@ -17557,6 +17557,30 @@ test-core: $(COMPILER)
 	   || { echo 'c_undeclared_in_file_scope_init_refused: FAIL - expected one diagnostic per shape; a silent shape is the whole bug'; \
 	        cat $(TESTTMP)/c_fsundecl.log; exit 1; } \
 	   && echo "c_undeclared_in_file_scope_init_refused: 4 shapes, 4 refusals"
+	# TAKING A MEMBER FROM A TYPE OF UNKNOWN LAYOUT. Same family as the arm
+	# above and the same failure mode -- no diagnostic, a working binary, and a
+	# plausible WRONG VALUE. An unknown member resolves to offset 0 and aliases
+	# the first real field, so `v.a=11; v.b=22; v.typo=99' printed a=99 b=22.
+	# An undeclared tag reaches the identical path (the frontend allocates an
+	# empty record for it), which is why one check covers both arms.
+	@./$(COMPILER) test/c_incomplete_type_member_refused.c $(TESTTMP)/c_incmember26 \
+	   > $(TESTTMP)/c_incmember.log 2>&1; \
+	 test $$? -ne 0 \
+	   || { echo 'c_incomplete_type_member_refused: FAIL - six member accesses against unknown layout must refuse'; \
+	        cat $(TESTTMP)/c_incmember.log; exit 1; }
+	# PER ARM, NOT IN TOTAL: one check that collapsed both wordings into one
+	# message would still produce six diagnostics and pass a total.
+	@test "$$(grep -c 'INCOMPLETE type' $(TESTTMP)/c_incmember.log)" = 3 \
+	   && test "$$(grep -c 'no member named' $(TESTTMP)/c_incmember.log)" = 3 \
+	   || { echo 'c_incomplete_type_member_refused: FAIL - want 3 incomplete-type and 3 no-such-member diagnostics, one per access'; \
+	        cat $(TESTTMP)/c_incmember.log; exit 1; } \
+	   && echo "c_incomplete_type_member_refused: 6 accesses, 3+3 refusals"
+	# THE CASE THAT MUST NOT BREAK, and it matters more than the refusal: a
+	# pointer to an incomplete type is how every opaque handle is spelled, and a
+	# forward declaration that is later defined is not incomplete when a member
+	# is finally taken from it. Expected values cross-checked against gcc.
+	./$(COMPILER) test/c_incomplete_type_legal_shapes.c $(TESTTMP)/c_inclegal26
+	$(TESTTMP)/c_inclegal26 | diff - test/c_incomplete_type_legal_shapes.expected
 	# THE CASE THAT MUST NOT BREAK, and it is the same code path: an identifier
 	# in a constant expression that is DECLARED but not constant is a VLA, not a
 	# mistake. Refusing these would take out the VLA, the NARGS idiom and

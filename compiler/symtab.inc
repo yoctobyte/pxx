@@ -3385,6 +3385,29 @@ begin
   else if rec >= REC_UCLASS_BASE then Result := UClsSize_[rec - REC_UCLASS_BASE];
 end;
 
+function RecHasField(rec: Integer; const field: AnsiString): Boolean;
+{ Does this record actually HAVE this field? RecFieldOffset below cannot answer
+  that -- it is a pure offset function with no error channel, so a field it does
+  not find reads back as offset 0, which is a real address in every record. The
+  structure here deliberately mirrors RecFieldOffset's own two arms so the two
+  cannot disagree about what "has" means. }
+var i, cnt: Integer; field2: AnsiString;
+begin
+  Result := False; field2 := field;
+  cnt := BuiltinRecFieldCount(rec);
+  if cnt > 0 then
+  begin
+    for i := 0 to cnt - 1 do
+      if BuiltinRecFieldMatches(rec, i, field) then
+      begin
+        Result := True;
+        Exit;
+      end;
+  end
+  else if rec >= REC_UCLASS_BASE then
+    Result := FindUField(rec - REC_UCLASS_BASE, field2) >= 0;
+end;
+
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
 var fi, i, cnt, off: Integer; field2: AnsiString;
 begin
