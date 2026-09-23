@@ -186,10 +186,26 @@ if [ "${1:-}" = "qemu-assert" ]; then
   got="$(tr -d '\r' < "$ser" | awk 'f && !/^[IWE] \([0-9]+\) / {print} /Calling app_main\(\)/{f=1}')"
   want="$(cat main/main.expected)"
   boots="$(grep -c 'ESP-ROM' "$ser" || true)"
-  if [ "$got" = "$want" ] && [ "$boots" = 1 ]; then
+  # THE FILTER ABOVE DROPS IDF'S *ERROR* LINES, so scan the raw capture for them
+  # before comparing -- a watchdog trigger (a hung ISR) and a corrupt-heap report
+  # (an allocation inside an interrupt handler) both arrive as `E (nnn) tag: ...`
+  # and are removed by the same awk that removes the routine `I (nnn)` chatter,
+  # leaving output that matches main.expected exactly. Same scan as
+  # tools/esp_flash.sh, which is the other half of this pair.
+  # Measured 2026-09-24: zero E lines in a normal passing boot of this very image
+  # (59 lines, 46 I-lines), so this cannot be born red.
+  errs="$(tr -d '\r' < "$ser" | awk 'f && /^E \([0-9]+\) / {print} /Calling app_main\(\)/{f=1}')"
+  if [ "$got" = "$want" ] && [ "$boots" = 1 ] && [ -z "$errs" ]; then
     echo "OK   $(basename "$PWD") -- a static Python application runs on the $CHIP, output == main/main.expected, one boot"
   else
-    echo "FAIL $(basename "$PWD") -- output differs from main/main.expected or the chip rebooted (boots=$boots)"
+    echo "FAIL $(basename "$PWD") -- output differs from main/main.expected, or the chip rebooted (boots=$boots), or IDF logged an error"
+    if [ -n "$errs" ]; then
+      # Named separately because this is the case where `want` and `got` AGREE:
+      # the error lines never reach `got`, so a reader comparing the two blocks
+      # below sees no difference and would otherwise have nothing to go on.
+      echo "IDF error lines (stripped from 'got' by the log filter, which is why they are printed here):"
+      printf '%s\n' "$errs" | sed 's/^/    /'
+    fi
     echo "want:"; printf '%s\n' "$want" | sed 's/^/    /'
     echo "got:";  printf '%s\n' "$got"  | sed 's/^/    /'
     echo "serial tail:"; tr -d '\r' < "$ser" | tail -25 | sed 's/^/    /'

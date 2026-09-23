@@ -241,6 +241,32 @@ OUT="$(awk 'f {print} /Calling app_main\(\)/{f=1}' "$SER" | tr -d '\r')"
 # the same filter). Scoped to --project ON PURPOSE: widening the bare form's
 # filter would change what a hello-* run compares, and that path is the tested
 # one.
+# THE STRIP BELOW REMOVES IDF'S *ERROR* LINES TOO, SO SCAN FOR THEM FIRST.
+# Measured 2026-09-24 on a synthetic capture: a run containing
+#   E (5123) task_wdt: Task watchdog got triggered...
+#   W (5123) heap_init: corrupt heap detected at 0x3fca1234
+# came out of this filter as a clean, contiguous tick=1..3 and the script below
+# printed "OK -- board output matches". Those two lines are not incidental: a
+# watchdog trigger is what a hung ISR looks like, and a corrupt-heap report is
+# how an allocation inside an interrupt handler surfaces -- which is exactly the
+# contract the second acceptance row of feature-esp-hardware-flash-validation
+# exists to check. The instrument built to catch that was deleting its evidence.
+#
+# Scanned BEFORE the strip, and outside the --project and --verify conditions on
+# purpose: that ticket's ISR step runs with --no-verify, so it performs no
+# comparison at all and an error line is otherwise never reported by anything.
+#
+# E FAILS, W ONLY REPORTS, and the asymmetry is about which target was measured.
+# Zero E and zero W lines in a real boot of examples/esp32/nilpy-c3's image under
+# Espressif qemu (esp32c3; 59 lines, 46 I-lines, app_main reached -- so logging
+# was demonstrably live at a level that would have shown them), which is why E
+# can fail without being born red. That measurement is QEMU, and the target that
+# matters here is SILICON: a physical part's bootloader may warn routinely where
+# qemu does not, so W stays advisory until someone says which board and which
+# chip emitted one.
+ESP_ERR_LINES="$(printf '%s\n' "$OUT" | grep -E '^E \([0-9]+\) ' || true)"
+ESP_WARN_LINES="$(printf '%s\n' "$OUT" | grep -E '^W \([0-9]+\) ' || true)"
+
 if [ -n "$PROJECT" ] && [ -n "$OUT" ]; then
   OUT="$(printf '%s\n' "$OUT" | awk '!/^[IWE] \([0-9]+\) /')"
 fi
@@ -259,7 +285,32 @@ if [ -z "$OUT" ]; then
   exit 1
 fi
 printf '%s\n' "$OUT"
+
+# A REBOOT IS A FAILURE THE COMPARISON CANNOT SEE, because a panic loop reprints
+# the program's first lines and a prefix diff matches them happily.
+# examples/esp32/nilpy-c3/build.sh qemu-assert already asserts boots == 1; this
+# script asserted nothing -- the same guard, present in one of the two places
+# that need it. The bound here is >= 2 rather than == 1 because esptool's hard
+# reset races the reader, so a capture with NO banner is ordinary and expected
+# (the fallbacks above say so).
+ESP_BOOTS="$(grep -c 'ESP-ROM' "$SER" || true)"
 rm -f "$SER"
+
+if [ -n "$ESP_WARN_LINES" ]; then
+  echo "esp_flash: the board logged IDF WARNINGS (not a failure -- if you report one, say which chip and whether it was silicon or qemu):" >&2
+  printf '%s\n' "$ESP_WARN_LINES" | sed 's/^/    /' >&2
+fi
+
+if [ -n "$ESP_ERR_LINES" ]; then
+  echo "esp_flash: FAIL -- the board logged IDF ERRORS. They are stripped before the output comparison, so without this check the run reports OK:" >&2
+  printf '%s\n' "$ESP_ERR_LINES" | sed 's/^/    /' >&2
+  exit 1
+fi
+
+if [ "${ESP_BOOTS:-0}" -ge 2 ]; then
+  echo "esp_flash: FAIL -- the board rebooted during the capture (${ESP_BOOTS} boot banners). A panic loop reprints the program's first lines, which a prefix comparison matches." >&2
+  exit 1
+fi
 
 if [ "$VERIFY" = 1 ]; then
   # The board keeps running (most ESP programs park in a loop), so the capture
