@@ -5348,6 +5348,91 @@ binary lying around"; "A 'WRONG CWD FAILS LOUDLY' CONTROL DRAWN FROM AN EMPTY
 DIRECTORY"; "A GUARD THAT CANNOT FAIL IS NOT A GUARD" in CLAUDE.md.
 
 
+## A SCRIPT COPIED OUT OF THE TREE LOCATES ITSELF AND THEREFORE LOCATES NOTHING — and it exits with the SAME CODE as the real answer
+
+**2026-09-23, frankS.** I had changed `tools/aarch64_cabi_prologue_probe.sh` to
+select its disassembler by capability instead of by `--version`, and I wanted the
+A/B that justifies the change: does the OLD version accept a tool that runs and
+decodes nothing? `/bin/true` is the perfect such tool — it exits 0 for any
+argument, so it passes `--version` and disassembles nothing at all.
+
+**The control I wrote, and it is the obvious one:**
+
+    git show HEAD:tools/aarch64_cabi_prologue_probe.sh > $S/probe_head.sh
+    LLVM_OBJDUMP=/bin/true bash $S/probe_head.sh   # -> rc=2
+
+**rc=2 is exactly what a correct refusal looks like**, and I read it as one: *the
+old gate catches `/bin/true` too, so my change buys less than I thought*. I was
+about to record that.
+
+**What it was actually measuring.** The script's second line is
+
+    REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+so a copy in `/tmp/.../scratchpad` computes `REPO_ROOT=/tmp/.../` , looks for
+`$REPO_ROOT/compiler/pascal26`, does not find it, and exits 2 at the FIRST
+GUARD — before the tool-selection code I was testing ever ran. The whole output
+was one line:
+
+    probe: compiler not built (/tmp/.../compiler/pascal26)
+
+I had not looked at stdout, because rc was all my A/B needed. Re-run with
+`PXX_PROBE_CC=$PWD/compiler/pascal26`, the control reaches the code under test
+and answers the opposite way — five `BROKEN` rows, each labelled `this is an
+INSTRUMENT failure, not a result about pxx`, then rc=2 from a completely
+different branch. The old code was *honest about the channel*; what it could not
+do was refuse at selection. My change is real and smaller than I had claimed,
+and the corrected claim is the one that went in the commit.
+
+### Why the existing rules do not cover this
+
+The playbook and CLAUDE.md already say to **aim** a guard and to **branch** on
+the precondition. Both assume the thing under test is REACHABLE and ask whether
+your assertion is pointed at it. Here the control was correctly aimed, correctly
+parameterised, drawn from the right population, and pointed at **a copy that
+could never execute the code it was copied from**. Every aim-and-read question
+returns yes.
+
+It is also not the sibling failure one section up (*a control reverted into a
+scratch directory with a search path that prefers the live tree*): there the
+control RAN and was silently bypassed. Here it never ran.
+
+**The mechanism is the script's own self-location.** Anything that finds its
+inputs relative to `$0` — `dirname "$0"`, `readlink -f "$0"`, `$BASH_SOURCE`, a
+`../lib` relative to the executable — is **coupled to where it lives**, so
+`git show <sha>:<path> > /tmp/copy` produces a file that is byte-correct and
+positionally wrong. The A/B arm is the one place this bites, because an A/B arm
+is exactly the thing you copy out of the tree.
+
+**And the exit code hides it.** A first-guard bail and a real refusal are both
+"nonzero", and this script uses `2` for both — `compiler not built` and
+`no working disassembler` are both instrument failures, so `2` is *correct* in
+both cases. There is no rc a well-written script could have used that would
+have separated them.
+
+### What to do instead
+
+- **Read stdout of a control arm, not just its rc.** One line of output would
+  have said `compiler not built`. I never looked, because the comparison was
+  about exit status.
+- **Assert the arm reached the code under test.** For a historical copy, make it
+  print the thing you are testing — here, which tool it selected — and check
+  that line exists before believing the verdict.
+- **Prefer running the old version IN PLACE**: `git stash` / a worktree / `git
+  -C` against the real path, so self-location still resolves. Copying to `/tmp`
+  is the convenient move and the one that breaks it.
+- **Or pass the inputs explicitly.** This script already had `PXX_PROBE_CC`, and
+  the fix was one environment variable. A script that takes its inputs from the
+  environment is copy-safe; one that derives them from `$0` is not.
+- **A control that agrees with the null hypothesis deserves the same suspicion
+  as one that agrees with your thesis.** Mine said "your change buys nothing",
+  which felt like rigour — the self-deprecating reading terminates the search
+  just as firmly as the flattering one, and is less likely to be challenged.
+
+**The general form:** *a control arm has to be able to REACH the code under
+test, and a nonzero exit cannot tell you whether it did.* Ask what the arm
+would print if it had bailed before starting, and go look for that string.
+
 ## A GREEN THAT NAMES ITS OWN SKIPS IS STILL A GREEN ABOUT A SMALLER CORPUS — and the line that says so is written to be reassuring
 
 **2026-09-11, frankS, and it is the THIRD round of one error in one ticket.**
