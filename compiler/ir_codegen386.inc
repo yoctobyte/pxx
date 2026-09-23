@@ -5942,7 +5942,7 @@ begin
           EmitB($50);                                               { push dest }
           EmitB($68); EmitI32(RecSize(SymTR[i].RecId));            { push count }
           procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found (i386)');
           EmitCallProc(procIdx);
           EmitB($81); EmitB($C4); EmitI32(8);                       { add esp, 8 }
         end

@@ -4647,7 +4647,7 @@ begin
           EmitLoadDataRefA64(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
           EmitCallProc(procIdx);
           procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found (aarch64)');
           EmitI32($F94003E0);                  { ldr x0, [sp] (dest) }
           EmitLoadImmA64(1, IRIVal[node]);     { x1 = count }
           EmitCallProc(procIdx);
@@ -4656,7 +4656,7 @@ begin
         else
         begin
           procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found (aarch64)');
           EmitLoadImmA64(1, IRIVal[node]);     { x1 = count }
           EmitCallProc(procIdx);
         end;
@@ -5318,7 +5318,7 @@ begin
           EmitI32($8B0903A0);    { add x0, x29, x9 (dest) }
           EmitLoadImmA64(1, RecSize(SymTR[i].RecId));   { x1 = count }
           procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found (aarch64)');
           EmitCallProc(procIdx);
         end
         else
@@ -5575,7 +5575,7 @@ begin
               EmitI32($8B0903A0);                 { add x0, x29, x9 (dest) }
               EmitLoadImmA64(1, sz);              { x1 = count }
               procIdx := FindProc('PXXMemZero');
-              if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+              if procIdx < 0 then Error('compiler error: PXXMemZero not found (aarch64)');
               EmitCallProc(procIdx);
             end;
           end;

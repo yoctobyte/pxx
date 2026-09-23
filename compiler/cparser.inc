@@ -13130,7 +13130,28 @@ begin
     pull (see two paragraphs up), so the condition is evaluated before the
     block it guards. If a second door to builtinheap is ever added, it goes
     into this variable, not beside it. }
-  cPullsBuiltinHeap := (not NoDefaultRtl) and (TargetPlatform <> PLATFORM_ESP);
+  { TargetIsEspClass, NOT `TargetPlatform <> PLATFORM_ESP`. The two agree on
+    riscv32 and differ on xtensa, which is PLATFORM_ESP UNCONDITIONALLY -- so
+    the platform spelling made this gate permanently False there and no xtensa
+    C source could reach builtinheap on ANY profile. That contradicted this
+    block's own comment a few lines down ("xtensa joins riscv32 here for the
+    IDF profile") and it contradicted the Pascal driver, which asks
+    TargetIsEspClass at 24 sites for this exact question -- may I pull this RTL
+    unit -- and does pull it for xtensa under IDF.
+
+    util.inc's header on that predicate predicted this failure in so many
+    words: the C frontend "had drifted into their own copies, each with its own
+    comment saying 'same guard as the Pascal default-RTL pull' -- the sameness
+    was documented in prose and not in code". The consolidation pass replaced
+    one cparser.inc site; this is a SECOND spelling of the same question in the
+    same file that it did not reach, because it was spelled over TargetPlatform
+    rather than written out by hand like the other 24.
+
+    The platform spelling IS right for the pxxcio guard above -- that one asks
+    "are there posix syscalls under this target", a different question with its
+    own note -- which is exactly why two neighbouring gates disagreeing looked
+    deliberate. bug-s-c-on-the-esp-profile-cannot-reach-crtl }
+  cPullsBuiltinHeap := (not NoDefaultRtl) and (not TargetIsEspClass);
   if cPullsBuiltinHeap and (TargetArch = TARGET_X86_64) then
   begin
     RegisterEmittedStringRuntimeForwards;

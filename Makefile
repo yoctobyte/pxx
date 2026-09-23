@@ -36054,6 +36054,39 @@ test-emit-obj: $(COMPILER)
 	tools/expect_same.sh c_read_ptr_param_is_a_load_xt "$$(PXXDBG='a.ast:read_char' ./$(COMPILER) --target=xtensa --emit-obj test/c_read_through_a_pointer_param_is_a_load.c $(TESTTMP)/c_rdptr_xt.o 2>&1 | grep -oE 'kind=(36|5) tk=[0-9]+ ival=[0-9]+' | head -1)" "kind=36 tk=3 ival=0"
 	./$(COMPILER) test/c_read_through_a_pointer_param_is_a_load.c $(TESTTMP)/c_rdptr_native
 	$(TESTTMP)/c_rdptr_native
+	@# C THAT REACHES CRTL ON AN ESP TARGET. `#include <stdio.h>` + printf
+	@# stopped with `compiler error: PXXMemZero not found` under
+	@# --target=xtensa --emit-obj while building fine with --platform=posix.
+	@# The symbol was never missing -- builtinheap defines it unconditionally;
+	@# the UNIT was not pulled, because the gate read
+	@# `TargetPlatform <> PLATFORM_ESP` where the rest of the compiler asks
+	@# TargetIsEspClass. Those agree on riscv32 and differ on xtensa, which is
+	@# PLATFORM_ESP UNCONDITIONALLY, so the gate was permanently False there.
+	@# bug-s-c-on-the-esp-profile-cannot-reach-crtl
+	@#
+	@# Both ISAs, because the bug was invisible on one of them: esp32c3 built
+	@# this all along (riscv32 is posix unless the profile says otherwise), so
+	@# a riscv32-only row would have passed throughout.
+	./$(COMPILER) --target=xtensa  --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_xt.o
+	./$(COMPILER) --target=esp32s3 --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_s3.o
+	./$(COMPILER) --target=esp32c3 --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_c3.o
+	@# ...and the helper is actually IN the object. "The compiler accepted it"
+	@# and "the unit got pulled" are two claims and only the second was ever
+	@# broken, so a compile row alone would go green on a build that emitted a
+	@# call to an undefined PXXMemZero. `t` is a DEFINED local text symbol; an
+	@# unresolved one would be `U`.
+	nm $(TESTTMP)/c_crtl_xt.o | grep -q ' t PXXMemZero$$'
+	nm $(TESTTMP)/c_crtl_c3.o | grep -q ' t PXXMemZero$$'
+	@# THE NEGATIVE CONTROL, and it is the row that keeps the fix a correction
+	@# rather than a widening: bare metal deliberately gets NO default RTL, so
+	@# it must still refuse. A predicate that made every profile build the row
+	@# above would look like a fix and would have quietly dragged the whole RTL
+	@# into bare-metal images. Greps the SYMBOL NAME and not the full wording:
+	@# on bare this is still an internal assertion with no remedy a C
+	@# programmer could act on, which is the ticket's remaining half, so the
+	@# message is expected to change and the contract is not.
+	! ./$(COMPILER) --target=xtensa --esp-profile=bare --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_bare.o >$(TESTTMP)/c_crtl_bare.err 2>&1
+	grep -q "PXXMemZero" $(TESTTMP)/c_crtl_bare.err
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained

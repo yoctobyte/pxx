@@ -16271,7 +16271,7 @@ begin
   end;
 
   helperPi := FindProc('PXXMemZero');
-  if helperPi < 0 then Error('compiler error: PXXMemZero not found');
+  if helperPi < 0 then Error('compiler error: PXXMemZero not found (symtab)');
   if TargetArch = TARGET_I386 then
   begin
     EmitB($8D); EmitB($85); EmitI32(frameOff);   { lea eax, [ebp+off] }
