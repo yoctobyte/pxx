@@ -14,9 +14,10 @@ pascal26 --emit-obj mylib.pas mylib.o
 gcc main.c mylib.o -o prog
 ```
 
-Targets: **x86-64**, **i386**, **riscv32** and **xtensa**. `arm32` and
-`aarch64` have no object writer. This page describes the x86-64 and i386
-objects. They share an export surface, but **not** a relocation model: an
+Targets: **x86-64**, **i386**, **aarch64**, **arm32**, **riscv32** and
+**xtensa**. This page describes the x86-64 and i386 objects. The aarch64 and
+arm32 writers were added on 2026-09-22, and this page does not yet cover
+linking their objects. They share an export surface, but **not** a relocation model: an
 x86-64 object is position-independent and links either way, an i386 object is
 position-dependent and needs `gcc -m32 -no-pie`. The two ESP targets are a
 different kind of object: they export `app_main` for an IDF image and are

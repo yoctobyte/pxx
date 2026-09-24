@@ -43,10 +43,10 @@ documentation first.
   indexed/default), managed strings, dynamic arrays, exceptions, and more.
 - **More than "just an executable."** Besides a normal linked binary, PXX can
   also emit a relocatable object (`--emit-obj`, `.o`) for linking with other
-  toolchains — on `x86-64`, `i386`, `riscv32` and `xtensa` for compiled
+  toolchains — on `x86-64`, `i386`, `aarch64`, `arm32`, `riscv32` and `xtensa` for compiled
   sources, and on x86-64 for assembly sources — and an ET_DYN shared library
   (`--shared`, `.so`) on x86-64, for compiled sources as well as the
-  assembly-source frontend. `aarch64` and `arm32` have no object writer. The
+  assembly-source frontend. The
   [command-line reference](./reference/cli.md) has the exact target and
   source-kind rules.
 - **It builds a bootable system.** PXX compiles BusyBox — a 19-applet
