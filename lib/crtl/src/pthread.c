@@ -101,9 +101,23 @@ struct pxx_thr_slot {
   long long      tid;                /* > 0 when live */
   int            used;
   unsigned char  h[PXX_HANDLE_BYTES];
+  void        *(*start)(void *);     /* the caller's start routine and arg, */
+  void          *arg;                /* run by pxx_thr_trampoline, which    */
+  void          *ret;                /* keeps the return value for join     */
 };
 static struct pxx_thr_slot pxx_thr_reg[PXX_PTHREAD_MAX];
 static pthread_mutex_t pxx_thr_reg_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* The thread the PAL spawns runs THIS, not the caller's routine directly: the
+ * PAL discards the entry's return value, and POSIX hands it to pthread_join.
+ * The slot stays owned by this thread until join frees it, so the store needs
+ * no lock; join reads it only after __pxx_pthread_join has seen the thread
+ * exit. */
+static void *pxx_thr_trampoline(void *p) {
+  struct pxx_thr_slot *s = (struct pxx_thr_slot *)p;
+  s->ret = s->start(s->arg);
+  return s->ret;
+}
 
 int pthread_create(pthread_t *t, const pthread_attr_t *attr,
                    void *(*start)(void *), void *arg) {
@@ -119,7 +133,10 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
 
   /* Spawn under the registry lock: PalThreadCreate fills the handle bytes and
      returns the child tid. Serialising spawns is fine for test-scale fan-out. */
-  tid = __pxx_pthread_create(pxx_thr_reg[slot].h, start, arg);
+  pxx_thr_reg[slot].start = start;
+  pxx_thr_reg[slot].arg   = arg;
+  pxx_thr_reg[slot].ret   = 0;
+  tid = __pxx_pthread_create(pxx_thr_reg[slot].h, pxx_thr_trampoline, &pxx_thr_reg[slot]);
   if (tid <= 0) {
     pxx_thr_reg[slot].used = 0;
     __pxx_pmutex_unlock(&pxx_thr_reg_lock);
@@ -134,8 +151,6 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
 
 int pthread_join(pthread_t t, void **retval) {
   int i, slot = -1;
-  if (retval) *retval = 0;                 /* thread return value is not tracked */
-
   __pxx_pmutex_lock(&pxx_thr_reg_lock);
   for (i = 0; i < PXX_PTHREAD_MAX; i++) {
     if (pxx_thr_reg[i].used && pxx_thr_reg[i].tid == (long long)t) { slot = i; break; }
@@ -144,6 +159,7 @@ int pthread_join(pthread_t t, void **retval) {
   if (slot < 0) return 3;                  /* ESRCH */
 
   __pxx_pthread_join(pxx_thr_reg[slot].h); /* blocks on the child-tid futex */
+  if (retval) *retval = pxx_thr_reg[slot].ret;
 
   __pxx_pmutex_lock(&pxx_thr_reg_lock);
   pxx_thr_reg[slot].used = 0;

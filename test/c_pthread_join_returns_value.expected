@@ -1,0 +1,7 @@
+thread 3 returned 2001
+thread 2 returned -1
+thread 1 returned 15
+thread 0 returned 85
+null worker returned 0
+join with NULL retval: 0
+PJ-DONE

@@ -7610,6 +7610,12 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/c_errno_per_thread26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_errno_per_thread26_a64)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_arm32
 	tools/expect_same.sh arm32/c_errno_per_thread26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_errno_per_thread26_arm32)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
+	# pthread_join's retval is the start routine's return (crtl trampoline), on
+	# the cross targets too. Pre-fix every row printed "returned 0".
+	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_join_returns_value.c $(TESTTMP)/c_pjoin26_a64
+	tools/run_target.sh aarch64 $(TESTTMP)/c_pjoin26_a64 | diff -u test/c_pthread_join_returns_value.expected -
+	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_join_returns_value.c $(TESTTMP)/c_pjoin26_arm32
+	tools/run_target.sh arm32 $(TESTTMP)/c_pjoin26_arm32 | diff -u test/c_pthread_join_returns_value.expected -
 	# THE OTHER HALF OF THE SAME PASS, and it fails by printing a WRONG NUMBER
 	# rather than by crashing. RewriteThreadVarRefs arms on the program declaring
 	# any threadvar and rewrites every AN_IDENT whose SymTlsOffset is >= 0; -1 is
@@ -17267,6 +17273,8 @@ test-core: $(COMPILER)
 	# sources: RED 5 runs of 5; against the fix, GREEN 5 of 5.
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26
 	tools/expect_same.sh c_errno_per_thread26 "$$($(TESTTMP)/c_errno_per_thread26)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
+	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_join_returns_value.c $(TESTTMP)/c_pjoin26
+	$(TESTTMP)/c_pjoin26 | diff -u test/c_pthread_join_returns_value.expected -
 	tools/expect_same.sh c_thread_local26 "$$($(TESTTMP)/c_thread_local26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
 	# A `__thread` THAT CANNOT GET A PER-THREAD SLOT: WHICH REFUSALS STOP THE
 	# BUILD AND WHICH DEGRADE. The allocator has FIVE refusal reasons and they
