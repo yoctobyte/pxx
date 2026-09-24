@@ -3628,9 +3628,13 @@ begin
       arm32 +-32 MiB, riscv32 JAL +-1 MiB, x86-64 rel32), so xtensa is the only
       target whose ENTRY branch is the binding constraint.
 
-      BARE keeps the 3-byte `j`: those images are SRAM-bounded at tens of KB,
-      cannot approach 128 KiB, and are covered by a byte-identity canary that
-      the long form would perturb for no gain.
+      BARE TAKES THE LONG FORM TOO. It kept the 3-byte `j` on the argument
+      that bare images are tens of KB and cannot approach 128 KiB -- true of
+      the IMAGE, false of this jump, which is patched BEFORE DCE drops the
+      unused unit bodies it skips. A bare esp32s3 program with an unused
+      Double and an AnsiString concat measured 131401 bytes here and was
+      refused ("j displacement ... outside the encodable range") while its
+      final image is a few KB. The long form costs ~15 bytes.
 
       Otherwise emit a reach-independent jump. It needs the runtime PC, and
       xtensa has no instruction that yields it -- but CALL0 leaves the address
@@ -3644,16 +3648,11 @@ begin
       over an absolute address in the literal, which would have needed a new
       "address of a code offset" fixup threaded through the ELF writer's four
       ProcAddrFix sites. bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb }
-    if EspBareBoot then
-    begin
-      XtEntryPcAnchor := -1;
-      jmpPatch := CodeLen;
-      xtensa_j(0);
-      Exit;
-    end;
     { ESP-IDF: publish the BSS arena reserved in frontend_prologue.inc. It
-      writes only a8/a9, which this stub already overwrites below. }
-    if withHeapArena and (BSS_HEAP_ARENA > 0) then EmitBareHeapArenaInit;
+      writes only a8/a9, which this stub already overwrites below. Not on
+      bare, which never took this path before the long form reached it. }
+    if (not EspBareBoot) and withHeapArena and (BSS_HEAP_ARENA > 0) then
+      EmitBareHeapArenaInit;
     xtensa_mov(reg_xtensa_a9, reg_xtensa_a0);   { save the return address }
     { call0 to the next 4-aligned offset. CALL0 targets must be 4-aligned (the
       encoder now asserts it), so pad the gap with bytes that are never
@@ -3887,8 +3886,9 @@ begin
     too. }
   { The anchor travels WITH the slot from here on, so nothing downstream reads
     XtEntryPcAnchor and nothing can read it stale. On xtensa it is either the
-    CALL0 anchor PC (the long form) or CODEREF_ANCHOR_J (EspBareBoot's short
-    `j`); every other target ignores it. }
+    CALL0 anchor PC (the long form, bare included since 2026-09-25) or
+    CODEREF_ANCHOR_J (a short `j`, which the entry no longer emits); every
+    other target ignores it. }
   if TargetArch = TARGET_XTENSA then
   begin
     if XtEntryPcAnchor >= 0 then xtAnchor := XtEntryPcAnchor

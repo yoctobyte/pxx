@@ -36819,6 +36819,13 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare.pas > $(TESTTMP)/test_esp_bare.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare.oracle $(TESTTMP)/test_esp_bare.s3; then echo "esp32s3 bare-boot ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 bare-boot MISMATCH"; exit 1; fi; fi
+	# The entry jump was a short `j` on bare, patched BEFORE DCE, so an unused
+	# Double plus an AnsiString concat put main 131401 bytes out and the build
+	# was refused. Bare takes the long form now; this boots it and reads the UART.
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 far-main entry run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_entry_jump_reaches_a_far_main.pas > $(TESTTMP)/test_esp_bare_farmain.s3 2>/dev/null; \
+	  tools/expect_same.sh test_esp_bare_farmain_s3 "$$(cat $(TESTTMP)/test_esp_bare_farmain.s3)" "str -4095" || exit 1; fi
 	# A float on bare metal. test_esp_bare.pas deliberately has none, so the
 	# whole softfloat-on-ESP path was unexercised by execution as well as by
 	# build: any float in a bare program died at codegen because the `softfloat`
