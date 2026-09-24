@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: T
+summary: "CLOSED 2026-09-24: not reproducible. The row `assert_no_leak.sh dynarray_to_pointer_seam 50` passes at 8e68f024e2 (binary b51d542b4e1f, x86-64): allocs=10975 frees=10961 live=14. It was not red in T's full run at pin v423, and the filed log tail itself shows live=5, so the recorded failure was not a leak."
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 3 of 10 is `tools/assert_no_leak.sh dynarray_to_pointer_seam 50 /tmp/test_dtp26`. The job's own `src` (`test/test_dynarray_to_pointer_seam_leaks.pas`, 3 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -68,3 +70,15 @@ assert_no_leak[dynarray_to_pointer_seam]: LEAK — live=999 exceeds 50
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Closed (2026-09-24, frankb-12)
+
+Re-run at 8e68f024e2, binary b51d542b4e1f, x86-64, from the repo root:
+`-dPXX_ALLOC_CENSUS test/test_dynarray_to_pointer_seam_leaks.pas`, then
+`tools/assert_no_leak.sh dynarray_to_pointer_seam 50` -> ok, allocs=10975
+frees=10961 live=14. Not red in T's full run at pin v423 (per the coordinator).
+The log tail filed above already reads live=5, under the bound, so whatever
+reddened step 3 on 09-18 was not the leak the slug names. A dynarray leak
+census the same day (22 shapes, x86-64 and i386) found one unrelated leak, a
+by-value dynarray parameter rebound in the callee; handed to franks-a3.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

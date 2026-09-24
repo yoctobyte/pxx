@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: A
+summary: "CLOSED 2026-09-24: not reproducible. At 8e68f024e2 (binary b51d542b4e1f) the aarch64 rows pass: the aarch64 and x86-64 outputs are identical, and assert_no_leak gives live=14 (bound 50) on both. Same stale filing as its test-core twin, closed the same day."
+status: done
 ---
 
 > **Track A from the job NAME `test-aarch64`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/test_dynarray_to_pointer_seam_leaks.pas`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -70,3 +72,11 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-18 — the borg watcher saw `test-aarch64#src:test/test_dynarray_to_pointer_seam_leaks.pas` GREEN at 2b8480963d5f (tier full) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## Closed (2026-09-24, frankb-12)
+
+Re-run at 8e68f024e2, binary b51d542b4e1f: the four Makefile rows (aarch64 and
+x86-64 builds, expect_same, both assert_no_leak) all pass; live=14 against a
+bound of 50 on both targets, identical census lines. Twin of
+regression-test-core-test-dynarray-to-pointer-seam-leaks-2, closed together.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
