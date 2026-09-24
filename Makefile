@@ -17281,6 +17281,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_errno_per_thread26 "$$($(TESTTMP)/c_errno_per_thread26)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_join_returns_value.c $(TESTTMP)/c_pjoin26
 	$(TESTTMP)/c_pjoin26 | diff -u test/c_pthread_join_returns_value.expected -
+	# Host headers crtl does not ship parse (crtl <features.h> -> glue <sys/cdefs.h>),
+	# and __GLIBC__ stays undefined (the test #errors if it is not).
+	./$(COMPILER) test/c_host_header_needs_cdefs_glue.c $(TESTTMP)/c_hosthdr26 2>/dev/null
+	tools/expect_same.sh c_host_header_needs_cdefs_glue "$$($(TESTTMP)/c_hosthdr26)" "host headers parsed"
 	tools/expect_same.sh c_thread_local26 "$$($(TESTTMP)/c_thread_local26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
 	# A `__thread` THAT CANNOT GET A PER-THREAD SLOT: WHICH REFUSALS STOP THE
 	# BUILD AND WHICH DEGRADE. The allocator has FIVE refusal reasons and they
