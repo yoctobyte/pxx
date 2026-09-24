@@ -5535,20 +5535,25 @@ function FindCTag(const name: AnsiString): Integer;
 var idx: Integer;
 begin
   idx := FindCTagIdx(name);
-  if idx >= 0 then Result := CTagRec[idx] else Result := -1;
+  if idx >= 0 then Result := CTagRec[idx] else Result := -1;  { -1 also for a closed block's tag }
 end;
 
 procedure AddCTag(const name: AnsiString; recId: Integer);
 var idx, i: Integer;
 begin
   idx := FindCTagIdx(name);
-  if idx >= 0 then begin CTagRec[idx] := recId; Exit; end;  { update (forward -> defined) }
+  if idx >= 0 then
+  begin
+    if CTagRec[idx] < 0 then CTagDepth[idx] := 0;  { re-bound after its block closed: a file-scope forward }
+    CTagRec[idx] := recId; Exit;   { update (forward -> defined) }
+  end;
   if CTagCount >= MAX_CTYPEDEF then Error('C tag table overflow');
   if CTagCharLen + Length(name) >= 524288 then Error('C tag chars pool overflow');
   CTagNameOff[CTagCount] := CTagCharLen;
   CTagNameLen[CTagCount] := Length(name);
   for i := 1 to Length(name) do begin CTagChars[CTagCharLen] := name[i]; Inc(CTagCharLen); end;
   CTagRec[CTagCount] := recId;
+  CTagDepth[CTagCount] := 0;
   i := CTypedefHashKey(name);
   while CTagHash[i] <> 0 do i := (i + 1) and 16383;
   CTagHash[i] := CTagCount + 1;
@@ -5584,6 +5589,63 @@ end;
   record, used for `struct|union [tag] { ... }` in a TYPE position. `rec` is the
   tag's record (>= REC_UCLASS_BASE) or REC_NONE for an anonymous body; on return
   it holds the laid-out record id. }
+{ The record a tag DEFINITION binds (`struct T` with a body, or a bare `struct T;`). At file
+  scope, or when the visible binding was made in THIS block, that is the existing
+  record -- completing a forward, or reaching the same-scope redefinition guard.
+  Inside a block whose visible binding is from an enclosing scope (or from none),
+  the definition declares a NEW type: a fresh record, bound here and undone at
+  the block's closing brace (CTagLeaveBlock). References (`struct T x;`,
+  `struct T *p`) go through FindOrForwardCTag and see whichever binding is
+  visible. bug-c-a-struct-tag-is-not-scoped-to-its-block. }
+function CDefineCTag(const name: AnsiString): Integer;
+var idx, rec, ci: Integer;
+begin
+  idx := FindCTagIdx(name);
+  if (CBlockDepth = 0) or (CTagUndoCount > High(CTagUndoIdx)) or
+     ((idx >= 0) and (CTagRec[idx] >= 0) and (CTagDepth[idx] = CBlockDepth)) or
+     (UClsCount >= MAX_UCLASS - 1) then
+  begin
+    Result := FindOrForwardCTag(name);
+    Exit;
+  end;
+  ci := AddUClass(0, 0);
+  UClsIsRecord[ci] := True;
+  UClsCaseSensFields[ci] := True; { C: `b` != `B` }
+  UClsBodySeen[ci] := False;
+  UClsLayoutDropped[ci] := False;
+  rec := REC_UCLASS_BASE + ci;
+  if idx < 0 then
+  begin
+    AddCTag(name, -1);
+    idx := FindCTagIdx(name);
+  end;
+  CTagUndoIdx[CTagUndoCount] := idx;
+  CTagUndoRec[CTagUndoCount] := CTagRec[idx];
+  CTagUndoDepth[CTagUndoCount] := CTagDepth[idx];
+  Inc(CTagUndoCount);
+  CTagRec[idx] := rec;
+  CTagDepth[idx] := CBlockDepth;
+  Result := rec;
+end;
+
+{ Block entry/exit for the tag namespace; the mark is CTagUndoCount at entry. }
+function CTagEnterBlock: Integer;
+begin
+  Inc(CBlockDepth);
+  Result := CTagUndoCount;
+end;
+
+procedure CTagLeaveBlock(mark: Integer);
+begin
+  while CTagUndoCount > mark do
+  begin
+    Dec(CTagUndoCount);
+    CTagRec[CTagUndoIdx[CTagUndoCount]] := CTagUndoRec[CTagUndoCount];
+    CTagDepth[CTagUndoIdx[CTagUndoCount]] := CTagUndoDepth[CTagUndoCount];
+  end;
+  Dec(CBlockDepth);
+end;
+
 procedure CParseInlineAggBody(var rec: Integer; isUnion: Boolean);
 var d: Integer;
 begin
@@ -5940,7 +6002,12 @@ begin
         begin
           Next;
           base := tyRecord; isAggBase := True; sawBase := True;
-          if CurTok.Kind = tkIdent then begin baseRec := FindOrForwardCTag(CurTok.SVal); Next; end;
+          if CurTok.Kind = tkIdent then
+          begin
+            if (Tokens[TokPos].Kind = tkBegin) or (Tokens[TokPos].Kind = tkSemicolon) then baseRec := CDefineCTag(CurTok.SVal)
+            else baseRec := FindOrForwardCTag(CurTok.SVal);
+            Next;
+          end;
           if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, False);
         end;
       tkIdent:
@@ -5964,7 +6031,12 @@ begin
           begin
             Next;
             base := tyRecord; isAggBase := True; sawBase := True;
-            if CurTok.Kind = tkIdent then begin baseRec := FindOrForwardCTag(CurTok.SVal); Next; end;
+            if CurTok.Kind = tkIdent then
+            begin
+              if (Tokens[TokPos].Kind = tkBegin) or (Tokens[TokPos].Kind = tkSemicolon) then baseRec := CDefineCTag(CurTok.SVal)
+              else baseRec := FindOrForwardCTag(CurTok.SVal);
+              Next;
+            end;
             if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, True);
           end
           else if (not sawBase) and (CurTok.SVal = 'enum') then
@@ -9073,7 +9145,7 @@ begin
 end;
 
 function ParseCBlockAST: Integer;
-var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj: Integer;
+var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark: Integer;
 begin
   Expect(tkBegin, '{');
   { C block scope: an inner `int v` SHADOWS an outer v (FindSym's hash chain
@@ -9082,6 +9154,7 @@ begin
     inside the block on exit (below). tcc's struct_decl re-declares
     `int v = btype.ref->v` in a nested block; without scoping it clobbered
     the outer v and pushed a garbage symbol token. }
+  tagMark := CTagEnterBlock;
   scopeMark := SymCount;
   blockNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
@@ -9100,14 +9173,17 @@ begin
     end;
   end;
   Expect(tkEnd, '}');
+  CTagLeaveBlock(tagMark);
   { End of scope: unhook this block's locals from their hash chains so name
     lookup can't bind them anymore. AST nodes already hold sym INDICES, which
     stay valid (codegen, DWARF); block-scope statics are skGlobal (BSS) and
     survive. Splice, don't rename: renamed entries stayed in the chains and
     turned hot lookups into full-chain misses (libtcc 12s -> hang). The dead
-    syms are near the chain head (just allocated), so the walk is short. }
+    syms are near the chain head (just allocated), so the walk is short.
+    A block's ENUMERATORS (skConst, ParseCEnumBody) are block-scoped too: an
+    inner `enum { A = 40 }` must stop shadowing the outer A at the brace. }
   for si := SymCount - 1 downto scopeMark do
-    if (Syms[si].Kind = skLocal) and (Syms[si].Name <> '') then
+    if ((Syms[si].Kind = skLocal) or (Syms[si].Kind = skConst)) and (Syms[si].Name <> '') then
     begin
       hh := SymNameFoldHash(Syms[si].Name);
       if SymHashHead[hh] = si then
@@ -9141,10 +9217,11 @@ begin
 end;
 
 function ParseCStmtExprAST: Integer;
-var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj: Integer;
+var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj, tagMark: Integer;
     prevStmt, valNode, comma: Integer;
 begin
   Expect(tkBegin, '{');
+  tagMark := CTagEnterBlock;
   scopeMark := SymCount;
   blockNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
@@ -9168,6 +9245,7 @@ begin
     end;
   end;
   Expect(tkEnd, '}');
+  CTagLeaveBlock(tagMark);
   { last statement decides the value: an expression yields it; a structural
     statement makes the whole thing void — push it into the block too. }
   if CNodeIsStatementKind(prevStmt) then
@@ -9189,7 +9267,7 @@ begin
     teardown as ParseCBlockAST). AST nodes hold sym INDICES, which stay valid, so
     a value expression referencing a block local still lowers correctly. }
   for si := SymCount - 1 downto scopeMark do
-    if (Syms[si].Kind = skLocal) and (Syms[si].Name <> '') then
+    if ((Syms[si].Kind = skLocal) or (Syms[si].Kind = skConst)) and (Syms[si].Name <> '') then
     begin
       hh := SymNameFoldHash(Syms[si].Name);
       if SymHashHead[hh] = si then
@@ -16373,7 +16451,7 @@ begin
       Next;  { consume struct/union keyword }
       if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkBegin) then
       begin
-        subci := FindOrForwardCTag(CurTok.SVal) - REC_UCLASS_BASE;  { inline-tagged }
+        subci := CDefineCTag(CurTok.SVal) - REC_UCLASS_BASE;  { inline-tagged }
         Next;
       end
       else if UClsCount < MAX_UCLASS - 1 then
@@ -17086,7 +17164,7 @@ begin
         (or reuse a forward) record for that tag BEFORE parsing the body, so a
         self-reference `struct Tag *next;` inside resolves to this same record. }
       if hasTag then
-        ci := FindOrForwardCTag(tagName) - REC_UCLASS_BASE
+        ci := CDefineCTag(tagName) - REC_UCLASS_BASE
       else
         ci := AddUClass(0, 0);
       UClsIsRecord[ci] := True;
@@ -17414,7 +17492,7 @@ begin
     ci := -1;
     if hasTag then
     begin
-      tagRec := FindOrForwardCTag(tagName);          { may be REC_NONE if table full }
+      tagRec := CDefineCTag(tagName);               { may be REC_NONE if table full }
       if tagRec >= REC_UCLASS_BASE then ci := tagRec - REC_UCLASS_BASE;
     end
     else if UClsCount < MAX_UCLASS - 1 then
@@ -17453,7 +17531,7 @@ begin
     end;
   end
   else if hasTag then
-    FindOrForwardCTag(tagName);  { forward `struct Tag;` }
+    CDefineCTag(tagName);  { forward `struct Tag;` -- in a block, declares a NEW incomplete type }
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
   Eat(tkSemicolon);
 end;

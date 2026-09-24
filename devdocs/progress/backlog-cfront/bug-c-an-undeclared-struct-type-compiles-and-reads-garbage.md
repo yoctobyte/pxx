@@ -505,3 +505,15 @@ frankS's grep hazard is worth carrying beside it: `git show <tree>:file | grep
 'kept this struct/union OPAQUE'` answers 0 for a tree that HAS the diagnostic,
 because the message is assembled at runtime from two literals — a source grep for
 a runtime-assembled string is a search whose answer is always no.
+
+## 2026-09-24 (frankS): checked against the tag-scoping fix, and it is a different mechanism
+
+The block-scoping fix for bug-c-a-struct-tag-is-not-scoped-to-its-block landed
+and leaves this ticket's remaining half exactly as it was. That fix changes
+WHICH record a tag names. This ticket is about what happens when the record
+named has no layout: an object definition or a `sizeof` is given size 0 instead
+of being refused. They share the tag table and nothing else. Note one new way
+in: a tag defined in a function body is now invisible after the function's
+closing brace, so a later `struct T x;` at file scope names a fresh forward and
+lands on exactly this ticket's silent size 0. That is correct C, since gcc
+refuses it too.

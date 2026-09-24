@@ -5400,6 +5400,18 @@ var
   CTagChars   : array[0..524287] of Char;
   CTagCharLen : Integer;
   CTagHash    : array[0..16383] of Integer;  { name->idx+1 (0=empty), O(1) tag lookup }
+  { Block scope for tags (C11 6.2.1p4): a tag DEFINED inside a block shadows an
+    outer binding of the same name until that block's closing brace. CTagDepth is
+    the block depth an entry is bound at (0 = file scope; plain references that
+    create a forward stay at 0). Each shadowing definition pushes the binding it
+    replaced onto the undo log; leaving the block pops back to its mark. A rec of
+    -1 in CTagRec means "bound only in a block that has closed" -- not visible. }
+  CTagDepth     : array[0..MAX_CTYPEDEF-1] of Integer;
+  CBlockDepth   : Integer;
+  CTagUndoIdx   : array[0..4095] of Integer;
+  CTagUndoRec   : array[0..4095] of Integer;
+  CTagUndoDepth : array[0..4095] of Integer;
+  CTagUndoCount : Integer;
   CTypedefChars : array[0..524287] of Char;
   CTypedefCharLen : Integer;
   { C11 _Generic type-descriptor pool (see cgXxx consts). Index 0 is reserved

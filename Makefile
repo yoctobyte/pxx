@@ -16749,6 +16749,13 @@ test-core: $(COMPILER)
 	done
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_c_float_to_int_implicit.c $(TESTTMP)/cf2i_xt
 	tools/expect_same.sh xtensa/cf2i "$$(tools/run_target.sh xtensa $(TESTTMP)/cf2i_xt)" "$$(cat test/test_c_float_to_int_implicit.expected)"
+	@# A struct/union tag DEFINED in a block shadows the outer tag until '}'.
+	@# The tag table was global, so the inner body hit the redefinition guard and
+	@# its members resolved against the OUTER layout (refused, or read at the
+	@# outer offset; sizeof answered the outer size). Frontend-only, so one
+	@# target is the row. .expected is gcc's. The pinned compiler refuses it.
+	./$(COMPILER) test/test_c_tag_block_scope.c $(TESTTMP)/ctagscope
+	tools/expect_same.sh ctagscope "$$($(TESTTMP)/ctagscope)" "$$(cat test/test_c_tag_block_scope.expected)"
 	# THE OTHER HALF OF THE RISCV32 THIRD, and it is not about aggregates: an
 	# 8-byte-ALIGNED variadic slot starts on an EVEN register, for a plain
 	# `double` and an `int64` as much as for a record. riscv32 applied that

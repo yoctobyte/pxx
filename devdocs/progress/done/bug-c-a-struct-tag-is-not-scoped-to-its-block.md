@@ -3,12 +3,12 @@ slug: bug-c-a-struct-tag-is-not-scoped-to-its-block
 track: C
 type: bug
 prio: 50
-status: open
+status: done
 owner: ""
 created: 2026-09-24
 found-by: frank (frankb-8e, running the shard the range attribution said was already green)
 blocked-by: []
-summary: "MECHANISM: a C struct/union TAG is registered globally rather than in the scope that declares it, so an inner `struct T {...}` does not SHADOW an outer `struct T` -- it collides with it, and every member reference in the inner scope is resolved against the OUTER type. Standard C scopes a tag to its enclosing block (C11 6.2.1p7); gcc compiles all rows below. TWO OBSERVABLE CLASSES FROM ONE CAUSE, and the second is silent: where the inner type's member NAME is absent from the outer type the access is REFUSED (`no member named 'y' in this struct/union`), and where the name is PRESENT it resolves at the OUTER type's offset -- so a member that happens to line up gives a plausible right answer and one that does not gives a plausible wrong one. `sizeof(struct T)` inside the inner scope answers the OUTER type's size with no diagnostic at all (4 against gcc's 8). THIS IS NOT A REGRESSION AND MUST NOT BE FILED AS ONE: it is what reddened test-c-conformance#shard4/6 on x86-64 and on all four cross targets, but the refusal arrived from the member-refusal fix that correctly replaced a silent offset-0 read, and the corpus test it reddens (00053.c) was PASSING FOR THE WRONG REASON -- both its structs have a single member at offset 0, so the mis-resolved `s2.y` read `s1.x`'s slot and `s1.x - s2.y` came out 0. A correct fix unmasked an older bug; the five red rows are ONE cause, identical on every target because a frontend refusal is target-independent. THE CONDITION THAT SPRINGS IT is any tag reused in a nested scope -- a block-local struct in a function that also has a file-scope tag of the same name, which is ordinary in C where short tags like T, node, entry or pair recur. Reuse with an IDENTICAL member set is invisible, which is why this survived: the shapes that work and the shapes that break differ only in whether the two definitions agree. WHAT WOULD RETIRE IT: 00053.c passing unskipped on x86-64 and all four cross targets, plus the three-row control -- the same-tag-same-member row still answering 1 2 (it works today and must keep working), `sizeof` in the inner scope answering the INNER size, and `struct E { };` still answering 0 and NOT being refused, which is a legal GNU extension and the row most likely to be left out. RELATED: the silent `sizeof` half is a second independent instance of the size path having no error channel -- see [[bug-c-an-undeclared-struct-type-compiles-and-reads-garbage]], where RecSize (symtab.inc:3374) returns a number for every input and 0 is simultaneously correct for an empty struct and wrong for a dropped layout. Two unrelated causes now reach a wrong size silently, which makes the missing error channel the shared defect rather than either cause."
+summary: "FIXED 2026-09-24 (frankS). MECHANISM: the C tag table was one global namespace, so a struct/union tag DEFINED in a block did not shadow an outer tag of the same name -- the inner body reached the same-scope redefinition guard and was skipped, and every member reference and sizeof resolved against the OUTER layout. Now each tag binding records the block depth it was made at, and a DEFINITION (a body, or a bare `struct T;`) in a block whose visible binding is from an enclosing scope, or from none, binds a fresh record for that block; the closing brace restores the outer binding from an undo log (CDefineCTag / CTagEnterBlock / CTagLeaveBlock in cparser.inc). References (`struct T x`, `struct T *p`) see whichever binding is visible, and a forward created by a plain reference stays file-scope as before. The same-scope redefinition guard, which exists to prevent a documented SIGSEGV, still fires, because a same-depth definition returns the existing record. Guard: test/test_c_tag_block_scope.c (13 rows against gcc, including the same-members control, inner and after-close sizeof, the union spelling, `struct E { }` = 0, a block-local forward, a self-reference, a typedef spelling and a file-scope duplicate); the pinned compiler refuses it. Enum tags need nothing (no record is bound); block-scoped ENUMERATORS leaked past the brace and are fixed in the same change (the block unhook now splices skConst too). Does NOT touch the declaration-site half of bug-c-an-undeclared-struct-type-compiles-and-reads-garbage -- that is a missing refusal on objects of incomplete type, a different mechanism that shares only this table.""
 ---
 
 # A C struct tag is not scoped to its block
@@ -185,3 +185,22 @@ and a local patch here is not.
 has fields must still take the guard** (keep the first definition, no crash, no
 second record). That row is the guard's own positive control and is not in the
 three listed above.
+
+## 2026-09-24 (frankS): fixed
+
+Block depth on each tag binding, plus an undo log that the block's closing brace
+unwinds. A definition that would shadow gets a fresh record; one at the same
+depth gets the existing record, so the redefinition guard keeps working. A bare
+`struct N;` in a block reaches the TYPE-POSITION path, not the bare-declaration
+one, so both paths route `tag {` and `tag ;` through CDefineCTag. That was found
+by the fixture's forward row, which failed until it was.
+
+False-positive census, compile rc only, pinned binary against the new one, for
+all 328 .c files under library_candidates/zlib, lib/crtl/src and
+c-testsuite/single-exec: exactly one change, 00053.c 1 -> 0.
+Conformance on the 220 files of c-testsuite single-exec: 220/220 on x86-64, i386, arm32, aarch64 and riscv32 with the tag half; x86-64 and i386 re-run at the final binary (sha256 d7354fb5f624...) with the enum half, still 220/220. gate quick GREEN.
+
+**The sibling spelling was ENUMERATORS, not enum tags.** An enum TAG binds no record, so it needs nothing. But a block's enumerators are skConst symbols, and the block-exit unhook only spliced skLocal, so an inner `enum { A = 40 }` went on shadowing the outer A after the brace. pxx printed 40 where gcc prints 1. The unhook now takes skConst too; the only skConst the C frontend creates is an enumerator (RegisterCMacroConsts runs from the Pascal cimport, never inside a C block). The fixture carries that row LAST.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
