@@ -8,7 +8,7 @@ owner: ""
 found: 2026-08-30
 found-by: claude-A
 blocked-by: []
-summary: "MECHANISM, AND IT IS WHY THIS IS A FEATURE AND NOT A BUG: on the bare ESP profile `builtin` is withheld by design (`(not TargetIsEspClass)` on 22 arms of `needsBuiltin`), and making it compile is not a repair with an endpoint -- each guard you add exposes the next, and THE FAILURE CLASS CHANGES after the first step, from undefined-declaration to link-failure on float kernels. That is what makes the job unsizable from the outside: a static census of declarations answers confidently about the first class and is SILENT about the second, so do not build one and quote it. Every step is a design call about what a size-constrained profile offers. PRIO 20 BECAUSE THE RANKING TEST IS `root-cause-over-microfix`'s tickets-closed-per-change AND THE ONE NAMED CONSUMER HAS ANOTHER ROUTE: a bare NilPy program stops at step 0 because NilPy's runtime is built on `builtin`, but the SAME program runs today on the IDF profile (`examples/esp32/nilpy-c3`), so this is the bare route to Python-on-ESP and not the only one -- which is why it is deliberately NOT wired as a blocker of the NilPy cross-target walls. RAISE IT if a consumer appears with no IDF route. WHAT A SEAT ARRIVING HERE SHOULD KNOW BEFORE ANYTHING ELSE (2026-09-24): the gap a bare program actually MEETS is not this cascade, it is `Str` -- the language statement, no `uses` clause involved -- refused for integer AND float on all four ESP targets by two purpose-built diagnostics in `pasparser_stmt.inc`. Its sibling `WriteLn` warns-and-compiles instead, and THAT ASYMMETRY IS CORRECT, not a normalise-don't-special-case defect: `WriteLn` has no result so dropping it loses nothing observable, while `Str` YIELDS A VALUE the program ships or compares, so warn-and-drop there would be a silent wrong answer. The bounded job in the area is therefore the DIAGNOSTIC (both `Str` errors name an internal routine and offer no remedy, where the `WriteLn` warning names the profile and points at the docs) plus `docs/targets/esp32.md`, which documents the console no-op and is silent about `Str`. COSTS, esp32c3, marginal `code=` bytes over an AnsiString baseline, so a later re-run can tell a regression from a different denominator: Str(integer) +23,724, Variants +35,652, Str(double) +89,116 -- float formatting is the MOST expensive group, which inverts the ordering this ticket's own earlier `writeln`-is-a-no-op argument implied. TWO INSTRUMENT TRAPS measured here: `procs` is not a cost (bare WriteLn(d) is procs=121, code=368B -- pre- vs post-DCE), and differences of `codeseg` come out as exact multiples of 4096 because it carries segment padding, so quote `code=`. WHAT WOULD RETIRE THIS: a bare NilPy program building AND RUNNING on a device, since on this profile `ok:` from the compiler is not a result -- espassert.pas's own lesson."
+summary: "MECHANISM, AND IT IS WHY THIS IS A FEATURE AND NOT A BUG: on the bare ESP profile `builtin` is withheld by design (`(not TargetIsEspClass)` on 22 arms of `needsBuiltin`), and making it compile is not a repair with an endpoint -- each guard you add exposes the next, and THE FAILURE CLASS CHANGES after the first step, from undefined-declaration to link-failure on float kernels. That is what makes the job unsizable from the outside: a static census of declarations answers confidently about the first class and is SILENT about the second, so do not build one and quote it. Every step is a design call about what a size-constrained profile offers. PRIO 20 BECAUSE THE RANKING TEST IS `root-cause-over-microfix`'s tickets-closed-per-change AND THE ONE NAMED CONSUMER HAS ANOTHER ROUTE: a bare NilPy program stops at step 0 because NilPy's runtime is built on `builtin`, but the SAME program runs today on the IDF profile (`examples/esp32/nilpy-c3`), so this is the bare route to Python-on-ESP and not the only one -- which is why it is deliberately NOT wired as a blocker of the NilPy cross-target walls. RAISE IT if a consumer appears with no IDF route. WHAT A SEAT ARRIVING HERE SHOULD KNOW BEFORE ANYTHING ELSE, AND THE NON-FLOAT HALF OF IT IS NOW LANDED (2026-09-24): the gap a bare program actually MEETS is not this cascade, it is `Str` -- the language statement, no `uses` clause involved. IT WAS refused for integer AND float on all four ESP targets; the NON-FLOAT half was fixed the same day by [[feature-a-non-float-str-on-the-bare-esp-profile]] (five formatters moved to `compiler/builtin/strfmt.pas`, pulled directly on bare, booted on both chips against the x86-64 oracle), so THE STANDING GAP IS THE FLOAT ARM ONLY and its refusal is deliberate, not an oversight: `StrFloat` needs `PxxSciDigits17` and therefore softfloat, which bare skips so a float-free MCU program does not pay ~54-64 KB of flash. WHAT THAT LEAVES FOR THIS CASCADE IS THE MECHANISM AND NOT A ROW, stated so it does not decay the next time a slice lands: bare withholds `builtin` WHOLESALE, so anything living in that unit and NOT separately extracted is unreachable here, and the extractable set is exactly the bodies whose closure contains no float, Variant, syscall or filesystem -- `Val` is the next obvious member and was not touched. Its sibling `WriteLn` warns-and-compiles instead, and THAT ASYMMETRY IS CORRECT, not a normalise-don't-special-case defect: `WriteLn` has no result so dropping it loses nothing observable, while `Str` YIELDS A VALUE the program ships or compares, so warn-and-drop there would be a silent wrong answer. COSTS, esp32c3, marginal `code=` bytes over an AnsiString baseline, so a later re-run can tell a regression from a different denominator: Str(integer) +23,724, Variants +35,652, Str(double) +89,116 -- float formatting is the MOST expensive group, which inverts the ordering this ticket's own earlier `writeln`-is-a-no-op argument implied. TWO INSTRUMENT TRAPS measured here: `procs` is not a cost (bare WriteLn(d) is procs=121, code=368B -- pre- vs post-DCE), and differences of `codeseg` come out as exact multiples of 4096 because it carries segment padding, so quote `code=`. WHAT WOULD RETIRE THIS: a bare NilPy program building AND RUNNING on a device, since on this profile `ok:` from the compiler is not a result -- espassert.pas's own lesson."
 ---
 
 # Make `uses builtin;` compile on a bare ESP boot
@@ -318,3 +318,33 @@ routines out of `builtin`; this ticket is about making the whole unit compile,
 Variants included. Read the ranking test as satisfied **for the slice only** --
 the cascade still has no named consumer, and the Variant half still has none at
 all.
+
+## 2026-09-24 (frank, frankb-8e) — the non-float `Str` slice LANDED, so three rows above are now historical
+
+`Str` for every non-float type works on bare, all four ESP targets, booted on
+esp32c3 and esp32s3 with UART bytes equal to the x86-64 oracle. See
+[[feature-a-non-float-str-on-the-bare-esp-profile]] for the build, the controls
+and the containment numbers.
+
+**Which rows above are now historical rather than wrong.** They were correct when
+measured and are kept with their date, because a cost table whose population is
+undated is unquotable either way:
+
+- the cost table's `str_int | REFUSED` row: **that program compiles now.** Its
+  IDF column (57,672) and its marginal figure (+23,724) were measurements of the
+  IDF build and are unaffected. `variant` and `str_flt` are still REFUSED.
+- `pascal26:1: error: Str: StrInt not loaded` — still reachable, but only by a
+  compiler that predates the split. It is no longer what a bare program meets.
+- the "diagnostic plus docs" bounded job: `docs/targets/esp32.md` now documents
+  `Str` on this profile, and the integer diagnostic no longer fires. **What is
+  left of that job is the FLOAT diagnostic**, which still names an internal
+  routine (`StrFloat`) and offers no remedy, where the remedy is real and
+  one line: `uses softfloat;`.
+
+**What this does NOT retire, and the reason is the cascade's own shape.** Bare
+withholds `builtin` wholesale, so extracting one group does not open the next —
+`Val`, Variant and the float formatters are each still unreachable, and each is a
+separate decision about what a size-constrained profile offers. The slice met
+this ticket's ranking test *for its own slice only*, exactly as that test was
+written. **`Val` is the next obvious member** (its closure is string-and-integer
+like the five that moved) and nobody has looked at it.

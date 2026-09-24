@@ -36356,6 +36356,35 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_atomic.pas > $(TESTTMP)/test_esp_bare_atomic.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare_atomic.oracle $(TESTTMP)/test_esp_bare_atomic.s3; then echo "esp32s3 atomics ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 atomics MISMATCH"; exit 1; fi; fi
+	# feature-a-non-float-str-on-the-bare-esp-profile: `Str` was refused at
+	# COMPILE time on this profile for EVERY type, integers included, because bare
+	# links no `builtin` -- so the profile's only debugging instrument could report
+	# a constant and never a value. The five non-float formatters now live in
+	# compiler/builtin/strfmt.pas, which both `builtin` and the bare pull share, so
+	# there is one body and not a twin spelling.
+	#
+	# A RUNTIME row, not a compile row, and that is the whole design: the failure
+	# this replaces was a compile error, so "it compiles now" is the fixture that
+	# suggests itself -- and it would pass over a Str that returns ''. espassert.pas
+	# was bitten by exactly that (compiled on both chips, printed nothing). The
+	# values are picked so a correct answer differs from '' AND from every other
+	# row: Low(Int64) once produced just "-", and a QWord >= 2^63 through the
+	# SIGNED formatter prints a minus sign, which is the only thing StrQWord is for.
+	#
+	# Str of a FLOAT stays refused here on purpose (StrFloat needs softfloat); that
+	# boundary cannot be a row in this file, because a refused compile has no UART.
+	@./$(COMPILER) test/test_esp_bare_str.pas $(TESTTMP)/test_esp_bare_str_oracle >/dev/null && $(TESTTMP)/test_esp_bare_str_oracle > $(TESTTMP)/test_esp_bare_str.oracle
+	@test -s $(TESTTMP)/test_esp_bare_str.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 bare-Str run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_str.pas > $(TESTTMP)/test_esp_bare_str.c3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_str.oracle $(TESTTMP)/test_esp_bare_str.c3; then echo "esp32c3 bare Str ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 bare-Str MISMATCH"; exit 1; fi; fi
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 bare-Str run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_str.pas > $(TESTTMP)/test_esp_bare_str.s3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_str.oracle $(TESTTMP)/test_esp_bare_str.s3; then echo "esp32s3 (Call0) bare Str ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 bare-Str MISMATCH"; exit 1; fi; fi
 	# feature-s-a-csr-write-is-not-expressible-...: numeric csrw/csrr + mret, and
 	# the first RAW TRAP VECTOR INSTALL in the tree -- mtvec ($305) is written,
 	# read straight back, and two `ecall`s are taken through the handler. TWO,

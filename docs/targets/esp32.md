@@ -69,32 +69,46 @@ Notes for the bare profile:
 
 - `writeln`/`readln` are intentionally no-ops — there is no console. Output
   goes through your own UART writes, as above.
-- **`Str` is not available, for any type — so formatting a number is the one
-  thing you have to write yourself.** This profile links no `builtin`, which is
-  where the formatters live, so `Str(n, s)` is refused at compile time for
-  integers as much as for floats:
-
-  ```
-  pascal26:5: error: Str: StrInt not loaded
-  ```
-
-  `sysutils.IntToStr` is not a way round it either — `sysutils` is not
-  reachable here. What *does* work is a digit loop over the string machinery
-  bare already has, which is everything the snippet below needs:
+- **`Str` works for every type except floats.** The five non-float formatters
+  live in `compiler/builtin/strfmt.pas`, which this profile pulls on its own when
+  it sees `Str(`, so integers, unsigned, `Char`, `Boolean`, strings and field
+  widths all format here:
 
   ```pascal
-  s := '';
-  if n = 0 then s := '0';
-  while n > 0 do begin s := Chr(Ord('0') + (n mod 10)) + s; n := n div 10; end;
+  var s: AnsiString; n: Int64;
+  begin
+    n := -4095;  Str(n, s);     { '-4095' }
+    n := 42;     Str(n:6, s);   { '    42' — padded on the left }
+  end.
   ```
 
-  Worth knowing because it bites where you least want it: an `Assert` message
-  on this profile can only contain string literals.
-  `Assert(n > 99, 'count too low')` compiles and prints; the same assertion
-  carrying the value that failed does not. Tracked as
-  `feature-a-non-float-str-on-the-bare-esp-profile` — the non-float formatters
-  are pure string-and-integer code and could be offered here; float formatting
-  is the part that genuinely cannot be, because it pulls softfloat.
+  Verified by booting the same source on esp32c3 and esp32s3 under Espressif
+  QEMU and diffing the UART bytes against the x86-64 run
+  (`test/test_esp_bare_str.pas`), so this is output equality and not just a
+  successful compile.
+
+  **`Str` of a float is still refused, deliberately**, and the diagnostic says
+  which arm is missing:
+
+  ```
+  pascal26:3: error: Str: StrFloat not loaded
+  ```
+
+  Float formatting needs `PxxSciDigits17` and therefore the whole softfloat
+  library, which this profile skips so a program that never touches a float does
+  not pay ~54–64 KB of flash for the option. Add `uses softfloat;` if you want
+  it — the same unit the [Floating point](#floating-point) section describes.
+
+  An `Assert` message can now carry the value that failed, which is what this was
+  really about on a board with no debugger:
+
+  ```pascal
+  Str(n, s);
+  Assert(n > 99, 'count too low: ' + s);   { prints: count too low: 3 (f.pas, line 5). }
+  ```
+
+  `sysutils.IntToStr` is still not reachable here — `sysutils` is not available
+  on this profile — so `Str` is the route.
 - **The heap is a fixed static arena, 64 KiB by default, and it is the single
   largest thing in a bare image's SRAM.** Size it with one of
   `-dPXX_ESP_HEAP_8K`, `-dPXX_ESP_HEAP_16K`, `-dPXX_ESP_HEAP_32K`,

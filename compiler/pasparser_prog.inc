@@ -1093,6 +1093,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     usesMath, needsMath: Boolean;
     needsSoftFloat, needsWasiFile: Boolean;
     needsEspAssert: Boolean;
+    needsStrFmt: Boolean;
     needsThreads: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
@@ -1189,6 +1190,7 @@ begin
   needsSoftFloat := False;
   needsWasiFile := False;
   needsEspAssert := False;
+  needsStrFmt := False;
   needsThreads := False;
   needsPromoInt := False;
   needsWide := False;
@@ -1797,12 +1799,50 @@ begin
     { The full `builtin` unit (Str/Val/Variant) uses frozen-string concat, which
       the ESP backends (xtensa/riscv32) cannot lower, so it is never pulled there
       — a program that genuinely needs Str/Val on ESP fails at the call site
-      instead of dragging in an uncompilable unit. }
+      instead of dragging in an uncompilable unit.
+
+      SCOPE OF THAT CLAIM, MEASURED 2026-09-24, because it reads as covering
+      every body in the unit and does not. The five NON-FLOAT Str formatters
+      have been split out to `strfmt` and they lower on both ESP backends: the
+      literal-plus-managed concats they actually perform (`' ' + r`,
+      `'-' + digits`, `Chr(...) + digits`), the indexed store `r[1] := c` and
+      the QWord digit loop all compile AND boot under Espressif qemu on esp32c3
+      and esp32s3, with UART bytes equal to the x86-64 oracle
+      (test/test_esp_bare_str.pas). So whatever this sentence is true of, it is
+      not true of those five, and it was the reason `Str` was refused for EVERY
+      type on bare rather than only for floats.
+
+      WHAT IS NOT MEASURED, and is why the sentence stays rather than being
+      rewritten: nobody has established that `uses builtin` as a WHOLE compiles
+      on bare. Variant and Val were not part of the split and were not tried.
+      Treat the claim as live for the rest of the unit and retired for the five.
+      feature-a-non-float-str-on-the-bare-esp-profile,
+      feature-bare-esp-supports-uses-builtin }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
+    { ...and the NON-FLOAT half of that on the bare ESP profile, which links no
+      `builtin` at all, so `Str` was refused for EVERY type there -- integers
+      included, not just floats. The five non-float formatters now live in
+      `strfmt`, which is bare-safe; `StrFloat` stays in `builtin` because it
+      needs PxxSciDigits17 and therefore softfloat, so a float Str on bare still
+      fails at the call site rather than dragging ~54-64 KB of flash in.
+
+      `str` ONLY, never `val`: Val's body is still in `builtin`, so pulling
+      strfmt for a Val-only program would cost a unit and resolve nothing.
+
+      A following '(' is REQUIRED, for the reason the `assert` scan below gives:
+      `str` is an extremely plausible variable name, and a user's own `Str` still
+      wins because the lowering tests FindProc/FindSym first -- so a false
+      positive costs a small unit and never a wrong binding.
+      feature-a-non-float-str-on-the-bare-esp-profile }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       CaseEqual(GetTokenStr(i), 'str') and
+       EspBareBoot and (not NoDefaultRtl) then
+      needsStrFmt := True;
     { `x.Equals(...)` / `x.GetHashCode` / `x.ToString` pulls the builtin unit:
       the TObject root methods' default bodies (__pxxTObject*) live there, and
       EnsureTObjectRootMethods only registers the rows when it can see the procs.
@@ -2326,7 +2366,7 @@ begin
     is the only reason this class is cheap to find. }
   if needsAnsiRuntime or needsBuiltin or needsTextfile or needsMath or
      needsThreads or needsWide or needsPromoInt or needsEntropy or
-     needsEspAssert then
+     needsEspAssert or needsStrFmt then
     needHeapUnit := True;
   if needHeapUnit then ParseUsesUnitAmbient('builtinheap');
   { …and the UTF-16 runtime on top of it, only when the token scan above found a
@@ -2366,6 +2406,15 @@ begin
     `/` is -- and no library unit calls the sys* family (only the compiler's own
     PxxEnvLoad and elfwriter do), so a miss through a unit is not reachable. }
   if needsWasiFile then ParseUsesUnitAmbient('wasibackend');
+  { BEFORE `builtin`, which `uses` it. Pulled for needsBuiltin as well as for
+    the bare flag, so the formatters are always a DIRECT program-level unit on
+    every target rather than reached transitively through builtin -- the parser's
+    Str lowering resolves them by FindProc, and I did not want the non-bare path
+    to depend on whether a used unit's interface re-exports. That is measurable
+    and it is measured (the containment control compiles every non-float Str arm
+    on x86-64 and compares against the pre-split binary), but making it
+    structural costs nothing and removes the question. }
+  if needsBuiltin or needsStrFmt then ParseUsesUnitAmbient('strfmt');
   if needsBuiltin then ParseUsesUnitAmbient('builtin');
   { …and the System-unit GENERIC types, on the same terms. Injected AFTER
     builtin so a program that needs both keeps the existing order. }
