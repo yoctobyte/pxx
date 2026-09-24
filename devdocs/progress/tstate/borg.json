@@ -16670,6 +16670,7 @@
     "a2904ffc79d0538df0ae470d8294a0550e0fc0b9",
     "e6e19a96e9717ea257468777bd7b6c81836bb72b"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy tools/expect_same.sh",
    "status": "timeout"
   }
