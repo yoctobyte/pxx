@@ -1,12 +1,12 @@
 ---
 track: N
-prio: 60
+prio: 70
 type: bug
 blocked-by: []
-summary: "The runtime closure bridge (PyBoundFnCallvnMaskBody in compiler/builtin/pyeval.pas) calls every lifted NilPy body through TBFn = function(a0..: Int64), i.e. one 64-bit word per slot, but the frontend declares the lifted body's slots at their REAL types — a Variant own-param is passed by address, which is a 4-byte word on a 32-bit target. So on i386/arm32/riscv32/xtensa, as soon as a body has two or more slots (own params plus captures), slot k is read from the wrong place, and the result is a crash or a wrong value. A body with exactly one slot works by accident, because a little-endian Int64 puts the pointer in the low word. x86-64 and aarch64 cannot see it. Reached by `add2 = lambda a, b: a + b; print(add2(2, 3))`: SIGSEGV on i386 and arm32 at HEAD 6eaabf48c. Also reached by corpus tests funcvalue, nonlocal_escaping_closure and lambda_container_result, and it is why they fail on the ESP32-S3."
+summary: "The runtime closure bridge (PyBoundFnCallvnMaskBody in compiler/builtin/pyeval.pas) calls every lifted NilPy body through TBFn = function(a0..: Int64): Variant, i.e. one 64-bit word per slot, but the frontend declares the lifted body's slots at their REAL types; a Variant own-param is a 4-byte address on a 32-bit target. Where the mismatch bites depends on how the target passes an Int64. On i386 (stack) and arm32 it bites from TWO slots: slot k is read from the wrong place (`lambda a, b: a + b` SIGSEGVs). On XTENSA it bites from ONE slot (measured; the likely reason, NOT yet confirmed by disassembly, is that an Int64 goes in an even-aligned register pair while the hidden Variant-result pointer already holds the first register): `lam = lambda x: x * 2; print(lam(5))` prints 0 on the ESP32-S3 under QEMU (15 for a def passed as a value, 42 for a zero-arg lambda). x86-64 and aarch64 cannot see it. This is the largest NilPy-on-ESP failure class: of the 2026-09-24 S3 board census (every 12th NilPy corpus file, 70 tests, CPython 3.14.4 oracle) it explains funcvalue, lambda_container_result, nonlocal_escaping_closure, sorted_key_dispatch (a `key=lambda` hangs) and min_max_key_in_a_variable."
 ---
 
-# A lifted closure with 2+ slots reads them at the wrong width on 32-bit targets
+# A lifted closure reads its slots at the wrong width on 32-bit targets (from 2 slots on i386/arm32, from 1 on xtensa)
 
 ## Repro (HEAD 6eaabf48c, compiler sha 4e32f1dde0ec)
 
@@ -35,7 +35,7 @@ The normalising fix is for the **lifter to declare every lifted slot as one 64-b
 
 ## Acceptance
 
-- The repro above prints `5` on i386, arm32, riscv32 and xtensa (QEMU esp32s3).
+- The repro above prints `5` on i386, arm32, riscv32 and xtensa (QEMU esp32s3), and `lambda x: x * 2` applied to 5 prints `10` on xtensa.
 - The three corpus tests above match CPython on i386.
 - A fixture with three own params plus one int capture plus one pointer capture, so that mixed widths are covered and the interesting slot is not first.
 
