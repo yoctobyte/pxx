@@ -3397,6 +3397,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_vagghd26 | diff -u test/test_nilpy_a_builtin_over_a_variant_list_releases_its_copy.expected -
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_builtin_over_a_variant_list_releases_its_copy.npy $(TESTTMP)/test_nilpy_vaggc26
 	tools/assert_no_leak.sh nilpy_variant_list_builtins_release 300 $(TESTTMP)/test_nilpy_vaggc26
+	@# print() of an int/float/container writes a conversion call's string, which
+	@# the write owns -- the same gap as Write(F(x)): 44 bytes per run on the S3.
+	@# The old codegen leaves live=900 here.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_print_of_a_converted_value_releases_its_string.npy $(TESTTMP)/test_nilpy_prconv26
+	$(TESTTMP)/test_nilpy_prconv26 | diff -u test/test_print_of_a_converted_value_releases_its_string.expected -
+	tools/assert_no_leak.sh nilpy_print_conversion_release 100 $(TESTTMP)/test_nilpy_prconv26
 	@# an ANNOTATED returned local keeps the def's class result. The values cannot
 	@# see it, so the row asserts the TYPE as a relation: b (annotated) and c
 	@# (annotated, from a nested def) must carry exactly what a (unannotated) does,
@@ -13158,6 +13164,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/test_dfro26
 	tools/expect_same.sh test_dfro26 "$$($(TESTTMP)/test_dfro26 | tail -n 2)" "$$(printf 'b=4 b0=n0 ib=4 ibsum=110\nDYNFRESHOPERAND OK')"
 	tools/assert_no_leak.sh dynarray_fresh_operand 50 $(TESTTMP)/test_dfro26
+	@# Write(F(x)) with F returning an AnsiString: the write owns the result and
+	@# released only a concat, so every call leaked a block on every backend. The
+	@# old codegen leaves live=506 here; the output diff passes either way.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_write_of_a_string_function_result_releases_it.pas $(TESTTMP)/test_wsfr26
+	$(TESTTMP)/test_wsfr26 | diff -u test/test_write_of_a_string_function_result_releases_it.expected -
+	tools/assert_no_leak.sh write_string_call_result 100 $(TESTTMP)/test_wsfr26
 	@# ...and the same ownership gap one call-shape over: a FRESH dyn-array result
 	@# passed to an OPEN-ARRAY param. The callee gets (data pointer, high) -- a raw
 	@# pointer -- and a dyn-array source already has the [len][data] layout, so it

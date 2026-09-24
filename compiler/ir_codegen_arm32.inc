@@ -4799,8 +4799,7 @@ begin
               if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
               EmitCallProc(procIdx);
               EmitI32($E8BD0003);                  { pop {r0, r1} handle }
-              if (IRKind[valNode] = IR_BINOP) and
-                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              if IRNodeOwnsManagedStr(valNode) then  { owned: concat OR fresh call result, see x86-64 IR_WRITE }
                 EmitStrDecRefArm32;
             end
             else
@@ -4816,8 +4815,7 @@ begin
               EmitI32($E3A07004);                  { mov r7, #4 }
               EmitI32($EF000000);                  { svc #0 }
               EmitI32($E8BD0001);                  { pop {r0} handle }
-              if (IRKind[valNode] = IR_BINOP) and
-                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              if IRNodeOwnsManagedStr(valNode) then  { owned: concat OR fresh call result, see x86-64 IR_WRITE }
                 EmitStrDecRefArm32;
               Patch32(j, $0A000000 or ((((CodeLen - j) div 4) - 2) and $00ffffff));
             end;

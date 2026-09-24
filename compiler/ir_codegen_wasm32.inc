@@ -5213,7 +5213,15 @@ begin
 
   if tk = tyChar then hp := WasmWriteHelper('PXXWriteCharW')
   else if tk = tyBoolean then hp := WasmWriteHelper('PXXWriteBoolW')
-  else if tk = tyAnsiString then hp := WasmWriteHelper('PXXWriteStrMW')
+  else if tk = tyAnsiString then
+  begin
+    { An OWNED handle (concat, fresh call result) is released by the write, or
+      every print of one leaks a block -- see x86-64 IR_WRITE. }
+    if IRNodeOwnsManagedStr(valNode) then
+      hp := WasmWriteHelper('PXXWriteStrMWOwned')
+    else
+      hp := WasmWriteHelper('PXXWriteStrMW');
+  end
   { THE ONE HELPER CHOICE ON THIS BACKEND. The two differ only in the prefix
     they read — PXXWriteFrozenW takes a machine word and writes from +8,
     PXXWriteFrozenBW takes one byte and writes from +1 — and the caller knows

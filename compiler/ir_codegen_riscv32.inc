@@ -3827,8 +3827,13 @@ begin
             begin
               IREmitNodeRISCV32(valNode);              { a0 = handle }
               EmitLoadImmRISCV32(reg_a1, j);
-              procIdx := FindProc('PXXWriteStrMW');
-              if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
+              { An OWNED handle (concat, fresh call result) is released by the
+                write, or every print of one leaks a block -- see x86-64 IR_WRITE. }
+              if IRNodeOwnsManagedStr(valNode) then
+                procIdx := FindProc('PXXWriteStrMWOwned')
+              else
+                procIdx := FindProc('PXXWriteStrMW');
+              if procIdx < 0 then Error('compiler error: PXXWriteStrMW[Owned] not found');
               EmitCallProc(procIdx);
             end
             else if TypeIsFrozenString(tk) then

@@ -1,0 +1,22 @@
+# print() writes an int, float or container through a conversion call
+# (PXXPromoToStr, pystr_of, the repr builders) whose string the write owns.
+# The write used to release only a concat, so every one of these leaked a
+# block per call -- 44 bytes per run on an ESP32-S3. Run under
+# -dPXX_ALLOC_CENSUS with a leak bound in the Makefile; one line per print,
+# so the census lines on stderr start a line (assert_no_leak reads ^pxx-census).
+def pint(k):
+    total = 0
+    total += k
+    print(total)
+
+def pflt(k):
+    print(k * 1.5)
+
+def plst(xs):
+    print(xs)
+
+ys = [1, 2]
+for k in range(300):
+    pint(k % 7)
+    pflt(k % 5)
+    plst(ys)

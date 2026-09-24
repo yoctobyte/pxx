@@ -5518,8 +5518,7 @@ begin
               EmitCallProc(procIdx);
               EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
               EmitB($58);                                { pop eax (handle) }
-              if (IRKind[valNode] = IR_BINOP) and
-                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              if IRNodeOwnsManagedStr(valNode) then  { owned: concat OR fresh call result, see x86-64 IR_WRITE }
               begin
                 EmitB($50);                              { push eax (arg0) }
                 procIdx := FindProc('PXXStrDecRef');
@@ -5542,8 +5541,7 @@ begin
               EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
               EmitB($CD); EmitB($80);                      { int 0x80 }
               EmitB($58);                                  { pop eax (handle) }
-              if (IRKind[valNode] = IR_BINOP) and
-                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              if IRNodeOwnsManagedStr(valNode) then  { owned: concat OR fresh call result, see x86-64 IR_WRITE }
               begin
                 EmitB($50);                                { push eax (arg0) }
                 procIdx := FindProc('PXXStrDecRef');

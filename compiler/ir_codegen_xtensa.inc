@@ -4276,7 +4276,12 @@ begin
             begin
               IREmitNodeXtensa(valNode);               { a2 = handle }
               EmitLoadConstXtensa(reg_xtensa_a3, j);
-              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteStrMW'), 2);
+              { An OWNED handle (concat, fresh call result) is released by the
+                write, or every print of one leaks a block -- see x86-64 IR_WRITE. }
+              if IRNodeOwnsManagedStr(valNode) then
+                EmitXtensaHelperCall(XtensaHelperProc('PXXWriteStrMWOwned'), 2)
+              else
+                EmitXtensaHelperCall(XtensaHelperProc('PXXWriteStrMW'), 2);
             end
             else if TypeIsFrozenString(tk) then
             begin

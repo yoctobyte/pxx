@@ -10649,7 +10649,13 @@ begin
           EmitB($48); EmitB($8B); EmitB($50); EmitB($F8); { mov rdx, [rax-8] }
           MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
           EmitB($58);                                     { restore managed expression }
-          if (IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+          { An OWNED handle -- a concat, or any fresh call result -- is this
+            write's to release. Listing IR_BINOP alone leaked one block per
+            `WriteLn(F(x))`, and NilPy's print lowers every promotable int,
+            float and container through such a call (PXXPromoToStr, pystr_of,
+            the repr builders), so every print of one leaked; the stores
+            already ask IRNodeOwnsManagedStr for exactly this. }
+          if IRNodeOwnsManagedStr(valNode) then
             IREmitCodeCall(AnsiStrReleaseAddr);
           if wid > 0 then
           begin
