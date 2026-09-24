@@ -90,3 +90,29 @@ re-diagnose before estimating it. The xtensa half stands exactly as the
 
 ## Log
 - 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b2bb1153cc.
+
+## 2026-09-24 (frankb-12) — re-measured at depth, both halves, both chips
+
+Asked whether the closure above was shallow (a Variant section storing only
+small ints would pass with the promoted path broken). It is not, and the
+deeper probes below hold on esp32c3 AND esp32s3, IDF profile, Espressif QEMU,
+HEAD compiler af40370a8a91:
+
+- **Pascal, every width band.** `test_promoint.pas` already boxes 30! (~2.65e32,
+  heap tier on every target) into a Variant, reads it back into a PromoInt and
+  does Variant arithmetic on it. A second probe added the band that exists ONLY
+  on 32-bit targets: 2^31..2^63 is inline on x86-64 but heap tier on xtensa and
+  riscv32 (`PXXPromoFromInt` spills outside +-2^31 when SizeOf(NativeInt) < 8).
+  2^40 and -2^40 in and out of a Variant, Variant +/*/> on it, 2^70 and 2^140
+  in an `array of Variant`, and the 2^31-1 / 2^31 edge: 14 lines,
+  byte-identical to x86-64 on both chips.
+- **NilPy, dynamically typed slots.** 2^70 and 2^40 through a mixed list
+  (`[n, 7, "s", m]`), a dict value, a tuple, an untyped def parameter and
+  return, a local rebound int -> str -> int (typed tyVariant, tk=22, on the ESP
+  target), `append` of 2^210, `sum`, `max`, `str`, `==`, unary minus: 15 lines,
+  output == CPython's own, one boot, no IDF error, via a scratch copy of
+  `examples/esp32/nilpy-c3` / `nilpy-s3` with `build.sh qemu-assert`.
+
+Coverage note: the 2^31..2^63 Variant band is exercised by nothing in the host
+tier, because it only reaches the heap arm on a 32-bit target. A fixture for it
+has to run cross (qemu-riscv32 or ESP) to be able to fail.
