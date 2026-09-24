@@ -392,9 +392,21 @@ correct program, and it is the row a fix should target.
 Neither predates nor is caused by the three-arm work: `CAttrAlignedValueOf` dates
 to `63a4a3fc01`, when aligned support landed.
 
-**For whoever fixes it: the row that must fail first is `sizeof == 8` for the
-argument-less spelling, not `sizeof == 0`** — and do not assert gcc's 16 without
-re-deriving it on the target you are building for.
+**CORRECTED BY THE SECTION BELOW — read that before using this sentence.** I
+wrote here that the row which must fail first is `sizeof == 8` and not
+`sizeof == 0`. **That is true of the same-declaration spelling only, and I had
+measured only that one.** frankb-8e measured the separate-declaration spelling,
+where the tree answers **0**, and both numbers are real: the same definition
+forks the SIZE as well as the refusal, depending on where the object is
+declared. A guard written to either number alone is blind to the other arm.
+
+The error is the quantifier, not the measurement: I measured one spelling and
+wrote a sentence about "the argument-less spelling", which reads as the
+construct. Left standing rather than silently rewritten, because the corrected
+form is only legible beside the claim it corrects.
+
+And do not assert gcc's 16 without re-deriving it on the target you are building
+for.
 
 ## 2026-09-24 (frank, frankb-8e) — frankS's retraction CONFIRMED, and the two of us measured different SPELLINGS, so both `sizeof` numbers are real
 
