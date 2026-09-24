@@ -124,7 +124,7 @@ the Pascal one.
 | --- | --- |
 | **Standing `.npy` suite** | Several hundred test programs in-tree, covering classes and dunder methods, variants, `str`/`bytes`/`list`/`set`/`tuple`/`dict` surfaces, lambdas and capture, optionals, file I/O, and exceptions reaching the RTL. |
 | **CPython as the oracle** | For `re`, `collections.Counter`, `dataclasses` field defaults and PEP 604 annotation unions, the expected output in the gate *is* CPython's own output for the same program. |
-| **`import sqlite3`** | Resolves the C header, links `libsqlite3.so.0` and calls it — real C interop from Python source, not a reimplementation. CRUD against a file-backed database is part of the gate. |
+| **`import sqlite3`** | Gives Python's `sqlite3` API (`connect`, `execute`, iterating rows) as PXX's own module layered over the system `libsqlite3.so.0`, so the database engine is SQLite itself, not a reimplementation. The module covers part of Python's API. With `--no-shims`, the same import reads `sqlite3.h` and calls the C API directly. CRUD against a file-backed database is part of the gate. |
 
 The claim here is narrower than for the C corpora: this is a standing suite plus
 a differential check against CPython on specific modules, not a conformance
