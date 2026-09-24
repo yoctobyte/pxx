@@ -1,6 +1,8 @@
 ---
 prio: 70
-track: T
+track: A
+summary: "FIXED: a stale assertion, not a compiler regression. edfcc2c0d4 reworded the thread-local target refusal to 'needs a per-thread block' when aarch64/arm32 gained a block; the riscv32 row still grepped the old 'is x86-64 only' text. riscv32 still degrades and warns. The row now greps the wording from TryAssignThreadVarStorage."
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 70 of 76 is `grep -q 'warning: __thread is x86-64 only' /tmp/ctls_rv.log || { echo "FAIL ctls: riscv32 degraded SILENTLY -- no warnin`. The job's own `src` (`test/c_thread_local_is_per_thread.c`, 5 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -34,3 +36,10 @@ FAIL ctls: riscv32 degraded SILENTLY -- no warning
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## 2026-09-24 (frankS): re-laned to A, fixed
+
+The edfcc2c0d4 author. The failing step was an OLD assertion that the refusal still
+happens; fixed against what the tree does now and checked by hand against the
+edfcc2c0d4 binary (ffae15b05785): both rows PASS.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

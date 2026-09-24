@@ -17273,11 +17273,11 @@ test-core: $(COMPILER)
 	@./$(COMPILER) --target=riscv32 --emit-obj $(TESTTMP)/ctls_scalar.c $(TESTTMP)/ctls_rv.o > $(TESTTMP)/ctls_rv.log 2>&1 || { echo "FAIL ctls: a degraded __thread stopped a riscv32 build; the four non-configuration refusals must stay warnings"; cat $(TESTTMP)/ctls_rv.log; exit 1; }
 	@# NOTE THE ASYMMETRY, matched against the built thing rather than assumed:
 	@# the ARCH and NOINSTALL reasons do NOT name a declaration (`why` is
-	@# spelling + ' is x86-64 only: ...'), while ARRAY, TYPE and AREAFULL append
+	@# spelling + ' needs a per-thread block ...'), while ARRAY, TYPE and AREAFULL append
 	@# Syms[idx].Name. That is honest -- on a cross target EVERY declaration
 	@# degrades for the same reason, so naming one of them would be arbitrary --
 	@# and it is why this pattern is not the `__thread <name>:' shape row 2 uses.
-	@grep -q 'warning: __thread is x86-64 only' $(TESTTMP)/ctls_rv.log || { echo "FAIL ctls: riscv32 degraded SILENTLY -- no warning"; exit 1; }
+	@grep -q 'warning: __thread needs a per-thread block' $(TESTTMP)/ctls_rv.log || { echo "FAIL ctls: riscv32 degraded SILENTLY -- no warning"; exit 1; }
 	@echo "test-core: a C __thread that cannot get a per-thread slot stops when the build flag is the cause and degrades-with-a-warning when the limit is ours, once per reason"
 	# A block-scope `static` must stay static when another storage class sits
 	# between it and the type: `static __thread int f;` compiled to an ORDINARY
@@ -18973,9 +18973,11 @@ test-core: $(COMPILER)
 	grep -q 'not allowed in a class or record body' $(TESTTMP)/tv_6.err
 	# ...and the target refusal, which is the one that must NOT become a silent
 	# shared global -- that is the whole complaint in the C sibling ticket.
+	# i386, not aarch64: aarch64 and arm32 gained a per-thread block on
+	# 2026-09-24 and compile this now (TargetHasTlsBlock); i386 has none yet.
 	printf 'program a; threadvar t: LongInt; begin t := 1; end.\n' > $(TESTTMP)/tv_arch.pas
-	! ./$(COMPILER) --target=aarch64 $(TESTTMP)/tv_arch.pas $(TESTTMP)/tv_7 >$(TESTTMP)/tv_7.err 2>&1
-	grep -q 'threadvar is x86-64 only' $(TESTTMP)/tv_7.err
+	! ./$(COMPILER) --target=i386 $(TESTTMP)/tv_arch.pas $(TESTTMP)/tv_7 >$(TESTTMP)/tv_7.err 2>&1
+	grep -q 'threadvar needs a per-thread block' $(TESTTMP)/tv_7.err
 	# feature-p-a-pascal-library-unit-does-not-parse — the four `exports`
 	# refusals. ONE FILE PER DIAGNOSTIC: a single source carrying all four
 	# mistakes reports the first and hides three behind it, which is how a
