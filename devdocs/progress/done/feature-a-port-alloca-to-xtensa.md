@@ -34,4 +34,4 @@ move too (movsp). That wants a design pass, not a same-session port.
 call0 row against x86-64 in test-xtensa.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 60c34618a.
