@@ -2696,6 +2696,43 @@ begin
   Result := head;
 end;
 
+{ Release the managed LOCALS a generator still holds when it runs to
+  EXHAUSTION. The step epilogue skips every persistent slot on purpose -- it is
+  shared by every yield-return, where the locals are the live state -- so on the
+  one return that really ends the generator nothing released them, and each
+  instance leaked what its locals held (one block per generator with a class
+  local, measured). Emitted on the fall-off path only, before the done flag, as
+  a PXXObjRelease call (the epilogue's own SXR_OBJ action) and a nil store, as
+  AST, so every target gets it with no new backend code. The slot copy is
+  left stale on purpose -- after done nothing reads it and SlFree releases no
+  slot. An EARLY teardown (a `break` out of the for-in, a dropped cursor) never
+  reaches this path; that half needs the per-proc slot map
+  bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells describes. }
+function SLReleaseLocalsAtDone: Integer;
+var i, head, tail, stmt, lit, a1, a2, a3, relProc: Integer;
+begin
+  head := -1; tail := -1;
+  relProc := FindProc('PXXObjRelease');
+  if relProc < 0 then begin Result := -1; Exit; end;
+  for i := CurGenScopeBase to SymCount - 1 do
+  begin
+    if SymGenSlot[i] < 0 then Continue;
+    if Syms[i].Kind <> skLocal then Continue;
+    if Syms[i].IsRef or Syms[i].IsArray then Continue;
+    if ScopeExitReleaseAction(i, a1, a2, a3) <> SXR_OBJ then Continue;
+    { the epilogue's own SXR_OBJ release, then nil so nothing else can
+      reach the freed object -- a class-typed assignment does not release
+      here, the NilPy store emits its own retain/release }
+    stmt := GenMakeCall6(relProc, tyPointer, GenMakeIdent(i, tyPointer), -1, -1, -1, -1, -1);
+    if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
+    else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
+    lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := 0; ASTTk[lit] := Ord(tyPointer);
+    stmt := GenMakeAssign(GenMakeIdent(i, Syms[i].TypeKind), lit);
+    ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail];
+  end;
+  Result := head;
+end;
+
 function SLNewSlotVar(tk: TTypeKind): Integer;
 begin
   Result := AllocVar('', tk);
@@ -2832,6 +2869,32 @@ begin
       begin
         SLRewriteLoopJumps(ASTChildLeft(node), contLbl, brkLbl);
         SLRewriteLoopJumps(ASTChildRight(node), contLbl, brkLbl);
+      end;
+  end;
+end;
+
+{ Route a plain `return`/`exit` of the generator body to the fall-off tail, so
+  it ends the generator by the one path that releases what the generator
+  holds (SLReleaseLocalsAtDone) and marks it done. As an AN_EXIT it left the
+  step function directly and leaked the locals and the last yielded value.
+  NOT descended into a try block: a goto out of a protected region is not
+  something this lowering promises, so a return there keeps its old path. }
+procedure SLRewriteReturns(node, doneLbl: Integer);
+begin
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_TRY_EXCEPT, AN_TRY_FINALLY: Exit;
+    AN_EXIT:
+      if ASTLeft[node] < 0 then
+      begin
+        ASTKind[node] := AN_GOTO;
+        ASTSOffset[node] := -1; ASTSLen[node] := 0;
+        ASTIVal[node] := doneLbl;
+      end;
+    else
+      begin
+        SLRewriteReturns(ASTChildLeft(node), doneLbl);
+        SLRewriteReturns(ASTChildRight(node), doneLbl);
       end;
   end;
 end;
@@ -3040,7 +3103,7 @@ end;
   value (caller derives ProcGenInstSize). }
 function BuildStacklessStep(bodyAST, procIdx: Integer): Integer;
 var selfSym, retSym, bodyLo, dispatch, dtail, restore: Integer;
-    setDone, setRes, k, stmt: Integer;
+    setDone, setRes, k, stmt, doneLbl, clearCur, lit: Integer;
 begin
   if (FindProc('SlGet') < 0) or (FindProc('SlSet') < 0) then
     Error('stackless generator: the slgen unit is not in scope (add `uses slgen;`)');
@@ -3076,6 +3139,8 @@ begin
       Error('stackless generator: record support needs slgen SlBlob/SlUnblob (update lib/rtl/slgen.pas in scope)');
 
   CurGenStateCtr := 1;                   { state 0 = first entry (falls through) }
+  doneLbl := NewSyntheticLabel;
+  SLRewriteReturns(bodyAST, doneLbl);
   bodyLo := SLLower(bodyAST, selfSym, retSym);
 
   { Dispatch: for each yield-state k, if state=k goto its resume label. }
@@ -3091,15 +3156,27 @@ begin
 
   restore := SLRestoreLocals(selfSym);
 
-  { Fall-off: mark exhausted, return False. }
+  { Fall-off: release what the generator holds, mark exhausted, return False.
+    The last yielded VARIANT still sits in the CURRENT region with the
+    instance's reference; the consumer took its own when it read it, so an int
+    stored through the managed variant path drops ours. }
+  clearCur := -1;
+  if CurGenElemIsVariant then
+  begin
+    lit := GenMakeIntLit(0);
+    clearCur := GenMakeSeq(GenMakeAssign(GenMakeVariantAt(selfSym, CurGenElemOff), lit), -1);
+  end;
   setDone := GenSlSetStmt(selfSym, SL_OFF_DONE, GenMakeIntLit(1));
   setRes  := GenMakeAssign(GenMakeIdent(retSym, tyBoolean), GenMakeBoolLit(0));
 
   Result := chainSeq(restore,
             chainSeq(dispatch,
             chainSeq(bodyLo,
+            GenMakeSeq(GenMakeLabel(doneLbl),
+            chainSeq(SLReleaseLocalsAtDone,
+            chainSeq(clearCur,
             GenMakeSeq(setDone,
-            GenMakeSeq(setRes, -1)))));
+            GenMakeSeq(setRes, -1))))))));
 end;
 
 { Assign a persistent instance slot to each declared param + body local of a

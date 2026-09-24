@@ -3383,6 +3383,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_fjforeign26 | diff -u test/test_nilpy_a_store_through_a_non_self_receiver_widens_the_field.expected -
 	./$(COMPILER) test/test_nilpy_a_non_instance_stored_into_a_class_slot.npy $(TESTTMP)/test_nilpy_clsslotraise26
 	$(TESTTMP)/test_nilpy_clsslotraise26 | diff -u test/test_nilpy_a_non_instance_stored_into_a_class_slot.expected -
+	./$(COMPILER) test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.npy $(TESTTMP)/test_nilpy_genrel26
+	$(TESTTMP)/test_nilpy_genrel26 | diff -u test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.expected -
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.npy $(TESTTMP)/test_nilpy_genrelhd26
+	$(TESTTMP)/test_nilpy_genrelhd26 | diff -u test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.npy $(TESTTMP)/test_nilpy_genrelc26
+	tools/assert_no_leak.sh nilpy_generator_locals_released 200 $(TESTTMP)/test_nilpy_genrelc26
 	@# an ANNOTATED returned local keeps the def's class result. The values cannot
 	@# see it, so the row asserts the TYPE as a relation: b (annotated) and c
 	@# (annotated, from a nested def) must carry exactly what a (unannotated) does,

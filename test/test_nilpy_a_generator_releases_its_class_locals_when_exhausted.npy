@@ -1,0 +1,65 @@
+# A generator's class-typed LOCALS are released when it runs to exhaustion.
+# The step function returns at every yield and keeps its locals as live state,
+# so its epilogue skips them -- and on the one return that really ends the
+# generator nothing released them either: one object leaked per generator
+# instance (the Makefile row asserts the leak is gone with assert_no_leak.sh).
+# The rows below guard the other direction, a release that frees something
+# still in use: a yielded object kept by the consumer, a local reassigned after
+# the last yield, a `return` part-way through, and a `break` that abandons the
+# generator before it is exhausted. Values against CPython.
+# A `break` still leaks (early teardown), which is why it runs only 10 times.
+# bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
+
+
+class Box:
+    def __init__(self, v):
+        self.v = v
+
+
+def gives_itself(n):
+    b = Box(n)
+    yield b
+    yield b
+
+
+def reassigned(n):
+    b = Box(n)
+    yield b.v
+    b = Box(n + 100)
+    yield b.v
+    b = Box(n + 200)
+
+
+def returns_early(n):
+    b = Box(n)
+    yield b.v
+    if n > 0:
+        return
+    yield 99
+
+
+def main():
+    kept = []
+    total = 0
+    i = 0
+    while i < 3000:
+        for x in gives_itself(i):
+            if i % 1000 == 0:
+                kept.append(x)
+        for v in reassigned(i):
+            total += v
+        for v in returns_early(i):
+            total += v
+        if i < 10:
+            # a `break` abandons the generator unexhausted: its locals still
+            # leak (the per-proc slot map the ticket describes), so this shape
+            # runs a handful of times and stays under the leak row's bound
+            for v in reassigned(i):
+                total += v
+                break
+        i += 1
+    print(total)
+    print([k.v for k in kept])
+
+
+main()

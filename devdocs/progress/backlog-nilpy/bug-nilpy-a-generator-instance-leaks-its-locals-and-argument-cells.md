@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 status: backlog
-summary: "Re-measured 2026-09-04 at 7e271ff7d: TWO leaks, one block each per generator INSTANCE, and they are independent. (1) a managed value in a persistent slot is dropped without release -- 1.0 blocks/generator with a class local and no argument; (2) each variant argument's 16-byte pycell_new cell is never freed -- 1.0 blocks/generator with an int argument and no managed local. Both together: 2.0. A generator with neither is FLAT (live=1), so the instance block and the yielded values are fine; it is exactly these two. One-off per instance, not per yield."
+summary: "MECHANISM: a stackless generator keeps its managed locals as live state across yields, so the step epilogue never releases them, and nothing else did at teardown. FIXED on the EXHAUSTION path (2026-09-24): running off the end, or a plain `return`, now releases the slotted class locals and the last yielded variant before marking the generator done (SLReleaseLocalsAtDone, SLRewriteReturns, BuildStacklessStep). STILL LEAKS on EARLY teardown -- a `break` out of the for-in, a cursor dropped before exhaustion, a `return` inside a try block -- where the frame is gone and only the instance slots hold the references; that needs the per-proc slot-kind map below, read at SlFree. The argument-cell half of the old summary no longer reproduces at HEAD.""
 ---
 
 # A Nil Python generator instance leaks its locals and its argument cells
@@ -133,3 +133,36 @@ Three shapes were considered:
 shared prerequisite for all three: the slot allocator in `pasparser_stmt.inc`
 already walks the symbols and assigns `SymGenSlot[i]`, so the kind map wants to
 be built there, beside `ProcGenInstSize[gpi]`.
+
+## Re-measured and half fixed (2026-09-24, frankb-12)
+
+At HEAD before the fix, `-dPXX_ALLOC_CENSUS`, ~7800 generators each driven to
+exhaustion by a for-in: no arguments/no managed locals live=1; an `int`
+argument live=1 (**the argument-cell leak is gone**, closed by events);
+a class local live=7815; both live=7815. So one leak remained: the class
+local, one block per instance.
+
+Mechanism, measured rather than assumed: a stackless step function
+checkpoints locals into the instance at each yield (SLSaveLocals) and restores
+them at entry, so on the EXHAUSTING return the frame value is the live one.
+The shared epilogue skips it (StacklessPersistentSlotSym), which is right for
+every yield-return and wrong for that one. A NilPy class-typed store does not
+release in the IR assignment (NilPy's own store emits retain/release), so the
+release is an explicit PXXObjRelease, the epilogue's SXR_OBJ action.
+
+Fix, all AST in BuildStacklessStep so every backend gets it:
+1. SLReleaseLocalsAtDone before setDone: PXXObjRelease + nil for each slotted
+   class-typed LOCAL whose scope-exit action is SXR_OBJ;
+2. the CURRENT variant region is cleared through the managed variant store,
+   which dropped the last yielded object (a generator yielding its own local
+   leaked one per instance even with (1));
+3. SLRewriteReturns routes a plain `return` to the same tail (not inside a
+   try block).
+
+Per shape, 3000 generators each: exhausted with a reassigned local live=3;
+yields its own object live=2; `return` part-way live=1; `break` live=2706
+(unchanged: early teardown). Fixture
+`test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.npy`
+checks values against CPython plain and under -dPXX_HEAP_DEBUG (no
+use-after-free), plus an assert_no_leak.sh row with bound 200: HEAD live=17,
+pin v421 (4e32f1dde0ec) live=8349, fails the bound.
