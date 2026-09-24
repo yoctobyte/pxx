@@ -323,6 +323,16 @@ begin
       needsHeap := True;
     if (i < Length(TokRChecks)) and TokRChecks[i] then
       needsHeap := True;
+    { `for ch in 'abc'` -- a string LITERAL as a for-in iterable. The lowering
+      parks it in a hidden AnsiString temp and stores through
+      AnsiStrReleaseAddr, so it needs the string runtime while the program
+      mentions no string type at all. From 523833fde3 it refused with `call to
+      a runtime stub that was never emitted` (fpc-testsuite tforin17.pp,
+      T's conformance shard 3). A string CONST and a set literal already
+      build; only this shape was missing. }
+    if (i >= 3) and (Tokens[i].Kind = tkString) and (Tokens[i - 1].Kind = tkIn) and
+       (Tokens[i - 3].Kind = tkFor) then
+      needsAnsiRuntime := True;
     { `div` / `mod` OFF x86-64. Every backend's pre-divide zero check calls
       builtinheap's PXXDivZero (DivZeroCheckProc); x86-64 alone has a
       unit-free fallback stub, and elsewhere a missing helper means NO CHECK

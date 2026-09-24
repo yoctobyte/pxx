@@ -4399,9 +4399,15 @@ begin
         end
         else
         begin
-          procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'arm32');
+          { INLINE, as x86-64 and i386 do -- see the aarch64 arm. r0 = dest,
+            r1 = count, r2 scratch; all dead afterwards, as after a call. }
           EmitLoadImmArm32(1, IRIVal[node]); { r1 = count }
-          EmitCallProc(procIdx);
+          EmitI32($E3A02000);                { mov r2, #0 }
+          EmitI32($E3510000);                { cmp r1, #0 }
+          EmitI32($0A000002);                { beq .end }
+          EmitI32($E4C02001);                { .loop: strb r2, [r0], #1 }
+          EmitI32($E2511001);                { subs r1, r1, #1 }
+          EmitI32($1AFFFFFC);                { bne .loop }
         end;
       end;
 

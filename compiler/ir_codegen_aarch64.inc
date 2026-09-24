@@ -4674,9 +4674,18 @@ begin
         end
         else
         begin
-          procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'aarch64');
+          { INLINE, as x86-64 and i386 do (rep stosb), not a PXXMemZero call:
+            nothing pulls builtinheap for the demand, which is found here at
+            codegen with no token behind it. A runtime set literal `[1, v]` on
+            a program with no other heap need refused with `PXXMemZero not
+            found` from 523833fde3 (test_set_runtime, T's standing set).
+            x0 = dest, x1 = count; both are dead afterwards, as they are after
+            the call this replaces. }
           EmitLoadImmA64(1, IRIVal[node]);     { x1 = count }
-          EmitCallProc(procIdx);
+          EmitI32($B4000081);                  { cbz x1, .end (+16) }
+          EmitI32($3800141F);                  { .loop: strb wzr, [x0], #1 }
+          EmitI32($F1000421);                  { subs x1, x1, #1 }
+          EmitI32($54FFFFC1);                  { b.ne .loop }
         end;
       end;
 

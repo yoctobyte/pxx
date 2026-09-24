@@ -22088,7 +22088,9 @@ test-core: $(COMPILER)
 	# ...and the parse must really have CROSSED the seam. Without this the next
 	# row passes on a fixture that never reached an appended unit, which is what
 	# it did from 523833fde3 until the fixture gained a managed-string var.
-	grep -q "in: ./compiler/builtin/builtinheap.pas" $(TESTTMP)/test_nearbound.log
+	# The `in:` path is relative to wherever the compiler was run from (testmgr
+	# runs a scratch copy), so match the path SUFFIX, not `./compiler/...`.
+	grep -qE "in: .*builtin/builtinheap\.pas" $(TESTTMP)/test_nearbound.log
 	# ...and it must not carry a token from this file across the seam.
 	! grep -q "near:.*'hi'" $(TESTTMP)/test_nearbound.log
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
