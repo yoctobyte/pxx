@@ -3,12 +3,12 @@ slug: bug-c-sqlite-with-threadsafe-stops-at-a-stray-BEGIN_DECLS
 track: C
 type: bug
 prio: 30
-status: open
+status: done
 found: 2026-09-05
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "TWO WALLS, and --threadsafe caused neither of them in the way the title suggests. (1) FIXED 2026-09-24 (frankS): `--threadsafe --emit-obj` and `--threadsafe --shared` refused EVERY C file, `int f(int x){return x+1;}` included, with `call to a runtime stub that was never emitted`. MECHANISM: every stub-address variable reads 0 as never emitted. An executable's entry stub owns code offset 0, but a C object or shared library has no entry stub, so the first runtime stub landed at 0. Under --threadsafe that is the heap-lock slow stub, and the heap lock's own call to it tripped the guard. The C driver now plants a one-instruction trap at offset 0 in object/shared mode off ESP. With that, `--threadsafe -DSQLITE_OMIT_LOAD_EXTENSION --emit-obj sqlite3.c` builds (4617 procs). (2) OPEN, and it has nothing to do with --threadsafe: `__BEGIN_DECLS` comes from the HOST /usr/include/dlfcn.h, because crtl has no <dlfcn.h> and sqlite includes it unless SQLITE_OMIT_LOAD_EXTENSION is set. It reproduces with -DSQLITE_THREADSAFE=0. What would close it: a crtl <dlfcn.h> routed to the PAL loader that lib/rtl/dynlibs.pas already uses (PalDlOpen/PalDlSym/PalDlClose: honest stubs by default, real dlopen under -dPXX_DYNLIB_LIBC). No crtl C source calls the PAL today, so the bridge is the design part.""
+summary: "FIXED 2026-09-24 (frankS). TWO WALLS, and --threadsafe caused neither of them the way the title suggests. (1) a4dea4c09b: in a C object or shared library the first runtime stub landed at code offset 0, which every stub-address variable reads as never emitted, so `--threadsafe --emit-obj/--shared` refused EVERY C file. Offset 0 is now reserved with a trap instruction. (2) this commit: `__BEGIN_DECLS` came from the HOST /usr/include/dlfcn.h, because crtl had no <dlfcn.h>; sqlite includes it unless SQLITE_OMIT_LOAD_EXTENSION is set. crtl now has <dlfcn.h> + src/dlfcn.c over the PAL loader Pascal's dynlibs uses, via new __pxx_dl* bridges in pxxcio.pas. Default libc-free build: dlopen returns NULL and dlerror says why. -dPXX_DYNLIB_LIBC: the real loader, output equal to gcc -ldl. Now `--threadsafe --emit-obj sqlite3.c` builds with no -D at all (4654 procs), and so does `-DSQLITE_THREADSAFE=0`. Without either, sqlite's default THREADSAFE=1 meets the designed refusal `__pxx_pmutex_init needs the thread-safe runtime: rebuild with --threadsafe`, which is correct and names its fix.""
 ---
 
 # sqlite with `--threadsafe` stops at a stray `__BEGIN_DECLS`
@@ -81,3 +81,29 @@ Guard: test/c_threadsafe_object_offset_zero.c, built `--threadsafe --emit-obj`
 and `--threadsafe --shared`, each linked by gcc and run (answers 42). The rows
 are at the head of test-emit-obj. Pin v421 refuses the file. Also verified:
 make test-emit-obj and make test-c-abi-mixed-link, x86_64 and i386, both green.
+
+## 2026-09-24 (frankS): the dlfcn half, closed
+
+lib/crtl/include/dlfcn.h, lib/crtl/src/dlfcn.c, and pxxcio's __pxx_dlopen /
+__pxx_dlsym / __pxx_dlclose / __pxx_dl_available over PalDlOpen/PalDlSym/
+PalDlClose/PalHasDynlib. RTLD_* take glibc's values and are not honoured (the
+PAL takes a name only), and dlopen(NULL) is refused through dlerror. The
+regenerated compiler/crtl_names.inc means a hand-declared `void
+*dlopen(const char *, int);` now pulls the crtl body instead of becoming a
+silent libc import. Measured: it answers NULL in the default build.
+
+Rows (test-core, beside the tag rows): test/c_crtl_dlfcn.c, default build
+(test/c_crtl_dlfcn.expected) and -dPXX_DYNLIB_LIBC (c_crtl_dlfcn_libc.expected
+= gcc -ldl output). Control: with dlfcn.h moved aside, the fixture reproduces
+this ticket's exact refusal, `stray token at top level: '__BEGIN_DECLS'`. The
+pinned compiler is NOT a control here, because it reads crtl from the live
+tree. Also:
+- the fixture builds and runs on i386, arm32, aarch64 and riscv32, and builds
+  for riscv32 ESP;
+- test/crtl_declaration_census.sh: 606 declared, all defined, no libc imports;
+- make test-sqlite-parity PASS;
+- gate quick GREEN (after regenerating crtl_names.inc, which the gate
+  correctly flagged as stale).
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

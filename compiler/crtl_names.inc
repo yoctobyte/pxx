@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  621 functions across 63 headers. }
+  625 functions across 64 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -35,8 +35,9 @@ begin
       ' closelog:syslog.h connect:sys/socket.h copysign:math.h cos:math.h cosf:math.h ' +
       ' cosh:math.h creat:fcntl.h ctime:time.h ctime_r:time.h ';
     'd': Result :=
-      ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dn_comp:resolv.h ' +
-      ' dn_expand:resolv.h dn_skipname:resolv.h dprintf:stdio.h dup:unistd.h dup2:unistd.h ';
+      ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dlclose:dlfcn.h ' +
+      ' dlerror:dlfcn.h dlopen:dlfcn.h dlsym:dlfcn.h dn_comp:resolv.h dn_expand:resolv.h ' +
+      ' dn_skipname:resolv.h dprintf:stdio.h dup:unistd.h dup2:unistd.h ';
     'e': Result :=
       ' endgrent:grp.h endmntent:mntent.h endpwent:pwd.h endservent:netdb.h ' +
       ' ether_aton:netinet/ether.h ether_aton_r:netinet/ether.h ether_hostton:netinet/ether.h ' +
@@ -205,7 +206,7 @@ begin
     'a': Result := 1016;
     'b': Result := 400;
     'c': Result := 143352;
-    'd': Result := 3000;
+    'd': Result := 3064;
     'e': Result := 14200;
     'f': Result := 65520;
     'g': Result := 131024;

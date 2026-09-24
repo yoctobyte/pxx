@@ -25,6 +25,15 @@ function __pxx_seek(fd: Integer; offset: Int64; whence: Integer): Int64;
 function __pxx_remove(path: PChar): Integer;
 function __pxx_rename(oldPath, newPath: PChar): Integer;
 
+{ C <dlfcn.h> bridge (lib/crtl/src/dlfcn.c): the SAME PAL loader Pascal's
+  dynlibs unit uses, so C and Pascal share one policy -- honest stubs in the
+  default libc-free build (NULL handle, PalHasDynlib False), the real loader
+  under -dPXX_DYNLIB_LIBC. }
+function __pxx_dlopen(name: PChar): Pointer;
+function __pxx_dlsym(handle: Pointer; sym: PChar): Pointer;
+function __pxx_dlclose(handle: Pointer): Integer;
+function __pxx_dl_available: Integer;
+
 { C socket bridge: BSD-shaped C wrappers parse/fill sockaddr_in and bottom out
   on these PAL IPv4 primitives, so C and Pascal share one socket backend. }
 function __pxx_socket(domain, kind, proto: Integer): Integer;
@@ -248,6 +257,26 @@ end;
 function __pxx_rename(oldPath, newPath: PChar): Integer;
 begin
   Result := PalRename(oldPath, newPath);
+end;
+
+function __pxx_dlopen(name: PChar): Pointer;
+begin
+  Result := PalDlOpen(name);
+end;
+
+function __pxx_dlsym(handle: Pointer; sym: PChar): Pointer;
+begin
+  Result := PalDlSym(handle, sym);
+end;
+
+function __pxx_dlclose(handle: Pointer): Integer;
+begin
+  Result := PalDlClose(handle);
+end;
+
+function __pxx_dl_available: Integer;
+begin
+  if PalHasDynlib then Result := 1 else Result := 0;
 end;
 
 function __pxx_socket(domain, kind, proto: Integer): Integer;

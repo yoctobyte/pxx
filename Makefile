@@ -16765,6 +16765,13 @@ test-core: $(COMPILER)
 	@# An object of, or sizeof on, a struct type with no definition is refused
 	@# (it was size 0, silently); the legal incomplete shapes still compile.
 	test/test_c_incomplete_object_refused.sh ./$(COMPILER)
+	@# crtl <dlfcn.h> over the PAL loader. Default build: no loader, so NULL
+	@# plus a dlerror message that clears. -dPXX_DYNLIB_LIBC: the real loader,
+	@# equal to gcc -ldl. Before the header, the HOST dlfcn.h leaked in.
+	./$(COMPILER) test/c_crtl_dlfcn.c $(TESTTMP)/cdlfcn
+	tools/expect_same.sh cdlfcn "$$($(TESTTMP)/cdlfcn)" "$$(cat test/c_crtl_dlfcn.expected)"
+	./$(COMPILER) -dPXX_DYNLIB_LIBC test/c_crtl_dlfcn.c $(TESTTMP)/cdlfcn_libc
+	tools/expect_same.sh cdlfcn-libc "$$($(TESTTMP)/cdlfcn_libc)" "$$(cat test/c_crtl_dlfcn_libc.expected)"
 	# THE OTHER HALF OF THE RISCV32 THIRD, and it is not about aggregates: an
 	# 8-byte-ALIGNED variadic slot starts on an EVEN register, for a plain
 	# `double` and an `int64` as much as for a record. riscv32 applied that
