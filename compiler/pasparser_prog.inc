@@ -259,9 +259,16 @@ begin
       and then emits no call, so there is no helper to resolve and forcing the
       unit here would cost the whole prize on the one target that needs it
       most. Measured: bare xtensa hello-world stays at code=860B procs=88 with
-      this arm unguarded, against code=58B procs=0 with it guarded. }
+      this arm unguarded, against code=58B procs=0 with it guarded.
+
+      wasm32 JOINED 2026-09-24: its write arm lowers onto the same builtinheap
+      family (WasmWriteHelper), so it has the riscv32 dependency. The
+      "wasm32 builds and runs" row above was riding on something else pulling
+      the unit, and by v423 nothing did: `writeln(6*7)` emitted `main` as
+      `unreachable` and trapped (frankd-a3). }
     if (Tokens[i].Kind in [tkwrite, tkwriteln]) and
-       ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+       ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA) or
+        (TargetArch = TARGET_WASM32)) and
        (not ((TargetPlatform = PLATFORM_ESP) and EspBareBoot)) then
       needsHeap := True;
     { A `:w` / `:w:d` FORMAT SPEC on any target. `writeln(r.a:0:0)` lowers to

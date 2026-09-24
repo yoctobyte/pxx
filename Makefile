@@ -30667,6 +30667,11 @@ test-wasm32: $(COMPILER)
 	# and its own SetLength slot address, so it needs its own row.
 	./$(COMPILER) --target=wasm32 test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/w32_by_value_param_owned.wasm
 	tools/expect_same.sh wasm32/by_value_param_owned "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_by_value_param_owned.wasm)" "$$(cat test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.expected)"
+	# A program that only WRITES must pull builtinheap on wasm32 (the PXXWrite*
+	# family), and a helper that is still missing fails the BUILD, never `ok:`.
+	./$(COMPILER) --target=wasm32 test/test_wasm32_writeln_of_an_ordinal_builds_and_prints.pas $(TESTTMP)/w32_writeln_ordinal.wasm
+	./$(COMPILER) test/test_wasm32_writeln_of_an_ordinal_builds_and_prints.pas $(TESTTMP)/w32_writeln_ordinal_x64
+	tools/expect_same.sh wasm32/writeln_ordinal "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_writeln_ordinal.wasm)" "$$($(TESTTMP)/w32_writeln_ordinal_x64)"
 	./$(COMPILER) --target=wasm32 test/test_cross_case_range.pas $(TESTTMP)/w32_case_range.wasm
 	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/w32_case_range_x64
 	tools/expect_same.sh wasm32/case_range "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_case_range.wasm)" "$$($(TESTTMP)/w32_case_range_x64)"

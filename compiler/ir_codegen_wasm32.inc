@@ -708,6 +708,22 @@ end;
 
 function WasmEmitNode(node: Integer): TTypeKind; forward;
 
+{ A routine the lowering CALLS INTO the RTL for. Missing, it is not a gap in
+  this backend -- the construct lowers fine -- it is a unit that was never
+  pulled into the build, so it FAILS THE BUILD. As a WasmUnsupported floor it
+  emitted the body as `unreachable` and the driver printed `ok:` with rc=0:
+  `program t; begin writeln(6*7); end.` built green and trapped on its first
+  instruction (frankd-a3, pin v423 and HEAD 448395e492db). The floor is for
+  what this backend cannot lower yet, never for what the build forgot.
+  bug-a-a-wasm32-program-whose-entry-lowers-to-unreachable-builds-green-and-traps-on-the-first-instruction }
+function WasmRuntimeHelper(const nm: AnsiString): Integer;
+begin
+  WasmRuntimeHelper := FindProc(nm);
+  if WasmRuntimeHelper < 0 then
+    Error('wasm32: RTL helper ' + nm + ' not found -- the unit that '
+          + 'defines it was not pulled into this build');
+end;
+
 { FORWARDS FOR THE FPC SEED, and they are not optional decoration.
 
   pxx accepts a call to a routine defined later in the same include; FPC does
@@ -2500,12 +2516,7 @@ begin
   WasmEmitGetMem := False;
   argNode := IRB[node];                     { the size argument }
   if argNode = -1 then Exit;
-  alloc := FindProc('PXXAlloc');
-  if alloc < 0 then
-  begin
-    WasmUnsupported('the builtin unit has no PXXAlloc');
-    Exit;
-  end;
+  alloc := WasmRuntimeHelper('PXXAlloc');
   if not WasmParamValType(alloc, 0, pvt) then pvt := WT_I32;
   WasmEmitValueAs(IRA[argNode], pvt, 'size argument of PXXAlloc');
   if WasmBodyBroken then Exit;
@@ -2549,12 +2560,7 @@ begin
   WasmEmitFreeMem := False;
   argNode := IRB[node];
   if argNode = -1 then Exit;
-  f := FindProc('PXXFree');
-  if f < 0 then
-  begin
-    WasmUnsupported('the builtin unit has no PXXFree');
-    Exit;
-  end;
+  f := WasmRuntimeHelper('PXXFree');
   if not WasmParamValType(f, 0, pvt) then pvt := WT_I32;
   WasmEmitValueAs(IRA[argNode], pvt, 'pointer argument of PXXFree');
   if WasmBodyBroken then Exit;
@@ -2998,12 +3004,7 @@ function WasmEmitArgvFetch(var argcL, vecL: Integer): Boolean;
 var szImp, getImp, scratchL, bufszL, alloc: Integer; pvt: Byte;
 begin
   WasmEmitArgvFetch := False;
-  alloc := FindProc('PXXAlloc');
-  if alloc < 0 then
-  begin
-    WasmUnsupported('the builtin unit has no PXXAlloc');
-    Exit;
-  end;
+  alloc := WasmRuntimeHelper('PXXAlloc');
   szImp := WasmHostImport('wasi_snapshot_preview1', 'args_sizes_get',
                           [WT_I32, WT_I32], [WT_I32]);
   getImp := WasmHostImport('wasi_snapshot_preview1', 'args_get',
@@ -3156,12 +3157,7 @@ function WasmEmitEnvironFetch(envpProc: Integer): Boolean;
 var szImp, getImp, scratchL, cntL, bufszL, vecL, alloc: Integer; pvt: Byte;
 begin
   WasmEmitEnvironFetch := False;
-  alloc := FindProc('PXXAlloc');
-  if alloc < 0 then
-  begin
-    WasmUnsupported('the builtin unit has no PXXAlloc');
-    Exit;
-  end;
+  alloc := WasmRuntimeHelper('PXXAlloc');
   szImp := WasmHostImport('wasi_snapshot_preview1', 'environ_sizes_get',
                           [WT_I32, WT_I32], [WT_I32]);
   getImp := WasmHostImport('wasi_snapshot_preview1', 'environ_get',
@@ -3350,12 +3346,7 @@ begin
     { Managed destination: build a handle from the bytes, then PUBLISH it into
       the slot, which is what releases whatever the slot held. Publishing and
       not storing — a raw store would leak the old handle. }
-    f := FindProc('PXXStrFromLit');
-    if f < 0 then
-    begin
-      WasmUnsupported('the builtin unit has no PXXStrFromLit');
-      Exit;
-    end;
+    f := WasmRuntimeHelper('PXXStrFromLit');
     WasmEmitCStrLen(ptrL, lenL);
     WasmLValueAddr(sym);
     WasmLocalGet(lenL);
@@ -5066,12 +5057,10 @@ end;
   They format into a local buffer and emit ONE PXXSysWrite, and they contain no
   `write` STATEMENT, which is what stops this arm recursing into itself.
 
-  What they do NOT solve is the last inch: PXXSysWrite is an ifdef chain over
-  __pxxrawsyscall with an arm per target and NO CPU_WASM32 arm, so on this
-  target it returns 0 having written nothing. That is a shared file; see
-  bug-a-pxxsyswrite-has-no-wasm32-arm. Until it lands, `writeln` here lowers
-  correctly and prints nothing — which is why the slice asserts the silence
-  rather than the output, and will fail the day it stops being silent.
+  PXXSysWrite has a CPU_WASM32 arm now (bug-a-pxxsyswrite-has-no-wasm32-arm,
+  done), so these print. The unit has to be IN the build, which is the
+  pasparser_prog.inc write arm's job; a helper still missing fails the build
+  through WasmRuntimeHelper rather than lowering to `unreachable`.
 
   Argument types come from the CALLEE's declared parameters rather than being
   assumed, exactly as WasmEmitCall does it: a helper parameter declared
@@ -5080,9 +5069,7 @@ end;
 
 function WasmWriteHelper(const nm: AnsiString): Integer;
 begin
-  WasmWriteHelper := FindProc(nm);
-  if WasmWriteHelper < 0 then
-    WasmUnsupported('RTL helper ' + nm + ' not found');
+  WasmWriteHelper := WasmRuntimeHelper(nm);
 end;
 
 { Push a compile-time integer as the callee's parameter i wants it. }

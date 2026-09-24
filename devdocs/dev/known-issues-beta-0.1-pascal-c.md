@@ -105,6 +105,10 @@ var guard, a: LongInt;
   - Fixed on x86-64, i386, arm32, aarch64, riscv32, esp32c3, esp32s3 and
     wasm32. On wasm32, `SetLength(a, 9)` on a by-value dynamic-array
     parameter also used to have no effect in the callee; that is fixed too.
+- **Pascal `writeln` on wasm32.** `program t; begin writeln(6*7); end.` built
+  with `ok:` and rc=0, then trapped under wasmtime (frankd-a3, v423 and
+  `448395e492db`). It prints `42` now. A missing runtime helper on wasm32 now
+  fails the build instead of producing a module that traps.
 - **`examples/parallel/collatz`** printed `total steps = 0`. The bug was in the
   example: a local `n` hid `const N`. pxx now warns on that shape.
 - **A program routine named like a System const** (`function MaxInt(A, B)`) was

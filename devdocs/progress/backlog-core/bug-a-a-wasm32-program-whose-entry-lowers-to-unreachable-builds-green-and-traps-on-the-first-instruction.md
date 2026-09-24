@@ -9,7 +9,7 @@ created: 2026-09-19
 found-by: frankb-56
 tags: [wasm32, backend, silent-negative]
 blocked-by: []
-summary: "A variadic CALL on wasm32 writes a valid 117KB module, prints `ok:` and exits 0 with `main` lowered to `unreachable` — a GREEN BUILD OF A PROGRAM THAT TRAPS ON ITS FIRST INSTRUCTION. The `unreachable` floor is the wasm backend's own partial-lowering instrument and is correct as a floor; what is unowned is its EXIT-CODE POLICY. Blast radius measured, not estimated: re-measured at origin `54b2cf4d9` / compiler `8f8a089c6812` over a STATED population of 43 sources (`test/wasm/*.pas` + `test/*wasm*.pas`): 43 reached the backend, 42 clean, 0 invalid, and EXACTLY ONE emits a gap — the test that exists to document the mechanism, whose unreachable body is `main$0`, so a naive 'fatal when the entry traps' rule would red that test. So this is not a one-line policy flip and that is why it is filed rather than fixed."
+summary: "ONE CLASS IS CLOSED (2026-09-24): a missing RTL HELPER is no longer a floor -- WasmRuntimeHelper fails the build (rc=1), because a helper the lowering calls into being absent is a unit the build forgot, not a construct this backend cannot lower (`writeln(6*7)` built `ok:` and trapped). What stays open is the policy for a genuine lowering gap. A variadic CALL on wasm32 writes a valid 117KB module, prints `ok:` and exits 0 with `main` lowered to `unreachable` — a GREEN BUILD OF A PROGRAM THAT TRAPS ON ITS FIRST INSTRUCTION. The `unreachable` floor is the wasm backend's own partial-lowering instrument and is correct as a floor; what is unowned is its EXIT-CODE POLICY. Blast radius measured, not estimated: re-measured at origin `54b2cf4d9` / compiler `8f8a089c6812` over a STATED population of 43 sources (`test/wasm/*.pas` + `test/*wasm*.pas`): 43 reached the backend, 42 clean, 0 invalid, and EXACTLY ONE emits a gap — the test that exists to document the mechanism, whose unreachable body is `main$0`, so a naive 'fatal when the entry traps' rule would red that test. So this is not a one-line policy flip and that is why it is filed rather than fixed."
 ---
 
 # A wasm32 build says `ok:` for a module that cannot execute one instruction
@@ -87,3 +87,15 @@ own sha; do not edit the first, which is a record of a different measurement.
 `bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile` —
 that is a runtime disagreement between hosts. This is the build reporting
 success for something no host can run.
+
+## 2026-09-24 (frankS): the missing-helper class is fatal now
+
+`program t; begin writeln(6*7); end.` built `ok:` rc=0 and trapped under
+wasmtime on pin v423 and HEAD `448395e492db` (frankd-a3): `main$0 -- RTL helper
+PXXWriteDecW not found`. Two fixes. First, a wasm32 program that writes now pulls
+builtinheap (`pasparser_prog.inc`, the riscv32/xtensa write arm). Second,
+every wasm32 RTL-helper lookup (the PXXWrite* family, PXXAlloc, PXXFree,
+PXXStrFromLit) goes through `WasmRuntimeHelper`, which calls `Error`. The
+documentation test's gaps are lowering gaps, not helpers, so it is unaffected.
+Census at HEAD, `test/wasm/*.pas` + `test/*wasm*.pas`, 44 sources: 43 clean, 1
+with gaps, 0 invalid.
