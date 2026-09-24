@@ -55,4 +55,4 @@ Measure that with a series on its OWN code, not a single pair of files, since
 the July pair compared two different programs.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f9e8e2c846.
