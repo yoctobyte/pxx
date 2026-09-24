@@ -12571,8 +12571,12 @@ test-core: $(COMPILER)
 	# esp32s3 what xtensa meant. If these ever diverge, the capability table has
 	# started disagreeing with the constants it replaced.
 	# decide-esp-soc-axis-and-capability-table
-	./$(COMPILER) --target=riscv32 test/test_esp_float_depth_from_target.pas $(TESTTMP)/test_soc_rv26
-	./$(COMPILER) --target=esp32c3 test/test_esp_float_depth_from_target.pas $(TESTTMP)/test_soc_c326
+	# The generic riscv32 is dual-role and defaults to hosted linux; a CHIP name
+	# implies --platform=esp (the decide ticket says so; the compiler did not until
+	# 2026-09-24), so the byte-identical twin of esp32c3 is riscv32 + esp -- as an
+	# OBJECT, because the IDF profile's externals are resolved by the IDF link.
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_float_depth_from_target.pas $(TESTTMP)/test_soc_rv26
+	./$(COMPILER) --target=esp32c3 --emit-obj test/test_esp_float_depth_from_target.pas $(TESTTMP)/test_soc_c326
 	cmp $(TESTTMP)/test_soc_rv26 $(TESTTMP)/test_soc_c326
 	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare.pas $(TESTTMP)/test_soc_xt26
 	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare.pas $(TESTTMP)/test_soc_s326

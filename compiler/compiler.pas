@@ -327,7 +327,14 @@ begin
   if PlatformExplicit then Exit;
   { riscv32 is dual-role: bare ESP32-C3 (--esp-profile=bare) OR hosted linux
     (qemu-user) -- only the bare profile is esp. xtensa has no hosted leg. }
-  if EspBareBoot or (TargetArch = TARGET_XTENSA) then
+  { A NAMED chip (`--target=esp32c3`) is esp too. decide-esp-soc-axis-and-
+    capability-table ratified exactly that -- "the SoC target IMPLIES arch +
+    platform=esp + the capability row" -- and this rule never learned it, so
+    the chip name fell through to POSIX and built a hosted-linux object with
+    raw ecalls: measured 2026-09-24, `--target=esp32c3 --emit-obj` of a printf
+    hello had ZERO undefined symbols, i.e. nothing an IDF image could supply.
+    Only the GENERIC riscv32 is dual-role. }
+  if EspBareBoot or (TargetArch = TARGET_XTENSA) or SocExplicit then
     TargetPlatform := PLATFORM_ESP
   else if TargetArch = TARGET_WASM32 then
     TargetPlatform := PLATFORM_WASI
@@ -1459,13 +1466,6 @@ begin
     begin
       TargetPlatform := PLATFORM_ESP;
       PlatformExplicit := True;
-      { ESP IMPLIES --compact-classes: memory is precious on that target (user,
-        2026-08-21) and the root slots cost data per class declared. An explicit
-        --compact-classes / --no-compact-classes anywhere on the command line
-        wins, so an ESP build that wants a class-keyed default comparer can turn
-        it back on. Documented in docs/ — an implied flag that changes what
-        COMPILES is otherwise a surprise. }
-      if not CompactClassesExplicit then CompactClasses := True;
       Inc(i);
     end
     else if option = '--xtensa-abi=call0' then
@@ -2180,6 +2180,20 @@ begin
     posix. The platform axis stays independent: an explicit --platform overrides
     this (e.g. a hosted RTOS on xtensa later). }
   DeriveTargetPlatform;
+  { ESP IMPLIES --compact-classes: memory is precious on that target (user,
+    2026-08-21) and the root slots cost data per class declared. An explicit
+    --compact-classes / --no-compact-classes anywhere on the command line wins,
+    so an ESP build that wants a class-keyed default comparer can turn it back
+    on. An implied flag that changes what COMPILES is a surprise unless
+    documented -- and it is NOT yet: this comment said "documented in docs/"
+    and on 2026-09-24 nothing under docs/ named it.
+    HERE, after derivation, and not in the --platform=esp handler where it
+    was: there it fired only for the SPELLED platform, so the derived ESP
+    routes -- xtensa, --esp-profile=bare, a chip name -- built with full class
+    slots. Measured 2026-09-24: `--target=esp32c3` and `--target=riscv32
+    --platform=esp` differed by 56 bytes on a C hello for this reason alone. }
+  if (TargetPlatform = PLATFORM_ESP) and (not CompactClassesExplicit) then
+    CompactClasses := True;
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
   { AFTER PasApplyTargetDefines and after the target is settled: the compiler
