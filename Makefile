@@ -14130,6 +14130,12 @@ test-core: $(COMPILER)
 	# The SILENT face of the same bug, through the C frontend and diffable against
 	# gcc: _Generic resolved an array-of-A to `struct B`. gcc says other/other/3;
 	# pre-fix pxx said B/B/3 -- compiled clean, ran clean, printed a wrong answer.
+	# sizeof of a dereferenced multidimensional array, a typedef of an array of
+	# a typedef'd array, and `sizeof (t)->key` -- tiny-regex-c, cglm and stb_ds.
+	# Expected is gcc's output; every value differs from the pointer and the
+	# element size, so no row passes by a default.
+	./$(COMPILER) test/test_c_sizeof_of_a_dereferenced_array_and_a_typedef_of_array_typedefs.c $(TESTTMP)/test_c_sizeof_deref26
+	tools/expect_same.sh test_c_sizeof_deref26 "$$($(TESTTMP)/test_c_sizeof_deref26)" "$$(printf '32 32 12 2 32 96\n16 64 16 120 64 4\n4 16 7 1 77\n8 20 20')"
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
 	tools/expect_same.sh test_c_recname26 "$$($(TESTTMP)/test_c_recname26)" "$$(printf 'other\nother\n3')"
 	# A C program links the system library its header names: every prototype

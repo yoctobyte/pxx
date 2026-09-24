@@ -3336,7 +3336,18 @@ end;
   double case does not reach its sibling (devdocs/dev/normalise-dont-special-case.md).
   Both spellings now walk here.
   bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
-function CSizeofDescriptorWalk(si: Integer; var sz: Integer): Boolean;
+function CSizeofDescriptorWalkDeref(si, derefs: Integer; var sz: Integer): Boolean;
+{ `derefs` leading `*`s, applied AFTER the postfix chain because C's unary `*`
+  binds looser than `[]`/`.`/`->`: `*a.m` is `*(a.m)`. Dereferencing an ARRAY
+  is exactly subscripting it by 0, so each `*` peels one level through the same
+  arm `[` takes. Without this `sizeof *t` of `char *t[][4]` answered the pointer
+  size (8, gcc 32) and `sizeof *c` of `int c[][3]` 8 (gcc 12), so the everyday
+  `n = sizeof a / sizeof *a` overran -- tiny-regex-c's test1 segfaulted on it --
+  while `sizeof t[0]`, the other spelling of the same thing, was right.
+
+  A `*` that meets anything but an array answers False and leaves the caller
+  to its pointer arms, which carry the pointee-array multiplier this walk does
+  not (`int (*p)[4]`). }
 var cArrLen, cRec, cPtrRec, cNDims, cDim, cSpanSym, recId, depth: Integer;
     cPtrDepth, cPtrBaseRec: Integer;   { pointer CHAIN, not one level of pointee }
     cTk, cPtrTk, cPtrBaseTk: TTypeKind; cOK: Boolean;
@@ -3376,8 +3387,10 @@ begin
   end;
   while cOK do
   begin
-    if CurTok.Kind = tkLBrack then
+    if (CurTok.Kind = tkLBrack) or
+       ((derefs > 0) and not ((CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent))) then
     begin
+      if (CurTok.Kind <> tkLBrack) and (cArrLen < 0) then begin cOK := False; Break; end;
       { one subscript peels one level: an element of the array, or the
         pointee of a pointer. The index expression is skipped balanced so
         `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
@@ -3436,16 +3449,21 @@ begin
         end;
       end
       else cOK := False;
-      depth := 0;
-      while CurTok.Kind <> tkEOF do
+      if CurTok.Kind <> tkLBrack then
+        Dec(derefs)              { a `*`: nothing to skip }
+      else
       begin
-        if CurTok.Kind = tkLBrack then Inc(depth)
-        else if CurTok.Kind = tkRBrack then
+        depth := 0;
+        while CurTok.Kind <> tkEOF do
         begin
-          Dec(depth);
-          if depth = 0 then begin Next; Break; end;
+          if CurTok.Kind = tkLBrack then Inc(depth)
+          else if CurTok.Kind = tkRBrack then
+          begin
+            Dec(depth);
+            if depth = 0 then begin Next; Break; end;
+          end;
+          Next;
         end;
-        Next;
       end;
     end
     else if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
@@ -3497,6 +3515,11 @@ begin
   Result := cOK;
 end;
 
+function CSizeofDescriptorWalk(si: Integer; var sz: Integer): Boolean;
+begin
+  Result := CSizeofDescriptorWalkDeref(si, 0, sz);
+end;
+
 { The size of record field `fieldName` of `recId`, AS sizeof MUST ANSWER IT.
   The one rule that separates this from reading the field's type: sizeof is not
   a USE, so an ARRAY field does not decay -- it is its whole extent, and
@@ -3542,6 +3565,31 @@ begin
   Result := True;
 end;
 
+function CSizeofTryArrayDeref(derefs: Integer; var sz: Integer): Boolean;
+{ CurTok is the identifier after `derefs` stars. If what the stars dereference
+  is an ARRAY (after the postfix chain), size it and leave CurTok past the
+  chain; otherwise rewind to the identifier and answer False. Shared by
+  `sizeof(*a)` and `sizeof *a`, which were separate arms and both answered the
+  pointer size for a multidimensional array. }
+var idPos, si, wsz: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  si := CFindSymFromModule(CurTok.SVal);
+  if si < 0 then Exit;
+  idPos := TokPos - 1;
+  Next;
+  if CSizeofDescriptorWalkDeref(si, derefs, wsz) then
+  begin
+    sz := wsz;
+    Result := True;
+  end
+  else
+  begin
+    TokPos := idPos; Next;
+  end;
+end;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
     cNDims, cDim, cSpanSym: Integer;
@@ -3555,7 +3603,27 @@ begin
   sz := TARGET_PTR_SIZE;
   node := -1;
   vlaSz := -1;
-  if CurTok.Kind = tkLParen then
+  { `sizeof (t)->key` -- a PARENTHESISED IDENTIFIER followed by a postfix
+    chain. The operand is the unary expression `(t)->key`, which is `t->key`;
+    it was read as `sizeof(t)` and the `->key` left over was refused with
+    "expected ')'" (stb_ds's shput macro wraps its argument this way).
+    `sizeof t->key` and `sizeof ((t)->key)` already worked. Only a variable
+    name qualifies: `(T)->x` for a TYPE name is a cast, not this. }
+  if (CurTok.Kind = tkLParen) and (TokPos + 2 < TokCount) and
+     (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkRParen) and
+     ((Tokens[TokPos + 2].Kind = tkLBrack) or
+      ((Tokens[TokPos + 2].Kind = tkDot) and (TokPos + 3 < TokCount) and
+       (Tokens[TokPos + 3].Kind = tkIdent))) and
+     (FindCTypedef(GetTokenStr(TokPos)) < 0) and
+     (CFindSymFromModule(GetTokenStr(TokPos)) >= 0) then
+  begin
+    Next;                               { '(' }
+    si := CFindSymFromModule(CurTok.SVal);
+    Next;                               { the identifier }
+    Next;                               { ')' }
+    if not CSizeofDescriptorWalk(si, sz) then ;   { False leaves the default }
+  end
+  else if CurTok.Kind = tkLParen then
   begin
     Next;
     savedPos := TokPos;
@@ -3673,7 +3741,9 @@ begin
         three layers away from sizeof. Measured: gcc 16, pxx 8. }
       starCount := 0;
       while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
-      if (starCount > 1) and (CurTok.Kind = tkIdent) then
+      if CSizeofTryArrayDeref(starCount, sz) then
+        { an array dereferenced: sized, see CSizeofDescriptorWalkDeref }
+      else if (starCount > 1) and (CurTok.Kind = tkIdent) then
       begin
         { CFindSymFromModule at all five sizeof identifier sites, not FindSym.
           sizeof reads the SYMBOL's own metadata -- ArrLen, PtrDepth,
@@ -3970,11 +4040,23 @@ begin
       if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
         vlaSz := FindSym('$vlasz$' + CurTok.SVal);
     end;
-    node := ParseCUnary;
-    tk := IntToTypeKind(ASTTk[node]);
-    if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
-    else if (tk = tyUnknown) or (tk = tyInteger) then sz := 4
-    else sz := TypeSlotSize(tk);
+    { `sizeof *a` of an array: the same walk `sizeof(*a)` asks, and the
+      spelling `n = sizeof a / sizeof *a` is written in. Rewound when the
+      stars do not dereference an array, so a pointer keeps the path below. }
+    savedPos := TokPos - 1;
+    starCount := 0;
+    while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
+    if (starCount > 0) and CSizeofTryArrayDeref(starCount, sz) then
+      node := -1
+    else
+    begin
+      TokPos := savedPos; Next;
+      node := ParseCUnary;
+      tk := IntToTypeKind(ASTTk[node]);
+      if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
+      else if (tk = tyUnknown) or (tk = tyInteger) then sz := 4
+      else sz := TypeSlotSize(tk);
+    end;
   end;
   if vlaSz >= 0 then
   begin
@@ -17368,6 +17450,8 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
     tdNDim, tdDimV: Integer;   { array typedef: how many dims and the one being read }
+    tdElemNDims: Integer;      { dims the ELEMENT typedef carries (`typedef vec4 mat4[4]`) }
+    tdElemDims: array[0..MAX_ARR_DIMS-1] of Integer;
     ftRet, ftPType: TTypeKind; ftNParams, ftSig: Integer;
     ftPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ftPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -17626,6 +17710,21 @@ begin
     end
     else
       AddCTypedef(nm, tk);
+    { AN ARRAY TYPEDEF WHOSE ELEMENT IS ITSELF AN ARRAY TYPEDEF keeps both sets
+      of dims: its own brackets outermost, then the element typedef's. cglm's
+      `typedef vec4 mat4[4]` over `typedef float vec4[4]` recorded [4] only, so
+      a global `mat4 g` was 16 bytes (gcc 64), every g[i][j] read 0, and a
+      local `mat4 m = {{...}}` was refused ("expected C expression",
+      glm_mat4_identity). `typedef vec4 alias;` with no brackets lost vec4's
+      [4] the same way. Captured before the dims below are parsed, because
+      CEvalConstExpr can run another type parse. }
+    tdElemNDims := 0;
+    if (tk <> tyRecord) and (tk <> tyPointer) and (CTypePtrDepth = 0) then
+    begin
+      tdElemNDims := CTypeTypedefNDims;
+      for tdDimV := 0 to tdElemNDims - 1 do
+        tdElemDims[tdDimV] := CTypeTypedefDims[tdDimV];
+    end;
     { Array typedef `typedef ELEM name[N]` — record the inherent single dimension
       so a decl `name v` / `name v[k]` folds it in (bug-c-typedef-array-element-init;
       cglm `typedef float vec4[4]`). Only a single constant `[N]` is modelled;
@@ -17660,6 +17759,19 @@ begin
       begin
         CTypedefNDims[ci] := tdNDim;
         if tdNDim > 0 then CTypedefArrLen[ci] := CTypedefDims[ci * MAX_ARR_DIMS];
+      end;
+    end;
+    if tdElemNDims > 0 then
+    begin
+      ci := FindCTypedef(nm);
+      if ci >= 0 then
+      begin
+        if CTypedefNDims[ci] + tdElemNDims > MAX_ARR_DIMS then
+          Error('too many dimensions in an array typedef');
+        for tdDimV := 0 to tdElemNDims - 1 do
+          CTypedefDims[ci * MAX_ARR_DIMS + CTypedefNDims[ci] + tdDimV] := tdElemDims[tdDimV];
+        CTypedefNDims[ci] := CTypedefNDims[ci] + tdElemNDims;
+        CTypedefArrLen[ci] := CTypedefDims[ci * MAX_ARR_DIMS];
       end;
     end;
   end;

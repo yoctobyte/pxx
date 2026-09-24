@@ -17,33 +17,6 @@ refusal at least tells you something is wrong.
 
 ## Silently wrong
 
-### C: `sizeof *a` of a two-dimensional array is the size of a pointer
-
-```c
-char *table[][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
-size_t rows = sizeof table / sizeof *table;   /* 8 here; GCC gives 2 */
-```
-
-`sizeof *table` is 8 instead of 32, so the common `sizeof a / sizeof *a`
-row count comes out too large and a loop over it runs past the end of the
-array. `sizeof table[0]` is correct. This affects every multidimensional array,
-global or local, in v424 and in the development tree.
-**Workaround:** write `sizeof a[0]` instead of `sizeof *a`.
-
-### C: a typedef of an array of a typedef'd array loses a dimension
-
-```c
-typedef float vec4[4];
-typedef vec4 mat4[4];
-mat4 m = { { 1, 2, 3, 4 }, { 5, 6, 7, 8 }, { 9, 10, 11, 12 }, { 13, 14, 15, 16 } };
-```
-
-At file scope `sizeof m` is 16 instead of 64, and every element reads 0. Inside
-a function the same initialised declaration is refused with `expected C
-expression`. This affects v424 and the development tree.
-**Workaround:** declare the variable as `vec4 m[4]`, which gives the right size
-and values.
-
 ### C: `long double` is 8 bytes
 
 GCC's `long double` is 16 bytes on x86-64; PXX's is 8, the same as `double`. A
@@ -104,6 +77,19 @@ will carry the fixes. Until then, use the workaround.
   keep floats out of the program, or build it as an ESP-IDF component; see
   [ESP32](../targets/esp32.md), "Mode 1: Bare metal". Fixed in `e0db3791c`: the
   program builds and prints its output under `qemu-system-xtensa`.
+- **C: `sizeof *a` of a multidimensional array is the size of a pointer.** For
+  `char *table[][4]`, `sizeof *table` is 8 instead of 32, so
+  `sizeof a / sizeof *a` counts too many rows and a loop over it runs past the
+  array. **Workaround:** write `sizeof a[0]`.
+- **C: a typedef of an array of a typedef'd array loses a dimension.** With
+  `typedef float vec4[4]; typedef vec4 mat4[4];` a `mat4` is 16 bytes instead
+  of 64 and its elements read 0, and an initialised local `mat4` is refused
+  with `expected C expression`. **Workaround:** declare it as `vec4 m[4]`.
+- **C: `sizeof (t)->key` is refused** with `expected ')'`. **Workaround:**
+  write `sizeof t->key` or `sizeof ((t)->key)`.
+
+  The three C rows are checked against gcc on x86-64 by
+  `test_c_sizeof_of_a_dereferenced_array_and_a_typedef_of_array_typedefs.c`.
 
 Each row was re-checked on 2026-09-25 with a development build (compiler sha256
 `5a8648a2450a…`, tree `c570417d8`): `printf` prints `42 ok`, the `writeln` loop
