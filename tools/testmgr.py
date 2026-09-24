@@ -131,6 +131,12 @@ TIERS = {
         "test-emit-obj",
         # the real-program corpus, native only — the cross variants stay in full
         "test-lua", "test-cjson", "test-zlib",
+        # quickjs: ~90k lines of real C, the largest program the C frontend
+        # compiles and runs. It was in NO tier until 2026-09-25: it failed to
+        # build on crtl's missing tm_gmtoff until f82b42a21 and no tier
+        # reported it. SKIPs without
+        # library_candidates/quickjs.
+        "test-quickjs",
         # The only two rungs in the matrix that compile real third-party OBJECT
         # PASCAL (fgl.pp from FPC's own RTL; fcl-json's 203-case fpcunit suite).
         # Enrolled 2026-08-26 (task-t-enrol-the-fgl-corpus-rung), and the reason
@@ -289,7 +295,7 @@ TIERS = {
         "test-c-conformance-i386", "test-c-conformance-aarch64",
         "test-c-conformance-arm32", "test-c-conformance-riscv32",
         "test-lua-cross",
-        "test-lua", "test-cjson", "test-zlib",
+        "test-lua", "test-cjson", "test-zlib", "test-quickjs",
         # see the note in `limited`; fpjson is full-only because it is
         # pin-built and `limited` is kept pin-free on purpose
         "test-fgl", "test-fpjson",
