@@ -43381,8 +43381,9 @@ vacuous — and a vacuous comparison does not look empty. It looks like
 The tell is that the two arms agree *perfectly*. Two arms that genuinely differ
 in one variable almost never produce byte-identical failures.
 
-**Three instances, one seat, one session, 2026-09-24 — which is the recurrence
-that earns the section.** All three were caught, none by noticing the rule.
+**Four instances, one seat, one session, 2026-09-24 — which is the recurrence
+that earns the section.** All four were caught, none by noticing the rule, and
+the fourth was produced AFTER the first three had been written up here.
 
 **1. A control that shares an unrelated refusal with its subject.** Checking
 whether `lib/rtl/palthread.pas`'s bare `MAP_ANON_PRIV = $22` was an xtensa
@@ -43434,18 +43435,56 @@ confident 0 into a visible 0-of-0.
 (`bug-c-an-undeclared-struct-type-compiles-and-reads-garbage`,
 `bug-b-terminalsize-answers-enotty-on-xtensa-and-the-probe-cannot-say-why`.)
 
-**Two further instances are owed here from frankb-8e** and are not yet written
-in, because they are the shapes my three do not cover: a discriminator built on
-qemu naming behaviour that a **riscv32 control killed** — the case where the
-control WORKED, which is what makes it worth quoting — and an xtensa pty ioctl
-that returns **rc=0 with a zeroed struct**, where success itself is the vacuous
-control and the data is simply absent. Until those land this section is three
-instances of one shape.
+**A FOURTH INSTANCE, PRODUCED WHILE WRITING THIS SECTION, which is the part
+that makes the rule worth having.** Mapping pxx against gcc on incomplete-type
+declarations, the probe counted `error` lines from each compiler and reported
+agreement on four rows. Every pxx "error" was `main function not found` — the
+probe snippets had no `main`. The two compilers agreed about nothing, and the
+readout manufactured the parity. **This was written less than an hour after the
+three instances above, by the author of this section, in a probe built to check
+a boundary.** Knowing the rule did not fire it; a row whose gcc column said
+`storage size of 'v' isn't known` against a pxx column saying `main function not
+found` is only obviously wrong once the MESSAGES are printed instead of counted.
+**Print what the instrument said, not how many times it said something.**
 
-**Not promoted to CLAUDE.md**, by the promotion test: this is one seat and one
-session, and the file already carries "a positive control drawn from the wrong
-population" and "a guard that cannot fail" — which an author reads as covering
-this, and which measurably did not, three times in one evening. **Promote it if
-a second seat produces a vacuous comparison that both of those rules would have
-passed**; 8e's two instances above are the candidate, and if they land here they
-are that second seat.
+**TWO INSTANCES FROM A SECOND SEAT (frankb-8e, 2026-09-24), and they bracket the
+shape from both ends:**
+
+**The control that WORKED, and killed the method rather than a candidate.** 8e
+had inferred from `qemu-xtensa -strace` naming an ioctl that naming implied
+handling, and was about to rank candidate `TIOCGWINSZ` encodings by whether qemu
+named them. The control was riscv32, which names only `TCGETS`/`TCSETS` and
+whose `$5413` nevertheless works — so not-named does not imply not-handled, and
+the discriminator had no discriminating power at all. It cost one command and
+refuted the whole method. The underlying reason is this family's signature: qemu
+names a syscall from a **per-target table, before touching the fd**, so it names
+them on a bad fd too. The instrument was correct about its own table and silent
+about the kernel.
+
+**The vacuous rc=0 control, which is this section's shape exactly.** Scanning the
+read-direction `'t'`/`'T'` space on an xtensa pty, `$40087467` returns **rc=0 and
+leaves the winsize struct ZEROED**; four such encodings exist. "The ioctl
+succeeded" is therefore satisfied by encodings that transfer nothing, and an
+acceptance row written on rc alone reports SUCCESS with an 0x0 terminal. Only the
+DATA separates them, which is why the accepted constant was validated against a
+pty of KNOWN size — three sizes, 132x40, 80x24 and 200x50, read back exactly,
+twice each — rather than against rc. 8e's framing of the pair is better than
+mine: **#1 is a control that fails differently and therefore works; #2 is a
+control the subject cannot fail.**
+
+**NOT PROMOTED TO CLAUDE.md, and the reasoning is said out loud because "not
+promoted" reads as "not valued" otherwise.** The promotion test is recurrence
+across an independent subsystem, and this section now has two seats — so the
+trigger I wrote into it a few hours ago has technically fired. I am declining it
+anyway, on the other half of the test: **CLAUDE.md must not grow a neighbour
+where it already has the rule.** 8e's #2 is already decided there by "CHOOSE A
+PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT" — 0 is both "no answer" and a
+plausible answer, which is that rule verbatim. 8e's #1 is a control that worked,
+which is not this shape at all. Strip those two out and the genuinely new shape —
+**two arms that fail IDENTICALLY for a reason unrelated to the question, so the
+verdict reads as parity** — is still one seat, one session, four instances.
+**What would change it: a second seat producing a vacuous comparison where both
+arms ran, both failed the same way, and neither the wrong-population rule nor the
+cannot-fail rule would have caught it.** If that arrives, the line to strengthen
+is the existing positive-control paragraph, not a new rule beside it: an
+extension costs a sentence where a neighbour costs a paragraph.
