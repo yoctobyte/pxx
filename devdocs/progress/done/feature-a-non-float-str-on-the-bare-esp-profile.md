@@ -336,3 +336,40 @@ stating because both are ways a later reader gets this wrong:
 The measurements themselves are unaffected: they were taken with both binaries
 named by sha, and `code=` equality plus the byte-identical no-`Str` program stand
 as recorded.
+
+## 2026-09-24 — the containment control WAS non-vacuous when run, and is vacuous NOW; the pin snapshot is a second instance of a hazard already in CLAUDE.md
+
+franks-5b measured that `compiler/builtin/` and
+`stable_linux_amd64/default/builtin/` are **byte-identical — 14 of 14 files**,
+`strfmt.pas` included, and drew the right conclusion: *identical is the dangerous
+state, not the safe one.* Reproduced here.
+
+**Why the control was sound when taken.** The claim it supported was that the
+pinned compiler reads its own snapshot rather than the live tree, so the split
+could not break `$(PXX_STABLE)` consumers. At that moment the snapshot was v419's
+— pre-split, no `strfmt.pas` — while the live `builtin.pas` had already had the
+five formatters removed. The pinned compiler then compiled an eight-arm `Str`
+program **successfully**, with pre-split numbers (`code=24368B data=6936B`). Had
+it been reading the live tree it would have failed outright, because live
+`builtin.pas` no longer declares `StrInt`. **That is a differential that could
+have come out the other way**, which is the only reason the conclusion was worth
+anything.
+
+**Why re-running it now proves nothing.** v420 was cut from this tree, so the two
+copies agree, and the same command compares the split tree with itself. Recorded
+at `82ec739118` for the control BINARY; this is the same mechanism reaching the
+control SOURCE TREE, and it arrives automatically at every pin rather than through
+anybody's mistake.
+
+**And it is the same structure CLAUDE.md already documents one layer down**, in
+the bootstrap-CWD rule: *"a byte-comparison does not catch the silent arm while
+the two trees' builtins happen to agree ... measured, a build from a sibling root
+came out BYTE-IDENTICAL."* That is about ~20 sibling checkouts; this is about the
+pin snapshot, in-tree, and **guaranteed identical for as long as nobody touches
+`compiler/builtin/` after a pin.** Two copies of `builtin/` that agree until they
+do not, in both cases, with the agreement doing the concealing.
+
+The practical residue, and it is one question rather than a procedure: **when a
+control's two sides can become the same object, say what made them different at
+the time you ran it.** For this one it was `strfmt.pas`'s absence from the
+pinned snapshot, and that sentence stays true after the copies converge.
