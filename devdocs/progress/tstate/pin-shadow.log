@@ -1078,3 +1078,4 @@
 2026-09-24T15:39:05Z	borg	57ec17b3439805b8901a80c9bf4c3b99200966d6	would NOT pin 57ec17b34398 — 3 red(s) the current pin does not have, 12 inherited from the current pin: size-canary#src:tools/size_canary.py, test-nilpy#src:test/test_nilpy_float_repr_roundtrip.npy, tools-devtest#00
 2026-09-24T16:03:52Z	borg	e52b268c9976b42827b3898ce2cb5f5ede7710a0	would NOT pin e52b268c9976 — 2 red(s) the current pin does not have, 12 inherited from the current pin: size-canary#src:tools/size_canary.py, tools-devtest#00
 2026-09-24T16:35:33Z	borg	8e2464989f2a0ba0ca8f6ea90bf854a98c2f2b49	would-pin PENDING 8e2464989f2a — qualifies, streak 1/2
+2026-09-24T16:59:47Z	borg	5035144550139e34e3ca1c3c5d62a45a6d987902	would NOT pin 503514455013 — 1 red(s) the current pin does not have, 10 inherited from the current pin: lib-test#src:test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy
