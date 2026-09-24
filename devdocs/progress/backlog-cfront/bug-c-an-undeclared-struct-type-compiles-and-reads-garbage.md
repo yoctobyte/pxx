@@ -367,9 +367,25 @@ about the binary"*, arriving in a peer review of the very commit that fixed it.
 inverted the conclusion: `git show <tree>:compiler/cparser.inc | grep -c 'kept
 this struct/union OPAQUE'` answered **0** for a tree that has the diagnostic. The
 message is assembled at runtime from two string literals (`'...kept this'` +
-`' struct/union OPAQUE...'`), so that phrase exists in the BINARY and never in
-the SOURCE. Grepping source for a runtime-assembled message is a search whose
-answer is always no.
+`' struct/union OPAQUE...'`).
+
+**I first wrote here that the phrase "exists in the BINARY and never in the
+SOURCE". That is wrong, and wrong in the direction that sends the next reader to
+a second instrument which fails the same way.** Measured:
+
+| where | `kept this struct/union` |
+| --- | --- |
+| source (`grep`) | **0** |
+| binary (`strings`) | **0** |
+| the program's OUTPUT | 4 |
+
+The concatenation happens at RUNTIME, so the joined phrase is in neither
+artefact — only `kept this` is, as its own literal. **A grep for a
+runtime-assembled message is a search whose answer is always no, in the source
+AND in the binary**; the only instrument that sees it is running the thing.
+Search for the longest fragment that is one literal, or grep for the
+identifier that emits it (`CRecMissingFieldKind`, `UClsLayoutDropped`) rather
+than for the words a user would read.
 
 ### What is real, and it is worth fixing
 
