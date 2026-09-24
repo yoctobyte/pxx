@@ -43775,6 +43775,285 @@ begin
   PyFJDetecting := False;
 end;
 
+procedure PyFJEnclosingDef(p: Integer; out hdrFrom, bodyFrom: Integer);
+{ The innermost def whose suite contains token p: its `def` token and the first
+  token of its body. Both -1 at module level. Token-only, for the pre-pass. }
+var i, ind: Integer;
+begin
+  hdrFrom := -1;
+  bodyFrom := -1;
+  i := p - 1;
+  while i >= PyScanLo do
+  begin
+    if Tokens[i].Kind = tkFunction then
+    begin
+      ind := PyFindSuiteIndent(i, MainProgramTokCount);
+      if (ind >= 0) and (ind < p) and (p < PyFindBodyEnd(ind + 1)) then
+      begin
+        hdrFrom := i;
+        bodyFrom := ind + 1;
+        Exit;
+      end;
+    end;
+    Dec(i);
+  end;
+end;
+
+function PyFJRecvCi(p: Integer; const nm: AnsiString): Integer;
+{ The class of the bare receiver `nm` of a store at token p, when the tokens
+  say so: an annotated parameter (`def f(b: A)`), or a local / module name whose
+  bindings before p are all constructions of one class. -1 when unknown. }
+var hdr, body, lo, k, depth, eq, e2, ci: Integer;
+    t2: TTypeKind;
+begin
+  Result := -1;
+  PyFJEnclosingDef(p, hdr, body);
+  if hdr >= 0 then
+  begin
+    depth := 0;
+    k := hdr;
+    while (k + 2 < body) and not (Tokens[k].Kind in [tkNewline, tkIndent]) do
+    begin
+      if Tokens[k].Kind = tkLParen then Inc(depth)
+      else if Tokens[k].Kind = tkRParen then Dec(depth)
+      else if (depth = 1) and (Tokens[k].Kind = tkIdent) and
+              (Tokens[k - 1].Kind in [tkLParen, tkComma]) and
+              TokenCaseEqual(k, nm) then
+      begin
+        if (Tokens[k + 1].Kind = tkColon) and (Tokens[k + 2].Kind = tkIdent) then
+        begin
+          ci := FindUClassNonRecord(GetTokenStr(k + 2));
+          if (ci >= 0) and not UClsIsRecord[ci] then Result := ci;
+        end;
+        Exit;   { a parameter: annotated or not, no body binding decides it }
+      end;
+      Inc(k);
+    end;
+    lo := body;
+  end
+  else
+    lo := PyScanLo;
+  for k := lo to p - 1 do
+  begin
+    if not ((Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, nm) and
+            PyWholeTargetAt(k, lo)) then Continue;
+    eq := PyLocalAsgEqIdx(k, lo);
+    if eq < 0 then Continue;
+    e2 := eq + 1;
+    while (e2 < TokCount) and
+          not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(e2);
+    t2 := PyInferExprType(eq + 1, e2);
+    if (t2 = tyClass) and (PyInferLastCi >= 0) and
+       ((Result < 0) or (Result = PyInferLastCi)) then
+      Result := PyInferLastCi
+    else
+    begin
+      Result := -1;   { bound to something else, or to two classes: unknown }
+      Exit;
+    end;
+  end;
+end;
+
+function PyFJDeclaringEntry(ci: Integer; const nm: AnsiString): Integer;
+{ The PyFJ entry of `nm` in ci or its nearest ancestor that records it. }
+var guard: Integer;
+begin
+  Result := -1;
+  guard := 0;
+  while (ci >= 0) and (guard < MAX_UCLASS) do
+  begin
+    Result := PyFJFind(ci, nm);
+    if Result >= 0 then Exit;
+    ci := PyFJParent[ci];
+    Inc(guard);
+  end;
+end;
+
+function PyFJForeignRhsTk(lo, hi, p: Integer): TTypeKind;
+{ The token-level type of the value a non-self store writes. }
+var hdr, body, k, ent, rci: Integer;
+    nm: AnsiString;
+    t: TTypeKind;
+begin
+  Result := PyInferExprType(lo, hi);
+  if Result <> tyUnknown then Exit;
+  if (hi = lo + 1) and (Tokens[lo].Kind = tkIdent) then
+  begin
+    { a bare name: its bindings before the store, in the enclosing def }
+    PyFJEnclosingDef(p, hdr, body);
+    if body < 0 then body := PyScanLo;
+    Result := PyRetNameType(body, p, GetTokenStr(lo));
+  end
+  else if (hi = lo + 3) and (Tokens[lo].Kind = tkIdent) and
+          (Tokens[lo + 1].Kind = tkDot) and (Tokens[lo + 2].Kind = tkIdent) then
+  begin
+    { `r.F`: F's recorded type -- in r's class when known, else agreed by
+      every class recording F }
+    nm := GetTokenStr(lo + 2);
+    rci := -1;
+    if GetTokenStr(lo) <> 'self' then rci := PyFJRecvCi(p, GetTokenStr(lo));
+    if rci >= 0 then
+    begin
+      ent := PyFJDeclaringEntry(rci, nm);
+      if ent >= 0 then Result := IntToTypeKind(PyFJTk[ent]);
+      Exit;
+    end;
+    for k := 0 to PyFJCount - 1 do
+      if PyFJName[k] = nm then
+      begin
+        t := IntToTypeKind(PyFJTk[k]);
+        if Result = tyUnknown then Result := t
+        else if Result <> t then
+        begin
+          Result := tyUnknown;
+          Exit;
+        end;
+      end;
+  end;
+end;
+
+procedure PyFJJoinForeignStores;
+{ Join into the field table every store that writes a field through a receiver
+  OTHER than a bare `self` -- `b.s = y` in a free def, `a.s = 2.5` on a local,
+  `m.obj.s = ...`, chain and tuple targets. PyCollectClassFieldJoins sees only
+  `self.NAME`, so without this a field kept the type its own methods gave it
+  and a float written from outside landed in an int slot as its IEEE bits.
+
+  Runs between the detect sweep and the layout, so nothing is laid out yet and
+  no re-layout is needed. Where the receiver's class is known from the tokens
+  (PyFJRecvCi) the join is SCOPED to that class's declaring entry; only an
+  untyped receiver falls back to every class recording NAME -- widening is
+  always correct, and the fallback costs speed only where names collide.
+
+  An rhs the tokens cannot type joins NOTHING: widening on unknown would make
+  every `node.next = other` field a variant. Those stores keep the old
+  behaviour, which is the recorded residual of
+  bug-n-a-store-through-a-non-self-receiver-never-widens-the-field-so-a-float-lands-as-raw-bits }
+var k, e, depth, j, na, t, ti, ri, tLo, tHi, rLo, rHi, it, nT, nR, rci, ent, x: Integer;
+    eqs: array[0..15] of Integer;
+    tItem, rItem: array[0..31] of Integer;   { item start, item end pairs }
+    nm: AnsiString;
+    rtk: TTypeKind;
+    scoped: Boolean;
+
+  function SplitItems(lo, hi: Integer; var items: array of Integer): Integer;
+  var q, d, st: Integer;
+  begin
+    Result := 0;
+    d := 0;
+    st := lo;
+    for q := lo to hi do
+    begin
+      if (q = hi) or ((d = 0) and (Tokens[q].Kind = tkComma)) then
+      begin
+        if Result >= 16 then begin Result := -1; Exit; end;
+        if q > st then
+        begin
+          items[Result * 2] := st;
+          items[Result * 2 + 1] := q;
+          Inc(Result);
+        end;
+        st := q + 1;
+      end
+      else if Tokens[q].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+      else if Tokens[q].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(d);
+    end;
+  end;
+
+begin
+  k := PyScanLo;
+  while k < MainProgramTokCount do
+  begin
+    if not ((Tokens[k].Kind = tkIdent) and
+            ((k = PyScanLo) or
+             (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent]))) then
+    begin
+      Inc(k);
+      Continue;
+    end;
+    { the statement: its end, and every `=` at bracket depth 0 }
+    e := k;
+    depth := 0;
+    na := 0;
+    while (e < MainProgramTokCount) and
+          not ((depth = 0) and (Tokens[e].Kind in [tkNewline, tkEOF, tkIndent, tkDedent])) do
+    begin
+      if Tokens[e].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+      else if Tokens[e].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
+      else if (depth = 0) and (Tokens[e].Kind = tkAssign) and (na < 16) then
+      begin
+        eqs[na] := e;
+        Inc(na);
+      end
+      else if (depth = 0) and (Tokens[e].Kind = tkColon) then Break;  { annotated / compound }
+      Inc(e);
+    end;
+    if (na > 0) and (e > eqs[na - 1] + 1) and
+       ((e >= MainProgramTokCount) or (Tokens[e].Kind <> tkColon)) then
+    begin
+      rLo := eqs[na - 1] + 1;
+      rHi := e;
+      nR := SplitItems(rLo, rHi, rItem);
+      tLo := k;
+      for t := 0 to na - 1 do
+      begin
+        tHi := eqs[t];
+        nT := SplitItems(tLo, tHi, tItem);
+        if (nT > 0) and ((nT = 1) or (nT = nR)) then
+          for ti := 0 to nT - 1 do
+          begin
+            it := tItem[ti * 2];
+            x := tItem[ti * 2 + 1];
+            { a dotted target `r.NAME` or `r.a.NAME`, not a bare `self.NAME` }
+            if (x - it < 3) or (((x - it) mod 2) <> 1) then Continue;
+            j := it;
+            while (j < x) and (Tokens[j].Kind = tkIdent) and
+                  ((j + 1 = x) or (Tokens[j + 1].Kind = tkDot)) do j := j + 2;
+            if j <> x + 1 then Continue;
+            if (x - it = 3) and (GetTokenStr(it) = 'self') then Continue;
+            if nT = 1 then begin ri := rLo; j := rHi; end
+            else begin ri := rItem[ti * 2]; j := rItem[ti * 2 + 1]; end;
+            if (nT = 1) and (nR > 1) then Continue;   { a tuple into one field }
+            rtk := PyFJForeignRhsTk(ri, j, k);
+            if rtk = tyUnknown then Continue;
+            if rtk = tyString then rtk := tyAnsiString;
+            nm := GetTokenStr(x - 1);
+            rci := -1;
+            if x - it = 3 then rci := PyFJRecvCi(k, GetTokenStr(it));
+            ent := -1;
+            if rci >= 0 then ent := PyFJDeclaringEntry(rci, nm);
+            scoped := ent >= 0;
+            if scoped then
+            begin
+              PyInferName := 'field ' + nm;
+              PyFJTk[ent] := Ord(PyWidenBinding(IntToTypeKind(PyFJTk[ent]), rtk));
+              PyInferName := '';
+            end
+            else if rci < 0 then
+              for j := 0 to PyFJCount - 1 do
+                if PyFJName[j] = nm then
+                begin
+                  PyInferName := 'field ' + nm;
+                  PyFJTk[j] := Ord(PyWidenBinding(IntToTypeKind(PyFJTk[j]), rtk));
+                  PyInferName := '';
+                end;
+            { PXXDBG=n.fjforeign -- which join each non-self store took }
+            if PxxDbgEnabled('n.fjforeign') then
+            begin
+              if scoped then nm := nm + ' rhs tk=' + AIntToStr(Ord(rtk)) + ' scoped ci=' + AIntToStr(rci)
+              else if rci >= 0 then nm := nm + ' rhs tk=' + AIntToStr(Ord(rtk)) + ' skipped, class records no field'
+              else nm := nm + ' rhs tk=' + AIntToStr(Ord(rtk)) + ' name-wide';
+              WriteLn('PXXDBG n.fjforeign line ', Tokens[it].Line, ' .', nm);
+            end;
+          end;
+        tLo := eqs[t] + 1;
+      end;
+    end;
+    if e <= k then e := k + 1;
+    k := e;
+  end;
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz, vmtN: Integer;
@@ -46554,6 +46833,7 @@ begin
     thousand lines further down. Hence detect, propagate, then register. }
   PyFJReset;
   PyClassHeaderSweep(0);
+  PyFJJoinForeignStores;
   PyFJPropagate;
   PyInHeaderSweep := True;
   PyClassHeaderSweep(1);

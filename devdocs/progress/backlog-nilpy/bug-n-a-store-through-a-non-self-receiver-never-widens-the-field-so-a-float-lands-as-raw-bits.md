@@ -1,9 +1,9 @@
 ---
 track: N
-prio: 80
+prio: 60
 type: bug
 blocked-by: []
-summary: "MECHANISM: a class field's type is joined only from stores through `self` inside the class's own methods (the class pre-pass, PyWidenBinding over `self.<f> = ...`). A store through ANY other receiver -- a parameter, a local, a module name, a tuple or chain target -- is never seen by that join, so the field keeps its first type and the value is written into it unconverted. A float-typed value into an int field lands as its IEEE BITS (`b.s = y` with y = 1.5 prints 4609434218613702656); a float LITERAL is truncated instead (prints 1), which is also wrong; an int into a float field prints `3.0` where CPython prints `3`. Silent, exit 0, every receiver kind except self. Springs whenever code outside a class rebinds a field to a type its own methods never store."
+summary: "FIXED for every store whose value the tokens can type (PyFJJoinForeignStores, between the class detect sweep and layout): `<recv>.NAME = v` through a parameter, local, module name, dotted chain, chain or tuple target now widens the field, scoped to the receiver's class when the tokens name it and name-wide across every class recording NAME otherwise. RESIDUAL, STILL SILENT WRONG VALUES: a store whose right-hand side the token pre-pass cannot type -- a call result with no inferable return, a subscript, a parameter, an attribute of an untyped receiver whose classes disagree -- joins nothing, so a float written that way into an int field still lands as its IEEE bits. Also a cost, not a defect: the name-wide fallback widens same-named fields of unrelated classes (to variant for int/float), values unchanged.""
 ---
 
 # A store through a non-self receiver never widens the field
@@ -56,3 +56,40 @@ not known until the def is parsed. By then the layout is fixed.
   PyWidenBinding already answers for the int/float rebind.
 
 Would retire this: the five rows above printing CPython's answers.
+
+## Design (2026-09-24, frankb-12) -- no re-layout needed
+
+The re-layout above is not required. The class pre-pass already runs in two
+phases over EVERY class: phase 0 (PyCollectClassFieldJoins) only DETECTS, filling
+the (class, field) -> joined-type table PyFJ*, and phase 1 lays out from that
+table. Nothing is laid out until phase 0 has seen the whole program. So a
+non-self store can be joined in the same place, before any layout exists:
+
+1. After phase 0's class walk, one token scan of the whole module for
+   `<ident> . NAME = <rhs>` at a statement start, `<ident>` not `self`
+   (the self stores are the class walk's). Tuple/chain targets later.
+2. Type `<rhs>` token-wise, the way the shell pre-pass must (PyLocals do not
+   exist yet): PyInferExprType; a bare ident is chased with PyRetNameType over
+   the enclosing def's body; `<ident>.F` answers PyFJTk of F when every class
+   recording F agrees.
+3. Join the answer with PyFJNote into EVERY class whose table already records
+   NAME. The receiver's class is unknown at token level; joining into all
+   same-named fields is conservative (widening is always correct, costs speed
+   only where names collide).
+4. An UNKNOWN rhs joins nothing, so an untypable rhs is still the old bug. That
+   is deliberate: widening on unknown would turn every `node.next = other` field
+   into a variant. Residual, recorded rather than guessed.
+
+## RESOLVED (2026-09-24, frankb-12) -- the typable half
+
+Built as designed above. Fixture
+`test/test_nilpy_a_store_through_a_non_self_receiver_widens_the_field.npy`
+(eleven rows, CPython's output as `.expected`) covers the five rows above, a
+chain, an annotated-parameter tuple target, a str into an int field, and the
+BYSTANDER classes C (declared before) and D (after) holding a same-named int
+field. The bystanders are reached by the name-wide join (their field becomes a
+variant) and print `==`, `//`, `%d`, `str()` and `+` exactly as CPython does.
+Pin v421 (binary sha256 4e32f1dde0ec) gets 8 of the 11 rows wrong. The
+bystander rows are identical under both compilers.
+`PXXDBG=n.fjforeign` prints, per store, which join it took: scoped (with the
+class id), name-wide, or skipped.
