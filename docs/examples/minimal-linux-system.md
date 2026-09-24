@@ -116,12 +116,21 @@ userland you need PXX's source and BusyBox's source; to run it you need a kernel
 | **rebuild the kernel** | not us: the image boots a prebuilt distribution kernel |
 | **re-run the differential** | GCC, as the test's reference build — an oracle, not a build input |
 
-Binutils is on that list for one reason, worth naming rather than hiding: PXX
-cannot yet consume an object file, so the 86 BusyBox objects are combined by
-`ld`, and `as` assembles the entry stub (`tools/pxx_freestanding_start.s`, which
-is our own source). Everything *compiled* is compiled by PXX. Those two are
-tools rather than libraries — nothing from outside the checkout ends up inside
-the result, which is the claim the freestanding link asserts.
+Binutils is on that list for one reason, worth naming rather than hiding: when
+this image was put together, PXX could not consume an object file, so the 86
+BusyBox objects are combined by `ld`, and `as` assembles the entry stub
+(`tools/pxx_freestanding_start.s`, which is our own source). Everything
+*compiled* is compiled by PXX. Those two are tools rather than libraries —
+nothing from outside the checkout ends up inside the result, which is the claim
+the freestanding link asserts.
+
+**That limit has since gone; this recipe has not moved with it.** `pascal26
+--link` now links objects itself. On 2026-09-24, with pin v423,
+`tools/busybox_diff.sh --pinned --pxx-link --targets x86_64 --applets "cat echo
+ls wc sort ash"` linked 55 BusyBox objects with no external linker into a static
+executable with no `PT_INTERP`, byte-identical to GCC's build over 82 cases.
+The image recipe above still uses `ld`, and it has not been rebuilt the new way,
+so the 19-applet image described on this page is still the `ld`-linked one.
 
 Nothing about this image is the limit of what such an image can hold. PXX
 compiles SQLite, Lua and zlib as zero-dependency binaries already — see
@@ -217,8 +226,8 @@ that is the check.
   serial console — but there is no self-host fixed point on this ISO, because it
   deliberately ships **no compiler sources**. `/opt/pxx/compiler` holds the
   `pascal26` binary and its builtin units and *zero* `.pas` or `.inc` files.
-  Nor can it rebuild its own BusyBox: PXX cannot consume an object file, and the
-  image carries no assembler and no linker.
+  Nor does it rebuild its own BusyBox: the image carries the BusyBox binary but
+  none of BusyBox's sources.
 - **The self-host fixed point in a VM is a different image.**
   `tools/mkkiosk.sh --selfhost` builds a larger development image that *does*
   carry the compiler's own sources, and there the compiler rebuilds itself
