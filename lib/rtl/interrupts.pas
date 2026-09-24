@@ -63,13 +63,21 @@ unit interrupts;
   (no bare Makefile row passes -Fulib/rtl). Revisit if a Pascal ESP program ever
   needs the pump under a flash budget this does not fit.
 
-  NOT BUILT HERE, DELIBERATELY: the owner's "hidden loop" for a script that
-  registers handlers and then falls off the end. It needs two things settled
-  that this unit does not settle -- it must engage only when a handler is
-  registered, and a desktop program must still EXIT -- and getting the second
-  wrong hangs every NilPy script that imports this unit at exit on the host,
-  which is a regression in ordinary frontend use rather than in an ESP feature.
-  The ticket says not to land it in the same commit as the pump. }
+  THE HIDDEN LOOP (the owner's, built 2026-09-24): a script that registers a
+  handler, arms a source and falls off the end keeps being served. It lives
+  in this unit's `finalization`, the same place mimic_threading joins
+  non-daemon threads, so Python code still runs there. It ENGAGES ONLY WHILE
+  BOTH hold:
+    - a handler is registered (IntHandlerCount > 0), and
+    - a LIVE SOURCE exists (IntLiveSources > 0): a source that can still
+      produce an event after the main body has ended. espgpio opens one per
+      armed pin and closes it on edge_off; espadc opens one on start and
+      closes it on stop. The synthetic `push` is NOT a source, because
+      nothing calls it once the program has ended.
+  A desktop program has no source that opens one, so the loop cannot engage
+  there and every script that imports this unit exits as before. On ESP, the
+  loop ends when the last source closes, e.g. a handler that calls
+  adc.stop(), and the program then ends normally. }
 
 interface
 
@@ -133,6 +141,14 @@ function  IntDrainBudget: Integer;
 { Take one event without running callbacks -- the Pascal half of iterating
   `for ev in interrupts.events()`. False when the queue is empty. }
 function IntNext(var ev: TIntEvent): Boolean;
+
+{ Live sources: something that can still push after the main body ends.
+  A source calls IntSourceOpen when it arms and IntSourceClose when it
+  disarms. The hidden loop in this unit's finalization runs while any is open
+  AND a handler is registered -- see the unit header. }
+procedure IntSourceOpen;
+procedure IntSourceClose;
+function  IntLiveSources: Integer;
 
 { Drop every queued event and reset the counters. For tests and for a program
   that wants a clean slate after reconfiguring its sources. }
@@ -214,6 +230,9 @@ procedure on_event(source: Integer; const cb: Variant);
   push must not be mistakable for one. }
 function push(source, id: Integer): Boolean;
 
+{ How many live sources are open -- the hidden loop's second condition. }
+function live_sources: Integer;
+
 implementation
 
 uses platform,    { PalPendingDrain -- the blocking-point hook }
@@ -265,6 +284,7 @@ var
   Delivered: Int64;
   PushSeq:   Int64;
   Budget:    Integer;
+  LiveSources: Integer;
   InDrain:   Boolean;
   BudgetSet: Boolean;
 
@@ -490,6 +510,22 @@ begin
   Result := CurrentBudget;
 end;
 
+procedure IntSourceOpen;
+begin
+  LiveSources := LiveSources + 1;
+end;
+
+procedure IntSourceClose;
+begin
+  if LiveSources > 0 then
+    LiveSources := LiveSources - 1;
+end;
+
+function IntLiveSources: Integer;
+begin
+  Result := LiveSources;
+end;
+
 procedure IntReset;
 var i: Integer;
 begin
@@ -584,4 +620,21 @@ begin
   Result := IntPush(source, id);
 end;
 
+function live_sources: Integer;
+begin
+  Result := LiveSources;
+end;
+
+finalization
+  { THE HIDDEN LOOP. See the unit header for when it engages and why a
+    desktop program is untouched. Sleeping 10 ms, then draining: on ESP the
+    sleep is a vTaskDelay of about one tick, so the idle task and the task
+    watchdog keep running; a shorter sleep would be a busy-wait there and
+    starve them. A handler may close the last source (or unregister
+    itself), and the loop then ends and the program with it. }
+  while (NHandlers > 0) and (LiveSources > 0) do
+  begin
+    PalNanosleep(0, 10000000);
+    IntPoll;
+  end;
 end.

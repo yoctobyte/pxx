@@ -55,9 +55,13 @@ BASELINE = os.path.join(ROOT, "tools/size_baseline.json")
 # budget is spent against.
 EMPTY_SRC = "program e;\nbegin\nend.\n"
 
-# (subject, extra compiler flags). The four ESP parts are the ticket's subject;
-# three of them are the same xtensa image today, and recording all three is how
-# a divergence between them becomes visible instead of arriving as a surprise.
+# (subject, extra compiler flags). The ESP parts are the ticket's subject.
+# esp32-bare and esp32s2-bare WERE rows until 2026-09-24 and are gone on
+# purpose: 672e44c7f made --esp-profile=bare REFUSE every named chip but c3 and
+# s3, because the bare image hardcodes their load address and UART0 base, so
+# those two "images" were an S3 image with the wrong chip's name on it. The
+# refusal is asserted by message in test-xtensa; a size row for an image we
+# refuse to build would measure nothing.
 #
 # x86_64 is here deliberately though the ticket does not ask for it: the sibling
 # ticket bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce is the same
@@ -66,8 +70,6 @@ EMPTY_SRC = "program e;\nbegin\nend.\n"
 SUBJECTS = [
     ("esp32c3-bare", ["--target=esp32c3", "--esp-profile=bare"]),
     ("esp32s3-bare", ["--target=esp32s3", "--esp-profile=bare"]),
-    ("esp32s2-bare", ["--target=esp32s2", "--esp-profile=bare"]),
-    ("esp32-bare",   ["--target=esp32",   "--esp-profile=bare"]),
     ("x86_64-empty", []),
 ]
 

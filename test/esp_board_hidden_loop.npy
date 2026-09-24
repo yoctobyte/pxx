@@ -1,0 +1,32 @@
+# BOARD ONLY (ESP32-S3): the ESP half of the owner's hidden-loop rule. A script
+# that registers a handler, arms a source and FALLS OFF THE END keeps being
+# served.
+#
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=$PWD/test/esp_board_hidden_loop.npy \
+#     tools/esp_flash.sh --project examples/esp32/adc-s3 --no-verify --seconds 10
+#   and compare the lines after "Calling app_main()" with
+#   test/esp_board_hidden_loop.expected
+#
+# The ADC keeps producing frames after the main body ends. Every "served"
+# line below is printed AFTER "main-end", i.e. by the loop in interrupts'
+# finalization. The handler stops the ADC at frame 20, which closes the last
+# live source, so the loop ends and the program returns from app_main.
+# "after-loop" comes from the handler's last act, not from the main body.
+# The desktop half is test/test_interrupt_desktop_script_exits.npy.
+import interrupts
+import 'espadc.pas' as adc
+
+n = [0]
+
+
+def on_frame(ev):
+    n[0] = n[0] + 1
+    if n[0] == 1 or n[0] == 10:
+        print("served", n[0], "live", interrupts.live_sources())
+    if n[0] == 20:
+        print("served", n[0], "stop", adc.stop(), "live", interrupts.live_sources())
+
+
+interrupts.on_event(interrupts.INT_SRC_ADC, on_frame)
+print("start", adc.start(0, 20000), "live", interrupts.live_sources())
+print("main-end served", n[0])

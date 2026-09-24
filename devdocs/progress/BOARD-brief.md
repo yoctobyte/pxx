@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:19 blocked:9 backlog:43 backlog-umbrella:14 backlog-core:169 backlog-nilpy:183 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3973 rejected:89`
+`working:34 unfinished:19 blocked:9 backlog:43 backlog-umbrella:14 backlog-core:169 backlog-nilpy:183 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3974 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 
@@ -37,7 +37,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-pascal-management-operators-copy-and-addref` [P] — owner: frankA
 - `feature-pascal-management-operators-nested-and-array` [P] — owner: frankA
-- `feature-s-interrupt-events-reach-python-outside-interrupt-context` [S] — owner: frankS
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `perf-a-every-return-releases-every-managed-local-even-the-untouched-ones` [A] — owner: frank-subcoord
 - `perf-n-one-computed-getattr-in-any-imported-module-boxes-every-method-in-the-program` [N] — owner: franks-5b

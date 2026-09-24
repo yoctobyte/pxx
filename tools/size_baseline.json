@@ -1,35 +1,25 @@
 {
   "_comment": "Written by tools/size_canary.py --update. A DELTA baseline, not a target: it freezes today's sizes so growth becomes a red, and blesses none of them. See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss.",
   "measured_at": {
-    "date": "2026-09-19T09:28:21+02:00",
-    "sha": "a55b9fb1cec1",
-    "subject": "docs(playbook): only one gate row compiles lib/rtl, and a layout change needs it"
+    "date": "2026-09-24T17:55:44+02:00",
+    "sha": "f941977cdb74",
+    "subject": "feat(B,S): ADC frames reach Python through the interrupts pump; time.sleep and time.monotonic work on ESP"
   },
   "subjects": {
-    "esp32-bare": {
-      "bss": 66808,
-      "code": 732,
-      "data": 640
-    },
     "esp32c3-bare": {
-      "bss": 66808,
-      "code": 276,
-      "data": 640
-    },
-    "esp32s2-bare": {
-      "bss": 66808,
-      "code": 732,
-      "data": 640
+      "bss": 640,
+      "code": 20,
+      "data": 336
     },
     "esp32s3-bare": {
-      "bss": 66808,
-      "code": 732,
-      "data": 640
+      "bss": 640,
+      "code": 58,
+      "data": 336
     },
     "x86_64-empty": {
-      "bss": 35324,
-      "code": 67418,
-      "data": 4264
+      "bss": 34600,
+      "code": 532,
+      "data": 360
     }
   }
 }

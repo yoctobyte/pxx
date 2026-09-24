@@ -135,6 +135,8 @@ const
 var
   EdgeIsrCount: LongInt;
   IsrServiceUp: Boolean;
+  { one live source (interrupts.IntSourceOpen) per armed pin }
+  Armed: array[0 .. 63] of Boolean;
 
 { INTERRUPT CONTEXT. Called by the IDF GPIO ISR service with the pin as arg.
   Counts the entry and pushes; nothing else, and in particular no callback.
@@ -174,6 +176,11 @@ begin
     rc := gpio_intr_disable(pin);
     gpio_isr_handler_remove(pin);
     gpio_set_intr_type(pin, GPIO_EDGE_NONE);
+    if (pin >= 0) and (pin <= 63) and Armed[pin] then
+    begin
+      Armed[pin] := False;
+      IntSourceClose;
+    end;
     GpioArmEdge := rc;
     Exit;
   end;
@@ -193,7 +200,13 @@ begin
   if rc <> 0 then begin GpioArmEdge := rc; Exit; end;
   rc := gpio_isr_handler_add(pin, @EdgeIsr, Pointer(PtrUInt(pin)));
   if rc <> 0 then begin GpioArmEdge := rc; Exit; end;
-  GpioArmEdge := gpio_intr_enable(pin);
+  rc := gpio_intr_enable(pin);
+  if (rc = 0) and (pin >= 0) and (pin <= 63) and not Armed[pin] then
+  begin
+    Armed[pin] := True;
+    IntSourceOpen;
+  end;
+  GpioArmEdge := rc;
 end;
 
 function GpioEdgeCount: Integer;

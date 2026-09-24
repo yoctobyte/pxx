@@ -70,7 +70,7 @@ def measured(**over):
 def main():
     print("1. the subjects the ticket names are all watched")
     names = {n for n, _ in sc.SUBJECTS}
-    for want in ("esp32c3-bare", "esp32s3-bare", "esp32s2-bare", "esp32-bare"):
+    for want in ("esp32c3-bare", "esp32s3-bare"):
         check(want in names, "%s is a subject" % want)
     check(all("--esp-profile=bare" in f for n, f in sc.SUBJECTS
               if n.endswith("-bare")),
@@ -132,7 +132,7 @@ def main():
 
     print("7. an unbaselined subject is a failure, with the fix in the message")
     b = baseline()
-    del b["subjects"]["esp32-bare"]
+    del b["subjects"]["esp32s3-bare"]
     rows, f, _ = sc.compare(measured(), b)
     check(len(f) == 1 and "no baseline" in f[0], "measured but unwatched -> red")
     check("--update" in f[0], "and the message names the command that adopts it",
@@ -149,7 +149,7 @@ def main():
     real_measure, real_argv = sc.measure, sys.argv
     try:
         sc.measure = lambda subject, flags, tmp: (
-            "compile failed (rc=2): nope" if subject == "esp32-bare"
+            "compile failed (rc=2): nope" if subject == "esp32s3-bare"
             else dict(BASE))
         sys.argv = ["size_canary.py", "--update"]
         buf = io.StringIO()
@@ -157,7 +157,7 @@ def main():
             rc = sc.main()
         out = buf.getvalue()
         check(rc == 1, "--update exits nonzero", "rc=%s" % rc)
-        check("REFUSING to update" in out and "esp32-bare" in out,
+        check("REFUSING to update" in out and "esp32s3-bare" in out,
               "and says which subject stopped it", out.strip().splitlines()[-1][:70])
     finally:
         sc.measure, sys.argv = real_measure, real_argv

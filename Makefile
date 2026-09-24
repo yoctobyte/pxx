@@ -37088,6 +37088,17 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/adc-c3/main/main.npy $(TESTTMP)/adc_demo.o >/dev/null \
 	  && echo "=== adc demo source builds [$$t]: OK ===" || exit 1; \
 	done
+	@# The two BOARD-ONLY tests, build only here -- their runs need silicon and
+	@# their recipes are in their headers. The ring stress is S3-only: it pins a
+	@# task to core 1, and the C3 has one core.
+	@./$(COMPILER) --target=esp32s3 --xtensa-long-calls --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_gpio_ring_stress.pas $(TESTTMP)/esp_board_ring.o >/dev/null \
+	  && echo "=== esp_board_gpio_ring_stress builds [esp32s3]: OK ===" || exit 1
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_hidden_loop.npy $(TESTTMP)/esp_board_hidden_loop.o >/dev/null \
+	  && echo "=== esp_board_hidden_loop builds [$$t]: OK ===" || exit 1; \
+	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build
 	# by name (`unresolved forward: <callee>`) rather than mis-running. A body
@@ -39857,6 +39868,23 @@ endif
 	# `after-sleep ... seen 3` into `seen 0` and the run then dies on seen[0].
 	./$(COMPILER) -Fulib/rtl test/test_interrupt_events_reach_python.npy $(TESTTMP)/test_interrupt_py
 	$(TESTTMP)/test_interrupt_py | diff -u test/test_interrupt_events_reach_python.expected -
+	# THE HIDDEN LOOP (interrupts' finalization), both of the owner's halves.
+	# Mechanism: a handler plus a LIVE SOURCE keeps a program served after its
+	# main body ends. 'main-end delivered 0 pending 3' prints BEFORE the three
+	# 'served' lines, which is the claim; the handler closes the source on the
+	# third, and the program must then exit (timeout 10). -dNO_SOURCE is the
+	# control: no source, no loop, the queued events are never delivered.
+	$(PXX_STABLE) -Fulib/rtl test/test_interrupt_hidden_loop.pas $(TESTTMP)/test_interrupt_hidden_loop
+	timeout 10 $(TESTTMP)/test_interrupt_hidden_loop | diff -u test/test_interrupt_hidden_loop.expected -
+	$(PXX_STABLE) -Fulib/rtl -dNO_SOURCE test/test_interrupt_hidden_loop.pas $(TESTTMP)/test_interrupt_hidden_loop_ns
+	timeout 10 $(TESTTMP)/test_interrupt_hidden_loop_ns | diff -u test/test_interrupt_hidden_loop_no_source.expected -
+	# The desktop half: a NilPy script that imports interrupts, registers a
+	# handler and falls off the end must EXIT. A hang is the failure, hence
+	# timeout. POSITIVE CONTROL, measured 2026-09-24: dropping the live-source
+	# condition from the loop makes this script hang (rc 124). ./$(COMPILER) for
+	# the same reason as the row above.
+	./$(COMPILER) -Fulib/rtl test/test_interrupt_desktop_script_exits.npy $(TESTTMP)/test_interrupt_desktop_exits
+	timeout 10 $(TESTTMP)/test_interrupt_desktop_exits | diff -u test/test_interrupt_desktop_script_exits.expected -
 	# uuid.uuid4().hex, which That Space Program names universe objects with.
 	# PREDICATES, not values (a uuid4 is random): 32 lowercase hex digits, version
 	# nibble 4, RFC 4122 variant, the 8-4-4-4-12 str, 200 distinct. Dropping the

@@ -187,6 +187,7 @@ begin
     Exit;
   end;
   Handle := h;
+  IntSourceOpen;     { a live source for interrupts' hidden loop }
   AdcStart := 0;
 end;
 
@@ -197,6 +198,7 @@ begin
   rc := adc_continuous_stop(Handle);
   adc_continuous_deinit(Handle);
   Handle := nil;
+  IntSourceClose;
   AdcStop := rc;
 end;
 

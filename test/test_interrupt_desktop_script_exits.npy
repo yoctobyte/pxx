@@ -1,0 +1,18 @@
+# The desktop half of the owner's hidden-loop rule: a script that imports
+# interrupts, registers a handler and falls off the end must EXIT. Nothing on
+# a desktop opens a live source, so the loop in interrupts' finalization must
+# not engage. The Makefile row runs this under `timeout`: a hang is the
+# failure, and it would otherwise hang every such script.
+import interrupts
+
+seen = []
+
+
+def h(ev):
+    seen.append(ev.id)
+
+
+interrupts.on_event(99, h)
+interrupts.push(99, 1)
+print("handlers registered, live sources", interrupts.live_sources(), "pending", interrupts.pending())
+print("end")
