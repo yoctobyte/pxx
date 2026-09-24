@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-24
 found-by: frankS (fixing bug-b-terminalsize-answers-enotty-on-xtensa)
 blocked-by: []
-summary: "HALF FIXED 2026-09-24 (commit `fix(C): a member taken from a type of unknown layout is refused, not read at offset 0`): taking a MEMBER from a type of unknown layout is now refused. WHAT REMAINS is the DECLARATION site, and the mechanism is that a type of unknown size is given size 0 rather than being refused an object -- so `struct nosuch v;` still defines a zero-byte object and `sizeof` of an incomplete type answers 0 instead of erroring. The condition that springs it is any code that sizes an object rather than naming its members: `memset(&v, 0, sizeof v)` compiles to a no-op, `malloc(sizeof(struct opaque))` asks for 0 bytes, and a struct passed or copied by value moves nothing. gcc errors with `storage size of 'v' isn't known` and `invalid application of sizeof to incomplete type`. This half is still SILENT-WRONG-VALUE: no diagnostic, a working binary, a plausible number. NOT a blanket refusal of incomplete types -- `struct opaque *p;`, forward declarations and extern declarations are legal C and this tree's own headers use them; what must be refused is DEFINING an object of, or applying sizeof to, a type whose layout is unknown. The member half that landed measured its false-positive population first (17043 resolving accesses across zlib and lib/crtl/src, zero failing) and that discipline is what this half still needs, on a population that is NOT busybox or sqlite -- neither parses per-file in this tree, and a sweep of busybox answered 0-of-0 without saying so. A FOURTH-STATE ROW WAS ADDED HERE AND IS RETRACTED -- RE-MEASURED AT HEAD AND IT DOES NOT REPRODUCE IN ANY SPELLING. frankb-8e reported that argument-less `__attribute__((aligned))` compiles with NO diagnostic, reads every member at offset 0, answers sizeof 0 and accepts `s.zzz`. Measured at c5ed28b34e across FOUR spellings (attribute after the body / before the tag, object declared in the same declaration / separately): none of those four claims holds. Where the object is declared SEPARATELY the access is REFUSED by the missKind=2 opaque arm -- the arm 8e reported as never firing -- and where it is declared in the SAME declaration the record lays out with correct values and correct offsets, and `s.zzz` is refused with gcc's own wording. The reported numbers are precisely this ticket's PRE-FIX behaviour; 8e's ancestry claim was correct (690d3859ff IS an ancestor of their 44b00e1c19, verified by merge-base, and the diagnostic's source is byte-identical at both trees) which is what localises it: the TREE carried the fix and the BINARY did not. `compiler/pascal26` is untracked, so a pull moves the tree and leaves the compiler alone. WHAT SURVIVES AND IS REAL, measured: argument-less `aligned` is SILENTLY IGNORED -- sizeof answers 8 against gcc's 16 -- while `aligned(8)`, `aligned(16)`, `packed` and no-attribute all match gcc exactly, so the argument-less spelling is the only divergent row and the others are its positive control. AND A SECOND REAL ROW, which is the same construct taking two paths: `} __attribute__((aligned)) s;` lays the record out while `} __attribute__((aligned));` followed by a separate `struct S s;` drops the layout entirely and is now refused, so ONE struct definition compiles or does not depending on where the object is declared -- valid C that gcc compiles, refused loudly by us. That is the sibling-is-a-spelling shape, it predates all of this work (CAttrAlignedValueOf, 63a4a3fc01), and it is the row a fix should target."
+summary: "HALF FIXED 2026-09-24 (commit `fix(C): a member taken from a type of unknown layout is refused, not read at offset 0`): taking a MEMBER from a type of unknown layout is now refused. WHAT REMAINS is the DECLARATION site, and the mechanism is that a type of unknown size is given size 0 rather than being refused an object -- so `struct nosuch v;` still defines a zero-byte object and `sizeof` of an incomplete type answers 0 instead of erroring. The condition that springs it is any code that sizes an object rather than naming its members: `memset(&v, 0, sizeof v)` compiles to a no-op, `malloc(sizeof(struct opaque))` asks for 0 bytes, and a struct passed or copied by value moves nothing. gcc errors with `storage size of 'v' isn't known` and `invalid application of sizeof to incomplete type`. This half is still SILENT-WRONG-VALUE: no diagnostic, a working binary, a plausible number. NOT a blanket refusal of incomplete types -- `struct opaque *p;`, forward declarations and extern declarations are legal C and this tree's own headers use them; what must be refused is DEFINING an object of, or applying sizeof to, a type whose layout is unknown. The member half that landed measured its false-positive population first (17043 resolving accesses across zlib and lib/crtl/src, zero failing) and that discipline is what this half still needs, on a population that is NOT busybox or sqlite -- neither parses per-file in this tree, and a sweep of busybox answered 0-of-0 without saying so. A FOURTH-STATE ROW WAS ADDED HERE AND IS RETRACTED -- RE-MEASURED AT HEAD AND IT DOES NOT REPRODUCE IN ANY SPELLING. frankb-8e reported that argument-less `__attribute__((aligned))` compiles with NO diagnostic, reads every member at offset 0, answers sizeof 0 and accepts `s.zzz`. Measured at c5ed28b34e across FOUR spellings (attribute after the body / before the tag, object declared in the same declaration / separately): none of those four claims holds. Where the object is declared SEPARATELY the access is REFUSED by the missKind=2 opaque arm -- the arm 8e reported as never firing -- and where it is declared in the SAME declaration the record lays out with correct values and correct offsets, and `s.zzz` is refused with gcc's own wording. The reported numbers are precisely this ticket's PRE-FIX behaviour; 8e's ancestry claim was correct (690d3859ff IS an ancestor of their 44b00e1c19, verified by merge-base, and the diagnostic's source is byte-identical at both trees) which is what localises it: the TREE carried the fix and the BINARY did not. `compiler/pascal26` is untracked, so a pull moves the tree and leaves the compiler alone. WHAT SURVIVES AND IS REAL, measured: argument-less `aligned` is SILENTLY IGNORED -- sizeof answers 8 against gcc's 16 -- while `aligned(8)`, `aligned(16)`, `packed` and no-attribute all match gcc exactly, so the argument-less spelling is the only divergent row and the others are its positive control. AND A SECOND REAL ROW, which is the same construct taking two paths: `} __attribute__((aligned)) s;` lays the record out while `} __attribute__((aligned));` followed by a separate `struct S s;` drops the layout entirely and is now refused, so ONE struct definition compiles or does not depending on where the object is declared -- valid C that gcc compiles, refused loudly by us. That is the sibling-is-a-spelling shape, it predates all of this work (CAttrAlignedValueOf, 63a4a3fc01), and it is the row a fix should target. RETRACTION CONFIRMED BY ITS AUTHOR at ef583558f6 with the rebuilt binary 4d148c23cc723afe (= pin v419's), and ONE ROW SURVIVES THAT NEITHER SEAT HAD: the two seats measured different SPELLINGS and both sizeof numbers are real -- `} __attribute__((aligned)) s;` answers 8, while the same definition followed by a separate `struct S s;` answers 0, so the declaration fork above also forks the size. THE MECHANISM, which is a property of the fix that landed and not a fact about `aligned`: a dropped layout is LOUD through a member and SILENT through sizeof, because the member arm acquired an error channel (RecHasField, CRecMissingFieldKind) and the SIZE arm has none -- RecSize (symtab.inc:3374) returns a number for every input, exactly as its neighbour RecHasField's header says of RecFieldOffset (`a pure offset function with no error channel, so a field it does not find reads back as offset 0`). AND THE FAILURE VALUE COLLIDES WITH A CORRECT ANSWER, so no sizeof row can catch this class: `struct S { };` is legitimately 0 in BOTH compilers, a dropped layout is 0 in ours and 16 in gcc, and an opaque type is 0 in ours where gcc refuses. A guard must therefore assert the PRESENCE OF THE REFUSAL for the member spelling and a DIFFERENTIAL against gcc for the size spelling, never an absolute size -- and a correction must carry both sizeof numbers with their spellings rather than replacing one with the other, since a guard written to either alone is blind to the other arm."
 ---
 
 # An undeclared struct type compiles and reads garbage
@@ -242,11 +242,23 @@ declaration-site census must deliberately include: a tentative definition
 completed later, a block-scope `extern`, a pointer-to-incomplete, and a struct
 whose body pxx drops.
 
-## 2026-09-24 (frank, frankb-8e) — A FOURTH STATE THE THREE ARMS DO NOT REACH: `__attribute__((aligned))` WITH NO ARGUMENT IS ACCEPTED SILENTLY AND READS EVERY MEMBER AT OFFSET 0
+## 2026-09-24 (frank, frankb-8e) — WITHDRAWN BY ITS OWN AUTHOR: measured with a STALE BINARY. Every row below is pre-fix behaviour and no claim in this section holds at HEAD.
 
-Found from outside this ticket, measured at `44b00e1c19` (so **after** the
-three-arm fix `690d3859ff`, which is an ancestor), compiler `bb681c88af9f`.
-**Carried by pin v419.** Not fixed here, deliberately — see the last section.
+**DO NOT READ THE TABLE BELOW AS A MEASUREMENT OF THIS TREE.** It is kept
+because the append-only history should show what was claimed, and struck here
+because a reader who scrolls to a table does not always scroll back to a
+retraction three sections down. frankS re-measured and retracted it
+(`ef583558f6`); I then reproduced their result and confirm it. The corrected
+rows, and the one row neither of us had, are in the section after theirs.
+
+The instrument: I measured at tree `44b00e1c19` with compiler
+`bb681c88af9f`, and stated in this very section that the tree was *"after the
+three-arm fix `690d3859ff`, which is an ancestor"*. **That sentence is true of
+the tree and false of the binary** — `690d3859ff` and `134d68dfe3` both
+postdate the binary, so the compiler that produced every number below had
+neither fix in it. `compiler/pascal26` is untracked, so nothing in `git status`
+contradicted me, and the parenthetical I wrote to establish provenance names the
+stale binary explicitly without my noticing that is what it was doing.
 
 ### The rows, with a gcc oracle and a control that isolates the attribute
 
@@ -257,8 +269,8 @@ three-arm fix `690d3859ff`, which is an ancestor), compiler `bb681c88af9f`.
 | no attribute (control) | `sz=8 a=7 b=9` | `sz=8` |
 | `__attribute__((packed))` | `sz=8 a=7 b=9` | `sz=8 a=7 b=9` |
 | `__attribute__((aligned(8)))` | `sz=8 a=7 b=9` | — |
-| **`__attribute__((aligned))`** | **`sz=0 a=9 b=9`** | **`sz=16 a=7 b=9`** |
-| **`struct __attribute__((aligned)) S {...}`** | **`sz=0 a=9 b=9`** | — |
+| ~~`__attribute__((aligned))`~~ | ~~`sz=0 a=9 b=9`~~ **STALE BINARY** | `sz=16 a=7 b=9` |
+| ~~`struct __attribute__((aligned)) S {...}`~~ | ~~`sz=0 a=9 b=9`~~ **STALE BINARY** | — |
 
 `a` reads **9** because both members resolve to offset 0, so `s.b=9` overwrites
 `s.a`. Confirmed directly: `(char*)&s.a - (char*)&s` and the same for `b` both
@@ -383,3 +395,85 @@ to `63a4a3fc01`, when aligned support landed.
 **For whoever fixes it: the row that must fail first is `sizeof == 8` for the
 argument-less spelling, not `sizeof == 0`** — and do not assert gcc's 16 without
 re-deriving it on the target you are building for.
+
+## 2026-09-24 (frank, frankb-8e) — frankS's retraction CONFIRMED, and the two of us measured different SPELLINGS, so both `sizeof` numbers are real
+
+Re-measured at `ef583558f6`, compiler `4d148c23cc723afe` — which is pin v419's
+binary, and `git log c5ed28b34e..ef583558f6 -- compiler/ lib/` is empty, so the
+instrument is current for this tree. `make compiler/pascal26` printed `converged
+after 1 round(s)`, the recompute verb, not `verified`.
+
+**frankS is right on every row they measured and their diagnosis of my failure is
+right.** Member access on the separate-declaration spelling is REFUSED at HEAD,
+loudly, by the `missKind = 2` opaque arm — the arm I reported as never firing. It
+fires. The three-state model was not short by one.
+
+### Where our numbers disagreed, and why neither of us was wrong
+
+frankS measured `sizeof = 8` for argument-less `aligned`; I measure `sizeof = 0`.
+**Both are correct and the discriminator is frankS's own row 2** — where the
+object is declared. Same definition, same attribute, one binary:
+
+| spelling | `sizeof` | member `s.a` | gcc `sizeof` |
+| --- | --- | --- | --- |
+| `} __attribute__((aligned)) s;` (object in the SAME declaration) | 8 | 7 | 16 |
+| `} __attribute__((aligned));` then `struct S s;` | **0** | **REFUSED** | 16 |
+| `} __attribute__((aligned));` then `sizeof(struct S)` | **0** | — | 16 |
+
+So the type lays out or does not depending on whether the defining declaration
+also declares an object, and **the two arms of that fork answer `sizeof`
+differently.** `aligned(0)` and `aligned()` behave as argument-less does; a
+declaration that lays out stays laid out for later separate objects of the same
+type, so it is the defining declaration that decides, once, for the type.
+
+**This is why the correction should not replace one number with the other.**
+frankS's note says the row that must fail first is `sizeof == 8` and not
+`sizeof == 0`; that is true for the same-declaration spelling and false for the
+separate one, where 0 is what the tree answers today. A guard written to either
+number alone is blind to the other arm. Carry both, each with its spelling.
+
+### The row neither of us had: a dropped layout is LOUD through a member and SILENT through `sizeof`
+
+This is the part worth keeping, because it is a general property of the fix that
+landed rather than a fact about `aligned`.
+
+The member arm acquired an error channel — `RecHasField`, `CRecMissingFieldKind`,
+the `missKind` wording. **The SIZE arm has none.** `RecSize` (`symtab.inc:3374`)
+returns a number for every input and has no way to say "unknown": its own
+neighbour `RecHasField` exists for exactly this reason and says so in its header
+— *"RecFieldOffset cannot answer that — it is a pure offset function with no
+error channel, so a field it does not find reads back as offset 0."* The same
+sentence is true of size, and nothing has been added for it.
+
+**And the failure value collides with a CORRECT answer, so no `sizeof` row can
+catch this class.** Measured, one binary:
+
+| declaration | pxx `sizeof` | gcc `sizeof` |
+| --- | --- | --- |
+| `struct S { };` — legitimately empty under GNU C | 0 | **0** |
+| `struct S { int a; int b; } __attribute__((aligned));` — layout dropped | 0 | 16 |
+| `struct S;` — opaque | 0 | refuses (incomplete type) |
+
+An empty struct is 0 in both compilers and that is *right*. A dropped layout is
+0 in ours and 16 in gcc and that is wrong. **A test that reads `sizeof` cannot
+tell them apart** — this is the tree's own collision rule (*"if the machinery did
+nothing at all, would this row still pass?"*), with 0 playing the part
+`TypeStorageSize(tyUnknown)` played in `sizeof(*s.fp)` answering 4.
+
+So a guard for the residue must assert on something that is not a size: the
+**presence of the refusal** for the member spelling, and for the size spelling a
+**differential against gcc**, never an absolute. The mechanism to state in any
+ticket that inherits this: *a record abandoned before registration reads back as
+size 0, and size 0 is a legal record size, so the size path cannot self-report.*
+
+### What I got wrong, separately from the binary
+
+I wrote that the fourth state escapes all three arms because it produced no
+diagnostic. It produced no diagnostic **because the compiler running it predated
+the arms**, and I had checked ancestry on the tree and treated that as having
+checked the instrument. The tree-versus-binary distinction is in CLAUDE.md under
+its own heading and I quoted a neighbouring rule from it the same evening.
+frankS's grep hazard is worth carrying beside it: `git show <tree>:file | grep
+'kept this struct/union OPAQUE'` answers 0 for a tree that HAS the diagnostic,
+because the message is assembled at runtime from two literals — a source grep for
+a runtime-assembled string is a search whose answer is always no.
