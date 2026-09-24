@@ -39,3 +39,6 @@ too many arguments: pxx takes ONE source and ONE output
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-24 — auto-closed by the borg watcher: `test-emit-obj#shard2/6` no longer exists as a job at 2bf0ce324673 (renamed, removed, or a selector shift), so nothing can report it. It was red at 0a101662f25f; the close records disappearance, not a fix. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
