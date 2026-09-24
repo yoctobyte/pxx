@@ -22,6 +22,11 @@
  * a sign-extension bug — +3600 read back fine while -18000 did not), a
  * non-whole-hour offset, southern-hemisphere DST, and both sides of a
  * transition in each direction.
+ *
+ * Also prints the glibc/BSD extensions tm_gmtoff and tm_zone (quickjs's Date
+ * reads tm_gmtoff and did not compile without it). The harness adds a
+ * `:zone` spelling of TZ, which pxx used to read as "no TZ, use
+ * /etc/localtime".
  */
 #include <stdio.h>
 #include <string.h>
@@ -45,7 +50,8 @@ int main(void) {
     localtime_r(&t, &l);
     strftime(gb, sizeof gb, "%Y-%m-%d %H:%M:%S", &g);
     strftime(lb, sizeof lb, "%Y-%m-%d %H:%M:%S", &l);
-    printf("%ld utc=%s local=%s\n", (long)t, gb, lb);
+    printf("%ld utc=%s local=%s isdst=%d gmtoff=%ld zone=%s gzone=%s\n",
+           (long)t, gb, lb, l.tm_isdst, l.tm_gmtoff, l.tm_zone, g.tm_zone);
   }
   return 0;
 }

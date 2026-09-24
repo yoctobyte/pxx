@@ -55,7 +55,11 @@ struct tm {
   int tm_year;   /* years since 1900 */
   int tm_wday;   /* 0..6, Sunday = 0 */
   int tm_yday;   /* 0..365 */
-  int tm_isdst;  /* daylight-saving flag (always 0 — pxx crtl is UTC) */
+  int tm_isdst;  /* daylight-saving flag, from the TZif zone for localtime */
+  /* The two BSD/glibc extensions, in glibc's order and width, so code that
+     reads them (quickjs's Date) compiles and a struct tm has glibc's size. */
+  long tm_gmtoff;        /* seconds east of UTC */
+  const char *tm_zone;   /* zone abbreviation ("UTC", "CEST", ...) */
 };
 
 struct timespec {

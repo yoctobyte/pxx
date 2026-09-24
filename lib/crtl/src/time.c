@@ -97,6 +97,8 @@ struct tm *gmtime(const time_t *timer) {
   tm_buf.tm_mday = (int)d;
   tm_buf.tm_yday = (int)(days - days_from_civil(y, 1, 1));
   tm_buf.tm_isdst = 0;
+  tm_buf.tm_gmtoff = 0;
+  tm_buf.tm_zone = "GMT";
   return &tm_buf;
 }
 
@@ -155,9 +157,15 @@ static void pxx_tz_load(void) {
   if (pxx_tz_loaded) return;
   pxx_tz_loaded = 1;
   tz = getenv("TZ");
+  /* POSIX's `:name` form is how systemd and many scripts spell it; glibc reads
+     the name after the colon exactly as the bare form, and an absolute name is
+     the file itself. A TZ that is SET but empty (`TZ=` or `TZ=:`) is UTC in
+     glibc, not the system default; only an unset TZ reads /etc/localtime. */
+  if (tz && tz[0] == ':') tz++;
+  if (tz && tz[0] == 0) return;
   if (tz && tz[0] == 'U' && tz[1] == 'T' && tz[2] == 'C' && tz[3] == 0) return;
-  if (tz && tz[0] && tz[0] != ':') {
-    const char *pre = "/usr/share/zoneinfo/";
+  if (tz && tz[0]) {
+    const char *pre = tz[0] == '/' ? "" : "/usr/share/zoneinfo/";
     for (i = 0; pre[i]; i++) path[i] = pre[i];
     for (j = 0; tz[j] && i + j + 1 < (int)sizeof(path); j++) path[i + j] = tz[j];
     path[i + j] = 0;
@@ -172,8 +180,7 @@ static void pxx_tz_load(void) {
 }
 
 /* The zone in effect at `t`, from the loaded TZif: the UTC offset in seconds,
-   the DST flag, and the abbreviation. Everything is 0/NULL on any problem, and
-   a caller that only wants the offset goes through pxx_tz_offset below.
+   the DST flag, and the abbreviation. Everything is 0/NULL on any problem.
 
    This is ONE walk of the file rather than three, because the three answers
    come from the same ttinfo record and reading it three times is three chances
@@ -241,13 +248,6 @@ static void pxx_tz_lookup(long long t, long *poff, int *pisdst,
       *pabbr = (const char *)(b + off + timecnt * tsz + timecnt
                               + typecnt * 6 + desig);
   }
-}
-
-/* The UTC offset in seconds at `t`, from the loaded TZif. 0 on any problem. */
-static long pxx_tz_offset(long long t) {
-  long off;
-  pxx_tz_lookup(t, &off, 0, 0);
-  return off;
 }
 
 /* ---- tzset(3) and the three globals it publishes -------------------------
@@ -362,9 +362,20 @@ void tzset(void) {
 
 struct tm *localtime(const time_t *timer) {
   time_t shifted;
+  struct tm *r;
+  long off;
+  int isdst;
+  const char *abbr;
   if (!timer) return gmtime(timer);
-  shifted = (time_t)(*timer + (time_t)pxx_tz_offset((long long)*timer));
-  return gmtime(&shifted);
+  /* ONE lookup for all three answers -- they come from the same ttinfo
+     record, and asking twice is two chances to disagree about which. */
+  pxx_tz_lookup((long long)*timer, &off, &isdst, &abbr);
+  shifted = (time_t)(*timer + (time_t)off);
+  r = gmtime(&shifted);
+  r->tm_isdst = isdst;
+  r->tm_gmtoff = off;
+  r->tm_zone = abbr ? abbr : "UTC";
+  return r;
 }
 
 /* Reentrant variants (POSIX): fill the caller's buffer, no shared static. */

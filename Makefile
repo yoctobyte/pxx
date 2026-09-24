@@ -40513,13 +40513,13 @@ endif
 	    echo "SKIP: ctime_localtime (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/ctime_localtime_oracle.err))"; echo ctime_localtime >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/ctime_localtime >/dev/null; \
 	  else \
-	  for z in UTC Europe/Amsterdam America/New_York Asia/Kolkata Australia/Sydney; do \
+	  for z in UTC Europe/Amsterdam America/New_York Asia/Kolkata Australia/Sydney :America/New_York; do \
 	    TZ=$$z $(TESTTMP)/ctime_localtime_gcc > $(TESTTMP)/ctl_gcc.txt; \
 	    TZ=$$z $(TESTTMP)/ctime_localtime > $(TESTTMP)/ctl_pxx.txt; \
 	    diff $(TESTTMP)/ctl_gcc.txt $(TESTTMP)/ctl_pxx.txt || \
 	      { echo "FAIL: ctime_localtime differs from gcc for $$z"; exit 1; }; \
 	  done; \
-	  echo 'ctime_localtime: identical to gcc (5 zones)'; \
+	  echo 'ctime_localtime: identical to gcc (6 zones)'; \
 	fi; \
 	else echo 'ctime_localtime: SKIP (no gcc or no zoneinfo)'; echo ctime_localtime >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/ctime_localtime >/dev/null; fi
 	# sscanf's EOF-vs-0 return contract, and the math surface. The boundary
