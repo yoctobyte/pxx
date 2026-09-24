@@ -28,7 +28,7 @@ status: done
 
 Fixture: `test/test_nilpy_annotated_returned_local_keeps_the_class.npy`; the
 Makefile row asserts the TYPE as a relation (b and c must equal a, a must be
-tk=6). Red on the pinned compiler (b, c tk=22).
+tk=6). Red on pin v420, binary sha256 af40370a8a91 (b, c tk=22).
 
 
 # Annotating a local that is returned destroys the def's inferred return type

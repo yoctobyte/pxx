@@ -22,7 +22,7 @@ tuple target REBINDING a name to another type kept the first slot — `x = 0;
 x, y = 0.5, 1` printed 4602678819172646912 (the double's bits), and a str
 local rebound by `s, n = 3, 4` segfaulted. Four doors, all fixed and all in
 `test/test_nilpy_tuple_target_rebinds_a_name_across_types.npy` (CPython's
-output; red on the pinned compiler): the def-local note in
+output; red on pin v420, binary sha256 af40370a8a91): the def-local note in
 PyUnpackTargetStore; PyNestEmit's leaves (nested groups); the module scan,
 which noted only NEW names, skipped module-level blocks (`depth = 0`), and
 did not recognise a statement starting with `(` or `*`.
