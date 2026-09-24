@@ -90,4 +90,4 @@ Found 2026-09-24 (frankH) by the first NilPy-corpus census on a real ESP32-S3 bo
 - **Inert until the next pin.**
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 16f54d98f.
