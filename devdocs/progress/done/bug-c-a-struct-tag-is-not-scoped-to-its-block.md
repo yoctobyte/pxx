@@ -203,4 +203,4 @@ Conformance on the 220 files of c-testsuite single-exec: 220/220 on x86-64, i386
 **The sibling spelling was ENUMERATORS, not enum tags.** An enum TAG binds no record, so it needs nothing. But a block's enumerators are skConst symbols, and the block-exit unhook only spliced skLocal, so an inner `enum { A = 40 }` went on shadowing the outer A after the brace. pxx printed 40 where gcc prints 1. The unhook now takes skConst too; the only skConst the C frontend creates is an enumerator (RegisterCMacroConsts runs from the Pascal cimport, never inside a C block). The fixture carries that row LAST.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a424ae12bc.
