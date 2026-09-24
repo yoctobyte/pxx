@@ -82,19 +82,22 @@ the program printed with `printf`, because the program does not exit through
 libc and libc never flushes its buffer. The development tree fixes this. On
 v424, call `fflush(stdout)` before `main` returns.
 
-**Other system libraries, such as zlib or SQLite, cannot currently be linked
-from C.** `#include <zlib.h>` finds the system header and the program
-compiles, with two warnings: that the header came from `/usr/include`, and that
-`zlibVersion` will be imported from the system C library. The binary then
-records only `libc.so.6` and fails when started: `undefined symbol:
-zlibVersion`. GTK behaves the same way. This applies to v424 and to the
-development tree. There are two ways around it:
+**Fixed after v424: other system libraries, such as zlib, SQLite or GTK,
+link from C.** A function declared in a system header binds to that header's
+shared library when the library on your machine exports it, so
+`#include <zlib.h>` records `libz.so.1` and the program runs. On v424 the
+program compiles, records only `libc.so.6`, and fails when started with
+`undefined symbol: zlibVersion`. There are two ways around that on v424:
 
 - Compile the library's **source** into your program, as the programs below do.
   The result is static.
 - Import the library from Pascal (`uses sqlite3`) or from
   [Nil Python](../targets/nil-python.md). Those routes do link the system
   library.
+
+The compiler still warns that the header came from `/usr/include`. A GTK
+program also needs `--threadsafe`, because GTK's headers include
+`<pthread.h>`.
 
 ## A project with several files
 

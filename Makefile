@@ -14132,6 +14132,15 @@ test-core: $(COMPILER)
 	# pre-fix pxx said B/B/3 -- compiled clean, ran clean, printed a wrong answer.
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
 	tools/expect_same.sh test_c_recname26 "$$($(TESTTMP)/test_c_recname26)" "$$(printf 'other\nother\n3')"
+	# A C program links the system library its header names: every prototype
+	# bound to libc.so.6, so <zlib.h> built `ok` and died at start on
+	# "undefined symbol". DT_NEEDED must name libz, and the round trip must print
+	# the right values. Skipped where zlib's header or library is absent.
+	@if [ -f /usr/include/zlib.h ] && ldconfig -p 2>/dev/null | grep -q 'libz\.so\.1 '; then \
+	  ./$(COMPILER) test/test_c_links_the_system_library_its_header_names.c $(TESTTMP)/test_c_syslib26 >/dev/null 2>&1 || { echo "test_c_syslib26: FAILED to build"; exit 1; }; \
+	  readelf -d $(TESTTMP)/test_c_syslib26 | grep -q 'NEEDED.*\[libz\.so\.1\]' || { echo "test_c_syslib26: the binary does not record libz.so.1 -- the prototypes bound to libc"; readelf -d $(TESTTMP)/test_c_syslib26 | grep NEEDED; exit 1; }; \
+	  tools/expect_same.sh test_c_syslib26 "$$($(TESTTMP)/test_c_syslib26)" "0 0 43 hello hello hello hello hello zlib from pxx f4f0fd2d" || exit 1; \
+	else echo "zlib header or library not installed; C system-library link check skipped"; fi
 	# __has_include, and pdfgen's endian chain that depends on it. Undefined, the
 	# `#ifdef __has_include` guard skipped the <endian.h> probe, and the fallback
 	# below it compared two macros only endian.h defines -- 0 == 0, true -- so

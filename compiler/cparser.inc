@@ -14131,10 +14131,75 @@ begin
   CDeclSawExtern := CDeclSawSpecifier(typeIdx, 'extern');
 end;
 
+var
+  CHdrLibMemoPath, CHdrLibMemoLib, CHdrLibMemoFile: AnsiString;
+  CHdrLibMemoOk: Boolean;
+
+function CHeaderLibraryFor(tok: Integer; const sym: AnsiString;
+                           var soname: AnsiString): Boolean;
+{ The shared library a C prototype belongs to, asked of the HEADER it was
+  declared in. A C program's prototypes all defaulted to libc.so.6 (libm for a
+  fixed list of math names), so `#include <zlib.h>` + zlibVersion() built `ok`
+  with only libc in DT_NEEDED and died at start on `undefined symbol:
+  zlibVersion` -- sqlite3.h the same, and --system-libs=z could not help,
+  because it only selects a soname some declaration already carries. Only the
+  Pascal `uses <header>` door set a library (CurrentCLibrary).
+
+  The header comes from the token-to-source table the C lexer plants from the
+  preprocessor's line markers (PasSrcOfTok). The candidate is the one the
+  Pascal door derives -- the file stem (CSonameForStem, host cache first:
+  zlib.h -> libz.so.1), then the header's directory (LdCacheDirCandidate) --
+  and it is ACCEPTED ONLY IF THIS HOST'S COPY EXPORTS `sym` (.dynsym), the
+  same evidence CSynthDirAnswersFor demands. A header whose library does not
+  define the name (zlib.h re-declaring nothing of libc's is luck; SDL_stdinc.h
+  re-declares memcmp) keeps libc, and a libc header maps to stem `c` and is
+  never asked. x86-64 only: the cache and the .dynsym check describe THIS
+  machine, which is not a cross target's. }
+var hdr, base, stem, cand, path: AnsiString; i, dot, slash: Integer;
+begin
+  Result := False;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  hdr := PasSrcOfTok(tok);
+  if hdr = '' then Exit;
+  { pxx's OWN headers are implemented by crtl, never by a system library --
+    <pthread.h> is crtl's shim over the thread PAL, and libpthread.so.0 does
+    export pthread_create, so the export check alone would rebind it. }
+  if Pos('crtl/include/', hdr) > 0 then Exit;
+  if hdr <> CHdrLibMemoPath then
+  begin
+    CHdrLibMemoPath := hdr;
+    CHdrLibMemoOk := False;
+    slash := 0; dot := 0;
+    for i := 1 to Length(hdr) do
+      if hdr[i] = '/' then begin slash := i; dot := 0; end
+      else if hdr[i] = '.' then dot := i;
+    if dot = 0 then dot := Length(hdr) + 1;
+    base := Copy(hdr, slash + 1, dot - slash - 1);
+    CHeaderStem(base, stem);
+    if not (CStemMatches(stem, 'c') or CStemMatches(stem, 'm')) then
+    begin
+      CSonameForStem(stem, cand);
+      if LdCacheNativePathFor(cand, path) then
+        CHdrLibMemoOk := True
+      else if LdCacheDirCandidate(CHeaderDirName(hdr), cand, path) then
+        CHdrLibMemoOk := True;
+      if CHdrLibMemoOk then
+      begin
+        CHdrLibMemoLib := cand;
+        CHdrLibMemoFile := path;
+      end;
+    end;
+  end;
+  if not CHdrLibMemoOk then Exit;
+  if not ElfSoExportsSymbol(CHdrLibMemoFile, sym) then Exit;
+  soname := CHdrLibMemoLib;
+  Result := True;
+end;
+
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
-  name, extLib: AnsiString;
+  name, extLib, hdrLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
@@ -14301,8 +14366,11 @@ begin
      (name = 'tan') or (name = 'asin') or (name = 'acos') or (name = 'atan') or
      (name = 'atan2') or (name = 'exp') or (name = 'log') or (name = 'frexp') or
      (name = 'ldexp') or (name = 'sinh') or (name = 'cosh') or (name = 'tanh') then
-    extLib := 'libm.so.6';
-  forceSystemExternal := (CurrentCLibrary <> '') or CSystemLibSelectedForSoname(extLib);
+    extLib := 'libm.so.6'
+  else if (CurrentCLibrary = '') and CHeaderLibraryFor(TokPos - 1, name, hdrLib) then
+    extLib := hdrLib;
+  forceSystemExternal := (CurrentCLibrary <> '') or CSystemLibSelectedForSoname(extLib) or
+                         ((extLib <> 'libc.so.6') and (extLib <> 'libm.so.6'));
   if (not fnRetIsFunc) and parenName then Eat(tkRParen);   { consume the ')' wrapping the name }
 
   if (not fnRetIsFunc) and (CurTok.Kind <> tkLParen) then
