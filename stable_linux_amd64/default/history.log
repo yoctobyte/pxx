@@ -416,3 +416,4 @@
 2026-09-21T20:24:40Z  v416  fddc21e7e6615f801ce2853b334593698d3a5ef1f8dd6d7c8228307e1e6091d1  4f33700019d0090abf18aa5a8fab61478d848649  feat(A): --dce-reach-from declares unresolved calls -- the VMT channel it cannot close
 2026-09-22T09:12:25Z  v417  734d10ec7b53c4a8a9bb7b5a4f8919ccd533d5d2255cf9a70fb24213110dfe23  819aab1dbb148fe7a842544607ce5c50d32a49f9  chore(U): send the RANGE, not the number -- a fork priced against a live number depends on nobody improving it
 2026-09-22T12:31:26Z  v418  fda77c48b8ee4b0381c66eed1dc18a09787409bd58c40361818b39b6e042130f  db6d1bddb3b3059547fd8669b988e6731ad10198  docs(dev): a deliberately-chosen axis can still be the wrong one, when the table is for somebody else's decision
+2026-09-24T00:12:01Z  v419  4d148c23cc723afe88a927b9206b5964c4525f9aba128e9c65111cba0daf5374  bd59da44369cfab056a73349ab6c0b0f8938fa02  docs(D/S): bare ESP cannot Str a number, and the workaround was nowhere

@@ -897,7 +897,8 @@ const
 
     IT IS A LEVER, NOT THE ANSWER. The arena exists at all because the program
     pulls the heap, and every Pascal program pulls it unconditionally --
-    PasApplyDefaults defines PXX_MANAGED_STRING, pasparser_prog.inc:104 turns
+    PasInitDefines (paslexer.inc) defines PXX_MANAGED_STRING,
+    pasparser_prog.inc:104 turns
     that into needsAnsiRuntime and :199 into needsHeap, which {$H-} cannot
     reach. A program that never allocates should not pay 64 KiB at ALL, and
     that is bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce, which

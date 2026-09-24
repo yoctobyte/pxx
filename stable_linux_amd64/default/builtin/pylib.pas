@@ -3411,7 +3411,11 @@ end;
   (project_string_conversion_shape_blindspot_pattern). }
 function pystr_ofchar(c: Char): AnsiString;
 begin
-  Result := c;
+  { The THIRD spelling of the same one-byte-string allocation -- see PyChar1.
+    Neither the construct name nor a grep for it distinguishes these: a
+    subscript, chr(), and a char->str promotion are one operation to whoever
+    wrote the source, and they are three routines here. }
+  Result := PyChar1(Byte(Ord(c)));
 end;
 
 { --- CHARACTER coordinates over a UTF-8 byte substrate ----------------------
@@ -3526,6 +3530,76 @@ begin
   Result := cp;
 end;
 
+{ The 256 one-byte strings, made once and handed out by reference.
+
+  MEASURED 2026-09-22 at the shipped default -O2, by differencing allocation
+  counts between a 1,000- and an 11,000-iteration loop so every fixed cost
+  cancels: `s[i]` cost 1.0054 heap allocations PER EVALUATION, and so did
+  chr(k) for k < $80. Both built a fresh one-character AnsiString and dropped
+  it; `len(s[i])` allocated a block purely to measure it.
+
+  Two spellings of one operation -- `Result := s[i + 1]` in pystr_charat and
+  `Result := Chr(k)` in pychr_s -- which is why this is a shared helper rather
+  than two local fixes. pystr_charat is also what a subscript, a for-in
+  iteration variable and list(s) ALL lower to, so one table serves four
+  constructs.
+
+  No static-block machinery is needed and none is used: the table holds a
+  permanent reference to each entry, so the 256 allocations are STARTUP cost,
+  and handing one out is a refcount bump. A slope measurement cancels fixed
+  cost by construction, which is what makes that trade legible rather than a
+  hidden relocation of the same bytes.
+
+  A CONST array, so the 256 blocks are STATIC and never on the heap at all.
+  That is not a micro-optimisation over building them at startup -- it is the
+  difference between a correct fix and a leak. The heap version was measured
+  first and `assert_no_leak` caught it honestly: a table holding a permanent
+  reference to 256 heap blocks reports live=262 against a threshold of 64,
+  because those blocks ARE alive at exit and no finalization ordering makes
+  that untrue. A narrow literal is already laid down by InternStr complete
+  with [meta][rc][len] and MSTR_STATIC_RC, so retain/release no-op on it: this
+  table costs no allocation, no free, and no refcount traffic, and adds 256
+  entries to the literal pool that the read-only LOAD segment already covers. }
+const
+  PyChar1Tab: array[0..255] of AnsiString = (
+    #0, #1, #2, #3, #4, #5, #6, #7,
+    #8, #9, #10, #11, #12, #13, #14, #15,
+    #16, #17, #18, #19, #20, #21, #22, #23,
+    #24, #25, #26, #27, #28, #29, #30, #31,
+    #32, #33, #34, #35, #36, #37, #38, #39,
+    #40, #41, #42, #43, #44, #45, #46, #47,
+    #48, #49, #50, #51, #52, #53, #54, #55,
+    #56, #57, #58, #59, #60, #61, #62, #63,
+    #64, #65, #66, #67, #68, #69, #70, #71,
+    #72, #73, #74, #75, #76, #77, #78, #79,
+    #80, #81, #82, #83, #84, #85, #86, #87,
+    #88, #89, #90, #91, #92, #93, #94, #95,
+    #96, #97, #98, #99, #100, #101, #102, #103,
+    #104, #105, #106, #107, #108, #109, #110, #111,
+    #112, #113, #114, #115, #116, #117, #118, #119,
+    #120, #121, #122, #123, #124, #125, #126, #127,
+    #128, #129, #130, #131, #132, #133, #134, #135,
+    #136, #137, #138, #139, #140, #141, #142, #143,
+    #144, #145, #146, #147, #148, #149, #150, #151,
+    #152, #153, #154, #155, #156, #157, #158, #159,
+    #160, #161, #162, #163, #164, #165, #166, #167,
+    #168, #169, #170, #171, #172, #173, #174, #175,
+    #176, #177, #178, #179, #180, #181, #182, #183,
+    #184, #185, #186, #187, #188, #189, #190, #191,
+    #192, #193, #194, #195, #196, #197, #198, #199,
+    #200, #201, #202, #203, #204, #205, #206, #207,
+    #208, #209, #210, #211, #212, #213, #214, #215,
+    #216, #217, #218, #219, #220, #221, #222, #223,
+    #224, #225, #226, #227, #228, #229, #230, #231,
+    #232, #233, #234, #235, #236, #237, #238, #239,
+    #240, #241, #242, #243, #244, #245, #246, #247,
+    #248, #249, #250, #251, #252, #253, #254, #255);
+
+function PyChar1(b: Byte): AnsiString;
+begin
+  Result := PyChar1Tab[b];
+end;
+
 { NilPy strings are byte strings (bug-nilpy-encode-ignores-the-codec), so
   chr()'s honest range is a single byte, 0..255 -- the same range ord()
   already agrees with (pyord_s takes exactly one byte). The underlying `Chr`
@@ -3541,7 +3615,7 @@ begin
   if (n < 0) or (n > $10FFFF) then
     raise ValueError.Create('chr() arg not in range(0x110000)');
   k := Integer(n);
-  if k < $80 then Result := Chr(k)
+  if k < $80 then Result := PyChar1(Byte(k))
   else if k < $800 then
   begin
     SetLength(Result, 2);
@@ -3593,7 +3667,7 @@ begin
   begin
     raise IndexError.Create('string index out of range');
   end;
-  if pystr_isascii(s) then begin Result := s[i + 1]; Exit; end;
+  if pystr_isascii(s) then begin Result := PyChar1(Byte(Ord(s[i + 1]))); Exit; end;
   b0 := PyStrByteOfChar(s, i);
   b1 := PyStrByteOfChar(s, i + 1);
   Result := Copy(s, b0, b1 - b0);
