@@ -3218,6 +3218,18 @@ begin
   end;
 end;
 
+{ Is the directive at line[p] (p at the '#') an #include? The same keyword
+  scan CPDirective does, without acting on it. }
+function CPDirectiveIsInclude(const line: AnsiString; p: Integer): Boolean;
+var a: Integer;
+begin
+  Inc(p);
+  while (p <= Length(line)) and (line[p] in [' ', #9]) do Inc(p);
+  a := p;
+  while (p <= Length(line)) and CPIsIdentChar(line[p]) do Inc(p);
+  Result := CPRangeIsLiteral(line, a, p - 1, 'include');
+end;
+
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
 var pos, p, q: Integer; inComment: Boolean; cont: AnsiString;
     savedFileId, savedLine, savedDepth: Integer;
@@ -3292,7 +3304,34 @@ begin
           Inc(q);
         end;
         if (q <= Length(cont)) and (cont[q] = '#') then
-          CPDirective(cont, q, Length(cont), depth, baseDir)
+        begin
+          { AN #include INSIDE AN OPEN PARENTHESIS SPLICES IN PLACE. The
+            included file is preprocessed by this same procedure, which
+            reads its lines into the GLOBAL CPrepLine -- so the half-collected
+            line (`return f(`) was overwritten and the program lost its text,
+            down to "main function not found". tcc's tccpp.c is exactly this:
+            an #include of a generated string table as a call argument, which
+            gcc and clang take. So flush what has been collected (expanded,
+            as the normal path below does), let the include emit its own
+            lines after it, and resume with an empty line: the tokens come
+            out in source order. Flushing early is only wrong when the open
+            parenthesis belongs to a MACRO invocation, and there gcc itself
+            refuses ("unterminated argument list invoking macro"). A
+            conditional (`# if`) keeps the collect-and-continue behaviour
+            above: it does not re-enter this procedure. }
+          if CPActive and CPDirectiveIsInclude(cont, q) then
+          begin
+            SetLength(CPrepLineExp, 0);
+            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+            CPSyncLine;
+            CPrepOutAppendStr(CPrepLineExp);
+            CPrepOutAppendCh(#10);
+            CPDirective(cont, q, Length(cont), depth, baseDir);
+            CPrepLine := '';
+          end
+          else
+            CPDirective(cont, q, Length(cont), depth, baseDir);
+        end
         else if CPActive then
           CPrepLine := CPrepLine + ' ' + cont;
       end;

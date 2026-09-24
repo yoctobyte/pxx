@@ -23450,6 +23450,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_cppargs26 "$$($(TESTTMP)/c_cppargs26)" "$$(printf 'swallow 10\nkeep    15\ndirfalse 20\ndirtrue 39\nmkdirshape 40\nforced 41\nline 88')"
 	./$(COMPILER) -include $(CURDIR)/test/c_cpp_forced_include.h test/c_cpp_macro_arg_shapes.c $(TESTTMP)/c_cppargsabs26
 	tools/expect_same.sh c_cppargsabs26 "$$($(TESTTMP)/c_cppargsabs26)" "$$(printf 'swallow 10\nkeep    15\ndirfalse 20\ndirtrue 39\nmkdirshape 40\nforced 41\nline 88')"
+	# An #include inside a call's open argument list splices in place (tcc's
+	# tccpp.c); .expected is gcc's output.
+	./$(COMPILER) test/c_cpp_include_in_call_args.c $(TESTTMP)/c_cppinccall26
+	$(TESTTMP)/c_cppinccall26 | diff -u test/c_cpp_include_in_call_args.expected -
 	# A LOCAL whose type is a struct with a function-pointer member. The struct
 	# BODY's member declarator left CTypeFnPtrName set, and the LOCAL path had
 	# no `baseTk = tyPointer' guard (the GLOBAL path has carried one), so the
