@@ -3756,6 +3756,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-uses-order-pylib-exception-b | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_b.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-val-builtin | T | 70 | regression | regression: test-core#src:test/test_val_builtin.pas red at 7462448a21bd (auto-filed by twatch) | — |
 | regression-test-core-test-val-radix-and-optional-code | P | 70 | regression | regression: test-core#src:test/test_val_radix_and_optional_code.pas red at 6d68643f9799 (auto-filed by twatch) | — |
+| regression-test-core-test-var-param-width-rule-accepts-exact-and-cast | T | 70 | regression | first-ever red: test-core#src:test/test_var_param_width_rule_accepts_exact_and_cast.pas at e575f1ec8cd0 in step 4/4, `grep -q "var parameter x of TC.M is Int64 (8 bytes) and needs a variable of exactly that type" /tmp/test_varwidth_refus…` (auto-filed by twatch) | — |
 | regression-test-core-test-variant-string-ops | A | 70 | regression | regression: test-core#src:test/test_variant_string_ops.pas red at df21e490d798 (auto-filed by twatch) | — |
 | regression-test-core-test-warn-ignored-directives | A | 70 | regression | regression: test-core#src:test/test_warn_ignored_directives.pas red at 83fb0ef72419 (auto-filed by twatch) | — |
 | regression-test-core-test-widechar-to-utf8-b319 | T | 70 | regression | regression: test-core#src:test/test_widechar_to_utf8_b319.pas red at d94db8d6b0cc (auto-filed by twatch) | — |

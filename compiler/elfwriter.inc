@@ -6348,8 +6348,7 @@ var
   f: Integer;
 {$endif}
 begin
-  if TargetArch <> TARGET_X86_64 then
-    ErrorNoPos('--shared: shared-library output is x86-64 only');
+  RefuseSharedOffX86_64;
 
   { WHICH FRONTEND PRODUCED THIS. AsmGlobalSymCount is nonzero only when
     ParseAsmProgram populated it, so it is the .asm shape's own signature --

@@ -14591,6 +14591,18 @@ end;
   it -- which is what lets the C init body reach the environment without a
   process stack to read.
   bug-a-c-a-shared-library-never-runs-its-initialisation }
+{ THE --shared target refusal, ONE sentence for every door that reaches it.
+  The init/fini thunk emitter runs before the ELF writer, so on aarch64 and
+  arm32 the first door a --shared build met was this file's
+  "internal: no init/fini thunk prologue" -- correct to refuse, and wrong to
+  word it as a compiler fault -- while i386, which has a thunk, reached the
+  writer's clean sentence. Both now ask this. }
+procedure RefuseSharedOffX86_64;
+begin
+  if TargetArch <> TARGET_X86_64 then
+    ErrorNoPos('--shared: shared-library output is x86-64 only');
+end;
+
 { The init/fini thunk's ABI halves, shared by every frontend and BOTH carriers
   (a .so's DT_INIT and an object's .init_array). The body between them differs
   per frontend and legitimately so; the register and alignment discipline owed
@@ -14604,6 +14616,7 @@ end;
   bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers }
 procedure EmitSharedThunkPrologue;
 begin
+  RefuseSharedOffX86_64;
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($53);                                     { push rbx }
