@@ -332,6 +332,21 @@ begin
     if ((Tokens[i].Kind = tkDiv) or (Tokens[i].Kind = tkMod)) and
        (TargetArch <> TARGET_X86_64) and not NoDivCheck then
       needsHeap := True;
+    { A PROCEDURAL TYPE -- `= procedure`, `: function`, `procedure of object`
+      in a type or var position. A call through one carries the default-on
+      nil check (IRWrapNilChk), which calls builtinheap's PXXNilRef and passes
+      through in silence when the unit is absent. Unlike the two arms above,
+      that passthrough changes no working program's output. A nil call still
+      dies, but as a jump to address 0 (SIGSEGV, no frame) instead of runtime
+      error 216. So the emitter stays lax and the evidence goes here:
+      test_nil_check_procvar exited 139 from 523833fde3 until 2026-09-24.
+      Keyed on the DECLARATION, so a procedural type imported from a unit that
+      pulls nothing is not covered. --no-nil-check turns it off; a
+      {$NILCHECKS ON} under --no-nil-check is not seen here. }
+    if ((Tokens[i].Kind = tkProcedure) or (Tokens[i].Kind = tkFunction)) and
+       (i > 0) and ((Tokens[i - 1].Kind = tkEq) or (Tokens[i - 1].Kind = tkColon)) and
+       not NoNilCheck then
+      needsHeap := True;
     { A string LITERAL is not evidence on its own -- `WriteLn('Hello')` is the
       program this whole change exists to shrink, and it needs nothing. A
       literal standing next to a concat or a comparison IS evidence: measured,
