@@ -16191,30 +16191,20 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-24T01:51:53Z",
+  "date": "2026-09-24T17:38:29Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
-   "test-core#src:test/test_const_shadows_routine_fail.pas",
    "test-core#src:test/test_a_property_store_through_a_cast_headed_target.pas",
-   "test-core#src:test/test_a_lifted_nested_routine_keeps_its_token_channels.pas",
    "test-core#src:test/c_crtl_wait.c",
-   "test-core#src:test/test_xtensa_div_zero_check.pas",
-   "test-core#src:test/test_nil_check_procvar.pas",
-   "test-c-conformance#shard4/6",
    "test-aarch64#src:test/test_set_runtime.pas",
    "test-arm32#src:test/test_set_runtime.pas",
-   "test-c-conformance-i386#shard4/6",
-   "test-c-conformance-aarch64#shard4/6",
-   "test-c-conformance-arm32#shard4/6",
-   "test-c-conformance-riscv32#shard4/6",
    "tools-devtest#00",
-   "tools-devtest-sh#00",
    "demos#00",
    "test-pascal-conformance#shard3/6"
   ],
-  "sha": "700392ca160fb2fc34afb4ba5e405ebc35ce5f61",
+  "sha": "591e2a7eee2096be79fabb70a5ecc45f3b5419d2",
   "tier": "full",
-  "ver": "v420",
+  "ver": "v422",
   "verdict": "RED",
   "why": {
    "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
