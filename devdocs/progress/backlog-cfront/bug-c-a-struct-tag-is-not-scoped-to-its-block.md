@@ -134,3 +134,54 @@ sqlite — neither parses per-file in this tree, and a sweep of busybox answered
 # Umbrella
 
 [[meta-a-pxx-produces-linkable-code]]
+
+## 2026-09-24 (frankS) — the SITE, measured: the inner body is swallowed by the REDEFINITION GUARD, which exists to prevent a documented SIGSEGV
+
+Confirming the report independently, and adding the mechanism one level down —
+**the inner definition is not merely mis-resolved, its body is never parsed at
+all.**
+
+`compiler/cparser.inc`, the bare `struct Tag { ... };` path:
+
+```pascal
+if hasTag and UClsIsRecord[ci] and (UClsFCount[ci] > 0) then
+  { REDEFINITION of an already-laid-out tag ... Keep the first definition;
+    skip the duplicate body. }
+  SkipBraceBlock
+```
+
+`FindOrForwardCTag` returns the OUTER tag's record, that record already has
+fields, so the guard fires and the inner body is discarded.
+
+**The discriminator, which is what makes this the site rather than a plausible
+story: the guard only fires when the outer tag ALREADY HAS FIELDS.** So a
+forward-declared outer tag should let the inner definition lay out normally.
+Predicted 4 and 8; measured 4 and 8:
+
+| outer declaration | inner `sizeof(struct T)` | gcc |
+| --- | --- | --- |
+| `struct T { int x; };` (1 field — guard fires) | **4** | 8 |
+| `struct T;` (forward, 0 fields — guard does not fire) | **8** | 8 |
+
+### The warning, and it is the reason this is worth a section
+
+**That guard is correct and must keep working.** Its own comment records why it
+exists: re-running `ParseCStructInto` on a populated record re-lays its field
+base and misfiles a following struct's members into the old range, **producing a
+self-referential record that hangs `RecordHasManagedFields` (SIGSEGV)**. It was
+added for a real case — a host header leaking in and redefining a crtl-defined
+struct, e.g. `struct in_addr` from both crtl and a host `netinet` include.
+
+So the two cases are **indistinguishable at that site today**: an illegal
+same-scope redefinition (where keeping the first definition is right) and a
+legal inner-scope shadow (where a second record must be created). A fix that
+weakens the guard to let the inner body parse will reintroduce the crash the
+guard was written for. **The tag scope stack is what separates them** — with
+scoping, the inner definition is a different tag entry and never reaches the
+redefinition test at all, which is why the structural fix is also the safe one
+and a local patch here is not.
+
+**Add to the controls: a same-scope duplicate definition of a tag that already
+has fields must still take the guard** (keep the first definition, no crash, no
+second record). That row is the guard's own positive control and is not in the
+three listed above.
