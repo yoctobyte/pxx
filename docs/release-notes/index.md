@@ -10,11 +10,11 @@ order: 95
 > decided yet, so nothing below assumes any of them. Until a release exists,
 > the way to get PXX is a clone of the repository; see [Install](../install/).
 
-Everything on this page was measured on **2026-09-24** on an x86-64 Linux host,
-against **pin v423**: commit `906239536`, compiler binary sha256
-`113a515bbdc9…`. This is the compiler that `./pxx` runs in a checkout of that
-commit. If you are reading this against a later pin, the figures describe v423,
-not yours.
+Everything on this page was measured on an x86-64 Linux host against **pin
+v424**: commit `0a3a7b5b4`, compiler binary sha256 `93a336a7ba85…`, on
+2026-09-25. This is the compiler that `./pxx` runs in a checkout of that commit.
+Where a figure was measured with a different compiler, it says which. If you
+are reading this against a later pin, the figures describe v424, not yours.
 
 ## What PXX is
 
@@ -31,7 +31,8 @@ the Linux kernel. That holds for every frontend.
 ## What works
 
 The [examples showcase](../examples/) is the best answer: every entry on it was
-compiled and run with this pin, and it shows the output or a screenshot of each.
+compiled and run with pin v423, and all its example programs were rebuilt
+with v424, where the batch programs printed identical output. It shows the output or a screenshot of each.
 It covers:
 
 - terminal and GTK applications, an IDE written in PXX, and a chess engine;
@@ -59,12 +60,12 @@ It covers:
 ## Targets
 
 The same one-line program, `writeln(6*7)` or its equivalent in each language,
-compiled by pin v423 and run: natively on x86-64, under QEMU user mode for the
+compiled by pin v424 and run: natively on x86-64, under QEMU user mode for the
 other Linux targets (`tools/run_target.sh`), and under wasmtime for wasm32.
 
 | | x86-64 | i386 | aarch64 | arm32 | riscv32 | wasm32 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Pascal | 42 | 42 | 42 | 42 | 42 | **traps** (fixed after v423) |
+| Pascal | 42 | 42 | 42 | 42 | 42 | 42 |
 | C | 42 | 42 | 42 | 42 | 42 | 42 |
 | Nil Python | 42 | 42 | 42 | 42 | refuses | 42 |
 | Rust | 42 | 42 | 42 | 42 | 42 | refuses |
@@ -75,11 +76,6 @@ A **refusal** is a compile-time error that names the reason, for example
 
 - x86-64 is the host and the most heavily tested target.
 - wasm32 is the least tested: its suites are run by hand, not continuously.
-  In a v423 checkout, the `./pxx` wrapper made C fail on wasm32 with
-  `undefined variable (SYS_openat)`, so the C row was built with the compiler
-  binary directly. The wrapper is fixed in the current tree; re-run
-  `./install.sh` to regenerate it. A copy already installed on your `PATH` is
-  only rewritten if you answer yes to the PATH question again.
 - ESP32 (xtensa and riscv32) is covered in the next section. See
   [Cross-compilation](../targets/cross-compilation.md) for the flags.
 
@@ -93,15 +89,22 @@ PXX builds bare-metal and ESP-IDF images for esp32s3 (xtensa) and esp32c3
   (`tools/run_c_conformance_esp.sh --chip esp32s3`). The skip is `00187.c`,
   which needs a writable file system the test image does not mount. This was
   measured with a development compiler (binary sha256 `9bcd11d46816`, tree
-  `e1648bcb4`) that predates v423, not with v423 itself.
-- **Examples:** 15 programs in `examples/esp32/` run under QEMU on this pin and
-  are listed in the [showcase](../examples/#esp32).
+  `e1648bcb4`) that predates v423, not with v424 itself.
+- **Examples:** 15 programs in `examples/esp32/` run under QEMU with pin v423
+  and are listed in the [showcase](../examples/#esp32).
 - **On a board:** eight examples, including the GPIO-edge and ADC programs
   that QEMU cannot exercise, ran correctly on a physical ESP32-S3, built with a
-  development compiler rather than v423. Looped for minutes, the Nil Python
+  development compiler older than v423. Looped for minutes, the Nil Python
   examples leak memory on every run. A fix is being landed; until it is in,
   treat Nil Python on ESP as fine for short runs and not yet for long-running
   use. The details are in the [showcase](../examples/#on-a-real-esp32-s3).
+- **New in v424:** units for I2C (`espi2c`), PWM (`esppwm`) and non-volatile
+  storage (`espnvs`), each with an example in `examples/esp32/` and each
+  checked on an ESP32-S3 board with a development compiler. NVS values survived
+  four reboots. PWM output was measured on its pin: edge counts and duty cycle
+  matched with nothing wired. I2C passed its no-device checks (bus open, empty
+  scan, a missing device reported as missing), but **reading and writing a real
+  I2C device has not been tested yet**.
 
 ESP is not a Unix: FreeRTOS provides tasks, not processes. Calls with POSIX
 shapes that have no meaning there return an explicit "unsupported" error rather
@@ -110,17 +113,14 @@ until it lands, see [ESP32](../targets/esp32.md).
 
 ## Known issues
 
-These lists are measured, not recalled. The Pascal and C rows were run on this
-pin and on the development tree by the Pascal/C lane on 2026-09-24. Rows that
+These lists are measured, not recalled. The Pascal/C lane ran every row on
+2026-09-24, and the desktop Pascal and C rows were re-run on v424 on
+2026-09-25. The two ESP rows have not been re-run since v423. Rows that
 **compile and silently give a wrong answer** come first, because a refusal at
 least tells you something is wrong.
 
 ### Silently wrong
 
-- **Pascal, every target:** a `var` parameter accepts a narrower variable. For
-  example, a `LongInt` passed to `var x: Int64` receives an 8-byte write, which
-  overwrites a neighbouring variable. FPC refuses the call. *Workaround:* pass
-  a variable of exactly the parameter's type.
 - **Pascal, every target:** a record type named like one of fourteen
   compiler-internal records (`TProc` and `TSymbol` among them) silently takes
   the compiler's layout: `SizeOf` is 1344 where it should be 800. *Workaround:*
@@ -139,22 +139,6 @@ least tells you something is wrong.
 - **ESP:** `Trunc` of an out-of-range float wraps when stored into a 32-bit
   integer (`Trunc(1e30)` gives -1) but saturates when stored into an `Int64`.
 
-### Fixed after v423
-
-These are wrong in v423 and fixed in the development tree, so the next pin will
-carry the fixes. Until then, the workarounds apply.
-
-- **Pascal, every target:** a function that writes into a **by-value** string
-  parameter also changed the caller's string. For example, the textbook
-  `UpperStr(s: string)` returned the right value and upper-cased the caller's
-  variable too. On wasm32, `SetLength` on a by-value dynamic-array parameter
-  also had no effect. *Workaround on v423:* copy the parameter into a local
-  first.
-- **Pascal on wasm32:** a program that used `WriteLn` printed `ok:` and exited
-  0, but the module trapped as soon as it ran. Now `WriteLn` works on wasm32,
-  and a build that cannot lower a runtime helper fails with a nonzero exit code
-  instead of reporting success.
-
 ### Refused, with a message that names the problem
 
 - Pascal `threadvar` on i386.
@@ -171,7 +155,7 @@ Nil Python is Python-ish and known to have plenty of issues. Its measured list
 is kept in one place, [Known limits](../targets/nil-python.md#known-limits) on the
 Nil Python page. That list includes silent wrong answers. For example, an `-> int` result
 wraps at 64 bits, and `hex()` of an int wider than 64 bits is wrong (both
-confirmed on v423). The same page records the deliberate differences from
+confirmed on v424). The same page records the deliberate differences from
 CPython; a difference not recorded there is a bug.
 
 ## Reporting bugs

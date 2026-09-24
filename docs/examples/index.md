@@ -18,6 +18,12 @@ strength of a test that once passed or a claim in another document.
 > checkout `02bd18fa0`. Where a row was measured differently, it says so. A
 > later pin may behave differently in either direction; re-run a command to
 > check.
+>
+> **Re-checked 2026-09-25 with pin v424** (commit `0a3a7b5b4`, sha256
+> `93a336a7ba85…`). All 36 example programs built. The batch and parallel
+> programs printed output byte-identical to v423's, apart from timing figures,
+> and every binary is the same size as under v423. The screenshots, the ESP
+> runs and the C-library rows were not redone for v424.
 
 ## Quick start
 
