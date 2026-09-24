@@ -62,7 +62,7 @@ The C frontend compiles standard C directly to native ELF in a single pass (see
   fails at the first step**, PXX compiling `tcc.c`: tcc's `<semaphore.h>` falls
   through to the host header, which does not parse against PXX's C runtime.
   With that part switched off, it stops at an `#include` inside a function
-  call's arguments in `tccpp.c`. Both are being worked on.
+  call's arguments in `tccpp.c`.
 - A number of candidate corpora (graphics, networking, and game libraries) are
   staged for bring-up but not yet claimed.
 
