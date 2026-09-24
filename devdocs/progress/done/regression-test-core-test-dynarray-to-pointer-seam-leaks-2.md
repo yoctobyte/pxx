@@ -81,4 +81,4 @@ The log tail filed above already reads live=5, under the bound, so whatever
 reddened step 3 on 09-18 was not the leak the slug names. A dynarray leak
 census the same day (22 shapes, x86-64 and i386) found one unrelated leak, a
 by-value dynarray parameter rebound in the callee; handed to franks-a3.
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c0e0f5fe8c.

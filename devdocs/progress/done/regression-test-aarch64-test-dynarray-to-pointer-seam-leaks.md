@@ -79,4 +79,4 @@ Re-run at 8e68f024e2, binary b51d542b4e1f: the four Makefile rows (aarch64 and
 x86-64 builds, expect_same, both assert_no_leak) all pass; live=14 against a
 bound of 50 on both targets, identical census lines. Twin of
 regression-test-core-test-dynarray-to-pointer-seam-leaks-2, closed together.
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c0e0f5fe8c.
