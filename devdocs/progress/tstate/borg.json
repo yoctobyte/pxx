@@ -16541,7 +16541,7 @@
   },
   {
    "bad": "b5140a1f00a7039ebc1d593532aba0874e71da3e",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "434cc8f7ff79350e6c221b699a7bd985a435c266",
    "job": "tools-devtest-sh#00",
