@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: MPL-2.0
+# The Nil Python half of test_nilpy_define_unit: PXX_NILPY must reach the unit.
+import 'test_nilpy_define_unit.pas' as u
+
+print(u.frontend())

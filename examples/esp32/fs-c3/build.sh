@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: 0BSD
-# PXX -> ESP-IDF (ESP32-C3) esptimer demo: compile main.pas (uses esptimer) to a
-# relocatable object, wrap it in an archive, then drive the normal IDF build.
+# PXX -> ESP-IDF (ESP32-C3) file I/O probe: compile main.pas (FAT on flash,
+# through the ESP PAL) to a relocatable object, wrap it in an archive, then
+# drive the normal IDF build.
 #
 # Prereqs: . ~/esp/esp-idf/export.sh   (idf.py + toolchains on PATH)
 # Usage:   ./build.sh            build only

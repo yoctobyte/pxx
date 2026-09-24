@@ -2658,6 +2658,14 @@ begin
     placed there is always false and silently does nothing. }
   if isNilPy then
     PasDefine('PXX_NILPY_STR');
+  { PXX_NILPY: "the program being compiled is Nil Python". A dual-surface unit
+    (lib/rtl/platform/esp/espi2c.pas) guards its Python half with it, because
+    that half needs pylib and a Pascal program that only wants the Pascal half
+    should not link the Python runtime: on xtensa that is ~3 MB and a forward
+    call past CALL8's reach. Its own name so that the string-model define
+    above keeps meaning only that. }
+  if isNilPy then
+    PasDefine('PXX_NILPY');
 
   { EVERY define that is GLOBAL to this compilation has now been seeded: -d,
     PasApplyTargetDefines, and the frontend ones above. Freeze that as the

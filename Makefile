@@ -18399,6 +18399,16 @@ test-core: $(COMPILER)
 	# and links perfectly either way.
 	./$(COMPILER) --platform=esp test/test_platform_defines.pas $(TESTTMP)/test_platform_defines_esp26
 	tools/expect_same.sh test_platform_defines_esp26 "$$($(TESTTMP)/test_platform_defines_esp26)" "$$(printf 'platform=esp\nend')"
+	# PXX_NILPY is defined for a Nil Python compilation and reaches the units it
+	# uses; a Pascal compilation never sees it. lib/rtl/platform/esp/espi2c.pas
+	# guards its Python half (which needs pylib) with it, so a Pascal program
+	# using the unit does not link the Python runtime. Both rows go through the
+	# same unit function; the pinned compiler, which predates the define,
+	# answers `pascal` for the .npy, so the second row can fail.
+	./$(COMPILER) test/test_nilpy_define.pas $(TESTTMP)/test_nilpy_define_pas26
+	tools/expect_same.sh test_nilpy_define_pas26 "$$($(TESTTMP)/test_nilpy_define_pas26)" "pascal"
+	./$(COMPILER) test/test_nilpy_define.npy $(TESTTMP)/test_nilpy_define_npy26
+	tools/expect_same.sh test_nilpy_define_npy26 "$$($(TESTTMP)/test_nilpy_define_npy26)" "nilpy"
 	./$(COMPILER) -Itest/unitpath/posix test/test_unitpath.pas $(TESTTMP)/test_unitpath_posix26
 	tools/expect_same.sh test_unitpath_posix26 "$$($(TESTTMP)/test_unitpath_posix26)" "posix"
 	./$(COMPILER) -Futest/unitpath/esp test/test_unitpath.pas $(TESTTMP)/test_unitpath_esp26
