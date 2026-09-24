@@ -60,18 +60,21 @@ fi
 # Discover lib roots: every dir under lib/ that holds at least one unit source.
 # Excludes:
 #   */historic    — superseded sources kept for reference only
-#   */platform/*  except posix — target-selected PAL backends; the posix one is
-#                 the host default, and including e.g. platform/esp as a peer
-#                 root would shadow posix units of the same name (platform_*).
+#   */platform/*  ALL of them, posix included — the PAL is target-selected, and
+#                 the compiler adds the right one itself (AddDefaultPasUnitDirs:
+#                 posix, wasi or esp by TargetPlatform, anchored to its exe
+#                 dir). A -Fu here comes BEFORE that default and wins, so the
+#                 posix root this used to re-add broke every non-posix target:
+#                 `pxx --target=wasm32 t.c` died on SYS_openat in the posix
+#                 platform_backend while the bare binary built it.
 # (The folder layout is due a review before a release — see the install help.)
 mapfile -t LIBDIRS < <(
   find "$ROOT/lib" -type f \( -name '*.pas' -o -name '*.pp' -o -name '*.h' \) -printf '%h\n' \
     | sort -u \
     | grep -vE '/historic(/|$)' \
-    | { grep -vE '/platform/' || true; } \
-  ; printf '%s/lib/rtl/platform/posix\n' "$ROOT"   # re-add the host PAL backend
+    | { grep -vE '/platform/' || true; }
 )
-# Dedup (the posix re-add may duplicate), then ORDER: Pascal unit roots
+# Dedup, then ORDER: Pascal unit roots
 # (lib/rtl, lib/pcl, …) BEFORE lib/crtl/*. A plain `sort -u` puts crtl first
 # (alphabetical), so `uses math` bound the C header lib/crtl/include/math.h via
 # C-header-import and shadowed the Pascal lib/rtl/math.pas — Sqrt/Cos vanished for
