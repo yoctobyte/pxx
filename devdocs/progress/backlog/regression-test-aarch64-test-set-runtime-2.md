@@ -37,3 +37,6 @@ pascal26:42: error: compiler error: PXXMemZero not found (aarch64)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-24 — the borg watcher saw `test-aarch64#src:test/test_set_runtime.pas` GREEN at 1b36bdb71957 (tier full) and did NOT close this: this is a repeat stub (`regression-test-aarch64-test-set-runtime-2`, not `regression-test-aarch64-test-set-runtime`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
