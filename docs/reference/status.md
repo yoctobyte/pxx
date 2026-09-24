@@ -156,10 +156,11 @@ which:
 ## Cross-targets
 
 Everything above describes the x86-64 host. PXX also cross-compiles to i386,
-AArch64, and ARM32 (Linux), plus the ESP32-oriented `riscv32` and `xtensa`
-embedded targets — six backends in all. `pxx --list-targets` also names `wasm32`,
-which is **registered only — no codegen yet**, so it is not one of the six. Most of the above runs on the Linux
-cross-targets too, but per-target status is a separate axis with its own gates.
+AArch64, ARM32 and 32-bit RISC-V (Linux), to `wasm32` (WebAssembly, run with
+wasmtime), and to the ESP32's `riscv32` and `xtensa`: seven backends in all.
+Most of the above runs on the cross targets too, but per-target status is a
+separate axis with its own gates; [Targets](../targets/index.md#what-each-target-supports)
+has the per-target table, measured on v424.
 
 ## How this is measured
 

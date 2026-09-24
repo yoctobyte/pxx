@@ -20,8 +20,9 @@ PXX can emit native and cross-target output from the same compiler invocation.
 | `wasm32` | WebAssembly module. | Run with `wasmtime`. |
 
 `pxx --list-targets` prints this list for your build. On v424 it describes
-wasm32 as "registered only — no codegen yet"; that line is out of date, and
-the table below shows what wasm32 actually does.
+wasm32 as "registered only — no codegen yet". That line is wrong, and the
+development tree corrects it (`3472ffc42`); the table below shows what wasm32
+actually does.
 
 ESP chip names are accepted as targets too. They imply the CPU and
 `--platform=esp`: `esp32`, `esp32s2` and `esp32s3` are xtensa; `esp32c2`,
@@ -67,10 +68,11 @@ table.
 | C with `#include <math.h>` | yes | yes | yes | yes | yes | refused |
 
 Every **refused** cell is a compile-time error that names the reason; none
-produces a program that runs wrongly. Three of the messages are worded for
-compiler developers rather than users: `--shared` on aarch64 and arm32 (fixed
-in the development tree), `--threadsafe` on riscv32 and wasm32, and Nil Python
-on riscv32 (`a heap arena needs mmap`). `xtensa` also has an object writer; it
+produces a program that runs wrongly. On v424, three of the messages are
+worded for compiler developers rather than users: `--shared` on aarch64 and
+arm32, `--threadsafe` on riscv32 and wasm32, and Nil Python on riscv32
+(`a heap arena needs mmap`). The development tree rewords all three
+(`45bbfb187`, `3472ffc42`). `xtensa` also has an object writer; it
 is the ESP-IDF route.
 
 ## Pages

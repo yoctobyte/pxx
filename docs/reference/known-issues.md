@@ -17,6 +17,33 @@ refusal at least tells you something is wrong.
 
 ## Silently wrong
 
+### C: `sizeof *a` of a two-dimensional array is the size of a pointer
+
+```c
+char *table[][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
+size_t rows = sizeof table / sizeof *table;   /* 8 here; GCC gives 2 */
+```
+
+`sizeof *table` is 8 instead of 32, so the common `sizeof a / sizeof *a`
+row count comes out too large and a loop over it runs past the end of the
+array. `sizeof table[0]` is correct. This affects every multidimensional array,
+global or local, in v424 and in the development tree.
+**Workaround:** write `sizeof a[0]` instead of `sizeof *a`.
+
+### C: a typedef of an array of a typedef'd array loses a dimension
+
+```c
+typedef float vec4[4];
+typedef vec4 mat4[4];
+mat4 m = { { 1, 2, 3, 4 }, { 5, 6, 7, 8 }, { 9, 10, 11, 12 }, { 13, 14, 15, 16 } };
+```
+
+At file scope `sizeof m` is 16 instead of 64, and every element reads 0. Inside
+a function the same initialised declaration is refused with `expected C
+expression`. This affects v424 and the development tree.
+**Workaround:** declare the variable as `vec4 m[4]`, which gives the right size
+and values.
+
 ### C: `long double` is 8 bytes
 
 GCC's `long double` is 16 bytes on x86-64; PXX's is 8, the same as `double`. A

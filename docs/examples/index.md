@@ -402,17 +402,24 @@ executables with no dynamic loader and no external C library. The sources are
 fetched on demand, not stored in the repository:
 
 ```sh
-tools/install_lib_candidates.sh busybox sqlite zlib lua cjson quickjs
+tools/install_lib_candidates.sh busybox sqlite zlib lua cjson duktape quickjs
 ```
+
+The zlib, Lua, cJSON and Duktape rows were re-run on 2026-09-25 with **pin
+v424** (compiler sha256 `93a336a7ba85…`) at checkout `f26d3a23b`. Each was
+checked two ways: against the recipe's expected output, and against the same
+driver program built by GCC and linked with glibc. The binary sizes are for
+builds without `-g`.
 
 | Program | Version | How it was checked | Binary |
 | --- | --- | --- | --- |
 | **BusyBox**, unity build | 1.36.1 | `tools/busybox_diff.sh --pinned --targets x86_64`: applets `cat` and `echo` as one translation unit; output byte-identical to a GCC build over 29 cases | 171 KB |
 | **BusyBox**, linked by PXX itself | same | `tools/busybox_diff.sh --pinned --pxx-link --targets x86_64 --applets "cat echo ls wc sort ash"`: 55 objects linked by `pascal26 --link` with no external linker; no `PT_INTERP`; byte-identical to GCC over 82 cases | 20 MB |
 | **SQLite** | 3.46.0 | amalgamation plus a ten-line `sqlite3_exec` driver; the SQL session below | 3.3 MB |
-| **zlib** | 1.3.1 | zlib's own `test/example.c`: output byte-identical to the same program built by GCC | 1.4 MB |
-| **Lua** | 5.4.7 | `test/lua/*.lua` against expected output; the stock `lua.c` interpreter also builds and runs | 1.0 MB |
-| **cJSON** | 1.7.18 | `test/cjson/*.json` round-trip, all five match | 137 KB |
+| **zlib** | 1.3.1 | zlib's own `test/example.c`: output byte-identical to the same program built by GCC | 717 KB |
+| **Lua** | 5.4.7 | the six `test/lua/*.lua` programs: all match the expected output, and all six outputs are byte-identical to the GCC build; the stock `lua.c` interpreter also builds and runs | 968 KB |
+| **cJSON** | 1.7.18 | the five `test/cjson/*.json` documents round-trip: all match the expected output and the GCC build | 149 KB |
+| **Duktape** | 2.7.0 | a JavaScript engine: `test/duktape/duk_smoke.c` runs a curated script, exits 42, and prints 29 lines byte-identical to the expected output and to the GCC build | 1.4 MB |
 | **QuickJS** (quickjs-ng) | 0.9.0 | `./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/quickjs test/quickjs/runner.c qjs` (about 11 s), then `./qjs "$(cat test/quickjs/smoke.js)"`: output byte-identical to `test/quickjs/smoke.expected`. Checked 2026-09-25 with pin v424 at checkout `a515adf81`; it needs the C runtime from that checkout or later | 4.9 MB |
 
 SQLite, compiled by PXX from the single-file amalgamation:
@@ -446,9 +453,10 @@ gzread(): hello, hello!
 ...
 ```
 
-The repository's recipes for these are `make test-zlib`, `make test-lua` and
-`make test-cjson`. Those targets build with the in-tree compiler rather than
-the pin.
+The repository's recipes for these are `make test-zlib`, `make test-lua`,
+`make test-cjson` and `make test-duktape`. Those targets build with the in-tree
+compiler rather than the pin; do not point their `COMPILER` variable at the
+pinned binary, because the recipe then rebuilds that path.
 
 ## A bootable minimal Linux system
 
