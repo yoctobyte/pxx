@@ -146,6 +146,7 @@ function __pxx_chmod(path: PChar; mode: Integer): Integer;
 function __pxx_chown(path: PChar; owner, group: Integer): Integer;
 function __pxx_lchown(path: PChar; owner, group: Integer): Integer;
 function __pxx_prlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+function __pxx_getrusage(who: Integer; usage: Pointer): Integer;
 function __pxx_uname(buf: Pointer): Integer;
 function __pxx_times(buf: Pointer): Int64;
 function __pxx_truncate(path: PChar; length: Int64): Integer;
@@ -777,6 +778,11 @@ end;
 function __pxx_prlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
 begin
   Result := PalPrlimit(resource, newLim, oldLim);
+end;
+
+function __pxx_getrusage(who: Integer; usage: Pointer): Integer;
+begin
+  Result := PalGetrusage(who, usage);
 end;
 
 function __pxx_mknod(path: PChar; mode: Integer; dev: Int64): Integer;

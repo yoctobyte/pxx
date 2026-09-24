@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Zlib */
 /*
- * C runtime: getrlimit / setrlimit, both on prlimit64.
+ * C runtime: getrlimit / setrlimit, both on prlimit64; getrusage on its own PAL entry.
  *
  * Needed by busybox's `ulimit' (shell/shell_common.c:616). Found attempting
  * rung 2 (feature-c-corpus-busybox-multi-applet).
@@ -25,6 +25,7 @@
 #include <errno.h>
 
 extern int __pxx_prlimit(int resource, void *newLim, void *oldLim);
+extern int __pxx_getrusage(int who, void *usage);
 
 struct __pxx_rlimit64 {
   unsigned long long rlim_cur;
@@ -95,6 +96,14 @@ int getpriority(int which, id_t who) {
 
 int setpriority(int which, id_t who, int prio) {
   int rc = __pxx_setpriority(which, (int)who, prio);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+int getrusage(int who, struct rusage *usage) {
+  int rc;
+  if (!usage) { errno = EFAULT; return -1; }
+  rc = __pxx_getrusage(who, usage);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
 }

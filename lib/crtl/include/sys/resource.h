@@ -17,10 +17,12 @@
  * the paragraph above names has been done -- PalPrlimit sits on prlimit64, one
  * syscall serving both.
  * UPDATE 2026-09-02: getpriority/setpriority likewise, on PalGetPriority/
- * PalSetPriority (busybox's `nice' and `renice'). The reasoning above still
- * stands for everything NOT listed here -- getrusage has no PAL entry, so it
- * stays undeclared and a call to it is a compile error naming the function,
- * which is the honest answer rather than a silent DT_NEEDED on glibc.
+ * PalSetPriority (busybox's `nice' and `renice').
+ * UPDATE 2026-09-25: getrusage likewise, on PalGetrusage (sqlite's shell
+ * times every statement with it). The reasoning above still stands for
+ * anything NOT declared here: without a PAL entry, a call is a compile error
+ * naming the function, which is the honest answer rather than a silent
+ * DT_NEEDED on glibc.
  *
  * prlimit64 rather than the legacy getrlimit/ugetrlimit pair: the legacy calls
  * use a 32-bit rlim_t on 32-bit targets and saturate at 4GB, so they would need
@@ -109,5 +111,10 @@ int setrlimit(int resource, const struct rlimit *rlim);
    contract work. busybox's coreutils/nice.c does exactly that. */
 int getpriority(int which, id_t who);
 int setpriority(int which, id_t who, int prio);
+
+/* getrusage(2). `who' is RUSAGE_SELF, RUSAGE_CHILDREN or RUSAGE_THREAD. The
+   struct above is the kernel's own layout on every target, so it is filled in
+   place. Refused (-1, ENOSYS) where there is no kernel to ask: wasm32, ESP. */
+int getrusage(int who, struct rusage *usage);
 
 #endif

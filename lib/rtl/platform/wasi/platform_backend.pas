@@ -100,6 +100,7 @@ function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
 function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+function PalBackendGetrusage(who: Integer; usage: Pointer): Integer;
 function PalBackendUname(buf: Pointer): Integer;
 function PalBackendTimes(buf: Pointer): Int64;
 function PalBackendTruncate(path: PChar; length: Int64): Integer;
@@ -1035,6 +1036,13 @@ end;
 { WASI exposes no resource limits. Refused rather than answering
   RLIM_INFINITY, which is a specific and wrong promise. }
 function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ WASI exposes no resource usage. Refused rather than answering zeros, which
+  would read as a program that used no CPU. }
+function PalBackendGetrusage(who: Integer; usage: Pointer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

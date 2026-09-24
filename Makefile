@@ -23548,6 +23548,21 @@ test-core: $(COMPILER)
 	# bug-c-a-macro-call-with-more-than-16-arguments-is-silently-mis-expanded
 	./$(COMPILER) test/c_macro_many_args.c $(TESTTMP)/c_manyargs26
 	tools/expect_same.sh c_manyargs26 "$$($(TESTTMP)/c_manyargs26)" "$$(printf '1 136\n2 153\n3 735435177334091028 635800628644997282\n4 17')"
+	# A space before the ')' of a macro's parameter list (`#define K( c )`,
+	# sqlite's shell.c): the #define scanner stepped over the ')' and read the
+	# body as parameters. Values are gcc's; the pin refuses the file.
+	./$(COMPILER) test/c_macro_param_list_whitespace.c $(TESTTMP)/c_mplws26
+	tools/expect_same.sh c_mplws26 "$$($(TESTTMP)/c_mplws26)" "$$(printf 'b85 3 3 1\nsp 5 tab 15 two 7 va 6\ncontrols 101 201')"
+	# A declarator name in redundant parens, `T *(name[N]) = {...}` (sqlite's
+	# shell.c azHelp): at file scope it was routed to the function parser and
+	# dropped whole; at function scope the declarator loop broke on the '('.
+	# Values are gcc's; the pin refuses the file.
+	./$(COMPILER) test/c_paren_declarator_name.c $(TESTTMP)/c_pdn26
+	tools/expect_same.sh c_pdn26 "$$($(TESTTMP)/c_pdn26)" "z 3 6 7 9 12 42 q 12"
+	# <utime.h> and getrusage(), both added for sqlite's shell.c. HEAD compiler,
+	# not the pin: the header->source map is compiled in. Values are gcc's.
+	./$(COMPILER) test/crtl_utime_getrusage.c $(TESTTMP)/crtl_ugr26
+	tools/expect_same.sh crtl_ugr26 "$$($(TESTTMP)/crtl_ugr26 $(TESTTMP)/crtl_ugr26.tmp)" "$$(printf 'utime 0\natime 1000000000 mtime 1234567890\nutime-now 0\nmoved 1\nutime-missing -1 errno-ENOENT 1\ngetrusage 0\nmaxrss>0 1 utime-usec-ok 1\nbad-who -1 einval 1')"
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

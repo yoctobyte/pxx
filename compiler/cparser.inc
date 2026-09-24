@@ -151,6 +151,7 @@ function CBlockContinues: Boolean; forward;
 function ParseCStmtExprAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
+function CParenDeclNameEnd(lp: Integer): Integer; forward;   { ParseCGlobalVarDecl asks it ~900 lines above its body }
 { Both called from ParseCGlobalVarDecl ~2500 lines above their bodies, for the
   same single-pass reason as CBlockContinues just above. CDeclSawStatic needs
   the forward as much as its new sibling does: it had no caller above its body
@@ -6628,6 +6629,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     cliBase, cliOuterTop: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     vlaDim, vlaPos, vlaElemSz, vlaSzSym, vlaAlloc, vlaMul, vlaSzLit: Integer;
+    lParenName: Boolean; lParenEnd: Integer;   { `T *(name[N])`, see CParenDeclNameEnd }
 begin
   cliOuterTop := CLIArrTop;
   cliBase := CLIArrTop;
@@ -6862,8 +6864,23 @@ begin
       end;
       Break;
     end;
+    { `T *(name[N])` -- a declarator name in redundant parens, the file-scope
+      arm's sibling (see CParenDeclNameEnd). A '(' after the ')' would make it
+      a block-scope prototype `int (f)(void);`, which stays with the arm below. }
+    lParenName := False;
+    if CurTok.Kind = tkLParen then
+    begin
+      lParenEnd := CParenDeclNameEnd(TokPos - 1);
+      if (lParenEnd >= 0) and (lParenEnd + 1 < TokCount) and
+         (Tokens[lParenEnd + 1].Kind <> tkLParen) then
+      begin
+        Next;
+        lParenName := True;
+      end;
+    end;
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
+    if lParenName and (CurTok.Kind = tkRParen) then begin Next; lParenName := False; end;
     if CurTok.Kind = tkLParen then
     begin
       { Block-scope function prototype `int f(params);` (C 6.7 — a declaration,
@@ -6966,6 +6983,7 @@ begin
         dimSpan[dimCount] := dimVal;
         Inc(dimCount);
       end;
+      if lParenName then begin Expect(tkRParen, ')'); lParenName := False; end;
       { Array typedef inherent dims fold UNDER any declarator-applied dims:
         `v4 r` -> [4]; `v4 rows[2]` -> [2][4] (bug-c-typedef-array-element-init).
         ALL of them, in order: this appended exactly one, so `typedef int T[2][3]'
@@ -10719,6 +10737,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     gScalarRec, gFirstRec, gFirstPtrDepth, gFirstElemTk, gFirstElemRec,
     gFirstPtrBaseTk, gFirstPtrBaseRec, gFirstPtrElemSig: Integer;
     gFirstDecl: Boolean;  { the first declarator's stars were eaten by ParseCDeclType }
+    gParenName: Boolean;  { THIS declarator's name is in redundant parens }
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   { Read the storage class BEFORE the type is consumed: both keywords are
@@ -11100,9 +11119,14 @@ begin
         CTypePtrBaseRec := gFirstPtrBaseRec; CTypePtrElemProcSig := gFirstPtrElemSig;
       end;
     end;
+    { `T *(name[N])`: the parens are redundant -- see CParenDeclNameEnd. }
+    gParenName := (CurTok.Kind = tkLParen) and (CParenDeclNameEnd(TokPos - 1) >= 0);
+    if gParenName then Next;
     if CurTok.Kind <> tkIdent then Break;
     gNameTok := TokPos - 1;
     name := CurTok.SVal; Next;
+    { `(g)[3]` -- the parens wrap only the name, and the dims follow them. }
+    if gParenName and (CurTok.Kind = tkRParen) then begin Next; gParenName := False; end;
     { Global array dimension(s). Pointer arrays with string-literal initializers
       are materialized below; other arrays still mostly serve as parse/layout
       anchors for now. }
@@ -11124,6 +11148,7 @@ begin
       Inc(dimCount);
       if dimCount = 1 then arrLen := dimVal;
     end;
+    if gParenName then Expect(tkRParen, ')');
     { Array typedef inherent dim folds UNDER any declarator dims: `v4 g` -> [4],
       `v4 gs[2]` -> [2][4] (bug-c-typedef-array-element-init).
 
@@ -11993,8 +12018,36 @@ end;
   (definition or prototype) vs a global variable, WITHOUT consuming it: peek
   the declaration-specifiers + declarator name and test for a following `(`,
   then rewind the token cursor. }
+{ A declarator NAME in redundant parentheses, `( ident [dims]... )`, with the
+  '(' at token index `lp`: returns the index of its ')', or -1 when the tokens
+  are anything else. C allows the parens around any declarator, and sqlite's
+  shell.c writes its help table `static const char *(azHelp[]) = {...}`.
+  `(*name)` is NOT this shape (ParseCDeclType owns that function-pointer
+  form), and whether `(name)` names a function or a variable is decided by the
+  token AFTER the ')' -- `(lua_gettop)(lua_State *L)` is lua.h's API style. }
+function CParenDeclNameEnd(lp: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := -1;
+  if (lp < 0) or (lp + 2 >= TokCount) then Exit;
+  if Tokens[lp].Kind <> tkLParen then Exit;
+  if Tokens[lp + 1].Kind <> tkIdent then Exit;
+  k := lp + 2;
+  while (k < TokCount) and (Tokens[k].Kind = tkLBrack) do
+  begin
+    depth := 0;
+    repeat
+      if Tokens[k].Kind = tkLBrack then Inc(depth)
+      else if Tokens[k].Kind = tkRBrack then Dec(depth)
+      else if Tokens[k].Kind in [tkSemicolon, tkEOF] then Exit;
+      Inc(k);
+    until (depth = 0) or (k >= TokCount);
+  end;
+  if (k < TokCount) and (Tokens[k].Kind = tkRParen) then Result := k;
+end;
+
 function CTopLevelIsFunc: Boolean;
-var savedPos: Integer;
+var savedPos, pe: Integer;
 begin
   savedPos := TokPos - 1;          { index of the current token }
   ParseCDeclType;
@@ -12004,6 +12057,16 @@ begin
   begin
     if CurTok.Kind = tkIdent then Next;
     Result := (CurTok.Kind = tkLParen);
+    { `T *(name[N]) = ...` is a VARIABLE in redundant parens; only a '('
+      after the ')' makes `(name)` a function. It went to ParseCSubroutine,
+      which found no name and skipped the whole declaration -- initializer
+      and all -- so every use read "undeclared identifier". }
+    if Result then
+    begin
+      pe := CParenDeclNameEnd(TokPos - 1);
+      if (pe >= 0) and ((pe + 1 >= TokCount) or (Tokens[pe + 1].Kind <> tkLParen)) then
+        Result := False;
+    end;
   end;
   TokPos := savedPos; Next;        { rewind }
 end;

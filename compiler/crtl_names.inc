@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  625 functions across 64 headers. }
+  627 functions across 65 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -72,11 +72,12 @@ begin
       ' getopt_long:unistd.h getopt_long_only:unistd.h getpagesize:unistd.h ' +
       ' getpeername:sys/socket.h getpgid:unistd.h getpid:unistd.h getppid:unistd.h ' +
       ' getpriority:sys/resource.h getpwent:pwd.h getpwnam:pwd.h getpwnam_r:pwd.h getpwuid:pwd.h ' +
-      ' getpwuid_r:pwd.h getrandom:sys/random.h getrlimit:sys/resource.h getservbyname:netdb.h ' +
-      ' getservbyname_r:netdb.h getservbyport:netdb.h getservent:netdb.h getsid:unistd.h ' +
-      ' getsockname:sys/socket.h getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h ' +
-      ' getxattr:sys/xattr.h glob:glob.h glob_pattern_p:glob.h globfree:glob.h gmtime:time.h ' +
-      ' gmtime_r:time.h grantpt:stdlib.h ';
+      ' getpwuid_r:pwd.h getrandom:sys/random.h getrlimit:sys/resource.h ' +
+      ' getrusage:sys/resource.h getservbyname:netdb.h getservbyname_r:netdb.h ' +
+      ' getservbyport:netdb.h getservent:netdb.h getsid:unistd.h getsockname:sys/socket.h ' +
+      ' getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h getxattr:sys/xattr.h ' +
+      ' glob:glob.h glob_pattern_p:glob.h globfree:glob.h gmtime:time.h gmtime_r:time.h ' +
+      ' grantpt:stdlib.h ';
     'h': Result :=
       ' hasmntopt:mntent.h herror:netdb.h hstrerror:netdb.h htonl:netinet/in.h ' +
       ' htons:netinet/in.h hypot:math.h ';
@@ -181,7 +182,7 @@ begin
     'u': Result :=
       ' umask:sys/stat.h umount:sys/mount.h umount2:sys/mount.h uname:sys/utsname.h ' +
       ' ungetc:stdio.h unlink:unistd.h unlockpt:stdlib.h unsetenv:stdlib.h unshare:sched.h ' +
-      ' usleep:unistd.h utimensat:time.h utimes:sys/time.h ';
+      ' usleep:unistd.h utime:utime.h utimensat:time.h utimes:sys/time.h ';
     'v': Result :=
       ' vasprintf:stdio.h vdprintf:stdio.h vfork:unistd.h vfprintf:stdio.h vfscanf:stdio.h ' +
       ' vprintf:stdio.h vscanf:stdio.h vsnprintf:stdio.h vsprintf:stdio.h vsscanf:stdio.h ' +

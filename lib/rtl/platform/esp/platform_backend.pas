@@ -64,6 +64,7 @@ function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
 function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+function PalBackendGetrusage(who: Integer; usage: Pointer): Integer;
 function PalBackendUname(buf: Pointer): Integer;
 function PalBackendTimes(buf: Pointer): Int64;
 function PalBackendTruncate(path: PChar; length: Int64): Integer;
@@ -708,6 +709,13 @@ end;
   Refused rather than answering RLIM_INFINITY, which would tell a caller it
   may open unlimited descriptors on a device that has very few. }
 function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ FreeRTOS has no per-process accounting -- there are no processes. Refused rather than answering zeros, which
+  would read as a program that used no CPU. }
+function PalBackendGetrusage(who: Integer; usage: Pointer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

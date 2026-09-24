@@ -392,6 +392,13 @@ begin
     while (p <= last) and (line[p] <> ')') do
     begin
       while (p <= last) and (line[p] in [' ', #9, ',']) do Inc(p);
+      { A space BEFORE the closing paren -- `#define K( c )`, sqlite's
+        shell.c B85 macros -- lands the skip above ON the ')'. Falling to the
+        `else Inc(p)` below stepped over it, and the scan went on reading the
+        macro BODY as parameters, up to its first ')': `K( x ) ((x)+1)` got
+        parameters x, x and an empty body, and every use was "expected C
+        expression". `K( x)` and `K(x)` never reached here with p on ')'. }
+      if (p <= last) and (line[p] = ')') then Break;
       if (p <= last) and CPIsIdentStart(line[p]) then
       begin
         paramStart := p;
