@@ -9,7 +9,7 @@ created: 2026-09-02
 found-by: frankD
 owner:
 blocked-by:
-summary: "DONE BY EVENTS in bd53b29d97 (2026-09-04, feat(crtl): a DNS resolver), found still open on 2026-09-24. lib/crtl/include/resolv.h, arpa/nameser.h, arpa/nameser_compat.h and lib/crtl/src/arpa/nameser.c provide struct __res_state and _res, res_init/res_mkquery/res_send, and the ns_* parser. The bound this ticket demanded is there: ns_name_unpack refuses a pointer that is not strictly backwards and also counts jumps. test/c_crtl_resolv.c feeds a self-pointer and a two-pointer loop, is wired in the Makefile against gcc -lresolv, and at HEAD every hostile row answers -1 and returns. That commit measured busybox at 396 of 400 TUs compiling at i386, nslookup included.""
+summary: 'DONE BY EVENTS in bd53b29d97 (2026-09-04, feat(crtl): a DNS resolver), found still open on 2026-09-24. lib/crtl/include/resolv.h, arpa/nameser.h, arpa/nameser_compat.h and lib/crtl/src/arpa/nameser.c provide struct __res_state and _res, res_init/res_mkquery/res_send, and the ns_* parser. The bound this ticket demanded is there: ns_name_unpack refuses a pointer that is not strictly backwards and also counts jumps. test/c_crtl_resolv.c feeds a self-pointer and a two-pointer loop, is wired in the Makefile against gcc -lresolv, and at HEAD every hostile row answers -1 and returns. That commit measured busybox at 396 of 400 TUs compiling at i386, nslookup included."'
 ---
 
 # What is missing

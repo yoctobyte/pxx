@@ -3,13 +3,8 @@ prio: 30
 track: N
 type: bug
 blocked-by: []
-<<<<<<<< HEAD:devdocs/progress/working/bug-nilpy-exception-args-attribute-missing.md
-owner: agent-N
-status: done
-========
 status: done
 owner: claude-A-N
->>>>>>>> parent of 2277bf349 (revert(N): e.args -- pylib's Exception cannot carry a member sysutils lacks):devdocs/progress/done/bug-nilpy-exception-args-attribute-missing.md
 ---
 
 # `e.args` is missing on exceptions

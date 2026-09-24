@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 status: backlog
-summary: "MECHANISM: a stackless generator keeps its managed locals as live state across yields, so the step epilogue never releases them, and nothing else did at teardown. FIXED on the EXHAUSTION path (2026-09-24): running off the end, or a plain `return`, now releases the slotted class locals and the last yielded variant before marking the generator done (SLReleaseLocalsAtDone, SLRewriteReturns, BuildStacklessStep). STILL LEAKS on EARLY teardown -- a `break` out of the for-in, a cursor dropped before exhaustion, a `return` inside a try block -- where the frame is gone and only the instance slots hold the references; that needs the per-proc slot-kind map below, read at SlFree. The argument-cell half of the old summary no longer reproduces at HEAD.""
+summary: 'MECHANISM: a stackless generator keeps its managed locals as live state across yields, so the step epilogue never releases them, and nothing else did at teardown. FIXED on the EXHAUSTION path (2026-09-24): running off the end, or a plain `return`, now releases the slotted class locals and the last yielded variant before marking the generator done (SLReleaseLocalsAtDone, SLRewriteReturns, BuildStacklessStep). STILL LEAKS on EARLY teardown -- a `break` out of the for-in, a cursor dropped before exhaustion, a `return` inside a try block -- where the frame is gone and only the instance slots hold the references; that needs the per-proc slot-kind map below, read at SlFree. The argument-cell half of the old summary no longer reproduces at HEAD."'
 ---
 
 # A Nil Python generator instance leaks its locals and its argument cells

@@ -10,7 +10,7 @@ created: 2026-09-01
 found-by: frankA
 owner: frankA
 blocked-by: []
-summary: "EVERY function-pointer file-scope variable was invisible to the object writer, not just an initialised one -- the slug is narrower than the defect. Swept seven forms in one TU: scalar, initialised, raw declarator `int (*G)(int);`, and a table all got no symbol, while the other six file-scope shapes exported. Cause: a fn-pointer declaration is registered by its OWN branch in cparser.inc which never recorded linkage; both branches now call CRecordGlobalLinkage. Fixed and covered on x86-64, i386, riscv32 and xtensa, with a two-object callback round trip against a gcc oracle.""
+summary: 'EVERY function-pointer file-scope variable was invisible to the object writer, not just an initialised one -- the slug is narrower than the defect. Swept seven forms in one TU: scalar, initialised, raw declarator `int (*G)(int);`, and a table all got no symbol, while the other six file-scope shapes exported. Cause: a fn-pointer declaration is registered by its OWN branch in cparser.inc which never recorded linkage; both branches now call CRecordGlobalLinkage. Fixed and covered on x86-64, i386, riscv32 and xtensa, with a two-object callback round trip against a gcc oracle."'
 ---
 
 # One shape out of seven

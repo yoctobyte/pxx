@@ -3,7 +3,7 @@ track: N
 prio: 80
 type: bug
 blocked-by: []
-summary: "FIXED. MECHANISM: a field stored through a receiver other than `self` was never joined, so a float landed in an int slot as its bits. PyFJJoinForeignStores (between the class detect sweep and layout) now joins every `<recv>.NAME = v`: a typable v widens the field by PyWidenBinding; a bare parameter is typed by its annotation or its call sites; a v the tokens cannot type widens any SCALAR or CLASS field it can reach to variant, so the value is stored as CPython stores it. Scoped to the receiver class when the tokens name it, name-wide otherwise. The one place pxx differs from CPython: a non-instance stored into an ANNOTATED class-typed local (`n: N = y`) raises TypeError (pyvarobj_store), because there the programmer declared the type; CPython would store it.""
+summary: 'FIXED. MECHANISM: a field stored through a receiver other than `self` was never joined, so a float landed in an int slot as its bits. PyFJJoinForeignStores (between the class detect sweep and layout) now joins every `<recv>.NAME = v`: a typable v widens the field by PyWidenBinding; a bare parameter is typed by its annotation or its call sites; a v the tokens cannot type widens any SCALAR or CLASS field it can reach to variant, so the value is stored as CPython stores it. Scoped to the receiver class when the tokens name it, name-wide otherwise. The one place pxx differs from CPython: a non-instance stored into an ANNOTATED class-typed local (`n: N = y`) raises TypeError (pyvarobj_store), because there the programmer declared the type; CPython would store it."'
 status: done
 ---
 

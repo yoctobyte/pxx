@@ -4,7 +4,7 @@ type: bug
 track: T
 prio: 45
 status: done
-summary: FIXED 2026-09-17 — the cause was a QUADRATIC REGEX, not repetition: `_USES_RE` was `^\s*uses` under re.M, and `compiler/builtin/pylib.pas` alone was 194.241s of a 194.8s total over the 1902 sources scanned. `[ \t]*` makes it line-scoped: whole set 0.2s (1082x), step-7 leg 196s -> 2.01s, devtest 18 guards / 0 FAIL / 4.8s from a 1200.1s TIMEOUT. Match set unchanged, measured byte-identical on all 1902 files. THE PRESCRIBED FIX BELOW ("memoise the parse") WAS WRONG and is left standing as written: the scan opens 1902 DISTINCT files across 2562 jobs, so a memo removes a quarter of the calls and none of the cost — it was built, proved equivalent, measured at ~1x and reverted. ORIGINALLY: tools/host_dev_lib_skip_devtest.py step 7 rescans >1500 recipes per run and now exceeds 1200s, timing out tools-devtest#00 and reddening any full tier
+summary: 'FIXED 2026-09-17 — the cause was a QUADRATIC REGEX, not repetition: `_USES_RE` was `^\s*uses` under re.M, and `compiler/builtin/pylib.pas` alone was 194.241s of a 194.8s total over the 1902 sources scanned. `[ \t]*` makes it line-scoped: whole set 0.2s (1082x), step-7 leg 196s -> 2.01s, devtest 18 guards / 0 FAIL / 4.8s from a 1200.1s TIMEOUT. Match set unchanged, measured byte-identical on all 1902 files. THE PRESCRIBED FIX BELOW ("memoise the parse") WAS WRONG and is left standing as written: the scan opens 1902 DISTINCT files across 2562 jobs, so a memo removes a quarter of the calls and none of the cost — it was built, proved equivalent, measured at ~1x and reverted. ORIGINALLY: tools/host_dev_lib_skip_devtest.py step 7 rescans >1500 recipes per run and now exceeds 1200s, timing out tools-devtest#00 and reddening any full tier'
 ---
 
 ## What
