@@ -696,6 +696,10 @@ procedure PXXDivZero;
 procedure PXXVariantError(const msg: AnsiString);
 procedure PXXInvalidCast;
 procedure PXXOverflow;
+{ {$Q+} checked 64x64 multiply for the 32-bit targets, where the IR lowers the
+  operator to a call instead of an inline 128-bit high-half test. }
+function PXXMulOvfS64(a, b: Int64): Int64;
+function PXXMulOvfU64(a, b: QWord): QWord;
 procedure PXXNilRef;
 function PXXRangeChkI64(v, lo, hi: Int64): Int64;
 function PXXDynIdxChkI64(dataPtr: Pointer; idx: Int64): Int64;
@@ -5595,6 +5599,47 @@ begin
   if PXXOverflowHook <> nil then PXXOverflowHook();
   writeln('Runtime error 215 (arithmetic overflow)');
   Halt(215);
+end;
+
+{ The checked 64x64 multiply, for the 32-bit targets (ir.inc lowers a
+  {$Q+} `*` with a 64-bit operand to these there). The product is computed
+  WRAPPED and then tested by dividing it back: for b <> 0, the multiply
+  overflowed exactly when r div b <> a. If it did not overflow, r = a*b and the
+  division is exact. If it did, r and a*b are congruent mod 2^64 but unequal,
+  so they differ by at least 2^64 > |b|, and r div b cannot land back on a.
+  The one signed pair the division cannot test is b = -1, where r div b is
+  itself -Low(Int64); that pair (and its mirror a = -1) overflows exactly when
+  the other operand is Low(Int64).
+  bug-a-64-bit-multiply-overflow-is-unchecked-under-q-plus-on-riscv32-and-xtensa }
+function PXXMulOvfS64(a, b: Int64): Int64;
+var r, lo: Int64;
+begin
+  r := a * b;
+  lo := -9223372036854775807 - 1;
+  if (a = 0) or (b = 0) then
+  begin
+    PXXMulOvfS64 := 0;
+    Exit;
+  end;
+  if b = -1 then
+  begin
+    if a = lo then PXXOverflow;
+  end
+  else if a = -1 then
+  begin
+    if b = lo then PXXOverflow;
+  end
+  else if r div b <> a then
+    PXXOverflow;
+  PXXMulOvfS64 := r;
+end;
+
+function PXXMulOvfU64(a, b: QWord): QWord;
+var r: QWord;
+begin
+  r := a * b;
+  if (b <> 0) and (r div b <> a) then PXXOverflow;
+  PXXMulOvfU64 := r;
 end;
 
 { {$R+} range trap: FPC behavior 'Runtime error 201' + exit code 201.

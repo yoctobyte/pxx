@@ -9821,6 +9821,17 @@ begin
     OpConvSrcTkOfNode := ASTTk[n];
 end;
 
+function IRIsNarrowOrdinal(tkInt: Integer): Boolean;
+{ True only for an ordinal KNOWN to be 32 bits or narrower. tyUnknown answers
+  False on purpose: its storage size defaults to 4, which would read an
+  untyped operand as narrow and skip a check it needs. }
+var tk: TTypeKind;
+begin
+  tk := IntToTypeKind(tkInt);
+  IRIsNarrowOrdinal := (tk <> tyUnknown) and TypeIsOrdinal(tk) and
+                       (TypeStorageSize(tk, -1) <= 4);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
@@ -13812,7 +13823,40 @@ begin
           { {$Q+} arithmetic: ival=1 marks the op overflow-checked; codegen
             traps a wrapped result into PXXOverflow (RE 215 / EIntOverflow).
             Only ordinal +,-,* carry the tag (parser sets ASTQChk). }
-          if ASTQChk[node] and TypeIsOrdinal(IntToTypeKind(ASTTk[node])) then
+          if ASTQChk[node] and (TARGET_PTR_SIZE = 4) and
+             (Integer(ASTIVal[node]) = Ord(tkStar)) and
+             ((IntToTypeKind(ASTTk[node]) = tyInt64) or
+              (IntToTypeKind(ASTTk[node]) = tyUInt64)) and
+             not (IRIsNarrowOrdinal(ASTTk[ASTLeft[node]]) and
+                  IRIsNarrowOrdinal(ASTTk[ASTRight[node]])) then
+          begin
+            { ...only when an OPERAND is 64-bit. Pascal widens every checked
+              `Integer * Integer` to an Int64 multiply so the narrowing store
+              can catch the wrap, and a product of two 32-bit values cannot
+              overflow 64 bits -- routing those here would add a divide to
+              every checked 32-bit multiply for a check that never fires. }
+            { A CHECKED 64x64 MULTIPLY ON A 32-BIT TARGET is a runtime call, on
+              all four such backends at once. Detecting it inline needs the high
+              half of a 128-bit product; riscv32 had only the unsigned half,
+              xtensa had neither, and i386 and arm32 left the signed half
+              unchecked too. So `z := x * y` with a product past 2^63 printed
+              the wrapped value on every 32-bit target while x86-64 raised
+              Runtime error 215. The helpers compute the wrapped product and
+              test it by division, which is exact (see PXXMulOvfS64): one
+              divide per checked Int64 multiply, only under $Q+.
+              bug-a-64-bit-multiply-overflow-is-unchecked-under-q-plus-on-riscv32-and-xtensa }
+            if IntToTypeKind(ASTTk[node]) = tyUInt64 then
+              procIdx := FindProc('PXXMulOvfU64')
+            else
+              procIdx := FindProc('PXXMulOvfS64');
+            if procIdx < 0 then
+              Error('{$Q+}: PXXMulOvfS64/U64 runtime helper not found (builtinheap not loaded)');
+            argNode := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[node]);
+            value := IRAppend(IR_ARG, right, -1, -1, 0, ASTTk[node]);
+            IRB[argNode] := value;
+            Result := IRAppendCall(procIdx, argNode, -1, ASTTk[node]);
+          end
+          else if ASTQChk[node] and TypeIsOrdinal(IntToTypeKind(ASTTk[node])) then
             Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 1, ASTTk[node])
           else
             Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);

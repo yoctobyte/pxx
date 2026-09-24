@@ -25009,9 +25009,8 @@ test-core: $(COMPILER)
 	# Shape is chosen by ARGUMENT COUNT: 0..4 must trap, and the 5-arg run is the
 	# CONTROL that must NOT -- a fix that traps unconditionally passes the first
 	# five rows.
-	# STILL UNCOVERED, on riscv32 too and pre-existing: a 64-bit*64-bit product
-	# that overflows Int64. x86-64 catches it; both 32-bit backends do not. That
-	# is parity with the closest sibling, not a regression.
+	# A 64-bit*64-bit product that overflows Int64 is NOT caught here -- it has
+	# no narrowing store to catch it; test_qplus_int64_mul_traps below covers it.
 	# bug-a-xtensa-has-no-q-plus-overflow-check-emitter-so-it-wraps-silently
 	./$(COMPILER) test/test_qplus_narrowing_store.pas $(TESTTMP)/qnarrow26
 	@for n in 0 1 2 3 4; do \
@@ -25042,6 +25041,29 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test_qplus_narrowing_store: qemu-xtensa absent, xtensa arm NOT verified ==="; \
 	fi
+	# {$Q+} on a 64-bit*64-bit multiply whose product overflows Int64/QWord.
+	# There is no narrowing store to catch it, so on the 32-bit targets (no
+	# widening multiply that can set a flag) the binop is lowered to a call to
+	# PXXMulOvfS64/U64 (builtinheap), which traps via a division check. Before
+	# that, i386/arm32/riscv32/xtensa printed a wrapped product with rc=0 while
+	# x86-64 trapped. Shapes 0..3 must trap (signed +, signed -, -1*Low(Int64),
+	# unsigned); 4 args are the fitting CONTROLS (exactly Low(Int64), the largest
+	# square); 5 args run the same overflowing products under the DEFAULT {$Q-}
+	# and must WRAP WITHOUT TRAPPING -- the check is opt-in, and a lowering that
+	# leaked into {$Q-} fails that row.
+	# bug-a-64-bit-multiply-overflow-is-unchecked-under-q-plus-on-riscv32-and-xtensa
+	@qm_run() { tgt=$$1; shift; case $$tgt in x86_64) "$$@";; xtensa) qemu-xtensa "$$@";; *) tools/run_target.sh $$tgt "$$@";; esac; }; \
+	for tgt in x86_64 i386 arm32 riscv32 xtensa; do \
+	  case $$tgt in x86_64) q=true; fl="";; i386) q=qemu-i386; fl=--target=i386;; arm32) q=qemu-arm; fl=--target=arm32;; riscv32) q=qemu-riscv32; fl=--target=riscv32;; xtensa) q=qemu-xtensa; fl="--target=xtensa --platform=posix --xtensa-soft-mulhigh";; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "=== test_qplus_int64_mul_traps: $$q absent, $$tgt arm NOT verified ==="; continue; fi; \
+	  ./$(COMPILER) $$fl test/test_qplus_int64_mul_traps.pas $(TESTTMP)/qmul_$$tgt >/dev/null || { echo "test_qplus_int64_mul_traps $$tgt compile FAIL"; exit 1; }; \
+	  for n in 0 1 2 3; do \
+	    a=""; i=0; while [ $$i -lt $$n ]; do a="$$a A$$i"; i=$$((i+1)); done; \
+	    tools/expect_same.sh $$tgt/qmul/shape$$n "$$(qm_run $$tgt $(TESTTMP)/qmul_$$tgt $$a 2>&1)" "Runtime error 215 (arithmetic overflow)" || exit 1; \
+	  done; \
+	  tools/expect_same.sh $$tgt/qmul/control "$$(qm_run $$tgt $(TESTTMP)/qmul_$$tgt A B C D 2>&1)" "$$(cat test/test_qplus_int64_mul_traps.expected)" || exit 1; \
+	  tools/expect_same.sh $$tgt/qmul/default-wraps "$$(qm_run $$tgt $(TESTTMP)/qmul_$$tgt A B C D E 2>&1; echo rc=$$?)" "$$(printf 'wrapped -2446744073709551616\nwrapped 0\nrc=0')" || exit 1; \
+	done
 	# Division by zero raises Runtime error 200 on EVERY target, in all FOUR
 	# shapes (32-bit div/mod, 64-bit div/mod) -- selected by ARGUMENT COUNT, so
 	# each of the four runs below enters a different branch. An earlier draft put
