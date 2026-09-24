@@ -104,6 +104,7 @@ _none_
 | regression-test-c-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-c-abi-mixed-link#src:tools/compiler_srchash.sh at 95fc8aff2016 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
 | regression-test-core-c-asm-in-inline-body-3 | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 4fe0e6505042 in step 7/14, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
 | regression-test-core-c-cross-time-and-exit-through-the-pal | T | 70 | regression | regression: test-core#src:test/c_cross_time_and_exit_through_the_pal.c at a8179a73ea84 in step 5/5, `overall=0; ran=0; want=0; \ for t in i386 aarch64 arm32 riscv32; do \ want=$((want+1)); \ case $t in i386) q=qemu-i386;…` (auto-filed by twatch) | — |
+| regression-test-core-c-unclosed-global-init-fail | T | 70 | regression | regression: test-core#src:test/c_unclosed_global_init_fail.c at f61b926d210a in step 5/5, `tools/expect_same.sh test_type_runtime26 "$(/tmp/test_type_runtime26)" "$(printf '1\n1\n1\n0\n1\n18446744065119617025\n…` (auto-filed by twatch) | — |
 | regression-test-core-test-interface-containers-2 | T | 70 | regression | regression: test-core#src:test/test_interface_containers.pas@1 at 4fbed6c4157e in step 2/18, `tools/expect_same.sh test_interface_containers26 "$(/tmp/test_interface_containers26)" "$(printf 'strarr: ok\nstatic: 3…` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-qualifier-vs-cproc-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_qualifier_vs_cproc.npy at 5e9c8da7481e in step 1/3, `./compiler/pascal26 -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy /tmp/test_nilpy_qual_cproc26` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-unbound-builtin-method-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_unbound_builtin_method.npy at b4104386ae9c in step 1/13, `./compiler/pascal26 test/test_nilpy_unbound_builtin_method.npy /tmp/test_nilpy_unbndbuiltin26` (auto-filed by twatch) | — |
@@ -127,7 +128,6 @@ _none_
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
 | regression-test-record-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-record-abi-mixed-link#src:tools/compiler_srchash.sh at 4c7c88d3614b in step 1/25, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
 | regression-test-threads-test-a-threadvar-is-per-thread-2 | T | 70 | regression | regression: test-threads#src:test/test_a_threadvar_is_per_thread.pas at 6ce37dd94d7c in step 2/11, `tools/expect_same.sh test_threadvar_pt26 "$(/tmp/test_threadvar_pt26)" "$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-cro…` (auto-filed by twatch) | — |
-| regression-test-threads-test-clone-entry-with-a-hidden-result | T | 70 | regression | regression: test-threads#src:test/test_clone_entry_with_a_hidden_result.pas at 9c14efd7b84a in step 2/2, `tools/expect_same.sh test_clonehidden26 "$(/tmp/test_clonehidden26)" "$(cat test/test_clone_entry_with_a_hidden_result.…` (auto-filed by twatch) | — |
 | regression-test-uforth-compiler-srchash | T | 70 | regression | regression: test-uforth#src:tools/compiler_srchash.sh@3 at 82e070429d30 in step 2/2, `if [ ! -f "/home/rene/projects/uforth/uforth.py" ]; then \ echo "test-uforth: SKIP — no uforth tree at /home/rene/proje…` (auto-filed by twatch) | — |
 | regression-tools-devtest-00-4 | T | 70 | regression | regression: tools-devtest#00 at fc2ce3d02553 in step 1/1, `n=0; bad=0; failed=''; \ for f in tools/*devtest*.py; do \ case "$f" in *bench_timing_devtest.py) continue ;; esac; \ p…` (auto-filed by twatch) | — |
 | regression-tools-devtest-sh-00-2 | T | 70 | regression | regression: tools-devtest-sh#00 at 3b5e6becd38b in step 1/1, `n=0; bad=0; failed=''; \ : > /tmp/tools_devtest_sh_reds.log; \ for f in tools/*devtest*.sh; do \ case "$f" in \ *c_inte…` (auto-filed by twatch) | — |
@@ -1115,9 +1115,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3985)
+## done (3986)
 
-3985 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3986 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1264,6 +1264,7 @@ _none_
 - [p 70] [T] regression-test-c-abi-mixed-link-compiler-srchash-2
 - [p 70] [T] regression-test-core-c-asm-in-inline-body-3
 - [p 70] [T] regression-test-core-c-cross-time-and-exit-through-the-pal
+- [p 70] [T] regression-test-core-c-unclosed-global-init-fail
 - [p 70] [T] regression-test-core-test-interface-containers-2
 - [p 70] [N] regression-test-core-test-nilpy-qualifier-vs-cproc-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-core-test-nilpy-unbound-builtin-method-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -1287,7 +1288,6 @@ _none_
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5
 - [p 70] [T] regression-test-record-abi-mixed-link-compiler-srchash-2
 - [p 70] [T] regression-test-threads-test-a-threadvar-is-per-thread-2
-- [p 70] [T] regression-test-threads-test-clone-entry-with-a-hidden-result
 - [p 70] [T] regression-test-uforth-compiler-srchash
 - [p 70] [T] regression-tools-devtest-00-4
 - [p 70] [T] regression-tools-devtest-sh-00-2

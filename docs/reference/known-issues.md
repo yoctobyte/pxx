@@ -79,6 +79,10 @@ answer silently.
   provide per-thread storage.
 - **C `__thread` on i386 and riscv32** compiles with a warning that every thread
   shares one copy. Single-threaded programs are unaffected.
+- **An ESP32-S3 bare-metal program that declares a `Double` and uses managed
+  strings** fails to build with `j displacement … is outside the encodable
+  range`. The ESP32-C3 and the ESP-IDF mode are not affected; see
+  [ESP32](../targets/esp32.md), "Mode 1: Bare metal".
 - **C `setvbuf` with full or line buffering** returns nonzero: PXX's C streams
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused, as shared-library output is

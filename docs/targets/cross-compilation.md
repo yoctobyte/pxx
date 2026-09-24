@@ -27,6 +27,14 @@ tools/run_target.sh aarch64 ./hello.a64
 tools/run_target.sh arm32 ./hello.arm
 ```
 
+wasm32 produces a WebAssembly module, run with
+[wasmtime](https://wasmtime.dev/):
+
+```sh
+./pxx --target=wasm32 hello.pas hello.wasm
+wasmtime hello.wasm
+```
+
 Static syscall-only PXX binaries do not need a target sysroot for normal
 cross-target smoke runs. Binaries that deliberately use external C libraries may
 need a guest dynamic loader and libc; `tools/run_target.sh` honors
@@ -42,10 +50,12 @@ tools/esp_run_bare.sh --chip esp32s3 examples/esp32/hello-s3/main/main.pas
 See [ESP32 / Microcontrollers](./esp32.md) for the bare-metal and ESP-IDF
 integration modes, footprint numbers, and the soft-float contract.
 
-Hosted 32-bit RISC-V Linux is also a full target: plain
-`--target=riscv32` (without `--esp-profile=bare`) emits a Linux ELF that
-runs under `qemu-riscv32`, with console I/O, exceptions, classes and the
-rest of the shared-IR surface.
+Plain `--target=riscv32` (without an ESP chip name or `--esp-profile=bare`)
+emits a 32-bit RISC-V Linux ELF that runs under `qemu-riscv32`, with console
+I/O, exceptions and classes. It has three limits the other Linux targets do
+not: `--threadsafe` and `threadvar` are refused, Nil Python is refused, and
+`Real` is `Single`. The [target table](./index.md#what-each-target-supports)
+has the full comparison.
 
 ## Next
 

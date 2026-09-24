@@ -5,13 +5,17 @@ order: 65
 
 # ESP32 and Microcontroller Targets
 
-PXX cross-compiles Pascal to the two ESP32 CPU families with no vendor
-compiler in the loop:
+PXX cross-compiles Pascal, C and Nil Python to the two ESP32 CPU families
+with no vendor compiler in the loop:
 
-| Chip | CPU | PXX target |
-| --- | --- | --- |
-| ESP32-C3 | RISC-V (RV32IMC) | `--target=riscv32` |
-| ESP32-S2 / S3 | Xtensa LX7 | `--target=xtensa` |
+| Chip | CPU | PXX target | How far it has been tested |
+| --- | --- | --- | --- |
+| ESP32-S3 | Xtensa LX7 | `--target=xtensa` or `--target=esp32s3` | examples run on a physical board |
+| ESP32-C3 | RISC-V (RV32IMC) | `--target=riscv32` or `--target=esp32c3` | examples run under Espressif's QEMU |
+| ESP32-S2 | Xtensa LX7 | `--target=esp32s2` | compiled only |
+
+The other chip names (`esp32`, `esp32c2`, `esp32c6`, `esp32h2`, `esp32p4`) are
+accepted and compile to an ESP-IDF object, but nothing has been run on them.
 
 There are two integration modes.
 
@@ -87,17 +91,16 @@ Notes for the bare profile:
   (`test/test_esp_bare_str.pas`), so this is output equality and not just a
   successful compile.
 
-  **`Str` of a float is still refused, deliberately**, and the diagnostic says
-  which arm is missing:
+  **`Str` of a float is refused on this profile**, and the diagnostic says
+  which part is missing:
 
   ```
-  pascal26:3: error: Str: StrFloat not loaded
+  pascal26:5: error: Str: StrFloat not loaded
   ```
 
-  Float formatting needs `PxxSciDigits17` and therefore the whole softfloat
-  library, which this profile skips so a program that never touches a float does
-  not pay ~54–64 KB of flash for the option. Add `uses softfloat;` if you want
-  it — the same unit the [Floating point](#floating-point) section describes.
+  `uses softfloat;` does not change that: float formatting lives in a runtime
+  unit this profile does not load. To print a float, scale it and format the
+  integer: `Str(Trunc(d * 100), s)` gives `450` for `d = 4.5`.
 
   An `Assert` message can now carry the value that failed, which is what this was
   really about on a board with no debugger:
@@ -109,35 +112,43 @@ Notes for the bare profile:
 
   `sysutils.IntToStr` is still not reachable here — `sysutils` is not available
   on this profile — so `Str` is the route.
-- **The heap is a fixed static arena, 64 KiB by default, and it is the single
-  largest thing in a bare image's SRAM.** Size it with one of
+- **The heap is a fixed static arena, 64 KiB by default.** It is linked in
+  only when the program allocates (a managed string, `GetMem`, a dynamic
+  array); a program that does not allocate has no arena at all. When it is
+  there, it is the largest thing in a bare image's SRAM. Size it with one of
   `-dPXX_ESP_HEAP_8K`, `-dPXX_ESP_HEAP_16K`, `-dPXX_ESP_HEAP_32K`,
-  `-dPXX_ESP_HEAP_128K`. Measured on an esp32c3 hello-world, total bss:
+  `-dPXX_ESP_HEAP_128K`. Measured with v424 on a program that concatenates a
+  string and calls `GetMem`, total bss, the same on both chips:
 
   | | 8K | 16K | 32K | 64K (default) | 128K |
   | --- | ---: | ---: | ---: | ---: | ---: |
-  | bss | 13,592 | 21,784 | 38,168 | 70,936 | 136,472 |
+  | bss | 9,472 | 17,664 | 34,048 | 66,816 | 132,352 |
 
   Running out is reported, not silent: the program writes
   `pxx: out of memory (bare static heap arena exhausted; HEAP_ARENA)` to UART0
   and halts with code 203. Note the compiler cannot check this for you —
   it refuses a build whose image plus arena plus stack does not FIT, but an
   arena that fits and is too small for your program is only found at runtime.
-- **A program that never allocates can drop the heap entirely with
-  `-uPXX_MANAGED_STRING`, and on bare metal that is the single largest saving
-  available.** Measured on an esp32c3, a UART-only program using `ShortString`
-  and no `GetMem`:
+- **`-uPXX_MANAGED_STRING` removes the managed-string runtime** from a
+  program that does not need it. The saving is now small, because unused
+  runtime code is dropped anyway. Measured with v424 on the hello program
+  above, code bytes:
 
-  | | code | data | bss |
-  | --- | ---: | ---: | ---: |
-  | default | 58,900 | 736 | 71,452 |
-  | `-uPXX_MANAGED_STRING` | **1,156** | 432 | **5,288** |
+  | | esp32c3 | esp32s3 |
+  | --- | ---: | ---: |
+  | default | 3,668 | 3,452 |
+  | `-uPXX_MANAGED_STRING` | 892 | 1,288 |
 
-  Byte-identical output from both. It is not automatic yet — every Pascal
-  program pulls the managed-string runtime unconditionally, and `{$H-}` does
-  not reach it. **Getting it wrong is a COMPILE error, never a bad binary**: a
-  program that does need the runtime fails with `frozen tyString concat
-  unsupported` rather than miscompiling, so it is safe to try and see.
+  With `ShortString` instead of `AnsiString` the program is already under
+  1.4 KB and the flag changes nothing. **Getting it wrong is a compile error,
+  never a bad binary**: a program that does need the runtime fails with
+  `frozen tyString concat unsupported` rather than miscompiling, so it is safe
+  to try.
+- **On the ESP32-S3, a bare program that declares a `Double` and uses managed
+  strings can fail to build** with `j displacement … is outside the encodable
+  range -131072..131071`. The same program builds for the ESP32-C3, and the
+  ESP-IDF mode is not affected. Until it is fixed, keep floats out of an S3 bare
+  program that uses `AnsiString`, or build it as an ESP-IDF component.
 - A program that falls off the end parks in a self-loop (there is no OS to
   exit to). End interactive experiments with `while True do ;`.
 - Interrupt handlers: mark a routine `interrupt;` for a raw hardware-vector
@@ -176,54 +187,43 @@ which the runtime is stuck with rather than choosing:
 
 ## Code size and memory footprint
 
-Measured on **2026-08-30 with pinned `v393`** (empty program, `--esp-profile=bare`).
-Re-measure rather than trust the table — these have roughly doubled since they
-were first published, and a figure without a pin behind it is a promise nobody
-renewed:
+Measured with **pin v424** on 2026-09-25, `--esp-profile=bare`. The compiler
+prints the figures on its `ok:` line:
 
 ```sh
-pxx --target=esp32c3 --esp-profile=bare empty.pas out    # prints code/data/bss
+./pxx --target=esp32c3 --esp-profile=bare prog.pas prog.elf
 ```
 
-| | code | data | bss |
-| --- | --- | --- | --- |
-| esp32c3 (riscv32) | ~50 KB | 344 B | ~104 KB |
-| esp32s3 (xtensa) | ~43 KB | 344 B | ~104 KB |
+| Program | Chip | code | data | bss |
+| --- | --- | ---: | ---: | ---: |
+| empty (`begin end.`) | esp32c3 | 20 B | 336 B | 640 B |
+| empty | esp32s3 | 58 B | 336 B | 640 B |
+| hello, above (UART writes, `AnsiString`) | esp32c3 | 3,668 B | 528 B | 1,276 B |
+| a string concat and a `GetMem` | esp32c3 | 19,416 B | 480 B | 66,816 B |
+| a string concat and a `GetMem` | esp32s3 | 15,720 B | 480 B | 66,816 B |
 
-What that buys you — the floor is not "hello world plus bloat", it is the
-full managed runtime:
+Unused runtime code is dropped, so a program pays for what it uses. The big
+step is the first allocation, which brings in the allocator and the 64 KiB heap
+arena (the bulk of that bss). Managed strings with reference counting, `New`,
+`Dispose`, `GetMem` and dynamic arrays all work on bare metal.
 
-- **Heap**: a fixed 64 KiB static arena (the bulk of that bss figure).
-  `New`/`Dispose`/`GetMem`/dynamic arrays work on bare metal.
-- **Managed strings**: `AnsiString` with reference counting works on bare
-  metal, including on the C3's boot path.
-- The remainder of that bss figure is runtime globals — exception state and
-  similar. It has grown faster than the arena and is tracked as
-  a compiler-size problem, not an ESP one; see the emission-size work on the
-  board rather than treating the number here as a target.
-
-An ESP32-C3 has roughly 400 KB of usable SRAM, so a minimal PXX image plus
-stack currently sits around a quarter of it. That is comfortable but no longer
-negligible, and it is the honest way to say it — an earlier version of this page
-claimed "well under a quarter" against a bss figure that has since grown by
-about half.
+An ESP32-C3 has roughly 400 KB of usable SRAM, so a program that allocates
+starts at about a fifth of it with the default arena, most of which is the arena
+itself. `-dPXX_ESP_HEAP_16K` brings that down to under a tenth.
 
 ## Floating point
 
 The ESP cores are compiled without FPU codegen; float operations lower to
-integer soft-float kernels. On bare images this support is **opt-in** so
-programs that never touch floats do not pay for it:
+integer soft-float kernels. They are linked in when a program uses a float and
+not otherwise, with no `uses` needed. Measured with v424 on bare images, a
+program that multiplies a `Double` and truncates it is 15,644 bytes of code on
+the esp32c3 and 14,084 on the esp32s3. The same program with `Int64` in place
+of the `Double` is 544 bytes on both. 64-bit integer arithmetic (`Int64`/`UInt64`, including
+multiply, divide and shifts) is always available and validated against the
+x86-64 oracle.
 
-```pascal
-uses softfloat;   { Double/Single arithmetic; ~54 KB of code on xtensa, ~64 KB on riscv32 }
-```
-
-Without the unit, float operations fail at compile time with a clear error
-rather than silently linking the kernels in. 64-bit integer arithmetic
-(`Int64`/`UInt64`, including multiply, divide and shifts) is always
-available and validated against the x86-64 oracle.
-
-**`Real` is `Single` here, not `Double`.** These cores have no hardware double,
+**`Real` is `Single` here, not `Double`**, on both ESP chips and on riscv32
+Linux. These cores have no hardware double,
 so `Real` — the type that means "the native float of this machine" — is the
 4-byte one. `SizeOf(Real)` is 4, an `array of Real` strides by 4, and `Real`
 arithmetic carries about 7 decimal digits. This is deliberate: it keeps
@@ -243,8 +243,8 @@ Most of the shared-IR language surface works on the ESP targets: records,
 sets, 64-bit integers, dynamic arrays, proc-typed variables (indirect
 calls), `@proc`, and stackless generators. Classes (with virtual dispatch)
 work on both ESP targets. `try`/`except`/`finally` (including re-raise)
-works on the bare profile of both chips; an unhandled `raise` halts the
-program. Generators on any non-x86-64 target must use the stackless
+works on the bare profile of both chips. An unhandled exception does not print
+a message: see [Known issues](../reference/known-issues.md#esp-an-uncaught-exception-does-not-report-itself). Generators on any non-x86-64 target must use the stackless
 form:
 
 ```pascal

@@ -48,8 +48,8 @@ handles natively:
 
 | Target                              | `Real` is | `SizeOf(Real)` |
 | ----------------------------------- | --------- | -------------- |
-| x86-64, i386, aarch64, arm32        | `Double`  | 8              |
-| xtensa (ESP32), riscv32 (ESP32-C3)  | `Single`  | 4              |
+| x86-64, i386, aarch64, arm32, wasm32 | `Double` | 8              |
+| xtensa (ESP32), riscv32 (ESP32-C3 and riscv32 Linux) | `Single` | 4 |
 
 This is deliberate and settled, not a gap waiting to be closed. The ESP class
 has no hardware double, so a `Double` there is a software-emulated value that
@@ -59,7 +59,7 @@ written to `Real` gets the fast path everywhere, and code that genuinely needs
 53 bits of mantissa says `Double` and gets it — emulated on ESP, but only where
 it was actually asked for.
 
-The practical consequences, on the ESP targets only:
+The practical consequences, on xtensa and riscv32 only:
 
 * `SizeOf(Real)` is 4, and an `array of Real` strides by 4.
 * `Real` arithmetic carries about 7 decimal digits, so `1.0/3.0` is

@@ -76,9 +76,9 @@ See the dedicated [C Frontend](./c-frontend.md) page for details on compiling C,
 
 ## C interop
 
-PXX can import selected C headers and call shared-library symbols on supported
-paths. This is useful for concrete bindings, but it is not a full C compiler or
-full C ABI compatibility layer.
+A Pascal program can import selected C headers and call shared-library symbols
+on supported paths. This route is for bindings, and it is separate from the
+[C frontend](./c-frontend.md), which compiles whole C programs.
 
 An `external` routine is called with the platform's C ABI automatically — a
 `cdecl` marker on it is documentation, not instruction. The one place the marker

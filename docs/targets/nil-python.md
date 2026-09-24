@@ -22,10 +22,16 @@ where CPython can run the same source, comparing the output with CPython 3.14.4.
 
 - **Desktop demos**: `examples/shell/` (a small shell, `nilsh`) and
   `examples/tk/` (GUI programs on PXX's `tkinter` facade). All twelve compile.
-- **ESP32**: `examples/esp32/nilpy-*`, `adc-*` and `gpio-edge-*`, for the
-  ESP32-C3 (riscv32) and ESP32-S3 (xtensa). Each `main.npy` compiles to an
-  object that ESP-IDF links; the chip runs that machine code, with no
-  interpreter. All eight compile. Each directory's `build.sh` is the recipe.
+- **ESP32**: `examples/esp32/nilpy-*`, `adc-*`, `gpio-edge-*` and
+  `monitor-s3`, for the ESP32-C3 (riscv32) and ESP32-S3 (xtensa). Each
+  `main.npy` compiles to an object that ESP-IDF links; the chip runs that
+  machine code, with no interpreter. All nine compile with pin v424
+  (2026-09-25). `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3` and `adc-s3` ran on
+  a physical ESP32-S3 board; `nilpy-c3` and `nilpy-hw-c3` ran under QEMU. The
+  other three have only been compiled. Each directory's `build.sh` is the recipe, and
+  [ESP32 peripherals](../library/esp.md) documents the units they import.
+- **Linux cross targets**: i386, aarch64 and arm32 run Nil Python under QEMU,
+  and wasm32 under wasmtime. riscv32 Linux refuses it at compile time.
 
 ## The core that works
 
@@ -98,11 +104,12 @@ owner's words, an embedded device *"should (try) to keep running, even if
 whatever unexpected input (sensor etc) produces a math error. we should not
 halt."* Desktop builds are unaffected.
 
-Status: integer `div` and `mod` by zero give `0` on ESP32-C3 and ESP32-S3 in
-Pascal and C, checked under qemu on both chips (commit `46d2a9430a`). The Nil
-Python side — `//` and `%` by zero giving `0`, and `/` by zero giving an IEEE
-infinity or NaN, with no `ZeroDivisionError` — is **in progress**. Check the
-behaviour on your build before relying on it.
+On both ESP chips, `//` and `%` by zero give `0`, and `/` by zero gives an
+IEEE infinity or NaN, with no `ZeroDivisionError`. That was checked with pin
+v424 under QEMU on the ESP32-C3 and the ESP32-S3. On desktop targets Nil
+Python raises `ZeroDivisionError` for all three, as CPython does. The full
+table, with Pascal and C, is in
+[Known issues](../reference/known-issues.md#by-design-math-errors).
 
 ## Imports
 
