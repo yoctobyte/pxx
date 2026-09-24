@@ -1,33 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-22T17:02:23Z",
-   "fixed": [],
-   "new_red": [
-    "test-arm32#src:test/test_const_record_temp.pas",
-    "test-arm32#src:test/test_cross_aggregate_return.pas",
-    "test-arm32#src:test/test_cross_byvalue_aggregate_params.pas",
-    "test-arm32#src:test/test_record_temp_byval_arg.pas",
-    "test-arm32#src:test/test_set_runtime.pas",
-    "test-c-conformance#shard0/6",
-    "test-c-conformance#shard1/6",
-    "test-c-conformance#shard2/6",
-    "test-c-conformance#shard3/6",
-    "test-c-conformance#shard4/6",
-    "test-c-conformance#shard5/6",
-    "test-emit-obj#src:test/c_obj_data_dup_a.c",
-    "test-emit-obj#src:test/c_obj_data_import.c",
-    "test-emit-obj#src:tools/compiler_srchash.sh",
-    "test-esp-bare#src:test/test_esp_record_result.pas",
-    "test-pascal-conformance#shard3/6",
-    "test-record-abi-mixed-link#src:tools/compiler_srchash.sh"
-   ],
-   "sha": "f64af0fd3a0cbd75138f2f38af5c99c665602792",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-22T17:08:06Z",
    "fixed": [],
    "new_red": [],
@@ -760,6 +733,17 @@
    "new_red": [],
    "sha": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-09-24T08:45:15Z",
+   "fixed": [],
+   "new_red": [
+    "test-esp-idf#src:tools/compiler_srchash.sh"
+   ],
+   "sha": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "RED"
   }
@@ -3906,8 +3890,6 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-esp-bare#src:test/test_esp_varparam.pas": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
-  "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "747054b6df74ffa97698ad636bd7bfb5e801833f",
   "test-esp-idf#src:tools/compiler_srchash.sh": "747054b6df74ffa97698ad636bd7bfb5e801833f",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
@@ -5599,7 +5581,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-threads#src:tools/compiler_srchash.sh": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
-  "test-uforth#src:tools/compiler_srchash.sh": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+  "test-uforth#src:tools/compiler_srchash.sh": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-uforth#src:tools/compiler_srchash.sh@1": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-uforth#src:tools/compiler_srchash.sh@10": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
   "test-uforth#src:tools/compiler_srchash.sh@11": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
@@ -5803,6 +5785,7 @@
   "test-core#src:test/test_const_shadows_routine_fail.pas": "test_const_shadows_routine_fail: FAIL - expected a refusal naming the const",
   "test-core#src:test/test_nil_check_procvar.pas": "ok: $TMP  [code=690B  data=440B  bss=34608B  procs=38  codeseg=3808B] | ok: $TMP  [code=690B  data=440B  bss=34608B  procs=38  codeseg=3808B] | Segmentation fault (core dumped) | test_nil_check_procvar: FAIL - exit 139, want 216",
   "test-core#src:test/test_xtensa_div_zero_check.pas": "+++ actual | @@ -1,2 +1,3 @@ | start | -Runtime error 200 (division by zero) | +0 | +unreachable",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "PAL: cGuru Meditation Error: Core  0 panic'ed (Interrupt wdt timeout on CPU0). | PAL: content-mismatches=0 | PAL: close rc=0 | PAL: open-EXCL=-38 (today: -38 unsupported) | PAL: open-missing=-1 (today: -1, errno collapsed) | PAL: VERDICT esp-pal-file-io-WORKS | (full serial log kept at $TMP)",
   "test-pascal-conformance#shard3/6": "pascal26:6: error: compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point). A frontend driver is missing its stub-emission call for the current flags/targe | SKIP tover4.pp \u2014 gap: 80-bit extended/cextended float type and overload resolution across single/double/extended | SKIP tpropdef.pp \u2014 wontfix: depends on FPC Classes/TComponent published-property \u2026"
  },
  "job_tier": {
@@ -8949,8 +8932,6 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "full",
   "test-esp-bare#src:test/test_esp_varparam.pas": "full",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "full",
-  "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "slow",
-  "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "slow",
   "test-esp-idf#src:tools/compiler_srchash.sh": "slow",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "full",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "full",
@@ -13969,9 +13950,7 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "pass",
   "test-esp-bare#src:test/test_esp_varparam.pas": "pass",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "pass",
-  "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "pass",
-  "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "pass",
-  "test-esp-idf#src:tools/compiler_srchash.sh": "pass",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "fail",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "pass",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "pass",
   "test-fgl#src:tools/compiler_srchash.sh": "pass",
@@ -15841,14 +15820,14 @@
  },
  "last": {
   "code_fp": "f35167cd4e55",
-  "date": "2026-09-24T08:41:26Z",
+  "date": "2026-09-24T08:45:15Z",
   "deadline": 3600.0,
   "sha": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
-  "unreached": 0,
+  "unreached": 2,
   "verdict": "RED",
-  "wall": 1084.1
+  "wall": 217.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15899,14 +15878,14 @@
   },
   "slow": {
    "code_fp": "f35167cd4e55",
-   "date": "2026-09-24T07:55:27Z",
+   "date": "2026-09-24T08:45:15Z",
    "deadline": 3600.0,
-   "sha": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+   "sha": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
    "tier": "slow",
    "timed_out": false,
-   "unreached": 0,
-   "verdict": "GREEN",
-   "wall": 416.8
+   "unreached": 2,
+   "verdict": "RED",
+   "wall": 217.9
   }
  },
  "last_full": {
@@ -16375,6 +16354,24 @@
    ],
    "range_non_causal": false,
    "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1",
+   "status": "fail"
+  },
+  {
+   "bad": "6919ef8a34c2865b0c2372889d1c3436b11ecbe8",
+   "bad_untestable": false,
+   "first_seen": false,
+   "good": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+   "job": "test-esp-idf#src:tools/compiler_srchash.sh",
+   "name": "test-esp-idf#00",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-24T08:45:15Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "6919ef8a34c2865b0c2372889d1c3436b11ecbe8"
+   ],
+   "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2",
    "status": "fail"
   }
  ],
