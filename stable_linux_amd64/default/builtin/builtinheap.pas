@@ -540,6 +540,7 @@ procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;
 function __pxx_divsi3(a: Integer; b: Integer): Integer;
 function __pxx_modsi3(a: Integer; b: Integer): Integer;
+function __pxx_umodsi3(n: LongWord; d: LongWord): LongWord;
 {$endif}
 { Not on BARE ESP: file I/O, managed-element dynarray/record retain/release,
   variant, float formatting. Bare metal, hence PXX_ESP, is now the only profile
@@ -1397,9 +1398,27 @@ end;{$ifdef PXX_ESP_IDF}
   parameter allocates and died in HeapMmap); the bare-metal static arena is
   both tiny and redundant next to the SoC's real heap. calloc keeps PXXAlloc's
   zero-init contract; the same 8-byte size header as the native allocator
-  preserves PXXRealloc's copy length. }
-function calloc(n: NativeUInt; size: NativeUInt): Pointer; external;
+  preserves PXXRealloc's copy length.
+
+  TWO THINGS PXXObjPlausible NEEDS, and this branch supplied neither until
+  2026-09-24: a HeapLow/HeapHigh envelope, and an 8-aligned handle. With
+  HeapLow left at 0, PXXObjPlausible was FALSE FOR EVERY POINTER on ESP, so
+  PXXObjRetain/Release were no-ops (no NilPy object was ever reclaimed) and
+  PXXObjFree took its unheadered arm and freed handle-8, 24 bytes inside a
+  live block. IDF's heap then asserted (tlsf block_next /
+  "CORRUPT HEAP: Bad head") on real S3 silicon and under qemu, first seen on
+  test/lib_mimic_string_template.npy. Hence the envelope, maintained as the
+  PXX_LIBC_HEAP branch does. And heap_caps_aligned_calloc(8, ...) instead of
+  calloc: IDF's calloc asks the heap for alignment 4, and the handle is
+  base+32, so a 4-aligned block would still fail the (p and 7) test. Plain
+  free() releases an aligned block (heap_caps_free; heap_caps_aligned_free
+  is deprecated). }
+function heap_caps_aligned_calloc(alignment: NativeUInt; n: NativeUInt;
+  size: NativeUInt; caps: LongWord): Pointer; external;
 procedure free(p: Pointer); external;
+
+const
+  MALLOC_CAP_DEFAULT = $1000;   { esp_heap_caps.h: (1<<12), what calloc uses }
 
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var p: Int64;
@@ -1415,9 +1434,12 @@ begin
     both pxx and FPC. }
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));
-  p := Int64(calloc(1, NativeUInt(size + 8)));   { zeroed: keeps the contract }
+  p := Int64(heap_caps_aligned_calloc(8, 1, NativeUInt(size + 8),
+                                      MALLOC_CAP_DEFAULT));   { zeroed: keeps the contract }
   PMachineWord(p)^ := size;                             { 8-byte size header }
   Result := Pointer(p + 8);                      { payload }
+  if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
+  if p + size + 8 > HeapHigh then HeapHigh := p + size + 8;
   HeapLiveBytes := HeapLiveBytes + size;
   if HeapLiveBytes > HeapPeakBytes then HeapPeakBytes := HeapLiveBytes;
 end;
@@ -5672,6 +5694,12 @@ end;
 function __pxx_modsi3(a: Integer; b: Integer): Integer;
 begin
   Result := a - __pxx_divsi3(a, b) * b;
+end;
+
+{ Unsigned 32-bit modulo, for an unsigned `mod` / C `%` on LX6. }
+function __pxx_umodsi3(n: LongWord; d: LongWord): LongWord;
+begin
+  Result := n - __pxx_udivsi3(n, d) * d;
 end;
 {$endif}
 
