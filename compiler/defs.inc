@@ -5412,6 +5412,12 @@ var
   CTagUndoRec   : array[0..4095] of Integer;
   CTagUndoDepth : array[0..4095] of Integer;
   CTagUndoCount : Integer;
+  { File-scope objects whose struct/union type was still incomplete when pass 1
+    reserved them: re-checked once pass 1 has seen the whole file (a tentative
+    definition may be completed later). Token index of the name, and its record. }
+  CIncGlobTok   : array[0..1023] of Integer;
+  CIncGlobRec   : array[0..1023] of Integer;
+  CIncGlobCount : Integer;
   CTypedefChars : array[0..524287] of Char;
   CTypedefCharLen : Integer;
   { C11 _Generic type-descriptor pool (see cgXxx consts). Index 0 is reserved

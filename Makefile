@@ -16756,6 +16756,13 @@ test-core: $(COMPILER)
 	@# target is the row. .expected is gcc's. The pinned compiler refuses it.
 	./$(COMPILER) test/test_c_tag_block_scope.c $(TESTTMP)/ctagscope
 	tools/expect_same.sh ctagscope "$$($(TESTTMP)/ctagscope)" "$$(cat test/test_c_tag_block_scope.expected)"
+	@# FILE-SCOPE declarator lists: each declarator gets its own type. Every one
+	@# used to take the FIRST one's (`int x, *p;` made p an int). .expected is gcc's.
+	./$(COMPILER) test/test_c_global_declarator_list_types.c $(TESTTMP)/cgdecl
+	tools/expect_same.sh cgdecl "$$($(TESTTMP)/cgdecl)" "$$(cat test/test_c_global_declarator_list_types.expected)"
+	@# An object of, or sizeof on, a struct type with no definition is refused
+	@# (it was size 0, silently); the legal incomplete shapes still compile.
+	test/test_c_incomplete_object_refused.sh ./$(COMPILER)
 	# THE OTHER HALF OF THE RISCV32 THIRD, and it is not about aggregates: an
 	# 8-byte-ALIGNED variadic slot starts on an EVEN register, for a plain
 	# `double` and an `int64` as much as for a record. riscv32 applied that

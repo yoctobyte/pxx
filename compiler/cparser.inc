@@ -158,6 +158,9 @@ procedure ParseCSubroutine; forward;
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
 function CRecMissingFieldKind(recId: Integer): Integer; forward;
+procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer); forward;
+procedure CRefuseIncompleteSizeof(recId: Integer); forward;
+procedure CCheckIncompleteGlobals; forward;
 function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
 function CDeclSawThreadLocal(typeIdx: Integer): Boolean; forward;
 function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
@@ -3612,6 +3615,7 @@ begin
     begin
       tk := ParseCDeclType;
       sz := CTypeSizeBytes(tk);
+      if (tk = tyRecord) and (CTypePtrDepth = 0) then CRefuseIncompleteSizeof(CTypeBaseRec);
       { AN ARRAY TYPEDEF'S NAME AS THE OPERAND carries its dims in the type, not
         in the declarator, and this arm read only the element size:
         `typedef double TA[4]` answered 8 against gcc's 32, `typedef char TC[4]`
@@ -6996,7 +7000,7 @@ begin
       { An array of structs needs the element record id so AllocArray sizes the
         slot by RecSize, not a default — `struct V a[N]; a[i].f` was using the
         wrong stride. }
-      if declTk = tyRecord then LastTypeRecId := scalarRec;
+      if declTk = tyRecord then begin CRefuseIncompleteObject(name, scalarRec); LastTypeRecId := scalarRec; end;
       { Array brace-initializer for scalar/pointer element arrays: parse each
         element expression up front (so an unsized open-bracket array is sized
         from the count) and generate arr-index-k := ek assignments at the
@@ -7294,7 +7298,7 @@ begin
         else if declPtrDepth > 0 then vlaElemSz := TARGET_PTR_SIZE
         else vlaElemSz := TypeSlotSize(declTk);
         if vlaElemSz < 1 then vlaElemSz := 1;
-        if declTk = tyRecord then LastTypeRecId := scalarRec;
+        if declTk = tyRecord then begin CRefuseIncompleteObject(name, scalarRec); LastTypeRecId := scalarRec; end;
         idx := CAllocDeclVar(name, tyPointer);
         SetSymPointerType(idx, declTk, scalarRec,
                           declPtrDepth + 1, declBaseTk, declBaseRec);
@@ -7457,7 +7461,7 @@ begin
     begin
       { A struct-by-value local needs its record id so field access resolves and
         AllocVar reserves RecSize bytes. }
-      if declTk = tyRecord then LastTypeRecId := scalarRec;
+      if declTk = tyRecord then begin CRefuseIncompleteObject(name, scalarRec); LastTypeRecId := scalarRec; end;
       idx := CAllocDeclVar(name, declTk);
       if declTk = tyPointer then
       begin
@@ -10709,6 +10713,11 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     declSawThread: Boolean;
     gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
     gStars: Integer;      { stars on THIS declarator, counted rather than skipped }
+    gNameTok: Integer;    { token index of THIS declarator's name }
+    gHadStar: Boolean;    { the first declarator's pointer came from a LITERAL star }
+    gScalarTk, gFirstTk: TTypeKind;
+    gScalarRec, gFirstRec, gFirstPtrDepth, gFirstElemTk, gFirstElemRec,
+    gFirstPtrBaseTk, gFirstPtrBaseRec, gFirstPtrElemSig: Integer;
     gFirstDecl: Boolean;  { the first declarator's stars were eaten by ParseCDeclType }
     gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
@@ -11036,6 +11045,21 @@ begin
     Eat(tkSemicolon);
     Exit;
   end;
+  { Per-declarator types, the same split ParseCLocalDeclAST makes: ParseCDeclType
+    folded the FIRST declarator's stars into baseTk and the CType* globals, and
+    this loop read those for EVERY declarator. So `int *p, x;` made x a pointer
+    and `int x, *p;` made p an int (`*p` segfaulted), silent at file scope while
+    the same lines in a body were right. Snapshot the first declarator's type
+    and the pre-star scalar base; each later declarator is re-derived at the
+    loop top from its own stars. A pointer from a TYPEDEF (no literal star) is
+    the whole type and applies to every sibling. }
+  gHadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
+  gFirstTk := baseTk; gFirstRec := recId;
+  gFirstPtrDepth := CTypePtrDepth; gFirstElemTk := CTypeElemTk;
+  gFirstElemRec := CTypeElemRec; gFirstPtrBaseTk := CTypePtrBaseTk;
+  gFirstPtrBaseRec := CTypePtrBaseRec; gFirstPtrElemSig := CTypePtrElemProcSig;
+  if gHadStar then begin gScalarTk := IntToTypeKind(CTypePtrBaseTk); gScalarRec := CTypePtrBaseRec; end
+  else begin gScalarTk := baseTk; gScalarRec := recId; end;
   gFirstDecl := True;
   while True do
   begin
@@ -11050,7 +11074,34 @@ begin
       and all of tcc's `Sym *a, *b`). }
     gStars := 0;
     while CurTok.Kind = tkStar do begin Next; Inc(gStars); end;
+    if not gFirstDecl then
+    begin
+      if gStars > 0 then
+      begin
+        baseTk := tyPointer; recId := gScalarRec;
+        CTypePtrDepth := gStars;
+        CTypePtrBaseTk := Ord(gScalarTk); CTypePtrBaseRec := gScalarRec;
+        if gStars = 1 then CTypeElemTk := Ord(gScalarTk) else CTypeElemTk := Ord(tyPointer);
+        CTypeElemRec := gScalarRec;   { kept at depth >= 2 too, as the local path does }
+        CTypePtrElemProcSig := -1;
+      end
+      else if gHadStar then
+      begin
+        baseTk := gScalarTk; recId := gScalarRec;
+        CTypePtrDepth := 0; CTypeElemTk := Ord(tyUnknown); CTypeElemRec := gScalarRec;
+        CTypePtrBaseTk := Ord(tyUnknown); CTypePtrBaseRec := REC_NONE;
+        CTypePtrElemProcSig := -1;
+      end
+      else
+      begin
+        baseTk := gFirstTk; recId := gFirstRec;
+        CTypePtrDepth := gFirstPtrDepth; CTypeElemTk := gFirstElemTk;
+        CTypeElemRec := gFirstElemRec; CTypePtrBaseTk := gFirstPtrBaseTk;
+        CTypePtrBaseRec := gFirstPtrBaseRec; CTypePtrElemProcSig := gFirstPtrElemSig;
+      end;
+    end;
     if CurTok.Kind <> tkIdent then Break;
+    gNameTok := TokPos - 1;
     name := CurTok.SVal; Next;
     { Global array dimension(s). Pointer arrays with string-literal initializers
       are materialized below; other arrays still mostly serve as parse/layout
@@ -11291,6 +11342,17 @@ begin
       global LastTypeRecId for tyRecord) so field access `gg.f` resolves the
       offset — without this the field always landed at offset 0. }
     if baseTk = tyRecord then LastTypeRecId := recId;
+    { A file-scope TENTATIVE definition may name a type completed later in the
+      file (`struct T g; struct T { ... };` is legal), so an incomplete one is
+      only QUEUED here; CCheckIncompleteGlobals refuses it after pass 1 if it is
+      still incomplete. `extern` defines nothing, and stars make this a pointer. }
+    if (baseTk = tyRecord) and (gStars = 0) and (not declSawExtern) and
+       (CRecMissingFieldKind(recId) = 1) and (CIncGlobCount <= High(CIncGlobTok)) then
+    begin
+      CIncGlobTok[CIncGlobCount] := gNameTok;
+      CIncGlobRec[CIncGlobCount] := recId;
+      Inc(CIncGlobCount);
+    end;
     idx := FindSym(name);
     { A C global must not bind to a Pascal predefined const that only matches
       case-insensitively (e.g. C `stderr` vs the builtin `StdErr` = fd 2):
@@ -11978,8 +12040,8 @@ end;
   the one token stream:
     pass 1 (CHeaderMode) — register every function signature and reserve every
             global, skipping bodies, so any call resolves regardless of order;
-    pass 2 — compile each function body (ParseCSubroutine) and reserve globals
-            (idempotent).
+    pass 2 — compile each function body (ParseCSubroutine); globals are skipped
+            (SkipCDeclToSemi) -- pass 1 reserved them.
   Entry stub (x86-64, matching the pre-existing convention): save rsp, `call
   main`, then exit_group(eax) so main's int return becomes the process code. }
 { Emit the C setjmp/longjmp primitives as raw machine-code stubs and register
@@ -13672,6 +13734,7 @@ begin
     two bodies for each of stdlib.c's 51 functions
     (bug-c-string-h-compiles-stdlib-c-twice). Anything appended BEFORE the crtl
     pull (pxxcio) still falls inside this loop, as it always did. }
+  CCheckIncompleteGlobals;
   TokPos := firstIdx; Next;
   CPackAlign := 0; CPackSP := 0;
   while (CurTok.Kind <> tkEOF) and ((crtlStart < 0) or (TokPos - 1 < crtlStart)) do
@@ -16099,6 +16162,47 @@ begin
   if UClsFCount[recId - REC_UCLASS_BASE] > 0 then Exit;
   if UClsLayoutDropped[recId - REC_UCLASS_BASE] then Result := 2
   else if not UClsBodySeen[recId - REC_UCLASS_BASE] then Result := 1;
+end;
+
+{ DEFINING an object of a struct/union type with no definition in scope, or
+  applying sizeof to one, is refused (C11 6.7p7, 6.5.3.4p1). Such a record has
+  size 0, so the object got no storage: `memset(&v, 0, sizeof v)` became a
+  no-op and `malloc(sizeof(struct opaque))` asked for 0 bytes, with no
+  diagnostic. Only kind 1 (no body ever seen) is refused here. A pointer to an
+  incomplete type, a forward declaration and a block-scope `extern` never get
+  here, and `struct E { }` has a body, so it answers 0 as gcc's extension does.
+  Kind 2 (a body pxx declined to lay out) is a different limitation, already
+  refused at every member access, and is left alone here.
+  RECOVERING, like the member arm. Each caller names the site.
+  bug-c-an-undeclared-struct-type-compiles-and-reads-garbage }
+procedure CRefuseIncompleteObject(const name: AnsiString; recId: Integer);
+begin
+  if CRecMissingFieldKind(recId) = 1 then
+    ErrorRecover('C: storage size of ''' + name + ''' isn''t known -- its'
+      + ' struct/union type has no definition in scope');
+end;
+
+{ After pass 1: every queued file-scope object whose type is STILL incomplete
+  is refused, reported at its own declarator. }
+procedure CCheckIncompleteGlobals;
+var i, savedPos: Integer;
+begin
+  savedPos := TokPos;
+  for i := 0 to CIncGlobCount - 1 do
+    if CRecMissingFieldKind(CIncGlobRec[i]) = 1 then
+    begin
+      TokPos := CIncGlobTok[i]; Next;
+      CRefuseIncompleteObject(CurTok.SVal, CIncGlobRec[i]);
+    end;
+  CIncGlobCount := 0;
+  TokPos := savedPos - 1; Next;
+end;
+
+procedure CRefuseIncompleteSizeof(recId: Integer);
+begin
+  if CRecMissingFieldKind(recId) = 1 then
+    ErrorRecover('C: invalid application of ''sizeof'' to an INCOMPLETE'
+      + ' struct/union type -- it has no definition in scope');
 end;
 
 function CStructBodyIsSimple(startIdx: Integer): Boolean;
