@@ -648,6 +648,14 @@ begin
     entry; a15 is dead until the body establishes its own frame. }
   top := top - 16;
   PW(top + 0)^ := 0;                 { exc_top }
+  { [top+4] ZERO IS LOAD-BEARING ON THE WINDOWED ABI, and harmless on Call0,
+    which reads it as a15 (dead on first entry). The windowed stub reads the
+    same slot as the context's saved a0, and zero is how it tells a context
+    that never ran -- to be CALLED into [top+8] -- from one to RETW into.
+    Stack memory is not zeroed, so leaving it unwritten would resume a fresh
+    coroutine at a garbage address. One layout, both ABIs: see the windowed
+    arm of EmitCoroutineRuntime. }
+  PW(top + 4)^ := 0;
   PW(top + 8)^ := Int64(@CoStart);   { a0 -> CoStart }
 {$else}
 {$ifdef CPU_RISCV32}

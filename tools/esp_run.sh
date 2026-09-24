@@ -14,7 +14,9 @@
 # (the oracle) for output-equality validation.
 #
 # Per chip:
-#   esp32s3 -> --target=xtensa --xtensa-abi=windowed, project hello-s3,
+#   esp32s3 -> --target=esp32s3 (the chip name alone means windowed on IDF
+#              since 2026-09-24; it used to need --xtensa-abi=windowed
+#              spelled out), project hello-s3,
 #              qemu-system-xtensa  -M esp32s3
 #   esp32c3 -> --target=riscv32,                       project hello-c3,
 #              qemu-system-riscv32 -M esp32c3
@@ -44,7 +46,7 @@ echo "esp_run: compiler $PXX" >&2
 case "$CHIP" in
   esp32s3)
     PROJ="$REPO_ROOT/examples/esp32/hello-s3"
-    PXXFLAGS="--target=xtensa --xtensa-abi=windowed --platform=esp"
+    PXXFLAGS="--target=esp32s3"
     QEMU="$(ls "$HOME"/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1)" ;;
   esp32c3)
     PROJ="$REPO_ROOT/examples/esp32/hello-c3"

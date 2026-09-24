@@ -4,12 +4,12 @@ track: A
 tags: [S]
 type: feature
 prio: 25
-status: open
+status: done
 owner: ""
 created: 2026-09-24
 found-by: frank (the Call0 half landed; this is the sequenced remainder)
 blocked-by: []
-summary: "MECHANISM: a stackful context switch assumes callee-saved state lives ON the stack it is swapping, and the xtensa WINDOWED ABI does not put it there -- `call8` rotates the register file and the window's spill area sits at [sp-16], so handing a stack to another context requires spilling the window FIRST and a switch that moves sp invalidates the area it would spill into. That is why it was sequenced away from Call0 rather than bundled with it. NOT A GAP ANYONE HITS BY DEFAULT: XtensaABI defaults to CALL0 and only an explicit --xtensa-abi=windowed moves it (measured -- a flagless xtensa build is byte-identical to --xtensa-abi=call0 and differs from windowed), so every xtensa and esp32s3 build gets working coroutines today. It is reachable, though: the NilPy xtensa rows in test-xtensa build with `--xtensa-abi=windowed --platform=esp`, so an ESP-IDF-shaped build that also wanted async would meet the refusal. IT REFUSES BY NAME, NOT SILENTLY -- coroutine_emit.inc names the ABI, says Call0 is supported and is the default, and a negative-control row in test-xtensa greps for that wording, so the refusal cannot rot into a fall-through. THE CONDITION THAT RETIRES IT: the six test-xtensa coroutine rows pass under --xtensa-abi=windowed as well as Call0, with the negative control replaced rather than deleted, and a raise inside a coroutine still reaching the handler around its driver (the exception chain travels with the stack, so the window spill and BSS_EXC_TOP interact)."
+summary: "DONE 2026-09-24. xtensa coroutines work on the WINDOWED ABI as well as Call0. The stub (coroutine_emit.inc) spills every caller window with a CALL8 chain, saves exc_top and a0 in a 48-byte frame, swaps a1 and RETWs, and the window underflow handler reloads the other context from its own stack; a fresh context (saved a0 = 0) is CALLX8'd into its entry on the new stack. scheduler.pas primes ONE layout for both ABIs. Retire condition met: the six test-xtensa coroutine rows pass under --xtensa-abi=windowed, the negative control was REPLACED by ABI relation rows, and a raise inside a coroutine reaches its handler (scheduler_exc, plus the new deep-call-chain row)."
 ---
 
 # A windowed-ABI CoSwitch for xtensa
@@ -114,3 +114,50 @@ builds, so that is not hypothetical, just not currently asked for.
 # Umbrella
 
 [[meta-a-pxx-produces-linkable-code]]
+
+
+## Resolution (2026-09-24, frankH)
+
+**Mechanism.** This is the windowed longjmp's trick (exception_emit.inc, the
+part measured under QEMU), aimed at a different frame. The switch needs no
+jmpbuf-style copy of the [sp-16] save area, because a SUSPENDED context's
+stack is not written by anyone while it is parked.
+
+**The one number that is easy to get wrong: `entry a1, 48`, not 32.**
+- With 32 bytes, the ABI claims every byte of the frame: [sp+0,+16) is this
+  window's own a4-a7 save area, and [sp+16,+32) is the caller's caller's base
+  save area.
+- The three slots therefore live in the 16 bytes that 48 adds: exc_top at
+  sp+0, a0 at sp+4, fresh-entry at sp+8.
+
+**A fresh context is CALLED, not returned into,** because CoStart begins with
+ENTRY. The stub:
+1. moves its own window onto the new stack at P-32;
+2. records P at [a1-12], so a later overflow of that window writes its a4-a7
+   into [P-32,P-16) and nowhere else;
+3. CALLX8s the entry.
+
+**The priming layout is shared with Call0.** It is [0] exc_top = 0,
+[4] = 0 (Call0 reads it as a15; windowed reads it as "never ran"), and
+[8] = @CoStart.
+
+**Verified:**
+- **Rows vs the x86-64 oracle, windowed:** scheduler, scheduler_exc, channel,
+  timer, reactor and asyncecho, plus the new
+  test_scheduler_yields_deep_in_a_call_chain on both ABIs. That test yields
+  with 20 frames live, far more than the 64-register file holds.
+- **httpdemo:** examples/net/httpdemo runs on xtensa under both ABIs.
+- **Positive control:** writing 0 to the CoStart slot makes test_scheduler
+  SEGFAULT on both ABIs, so the rows do reach the stub.
+- **The board:** the deep test passed on an ESP32-S3.
+- **gate.sh quick:** GREEN.
+
+**Found beside it, not fixed:**
+- On ESP-IDF, the scheduler's default 192 KB coroutine stack (CO_STK) does
+  not fit three times in the S3's internal RAM. Unmodified test_scheduler
+  aborts with "pxx: out of memory"; SpawnSized works.
+- That is a sizing default for the ESP profile, not an ABI defect, and it is
+  filed as its own ticket.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -21,6 +21,7 @@
   never be inlined. }
 
 procedure EmitCoroutineRuntime;
+var coSpill: Integer;
 begin
   if TargetArch = TARGET_X86_64 then
   begin
@@ -221,29 +222,89 @@ begin
     xtensa_ret;
   end
   else if TargetArch = TARGET_XTENSA then
-    { WINDOWED, and refused SEPARATELY from the generic tail below so the
-      message names the ABI rather than the target. The target is supported;
-      this ABI is not, and the two want different answers from the reader.
+  begin
+    { xtensa WINDOWED: pfrom=a2, pto=a3 in the stub's own window (entered by
+      CALL8, so the caller wrote them to a10/a11). The model is the windowed
+      longjmp in exception_emit.inc, which is MEASURED under qemu-xtensa, and
+      this is the same trick with a different target frame: spill every caller
+      window to memory, forge a0/a1, RETW, and the window UNDERFLOW handler
+      reloads the other context's caller from ITS stack. The a0-a3 save area at
+      [sp-16] sits below a SUSPENDED context's sp, on that context's own stack,
+      which nothing writes while it is parked -- which is why a switch needs no
+      jmpbuf-style copy of it, where longjmp does.
 
-      Why it is genuinely harder and not just unwritten: the windowed ABI keeps
-      callee-saved state in a ROTATING REGISTER WINDOW rather than on the stack
-      the way this switch assumes, so handing a stack to another context
-      requires spilling the window first (and the spill area lives at [sp-16],
-      which a switch that moves sp invalidates). It is not Call0's twin and the
-      ticket says to sequence the two rather than bundle them. }
-    Error('coroutines are not implemented for the xtensa WINDOWED ABI '
-          + '(--xtensa-abi=windowed): a context switch has to spill the '
-          + 'register window before another context can own the stack. The '
-          + 'CALL0 ABI is supported and is the DEFAULT — drop '
-          + '--xtensa-abi=windowed, or pass --xtensa-abi=call0 explicitly.')
+      THE FRAME IS 48 BYTES, NOT THE 32 EVERY OTHER STUB USES, AND THAT IS THE
+      ONE NUMBER HERE THAT IS EASY TO GET WRONG. With `entry a1, 32` all 32 bytes
+      are claimed by the ABI: [sp+0,+16) is this window's own a4-a7 save area
+      ([caller_sp - 32]) and [sp+16,+32) is the base save area of the caller's
+      caller. The switch's three slots need room NEITHER owns, so the frame
+      grows by 16 and the slots are [sp+0] exc_top, [sp+4] a0 (with its
+      call-size bits), [sp+8] a fresh context's entry.
+
+      THE SLOT LAYOUT IS THE CALL0 STUB'S, deliberately, so lib/rtl/scheduler.pas
+      primes ONE shape for both ABIs: [top+0] exc_top = 0, [top+4] = 0, [top+8]
+      = @CoStart. Call0 reads [4] as a15 (dead on first entry) and [8] as a0.
+      Windowed reads [4] as the saved a0 -- ZERO means "never ran" -- and [8] as
+      the routine to CALLX8 into on the new stack.
+
+      A FRESH CONTEXT IS CALLED, NOT RETURNED INTO: CoStart begins with ENTRY,
+      so a forged RETW into it would land after a window rotation it never
+      asked for. The stub keeps its own window, moves it onto the new stack at
+      P-32 (the shape `entry a1, 32` would give), records P at [a1-12] -- the
+      slot an overflow reads for "this window's caller's sp" -- so a later spill
+      of this window writes its a4-a7 to [P-32,P-16) inside that fake frame and
+      nowhere else, and CALLX8s the entry. CoStart never returns. }
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    coSpill := CodeLen;
+    { THE SPILL: exception_emit.inc's self-recursive CALL8 chain, repeated
+      rather than shared because that one exists only in builds that emit the
+      exception runtime, and a coroutine does not imply one. a2 = depth. }
+    xtensa_entry(reg_xtensa_sp, 32);
+    xtensa_movi(reg_xtensa_a3, 0);
+    xtensa_beq(reg_xtensa_a2, reg_xtensa_a3, 12);      { depth 0: -> retw }
+    xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+    RecordCodeRefFull(CodeLen, coSpill, 0, CODEREF_ANCHOR_CALL8);
+    xtensa_call8(coSpill - CodeLen);
+    xtensa_retw;
+
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    CoSwitchAddr := CodeLen;
+    xtensa_entry(reg_xtensa_sp, 48);
+    xtensa_movi(reg_xtensa_a10, 16);                   { 16 x 8 > 64 registers }
+    RecordCodeRefFull(CodeLen, coSpill, 0, CODEREF_ANCHOR_CALL8);
+    xtensa_call8(coSpill - CodeLen);                   { a2..a7 survive it }
+    XtensaEmitLitHeader;                               { a4 = &BSS_EXC_TOP }
+    EmitGlobRef(BSS_EXC_TOP);
+    xtensa_l32r(reg_xtensa_a4, $FFFF);
+    xtensa_l32i(reg_xtensa_a5, reg_xtensa_a4, 0);
+    xtensa_s32i(reg_xtensa_a5, reg_xtensa_sp, 0);      { exc_top on THIS stack }
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 4);      { resume point + call bits }
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 0);      { *pfrom = sp }
+    xtensa_l32i(reg_xtensa_a6, reg_xtensa_a3, 0);      { a6 = the other sp }
+    xtensa_l32i(reg_xtensa_a5, reg_xtensa_a6, 0);
+    xtensa_s32i(reg_xtensa_a5, reg_xtensa_a4, 0);      { BSS_EXC_TOP = its chain }
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_a6, 4);
+    xtensa_movi(reg_xtensa_a7, 0);
+    xtensa_beq(reg_xtensa_a0, reg_xtensa_a7, 8);       { never ran: -> fresh }
+    xtensa_mov(reg_xtensa_sp, reg_xtensa_a6);          { a1 LAST, as in longjmp }
+    xtensa_retw;
+    { fresh: the offset counts from the beq itself -- beq 3 + mov 3 + retw.n 2 }
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a6, 8);      { the entry routine }
+    xtensa_addi(reg_xtensa_a9, reg_xtensa_a6, -44);
+    xtensa_s32i(reg_xtensa_a6, reg_xtensa_a9, 0);      { [P-44] = P }
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_a6, -32);
+    xtensa_callx8(reg_xtensa_a8);
+    xtensa_j(0);                                       { CoStart never returns }
+  end
   else if TargetArch = TARGET_WASM32 then
     Error('wasm32: coroutine context switch not implemented (a wasm module has '
           + 'no addressable stack pointer to swap)')
   else
     { FAIL-CLOSED DEFAULT FOR A TARGET THAT DOES NOT EXIST YET. As of
       2026-09-24 every target this compiler has reaches an arm above — x86-64,
-      i386, aarch64, arm32, riscv32, xtensa (Call0 implemented, windowed
-      refused by name) and wasm32 — so nothing routes here today and that is
+      i386, aarch64, arm32, riscv32, xtensa (Call0 and, since 2026-09-24,
+      windowed) and wasm32 — so nothing routes here today and that is
       the point: a new TARGET_* lands with a refusal rather than with silence.
 
       WHAT SILENCE WOULD COST, and it is why this else is an Error and not a

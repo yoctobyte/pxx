@@ -32231,12 +32231,12 @@ test-xtensa: $(COMPILER)
 	# when a test changes. It also means a row cannot silently encode a
 	# xtensa-specific wrong answer as its own expectation.
 	#
-	# CALL0 ONLY, AND THAT IS THE WHOLE SCOPE. The windowed ABI keeps
-	# callee-saved state in a rotating register window, so a switch has to spill
-	# the window before another context can own the stack -- a materially
-	# different problem, refused BY NAME in coroutine_emit.inc and sequenced
-	# rather than bundled. The negative control for that refusal is the row
-	# further down; do not "fix" it by widening the stub.
+	# BOTH ABIS SINCE 2026-09-24. These six were Call0-only and the windowed ABI
+	# was refused by name; the windowed stub (coroutine_emit.inc) spills every
+	# register window and lets the underflow handler reload the other context,
+	# the mechanism the windowed longjmp already proved. The windowed copies of
+	# the rows are further down, beside the deep-call-chain row that is the
+	# windowed-specific risk.
 	#
 	# WHY THESE ROWS ARE NOT VACUOUS, measured before landing them: perturbing
 	# the priming in lib/rtl/scheduler.pas by one slot (writing @CoStart to
@@ -32289,21 +32289,55 @@ test-xtensa: $(COMPILER)
 	# lib_asyncnet6 all along and esp32s3 (xtensa) could not. Both must now, and
 	# it is an --emit-obj row on purpose -- it asserts the COMPILE reaches the
 	# end on the real ESP target triple, with no emulator in the question.
+	# THE s3 ROW NOW BUILDS WINDOWED, and that is a change to what it asserts:
+	# until 2026-09-24 the chip name meant Call0, an object ESP-IDF cannot call,
+	# and this row passed only because coroutines were Call0-only.
+	# bug-a-target-esp32s3-builds-a-call0-object-that-esp-idf-cannot-call
 	./$(COMPILER) --target=esp32s3 --emit-obj test/lib_asyncnet6.pas $(TESTTMP)/test_xt_asyncnet6_s3.o
 	./$(COMPILER) --target=esp32c3 --emit-obj test/lib_asyncnet6.pas $(TESTTMP)/test_xt_asyncnet6_c3.o
-	# NEGATIVE CONTROL for the ABI scope, and it is the row that keeps the
-	# comment above honest: the WINDOWED ABI must still refuse, by name. If this
-	# ever starts succeeding, a windowed CoSwitch has appeared without anyone
-	# updating the claim that Call0 is the only implemented arm.
-	# `>` AND NOT `2>`, AND THAT IS NOT A TYPO TO TIDY: pascal26 writes its
-	# diagnostics to STDOUT. This row was first written as `2>...err` by analogy
-	# with the `2>/dev/null` rows elsewhere in this file, and it was a guard that
-	# COULD NOT PASS -- the .err file came back 0 bytes and the grep failed while
-	# the refusal was working perfectly. Those other rows get away with it
-	# because they only assert a nonzero exit and never read the text.
-	! ./$(COMPILER) --target=xtensa --platform=posix --xtensa-abi=windowed --emit-obj test/lib_asyncnet6.pas $(TESTTMP)/test_xt_an6_win.o >$(TESTTMP)/test_xt_an6_win.out 2>&1
-	grep -q "xtensa WINDOWED ABI" $(TESTTMP)/test_xt_an6_win.out
-	@echo "=== test-xtensa: coroutines/async on Call0 (6 rows vs the x86-64 oracle), esp32s3 asyncnet parity, windowed still refused ==="
+	# THE CHIP NAME MEANS WINDOWED ON IDF, as a RELATION rather than by reading
+	# instruction bytes: the chip-name object must be byte-identical to the
+	# spelled-windowed one and must DIFFER from the spelled-call0 one. The
+	# second cmp is the half that fails if the default ever drifts back.
+	./$(COMPILER) --target=esp32s3 --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/test_xt_abi_default.o
+	./$(COMPILER) --target=esp32s3 --xtensa-abi=windowed --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/test_xt_abi_win.o
+	./$(COMPILER) --target=esp32s3 --xtensa-abi=call0 --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/test_xt_abi_c0.o
+	cmp $(TESTTMP)/test_xt_abi_default.o $(TESTTMP)/test_xt_abi_win.o
+	! cmp -s $(TESTTMP)/test_xt_abi_default.o $(TESTTMP)/test_xt_abi_c0.o
+	# COROUTINES ON THE WINDOWED ABI, vs the same x86-64 oracle. The deep row is
+	# the one that matters most: it yields with twenty frames live, far more
+	# than the 64-register file holds, so every switch crosses spilled windows
+	# in both directions. Measured 2026-09-24: writing 0 to CoStart's priming
+	# slot makes test_scheduler SEGFAULT under qemu on both ABIs, so these rows
+	# do reach the stub. Also passed on an ESP32-S3 board, built with only
+	# --target=esp32s3 (tools/esp_flash.sh).
+	./$(COMPILER) test/test_scheduler_yields_deep_in_a_call_chain.pas $(TESTTMP)/test_xt_codeep_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_scheduler_yields_deep_in_a_call_chain.pas $(TESTTMP)/test_xt_codeep
+	tools/expect_same.sh xtensa/scheduler_deep "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_codeep)" "$$($(TESTTMP)/test_xt_codeep_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_scheduler_yields_deep_in_a_call_chain.pas $(TESTTMP)/test_xt_codeep_w
+	tools/expect_same.sh xtensa-win/scheduler_deep "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_codeep_w)" "$$($(TESTTMP)/test_xt_codeep_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_scheduler.pas $(TESTTMP)/test_xt_scheduler_w
+	tools/expect_same.sh xtensa-win/scheduler "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_scheduler_w)" "$$($(TESTTMP)/test_xt_scheduler_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_scheduler_exc.pas $(TESTTMP)/test_xt_scheduler_exc_w
+	tools/expect_same.sh xtensa-win/scheduler_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_scheduler_exc_w)" "$$($(TESTTMP)/test_xt_scheduler_exc_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_channel.pas $(TESTTMP)/test_xt_channel_w
+	tools/expect_same.sh xtensa-win/channel "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_channel_w)" "$$($(TESTTMP)/test_xt_channel_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_timer.pas $(TESTTMP)/test_xt_timer_w
+	tools/expect_same.sh xtensa-win/timer "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_timer_w)" "$$($(TESTTMP)/test_xt_timer_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_reactor.pas $(TESTTMP)/test_xt_reactor_w
+	tools/expect_same.sh xtensa-win/reactor "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_reactor_w)" "$$($(TESTTMP)/test_xt_reactor_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_xt_asyncecho_w
+	tools/expect_same.sh xtensa-win/asyncecho "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_asyncecho_w)" "$$($(TESTTMP)/test_xt_asyncecho_x64)"
+	# examples/net/httpdemo on xtensa, both ABIs -- the program the stackful-
+	# coroutine ticket was named for, which riscv32 has run since that ticket's
+	# first half. --xtensa-long-calls because the image passes Call0's 512 KiB
+	# forward-call reach (the compiler says so by name without it).
+	./$(COMPILER) examples/net/httpdemo.pas $(TESTTMP)/test_xt_httpdemo_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls examples/net/httpdemo.pas $(TESTTMP)/test_xt_httpdemo
+	tools/expect_same.sh xtensa/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo)" "$$($(TESTTMP)/test_xt_httpdemo_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --xtensa-abi=windowed examples/net/httpdemo.pas $(TESTTMP)/test_xt_httpdemo_w
+	tools/expect_same.sh xtensa-win/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo_w)" "$$($(TESTTMP)/test_xt_httpdemo_x64)"
+	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)
 	# THE READ-ONLY DATA SEGMENT ON arm32 -- the same pair as test-aarch64's first

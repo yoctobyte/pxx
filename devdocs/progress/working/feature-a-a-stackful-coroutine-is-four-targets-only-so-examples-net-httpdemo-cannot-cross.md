@@ -8,7 +8,7 @@ created: 2026-09-02
 found-by: frankC
 owner: frankC
 blocked-by: []
-summary: "riscv32 is DONE -- examples/net/httpdemo builds and runs there with output byte-identical to the x86-64 oracle, and i386/arm32/aarch64 are unchanged. XTENSA REMAINS, and it is the hard half: under the windowed ABI the callee-saved state lives in a rotating register window rather than on the stack the way CoSwitch assumes, so a stack switch has to spill the window first. riscv32 took FOUR pieces, not the three this ticket predicted -- the CoSwitch stub, the IR_COSWITCH lowering, scheduler.pas's initial frame and epoll syscall numbers, AND atomic codegen, which riscv32 refused in user mode because its only primitive was the ESP arm's machine-mode interrupt mask."
+summary: "The SCHEDULER half is DONE on every target: examples/net/httpdemo builds and runs byte-identical to the x86-64 oracle on riscv32 and, since 2026-09-24, on xtensa under BOTH ABIs (Call0, and windowed via the windowed CoSwitch; test-xtensa rows xtensa/httpdemo and xtensa-win/httpdemo, built with --xtensa-long-calls because the image passes Call0's 512 KiB forward-call reach). i386/arm32/aarch64 are unchanged. WHAT REMAINS is the GENERATOR runtime: lib/rtl/coroutine.pas primes an x86-64 frame only, so generators cross to no 32-bit target yet."
 ---
 
 # A stackful coroutine is four targets only, so `examples/net/httpdemo` cannot cross
@@ -119,3 +119,12 @@ window-spill described above is unchanged and unstarted. `lib/rtl/coroutine.pas`
 (the generator runtime, whole unit inside `{$ifdef CPUX86_64}`) is also still
 untouched — this work went through the scheduler path only, so generators cross
 on no 32-bit target yet.
+
+
+## 2026-09-24 (frankH): the xtensa half landed
+
+The windowed CoSwitch
+([[feature-a-a-windowed-abi-coswitch-for-xtensa]]) closed "XTENSA REMAINS".
+httpdemo runs on qemu-xtensa under both ABIs and matches the oracle, 8 lines.
+The summary above was rewritten to match. The generators are untouched, and
+this ticket stays open for them; its owner is unchanged.

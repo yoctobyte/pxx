@@ -1159,6 +1159,7 @@ begin
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   SocExplicit := False;
+  XtensaAbiExplicit := False;
   CompactClasses := False;
   CompactClassesExplicit := False;
   ProcExceptionCleanupFrameActive := False;
@@ -1474,11 +1475,13 @@ begin
     else if option = '--xtensa-abi=call0' then
     begin
       XtensaABI := XTENSA_ABI_CALL0;
+      XtensaAbiExplicit := True;
       Inc(i);
     end
     else if option = '--xtensa-abi=windowed' then
     begin
       XtensaABI := XTENSA_ABI_WINDOWED;
+      XtensaAbiExplicit := True;
       Inc(i);
     end
     else if (option = '--xtensa-cpu=lx6') or (option = '--xtensa-soft-divide') then
@@ -2183,6 +2186,21 @@ begin
     posix. The platform axis stays independent: an explicit --platform overrides
     this (e.g. a hosted RTOS on xtensa later). }
   DeriveTargetPlatform;
+  { A NAMED xtensa chip (--target=esp32 / esp32s2 / esp32s3) on the IDF
+    platform means WINDOWED unless --xtensa-abi says otherwise. ESP-IDF on
+    every xtensa chip enters app_main with CALLX8 and expects RETW, so the Call0
+    default produced an object that linked and could not run -- the silent
+    wrong build the esp32c3 hosted-linux fix (747054b6df) closed on riscv32.
+    IDF is the assumed ESP profile and bare is a test vehicle (owner's standing
+    ruling), so the chip name alone builds what IDF can call.
+    SCOPE, deliberately: the NAMED chip only. Generic --target=xtensa keeps
+    Call0 -- it is the qemu linux-user spelling every hosted xtensa row uses --
+    and --esp-profile=bare keeps Call0 by requirement (refused windowed above,
+    and excluded here so a bare chip build is not flipped INTO that refusal).
+    bug-a-target-esp32s3-builds-a-call0-object-that-esp-idf-cannot-call }
+  if SocExplicit and SocIsXtensa(TargetSoc) and (not XtensaAbiExplicit) and
+     (not EspBareBoot) and (TargetPlatform = PLATFORM_ESP) then
+    XtensaABI := XTENSA_ABI_WINDOWED;
   { ESP IMPLIES --compact-classes: memory is precious on that target (user,
     2026-08-21) and the root slots cost data per class declared. An explicit
     --compact-classes / --no-compact-classes anywhere on the command line wins,

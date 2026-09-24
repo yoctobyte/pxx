@@ -94,7 +94,8 @@ case "$CHIP" in
   esp32s2) PROJ="$REPO_ROOT/examples/esp32/hello-s2"
            PXXFLAGS="--target=xtensa --xtensa-abi=windowed --platform=esp" ;;
   esp32s3) PROJ="$REPO_ROOT/examples/esp32/hello-s3"
-           PXXFLAGS="--target=xtensa --xtensa-abi=windowed --platform=esp" ;;
+           # the chip name alone is windowed on IDF since 2026-09-24
+           PXXFLAGS="--target=esp32s3" ;;
   esp32c3) PROJ="$REPO_ROOT/examples/esp32/hello-c3"
            PXXFLAGS="--target=riscv32 --platform=esp" ;;
   *) echo "esp_flash: unknown chip '$CHIP' (esp32s2|esp32s3|esp32c3)" >&2; exit 2 ;;

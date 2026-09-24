@@ -6453,6 +6453,10 @@ var
   { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
     the windowed ABI. }
   XtensaABI : Integer;
+  { True once --xtensa-abi= was spelled. A NAMED xtensa chip on the IDF
+    platform defaults to windowed only when it is False, so an explicit
+    --xtensa-abi=call0 still means call0. }
+  XtensaAbiExplicit : Boolean;
   { Xtensa integer divide policy. Default False = native quos/rems (LX7 / ESP32
     -S2/-S3 baseline). True (via --xtensa-cpu=lx6) routes div/mod through the
     software shift-subtract helpers __pxx_divsi3/__pxx_modsi3 for ESP32 classic

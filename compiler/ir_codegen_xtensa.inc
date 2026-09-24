@@ -4973,15 +4973,29 @@ begin
           stub was emitted, because EmitCoroutineRuntime errors on every xtensa
           configuration it does not implement.
 
-          NO ABI GUARD IS NEEDED HERE and that is deliberate rather than an
-          omission — compare IR_SET_SIGNAL below, which has to ask
-          TargetHasSignalRuntime because its stub is emitted on some xtensa
-          builds and not others. Coroutine emission has no such split: any
-          build that reaches this node has already been through
-          EmitCoroutineRuntime, which refuses --xtensa-abi=windowed by name. A
-          second check here would be a guard that cannot fail.
+          NO RUNTIME GUARD IS NEEDED HERE -- compare IR_SET_SIGNAL below,
+          which has to ask TargetHasSignalRuntime because its stub is emitted
+          on some xtensa builds and not others. EmitCoroutineRuntime emits a
+          stub for BOTH ABIs (windowed since 2026-09-24), so any build that
+          reaches this node has one; the ABI decides only how it is called.
           feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there }
         argNode := IRA[node];                           { IR_ARG pfrom }
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          { WINDOWED: CALL8, arguments in a10/a11 (the stub's a2/a3), and the
+            spill through the expression stack, which keeps sp constant --
+            moving a1 here would make a window overflow read a stale caller-sp
+            out of [a1-12]. The stub is coroutine_emit.inc's windowed arm. }
+          IREmitNodeXtensa(IRA[argNode]);               { a2 = pfrom }
+          XtensaPushA2;
+          argNode := IRB[argNode];                      { IR_ARG pto }
+          IREmitNodeXtensa(IRA[argNode]);               { a2 = pto }
+          XtensaPopA3;                                  { a3 = pfrom }
+          xtensa_mov(reg_xtensa_a10, reg_xtensa_a3);
+          xtensa_mov(reg_xtensa_a11, reg_xtensa_a2);
+          EmitXtensaCall8ToCode(CoSwitchAddr);
+          Exit;
+        end;
         IREmitNodeXtensa(IRA[argNode]);                 { a2 = pfrom }
         xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
         xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);   { spill pfrom }
