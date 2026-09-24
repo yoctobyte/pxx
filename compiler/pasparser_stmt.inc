@@ -7454,6 +7454,21 @@ begin
         if i = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
         ASTLeft[opNode] := valNode;
         ASTRight[opNode] := stepsNode;
+        { TYPE THE BINOP, as the expression parser types `x + 1`. Left untyped,
+          the IR lowered it at the NATIVE width, which is right by accident on
+          a 64-bit host and wrong on every 32-bit target: `r := -2; Dec(r)` on
+          an Int64 gave 4294967293 on i386, arm32, riscv32 and xtensa -- the
+          add/sub ran in 32 bits and the high word was stored as ZERO on every
+          Inc/Dec, carry or not, while `r := r - 1` was right. NilPy's
+          math.floor (Trunc then Dec) inherited it on the ESP32-S3. Scoped to
+          the machine integers and pointers, mirroring the expression arms;
+          Char/enum/Boolean targets keep the untyped node they had.
+          test/test_int64_counter_crosses_2pow32_on_32bit.pas }
+        if TypeIsMachineInt(castTk) then
+          ASTTk[opNode] := Ord(TypeArithmeticResultOp(castTk,
+                               IntToTypeKind(ASTTk[stepsNode]), TTokenKind(ASTIVal[opNode])))
+        else if castTk = tyPointer then
+          ASTTk[opNode] := Ord(tyPointer);
 
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode;

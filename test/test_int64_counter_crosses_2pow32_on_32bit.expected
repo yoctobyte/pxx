@@ -1,0 +1,11 @@
+inc carry 4294967296
+dec borrow -1
+dec by 7 -2
+inc by 2 4294967297
+dec by var -2
+qword inc 4294967296
+dec across 4294967295
+for across 2 4294967296
+downto across 3 4294967294
+for neg to pos 3 1
+qword for 4 4294967297

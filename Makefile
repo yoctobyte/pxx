@@ -27023,6 +27023,11 @@ progress-check:
 # i386 cross-target slice (feature-target-i386). Grows with the backend;
 # joins 'make test' when the op coverage is broad enough to matter.
 test-i386: $(COMPILER)
+	# A 64-bit counter crossing 2^32: Inc/Dec and a counted `for` both moved
+	# only the low word on 32-bit targets. Nine of eleven rows are wrong under
+	# pin af40370a8a91; no x86-64 row can see it.
+	./$(COMPILER) --target=i386 test/test_int64_counter_crosses_2pow32_on_32bit.pas $(TESTTMP)/test_i386_int64ctr
+	tools/expect_same.sh i386/int64ctr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_int64ctr)" "$$(cat test/test_int64_counter_crosses_2pow32_on_32bit.expected)"
 	# THE READ-ONLY DATA SEGMENT ON i386 -- the same pair as test-aarch64's first
 	# rows: the literal store faults with the split, runs with --no-ro-data.
 	# feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident
@@ -29208,6 +29213,11 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_static_string_literal "$$(tools/run_target.sh aarch64 $(TESTTMP)/ssl_a64 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a64_x64 | grep -v '^pxx-census')"
 
 test-riscv32: $(COMPILER)
+	# A 64-bit counter crossing 2^32: Inc/Dec and a counted `for` both moved
+	# only the low word on 32-bit targets. Nine of eleven rows are wrong under
+	# pin af40370a8a91; no x86-64 row can see it.
+	./$(COMPILER) --target=riscv32 test/test_int64_counter_crosses_2pow32_on_32bit.pas $(TESTTMP)/test_rv32_int64ctr
+	tools/expect_same.sh riscv32/int64ctr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_int64ctr)" "$$(cat test/test_int64_counter_crosses_2pow32_on_32bit.expected)"
 	# The cross half of bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only.
 	# riscv32 was already CORRECT here while i386/aarch64/arm32 refused, which is
 	# why the ticket could cite a non-x86-64 reference. This row is the control

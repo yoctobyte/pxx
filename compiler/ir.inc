@@ -17584,7 +17584,19 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       
       down := ASTIVal[isDownNode] = 1;
       varIdx := ASTIVal[lhsNode];
-      
+
+      { THE COUNTER'S WIDTH COMES FROM ITS SYMBOL. The Pascal parser builds the
+        counter as a bare AN_IDENT with no ASTTk, and every node below -- the
+        store, the loads, the tests, the step -- is typed from ASTTk[lhsNode].
+        Unknown reads as native width, which is right on x86-64 and wrong on a
+        32-bit target for an Int64/QWord counter: `for k := 4294967295 to
+        4294967296` on i386 compared and stepped only the low word, never
+        reached the limit and ran until a Break stopped it. Machine integers
+        only, so an enum/char/boolean counter lowers exactly as before. }
+      if (ASTTk[lhsNode] = 0) and (varIdx >= 0) and (varIdx < SymCount) and
+         TypeIsMachineInt(Syms[varIdx].TypeKind) then
+        ASTTk[lhsNode] := Ord(Syms[varIdx].TypeKind);
+
       { EVALUATE BOTH BOUNDS BEFORE ASSIGNING THE CONTROL VARIABLE.
 
         ISO Pascal, Delphi and FPC all evaluate the initial AND the final
