@@ -88,6 +88,12 @@ will carry the fixes. Until then, use the workaround.
   `type TProc = record A: array[0..99] of Int64; end` has `SizeOf` 1344 instead
   of 800, and an enum named `TSymbol` is 104 bytes instead of 4, with no
   diagnostic. Fourteen names do this. **Workaround:** rename the type.
+- **An ESP32-S3 bare-metal program that declares a `Double` and uses managed
+  strings** fails to build with `j displacement … is outside the encodable
+  range`. The ESP32-C3 and the ESP-IDF mode are not affected. **Workaround:**
+  keep floats out of the program, or build it as an ESP-IDF component; see
+  [ESP32](../targets/esp32.md), "Mode 1: Bare metal". Fixed in `e0db3791c`: the
+  program builds and prints its output under `qemu-system-xtensa`.
 
 Each row was re-checked on 2026-09-25 with a development build (compiler sha256
 `5a8648a2450a…`, tree `c570417d8`): `printf` prints `42 ok`, the `writeln` loop
@@ -106,10 +112,6 @@ answer silently.
   provide per-thread storage.
 - **C `__thread` on i386 and riscv32** compiles with a warning that every thread
   shares one copy. Single-threaded programs are unaffected.
-- **An ESP32-S3 bare-metal program that declares a `Double` and uses managed
-  strings** fails to build with `j displacement … is outside the encodable
-  range`. The ESP32-C3 and the ESP-IDF mode are not affected; see
-  [ESP32](../targets/esp32.md), "Mode 1: Bare metal".
 - **C `setvbuf` with full or line buffering** returns nonzero: PXX's C streams
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused, as shared-library output is

@@ -144,11 +144,11 @@ Notes for the bare profile:
   never a bad binary**: a program that does need the runtime fails with
   `frozen tyString concat unsupported` rather than miscompiling, so it is safe
   to try.
-- **On the ESP32-S3, a bare program that declares a `Double` and uses managed
-  strings can fail to build** with `j displacement … is outside the encodable
-  range -131072..131071`. The same program builds for the ESP32-C3, and the
-  ESP-IDF mode is not affected. Until it is fixed, keep floats out of an S3 bare
-  program that uses `AnsiString`, or build it as an ESP-IDF component.
+- **Fixed after v424:** on the ESP32-S3, a bare program that declares a
+  `Double` and uses managed strings could fail to build with `j displacement …
+  is outside the encodable range -131072..131071`. The development tree builds
+  and runs it. On v424, keep floats out of an S3 bare program that uses
+  `AnsiString`, or build it as an ESP-IDF component.
 - A program that falls off the end parks in a self-loop (there is no OS to
   exit to). End interactive experiments with `while True do ;`.
 - Interrupt handlers: mark a routine `interrupt;` for a raw hardware-vector
