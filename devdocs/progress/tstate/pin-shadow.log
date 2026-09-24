@@ -1045,3 +1045,5 @@
 2026-09-24T00:15:48Z	borg	692ea558bbe4754bbb26145b61ea9daa9b4dfd08	would NOT pin 692ea558bbe4 — 16 red(s) the current pin does not have, 3 inherited from the current pin: optdiff#shard6/12, optdiff#shard8/12, test-aarch64#src:test/test_set_runtime.pas, test-arm32#src:test/test_set_runtime.pas, test-c-conformance#shard4/6
 2026-09-24T00:59:09Z	borg	b3dbca273e0bc43c61c48ee2406b4c2508f8eb23	would NOT pin b3dbca273e0b — 1 red(s) the current pin does not have, 19 inherited from the current pin: lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy
 2026-09-24T01:27:27Z	borg	e09adcd641b6925f23fd302fa913f5e0e0147d2e	would-pin PENDING e09adcd641b6 — qualifies, streak 1/2
+2026-09-24T02:10:16Z	borg	eeec00ef0d75ee48f9253a25ab885fe3956f5b46	WOULD PIN eeec00ef0d75 — 19 red(s), none new, 19 inherited from the current pin, self-host clean, streak 2/2
+2026-09-24T02:10:16Z	borg	eeec00ef0d75ee48f9253a25ab885fe3956f5b46	AUTO-PIN DECLINED — HEAD is b4b55a94af48, not the tested eeec00ef0d75
