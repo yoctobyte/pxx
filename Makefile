@@ -28127,15 +28127,18 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_string_index_cow "$$(tools/run_target.sh i386 $(TESTTMP)/tsic_i386)" "$$($(TESTTMP)/tsic_i386_x64)"
 	# Does a fresh managed string get RELEASED — the four-arm ownership
 	# predicate, which each backend used to hand-copy with two arms missing.
-	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
-	# identical across targets for one program, so a backend that stops
-	# releasing shows up as a differing frees=/live= against the x86-64 build
-	# of the same source. A missing arm leaks silently and prints nothing
-	# wrong, which is why both earlier instances were found by reading a heap
-	# number rather than by a test.
+	# -dPXX_ALLOC_CENSUS makes the runtime print allocation counters -- ON
+	# STDERR, which the expect_same row below never captures: that row checks
+	# the program's VALUES only, and for 24 days its comment said it caught a
+	# backend that stops releasing. It could not (xtensa's `F(i) <> 'lit'`
+	# leaked every compare past it). The census is also NOT identical across
+	# targets -- 32-bit backends allocate more temporaries -- so the leak check
+	# is the absolute one, assert_no_leak.sh on this target's own binary. A
+	# missing arm leaks silently and prints nothing wrong.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386_x64
 	tools/expect_same.sh i386/test_managed_str_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/msol_i386)" "$$($(TESTTMP)/msol_i386_x64)"
+	tools/assert_no_leak.sh i386/test_managed_str_ownership_leaks 200 tools/run_target.sh i386 $(TESTTMP)/msol_i386
 	./$(COMPILER) --target=i386 test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_i386
 	tools/expect_same.sh i386/test_virtual_call_runs_once "$$(tools/run_target.sh i386 $(TESTTMP)/vcro_i386)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=i386 test/test_dynarray_result.pas $(TESTTMP)/dynres_i386
@@ -28164,12 +28167,14 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386_x64
 	tools/expect_same.sh i386/test_dynarray_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dao_i386)" "$$($(TESTTMP)/dao_i386_x64)"
+	tools/assert_no_leak.sh i386/test_dynarray_ownership_leaks 200 tools/run_target.sh i386 $(TESTTMP)/dao_i386
 	@# i386 is the CONTROL for the fresh-operand park: a dyn-array handle is
 	@# 4 bytes here, so the IR_LOAD_SYM width bug this test covers was invisible
 	@# on 32-bit and only ever bit on 64-bit targets.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_i386_x64
 	tools/expect_same.sh i386/test_dynarray_fresh_result_operand_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dfro_i386)" "$$($(TESTTMP)/dfro_i386_x64)"
+	tools/assert_no_leak.sh i386/test_dynarray_fresh_result_operand_leaks 200 tools/run_target.sh i386 $(TESTTMP)/dfro_i386
 	./$(COMPILER) --target=i386 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_i386
 	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_i386_x64
 	tools/expect_same.sh i386/test_open_array_managed_field_record "$$(tools/run_target.sh i386 $(TESTTMP)/oamfr_i386)" "$$($(TESTTMP)/oamfr_i386_x64)"
@@ -28193,6 +28198,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_i386_x64
 	tools/expect_same.sh i386/test_managed_dynarray_field_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/mdf_i386)" "$$($(TESTTMP)/mdf_i386_x64)"
+	tools/assert_no_leak.sh i386/test_managed_dynarray_field_leaks 200 tools/run_target.sh i386 $(TESTTMP)/mdf_i386
 	tools/assert_no_leak.sh i386/managed_dynarray_field 50 tools/run_target.sh i386 $(TESTTMP)/mdf_i386
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_i386_x64
 	# A managed string handed to the VARIANT boundary with nobody owning it:
@@ -28215,6 +28221,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_i386_x64
 	tools/expect_same.sh i386/test_variant_string_temp_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/vstl_i386)" "$$($(TESTTMP)/vstl_i386_x64)"
+	tools/assert_no_leak.sh i386/test_variant_string_temp_leaks 200 tools/run_target.sh i386 $(TESTTMP)/vstl_i386
 	tools/assert_no_leak.sh i386/variant_string_temp 50 tools/run_target.sh i386 $(TESTTMP)/vstl_i386
 	tools/assert_no_leak.sh x86-64/variant_string_temp 50 $(TESTTMP)/vstl_i386_x64
 	@# The array-of-const sibling. Unlike the variant test above, every target
@@ -28224,21 +28231,25 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_i386_x64
 	tools/expect_same.sh i386/test_array_of_const_string_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/aocs_i386)" "$$($(TESTTMP)/aocs_i386_x64)"
+	tools/assert_no_leak.sh i386/test_array_of_const_string_leaks 200 tools/run_target.sh i386 $(TESTTMP)/aocs_i386
 	tools/assert_no_leak.sh i386/array_of_const_string 50 tools/run_target.sh i386 $(TESTTMP)/aocs_i386
 	tools/assert_no_leak.sh x86-64/array_of_const_string 50 $(TESTTMP)/aocs_i386_x64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_i386_x64
 	tools/expect_same.sh i386/test_pchar_of_computed_string_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/pcls_i386)" "$$($(TESTTMP)/pcls_i386_x64)"
+	tools/assert_no_leak.sh i386/test_pchar_of_computed_string_leaks 200 tools/run_target.sh i386 $(TESTTMP)/pcls_i386
 	tools/assert_no_leak.sh i386/pchar_of_computed_string 50 tools/run_target.sh i386 $(TESTTMP)/pcls_i386
 	tools/assert_no_leak.sh x86-64/pchar_of_computed_string 50 $(TESTTMP)/pcls_i386_x64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_string_to_pointer_seam_leaks.pas $(TESTTMP)/stps_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_string_to_pointer_seam_leaks.pas $(TESTTMP)/stps_i386_x64
 	tools/expect_same.sh i386/test_string_to_pointer_seam_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/stps_i386)" "$$($(TESTTMP)/stps_i386_x64)"
+	tools/assert_no_leak.sh i386/test_string_to_pointer_seam_leaks 200 tools/run_target.sh i386 $(TESTTMP)/stps_i386
 	tools/assert_no_leak.sh i386/string_to_pointer_seam 50 tools/run_target.sh i386 $(TESTTMP)/stps_i386
 	tools/assert_no_leak.sh x86-64/string_to_pointer_seam 50 $(TESTTMP)/stps_i386_x64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_i386_x64
 	tools/expect_same.sh i386/test_interface_result_temp_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/irts_i386)" "$$($(TESTTMP)/irts_i386_x64)"
+	tools/assert_no_leak.sh i386/test_interface_result_temp_leaks 200 tools/run_target.sh i386 $(TESTTMP)/irts_i386
 	@# The discarded-result park, cross-checked: the dyn-array arm allocates its
 	@# temp from a layout descriptor, so a wrong element width is a target-
 	@# specific double free rather than a leak. Builds its OWN x86-64 comparison
@@ -28247,6 +28258,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_i386_x64
 	tools/expect_same.sh i386/test_discarded_managed_result_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dmrs_i386)" "$$($(TESTTMP)/dmrs_i386_x64)"
+	tools/assert_no_leak.sh i386/test_discarded_managed_result_leaks 200 tools/run_target.sh i386 $(TESTTMP)/dmrs_i386
 	tools/assert_no_leak.sh i386/interface_result_temp 50 tools/run_target.sh i386 $(TESTTMP)/irts_i386
 	tools/assert_no_leak.sh x86-64/interface_result_temp 50 $(TESTTMP)/irts_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -28353,6 +28365,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386_x64
 	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386)" "$$($(TESTTMP)/teol_i386_x64)"
+	tools/assert_no_leak.sh i386/test_exception_object_leaks 200 tools/run_target.sh i386 $(TESTTMP)/teol_i386
 	tools/assert_no_leak.sh i386/exception_object 50 tools/run_target.sh i386 $(TESTTMP)/teol_i386
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_i386_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
@@ -29265,15 +29278,18 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_string_index_cow "$$(tools/run_target.sh aarch64 $(TESTTMP)/tsic_a64)" "$$($(TESTTMP)/tsic_a64_x64)"
 	# Does a fresh managed string get RELEASED — the four-arm ownership
 	# predicate, which each backend used to hand-copy with two arms missing.
-	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
-	# identical across targets for one program, so a backend that stops
-	# releasing shows up as a differing frees=/live= against the x86-64 build
-	# of the same source. A missing arm leaks silently and prints nothing
-	# wrong, which is why both earlier instances were found by reading a heap
-	# number rather than by a test.
+	# -dPXX_ALLOC_CENSUS makes the runtime print allocation counters -- ON
+	# STDERR, which the expect_same row below never captures: that row checks
+	# the program's VALUES only, and for 24 days its comment said it caught a
+	# backend that stops releasing. It could not (xtensa's `F(i) <> 'lit'`
+	# leaked every compare past it). The census is also NOT identical across
+	# targets -- 32-bit backends allocate more temporaries -- so the leak check
+	# is the absolute one, assert_no_leak.sh on this target's own binary. A
+	# missing arm leaks silently and prints nothing wrong.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64_x64
 	tools/expect_same.sh aarch64/test_managed_str_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/msol_a64)" "$$($(TESTTMP)/msol_a64_x64)"
+	tools/assert_no_leak.sh aarch64/test_managed_str_ownership_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/msol_a64
 	./$(COMPILER) --target=aarch64 test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_a64
 	tools/expect_same.sh aarch64/test_virtual_call_runs_once "$$(tools/run_target.sh aarch64 $(TESTTMP)/vcro_a64)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=aarch64 test/test_dynarray_result.pas $(TESTTMP)/dynres_a64
@@ -29302,9 +29318,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64_x64
 	tools/expect_same.sh aarch64/test_dynarray_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dao_a64)" "$$($(TESTTMP)/dao_a64_x64)"
+	tools/assert_no_leak.sh aarch64/test_dynarray_ownership_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/dao_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_a64_x64
 	tools/expect_same.sh aarch64/test_dynarray_fresh_result_operand_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dfro_a64)" "$$($(TESTTMP)/dfro_a64_x64)"
+	tools/assert_no_leak.sh aarch64/test_dynarray_fresh_result_operand_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/dfro_a64
 	./$(COMPILER) --target=aarch64 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a64
 	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a64_x64
 	tools/expect_same.sh aarch64/test_open_array_managed_field_record "$$(tools/run_target.sh aarch64 $(TESTTMP)/oamfr_a64)" "$$($(TESTTMP)/oamfr_a64_x64)"
@@ -29328,6 +29346,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_aarch64_x64
 	tools/expect_same.sh aarch64/test_managed_dynarray_field_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64)" "$$($(TESTTMP)/mdf_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_managed_dynarray_field_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64
 	tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_aarch64_x64
 	# A managed string handed to the VARIANT boundary with nobody owning it:
@@ -29350,26 +29369,31 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_aarch64_x64
 	tools/expect_same.sh aarch64/test_variant_string_temp_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/vstl_aarch64)" "$$($(TESTTMP)/vstl_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_variant_string_temp_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/vstl_aarch64
 	tools/assert_no_leak.sh aarch64/variant_string_temp 50 tools/run_target.sh aarch64 $(TESTTMP)/vstl_aarch64
 	tools/assert_no_leak.sh x86-64/variant_string_temp 50 $(TESTTMP)/vstl_aarch64_x64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_aarch64_x64
 	tools/expect_same.sh aarch64/test_array_of_const_string_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/aocs_aarch64)" "$$($(TESTTMP)/aocs_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_array_of_const_string_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/aocs_aarch64
 	tools/assert_no_leak.sh aarch64/array_of_const_string 50 tools/run_target.sh aarch64 $(TESTTMP)/aocs_aarch64
 	tools/assert_no_leak.sh x86-64/array_of_const_string 50 $(TESTTMP)/aocs_aarch64_x64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_aarch64_x64
 	tools/expect_same.sh aarch64/test_pchar_of_computed_string_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/pcls_aarch64)" "$$($(TESTTMP)/pcls_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_pchar_of_computed_string_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/pcls_aarch64
 	tools/assert_no_leak.sh aarch64/pchar_of_computed_string 50 tools/run_target.sh aarch64 $(TESTTMP)/pcls_aarch64
 	tools/assert_no_leak.sh x86-64/pchar_of_computed_string 50 $(TESTTMP)/pcls_aarch64_x64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_string_to_pointer_seam_leaks.pas $(TESTTMP)/stps_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_string_to_pointer_seam_leaks.pas $(TESTTMP)/stps_aarch64_x64
 	tools/expect_same.sh aarch64/test_string_to_pointer_seam_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/stps_aarch64)" "$$($(TESTTMP)/stps_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_string_to_pointer_seam_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/stps_aarch64
 	tools/assert_no_leak.sh aarch64/string_to_pointer_seam 50 tools/run_target.sh aarch64 $(TESTTMP)/stps_aarch64
 	tools/assert_no_leak.sh x86-64/string_to_pointer_seam 50 $(TESTTMP)/stps_aarch64_x64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_aarch64_x64
 	tools/expect_same.sh aarch64/test_interface_result_temp_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/irts_aarch64)" "$$($(TESTTMP)/irts_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_interface_result_temp_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/irts_aarch64
 	@# The discarded-result park, cross-checked: the dyn-array arm allocates its
 	@# temp from a layout descriptor, so a wrong element width is a target-
 	@# specific double free rather than a leak. Builds its OWN x86-64 comparison
@@ -29378,6 +29402,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_aarch64_x64
 	tools/expect_same.sh aarch64/test_discarded_managed_result_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dmrs_aarch64)" "$$($(TESTTMP)/dmrs_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_discarded_managed_result_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/dmrs_aarch64
 	tools/assert_no_leak.sh aarch64/interface_result_temp 50 tools/run_target.sh aarch64 $(TESTTMP)/irts_aarch64
 	tools/assert_no_leak.sh x86-64/interface_result_temp 50 $(TESTTMP)/irts_aarch64_x64
 	@# Dyn-array seam. NO i386 SIBLING for this one, deliberately: i386 refuses
@@ -29386,6 +29411,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_to_pointer_seam_leaks.pas $(TESTTMP)/dtps_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_to_pointer_seam_leaks.pas $(TESTTMP)/dtps_aarch64_x64
 	tools/expect_same.sh aarch64/test_dynarray_to_pointer_seam_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dtps_aarch64)" "$$($(TESTTMP)/dtps_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_dynarray_to_pointer_seam_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/dtps_aarch64
 	tools/assert_no_leak.sh aarch64/dynarray_to_pointer_seam 50 tools/run_target.sh aarch64 $(TESTTMP)/dtps_aarch64
 	tools/assert_no_leak.sh x86-64/dynarray_to_pointer_seam 50 $(TESTTMP)/dtps_aarch64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -29399,6 +29425,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_exception_object_leaks.pas $(TESTTMP)/teol_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_aarch64_x64
 	tools/expect_same.sh aarch64/test_exception_object_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64)" "$$($(TESTTMP)/teol_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/test_exception_object_leaks 200 tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64
 	tools/assert_no_leak.sh aarch64/exception_object 50 tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_aarch64_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
@@ -30312,15 +30339,18 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_string_index_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/tsic_rv32)" "$$($(TESTTMP)/tsic_rv32_x64)"
 	# Does a fresh managed string get RELEASED — the four-arm ownership
 	# predicate, which each backend used to hand-copy with two arms missing.
-	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
-	# identical across targets for one program, so a backend that stops
-	# releasing shows up as a differing frees=/live= against the x86-64 build
-	# of the same source. A missing arm leaks silently and prints nothing
-	# wrong, which is why both earlier instances were found by reading a heap
-	# number rather than by a test.
+	# -dPXX_ALLOC_CENSUS makes the runtime print allocation counters -- ON
+	# STDERR, which the expect_same row below never captures: that row checks
+	# the program's VALUES only, and for 24 days its comment said it caught a
+	# backend that stops releasing. It could not (xtensa's `F(i) <> 'lit'`
+	# leaked every compare past it). The census is also NOT identical across
+	# targets -- 32-bit backends allocate more temporaries -- so the leak check
+	# is the absolute one, assert_no_leak.sh on this target's own binary. A
+	# missing arm leaks silently and prints nothing wrong.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32_x64
 	tools/expect_same.sh riscv32/test_managed_str_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32)" "$$($(TESTTMP)/msol_rv32_x64)"
+	tools/assert_no_leak.sh riscv32/test_managed_str_ownership_leaks 200 tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32
 	# Aggregate / frozen-string result via a VIRTUAL and an INDIRECT call. Both
 	# paths Error()ed on this target until 2026-09-02, under a ticket whose title
 	# said "cross backends" and whose body named i386/arm32/aarch64 -- so this
@@ -30377,6 +30407,7 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_rv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_rv32_x64
 	tools/expect_same.sh riscv32/test_dynarray_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32)" "$$($(TESTTMP)/dao_rv32_x64)"
+	tools/assert_no_leak.sh riscv32/test_dynarray_ownership_leaks 200 tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32
 	./$(COMPILER) --target=riscv32 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_rv32
 	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_rv32_x64
 	tools/expect_same.sh riscv32/test_open_array_managed_field_record "$$(tools/run_target.sh riscv32 $(TESTTMP)/oamfr_rv32)" "$$($(TESTTMP)/oamfr_rv32_x64)"
@@ -30400,6 +30431,7 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_riscv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_riscv32_x64
 	tools/expect_same.sh riscv32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32)" "$$($(TESTTMP)/mdf_riscv32_x64)"
+	tools/assert_no_leak.sh riscv32/test_managed_dynarray_field_leaks 200 tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32
 	tools/assert_no_leak.sh riscv32/managed_dynarray_field 50 tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_riscv32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -30413,6 +30445,7 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_exception_object_leaks.pas $(TESTTMP)/teol_riscv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_riscv32_x64
 	tools/expect_same.sh riscv32/test_exception_object_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32)" "$$($(TESTTMP)/teol_riscv32_x64)"
+	tools/assert_no_leak.sh riscv32/test_exception_object_leaks 200 tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32
 	tools/assert_no_leak.sh riscv32/exception_object 50 tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_riscv32_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
@@ -31859,6 +31892,7 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_xt
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_xt_x64
 	tools/expect_same.sh xtensa/test_dynarray_ownership_leaks "$$(tools/run_target.sh xtensa $(TESTTMP)/dao_xt; echo "exit=$$?")" "$$($(TESTTMP)/dao_xt_x64; echo "exit=$$?")"
+	tools/assert_no_leak.sh xtensa/test_dynarray_ownership_leaks 200 tools/run_target.sh xtensa $(TESTTMP)/dao_xt
 	# THE EPILOGUE CALL EVERY EXIT PATH MAKES, deliberately WITHOUT
 	# --xtensa-long-calls. EmitProgramEpilogue emits the __pxx_run_finalizers
 	# body last while every exit path forward-calls it, so its displacement is
@@ -32254,15 +32288,18 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_string_index_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/tsic_xt)" "$$($(TESTTMP)/tsic_xt_x64)"
 	# Does a fresh managed string get RELEASED — the four-arm ownership
 	# predicate, which each backend used to hand-copy with two arms missing.
-	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
-	# identical across targets for one program, so a backend that stops
-	# releasing shows up as a differing frees=/live= against the x86-64 build
-	# of the same source. A missing arm leaks silently and prints nothing
-	# wrong, which is why both earlier instances were found by reading a heap
-	# number rather than by a test.
+	# -dPXX_ALLOC_CENSUS makes the runtime print allocation counters -- ON
+	# STDERR, which the expect_same row below never captures: that row checks
+	# the program's VALUES only, and for 24 days its comment said it caught a
+	# backend that stops releasing. It could not (xtensa's `F(i) <> 'lit'`
+	# leaked every compare past it). The census is also NOT identical across
+	# targets -- 32-bit backends allocate more temporaries -- so the leak check
+	# is the absolute one, assert_no_leak.sh on this target's own binary. A
+	# missing arm leaks silently and prints nothing wrong.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt_x64
 	tools/expect_same.sh xtensa/test_managed_str_ownership_leaks "$$(tools/run_target.sh xtensa $(TESTTMP)/msol_xt)" "$$($(TESTTMP)/msol_xt_x64)"
+	tools/assert_no_leak.sh xtensa/test_managed_str_ownership_leaks 200 tools/run_target.sh xtensa $(TESTTMP)/msol_xt
 	# A VIRTUAL CALL WHOSE RESULT IS USED MUST RUN ONCE. This is the row that
 	# would have caught it: xtensa emitted IR_VIRTUAL_CALL at statement level
 	# (the walker's `else` catch-all) AND again from the parent consuming the
@@ -33258,15 +33295,18 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_string_index_cow "$$(tools/run_target.sh arm32 $(TESTTMP)/tsic_a32)" "$$($(TESTTMP)/tsic_a32_x64)"
 	# Does a fresh managed string get RELEASED — the four-arm ownership
 	# predicate, which each backend used to hand-copy with two arms missing.
-	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
-	# identical across targets for one program, so a backend that stops
-	# releasing shows up as a differing frees=/live= against the x86-64 build
-	# of the same source. A missing arm leaks silently and prints nothing
-	# wrong, which is why both earlier instances were found by reading a heap
-	# number rather than by a test.
+	# -dPXX_ALLOC_CENSUS makes the runtime print allocation counters -- ON
+	# STDERR, which the expect_same row below never captures: that row checks
+	# the program's VALUES only, and for 24 days its comment said it caught a
+	# backend that stops releasing. It could not (xtensa's `F(i) <> 'lit'`
+	# leaked every compare past it). The census is also NOT identical across
+	# targets -- 32-bit backends allocate more temporaries -- so the leak check
+	# is the absolute one, assert_no_leak.sh on this target's own binary. A
+	# missing arm leaks silently and prints nothing wrong.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32_x64
 	tools/expect_same.sh arm32/test_managed_str_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/msol_a32; echo "exit=$$?")" "$$($(TESTTMP)/msol_a32_x64; echo "exit=$$?")"
+	tools/assert_no_leak.sh arm32/test_managed_str_ownership_leaks 200 tools/run_target.sh arm32 $(TESTTMP)/msol_a32
 	./$(COMPILER) --target=arm32 --platform=posix test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_a32
 	tools/expect_same.sh arm32/test_virtual_call_runs_once "$$(tools/run_target.sh arm32 $(TESTTMP)/vcro_a32)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=arm32 --platform=posix test/test_dynarray_result.pas $(TESTTMP)/dynres_a32
@@ -33295,6 +33335,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32_x64
 	tools/expect_same.sh arm32/test_dynarray_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/dao_a32; echo "exit=$$?")" "$$($(TESTTMP)/dao_a32_x64; echo "exit=$$?")"
+	tools/assert_no_leak.sh arm32/test_dynarray_ownership_leaks 200 tools/run_target.sh arm32 $(TESTTMP)/dao_a32
 	./$(COMPILER) --target=arm32 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a32
 	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a32_x64
 	tools/expect_same.sh arm32/test_open_array_managed_field_record "$$(tools/run_target.sh arm32 $(TESTTMP)/oamfr_a32; echo "exit=$$?")" "$$($(TESTTMP)/oamfr_a32_x64; echo "exit=$$?")"
@@ -33318,6 +33359,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32_x64
 	tools/expect_same.sh arm32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32; echo "exit=$$?")" "$$($(TESTTMP)/mdf_arm32_x64; echo "exit=$$?")"
+	tools/assert_no_leak.sh arm32/test_managed_dynarray_field_leaks 200 tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32
 	tools/assert_no_leak.sh arm32/managed_dynarray_field 50 tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_arm32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -33334,6 +33376,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32_x64
 	tools/expect_same.sh arm32/test_exception_object_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/teol_arm32; echo "exit=$$?")" "$$($(TESTTMP)/teol_arm32_x64; echo "exit=$$?")"
+	tools/assert_no_leak.sh arm32/test_exception_object_leaks 200 tools/run_target.sh arm32 $(TESTTMP)/teol_arm32
 	tools/assert_no_leak.sh arm32/exception_object 50 tools/run_target.sh arm32 $(TESTTMP)/teol_arm32
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_arm32_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already

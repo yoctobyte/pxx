@@ -3040,14 +3040,20 @@ begin
             xtensa_mov(reg_xtensa_a5, r4);              { a5=srcB }
             EmitCallProc(procIdx);                           { result a2 }
           end;
-          { release fresh tyAnsiString BINOP operand temporaries }
+          { Release fresh tyAnsiString operands through the ONE predicate,
+            IRNodeOwnsManagedStr, as the concat arm above and riscv32's compare
+            do. This tested `IRKind = IR_BINOP` -- the concat arm's old narrow
+            copy, fixed there on 2026-09-01 and left here -- so `F(4) <> 'soak'`
+            never released F's result: xtensa allocs=921 frees=0 over 1000
+            compares, every other backend frees=920 (frankh-95, S3 board: 44
+            B/iter). }
           XtensaPushA2;                                 { slot 2 = result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');

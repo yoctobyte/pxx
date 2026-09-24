@@ -9,11 +9,15 @@
   runs. Both bugs found before this test existed were caught by somebody reading
   a heap number, never by a test (see the ticket).
 
-  HOW THIS FAILS. Compiled with -dPXX_ALLOC_CENSUS, the runtime prints exact
-  allocation counters, and they are IDENTICAL across targets for the same
-  program. The make rows therefore compare this program's census output against
-  the x86-64 build of the same source -- so a backend that stops releasing shows
-  up as a differing `frees=` and `live=`, with no .expected to drift.
+  HOW THIS FAILS. Compiled with -dPXX_ALLOC_CENSUS, the runtime prints
+  allocation counters ON STDERR. Each target's make rows run tools/
+  assert_no_leak.sh on that target's own binary, which reads the last census
+  line and fails on a retained `live=`. The expect_same row beside it compares
+  STDOUT against the x86-64 build: the values, not the census. Until
+  2026-09-25 this header said the census itself was compared and was
+  identical across targets. Neither was true: the rows captured stdout only,
+  and 32-bit backends allocate more temporaries, so the totals differ with no
+  leak. The xtensa compare arm below leaked past every row as a result.
 
   MEASURED when it was written (2026-09-01): before the fix, `s := fp(i)` over
   4000 iterations gave `frees=0 live=3799` on i386, arm32, aarch64, riscv32 AND
@@ -64,4 +68,21 @@ begin
   for i := 1 to 2000 do
     k := k + Length(MakeStr(i));
   Writeln('discarded k=', k);
+
+  { the COMPARE arm: a fresh result as an operand of =, <>, < -- on either
+    side, and against another fresh result. xtensa's compare asked
+    `IRKind = IR_BINOP` instead of IRNodeOwnsManagedStr, so a CALL operand was
+    never released: `F(4) <> 'soak'` gave xtensa frees=0 over 1000 compares
+    against frees=920 on every other backend (found on the S3 board, 44
+    B/iteration). The concat arm above had been fixed for the same narrow
+    copy on 2026-09-01; this is its sibling. }
+  k := 0;
+  for i := 1 to 2000 do
+  begin
+    if MakeStr(i) <> 'soak' then k := k + 1;
+    if 'a' = MakeStr(i) then k := k + 1;
+    if MakeStr(i) < 'b' then k := k + 1;
+    if MakeStr(i) = MakeStr(i) then k := k + 1;
+  end;
+  Writeln('compare k=', k);
 end.

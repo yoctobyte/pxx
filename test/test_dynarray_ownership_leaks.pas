@@ -21,10 +21,12 @@
   expression leaked or did not purely by how the callee was reached
   (bug-a-an-indirect-call-returning-a-dynamic-array-leaks-every-allocation-on-every-backend).
 
-  HOW THIS FAILS. Built -dPXX_ALLOC_CENSUS the runtime prints exact allocation
-  counters, identical across targets for one program, so the make rows compare
-  each target against the x86-64 build of the same source. That catches a
-  backend that DIVERGES. It is blind by construction to a leak every backend
+  HOW THIS FAILS. Built -dPXX_ALLOC_CENSUS the runtime prints allocation
+  counters ON STDERR, and the cross-target expect_same rows capture STDOUT --
+  they compare VALUES against the x86-64 build and never saw the census (the
+  totals are not identical across targets anyway: 32-bit backends allocate
+  more temporaries). Each target now also runs tools/assert_no_leak.sh on its
+  own binary, which is the check that sees a backend that DIVERGES. It is blind by construction to a leak every backend
   SHARES -- and this bug was exactly that, x86-64 included -- so every row is
   paired with tools/assert_no_leak.sh, which is the absolute check. A
   differential alone would have compared two equally wrong numbers and passed.
