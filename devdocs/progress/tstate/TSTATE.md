@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `44179a5d818b` | 2026-09-24T22:43:00Z | RED (native) | 334.5s | `aef4ee1310f9` RED |
+| borg | `f61b926d210a` | 2026-09-24T23:08:34Z | RED (native) | 342.1s | `aef4ee1310f9` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -30,4 +30,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 ## Open regressions
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **test-emit-obj#src:test/c_threadsafe_object_offset_zero.c@2** — test/c_threadsafe_object_offset_zero.c test/c_threadsafe_object_offset_zero_main.c +17 (borg): bad `aef4ee1310f9`, last good `f88e0ea1f464`, 2 commit(s) in range
-- **test-threads#src:test/test_clone_entry_with_a_hidden_result.pas** — test/test_clone_entry_with_a_hidden_result.pas tools/expect_same.sh +1 (borg): bad `9c14efd7b84a`, last good `594cb89d4916`, 3 commit(s) in range
+- **test-core#src:test/c_unclosed_global_init_fail.c** — test/c_unclosed_global_init_fail.c test/c_unclosed_ptr_array_init_fail.c +3 (borg): bad `f61b926d210a`, last good `44179a5d818b`, 3 commit(s) in range
