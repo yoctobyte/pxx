@@ -12,10 +12,9 @@ rm -f main/main.o main/libpxx_app.a
 "$PXX" --target=xtensa --xtensa-abi=windowed --platform=esp main/main.pas main/main.o
 xtensa-esp32s3-elf-ar rcs main/libpxx_app.a main/main.o
 
-# ninja does not see inside the prebuilt archive, so drop the image to force
-# a relink.
+# The archive is a dependency of the .elf, so ninja relinks on its own when
+# it changes, without regenerating sections.ld (see main/CMakeLists.txt).
 if [ -f build/build.ninja ]; then
-  rm -f build/pxx_rgb_s3.elf build/pxx_rgb_s3.bin
   ninja -C build
 else
   idf.py set-target esp32s3

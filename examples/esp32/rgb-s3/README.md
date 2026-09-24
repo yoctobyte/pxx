@@ -13,6 +13,11 @@ both. Edit `pins[]` in `main/main.pas` if your board has only one of them.
 tools/esp_flash.sh --project examples/esp32/rgb-s3 --no-verify   # from the repo root
 ```
 
+If the board has two USB connectors, use the USB-UART bridge one (here a
+CH343, `1a86:55d3`): it stays connected through a chip reset, and its DTR/RTS
+lines drive EN/BOOT, so flashing and reading output work without the gaps the
+chip's own USB port has (below).
+
 Expected serial output:
 
 ```
@@ -34,3 +39,22 @@ gap reads nothing, and `esp_flash.sh` reports "the board said nothing". Devkits
 with a second USB connector (a USB-UART bridge on UART0, GPIO43/44, the
 primary console) show the same output on `/dev/ttyUSB*`, and that port stays
 connected through a chip reset.
+
+## Edit-compile-upload loop, measured 2026-09-24
+
+Pinned pxx, IDF v6.0.1, CH343 port, busy 12-core host. Min of 5 (compile,
+link) or 3 (upload, full chain):
+
+| stage | time |
+|---|---|
+| pxx compile `main.pas` + `ar` | 0.38 s |
+| IDF relink (`.elf` + `.bin`) | 2.2 s |
+| upload bootloader + table + app @ 921600 | 4.5 s |
+| **full chain, compile start to upload done** | **7.1 s** |
+
+Before `main/CMakeLists.txt` switched to a non-global imported target, the
+full chain took 25.0 s. Each recompile made IDF's ldgen regenerate
+`sections.ld`, and ldgen spent ~18 s using pyparsing to re-read 63 IDF
+fragment files and the section tables of 17 IDF archives. None of those are
+our archive, and the output was byte-identical every time. Upload is mostly
+fixed cost: going from 921600 to 2000000 baud saves about 0.1 s.
