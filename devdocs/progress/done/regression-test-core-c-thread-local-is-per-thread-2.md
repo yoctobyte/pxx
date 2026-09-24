@@ -42,4 +42,4 @@ takes it from the repro line.*
 The edfcc2c0d4 author. The failing step was an OLD assertion that the refusal still
 happens; fixed against what the tree does now and checked by hand against the
 edfcc2c0d4 binary (ffae15b05785): both rows PASS.
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a34ce5e04.
