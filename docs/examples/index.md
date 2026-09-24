@@ -357,12 +357,30 @@ Kees 24
 total 59 3
 ```
 
-Some examples are not in the table because they were not verified for this
-page. `adc-s3`, `adc-c3`, `gpio-edge-s3` and `gpio-edge-c3` build and boot
-under QEMU but cannot pass there, because the emulator delivers no ADC
-readings or GPIO edges. `rgb-s3`, `wifi-ap-s3` and `hello-s2` were not run.
-These need a board; `tools/esp_flash.sh --project examples/esp32/<name>`
-builds, flashes and checks one.
+### On a real ESP32-S3
+
+Separately from the QEMU runs above, the ESP lane flashed eight examples to an
+ESP32-S3 board. That run used a development compiler (binary sha256
+`bb17d23beea5`, tree `54a8835dd`), not pin v423.
+
+| Example | Language | Result on the board |
+| --- | --- | --- |
+| nilpy-s3, nilpy-hw-s3 | Python | output matches `main.expected` |
+| gpio-edge-s3 | Pascal | output matches `main.expected`: real input edges, which QEMU cannot deliver |
+| adc-s3 | Pascal | output matches `main.expected`: real ADC readings |
+| hello-s3, timer-s3, rgb-s3 | Pascal | run as intended, checked by eye (no `main.expected`) |
+| wifi-ap-s3 | Pascal | starts the access point and reaches `HTTP server listening on port 80`; no client connected during the test |
+
+**These are single runs, not long ones.** The same examples looped for minutes
+showed the Python programs leaking memory on every run (`adc-s3` ran out of
+memory after about twelve runs). The causes are known and a fix is being
+landed. Until then, do not treat the Python examples as safe for long-running
+use. The Pascal `rgb-s3` stayed flat over the same test.
+
+Still unverified: `adc-c3` and `gpio-edge-c3`, because there was no C3 board
+and QEMU delivers no ADC readings or GPIO edges; and `hello-s2`, which builds
+but has not been run. `tools/esp_flash.sh --project examples/esp32/<name>`
+builds, flashes and checks an example on a board.
 
 ## Real C programs
 

@@ -85,16 +85,22 @@ A **refusal** is a compile-time error that names the reason, for example
 ## ESP32
 
 PXX builds bare-metal and ESP-IDF images for esp32s3 (xtensa) and esp32c3
-(riscv32), in Pascal and in Nil Python.
+(riscv32), from Pascal, C and Nil Python.
 
-- **Conformance:** 219/0/1 on esp32s3 under Espressif's QEMU, as reported by
-  the ESP lane. *(Placeholder: the column meanings and the command that
-  produced the figure are to be filled in from the ESP lane.)*
+- **C conformance:** 219 pass, 0 fail, 1 skip out of the 220 single-program
+  tests of c-testsuite, compiled for esp32s3 and run under Espressif's QEMU
+  (`tools/run_c_conformance_esp.sh --chip esp32s3`). The skip is `00187.c`,
+  which needs a writable file system the test image does not mount. This was
+  measured with a development compiler (binary sha256 `9bcd11d46816`, tree
+  `e1648bcb4`) that predates v423, not with v423 itself.
 - **Examples:** 15 programs in `examples/esp32/` run under QEMU on this pin and
   are listed in the [showcase](../examples/#esp32).
-- **Not verified in QEMU:** programs that need real hardware input (GPIO edges,
-  ADC readings, Wi-Fi). QEMU delivers none, so those examples have been tested
-  on boards only, not here.
+- **On a board:** eight examples, including the GPIO-edge and ADC programs
+  that QEMU cannot exercise, ran correctly on a physical ESP32-S3, built with a
+  development compiler rather than v423. Looped for minutes, the Nil Python
+  examples leak memory on every run. A fix is being landed; until it is in,
+  treat Nil Python on ESP as fine for short runs and not yet for long-running
+  use. The details are in the [showcase](../examples/#on-a-real-esp32-s3).
 
 ESP is not a Unix: FreeRTOS provides tasks, not processes. Calls with POSIX
 shapes that have no meaning there return an explicit "unsupported" error rather
