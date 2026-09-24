@@ -1162,3 +1162,16 @@ before committing to either.
 
 Tuning the harness is Track T's file, so this is a note for whoever picks that
 up rather than work claimed here.
+
+### Sitting 2026-09-24 (frankS): seeds 800000..800199, default `--opts 0,2`, x86-64, NULL
+
+```
+tools/csmith_fuzz.py --iters 200 --seed-start 800000
+  173/200 agreed with the gcc oracle  (27 skipped)
+  no findings
+```
+
+Compiler sha256 `ec3d2325ef7b` at `24972bb055`. That tree has the C tag
+block-scoping, the incomplete-type refusal and the file-scope declarator-list
+fix. This was a dry run on the default axis, so the next sitting should spend
+seeds on an untried axis rather than on 800000..800199 again.
