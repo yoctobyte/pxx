@@ -354,6 +354,59 @@ end;
   chains through ASTRight, so a thousand-statement arm is a thousand-deep walk;
   exhausting the budget answers TRUE -- keep the arm -- because a guard that
   runs out of room must fail toward emitting code, never toward deleting it. }
+{ Does the subtree READ symbol `sym` as a plain name (AN_IDENT)? Used by the
+  counted-for bound check: `for n := 1 to N` where a local `n` shadows a global
+  `const N` -- Pascal is case-insensitive, so the bound is the counter itself,
+  read before the loop assigns it. FPC and pxx both compile it and both run the
+  loop to whatever the counter held; examples/parallel/collatz.pas shipped it
+  and printed `total steps = 0`. THE BUDGET FAILS TOWARD FALSE, the opposite of
+  ASTSubtreeHasLabel's: this feeds a WARNING, and a guard that runs out of room
+  must stay silent rather than invent one. }
+function ASTSubtreeReadsSym(node, sym: Integer; var budget: Integer): Boolean;
+begin
+  ASTSubtreeReadsSym := False;
+  if (node < 0) or (sym < 0) then Exit;
+  if budget <= 0 then Exit;
+  Dec(budget);
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] = sym) then
+  begin
+    ASTSubtreeReadsSym := True;
+    Exit;
+  end;
+  if ASTSubtreeReadsSym(ASTChildLeft(node), sym, budget) then
+  begin
+    ASTSubtreeReadsSym := True;
+    Exit;
+  end;
+  ASTSubtreeReadsSym := ASTSubtreeReadsSym(ASTChildRight(node), sym, budget);
+end;
+
+{ The warning itself, shared by `for` and `parallel for` so the two spellings
+  of one loop cannot drift apart.
+  ONLY THE SHADOW SHAPE WARNS. `for i := i to n` on a counter that already
+  holds a value is legal and sometimes meant; what is never meant is a bound
+  that names an OUTER symbol and gets the counter because the counter's name
+  hides it. So the warning needs a second symbol of the same name. }
+procedure WarnIfForBoundReadsCounter(varIdx, boundNode: Integer; const which: AnsiString);
+var budget, k: Integer; shadowed: Boolean;
+begin
+  if (varIdx < 0) or (varIdx >= SymCount) then Exit;
+  budget := 4096;
+  if not ASTSubtreeReadsSym(boundNode, varIdx, budget) then Exit;
+  shadowed := False;
+  for k := 0 to SymCount - 1 do
+    if (k <> varIdx) and CaseEqual(Syms[k].Name, Syms[varIdx].Name) then
+    begin
+      shadowed := True;
+      Break;
+    end;
+  if shadowed then
+    Warn('the ' + which + ' bound of this for loop reads the loop counter `'
+         + Syms[varIdx].Name + '` itself, before the loop assigns it: the '
+         + 'counter hides an outer symbol spelled the same (Pascal is '
+         + 'case-insensitive), e.g. a `const N` -- rename one of them');
+end;
+
 function ASTSubtreeHasLabel(node: Integer; var budget: Integer): Boolean;
 begin
   ASTSubtreeHasLabel := False;

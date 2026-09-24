@@ -46,15 +46,19 @@ end;
 { Sum Collatz(n) over [1..N] under a chosen distribution / worker count.
   The reduction variable is an ENCLOSING LOCAL (globals are not captured);
   the total is returned via an out param. }
+{ The counter is `k`, NOT `n`: Pascal is case-insensitive, so a local `n`
+  hides `const N` and `for n := 1 to N` reads the (unassigned) counter as its
+  own bound. This file shipped exactly that and printed `total steps = 0`;
+  the compiler now warns on the shape. }
 procedure SumSteps(useOnDemand, forceSerial: Boolean; var oTot: Int64);
-var n: Integer; lTot: Int64;
+var k: Integer; lTot: Int64;
 begin
   lTot := 0;
   if forceSerial then PXXSetParForWorkers(1);
   if useOnDemand then
-    parallel(pdOnDemand) for n := 1 to N reduction(+: lTot) do lTot := lTot + Collatz(n)
+    parallel(pdOnDemand) for k := 1 to N reduction(+: lTot) do lTot := lTot + Collatz(k)
   else
-    parallel(pdChunked) for n := 1 to N reduction(+: lTot) do lTot := lTot + Collatz(n);
+    parallel(pdChunked) for k := 1 to N reduction(+: lTot) do lTot := lTot + Collatz(k);
   if forceSerial then PXXSetParForWorkers(0);
   oTot := lTot;
 end;
@@ -78,6 +82,12 @@ begin
   writeln('pdChunked  : ', usChunked, ' us   speedup ', (usSerial * 100) div usChunked, ' /100x');
   writeln('pdOnDemand : ', usOnDemand, ' us   speedup ', (usSerial * 100) div usOnDemand, ' /100x');
 
+  { A zero total is a loop that never ran, and three zeros AGREE -- which is
+    how this file printed ALL AGREE over `total steps = 0`. }
+  if totSerial <= 0 then
+  begin
+    writeln('EMPTY — the loop ran no iterations (BUG)'); Halt(1);
+  end;
   if (totChunked = totSerial) and (totOnDemand = totSerial) then
     writeln('ALL AGREE — every distribution gives the identical sum')
   else begin

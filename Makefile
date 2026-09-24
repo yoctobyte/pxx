@@ -22784,6 +22784,13 @@ test-core: $(COMPILER)
 	grep -q "warning: bare own name 'Count' reads the result of parameterless function Count" $(TESTTMP)/test_warn_self_result.log
 	! ./$(COMPILER) --warn-self-result -Werror test/test_warn_self_result.pas $(TESTTMP)/test_warn_self_result_werror26 > $(TESTTMP)/test_warn_self_result_werror.log 2>&1
 	grep -q "warning promoted by -Werror" $(TESTTMP)/test_warn_self_result_werror.log
+	# A for bound that reads its own counter because the counter HIDES an outer
+	# namesake (`var n` vs `const N`): exactly one warning, on the shadow line,
+	# none for the legit `for i := i to 5`. Values match fpc.
+	./$(COMPILER) test/test_for_bound_reads_a_counter_that_shadows_a_const.pas $(TESTTMP)/test_for_bound_shadow26 > $(TESTTMP)/test_for_bound_shadow.log 2>&1
+	tools/expect_same.sh test_for_bound_shadow_count "$$(grep -c 'reads the loop counter' $(TESTTMP)/test_for_bound_shadow.log)" "1"
+	grep -q "pascal26:15: warning: the end bound of this for loop reads the loop counter .n." $(TESTTMP)/test_for_bound_shadow.log
+	tools/expect_same.sh test_for_bound_shadow26 "$$($(TESTTMP)/test_for_bound_shadow26)" "$$(printf 'shadow 10\nlegit 12\nother 5050')"
 	# Oversized-stack-frame warning: 2MB local warns (default 1MB threshold), runs fine
 	./$(COMPILER) test/test_warn_stack_frame.pas $(TESTTMP)/test_warn_stack_frame26 > $(TESTTMP)/test_warn_stack_frame.log
 	grep -q "routine 'BigLocal' uses 2097152 bytes of stack frame" $(TESTTMP)/test_warn_stack_frame.log

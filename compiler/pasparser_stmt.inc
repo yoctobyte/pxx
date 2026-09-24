@@ -3772,6 +3772,8 @@ begin
   down := CurTok.Kind = tkDownto;
   if down then Next else Expect(tkTo, 'to');
   ParseExpr; limitNode := CurASTNode;
+  WarnIfForBoundReadsCounter(varIdx, initNode, 'start');
+  WarnIfForBoundReadsCounter(varIdx, limitNode, 'end');
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
 
@@ -5600,6 +5602,8 @@ begin
     Error('parallel for: `downto` not supported (iteration order is unspecified) — use `to`');
   Expect(tkTo, 'to');
   ParseExpr; hiNode := CurASTNode;
+  WarnIfForBoundReadsCounter(FindSym(Vname), loNode, 'start');
+  WarnIfForBoundReadsCounter(FindSym(Vname), hiNode, 'end');
 
   { optional `reduction(op: v, ...)` clause(s) between the range and `do`. Ops:
       + or xor  — private starts at identity 0, combined `v^ := v^ op partial`
