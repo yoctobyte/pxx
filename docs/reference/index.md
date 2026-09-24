@@ -17,6 +17,7 @@ Reference pages collect exact command-line and operational details.
 - [Compiler architecture](./architecture.md)
 - [Representation contract](./representation.md)
 - [Current limits](./limits.md)
+- [Known issues in beta 0.1](./known-issues.md)
 - [Licensing](./licensing.md)
 - [Glossary](./glossary.md)
 

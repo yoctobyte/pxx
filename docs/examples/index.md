@@ -328,7 +328,8 @@ board for this page. The prerequisite is the ESP-IDF toolchain
 | gpio-c3 | C3 | Pascal | `./build.sh qemu` | GPIO configuration runs. QEMU delivers no input edges, and the program reports exactly that |
 
 `tools/esp_run.sh` compiles with the in-tree compiler unless
-`ESP_RUN_PXX=stable_linux_amd64/default/pinned` is set. The `build.sh`
+`ESP_RUN_PXX="$PWD/stable_linux_amd64/default/pinned"` is set; the path must be
+absolute, because the script compiles from inside the ESP-IDF project. The `build.sh`
 scripts default to the pinned compiler.
 
 The Python program from `nilpy-s3` is ordinary Python:

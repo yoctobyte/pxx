@@ -113,50 +113,22 @@ until it lands, see [ESP32](../targets/esp32.md).
 
 ## Known issues
 
-These lists are measured, not recalled. The Pascal/C lane ran every row on
-2026-09-24, and the desktop Pascal and C rows were re-run on v424 on
-2026-09-25. The two ESP rows have not been re-run since v423. Rows that
-**compile and silently give a wrong answer** come first, because a refusal at
-least tells you something is wrong.
+The full list, each row re-run on v424, is on its own page:
+[Known issues in beta 0.1](../reference/known-issues.md). In short:
 
-### Silently wrong
-
-- **Pascal, every target:** a record type named like one of fourteen
-  compiler-internal records (`TProc` and `TSymbol` among them) silently takes
-  the compiler's layout: `SizeOf` is 1344 where it should be 800. *Workaround:*
-  rename the type.
-- **C, every target:** `long double` is 8 bytes; GCC's is 16. A single program
-  is self-consistent, but a struct containing one has a different size from
-  GCC's (`struct { char c; long double y; }` is 16 bytes here, 32 under GCC).
-  This matters as soon as such a struct crosses into GCC-compiled code or a
-  file format.
-- **C, threaded targets:** an **initialised** `__thread` variable reads 0 in
-  every thread except the main one. *Workaround:* assign the value at the start
-  of each thread.
-- **ESP (esp32c3, esp32s3):** an uncaught exception does not report itself.
-  esp32c3 reboots in a loop; esp32s3 stops with no message. *Workaround:*
-  catch exceptions at the top of the program.
-- **ESP:** `Trunc` of an out-of-range float wraps when stored into a 32-bit
-  integer (`Trunc(1e30)` gives -1) but saturates when stored into an `Int64`.
-
-### Refused, with a message that names the problem
-
-- Pascal `threadvar` on i386.
-- C `__thread` on i386 and riscv32 compiles with a warning that every thread
-  shares one copy. Single-threaded code is unaffected.
-- C `setvbuf` with full or line buffering returns nonzero: PXX's C streams are
-  unbuffered, and the call says so instead of claiming success.
-- Integer division by zero on a desktop target is runtime error 200, as in FPC.
-  On ESP it gives 0 and the program continues, by design.
-
-### Nil Python
-
-Nil Python is Python-ish and known to have plenty of issues. Its measured list
-is kept in one place, [Known limits](../targets/nil-python.md#known-limits) on the
-Nil Python page. That list includes silent wrong answers. For example, an `-> int` result
-wraps at 64 bits, and `hex()` of an int wider than 64 bits is wrong (both
-confirmed on v424). The same page records the deliberate differences from
-CPython; a difference not recorded there is a bug.
+- A few programs compile and silently give a wrong answer. Examples: a Pascal
+  record named like a compiler-internal type (`TProc`) gets the wrong size; C
+  `long double` is 8 bytes, not GCC's 16; an initialised C `__thread` variable
+  reads 0 outside the main thread; on ESP, an uncaught exception reboots or
+  stops the chip without a message.
+- Two problems are fixed in the development tree but not in v424: libc `printf`
+  output lost at exit, and a string leak in `writeln` of a function result.
+  Each has a workaround until the next pin.
+- Integer division by zero gives 0 on ESP and stops the program on desktop.
+  That is by design: an embedded device keeps running.
+- Nil Python is Python-ish at best and known to have plenty of issues; its
+  measured limits are on the
+  [Nil Python page](../targets/nil-python.md#known-limits).
 
 ## Reporting bugs
 
