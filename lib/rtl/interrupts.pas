@@ -81,10 +81,6 @@ unit interrupts;
   loop ends when the last source closes, e.g. a handler that calls
   adc.stop(), and the program then ends normally. }
 
-{$ifdef PXX_NILPY_STR}{$define PXX_NILPY}{$endif}   { PIN BRIDGE: the pinned compiler
-  predates PXX_NILPY but sets PXX_NILPY_STR for exactly the same compilations,
-  so a NilPy demo built with $(PXX_STABLE) keeps this unit's Python surface.
-  Delete this line once a pin carries PXX_NILPY (compiler.pas, fc3cce1eb). }
 interface
 
 {$ifdef PXX_NILPY}
