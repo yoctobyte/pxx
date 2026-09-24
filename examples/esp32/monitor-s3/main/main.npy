@@ -74,7 +74,6 @@ def main():
     print("adc start", adc.start(ADC_CHANNEL, SAMPLE_HZ))
 
     history = []
-    heap0 = sys.free_heap()
     for tick in range(1, REPORTS + 1):
         time.sleep(1)
         stats = summarize(collect())
@@ -93,7 +92,9 @@ def main():
               f" trend {trend:7s} frames {state['frames']} free {sys.free_heap()}")
 
     adc.stop()
-    print(f"done: history {history}, heap change {sys.free_heap() - heap0} bytes")
+    # Not "free now minus free at start": the first report allocates what
+    # the loop reuses from then on, so that difference is warm-up, not a leak.
+    print(f"done: history {history}, free {sys.free_heap()}, lowest since boot {sys.min_free_heap()}")
     print("main() returned; press BOOT, the hidden loop is still serving it")
 
 
