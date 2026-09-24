@@ -1,0 +1,67 @@
+# min/max/sum/any/all/sorted/next over an UNANNOTATED parameter -- a Variant
+# holding a list -- used to leak one full copy of the list per call: the
+# runtime copies the list to iterate it and never released the copy. On an
+# ESP32-S3 that was 4168 bytes per min(s) of 256 ints, and a sampling loop
+# rebooted the chip. The Makefile row runs this under the allocation census
+# with a bound, and under PXX_HEAP_DEBUG: the result of min/max/next is an
+# ELEMENT of the released copy, so a result that was not retained would be
+# freed memory here.
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+    def __lt__(self, o):
+        return self.v < o.v
+
+    def __gt__(self, o):
+        return self.v > o.v
+
+
+def agg(s, n):
+    t = 0
+    for r in range(n):
+        t = t + min(s) + max(s) + sum(s) + sum(s, 1)
+        if any(s) and all(s):
+            t = t + 1
+        t = t + sorted(s)[0] + next(iter(s))
+    return t
+
+
+def objs(s, n):
+    best = None
+    for r in range(n):
+        lo = min(s)
+        hi = max(s)
+        best = sorted(s)[-1]
+    return lo.v + hi.v + best.v
+
+
+# The lists come back from UNANNOTATED functions, as a sampling loop's do:
+# a list built in main and passed straight in lets the call-site typer give
+# the parameter a native list type, and then the leaking Variant path is never
+# reached -- measured, that version of this fixture passed on the old runtime.
+def ints():
+    s = []
+    for i in range(256):
+        s.append(3000 + i)
+    return s
+
+
+def points():
+    ps = []
+    for i in range(64):
+        ps.append(P(i * 7 % 64))
+    return ps
+
+
+def main():
+    s = ints()
+    print(agg(s, 2000))
+    ps = points()
+    print(objs(ps, 2000))
+    print(min([5, 3, 9]), max(s), sum([]), any([]), all([]))
+
+
+main()

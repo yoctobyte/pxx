@@ -8686,7 +8686,7 @@ begin
 end;
 
 function pynext_v(const v: Variant): Variant;
-var o: TObject;
+var o: TObject; l: TPyList;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -8701,11 +8701,17 @@ begin
       Exit;
     end;
   end;
-  pynext_v := pynext_first(pylist_v(v));
+  { a fresh copy -- released for the reason given in max(const v: Variant) }
+  l := pylist_v(v);
+  try
+    pynext_v := pynext_first(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function pynext_or_v(const v: Variant; const dflt: Variant): Variant;
-var o: TObject;
+var o: TObject; l: TPyList;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -8716,7 +8722,12 @@ begin
       Exit;
     end;
   end;
-  pynext_or_v := pynext_first_or(pylist_v(v), dflt);
+  l := pylist_v(v);
+  try
+    pynext_or_v := pynext_first_or(l, dflt);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 { Is every element of this list a plain int/bool/float, with at least one
@@ -8853,9 +8864,20 @@ begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('max() argument is not iterable');
   l := pylist_v(v);
-  if (l = nil) or (l.count = 0) then
-    raise ValueError.Create('max() iterable argument is empty');
-  Result := PyExtremeOfList(l, True);
+  { The list pylist_v answers is a FRESH COPY for every input (see the note in
+    pyset_of): a Pascal local does not take part in refcounting, so it is
+    released here. Without it every min/max/sum/any/all/next over a VARIANT --
+    an unannotated parameter holding a list -- leaked one full copy per call:
+    measured 2026-09-24, 4168 bytes per min(s) for 256 ints on an ESP32-S3
+    (esp_get_free_heap_size under qemu), ~2 blocks per call under the x86-64
+    census. }
+  try
+    if (l = nil) or (l.count = 0) then
+      raise ValueError.Create('max() iterable argument is empty');
+    Result := PyExtremeOfList(l, True);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function min(const v: Variant): Variant; overload;
@@ -8864,9 +8886,14 @@ begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('min() argument is not iterable');
   l := pylist_v(v);
-  if (l = nil) or (l.count = 0) then
-    raise ValueError.Create('min() iterable argument is empty');
-  Result := PyExtremeOfList(l, False);
+  { a fresh copy -- released for the reason given in max above }
+  try
+    if (l = nil) or (l.count = 0) then
+      raise ValueError.Create('min() iterable argument is empty');
+    Result := PyExtremeOfList(l, False);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 
@@ -16290,24 +16317,50 @@ begin
   Result := all(pyiter_drain(it));
 end;
 
+{ Each of these releases the fresh copy pylist_v answers -- see max(const v:
+  Variant). }
 function sum(const v: Variant): Variant; overload;
+var l: TPyList;
 begin
-  Result := sum(pylist_v(v));
+  l := pylist_v(v);
+  try
+    Result := sum(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function sum(const v: Variant; const start: Variant): Variant; overload;
+var l: TPyList;
 begin
-  Result := sum(pylist_v(v), start);
+  l := pylist_v(v);
+  try
+    Result := sum(l, start);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function any(const v: Variant): Boolean; overload;
+var l: TPyList;
 begin
-  Result := any(pylist_v(v));
+  l := pylist_v(v);
+  try
+    Result := any(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function all(const v: Variant): Boolean; overload;
+var l: TPyList;
 begin
-  Result := all(pylist_v(v));
+  l := pylist_v(v);
+  try
+    Result := all(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 type

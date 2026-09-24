@@ -3389,6 +3389,14 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_genrelhd26 | diff -u test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.expected -
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_generator_releases_its_class_locals_when_exhausted.npy $(TESTTMP)/test_nilpy_genrelc26
 	tools/assert_no_leak.sh nilpy_generator_locals_released 200 $(TESTTMP)/test_nilpy_genrelc26
+	@# min/max/sum/any/all/sorted/next over a VARIANT list released none of the copies
+	@# they iterate: the old runtime leaves live=35934 here and fails the bound.
+	./$(COMPILER) test/test_nilpy_a_builtin_over_a_variant_list_releases_its_copy.npy $(TESTTMP)/test_nilpy_varagg26
+	$(TESTTMP)/test_nilpy_varagg26 | diff -u test/test_nilpy_a_builtin_over_a_variant_list_releases_its_copy.expected -
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_builtin_over_a_variant_list_releases_its_copy.npy $(TESTTMP)/test_nilpy_vagghd26
+	$(TESTTMP)/test_nilpy_vagghd26 | diff -u test/test_nilpy_a_builtin_over_a_variant_list_releases_its_copy.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_builtin_over_a_variant_list_releases_its_copy.npy $(TESTTMP)/test_nilpy_vaggc26
+	tools/assert_no_leak.sh nilpy_variant_list_builtins_release 300 $(TESTTMP)/test_nilpy_vaggc26
 	@# an ANNOTATED returned local keeps the def's class result. The values cannot
 	@# see it, so the row asserts the TYPE as a relation: b (annotated) and c
 	@# (annotated, from a nested def) must carry exactly what a (unannotated) does,
