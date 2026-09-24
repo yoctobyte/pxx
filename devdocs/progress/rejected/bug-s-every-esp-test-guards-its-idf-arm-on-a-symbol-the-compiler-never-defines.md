@@ -9,7 +9,7 @@ owner: ""
 created: 2026-09-24
 found-by: frank (frankb-8e, while writing an ifdef for the bare Str test and checking which symbol was real)
 blocked-by: []
-summary: "REJECTED BY ITS OWN AUTHOR 2026-09-24, SAME NIGHT, BEFORE ANYONE ACTED ON IT -- THERE IS NO DEFECT HERE AT ALL. The claim was that `PXX_ESP` is never defined so 36 test files guard a dead IDF arm. The first half is true of the COMPILER and irrelevant: all 36 files MINT PXX_ESP THEMSELVES at the top, `{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}` plus the CPU_RISCV32 twin, and CPU_XTENSA/CPU_RISCV32 ARE defined per target (verified independently). Re-probed on the REAL files rather than a synthetic one: the in-body arm is TAKEN on xtensa, riscv32 and esp32c3 bare and not on x86-64; the esp_rom_printf IDF-output arm is TAKEN on --emit-obj both with and without --platform=esp, and not on bare, and not on x86-64. Every arm resolves correctly on every profile. The `--emit-obj` half is not a trap either: PXX_ESP_IDF is live and correctly used by builtinheap, lib/rtl/dns.pas and dns_libc.pas, and dns.pas DOCUMENTS the --platform=esp condition and depends on it deliberately. WHY THE TICKET EXISTED, and it is this tree's own population rule with the author standing in the worked example: my probe file DID NOT CONTAIN THE SELF-DEFINE LINES that every real file carries, so it was correct about the compiler's built-in defines and STRUCTURALLY SILENT about the subject -- a population that cannot contain the thing being asked about. The probe technique (a deliberate syntax error inside the guarded arm, so the answer is a compiler diagnostic) is sound and is what resolved this in ten minutes; it was aimed at the wrong file. AND THE INSTRUMENT LESSON I ATTACHED TO IT IS ALSO WITHDRAWN, IN THE OPPOSITE DIRECTION FROM HOW I FILED IT: I reported that `strings -a <object> | grep esp_rom_printf` had INVERTED the answer. It had not -- `strings` was RIGHT both times. esp_rom_printf really is in the --emit-obj object, and renaming the guard to PXX_ESP_IDF really did remove it, because PXX_ESP_IDF needs --platform=esp which that invocation lacks. The artefact grep was correct and my synthetic compile-time probe was the wrong instrument, which is the exact reverse of what I told two peers. KEPT AS A CENSUS CORRECTION FOR ANYONE COUNTING THESE: whole-word is 36 files / 144 occurrences outside builtinheap; my filed 130 came from `grep 'PXX_ESP}'` with no -w, and franks-5b's first pass got 44/161 by substring-matching PXX_ESP_BARE. Three counts, one symbol, two grep hazards -- use -w and say so. NOTHING TO DO. Filed in rejected/ rather than deleted so the reasoning is reachable and so the next seat who notices that PXX_ESP is absent from paslexer.inc finds this instead of re-deriving it."
+summary: "REJECTED BY ITS OWN AUTHOR 2026-09-24, SAME NIGHT, BEFORE ANYONE ACTED ON IT -- THERE IS NO DEFECT HERE AT ALL. The claim was that `PXX_ESP` is never defined so 36 test files guard a dead IDF arm. The first half is true of the COMPILER and irrelevant: all 36 files MINT PXX_ESP THEMSELVES at the top, `{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}` plus the CPU_RISCV32 twin, and CPU_XTENSA/CPU_RISCV32 ARE defined per target (verified independently). Re-probed on the REAL files rather than a synthetic one: the in-body arm is TAKEN on xtensa, riscv32 and esp32c3 bare and not on x86-64; the esp_rom_printf IDF-output arm is TAKEN on --emit-obj both with and without --platform=esp, and not on bare, and not on x86-64. Every arm resolves correctly on every profile. The `--emit-obj` half is not a trap either: PXX_ESP_IDF is live and correctly used by builtinheap, lib/rtl/dns.pas and dns_libc.pas, and dns.pas DOCUMENTS the --platform=esp condition and depends on it deliberately. WHY THE TICKET EXISTED, and it is this tree's own population rule with the author standing in the worked example: my probe file DID NOT CONTAIN THE SELF-DEFINE LINES that every real file carries, so it was correct about the compiler's built-in defines and STRUCTURALLY SILENT about the subject -- a population that cannot contain the thing being asked about. The probe technique (a deliberate syntax error inside the guarded arm, so the answer is a compiler diagnostic) is sound and is what resolved this in ten minutes; it was aimed at the wrong file. AND THE INSTRUMENT LESSON I ATTACHED TO IT IS ALSO WITHDRAWN, IN THE OPPOSITE DIRECTION FROM HOW I FILED IT: I reported that `strings -a <object> | grep esp_rom_printf` had INVERTED the answer. It had not -- `strings` was RIGHT both times. esp_rom_printf really is in the --emit-obj object, and renaming the guard to PXX_ESP_IDF really did remove it, because PXX_ESP_IDF needs --platform=esp which that invocation lacks. The artefact grep was correct and my synthetic compile-time probe was the wrong instrument, which is the exact reverse of what I told two peers. KEPT AS A CENSUS CORRECTION, AND THE CORRECTION ITSELF WAS WRONG ONCE -- THE FIGURE IS 36 FILES / 131 OCCURRENCES, population test/ only, `grep -row PXX_ESP test/`, franks-5b's number, reproduced here. My own `144` is WITHDRAWN and decomposes into three compounded errors: it used population `.` rather than test/ so it swept in compiler/builtin/builtin.pas (7); it therefore ALSO swept in stable_linux_amd64/default/builtin/builtin.pas (7), which is the PIN SNAPSHOT of that same file, so a repo-wide census of any compiler-source symbol DOUBLE-COUNTS by construction; and my `grep -v builtinheap` filter matched a LINE'S TEXT rather than a path, silently eating one real test/ hit (test_esp_bare_variant.pas:6, a comment that mentions builtinheap.pas). 131 + 7 + 7 - 1 = 144. So FOUR counts now exist for one symbol: 130 (mine, no -w), 44/161 (5b's, substring-matching the different symbol PXX_ESP_BARE), 144 (mine, three errors above), 131 (correct). And note which lesson I drew wrongly the first time: I wrote `use -w and say so`, which was the fix for 5B'S error and not for MINE -- mine were the POPULATION and the FILTER, and -w would not have touched either. NOTHING TO DO. Filed in rejected/ rather than deleted so the reasoning is reachable and so the next seat who notices that PXX_ESP is absent from paslexer.inc finds this instead of re-deriving it."
 ---
 
 # Every ESP test guards its IDF arm on a symbol the compiler never defines
@@ -177,7 +177,55 @@ version in the playbook.
 | --- | --- | --- |
 | 130 occurrences | mine, `grep 'PXX_ESP}'` | no `-w`; missed occurrences not followed by `}` |
 | 44 files / 161 | 5b's first pass | substring-matched `PXX_ESP_BARE`, a different symbol |
-| **36 files / 144** | `grep -rnw`, minus builtinheap | the real figure |
+| ~~36 files / 144~~ | `grep -rnw ... .` minus builtinheap | **WITHDRAWN** — population `.` not test/, so it included compiler/builtin/builtin.pas AND its pin snapshot (the same file twice), minus one real hit the `-v builtinheap` filter ate from a comment |
+| **36 files / 131** | `grep -row PXX_ESP test/` | the figure, franks-5b's, reproduced at 37655f4bb5 |
 
 Two grep hazards, one symbol, two seats, inside an hour. Use `-w` and say that
 you did.
+
+## 2026-09-24 — the census correction was itself wrong, and the mechanism is worth more than the number
+
+franks-5b could not reproduce my `144` and said so with their population stated,
+which is what made it falsifiable in one command. **They are right: it is 131.**
+
+```
+grep -row PXX_ESP test/ | wc -l        ->  131   (36 files, 131 lines)
+```
+
+My `grep -rnw 'PXX_ESP' --include=*.pas . | grep -v builtinheap | wc -l` gave 144,
+and it decomposes exactly:
+
+| term | count | why it was in there |
+| --- | ---: | --- |
+| `test/` — the actual subject | 131 | correct |
+| `compiler/builtin/builtin.pas` | +7 | population was `.`, not `test/` |
+| `stable_linux_amd64/default/builtin/builtin.pas` | +7 | **the pin snapshot of the line above — the same file counted twice** |
+| the `-v builtinheap` filter | −1 | ate `test_esp_bare_variant.pas:6`, a comment mentioning `builtinheap.pas` |
+| | **144** | |
+
+### The two general points, which are why this is recorded at all
+
+**A repo-wide census of a compiler-source symbol DOUBLE-COUNTS, by
+construction.** `stable_linux_amd64/` is a snapshot of `compiler/builtin/`, so any
+`grep -r ... .` over this tree sees `builtin.pas` twice — and the two copies agree
+until a pin is cut, which is exactly when a re-run silently changes. Nothing about
+the command looks wrong, and the duplicate is a *correct* file in a *correct*
+location.
+
+**A `grep -v <name>` filter matches the LINE, not the PATH.** I meant "exclude
+builtinheap.pas" and wrote something that also excludes any line whose prose
+mentions it — in a tree where tickets and test headers cite filenames constantly.
+The filter removed a real hit from the population it was supposed to be measuring,
+and removed it silently, in the direction that makes the number smaller.
+
+### And the lesson I attached was the wrong one
+
+I wrote **"use `-w` and say so"**. That was the fix for *5b's* error — a substring
+match on `PXX_ESP_BARE`. It was not the fix for mine: my errors were the
+**population** and the **filter**, and `-w` was already present in my command.
+Sitting directly above a number, the wrong lesson makes a reader adopt that number
+without re-running it, which is 5b's point and the reason they flagged it.
+
+The durable form is the one already in this ticket twice over, now for the third
+time in the same investigation: **state the population beside the number.** `-w`
+is a detail; the set is the claim.

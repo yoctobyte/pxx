@@ -96,6 +96,60 @@ and more contentious change, it touches the file every session reads at startup,
 and the measurement above does not justify it — the retrieval failure is fixable
 on the reading side alone.
 
+## 2026-09-24 (frank, frankb-8e) — THE RECIPE FOR A SEAT WITH NO TOOL, because the hazard is invisible without it
+
+The section above asks for `rulegrep` and gives it controls. **Until that exists,
+the hazard has no user-facing discharge** — and the failure it produces is the one
+shape nothing downstream corrects.
+
+**Measured 2026-09-24 while checking whether a rule a peer cited was real.** It
+was not, and I reported it absent **from a plain `grep CLAUDE.md`** — the exact
+instrument this ticket says cannot answer that question. The conclusion was
+correct and the evidence was not, which is worse than being wrong: a wrong answer
+gets contradicted, a right answer reached badly propagates as a citation.
+
+### The three rows that make the recipe stick
+
+`N=$(tr '\n' ' ' < CLAUDE.md | tr -s ' ' | tr -d '*_`')`, then `grep -oic`:
+
+| phrase, known to BE in the file | plain `grep -oic` | normalised |
+| --- | ---: | ---: |
+| `if a second investigation on an unrelated subsystem produces` | **0** | 1 |
+| `the name is not the thing` | 1 | **2** |
+| `RECURRENCE, NOT QUALITY` | 1 | 1 |
+
+**Row 1 is the whole argument.** A plain grep answers ZERO for a sentence that is
+in the file — and it is the line I had just quoted, by number, as my evidence for
+the claim I was making. Row 2 undercounts. Row 3 is why the failure is not
+obvious: short unwrapped fragments do survive, so the instrument works often
+enough to be trusted.
+
+### The discipline, which is direction-specific and one command
+
+**Before asserting that something is NOT in a corpus, grep that corpus for
+something you KNOW is in it, with the same command.**
+
+Not "be careful with greps" and not "use the pipeline" — a seat reaches for
+`grep` precisely when it has no reason to suspect the file, and the pipeline is
+only obviously necessary once you have seen the plain version fail. The positive
+control is what shows you that, costs one command, and is needed **only** for a
+negative claim. A positive hit needs no control; it is its own evidence.
+
+### Why this is not covered by the controls already listed above
+
+Those are controls for the TOOL, asserted by whoever builds it. This is a control
+for the READER, run at the moment of making a claim, and it is required whether or
+not the tool ever ships. The two do not substitute: `rulegrep` existing does not
+help a seat who does not know to reach for it, which describes every seat that
+has not read this ticket.
+
+### What this does not fix
+
+Nothing about retrieval. A seat that never doubts its grep still gets a silent
+zero — the recipe converts an undetectable wrong claim into a detectable one only
+for someone who stops to make the claim explicitly. **The real discharge is still
+the tool**, and this is the interim rule, dated, for as long as there isn't one.
+
 ## Not measured, listed so nobody quotes it as a finding
 
 The route rule also sits around 60% of the way through the file, inside a
