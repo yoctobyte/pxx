@@ -193,3 +193,51 @@ sweep was **silent about the case rather than clearing it** — an honest
 measurement over a population that cannot contain the subject. The number was
 re-taken after the third arm existed (still 0 of 48) instead of being carried
 forward.
+
+## 2026-09-24 — the gcc boundary for the declaration half, measured
+
+Banked because it is the expensive part to re-derive, and because the first
+design I had in hand would have been **wrong in the refusing direction** on two
+of these rows. Every row measured against `gcc -std=gnu99` and against pxx at
+the tree carrying the member fix.
+
+| shape | gcc | pxx | note |
+| --- | --- | --- | --- |
+| `struct S v;` in a function body | **error** `storage size of 'v' isn't known` | accepts | the target |
+| ...with `struct S { int x; };` later at file scope | **error** | accepts | **block scope needs the type complete AT THE DECLARATION**, so a parse-time check matches gcc exactly |
+| `static struct S v;` in a body | **error** | accepts | same arm; `CLocalStaticDecl` still routes through the same allocator |
+| `extern struct S v;` in a body | accepts | accepts | **must not be refused** — declares, defines nothing |
+| `struct S *p;` in a body | accepts | accepts | must not be refused — the opaque-handle idiom |
+| `struct S v;` at FILE scope | **error** | accepts | but see the row below — this one is NOT a parse-time check |
+| `struct S v;` at file scope, `struct S {...}` later | **accepts** | accepts | **a tentative definition only needs its size by END OF TRANSLATION UNIT** |
+| `struct S a[3];` in a body | **error** `array type has incomplete element type` | accepts | separate message, separate site |
+| `int f(struct S v)` by value | **error** `parameter 1 ('v') has incomplete type` | accepts | separate message, separate site |
+| `int f(struct S *p)` | accepts | accepts | must not be refused |
+
+**The two rows that kill the obvious design.** A parse-time refusal at the
+declaration site is correct for BLOCK scope and **wrong for FILE scope** — row 7
+is legal C that gcc compiles, and refusing it would break a tentative definition,
+which is an ordinary spelling. So the file-scope half needs a deferred
+end-of-translation-unit check over objects still incomplete, not a check where
+the declaration is parsed. Those are two different pieces of work and only the
+block-scope one is cheap.
+
+**What makes the block-scope half tractable now and not before:** it needs to
+tell "never defined" from "defined, layout dropped" and from "defined empty",
+which is exactly what `UClsBodySeen` / `UClsLayoutDropped` and
+`CRecMissingFieldKind` were added for. Refuse only on kind 1 (no body ever
+seen); the other two are definitions and must be left alone.
+
+**Three call sites, not one.** `if declTk = tyRecord then LastTypeRecId :=
+scalarRec;` appears three times in `cparser.inc` (the plain local-declaration
+path and two others), so a block-scope object of record type can reach
+allocation by more than one route. Hooking one of them is the shape of bug this
+tree calls "the sibling is a spelling" — find all three, or put the check in the
+shared allocator where every route passes.
+
+**Do not skip the census a second time.** The member half's false-positive
+population (48 files, zlib + `lib/crtl/src`) contained no alignment-attribute
+struct and was therefore silent about the state that produced a regression. A
+declaration-site census must deliberately include: a tentative definition
+completed later, a block-scope `extern`, a pointer-to-incomplete, and a struct
+whose body pxx drops.
