@@ -37094,6 +37094,9 @@ test-esp-idf: $(COMPILER)
 	@./$(COMPILER) --target=esp32s3 --xtensa-long-calls --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_gpio_ring_stress.pas $(TESTTMP)/esp_board_ring.o >/dev/null \
 	  && echo "=== esp_board_gpio_ring_stress builds [esp32s3]: OK ===" || exit 1
+	@./$(COMPILER) --target=esp32s3 --xtensa-long-calls --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_isr_no_alloc.pas $(TESTTMP)/esp_board_isr_no_alloc.o >/dev/null \
+	  && echo "=== esp_board_isr_no_alloc builds [esp32s3]: OK ===" || exit 1
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_hidden_loop.npy $(TESTTMP)/esp_board_hidden_loop.o >/dev/null \

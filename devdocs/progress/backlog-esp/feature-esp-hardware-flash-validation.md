@@ -7,7 +7,7 @@ status: backlog
 owner: ""
 created: 2026-06-30
 blocked-by: []
-summary: "HARDWARE-GATED AND NOT WORK ANYONE CAN PICK UP TODAY -- the prio is 25 for that reason and NOT because the ticket is unimportant. It is the row that decides whether the ESP work pays: two of the fleet's open technical claims live here and neither can be closed without a board on USB. (1) UART: tools/esp_flash.sh gained a --project pass/hang verdict (7d4f7ea33) and all four NilPy demos are OK in qemu against pin v413 -- but the log filter was written against QEMU output, so a filter tuned to qemu can strip a line a physical part prints and report a clean pass, which is this ticket's own first acceptance row failing silently. ONE INSTANCE OF THAT IS NOW FIXED AND THE ROW IS NOT CLOSED (2026-09-24, frankS): the filter dropped `^[IWE] (nnn)` and that class includes E, IDF's ERROR prefix, so a capture carrying a task-watchdog trigger and a corrupt-heap report -- a hung ISR and an allocation inside a handler, i.e. row 2's entire subject -- came out clean and the verdict printed OK, reproduced end to end. Both copies (tools/esp_flash.sh and examples/esp32/nilpy-c3/build.sh) now scan for E lines BEFORE the strip and fail naming them, outside the --project and --verify conditions because the ISR step runs --no-verify and compares nothing; esp_flash.sh also gained the reboot check its sibling already had. W only reports, deliberately: zero E and zero W measured in a real Espressif-qemu boot of the nilpy-c3 image (59 lines, 46 I-lines, app_main reached, so logging was live enough to show them) and the real harness still passes at HEAD, but that is QEMU and silicon may warn routinely. WHAT REMAINS FOR THE BOARD is unchanged and is the actual row: whether the filter matches what a physical part emits. This removed one way for the validation to lie; it validated nothing against silicon. (2) ISR: the acceptance asks that a peripheral/ISR FIRE, and firing is necessary and not sufficient -- boxing ALLOCATES, an allocation inside an interrupt handler faults later on another context's heap, and every timing number in between is correct because the timing IS correct. A run printing tick=1..5 status=0 satisfies the row as written and says nothing about the contract; what settles it is an assertion on the ALLOCATOR (allocation count unchanged across N ticks), a different assertion class from expect_same. AND THE PRESCRIBED DEMO CANNOT REACH THE HAZARD AT ALL, WHICH IS THE SAME COLLISION ONE LEVEL DEEPER (2026-09-24, frankS, measured from source, no board needed): the timer-c3 step goes through esptimer.pas, which hardcodes dispatch_method := ESP_TIMER_TASK (line 141), and IDF's own header defines that as dispatched from the esp_timer TASK, not from an interrupt handler (esp_timer.h:61 vs :63) -- so no pxx code enters interrupt context on that path and there is no handler for an allocation to happen inside of. The demo's own header said so all along ("esp_timer callbacks run in task context") while this ticket claimed the opposite; the demo was right. The step is still worth running, it just is not the ISR row. THE PROGRAM THAT DOES EXERCISE IT EXISTS AND IS NOT THIS TICKET'S: examples/esp32/isrctx-c3 registers BOTH dispatch methods in one image so the task arm reproduces the 0 and the ISR arm must not, wired into the esp-idf tier at Makefile:36597, and it belongs to feature-n-a-non-allocating-restricted-thunk-for-an-isr (frankb-8e's). A board session should use it for the ISR row and expect a NON-ZERO ctx. THE CONDITION THAT SHOULD MOVE THIS PRIO is a board existing on the box -- the owner said 2026-09-20 that ESP32 is priority and that he will try to set hardware up later; until then a high rank would send seats to work they cannot start. Raise it the day silicon arrives, not before. WHY VISIBLE-BUT-LOW BEATS HIDDEN, and this is the argument that survives someone disagreeing about how likely a misdispatch is: THE TWO FAILURES HAVE DIFFERENT HALF-LIVES. Unpickability is short-lived and SELF-RESOLVING -- the moment a board exists the objection evaporates on its own. Invisibility is not: a ticket nobody can see stays unseen after the condition lifts, and the lifting event produces no notification. So the asymmetry favours ranked-and-low even if the misdispatch risk were higher than it is. AND NOT blocked/: that folder's convention is ticket-to-ticket via `blocked-by:` (sampled 3 of 3), and "no board exists on this box" names no ticket; rainy-day/ fits the deferral but is unranked and unscanned, which trades a small failure for the larger one. frankS holds both claims and can close neither."
+summary: "S3 ROWS MET ON SILICON 2026-09-24 (frankH, ESP32-S3 devkit on /dev/ttyACM0, compiler 58412e442c17 unless noted). C3 AND S2 ROWS STAY OPEN: no C3 or S2 board is on this box, so this ticket stays open until one is. Per row, S3: (1) UART boot == oracle: MET, test/test_esp_hw_validation.pas via `esp_flash.sh --chip esp32s3` matches the x86-64 oracle 7/7. (1b) Does the filter match silicon: MET for the four S3 NilPy demos (nilpy-s3 and nilpy-hw-s3 with the pinned compiler, gpio-edge-s3 and adc-s3 with HEAD). The raw reset-capture minus IDF log lines equals main.expected line for line, 0 lines stripped after app_main, one boot each. Silicon prints ONE routine W that qemu does not, BEFORE app_main: `spi_flash: Detected size(16384k) larger than the size in the binary image header(4096k)`. The E scan has fired on silicon for a real task-watchdog trigger (the first adc-s3 run, before time.sleep was fixed). (2) ISR fires: MET, isrctx (built for esp32s3 from isrctx-c3's main.pas with ISR dispatch on) prints `isr hits=5 ctx=1` against `task hits=5 ctx=0`, PAIR OK; also the GPIO-edge and ADC-frame ISRs of examples/esp32/gpio-edge-s3 and adc-s3. (2b) The contract, no allocation in the handler: MET for espgpio's and espadc's handlers. test/esp_board_isr_no_alloc.pas shows a free-heap delta of 0 over 9,997 GPIO and 625 ADC ISR entries, heap integrity OK, idle drift 0. Readout control (-dALLOC_IN_TASK, 1000 x 16 B) reads 28,000, so the zeros are real. The ISR-allocating control (-dALLOC_IN_ISR) aborts on the FIRST entry with `pxx: out of memory (ESP-IDF heap exhausted)`: loud, but the message misnames the cause. Timer step (esp_timer, task dispatch, NOT an ISR): runs on silicon inside nilpy-hw-s3. OPEN: every C3 row (test_esp_hw_validation, nilpy-c3, nilpy-hw-c3, isrctx-c3 itself, gpio-edge-c3, adc-c3; all build) and every S2 row (hello-s2 builds with --target=esp32s2; atomics are refused on the S2 by design until feature-a-esp32s2-atomics-by-interrupt-masking)."
 ---
 
 # ESP32 real-hardware flash + boot validation (S2/S3, C3)
@@ -306,3 +306,52 @@ The procedure above is unchanged. What is different is that a run which prints
 the right lines while the chip is failing underneath will now say so instead of
 printing OK. That does not validate the filter against silicon — it removes one
 way for the validation to lie.
+
+## 2026-09-24 -- the S3 rows, on silicon (frankH)
+
+Board: ESP32-S3 devkit, 16 MB flash, /dev/ttyACM0. Every row below ran on it.
+
+**Row 1, UART == oracle.** `tools/esp_flash.sh --chip esp32s3
+test/test_esp_hw_validation.pas`: `OK -- board output matches the x86-64 oracle
+(7 lines)`.
+
+**Row 1b, the filter against silicon.** For each project: the esp_flash
+`--project` verdict, then a separate raw capture of the same image after an
+RTS reset. The raw lines after `Calling app_main()`, minus `^[IWE] (nnn)`,
+were compared with main.expected.
+
+| project | compiler | verdict | raw == expected | stripped after app_main | boots |
+| --- | --- | --- | --- | --- | --- |
+| nilpy-s3 | pinned | OK (4) | yes | 0 | 1 |
+| nilpy-hw-s3 | pinned | OK (8) | yes | 0 | 1 |
+| gpio-edge-s3 | HEAD 58412e442c17 | OK (15) | yes | 0 | 1 |
+| adc-s3 | HEAD 58412e442c17 | OK (7) | yes | 0 | 1 |
+
+The one W line silicon prints is before app_main, in every boot:
+`W (NNN) spi_flash: Detected size(16384k) larger than the size in the binary
+image header(4096k).` It is the board's real flash size against the image's
+declared 4 MB. It is harmless, and it answers the note above: yes, silicon
+warns routinely where qemu did not, so W being advisory was the right call.
+
+**Row 2, an ISR fires.** isrctx-c3's main.pas built for esp32s3: the build.sh
+with `--target=esp32s3` and `set-target esp32s3`, the same
+sdkconfig.defaults with ISR dispatch on, run via `esp_flash.sh --project`.
+It printed `main ctx=0`, `task hits=5 ctx=0`, `isr hits=5 ctx=1` and `PAIR OK
+status=0`. That twin project is not committed; isrctx is frankb-8e's example.
+
+**Row 2b, the contract.** test/esp_board_isr_no_alloc.pas (the recipe is in
+its header):
+
+```
+idle isrs=0    heap-delta=0     integrity=1
+gpio isrs=9997 heap-delta=0     integrity=1     (espgpio edge ISR)
+adc  isrs=625  heap-delta=0     integrity=1     (espadc conv-done ISR)
+-dALLOC_IN_TASK: gpio heap-delta=28000          (readout sees 1000 x 16 B)
+-dALLOC_IN_ISR:  aborts on the first entry, "pxx: out of memory (ESP-IDF
+                 heap exhausted)", reboot loop
+```
+
+The ISR-allocation abort is useful (it is loud), but its text blames the heap
+when the heap is not exhausted. Whoever owns the ISR thunk question
+(feature-n-a-non-allocating-restricted-thunk-for-an-isr) may want the message
+to say "allocation in interrupt context".
