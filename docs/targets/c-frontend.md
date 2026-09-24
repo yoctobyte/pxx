@@ -57,13 +57,11 @@ PXX includes an integrated preprocessor that handles:
 - `--dump-cpp` prints the fully preprocessed translation unit instead of
   compiling it — useful for debugging macro expansion.
 
-> [!NOTE]
-> `#error` and `#warning` are currently parsed and **silently ignored** — a
-> `.c` file containing `#error "message"` on an active branch compiles clean
-> instead of failing. Don't rely on `#error` to gate a build.
+`#error` on an active branch stops the build with its message and a nonzero
+exit code; `#warning` prints its message and the build continues.
 
 ### Not (yet) supported
-No VLAs (variable-length arrays), no computed `goto`, no `_Complex` /
+No computed `goto`, no `_Complex` /
 `_Atomic` / `<stdatomic.h>`, no C11 `<threads.h>`, and no vector-extension
 intrinsics.
 
@@ -98,7 +96,15 @@ You can specify a comma-separated list of soname stems (e.g., `--system-libs=m` 
 ```
 
 ### 3. Integration Libraries Default
-Libraries that PXX does not emulate (such as GTK, zlib, sqlite, pthread, and dl) are modeled as system libraries by default. Symbols imported from these headers will resolve via `DT_NEEDED` to the host system libraries unless explicit wrappers are configured.
+A header that `lib/crtl` does not provide, such as `zlib.h`, `sqlite3.h` or
+GTK's, is read from the host's `/usr/include`, and the compiler warns that it
+did so. Its functions are then imported from the system **C library**,
+`libc.so.6`, not from the library that actually defines them, so the program
+compiles and fails when started with `undefined symbol`. As of pin v424 a C
+program therefore cannot link a system library other than libc and libm.
+Compile the library's source in instead, or import it from Pascal
+(`uses sqlite3`) or Nil Python, which do record the right library. See
+[Getting started with C](../getting-started/c.md#using-the-hosts-c-library-instead).
 
 ---
 
@@ -111,9 +117,8 @@ a real `.c` body behind the header (not just declarations): `assert.h`,
 `pthread.h` (a real but partial threading subset — see below), `signal.h`,
 `stdio.h` (the second largest), `stdlib.h`, `string.h`, `time.h`, `unistd.h`, and
 socket-related headers. `setjmp.h` is backed by compiler intrinsics rather
-than a `.c` file. `wchar.h`/`wctype.h` headers exist but have no
-implementation file behind them yet — treat wide-character support as
-unimplemented even though the header is present.
+than a `.c` file. `wchar.h` and `wctype.h` are partly implemented: `wcslen`,
+`iswupper` and `towupper` work, while `wcscpy`, for example, is not declared.
 
 `pthread.h` is a genuine subset, not a glibc-ABI-compatible implementation:
 mutexes, `pthread_self`/`pthread_equal`, create/join, `pthread_once`, and
@@ -124,8 +129,6 @@ attributes. Threaded C code needs `--threadsafe`.
 
 ## Known Limitations
 
-- **`#error`/`#warning` are silently ignored** (see above) — don't rely on
-  them to fail a build.
 - **A C call to an undeclared/extern function binds case-insensitively across
   the C *and* Pascal namespace**, with no arity check. This is deliberate and
   is how a C corpus gets a math library at all (`sqrt`/`sin`/`cos` bind to the
@@ -139,11 +142,6 @@ attributes. Threaded C code needs `--threadsafe`.
   preprocessed/macro-expanded buffer**, not the original source — stepping and
   breakpoints work, but the reported line can be wrong once macros or
   `#include` are involved.
-- **Runtime-sized local arrays (VLAs) are not reliable.** `int arr[n]` with a
-  non-constant `n` can compile and silently corrupt an adjacent stack slot
-  once touched inside a loop — this is a silent-wrong-output hazard, not a
-  compile error. Avoid VLAs; use a fixed-size array or a heap allocation
-  instead until this is fixed.
 - Very large single-translation-unit files (a multi-hundred-thousand-line
   amalgamation such as `sqlite3.c`) compile correctly but with mildly
   superlinear parse/codegen scaling — expect it to be slow, not wrong.

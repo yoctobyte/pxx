@@ -82,7 +82,8 @@ is chosen by extension, no separate tool:
 ./pxx hello.npy hello_npy   # or hello.py — same frontend, either extension
 ```
 
-See [C Frontend](../targets/c-frontend.md) and [Nil Python](../targets/nil-python.md).
+For C, start with [Getting started with C](./c.md). See also
+[C Frontend](../targets/c-frontend.md) and [Nil Python](../targets/nil-python.md).
 
 ## What you just built: a binary that needs nothing
 
