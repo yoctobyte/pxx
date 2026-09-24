@@ -419,3 +419,4 @@
 2026-09-24T00:12:01Z  v419  4d148c23cc723afe88a927b9206b5964c4525f9aba128e9c65111cba0daf5374  bd59da44369cfab056a73349ab6c0b0f8938fa02  docs(D/S): bare ESP cannot Str a number, and the workaround was nowhere
 2026-09-24T01:13:24Z  v420  af40370a8a91d2983226a8d5bac59484b97b7c0070da1e6bfb5c5e440e63281d  700392ca160fb2fc34afb4ba5e405ebc35ce5f61  tickets(S): PXX_ESP is not a compiler define -- 36 ESP tests guard their IDF arm on a symbol that can never fire
 2026-09-24T11:01:29Z  v421  4e32f1dde0ec758a652a6f7d7f9629a5c41b2ee7448859a1e55320e46e23ee57  040d57220bd6811978c21b0f897464edc9007e97  docs(C/S): clean single-binary ESP C conformance numbers; host load can trip IDF's WDT
+2026-09-24T17:11:54Z  v422  0ad0b556b98b9922fdd9fd111543e4091544e7255c722e27c192bb1d341ccf58  591e2a7eee2096be79fabb70a5ecc45f3b5419d2  fix(A): the emitted nil check reaches a program whose only need is a procvar

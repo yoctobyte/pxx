@@ -2897,6 +2897,13 @@ function pyvarobj_owned(const v: Variant): Pointer;
   None unwraps to nil, which is legitimate — passing None where a class is
   expected is ordinary Python. }
 function pyvarobj_arg(const v: Variant): Pointer;
+{ pyvarobj for a variant being STORED into a class-typed slot (a field, an
+  annotated local), CHECKED and NOT retained -- the store retains, see
+  PyStoreRhsToClassSlot. An int or str payload reinterpreted as an instance
+  pointer segfaulted on the first member read: `def put(h, y): h.node = y` with
+  y = 5. CPython stores the 5; a class slot cannot hold it, so this raises
+  TypeError instead of crashing. None unwraps to nil, as in pyvarobj_arg. }
+function pyvarobj_store(const v: Variant): Pointer;
 { The callee address of `<variant>(args)`, CHECKED. A name bound to None — an
   optional import that did not resolve, a value never assigned — has a nil
   payload, and calling it jumped to address 0: a segfault with no diagnostic,
@@ -4681,6 +4688,14 @@ begin
     Exit;
   end;
   raise TypeError.Create('expected an object argument, got ' + pytype_name_v(v));
+end;
+
+function pyvarobj_store(const v: Variant): Pointer;
+begin
+  if (pyvartag(v) <> 0) and not ((pyvartag(v) >= VT_OBJ_FIRST) and (pyvartag(v) <= VT_OBJ_LAST)) then
+    raise TypeError.Create('cannot store ' + pytype_name_v(v) +
+                           ' into a slot that holds a class instance');
+  Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
