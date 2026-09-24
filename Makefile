@@ -16728,6 +16728,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh arm32/pvarargs_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/pvarargs_arm32)" "$$(cat test/test_pascal_varargs_external.expected)"
 	./$(COMPILER) --target=aarch64 test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs_aarch64
 	tools/expect_same.sh aarch64/pvarargs_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/pvarargs_aarch64)" "$$(cat test/test_pascal_varargs_external.expected)"
+	@# libc's stdio flushed at exit: a pxx program exits by syscall, so printf's
+	@# buffered output was dropped under a pipe (rc 0). Old codegen prints nothing.
+	./$(COMPILER) test/test_libc_stdio_is_flushed_at_exit.pas $(TESTTMP)/libcflush_x8664
+	tools/expect_same.sh x86-64/libcflush "$$($(TESTTMP)/libcflush_x8664)" "$$(cat test/test_libc_stdio_is_flushed_at_exit.expected)"
+	./$(COMPILER) --target=i386 test/test_libc_stdio_is_flushed_at_exit.pas $(TESTTMP)/libcflush_i386
+	tools/expect_same.sh i386/libcflush "$$(tools/run_target.sh i386 $(TESTTMP)/libcflush_i386)" "$$(cat test/test_libc_stdio_is_flushed_at_exit.expected)"
+	./$(COMPILER) --target=arm32 test/test_libc_stdio_is_flushed_at_exit.pas $(TESTTMP)/libcflush_arm32
+	tools/expect_same.sh arm32/libcflush "$$(tools/run_target.sh arm32 $(TESTTMP)/libcflush_arm32)" "$$(cat test/test_libc_stdio_is_flushed_at_exit.expected)"
+	./$(COMPILER) --target=aarch64 test/test_libc_stdio_is_flushed_at_exit.pas $(TESTTMP)/libcflush_aarch64
+	tools/expect_same.sh aarch64/libcflush "$$(tools/run_target.sh aarch64 $(TESTTMP)/libcflush_aarch64)" "$$(cat test/test_libc_stdio_is_flushed_at_exit.expected)"
 	# THE OTHER DIRECTION, and the one no existing C variadic test covered:
 	# every one of them is native-only, and on x86-64 this defect is
 	# unobservable because pxx's caller and pxx's callee were wrong the same

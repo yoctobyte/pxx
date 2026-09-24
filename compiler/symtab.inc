@@ -17488,6 +17488,47 @@ begin
   ProcExtName[LibcErrnoProcIdx]  := InternStr('__errno_location');
 end;
 
+{ Does this program import anything from the C library -- a Pascal
+  `external 'libc.so.6'` (printf through `varargs`, say), or a C program's
+  libc import? Asked of ExternalProc[], the population the ELF writer turns
+  into DT_NEEDED, so it answers about what the binary will actually load.
+  Only meaningful once code emission is done: an import joins the table when
+  its first call is emitted. }
+function ProgramImportsFromLibc: Boolean;
+var i: Integer; lib: AnsiString;
+begin
+  ProgramImportsFromLibc := False;
+  for i := 0 to ExternalCount - 1 do
+    if (ExternalProc[i] >= 0) and (ProcLibrary[ExternalProc[i]] >= 0) then
+    begin
+      lib := Strs[ProcLibrary[ExternalProc[i]]].Text;
+      if (lib = 'libc.so.6') or (lib = 'libc.so') or (lib = 'libc') or
+         (lib = 'c') then
+      begin
+        ProgramImportsFromLibc := True;
+        Exit;
+      end;
+    end;
+end;
+
+{ Manufacture the libc import `fflush`, with one pointer parameter, the same
+  way EnsureLibcSyscallProcs manufactures its two. The finalizer runner calls
+  fflush(NULL) as its last act in a program that imports from libc: a PXX
+  program never exits through libc's exit(), so anything libc's stdio is still
+  buffering -- all of printf's output when stdout is a pipe or a file -- was
+  silently dropped, and the program exited 0. Idempotent. }
+procedure EnsureLibcFflushProc;
+var pn: array[0..0] of AnsiString; pt: array[0..0] of TTypeKind;
+begin
+  if LibcFflushProcIdx >= 0 then Exit;
+  pn[0] := 'stream'; pt[0] := tyPointer;
+  LibcFflushProcIdx := RegisterProc('libc$fflush', True, tyInteger, 1, pn, pt);
+  ProcExternal[LibcFflushProcIdx] := True;
+  ProcCdecl[LibcFflushProcIdx]    := True;
+  ProcLibrary[LibcFflushProcIdx]  := InternStr('libc.so.6');
+  ProcExtName[LibcFflushProcIdx]  := InternStr('fflush');
+end;
+
 { Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
 procedure ResolveSynthImportLibrary(procIdx: Integer);
 { Settle the LIBRARY an external will be imported from, or refuse the build.

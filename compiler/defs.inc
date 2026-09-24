@@ -6445,6 +6445,7 @@ var
   RtlOverLibc : Boolean;
   LibcSyscallProcIdx : Integer;
   LibcErrnoProcIdx : Integer;
+  LibcFflushProcIdx : Integer;   { libc$fflush, see EnsureLibcFflushProc }
   { --rtl-libc emits `call <thunk>` at each syscall site and appends the ONE
     thunk after all code is emitted, patching these rel32 fields. Out-of-line
     rather than inline because the sequence is ~140 bytes: inlining it grew

@@ -7827,7 +7827,7 @@ end;
 procedure EmitFinalizerRunnerBody;
 var
   procIdx, j, patchPos, savedSC, savedFS: Integer;
-  identN, litN, condN, asgN, callN, seqN, lastSeq, pairN, ifN: Integer;
+  identN, litN, condN, asgN, callN, seqN, lastSeq, pairN, ifN, argN: Integer;
 begin
   if (FiniRunnerProc < 0) and (FiniProcCount = 0) then Exit;
   procIdx := GetFiniRunnerProc;
@@ -7869,6 +7869,26 @@ begin
     callN := AllocNode(AN_CALL);
     ASTIVal[callN] := FiniProcs[j];
     ASTTk[callN] := Ord(tyInteger);
+    ASTRight[lastSeq] := AllocNode(AN_SEQ);
+    lastSeq := ASTRight[lastSeq];
+    ASTLeft[lastSeq] := callN;
+  end;
+  { LAST, after every finalization (one may printf): flush libc's stdio when
+    this executable imports from libc. A PXX program exits by syscall, never
+    through libc's exit(), so libc's buffers -- all of printf's output when
+    stdout is a pipe or a file -- were dropped and the program exited 0. An
+    object or a shared library is exited by its host, whose libc flushes. }
+  if (not EmitObjMode) and (not EmitSharedMode) and ProgramImportsFromLibc then
+  begin
+    EnsureLibcFflushProc;
+    litN := AllocNode(AN_INT_LIT);
+    ASTIVal[litN] := 0; ASTTk[litN] := Ord(tyPointer);
+    argN := AllocNode(AN_ARG);
+    ASTLeft[argN] := litN; ASTRight[argN] := -1;
+    callN := AllocNode(AN_CALL);
+    ASTIVal[callN] := LibcFflushProcIdx;
+    ASTTk[callN] := Ord(tyInteger);
+    ASTLeft[callN] := argN;
     ASTRight[lastSeq] := AllocNode(AN_SEQ);
     lastSeq := ASTRight[lastSeq];
     ASTLeft[lastSeq] := callN;

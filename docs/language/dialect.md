@@ -188,9 +188,14 @@ function sprintf(buf, fmt: PChar): Integer; cdecl; varargs;
   external 'libc.so.6' name 'sprintf';
 ```
 
-If you call libc's own `printf` this way, call `fflush(nil)` before the program
-ends. A PXX program does not exit through libc, so output that libc is still
-buffering is lost.
+You can call libc's own `printf` this way without flushing it yourself. A PXX
+program does not exit through libc, so a program that imports from libc calls
+`fflush(NULL)` for you after the unit finalizations, on every exit that runs
+them: the end of the program, `Halt`, and a runtime error. Output is still
+lost if the program is killed by a signal. Because libc buffers and PXX's own
+`Write` does not, `printf` output and `WriteLn` output can appear in a
+different order from the order of the calls when stdout is a pipe or a file.
+Call `fflush(nil)` between them if the order matters.
 
 ### `weakexternal` — an optional import
 

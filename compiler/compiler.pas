@@ -1150,6 +1150,7 @@ begin
   RtlOverLibc := False;
   LibcSyscallProcIdx := -1;
   LibcErrnoProcIdx := -1;
+  LibcFflushProcIdx := -1;
   LibcSyscallCallCount := 0;
   LibcSyscallThunkAddr := -1;
   { Hand the pure byte encoder our lowering. x64enc.inc cannot reference
