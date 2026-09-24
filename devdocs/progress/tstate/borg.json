@@ -15938,24 +15938,20 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-24T19:36:42Z",
+  "date": "2026-09-24T23:01:38Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
-   "lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy",
-   "test-core#src:test/test_a_property_store_through_a_cast_headed_target.pas",
+   "test-core#src:test/test_var_param_width_rule_accepts_exact_and_cast.pas",
    "test-core#src:test/c_crtl_wait.c",
-   "test-aarch64#src:test/test_set_runtime.pas",
-   "test-arm32#src:test/test_set_runtime.pas",
    "tools-devtest#00",
-   "demos#00",
-   "test-pascal-conformance#shard3/6"
+   "demos#00"
   ],
-  "sha": "8083f245263ae956c237eb3afaae9dd0b81be0a6",
+  "sha": "4d9b004c80816282852cae6f9a6002dc18ad591f",
   "tier": "full",
-  "ver": "v423",
+  "ver": "v424",
   "verdict": "RED",
   "why": {
-   "lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy": "ok: $TMP  [code=657646B  data=100868B  bss=72020B  procs=2250  codeseg=659168B]",
+   "test-core#src:test/test_var_param_width_rule_accepts_exact_and_cast.pas": "ok: $TMP  [code=20589B  data=4552B  bss=35388B  procs=158  codeseg=24288B]",
    "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
   }
  },
