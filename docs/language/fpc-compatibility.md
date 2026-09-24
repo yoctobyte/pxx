@@ -98,13 +98,13 @@ procedure Probe; experimental;
 ```
 
 `deprecated`, `platform`, `experimental`, `unimplemented`, and `library` parse on
-those declarations. They are accepted for source compatibility; PXX does not yet
-emit a usage warning for them, and they are not accepted on `var` declarations.
+those declarations, and on `var` declarations too. They are accepted for source
+compatibility; PXX does not yet emit a usage warning for them.
 
 These are one group among several. Which routine directives are inert, which
 change what is compiled, and which are rejected outright is tabulated under
-[routine directives](./dialect.md#routine-directives) — `varargs` in particular
-does not parse at all and needs removing when porting. Every calling-convention
+[routine directives](./dialect.md#routine-directives). `varargs` is accepted
+and implemented on `cdecl` externals. Every calling-convention
 spelling now parses in every position, `stdcall` included, and so do the inert
 FPC directives `noreturn`, `nostackframe`, `noinline`, `far`, `near` and
 `local`.

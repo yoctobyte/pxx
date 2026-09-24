@@ -168,10 +168,10 @@ missing directive an error, the way FPC has it.
 
 ### Not accepted
 
-`varargs`, `public`, `export`, `alias`, `compilerproc`, `internproc`,
-`rtlproc`, `hardfloat` and `softfloat` are refused, and that is a decision
-rather than a gap. Each of them means something: `varargs` changes how a call
-marshals, the linkage group changes what `--emit-obj` produces, `compilerproc`
+`public`, `export`, `alias`, `compilerproc`, `internproc`, `rtlproc`,
+`hardfloat` and `softfloat` are refused, and that is a decision rather than a
+gap. Each of them means something: the linkage group changes what `--emit-obj`
+produces, `compilerproc`
 and its neighbours mark a routine the compiler itself supplies, and
 `hardfloat`/`softfloat` select a float ABI — which is a real choice on the arm32
 and riscv32 targets. Accepting one and ignoring it would compile something other
@@ -179,7 +179,18 @@ than what was written, which is worse than refusing it. FPC sources using them
 need the directive removed, or the behaviour implemented.
 
 `weakexternal` was on that list until 2026-09-14 and is now **accepted**, by the
-second route that sentence offers: it is implemented.
+second route that sentence offers: it is implemented. So is `varargs`, since
+2026-09-03: on a `cdecl` external it lets a Pascal program call a variadic C
+function with extra arguments, in either of FPC's two orders.
+
+```pascal
+function sprintf(buf, fmt: PChar): Integer; cdecl; varargs;
+  external 'libc.so.6' name 'sprintf';
+```
+
+If you call libc's own `printf` this way, call `fflush(nil)` before the program
+ends. A PXX program does not exit through libc, so output that libc is still
+buffering is lost.
 
 ### `weakexternal` — an optional import
 
