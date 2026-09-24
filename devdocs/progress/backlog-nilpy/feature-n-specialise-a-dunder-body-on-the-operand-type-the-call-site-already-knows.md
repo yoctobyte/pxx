@@ -3,7 +3,7 @@ track: N
 prio: 80
 type: feature
 blocked-by: []
-summary: "An attribute read on a receiver whose class is not statically known runs the FULL dynamic protocol — a field read goes from 0 calls to 8, building a string key and probing a hash table. The call site usually knows the type already. Measured on real code: annotating the operand took Quat.rotate from 24674 B / 864 calls / 0 SSE to 2175 B / 18 calls / 30 SSE, and zeroed pydynattr_get_v in all three hot methods. Dunder operands are the commonest instance, but the rule is the receiver, not the dunder."
+summary: "A bare dunder operand (`def __add__(self, o)`) stays a variant because the call-site typer counts `.name(` calls and an operator is never spelled that way, so every `o.x` in the body runs the dynamic attribute protocol. Measured 2026-09-24 at HEAD: 2.7x (bare 0.48 s vs annotated 0.07 s for the accumulator loop inside a def). An operator-site arm was BUILT AND REVERTED: counting operators whose left operand is untyped vetoes every dunder, and skipping them is unsound -- a run-time-dispatched `xs[0] + xs[1]` with a duck-typed object then raises where CPython answers. BLOCKED on the operator dispatch path giving a class-typed operand the protection the METHOD path demonstrably has (getattr-called duck objects give CPython's answer there). Low payoff on lekkerzeilen: the arm typed exactly one dunder operand (Quat.__mul__.o).""
 ---
 
 # Specialise a dunder body on the operand type the call site already knows
@@ -170,3 +170,85 @@ generation improves enormously (measured), and this program spends its time
 elsewhere (measured). Where the mechanism would actually pay in that demo is
 `Grid.at` (13.8%) and `World.number` (12.1%), **if their receivers are bare**,
 which nobody has checked yet.
+
+## Re-measured and narrowed (2026-09-24, frankb-12)
+
+At HEAD, x86-64, the ticket's own `Vec3.__add__` shape, 200k adds, min of 3
+interleaved: bare operand 0.60 s, annotated 0.22 s -- **2.7x, not 10.3x**. The
+gap narrowed because call-site typing landed meanwhile:
+PyParamTypeFromSites now types a bare parameter from what its call sites pass,
+CLASS answers included when every site sits inside a def (`best >= 0`; a
+module-level site gives up). Measured: `plus.o` with its site in `main()` prints
+`tk=6 cls=Vec3`; with the same site at module level it prints `gaveup=1`. So
+`Quat.rotate(v)`-style METHOD calls from inside defs are covered.
+
+**What is still open is the OPERATOR spelling.** `PXXDBG=n.psites` on the
+fixture prints `__add__.o mode=1 sites=0`: the site scan matches `.name(`, and
+`a + d` is never spelled `.__add__(`, so a dunder's operand has no sites and
+stays a variant. That is the whole remaining gap for dunders.
+
+## Design -- operator sites for a binary dunder
+
+In PyParamTypeFromSites' site loop, for mode 1 with `siteName` a binary dunder
+(PyBinOpDunderName of some token T), also count a token of kind T as a site
+when:
+
+1. it is BINARY: the previous token ends an operand (ident, `)`, `]`, `}`,
+   literal);
+2. the LEFT operand is a simple primary (ident / `a.b` chain / call or
+   subscript groups) not preceded by a higher-precedence operator, and it types
+   (under the site's enclosing def, as the arguments already are) to the def's
+   own class or a relative. Certainly-another-type (a number, str, another
+   class) means another type's operator: skipped, not vetoed. Untypable counts,
+   as an untypable receiver already does;
+3. the RIGHT operand, the one argument, is the primary after T, and the token
+   after it is not a higher-precedence operator (else the argument is a larger
+   expression and the site is untypable, which gives up soundly).
+
+The in-place spelling `a += d` is a site of `__iadd__`, and of `__add__` when
+the class defines no `__iadd__`.
+
+Soundness is the existing contract: a missed site can mis-type, and a counted
+one only vetoes. Measured for the METHOD arm, which is already live: a
+site-typed `o` (cls=Vec3) called from an UNSEEN caller (`getattr(a, "plus")(P())`
+and `f = a.plus; f(P())`) with a DUCK-typed P whose fields sit at other offsets
+(a str first, then z, y, x) gives CPython's `11.0 22.0 33.0`. So that path is
+protected. The OPERATOR path is not yet known to be: with an ANNOTATED operand
+(`o: 'Vec3'`), `xs[0] + xs[1]` where xs[1] is that P raised `TypeError: expected
+a number, got int` (CPython: 11.0 22.0 33.0), and `xs[0] + 5` raised TypeError
+where CPython raises AttributeError. **Re-run both probes on the operator arm
+once it exists; if a site-typed operand behaves like the annotated one, the arm
+must not land until the operator dispatch path gets the method path's
+protection.**
+
+## Built, measured, reverted (2026-09-24, frankb-12)
+
+The operator-site arm above was implemented (PyOpSiteAt plus a hook in
+PyParamTypeFromSites' site loop) and reverted before landing. It is
+reconstructible from the design and helper spec above. Its fixture is kept
+beside the build scratch; no copy in the tree.
+
+1. **Counting every operator site vetoes everything.** Every `+` in numeric
+   code is an operator token, `self.x + o.x` in the dunder itself included,
+   and their left operands are untypable, so they count, and their untypable
+   arguments veto: `__add__.o sites=1 gaveup=1`.
+2. **Counting only sites whose left operand is CERTAINLY the class is
+   unsound.** A visible `xs[0] + xs[1]` has an untyped left operand, so it is
+   skipped; at run time it dispatches to `__add__` with a duck-typed P (fields
+   at other offsets) and pxx raises `TypeError: expected a number, got int`
+   where CPython prints `11.0 22.0 33.0`. The same duck object through the
+   METHOD arm (`getattr(a, "plus")(P())`, and `f = a.plus; f(P())`) gives
+   CPython's answer, so the method dispatch path protects a class-typed
+   parameter and the operator path does not.
+3. **Payoff on the target program is near zero anyway.** Compiling
+   lekkerzeilen/sim.py (corpus 9db2e38) with the certain-left arm typed one
+   dunder operand, `Quat.__mul__.o`. `Vec3.__add__` got zero sites, because
+   real receivers are rebound locals (`a = a + d`), fields and attribute
+   chains, never "certainly Vec3". The accumulator shape of this ticket's own
+   fixture gets no sites for the same reason.
+
+**What would unblock it:** make the run-time OPERATOR dispatch into a dunder
+behave like the method dispatch when the operand's static class does not
+match the object (find what the method path does; it was not located this
+session). Then the certain-left arm becomes sound; a further step is typing
+a receiver rebound only by the class's own operator (`a = a + d`).
