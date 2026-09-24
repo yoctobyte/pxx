@@ -7192,14 +7192,14 @@ var i, hp, hpDyn, hpK, mek, mz, nz: Integer;
 begin
   if CurProc < 0 then Exit;    { a program-body chunk: its variables are BSS,
                                  which the module's own memory image zeroes }
+  { The string and dynarray release helpers are looked up WHEN A SLOT NEEDS
+    ONE, like every other helper below. Looked up eagerly they were demanded by
+    every routine with an epilogue: `function AddTwo(a, b: Integer)` asked for
+    PXXDynArrayRelease, found no builtinheap, and -- when a missing helper was
+    a floor -- was emitted as `unreachable` (pin v423 did that silently); once
+    a missing helper failed the build, it refused a program with nothing
+    managed in it (T full, test-emit-obj, at aef4ee1310f9). }
   hp := -1; hpDyn := -1; mz := -1;
-  if release then
-  begin
-    hp := WasmWriteHelper('PXXStrDecRef');
-    if hp < 0 then Exit;
-    hpDyn := WasmWriteHelper('PXXDynArrayRelease');
-    if hpDyn < 0 then Exit;
-  end;
   { A DYNAMIC ARRAY local joins the release loop, and the release takes a
     descriptor where a string's does not. Zeroing matters for the same reason
     and one more: the FIRST assignment to the slot reads the old handle to
@@ -7285,6 +7285,7 @@ begin
         begin
           WasmSlotAddr(i);
           WasmMemOp($28, 'i32.load', 2, 0);     { the handle }
+          if hp < 0 then hp := WasmWriteHelper('PXXStrDecRef');
           WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
         end
         else if act = SXR_VAR then
@@ -7360,6 +7361,7 @@ begin
           WasmSlotAddr(i);
           WasmMemOp($28, 'i32.load', 2, 0);     { the handle }
           WasmDataAddr(GetOrAllocSymRTTI(i));
+          if hpDyn < 0 then hpDyn := WasmWriteHelper('PXXDynArrayRelease');
           WasmCall(WasmSlotForProc(hpDyn), 'PXXDynArrayRelease');
         end;
       end;
