@@ -92,7 +92,9 @@ ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
 case "$CHIP" in
   esp32s2) PROJ="$REPO_ROOT/examples/esp32/hello-s2"
-           PXXFLAGS="--target=xtensa --xtensa-abi=windowed --platform=esp" ;;
+           # the chip name: --target=xtensa means the S3 and would hand the S2
+           # an atomic instruction it lacks. Windowed on IDF is implied.
+           PXXFLAGS="--target=esp32s2" ;;
   esp32s3) PROJ="$REPO_ROOT/examples/esp32/hello-s3"
            # the chip name alone is windowed on IDF since 2026-09-24
            PXXFLAGS="--target=esp32s3" ;;

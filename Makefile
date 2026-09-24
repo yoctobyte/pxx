@@ -32347,6 +32347,20 @@ test-xtensa: $(COMPILER)
 	# bug-b-the-scheduler-s-default-coroutine-stack-does-not-fit-an-esp32
 	bss=$$(./$(COMPILER) --target=esp32s3 --emit-obj test/test_scheduler.pas $(TESTTMP)/test_xt_sched_s3.o | sed -n 's/.*bss=\([0-9]*\)B.*/\1/p'); \
 	  test -n "$$bss" && test "$$bss" -lt 65536 || { echo "FAIL: esp32s3 scheduler bss=$$bss (want < 65536)"; exit 1; }
+	# THE OTHER XTENSA CHIPS, measured 2026-09-24. The classic ESP32 runs Pascal,
+	# NilPy and the scheduler on ESP-IDF under qemu -M esp32 (its core has DIV32,
+	# so no soft divide). The rows here pin what a CHIP NAME must refuse rather
+	# than build wrong: bare boot on any chip but c3/s3 (the image hardcodes
+	# their load org and UART0), an FPU on the S2 (it has none), and an atomic
+	# on the S2 (no S32C1I -- the scheduler uses one). Each greps its message:
+	# pascal26 writes diagnostics to STDOUT, hence `>` with 2>&1.
+	! ./$(COMPILER) --target=esp32 --esp-profile=bare test/test_scheduler_yields_deep_in_a_call_chain.pas $(TESTTMP)/test_xt_e32_bare >$(TESTTMP)/test_xt_e32_bare.out 2>&1
+	grep -q "supports esp32s3 and esp32c3 only" $(TESTTMP)/test_xt_e32_bare.out
+	! ./$(COMPILER) --target=esp32s2 --xtensa-fpu --emit-obj test/test_float.pas $(TESTTMP)/test_xt_s2_fpu.o >$(TESTTMP)/test_xt_s2_fpu.out 2>&1
+	grep -q "esp32s2 has no FPU" $(TESTTMP)/test_xt_s2_fpu.out
+	! ./$(COMPILER) --target=esp32s2 --emit-obj test/test_scheduler.pas $(TESTTMP)/test_xt_s2_atomic.o >$(TESTTMP)/test_xt_s2_atomic.out 2>&1
+	grep -q "esp32s2 has no atomic instruction" $(TESTTMP)/test_xt_s2_atomic.out
+	./$(COMPILER) --target=esp32 --emit-obj test/test_scheduler.pas $(TESTTMP)/test_xt_e32_sched.o
 	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)

@@ -2179,6 +2179,20 @@ begin
     prescribe this flag, which this line would then refuse. }
   if ThreadSafeMode and (not TargetHasThreadSafeLocks) then
   begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only. THIS IS NOT A TODO: on a single-core target the existing lock would be UNSAFE rather than merely absent. PXXHeapSpin (builtinheap.pas) is a plain exchange spin with NO interrupt masking, so a task holding it that is preempted by an allocating interrupt handler DEADLOCKS -- the only code that can release the lock is the task the handler is standing on -- which hangs the chip with no output. That is strictly worse than the unlocked allocator it would be replacing. An acquire here must MASK INTERRUPTS, which is what ESP-IDF chose portENTER_CRITICAL_SAFE for. Do not add a target to the softlock list without that; see devdocs/dev/esp32-hardening-map.md'); Halt(1); end;
+  { BARE IS C3 AND S3 ONLY, refused by name for every other NAMED chip. The bare
+    image's load org and console are per-chip MMIO, and the table has them for
+    exactly two parts: SocIramBase answers the S3's $40378000 for every xtensa
+    chip and the C3's for every riscv32 one, and PutC writes UART0 at
+    $60000000 -- right for the C3/S3, wrong for the classic ESP32 ($3FF40000)
+    and the S2 ($3F400000), whose IRAM maps differ too. So `--target=esp32
+    --esp-profile=bare` built an S3-shaped image and said ok. Measured
+    2026-09-24; the IDF profile is unaffected (IDF owns the map there) and
+    runs on the classic ESP32 under qemu -M esp32. }
+  if EspBareBoot and SocExplicit and (TargetSoc <> SOC_ESP32S3) and
+     (TargetSoc <> SOC_ESP32C3) then
+  begin writeln(StdErr, '--esp-profile=bare supports esp32s3 and esp32c3 only: the bare image hardcodes their load address and UART0 base, and ' + SocName(TargetSoc) + ' has a different memory map. Use the ESP-IDF profile (drop --esp-profile=bare), which works for ' + SocName(TargetSoc) + ' because IDF owns the map.'); Halt(1); end;
+  if XtensaHasFpu and (TargetSoc = SOC_ESP32S2) then
+  begin writeln(StdErr, '--xtensa-fpu: the esp32s2 has no FPU (XCHAL_HAVE_FP = 0); drop the flag -- Single and Double go through softfloat'); Halt(1); end;
   if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;
   { Derive the platform from the target unless --platform= set it explicitly.

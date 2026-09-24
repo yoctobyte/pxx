@@ -8,7 +8,9 @@ PXX="$ROOT/compiler/pascal26"
 cd "$(dirname "$0")"
 
 rm -f main/main.o main/libpxx_app.a
-"$PXX" --target=xtensa --xtensa-abi=windowed main/main.pas main/main.o
+# The chip name, not --target=xtensa: that one means the S3, whose atomic
+# instruction (S32C1I) the S2 does not have. esp32s2 implies windowed on IDF.
+"$PXX" --target=esp32s2 main/main.pas main/main.o
 xtensa-esp32s2-elf-ar rcs main/libpxx_app.a main/main.o
 
 idf.py set-target esp32s2

@@ -4901,7 +4901,12 @@ begin
            (IRIVal[node] = ATOMIC_ADD64) then
           Error('target xtensa: __pxxatomic_*64 not supported (32-bit target)');
         if not SocHasAtomicISA(TargetSoc) then
-          Error('target xtensa: this SoC has no atomic ISA');
+          Error('target xtensa: ' + SocName(TargetSoc) + ' has no atomic '
+                + 'instruction (S32C1I is absent from its core config), so an '
+                + 'atomic -- which the coroutine scheduler also uses -- cannot be '
+                + 'emitted. It is single-core, so masking interrupts would be a '
+                + 'correct atomic there, as on the esp32c3; that arm is not written '
+                + 'yet: feature-a-esp32s2-atomics-by-interrupt-masking');
         argNode := IRA[node]; nArgs := 0;
         while argNode <> -1 do
         begin

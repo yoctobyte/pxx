@@ -9054,7 +9054,12 @@ function SocHasAtomicISA(soc: Integer): Boolean;
   extension. NOT the C3/C2 — those are RV32IMC, no `A`, which is why
   `compiler/rv32enc.inc` has no AMO or LR/SC encoders to emit. }
 begin
-  SocHasAtomicISA := SocIsXtensa(soc) or
+  { NOT the ESP32-S2 either, which this said until 2026-09-24: its core config
+    (IDF's esp32s2 core-isa.h) has XCHAL_HAVE_S32C1I = 0, so S32C1I and the
+    ATOMCTL write are illegal instructions there -- a silent wrong build, not a
+    refusal, the moment a program used an atomic (the scheduler does). The
+    esp32 and esp32s3 configs have it = 1. }
+  SocHasAtomicISA := (SocIsXtensa(soc) and (soc <> SOC_ESP32S2)) or
                      (soc = SOC_ESP32C6) or (soc = SOC_ESP32H2) or
                      (soc = SOC_ESP32P4);
 end;
