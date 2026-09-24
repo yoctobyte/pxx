@@ -200,7 +200,13 @@ echo "case 5: disassembler NAMED but absent -- must not blame pxx"
 LLVM_OBJDUMP=/nonexistent/llvm-objdump "$PROBE" > "$WORK/out" 2>&1
 rc=$?
 [ "$rc" = 2 ] && ok "exit 2" || bad "exit $rc, expected 2" "$(tail -3 "$WORK/out")"
-grep -qi 'does not run\|INSTRUMENT failure' "$WORK/out" \
+# The `does not run` arm of this alternation is DEAD as of 2026-09-24 -- the
+# probe emits "does not DECODE" for both this case and case 6, and `does not
+# run` occurs zero times in it. Dropped rather than left in place: an
+# alternation whose arms are not all live makes a guard look broader than it
+# is, and the dead arm is invisible because the surviving arm carries the row.
+# Found by grepping the SIBLING assertion while fixing case 6, not by a red.
+grep -qi 'INSTRUMENT failure' "$WORK/out" \
     && ok "names it an instrument failure" || bad "no instrument-failure line"
 grep -qi 'pxx-side broken' "$WORK/out" \
     && bad "blamed pxx for a missing disassembler" "$(tail -3 "$WORK/out")" \
@@ -210,15 +216,48 @@ echo "case 6: disassembler RUNS but is not a disassembler (/bin/true)"
 # The nastiest shape: the tool exists, exits 0, and emits nothing. pxx compiles
 # both objects fine, so only an assertion that the DISASSEMBLY is non-empty can
 # tell this from a broken prologue.
-LLVM_OBJDUMP=/bin/true "$PROBE" > "$WORK/out" 2>&1
+# One spelling, used for both the invocation and the assertion below, so the
+# two cannot silently drift apart into testing different tools.
+BADDUMP=/bin/true
+LLVM_OBJDUMP="$BADDUMP" "$PROBE" > "$WORK/out" 2>&1
 rc=$?
 [ "$rc" = 2 ] && ok "exit 2" || bad "exit $rc, expected 2" "$(tail -4 "$WORK/out")"
 grep -qi 'verdict: DISAGREEMENT' "$WORK/out" \
     && bad "blamed pxx for a tool that emits nothing" "$(grep -i verdict "$WORK/out")" \
     || ok "does NOT say DISAGREEMENT"
-grep -qi 'DISASSEMBLER' "$WORK/out" \
-    && ok "names the disassembler as the failing side" \
-    || bad "does not identify which side failed"
+# WHAT THIS ROW IS FOR, STATED AS A PROPERTY BECAUSE IT USED TO BE A WORD.
+# Until 2026-09-24 the assertion was `grep -qi 'DISASSEMBLER'`, and it went RED
+# on `b5140a1f0` -- a commit that IMPROVED this message, replacing the word with
+# a precise statement of what the tool failed to do ("does not DECODE a pxx
+# aarch64 image"). Every property the row exists to protect was satisfied and
+# the guard still failed, because it pinned the old message's SPELLING.
+#
+# The shape is the guarded commit's own lesson one level up: `b5140a1f0`
+# replaced selecting the disassembler BY NAME with selecting it BY CAPABILITY,
+# and the guard over it still asserted on a name. An assertion that pins a
+# diagnostic's wording fails on every improvement to that wording, and it fails
+# in the direction that reads as a regression in the thing that improved.
+#
+# AND IT WAS WRONG IN BOTH DIRECTIONS, WHICH IS WHY THIS IS NOT MERELY A STALE
+# STRING. Measured against four synthetic outputs: the old assertion FAILED on
+# the correct improved message (the false red T bisected) and PASSED on a
+# message reading "the disassembler produced no instructions" -- which names no
+# tool and identifies no side. The word it pinned was incidental to the
+# property, so it tracked the message's VOCABULARY, which correlates with the
+# property only by convention. The two rows below fail independently of each
+# other (verified: one control breaks each), and both fail together on a
+# message that blames pxx, which is the defect this case exists for.
+#
+# So: two orthogonal properties, each separately falsifiable. Note case 5 above
+# was already written this way -- the sibling arm was correct and this one was
+# not, which is why grepping for the OTHER SPELLING'S HANDLER beats grepping for
+# the feature.
+grep -qF "$BADDUMP" "$WORK/out" \
+    && ok "names the offending tool by its value" \
+    || bad "does not name which tool failed" "$(tail -4 "$WORK/out")"
+grep -qi 'INSTRUMENT failure' "$WORK/out" \
+    && ok "attributes the failure to the INSTRUMENT, not to pxx" \
+    || bad "does not identify which side failed" "$(tail -4 "$WORK/out")"
 
 echo
 if [ "$FAILED" -gt 0 ]; then
