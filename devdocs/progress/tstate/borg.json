@@ -16715,23 +16715,47 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-22T13:06:58Z",
+  "date": "2026-09-24T00:40:35Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
+   "test-core#src:test/test_const_shadows_routine_fail.pas",
+   "test-core#src:test/test_a_property_store_through_a_cast_headed_target.pas",
+   "test-core#src:test/test_a_lifted_nested_routine_keeps_its_token_channels.pas",
    "test-core#src:test/c_crtl_wait.c",
-   "test-nilpy#src:test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy",
-   "test-aarch64#src:tools/compiler_srchash.sh",
-   "test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2",
+   "test-core#src:test/test_xtensa_div_zero_check.pas",
+   "test-core#src:test/test_nil_check_procvar.pas",
+   "test-c-conformance#shard4/6",
+   "test-aarch64#src:test/test_set_runtime.pas",
+   "test-arm32#src:test/test_set_runtime.pas",
+   "test-c-conformance-i386#shard4/6",
+   "test-c-conformance-aarch64#shard4/6",
+   "test-c-conformance-arm32#shard4/6",
+   "test-c-conformance-riscv32#shard4/6",
    "tools-devtest#00",
-   "demos#00"
+   "tools-devtest-sh#00",
+   "demos#00",
+   "test-pascal-conformance#shard3/6"
   ],
-  "sha": "db6d1bddb3b3059547fd8669b988e6731ad10198",
+  "sha": "bd59da44369cfab056a73349ab6c0b0f8938fa02",
   "tier": "full",
-  "ver": "v418",
+  "ver": "v419",
   "verdict": "RED",
   "why": {
-   "test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@2": "ok: $TMP  [code=38576B  data=1408B  bss=34320B  procs=538  codeseg=40812B] | ok: $TMP  [code=931632B  data=164360B  bss=34112B  procs=186  codeseg=933740B] | rv32_bigbody: code=931632 does not exceed ",
-   "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
+   "test-aarch64#src:test/test_set_runtime.pas": "pascal26:42: error: compiler error: PXXMemZero not found (aarch64) | near: , 3 in cand ) ; >>> end .",
+   "test-arm32#src:test/test_set_runtime.pas": "pascal26:42: error: compiler error: PXXMemZero not found (arm32) | near: , 3 in cand ) ; >>> end .",
+   "test-c-conformance#shard4/6": "pascal26:8: error: C: no member named 'y' in this struct/union | near:   s2  s2  >>> y | pascal26:9: error: C: no member named 'y' in this struct/union | near: s1  x  s2  >>> y | test-c-conformance: 3",
+   "test-c-conformance-aarch64#shard4/6": "pascal26:8: error: C: no member named 'y' in this struct/union | near:   s2  s2  >>> y | pascal26:9: error: C: no member named 'y' in this struct/union | near: s1  x  s2  >>> y | test-c-conformance-aa",
+   "test-c-conformance-arm32#shard4/6": "pascal26:8: error: C: no member named 'y' in this struct/union | near:   s2  s2  >>> y | pascal26:9: error: C: no member named 'y' in this struct/union | near: s1  x  s2  >>> y | test-c-conformance-ar",
+   "test-c-conformance-i386#shard4/6": "pascal26:8: error: C: no member named 'y' in this struct/union | near:   s2  s2  >>> y | pascal26:9: error: C: no member named 'y' in this struct/union | near: s1  x  s2  >>> y | test-c-conformance-i3",
+   "test-c-conformance-riscv32#shard4/6": "pascal26:8: error: C: no member named 'y' in this struct/union | near:   s2  s2  >>> y | pascal26:9: error: C: no member named 'y' in this struct/union | near: s1  x  s2  >>> y | test-c-conformance-ri",
+   "test-core#src:test/test_a_lifted_nested_routine_keeps_its_token_channels.pas": "unchecked 20 | before-checked | -Runtime error 201 (range check error) | -exit=201 | +checked-not-reached 20 | +after-checked-not-reached",
+   "test-core#src:test/test_a_property_store_through_a_cast_headed_target.pas": "ok: $TMP  [code=22246B  data=6488B  bss=35412B  procs=154  codeseg=24288B]",
+   "test-core#src:test/test_const_shadows_routine_fail.pas": "test_const_shadows_routine_fail: FAIL - expected a refusal naming the const",
+   "test-core#src:test/test_nil_check_procvar.pas": "ok: $TMP  [code=690B  data=440B  bss=34608B  procs=38  codeseg=3808B] | ok: $TMP  [code=690B  data=440B  bss=34608B  procs=38  codeseg=3808B] | Segmentation fault (core dumped) | test_nil_check_procva",
+   "test-core#src:test/test_xtensa_div_zero_check.pas": "+++ actual | @@ -1,2 +1,3 @@ | start | -Runtime error 200 (division by zero) | +0 | +unreachable",
+   "test-pascal-conformance#shard3/6": "pascal26:6: error: compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point). A frontend driver is missing its stub-emission call for the current flags/targe",
+   "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d",
+   "tools-devtest-sh#00": "ok   does NOT say DISAGREEMENT | FAIL does not identify which side failed | FAILED: 1 row(s) | tools-devtest-sh: 4 green, 1 RED -- tools/aarch64_cabi_prologue_probe_devtest.sh"
   }
  },
  "toolchain": {
