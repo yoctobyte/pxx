@@ -777,7 +777,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — a working SKELETON; 6 of 28 ordinary constructs compile (re-measured 2026-09-12) | — |
 
-## rainy-day (49)
+## rainy-day (50)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -808,6 +808,7 @@ _none_
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-kernel-matrix-bootroom | E | 50 | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
 | feature-mode-delphi-remaining | A | 50 | feature | `{$mode delphi}` — remaining @-relax edge slices | — |
+| feature-n-an-integer-nan-for-promotable-ints-on-esp | N | 20 | feature | NOT to be implemented until the owner lifts it. On ESP, a NilPy promotable-int `//` or `%` by zero would produce an integer NaN (a third promo tag) that propagates, compares false and prints `nan`, instead of halting or answering 0. The owner called it a valid construct for promotable ints and said not to fix it now. The real work is the BOUNDARY LIST: every consumer that has no NaN (indexing, range, slicing, truthiness, dict keys, Pascal/C arguments, formatting, int-to-float) needs a decided answer, and none is decided here. | — |
 | feature-nilpy-runtime-dunder-dispatch-on-variants | N | 45 | feature | Runtime dunder dispatch for a user class held in a Variant | decide-nilpy-runtime-dunder-dispatch-strategy |
 | feature-no-ansistring-profile | A | 50 | feature | No-AnsiString / bounded-string profile | — |
 | feature-os-targets-bsd-mac | A | 50 | feature | Additional OS targets (BSD / macOS via syscall mapping) | — |
