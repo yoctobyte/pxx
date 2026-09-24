@@ -1062,3 +1062,5 @@
 2026-09-24T10:05:33Z	borg	b60affaab3c6783bd8a53a9ff3f166b6883c5018	would NOT pin b60affaab3c6 — 7 red(s) the current pin does not have, 18 inherited from the current pin: test-emit-obj#shard0/6, test-emit-obj#shard1/6, test-emit-obj#shard2/6, test-emit-obj#shard3/6, test-emit-obj#shard4/6
 2026-09-24T10:35:35Z	borg	2bf0ce3246737a70a0a873b0721b3585fad3ef14	would NOT pin 2bf0ce324673 — 7 red(s) the current pin does not have, 18 inherited from the current pin: test-emit-obj#shard0/6, test-emit-obj#shard1/6, test-emit-obj#shard2/6, test-emit-obj#shard3/6, test-emit-obj#shard4/6
 2026-09-24T11:16:07Z	borg	040d57220bd6811978c21b0f897464edc9007e97	would-pin PENDING 040d57220bd6 — qualifies, streak 1/2
+2026-09-24T11:40:30Z	borg	bff2af70c3a0914a5b2e4e14d45d4b20751e4b52	WOULD PIN bff2af70c3a0 — 18 red(s), none new, 18 inherited from the current pin, self-host clean, streak 2/2
+2026-09-24T11:40:30Z	borg	bff2af70c3a0914a5b2e4e14d45d4b20751e4b52	AUTO-PIN DECLINED — HEAD is 6b3a014be9cb, not the tested bff2af70c3a0
