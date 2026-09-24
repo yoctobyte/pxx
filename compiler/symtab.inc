@@ -17527,7 +17527,14 @@ var i: Integer; lib: AnsiString;
 begin
   ProgramImportsFromLibc := False;
   for i := 0 to ExternalCount - 1 do
-    if (ExternalProc[i] >= 0) and (ProcLibrary[ExternalProc[i]] >= 0) then
+    { A `weakexternal` does not count: a library reached only weakly gets no
+      DT_NEEDED (see the elfwriter's DT_NEEDED loop), and a strong fflush
+      import would turn it into a real dependency -- loading libc into a
+      program built not to have it. palthread's weak pthread_create is the
+      live case: libc loaded made it non-nil and the clone-thread fixtures
+      crashed. }
+    if (ExternalProc[i] >= 0) and (ProcLibrary[ExternalProc[i]] >= 0) and
+       (not ProcWeakExternal[ExternalProc[i]]) then
     begin
       lib := Strs[ProcLibrary[ExternalProc[i]]].Text;
       if (lib = 'libc.so.6') or (lib = 'libc.so') or (lib = 'libc') or
