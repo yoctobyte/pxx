@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-24T08:58:17Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6011be75c5b9194fc643f8bbbd12c8877236ac83",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-24T09:16:33Z",
    "fixed": [],
    "new_red": [],
@@ -493,6 +484,15 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-24T19:02:19Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -724,18 +724,18 @@
   "lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "lib-test#src:test/test_tcomponent.pas": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "lib-test#src:test/test_tlist_notify.pas": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
-  "optdiff#shard0/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "optdiff#shard1/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "optdiff#shard10/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "optdiff#shard11/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "optdiff#shard2/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "optdiff#shard3/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "optdiff#shard4/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "optdiff#shard5/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+  "optdiff#shard0/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "optdiff#shard1/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "optdiff#shard10/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "optdiff#shard11/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "optdiff#shard2/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "optdiff#shard3/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "optdiff#shard4/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "optdiff#shard5/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "optdiff#shard6/12": "d36af549ea5bf9d75cbdcf66a93874395a59f7f9",
-  "optdiff#shard7/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+  "optdiff#shard7/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "optdiff#shard8/12": "d36af549ea5bf9d75cbdcf66a93874395a59f7f9",
-  "optdiff#shard9/12": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+  "optdiff#shard9/12": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "size-canary#src:tools/size_canary.py": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "test-aarch64#src:test/c_crtl_cmsg_and_socket_levels.c": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
@@ -4937,11 +4937,11 @@
   "test-nilpy#src:test/test_var_init_from_named_string_const.pas": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "test-nilpy#src:tools/compiler_srchash.sh": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
-  "test-opt#src:compiler/compiler.pas@1": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "test-opt#src:compiler/compiler.pas@2": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "test-opt#src:compiler/compiler.pas@3": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "test-opt#src:test/test_atomic64.pas": "747054b6df74ffa97698ad636bd7bfb5e801833f",
-  "test-opt#src:tools/compiler_srchash.sh": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+  "test-opt#src:compiler/compiler.pas@1": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "test-opt#src:compiler/compiler.pas@2": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "test-opt#src:compiler/compiler.pas@3": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "test-opt#src:test/test_atomic64.pas": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
+  "test-opt#src:tools/compiler_srchash.sh": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "test-pascal-conformance#shard0/6": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "test-pascal-conformance#shard1/6": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
   "test-pascal-conformance#shard2/6": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
@@ -5562,7 +5562,7 @@
  "job_reason": {
   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | OK    examples/tui/menudemo.pas | OK    examples/vm/vmdemo.pas | === demos: 31/36 built into build/demos/ (esp32 skipped \u2014 cross-only) === | (demos is a dashboard, not a gate; FAILs -> file a ticket)",
   "lib-test#src:tools/crtl_reachability.py": "... 4 more line(s) not shown | lib-units: FAIL mimic_reportlab_pdfgen | pascal26:60: warning: #include <asm-generic/ioctls.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:60: warning: #include <linux/ioctl.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismat\u2026",
-  "optdiff#shard6/12": "OPT DIFF -O3: test/reloc_movw_probe.c (rc 0 vs 0) | optdiff skip SKIPLIST: test_rtti_method_call_by_name.pas | optdiff skip EXEC-FAIL-O0: c_const_and_chain_dead_arm.c(127) cgeneric_array_decay.c(127) | optdiff skip BUILD-FAIL: c_obj_data_dup_b.c c_obj_extern_addr.c cprep_lib.c csqlite_schema_exec_probe.c cundeclared_type_cast_fail.c i386_pcrel_globals.c library_program_needs_a_main_body_fail.pas \u2026",
+  "optdiff#shard6/12": "OPT DIFF -O3: test/reloc_movw_probe.c (rc 0 vs 0) | optdiff skip SKIPLIST: test_rtti_method_call_by_name.pas | optdiff skip EXEC-FAIL-O0: c_const_and_chain_dead_arm.c(127) cgeneric_array_decay.c(127) c_threadsafe_object_offset_zero_main.c(127) | optdiff skip BUILD-FAIL: c_obj_data_dup_b.c c_obj_extern_addr.c cprep_lib.c csqlite_schema_exec_probe.c cundeclared_type_cast_fail.c i386_pcrel_globals.c\u2026",
   "optdiff#shard8/12": "Segmentation fault | Terminated | optdiff skip SKIPLIST: test_c_gtk_call.pas | optdiff skip EXEC-FAIL-O0: c_obj_import_host.c(127) c_obj_static_link_b.c(127) i386_pcrel_globals_host.c(127) test_dead_loop_back_edge.pas(127) | optdiff skip BUILD-FAIL: cbridge_via_unit.c cconst_negative_array_bound_fails.c c_incomplete_type_member_refused.c c_obj_esp_export.c csqlite_thread_test.c ctypedef_lib.c cun\u2026",
   "test-aarch64#src:test/test_set_runtime.pas": "pascal26:42: error: compiler error: PXXMemZero not found (aarch64) | near: , 3 in cand ) ; >>> end .",
   "test-arm32#src:test/test_set_runtime.pas": "pascal26:42: error: compiler error: PXXMemZero not found (arm32) | near: , 3 in cand ) ; >>> end .",
@@ -15692,14 +15692,14 @@
  },
  "last": {
   "code_fp": "f35167cd4e55",
-  "date": "2026-09-24T18:47:41Z",
+  "date": "2026-09-24T19:02:19Z",
   "deadline": 3600.0,
   "sha": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 537.1
+  "verdict": "RED",
+  "wall": 865.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15739,14 +15739,14 @@
   },
   "opt": {
    "code_fp": "f35167cd4e55",
-   "date": "2026-09-24T08:10:02Z",
+   "date": "2026-09-24T19:02:19Z",
    "deadline": 3600.0,
-   "sha": "747054b6df74ffa97698ad636bd7bfb5e801833f",
+   "sha": "46d2a9430a963821ab44e4c68ff6dd22867c0d6b",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
    "verdict": "RED",
-   "wall": 858.1
+   "wall": 865.4
   },
   "slow": {
    "code_fp": "f35167cd4e55",
