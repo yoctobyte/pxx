@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `e09adcd641b6` | 2026-09-24T01:08:53Z | RED (native) | 333.7s | `b3dbca273e0b` RED |
+| borg | `e09adcd641b6` | 2026-09-24T01:27:27Z | RED (full) | 1074.9s | `e09adcd641b6` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `b3dbca273e0b` on borg, 2026-09-24T00:59:09Z (9m ago).**
+**Newest full tier in the fleet: `e09adcd641b6` on borg, 2026-09-24T01:27:27Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `b3dbca273e0b` | RED | 9m | — (newest) |
+| borg | `e09adcd641b6` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -316,4 +316,3 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-c-conformance-arm32#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
 - **test-c-conformance-i386#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
 - **test-c-conformance-riscv32#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
-- **lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy** — test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy tools/expect_same.sh (borg): bad `b3dbca273e0b`, last good `692ea558bbe4`, 3 commit(s) in range
