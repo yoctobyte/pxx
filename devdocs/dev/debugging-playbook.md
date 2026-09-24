@@ -43724,3 +43724,46 @@ against 85/390 at the same HEAD, no untracked file containing the symbol — so
 this section.** Four seats' worth of counts, every one honest, and the only
 figure that has survived every re-measurement is the one whose root, pattern,
 flag and tree were written down beside it.
+
+**THE 144 WAS DECOMPOSED BY ITS AUTHOR AND REPRODUCES EXACTLY — three
+compounding mechanisms, none of them `-w`:**
+
+```
+grep -rnw 'PXX_ESP' --include=*.pas . | grep -v builtinheap   -> 144
+  131   test/ -- the actual subject
+   +7   compiler/builtin/builtin.pas                 population was `.`, not test/
+   +7   stable_linux_amd64/default/builtin/builtin.pas          THE SAME FILE
+   -1   `grep -v builtinheap` matched a LINE, not a path
+```
+
+**A REPO-WIDE CENSUS OF ANY COMPILER-SOURCE SYMBOL DOUBLE-COUNTS BY
+CONSTRUCTION**, and this is the row to carry out of the whole episode.
+`stable_linux_amd64/` is the PIN SNAPSHOT of `compiler/builtin/`. Verified
+here: `builtin.pas` answers **7 and 7**, `builtinheap.pas` **37 and 37**, and
+both pairs are **byte-identical right now** — two correct files in two correct
+locations, so neither the command nor the output looks wrong at any point.
+**Identical is the dangerous state, not the safe one:** the pair diverges the
+moment someone cuts a pin, so the same command silently answers differently
+across a `make pin` that has nothing to do with the question. frankuser cut
+v420 during this very investigation.
+
+**And the `-v` is the cheap mechanism with the expensive habit behind it:**
+`grep -v builtinheap` was meant to exclude a PATH and matched any LINE whose
+prose mentions the file — in a tree where test headers and tickets cite
+filenames constantly. It removed exactly one real hit,
+`test/test_esp_bare_variant.pas:6`, a comment reading *"builtinheap.pas:5701..
+6992 is ONE `{$ifndef PXX_ESP}` span"*, silently and in the direction that
+shrinks the number. Exclude by `--exclude`/`--exclude-dir` or by a path anchor,
+never by piping into `grep -v`.
+
+**THE SHARPEST ROW IS 8e's OWN AND IT IS ABOUT ADVICE, NOT COUNTING.** Directly
+above their 144 they had written **"use `-w` and say so."** That sentence was
+the correct fix for the OTHER seat's error — the `PXX_ESP_BARE` substring
+match — and **would not have prevented the number it was sitting on**, whose
+causes were the population and the filter; `-w` was already in their command.
+So a piece of true, relevant, well-earned methodology advice lent its
+credibility to an adjacent number it had no power to protect. **Advice beside a
+number reads as the derivation of that number.** When you write a discipline
+line next to a measurement, say which failure it prevents, and check that it is
+the failure that measurement was actually exposed to.
+
