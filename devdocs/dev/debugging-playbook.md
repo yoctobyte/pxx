@@ -43473,18 +43473,97 @@ mine: **#1 is a control that fails differently and therefore works; #2 is a
 control the subject cannot fail.**
 
 **NOT PROMOTED TO CLAUDE.md, and the reasoning is said out loud because "not
-promoted" reads as "not valued" otherwise.** The promotion test is recurrence
-across an independent subsystem, and this section now has two seats — so the
-trigger I wrote into it a few hours ago has technically fired. I am declining it
-anyway, on the other half of the test: **CLAUDE.md must not grow a neighbour
+promoted" reads as "not valued" otherwise.**
+
+**First, a correction to this section's own trigger, supplied by frankb-8e and
+against its author's interest:** I wrote the trigger as *a second SEAT*, and
+CLAUDE.md's actual test is **a second independent SUBSYSTEM**. By the file's own
+wording the four instances above already meet it — palthread's threadsafe gate,
+interrupts.pas's platform_backend resolution, a grep over a run that never
+happened, and an error-line count across two compilers are four unrelated
+subsystems. **So the trigger fired long before a second seat appeared, and the
+second seat was never load-bearing for it.** Stating that plainly because a
+decline resting on a bar the rule does not set is not a decline, it is an error
+that happens to look conservative.
+
+I am declining anyway, on grounds that survive the correction: **CLAUDE.md must not grow a neighbour
 where it already has the rule.** 8e's #2 is already decided there by "CHOOSE A
 PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT" — 0 is both "no answer" and a
 plausible answer, which is that rule verbatim. 8e's #1 is a control that worked,
 which is not this shape at all. Strip those two out and the genuinely new shape —
 **two arms that fail IDENTICALLY for a reason unrelated to the question, so the
 verdict reads as parity** — is still one seat, one session, four instances.
-**What would change it: a second seat producing a vacuous comparison where both
-arms ran, both failed the same way, and neither the wrong-population rule nor the
-cannot-fail rule would have caught it.** If that arrives, the line to strengthen
-is the existing positive-control paragraph, not a new rule beside it: an
-extension costs a sentence where a neighbour costs a paragraph.
+**And the form matters more than the verdict.** The novel part is that a control
+can be drawn from the RIGHT population, correctly aimed, and still be vacuous
+because **both arms die upstream of the question**. CLAUDE.md's positive-control
+paragraph already says a control must be drawn from the population your question
+is about; this is one sentence appended to that clause, not a paragraph beside
+it — an extension costs a sentence where a neighbour costs a paragraph, and the
+file's own rule prefers the extension. **If this is ever promoted, that is the
+shape it should take**, and it should be proposed to the owner rather than
+written in on a seat's judgement: a peer suggesting a CLAUDE.md edit is not a
+route to one, however good the argument, and this one came from a peer.
+
+## A SUPPRESSION IS THE NATURAL REPAIR FOR A FALSE DIAGNOSTIC, AND IT IS THE ONE REPAIR THAT TURNS A VISIBLE FAILURE INTO AN INVISIBLE ONE
+
+You add a diagnostic. It fires on valid input. The obvious repair is to stop it
+firing there — and if the accepting path produces a wrong VALUE, you have just
+restored the exact defect the diagnostic was added to catch, with the alarm
+removed. **The report that arrives is "your change broke a program that used to
+build", and the repair that answers that report is the one that must not be
+made.**
+
+**Measured 2026-09-24**, an hour apart, both halves by the same seat.
+
+The diagnostic: a C member taken from a type of unknown layout is refused,
+because `RecFieldOffset` has no error channel and a missing field reads back as
+offset 0 — so `v.a=11; v.b=22; v.typo=99` printed `a=99 b=22`, a silent CLOBBER.
+
+The false positive: `struct S { int a; int b; } __attribute__((aligned));` is
+valid C that gcc compiles, and pxx refuses it — the frontend DECLINES to lay out
+a body it cannot handle, so a fully defined struct reaches the field tables with
+zero fields, indistinguishable from an undefined tag.
+
+**The repair that was worse than the bug:** suppress the diagnostic where the
+layout is unknown, on the sound-sounding reasoning that *we cannot know a member
+is missing from a struct we never laid out*. The program compiles. **It prints
+`9 9` where gcc prints `7 9`**, and `sizeof` answers 0 against gcc's 16, because
+with the layout dropped every member resolves to offset 0. A loud wrong MESSAGE
+traded for a silent wrong VALUE — this ticket's own bug, reintroduced by the
+guard written to prevent a regression.
+
+**It was caught by building the binary and RUNNING it. Nothing else would have.**
+Every compile-level signal said the repair worked: the false positive was gone,
+the true positives still refused, and the 48-file corpus was still clean. The
+only instrument that disagreed was the program's output against gcc's.
+
+**The rule: when you relax a diagnostic, ask what the accepting path now DOES,
+not whether it builds.** Run it, diff against the oracle, and treat "it compiles
+again" as the beginning of the check rather than the end of it.
+
+**And where the accepting path cannot be made correct, the answer is a more
+ACCURATE message, never silence.** Here the fix was a third state — the record
+was neither undefined nor genuinely empty but *defined with its layout dropped*
+— so all three cases refuse and each says something true: the member NAME is
+wrong, the DEFINITION is missing, or the layout is OURS to explain. Two booleans
+and a three-valued classifier. **The pressure to collapse three states into two
+is where this class comes from**: the second state is discovered by a bug report
+and the third only by someone asking why the first two look identical.
+
+**The asymmetry that makes this worth a section.** A false refusal generates a
+report — someone's build broke and they say so. A silent wrong value generates
+nothing; it is found months later, or in this repo's case by a differential
+against gcc that nobody had a reason to run. **So the pressure on a maintainer
+runs entirely one way**, and the repair that relieves it is the one that removes
+the evidence. Weigh a refusal you can see against a value you cannot.
+
+Filed alongside `bug-c-an-undeclared-struct-type-compiles-and-reads-garbage`,
+whose ticket body carries the three-state table and the gcc boundary rows.
+
+**Not promoted to CLAUDE.md**: one subsystem, one session. The neighbouring
+CLAUDE.md rules are about an instrument that cannot fail and a probe whose right
+answer collides with its failure value; this is about a FIX that converts one
+failure mode into a quieter one, which neither covers. **Promote it if a second
+subsystem produces a suppression that restores a silent wrong value** — and if
+it goes up, it goes up as its own line, because there is no existing clause it
+extends.
