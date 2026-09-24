@@ -137,12 +137,11 @@ procedure EmitAcquireHeapLock;
   a slot -- as 1152 did: TlsBlockSize is now that map PLUS TlsUserBytes of
   `threadvar` storage, and the map's own extent is what the 1152 above names.
 
-  THE REAL CONSTRAINT IS THE TARGET SET. `__pxxTlsBase` refuses on everything
-  but x86-64 — the others have a readable thread register (aarch64 tpidr_el0,
-  arm32 tpidruro) and no way to SET one yet. `--threadsafe` itself covers
-  x86-64, i386, aarch64 and arm32, so per-thread arenas built on this would be
-  an x86-64-only optimisation and the other three threaded targets stay on the
-  global lock. That is the thing to decide before starting, not a missing
+  THE REAL CONSTRAINT IS THE TARGET SET. Since 2026-09-24 aarch64 and arm32
+  install a block too (TargetHasTlsBlock), but ONLY IN A STATIC BINARY: their
+  one thread register belongs to glibc whenever the loader brings it in. i386
+  has none yet. So per-thread arenas built on this would need a fallback for
+  exactly the dynamic programs, and i386 stays on the global lock. That is the thing to decide before starting, not a missing
   accessor. feature-a-reentrant-heap-lock-and-per-thread-arenas.
 
   What this blob still is: the part of the cliff that was pure contention
@@ -259,12 +258,12 @@ function HeapMagazineEnabled: Boolean;
   to skip. A default build emits none (EmitAcquireHeapLock opens with
   `if ThreadSafeMode`), so nothing here can move the default build's allocator.
 
-  x86-64 only, and that is a target-set limit rather than a design one: the
-  magazine lives in the TLS block, `gs:[0]` is how this runtime reaches it, and
-  __pxxTlsBase refuses off x86-64 because the other threaded targets (i386,
-  aarch64, arm32) have a readable thread register and no way to SET one yet.
-  Those three keep the global lock and the negative scaling measured in
-  feature-a-reentrant-heap-lock-and-per-thread-arenas.
+  x86-64 only. The magazine lives in the TLS block, and `gs:[0]` is how this
+  runtime reaches it. aarch64 and arm32 have had a block since 2026-09-24, but
+  only in a static binary (TargetHasTlsBlock), and i386 has none. So the other
+  three keep the global lock and the negative scaling measured in
+  feature-a-reentrant-heap-lock-and-per-thread-arenas; porting the magazine is
+  a separate change.
 
   TlsMainInstalled for the reason StatusSlotTlsIndex gives at length: with
   --emit-obj/--shared nothing installed a base and `gs:` does not return 0, it
@@ -1976,8 +1975,9 @@ procedure EmitTlsMainInstall;
   four-line program calling printf/malloc/strerror, which `pinned` runs fine,
   and no test in the quick tier links glibc so nothing caught it. gs is unused
   by userspace on x86-64 Linux, so the two thread pointers coexist. }
+var pSkip: Integer;
 begin
-  if TargetArch <> TARGET_X86_64 then Exit;
+  if not TargetHasTlsBlock then Exit;
   { --emit-obj / --shared have no ELF entry point: the linker or the host program
     supplies one, so code at offset 0 is never reached and the block would never
     be installed. Say so with a flag rather than emitting dead bytes and hoping,
@@ -1985,6 +1985,45 @@ begin
     faults on an fs base of 0 and, worse, inside a glibc host it succeeds and
     returns glibc's TCB. }
   if EmitObjMode or EmitSharedMode then Exit;
+  if (TargetArch = TARGET_AARCH64) or (TargetArch = TARGET_ARM32) then
+  begin
+    { ONE thread register, and glibc owns it in a dynamic binary. The loader
+      has set it before this runs, and a static binary starts with it at 0.
+      So install only when it reads 0; TargetHasTlsBlock has the rest. The
+      block's slot 0 is its own address, the same convention as x86-64, and
+      the clone leg uses it to tell a pxx block from glibc's TCB.
+      Only the self-pointer is written. The TID and stack-bound slots feed the
+      x86-64 I/O-lock fast path and nothing reads them here; zero is their
+      documented "unset" value. }
+    TlsMainInstalled := True;
+    BSSSize := (BSSSize + 15) and (not 15);
+    BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TlsBlockSize);
+    if TargetArch = TARGET_AARCH64 then
+    begin
+      EmitI32($D53BD049);                       { mrs  x9, tpidr_el0 }
+      pSkip := CodeLen; EmitI32($B5000009);     { cbnz x9, .skip (patched) }
+      EmitI32($18000049);                       { ldr  w9, [pc+8] }
+      EmitI32($14000002);                       { b    [pc+8] }
+      EmitGlobRef(BSS_TLS_MAIN);
+      EmitI32($F9000129);                       { str  x9, [x9]    (slot 0 = self) }
+      EmitI32($D51BD049);                       { msr  tpidr_el0, x9 }
+      Patch32(pSkip, $B5000009 or ((((CodeLen - pSkip) div 4) and $7FFFF) shl 5));
+    end
+    else
+    begin
+      EmitI32($EE1D9F70);                       { mrc  p15, 0, r9, c13, c0, 3  (TPIDRURO) }
+      EmitI32($E3590000);                       { cmp  r9, #0 }
+      pSkip := CodeLen; EmitI32($1A000000);     { bne  .skip (patched) }
+      EmitI32($E59F0000);                       { ldr  r0, [pc] }
+      EmitI32($EA000000);                       { b    .+8 }
+      EmitGlobRef(BSS_TLS_MAIN);
+      EmitI32($E5800000);                       { str  r0, [r0]    (slot 0 = self) }
+      EmitLoadImmArm32(7, $F0005);              { r7 = __ARM_NR_set_tls }
+      EmitI32($EF000000);                       { svc  0 }
+      Patch32(pSkip, $1A000000 or ((((CodeLen - pSkip) div 4) - 2) and $00FFFFFF));
+    end;
+    Exit;
+  end;
   TlsMainInstalled := True;
   { The block, plus 16 bytes past its end used ONCE, here, as the `struct
     rlimit` getrlimit writes into. Past the end rather than in a slot, because

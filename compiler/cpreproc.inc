@@ -3454,7 +3454,7 @@ begin
 
     THE TWO CONDITIONS ARE TryAssignThreadVarStorage's TWO TU-LEVEL REFUSALS,
     and they are here rather than inferred because both are command-line facts
-    known before a token is read: TLSREFUSE_ARCH (not x86-64) and
+    known before a token is read: TLSREFUSE_ARCH (not TargetHasTlsBlock) and
     TLSREFUSE_NOINSTALL (--emit-obj/--shared have no ELF entry point, so
     EmitTlsMainInstall never runs and nothing installs the block).
 
@@ -3465,7 +3465,7 @@ begin
     "would a scalar get a slot here", which is the question a header asks.
     If TryAssignThreadVarStorage grows a sixth TU-level reason, it belongs here
     too, or the macro becomes a name that is not the thing. }
-  if (TargetArch = TARGET_X86_64) and not (EmitObjMode or EmitSharedMode) then
+  if TargetHasTlsBlock and not (EmitObjMode or EmitSharedMode) then
     CPAddLiteral('__pxx_thread_local__', '01');
   { Data-model predefines (C 5.2.4.2): real code branches on these to size long
     (c-testsuite 00212). 64-bit targets are LP64 (long/pointer = 8), 32-bit are

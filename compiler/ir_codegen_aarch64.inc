@@ -2486,6 +2486,26 @@ begin
         EmitI32($F9400000);               { ldr x0, [x0] = data pointer }
       end;
 
+    IR_TLSBASE:
+      { __pxxTlsBase: the block EmitTlsMainInstall or the clone leg put in
+        tpidr_el0, recognised by its slot 0 holding its own address. When the
+        register is NOT a pxx block (glibc's TCB, in a dynamic binary or on a
+        thread glibc created), fall back to the main thread's block: one shared
+        copy, which is what every thread-local was before this target had a
+        block, and never a write into glibc's TCB. The ELF writer then refuses
+        or warns (TlsBaseUsed, TlsStrictUsed). x9 is scratch. }
+      begin
+        TlsBaseUsed := True;
+        EmitI32($D53BD040);               { mrs  x0, tpidr_el0 }
+        EmitI32($F9400009);               { ldr  x9, [x0] }
+        EmitI32($EB09001F);               { cmp  x0, x9 }
+        EmitI32($54000080);               { b.eq .own  (+4 words) }
+        EmitI32($18000040);               { ldr  w0, [pc+8] }
+        EmitI32($14000002);               { b    [pc+8] }
+        EmitGlobRef(BSS_TLS_MAIN);
+                                          { .own: }
+      end;
+
     IR_FRAME:
       { get_frame: x29 is the frame pointer (stp x29,x30,[sp,#-16]!; mov x29,sp). }
       EmitI32($AA1D03E0); { mov x0, x29 }

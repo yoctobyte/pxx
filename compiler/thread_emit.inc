@@ -43,9 +43,32 @@
   a `uses`d unit pulled in after the up-front runtime-stub region. CloneStubAddr = 0
   marks "not yet emitted". }
 
+function TargetHasTlsBlock: Boolean;
+{ Does this target give every thread its own TLS block, the one __pxxTlsBase
+  and `threadvar` reach? The ONE predicate; the parser's refusals, the entry
+  install and the clone legs all ask it.
+
+  x86-64 installs the block in gs, which no libc uses. aarch64 (tpidr_el0) and
+  arm32 (TPIDRURO, set with the set_tls syscall) have ONE thread register, and
+  glibc owns it whenever the loader brought glibc in. So on those two targets
+  the block is installed in a STATIC binary only. The entry code checks at
+  RUNTIME: a static binary starts with the register at 0, and a dynamic one
+  starts with it pointing at glibc's TCB. The ELF writer then refuses a dynamic
+  binary that reads the block (TlsBaseUsed), so no program can get glibc's TCB
+  back from __pxxTlsBase.
+
+  i386 is NOT here: it needs set_thread_area plus a segment selector, which is
+  a separate port. riscv32 and the rest have no threads at all (the
+  --threadsafe gate). }
+begin
+  TargetHasTlsBlock := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)
+                    or (TargetArch = TARGET_ARM32);
+end;
+
 procedure EnsureCloneStub;
 var
   jmpOver: Integer;
+  pNoInst, pNoInst2: Integer;   { the child's skip-the-install branches (aarch64, arm32) }
   pParent: Integer;   { the child/parent split, patched in ALL FOUR legs: rel8 on
                         x86-64/i386, a branch immediate on aarch64/arm32 }
 begin
@@ -258,6 +281,19 @@ begin
     jmpOver := CodeLen - 4;
     CloneStubAddr := CodeLen;
     EmitI32($D1040021);                 { sub  x1, x1, #256       (hidden-dest scratch) }
+    { ---- carve the child's TLS block below the scratch ----
+      The same block the x86-64 leg carves, zeroed for the same reasons (see
+      there): every threadvar starts at 0, and a reused stack must not hand
+      over the previous thread's slots. x9/x10 are caller-saved scratch.
+      TlsBlockSize is a nonzero multiple of 16, so the loop terminates and sp
+      stays 16-aligned. }
+    EmitLoadImmA64(9, TlsBlockSize);    { x9 = TlsBlockSize }
+    EmitI32($CB090021);                 { sub  x1, x1, x9 }
+    EmitI32($AA0103EA);                 { mov  x10, x1 }
+    EmitI32($F800855F);                 { .z: str xzr, [x10], #8 }
+    EmitI32($F1002129);                 { subs x9, x9, #8 }
+    EmitI32($54FFFFC1);                 { b.ne .z }
+    EmitI32($F9000021);                 { str  x1, [x1]           (slot 0 = self) }
     EmitI32($D1004021);                 { sub  x1, x1, #16        (stage area) }
     EmitI32($F9000022);                 { str  x2, [x1]           (entry) }
     EmitI32($F9000423);                 { str  x3, [x1, #8]       (arg) }
@@ -271,13 +307,30 @@ begin
       short -- inside the child path, in the PARENT. Three legs had already
       been converted for exactly this reason and this one had not. }
     pParent := CodeLen; EmitI32($B5000000);   { cbnz x0, .parent (patched) }
-    { ---- child: sp = childStack-16, [sp]=entry [sp+8]=arg ---- }
+    { ---- child: sp = the stage area, [sp]=entry [sp+8]=arg, block at sp+16 ---- }
+    { Install the block, but ONLY if the parent was running on a pxx block.
+      clone inherits tpidr_el0, so the register holds either the parent's pxx
+      block, whose slot 0 is its own address, or glibc's TCB in a dynamic
+      binary, whose first word is the dtv pointer. Taking the register in the
+      second case would break glibc on this thread, and TargetHasTlsBlock says
+      why that binary never reads the block anyway. }
+    EmitI32($D53BD049);                 { mrs  x9, tpidr_el0 }
+    pNoInst := CodeLen; EmitI32($B4000009);   { cbz  x9, .noinst (patched) }
+    EmitI32($F940012A);                 { ldr  x10, [x9] }
+    EmitI32($EB0A013F);                 { cmp  x9, x10 }
+    pNoInst2 := CodeLen; EmitI32($54000001);  { b.ne .noinst (patched) }
+    EmitI32($910043E9);                 { add  x9, sp, #16        (the block) }
+    EmitI32($D51BD049);                 { msr  tpidr_el0, x9 }
+    Patch32(pNoInst, $B4000009 or ((((CodeLen - pNoInst) div 4) and $7FFFF) shl 5));
+    Patch32(pNoInst2, $54000001 or ((((CodeLen - pNoInst2) div 4) and $7FFFF) shl 5));
     EmitI32($F94003E1);                 { ldr  x1, [sp]           (entry) }
     EmitI32($F94007E0);                 { ldr  x0, [sp, #8]       (arg -> x0) }
     { x8 = the hidden-destination scratch (AAPCS XR, which is also what this
       compiler's own aggregate-return convention uses) — see CLONE_RETBUF_SIZE.
-      sp is the 16-byte stage area, so the scratch begins just above it. }
-    EmitI32($910043E8);                 { add  x8, sp, #16        (scratch) }
+      It sits above the stage area and the TLS block. }
+    EmitI32($910043E8);                 { add  x8, sp, #16 }
+    EmitLoadImmA64(9, TlsBlockSize);
+    EmitI32($8B090108);                 { add  x8, x8, x9         (scratch) }
     EmitI32($D63F0020);                 { blr  x1                 (entry(arg)) }
     EmitI32($D2800000);                 { mov  x0, #0             (exit code 0) }
     EmitI32($D2800BA8);                 { mov  x8, #93            (SYS_exit) }
@@ -298,7 +351,19 @@ begin
       -march=armv7-a. }
     EmitI32($EA000000); jmpOver := CodeLen - 4;   { b .end (patched below) }
     CloneStubAddr := CodeLen;
+    { r9/r10 are callee-saved under AAPCS and the block carve needs them. Only
+      the PARENT restores them; the child runs on a fresh stack. }
+    EmitI32($E92D0600);                 { push {r9, r10} }
     EmitI32($E2411C01);                 { sub r1, r1, #256      (hidden-dest scratch) }
+    { ---- carve the child's TLS block, as the aarch64 leg does ---- }
+    EmitLoadImmArm32(9, TlsBlockSize);  { r9 = TlsBlockSize }
+    EmitI32($E0411009);                 { sub r1, r1, r9 }
+    EmitI32($E1A0A001);                 { mov r10, r1 }
+    EmitI32($E3A0C000);                 { mov r12, #0 }
+    EmitI32($E48AC004);                 { .z: str r12, [r10], #4 }
+    EmitI32($E2599004);                 { subs r9, r9, #4 }
+    EmitI32($1AFFFFFC);                 { bne .z }
+    EmitI32($E5811000);                 { str r1, [r1]          (slot 0 = self) }
     EmitI32($E2411010);                 { sub r1, r1, #16       (stage area) }
     EmitI32($E5812000);                 { str r2, [r1]          (entry) }
     EmitI32($E5813004);                 { str r3, [r1, #4]      (arg) }
@@ -310,17 +375,33 @@ begin
     { bne .parent -- COMPUTED, same story as the aarch64 leg above: the +7 was
       correct until the child sequence grew by one instruction. }
     pParent := CodeLen; EmitI32($1A000000);   { bne .parent (patched) }
-    { ---- child: sp = childStack-16, [sp]=entry [sp+4]=arg ---- }
+    { ---- child: sp = the stage area, [sp]=entry [sp+4]=arg, block at sp+16 ---- }
+    { Install only over a pxx block; see the aarch64 leg. }
+    EmitI32($EE1D9F70);                 { mrc p15, 0, r9, c13, c0, 3  (TPIDRURO) }
+    EmitI32($E3590000);                 { cmp r9, #0 }
+    pNoInst := CodeLen; EmitI32($0A000000);   { beq .noinst (patched) }
+    EmitI32($E599A000);                 { ldr r10, [r9] }
+    EmitI32($E159000A);                 { cmp r9, r10 }
+    pNoInst2 := CodeLen; EmitI32($1A000000);  { bne .noinst (patched) }
+    EmitI32($E28D0010);                 { add r0, sp, #16       (the block) }
+    EmitLoadImmArm32(7, $F0005);        { r7 = __ARM_NR_set_tls }
+    EmitI32($EF000000);                 { svc 0 }
+    Patch32(pNoInst, $0A000000 or ((((CodeLen - pNoInst) div 4) - 2) and $00FFFFFF));
+    Patch32(pNoInst2, $1A000000 or ((((CodeLen - pNoInst2) div 4) - 2) and $00FFFFFF));
     EmitI32($E59D1000);                 { ldr r1, [sp]          (entry) }
     EmitI32($E59D0004);                 { ldr r0, [sp, #4]      (arg -> r0) }
-    { r12 (ip) = the hidden-destination scratch — see CLONE_RETBUF_SIZE. }
-    EmitI32($E28DC010);                 { add r12, sp, #16      (scratch) }
+    { r12 (ip) = the hidden-destination scratch — see CLONE_RETBUF_SIZE. It
+      sits above the stage area and the TLS block. }
+    EmitI32($E28DC010);                 { add r12, sp, #16 }
+    EmitLoadImmArm32(9, TlsBlockSize);
+    EmitI32($E08CC009);                 { add r12, r12, r9      (scratch) }
     EmitI32($E12FFF31);                 { blx r1                (entry(arg)) }
     EmitI32($E3A00000);                 { mov r0, #0            (exit code 0) }
     EmitI32($E3A07001);                 { mov r7, #1            (SYS_exit) }
     EmitI32($EF000000);                 { svc 0                 (thread exits here) }
     { ---- .parent: r0 = child tid ---- }
     Patch32(pParent, $1A000000 or (((((CodeLen - pParent) div 4) - 2)) and $00FFFFFF));
+    EmitI32($E8BD0600);                 { pop {r9, r10} }
     EmitI32($E1A01FC0);                 { mov r1, r0, asr #31   sign-extend tid into Int64 hi word }
     EmitI32($E12FFF1E);                 { bx lr }
     { patch the leading branch to land here (ARM pc is 2 instr ahead). }

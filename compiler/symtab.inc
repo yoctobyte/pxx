@@ -17543,6 +17543,37 @@ begin
     ResolveSynthImportLibrary(ExternalProc[i]);
 
 
+  { A DYNAMIC binary off x86-64 has no pxx thread block: the loader gave the
+    one thread register to glibc before the entry point ran, so the entry code
+    leaves it alone (EmitTlsMainInstall) and every thread-local read falls back
+    to the main thread's block -- ONE shared copy (see IR_TLSBASE in the aarch64
+    and arm32 backends).
+    Pascal's `threadvar` and `__pxxTlsBase` REFUSE here. Neither has ever
+    compiled to a shared copy, so a refusal breaks no working program.
+    C's `__thread` WARNS, and only when the program creates pxx threads. It
+    compiled to one shared copy before this target had a block, and errno.h
+    declares errno with it, so refusing would stop nearly every C program that
+    links a shared library. A single-threaded program is exactly right with
+    one copy, so it gets no warning.
+    bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
+  if (ExternalCount > 0) and TlsBaseUsed and (TargetArch <> TARGET_X86_64) then
+  begin
+    if TlsStrictUsed then
+      ErrorNoPos('this program uses `threadvar` or __pxxTlsBase AND links a '
+        + 'shared library. On this target the only thread register belongs to '
+        + 'the loaded libc, so pxx installs its per-thread block only in a '
+        + 'static binary. Drop the external library, or the threadvar.');
+    if ProgramCreatesPxxThreads and (not TlsSharedWarned) then
+    begin
+      TlsSharedWarned := True;
+      Inc(WarnCount);
+      writeln('pascal26: warning: this program links a shared library, so on this '
+        + 'target its thread-local variables (__thread, _Thread_local, errno) '
+        + 'get ONE copy shared by every thread: the only thread register belongs '
+        + 'to the loaded libc. Threads will read and write each other''s values.');
+    end;
+  end;
+
   { TARGET_X86_64 takes the pthread route (palthread.pas, PthreadRouteAvailable),
     which is exactly available when this condition holds -- see the routine. }
   if (not ThreadTlsHazardWarned) and (ExternalCount > 0)

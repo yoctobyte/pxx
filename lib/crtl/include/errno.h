@@ -8,12 +8,12 @@
    against the glibc oracle at 8 cross-reads per 200000 iterations, varying per
    run as a race should, where the oracle is 0 every time.
 
-   `__thread` is the whole fix because the machinery already exists: on hosted
-   x86-64 scalars it gets a real per-thread slot, and errno is exactly that.
-   Everywhere else it DEGRADES to the one shared .bss object it is today and
-   warns -- so this is strictly better on x86-64 and byte-identical elsewhere,
-   and nothing that compiles today stops compiling. The residual target set is
-   bug-a-a-cloned-thread-still-inherits-the-parents-fs-base-on-every-target-but-x86-64.
+   `__thread` is the whole fix because the machinery already exists: a scalar
+   gets a real per-thread slot on hosted x86-64, and in a static binary on
+   aarch64 and arm32 (since 2026-09-24), and errno is exactly that. Elsewhere
+   it DEGRADES to one shared object -- in a dynamic aarch64/arm32 binary by
+   falling back to the main thread's block -- so nothing that compiles today
+   stops compiling. See TargetHasTlsBlock in compiler/thread_emit.inc.
    bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure */
 #ifdef __pxx_thread_local__
 extern __thread int errno;

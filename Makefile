@@ -7566,6 +7566,28 @@ test-threads: $(COMPILER)
 	# feature-p-threadvar-is-not-supported-at-any-scope
 	./$(COMPILER) --threadsafe test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26
 	tools/expect_same.sh test_threadvar_pt26 "$$($(TESTTMP)/test_threadvar_pt26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	# The same file on aarch64 (tpidr_el0) and arm32 (TPIDRURO via set_tls),
+	# which refused `threadvar` until 2026-09-24. Positive control, measured that
+	# day: a compiler with the clone leg's install replaced by a nop prints
+	# zeroed-on-entry=0/4 and main-copy=103 on both targets. That is the
+	# plain-global answer, so these rows can see a child running on its parent's
+	# block. i386 has no install yet and still refuses (TargetHasTlsBlock).
+	# bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26_a64
+	tools/expect_same.sh aarch64/test_threadvar_pt26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_threadvar_pt26_a64)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26_arm32
+	tools/expect_same.sh arm32/test_threadvar_pt26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_threadvar_pt26_arm32)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	# C's `__thread`, and errno through it, on the same two targets. Same
+	# control, same day: the nop-install compiler prints zeroed-on-entry=0/4 and
+	# main-copy=103 for the C fixture too.
+	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26_a64
+	tools/expect_same.sh aarch64/c_thread_local26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_thread_local26_a64)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
+	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26_arm32
+	tools/expect_same.sh arm32/c_thread_local26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_thread_local26_arm32)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
+	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_a64
+	tools/expect_same.sh aarch64/c_errno_per_thread26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_errno_per_thread26_a64)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
+	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_arm32
+	tools/expect_same.sh arm32/c_errno_per_thread26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_errno_per_thread26_arm32)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	# THE OTHER HALF OF THE SAME PASS, and it fails by printing a WRONG NUMBER
 	# rather than by crashing. RewriteThreadVarRefs arms on the program declaring
 	# any threadvar and rewrites every AN_IDENT whose SymTlsOffset is >= 0; -1 is

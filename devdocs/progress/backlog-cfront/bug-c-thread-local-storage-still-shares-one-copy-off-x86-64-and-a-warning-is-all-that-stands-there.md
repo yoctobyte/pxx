@@ -1,5 +1,5 @@
 ---
-summary: "The RESIDUAL left by the __thread fix: on x86-64 with a file-scope scalar, `__thread` gets real per-thread storage; everywhere else — any other target, an array, --emit-obj/--shared, and FUNCTION SCOPE — it still compiles to ONE SHARED object and only a warning says so, and AS OF 2026-09-19 function scope warns too (TLSREFUSE_FUNCSCOPE, a sixth reason that is not a refusal but a declaration that never reached the allocator) — so the family no longer has a silent member, which was this ticket's sharpest row. The SHARING is untouched at every one of the five: the warning deliberately does not reach TryAssignThreadVarStorage, because a new class of consumer would meet an area size baked before anything is lexed and a full area is now a hard Error, so wiring it would stop a program compiling that compiles today. Real storage for function scope is feature-c-a-function-scope-thread-local-gets-real-per-thread-storage, blocked on the sizing move. A SECOND DEFECT AT THE SAME SEAM was measured while fixing this and is NOT fixed: a BARE `__thread` in a body, no `static`, returns a garbage stack local where gcc refuses the program — bug-c-a-bare-thread-in-a-function-body-is-accepted-and-returns-a-garbage-value, ranked ABOVE this one because it is wrong on one thread today. Not a regression; this is byte-identical to the behaviour before the fix. NOTE the function-scope row is about SHARING ONLY: the separate bug that made it a wrong value single-threaded (the `static` being dropped) is fixed and is bug-c-a-block-scope-static-is-silently-dropped-when-a-thread-storage-class-precedes-the-type."
+summary: "STATE 2026-09-24 (frankS). A file-scope SCALAR `__thread` gets real per-thread storage wherever TargetHasTlsBlock holds and the binary installs a block: x86-64 (gs) always, and aarch64 (tpidr_el0) and arm32 (TPIDRURO, set_tls) in a STATIC binary. It still gets ONE shared copy in these cases: (1) a target with no block install (i386; riscv32 and the rest have no threads); (2) a DYNAMIC binary on aarch64/arm32, because glibc owns the one thread register, so reads fall back to the main thread's block and a link-time warning fires when the program also creates threads; (3) an array or a non-scalar type; (4) --emit-obj/--shared, which have no entry point to install a block; (5) function scope, which is feature-c-a-function-scope-thread-local-gets-real-per-thread-storage. Each of these warns. The pieces that would close each case: an i386 set_thread_area port; glibc ELF TLS (PT_TLS) for dynamic binaries; symbol-path support for arrays; per-thread init/final hooks for managed types."
 type: bug
 track: C
 prio: 40
@@ -111,3 +111,35 @@ one green on x86-64 closes nothing. `test/c_thread_local_is_per_thread.c` is the
 x86-64 row and is the shape to copy; its six assertions and, in particular,
 which two of them (`zeroed-on-entry`, `main-copy`) survive serial execution are
 documented in the file.
+
+## 2026-09-24 (frankS): aarch64 and arm32 get a block, in a static binary
+
+What landed:
+- The entry code installs the main block: tpidr_el0 on aarch64; TPIDRURO via
+  the set_tls syscall on arm32. It does so only when the register reads 0 at
+  entry, which is true of a static binary. A dynamic one arrives holding
+  glibc's TCB.
+- The clone leg carves a zeroed block off the child's stack. The child
+  installs it only when the parent's register holds a pxx block, recognised by
+  slot 0 holding its own address.
+- IR_TLSBASE uses the same recognition and falls back to the main block
+  otherwise. So a dynamic binary gets one shared copy, which is the old
+  behaviour, and never writes into glibc's TCB.
+- The ELF writer refuses a dynamic binary for Pascal `threadvar` and
+  `__pxxTlsBase`, which never compiled shared. For C it warns only when the
+  program creates threads, because errno.h declares errno `__thread` and
+  refusing would stop every C program that links a shared library.
+
+Measured with test/test_a_threadvar_is_per_thread.pas and
+test/c_thread_local_is_per_thread.c, both THREADVAR/C THREAD-LOCAL OK on
+aarch64 and arm32 under qemu, plus c_errno_is_per_thread.c. Positive control:
+the same compiler with the child's install replaced by a nop gives
+zeroed-on-entry=0/4 and main-copy=103 on both targets and both fixtures.
+Dynamic probes (a C program importing a Pascal unit with an `external
+'libc.so.6'`; readelf shows INTERP) run on both targets, and pthread_self in a
+dynamic Pascal program stays in the mmap range, not pxx's BSS, so glibc's
+register is untouched. Rows are in test-threads.
+
+Found on the way, NOT fixed here: an initialised C `__thread int x = 5;` reads
+0 in a child thread (gcc: 5) on every target. The initialiser is a startup
+store into the main thread's block, and a new block starts zeroed.

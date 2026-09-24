@@ -2764,14 +2764,12 @@ begin
   TryAssignThreadVarStorage := False;
   why := '';
   reason := TLSREFUSE_NONE;
-  if TargetArch <> TARGET_X86_64 then
+  if not TargetHasTlsBlock then
   begin
-    why := spelling + ' is x86-64 only: a per-thread block is installed with '
-         + 'arch_prctl(ARCH_SET_GS) by the clone stub, and the other targets have '
-         + 'a readable thread register (aarch64 tpidr_el0, arm32 tpidruro) but no '
-         + 'way to SET one yet. Answering with the parent thread''s block would be '
-         + 'a plausible wrong address rather than a null anything could test for '
-         + '-- the same reason __pxxTlsBase refuses off x86-64.';
+    why := spelling + ' needs a per-thread block, and only x86-64, aarch64 and '
+         + 'arm32 install one (see TargetHasTlsBlock). Answering with the parent '
+         + 'thread''s block would be a plausible wrong address rather than a null '
+         + 'anything could test for -- the same reason __pxxTlsBase refuses here.';
     reason := TLSREFUSE_ARCH;
     Exit;
   end;
@@ -2844,6 +2842,7 @@ begin
   { `reason` is read by the C caller and deliberately ignored here: Pascal's
     policy is uniform across all five, which is what makes refusing free. }
   if not TryAssignThreadVarStorage(idx, 'threadvar', why, reason) then Error(why);
+  TlsStrictUsed := True;
 end;
 
 procedure ParseVarSection;

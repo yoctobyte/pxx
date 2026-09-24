@@ -3226,7 +3226,7 @@ const
     under-reporting, and a silently degraded declaration is a latent data race.
     bug-c-a-thread-declaration-that-does-not-fit-the-tls-area-becomes-a-shared-global-with-only-a-warning }
   TLSREFUSE_NONE      = 0;  { assigned a per-thread slot; not a refusal }
-  TLSREFUSE_ARCH      = 1;  { not x86-64: no way to SET a thread register yet }
+  TLSREFUSE_ARCH      = 1;  { not TargetHasTlsBlock: this target installs no per-thread block }
   TLSREFUSE_NOINSTALL = 2;  { --emit-obj/--shared: no ELF entry point installs the block }
   TLSREFUSE_ARRAY     = 3;  { an array is reached through its symbol; scalars first }
   TLSREFUSE_TYPE      = 4;  { managed/record/set: needs per-thread init+final }
@@ -7154,6 +7154,9 @@ var
     item 4). Allocated in EnsureSignalBss, NOT in one arch's emitter -- see the
     note there. }
   TlsMainInstalled: Boolean;     { the entry-point code that installs the main thread's TLS block was emitted -- false for --emit-obj/--shared, which have no ELF entry, so anything reading gs: must fall back }
+  TlsBaseUsed     : Boolean;     { a non-x86-64 backend emitted IR_TLSBASE. Read by the ELF writer: in a DYNAMIC binary on those targets the one thread register belongs to the libc the loader brought in, so the read falls back to the main thread's block, one shared copy. See TargetHasTlsBlock. }
+  TlsSharedWarned : Boolean;     { the dynamic-binary shared-copy warning was printed; ResolveSynthImportLibraries runs once per DT_NEEDED builder }
+  TlsStrictUsed   : Boolean;     { a Pascal `threadvar` got a slot, or `__pxxTlsBase` was named. Neither has ever compiled with a shared copy, so the ELF writer REFUSES the dynamic fallback for these, where C's `__thread` only warns. }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
   TlsUserUsed     : Integer;     { bytes of TlsUserBytes handed out to `threadvar` declarations so far; the bump allocator's only state }
   TlsUserBytes    : Integer;     { the source-declared `threadvar` area, in bytes. TLS_USER_BYTES_DEFAULT unless -dPXX_TLS_USER_<rung> asked otherwise; set ONCE by ApplyTlsUserBytesOption before EmitTlsMainInstall and never touched again during a compile -- that invariant is the whole reason the fold of __pxxTlsBlockSize is sound. }

@@ -1128,6 +1128,9 @@ begin
   LinkOutPath := '';
   LinkGcSections := True;
   TlsMainInstalled := False;
+  TlsBaseUsed := False;
+  TlsStrictUsed := False;
+  TlsSharedWarned := False;
   EmitSharedMode := False;
   InitThunkOff := -1;
   FiniThunkOff := -1;

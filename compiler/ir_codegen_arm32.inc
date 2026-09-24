@@ -1521,6 +1521,22 @@ begin
       { Absolute data address (sentinel-resolvable), see the x86-64 case. }
       EmitLoadDataRefArm32(0, Integer(IRIVal[node]));
 
+    IR_TLSBASE:
+      { __pxxTlsBase: TPIDRURO, set by EmitTlsMainInstall or the clone leg
+        through the set_tls syscall, with the same main-block fallback as the
+        aarch64 case. r12 is scratch. }
+      begin
+        TlsBaseUsed := True;
+        EmitI32($EE1D0F70);               { mrc p15, 0, r0, c13, c0, 3 }
+        EmitI32($E590C000);               { ldr r12, [r0] }
+        EmitI32($E150000C);               { cmp r0, r12 }
+        EmitI32($0A000002);               { beq .own  (past the fallback) }
+        EmitI32($E59F0000);               { ldr r0, [pc] }
+        EmitI32($EA000000);               { b   .+8 }
+        EmitGlobRef(BSS_TLS_MAIN);
+                                          { .own: }
+      end;
+
     IR_FRAME:
       { get_frame: fp (r11) is the frame pointer (push {fp,lr}; mov fp, sp). }
       EmitI32($E1A0000B); { mov r0, fp }

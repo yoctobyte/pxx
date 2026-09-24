@@ -11,12 +11,11 @@ function StatusSlotTlsIndex(bssSlot: Integer): Integer;
   (75875 in 400000 deliveries); the exception four CRASH, because the chain head
   is a pointer the unwinder longjmps to.
 
-  -1 whenever the answer is "there is no block": not x86-64 (EmitTlsMainInstall
-  is x86-64-only and cloned threads get their block from the x86-64 clone stub,
-  so the other hosted targets have nothing to read -- and they also have no
-  threads, since palthread compile-errors at the __pxxclone call site off
-  x86-64); or --emit-obj/--shared, where nothing installed a base and `gs:`
-  does not return 0, it FAULTS. Also -1 before the corresponding BSS group has
+  -1 whenever the answer is "there is no block" for THIS emitter: not x86-64
+  (the per-thread status slots are addressed gs-relative, and the aarch64 and
+  arm32 blocks, which exist only in a static binary, are not wired to them);
+  or --emit-obj/--shared, where nothing installed a base and `gs:` does not
+  return 0, it FAULTS. Also -1 before the corresponding BSS group has
   been allocated, because until then every one of these globals is 0 and so are
   the others -- an identity test on 0 would match the wrong family.
 
