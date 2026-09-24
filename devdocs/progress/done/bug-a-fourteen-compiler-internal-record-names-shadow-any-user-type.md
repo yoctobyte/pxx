@@ -3,13 +3,13 @@ slug: bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type
 track: A
 prio: 70
 type: bug
-status: backlog
-owner: ""
+status: done
+owner: "frankS"
 created: 2026-09-10
 found-by: frankH
 tags: [core, symtab, record-layout, silent-wrong-answer, self-host]
 blocked-by: []
-summary: "`IsRecordType` (compiler/symtab.inc:2890) maps FOURTEEN type names to builtin rec ids by string compare, before it ever consults user-declared records. So `type TProc = record A: array[0..99] of Int64 end` in an ordinary user program silently gets the COMPILER'S OWN TProc layout -- SizeOf 1344 where the declaration says 800 -- with no error and no warning. All fourteen reproduce; two controls (TMyClass, which has a REC_ constant but is not in the chain, and TZZZControl) are correct. TProc and TSymbol are ordinary names in real Pascal (Delphi ships a TProc), so this is a silent wrong-layout bug reachable by correct code that never mentions the compiler."
+summary: "FIXED 2026-09-25 (frankS). `IsRecordType` answers a builtin compiler record for one of the fourteen names only when no user type of that name exists, or the user record has exactly the builtin's field names in order (`UserRecordIsBuiltinShape`) -- which is what keeps the compiler's own defs.inc records on the builtin layout. A differently shaped user record, a CLASS or an ENUM of the name now gets its own type. The MAX_PROC_PARAMS coupling is NOT touched by this: the compiler's TProc still matches field for field, so bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment stands."
 ---
 
 # Who found what, and who intends to take it
@@ -100,3 +100,22 @@ that needs the offsets to track the constant.
 while `SizeOf` disagrees with its own formula, so it is not reading the
 quantity it appears to. Any fix should assert the DECLARED shape against the
 builtin's, not the builtin against a second copy of the same number.
+
+## Resolution, 2026-09-25 (frankS)
+
+Taken at frankuser's dispatch; frankZ had said they meant to take it "not
+immediately" (2026-09-10).
+
+- `UserRecordIsBuiltinShape(ci, rec)` (symtab.inc): same field count, same
+  names in order. The builtin is kept only for that, so the compiler's own
+  records keep their layout (self-host fixedpoint; bss unchanged at
+  89876784 across the change).
+- Two more spellings were wrong: a CLASS named TProc (SizeOf 1344 where the
+  same class under another name is 16; the pin also segfaults in `Free`) and
+  an ENUM named TSymbol (104 against 4). Both fixed. A type ALIAS was
+  already right; it is kept as a control row.
+- Tests: test_a_record_named_like_a_compiler_record_keeps_its_layout (all
+  fourteen names, tail offset 800 plus a written/read last element; identical on
+  x86-64, i386, aarch64, arm32, riscv32; the pin refuses to compile it) and
+  test_a_class_or_enum_named_like_a_compiler_record_is_not_that_record
+  (relations against same-kind controls; pin prints FALSE FALSE TRUE).

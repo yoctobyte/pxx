@@ -2916,17 +2916,19 @@ type
     ParamCount : Integer;
     Params     : array[0..31] of TParam;
       { LITERAL 31, AND THIS DECLARATION IS NOT WHAT LAYS TProc OUT.
-        `IsRecordType` (symtab.inc:2890) maps the NAME `TProc` to REC_TPROC by
-        string compare, before it ever consults a declared record, so the
+        `IsRecordType` (symtab.inc) maps the NAME `TProc` to REC_TPROC by
+        string compare, and this declaration matches it field for field, so the
         BUILTIN layout wins and these lines are documentation. Editing the
         bound changes nothing measurable: `0..31`, `0..63` and `0..255` all
         emit the same code=7565080 data=555780 bss=86531556 procs=4641 (three
         DIFFERENT binaries, so the bound does reach bounds-check code -- it
         just never reaches the field offsets), and SizeOf(TProc) stays 1344 at
         MAX_PROC_PARAMS = 16, 32 and 64 alike.
-        Fourteen names are shadowed this way, TSymbol and TParam among them,
-        so a USER program declaring `type TProc = record ... end` silently
-        gets this layout too -- same family as the
+        The builtin wins HERE because this record has exactly the builtin's
+        field names in order (UserRecordIsBuiltinShape). A user program's
+        `type TProc = record ... end` with other fields got this layout too
+        until 2026-09-25; it now gets its own, as does a class or enum of any
+        of the fourteen names -- same family as the
         project_tsymbol_field_landmine note on SymTR a few hundred lines below.
         The literal stays because `MAX_PROC_PARAMS-1` here would make the two
         LOOK coupled while changing nothing, which is worse than a literal
@@ -2939,7 +2941,7 @@ type
         asserts the builtin's size as 288 + MAX_PROC_PARAMS * 296 + 32, so it
         is MEANT to track the constant and measurably does not -- that gap is
         the shortest thread. Raising MAX_PROC_PARAMS needs it fixed first:
-        bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type }
+        bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment }
     BodyAddr   : Integer;   { -1 = forward declared }
     FramePatch : Integer;   { code position of sub rsp imm32 }
     RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }

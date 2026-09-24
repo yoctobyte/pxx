@@ -17,15 +17,6 @@ Silent-wrong rows come first. A refusal names the problem; a silent row does not
 
 ## Silently wrong
 
-### Pascal, all targets: a record named like a compiler-internal record gets the compiler's layout
-
-- What you see: `type TProc = record A: array[0..99] of Int64; end;` gives
-  `SizeOf(TProc)` = 1344 (fpc: 800), with no diagnostic. The same happens for
-  thirteen other names, TSymbol among them.
-- Workaround: rename the type.
-- Measured on x86-64, both binaries.
-- Ticket: bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type.
-
 ### C, all targets: `long double` is 8 bytes; gcc's is 16
 
 - `sizeof(long double)` = 8. `struct { char c; long double y; }` is 16 here
@@ -93,6 +84,10 @@ Silent-wrong rows come first. A refusal names the problem; a silent row does not
   with `ok:` and rc=0, then trapped under wasmtime (frankd-a3, v423 and
   `448395e492db`). It prints `42` now. A missing runtime helper on wasm32 now
   fails the build instead of producing a module that traps.
+- **A record, class or enum named like a compiler-internal record** (TProc,
+  TSymbol and twelve others) got the compiler's own record layout:
+  `type TProc = record A: array[0..99] of Int64; end` was 1344 bytes, not 800.
+  Each now gets the layout it declares.
 - **A `var` parameter accepted a variable of another width** and the callee
   wrote past it (`P(var x: Int64)` with a LongInt clobbered a neighbour). Now
   refused, as fpc does; overloads bind the exact-width row. `Val` with a

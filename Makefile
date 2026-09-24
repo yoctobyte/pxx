@@ -18864,6 +18864,10 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_byref_arg_lvalue_refused.pas $(TESTTMP)/test_byref_refused26 \
 	    > $(TESTTMP)/test_byref_refused.log 2>&1
 	grep -q "by-reference argument must be a variable" $(TESTTMP)/test_byref_refused.log
+	./$(COMPILER) test/test_a_record_named_like_a_compiler_record_keeps_its_layout.pas $(TESTTMP)/test_recname_layout26
+	tools/expect_same.sh test_recname_layout26 "$$($(TESTTMP)/test_recname_layout26)" "$$(cat test/test_a_record_named_like_a_compiler_record_keeps_its_layout.expected)"
+	./$(COMPILER) test/test_a_class_or_enum_named_like_a_compiler_record_is_not_that_record.pas $(TESTTMP)/test_recname_kinds26
+	tools/expect_same.sh test_recname_kinds26 "$$($(TESTTMP)/test_recname_kinds26)" "$$(printf '42 2 65535\nTRUE TRUE TRUE')"
 	./$(COMPILER) test/test_var_param_width_rule_accepts_exact_and_cast.pas $(TESTTMP)/test_varwidth_ok26
 	tools/expect_same.sh test_varwidth_ok26 "$$($(TESTTMP)/test_varwidth_ok26)" "$$(printf '41 2 6 7 2 5 12345\n42 12345')"
 	! ./$(COMPILER) test/test_var_param_refuses_a_narrower_variable.pas $(TESTTMP)/test_varwidth_refused26 \

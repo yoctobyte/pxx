@@ -3050,6 +3050,27 @@ const
   REC_TGENERICFUNC = 13;
   REC_TPENDINGGFSPEC = 14;
 
+function BuiltinRecFieldCount(rec: Integer): Integer; forward;
+function BuiltinRecFieldName(rec, idx: Integer): AnsiString; forward;
+
+{ Does the DECLARED record ci have exactly builtin rec's fields, by name and in
+  order? The fourteen builtin names below exist for the compiler's own records
+  (defs.inc), which pass. A user record that merely shares the NAME -- Delphi
+  ships a TProc -- does not, and must get its own declared layout: before this
+  check `type TProc = record A: array[0..99] of Int64; end` was 1344 bytes with
+  no diagnostic, where fpc says 800.
+  bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type }
+function UserRecordIsBuiltinShape(ci, rec: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if UClsFCount[ci] <> BuiltinRecFieldCount(rec) then Exit;
+  for k := 0 to UClsFCount[ci] - 1 do
+    if not UNameMatch(UFldNOff[UClsFBase[ci] + k], UFldNLen[UClsFBase[ci] + k],
+                      ULower(BuiltinRecFieldName(rec, k))) then Exit;
+  Result := True;
+end;
+
 function IsRecordType(const lo: AnsiString): Integer;
 var ci: Integer; lo2: AnsiString;
 begin
@@ -3068,12 +3089,19 @@ begin
   else if lo = 'TGenericFunc' then Result := REC_TGENERICFUNC
   else if lo = 'TPendingGFSpec' then Result := REC_TPENDINGGFSPEC
   else if lo = 'TMethodFixup' then Result := REC_TMETHODFIXUP;
-  if Result = REC_NONE then
+  lo2 := lo;
+  ci := FindUClass(lo2);
+  if ci >= 0 then
   begin
-    lo2 := lo;
-    ci := FindUClass(lo2);
-    if (ci >= 0) and UClsIsRecord[ci] then Result := REC_UCLASS_BASE + ci;
-  end;
+    { A declared type of the name wins over the builtin unless it IS the
+      builtin's shape. A CLASS named TProc is not a record at all (SizeOf
+      1344 where fpc says 8), and neither is an ENUM named TSymbol (104 for 4). }
+    if not UClsIsRecord[ci] then Result := REC_NONE
+    else if (Result = REC_NONE) or not UserRecordIsBuiltinShape(ci, Result) then
+      Result := REC_UCLASS_BASE + ci;
+  end
+  else if (Result <> REC_NONE) and (FindEnumType(lo2) >= 0) then
+    Result := REC_NONE;
 end;
 
 { The CLASS of that name, skipping same-named RECORDS. FindUClass returns the
