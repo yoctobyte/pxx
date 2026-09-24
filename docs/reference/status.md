@@ -46,17 +46,23 @@ The C frontend compiles standard C directly to native ELF in a single pass (see
 
 | Corpus | What it demonstrates |
 | --- | --- |
-| **c-testsuite** | The full standard C conformance battery passes. |
+| **c-testsuite** | All 220 programs of the standard C conformance battery pass (pin v424, x86-64, 2026-09-25). |
 | **zlib** | Compresses with output **byte-for-byte identical to a gcc-built zlib's** output. |
 | **SQLite** | The amalgamation compiles and runs — in-memory and file-backed databases, CRUD, and multi-threaded access — as a **libc-free, zero-dependency** binary. |
 | **Lua** | The reference interpreter compiles and runs Lua programs. |
 | **cJSON** | Parses and serialises. |
 | **QuickJS** (quickjs-ng 0.9.0) | The JavaScript engine compiles as a zero-dependency binary and runs the in-tree smoke test byte-for-byte. |
-| **tcc** (Tiny C Compiler) | Compiles, and a PXX-built tcc in turn compiles tcc itself (self-compile converged). |
 | **BusyBox** | Compiles as separate translation units, BusyBox's own way, with output **matching a GCC build of the same sources** across a differential case list. A PXX-built BusyBox also boots as PID 1 under a real kernel — see [A minimal Linux system](../examples/minimal-linux-system.md). |
 
 ### Partial / in progress
 
+- **tcc** (Tiny C Compiler, mob at `a338258d`): last shown working on
+  2026-07-07, when PXX compiled tcc, the PXX-built tcc compiled C, and the
+  self-compile chains converged byte-identical with GCC's. **With pin v424 it
+  fails at the first step**, PXX compiling `tcc.c`: tcc's `<semaphore.h>` falls
+  through to the host header, which does not parse against PXX's C runtime.
+  With that part switched off, it stops at an `#include` inside a function
+  call's arguments in `tccpp.c`. Both are being worked on.
 - A number of candidate corpora (graphics, networking, and game libraries) are
   staged for bring-up but not yet claimed.
 

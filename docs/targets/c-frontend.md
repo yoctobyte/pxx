@@ -16,8 +16,9 @@ PXX features a C frontend that compiles C source files directly to native ELF ex
 
 The C frontend targets a C99-class dialect (`__STDC_VERSION__` is `199901L`)
 suitable for compiling standard systems code and libraries — it is the
-frontend that passes the full **c-testsuite** conformance battery and compiles
-real corpora such as SQLite, Lua, zlib, cJSON, and tcc (see
+frontend that passes all 220 programs of the **c-testsuite** conformance
+battery and compiles real programs such as SQLite, Lua, zlib, cJSON and
+QuickJS (see
 [compatibility status](../reference/status.md)).
 
 ### Supported Syntax & Types
