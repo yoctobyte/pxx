@@ -3,8 +3,37 @@ track: N
 prio: 80
 type: bug
 blocked-by: []
-summary: "`def f(b): b.s, b.t = 22, 23` COMPILES, RUNS, prints nothing and STORES NOTHING — the fields keep their initial values. Any store through PyUnpackTargetStore (the TUPLE UNPACK and CHAINED-ASSIGNMENT paths, which share it) is silently dropped when the receiver is a PARAMETER. MEASURED 2026-09-12 against the PINNED compiler and HEAD, identical on both, so it is pre-existing and not from the chain widening landed the same day. THE SAME STORE WRITTEN AS A SINGLE STATEMENT IS CORRECT (`b.s = 11` works), and a LOCAL or MODULE-LEVEL receiver is correct (`a.s, a.t = 31, 32` works) — so the defect is exactly PyUnpackTargetStore + parameter. NO DIAGNOSTIC, and the value it leaves behind is the field's initial value, which is plausible. Found only because a chain fixture happened to use a parameter; the receiver kind a test naturally uses is the one that works, because a test constructs the object where it uses it."
+summary: "RESOLVED 2026-09-24. The parameter-receiver store was already correct on origin: the commit that filed this ticket (203919198d) also routed the unpack attribute arm through PyMakeAttrStore. The same function's NAME arm did not note a rebinding to the typing pass, so a tuple target rebinding a name to another type stored raw bits or segfaulted; fixed at four doors, fixture test_nilpy_tuple_target_rebinds_a_name_across_types. Field-type widening through non-self receivers is split out."
+status: done
 ---
+
+## RESOLVED 2026-09-24 (frankb-12) — the store was fixed by the commit that filed this; a name-rebinding defect in the same function was not
+
+**The summary was never true on origin.** `git log --diff-filter=A` puts this
+file's creation in `203919198d`, the same commit that routed
+PyUnpackTargetStore's attribute arm through PyMakeAttrStore ("ONE store
+builder"). At HEAD, before any change of mine, `single/unpack/chain` through a
+parameter all print CPython's `11 / 22 23 / 33 33`, and so do self, local,
+module, annotated-parameter, swap, nested-receiver and starred variants.
+
+**What the group work found instead, same function, fixed here:** the NAME
+arm of PyUnpackTargetStore never noted its target to the typing pass, so a
+tuple target REBINDING a name to another type kept the first slot — `x = 0;
+x, y = 0.5, 1` printed 4602678819172646912 (the double's bits), and a str
+local rebound by `s, n = 3, 4` segfaulted. Four doors, all fixed and all in
+`test/test_nilpy_tuple_target_rebinds_a_name_across_types.npy` (CPython's
+output; red on the pinned compiler): the def-local note in
+PyUnpackTargetStore; PyNestEmit's leaves (nested groups); the module scan,
+which noted only NEW names, skipped module-level blocks (`depth = 0`), and
+did not recognise a statement starting with `(` or `*`.
+
+**Not fixed, filed:** a store of a different TYPE into a FIELD through any
+non-self receiver writes the value unconverted (raw bits for a float into an
+int field, single statement included) —
+[[bug-n-a-store-through-a-non-self-receiver-never-widens-the-field-so-a-float-lands-as-raw-bits]].
+Two refused target spellings found on the way:
+[[compat-n-two-attribute-target-spellings-are-refused]].
+
 
 # An unpack or chain store through a parameter receiver is silently dropped
 
@@ -62,3 +91,6 @@ two would then disagree exactly as measured.
 **Positive control when fixing:** the table above, with the parameter row
 asserted to the CPython value. A fixture using only `self`, a local or a
 module-level receiver passes today and certifies the bug.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

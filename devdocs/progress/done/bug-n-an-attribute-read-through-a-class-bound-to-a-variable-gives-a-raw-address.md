@@ -3,15 +3,36 @@ slug: bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-ad
 track: N
 type: bug
 prio: 80
-status: backlog
+status: done
 owner: frankuser
 created: 2026-09-11
 found: 2026-09-11
 found-by: frankZ
 tags: [nilpy, values, silent-wrong-value, lekkerzeilen]
 blocked-by: []
-summary: "SEGFAULTS (rc=139), and the summary said ~5.5e6-with-exit-0 until 2026-09-13 -- a probe written to the old wording checks a VALUE and CANNOT observe a crash. WHERE IT DIES, measured at 7990405c2 with -g -O2 and the .map: __pxxInheritsFrom at `mov (%rax),%rax` reading the parent at +8, with the class pointer equal to 0x40000000 -- MSTR_STATIC_RC / PXX_STATIC_RC_FLOOR, the never-free REFCOUNT sentinel. A refcount word is being walked as a class pointer, so the fix is an OFF-BY-HEADER-OFFSET and not a wrong slot offset. (gdb frame #1 resolves to PyBoxClassRef and is noise -- no CFI, and that return address follows an exception-frame call.) THE OLD 5.5e6 IS EXPLAINED AND RETIRED: frankz-9c traced it to pyclsattr_bind registering the slot at ~5.6e6, i.e. the bound slot ADDRESS surfacing as the value. TRIGGER IS POSITION, NOT COUNT: anything lexically PRECEDING the accessed class, an `import` included -- and an import emits nothing, which also rules out "more than one emitting construct"; a statement AFTER the class is harmless, which rules out the last-class hoist-drain family a second way. AND THE OUTCOME IS SENSITIVE TO THE CLASS NAMES (Other, Self, Value, Count, Rtti, Result, Kind give the right answer; Bbb, Index, Data, Node, Entry, Base, Zzz, Bar segfault; `other` passes and `OTHER` fails). A semantic property cannot depend on an identifier spelling, so THE DEFECT IS PRESENT IN EVERY ROW AND ONLY THE CRASH IS CONDITIONAL ON LAYOUT -- which is what reconciles this ticket's three recorded observables as one defect. A row that prints the right answer is NOT evidence the bug is absent, and no fixture here may assert a value. Deterministic: three recompiles byte-identical, five runs agree. ROUTE: PyClsAttrRefGet, documented in pylib as the route for a class held as a VALUE, is NEVER CALLED in either the failing or the working case (frankz-9c, instrumented on entry); pyclsattr_inst_get is ruled out too. Identical under pin v408 and at HEAD, so the three class-as-value fixes of 2026-09-13 neither caused nor fixed it. OWNED by frankuser from 2026-09-13."
+summary: "RESOLVED 2026-09-24, closed by events: the classref read now routes through pydynattr_get_v's tag-11 arm to PyClsAttrRefGet and never reaches the instance RTTI walk, whose seven emitters were tag-guarded in 1892599756. Fixture asserts exit status, with a control showing it reddens when that arm is disabled."
 ---
+
+## RESOLVED 2026-09-24 (frankb-12) — closed by events, and the route it takes now is not the one this ticket describes
+
+Re-measured at HEAD: every row of the trigger tables below (docstring,
+assignment, def, import or another class preceding; class names Widget, Bbb,
+Index, Data, Node, Other) — 30 combinations — prints the right value with rc=0.
+Per this ticket's own warning a right value proves nothing, so the ROUTE was
+checked: `w.V` now lowers to `pydynattr_get_v`, whose `tg = 11` arm hands a
+classref to `PyClsAttrRefGet` (gdb breakpoints on both fire, in that order).
+It no longer reaches an inline `pyvarobj(v) is C` walk at all. That walk's
+emitters were separately guarded in `1892599756` (2026-09-14): seven sites, all
+now tagged — five through PyMakeVariantIsTest, PyParseIsinstance's own arm, and
+PyHasAttrRuntimeChain's `pyvartag = VT_OBJECT and ...`.
+
+Fixture: `test/test_nilpy_a_class_attribute_read_through_a_class_valued_variable.npy`
+(+ `test/nilpy_clsvalattr/`), EXIT STATUS asserted before values. Controls,
+both run: removing PyMakeVariantIsTest's guard does NOT redden it (it is not on
+that route — the existing classref fixture does go rc=139 under the same
+control); disabling `pydynattr_get_v`'s `tg = 11` arm DOES (rc=217,
+AttributeError). So it pins the route actually in use.
+
 
 ## Summary
 
@@ -265,3 +286,6 @@ is not reached — a different lowering was selected — not rows where it ran a
 survived. That does not soften the conclusion recorded above; it sharpens it.
 **A passing row is evidence about which lowering was chosen, never evidence that
 the classref path works.**
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

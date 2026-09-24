@@ -1,0 +1,20 @@
+# A class-ATTRIBUTE read through a VARIABLE holding a class (`w = m.Bbb; w.V`).
+# The receiver is a variant tagged VT_CLASSREF whose payload IS the class blob,
+# and the run-time class test walked it as an INSTANCE -- payload -> "VMT" ->
+# [-8] "RTTI" -- which lands on the interned class NAME's static refcount
+# (0x40000000), so __pxxInheritsFrom died reading 0x40000008. Whether it died
+# depended on layout, even on the class NAMES (Bbb and Index crashed, Other did
+# not), so a right VALUE is not evidence here: the Makefile row checks the exit
+# status first. clsval_mod puts every construct that used to trigger it ahead of
+# the classes. Output is CPython's.
+# bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
+import clsval_mod
+
+w = clsval_mod.Bbb
+print(w.V)
+print(w.W)
+x = clsval_mod.Index
+print(x.V)
+print(x.W)
+for c in [clsval_mod.Bbb, clsval_mod.Index]:
+    print(c.V)

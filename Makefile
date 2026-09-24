@@ -1768,6 +1768,13 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_scalarattr26 | diff -u test/test_nilpy_an_attribute_on_a_scalar_raises_rather_than_answering_garbage.expected -
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.npy $(TESTTMP)/test_nilpy_clsref_rtti
 	$(TESTTMP)/test_nilpy_clsref_rtti | diff -u test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.expected -
+	@# the same walk reached by a class-ATTRIBUTE read through a class-valued
+	@# VARIABLE (`w = m.Bbb; w.V`), with every construct that used to trigger the
+	@# crash placed before the classes. The crash was layout-dependent, so the
+	@# EXIT STATUS is asserted before the values are compared.
+	./$(COMPILER) -Futest/nilpy_clsvalattr test/test_nilpy_a_class_attribute_read_through_a_class_valued_variable.npy $(TESTTMP)/test_nilpy_clsvalattr
+	o=$$($(TESTTMP)/test_nilpy_clsvalattr); rc=$$?; test $$rc -eq 0 || { echo "test_nilpy_clsvalattr: rc=$$rc (the classref RTTI walk is back)"; exit 1; }; \
+	 tools/expect_same.sh test_nilpy_clsvalattr "$$o" "$$(cd test && PYTHONPATH=nilpy_clsvalattr python3 -B test_nilpy_a_class_attribute_read_through_a_class_valued_variable.npy)"
 	./$(COMPILER) -Futest/nilpy_boundret test/test_nilpy_a_bound_method_value_keeps_the_variant_return_abi.npy $(TESTTMP)/test_nilpy_boundret
 	$(TESTTMP)/test_nilpy_boundret | diff -u test/test_nilpy_a_bound_method_value_keeps_the_variant_return_abi.expected -
 	./$(COMPILER) -Futest/nilpy_modshadow test/test_nilpy_a_def_in_an_imported_module_shadows_a_builtin.npy $(TESTTMP)/test_nilpy_modshadow
@@ -3367,6 +3374,20 @@ test-nilpy: $(COMPILER)
 	@# and a heapify that cannot be written without it. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_tuple_assign_to_subscripts.npy $(TESTTMP)/test_nilpy_tuple_sub26
 	$(TESTTMP)/test_nilpy_tuple_sub26 | diff -u test/test_nilpy_tuple_assign_to_subscripts.expected -
+	@# a TUPLE TARGET rebinding a name to another type widens it: every door --
+	@# def local, module scope, module block, nested group, star, a statement
+	@# starting with ( or * -- once stored a float's bits or segfaulted. CPython's output.
+	./$(COMPILER) test/test_nilpy_tuple_target_rebinds_a_name_across_types.npy $(TESTTMP)/test_nilpy_tuprebind26
+	$(TESTTMP)/test_nilpy_tuprebind26 | diff -u test/test_nilpy_tuple_target_rebinds_a_name_across_types.expected -
+	@# an ANNOTATED returned local keeps the def's class result. The values cannot
+	@# see it, so the row asserts the TYPE as a relation: b (annotated) and c
+	@# (annotated, from a nested def) must carry exactly what a (unannotated) does,
+	@# and a must be a class at all, or two variants would agree.
+	o=$$(PXXDBG=n.locals ./$(COMPILER) test/test_nilpy_annotated_returned_local_keeps_the_class.npy $(TESTTMP)/test_nilpy_annret26 2>&1); \
+	 echo "$$o" | grep -qE '^PXXDBG n.locals <module> a tk=6 rec=[0-9]+' && \
+	 tools/expect_same.sh test_nilpy_annret_b "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> b ' | sed 's/ | .*//; s/ b / _ /')" "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> a ' | sed 's/ | .*//; s/ a / _ /')" && \
+	 tools/expect_same.sh test_nilpy_annret_c "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> c ' | sed 's/ | .*//; s/ c / _ /')" "$$(echo "$$o" | grep -E '^PXXDBG n.locals <module> a ' | sed 's/ | .*//; s/ a / _ /')"
+	tools/expect_same.sh test_nilpy_annret26 "$$($(TESTTMP)/test_nilpy_annret26)" "$$(python3 test/test_nilpy_annotated_returned_local_keeps_the_class.npy)"
 	@# a def that returns None on one path and a value on another answers Any:
 	@# `return None` beside `return 7` used to store a plain 0, so `x is None` was
 	@# False and str(x) printed 0. Diffed against CPython.

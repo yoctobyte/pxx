@@ -3,8 +3,33 @@ track: N
 prio: 80
 type: bug
 blocked-by: []
-summary: "`t: Holder = Holder(); return t` types the CALLER's local as a variant where the unannotated `t = Holder()` types it correctly — the annotation makes the inference worse, and only at the call site. `return self.m()` is the same scan's second blind spot."
+summary: "RESOLVED 2026-09-24: the return scan's local-binding readers now accept `name: T =` (PyLocalAsgEqIdx, five readers), and `return self.m()` resolves self from the enclosing class in both passes. Fixture asserts the caller's TYPE as a relation to the unannotated spelling."
+status: done
 ---
+
+## RESOLVED 2026-09-24 (frankb-12) — both blind spots fixed
+
+1. **Annotated local.** The return-type scan's token readers matched only
+   `name =`. New PyLocalAsgEqIdx finds the binding `=` for `name =` AND
+   `name: T =` (the annotated form only at a statement boundary, via the
+   class-attribute side's PyClsAttrEqIdx so the two readers agree), and it is
+   wired into all five readers that answer "what was this local bound to":
+   the bare-ident return chase, PyRetRecvClass (both arms), PyRetNameType, the
+   bound-in-this-def check, and the nested-def result chase.
+   PyLocalScalarTypeFrom was left alone: it bails (`ok := False`) on any shape
+   it does not know, so it is conservative, not wrong.
+2. **`return self.m()`.** PyRetMethodType found receivers only by chasing an
+   assignment, and `self` is never assigned. It now resolves `self` from
+   CurSelfClass, then PyInferSelfCi — the same two sources in the same order as
+   PyInferExprType's `self.m(...)` arm, so the signature pass and the frame pass
+   agree. A subclass override reached through the inherited method prints its
+   own value (9). Still variant, unchanged and value-correct: a method called
+   before it is DEFINED, and `self.m()` from a nested def.
+
+Fixture: `test/test_nilpy_annotated_returned_local_keeps_the_class.npy`; the
+Makefile row asserts the TYPE as a relation (b and c must equal a, a must be
+tk=6). Red on the pinned compiler (b, c tk=22).
+
 
 # Annotating a local that is returned destroys the def's inferred return type
 
@@ -100,3 +125,6 @@ Four return annotations bought thirteen where three constructor annotations
 bought nothing. The return-type surface is the high-leverage one for
 method-calling code, which is what makes the two defects above expensive rather
 than academic.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

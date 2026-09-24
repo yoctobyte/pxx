@@ -1,0 +1,87 @@
+# A TUPLE TARGET rebinding a name to a DIFFERENT type must widen the name, the
+# way `x = 0.5` after `x = 0` already does. The unpack door never told the
+# typing pass, so the name kept its first slot: a float's BITS landed in an int
+# (0.5 printed 4602678819172646912) and a str local rebound to an int stored 3
+# into a string slot and segfaulted. Every row below was wrong before the fix;
+# the .expected is CPython's own output for this file.
+#
+# The rebound name is put FIRST in some target lists and LAST in others, and
+# every door is covered: a def local, module scope, a module-level block, a
+# nested group, a starred target, and a statement that STARTS with `(` or `*`.
+# bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
+
+
+def first_in_list():
+    x = 0
+    x, y = 0.5, 1
+    print(x, y)
+
+
+def last_in_list():
+    y = 0
+    x, y = 1, 0.5
+    print(x, y)
+
+
+def str_to_int():
+    s = "a"
+    s, n = 3, 4
+    print(s, n)
+
+
+def int_to_str():
+    n = 7
+    k, n = 1, "seven"
+    print(k, n)
+
+
+def in_a_loop():
+    x = 0
+    for i in range(2):
+        x, y = 0.5 + i, 1
+    print(x, y)
+
+
+def nested_group():
+    a = 1
+    (a, b), c = (1.5, 2), 3
+    print(a, b, c)
+
+
+def from_a_call():
+    def pair():
+        return 0.25, "x"
+    p = 1
+    p, q = pair()
+    print(p, q)
+
+
+first_in_list()
+last_in_list()
+str_to_int()
+int_to_str()
+in_a_loop()
+nested_group()
+from_a_call()
+
+m = 0
+m, q = 2.5, "z"
+print(m, q)
+
+w = 0
+for i in range(2):
+    v, w = "v", 2.5 + i
+print(v, w)
+
+k = "s"
+if True:
+    k, j = 3, 4
+print(k, j)
+
+a = 1
+(a, b), c = (1.5, 2), 3
+print(a, b, c)
+
+z = 0
+*r, z = [1, 2, 0.5]
+print(r, z)

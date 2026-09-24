@@ -1,0 +1,36 @@
+# A def that returns an ANNOTATED local must infer the same result type as the
+# unannotated spelling. `t: Holder = Holder(); return t` used to type the
+# CALLER's local as a variant (tk=22), where `t = Holder(); return t` typed it
+# as the class: the return scan matched only `name =`, so `name: T =` chased
+# nothing. The values printed were right either way -- this file's real check
+# is the PXXDBG=n.locals row in the Makefile, which asserts the TYPE; the
+# printed lines only prove the program still runs, against CPython.
+# bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
+
+
+class Holder:
+    def __init__(self):
+        self.v = 5
+
+
+def mk_bare():
+    t = Holder()
+    return t
+
+
+def mk_ann():
+    t: Holder = Holder()
+    return t
+
+
+def mk_ann_nested():
+    def inner():
+        return Holder()
+    t: Holder = inner()
+    return t
+
+
+a = mk_bare()
+b = mk_ann()
+c = mk_ann_nested()
+print(a.v, b.v, c.v)

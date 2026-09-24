@@ -28747,6 +28747,10 @@ begin
       sym := AllocVar(PyNestRecName[r], tyVariant)
     else
     begin
+      { A leaf is a REBINDING of its name, with a variant element as the value
+        -- the same note PyUnpackTargetStore makes for a flat target. Without
+        it `a = 1; (a, b), c = (1.5, 2), 3` kept `a` an int and printed 1. }
+      if PyTypingPass then PyNoteLocalType(PyNestRecName[r], tyVariant, REC_NONE);
       sym := PyAssignTargetSym(PyNestRecName[r]);
       if sym < 0 then sym := AllocVar(PyNestRecName[r], tyVariant);
     end;
@@ -33073,6 +33077,13 @@ begin
   symIdx := PyProgSym(nm);
   if fld = '' then
   begin
+    { A NAME target is a rebinding, so the trial parse must hear about it --
+      the chain and single-statement doors both note it, and this one did not.
+      Without the note a name bound first as an int and then by `x, y = 0.5, 1`
+      kept its int slot: the float's BITS landed in it (4602678819172646912),
+      and a str local rebound by `s, n = 3, 4` stored 3 into a string slot and
+      segfaulted on the next refcount. }
+    if PyTypingPass then PyNoteLocalType(nm, newTk, newRec);
     if symIdx < 0 then symIdx := AllocVar(nm, newTk);
     { Carry the CLASS IDENTITY, not just the type kind. `a, b = C(3), C(3)`
       typed each target tyClass but left RecName unset, so the target was a
@@ -35795,23 +35806,43 @@ end;
   Python but bind through a subscript or a field rather than declaring a module
   name, and this scan exists purely to declare names. Anything else in the run
   makes it answer False and the statement is left alone, exactly as before.
-  bug-nilpy-tuple-unpacked-name-undefined-in-a-later-assignment }
+  bug-nilpy-tuple-unpacked-name-undefined-in-a-later-assignment
+
+  A NESTED GROUP `(a, b), c =` and a STAR `*w, z =` are names too, so the
+  parentheses and the star are admitted around them: every leaf still binds a
+  module name, and a scan that stopped at the first '(' or '*' left a name
+  REBOUND there in its first slot (`z = 0; *w, z = [1, 2, 0.5]` printed 0).
+  At least one comma at paren depth 0 is still required -- `(x) = 1` is a
+  plain assignment and belongs to the arm above. }
 function PyTupleTargetRun(i: Integer; var tupEnd: Integer): Boolean;
-var k: Integer; wantIdent: Boolean;
+var k, depth: Integer; wantIdent, sawComma: Boolean;
 begin
   PyTupleTargetRun := False;
   tupEnd := -1;
   k := i;
+  depth := 0;
   wantIdent := True;
+  sawComma := False;
   while k < MainProgramTokCount do
   begin
     if wantIdent then
     begin
-      if Tokens[k].Kind <> tkIdent then Exit;
-      wantIdent := False;
+      if Tokens[k].Kind = tkLParen then Inc(depth)
+      else if Tokens[k].Kind = tkStar then
+      begin
+        { a star binds exactly one name next }
+        if (k + 1 >= MainProgramTokCount) or (Tokens[k + 1].Kind <> tkIdent) then Exit;
+      end
+      else if Tokens[k].Kind = tkIdent then wantIdent := False
+      else Exit;
     end
-    else if Tokens[k].Kind = tkComma then wantIdent := True
-    else if Tokens[k].Kind = tkAssign then
+    else if (Tokens[k].Kind = tkRParen) and (depth > 0) then Dec(depth)
+    else if Tokens[k].Kind = tkComma then
+    begin
+      if depth = 0 then sawComma := True;
+      wantIdent := True;
+    end
+    else if (Tokens[k].Kind = tkAssign) and (depth = 0) and sawComma then
     begin
       tupEnd := k;
       PyTupleTargetRun := True;
@@ -36854,8 +36885,13 @@ begin
         properly when it runs. What matters is only that the name RESOLVES, so
         the later trial parse gets that far.
         bug-nilpy-tuple-unpacked-name-undefined-in-a-later-assignment }
-      else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
-              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkComma) and
+      { Any MODULE-LEVEL block, not only depth 0: `for ...: m, n = 2.5, "z"`
+        at module scope is a module binding too, and gating this on depth 0
+        left it in its first slot -- the same test the sibling block arms use. }
+      else if ((depth = 0) or ((depth <= 255) and (not blockIsDef[depth]))) and
+              (((Tokens[i].Kind = tkIdent) and
+                (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkComma)) or
+               (Tokens[i].Kind = tkLParen) or (Tokens[i].Kind = tkStar)) and
               ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent,
                                                          tkDedent, tkSemicolon])) and
               PyTupleTargetRun(i, tupEnd) then
@@ -36866,11 +36902,13 @@ begin
           if Tokens[bodyIx].Kind = tkIdent then
           begin
             blkName := GetTokenStr(bodyIx);
+            { NOTE EVERY TARGET, not only a new one: a name already bound
+              (`m = 0` earlier) is being REBOUND here, and skipping the note
+              left it in its first slot, so `m, q = 2.5, "z"` stored the
+              float's bits into an int. Only the ALLOCATION is for new names. }
+            PyNoteLocalType(blkName, tyVariant, REC_NONE);
             if PyProgSym(blkName) < 0 then
-            begin
-              PyNoteLocalType(blkName, tyVariant, REC_NONE);
               si := AllocVar(blkName, tyVariant);
-            end;
           end;
           Inc(bodyIx);
         end;
@@ -39488,6 +39526,28 @@ begin
                                     tkAssign]);
 end;
 
+{ The `=` that binds the LOCAL whose name sits at token k, or -1: `x = ...`
+  exactly as before, and ALSO `x: T = ...`, stepping over the annotation with
+  the class-attribute side's own helper so the two readers agree on where the
+  initialiser starts. The annotated form is only taken at a statement boundary,
+  because `name :` is also a dict key, a lambda parameter and the head of a
+  one-line `if a: b = 1`.
+
+  The body scans that type a def's RESULT from a returned local matched only
+  `x =`, so `t: Holder = Holder(); return t` chased nothing and the def answered
+  VARIANT where the unannotated spelling answered the class -- an annotation,
+  the documented lever for speed, silently costing every caller its type.
+  bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type }
+function PyLocalAsgEqIdx(k, scanFrom: Integer): Integer;
+begin
+  Result := -1;
+  if k + 1 >= TokCount then Exit;
+  if Tokens[k + 1].Kind = tkAssign then
+    Result := k + 1
+  else if (Tokens[k + 1].Kind = tkColon) and PyWholeTargetAt(k, scanFrom) then
+    Result := PyClsAttrEqIdx(k, TokCount);
+end;
+
 function PyRetRecvClass(scanFrom, scanTo: Integer; const recvNm: AnsiString): Integer;
 { The class a local of this body was last bound to, from its `recv = ClassName(`
   assignment. Token-only, like every other chase in this scan: PyInferExprType's
@@ -39500,18 +39560,23 @@ function PyRetRecvClass(scanFrom, scanTo: Integer; const recvNm: AnsiString): In
   A second copy of the chase is a second chance for the two shapes to diverge,
   which is precisely how the method form stayed broken after the field form was
   fixed. }
-var k, pi, e2: Integer;
+var k, pi, e2, eq: Integer;
 begin
   PyRetRecvClass := -1;
   for k := scanFrom to scanTo - 1 do
-    if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
-       (Tokens[k + 3].Kind = tkLParen) and
-       TokenCaseEqual(k, recvNm) and PyWholeTargetAt(k, scanFrom) then
+  begin
+    { `recv =` or `recv: T =` -- see PyLocalAsgEqIdx }
+    eq := -1;
+    if (Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, recvNm) and
+       PyWholeTargetAt(k, scanFrom) then
+      eq := PyLocalAsgEqIdx(k, scanFrom);
+    if eq < 0 then Continue;
+    if (eq + 2 < TokCount) and (Tokens[eq + 1].Kind = tkIdent) and
+       (Tokens[eq + 2].Kind = tkLParen) then
     begin
       { the LAST such binding wins, as everywhere else in this scan }
-      if FindUClassNonRecord(GetTokenStr(k + 2)) >= 0 then
-        PyRetRecvClass := FindUClassNonRecord(GetTokenStr(k + 2))
+      if FindUClassNonRecord(GetTokenStr(eq + 1)) >= 0 then
+        PyRetRecvClass := FindUClassNonRecord(GetTokenStr(eq + 1))
       else
       begin
         { `c = get()` — bound from a DEF that returns an instance, not from a
@@ -39525,15 +39590,13 @@ begin
           finds Pascal's `Hi` — but the guard demands a CLASS return with a real
           rec id, and no intrinsic has one. A def defined later in the file has
           no RetType yet, answers -1, and is left alone. }
-        pi := FindProc(GetTokenStr(k + 2));
+        pi := FindProc(GetTokenStr(eq + 1));
         if (pi >= 0) and (Procs[pi].RetType = tyClass) and
            (ProcRetRecId[pi] >= REC_UCLASS_BASE) then
           PyRetRecvClass := ProcRetRecId[pi] - REC_UCLASS_BASE;
       end;
     end
-    else if (Tokens[k].Kind = tkIdent) and (k + 2 < TokCount) and
-            (Tokens[k + 1].Kind = tkAssign) and TokenCaseEqual(k, recvNm) and
-            PyWholeTargetAt(k, scanFrom) then
+    else if eq + 1 < TokCount then
     begin
       { `c = a + b`, `c = (a + b)`, `c = h.a` -- any other right-hand side.
         The two shapes above were the only ones this chase knew, so a receiver
@@ -39548,12 +39611,13 @@ begin
         arm happened to answer variant. PyInferExprType is token-only in this
         position (see PyChaseBareLocalClass), so both passes still agree.
         bug-n-attribute-access-directly-on-a-dunder-result-segfaults }
-      e2 := k + 2;
+      e2 := eq + 1;
       while (e2 < TokCount) and
             not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(e2);
-      if (PyInferExprType(k + 2, e2) = tyClass) and (PyInferLastCi >= 0) then
+      if (PyInferExprType(eq + 1, e2) = tyClass) and (PyInferLastCi >= 0) then
         PyRetRecvClass := PyInferLastCi;
     end;
+  end;
 end;
 
 function PyRetFieldType(scanFrom, scanTo: Integer; const recvNm, fldNm: AnsiString;
@@ -39685,6 +39749,19 @@ begin
   PyRetMethodType := tyUnknown;
   mthRec := REC_NONE;
   recvCi := PyRetRecvClass(scanFrom, scanTo, recvNm);
+  { `self` is never ASSIGNED in the body, so the chase above cannot find it and
+    `return self.r_ctor()` answered VARIANT while `return C().r_ctor()` and the
+    callee itself typed the class. Resolved from the same two sources, in the
+    same order, as PyInferExprType's `self.m(...)` arm -- CurSelfClass while a
+    method is being parsed, PyInferSelfCi while the member pre-pass lends it --
+    so the pass that decides the signature and the pass that lays out the frame
+    still give one answer.
+    bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type }
+  if (recvCi < 0) and (recvNm = 'self') then
+  begin
+    if CurSelfClass >= REC_UCLASS_BASE then recvCi := CurSelfClass - REC_UCLASS_BASE
+    else if PyInferSelfCi >= 0 then recvCi := PyInferSelfCi;
+  end;
   if recvCi < 0 then Exit;
   si := FindUMeth(recvCi, mthNm);
   if si < 0 then Exit;
@@ -39694,20 +39771,22 @@ begin
 end;
 
 function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind;
-var k, e2: Integer; t2: TTypeKind;
+var k, e2, eq: Integer; t2: TTypeKind;
 begin
   PyRetNameType := tyUnknown;
   for k := scanFrom to scanTo - 1 do
-    if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and TokenCaseEqual(k, nm) and
+  begin
+    eq := -1;
+    if (Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, nm) and
        PyWholeTargetAt(k, scanFrom) then
-    begin
-      e2 := k + 2;
-      while (e2 < TokCount) and
-            not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(e2);
-      t2 := PyInferExprType(k + 2, e2);
-      if t2 <> tyUnknown then PyRetNameType := t2;
-    end;
+      eq := PyLocalAsgEqIdx(k, scanFrom);   { `nm =` or `nm: T =` }
+    if eq < 0 then Continue;
+    e2 := eq + 1;
+    while (e2 < TokCount) and
+          not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(e2);
+    t2 := PyInferExprType(eq + 1, e2);
+    if t2 <> tyUnknown then PyRetNameType := t2;
+  end;
 end;
 
 { Is `nm` bound INSIDE this def — as a parameter, or by an assignment in the
@@ -39738,10 +39817,11 @@ begin
       Exit;
     end;
   end;
-  { a LOCAL: `nm = ...` earlier in the body, the same shape PyRetNameType scans }
+  { a LOCAL: `nm = ...` (or `nm: T = ...`) earlier in the body, the same
+    shape PyRetNameType scans }
   for k := bodyFrom to bodyTo - 1 do
-    if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and TokenCaseEqual(k, nm) then
+    if (Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, nm) and
+       (PyLocalAsgEqIdx(k, bodyFrom) >= 0) then
     begin
       Result := True;
       Exit;
@@ -39846,6 +39926,7 @@ function PyInferDefRetTypeScanInner(methodStart: Integer; var retRec: Integer;
                                var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth, chainRec: Integer;
+    eqx: Integer;   { the `=` of an assignment the name chase matched }
     recvCi2: Integer;   { the method arm's receiver class, or -1 if not a local here }
     smPname: AnsiString;      { the str-method arm: pylib entry, its return kind }
     smRetTk: TTypeKind;       { and its arity code, all three unused except as }
@@ -40122,12 +40203,14 @@ begin
               rec2 := -1;
               PyInferLastCi := -1;
             end
-            else if Tokens[k + 1].Kind = tkAssign then
+            else if PyLocalAsgEqIdx(k, bodyScanStart) >= 0 then
           begin
-            e2 := k + 2;
+            { `x = ...` or `x: T = ...` -- see PyLocalAsgEqIdx }
+            eqx := PyLocalAsgEqIdx(k, bodyScanStart);
+            e2 := eqx + 1;
             while (e2 < TokCount) and not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do
               Inc(e2);
-            t2 := PyInferExprType(k + 2, e2);
+            t2 := PyInferExprType(eqx + 1, e2);
             { Self-referential accumulator (`acc = acc + chr(97)`): this raw
               re-scan has no PyLocals here, so the leading `acc` on the RHS
               resolves to tyUnknown and contributes nothing, and the type comes
@@ -40137,9 +40220,9 @@ begin
               to one byte
               (bug-nilpy-return-type-inference-mistypes-several-expression-shapes).
               Fold in the type accumulated across the chain so far instead. }
-            if (chainCur <> tyUnknown) and (k + 2 < e2) and
-               (Tokens[k + 2].Kind = tkIdent) and
-               TokenCaseEqual(k + 2, GetTokenStr(j + 1)) then
+            if (chainCur <> tyUnknown) and (eqx + 1 < e2) and
+               (Tokens[eqx + 1].Kind = tkIdent) and
+               TokenCaseEqual(eqx + 1, GetTokenStr(j + 1)) then
             begin
               t2 := PyWiden(chainCur, t2);
               { ...and the class IDENTITY travels with the kind. PyWiden folds
@@ -40459,14 +40542,16 @@ begin
       if ((cur = tyUnknown) or PyRetIsIntDefault(cur)) and
          (e = j + 2) and (Tokens[j + 1].Kind = tkIdent) then
         for k := bodyScanStart to j - 1 do
-          if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
-             (Tokens[k + 1].Kind = tkAssign) and
-             (Tokens[k + 2].Kind = tkIdent) and (Tokens[k + 3].Kind = tkLParen) and
-             TokenCaseEqual(k, GetTokenStr(j + 1)) and
-             PyWholeTargetAt(k, bodyScanStart) and
-             (FindProc(GetTokenStr(k + 2)) < 0) then
+        begin
+          eqx := -1;   { `s = inner()` or `s: T = inner()` }
+          if (Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, GetTokenStr(j + 1)) and
+             PyWholeTargetAt(k, bodyScanStart) then
+            eqx := PyLocalAsgEqIdx(k, bodyScanStart);
+          if (eqx >= 0) and (eqx + 2 < TokCount) and
+             (Tokens[eqx + 1].Kind = tkIdent) and (Tokens[eqx + 2].Kind = tkLParen) and
+             (FindProc(GetTokenStr(eqx + 1)) < 0) then
           begin
-            t2 := PyNestedDefRetType(bodyScanStart, k, GetTokenStr(k + 2), rec2);
+            t2 := PyNestedDefRetType(bodyScanStart, k, GetTokenStr(eqx + 1), rec2);
             if t2 <> tyUnknown then
             begin
               cur := t2;
@@ -40474,6 +40559,7 @@ begin
                 PyInferLastCi := rec2 - REC_UCLASS_BASE;
             end;
           end;
+        end;
       { NOTE tyInteger, not tyVariant. Making an untypable return DYNAMIC is
         the honest answer and was tried (0843fbb7) — but a variant-returning
         def returns through a hidden destination, and a def whose parameters
