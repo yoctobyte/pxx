@@ -133,6 +133,7 @@ procedure EmitLoadGlobAddrXtensa(rd: Integer; bssOff: Integer); forward;
 procedure EmitLoadDataRefXtensa(rd: Integer; dataOff: Integer); forward;
 procedure EmitCallProc(procIdx: Integer); forward;
 function DivZeroCheckProc: Integer; forward;
+function DivZeroYieldsZero: Boolean; forward;
 procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
 { Scope-exit release of a proc's managed locals on ANY target. Body in
   ir_codegen.inc — see the note there for why the six arms had to be one
@@ -18054,7 +18055,30 @@ function DivZeroCheckProc: Integer;
 begin
   Result := -1;
   if NoDivCheck then Exit;
+  { ESP (bare and IDF): a zero divisor gives 0 -- see DivZeroYieldsZero. }
+  if TargetPlatform = PLATFORM_ESP then Exit;
   Result := FindProc('PXXDivZero');
+end;
+
+function DivZeroYieldsZero: Boolean;
+{ ESP, bare AND IDF: integer `div` and `mod` by zero give 0 -- no halt, no
+  trap, no runtime call. The owner's ruling, 2026-09-24: "return 0 on esp, keep
+  RE 200 on desktop" (decide-int-div-zero-behavior-unification, DECIDED
+  2026-09-24). Desktop and hosted targets, hosted riscv32 and arm32 Linux
+  included, keep DivZeroCheckProc's RE 200; --no-div-check means raw hardware
+  everywhere, ESP included.
+
+  The two ESP ISAs' check emitters (EmitDivZeroCheckRV32/Xtensa) test the
+  divisor exactly as before and, on zero, set dividend := 0 and divisor := 1 and
+  FALL THROUGH into the divide: 0 div 1 and 0 mod 1 are both 0, signed and
+  unsigned, 32- and 64-bit, hardware or soft. So the divide never sees a zero
+  (xtensa's QUOS/REMS would raise IntegerDivideByZero), there is no call and no
+  builtinheap, and a site costs a branch and two to four moves. A first cut
+  built the same thing as an IR branch around the divide: correct, but it
+  spilled both operands and the result to frame slots and cost 140 B/site on
+  esp32s3 and 192 B/site on esp32c3. }
+begin
+  Result := (not NoDivCheck) and (TargetPlatform = PLATFORM_ESP);
 end;
 
 function XtensaCallReaches(pc, target: Integer): Boolean;

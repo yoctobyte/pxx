@@ -37079,6 +37079,19 @@ test-esp-idf: $(COMPILER)
 	    echo "$$chip WriteLn + task end ok (== x86-64 oracle, one boot)"; \
 	  else echo "$$chip WriteLn + task end MISMATCH"; exit 1; fi; \
 	done
+	@# INTEGER DIVISION BY ZERO GIVES 0 ON ESP, Pascal and C, both ISAs, and the
+	@# program carries on (decide-int-div-zero-behavior-unification, DECIDED
+	@# 2026-09-24). A fixed .expected, not the x86-64 oracle: desktop halts with
+	@# runtime error 200 on the first row, which test-core asserts.
+	@for chip in esp32c3 esp32s3; do \
+	  for t in test/test_esp_div_by_zero_yields_zero.pas test/c_esp_div_by_zero_yields_zero.c; do \
+	    b=$$(basename $$t); echo "--- $$chip $$b"; \
+	    ESP_RUN_TIMEOUT=20 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	      tools/esp_run.sh --chip $$chip $$t 2>/dev/null | grep -v 'main_task' > $(TESTTMP)/$$b.$$chip || true; \
+	    if diff -u $${t%.*}.expected $(TESTTMP)/$$b.$$chip; then echo "$$chip $$b ok"; \
+	    else echo "$$chip $$b MISMATCH"; exit 1; fi; \
+	  done; \
+	done
 
 	@# THE HARDWARE DEMO'S SOURCE, both ESP ISAs, BUILD ONLY -- the qemu run of
 	@# it lives in examples/esp32/nilpy-hw-{c3,s3}/build.sh, as for the other

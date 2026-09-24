@@ -126,3 +126,51 @@ Python's answer.
 (The float VALUES are right; printing one is not — `writeln` of a non-finite
 Double hangs. That is a plain bug, not a policy question, and is filed as
 [[bug-a-writeln-of-a-non-finite-double-hangs]].)
+
+## DECIDED 2026-09-24: ESP returns 0; desktop keeps RE 200
+
+**This supersedes the 2026-07-20 "RE 200 everywhere" FOR ESP ONLY.** Desktop and
+hosted targets (x86-64, i386, aarch64, and arm32 and riscv32 under Linux) keep
+runtime error 200 as before.
+
+The owner's words, relayed by frankuser on 2026-09-24, in order:
+
+> not halting on divby zero is desired behaviour, see relevant discussion about embedded
+
+> on math errors i rather have NaN propagating
+
+> range check is not an issue. especially not on esp. just code overhead.
+
+> return 0 on esp, keep RE 200 on desktop
+
+> the big distinction is a desktop app under an OS. and an embedded device that should (try) to keep running, even if whatever unexpected input (sensor etc) produces a math error. we should not halt.
+
+The "relevant discussion about embedded" is the 2026-07-02 position recorded at
+the top of this file ("returning zero is a sane result", from real-time
+measurement data where inputs go out of bounds).
+
+**What is built (frankS):**
+- ESP means `TargetPlatform = PLATFORM_ESP`: esp32c3 and esp32s3, IDF and bare.
+- Integer `div`/`mod` by zero gives 0, in Pascal and in C (C calls it UB, so 0
+  is legal). This covers 32- and 64-bit, signed and unsigned, and the compound
+  C forms.
+- Mechanism (`DivZeroYieldsZero`, symtab.inc): the existing per-divide zero
+  test, on zero, sets dividend := 0 and divisor := 1 and falls into the divide.
+  The divide never sees a zero, so xtensa's QUOS cannot raise
+  IntegerDivideByZero. There is no call and no builtinheap.
+- Measured cost: about 20 B/site on esp32s3 and 24 B/site on esp32c3, with no
+  fixed cost. The runtime-error route it replaces pulled builtinheap for
+  PXXDivZero: 291 B -> 24,123 B of code for one `div` in an otherwise
+  runtime-free esp32s3 program, and 500 B -> 33,876 B on esp32c3.
+- `--no-div-check` still means raw hardware everywhere. Measured on esp32c3:
+  -1 and the dividend (the RISC-V rule). On esp32s3 this build computes
+  LongInt/Int64 division in the software core (no QUOS in the object), which
+  gives the same -1 and dividend and does not trap.
+- Opt-in checks ({$R+}, {$Q+}) keep trapping. The programmer asked for those.
+
+**frankuser's reading of the principle, NOT the owner's words:** on ESP, NilPy
+`//` and `%` by zero also give 0, and `/` by zero follows IEEE (inf/nan)
+without raising, because an uncaught ZeroDivisionError halts the device.
+Desktop NilPy keeps ZeroDivisionError. Tracked in
+feature-a-esp-math-errors-keep-the-device-running, together with the census of
+the other default-halting math paths on ESP.

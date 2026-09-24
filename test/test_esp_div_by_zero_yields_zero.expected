@@ -1,0 +1,6 @@
+div32 0 mod32 0
+div64 0 mod64 0
+udiv 0 umod 0
+side 0 calls 2
+nonzero 3 -2 3 -2 -3
+calls 4

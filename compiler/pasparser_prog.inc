@@ -330,7 +330,8 @@ begin
       523833fde3 until test-core's divzero4 rows caught it on 2026-09-24. The
       same silent-passthrough shape as {$R+} above, so the same answer. }
     if ((Tokens[i].Kind = tkDiv) or (Tokens[i].Kind = tkMod)) and
-       (TargetArch <> TARGET_X86_64) and not NoDivCheck then
+       (TargetArch <> TARGET_X86_64) and not NoDivCheck and
+       (TargetPlatform <> PLATFORM_ESP) then   { ESP: 0, no helper -- DivZeroYieldsZero }
       needsHeap := True;
     { A PROCEDURAL TYPE -- `= procedure`, `: function`, `procedure of object`
       in a type or var position. A call through one carries the default-on

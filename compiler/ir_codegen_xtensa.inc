@@ -790,6 +790,36 @@ procedure EmitDivZeroCheckXtensa(divisorIsA2A3Pair: Boolean);
   bug-a-the-div-by-zero-check-is-still-missing-on-xtensa }
 var pSkip, dzProc, testReg: Integer;
 begin
+  if DivZeroYieldsZero then
+  begin
+    { ESP: divisor zero -> dividend := 0, divisor := 1, fall into the divide
+      (DivZeroYieldsZero). 32-bit: a2 / a3. 64-bit: a4:a5 / a2:a3, checked
+      before the signed core takes signs. }
+    if divisorIsA2A3Pair then
+    begin
+      xtensa_or(reg_xtensa_a8, reg_xtensa_a2, reg_xtensa_a3);
+      testReg := reg_xtensa_a8;
+    end
+    else
+      testReg := reg_xtensa_a3;
+    xtensa_movi(reg_xtensa_a9, 0);
+    pSkip := CodeLen;
+    xtensa_bne(testReg, reg_xtensa_a9, 0);        { -> .ok, patched below }
+    if divisorIsA2A3Pair then
+    begin
+      xtensa_movi(reg_xtensa_a4, 0);
+      xtensa_movi(reg_xtensa_a5, 0);
+      xtensa_movi(reg_xtensa_a2, 1);
+      xtensa_movi(reg_xtensa_a3, 0);
+    end
+    else
+    begin
+      xtensa_movi(reg_xtensa_a2, 0);
+      xtensa_movi(reg_xtensa_a3, 1);
+    end;
+    Patch24(pSkip, EncodeXtensaBranch(9, testReg, reg_xtensa_a9, CodeLen - pSkip));
+    Exit;
+  end;
   dzProc := DivZeroCheckProc;
   if dzProc < 0 then Exit;          { policy: no PXXDivZero => emit no check }
   if divisorIsA2A3Pair then

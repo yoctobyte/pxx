@@ -621,6 +621,28 @@ procedure EmitDivZeroCheckRV32(divisorInA1Only: Boolean);
   bug-a-the-div-by-zero-check-is-emitted-on-x86-64-only }
 var pSkip, dzProc, testReg: Integer;
 begin
+  if DivZeroYieldsZero then
+  begin
+    { ESP: divisor zero -> dividend := 0, divisor := 1, fall into the divide.
+      32-bit: a0 / a1. 64-bit core: t0:t1 / a0:a1 (a signed caller has already
+      taken signs; 0 negated is 0). }
+    if divisorInA1Only then
+    begin
+      rv32_bne(reg_a1, reg_zero, 12);
+      rv32_addi(reg_a0, reg_zero, 0);
+      rv32_addi(reg_a1, reg_zero, 1);
+    end
+    else
+    begin
+      rv32_or(reg_t6, reg_a0, reg_a1);
+      rv32_bne(reg_t6, reg_zero, 20);
+      rv32_addi(reg_t0, reg_zero, 0);
+      rv32_addi(reg_t1, reg_zero, 0);
+      rv32_addi(reg_a0, reg_zero, 1);
+      rv32_addi(reg_a1, reg_zero, 0);
+    end;
+    Exit;
+  end;
   dzProc := DivZeroCheckProc;
   if dzProc < 0 then Exit;
   if divisorInA1Only then
