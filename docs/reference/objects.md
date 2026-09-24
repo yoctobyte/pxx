@@ -21,7 +21,7 @@ linking their objects. They share an export surface, but **not** a relocation mo
 x86-64 object is position-independent and links either way, an i386 object is
 position-dependent and needs `gcc -m32 -no-pie`. The two ESP targets are a
 different kind of object: they export `app_main` for an IDF image and are
-covered under [Targets](../targets/).
+covered under [Targets](../targets/index.md).
 
 ## What the object exports
 

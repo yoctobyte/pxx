@@ -32,7 +32,8 @@ tools/run_target.sh aarch64 ./hello.a64
 ```
 
 For ESP32 targets, start with the board-specific examples under
-`examples/esp32/`.
+`examples/esp32/`; the peripheral units are in
+[ESP32 peripherals](../library/esp.md).
 
 ## Pages
 

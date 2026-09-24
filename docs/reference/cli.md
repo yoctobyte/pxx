@@ -311,5 +311,5 @@ Per-library define and mode manifests are not implemented.
 
 - [Compiler modes and strictness](./modes.md)
 - [Compiler directives](./directives.md)
-- [Install](../install/)
-- [Targets](../targets/)
+- [Install](../install/index.md)
+- [Targets](../targets/index.md)

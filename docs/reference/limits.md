@@ -67,4 +67,4 @@ actual result.
 
 - [Command line](./cli.md)
 - [FPC compatibility](../language/fpc-compatibility.md)
-- [Targets](../targets/)
+- [Targets](../targets/index.md)

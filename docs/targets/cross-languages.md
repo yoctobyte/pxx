@@ -163,4 +163,4 @@ boundaries, rather than in whether a call reaches the other language at all.
 ## Next
 
 - [FPC compatibility](../language/fpc-compatibility.md)
-- [Targets](./)
+- [Targets](./index.md)

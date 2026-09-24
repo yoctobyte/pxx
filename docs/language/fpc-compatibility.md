@@ -124,4 +124,4 @@ Prefer these changes when moving small FPC examples to PXX:
 ## Next
 
 - [PXX dialect](./dialect.md)
-- [Reference](../reference/)
+- [Reference](../reference/index.md)

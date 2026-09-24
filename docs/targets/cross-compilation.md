@@ -49,5 +49,5 @@ rest of the shared-IR surface.
 
 ## Next
 
-- [Targets](./)
+- [Targets](./index.md)
 - [Command-line reference](../reference/cli.md)

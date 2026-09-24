@@ -243,5 +243,5 @@ These functions return strings; they do not write to the terminal directly.
 
 ## Next
 
-- [Standard library](./)
-- [Examples](../examples/)
+- [Standard library](./index.md)
+- [Examples](../examples/index.md)

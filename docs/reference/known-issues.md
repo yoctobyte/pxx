@@ -117,5 +117,5 @@ the program, not MicroPython's API.
 
 ## Reporting a problem
 
-See [Reporting bugs](../release-notes/#reporting-bugs). A program that compiles
+See [Reporting bugs](../release-notes/index.md#reporting-bugs). A program that compiles
 and gives a wrong answer is the most useful report you can send.

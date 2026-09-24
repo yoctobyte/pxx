@@ -8,7 +8,7 @@ order: 22
 The same `pxx` compiler that builds Pascal also compiles C. It picks the C
 frontend from the `.c` extension; there is no separate tool. Everything on this
 page was run with **pin v424** (compiler sha256 `93a336a7ba85…`) on
-2026-09-25, from the root of a checkout set up as in [Install](../install/).
+2026-09-25, from the root of a checkout set up as in [Install](../install/index.md).
 
 ## Hello, world
 
@@ -237,7 +237,7 @@ C also runs on the ESP32 chips; see [ESP32](../targets/esp32.md).
 
 Two larger programs show what the C frontend handles. Both are compiled from
 their unmodified release sources, and both are in the
-[examples showcase](../examples/#real-c-programs) with the exact commands:
+[examples showcase](../examples/index.md#real-c-programs) with the exact commands:
 
 - **SQLite 3.46.0**: the whole database engine, built from its single-file
   amalgamation into a static 3.3 MB binary that runs SQL.

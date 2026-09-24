@@ -151,6 +151,10 @@ called by ESP-IDF's startup task. Externals such as `esp_rom_printf` and
 peripheral drivers stay available. See `examples/esp32/hello-c3/` and
 `examples/esp32/net-c3/` for complete buildable projects.
 
+The peripheral units (GPIO, UART, ADC, PWM, I2C, NVS, timers and the
+interrupt event queue) are documented in
+[ESP32 peripherals](../library/esp.md).
+
 ```pascal
 procedure esp_rom_printf(fmt: string; v: Integer); external;
 procedure vTaskDelay(ticks: Integer); external;
@@ -264,5 +268,6 @@ end;
 
 ## Next
 
+- [ESP32 peripherals](../library/esp.md)
 - [Cross-compilation](./cross-compilation.md)
-- [Targets overview](./)
+- [Targets overview](./index.md)

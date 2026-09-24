@@ -80,6 +80,10 @@ The wrapper installs the POSIX platform backend by default. Cross and embedded
 flows may pass an explicit platform root when a helper asks for it, for example
 an ESP backend path in an ESP32 object build.
 
+| Unit | Description |
+| --- | --- |
+| [ESP32 peripherals](./esp.md) | `espgpio`, `espuart`, `espadc`, `esppwm`, `espi2c`, `espnvs`, `esptimer`, `espsys` and `interrupts`: pins, serial, analog input, PWM, I2C, stored settings and timers on the ESP32, from Pascal and Nil Python. |
+
 For project-local units, pass additional roots with `-Fu`:
 
 ```sh
