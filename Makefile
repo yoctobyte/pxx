@@ -24981,6 +24981,22 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-i386 absent, i386 arm NOT verified ==="; \
 	fi
+	# xtensa, the sixth backend (feature-a-port-alloca-to-xtensa). Hosted rows
+	# are CALL0 only, because a hosted C image has no windowed entry stub; call0
+	# moves sp per push, so its arm is riscv32's. The WINDOWED arm (IDF's ABI)
+	# is a different mechanism -- movsp, copy the live spill words, block above
+	# the reserved region -- and is covered by 00207 in
+	# tools/run_c_conformance_esp.sh --chip esp32s3. Measured 2026-09-24: these
+	# two files also pass there and on an ESP32-S3 board, byte-exact against
+	# x86-64.
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_xt >/dev/null || { echo "c_alloca_expression_stack xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh xtensa/c_alloca_expr_xt "$$(tools/run_target.sh xtensa $(TESTTMP)/c_alloca_expr_xt)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/c_vla.c $(TESTTMP)/c_vla_xt >/dev/null || { echo "c_vla xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh xtensa/c_vla_xt "$$(tools/run_target.sh xtensa $(TESTTMP)/c_vla_xt)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24\n9 7 6')" || exit 1; \
+	else \
+	  echo "=== c_alloca_expression_stack: qemu-xtensa absent, xtensa arm NOT verified ==="; \
+	fi
 	# {$Q+} raises Runtime error 215 when a checked binop's result does not fit
 	# the destination. THE CHECK IS AT THE NARROWING STORE, not the binop: Pascal
 	# widens Q-tagged arithmetic to Int64, so `Integer + Integer` reaches codegen

@@ -6520,6 +6520,17 @@ var
     argument words than XT_OUTARG_REGION holds; 0 for every ordinary call.
     XtensaCallDoneWindowed restores it after the call. }
   XtCallSpExtra : Integer;
+  { IR_ALLOCA on xtensa (feature-a-port-alloca-to-xtensa). WINDOWED places each
+    alloca's block just above the reserved expression/argument region, at
+    new sp + XtSpillMax -- and XtSpillMax is final only after the body, so every
+    alloca loads that offset from a LITERAL whose position is recorded here and
+    which PatchProcPrologue fills in, as it does the frame size. Reset per body
+    emission attempt (IREmitMachineCodeXtensa re-emits on relaxation). CALL0
+    moves sp for every push, so it uses the riscv32 model instead: a frame word
+    holding where the expression stack starts, a15-relative; 0 = no alloca. }
+  XtAllocaLit : array[0..63] of Integer;
+  XtAllocaLitCount : Integer;
+  XtAllocaBaseOff : Integer;
   XtExcSlotOwner : Integer;
   XtExcSlotSet : array[0..XT_EXC_MAX_SLOTS - 1] of Boolean;
   XtExcSlotOff : array[0..XT_EXC_MAX_SLOTS - 1] of Integer;

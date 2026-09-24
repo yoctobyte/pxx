@@ -15698,6 +15698,11 @@ begin
     aligned := ((size + XtSpillMax + 15) div 16) * 16;
     if aligned = 0 then aligned := 16;
     Patch32(patchPos, aligned);
+    { ...and every alloca's block offset, which is the same final number:
+      the block sits just above the region this frame reserves for spills. }
+    for rvLo := 0 to XtAllocaLitCount - 1 do
+      Patch32(XtAllocaLit[rvLo], XtSpillMax);
+    XtAllocaLitCount := 0;
     Exit;
   end;
   if TargetArch = TARGET_ARM32 then

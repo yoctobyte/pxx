@@ -4,7 +4,8 @@ track: A
 prio: 30
 type: feature
 blocked-by: []
-summary: "IR_ALLOCA (C VLAs, alloca()) has no xtensa arm: `target xtensa: unsupported node in IR codegen: alloca`. It is the one c-testsuite row (00207.c) that red on esp32s3 for a missing feature rather than a bug. The other five backends have it; riscv32's is the model (a frame word holding where the expression stack starts, sp lowered by the 16-rounded size, the region between relocated down). xtensa is harder on the WINDOWED ABI, which IDF runs: that backend keeps sp CONSTANT and addresses its expression-stack spill slots and outgoing-argument area at fixed sp offsets, and moving sp there has to go through movsp and carry the 16-byte base save area the window-overflow handlers read below sp. Call0 is the easier half."
+summary: "DONE 2026-09-24 (frankH). IR_ALLOCA has an xtensa arm for both ABIs. CALL0 moves sp per push, so it is riscv32's arm (a base word holding where the expression stack starts, then relocate and return the gap). WINDOWED keeps sp constant, so: MOVSP down (the alloca exception handles the caller's a0-a3 block), copy the live [sp, sp+XtSpillDepth) words, and place the block above the WHOLE reserved spill region at new sp + XtSpillMax. That offset is a literal PatchProcPrologue fills in, and 16 bytes of slack pay for aligning the block. Verified: 00207 plus c_alloca_expression_stack / c_alloca_in_call_argument / c_vla / test_alloca PASS on tools/run_c_conformance_esp.sh --chip esp32s3 (qemu, windowed). Two of them are byte-exact on an ESP32-S3 board. All four match x86-64 hosted on call0, with new test-xtensa rows."
+status: done
 ---
 
 # Port IR_ALLOCA to xtensa
@@ -31,3 +32,6 @@ move too (movsp). That wants a design pass, not a same-session port.
 
 00207.c PASS on `tools/run_c_conformance_esp.sh --chip esp32s3`, and a hosted
 call0 row against x86-64 in test-xtensa.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -4959,6 +4959,97 @@ begin
         EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .p', 'movi a3, -1', '.p:']);
       end;
 
+    IR_ALLOCA:
+      begin
+        { Dynamic stack allocation: C VLAs and alloca(). The model is x86-64's
+          (the block comment above EmitSaveCallerRspX64 in ir_codegen.inc), and
+          the two ABIs need it in two different shapes.
+
+          CALL0 moves sp for every expression push, exactly like riscv32, so it
+          is riscv32's arm: a frame word holds where the expression stack
+          starts; lower sp by the 16-rounded size, relocate everything between
+          sp and that base down by the same amount, return the gap under it.
+
+          WINDOWED keeps sp CONSTANT and addresses its spills and outgoing
+          argument words at fixed offsets from sp, in a region the prologue
+          reserves at [sp, sp + XtSpillMax) below the locals. So the live words
+          [sp, sp + XtSpillDepth) are copied down with sp, and every offset the
+          body already computed stays valid. The block cannot go at
+          new sp + XtSpillDepth, because later pushes land there; it goes just
+          above the WHOLE reserved region, at new sp + XtSpillMax. That number is
+          final only after the body, so it is a literal PatchProcPrologue fills
+          in (XtAllocaLit). XtSpillMax is not 16-aligned, so 16 bytes of slack
+          are taken and the block is rounded up inside them.
+
+          sp moves with MOVSP, not ADD. The caller's a0-a3 may already be
+          spilled into the 16 bytes under the OLD sp; MOVSP raises the alloca
+          exception in exactly that case and the handler reloads them, so the
+          next spill lands under the new sp. sp moves BEFORE the copy because
+          IDF's interrupt entry saves context below sp, which makes anything
+          under sp scratch at every instruction.
+          feature-a-port-alloca-to-xtensa }
+        IREmitNodeXtensa(IRA[node]);                       { a2 = size }
+        xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 15);
+        xtensa_movi(reg_xtensa_a3, -16);
+        xtensa_and(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);  { rounded }
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 16);   { alignment slack }
+          xtensa_mov(reg_xtensa_a4, reg_xtensa_sp);        { a4 = old sp }
+          xtensa_sub(reg_xtensa_a3, reg_xtensa_sp, reg_xtensa_a2);
+          xtensa_movsp(reg_xtensa_sp, reg_xtensa_a3);
+          for i := 0 to XtSpillDepth div 4 - 1 do
+          begin
+            xtensa_l32i(reg_xtensa_a5, reg_xtensa_a4, 4 * i);
+            xtensa_s32i(reg_xtensa_a5, reg_xtensa_sp, 4 * i);
+          end;
+          if CurProc < 0 then
+            EmitLoadConstXtensa(reg_xtensa_a3, XtSpillLimit)  { main: fixed reserve }
+          else
+          begin
+            if XtAllocaLitCount > High(XtAllocaLit) then
+              Error('target xtensa: more than 64 alloca sites in one routine');
+            XtensaEmitLitHeader;
+            XtAllocaLit[XtAllocaLitCount] := CodeLen;
+            Inc(XtAllocaLitCount);
+            EmitI32(0);                                    { XtSpillMax, patched }
+            xtensa_l32r(reg_xtensa_a3, $FFFF);
+          end;
+          xtensa_add(reg_xtensa_a2, reg_xtensa_sp, reg_xtensa_a3);
+          xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 15);
+          xtensa_movi(reg_xtensa_a3, -16);
+          xtensa_and(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);  { a2 = block }
+        end
+        else
+        begin
+          if XtAllocaBaseOff = 0 then
+            Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
+                + 'IREmitMachineCodeXtensa''s body-entry scan did not see this node');
+          xtensa_sub(reg_xtensa_sp, reg_xtensa_sp, reg_xtensa_a2);  { sp -= size }
+          if CurProc < 0 then
+            EmitLoadGlobAddrXtensa(reg_xtensa_a8, XtAllocaBaseOff)
+          else
+            EmitFrameAddrXtensa(reg_xtensa_a8, XtAllocaBaseOff);
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_a8, 0);     { old base }
+          xtensa_sub(reg_xtensa_a3, reg_xtensa_a3, reg_xtensa_a2);  { new base }
+          xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 0);
+          xtensa_mov(reg_xtensa_a4, reg_xtensa_sp);         { dst cursor }
+          xtensa_add(reg_xtensa_a5, reg_xtensa_sp, reg_xtensa_a2);  { src = old sp }
+          { Whole words only (every push is 4 bytes), so dst lands exactly on the
+            new base and BEQ terminates; tested first, so an empty region copies
+            nothing. }
+          i := CodeLen;
+          xtensa_beq(reg_xtensa_a4, reg_xtensa_a3, 4);     { patched below }
+          xtensa_l32i(reg_xtensa_a6, reg_xtensa_a5, 0);
+          xtensa_s32i(reg_xtensa_a6, reg_xtensa_a4, 0);
+          xtensa_addi(reg_xtensa_a4, reg_xtensa_a4, 4);
+          xtensa_addi(reg_xtensa_a5, reg_xtensa_a5, 4);
+          xtensa_j(i - CodeLen);
+          Patch24(i, EncodeXtensaBranch(1, reg_xtensa_a4, reg_xtensa_a3, CodeLen - i));
+          xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);         { a2 = the block }
+        end;
+      end;
+
     IR_ASM:
       begin
         { Inline asm block: replay the parse-time-captured text lines
@@ -5905,6 +5996,24 @@ begin
   saveSpillMax := XtSpillMax;
   for i := 0 to IRLabelCount - 1 do
     XtWideLabel[i] := False;
+  { Call0 alloca base: carved ONCE, outside the relaxation retry, because a
+    second pass must address the same slot rather than grow the frame again.
+    Main has no patched frame, so its base is a BSS word. }
+  XtAllocaBaseOff := 0;
+  if XtensaABI <> XTENSA_ABI_WINDOWED then
+    for i := 0 to IRCount - 1 do
+      if (IRKind[i] = IR_ALLOCA) and (XtAllocaBaseOff = 0) then
+        if CurProc < 0 then
+        begin
+          BSSSize := AlignTo(BSSSize, 4);
+          XtAllocaBaseOff := BSSSize;
+          Inc(BSSSize, 4);
+        end
+        else
+        begin
+          FrameSize := AlignTo(FrameSize + 4, 4);
+          XtAllocaBaseOff := -FrameSize;
+        end;
   attempt := 0;
 
   repeat
@@ -5951,6 +6060,16 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+  XtAllocaLitCount := 0;
+  { Call0: record where the expression stack starts, for IR_ALLOCA's relocation. }
+  if XtAllocaBaseOff <> 0 then
+  begin
+    if CurProc < 0 then
+      EmitLoadGlobAddrXtensa(reg_xtensa_a8, XtAllocaBaseOff)
+    else
+      EmitFrameAddrXtensa(reg_xtensa_a8, XtAllocaBaseOff);
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a8, 0);
+  end;
 
   for i := 0 to IRCount - 1 do
   begin
