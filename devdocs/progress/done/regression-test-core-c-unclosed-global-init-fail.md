@@ -47,3 +47,6 @@ expect_same: MISMATCH [test_type_runtime26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-24 — auto-closed by the borg watcher: `test-core#src:test/c_unclosed_global_init_fail.c` passes at 6c33eee05d0f (tier native); it was red at f61b926d210a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
