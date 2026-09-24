@@ -8113,24 +8113,33 @@ end;
   where IEEE — and therefore the Pascal RTL these lower to — answers a quiet NaN
   or -Inf. The guard sits on the ARGUMENT so a NaN input still answers NaN.
   bug-n-math-pow-domain-error-raises-the-wrong-exception }
+{ ON ESP the domain guards step aside and the RTL's IEEE NaN / -Inf comes
+  through: a device keeps running on a bad sensor value (owner, 2026-09-24).
+  feature-a-esp-math-errors-keep-the-device-running }
 function pymath_dom_nonneg(x: Double): Double;
 begin
+  {$ifndef PXX_PLATFORM_ESP}
   if x < 0.0 then raise ValueError.Create('math domain error');
+  {$endif}
   pymath_dom_nonneg := x;
 end;
 
 { log/log2/log10: zero is out of domain too, and gives -Inf rather than NaN. }
 function pymath_dom_pos(x: Double): Double;
 begin
+  {$ifndef PXX_PLATFORM_ESP}
   if x < 0.0 then raise ValueError.Create('math domain error');
   if x = 0.0 then raise ValueError.Create('math domain error');
+  {$endif}
   pymath_dom_pos := x;
 end;
 
 { asin/acos: [-1, 1]. }
 function pymath_dom_unit(x: Double): Double;
 begin
+  {$ifndef PXX_PLATFORM_ESP}
   if (x < -1.0) or (x > 1.0) then raise ValueError.Create('math domain error');
+  {$endif}
   pymath_dom_unit := x;
 end;
 
@@ -8148,6 +8157,7 @@ end;
   Complex support is filed as bug-nilpy-no-complex-number-type. }
 function pypow_dom(b: Double; e: Double): Double;
 begin
+  {$ifndef PXX_PLATFORM_ESP}
   if (b < 0.0) and (e - Int(e) <> 0.0) then
     raise ValueError.Create(
       'a negative number raised to a fractional power is complex, '
@@ -8158,18 +8168,22 @@ begin
   if (b = 0.0) and (e < 0.0) then
     raise ZeroDivisionError.Create(
       '0.0 cannot be raised to a negative power');
+  {$endif}
   pypow_dom := b;
 end;
 
 function pymath_dom_pow(b: Double; e: Double): Double;
 var t: Double;
 begin
+  {$ifndef PXX_PLATFORM_ESP}
   if b < 0.0 then
   begin
     t := e - Int(e);
     if t <> 0.0 then raise ValueError.Create('math domain error');
   end;
   if (b = 0.0) and (e < 0.0) then raise ValueError.Create('math domain error');
+  {$endif}
+  t := 0.0;
   pymath_dom_pow := b;
 end;
 
@@ -8196,6 +8210,11 @@ end;
 function pyfloat_range_overflowed(v: Double; a: Double; b: Double): Boolean;
 begin
   pyfloat_range_overflowed := False;
+  { ESP: an overflow answers IEEE inf and the device keeps running.
+    feature-a-esp-math-errors-keep-the-device-running }
+  {$ifdef PXX_PLATFORM_ESP}
+  Exit;
+  {$endif}
   if not pyfloat_isinf(v) then Exit;
   if pyfloat_isinf(a) or pyfloat_isinf(b) then Exit;
   pyfloat_range_overflowed := True;
@@ -8667,7 +8686,7 @@ begin
 end;
 
 function pynext_v(const v: Variant): Variant;
-var o: TObject;
+var o: TObject; l: TPyList;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -8682,11 +8701,17 @@ begin
       Exit;
     end;
   end;
-  pynext_v := pynext_first(pylist_v(v));
+  { a fresh copy -- released for the reason given in max(const v: Variant) }
+  l := pylist_v(v);
+  try
+    pynext_v := pynext_first(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function pynext_or_v(const v: Variant; const dflt: Variant): Variant;
-var o: TObject;
+var o: TObject; l: TPyList;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -8697,7 +8722,12 @@ begin
       Exit;
     end;
   end;
-  pynext_or_v := pynext_first_or(pylist_v(v), dflt);
+  l := pylist_v(v);
+  try
+    pynext_or_v := pynext_first_or(l, dflt);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 { Is every element of this list a plain int/bool/float, with at least one
@@ -8834,9 +8864,20 @@ begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('max() argument is not iterable');
   l := pylist_v(v);
-  if (l = nil) or (l.count = 0) then
-    raise ValueError.Create('max() iterable argument is empty');
-  Result := PyExtremeOfList(l, True);
+  { The list pylist_v answers is a FRESH COPY for every input (see the note in
+    pyset_of): a Pascal local does not take part in refcounting, so it is
+    released here. Without it every min/max/sum/any/all/next over a VARIANT --
+    an unannotated parameter holding a list -- leaked one full copy per call:
+    measured 2026-09-24, 4168 bytes per min(s) for 256 ints on an ESP32-S3
+    (esp_get_free_heap_size under qemu), ~2 blocks per call under the x86-64
+    census. }
+  try
+    if (l = nil) or (l.count = 0) then
+      raise ValueError.Create('max() iterable argument is empty');
+    Result := PyExtremeOfList(l, True);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function min(const v: Variant): Variant; overload;
@@ -8845,9 +8886,14 @@ begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('min() argument is not iterable');
   l := pylist_v(v);
-  if (l = nil) or (l.count = 0) then
-    raise ValueError.Create('min() iterable argument is empty');
-  Result := PyExtremeOfList(l, False);
+  { a fresh copy -- released for the reason given in max above }
+  try
+    if (l = nil) or (l.count = 0) then
+      raise ValueError.Create('min() iterable argument is empty');
+    Result := PyExtremeOfList(l, False);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 
@@ -10177,8 +10223,15 @@ begin
     CPython raises ValueError('math domain error') for log of a non-positive,
     and this is the same message.
     bug-nilpy-pow-and-log-hang-on-a-non-positive-base }
+  {$ifdef PXX_PLATFORM_ESP}
+  { ESP answers IEEE instead of raising: ln 0 = -Inf, ln of a negative = NaN.
+    Both computed from x at run time so nothing folds a division by zero. }
+  if x = 0.0 then begin Result := -1.0 / (x * x); Exit; end;
+  if x < 0.0 then begin Result := (x - x) / (x - x); Exit; end;
+  {$else}
   if x <= 0.0 then
     raise ValueError.Create('math domain error');
+  {$endif}
   e := 0; m := x;
   while m >= 2.0 do begin m := m / 2.0; Inc(e); end;
   while m < 1.0 do begin m := m * 2.0; Dec(e); end;
@@ -10318,6 +10371,23 @@ begin
   end;
   fbase := pyvar_to_float(a);
   fexp := pyvar_to_float(b);
+  {$ifdef PXX_PLATFORM_ESP}
+  { ESP: IEEE +inf instead of ZeroDivisionError (fbase is zero here, so the
+    division is inf at run time), and NaN below for a negative base with a
+    fractional exponent. feature-a-esp-math-errors-keep-the-device-running }
+  if (fbase = 0.0) and (fexp < 0.0) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := 1.0 / fbase;
+    Exit;
+  end;
+  if (fbase < 0.0) and (Frac(fexp) <> 0.0) then
+  begin
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := (fbase - fbase) / (fbase - fbase);
+    Exit;
+  end;
+  {$endif}
   if (fbase = 0.0) and (fexp < 0.0) then
     raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
   { ZERO to a POSITIVE power is 0.0 — CPython's answer, and it has to be
@@ -11118,7 +11188,10 @@ begin
     before the zero test means anything. }
   da := pyvar_to_float(a);
   db := pyvar_to_float(b);
+  { ESP: no raise -- IEEE inf/nan, feature-a-esp-math-errors-keep-the-device-running }
+  {$ifndef PXX_PLATFORM_ESP}
   if db = 0.0 then raise ZeroDivisionError.Create('division by zero');
+  {$endif}
   r := PPyVarRec(@Result);
   r^.VType := 3;
   PPyDouble(@r^.Payload)^ := da / db;
@@ -11318,9 +11391,15 @@ end;
   divisor. Plain IEEE division does neither — `3 / 0` produced a saturated
   Int64 formatted through the large-float path, i.e. garbage bytes on stdout
   (bug-nilpy-runtime-raised-errors-bypass-try-except). }
+{ ON ESP none of these division helpers raise: an embedded device keeps running
+  on a math error (owner, 2026-09-24). `/` answers IEEE inf/nan; `//` and `%`
+  on ints answer 0, as Pascal/C div and mod do there; float `//` is IEEE.
+  feature-a-esp-math-errors-keep-the-device-running }
 function pytruediv_f(a: Double; b: Double): Double;
 begin
+  {$ifndef PXX_PLATFORM_ESP}
   if b = 0 then raise ZeroDivisionError.Create('division by zero');
+  {$endif}
   pytruediv_f := a / b;
 end;
 
@@ -11329,7 +11408,11 @@ var q, r: Int64;
 begin
   { Python raises ZeroDivisionError; the bare `div` below traps as Pascal
     runtime error 200, which unwinds nothing and no handler can catch. }
+  {$ifdef PXX_PLATFORM_ESP}
+  if b = 0 then begin Result := 0; Exit; end;
+  {$else}
   if b = 0 then raise ZeroDivisionError.Create('integer division or modulo by zero');
+  {$endif}
   q := a div b;
   r := a mod b;
   if (r <> 0) and ((r < 0) <> (b < 0)) then q := q - 1;
@@ -11339,7 +11422,11 @@ end;
 function pyfloormod_i(a: Int64; b: Int64): Int64;
 var r: Int64;
 begin
+  {$ifdef PXX_PLATFORM_ESP}
+  if b = 0 then begin Result := 0; Exit; end;
+  {$else}
   if b = 0 then raise ZeroDivisionError.Create('integer modulo by zero');
+  {$endif}
   r := a mod b;
   if (r <> 0) and ((r < 0) <> (b < 0)) then r := r + b;
   Result := r;
@@ -11348,7 +11435,11 @@ end;
 function pyfloordiv_f(a: Double; b: Double): Double;
 var q: Double;
 begin
+  {$ifdef PXX_PLATFORM_ESP}
+  if b = 0 then begin Result := a / b; Exit; end;
+  {$else}
   if b = 0 then raise ZeroDivisionError.Create('float floor division by zero');
+  {$endif}
   q := Int(a / b);
   { Int() truncates toward zero; step down when the true quotient was negative
     and inexact, so the result floors like Python's. }
@@ -16226,24 +16317,50 @@ begin
   Result := all(pyiter_drain(it));
 end;
 
+{ Each of these releases the fresh copy pylist_v answers -- see max(const v:
+  Variant). }
 function sum(const v: Variant): Variant; overload;
+var l: TPyList;
 begin
-  Result := sum(pylist_v(v));
+  l := pylist_v(v);
+  try
+    Result := sum(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function sum(const v: Variant; const start: Variant): Variant; overload;
+var l: TPyList;
 begin
-  Result := sum(pylist_v(v), start);
+  l := pylist_v(v);
+  try
+    Result := sum(l, start);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function any(const v: Variant): Boolean; overload;
+var l: TPyList;
 begin
-  Result := any(pylist_v(v));
+  l := pylist_v(v);
+  try
+    Result := any(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function all(const v: Variant): Boolean; overload;
+var l: TPyList;
 begin
-  Result := all(pylist_v(v));
+  l := pylist_v(v);
+  try
+    Result := all(l);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 type

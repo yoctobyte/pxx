@@ -6406,7 +6406,17 @@ begin
   begin
     o := TObject(pyvarobj(v));
     seq := pyseq_of_obj(o);
-    if seq <> nil then begin Result := min(seq, key); Exit; end;
+    { seq is a fresh copy (pyseq_of_obj, see pyset_of): release it, or every
+      min/max/sorted over a VARIANT leaks one full copy per call }
+    if seq <> nil then
+    begin
+      try
+        Result := min(seq, key);
+      finally
+        PXXObjRelease(Pointer(seq));
+      end;
+      Exit;
+    end;
   end;
   if pyvartag(v) = 6 then begin Result := min(pystr_of(v), key); Exit; end;
   raise ValueError.Create('min() iterable argument is empty');
@@ -6419,7 +6429,15 @@ begin
   begin
     o := TObject(pyvarobj(v));
     seq := pyseq_of_obj(o);
-    if seq <> nil then begin Result := max(seq, key); Exit; end;
+    if seq <> nil then
+    begin
+      try
+        Result := max(seq, key);
+      finally
+        PXXObjRelease(Pointer(seq));
+      end;
+      Exit;
+    end;
   end;
   if pyvartag(v) = 6 then begin Result := max(pystr_of(v), key); Exit; end;
   raise ValueError.Create('max() iterable argument is empty');
@@ -6467,7 +6485,15 @@ begin
   begin
     o := TObject(pyvarobj(v));
     seq := pyseq_of_obj(o);
-    if seq <> nil then begin Result := sorted(seq, key, reverse); Exit; end;
+    if seq <> nil then
+    begin
+      try
+        Result := sorted(seq, key, reverse);
+      finally
+        PXXObjRelease(Pointer(seq));
+      end;
+      Exit;
+    end;
   end;
   if pyvartag(v) = 6 then begin Result := sorted(pystr_of(v), key, reverse); Exit; end;
   Result := TPyList.Create;      { None / empty }

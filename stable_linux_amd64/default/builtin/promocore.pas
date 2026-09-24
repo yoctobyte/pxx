@@ -451,7 +451,14 @@ var cur, trial: TBig;
 begin
   SetLength(q.limbs, 0); q.neg := False;
   SetLength(r.limbs, 0); r.neg := False;
+  { ESP: q and r are already zero, and a device keeps running on a math
+    error (owner, 2026-09-24) -- the same answer Pascal div/mod give there.
+    feature-a-esp-math-errors-keep-the-device-running }
+  {$ifdef PXX_PLATFORM_ESP}
+  if BIsZero(b) then Exit;
+  {$else}
   if BIsZero(b) then RunError(200);          { division by zero }
+  {$endif}
   if BCmpMag(a, b) < 0 then
   begin
     r := a;
