@@ -43567,3 +43567,115 @@ failure mode into a quieter one, which neither covers. **Promote it if a second
 subsystem produces a suppression that restores a silent wrong value** — and if
 it goes up, it goes up as its own line, because there is no existing clause it
 extends.
+
+## A RETRACTED FINDING LEAVES ITS METHODOLOGY LESSON STANDING — and the lesson has travelled further, into documents with no retraction machinery
+
+Measured 2026-09-24, frankb-8e and franks (this seat), one evening, one symbol.
+
+8e filed a p40 saying `PXX_ESP` is defined on no profile, so 36 test files /
+130 occurrences guard a dead ESP-IDF arm. Beside it they banked an instrument
+lesson and relayed it to two peers:
+
+> **[WITHDRAWN 2026-09-24 — QUOTED ONLY TO BE REFUTED. This sentence is
+> BACKWARDS. Do not act on it; the paragraph below says why.]**
+> `strings -a <object> | grep esp_rom_printf` said YES for the unmodified file
+> and NO after the rename, the exact inverse of the truth, because it answers
+> about byte sequences anywhere rather than about which arm compiled. **Ask the
+> compiler which arm it took; do not ask the output what words it contains.**
+
+(The marker is inside the quote deliberately: this section is the only place
+that sentence now exists in the tree, so a future `grep` for it lands *here*,
+and a hit that carries no retraction would re-publish the error this section
+was written about.)
+
+The finding was wrong: their probe file lacked the `{$ifdef CPU_XTENSA}{$define
+PXX_ESP}{$endif}` lines that all 36 real files carry, so it was correct about
+the compiler's built-in defines and structurally silent about the subject. They
+rejected it two hours later.
+
+**The lesson was wrong too, and in the opposite direction, and it needed a
+SEPARATE retraction that nearly did not happen.** `strings` had not inverted
+anything — it was right both times. The arm really is taken, so the symbol
+really is in the `--emit-obj` object; and it really did vanish under the rename,
+because the renamed symbol needs `--platform=esp` and the invocation lacked it.
+**The artefact grep was the reliable instrument and the synthetic compile-time
+probe was the unreliable one.** A reader acting on the banked sentence would
+have distrusted the instrument that was telling the truth.
+
+**The two artefacts have different lifecycles, and that is the whole finding.**
+A finding lives in a ticket: it has a `rejected/` folder, a summary, a ranker
+that brings it back to somebody's attention, and an owner who is expected to
+close it. A lesson lives in a logbook line, a playbook section, or a peer
+message — **append-only stores with no retraction machinery**, no status field
+and no folder to move it to. And the lesson has usually travelled *further*,
+because generality is what makes something worth relaying: the ticket went to
+one queue, the sentence went to two seats and a logbook.
+
+**A methodology lesson reads as independently true, which is why the
+retraction does not reach it.** "Ask the compiler which arm it took, do not ask
+the output what words it contains" is a good sentence. Nothing in it depends on
+the instance it came from, so it survives that instance's death without looking
+damaged — where a finding stripped of its measurement visibly has a hole in it.
+
+**THE NEAR MISS IS THE MEASURED HALF.** This seat was handed that sentence as
+the fifth instance for a playbook section and had not yet written it — not
+because it was doubted, but because the *underlying claim* was being verified
+for an unrelated reason (a p40 asserting 130 dead arms invites a later seat to
+"enable" arms that already run). Had it been transcribed on arrival, which is
+the default for a peer-supplied methodology note, it would now be a section in
+this playbook (~43,700 lines, 2026-09-24), attached to no ticket, with nothing
+to reject.
+
+**What actually survives, scoped:** a deliberate error inside a guarded arm
+answers which arm compiled — **provided it is run on the file in question.**
+That is a technique note, not a hazard class, and it is not a reason to
+distrust a grep of an artefact.
+
+**How to apply, both ends:**
+
+- **Retracting:** grep for the lesson, not only for the ticket. Name in the
+  retraction every document it reached and every peer it was sent to. A
+  rejection that fixes the `rejected/` folder and leaves the logbook line
+  standing has corrected the cheap copy and left the expensive one.
+- **Receiving:** a lesson arriving from a peer is a CLAIM with a measurement
+  behind it, and the general phrasing is what hides the measurement. Ask which
+  rows produced it before banking it. CLAUDE.md already says to ask which
+  population a conclusion was drawn from "especially when it arrives labelled as
+  a finding" — this is that rule arriving in the lesson-transfer channel, where
+  it is harder to apply, because a lesson is offered as a gift rather than as a
+  claim and checking it reads as ingratitude.
+- **The tell that a retraction is incomplete:** the retracted finding and the
+  banked lesson point in *opposite* directions about the same instrument. Here
+  the rejection established that the compile-time probe was the broken one,
+  while the standing lesson said to prefer it over the artefact grep. Whenever
+  a rejection reverses which of two instruments was trustworthy, the lesson
+  drawn from it is not merely unsupported — it is backwards.
+
+Companion rows from the same evening, both the same shape at one level down —
+a sound instrument aimed at a subject that could not contain the answer: 8e's
+stale-binary check (the compiler had no fixes) and the probe file above (no
+self-define lines). Neither was caught by its author re-reading; both were
+caught by a second seat re-measuring. And the census under them failed twice
+independently: 8e's `grep` without `-w` counted 130, and this seat's counted 44
+files / 161 occurrences by substring-matching the *different* symbol
+`PXX_ESP_BARE` (30 lines in 29 files), a table and a conclusion written before
+any file was opened. Two seats, one symbol, two different grep hazards inside
+an hour, neither careless — both precise about the wrong set.
+
+**AND THE CORRECTED COUNT DID NOT CONVERGE EITHER, WHICH IS THE ROW TO COPY.**
+8e's retraction gives the whole-word answer as **36 files / 144 occurrences**;
+re-measured here at `82ec739118` it is **36 files / 131 occurrences, on 131
+distinct lines, population `test/` only, `grep -row PXX_ESP test/`**. The file
+count agrees and the occurrence count does not, and no population tried here
+sums to 144 (`test/` plus `compiler/`+`tools/`+`Makefile` is 183; the
+`PXX_ESP_BARE` lines are 30). **Both rows stand, each labelled with what it
+measured** — a number whose population was never written down is not refuted by
+a new one, it is unquotable. What would retire the 131: a stated command and
+tree from 8e that reproduces 144.
+
+Note the third population hazard sitting underneath both counts: whole-word
+`PXX_ESP` across the repo is **83 files / 384 occurrences**, of which **37
+files are `devdocs/`** — our own prose about the symbol, including this
+section. Prose about a thing outnumbers the thing, so a repo-wide grep is the
+wrong population for "how many tests guard on it", and it grows every time
+somebody investigates.
