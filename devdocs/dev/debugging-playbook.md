@@ -43668,10 +43668,35 @@ re-measured here at `82ec739118` it is **36 files / 131 occurrences, on 131
 distinct lines, population `test/` only, `grep -row PXX_ESP test/`**. The file
 count agrees and the occurrence count does not, and no population tried here
 sums to 144 (`test/` plus `compiler/`+`tools/`+`Makefile` is 183; the
-`PXX_ESP_BARE` lines are 30). **Both rows stand, each labelled with what it
-measured** — a number whose population was never written down is not refuted by
-a new one, it is unquotable. What would retire the 131: a stated command and
-tree from 8e that reproduces 144.
+`PXX_ESP_BARE` lines are 30). Both rows stood, each labelled with what it
+measured — a number whose population was never written down is not refuted by
+a new one, it is unquotable.
+
+**RESOLVED the same evening by a third seat, and the resolution is worth more
+than the number.** frankuser measured `test/` whole-word at **four separate
+shas — `37655f4bb`, `c52857633a`, `700392ca16`, `e09adcd641`, including the one
+8e filed at — and got 131 at every one.** No population in `test/` reaches 144,
+so the tree was never the variable and 8e owed nobody a command. The earlier
+**130** came from `grep 'PXX_ESP}'`: **a different PATTERN, not a different
+population**, which is a third distinct way for one census to disagree with
+itself after `-w` has already been ruled out.
+
+**WHY IT LOOKED SETTLED TO BOTH OF US, WHICH IS THE TRANSFERABLE PART (credit
+frankuser): `36 files` is common to EVERY whole-word reading, and the agreeing
+file count read as corroboration for the disputed occurrence count.** It cannot
+be. The files are the SUBJECTS and the occurrences are the MEASUREMENT, and
+only one of the two was ever in dispute. Generic form: **an agreeing dimension
+you were not arguing about is not evidence about the one you were.** It is the
+"a second source only counts if it FAILS DIFFERENTLY" rule arriving where both
+readings come from *your own* instrument and the agreement is structural — the
+two dimensions cannot fail independently, so their agreement carries no
+information at all.
+
+**And the rule this lands on is NOT "use `-w`" — both seats did.** It is that a
+symbol count is meaningless without its ROOT. The identical command differs by
+**~2.9x** between `test/` (131) and the whole repo (384 tracked at
+`37655f4bb^`), and the wider root is the wrong population for the question that
+was actually asked ("how many TESTS guard on it").
 
 Note the third population hazard sitting underneath both counts: whole-word
 `PXX_ESP` across the repo is **83 files / 384 occurrences**, of which **37
@@ -43679,3 +43704,23 @@ files are `devdocs/`** — our own prose about the symbol, including this
 section. Prose about a thing outnumbers the thing, so a repo-wide grep is the
 wrong population for "how many tests guard on it", and it grows every time
 somebody investigates.
+
+**That last clause is measured, not asserted, and this section is the
+instrument.** Tracked whole-word repo-wide: **384 at `37655f4bb^`, 390 at
+`37655f4bb`** — the commit that added this section moved the repo-wide count by
+6 while `test/` stayed at **131 on both sides**. The census of a symbol is
+degraded by the act of writing up the census, and only the narrow root is
+stable.
+
+**AND THE REPO-WIDE ROW STILL DOES NOT RECONCILE — the same shape recurring
+inside the message that named it, the same day.** frankuser's table gives
+repo-wide tracked as **85 files / 364 occurrences**; measured here at
+`37655f4bb^` it is **85 files / 384**. The file count agrees exactly and the
+occurrence count differs by 20, which is precisely the agreeing-dimension
+reading diagnosed two paragraphs up, arriving in the correction itself. Also
+note `grep -r` and `git grep` are *different populations on one tree* — 83/388
+against 85/390 at the same HEAD, no untracked file containing the symbol — so
+"the whole repo" is not one root either. **Nobody is careless in any row of
+this section.** Four seats' worth of counts, every one honest, and the only
+figure that has survived every re-measurement is the one whose root, pattern,
+flag and tree were written down beside it.
