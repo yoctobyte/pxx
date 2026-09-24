@@ -2,10 +2,10 @@
 prio: 30
 track: B+S
 type: feature
-status: open
+status: done
 found: 2026-08-30
 found-by: pxx-b
-summary: "SLICE 2 (GPIO edges) LANDED AND RAN ON AN ESP32-S3 BOARD, 2026-09-24: lib/rtl/platform/esp/espgpio.pas arms a pin (on_rising / on_falling / on_change / edge_off) and its ISR calls only interrupts.IntPush; the handler is registered with interrupts.on_event and runs in the main task at a blocking point. examples/esp32/gpio-edge-s3 matches its spec on silicon: ordering (10 ISR entries, 0 delivered before a blocking point), count (ISR entries == delivered + dropped, including a 100-edge flood into the 64-slot ring), and two controls (an unarmed toggled pin and a disarmed pin add 0 ISR entries). The edge is a pin in INPUT_OUTPUT mode, whose pad feeds its own input, so no jumper and no human. The C3 build compiles and links but no C3 board was attached, so it is unrun. The ring fix that came with it is MEASURED under a concurrent producer (test/esp_board_gpio_ring_stress.pas): the new ring is exact over ~672k edges, twice; the old ring loses 2,503 and misorders 3,667. SLICE 3 (ADC conversion-done callback) REMAINS and is no longer blocked on hardware now that a board exists; under qemu adc_oneshot_new_unit never returns. The owner's hidden loop is a follow-on in feature-s-interrupt-events-reach-python-outside-interrupt-context."
+summary: "DONE 2026-09-24, both slices run on an ESP32-S3 board through the interrupts pump (the ISR or driver callback only counts and calls IntPush; Python drains in the main task). SLICE 2 GPIO: espgpio.pas on_rising/on_falling/on_change/edge_off; examples/esp32/gpio-edge-s3 passes ordering, count and two controls (15/15 lines). Its ring fix is measured under a core-1 producer (test/esp_board_gpio_ring_stress.pas: exact over ~672k edges; the old ring loses 2,503). SLICE 3 ADC: lib/rtl/platform/esp/espadc.pas start/stop/read/frames/overflows/channel_pad; examples/esp32/adc-s3 passes ordering (frames arrive, 0 delivered before a blocking point), count (frames == delivered + dropped) and a value control on one pad (internal pull-up reads 3895, pull-down 363, of 4095) (7/7 lines). C3 variants of both build and link; no C3 board was attached, so they are unrun. Found and fixed on the way: time.sleep and time.monotonic did nothing on ESP (PalBackendNanosleep and PalBackendClockGetTime refused)."
 ---
 
 ## 2026-09-24 -- slice 2 done on a board (frankH)
@@ -25,6 +25,33 @@ consumer task. test/esp_board_gpio_ring_stress.pas does: a task pinned to core
 same day. The new ring is exact twice (671,997 ISR entries == delivered +
 dropped, 0 out-of-sequence). The old ring under the same producer loses 2,503
 edges from the accounting and delivers 3,667 out of sequence.
+
+## 2026-09-24 -- slice 3 done on a board (frankH)
+
+`tools/esp_flash.sh --project examples/esp32/adc-s3` gives `OK -- board output
+matches main.expected (7 lines)`. The driver's on_conv_done calls espadc's
+handler, which counts and pushes (INT_SRC_ADC, channel). Samples come from
+adc.read(), a non-blocking adc_continuous_read_parse, so the per-chip DMA
+result bitfields are never mirrored.
+
+Measured on the S3 at 20 kHz: 314 frames/s, one read() of 64 samples ~6 ms,
+and summing those 64 in NilPy ~21 ms. That is why the demo's handler only
+counts. See perf-n-iterating-a-variant-list-costs-a-third-of-a-millisecond-
+per-element-on-esp32s3.
+
+Three things found on the way:
+- time.sleep() on ESP neither waited nor yielded, because PalBackendNanosleep
+  returned unsupported. The first demo run was killed by the task watchdog.
+  It now calls IDF's usleep.
+- time.monotonic() returned 0.0 on ESP, because PalBackendClockGetTime
+  refused every clock while PalBackendMonotonicMillis in the same unit
+  already read esp_timer. The monotonic ids now read esp_timer; realtime
+  still refuses.
+- flush_pool is off. With it on, the driver's ISR receives from the ring
+  buffer that read() receives from.
+Unexplained, not chased: a debug loop printing each iteration lost 132 B of
+heap per iteration. It was not isolated to any unit, and the shipped demo
+does not have that loop.
 
 # ESP peripheral callback API — GPIO (slice 2) and ADC (slice 3)
 

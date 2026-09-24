@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:19 blocked:9 backlog:43 backlog-umbrella:14 backlog-core:169 backlog-nilpy:182 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3972 rejected:89`
+`working:35 unfinished:19 blocked:9 backlog:43 backlog-umbrella:14 backlog-core:169 backlog-nilpy:183 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3973 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 

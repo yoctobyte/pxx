@@ -37081,6 +37081,13 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/gpio-edge-c3/main/main.npy $(TESTTMP)/gpio_edge.o >/dev/null \
 	  && echo "=== gpio-edge demo source builds [$$t]: OK ===" || exit 1; \
 	done
+	@# And the ADC demo (espadc.pas + interrupts), same reason, same limits: its
+	@# run is on silicon (examples/esp32/adc-s3); qemu's ADC does not start.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    examples/esp32/adc-c3/main/main.npy $(TESTTMP)/adc_demo.o >/dev/null \
+	  && echo "=== adc demo source builds [$$t]: OK ===" || exit 1; \
+	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build
 	# by name (`unresolved forward: <callee>`) rather than mis-running. A body

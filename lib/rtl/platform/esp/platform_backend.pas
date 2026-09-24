@@ -167,6 +167,7 @@ type
 
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
 procedure vTaskDelay(ticks: Integer); external;
+function usleep(us: LongWord): Integer; external;   { esp_libc }
 function esp_timer_get_time: Int64; external;
 
 function fopen(path: PChar; mode: PChar): Pointer; cdecl; external;
@@ -780,9 +781,36 @@ begin
 end;
 
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+var us, chunk: Int64;
+begin
+  { ESP-IDF's usleep (esp_libc/src/time.c): vTaskDelay for whole ticks, with
+    the monotonic clock making sure at least `us` has passed, and
+    esp_rom_delay_us below one tick. So a sleep of a tick or more YIELDS, and
+    the idle task and the task watchdog get their turn.
+
+    This returned PAL_ERR_UNSUPPORTED until 2026-09-24, so on ESP `time.sleep`
+    and sysutils.Sleep neither waited nor yielded. A NilPy program pacing
+    itself with time.sleep(0.02) ran flat out and was killed by the task
+    watchdog (IDLE0 starved), found by examples/esp32/adc-s3. Demos until
+    then paced with esptimer.sleep_ms, which is why nothing had shown it.
+    usleep takes a 32-bit count, hence the chunks. }
+  us := sec * 1000000 + nsec div 1000;
+  while us > 0 do
+  begin
+    chunk := us;
+    if chunk > 1000000000 then
+      chunk := 1000000000;
+    usleep(LongWord(chunk));
+    us := us - chunk;
+  end;
+  Result := 0;
+end;
+{$else}
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
+{$endif}
 
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
 begin
@@ -790,14 +818,33 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-{ Same refusal as PalBackendRealtime above, for the same reason and NOT as a
-  stub: an ESP image has no kernel clock behind this interface, and 33 PAL
-  entries here refuse deliberately so that POSIX-shaped code meets
-  PAL_ERR_UNSUPPORTED rather than a wrong answer. Zeroing the outputs first
-  means a caller that ignores the result reads 0, not whatever was on its stack. }
+{ THE MONOTONIC CLOCKS ARE ANSWERED, THE WALL CLOCK IS REFUSED. esp_timer
+  counts microseconds since boot and never steps, which is exactly what
+  CLOCK_MONOTONIC (1), CLOCK_MONOTONIC_RAW (4) and CLOCK_BOOTTIME (7) mean.
+  PalBackendMonotonicMillis below already reads it. Until 2026-09-24 this
+  refused every id, so time.monotonic() / perf_counter() on ESP returned 0.0
+  while the RTL's own millisecond clock worked (found by
+  examples/esp32/adc-s3, whose timing rows read 0). Wall-clock time
+  (CLOCK_REALTIME and the rest) has no source until something like SNTP sets
+  one, so it still gets PAL_ERR_UNSUPPORTED rather than a wrong answer,
+  as PalBackendRealtime does. Zeroing the outputs first means a caller that
+  ignores the result reads 0, not whatever was on its stack. }
 function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+var us: Int64;
+{$endif}
 begin
   sec := 0; nsec := 0;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+  if (clockId = 1) or (clockId = 4) or (clockId = 7) then
+  begin
+    us := esp_timer_get_time;
+    sec := us div 1000000;
+    nsec := (us mod 1000000) * 1000;
+    Result := 0;
+    Exit;
+  end;
+{$endif}
   Result := PAL_ERR_UNSUPPORTED;
 end;
 

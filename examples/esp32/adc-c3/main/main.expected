@@ -1,0 +1,7 @@
+start 0
+after-frames delivered 0 seen 0 pending-covers-frames True
+after-sleep delivered>0 True seen==delivered True
+pull-up high True pull-down low True
+stop 0
+accounted True
+ADC-DONE

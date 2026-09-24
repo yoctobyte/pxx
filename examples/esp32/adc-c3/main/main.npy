@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: 0BSD
+# ADC FRAMES REACH PYTHON, OUTSIDE INTERRUPT CONTEXT -- on silicon.
+# (feature-esp-gpio-and-adc-callback-slices, slice 3)
+#
+# The same pump as the GPIO edges: the driver's conversion-done interrupt
+# calls espadc's handler, which only counts and does interrupts.IntPush; this
+# Python handler runs in the main task at a blocking point. The samples are
+# fetched by ordinary code with adc.read(), which never waits.
+#
+# Acceptance, as for GPIO:
+#   ORDERING  frames arrive while the program runs no blocking point, and none
+#             is delivered until it does.
+#   COUNT     frames reported by the interrupt == delivered + dropped.
+# And the samples mean something: with nothing wired to the pad, its internal
+# pull-up reads near full scale and its pull-down near zero. Same pad, same
+# ADC, only the pull changes, so the two rows cannot both pass by accident.
+#
+# THE HANDLER ONLY COUNTS, AND THAT IS A MEASUREMENT, NOT STYLE. 20 kHz in
+# 64-sample frames is 314 frames/s (measured). On the S3, adc.read() of one
+# frame costs ~6 ms and summing its 64 values in NilPy ~21 ms, so a handler
+# that processed every frame would cost ~27 ms per frame and fall behind 8x.
+#
+# Under qemu the ADC does not start at all; this is for a board.
+
+import time
+import interrupts
+import 'espadc.pas' as adc
+import 'espgpio.pas' as gpio
+
+CH = 0
+HZ = 20000
+
+seen = [0]
+
+
+def on_frame(ev):
+    seen[0] = seen[0] + 1
+
+
+def fresh_mean():
+    # Empty what the pool holds from before the change, let new frames
+    # arrive, then average a few frames' worth.
+    k = 0
+    while k < 8:
+        adc.read()
+        k = k + 1
+    time.sleep(0.05)
+    n = 0
+    tot = 0
+    k = 0
+    while k < 3:
+        for v in adc.read():
+            tot = tot + v
+            n = n + 1
+        k = k + 1
+    if n == 0:
+        return -1
+    return tot // n
+
+
+def main():
+    interrupts.on_event(interrupts.INT_SRC_ADC, on_frame)
+    print("start", adc.start(CH, HZ))
+
+    # No blocking point: frames arrive, nothing is delivered.
+    while adc.frames() < 5:
+        pass
+    f = adc.frames()
+    p = interrupts.pending()
+    print("after-frames delivered", interrupts.delivered(), "seen", seen[0],
+          "pending-covers-frames", p >= f)
+
+    time.sleep(0.1)
+    print("after-sleep delivered>0", interrupts.delivered() > 0,
+          "seen==delivered", seen[0] == interrupts.delivered())
+
+    pad = adc.channel_pad(CH)
+    gpio.gpio_pullup(pad)
+    hi = fresh_mean()
+    gpio.gpio_pulldown(pad)
+    lo = fresh_mean()
+    print("pull-up high", hi > 3000, "pull-down low", lo >= 0 and lo < 1000)
+
+    print("stop", adc.stop())
+    while interrupts.pending() > 0:
+        time.sleep(0)
+    print("accounted", adc.frames() == interrupts.delivered() + interrupts.dropped())
+    print("ADC-DONE")
+
+
+main()

@@ -84,6 +84,7 @@ const
   INT_SRC_GPIO  = 1;
   INT_SRC_TIMER = 2;
   INT_SRC_USER  = 3;
+  INT_SRC_ADC   = 4;   { espadc: one event per continuous-mode frame }
   { The synthetic source the host tests push from. Named rather than borrowing
     INT_SRC_GPIO so a test can never be mistaken for evidence about real edge
     delivery, which only a board can give (examples/esp32/gpio-edge-s3). }

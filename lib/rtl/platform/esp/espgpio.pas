@@ -97,6 +97,11 @@ function gpio_input(pin: Integer): Integer;
   makes a real edge that the interrupt hardware sees, with nothing wired. }
 function gpio_inout(pin: Integer): Integer;
 
+{ Internal pull resistor on a pin, digital or analog. On an ADC pad, set it
+  AFTER adc start: the ADC driver clears the pulls when it claims the pad. }
+function gpio_pullup(pin: Integer): Integer;
+function gpio_pulldown(pin: Integer): Integer;
+
 { Arm edge interrupts on a pin; each edge becomes an interrupts event with
   source interrupts.INT_SRC_GPIO and id = pin. Register the handler with
   interrupts.on_event. edge_off disarms. All return an esp_err_t, 0 = ESP_OK. }
@@ -122,6 +127,7 @@ function gpio_intr_disable(pin: Integer): Integer; external;
 function gpio_install_isr_service(flags: Integer): Integer; external;
 function gpio_isr_handler_add(pin: Integer; isr: Pointer; arg: Pointer): Integer; external;
 function gpio_isr_handler_remove(pin: Integer): Integer; external;
+function gpio_set_pull_mode(pin, mode: Integer): Integer; external;
 
 const
   ESP_ERR_INVALID_STATE = $103;   { install_isr_service: already installed }
@@ -233,6 +239,16 @@ begin
   rc := gpio_reset_pin(pin);
   if rc <> 0 then begin gpio_inout := rc; Exit; end;
   gpio_inout := gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT);
+end;
+
+function gpio_pullup(pin: Integer): Integer;
+begin
+  gpio_pullup := gpio_set_pull_mode(pin, 0);     { GPIO_PULLUP_ONLY }
+end;
+
+function gpio_pulldown(pin: Integer): Integer;
+begin
+  gpio_pulldown := gpio_set_pull_mode(pin, 1);   { GPIO_PULLDOWN_ONLY }
 end;
 
 function on_rising(pin: Integer): Integer;
