@@ -64,7 +64,7 @@ other Linux targets (`tools/run_target.sh`), and under wasmtime for wasm32.
 
 | | x86-64 | i386 | aarch64 | arm32 | riscv32 | wasm32 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Pascal | 42 | 42 | 42 | 42 | 42 | **traps** (see known issues) |
+| Pascal | 42 | 42 | 42 | 42 | 42 | **traps** (fixed after v423) |
 | C | 42 | 42 | 42 | 42 | 42 | 42 |
 | Nil Python | 42 | 42 | 42 | 42 | refuses | 42 |
 | Rust | 42 | 42 | 42 | 42 | 42 | refuses |
@@ -124,14 +124,6 @@ least tells you something is wrong.
   compiler-internal records (`TProc` and `TSymbol` among them) silently takes
   the compiler's layout: `SizeOf` is 1344 where it should be 800. *Workaround:*
   rename the type.
-- **Pascal, every target except wasm32:** a function that writes into a
-  **by-value** string parameter also changes the caller's string. The textbook
-  `UpperStr(s: string)` returns the right value and upper-cases the caller's
-  variable too. *Fixed after v423*, so it is gone in the next pin. *Workaround
-  until then:* copy the parameter into a local first.
-- **Pascal, wasm32:** the same by-value problem, which the fix above does not
-  reach. In addition, `SetLength` on a by-value dynamic-array parameter has no
-  effect. *Workaround:* copy into a local.
 - **C, every target:** `long double` is 8 bytes; GCC's is 16. A single program
   is self-consistent, but a struct containing one has a different size from
   GCC's (`struct { char c; long double y; }` is 16 bytes here, 32 under GCC).
@@ -146,12 +138,21 @@ least tells you something is wrong.
 - **ESP:** `Trunc` of an out-of-range float wraps when stored into a 32-bit
   integer (`Trunc(1e30)` gives -1) but saturates when stored into an `Int64`.
 
-### Builds "ok" but does not run
+### Fixed after v423
 
-- **Pascal on wasm32:** a program that uses `WriteLn` prints `ok:` and exits 0,
-  but the module traps as soon as it runs. The compiler does print the reason on
-  stderr (`RTL helper PXXWriteDecW not found`), so a wasm32 build that reports
-  lowering gaps will not run. C `printf` and Nil Python `print` work on wasm32.
+These are wrong in v423 and fixed in the development tree, so the next pin will
+carry the fixes. Until then, the workarounds apply.
+
+- **Pascal, every target:** a function that writes into a **by-value** string
+  parameter also changed the caller's string. For example, the textbook
+  `UpperStr(s: string)` returned the right value and upper-cased the caller's
+  variable too. On wasm32, `SetLength` on a by-value dynamic-array parameter
+  also had no effect. *Workaround on v423:* copy the parameter into a local
+  first.
+- **Pascal on wasm32:** a program that used `WriteLn` printed `ok:` and exited
+  0, but the module trapped as soon as it ran. Now `WriteLn` works on wasm32,
+  and a build that cannot lower a runtime helper fails with a nonzero exit code
+  instead of reporting success.
 
 ### Refused, with a message that names the problem
 
