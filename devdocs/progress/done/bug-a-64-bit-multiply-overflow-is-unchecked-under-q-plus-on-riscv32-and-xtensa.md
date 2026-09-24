@@ -80,4 +80,4 @@ Q-/Q+ pair: {$Q-} is one plain binop and no extra call on all four 32-bit target
 exactly one call. gate quick GREEN. Inert for `$(PXX_STABLE)` users until the next pin.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 20cae8507.
