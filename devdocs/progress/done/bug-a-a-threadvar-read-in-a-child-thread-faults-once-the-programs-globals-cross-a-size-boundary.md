@@ -4,13 +4,13 @@ title: "A threadvar read in a CHILD thread segfaults once the program's globals 
 track: A
 prio: 60
 type: bug
-status: open
+status: done
 owner: ""
 found: 2026-09-09
 found-by: frankS
 blocked-by: []
 tags: [threads, threadvar, codegen, x86-64]
-summary: "MEASURED 2026-09-09 at compiler 470240dd0eb5. Add ONE unused Integer to the program var block of test/test_a_threadvar_is_per_thread.pas and it SEGFAULTS -- in the child thread, at the first read of the threadvar, before any output. The file is green at HEAD, so the shipped test sits one variable from a crash. The fault address is `0xffffffffe03fad30`: a 32-bit value SIGN-EXTENDED and used as a pointer, which is why the main thread never faults (its block is low) and a child does (its block is carved off a thread stack, which is mapped high with bit 31 set). The two builds do not differ by an offset -- they emit STRUCTURALLY DIFFERENT code for the same source: with the smaller var block the parameter read is `mov -0x8(%rbp),%rax`, with the larger one the same source position emits `mov %gs:0x0,%rax; mov (%rax),%rax`. NO PINNED CONTROL EXISTS: the pin refuses program-level `threadvar` outright (`expected 'begin' before 'threadvar'`), so this cannot be bisected against v407 and is young rather than long-standing. Found while repairing the flaky race control in that same file -- the repair needs one more loop variable, which is exactly what trips this, so [[regression-test-threads-test-a-threadvar-is-per-thread]] is blocked on this."
+summary: "FIXED by b984ad07e3 (2026-09-14), confirmed 2026-09-24 (frankS) with a positive control. The mechanism: a symbol slot reused from an earlier pass kept SymTlsOffset 0, so a parameter read was lowered as a threadvar (gs:0). The number of globals only moved which slot got reused. Evidence: the ticket's own one-line repro (an unused_ Integer added) segfaults with a compiler built at b984ad07e3^ (rc 139, no output) and prints THREADVAR OK at HEAD 0cb7844c92 (binary ec3d2325ef7b). Every variant of the current test with 0..64 extra globals also segfaults at b984ad07e3^ and passes at HEAD. This is NOT the same mechanism as the TLS-area sizing move."
 ---
 
 # One more variable and the child thread faults
@@ -75,3 +75,22 @@ segfaulted, which read exactly like the repair being wrong. It was not.
 **A latent codegen bug sitting one declaration away from a live test is
 invisible until someone adds a declaration**, and what they will conclude is
 that their own edit is broken.
+
+## 2026-09-24 (frankS): closed by b984ad07e3, with a positive control
+
+The compiler was built from `git archive b984ad07e3^` in a scratch directory,
+seeded by HEAD's binary, and every probe was compiled from that directory so it
+used that tree's lib/rtl.
+
+| probe | b984ad07e3^ | HEAD 0cb7844c92 (ec3d2325ef7b) |
+| --- | --- | --- |
+| this ticket's repro (old test file, one unused Integer added) | SIGSEGV rc=139, no output | THREADVAR OK rc=0 |
+| old test file unmodified | THREADVAR OK | (n/a) |
+| current test file plus 0,1,2,3,4,5,6,8,10,12,16,20,24,32,48,64 extra globals | SIGSEGV on all 16 | THREADVAR OK on all 16 |
+
+So the HEAD sweep is a real negative: the same population faulted before the
+fix. The current test file faults under the old compiler even with no globals
+added, because it has grown past the boundary on its own since 09-09.
+
+## Log
+- 2026-09-24 — resolved, commit b984ad07e3.
