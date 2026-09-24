@@ -3670,9 +3670,21 @@ function ObjProcIsExported(procIdx: Integer): Boolean;
   reads SymCStaticLink) -- functions were the arm that never got the sibling.
   Measured: for `static int helper(int)` in a shared header, gcc emits `t' and
   we emitted `T'.
-  bug-a-static-c-functions-are-emitted-as-global-symbols }
+  bug-a-static-c-functions-are-emitted-as-global-symbols
+
+  An `exports` name whose convention is C without the flag -- riscv32, where
+  the one convention IS C and the parser never sets ProcCdecl -- joins too.
+  Reading the flag alone left a validated `exports f` LOCAL in the riscv32
+  object: `undefined reference to f` from the C side. Only NAMED routines: the
+  whole riscv32 program is C-convention and must not all go GLOBAL. }
+var i: Integer;
 begin
-  Result := ProcCdecl[procIdx] and (not ProcCStaticLink[procIdx]);
+  Result := False;
+  if ProcCStaticLink[procIdx] then Exit;
+  if ProcCdecl[procIdx] then begin Result := True; Exit; end;
+  if not ProcConventionIsC(procIdx) then Exit;
+  for i := 0 to ExportCount - 1 do
+    if FindProc(ExportName[i]) = procIdx then begin Result := True; Exit; end;
 end;
 
 { numExtraLocal: LOCAL symbols emitted after the local data block and before

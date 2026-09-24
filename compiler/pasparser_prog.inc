@@ -1098,6 +1098,20 @@ begin
   if not Eat(tkSemicolon) then Error('expected `;` after the exports clause');
 end;
 
+{ Is routine pi's calling convention the C one, so a C caller marshals what
+  its body reads? `cdecl` answers it where the target HAS two conventions
+  (x86-64, i386, aarch64, arm32 -- ProcCdecl). riscv32 has ONE: after the psABI
+  stack-order fix its ordinary convention IS C at every width, which is why the
+  parser deliberately never sets ProcCdecl there (pasparser_proc.inc) -- and
+  why reading the flag alone refused a correctly declared `cdecl` export on
+  riscv32, --emit-obj included, which is how a Pascal callback reaches IDF C
+  code on esp32c3. xtensa is not claimed (see ValidateExports).
+  decide-may-exports-name-a-routine-that-is-not-cdecl }
+function ProcConventionIsC(pi: Integer): Boolean;
+begin
+  ProcConventionIsC := ProcCdecl[pi] or (TargetArch = TARGET_RISCV32);
+end;
+
 procedure ValidateExports;
 { Run after the BODY pass, which is later than it first looks like it needs to
   be. Pass 1 registers every signature, so an `exports` clause may sit above the
@@ -1125,7 +1139,13 @@ begin
       caller marshals SysV into a callee reading the internal convention, with
       nothing to diagnose it. Rejecting is also the only arm that can be relaxed
       later without breaking a program that compiles today. }
-    else if not ProcCdecl[pi] then
+    else if (not ProcConventionIsC(pi)) and (TargetArch = TARGET_XTENSA) then
+      ErrorAt(ExportLine[i], 'exports `' + ExportName[i] +
+              '`: pxx does not export routines for C callers on xtensa. Its ' +
+              'convention agrees with C for word-sized arguments but is not ' +
+              'verified for 64-bit argument alignment or record results, and ' +
+              '`cdecl` selects nothing on this target')
+    else if not ProcConventionIsC(pi) then
       ErrorAt(ExportLine[i], 'exports `' + ExportName[i] +
               '`, which is not `cdecl`: it would be callable and wrong from outside ' +
               'pxx, because the caller marshals the C convention and the body reads ' +

@@ -35720,6 +35720,22 @@ test-emit-obj: $(COMPILER)
 	  n=$$(readelf -sW $(TESTTMP)/espx_c_$$t.o | grep -cE "GLOBAL +DEFAULT +[0-9]+ app_main$$"); \
 	  [ "$$n" = 1 ] || { echo "test-emit-obj: $$t object has $$n GLOBAL app_main definitions -- the writer's entry symbol and the source's own proc collide"; exit 1; }; \
 	 done; echo "test-emit-obj: an ESP object exports a cdecl routine and a global, with exactly one app_main (riscv32, xtensa)"
+	# 4b-decies. A PASCAL `exports` LINKS FROM C ON RISCV32, AND XTENSA STILL
+	#    REFUSES IT. riscv32's one convention IS C's, so ProcCdecl is never set
+	#    there and both readers of the flag were wrong: ValidateExports refused
+	#    the export and the writer left `f` LOCAL. The run is the proof: exit
+	#    code 42 means C's 41 reached the register the Pascal body reads.
+	#    xtensa is refused on purpose (64-bit alignment and record results are
+	#    unverified against C); the leading `!` fails the row if it compiles.
+	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
+	if [ -n "$$RV" ] && command -v qemu-riscv32 >/dev/null; then \
+	  ./$(COMPILER) --target=riscv32 --emit-obj test/library_exports_riscv32_links_from_c.pas $(TESTTMP)/libexp_rv.o >/dev/null || { echo "test-emit-obj: the riscv32 exports library FAILED to build"; exit 1; }; \
+	  $$RV -march=rv32imc -mabi=ilp32 -nostdlib -static test/library_exports_riscv32_driver.c $(TESTTMP)/libexp_rv.o -o $(TESTTMP)/libexp_rv.elf || { echo "test-emit-obj: the riscv32 exports object FAILED to link from C"; exit 1; }; \
+	  qemu-riscv32 $(TESTTMP)/libexp_rv.elf; rc=$$?; \
+	  tools/expect_same.sh libexp_rv_call_from_c "$$rc" 42 || exit 1; \
+	else echo "riscv32-esp-elf-gcc or qemu-riscv32 not installed; riscv32 exports link check skipped"; fi
+	! ./$(COMPILER) --target=xtensa --emit-obj test/library_exports_riscv32_links_from_c.pas $(TESTTMP)/libexp_xt.o >$(TESTTMP)/libexp_xt.err 2>&1
+	grep -q 'exports `f`' $(TESTTMP)/libexp_xt.err
 	# THE EXTERNAL THIS ROW GREPS FOR IS DECLARED BY THE FIXTURE, NOT INHERITED
 	# FROM THE RTL. It was `free` until 2026-09-22, which reached the object only
 	# because the RTL was pulled into every program unconditionally; 523833fde
