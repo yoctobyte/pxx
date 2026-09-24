@@ -75,4 +75,4 @@ That is the reactor table, which on ESP can only ever use slot 0.
   above is therefore from qemu-xtensa (same code generator, same ABI).
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b2f5d2e52.
