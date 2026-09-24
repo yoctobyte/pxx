@@ -323,6 +323,15 @@ begin
       needsHeap := True;
     if (i < Length(TokRChecks)) and TokRChecks[i] then
       needsHeap := True;
+    { `div` / `mod` OFF x86-64. Every backend's pre-divide zero check calls
+      builtinheap's PXXDivZero (DivZeroCheckProc); x86-64 alone has a
+      unit-free fallback stub, and elsewhere a missing helper means NO CHECK
+      -- a divide by zero printed 0 and carried on, on aarch64, from
+      523833fde3 until test-core's divzero4 rows caught it on 2026-09-24. The
+      same silent-passthrough shape as {$R+} above, so the same answer. }
+    if ((Tokens[i].Kind = tkDiv) or (Tokens[i].Kind = tkMod)) and
+       (TargetArch <> TARGET_X86_64) and not NoDivCheck then
+      needsHeap := True;
     { A string LITERAL is not evidence on its own -- `WriteLn('Hello')` is the
       program this whole change exists to shrink, and it needs nothing. A
       literal standing next to a concat or a comparison IS evidence: measured,
