@@ -12943,6 +12943,27 @@ begin
       xtensa_retw;
       cEspObjEntry := True;
     end;
+    { OFFSET 0 IS RESERVED EVEN WHEN NOTHING ENTERS THERE. Every runtime stub's
+      address variable reads 0 as "never emitted" (IREmitCodeCall's guard, the
+      heap lock's fallback, the div-zero safety net), which holds in an
+      executable because the entry stub owns offset 0. An object or shared
+      library outside the ESP arms above has no entry stub, so the FIRST stub
+      emitted landed at 0 and read as missing: `--threadsafe --emit-obj` and
+      `--threadsafe --shared` refused every C file, even
+      `int f(int x){return x+1;}`, because HeapLockSlowAddr was 0. Plain
+      --emit-obj put the div-zero stub at 0 and got away with it only because C
+      division calls PXXDivZero by name. One trap instruction here (never
+      reached: nothing calls offset 0 and no symbol points at it) keeps the
+      sentinel true for all of them at once. Not on ESP: its object writer
+      exports app_main at offset 0, so that platform keeps its own layout.
+      bug-c-sqlite-with-threadsafe-stops-at-a-stray-BEGIN_DECLS }
+    if (CodeLen = 0) and (TargetPlatform <> PLATFORM_ESP) then
+      case TargetArch of
+        TARGET_X86_64, TARGET_I386: EmitB($CC);                  { int3 }
+        TARGET_ARM32: EmitI32(LongInt($E7F000F0));               { udf }
+      else
+        EmitI32(0);   { aarch64 udf #0; riscv32 all-zero is illegal; xtensa ill }
+      end;
   end
   else
   case TargetArch of

@@ -34549,6 +34549,15 @@ test-chess-perft: $(COMPILER)
 # Host-only checks via binutils readelf; if the ESP cross toolchains are
 # installed (~/.espressif), also proves each .o links against a C shim.
 test-emit-obj: $(COMPILER)
+	# OFFSET 0 IS RESERVED IN A C OBJECT. Every stub-address variable reads 0 as
+	# "never emitted"; with no entry stub, `--threadsafe` put the heap-lock slow
+	# stub at 0 and refused every C file. Both output modes, linked by gcc, run.
+	./$(COMPILER) --threadsafe --emit-obj test/c_threadsafe_object_offset_zero.c $(TESTTMP)/ctsoz.o
+	gcc -o $(TESTTMP)/ctsoz test/c_threadsafe_object_offset_zero_main.c $(TESTTMP)/ctsoz.o
+	tools/expect_same.sh ctsoz-obj "$$($(TESTTMP)/ctsoz)" "42"
+	./$(COMPILER) --threadsafe --shared test/c_threadsafe_object_offset_zero.c $(TESTTMP)/libctsoz.so
+	gcc -o $(TESTTMP)/ctsoz_so test/c_threadsafe_object_offset_zero_main.c $(TESTTMP)/libctsoz.so
+	tools/expect_same.sh ctsoz-so "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/ctsoz_so)" "42"
 	# THE x86-64 ROWS COME FIRST because for a year this rule had none, and the
 	# flag it is named for was broken on the DEFAULT target the whole time:
 	# every assertion below targeted riscv32 or xtensa. A Pascal program asked

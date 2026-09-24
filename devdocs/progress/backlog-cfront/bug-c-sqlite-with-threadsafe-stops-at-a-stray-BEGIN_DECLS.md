@@ -8,7 +8,7 @@ found: 2026-09-05
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "BARE OBSERVATION, CAUSE UNKNOWN AND DELIBERATELY NOT GUESSED. `./compiler/pascal26 --threadsafe library_candidates/sqlite/sqlite3.c` stops with `stray token at top level (not a declaration): '__BEGIN_DECLS'`, rc=1. PRE-EXISTING, not caused by ec1a1d7b6 -- verified by stashing that change, rebuilding, and getting the identical failure, so `is this mine' is already answered and nobody needs to repeat the rebuild. NOT REDUCED: `--threadsafe' alone builds and runs a trivial program, and `#include <pthread.h>' plus `--threadsafe' builds too, so the minimal repro is still the whole amalgamation. `__BEGIN_DECLS' does not appear anywhere in lib/crtl/include; it is a glibc sys/cdefs.h macro and /usr/include/pthread.h uses it once -- which is an observation about where the token lives, NOT a claim about how it was reached. The amalgamation is otherwise healthy: --emit-obj -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION compiles it clean at 4458 procs."
+summary: "TWO WALLS, and --threadsafe caused neither of them in the way the title suggests. (1) FIXED 2026-09-24 (frankS): `--threadsafe --emit-obj` and `--threadsafe --shared` refused EVERY C file, `int f(int x){return x+1;}` included, with `call to a runtime stub that was never emitted`. MECHANISM: every stub-address variable reads 0 as never emitted. An executable's entry stub owns code offset 0, but a C object or shared library has no entry stub, so the first runtime stub landed at 0. Under --threadsafe that is the heap-lock slow stub, and the heap lock's own call to it tripped the guard. The C driver now plants a one-instruction trap at offset 0 in object/shared mode off ESP. With that, `--threadsafe -DSQLITE_OMIT_LOAD_EXTENSION --emit-obj sqlite3.c` builds (4617 procs). (2) OPEN, and it has nothing to do with --threadsafe: `__BEGIN_DECLS` comes from the HOST /usr/include/dlfcn.h, because crtl has no <dlfcn.h> and sqlite includes it unless SQLITE_OMIT_LOAD_EXTENSION is set. It reproduces with -DSQLITE_THREADSAFE=0. What would close it: a crtl <dlfcn.h> routed to the PAL loader that lib/rtl/dynlibs.pas already uses (PalDlOpen/PalDlSym/PalDlClose: honest stubs by default, real dlopen under -dPXX_DYNLIB_LIBC). No crtl C source calls the PAL today, so the bridge is the design part.""
 ---
 
 # sqlite with `--threadsafe` stops at a stray `__BEGIN_DECLS`
@@ -66,3 +66,18 @@ p30. Nothing in tree depends on a threadsafe sqlite today, and the amalgamation
 compiles by the route anything would actually use. It is filed because
 `--threadsafe` is a supported flag and this is a real, reproducible refusal on
 the largest C corpus we have.
+
+## 2026-09-24 (frankS): the --threadsafe half was an object-mode offset-0 collision, fixed
+
+Reduced from the amalgamation to one line: `int f(int x){return x+1;}` with
+`--threadsafe --emit-obj` refused. A backtrace in a -g compiler shows
+IREmitCodeCall(addr=0) <- EmitHeapLockStubs <- EmitHeapLockSlowStub <-
+ParseCProgram. HeapLockSlowAddr WAS emitted, at CodeLen 0, which is the
+sentinel. Plain --emit-obj also puts a stub at 0 (the div-zero stub; the
+object's first bytes are its write + exit_group(200)). It got away with it only
+because C division calls PXXDivZero by name.
+
+Guard: test/c_threadsafe_object_offset_zero.c, built `--threadsafe --emit-obj`
+and `--threadsafe --shared`, each linked by gcc and run (answers 42). The rows
+are at the head of test-emit-obj. Pin v421 refuses the file. Also verified:
+make test-emit-obj and make test-c-abi-mixed-link, x86_64 and i386, both green.
