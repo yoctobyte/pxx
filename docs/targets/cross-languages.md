@@ -128,7 +128,8 @@ smoothing over `T**` out-parameters, string marshalling, and `#define` constant
 mapping (see [architecture](../reference/architecture.md) for the mechanism):
 
 ```python
-import sqlite3
+import sqlite3          # built with --no-shims; without it this reaches
+                        # PXX's DB-API shim of the same name
 
 db = sqlite3_open("/tmp/users.db")
 sqlite3_exec(db, "CREATE TABLE users(id INT, name TEXT);", 0, 0, 0)

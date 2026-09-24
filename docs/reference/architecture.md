@@ -88,7 +88,8 @@ The Nil Python frontend (`.npy`) compiles directly to the same native backend as
 For example, a Nil Python program can import the system SQLite header and call it directly without any handwritten Pascal or C glue code:
 
 ```python
-import sqlite3
+import sqlite3          # built with --no-shims; without it this reaches
+                        # PXX's DB-API shim of the same name
 
 db = sqlite3_open("/tmp/test.db")
 sqlite3_exec(db, "CREATE TABLE t(id INTEGER, name TEXT);", 0, 0, 0)

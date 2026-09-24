@@ -112,8 +112,10 @@ semantics on 64-bit integers. These are tracked and shrinking.
 ## Nil Python frontend
 
 Nil Python (`.npy`) is a compiled Python-shaped dialect, not a Python
-implementation — see [Nil Python](../targets/nil-python.md) for the language
-surface and its documented gaps. It carries its own gate rather than riding on
+implementation. It is python-ish: a useful core behaves as under CPython, and
+outside that core it is known to have plenty of issues — see
+[Nil Python](../targets/nil-python.md) for the core, the measured limits, and
+where it differs on purpose. It carries its own gate rather than riding on
 the Pascal one.
 
 ### Working

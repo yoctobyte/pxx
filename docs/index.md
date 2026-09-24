@@ -31,7 +31,7 @@ documentation first.
   `DT_NEEDED` entries — a static ELF whose only runtime dependency is the Linux
   kernel. That holds for every frontend, with no flag to remember.
 - **Imports cross language lines without wrappers.** One backend, one symbol
-  table, one import resolver: Nil Python can `import sqlite3` straight from the
+  table, one import resolver: Nil Python can call SQLite straight from the
   system's C header, Pascal can `uses` a plain `.h`, and no FFI declarations,
   IDL, or generated bindings are involved. Libraries can be linked from the
   system or compiled in from source — the latter keeps the binary

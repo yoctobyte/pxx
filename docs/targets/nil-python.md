@@ -5,638 +5,170 @@ order: 63
 
 # Nil Python (`.npy`)
 
-Nil Python is a statically compiled Python-shaped frontend for the PXX compiler. It compiles `.npy` source files directly to native machine code through the shared AST and backend, achieving high performance without the overhead of a Python interpreter or runtime.
+Nil Python is **python-ish**. It is a Python-shaped language that PXX compiles
+ahead of time to native code, through the same backend as Pascal and C. It is
+not a Python implementation and there is no interpreter at run time. A useful
+core of everyday Python behaves as it does under CPython; outside that core,
+Nil Python is **known to have plenty of issues**. If a program depends on
+Python's dynamism, or on the standard library in depth, run it on CPython.
 
-It is a **mainline frontend**, a peer of Pascal and C rather than a research path: it has its own gated test suite (`test-nilpy`), and it is held to the same bar as the Pascal and C frontends — the suite green, the self-host fixedpoint byte-identical (at the default optimisation level), and the cross-target builds clean. The fixedpoint is proved on every change; the suites and the cross-targets are swept continuously as commits land, sampling the tip rather than running on every individual commit. BASIC, Rust and Zig are the experimental frontends; Nil Python began there and no longer is.
+Source files may use `.npy` or `.py`; both go through the same frontend.
 
-> [!NOTE]
-> Nil Python is not a full Python implementation. Source files can use either the `.npy` extension or plain `.py` — both compile through the same frontend; PXX does not require CPython-standard syntax, so a `.py` file that leans on dynamic-typing features CPython allows may not compile as-is.
+Every claim on this page was checked on 2026-09-24 by compiling a snippet
+with the compiler at commit `8e68f024e2` (binary sha256 `b51d542b4e1f`) and,
+where CPython can run the same source, comparing the output with CPython 3.14.4.
 
-## What it is aiming at
+## Where it runs today
 
-The frontend began as a Python-*shaped* dialect — the point was to prove that a
-grammar nothing like Pascal's could reach the same backend. That is no longer
-the goal it is measured against. Where a construct is implemented, the target
-is **CPython's observable behaviour**, and divergences from it are filed as
-bugs rather than accepted as dialect differences. Nil Python is a from-scratch
-compiler that targets CPython compatibility; it is not derived from CPython's
-implementation, and it is not an interpreter.
+- **Desktop demos**: `examples/shell/` (a small shell, `nilsh`) and
+  `examples/tk/` (GUI programs on PXX's `tkinter` facade). All twelve compile.
+- **ESP32**: `examples/esp32/nilpy-*`, `adc-*` and `gpio-edge-*`, for the
+  ESP32-C3 (riscv32) and ESP32-S3 (xtensa). Each `main.npy` compiles to an
+  object that ESP-IDF links; the chip runs that machine code, with no
+  interpreter. All eight compile. Each directory's `build.sh` is the recipe.
 
-That is a harder target than Pascal or C, and the board shows it: Nil Python
-carries by far the deepest open queue of any frontend, and roughly four in five
-of its tickets are bugs or regressions rather than features. A deep queue here
-means the reference is exacting, not that the frontend is fragile — see
-[ticket flow](https://pxxc.org/status/flow/) for the curves, which are generated
-from the board and cannot go stale the way a sentence can.
+## The core that works
 
-**What it will not do**, and this is a design boundary rather than a gap to
-close: anything requiring a live interpreter. No monkeypatching a class after
-compilation, no duck typing resolved at run time. Function parameters and
-return types need annotations; locals are inferred. If a program's design
-depends on Python's dynamism, it belongs on CPython.
+These give CPython's output:
 
-`exec` and `eval` are a narrower case than that boundary suggests, and they
-have [their own section](#exec-and-eval): the **explicit-namespace** forms —
-`exec(src, d, d)` and `eval(src, g, l)` — do run source built at run time, over
-a subset of Python. That is a tree-walker over the text, not a live
-interpreter, and the distinction is load-bearing.
+- **Functions**: with or without annotations, default values, `*args`,
+  `**kwargs`, `lambda` closures, `global` and `nonlocal`.
+- **Control flow**: `if`/`elif`/`else`, `while`, `for`, `break`/`continue`,
+  `try`/`except (A, B) as e`/`finally`, `raise`, `assert`, `with`.
+- **Comprehensions**: list, dict and set, with `if` filters.
+- **Generators**: `yield` gives a lazy generator; a `for` loop over an infinite
+  one that `break`s runs only as far as it consumed.
+- **Classes**: single and multiple inheritance, `super()`, `@property` with
+  `@x.setter`, `@staticmethod`, `@classmethod`, `@dataclass`, class
+  attributes, attributes added to an instance after construction, and
+  `getattr`/`setattr`/`hasattr`. Dunders dispatch, including `__init__`,
+  `__str__`, `__repr__`, `__eq__`, `__add__`, `__len__`, `__getitem__`,
+  `__call__`, `__enter__`/`__exit__`.
+- **Values**: unannotated ints have arbitrary precision (`2 ** 100`); a
+  variable rebound to a different type becomes a dynamic slot rather than an
+  error; lists may hold mixed types.
+- **Strings and containers**: the everyday methods of `str`, `bytes`, `list`,
+  `tuple`, `dict` and `set`; slicing; unpacking; f-strings with `!r`/`!s` and
+  format specs; `%` formatting and `str.format`.
+- **Builtins**: `len`, `min`, `max`, `sum`, `abs`, `round`, `sorted`,
+  `enumerate`, `zip`, `map`, `filter`, `any`, `all`, `isinstance`, `type`.
+- **Catchable errors**: `int("abc")` raises `ValueError`, a bad index raises
+  `IndexError`, a missing key raises `KeyError`.
+- **Modules**: `math`, `re`, `json`, `random`, `collections.Counter`, `zlib`
+  and others, each backed by a PXX unit (see [imports](#imports)).
 
-### It hardens the rest of the compiler
+## Known limits
 
-Compiling Python-shaped code exercises the shared AST, IR and runtime along
-paths that Pascal and C programs rarely reach — variants, dunder dispatch,
-container semantics — and the defects it turns up are usually **not** in the
-Nil Python frontend at all. They land in the shared layers, where fixing them
-benefits every frontend. Well over a hundred compiler-core tickets reference Nil
-Python work. It has been the cheapest bug-discovery route the project has:
-no third-party test corpus had to be dragged into Pascal or C to find them.
+Each of these was reproduced with the compiler named above.
 
----
+| What you write | CPython | Nil Python |
+| --- | --- | --- |
+| `def f(n: int) -> int: return n * n`, then `f(2 ** 40)` | `1208925819614629174706176` | `0` — an `-> int` result is a 64-bit machine integer and wraps silently. Leave the return type unannotated to keep arbitrary precision. |
+| `hex(2 ** 64 + 1)` | `0x10000000000000001` | `0x1` — hex, octal and binary text of an int wider than 64 bits is wrong; `format(x, "x")` on one raises `ValueError`. Decimal `str()` is correct. |
+| `b = 0` at run time, then `7 // b` inside `try/except ZeroDivisionError` | `caught` | `Runtime error 200`, exit code 200; the handler never runs. Only a literal `1 // 0` raises `ZeroDivisionError`. Same for `%`. |
+| `for v in (x * 2 for x in src()):` | lazy | the generator expression is evaluated in full before the loop starts |
+| `a.nope()` where no class declares `nope` | `AttributeError` at run time | compile error: `A has no method nope` |
+| `A.f = g` (replacing a method) | allowed | compile error; classes are fixed at compile time |
+| `match x:` / `async def` | supported | compile error (`undefined variable (match)`) |
+| `f"""a {v} b"""` | supported | compile error: triple-quoted f-strings are not supported |
+| `import threading` | works | needs the `--threadsafe` compiler flag; the error says so |
 
-## Language Surface
+A generator abandoned before it is exhausted, for example by `break`, does not
+release the class instances held in its local variables.
 
-Nil Python uses standard Python indentation syntax to define blocks. Type
-annotations on parameters and return types are **optional but recommended**: an
-unannotated parameter becomes a dynamically-typed (variant) slot that accepts an
-int, a float, a string or a list, while an annotated one compiles to a native
-typed slot. Local variables are always inferred.
+## Where it differs on purpose
 
-Annotate the **return type** in particular where the value matters. Inference
-of an omitted return type is currently wrong for true division — `def half(x):
-return x / 2` yields `2` rather than `2.5`, and with an annotated parameter it
-yields the double's raw bit pattern as an integer. Writing `-> float` is a
-complete workaround. This is a tracked defect, listed under
-[known gotchas](#known-gotchas) below.
+- **It is compiled.** Imports are resolved at compile time, so
+  `sys.path.insert(...)` has no effect; use `-Fu` (below).
+- **`__file__` names the executable**, not a source file, and so does
+  `sys.executable`. Keep data files next to the binary and find them with
+  `os.path.dirname(os.path.abspath(__file__))`.
+- **`exec` and `eval` run a subset of Python** through a tree-walker, and only
+  with an explicit namespace: `exec(src, d, d)`, `eval(src, g, l)`.
+  `exec(src)` with no namespace is a compile error, because compiled locals
+  have no run-time name table to bind into. The subset has no `import`, no
+  `class`, and no nested `exec`.
+- **It accepts some things CPython rejects**, such as the quoted import below.
+  Nil Python is compatible with CPython in one direction only.
 
-### Supported Statements
+## ESP: math errors do not halt
 
-```python
-# A simple function with type annotations
-def calculate_factorial(n: int) -> int:
-    result = 1
-    for i in range(1, n + 1):
-        result = result * i
-    return result
+On ESP targets the rule is that a math error must not stop the device. In the
+owner's words, an embedded device *"should (try) to keep running, even if
+whatever unexpected input (sensor etc) produces a math error. we should not
+halt."* Desktop builds are unaffected.
 
-# Control flow
-if x > 10:
-    print("Greater")
-elif x == 10:
-    print("Equal")
-else:
-    print("Lesser")
+Status: integer `div` and `mod` by zero give `0` on ESP32-C3 and ESP32-S3 in
+Pascal and C, checked under qemu on both chips (commit `46d2a9430a`). The Nil
+Python side — `//` and `%` by zero giving `0`, and `/` by zero giving an IEEE
+infinity or NaN, with no `ZeroDivisionError` — is **in progress**. Check the
+behaviour on your build before relying on it.
 
-# Loops
-while active:
-    poll_events()
-```
+## Imports
 
-### Syntax Rules
-- **Indentation**: Indentation defines blocks. Mixing tabs and spaces in the same file is forbidden and triggers a compile error.
-- **Parenthesis Suspension**: Indentation rules are suspended inside parentheses (`()`, `[]`, `{}`), allowing clean multi-line function calls or literal declarations.
-- **Signatures**: Annotations are optional. An annotated signature gives the
-  function a fixed native ABI, which is what lets recursion and cross-calling
-  resolve before a body has been fully parsed; an unannotated one is dynamic
-  and slower.
-
----
-
-## Type Inference & The Variant Escape Valve
-
-Nil Python is statically typed under the hood. The compiler performs local type inference across two passes to resolve the type of every variable:
-
-1. **Numeric Widening**: Assigning compatible numeric types keeps the variable unboxed and fast (e.g., assigning an `int` and later a `float` to the same variable resolves the slot to a standard 64-bit float).
-2. **Variant Promotion**: If a variable is rebound to incompatible types across different control paths (e.g., an integer on one path, and a string on another), the compiler **retroactively promotes** the variable to a 16-byte `tyVariant` stack slot at the entry of the function.
-3. **Promotion covers containers and objects too**: rebinding a list-valued or
-   class-valued variable to an incompatible type promotes it to Variant the same
-   way rather than being refused. (An earlier compiler rejected these at compile
-   time; verified against the pinned compiler that it no longer does.)
-
----
-
-## Wrapper-Free C Interop
-
-The most powerful feature of Nil Python is its ability to import C headers directly and call shared-library symbols natively without any handwritten wrapper code.
+A bare `import name` means a Python module (`name.py` or `name.npy`), or one of
+the PXX units that carry a Python surface, such as `math`, `re`, `json` or
+`zlib`. To reach a Pascal or C file, quote it and give it an alias:
 
 ```python
-import sqlite3
-
-# Call sqlite3 C functions directly
-db = sqlite3_open("/tmp/users.db")
-sqlite3_exec(db, "CREATE TABLE users(id INT, name TEXT);", 0, 0, 0)
+import 'sysutils.pas' as su
+print(su.Trim("  hi  "))          # hi
 ```
-
-### 1. Autotyping (Return-Lifting)
-C APIs frequently return status codes and pass output handles via pointer-to-pointer parameters (e.g., `int sqlite3_open(const char*, sqlite3**)`). 
-
-Since Nil Python has no pointer or address-of (`&`) operators, the compiler automatically detects trailing double-pointer out-parameters (`T**`) when reading the C header. It return-lifts the parameter:
-- The compiler allocates a hidden local pointer on the stack.
-- It passes the address of this pointer to the C function.
-- It returns the resulting handle directly as the Python-level return value (e.g., `db = sqlite3_open(path)`).
-
-### 2. Automatic String Marshalling
-- **Input**: Python strings passed to C `const char*` parameters are automatically marshalled as NUL-terminated C strings.
-- **Output**: C functions returning `char*` or `const char*` have their returned text copied automatically into managed, reference-counted PXX strings. The underlying C memory remains owned by the C library.
-
-### 3. Macro Constant Mapping
-Preprocessor integer `#define` macros in the C header (such as `SQLITE_ROW` or `SQLITE_OK`) are parsed and made available directly as ordinary constants in Nil Python.
-
----
-
-## Classes
-
-Multiple bases — `class C(A, B):` — are accepted, and methods from both bases
-are callable on the subclass. Where two bases declare the same method the first
-base wins, which is what C3 linearisation gives for a flat hierarchy. Calling a
-base constructor explicitly as `B.__init__(self)` is refused, so a two-base
-class cannot chain both initialisers; `super().__init__(...)` reaches the first
-base only.
-
-Dunder methods dispatch. Verified against the pinned compiler:
-`__init__`, `__str__`, `__repr__`, `__eq__`, `__len__`, `__getitem__`,
-`__call__`, `__enter__`/`__exit__` (so `with` works on your own classes), and
-`__iter__`/`__next__` (so a class of your own is usable as the subject of a
-`for` loop) all resolve to the method you defined.
-
-One sharp edge in an iterator: `raise StopIteration` must be written
-`raise StopIteration()`, because an exception class is not usable as a bare
-value.
-
-`super().method(args)` is recognized specifically as its own call
-**statement** — most commonly `super().__init__(...)` chaining a parent
-constructor — not as a general expression whose result you can use further
-(`x = super().method()` or embedding it in a larger expression is not
-supported):
-
-```python
-class Animal:
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-
-class Dog(Animal):
-    def __init__(self, name: str) -> None:
-        super().__init__(name)
-```
-
-`@property` and its matching `@x.setter` are supported on methods:
-
-```python
-class Box:
-    def __init__(self, v: int) -> None:
-        self._v = v
-
-    @property
-    def v(self) -> int:
-        return self._v
-
-    @v.setter
-    def v(self, val: int) -> None:
-        self._v = val
-```
-
-At module level, only `@dataclass` is accepted as a decorator — it generates
-an `__init__` from the annotated fields:
-
-```python
-@dataclass
-class Point:
-    x: int
-    y: int
-```
-
-`@staticmethod` works. `@classmethod` is refused with a diagnostic saying why:
-its `cls` receiver is not modelled, and binding it to the declaring class would
-be silently wrong in a subclass.
-
-## Functions: defaults, `*args`, `**kwargs`, lambdas
-
-Default parameter values, `*args` (collected as a list), and `**kwargs`
-(collected as a dict) are supported on the callee side:
-
-```python
-def total(*args):
-    s = 0
-    for a in args:
-        s = s + a
-    return s
-
-def opts(a, **kw):
-    for k in kw:
-        print(k, kw[k])
-```
-
-`lambda` is a real, compiled closure (not restricted to trivial expressions).
-`yield` works and gives a genuinely lazy generator — a `for` loop over an
-infinite generator that `break`s runs the body only as far as it consumed. A
-generator *expression* like `(x for x in it)` is the exception: it is accepted
-as sugar but desugars eagerly into a list, so its elements are all computed
-before the loop starts.
-
-## Control flow
-
-`if`/`elif`/`else`, `while`, `for … in`, `break`/`continue`/`pass`, and
-`try`/`except (A, B):`/`finally` (including multiple `except` clauses) all
-work as expected, and so does `assert`. `with` calls `__enter__`/`__exit__` on
-a class of your own (an earlier compiler treated it as scoping sugar only).
-
-List/dict/set comprehensions, including nested and filtered (`if`) forms, are
-supported and compile down to an imperative build:
-
-```python
-squares = [x * x for x in range(10) if x % 2 == 0]
-```
-
-Not present: `match`/`case` and `async`/`await`.
-
-## f-strings
-
-`f"{value!r}"`/`f"{value!s}"` conversions and a plain format spec are
-supported. Triple-quoted f-strings are not.
-
-## What an `import` resolves to
-
-**A bare import name means Python.** `import mymod` looks for `mymod.py` or
-`mymod.npy` and nothing else — it will not quietly load a Pascal unit that
-happens to share the name. (Two things that are *not* ordinary Pascal
-units do import bare: a [Python extension module](#python-extension-modules-import-bare),
-and the RTL units listed below.) Where a name *does* collide with one of PXX's own
-RTL units, the compiler says so and names the spelling that reaches it:
-
-```
-error: import: classes is the Pascal unit …/lib/rtl/classes.pas, not a Python
-module — a bare NilPy import resolves to Python (.py/.npy) only. To reach the
-Pascal unit, name it with its extension: import 'classes.pas' as classes
-```
-
-**A fixed list of RTL and PCL units is the deliberate exception**, because they
-carry a Python surface written for exactly this purpose. `ast`, `atexit`,
-`base64`, `collections`, `configparser`, `html`, `io`, `json`, `markdown`,
-`math`, `pathlib`, `random`, `re`, `subprocess`, `tempfile`, `tkinter` and
-`zlib` each import bare and resolve to the Pascal unit of that name:
-
-```python
-import math
-print(math.gcd(12, 18))          # 6 — gcd is not declared through C's
-                                 # <math.h>, so this proves which math
-                                 # was reached
-```
-
-That is narrower than "any unit with a Python surface". The set is a list
-compiled into the compiler, so a unit that *grows* a Python surface without being
-added to it stays unreachable by a bare import. Those seventeen names are what
-the list holds in the compiler source as of 2026-09-11; `import classes`, which
-is not on it, gives the error above.
-
-**Two consequences worth knowing before you debug one of these.** Because the
-list lives in the compiler rather than in the library, a name added to it is
-**inert until a compiler carrying it is pinned** — as of 2026-09-11, `zlib` is in
-that state: it is on the list in source, and the pinned compiler predates the
-entry. And because a name that misses the list can still resolve to a *host C
-header* of the same name, **the import itself compiles either way**. What fails
-is the first member call, with a confusing overload error rather than anything
-about imports:
-
-```
-error: no overload of crc32 matches these arguments
-```
-
-That is `/usr/include/zlib.h`'s three-argument `crc32`, reached because the
-Python route was not available. So a bare import that compiles is not evidence
-that you reached the PXX unit — only a call to a member the C header does not
-have distinguishes them.
-
-**To import another language, quote the file name and give it an alias:**
-
-```python
-import 'sysutils.pas' as su      # a unit NAME + extension, via the search chain
-print(su.Trim('  hi  '))         # hi
-
-import './mymod.pas' as m        # a PATH (it has a slash), from this file's dir
-import './mymath.c'  as c        # C works the same way
-```
-
-The slash is what separates the two: with one, the string is an authoritative
-path; without one, it is a unit name resolved through the normal search chain,
-which is how a `.npy` reaches `lib/rtl`. Both are unambiguous, because both are
-string literals.
-
-Two things that are **not** available, deliberately or not yet:
-
-- `import mymod.pas as m` — the dotted spelling is not built. `a.b` is Python's
-  package-submodule syntax, and telling an extension from a submodule would
-  need a whitelist that any package with a submodule named `c` or `pas` would
-  defeat. Quote it instead.
-- `from 'sysutils.pas' import Trim` — not built; the error is *expected a
-  module name after from*. Use the `as` form and qualify.
-
-### Python extension modules import bare
-
-An extension module is the one thing written in Pascal that a bare `import`
-reaches. That is not the rule bending — it is the rule not applying. The rule
-above governs how you reach a *Pascal unit*; a cpyext extension module is a
-**Python module whose body happens to be Pascal and C**, exactly what `_socket`
-or `_json` is to CPython, so bare import is its correct spelling:
-
-```python
-import fmt_ext                   # a Pascal unit, imported as the Python module it is
-print(fmt_ext.fmtUnicode())
-```
-
-The unit is found the same way any Python module is — on the search path, so a
-unit outside the current directory needs a `-Fu` root like any other (below).
-
-A unit becomes one by saying so, and the compiler checks the claim. Both must
-hold:
-
-```pascal
-unit fmt_ext;
-
-{$PYEXTENSION}                   { the DECLARATION — a line that is exactly this }
-
-interface
-
-uses pxxcio, '../../lib/cpyext/src/pyruntime.c',   { the CHECK — binds the cpyext runtime }
-     './fmt_ext_host.c';
-```
-
-The declaration is what makes it a Python module; binding the runtime only
-confirms the claim. A unit that binds the runtime without declaring itself is
-still refused by name, so the carve-out cannot widen into "any unit that
-touches CPython".
-
-**The module's name means nothing here.** `_ext` is not a convention — of 147
-real extension modules on a stock CPython 3.12 (stdlib `lib-dynload`,
-statically builtin, and third-party `.so` together), none end in `_ext`, while
-70 begin with a leading underscore. The `_ext` names in PXX's own test units are
-test-local naming. Nothing is keyed on the spelling of the name.
-
-Neither is `PyInit_<name>` a reliable tell, and PXX does not use it: a
-*vendored* extension's init symbol carries the **upstream** module's name, so a
-unit wrapping MarkupSafe's accelerator exports `PyInit__speedups`, not
-`PyInit_markupsafe_ext`. A unit that only *consumes* the C API exports no
-`PyInit_` at all and is still an extension module.
 
 ### Finding a third-party Python package: `-Fu`
 
-`-Fu<dir>` adds a search root, and it is how a package outside the current
-directory is found:
+`-Fu<dir>` adds a search root. Point it at the directory that **contains** the
+package:
 
 ```sh
 pxx -Fu/path/to/site-packages drv.npy drv
 ```
 
-Point it at the directory that *contains* the package, not at the package
-directory itself — `from mypkg import greet` needs the parent of `mypkg/`, the
-same way Python's own path works. A plain single-file module (`solo.py`) in
-that directory is found too.
+Without it, `from mypkg import greet` fails with
+`import: no unit named mypkg and no shim mimic_mypkg`.
 
-Without it the failure reads like a missing feature rather than a missing path:
+### Shims: standing in for a Python package
 
-```
-error: import: no unit named mypkg and no shim mimic_mypkg
-```
-
-`sys.path.insert(0, …)` will not help — it is a runtime mechanism, and by the
-time a compiled program runs, imports have long been resolved.
-
-### One name that behaves differently
-
-`import strings` is accepted rather than refused, even though
-`lib/rtl/strings.pas` exists, because the name also resolves through the
-host-header route (`/usr/include/strings.h`). It compiles; its members are not
-Python's. `import types`, `import classes` and `import sysutils` are all
-refused with the diagnostic above.
-
-## Standard-library surface
-
-`import` resolves against a real backing Pascal unit for a growing list of
-module names: `re`, `json`, `math`, `random`, `collections`, `configparser`,
-`base64`, `pathlib`, `subprocess`, `time`, `typing`, `dataclasses`. `sys`, `os`,
-`textwrap`, `select`, and `itertools` are recognized and partially supported
-without a dedicated shim unit. `tkinter` has its own facade
-(`lib/pcl/tkinter.pas`) for GUI programs. Not yet present: `socket`,
-`threading`, `struct`, `enum`, `csv`, `pickle`, `logging`, `hashlib`, `uuid`,
-`datetime`.
-
-## Shims: standing in for a Python package
-
-Some module names resolve to a unit PXX wrote itself, presenting a familiar
-Python API over PXX's own code. These are **shims**, and they are deliberately
-visible rather than hidden.
-
-A shim lives under PXX's own name — `mimic_<module>` — never the upstream
-package's. So no file in the tree carries a name it did not earn, and listing
-the directory tells you exactly which packages are being stood in for:
+Some package names resolve to a PXX unit named `mimic_<module>` that implements
+part of that package's API. The build says so:
 
 ```
-lib/pcl/mimic_reportlab_pdfgen.pas          <- from reportlab.pdfgen import canvas
-lib/pcl/mimic_reportlab_lib_pagesizes.pas   <- from reportlab.lib.pagesizes import A4
-lib/pcl/mimic_tkinter_font.pas              <- import tkinter.font as tkfont
+note: reportlab_lib_pagesizes -> mimic_reportlab_lib_pagesizes (shim, subset)
 ```
 
-A dotted package name is flattened before lookup, which is why
-`from reportlab.pdfgen import canvas` reaches `mimic_reportlab_pdfgen` with no
-package-directory machinery involved.
+A shim covers what PXX needed, not the package. `--no-shims` refuses every
+substitution, so a build that passes with it contains no stand-in code.
 
-### The mapping is a last resort
+### Python extension modules import bare
 
-The `mimic_` substitution is consulted **only after every ordinary lookup has
-failed**. A real unit of that name always wins — a sibling `.py`, a Pascal unit
-such as `lib/rtl/re.pas`, a C header. It applies to Nil Python only; a Pascal
-`uses` never reaches the shim table at all.
+A Pascal unit that declares `{$PYEXTENSION}` and binds the cpyext runtime is a
+Python extension module, the way `_json` is to CPython, so a bare `import`
+reaches it. The declaration is required; binding the runtime alone does not
+make a unit importable this way.
 
-Not every Python-shaped facade is a shim, and the distinction is the filename.
-`lib/pcl/tkinter.pas` is a real unit *named* `tkinter`, so `import tkinter`
-resolves to it by ordinary lookup and no substitution happens. Only
-`import tkinter.font` — which has no unit of its own — falls through to
-`mimic_tkinter_font`.
+## C libraries
 
-### A build says what it substituted
+Nil Python can import a C header and call the library directly. A trailing
+`T**` out-parameter becomes the return value, Python strings are passed as C
+strings and `char*` results are copied back, and integer `#define`s become
+constants.
 
-Every substitution prints a line, because a program built on a subset should
-say so:
-
-```
-$ ./pxx report.npy report
-note: reportlab_lib_units -> mimic_reportlab_lib_units (shim, subset)
-ok: report  [code=1179172B  data=31684B  bss=8332B  procs=1036]
-```
-
-**`(shim, subset)` is the important part.** A shim implements what PXX needs of
-that API, not the package. Treat an unexercised call as unimplemented until you
-have run it. The sizes on the `ok:` line are whatever that build happened to
-produce and move with the runtime; the `note:` line is the thing to read.
-
-### `--no-shims`: turning the claim into a check
-
-Passing `--no-shims` refuses the substitution outright — every import must
-resolve to a real unit of that name or the build fails:
-
-```
-$ ./pxx --no-shims report.npy report
-pascal26:1: error: import: no unit named reportlab_lib_units (--no-shims refuses the mimic_ substitution)
-```
-
-This is what makes "compiled without compatibility shims" a checked property
-rather than a claim. Use it when you need to know that a binary contains no
-stand-in code — for a dependency audit, or to find out how much of a program
-actually rests on shimmed surface. It is not a hardening flag: a build that
-passes `--no-shims` is not more correct, only more honest about what it used.
-
-## `__file__`, `sys.executable`, and where data files live
-
-A compiled Nil Python program has no source file at run time, so `__file__`
-names the **executable**:
-
-- for the **main module**, it is the binary's own absolute path;
-- for an **imported module**, it is that binary's directory joined with the
-  module's file name — a path that need not exist;
-- `sys.executable` is the same binary. (Under CPython it is the interpreter,
-  which is the same idea: the thing that is actually running.)
-
-All three are absolute and independent of the current directory. The practical
-consequence is the line every program that ships data files already has:
+A shim of the same name wins over a C header. `import sqlite3` therefore
+reaches a small DB-API shim: `sqlite3.connect(...)` and `con.execute(...)`
+work, but rows print as lists rather than tuples and `con.cursor()` does not
+exist. Build with `--no-shims` to call SQLite's C API instead:
 
 ```python
-here = os.path.dirname(os.path.abspath(__file__))   # the executable's directory
-path = os.path.join(here, "data.json")
+import sqlite3                     # built with --no-shims
+db = sqlite3_open("/tmp/users.db")
+sqlite3_exec(db, "CREATE TABLE users(id INT, name TEXT);", 0, 0, 0)
 ```
 
-Under CPython that finds data next to your `.py` sources. In a compiled build it
-finds data next to the **binary** — so that is where to put it. Copy the
-executable somewhere else and `here` follows it, because the path is resolved
-from the running program, not baked in at compile time.
+That C route, with file-backed CRUD, is part of the test suite.
 
-Frozen Python does the same thing for the same reason: PyInstaller and cx_Freeze
-also point `__file__` at the bundle rather than at sources that are no longer
-there. If you have shipped a frozen app, this is the shape you already know.
+## Reporting a problem
 
-Two things follow that are worth knowing before you meet them:
-
-- `open(__file__)` in the main module **succeeds, and opens the executable** —
-  a couple of megabytes of ELF, not Python source. In an imported module it
-  fails, because that path is synthesized and no file is there.
-- Code that keeps data beside its `.py` sources and reaches it through
-  `__file__` needs the data moved next to the binary, or the path supplied
-  some other way (an argument, an environment variable, a config file).
-
-## `exec` and `eval`
-
-Source built at run time does execute, through a tree-walker over the text.
-Say it uncompressed, because the short version is wrong in both directions:
-**the explicit-namespace forms work, over a subset of Python.** There is no
-live interpreter behind them, and nothing about the surrounding compiled
-program becomes dynamic.
-
-```python
-d = {}
-exec("total = 0\nfor i in range(4):\n    total = total + i", d, d)
-print(d["total"])                  # 6
-
-g = {"a": 10, "b": 4}
-print(eval("a * b + 2", g, g))     # 42
-```
-
-`eval` also accepts the ambient form, `eval("1 + 2")` — an expression only
-reads, so a name it cannot see is a run-time error naming that name, never a
-silent wrong value.
-
-`exec` does **not**. The ambient form is a compile error that names the working
-spelling:
-
-```
-Nil Python: exec(src) with no namespace is not supported — it would bind into
-the caller's own locals, which are compiled stack slots with no run-time name
-table. Use the explicit form Python also has: d = {}; exec(src, d, d), then
-read the results out of d
-```
-
-It is refused rather than accepted-and-ignored because those locals are
-compiled stack slots with no run-time name table to bind into — there is
-nowhere for the result to go, and failing loudly at compile time is the only
-honest answer.
-
-### The subset
-
-Inside `exec`/`eval`: assignment and augmented assignment, `if`/`elif`/`else`,
-`while`, `for` with `break`, `def`, `return`, `raise`, `del`, and expression
-statements. Expressions cover arithmetic, bitwise, comparison and boolean
-operators, calls, attribute access, subscripts including slices, f-strings,
-`isinstance`, conditional expressions, tuple/list/dict literals, and the
-`len`/`int`/`print` builtins.
-
-Not in the subset: `import`, `class` definitions, and `exec` inside `exec`.
-Pass what the source needs in through the namespace dict instead of importing
-it there.
-
-### `__builtins__` is a documented incompatibility
-
-CPython injects a `__builtins__` key into the globals dict it hands to
-`exec`. Nil Python does not, having no module object to put there:
-
-| | CPython | Nil Python |
-| --- | --- | --- |
-| `d={}; exec("x=1", d, d); sorted(d.keys())` | `['__builtins__', 'x']` | `['x']` |
-| `d["x"]` | `1` | `1` |
-
-Only a program that **enumerates** the namespace can see the difference;
-reading a bound name agrees. This is decided and permanent for now, and the
-reason is worth stating rather than apologising for: CPython resolves every
-name miss through one run-time dict, so its `__builtins__` is live and mutating
-it changes the whole program. Nil Python resolves builtin names in compiled
-code at compile time. Any `__builtins__` it handed back would be honoured by
-exec'd source and silently ignored by every compiled call site — a key that
-half-works is worse than an absent one, so it is absent.
-
-A **separate, open** bug sits next to it: a caller-supplied mapping is
-discarded rather than honoured, so the restricted-exec idiom does not restrict.
-
-| | CPython | Nil Python |
-| --- | --- | --- |
-| `d={"__builtins__":{}}; exec("n=len([1,2,3])", d, d)` | `NameError` | `n = 3` |
-
-Do not rely on that as a sandbox. It is tracked, not decided.
-
-## Known gotchas
-
-These are open, tracked issues — real-world `.py`/`.npy` programs can still
-hit them:
-
-- The inferred return type of a bare `return x / 2` is an integer: the value
-  is truncated, or — with an annotated parameter — handed back as the double's
-  raw bit pattern. Annotate the return type as `-> float`.
-- Calling a method no class declares is a **compile error**, not a runtime
-  `AttributeError`, so a program that catches `AttributeError` around a
-  deliberately-missing attribute does not build.
-- `super().method()` is a statement form only. Using it as an expression
-  (`return super().hi()`) fails to compile, with a diagnostic that names
-  neither the construct nor the right line. `Parent.method(self)` works and is
-  the usable spelling.
-- A keyword argument resolves against only one overload of an overload set —
-  it can fail on a sibling overload that has the same parameter name.
-- Object reclamation (reference counting) is disabled inside an imported
-  `.py` module specifically — a module compiled as the main program does not
-  have this restriction.
-- An `import` inside `exec` is skipped without a diagnostic and the statements
-  after it still run, so the failure — if the imported name is used at all —
-  arrives later as `pyeval: name not defined: <module>`, pointing at the use
-  rather than at the discarded import. Pass what the source needs in through
-  the namespace dict.
-- ~~A `def`/`lambda` in a plain variable can silently do nothing or segfault
-  when called.~~ ~~Missing methods segfault.~~ ~~`int("abc")` halts instead of
-  raising a catchable `ValueError`.~~ ~~`"%d" % value` yields garbage.~~
-  ~~`str()` of a tuple/list prints a pointer.~~ ~~`not some_object` is always
-  `True`.~~ ~~`str.encode`/`bytes.decode` ignore the codec.~~ ~~`super()` /
-  `Parent.method(self)` miss an override.~~ **Fixed** — each re-tested against
-  the pinned compiler on 2026-08-19. What survived of them is listed above in
-  its current, narrower form.
-- ~~A **typed** constant in a Pascal unit reads as the zero value of its type in
-  a Nil Python build.~~ **Fixed** — verified against the pinned compiler:
-  `from reportlab.lib.units import mm` now yields `2.834645669291339`, and a
-  typed `Double`/`Integer`/record constant reads its initializer whether the
-  main program is Pascal or Nil Python.
-
-If a real-world program hits one of these, check
-[compatibility status](../reference/status.md) and the project's ticket board
-before assuming it's a project-specific bug.
+Report it at <https://github.com/yoctobyte/pxx>. Include the smallest program
+that shows it, CPython's output, PXX's output, and what `pxx --version` prints.
+Expect gaps: a report is most useful when it comes from a real program rather
+than a probe of an edge case.
