@@ -30,6 +30,13 @@
 #   esp32c3 (default): riscv32.  esp32s3: windowed xtensa, the ABI IDF runs.
 #
 # Skips: test/c-conformance/pxx.skip (base) plus pxx.skip.<chip>.
+# HOST LOAD CAN FAIL A ROW, AND IT LOOKS LIKE A CRASH. Under many concurrent
+# QEMUs (measured 2026-09-24 on plexus, 12 threads: 10 QEMUs, and again at 6
+# with two other seats building) 00040.c on esp32c3 died with IDF's "Guru
+# Meditation ... Interrupt wdt timeout on CPU0" -- the emulated tick starves,
+# not the program. Alone, same binary and tree, it passed 3 of 3. So re-run any
+# crashed row ALONE before calling it a codegen bug, and report both verdicts.
+#
 # Prints ESP-CONF-COMPLETE as its last line whatever the verdict, so a caller
 # can tell a finished run from one that died -- grep for it, never trust a
 # wrapper's exit status.

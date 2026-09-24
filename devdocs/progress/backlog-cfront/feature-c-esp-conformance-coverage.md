@@ -1,7 +1,7 @@
 ---
 prio: 18
 track: C
-summary: "BOTH ESP-IDF legs are WIRED: tools/run_c_conformance_esp.sh --chip esp32c3|esp32s3 (Makefile targets test-c-conformance-esp32c3 / -esp32s3) runs the c-testsuite through a relinked IDF image per test under QEMU and reads each return value off the serial console. Measured 2026-09-24, population = the 220 files of library_candidates/c-testsuite/tests/single-exec: esp32c3 218 pass / 1 fail (00053, the global struct-tag bug, red on x86-64 too) / 1 skip (00187, no filesystem in the image); esp32s3 (windowed xtensa) 216 / 3 / 1 -- 00053, 00175 (C implicit double->int conversion, also wrong on riscv32 for float) and 00207 (VLA: alloca unsupported on xtensa). Bare metal is out by design: bare carries no crtl.""
+summary: "BOTH ESP-IDF legs are WIRED: tools/run_c_conformance_esp.sh --chip esp32c3|esp32s3 (Makefile targets test-c-conformance-esp32c3 / -esp32s3) runs the c-testsuite through a relinked IDF image per test under QEMU and reads each return value off the serial console. CLEAN single-binary, single-tree run 2026-09-24 at 5b95400c1a (tree == origin), compiler sha256 41013170dc747df106e246fc429e6262509f8518fc72de3ea88069761b3ac29e, population = the 220 files of library_candidates/c-testsuite/tests/single-exec: esp32c3 218 pass / 1 fail (00053, the global struct-tag bug, red on x86-64 too) / 1 skip (00187, no filesystem in the image); esp32s3 (windowed xtensa) 217 / 2 / 1 -- 00053 and 00207 (VLA: feature-a-port-alloca-to-xtensa). The concurrent c3 run also showed 00040 as an IDF interrupt-watchdog crash under host load; alone at the same binary and tree it passed 3 of 3, so it is counted as a pass. Bare metal is out by design: bare carries no crtl.""
 ---
 
 # C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare)
@@ -80,3 +80,22 @@ re-run at f8f9d3f827d3 (see done/feature-a-variadic-c-functions-on-the-windowed-
 216/3/1 is therefore 211 rows at 17be23f99ad8 and 9 at later binaries whose
 diffs are the fixes named there; a clean single-binary full run has NOT been
 done. esp32c3 re-checked on a 5-test subset at f8f9d3f827d3, all pass.
+
+## 2026-09-24 (frankS): the clean run
+
+One binary, one tree: 5b95400c1a == origin, compiler sha256
+41013170dc747df106e246fc429e6262509f8518fc72de3ea88069761b3ac29e. Sharded
+3 + 3 concurrently while two other seats were building (load avg ~11-12 on 12
+threads).
+
+| chip | concurrent | solo re-run of the fails |
+|---|---|---|
+| esp32c3 | 217 / 2 / 1 -- 00053 (compile), 00040 (Interrupt wdt crash) | 00040 PASS 3/3 |
+| esp32s3 | 217 / 2 / 1 -- 00053 (compile), 00207 (alloca, compile) | deterministic compile errors, not re-run |
+
+So c3 = 218/1/1 and s3 = 217/2/1, with 00040's concurrent crash recorded as a
+LOAD ARTEFACT (it had already tripped at 10 QEMUs in an aborted earlier run).
+The harness header now says so. An earlier attempt at 563f6937f9 was abandoned
+midway because a push pulled compiler/builtin/builtinheap.pas, a per-program
+compile input, into the tree under the s3 half; the compiler binary sha did not
+change, which is why the binary sha alone would not have caught it.
