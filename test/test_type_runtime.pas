@@ -53,5 +53,8 @@ begin
   writeln(Value.A);
   writeln(Value.B);
   writeln(Value.C);
-  writeln(SizeOf(TLayout));
+  { SizeOf of a CLASS type is the reference width, as fpc answers -- this row
+    printed the instance size (20) until 2b06006e1. A relation, so no target
+    carries a width; the instance layout is TLayout.InstanceSize's business. }
+  writeln(SizeOf(TLayout) = SizeOf(Pointer));
 end.

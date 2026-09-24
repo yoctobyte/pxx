@@ -25608,7 +25608,7 @@ test-core: $(COMPILER)
 	  | grep -q "unterminated C construct" \
 	  || { echo 'c_unclosed_unsized_2d_init_fail: FAIL - the unsized-dim counter must refuse, not size from -1'; exit 1; }
 	./$(COMPILER) test/test_type_runtime.pas $(TESTTMP)/test_type_runtime26
-	tools/expect_same.sh test_type_runtime26 "$$($(TESTTMP)/test_type_runtime26)" "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
+	tools/expect_same.sh test_type_runtime26 "$$($(TESTTMP)/test_type_runtime26)" "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\nTRUE')"
 	./$(COMPILER) test/test_float.pas $(TESTTMP)/test_float26
 	tools/expect_same.sh test_float26 "$$($(TESTTMP)/test_float26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_extended_is_double.pas $(TESTTMP)/test_ext_dbl26
