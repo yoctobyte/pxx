@@ -4,12 +4,12 @@ title: "crtl has no <resolv.h>: nslookup needs res_* plus the whole ns_* DNS mes
 track: C
 prio: 40
 type: feature
-status: open
+status: done
 created: 2026-09-02
 found-by: frankD
 owner:
 blocked-by:
-summary: "networking/nslookup.c is the last busybox translation unit stopped by a header that is really an implementation. It needs `struct __res_state` and the _res global, res_init/res_mkquery/res_msend, and the ns_* message-parsing API -- ns_initparse, ns_parserr, ns_msg/ns_rr and their accessors, ns_name_uncompress. One TU, so it ranks below regex.h (7); filed separately because the two share nothing but their shape."
+summary: "DONE BY EVENTS in bd53b29d97 (2026-09-04, feat(crtl): a DNS resolver), found still open on 2026-09-24. lib/crtl/include/resolv.h, arpa/nameser.h, arpa/nameser_compat.h and lib/crtl/src/arpa/nameser.c provide struct __res_state and _res, res_init/res_mkquery/res_send, and the ns_* parser. The bound this ticket demanded is there: ns_name_unpack refuses a pointer that is not strictly backwards and also counts jumps. test/c_crtl_resolv.c feeds a self-pointer and a two-pointer loop, is wired in the Makefile against gcc -lresolv, and at HEAD every hostile row answers -1 and returns. That commit measured busybox at 396 of 400 TUs compiling at i386, nslookup included.""
 ---
 
 # What is missing
@@ -45,3 +45,13 @@ value here is completeness of the corpus, not a class of programs unblocked --
 unlike `feature-c-crtl-posix-regex-regcomp-regexec`, which is seven.
 
 `feature-c-corpus-busybox-i386-the-second-architecture` is what this unblocks.
+
+## 2026-09-24 (frankS): closed, already built
+
+Re-measured at HEAD rather than trusting the 09-04 commit: test/c_crtl_resolv.c
+compiles and runs, and the reserved-length, len-past-eom and counts-no-data rows
+answer initparse=-1 uncompress=-1 without hanging. Wired at the Makefile's
+c_resolv rows (gcc differential with -lresolv).
+
+## Log
+- 2026-09-24 — resolved, commit bd53b29d97.
