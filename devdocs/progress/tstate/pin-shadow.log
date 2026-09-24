@@ -1058,3 +1058,4 @@
 2026-09-24T08:41:26Z	borg	6919ef8a34c2865b0c2372889d1c3436b11ecbe8	WOULD PIN 6919ef8a34c2 — 18 red(s), none new, 18 inherited from the current pin, self-host clean, streak 7/2
 2026-09-24T08:41:26Z	borg	6919ef8a34c2865b0c2372889d1c3436b11ecbe8	AUTO-PIN DECLINED — HEAD is 384bd914b5ef, not the tested 6919ef8a34c2
 2026-09-24T09:16:33Z	borg	6011be75c5b9194fc643f8bbbd12c8877236ac83	would NOT pin 6011be75c5b9 — 1 red(s) the current pin does not have, 18 inherited from the current pin: test-esp-idf#src:tools/compiler_srchash.sh
+2026-09-24T09:41:23Z	borg	0a101662f25f2db6213234e9f56b3f16095a71b5	would NOT pin 0a101662f25f — 7 red(s) the current pin does not have, 18 inherited from the current pin: test-emit-obj#shard0/6, test-emit-obj#shard1/6, test-emit-obj#shard2/6, test-emit-obj#shard3/6, test-emit-obj#shard4/6
