@@ -4,7 +4,7 @@ track: B
 prio: 15
 type: feature
 blocked-by: []
-summary: "Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets."
+summary: "The OPT-IN half only: dns_wire (pxx's own resolver, selected on ESP by -dPXX_DNS_WIRE) has no nameserver source on ESP-IDF, because it reads resolv.conf and the DHCP-supplied servers live inside lwIP. The DEFAULT on --platform=esp is dns_libc bound to lwip_getaddrinfo, which dns.pas selects whenever PXX_ESP_IDF is set and no other backend is named, so nothing on the default route reads a nameserver list. dns_getserver is in liblwip.a; its ip_addr_t return wants a small C shim rather than hand-computed offsets."
 status: backlog
 ---
 
@@ -104,3 +104,23 @@ decision has to settle.
 > question also names the general defect — a hold enforced only by a number does
 > not survive a bulk re-price — and a `blocked-by:` edge is one of the two forms
 > that does. [[feature-t-a-user-hold-must-survive-a-bulk-re-price]]
+
+## 2026-09-24 — the "default route" claim was FALSE until today; now true (frankS)
+
+The summary said the default ESP route went through lwIP. Measured at
+`8451ee11b2`, `--target=riscv32 --platform=esp --no-signals`, a plain
+`uses dns` program calling `DnsResolveHost`: with no define the object had
+**zero** `DnsLibc*` symbols and no `U lwip_getaddrinfo` — the facade linked
+`dns_wire` only, i.e. `DNS_ERR_NOCONFIG` for every name on a device. The
+`dns-c3` smoke could not show this: it imports `dns_libc` directly and passes
+`-dPXX_DNS_LIBC` by hand.
+
+Fixed in `dns.pas`: under `PXX_ESP_IDF`, with neither `PXX_DNS_WIRE` nor
+`PXX_DNS_RESOLVED` given, `PXX_DNS_LIBC` is defined. `-dPXX_DNS_WIRE` is the
+opt-out and is mutually exclusive with `-dPXX_DNS_LIBC` (compile error, same
+policy as the existing pair). Matrix on the same probe: none -> lwip bound;
+`-dPXX_DNS_WIRE` -> not bound; `-dPXX_DNS_LIBC` -> bound; both -> refused.
+Hosted x86-64 unchanged (no getaddrinfo; `-dPXX_DNS_LIBC -dPXX_DYNLIB_LIBC`
+control does show it). `dns-c3/build.sh` no longer passes the define and its
+QEMU smoke printed `PXX-dns-smoke status=0` (esp32c3, pinned compiler + HEAD
+`lib/rtl`). What remains here is only the opt-in wire half.

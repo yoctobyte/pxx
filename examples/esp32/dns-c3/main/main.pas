@@ -2,7 +2,7 @@
 program Esp32DnsSmoke;
 { PXX -> ESP-IDF lwIP resolver smoke (ESP32-C3 / riscv32), feature-dns-esp-backend.
 
-  Proves that `dns_libc` -dPXX_DNS_LIBC binds lwIP's getaddrinfo on ESP: the
+  Proves that `dns_libc` (the --platform=esp default) binds lwIP's getaddrinfo: the
   symbol links, the addrinfo list walks, and the sockaddr_in offset this backend
   reads by hand is the right one on lwIP's BSD-style struct.
 

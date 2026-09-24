@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: 0BSD
 # PXX -> ESP-IDF (ESP32-C3) lwIP RESOLVER smoke (feature-dns-esp-backend):
-# compile main.pas with -dPXX_DNS_LIBC so dns_libc binds lwip_getaddrinfo
-# directly, wrap it in an archive, drive the normal IDF build, and (optionally)
+# compile main.pas (dns_libc is the ESP default, binding lwip_getaddrinfo
+# directly), wrap it in an archive, drive the normal IDF build, and (optionally)
 # boot headless under Espressif QEMU and assert the smoke prints status=0.
 #
 # Prereqs: . ~/esp/esp-idf/export.sh   (idf.py + toolchains on PATH)
@@ -25,11 +25,13 @@ PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
 #                    rt_sigaction ecall in app_main's prologue.
 # An ecall under FreeRTOS is an unhandled M-mode trap: the app panics at
 # "Calling app_main()" and boot-loops. Neither flag alone is enough.
-# -dPXX_DNS_LIBC selects the getaddrinfo backend. Note NO -dPXX_DYNLIB_LIBC:
-# on ESP the symbol is a direct external statically linked by idf.py, so the
-# runtime loader is neither needed nor available, and dns.pas exempts ESP from
-# the guard that normally requires it.
-"$PXX" --target=riscv32 --platform=esp --no-signals -dPXX_DNS_LIBC \
+# No DNS define: on --platform=esp, dns.pas selects dns_libc (lwIP's
+# getaddrinfo) BY DEFAULT, so this smoke also proves the default wiring.
+# -dPXX_DNS_WIRE would opt back into pxx's own resolver. Note NO
+# -dPXX_DYNLIB_LIBC: on ESP the symbol is a direct external statically linked
+# by idf.py, so the runtime loader is neither needed nor available, and dns.pas
+# exempts ESP from the guard that normally requires it.
+"$PXX" --target=riscv32 --platform=esp --no-signals \
   -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.pas main/main.o
 ar rcs main/libpxx_app.a main/main.o
 

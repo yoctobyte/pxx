@@ -2,7 +2,8 @@
 
 Proves that `dns_libc` binds **lwIP's `getaddrinfo`** on ESP-IDF
 (`feature-dns-esp-backend`). `main/main.pas` is compiled
-(`--target=riscv32 --platform=esp --no-signals -dPXX_DNS_LIBC`) against the ESP
+(`--target=riscv32 --platform=esp --no-signals`, no DNS define: `dns_libc` is
+the `--platform=esp` default, `-dPXX_DNS_WIRE` opts out) against the ESP
 PAL backend to a relocatable object, wrapped in a static archive, and linked by
 the normal `idf.py build` as the provider of `app_main` — the same shape as
 `net-c3`, which exercises the PAL socket surface rather than the resolver.

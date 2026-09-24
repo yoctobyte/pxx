@@ -19,9 +19,27 @@ interface
     -dPXX_DNS_RESOLVED   dns_resolved — systemd-resolved over Varlink (split DNS)
     -dPXX_DNS_LIBC       dns_libc     — getaddrinfo via dlopen (nsswitch, mDNS)
 
+  On ESP-IDF (--platform=esp, which sets PXX_ESP_IDF) the default is dns_libc,
+  bound to lwIP's getaddrinfo: the device's nameservers arrive by DHCP and live
+  inside lwIP, and dns_wire has no resolv.conf there, so the wire default would
+  answer DNS_ERR_NOCONFIG for every name. -dPXX_DNS_WIRE opts back into pxx's
+  own resolver (feature-dns-esp-wire-nameservers-from-lwip).
+
   Two backends at once is a COMPILE-TIME ERROR rather than silent precedence:
   which resolver a program uses is a policy decision, and quietly picking one
   would be the kind of plausible-looking wrong answer that never gets noticed. }
+{$ifdef PXX_ESP_IDF}
+  {$ifndef PXX_DNS_WIRE}
+    {$ifndef PXX_DNS_RESOLVED}
+      {$define PXX_DNS_LIBC}
+    {$endif}
+  {$endif}
+{$endif}
+{$ifdef PXX_DNS_WIRE}
+  {$ifdef PXX_DNS_LIBC}
+    {$error PXX_DNS_WIRE and PXX_DNS_LIBC are mutually exclusive: pick one DNS backend}
+  {$endif}
+{$endif}
 {$ifdef PXX_DNS_RESOLVED}
   {$ifdef PXX_DNS_LIBC}
     {$error PXX_DNS_RESOLVED and PXX_DNS_LIBC are mutually exclusive: pick one DNS backend}
