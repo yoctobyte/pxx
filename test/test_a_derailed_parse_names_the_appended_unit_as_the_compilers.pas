@@ -14,7 +14,7 @@
 
   A wrong line number is a slow read; a real file in the compiler's own RTL
   invites the reader to go hunting for a compiler bug, and two agents did. The
-  note now says that unit is appended to every program and names the file to
+  note now says that unit is appended by the compiler and names the file to
   check first.
 
   ASSERTED ON THE NOTE, NOT ON THE EXIT CODE. This file was always refused; the
@@ -23,8 +23,14 @@
   causes it is -- a genuine defect in a builtin unit prints the same coordinates
   -- it names both and says which to check first, which is the part the reader
   cannot work out.
-  bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file }
+  bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file
+  THE `var s: AnsiString` IS WHAT MAKES THIS FIXTURE MEAN ANYTHING. Since
+  523833fde3 (2026-09-22) builtinheap is appended only to a program that needs
+  it, and `WriteLn('ok')` does not. Without the var this file has no appended
+  unit to derail into: it stops at EOF, is refused in its own file, and the
+  rows below go red, or pass for a reason unrelated to the note. Bisected. }
 program test_a_derailed_parse_names_the_appended_unit_as_the_compilers;
+var s: AnsiString;
 begin
   { the loop below steps past the '}' terminator }
   WriteLn('ok');

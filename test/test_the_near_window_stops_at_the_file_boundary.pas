@@ -18,7 +18,13 @@
   with nothing to say so. The line number and the message were right in every
   sighting of this -- only the excerpt was wrong, which is why it neither errors
   nor looks wrong.
-  bug-p-error-context-near-quotes-an-unrelated-token-stream }
+  bug-p-error-context-near-quotes-an-unrelated-token-stream
+  THE `var s: AnsiString` IS WHAT MAKES THIS FIXTURE MEAN ANYTHING. Since
+  523833fde3 (2026-09-22) builtinheap is appended only to a program that needs
+  it, and `WriteLn('ok')` does not. Without the var this file has no appended
+  unit to derail into: it stops at EOF, is refused in its own file, and the
+  seam row passes having crossed no seam. Bisected. }
 program test_the_near_window_stops_at_the_file_boundary;
+var s: AnsiString;
 begin
   WriteLn('hi');

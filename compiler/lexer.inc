@@ -308,7 +308,7 @@ begin
       bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file }
     if PathIsAppendedBuiltin(path) then
     begin
-      writeln('  note: that unit is appended to every program by the compiler --',
+      writeln('  note: that unit is appended to your program by the compiler --',
               ' you did not write it.');
       writeln('        Either the parse ran off the end of ', DbgSrcName,
               ' (an unterminated comment or');

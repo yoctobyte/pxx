@@ -22073,10 +22073,10 @@ test-core: $(COMPILER)
 	#    file to check first.
 	! ./$(COMPILER) test/test_a_derailed_parse_names_the_appended_unit_as_the_compilers.pas $(TESTTMP)/test_derail26 > $(TESTTMP)/test_derail.log 2>&1
 	grep -q "builtin/builtinheap.pas" $(TESTTMP)/test_derail.log
-	grep -q "appended to every program by the compiler" $(TESTTMP)/test_derail.log
+	grep -q "appended to your program by the compiler" $(TESTTMP)/test_derail.log
 	# and a REAL used unit must NOT get that note -- the note is scoped to the
 	# appended builtins, not to every `in:` line
-	! grep -q "appended to every program" $(TESTTMP)/test_nestbrace.log
+	! grep -q "appended to your program" $(TESTTMP)/test_nestbrace.log
 	# 3) ...and the `near:` window must stop at that same seam. One token array
 	#    holds every source, so a nine-token window near the boundary used to
 	#    print `( 'hi' ) ; unit builtinheap >>> ; interface type` -- the user's
@@ -22085,6 +22085,10 @@ test-core: $(COMPILER)
 	# AIMED: the window must have been printed at all, or the next row is a
 	# comparison whose input was never proven to exist.
 	grep -q "^  near: " $(TESTTMP)/test_nearbound.log
+	# ...and the parse must really have CROSSED the seam. Without this the next
+	# row passes on a fixture that never reached an appended unit, which is what
+	# it did from 523833fde3 until the fixture gained a managed-string var.
+	grep -q "in: ./compiler/builtin/builtinheap.pas" $(TESTTMP)/test_nearbound.log
 	# ...and it must not carry a token from this file across the seam.
 	! grep -q "near:.*'hi'" $(TESTTMP)/test_nearbound.log
 	# `packed array[..] of T` as a FIELD. Two copies of one field-declaration
