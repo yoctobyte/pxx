@@ -12671,6 +12671,33 @@ begin
   if (b >= 0) and (b < AliasCount) and AliasIsDistinct[b] then Result := True;
 end;
 
+{ Why candidate i cannot take argument j at a `var`/`out` SCALAR parameter
+  of another storage width -- '' when it can. ONE predicate for the overload
+  matcher (MatchArgRecMismatch) and for the two "no overload matches" reports,
+  so the refusal and its explanation cannot disagree. The callee writes its
+  declared width through the caller's address, so a different width either
+  overruns the variable or leaves part of it stale.
+  bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it }
+function VarRowWidthNote(i, j: Integer; aTk: TTypeKind): AnsiString;
+var pt: TTypeKind;
+begin
+  Result := '';
+  if (i < 0) or (j < 0) or (j >= MAX_PROC_PARAMS) or (j >= Procs[i].ParamCount) then Exit;
+  if not ByRefArgNeedsLvalue(i, j) then Exit;
+  if Procs[i].Params[j].IsArray then Exit;
+  if ProcParamUntyped[i * MAX_PROC_PARAMS + j] then Exit;
+  if MatchArgArrayValid and MatchArgArray[j] then Exit;
+  pt := Procs[i].Params[j].TypeKind;
+  if not (TypeIsOrdinal(pt) or TypeIsFloat(pt)) then Exit;
+  if not (TypeIsOrdinal(aTk) or TypeIsFloat(aTk)) then Exit;
+  if TypeStorageSize(pt, -1) = TypeStorageSize(aTk, -1) then Exit;
+  Result := 'var parameter ' + Procs[i].Params[j].Name + ' is ' +
+            Copy(TypeKindName(pt), 3, 64) + ' (' + AIntToStr(TypeStorageSize(pt, -1)) +
+            ' bytes); the variable passed is ' + Copy(TypeKindName(aTk), 3, 64) + ' (' +
+            AIntToStr(TypeStorageSize(aTk, -1)) + ' bytes), and a var argument ' +
+            'must be a variable of exactly the parameter''s type';
+end;
+
 function MatchArgRecMismatch(i, j: Integer; aTk: TTypeKind): Boolean;
 var pr, ar, curr: Integer;
 begin
@@ -12683,13 +12710,7 @@ begin
     picks the exact row, and so does this now; a call with NO fitting row is
     refused by CheckVarArgWidth when it is lowered.
     bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it }
-  if (j < MAX_PROC_PARAMS) and (j < Procs[i].ParamCount) and
-     ByRefArgNeedsLvalue(i, j) and (not Procs[i].Params[j].IsArray) and
-     (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) and
-     not (MatchArgArrayValid and MatchArgArray[j]) and
-     (TypeIsOrdinal(Procs[i].Params[j].TypeKind) or TypeIsFloat(Procs[i].Params[j].TypeKind)) and
-     (TypeIsOrdinal(aTk) or TypeIsFloat(aTk)) and
-     (TypeStorageSize(Procs[i].Params[j].TypeKind, -1) <> TypeStorageSize(aTk, -1)) then
+  if VarRowWidthNote(i, j, aTk) <> '' then
   begin
     Result := True;
     Exit;
@@ -14215,6 +14236,10 @@ begin
           OverloadReport := OverloadReport + '...';
         end;
         OverloadReport := OverloadReport + ')';
+        for j := 0 to Procs[i].ParamCount - 1 do
+          if (j < nArgs) and (VarRowWidthNote(i, j, argTypes[j]) <> '') then
+            OverloadReport := OverloadReport + nl + '      -- ' +
+                              VarRowWidthNote(i, j, argTypes[j]);
       end;
       i := ProcHashNext[i];
     end;

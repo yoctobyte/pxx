@@ -3992,12 +3992,14 @@ var
   nBr, brOnly: Integer;
   bcls, bestRank, bestCand, nBest, rk, nSet: Integer;   { element-class ranking at a bracket slot }
   nVR, vrOnly: Integer;   { ...and how many of those are `array of const` }
-  rep: AnsiString;   { the refusal's argument-type list — see the Error below }
+  rep, varNote: AnsiString;   { varNote: VarRowWidthNote of a dropped row }
+  rep0: AnsiString;   { the refusal's argument-type list — see the Error below }
   bmask: LongWord;
   ok, okBr, okVR, okSet, vetoed, okAny: Boolean;
   lo, name2: AnsiString;
 begin
   Result := -1;
+  varNote := '';
   name2 := name;
   lo := ULower(name2);
 
@@ -4549,7 +4551,12 @@ begin
           Measured on pin v403 too, so it is not a regression, it is the gap
           this ticket was filed about.
           bug-p-an-array-argument-binds-a-scalar-overload, method spelling. }
-        if MatchArgRecMismatch(pi, pj, argTk[j]) then ok := False;
+        if MatchArgRecMismatch(pi, pj, argTk[j]) then
+        begin
+          ok := False;
+          if VarRowWidthNote(pi, pj, argTk[j]) <> '' then
+            varNote := VarRowWidthNote(pi, pj, argTk[j]);
+        end;
         if Procs[pi].Params[pj].IsArray then continue;
         if ProcParamUntyped[pi * MAX_PROC_PARAMS + pj] then continue;
         if argIsNil[j] then continue;
@@ -4618,6 +4625,11 @@ begin
         rep := rep + ArgSpellingForReport(j, argTk[j]);
       end;
       rep := rep + ')';
+      if varNote <> '' then
+      begin
+        AppendChar(rep, Chr(10));
+        rep := rep + '  ' + varNote;
+      end;
       Error('no overload of ' + name + ' matches these arguments' + rep);
     end;
     Result := FindUMethArity(ci, name, nExplicitArgs);
