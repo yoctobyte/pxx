@@ -159,10 +159,12 @@ least tells you something is wrong.
 
 ### Nil Python
 
-Nil Python has more open issues than the two lines above can hold, and its list
-has not been compiled for this page. *(Placeholder: the Nil Python known-issues
-list.)* The [Nil Python](../targets/nil-python.md) page records the
-deliberate differences from CPython. A difference not recorded there is a bug.
+Nil Python is Python-ish and known to have plenty of issues. Its measured list
+is kept in one place, [Known limits](../targets/nil-python.md#known-limits) on the
+Nil Python page. That list includes silent wrong answers. For example, an `-> int` result
+wraps at 64 bits, and `hex()` of an int wider than 64 bits is wrong (both
+confirmed on v423). The same page records the deliberate differences from
+CPython; a difference not recorded there is a bug.
 
 ## Reporting bugs
 
