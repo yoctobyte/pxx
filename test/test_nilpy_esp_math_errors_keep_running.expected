@@ -1,0 +1,9 @@
+start
+idiv 0 imod 0
+tdiv inf fdiv inf zz nan
+ffloordiv inf fmod nan
+bigdiv 0 bigmod 0
+sqrt nan log -inf logneg nan
+asin nan exp inf
+pow0 inf mpow nan
+continued

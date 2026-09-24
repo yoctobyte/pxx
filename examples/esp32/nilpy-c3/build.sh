@@ -184,7 +184,9 @@ if [ "${1:-}" = "qemu-assert" ]; then
   # The program's output is everything after IDF's "Calling app_main()" line,
   # minus IDF's own log lines ("I (123) tag: ...").
   got="$(tr -d '\r' < "$ser" | awk 'f && !/^[IWE] \([0-9]+\) / {print} /Calling app_main\(\)/{f=1}')"
-  want="$(cat main/main.expected)"
+  # PXX_EXPECT pairs with PXX_MAIN: a swapped program brings its own expected
+  # output, which is what makes qemu-assert honest for it (see PXX_MAIN above).
+  want="$(cat "${PXX_EXPECT:-main/main.expected}")"
   boots="$(grep -c 'ESP-ROM' "$ser" || true)"
   # THE FILTER ABOVE DROPS IDF'S *ERROR* LINES, so scan the raw capture for them
   # before comparing -- a watchdog trigger (a hung ISR) and a corrupt-heap report
@@ -196,9 +198,9 @@ if [ "${1:-}" = "qemu-assert" ]; then
   # (59 lines, 46 I-lines), so this cannot be born red.
   errs="$(tr -d '\r' < "$ser" | awk 'f && /^E \([0-9]+\) / {print} /Calling app_main\(\)/{f=1}')"
   if [ "$got" = "$want" ] && [ "$boots" = 1 ] && [ -z "$errs" ]; then
-    echo "OK   $(basename "$PWD") -- a static Python application runs on the $CHIP, output == main/main.expected, one boot"
+    echo "OK   $(basename "$PWD") -- a static Python application runs on the $CHIP, output == ${PXX_EXPECT:-main/main.expected}, one boot"
   else
-    echo "FAIL $(basename "$PWD") -- output differs from main/main.expected, or the chip rebooted (boots=$boots), or IDF logged an error"
+    echo "FAIL $(basename "$PWD") -- output differs from ${PXX_EXPECT:-main/main.expected}, or the chip rebooted (boots=$boots), or IDF logged an error"
     if [ -n "$errs" ]; then
       # Named separately because this is the case where `want` and `got` AGREE:
       # the error lines never reach `got`, so a reader comparing the two blocks

@@ -37129,6 +37129,20 @@ test-esp-idf: $(COMPILER)
 	    else echo "$$chip $$b MISMATCH"; exit 1; fi; \
 	  done; \
 	done
+	@# NILPY MATH ERRORS KEEP AN ESP RUNNING: // and % by zero give 0, / and the
+	@# math domain/range errors give IEEE inf/nan, no raise, one boot. Through
+	@# the nilpy build.sh (esp_run's shared project is too small for a NilPy
+	@# image), with PXX_MAIN/PXX_EXPECT swapping in the fixture.
+	@# Branches on build.sh's own rc, and sources export.sh under bash, as the
+	@# fs-c3 row above does.
+	@for c in c3 s3; do \
+	  if PXX=$(CURDIR)/$(COMPILER) \
+	    PXX_MAIN=$(CURDIR)/test/test_nilpy_esp_math_errors_keep_running.npy \
+	    PXX_EXPECT=$(CURDIR)/test/test_nilpy_esp_math_errors_keep_running.expected \
+	    bash -c "cd examples/esp32/nilpy-$$c && . \"\$$HOME/esp/esp-idf/export.sh\" >/dev/null 2>&1 && ./build.sh qemu-assert" \
+	    > $(TESTTMP)/nilpy_esp_math.$$c.log 2>&1; then echo "nilpy-$$c math errors keep running ok"; \
+	  else tail -n 30 $(TESTTMP)/nilpy_esp_math.$$c.log; echo "nilpy-$$c math errors MISMATCH"; exit 1; fi; \
+	done
 
 	@# THE HARDWARE DEMO'S SOURCE, both ESP ISAs, BUILD ONLY -- the qemu run of
 	@# it lives in examples/esp32/nilpy-hw-{c3,s3}/build.sh, as for the other

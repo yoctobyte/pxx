@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MPL-2.0
+# ON ESP a NilPy math error does not halt: an embedded device keeps running on
+# a bad sensor value (owner, 2026-09-24). Integer // and % by zero give 0, as
+# Pascal and C div/mod do there; / and the math domain / range errors give IEEE
+# inf and nan. Desktop NilPy still raises CPython's exceptions, and that half
+# is unchanged. feature-a-esp-math-errors-keep-the-device-running
+# `b` is an opaque zero: sys.argv is empty on ESP, so the compiler cannot fold it.
+import math
+import sys
+b = len(sys.argv) - len(sys.argv)
+fb = 0.0 + b
+print('start')
+print('idiv', 7 // b, 'imod', 7 % b)
+print('tdiv', 7 / b, 'fdiv', 7.0 / fb, 'zz', fb / fb)
+print('ffloordiv', 7.0 // fb, 'fmod', 7.0 % fb)
+big = 2 ** 70
+print('bigdiv', big // b, 'bigmod', big % b)
+print('sqrt', math.sqrt(-1.0 - fb), 'log', math.log(fb), 'logneg', math.log(-1.0 + fb))
+print('asin', math.asin(2.0 + fb), 'exp', math.exp(1000.0 + fb))
+print('pow0', fb ** -1.0, 'mpow', math.pow(-8.0 + fb, 0.5))
+print('continued')

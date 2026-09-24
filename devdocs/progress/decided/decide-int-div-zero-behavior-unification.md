@@ -174,3 +174,10 @@ without raising, because an uncaught ZeroDivisionError halts the device.
 Desktop NilPy keeps ZeroDivisionError. Tracked in
 feature-a-esp-math-errors-keep-the-device-running, together with the census of
 the other default-halting math paths on ESP.
+
+### NilPy half, implemented 2026-09-24 (frankS)
+
+On ESP, NilPy `//` and `%` by zero give 0, and `/` plus the math domain and
+range errors give IEEE inf/nan. This is FRANKUSER'S READING of the owner's
+principle quoted above ("we should not halt"); the owner has not ruled on
+NilPy specifically. Desktop NilPy keeps CPython's exceptions.
