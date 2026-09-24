@@ -175,6 +175,12 @@ note "compiler:  ./pxx"
 [ -L "$ROOT/eliah" ] && note "ide:       ./eliah"
 note "demos:     ./demos.sh"
 echo
-if [ "$(ask 'Explore the example apps now (./demos.sh)?' y)" = y ]; then
+# The demo picker is interactive by construction ("pick a demo number"), so a
+# run that promised no prompts -- --yes, or no TTY -- must not launch it: with
+# the default at y, `./install.sh --yes` in a terminal used to finish by
+# blocking on the picker. Say how to run it instead.
+if [ "$ASSUME_YES" = 1 ] || [ ! -t 0 ]; then
+  note "run ./demos.sh to explore the example apps"
+elif [ "$(ask 'Explore the example apps now (./demos.sh)?' y)" = y ]; then
   exec "$ROOT/demos.sh"
 fi
