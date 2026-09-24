@@ -316,3 +316,23 @@ them.
 
 ## Log
 - 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0adefbd789.
+
+## 2026-09-24 — PIN v420 CARRIES THIS, so the containment control above names the PREVIOUS pin
+
+`75beaed74a` pinned v420 at binary `af40370a8a91d298`, which is the binary this
+work built, and `strfmt.pas` is in its snapshot. Two consequences, both worth
+stating because both are ways a later reader gets this wrong:
+
+- **The "inert for `$(PXX_STABLE)` consumers until the next pin" caveat is
+  DISCHARGED.** Track B/E get non-float `Str` on bare from v420 onward. That
+  sentence was correct for about two hours.
+- **Do NOT re-run the containment control against "the pinned compiler".** The
+  control's pre-split instrument is `4d148c23cc723afe`, pin **v419**, named by sha
+  in the section above for exactly this reason. Resolved against the *current*
+  pin it would compare the split tree with itself and pass vacuously — a guard
+  that cannot fail, produced entirely by a reference going stale rather than by
+  anything changing in the code.
+
+The measurements themselves are unaffected: they were taken with both binaries
+named by sha, and `code=` equality plus the byte-identical no-`Str` program stand
+as recorded.
