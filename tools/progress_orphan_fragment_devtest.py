@@ -142,12 +142,42 @@ def t_a_held_ticket_alone_is_not_a_duplicate():
     return "a ticket in working/ alone is not reported"
 
 
+def t_a_declared_addendum_is_exempt():
+    """The false positive that turned this check into scenery.
+
+    Two deliberate companion docs in backlog-nilpy tripped NO-FRONTMATTER on
+    every run, and the measured cost was not the two rows: a genuine orphan of
+    exactly this class went unseen on 2026-09-24 because the standing reds had
+    trained its author to skim the output.
+    """
+    out = _check([("backlog", "addendum-something.md",
+                   "# Addendum: measured later, beside its parent\n\nbody\n")])
+    assert "NO-FRONTMATTER" not in out, out
+    return "a declared addendum is not reported as an orphan"
+
+
+def t_the_addendum_exemption_needs_BOTH_halves():
+    """THE POSITIVE CONTROL FOR THE EXEMPTION, and the reason it is two-part.
+
+    A filename-only rule is the "name is not the thing" hazard at its plainest:
+    a real ticket christened `addendum-...` would silently stop being ranked,
+    which is the exact harm this check exists to prevent. So a file that carries
+    the name and does NOT declare itself must still be reported.
+    """
+    out = _check([("backlog", "addendum-liar.md",
+                   "## not actually an addendum\n\nbody\n")])
+    assert "NO-FRONTMATTER: backlog/addendum-liar.md" in out, out
+    return "the name alone does not buy the exemption"
+
+
 TESTS = [t_a_fence_without_a_key_is_an_orphan,
          t_a_fragment_with_no_fence_at_all_is_still_an_orphan,
          t_a_ranked_and_held_duplicate_is_reported,
          t_a_blocked_and_ranked_duplicate_is_reported,
          t_a_real_ticket_is_silent,
-         t_a_held_ticket_alone_is_not_a_duplicate]
+         t_a_held_ticket_alone_is_not_a_duplicate,
+         t_a_declared_addendum_is_exempt,
+         t_the_addendum_exemption_needs_BOTH_halves]
 
 
 def main():

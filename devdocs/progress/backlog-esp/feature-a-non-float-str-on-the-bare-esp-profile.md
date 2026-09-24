@@ -3,13 +3,13 @@ slug: feature-a-non-float-str-on-the-bare-esp-profile
 track: A
 tags: [S]
 type: feature
-prio: 40
+prio: 30
 status: open
 owner: ""
 created: 2026-09-24
 found-by: frank (frankb-8e, while pricing the uses-builtin cascade)
 blocked-by: []
-summary: "MECHANISM: `Str` -- the Pascal statement, no `uses` clause involved -- lowers through TextStrArg (pasparser_stmt.inc:4106), which resolves a formatter by FindProc; the bare ESP profile links no `builtin`, so every arm fails and the statement is refused for EVERY type, integer included, on all four ESP targets. THE NAMED CONSUMER IS THE RTL'S OWN ASSERT, WHICH IS WHY THIS IS p40 AND NOT p20: espassert.pas exists solely so a bare assertion can speak, and hand-rolls a UART writer to do it -- and then it can only speak in CONSTANTS. `Assert(n > 99, 'count too low')` compiles and boots; the same assertion carrying the value that failed does not, because the `Str(n, s)` that would produce the text is refused. An assertion that cannot report the number it tripped on is the weakest useful form of the feature this profile already paid for. The parent ticket [[feature-bare-esp-supports-uses-builtin]] set its own ranking test as `nobody has yet named a program that wants builtin on a bare boot`; this names one, and it is in-tree. SCOPE IS THE NON-FLOAT ARMS ONLY AND THE BOUNDARY IS MEASURED, not aesthetic: the five routines are pure AnsiString + integer arithmetic with no float, Variant, syscall or filesystem in their closure, and bare already carries AnsiString (3,768 B code=). The float arm stays refused because StrFloat needs PxxSciDigits17 and therefore softfloat, which the bare path deliberately skips so a float-free MCU program does not pay ~54-64 KB of flash -- priced at +89,116 B against +23,724 B for the integer arm. SHAPE IS PRESCRIBED BY PRECEDENT, NOT INVENTED: espassert.pas is the same pattern (on-demand token scan, target-gated, never ambient) and its own header states the rule for this exact moment -- `the shared-code alternative is an include both units pull, and that is the right shape ONLY once something else needs it; one caller is not a second path`. A second caller now exists, so the five bodies move to an include that `builtin.pas` and a new bare-only unit both pull, rather than being copied. Copying would mint the twin-spelling defect this tree keeps paying for. WHAT WOULD RETIRE IT: a bare fixture whose assertion message CONTAINS a formatted integer, booting on esp32c3 and esp32s3 under Espressif qemu and matching its x86-64 oracle byte-for-byte -- the same three-line oracle shape test-esp-bare already uses for Assert, because on this profile `ok:` from the compiler is not a result."
+summary: "MECHANISM: `Str` -- the Pascal statement, no `uses` clause involved -- lowers through TextStrArg (pasparser_stmt.inc:4106), which resolves a formatter by FindProc; the bare ESP profile links no `builtin`, so every arm fails and the statement is refused for EVERY type, integer included, on all four ESP targets. THIS IS NOT A BARE FEATURE REQUEST AND MUST NOT BE READ AS ONE -- IT IS THE BARE PROFILE'S ONLY DEBUGGING INSTRUMENT BEING UNABLE TO REPORT A VALUE. espassert.pas exists solely so a bare assertion can be heard at all, and hand-rolls a UART writer to do it -- and then it can only speak in CONSTANTS. `Assert(n > 99, 'count too low')` compiles and boots; the same assertion carrying the value that failed does not, because the `Str(n, s)` that would render it is refused. A test vehicle whose assertions cannot say WHAT failed taxes every future bare investigation, which is a cost paid by whoever debugs the profile rather than by anyone shipping on it. PRIO 30, AND THE TENSION IS RECORDED BECAUSE A READER WILL CHECK THE NUMBER AGAINST THE RULING: the owner ruled 2026-09-23 that IDF is the assumed profile and bare is a test vehicle -- `the bare-bones compilation merely serves as test and has so many drawbacks that it serves niche cases` -- so bare work is not to be ranked as if it were the shipping target. It was filed at p40 on the consumer argument alone, which would have topped Track S; 30 puts it below the broader and partly-landed p35 on the same profile and above the p20 cascade it slices from. The parent ticket [[feature-bare-esp-supports-uses-builtin]] set its own ranking test as `nobody has yet named a program that wants builtin on a bare boot`; this names one, it is in-tree, and meeting that test is what moves it off p20 -- it is NOT an argument that bare has become a shipping target. SCOPE IS THE NON-FLOAT ARMS ONLY AND THE BOUNDARY IS MEASURED, not aesthetic: the five routines are pure AnsiString + integer arithmetic with no float, Variant, syscall or filesystem in their closure, and bare already carries AnsiString (3,768 B code=). The float arm stays refused because StrFloat needs PxxSciDigits17 and therefore softfloat, which the bare path deliberately skips so a float-free MCU program does not pay ~54-64 KB of flash -- priced at +89,116 B against +23,724 B for the integer arm. SHAPE IS PRESCRIBED BY PRECEDENT, NOT INVENTED: espassert.pas is the same pattern (on-demand token scan, target-gated, never ambient) and its own header states the rule for this exact moment -- `the shared-code alternative is an include both units pull, and that is the right shape ONLY once something else needs it; one caller is not a second path`. A second caller now exists, so the five bodies move to an include that `builtin.pas` and a new bare-only unit both pull, rather than being copied. Copying would mint the twin-spelling defect this tree keeps paying for. WHAT WOULD RETIRE IT: a bare fixture whose assertion message CONTAINS a formatted integer, booting on esp32c3 and esp32s3 under Espressif qemu and matching its x86-64 oracle byte-for-byte -- the same three-line oracle shape test-esp-bare already uses for Assert, because on this profile `ok:` from the compiler is not a result."
 ---
 
 # Non-float `Str` on the bare ESP profile
@@ -39,6 +39,31 @@ in string literals.
 **This is the program the parent ticket asked for.** Its ranking test is
 *"Nobody has yet named a program that wants `uses builtin;` on a bare boot.
 Rank it against that"* — and the program is the RTL's own assertion path.
+
+## The ruling this is ranked against, and why 30 rather than 40
+
+The owner ruled **2026-09-23** that IDF is the assumed profile and bare is a
+test vehicle: *"the bare-bones compilation merely serves as test and has so many
+drawbacks that it serves niche cases."* **Bare work is therefore not to be
+ranked as if bare were the shipping target**, and this ticket was filed at p40
+on the consumer argument alone, which would have put it above everything left on
+Track S. That was wrong and the number is now 30.
+
+**What survives the ruling is not a feature argument, it is an instrument one.**
+Nothing here asks bare to do more; it asks the profile's *only* debugging
+instrument to be able to say what failed. `espassert.pas` was built, and a UART
+write hand-rolled inside it, precisely so a bare assertion could be heard — the
+gap is that it can be heard saying only constants. A test vehicle whose
+assertions cannot report a value taxes every future investigation **of the test
+vehicle**, which is a cost borne by whoever debugs bare, not by anyone shipping
+on it.
+
+30 places it below
+[[feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjacent]]
+(p35 — broader, same profile, already partly landed) and above the p20 cascade
+it slices from. **If you are re-ranking this, argue against the instrument
+framing, not against the consumer count** — the consumer count is what moved it
+off p20 and it is not a claim that bare has been promoted.
 
 ## Refused for every type, not just floats
 

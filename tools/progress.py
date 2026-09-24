@@ -1614,6 +1614,42 @@ pre code{background:none;padding:0}
                     problems = 1
                     continue
                 head = head_lines[0] if head_lines else ""
+                # A DELIBERATE COMPANION DOCUMENT IS NOT AN ORPHAN, AND REPORTING
+                # IT AS ONE COSTS MORE THAN THE ROW. Two files in backlog-nilpy
+                # (both `ffe6d19722`) are addenda written beside a ticket rather
+                # than inside it, each naming its parent in its second line, and
+                # each tripped NO-FRONTMATTER on EVERY run. The cost is measured
+                # and it is not the two lines: on 2026-09-24 frankb-8e pushed a
+                # genuine orphan of exactly this class -- a 196-line headless
+                # duplicate at a mistyped path -- and did not see it, because two
+                # permanently-red rows had already converted this check into
+                # scenery and the real row was not in the `tail -20` it read.
+                # The guard named the failure four separate ways and had simply
+                # not been run. That is CLAUDE.md's "a guard that cries wolf on
+                # its first outside run teaches that it can be ignored", with a
+                # named victim and a dated instance.
+                #
+                # THE EXEMPTION IS TWO-PART ON PURPOSE. A filename alone is the
+                # "name is not the thing" hazard in its plainest form -- a real
+                # ticket christened `addendum-...` would silently stop being
+                # ranked, which is the harm this check exists to prevent, and it
+                # would be invisible for the same reason the orphan above was.
+                # So require the author to have said it twice: the basename AND a
+                # first line that declares the document an addendum. The split
+                # tail that motivated the tightening below (`be154a3ca`) had
+                # neither -- its first line was a bare `---` and its second a
+                # `##` heading -- so it cannot inherit this by accident.
+                #
+                # WHAT WOULD RETIRE THIS: an addendum growing frontmatter of its
+                # own, or moving out of a ranked folder. Both would be better
+                # than the exemption; neither was worth doing to someone else's
+                # in-flight notes. Population when written: exactly 2 files, both
+                # matching both halves, verified by find -- if that number grows
+                # without anyone noticing, the convention has become a habit and
+                # is worth revisiting.
+                if (path.name.startswith("addendum-")
+                        and head.lstrip().lower().startswith("# addendum")):
+                    continue
                 # A LEADING `---` IS NOT FRONTMATTER, and testing only for it is
                 # how an orphan walked past this check on 2026-08-31.
                 # `be154a3ca` split a ticket across two folders and left an
