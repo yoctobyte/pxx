@@ -23,7 +23,7 @@ git clone --depth 1 https://github.com/yoctobyte/pxx
 ```
 
 `./install.sh` checks that the pinned compiler runs, writes the `./pxx`
-wrapper, and then asks five optional questions. Each defaults to no except the
+wrapper, and then asks up to five optional questions. Each defaults to no except the
 last, which opens the demo launcher:
 
 ```text
@@ -96,10 +96,9 @@ For unattended setup:
 ./install.sh --yes
 ```
 
-`--yes` takes each default, and the last default is to open the demo launcher.
-When run in a terminal, it therefore ends at the launcher's
-`pick a demo number (or a/q):` prompt; press `q` to leave. With no terminal
-attached, as in a script or CI, it finishes on its own.
+`--yes` answers no to every optional step and does not open the demo launcher;
+it ends by printing `run ./demos.sh to explore the example apps`. The launcher
+is also skipped when no terminal is attached, as in a script or CI.
 
 ## Wrapper installs
 

@@ -75,10 +75,11 @@ A **refusal** is a compile-time error that names the reason, for example
 
 - x86-64 is the host and the most heavily tested target.
 - wasm32 is the least tested: its suites are run by hand, not continuously.
-  The C row there was built with the compiler binary directly. Through the
-  `./pxx` wrapper, the same C file currently fails with
-  `undefined variable (SYS_openat)`, because the wrapper puts the Linux platform
-  layer on the search path for every target.
+  In a v423 checkout, the `./pxx` wrapper made C fail on wasm32 with
+  `undefined variable (SYS_openat)`, so the C row was built with the compiler
+  binary directly. The wrapper is fixed in the current tree; re-run
+  `./install.sh` to regenerate it. A copy already installed on your `PATH` is
+  only rewritten if you answer yes to the PATH question again.
 - ESP32 (xtensa and riscv32) is covered in the next section. See
   [Cross-compilation](../targets/cross-compilation.md) for the flags.
 
