@@ -1688,6 +1688,9 @@ begin
     dummyNames[1] := 'b'; dummyTypes[1] := tyInteger;
     i := RegisterProc('__pxx_divsi3', True, tyInteger, 2, dummyNames, dummyTypes);
     i := RegisterProc('__pxx_modsi3', True, tyInteger, 2, dummyNames, dummyTypes);
+    dummyNames[0] := 'n'; dummyTypes[0] := tyUInt32;
+    dummyNames[1] := 'd'; dummyTypes[1] := tyUInt32;
+    i := RegisterProc('__pxx_umodsi3', True, tyUInt32, 2, dummyNames, dummyTypes);
   end;
 
   { File load, variant and float-format helpers are not on ESP yet. }

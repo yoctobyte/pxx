@@ -32170,6 +32170,21 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_reactor.pas $(TESTTMP)/test_xt_reactor
 	./$(COMPILER) test/test_reactor.pas $(TESTTMP)/test_xt_reactor_x64
 	tools/expect_same.sh xtensa/reactor "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_reactor)" "$$($(TESTTMP)/test_xt_reactor_x64)"
+	@# UNSIGNED compare / divide / modulo: the integer compare arm was signed
+	@# for every type and `/` `%` always quos/rems, so a value >= 2^31 acted
+	@# negative (sprintf wrote nothing on esp32s3). Both frontends, both divide
+	@# shapes (hardware quou/remu, and --xtensa-cpu=lx6's soft helpers).
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_xtensa_unsigned_compare_and_divide.c $(TESTTMP)/test_xt_uns_c
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-cpu=lx6 test/test_xtensa_unsigned_compare_and_divide.c $(TESTTMP)/test_xt_uns_c_lx6
+	./$(COMPILER) test/test_xtensa_unsigned_compare_and_divide.c $(TESTTMP)/test_xt_uns_c_x64
+	tools/expect_same.sh xtensa/unsigned-c "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_uns_c)" "$$($(TESTTMP)/test_xt_uns_c_x64)"
+	tools/expect_same.sh xtensa/unsigned-c-lx6 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_uns_c_lx6)" "$$($(TESTTMP)/test_xt_uns_c_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_xtensa_unsigned_compare_and_divide.pas $(TESTTMP)/test_xt_uns_p
+	./$(COMPILER) test/test_xtensa_unsigned_compare_and_divide.pas $(TESTTMP)/test_xt_uns_p_x64
+	tools/expect_same.sh xtensa/unsigned-pas "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_uns_p)" "$$($(TESTTMP)/test_xt_uns_p_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_xtensa_64bit_truthiness.c $(TESTTMP)/test_xt_truth64
+	./$(COMPILER) test/test_xtensa_64bit_truthiness.c $(TESTTMP)/test_xt_truth64_x64
+	tools/expect_same.sh xtensa/truth64 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_truth64)" "$$($(TESTTMP)/test_xt_truth64_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_xt_asyncecho
 	./$(COMPILER) -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_xt_asyncecho_x64
 	tools/expect_same.sh xtensa/asyncecho "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_asyncecho)" "$$($(TESTTMP)/test_xt_asyncecho_x64)"
@@ -34030,11 +34045,14 @@ test-c-conformance-arm32: $(COMPILER)
 test-c-conformance-riscv32: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target riscv32
 test-c-conformance-cross: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32
-# ESP-IDF on esp32c3 under Espressif QEMU. NOT in -cross: it needs an ESP-IDF
-# checkout and takes ~30s per test (a relink plus a boot), so it is run by hand
-# or sharded (--shard I/N). Unlike the runner above, a missing suite is exit 2.
+# ESP-IDF on esp32c3 / esp32s3 under Espressif QEMU. NOT in -cross: it needs an
+# ESP-IDF checkout and takes ~30s per test (a relink plus a boot), so it is run
+# by hand or sharded (--shard I/N). Unlike the runner above, a missing suite is
+# exit 2. esp32s3 is the windowed xtensa ABI, the one IDF runs.
 test-c-conformance-esp32c3: $(COMPILER)
 	tools/run_c_conformance_esp.sh ./$(COMPILER)
+test-c-conformance-esp32s3: $(COMPILER)
+	tools/run_c_conformance_esp.sh ./$(COMPILER) --chip esp32s3
 	@# THE SUMMARY USED TO BE UNCONDITIONAL, and each of the four targets SKIPs
 	@# when the gitignored c-testsuite is absent -- so `all targets green` was
 	@# printed over four rows that measured nothing, and it was read as coverage
@@ -36275,9 +36293,10 @@ test-emit-obj: $(COMPILER)
 	@# crtl IS PRIVATE IN AN ESP-IDF OBJECT (ObjRuntimeIsPrivate). The IDF image
 	@# links picolibc, so a GLOBAL crtl was 41 `multiple definition` errors and
 	@# a WEAK one would be overridden piecemeal (crtl's printf on picolibc's
-	@# stdout). Asserted on --platform=esp for BOTH ISAs: --target=esp32c3 is a
-	@# hosted-linux object with no undefined symbols, so it cannot contain the
-	@# case. Pinned v416 fails the `!` rows (T malloc, T printf, B stdout).
+	@# stdout). Asserted on --platform=esp for BOTH ISAs. (--target=esp32c3 was a
+	@# hosted-linux object until 747054b6df and could not contain the case; a
+	@# chip name now implies --platform=esp.) Pinned v416 fails the `!` rows
+	@# (T malloc, T printf, B stdout).
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_rvesp.o
 	nm $(TESTTMP)/c_crtl_rvesp.o | grep -q ' t malloc$$'
 	! nm $(TESTTMP)/c_crtl_rvesp.o | grep -Eq ' [TWBDV] (malloc|printf|stdout|close|write)$$'
@@ -36288,6 +36307,31 @@ test-emit-obj: $(COMPILER)
 	@# came first, so IDF ran unrelated code and main never executed. The stub's
 	@# first word is `addi sp,sp,-32` (0xfe010113); pinned has a C helper there.
 	python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(); so,=struct.unpack_from("<I",d,32); n,=struct.unpack_from("<H",d,48); si,=struct.unpack_from("<H",d,50); sh=lambda i: struct.unpack_from("<10I",d,so+40*i); st=sh(si)[4]; nm=lambda h: d[st+h[0]:d.index(b"\0",st+h[0])]; t=[sh(i) for i in range(n) if nm(sh(i))==b".text"][0]; w,=struct.unpack_from("<I",d,t[4]); sys.exit(0 if w==0xfe010113 else "app_main at .text+0 is not the C entry stub: %#x" % w)' $(TESTTMP)/c_crtl_rvesp.o
+	@# WINDOWED XTENSA, the ABI IDF runs on the esp32s3: a C variadic DEFINITION
+	@# builds (the prologue refused it outright until 2026-09-24, and crtl's own
+	@# printf is one, so no C reached the s3 at all -- pinned v416 still refuses
+	@# this row, in crtl's fcntl.c), and app_main at .text+0 is the windowed
+	@# entry stub, `entry a1,64` = 36 81 00. The values are proven by booting:
+	@# tools/run_c_conformance_esp.sh --chip esp32s3.
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --platform=esp --emit-obj test/c_variadic_on_windowed_xtensa.c $(TESTTMP)/c_va_xtw.o
+	nm $(TESTTMP)/c_va_xtw.o | grep -q ' T main$$'
+	python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(); so,=struct.unpack_from("<I",d,32); n,=struct.unpack_from("<H",d,48); si,=struct.unpack_from("<H",d,50); sh=lambda i: struct.unpack_from("<10I",d,so+40*i); st=sh(si)[4]; nm=lambda h: d[st+h[0]:d.index(b"\0",st+h[0])]; t=[sh(i) for i in range(n) if nm(sh(i))==b".text"][0]; w=d[t[4]:t[4]+3]; sys.exit(0 if w==bytes.fromhex("368100") else "app_main at .text+0 is not the windowed C entry stub: %s" % w.hex())' $(TESTTMP)/c_va_xtw.o
+	@# ...and the one shape still refused: a variadic returning an aggregate BY
+	@# VALUE, whose hidden result pointer takes arg word 0 on windowed and is not
+	@# modelled -- building it would read every va_arg one word off.
+	! ./$(COMPILER) --target=xtensa --xtensa-abi=windowed --platform=esp --emit-obj test/c_variadic_aggregate_on_windowed_xtensa.c $(TESTTMP)/c_va_xtw_agg.o > $(TESTTMP)/c_va_xtw_agg.log 2>&1
+	grep -q 'returning an aggregate by value on windowed xtensa' $(TESTTMP)/c_va_xtw_agg.log
+	@# A C STRING LITERAL TO AN EXTERNAL gets its length prefix skipped ONCE. The
+	@# riscv32/xtensa backends skipped it again on the IR_ARG wrapper's tyString
+	@# tag, after the C frontend had already made it a char*, so esp_rom_printf
+	@# got its format 8 bytes in. Counts the double-skip pair itself
+	@# (`add a0,a0,a1; addi a0,a0,8` / `add a2,a2,a3; addi a2,a2,8`): the
+	@# unfixed compiler has 2 of each in this object, one per literal; Pascal's
+	@# external calls never had any.
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/c_string_literal_to_an_external_on_esp.c $(TESTTMP)/c_strext_rv.o
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --platform=esp --emit-obj test/c_string_literal_to_an_external_on_esp.c $(TESTTMP)/c_strext_xt.o
+	python3 -c 'import sys; n=open(sys.argv[1],"rb").read().count(bytes.fromhex("3305b50013058500")); sys.exit(0 if n==0 else "riscv32: C literal prefix skipped twice at %d call(s)" % n)' $(TESTTMP)/c_strext_rv.o
+	python3 -c 'import sys; n=open(sys.argv[1],"rb").read().count(bytes.fromhex("30228022c208")); sys.exit(0 if n==0 else "xtensa: C literal prefix skipped twice at %d call(s)" % n)' $(TESTTMP)/c_strext_xt.o
 	@# THE NEGATIVE CONTROL, and it is the row that keeps the fix a correction
 	@# rather than a widening: bare metal deliberately gets NO default RTL, so
 	@# it must still refuse. A predicate that made every profile build the row

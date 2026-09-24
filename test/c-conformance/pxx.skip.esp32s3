@@ -1,0 +1,1 @@
+00187.c	needs a writable filesystem: the harness image mounts no VFS, so fopen returns NULL and fwrite faults (environment, not codegen)

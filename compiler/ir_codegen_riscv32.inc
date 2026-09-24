@@ -3504,7 +3504,13 @@ begin
             { External C call: a Pascal string literal is stored as an 8-byte
               length prefix + NUL-terminated chars; pass the char data so the
               callee sees a const char*. }
-            if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
+            { ...and only while the VALUE is still the literal. The C frontend
+              lowers a literal to const_str+prefix itself (a char*, tk pointer)
+              but the IR_ARG wrapper keeps tyString, so keying on the wrapper
+              alone skipped the prefix TWICE: esp_rom_printf("ROM %d %d\n")
+              received "d\n". }
+            if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) and
+               TypeIsFrozenString(IntToTypeKind(IRTk[IRA[argNode]])) then
               { IRA[argNode], not argNode -- an IR_ARG node is tagged tyString
                 generically, so IRStrTkOf(argNode) always answers the 8-byte
                 default and the char pointer handed to the C callee pointed

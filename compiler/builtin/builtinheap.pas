@@ -540,6 +540,7 @@ procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;
 function __pxx_divsi3(a: Integer; b: Integer): Integer;
 function __pxx_modsi3(a: Integer; b: Integer): Integer;
+function __pxx_umodsi3(n: LongWord; d: LongWord): LongWord;
 {$endif}
 { Not on BARE ESP: file I/O, managed-element dynarray/record retain/release,
   variant, float formatting. Bare metal, hence PXX_ESP, is now the only profile
@@ -5672,6 +5673,12 @@ end;
 function __pxx_modsi3(a: Integer; b: Integer): Integer;
 begin
   Result := a - __pxx_divsi3(a, b) * b;
+end;
+
+{ Unsigned 32-bit modulo, for an unsigned `mod` / C `%` on LX6. }
+function __pxx_umodsi3(n: LongWord; d: LongWord): LongWord;
+begin
+  Result := n - __pxx_udivsi3(n, d) * d;
 end;
 {$endif}
 

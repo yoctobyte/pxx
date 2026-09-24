@@ -11927,7 +11927,15 @@ begin
       could not be emitted for xtensa at all, and why they were skipped in the
       same breath as the setjmp ones -- see the split guards at the two .c
       pulls, which are the actual defect this arm closes.
-      bug-cfront-no-entry-stub-for-xtensa }
+      bug-cfront-no-entry-stub-for-xtensa
+
+      AND A WINDOWED BODY MUST START WITH `entry` (2026-09-24). Without it the
+      window never rotated: `movi a2, 0` clobbered the CALLER's a2 and `retw`
+      returned through the caller's own a0 -- out of the caller as well. crtl's
+      __crtl_round_carry calls __pxx_fegetround, so it returned "no carry"
+      every time and printf("%f", 69.12f) truncated to 69.120002 on esp32s3
+      (c-testsuite 00174, 00195). Call0 was right all along. }
+    if XtensaABI = XTENSA_ABI_WINDOWED then xtensa_entry(reg_xtensa_sp, 32);
     xtensa_movi(reg_xtensa_a2, 0);
     if XtensaABI = XTENSA_ABI_WINDOWED then xtensa_retw else xtensa_ret;
   end;
@@ -12599,6 +12607,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
     cWasmEntry: Boolean;        { wasm32: the entry is synthesised, not emitted -- see the arm }
     cEspObjEntry: Boolean;      { riscv32 ESP-IDF object: a stub at offset 0 calls main -- see the obj-mode arm }
+    cEspNoMainBody: Integer;    { xtensa: offset of the entry/retw body a main-less stub calls }
     cWasmFini: Integer;         { ... and the finalizer runner it will call }
     cWasmWantsEnv: Boolean;     { ... and whether it must fetch the environment first }
     cSfI: Integer;
@@ -12701,9 +12710,8 @@ begin
       when it returns. main's result has nowhere to go and is dropped.
       A source with no `main` but its own `app_main` gets that called instead;
       one with neither (a library of routines for an IDF project) gets the call
-      turned into NOPs, so the entry returns at once. riscv32 only: xtensa's
-      IDF ABI is windowed, which needs its own prologue, and variadic C is not
-      implemented there yet. feature-c-esp-conformance-coverage }
+      turned into NOPs, so the entry returns at once. The windowed-xtensa arm
+      follows. feature-c-esp-conformance-coverage }
     if EmitObjMode and (not EmitSharedMode) and
        (TargetPlatform = PLATFORM_ESP) and (TargetArch = TARGET_RISCV32) and
        (not EspBareBoot) then
@@ -12729,6 +12737,46 @@ begin
       rv32_lw(reg_ra, reg_sp, 28);
       rv32_addi(reg_sp, reg_sp, 32);
       rv32_jalr(reg_zero, reg_ra, 0);     { ret }
+      cEspObjEntry := True;
+    end
+    { The same stub for WINDOWED xtensa, the only xtensa ABI IDF runs. app_main
+      is reached by a real CALL8 from IDF's main_task, so -- unlike the Pascal
+      program entry, which seeds its own [sp-16] because it runs in the root
+      window -- this is an ordinary windowed frame. `entry sp, 64`: the top 32
+      bytes are the callees' spill areas, sp+0.. is ours (no outgoing stack
+      arguments are passed: argc/argv go in a10/a11). The calls use the long
+      form, as the call0 stub below does, because main sits past every crtl
+      body. With no main and no app_main the call is aimed at a bare
+      `entry`/`retw` body emitted right after the stub. }
+    else if EmitObjMode and (not EmitSharedMode) and
+       (TargetPlatform = PLATFORM_ESP) and (TargetArch = TARGET_XTENSA) and
+       (XtensaABI = XTENSA_ABI_WINDOWED) and (not EspBareBoot) then
+    begin
+      if CodeLen <> 0 then
+        Error('internal: the ESP C entry stub must be at code offset 0, where ' +
+              'the object writer exports app_main, but code starts at ' +
+              AIntToStr(CodeLen));
+      xtensa_entry(reg_xtensa_sp, 64);
+      xtensa_movi(reg_xtensa_a8, 0);
+      xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, 0);    { argc = 0 }
+      xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, 4);    { argv[0] = NULL }
+      xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, 8);    { envp[0] = NULL }
+      if needInit then
+      begin
+        xtensa_mov(reg_xtensa_a10, reg_xtensa_sp);     { arg1 = the fake initial stack }
+        EmitXtensaLongCallSlot(initPatch, initAnchor);
+      end;
+      xtensa_movi(reg_xtensa_a10, 0);                  { argc = 0 }
+      xtensa_addi(reg_xtensa_a11, reg_xtensa_sp, 4);   { argv }
+      EmitXtensaLongCallSlot(callPatch, callAnchor);
+      xtFiniIdx := GetFiniRunnerProc;
+      EmitXtensaLongCallSlot(xtFiniLit, xtFiniAnchor);
+      RecordInternalCallAt(xtFiniIdx, xtFiniLit, xtFiniAnchor);
+      xtensa_retw;
+      while (CodeLen and 3) <> 0 do EmitB(0);          { ENTRY targets are 4-aligned }
+      cEspNoMainBody := CodeLen;
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_retw;
       cEspObjEntry := True;
     end;
   end
@@ -12992,7 +13040,13 @@ begin
         object, ESP fails it as an object and never gets that far as an
         executable. bug-s-c-on-the-esp-profile-cannot-reach-crtl 
         decide-should-a-c-main-exist-on-the-esp-profile-at-all 
-        bug-cfront-no-entry-stub-for-xtensa }
+        bug-cfront-no-entry-stub-for-xtensa
+
+        BOTH "NEEDS NO STUB" AND THE crtl BOUND ARE STALE (2026-09-24): the
+        object writer exports app_main at .text+0, and without a stub that was
+        whichever C routine came first -- "builds" was never "runs". --emit-obj
+        now emits an app_main -> main stub for riscv32 and windowed xtensa
+        (the EmitObjMode branch above), and C reaches crtl on both. }
       if XtensaABI <> XTENSA_ABI_CALL0 then
         Error('C program entry stub on xtensa: only the call0 ABI is ' +
               'implemented. A windowed image is entered by ESP-IDF startup, ' +
@@ -13679,8 +13733,16 @@ begin
     { No main and no app_main: an object of routines for an IDF project. The
       entry must still return rather than jump to offset 0 of nothing, so the
       two call words become NOPs (addi x0, x0, 0), and callPatch is spent. }
-    Patch32(callPatch, $00000013);
-    Patch32(callPatch + 4, $00000013);
+    if TargetArch = TARGET_XTENSA then
+    begin
+      Patch32(callPatch, cEspNoMainBody - callAnchor);
+      RecordCodeRefFull(callPatch, cEspNoMainBody, 1, callAnchor);
+    end
+    else
+    begin
+      Patch32(callPatch, $00000013);
+      Patch32(callPatch + 4, $00000013);
+    end;
     callPatch := -1;
   end
   else if mainIdx < 0 then
@@ -14935,28 +14997,53 @@ begin
         8 for a while and the tell was a first stack-passed variadic argument
         reading a saved-frame word.
 
-        WINDOWED IS REFUSED, not approximated: its frame pointer is a7, its
-        incoming register window is a10.. rather than a2.., and its bias is the
-        `entry` size, so every one of the three quantities here changes. A
-        silently wrong save area produces wrong VALUES from the second variadic
-        argument on, which is the failure mode with no diagnostic.
+        WINDOWED WAS REFUSED here until 2026-09-24, on the belief that all three
+        quantities change (frame pointer a7, window a10.., bias = entry size).
+        Only the bias does -- see the next comment. The reason for refusing
+        rather than guessing still stands for what IS refused: a wrong save
+        area produces wrong VALUES from the second variadic argument on, with
+        no diagnostic.
         a8/a9 are the documented scratch pair and are not argument registers.
         bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet }
-      if XtensaABI <> XTENSA_ABI_CALL0 then
-        Error('variadic C functions on xtensa: only the call0 ABI is ' +
-              'implemented. The windowed frame pointer, argument window and ' +
-              'incoming-stack bias all differ, and guessing them produces ' +
-              'wrong argument VALUES rather than a diagnostic');
-      EmitFrameAddrXtensa(reg_xtensa_a8, Syms[vaSaveSym].Offset); { a8 = &__va_save }
+      { WINDOWED (2026-09-24), and the paragraph above over-counted what
+        changes: seen from the CALLEE, a call8's arguments arrive in a2..a7
+        exactly as call0's do (a10.. is the CALLER's name for the same
+        registers), and the frame base is a15 on both ABIs -- not a7. What
+        does differ is read off the ordinary parameter spill (ir_codegen.inc)
+        rather than re-derived: the incoming-stack bias is the `entry` size,
+        32, where call0's is 16. And windowed passes a hidden aggregate-result
+        pointer as argument WORD 0, which would put a non-argument at the head
+        of the save area and shift every named/variadic word by one; that
+        combination (a variadic function returning a struct by value) is
+        refused rather than approximated.
+        feature-a-variadic-c-functions-on-the-windowed-xtensa-abi }
+      if (XtensaABI = XTENSA_ABI_WINDOWED) and
+         (ProcAggregateDestSym[procIdx] >= 0) then
+        Error('variadic C function returning an aggregate by value on ' +
+              'windowed xtensa: the hidden result pointer occupies argument ' +
+              'word 0 and is not modelled in the va_arg save area');
+      { THE FRAME BASE HERE IS a15 ON BOTH ABIs. EmitFrameAddrXtensa answers
+        a7 for windowed, which is right for a BODY and wrong at this point: the
+        windowed body's frame pointer is moved into a7 only after the ordinary
+        parameter spill (ir_codegen.inc), and until then a7 is still incoming
+        argument word 5 -- the very register the sixth store below saves. So
+        the save area is addressed off a15 explicitly; a7 := a15 later makes
+        the two the same base, so the slot offsets agree. }
+      EmitLoadConstXtensa(reg_xtensa_a8, Syms[vaSaveSym].Offset);
+      xtensa_add(reg_xtensa_a8, reg_xtensa_a15, reg_xtensa_a8);  { a8 = &__va_save }
       xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 0);
       xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 4);
       xtensa_s32i(reg_xtensa_a4, reg_xtensa_a8, 8);
       xtensa_s32i(reg_xtensa_a5, reg_xtensa_a8, 12);
       xtensa_s32i(reg_xtensa_a6, reg_xtensa_a8, 16);
       xtensa_s32i(reg_xtensa_a7, reg_xtensa_a8, 20);
-      xtensa_addi(reg_xtensa_a9, reg_xtensa_a15, 16);   { a9 = first stack word }
-      EmitFrameAddrXtensa(reg_xtensa_a8, Syms[vaOverflowSym].Offset);
-      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);     { *__va_overflow = a15+16 }
+      if XtensaABI = XTENSA_ABI_WINDOWED then
+        xtensa_addi(reg_xtensa_a9, reg_xtensa_a15, 32)  { a9 = first stack word (entry bias) }
+      else
+        xtensa_addi(reg_xtensa_a9, reg_xtensa_a15, 16); { a9 = first stack word }
+      EmitLoadConstXtensa(reg_xtensa_a8, Syms[vaOverflowSym].Offset);
+      xtensa_add(reg_xtensa_a8, reg_xtensa_a15, reg_xtensa_a8);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);     { *__va_overflow = first stack word }
     end;
     TARGET_WASM32:
     begin

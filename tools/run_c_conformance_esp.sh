@@ -19,17 +19,17 @@
 # the rest take nothing; on ilp32 the extra argument registers are ignored.
 #
 # BUILT ONCE, RELINKED PER TEST: the IDF project is copied from
-# examples/esp32/hello-c3 into a private work dir (so this never contends with
+# examples/esp32/hello-<c3|s3> into a private work dir (so this never contends with
 # tools/esp_run.sh's lock or a peer's run), configured once, and each test only
 # re-archives main.o and re-runs ninja. QEMU is killed as soon as the marker,
 # IDF's own "Returned from app_main()", or a panic appears -- a fixed timeout
 # per test would be the whole cost of the run.
 #
-# Usage: tools/run_c_conformance_esp.sh [compiler] [--shard I/N] [--only NNN.c]
-#   chip: esp32c3 (riscv32). esp32s3 is not wired: variadic C on the windowed
-#   xtensa ABI is refused by the compiler, and every test reaches printf.
+# Usage: tools/run_c_conformance_esp.sh [compiler] [--chip esp32c3|esp32s3]
+#                                       [--shard I/N] [--only NNN.c[,MMM.c...]]
+#   esp32c3 (default): riscv32.  esp32s3: windowed xtensa, the ABI IDF runs.
 #
-# Skips: test/c-conformance/pxx.skip (base) plus pxx.skip.esp32c3.
+# Skips: test/c-conformance/pxx.skip (base) plus pxx.skip.<chip>.
 # Prints ESP-CONF-COMPLETE as its last line whatever the verdict, so a caller
 # can tell a finished run from one that died -- grep for it, never trust a
 # wrapper's exit status.
@@ -45,6 +45,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --shard) SHARD_I="${2%%/*}"; SHARD_N="${2##*/}"; shift ;;
     --only)  ONLY="$2"; shift ;;
+    --chip)  CHIP="$2"; shift ;;
     *) echo "run_c_conformance_esp: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -54,7 +55,12 @@ SKIPLIST="$ROOT/test/c-conformance/pxx.skip"
 TSKIPLIST="$ROOT/test/c-conformance/pxx.skip.$CHIP"
 PER_TEST_TIMEOUT="${ESP_CONF_TIMEOUT:-20}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
-QEMU="$(ls "$HOME"/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1)"
+case "$CHIP" in
+  esp32c3) ISA=riscv32; PXXFLAGS="--target=riscv32 --platform=esp"; PROJSRC=hello-c3 ;;
+  esp32s3) ISA=xtensa;  PXXFLAGS="--target=xtensa --xtensa-abi=windowed --platform=esp"; PROJSRC=hello-s3 ;;
+  *) echo "run_c_conformance_esp: unsupported chip $CHIP (esp32c3|esp32s3)" >&2; exit 2 ;;
+esac
+QEMU="$(ls "$HOME"/.espressif/tools/qemu-$ISA/*/qemu/bin/qemu-system-$ISA 2>/dev/null | head -1)"
 
 # A missing suite is NOT a pass. The desktop runner prints SKIP and exits 0,
 # which makes a green there mean nothing ran; this one refuses instead.
@@ -64,7 +70,7 @@ if [ ! -f "$SUITE/00001.c" ]; then
   exit 2
 fi
 [ -x "$CC" ] || { echo "$LABEL: compiler not built ($CC)"; echo "ESP-CONF-COMPLETE"; exit 2; }
-[ -n "$QEMU" ] || { echo "$LABEL: Espressif qemu-riscv32 not found"; echo "ESP-CONF-COMPLETE"; exit 2; }
+[ -n "$QEMU" ] || { echo "$LABEL: Espressif qemu-$ISA not found"; echo "ESP-CONF-COMPLETE"; exit 2; }
 [ -f "$ESP_IDF_DIR/export.sh" ] || { echo "$LABEL: ESP-IDF not at $ESP_IDF_DIR"; echo "ESP-CONF-COMPLETE"; exit 2; }
 # shellcheck disable=SC1091
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
@@ -76,7 +82,7 @@ qpid=""
 trap '[ -n "$qpid" ] && kill "$qpid" 2>/dev/null; rm -rf "$WORK"' EXIT INT TERM
 PROJ="$WORK/proj"
 mkdir -p "$PROJ"
-( cd "$ROOT/examples/esp32/hello-c3" && tar cf - --exclude=./build --exclude=./sdkconfig \
+( cd "$ROOT/examples/esp32/$PROJSRC" && tar cf - --exclude=./build --exclude=./sdkconfig \
     --exclude='./main/*.o' --exclude='./main/*.a' . ) \
   | ( cd "$PROJ" && tar xf - )
 # The 1 MiB stock app partition is too small for crtl + IDF on the larger tests
@@ -89,7 +95,7 @@ echo "$LABEL: compiler $CC ($(sha256sum "$CC" | cut -c1-12))"
 # The first link needs SOME app_main; any passing test's object will do, and
 # the real per-test build below replaces it.
 printf 'int main(void) { return 0; }\n' > "$WORK/seed.c"
-"$CC" --target=riscv32 --platform=esp "$WORK/seed.c" "$PROJ/main/main.o" > "$WORK/cc.log" 2>&1 \
+"$CC" $PXXFLAGS "$WORK/seed.c" "$PROJ/main/main.o" > "$WORK/cc.log" 2>&1 \
   || { echo "$LABEL: seed compile failed"; cat "$WORK/cc.log"; echo "ESP-CONF-COMPLETE"; exit 1; }
 ar rcs "$PROJ/main/libpxx_app.a" "$PROJ/main/main.o"
 ( cd "$PROJ" && idf.py set-target "$CHIP" && idf.py build ) > "$WORK/idf.log" 2>&1 \
@@ -100,7 +106,7 @@ for src in "$SUITE"/*.c; do
   name="$(basename "$src")"
   idx=$((idx+1))
   [ $((idx % SHARD_N)) = "$SHARD_I" ] || continue
-  [ -z "$ONLY" ] || [ "$ONLY" = "$name" ] || continue
+  case ",$ONLY," in ,,|*",$name,"*) ;; *) continue ;; esac
 
   reason=""
   for sl in "$SKIPLIST" "$TSKIPLIST"; do
@@ -123,7 +129,8 @@ for src in "$SUITE"/*.c; do
     echo '  return 0;'
     echo '}'
   } > "$W"
-  if ! "$CC" --target=riscv32 --platform=esp -I"$ROOT/lib/crtl/include" -I"$ROOT/lib/crtl/src" \
+  # shellcheck disable=SC2086
+  if ! "$CC" $PXXFLAGS -I"$ROOT/lib/crtl/include" -I"$ROOT/lib/crtl/src" \
        "$W" "$PROJ/main/main.o" > "$WORK/cc.log" 2>&1; then
     fail=$((fail+1)); failed="$failed $name(compile)"
     echo "FAIL $name — compile error:"; sed -n '1,4p' "$WORK/cc.log" | sed 's/^/    /'
@@ -175,6 +182,25 @@ b = open(sys.argv[1], 'rb').read()
 if b.endswith(b'\n'): b = b[:-1]
 open(sys.argv[2], 'wb').write(b)
 PYEOF
+  # C99 5.1.2.2.3: falling off main's closing brace returns 0, and the compiler
+  # zeroes main's result slot for exactly that -- keyed on the NAME main. The
+  # rename above takes the test out of that rule, so a main with no `return`
+  # in its body hands back stack garbage that is the harness's doing (00206,
+  # 00211, 00212 on esp32s3; 0 by luck on esp32c3). Apply the rule here, only
+  # for a main whose body has no `return` at all.
+  if [ "$rc" != "0" ] && python3 - "$src" <<'PYEOF'
+import re, sys
+t = open(sys.argv[1], errors='replace').read()
+m = re.search(r'\bmain\s*\([^)]*\)\s*\{', t)
+if not m: sys.exit(1)
+i, d = m.end(), 1
+while d and i < len(t):
+    d += {'{': 1, '}': -1}.get(t[i], 0); i += 1
+sys.exit(1 if re.search(r'\breturn\b', t[m.end():i]) else 0)
+PYEOF
+  then
+    echo "NOTE $name — main has no return; exit $rc read as 0 (C99 5.1.2.2.3)"; rc=0
+  fi
   if [ "$rc" != "0" ]; then
     fail=$((fail+1)); failed="$failed $name(exit=$rc)"
     echo "FAIL $name — main returned $rc (want 0)"; continue
@@ -182,7 +208,7 @@ PYEOF
   if ! cmp -s "$OUT" "$src.expected"; then
     fail=$((fail+1)); failed="$failed $name(output)"
     echo "FAIL $name — output mismatch:"
-    diff -u "$src.expected" "$OUT" | sed -n '1,8p' | sed 's/^/    /'
+    diff -u "$src.expected" "$OUT" | sed -n '1,24p' | sed 's/^/    /'
     continue
   fi
   pass=$((pass+1))

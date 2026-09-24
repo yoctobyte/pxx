@@ -3036,13 +3036,26 @@ begin
         else if op = Ord(tkDiv) then
         begin
           EmitDivZeroCheckXtensa(False);       { divisor in a3 }
-          if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_divsi3')
+          { Unsigned operands divide unsigned (quou / __pxx_udivsi3), as riscv32
+            picks divu through the same TypeDivideUnsigned. quou existed in
+            xtensaenc.inc and was never called: 0xFFFFFFFFu / 2u answered 0. }
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
+          begin
+            if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_udivsi3')
+            else xtensa_quou(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+          end
+          else if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_divsi3')
           else xtensa_quos(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
         end
         else if op = Ord(tkMod) then
         begin
           EmitDivZeroCheckXtensa(False);       { divisor in a3 }
-          if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_modsi3')
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
+          begin
+            if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_umodsi3')
+            else xtensa_remu(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+          end
+          else if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_modsi3')
           else xtensa_rems(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
         end
         else if op = Ord(tkShl) then
@@ -3075,6 +3088,24 @@ begin
           EmitAsmXtensa(['sub a2, a2, a3','movi a3, 0','movi a4, 1','beq a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
         else if op = Ord(tkNeq) then
           EmitAsmXtensa(['sub a2, a2, a3','movi a3, 0','movi a4, 1','bne a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
+        else if ((op = Ord(tkLt)) or (op = Ord(tkGt)) or (op = Ord(tkLe)) or (op = Ord(tkGe))) and
+                TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
+        begin
+          { UNSIGNED operands take bltu/bgeu -- the rule riscv32 applies with
+            sltu, through the same TypeCompareUnsigned. This arm was signed
+            only, so on xtensa a C `size_t` 0xFFFFFFFF compared as -1: crtl's
+            sprintf passes cap = (size_t)-1, `o + 1 < cap` was false, and
+            sprintf wrote NOTHING while returning the right count (c-testsuite
+            00186.c on esp32s3). A Pascal LongWord took the same arm. }
+          if op = Ord(tkLt) then
+            EmitAsmXtensa(['movi a4, 1','bltu a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
+          else if op = Ord(tkGt) then
+            EmitAsmXtensa(['movi a4, 1','bltu a3, a2, .done','movi a4, 0','.done:','mov a2, a4'])
+          else if op = Ord(tkLe) then
+            EmitAsmXtensa(['movi a4, 1','bgeu a3, a2, .done','movi a4, 0','.done:','mov a2, a4'])
+          else
+            EmitAsmXtensa(['movi a4, 1','bgeu a2, a3, .done','movi a4, 0','.done:','mov a2, a4']);
+        end
         else if op = Ord(tkLt) then
           EmitAsmXtensa(['movi a4, 1','blt a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
         else if op = Ord(tkGt) then
@@ -3950,7 +3981,13 @@ begin
               VALUE node (IRA[argNode]), which is the LEA that can be walked
               back to a symbol; the guard's argNode is the IR_ARG wrapper and
               would always answer the generic wide tyString. }
-            if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
+            { ...and only while the VALUE is still the literal. The C frontend
+              lowers a literal to const_str+prefix itself (a char*, tk pointer)
+              but the IR_ARG wrapper keeps tyString, so keying on the wrapper
+              alone skipped the prefix TWICE: esp_rom_printf("ROM %d %d\n")
+              received "d\n". }
+            if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) and
+               TypeIsFrozenString(IntToTypeKind(IRTk[IRA[argNode]])) then
               EmitLeaStrDataXtensa(reg_xtensa_a2, reg_xtensa_a2,
                                    IRStrTkOf(IRA[argNode]));
             XtensaPushA2;
@@ -5831,7 +5868,18 @@ begin
       IR_JUMP_IF_FALSE:
         begin
           lblId := IRA[i];
-          IREmitNodeXtensa(IRB[i]);
+          { A 64-bit condition is a2:a3; branching on a2 alone tested only the
+            LOW word, so `if (x)` / `while (x)` on 0xabcd00000000 was FALSE and
+            crtl's %llx printed nothing (c-testsuite 00204 on esp32s3).
+            bug-32bit-truthiness-high-half -- riscv32, arm32, i386 and wasm32
+            carry this fix; xtensa was the backend nobody visited. }
+          if Is64BitXtensa(IntToTypeKind(IRTk[IRB[i]])) then
+          begin
+            EmitNode64Xtensa(IRB[i]);
+            xtensa_or(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+          end
+          else
+            IREmitNodeXtensa(IRB[i]);
           { Conditional branch range is only +-127 bytes, so branch over an
             18-bit J: if cond <> 0 skip the J, else J label. }
           xtensa_movi(reg_xtensa_a4, 0);

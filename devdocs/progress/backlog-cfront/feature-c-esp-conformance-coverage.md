@@ -1,7 +1,7 @@
 ---
 prio: 18
 track: C
-summary: "ESP32-C3 (riscv32, ESP-IDF, QEMU) is WIRED: tools/run_c_conformance_esp.sh (make target test-c-conformance-esp32c3) runs the c-testsuite through a relinked IDF image per test and reads each test's return value off the serial console. Measured 2026-09-24: 218 pass, 1 fail (00053.c, the global struct-tag bug that is red on x86-64 too), 1 skip (00187.c, needs a filesystem the image does not mount), of 220. What remains is the ESP32-S3 leg, walled by feature-a-variadic-c-functions-on-the-windowed-xtensa-abi. Bare metal is out by design: bare carries no crtl."
+summary: "BOTH ESP-IDF legs are WIRED: tools/run_c_conformance_esp.sh --chip esp32c3|esp32s3 (Makefile targets test-c-conformance-esp32c3 / -esp32s3) runs the c-testsuite through a relinked IDF image per test under QEMU and reads each return value off the serial console. Measured 2026-09-24, population = the 220 files of library_candidates/c-testsuite/tests/single-exec: esp32c3 218 pass / 1 fail (00053, the global struct-tag bug, red on x86-64 too) / 1 skip (00187, no filesystem in the image); esp32s3 (windowed xtensa) 216 / 3 / 1 -- 00053, 00175 (C implicit double->int conversion, also wrong on riscv32 for float) and 00207 (VLA: alloca unsupported on xtensa). Bare metal is out by design: bare carries no crtl.""
 ---
 
 # C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare)
@@ -65,3 +65,18 @@ alone builds a HOSTED-linux object (0 undefined symbols), not an IDF one --
 use `--target=riscv32 --platform=esp`, as tools/esp_run.sh does. And 00207.c
 (VLA) PASSES here while `pxx.skip.riscv32` skips it as "alloca is x86-64
 only" -- that skip may be stale; not re-measured on the desktop riscv32 leg.
+
+## 2026-09-24 (frankS): the esp32s3 leg
+
+Harness gained `--chip esp32s3` (hello-s3, `--target=xtensa
+--xtensa-abi=windowed --platform=esp`, qemu-system-xtensa), a comma list for
+`--only`, a 24-line diff, and C99's fall-off-main rule applied for a test whose
+`main` has no `return` (the rename to pxx_conf_main takes it out of the
+compiler's own rule; exactly 00206/00211/00212 in the suite, census by script).
+
+First full s3 run, compiler 17be23f99ad8: 209 pass / 10 fail / 1 skip. The nine
+non-00053 reds were five real xtensa bugs plus the harness artefact, fixed and
+re-run at f8f9d3f827d3 (see done/feature-a-variadic-c-functions-on-the-windowed-xtensa-abi).
+216/3/1 is therefore 211 rows at 17be23f99ad8 and 9 at later binaries whose
+diffs are the fixes named there; a clean single-binary full run has NOT been
+done. esp32c3 re-checked on a 5-test subset at f8f9d3f827d3, all pass.
