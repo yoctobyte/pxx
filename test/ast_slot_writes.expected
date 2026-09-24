@@ -847,6 +847,7 @@ AN_COMPOUND_LITERAL Left seq
 AN_COMPOUND_LITERAL Left sq
 AN_COMPOUND_LITERAL Left vaSeq
 AN_COMPOUND_LITERAL Left zseq
+AN_DEREF Left GenMakeIdent(idx, tyPointer)
 AN_DEREF Left GenMakeIdent(ps, tyPointer)
 AN_DEREF Left GenMakeSlotAddr(i)
 AN_DEREF Left PyMakeCellPtr(si)

@@ -1,0 +1,70 @@
+# RUN ON A 32-bit TARGET (test-i386, test-arm32). A green on x86-64 does NOT
+# cover this file's subject.
+#
+# The runtime bridge calls every lifted body with one 64-bit word per slot
+# (own arguments, then bound captures); the body declares its slots at their
+# real types, and a Variant or a nonlocal cell travels by ADDRESS -- a 4-byte
+# word on a 32-bit target. On i386/arm32 every slot from the second on was
+# read from the wrong place (`lambda a, b: a + b` segfaulted); on xtensa even
+# the first (`(lambda x: x * 2)(5)` gave 0 on the ESP32-S3). A 32-bit target
+# now enters through a word thunk (PyBoundFnEntry, pyparser.inc).
+# Every expected line is CPython's own output. The slot that matters is put
+# LAST as often as first, because a one-slot case passed by accident on i386.
+# bug-n-a-lifted-closure-with-two-or-more-slots-reads-them-at-the-wrong-width-on-32-bit-targets
+
+one = lambda x: x * 2
+print("one", one(5))
+
+two = lambda a, b: a + b
+print("two", two(2, 3), two("x", "y"), two(1.5, 2.25))
+
+k = 10
+tag = "t"
+three = lambda a, b, c: str(a + b + c + k) + tag
+print("three+caps", three(1, 2, 3))
+
+scale = 3
+print("key", sorted(["bbb", "a", "cc"], key=lambda s: len(s) * scale))
+print("max", max([3, 7, 5], key=lambda v: -v))
+
+def make_adder(n, m):
+    def add(x, y):
+        return x + y + n + m
+    return add
+
+adder = make_adder(100, 1000)
+print("nested", adder(1, 2))
+
+items = []
+push = lambda v, w: items.append(v * w)
+push(2, 3)
+push(4, 5)
+print("list", items)
+
+def counter():
+    n = 0
+    def bump(step):
+        nonlocal n
+        n += step
+        return n
+    return bump
+
+b = counter()
+b(2)
+print("nonlocal", b(5))
+
+# An UNTYPED parameter claimed `nonlocal` by an escaping def lives in a heap
+# Variant cell. Every 32-bit backend's EmitLoadVariantAddr* took the ADDRESS
+# of the cell-pointer symbol instead of its value, so `c` read back empty the
+# moment the def escaped -- before any call. An `int` param or a local was fine.
+def shared_param(c):
+    def bump():
+        nonlocal c
+        c += 1
+    f = bump
+    print("param cell before call", c)
+    f()
+    f()
+    return c
+
+print("param cell", shared_param(7))

@@ -1,0 +1,10 @@
+one 10
+two 5 xy 3.75
+three+caps 16t
+key ['a', 'cc', 'bbb']
+max 3
+nested 1103
+list [6, 20]
+nonlocal 7
+param cell before call 7
+param cell 9

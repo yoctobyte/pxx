@@ -28248,6 +28248,10 @@ test-i386: $(COMPILER)
 	tools/assert_no_leak.sh i386/nilpy_bound_except_releases 200 tools/run_target.sh i386 $(TESTTMP)/boundexc_i386
 	./$(COMPILER) --target=i386 test/test_nilpy_exception_args_survive_the_freed_exception_block.npy $(TESTTMP)/argsown_i386
 	tools/expect_same.sh i386/test_nilpy_exception_args_survive "$$(tools/run_target.sh i386 $(TESTTMP)/argsown_i386)" "$$(cat test/test_nilpy_exception_args_survive_the_freed_exception_block.expected)"
+	@# Lifted-closure slots are one 64-bit word each at the bridge; a 32-bit
+	@# target enters through a word thunk (PyBoundFnEntry). x86-64 cannot see it.
+	./$(COMPILER) --target=i386 test/test_nilpy_lifted_closure_slots_on_32bit.npy $(TESTTMP)/lclslots_i386
+	tools/expect_same.sh i386/test_nilpy_lifted_closure_slots "$$(tools/run_target.sh i386 $(TESTTMP)/lclslots_i386)" "$$(cat test/test_nilpy_lifted_closure_slots_on_32bit.expected)"
 	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
 	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
 	@# it -- its reference is borrowed from the in-flight exception and becomes
@@ -33180,6 +33184,8 @@ test-arm32: $(COMPILER)
 	# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
 	./$(COMPILER) --target=arm32 test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/genpromo_a32
 	tools/expect_same.sh arm32/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh arm32 $(TESTTMP)/genpromo_a32)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_lifted_closure_slots_on_32bit.npy $(TESTTMP)/lclslots_a32
+	tools/expect_same.sh arm32/test_nilpy_lifted_closure_slots "$$(tools/run_target.sh arm32 $(TESTTMP)/lclslots_a32)" "$$(cat test/test_nilpy_lifted_closure_slots_on_32bit.expected)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

@@ -1802,7 +1802,15 @@ end;
 procedure EmitLoadVariantAddrXtensa(node: Integer);
 { a2 = address of a variant slot for a value-position variant node. }
 begin
-  if IRKind[node] = IR_LOAD_SYM then
+  { A POINTER-typed symbol (a NilPy nonlocal cell pointer) is not itself a
+    variant slot: its VALUE is the slot's address. Taking the symbol's own
+    address copied 16 bytes of stack out of a 4-byte pointer slot, so an
+    untyped parameter held in a cell read back empty on every 32-bit target.
+    x86-64's var_store never came here (it asks IREmitNode). Twin in each
+    32-bit backend's EmitLoadVariantAddr*; test/test_nilpy_lifted_closure_slots_on_32bit. }
+  if (IRKind[node] = IR_LOAD_SYM) and (Syms[IRA[node]].TypeKind = tyPointer) then
+    IREmitNodeXtensa(node)
+  else if IRKind[node] = IR_LOAD_SYM then
     EmitSlotAddrXtensa(reg_xtensa_a2, IRA[node])
   else if IRKind[node] = IR_LOAD_MEM then
     IREmitNodeXtensa(IRA[node])

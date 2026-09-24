@@ -11278,6 +11278,56 @@ begin
   Result := (depth = 0);
 end;
 
+{ THE ENTRY POINT A BOUND-FN OBJECT CARRIES for the lifted body `realPi`.
+
+  The runtime bridge (PyBoundFnCallvnMaskBody, pyeval.pas) calls every lifted
+  body as `function(a0, a1, ...: Int64): Variant` -- one 64-bit word per slot,
+  own arguments then bound captures. The body is declared at its REAL types: a
+  Variant own-param or a nonlocal cell travels by ADDRESS, which is a 4-byte
+  word on a 32-bit target. Where a pointer is 8 bytes the two layouts agree
+  and the body is its own entry. Where it is 4 they do not, and HOW they
+  disagree is the target's calling convention: on i386/arm32 slot k was read
+  from the wrong place from two slots on (`lambda a, b: a + b` segfaulted);
+  on xtensa from ONE slot on (`(lambda x: x * 2)(5)` gave 0 on the ESP32-S3).
+
+  So on a 32-bit target the object carries a WORD THUNK instead:
+  `$pywordthunk_<realPi>(w0, w1, ...: Int64): Variant`, whose hand-built body
+  (PyCompileLambdaBody, bStart = -3) is `return REAL(conv(w0), conv(w1), ...)`
+  -- a by-reference parameter gets `deref(Pointer(w))`, anything else the
+  word narrowed to its type. The compiler lowers that ONE call through its
+  own ABI for the target, which is the only thing that knows how an Int64 or
+  a pointer lands in registers there -- so the runtime never has to.
+  bug-n-a-lifted-closure-with-two-or-more-slots-reads-them-at-the-wrong-width-on-32-bit-targets }
+function PyBoundFnEntry(realPi: Integer): Integer;
+var thunkName: AnsiString; thunkPi, k, n: Integer;
+    pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
+    ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
+begin
+  Result := realPi;
+  if TARGET_PTR_SIZE >= 8 then Exit;
+  thunkName := '$pywordthunk_' + AIntToStr(realPi);
+  thunkPi := FindProc(thunkName);
+  if thunkPi >= 0 then begin Result := thunkPi; Exit; end;
+  n := Procs[realPi].ParamCount;
+  if n > MAX_PROC_PARAMS then n := MAX_PROC_PARAMS;
+  for k := 0 to n - 1 do
+  begin
+    pnames[k] := 'w' + AIntToStr(k);
+    ptypes[k] := tyInt64;
+  end;
+  thunkPi := RegisterProc(thunkName, True, tyVariant, n, pnames, ptypes);
+  Procs[thunkPi].BodyAddr := -1;
+  if PyPendLamCount >= PY_MAX_NESTED then
+    Error('Nil Python: too many pending lambdas/closure thunks');
+  PyPendLamTok[PyPendLamCount] := -3;    { sentinel: a word thunk }
+  PyPendLamProc[PyPendLamCount] := thunkPi;
+  PyPendLamWrapReal[PyPendLamCount] := realPi;
+  PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
+  PyPendLamSelf[PyPendLamCount] := CurSelfClass;
+  Inc(PyPendLamCount);
+  Result := thunkPi;
+end;
+
 procedure PyParseLambdaStub;
 var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     params, src, nm: AnsiString;
@@ -11605,7 +11655,7 @@ begin
         travels by ADDRESS, exactly as the nested-def path passes its own }
       argA := AllocNode(AN_ARG);
       node := AllocNode(AN_PROCADDR);
-      ASTIVal[node] := lamProc; ASTTk[node] := Ord(tyPointer);
+      ASTIVal[node] := PyBoundFnEntry(lamProc); ASTTk[node] := Ord(tyPointer);
       ASTLeft[argA] := node;
       argB := AllocNode(AN_ARG);
       node := AllocNode(AN_INT_LIT);
@@ -11924,7 +11974,7 @@ begin
 
   argA := AllocNode(AN_ARG);
   node := AllocNode(AN_PROCADDR);
-  ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyPointer);
+  ASTIVal[node] := PyBoundFnEntry(procIdx); ASTTk[node] := Ord(tyPointer);
   ASTLeft[argA] := node;
   argB := AllocNode(AN_ARG);
   node := AllocNode(AN_INT_LIT);
@@ -12215,7 +12265,7 @@ begin
     VARIANT (unannotated) and must travel by address }
   argA := AllocNode(AN_ARG);
   node := AllocNode(AN_PROCADDR);
-  ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyPointer);
+  ASTIVal[node] := PyBoundFnEntry(procIdx); ASTTk[node] := Ord(tyPointer);
   ASTLeft[argA] := node;
   argB := AllocNode(AN_ARG);
   node := AllocNode(AN_INT_LIT);
@@ -38581,6 +38631,68 @@ begin
     ASTLeft[wCallNode] := wArgSeq;
     CurASTNode := wCallNode;
   end
+  else if bStart = -3 then
+  begin
+    { A WORD THUNK (PyBoundFnEntry): hand-build `return REAL(conv(w0), ...)`.
+      Parameter k of the thunk is the bridge's 64-bit word for slot k. A
+      by-reference parameter of the real body (a Variant own-param, a
+      nonlocal cell) gets `deref(Pointer(wk))`, an lvalue, so the ordinary
+      by-ref argument lowering hands the real body that address. Anything
+      else is the word narrowed to the parameter's own type -- the same
+      value the bridge's Int64 carried where a pointer is 8 bytes.
+      The real body's IsRef is tested together with tyVariant because a
+      lifted lambda's IsRef is only set when ITS body compiles, which the
+      queue order puts after this thunk. }
+    wArgSeq := -1; wArgLast := -1;
+    for i := 0 to nparams - 1 do
+    begin
+      { The real body's Variant params are by-reference, and the argument
+        lowering decides by-ref passing from IsRef. For a lifted LAMBDA that
+        flag is written only when its own body compiles -- after this thunk,
+        by queue order -- so without this the call boxed the POINTER into a
+        fresh Variant (the lambda saw an empty int). Same rule, same value
+        PyCompileLambdaBody writes; setting it earlier changes nothing else. }
+      if Procs[realProcIdx].Params[i].TypeKind = tyVariant then
+      begin
+        Procs[realProcIdx].Params[i].IsRef := True;
+        if i < MAX_PROC_PARAMS then
+          ProcParamIsConst[realProcIdx * MAX_PROC_PARAMS + i] := True;
+      end;
+      wIdentNode := AllocNode(AN_IDENT);
+      ASTIVal[wIdentNode] := Procs[procIdx].Params[i].SymIdx;
+      ASTTk[wIdentNode] := Ord(tyInt64);
+      wCastNode := AllocNode(AN_PTR_CAST);
+      ASTLeft[wCastNode] := wIdentNode;
+      ASTIVal[wCastNode] := -1;               { width-truncating VALUE cast }
+      if Procs[realProcIdx].Params[i].IsRef or
+         (Procs[realProcIdx].Params[i].TypeKind = tyVariant) then
+      begin
+        { through a typed pointer LOCAL, the shape the generator-cell path
+          builds: a deref of a bare cast carries no pointee type, and the
+          argument lowering then copied a garbage Variant out of it }
+        ASTTk[wCastNode] := Ord(tyPointer);
+        idx := AllocVar('', tyPointer);
+        SetSymPointerTo(idx, Procs[realProcIdx].Params[i].TypeKind, REC_NONE);
+        PyHoistStmt(PyMakeAssignNode(GenMakeIdent(idx, tyPointer), wCastNode));
+        node := AllocNode(AN_DEREF);
+        ASTLeft[node] := GenMakeIdent(idx, tyPointer);
+        ASTTk[node] := Ord(Procs[realProcIdx].Params[i].TypeKind);
+        wCastNode := node;
+      end
+      else
+        ASTTk[wCastNode] := Ord(Procs[realProcIdx].Params[i].TypeKind);
+      wArgNode := AllocNode(AN_ARG);
+      ASTLeft[wArgNode] := wCastNode; ASTRight[wArgNode] := -1;
+      if wArgLast < 0 then wArgSeq := wArgNode else ASTRight[wArgLast] := wArgNode;
+      wArgLast := wArgNode;
+    end;
+    wCallNode := AllocNode(AN_CALL);
+    ASTIVal[wCallNode] := realProcIdx;
+    ASTTk[wCallNode] := Ord(Procs[realProcIdx].RetType);
+    ASTRight[wCallNode] := ProcRetRecId[realProcIdx];
+    ASTLeft[wCallNode] := wArgSeq;
+    CurASTNode := wCallNode;
+  end
   else if bStart = -1 then
   begin
     { A CALLABLE-VALUE WRAPPER (feature-nilpy-callable-value-unified-dispatch):
@@ -38651,10 +38763,11 @@ begin
     result symbol this proc does not have. }
   if bStart = -2 then
     node := CurASTNode
-  else if (bStart <> -1) and
+  else if (bStart <> -1) and (bStart <> -3) and
      (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
      not PyLambdaResultIsOwnedTemp(CurASTNode, procIdx) then
-    { `bStart <> -1` EXEMPTS THE SYNTHESIZED CALLABLE-VALUE WRAPPER, and only it.
+    { `bStart <> -1` EXEMPTS THE SYNTHESIZED CALLABLE-VALUE WRAPPER (and -3, the
+      word thunk, which forwards its real body's result the same way).
       The freshness question this arm asks is a question about an arbitrary
       LAMBDA BODY, which may evaluate to a captured alias; a wrapper's body is
       always `return realproc(a0, ...)`, so it hands back exactly what a direct

@@ -333,7 +333,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (184)
+## backlog-nilpy (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -370,7 +370,6 @@ _none_
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-a-lambda-returning-a-user-class-instance-yields-none | N | 62 | bug | > | — |
 | bug-n-a-lambda-stored-in-a-class-attribute-is-not-callable | N | 45 | bug | `class gl: clear = lambda a: a * 3` then `gl.clear(2)` raises `TypeError: object is not callable` at run time; CPython prints 6. The same lambda bound to a MODULE-level name works (`f = lambda a: a * 3; f(2)` gives 6 in both), so it is the class-attribute store that loses the callable, not the lambda. Measured 2026-09-10 at compiler `98b6545b4652`. PRE-EXISTING and verified as such: it reproduces with and without the `staticmethod(...)` wrapper that was being added the same afternoon, so it is not that arm's doing -- the control without the wrapper fails identically. Compiles clean and fails at RUN time, which is the bad half: a class-as-namespace whose members are lambdas is accepted by the compiler and dies on first call. | — |
-| bug-n-a-lifted-closure-with-two-or-more-slots-reads-them-at-the-wrong-width-on-32-bit-targets | N | 70 | bug | The runtime closure bridge (PyBoundFnCallvnMaskBody in compiler/builtin/pyeval.pas) calls every lifted NilPy body through TBFn = function(a0..: Int64): Variant, i.e. one 64-bit word per slot, but the frontend declares the lifted body's slots at their REAL types; a Variant own-param is a 4-byte address on a 32-bit target. Where the mismatch bites depends on how the target passes an Int64. On i386 (stack) and arm32 it bites from TWO slots: slot k is read from the wrong place (`lambda a, b: a + b` SIGSEGVs). On XTENSA it bites from ONE slot (measured; the likely reason, NOT yet confirmed by disassembly, is that an Int64 goes in an even-aligned register pair while the hidden Variant-result pointer already holds the first register): `lam = lambda x: x * 2; print(lam(5))` prints 0 on the ESP32-S3 under QEMU (15 for a def passed as a value, 42 for a zero-arg lambda). x86-64 and aarch64 cannot see it. This is the largest NilPy-on-ESP failure class: of the 2026-09-24 S3 board census (every 12th NilPy corpus file, 70 tests, CPython 3.14.4 oracle) it explains funcvalue, lambda_container_result, nonlocal_escaping_closure, sorted_key_dispatch (a `key=lambda` hangs) and min_max_key_in_a_variable. | — |
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
 | bug-n-a-local-bound-to-both-a-pascal-class-and-its-subclass-loses-subscripting | N | 30 | bug | A name bound at one site to a Pascal class and at another to a NilPy SUBCLASS of it aborts at run time with `TypeError: object is not subscriptable` on the subscript, where CPython works. Measured 2026-09-09: `g = array.array(\"h\", bytes(2)); print(g[0]); g = Grid(\"h\")` with `class Grid(array.array)` fails at the FIRST subscript -- the one compiled before the subclass binding exists -- so it is the name's resolved TYPE that is wrong, not the operation. Three controls narrow it: the same name bound twice to the SAME Pascal class works; a Grid instance subscripted with no second binding works; and pure NilPy classes with __getitem__ rebound base->subclass work. So it is specific to a PASCAL class's `default` indexed property plus two bindings whose classes are related by inheritance. Loud, not silent. | — |
 | bug-n-a-local-bound-to-self-loses-its-class-and-an-omitted-default-then-segfaults | N | 35 | bug | > | — |
@@ -1123,9 +1122,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3964)
+## done (3965)
 
-3964 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3965 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1253,7 +1252,6 @@ _none_
 - [p 70] [N] bug-n-a-collections-deque-segfaults-at-run-time
 - [p 70] [N] bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
 - [p 70] [N] bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
-- [p 70] [N] bug-n-a-lifted-closure-with-two-or-more-slots-reads-them-at-the-wrong-width-on-32-bit-targets
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - [p 70] [N] bug-n-a-staticmethod-called-through-cls-raises-attributeerror
