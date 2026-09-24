@@ -1,9 +1,9 @@
 ---
 track: N
-prio: 80
+prio: 30
 type: feature
 blocked-by: []
-summary: "A bare dunder operand (`def __add__(self, o)`) stays a variant because the call-site typer counts `.name(` calls and an operator is never spelled that way, so every `o.x` in the body runs the dynamic attribute protocol. Measured 2026-09-24 at HEAD: 2.7x (bare 0.48 s vs annotated 0.07 s for the accumulator loop inside a def). An operator-site arm was BUILT AND REVERTED: counting operators whose left operand is untyped vetoes every dunder, and skipping them is unsound -- a run-time-dispatched `xs[0] + xs[1]` with a duck-typed object then raises where CPython answers. BLOCKED on the operator dispatch path giving a class-typed operand the protection the METHOD path demonstrably has (getattr-called duck objects give CPython's answer there). Low payoff on lekkerzeilen: the arm typed exactly one dunder operand (Quat.__mul__.o).""
+summary: "PRIO 30 (coordinator, 2026-09-24): the one real program that motivated it gains one typed operand, and the unsoundness below gates only this feature -- at HEAD the untyped operator path gives CPython's answer for the duck-typed case. A bare dunder operand (`def __add__(self, o)`) stays a variant because the call-site typer counts `.name(` calls and an operator is never spelled that way, so every `o.x` in the body runs the dynamic attribute protocol. Measured 2026-09-24 at HEAD: 2.7x (bare 0.48 s vs annotated 0.07 s for the accumulator loop inside a def). An operator-site arm was BUILT AND REVERTED: counting operators whose left operand is untyped vetoes every dunder, and skipping them is unsound -- a run-time-dispatched `xs[0] + xs[1]` with a duck-typed object then raises where CPython answers. BLOCKED on the operator dispatch path giving a class-typed operand the protection the METHOD path demonstrably has (getattr-called duck objects give CPython's answer there). Low payoff on lekkerzeilen: the arm typed exactly one dunder operand (Quat.__mul__.o).""
 ---
 
 # Specialise a dunder body on the operand type the call site already knows
