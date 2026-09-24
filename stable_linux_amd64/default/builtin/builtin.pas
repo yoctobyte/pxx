@@ -18,22 +18,15 @@ unit builtin;
 
 interface
 
-function StrInt(v: Int64; width: Integer): AnsiString;
-function StrQWord(v: QWord; width: Integer): AnsiString;
-{ One Char as a string, right-justified to `width`. The Text-file write
-  lowering needs it: a Char must NOT go through StrInt (that prints the
-  ORDINAL — 120 for 'x'), which is why the ordinal arm there excludes
-  tyChar. bug-p-writeln-text-rejects-char }
-function StrChar(c: Char; width: Integer): AnsiString;
-{ A STRING right-justified to `width`, and a Boolean as FPC's TRUE/FALSE right-
-  justified the same way. The two formatters the write lowering was missing:
-  writing either with a field width to a TEXT FILE silently DROPPED the width
-  (TextStrArg handed the string straight through), and with a VARIABLE width to
-  stdout it was refused outright — while the literal-width stdout path, which
-  formats inline in codegen, had always handled both.
-  bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit }
-function StrStrW(const s: AnsiString; width: Integer): AnsiString;
-function StrBool(b: Boolean; width: Integer): AnsiString;
+{ The five NON-FLOAT Str formatters moved to `strfmt` so the bare ESP profile
+  can have them without the rest of this unit -- `Str` was refused for EVERY
+  type on all four ESP targets, integers included, because bare links no
+  `builtin`. They are re-exported by nobody: the parser's Str lowering resolves
+  them by FindProc against the ambient pull, and this unit's own StrFloat calls
+  them through the `uses` below. StrFloat stays HERE, because it needs
+  PxxSciDigits17 and therefore softfloat, which bare deliberately skips.
+  feature-a-non-float-str-on-the-bare-esp-profile }
+uses strfmt;
 
 { ---- InterLocked* : FPC declares these in the `system` unit --------------
 
@@ -1586,33 +1579,6 @@ begin
   if s = '' then Result := #0 else Result := s[1];
 end;
 
-function StrQWord(v: QWord; width: Integer): AnsiString;
-{ StrInt's UNSIGNED sibling: a QWord >= 2^63 must not print with a minus sign
-  (write(Text, q) routes here; the console writeln path has its own unsigned
-  emitter). }
-var
-  digits: string;
-  n: QWord;
-  d: Integer;
-begin
-  digits := '';
-  if v = 0 then
-    digits := '0'
-  else
-  begin
-    n := v;
-    while n > 0 do
-    begin
-      d := Integer(n mod 10);
-      digits := Chr(Ord('0') + d) + digits;
-      n := n div 10;
-    end;
-  end;
-  Result := digits;
-  while Length(Result) < width do
-    Result := ' ' + Result;
-end;
-
 
 { The body sits OUTSIDE the CPURISCV32/CPUXTENSA guard below, and deliberately:
   the declaration is unguarded, and a declaration whose body compiles out is
@@ -1794,71 +1760,6 @@ end;
 {$ENDIF}
 {$endif}
 {$endif}
-
-function StrChar(c: Char; width: Integer): AnsiString;
-{ One Char as a string, space-padded on the LEFT to `width` (width <= 1 = no
-  padding), matching what StrInt/StrFloat do with their width argument.
-  bug-p-writeln-text-rejects-char }
-var r: AnsiString;
-begin
-  r := ' ';
-  r[1] := c;
-  while Length(r) < width do r := ' ' + r;
-  StrChar := r;
-end;
-
-function StrStrW(const s: AnsiString; width: Integer): AnsiString;
-{ see the interface comment. FPC pads on the LEFT and never truncates: a value
-  wider than the field is written in full. }
-var r: AnsiString;
-begin
-  r := s;
-  while Length(r) < width do r := ' ' + r;
-  StrStrW := r;
-end;
-
-function StrBool(b: Boolean; width: Integer): AnsiString;
-begin
-  if b then StrBool := StrStrW('TRUE', width)
-  else StrBool := StrStrW('FALSE', width);
-end;
-
-function StrInt(v: Int64; width: Integer): AnsiString;
-var
-  neg: Boolean;
-  digits: string;
-  n: Int64;
-  d: Integer;
-begin
-  digits := '';
-  if v = 0 then
-    digits := '0'
-  else
-  begin
-    neg := v < 0;
-    n := v;
-    if neg then
-    begin
-      { Low(Int64) has no positive counterpart (-n wraps to itself and the
-        digit loop then produced just "-"): peel the last digit in the
-        NEGATIVE domain first — Pascal div/mod truncate toward zero, so
-        n mod 10 is in -9..0 and n div 10 moves toward zero. }
-      d := -(n mod 10);
-      digits := Chr(Ord('0') + d);
-      n := -(n div 10);
-    end;
-    while n > 0 do
-    begin
-      d := n mod 10;
-      digits := Chr(Ord('0') + d) + digits;
-      n := n div 10;
-    end;
-    if neg then digits := '-' + digits;
-  end;
-  Result := digits;
-  while Length(Result) < width do
-    Result := ' ' + Result;
-end;
 
 function FloatToExpStr(v: Double): AnsiString;
 { Decimal exponent form, for magnitudes the Int64 digit split cannot hold. The
