@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `bf347a1e3b74` | 2026-09-24T03:40:05Z | RED (native) | 319.0s | `eeec00ef0d75` RED |
+| borg | `bf347a1e3b74` | 2026-09-24T03:58:37Z | RED (full) | 1091.3s | `bf347a1e3b74` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `eeec00ef0d75` on borg, 2026-09-24T02:10:16Z (1h ago).**
+**Newest full tier in the fleet: `bf347a1e3b74` on borg, 2026-09-24T03:58:37Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `eeec00ef0d75` | RED | 1h | — (newest) |
+| borg | `bf347a1e3b74` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -310,7 +310,6 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
   - `test-record-abi-mixed-link#src:tools/compiler_srchash.sh`
   </details>
 - **test-aarch64#src:test/test_set_runtime.pas** — test/test_set_runtime.pas tools/expect_same.sh +1 (borg): bad `f135783b52da`, last good `unknown`, 0 commit(s) in range
-- **tools-devtest-sh#00** (borg): bad `b5140a1f00a7`, last good `9a701a66d2f7`, 1 commit(s) in range
 - **test-c-conformance#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
 - **test-c-conformance-aarch64#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
 - **test-c-conformance-arm32#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
