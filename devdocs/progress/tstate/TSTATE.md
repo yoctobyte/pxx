@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `2bf0ce324673` | 2026-09-24T10:35:35Z | RED (full) | 1045.8s | `2bf0ce324673` RED |
+| borg | `2bf0ce324673` | 2026-09-24T10:42:48Z | GREEN (slow) | 418.4s | `2bf0ce324673` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `2bf0ce324673` on borg, 2026-09-24T10:35:35Z (0m ago).**
+**Newest full tier in the fleet: `2bf0ce324673` on borg, 2026-09-24T10:35:35Z (7m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `2bf0ce324673` | RED | 0m | — (newest) |
+| borg | `2bf0ce324673` | RED | 7m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -315,4 +315,3 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-c-conformance-arm32#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
 - **test-c-conformance-i386#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
 - **test-c-conformance-riscv32#shard4/6** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (borg): bad `692ea558bbe4`, last good `3d52b3c4eda5`, 1 commit(s) in range
-- **test-esp-idf#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2 (borg): bad `6919ef8a34c2`, last good `747054b6df74`, 1 commit(s) in range
