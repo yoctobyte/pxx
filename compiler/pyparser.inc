@@ -43670,7 +43670,7 @@ end;
 
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
-var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
+var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz, vmtN: Integer;
     fi, baseOff, fj: Integer; wtk: TTypeKind; fldWidened: Boolean;
     ovMmi, ovPi: Integer;   { the inherited method an override must match }
     fldAnn, rhsAt, k2, fldSig, sdepth: Integer;
@@ -45037,8 +45037,18 @@ begin
     Inc(DataLen);
   end;
   UClsVMTOffset[ci] := DataLen;
-  DataEnsure(UClsVirtCount[ci] * 8);
-  for i := 0 to UClsVirtCount[ci] * 8 - 1 do
+  { AT LEAST ONE SLOT, as the Pascal path reserves. A class with no virtuals
+    otherwise gets a ZERO-BYTE VMT, so its address is the first byte of
+    whatever Data[] appends next -- and on an ESP object, where string
+    literals go to .rodata, that next thing was a literal: the VMT address was
+    relocated into .rodata while its backlinks at VMT-8/-16 stayed in .data.
+    `type(Dog()).__name__`, `sorted(key=...)` and every `is` on a user
+    instance then read a string's bytes as the RTTI pointer (crash or hang on
+    the ESP32-S3; hosted targets have no split and could not see it). }
+  vmtN := UClsVirtCount[ci];
+  if vmtN < 1 then vmtN := 1;
+  DataEnsure(vmtN * 8);
+  for i := 0 to vmtN * 8 - 1 do
   begin
     Data[DataLen] := 0;
     Inc(DataLen);

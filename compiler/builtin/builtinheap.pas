@@ -1416,6 +1416,11 @@ end;{$ifdef PXX_ESP_IDF}
 function heap_caps_aligned_calloc(alignment: NativeUInt; n: NativeUInt;
   size: NativeUInt; caps: LongWord): Pointer; external;
 procedure free(p: Pointer); external;
+{ IDF's own fatal-error door: prints the text, a backtrace, and resets. Used
+  for an exhausted heap, which otherwise stored the size header through NIL
+  and reported only `StoreProhibited` at address 0 -- a fault with no cause
+  attached (test_nilpy_exception_no_leak ran the S3 out of memory that way). }
+procedure esp_system_abort(details: PChar); external;
 
 const
   MALLOC_CAP_DEFAULT = $1000;   { esp_heap_caps.h: (1<<12), what calloc uses }
@@ -1436,6 +1441,8 @@ begin
   size := (size + 7) and (not NativeInt(7));
   p := Int64(heap_caps_aligned_calloc(8, 1, NativeUInt(size + 8),
                                       MALLOC_CAP_DEFAULT));   { zeroed: keeps the contract }
+  if p = 0 then
+    esp_system_abort('pxx: out of memory (ESP-IDF heap exhausted)');
   PMachineWord(p)^ := size;                             { 8-byte size header }
   Result := Pointer(p + 8);                      { payload }
   if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
