@@ -27516,6 +27516,14 @@ test-i386: $(COMPILER)
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
 	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_i386_frozen_argpaths_lk
 	tools/assert_no_leak.sh i386/frozen_arg_no_leak 200 tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_lk
+	# ...and a LITERAL into a managed parameter, which Pascal never reaches (it
+	# converts in IRLowerCallArg) and NilPy's int("12") does, straight from the
+	# backend's call-argument arm: PXXStrFromLit per call, owned by nothing.
+	# Pre-fix live=2888 after 3000 iterations; the printed counts were right.
+	# bug-a-a-failed-int-conversion-leaks-per-iteration-on-i386-and-xtensa
+	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_literal_arg_no_leak.npy $(TESTTMP)/test_i386_nilpy_litarg_lk
+	tools/expect_same.sh i386/nilpy_literal_arg_value "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_nilpy_litarg_lk 2>/dev/null | grep -v '^pxx-census')" "$$(cat test/test_nilpy_literal_arg_no_leak.expected)"
+	tools/assert_no_leak.sh i386/nilpy_literal_arg_no_leak 200 tools/run_target.sh i386 $(TESTTMP)/test_i386_nilpy_litarg_lk
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=i386 test/test_shortstring_trunc.pas $(TESTTMP)/test_i386_sstrunc

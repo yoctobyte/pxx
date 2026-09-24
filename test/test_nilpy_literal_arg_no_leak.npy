@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: 0BSD
+# A string LITERAL handed to a managed-string parameter must not be copied to
+# the heap: the copy is an owned +1 that nothing releases after the call.
+# NilPy's int("...") is the reaching shape, because it passes the literal to
+# pystr_to_promo straight from the backend's call-argument arm (Pascal routes
+# the same conversion through IRLowerCallArg and never reaches it).
+# Measured before the fix, 3000 iterations each, -dPXX_ALLOC_CENSUS:
+#   i386  live=2888 (int ok)   live=2785 (int fails, caught)
+#   ESP32-S3 board, free-heap delta: 44 bytes per iteration, both shapes
+# The printed counts are right either way; only the census can see the leak.
+# bug-a-a-failed-int-conversion-leaks-per-iteration-on-i386-and-xtensa
+
+def ok(n):
+    i = 0
+    c = 0
+    while i < n:
+        c = c + int("12")
+        i = i + 1
+    return c
+
+def fails(n):
+    i = 0
+    c = 0
+    while i < n:
+        try:
+            v = int("x")
+        except ValueError:
+            c = c + 1
+        i = i + 1
+    return c
+
+print(ok(3000), fails(3000))

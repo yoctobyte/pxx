@@ -838,8 +838,22 @@ procedure EmitAnsiStringFromNodeXtensa(valNode: Integer);
   `string[N]` straight to a `const s: string` parameter passed the raw BUFFER
   address as if it were a heap handle, and the callee then read the 8 bytes
   BEFORE the buffer as its length. Mirrors riscv32's b345 port. }
+var j: Integer;
 begin
-  if IntToTypeKind(IRTk[valNode]) = tyChar then
+  j := -1;
+  if (IRKind[valNode] = IR_CONST_STR) and (OptLevel >= 2) then
+    j := InternStr(GetTokenStrFromRaw(IRA[valNode], IRB[valNode]));
+  if (j >= 0) and ((Strs[j].Len > 0) or isNilPy) then
+    { A LITERAL is already a managed string (saturated header, no retain) --
+      the static handle, as EmitStrHandleForStoreXtensa below already uses.
+      The copy is an owned +1 that nothing releases after the call, so every
+      literal handed to an AnsiString parameter leaked one block: NilPy
+      `int("12")` lost 44 bytes per iteration on the ESP32-S3.
+      bug-a-a-failed-int-conversion-leaks-per-iteration-on-i386-and-xtensa }
+    EmitLoadDataRefXtensa(reg_xtensa_a2, Strs[j].Offset + 8)
+  else if j >= 0 then
+    EmitLoadConstXtensa(reg_xtensa_a2, 0)       { Pascal '' is nil }
+  else if IntToTypeKind(IRTk[valNode]) = tyChar then
   begin
     IREmitNodeXtensa(valNode);                  { a2 = char code }
     XtensaPushA2;                               { spill char to the frame }

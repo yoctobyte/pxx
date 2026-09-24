@@ -4157,6 +4157,16 @@ begin
                 EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
                 EmitB($59);                                 { pop ecx }
               end
+              else if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) and
+                      EmitStaticLitHandle386(IRA[argNode]) then
+                { A LITERAL needs no copy: its pool entry is already a managed
+                  string with a saturated refcount, so eax is simply reloaded
+                  with that handle. The copy below is an owned +1 that nothing
+                  releases after the call, so a literal passed to an AnsiString
+                  parameter leaked one block per call (NilPy `int("12")`: 2,888
+                  live after 3,000 iterations). arm32 has always taken this
+                  route through EmitAnsiStringFromNodeArm32.
+                  bug-a-a-failed-int-conversion-leaks-per-iteration-on-i386-and-xtensa }
               else if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
               begin
                 { IRStrTkOf(IRA[argNode]), NOT IRStrTkOf(argNode). An IR_ARG node

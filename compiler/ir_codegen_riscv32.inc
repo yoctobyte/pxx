@@ -412,11 +412,23 @@ procedure EmitAnsiStringFromNodeRISCV32(valNode: Integer);
   `const s: string` parameter passed the raw BUFFER address as if it were a heap handle,
   and the callee then read the 8 bytes BEFORE the buffer as its length. Mirrors the
   aarch64/arm32/i386 arg path; riscv32 never had one. }
-var procIdx: Integer;
+var procIdx, j: Integer;
 begin
   procIdx := FindProc('PXXStrFromLit');
   if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-  if IntToTypeKind(IRTk[valNode]) = tyChar then
+  j := -1;
+  if (IRKind[valNode] = IR_CONST_STR) and (OptLevel >= 2) then
+    j := InternStr(GetTokenStrFromRaw(IRA[valNode], IRB[valNode]));
+  if (j >= 0) and ((Strs[j].Len > 0) or isNilPy) then
+    { A LITERAL is already a managed string (saturated header, no retain) --
+      the static handle, as IR_STORE_SYM and xtensa's twin of this routine
+      use. The copy below is an owned +1 that nothing releases after the call,
+      so each literal handed to an AnsiString parameter leaked one block.
+      bug-a-a-failed-int-conversion-leaks-per-iteration-on-i386-and-xtensa }
+    EmitLoadDataRefRISCV32(reg_a0, Strs[j].Offset + 8)
+  else if j >= 0 then
+    rv32_addi(reg_a0, reg_zero, 0)               { Pascal '' is nil }
+  else if IntToTypeKind(IRTk[valNode]) = tyChar then
   begin
     IREmitNodeRISCV32(valNode);                  { a0 = char code }
     rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0);
