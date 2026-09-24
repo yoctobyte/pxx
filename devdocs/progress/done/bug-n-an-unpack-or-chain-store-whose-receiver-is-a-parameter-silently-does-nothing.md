@@ -93,4 +93,4 @@ asserted to the CPython value. A fixture using only `self`, a local or a
 module-level receiver passes today and certifies the bug.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 3c28b6e248.
