@@ -57,4 +57,4 @@ Measured, not assumed:
 | riscv32 IDF | objdump of the loop | 1 PXXStrFromLit call | 0 |
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d83defb93.
