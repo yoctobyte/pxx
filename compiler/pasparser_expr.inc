@@ -8674,6 +8674,19 @@ begin
         variable/parameter/const symbol first. A same-named variable (FindSetConst
         is case-insensitive: a `set of char` const `C` would otherwise shadow a
         char var `c`) must win. }
+      { A CONST FROM AN OUTER SCOPE LOSES TO A ROUTINE THIS UNIT DECLARES.
+        Routines live in Procs and consts in Syms, so FindSym found System's
+        predefined `MaxInt` and the call below refused a program that declares
+        `function MaxInt(A, B: Integer)` -- valid Pascal, fpc prints 20, and
+        pin v421 compiled it into a SEGFAULT. The program's routine is the
+        nearer declaration, as it would be against FPC's System unit or any
+        used unit's const. The SAME-unit pair stays refused (the const-call
+        guard below says why): there neither declaration is nearer. }
+      if (idx >= 0) and (Syms[idx].Kind = skConst) and (procIdx >= 0) and
+         (Tokens[TokPos].Kind = tkLParen) and
+         (ProcUnitIdx[procIdx] = CurrentUnitIdx) and
+         ((idx < SysConstSymTop) or (SymUnitIdx[idx] <> CurrentUnitIdx)) then
+        idx := -1;
       sci := -1;
       if idx < 0 then sci := FindSetConstIn(name, qUnit);
       if sci >= 0 then

@@ -2803,11 +2803,14 @@ begin
   { Predefined System ordinal limits (FPC parity — System unit consts, always
     available, no `uses`). This AddConst block is pxx's System-const surface (cf.
     StdErr). 32-bit integer family; the 64-bit High/Low(Int64) go via the
-    High/Low intrinsics. Overriding these in user code is not a sane thing to do
-    (FPC allows it via unit scoping; pxx does not, which is fine). }
+    High/Low intrinsics. They sit in the OUTERMOST scope, as FPC's System unit
+    does: a routine of the same name declared by the program shadows them
+    (`function MaxInt(A, B: Integer)`, or `specialize Max<Integer> as MaxInt`
+    in docs/language/generics.md) -- see SysConstSymTop. }
   AddConst('MaxInt', tyInteger, 2147483647);
   AddConst('MaxLongInt', tyInteger, 2147483647);
   AddConst('MaxSmallInt', tyInteger, 32767);
+  SysConstSymTop := SymCount;
 
   { The main thread's TLS block, at code offset 0 = the ELF entry point, so it is
     installed before any frontend's code runs. One call site rather than one per

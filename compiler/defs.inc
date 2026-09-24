@@ -4978,6 +4978,11 @@ var
     covers. ADDITIVE ONLY: nothing reads SymTR yet. }
   SymTR : array of TTypeRef;
   SymCount  : Integer;
+  { Symbols below this index are the compiler's predefined System consts
+    (MaxInt, StdErr, ...), set in compiler.pas right after they are added. A
+    routine the program declares shadows them; see the const-call refusal in
+    ParseFactorCore. }
+  SysConstSymTop : Integer;
   SymCapacity : Integer;   { allocated length of the dynamic Syms/Sym* parallel arrays (grown by EnsureSymCapacity) }
   FrameSize : Integer;
 

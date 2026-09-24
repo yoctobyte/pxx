@@ -15976,6 +15976,9 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ctor_argcls26 "$$($(TESTTMP)/test_ctor_argcls26)" "$$(printf 'fails=0\nWIDECTOR OK')"
 	# A const and a routine of one name are ONE identifier. NEGATIVE half first:
 	# the call must not compile, and the message must say which way it resolved.
+	@# ...but a routine the PROGRAM declares shadows a predefined System const.
+	./$(COMPILER) test/test_a_program_routine_shadows_a_system_const.pas $(TESTTMP)/test_prog_routine_shadows_sysconst26
+	tools/expect_same.sh test_prog_routine_shadows_sysconst26 "$$($(TESTTMP)/test_prog_routine_shadows_sysconst26)" "$$(printf 'Max of 10 and 20: 20\nproc 5\nMaxLongInt 2147483647')"
 	@./$(COMPILER) test/test_const_shadows_routine_fail.pas $(TESTTMP)/test_constshadow26 2>&1 \
 	  | grep -q 'is a CONST and cannot be called' \
 	  || { echo 'test_const_shadows_routine_fail: FAIL - expected a refusal naming the const'; exit 1; }
