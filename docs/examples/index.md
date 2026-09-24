@@ -458,6 +458,26 @@ The repository's recipes for these are `make test-zlib`, `make test-lua`,
 compiler rather than the pin; do not point their `COMPILER` variable at the
 pinned binary, because the recipe then rebuilds that path.
 
+## Real Pascal libraries
+
+The Pascal rows above are PXX's own examples. These rows are third-party
+Pascal, all from the Free Pascal 3.2.2 release, used as released. The sources
+are fetched on demand:
+
+```sh
+tools/install_lib_candidates.sh fcl-json fpc-testsuite
+```
+
+Re-run on 2026-09-25 with **pin v424** (compiler sha256 `93a336a7ba85…`) at
+checkout `896d93932`.
+
+| Program | Version | How it was checked | Binary |
+| --- | --- | --- | --- |
+| **fcl-json** (`fpjson`, `jsonparser`, `jsonscanner`) with the **fpcunit** test framework | FPC 3.2.2 release | fcl-json's own test suite, `tjrun.pp`: `run: 203 failures: 0 errors: 0`, the same result as the Free Pascal 3.2.2 build. One file is replaced: fpcunit's `testutils`, which reads Free Pascal's internal VMT layout, is swapped for `test/fpjson/testutils.pas`. Every other unit is used unmodified | 870 KB, static |
+| **Free Pascal's own test suite** (`tests/test`) | FPC 3.2.2 release | `tools/run_pascal_conformance.sh`, on a curated 550 of the directory's 1,447 programs. Each must compile, run and exit as the test specifies, or be refused where the test expects a compile error. **427 pass, 0 fail.** 50 do not apply here (another CPU or target, or suite machinery PXX does not model). 73 are skipped, each with a written reason in `test/pascal-conformance/pxx.skip`: 39 are open gaps, 23 are deliberate differences, 9 wait on a design decision and 2 are programs PXX accepts where Free Pascal refuses them | – |
+
+The fcl-json recipe is `make test-fpjson`, which uses the pinned compiler. The test-suite runner takes the compiler as its first argument: `tools/run_pascal_conformance.sh stable_linux_amd64/default/pinned`.
+
 ## A bootable minimal Linux system
 
 This isn't a program under `examples/`, but it is built from the checkout: a

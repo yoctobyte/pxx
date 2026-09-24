@@ -56,13 +56,16 @@ The C frontend compiles standard C directly to native ELF in a single pass (see
 
 ### Partial / in progress
 
-- **tcc** (Tiny C Compiler, mob at `a338258d`): last shown working on
-  2026-07-07, when PXX compiled tcc, the PXX-built tcc compiled C, and the
-  self-compile chains converged byte-identical with GCC's. **With pin v424 it
-  fails at the first step**, PXX compiling `tcc.c`: tcc's `<semaphore.h>` falls
-  through to the host header, which does not parse against PXX's C runtime.
-  With that part switched off, it stops at an `#include` inside a function
-  call's arguments in `tccpp.c`.
+- **tcc** (Tiny C Compiler, mob at `a338258d`): works again with a compiler
+  built after pin v424, and will ship in the next pin. Measured 2026-09-25 with
+  compiler sha256 `5852ed1d21c6…` at checkout `ed6297d5b`: PXX compiles
+  `tcc.c`; that tcc builds a C program byte-identical to the one a GCC-built
+  tcc builds; and it compiles `tcc.c` itself into a tcc byte-identical to the
+  GCC-built tcc's, which then reproduces itself. Two limits: the PXX-built tcc
+  links the system C library dynamically, and its `-run` mode does not work,
+  because it has to load glibc's `libc.so.6` at run time. Programs built with
+  `-o` are unaffected. **Pin v424 itself** still stops in `tccpp.c`, at an
+  `#include` inside a function call's arguments.
 - A number of candidate corpora (graphics, networking, and game libraries) are
   staged for bring-up but not yet claimed.
 

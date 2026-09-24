@@ -153,6 +153,7 @@ the same program with v424 and with a development build (compiler sha256
 | `--shared` off x86-64 reads like an internal error | `45bbfb187` | On aarch64 and arm32, `--shared` now says `shared-library output is x86-64 only`, as i386 did. v424 said `internal: no init/fini thunk prologue`. |
 | A `var` argument of the wrong width through an overloaded routine | `6ff482413` | The refusal now names the parameter and both widths, where v424 said only `no overload of M matches these arguments`. Measured by its author. |
 | C `struct tm` lacks `tm_gmtoff` and `tm_zone` | `f82b42a21` | The C runtime's `struct tm` has both fields and honours `TZ=":zone"`. This is runtime-library source, so v424 picks it up from a checkout at or after the commit; it is what lets QuickJS build. |
+| tcc does not compile | `3c1952549`, `8d32d8c8a` | PXX compiles the Tiny C Compiler again, and that tcc compiles C and itself byte-identical to a GCC-built tcc (measured with compiler `5852ed1d21c6…`, tree `ed6297d5b`). The first commit is in the C runtime, so with v424 and a current checkout the build gets further, but it still stops at an `#include` inside a function call's arguments in `tccpp.c`. `tcc -run` does not work: it needs glibc's `libc.so.6` at run time. |
 
 ## Known issues
 
