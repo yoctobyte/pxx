@@ -1,9 +1,9 @@
 ---
 track: N
-prio: 60
+prio: 80
 type: bug
 blocked-by: []
-summary: "FIXED for every store whose value the tokens can type (PyFJJoinForeignStores, between the class detect sweep and layout): `<recv>.NAME = v` through a parameter, local, module name, dotted chain, chain or tuple target now widens the field, scoped to the receiver's class when the tokens name it and name-wide across every class recording NAME otherwise. RESIDUAL, STILL SILENT WRONG VALUES: a store whose right-hand side the token pre-pass cannot type -- a call result with no inferable return, a subscript, a parameter, an attribute of an untyped receiver whose classes disagree -- joins nothing, so a float written that way into an int field still lands as its IEEE bits. Also a cost, not a defect: the name-wide fallback widens same-named fields of unrelated classes (to variant for int/float), values unchanged.""
+summary: "FIXED, both halves. MECHANISM: a field stored through a receiver other than `self` was never joined, so a float landed in an int slot as its bits. PyFJJoinForeignStores (between the class detect sweep and layout) now joins every `<recv>.NAME = v`: a typable v widens the field by PyWidenBinding; a bare parameter is typed by its annotation or its call sites; a v the tokens cannot type widens a SCALAR field it can reach to variant (correct, slower). Scoped to the receiver class when the tokens name it, name-wide otherwise. KNOWN LIMIT, deliberate: a CLASS-typed field is not widened on an untypable store -- that would send every member read on it through the dynamic protocol -- so a non-class value stored into a class field this way is not covered.""
 ---
 
 # A store through a non-self receiver never widens the field
@@ -93,3 +93,23 @@ Pin v421 (binary sha256 4e32f1dde0ec) gets 8 of the 11 rows wrong. The
 bystander rows are identical under both compilers.
 `PXXDBG=n.fjforeign` prints, per store, which join it took: scoped (with the
 class id), name-wide, or skipped.
+
+## RESOLVED, the untypable half (2026-09-24, frankb-12)
+
+The coordinator refused p60 for a silent residual, rightly. Measured before
+choosing: census of non-self stores via `PXXDBG=n.fjforeign`. Population:
+every .npy directly under test (1065), examples .py/.npy (16), and
+lekkerzeilen at 9db2e38 (every lekkerzeilen .py compiled as a subject, so
+rows from imported modules repeat). Compiler: the first landing. Untypable-rhs
+rows: 45 in test, 9 in lekkerzeilen (6 distinct). Only those reaching a SCALAR
+field can go wrong: 13 rows in test, 3 distinct in lekkerzeilen (`gain`,
+`level`, `left`).
+The residual was worse than raw bits: the setter shape `def f(b, y): b.s = y`
+TRUNCATED a float into an int field (2 for 2.5), and an int into a str field
+SEGFAULTED.
+
+Fix: a bare parameter is now typed the way the body pass types it (its
+annotation, else PyParamTypeFromSites), which cleared `level`. Anything still
+untypable widens a scalar field to variant. After: two lekkerzeilen fields are
+widened, `gain` (audio.py:270) and `left` (ui.py:986). The fixture gained the
+setter rows. Pin v421 (4e32f1dde0ec) gets 9 lines of it wrong.

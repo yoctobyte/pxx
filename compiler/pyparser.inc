@@ -43985,17 +43985,33 @@ end;
 function PyFJForeignRhsTk(lo, hi, p: Integer): TTypeKind;
 { The token-level type of the value a non-self store writes. }
 var hdr, body, k, ent, rci: Integer;
-    nm: AnsiString;
+    nm, encl: AnsiString;
     t: TTypeKind;
 begin
   Result := PyInferExprType(lo, hi);
   if Result <> tyUnknown then Exit;
   if (hi = lo + 1) and (Tokens[lo].Kind = tkIdent) then
   begin
-    { a bare name: its bindings before the store, in the enclosing def }
+    { a bare name: a PARAMETER of the enclosing def is typed by its
+      annotation, else by what its call sites pass -- the same two answers,
+      from the same routines, the body pass gives it, so the join and the
+      frame cannot disagree. Otherwise its bindings before the store. }
     PyFJEnclosingDef(p, hdr, body);
+    nm := GetTokenStr(lo);
+    if (hdr >= 0) and (nm <> 'self') and (nm <> 'cls') and
+       PyHeaderHasParam(hdr, body - 1, nm) then
+    begin
+      Result := PyHeaderParamType(hdr, body - 1, nm);
+      if Result = tyUnknown then
+      begin
+        t := PyParamTypeFromSites(hdr, nm, PyDefSiteMode(hdr, encl), encl);
+        if (t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t) then
+          Result := t;
+      end;
+      Exit;
+    end;
     if body < 0 then body := PyScanLo;
-    Result := PyRetNameType(body, p, GetTokenStr(lo));
+    Result := PyRetNameType(body, p, nm);
   end
   else if (hi = lo + 3) and (Tokens[lo].Kind = tkIdent) and
           (Tokens[lo + 1].Kind = tkDot) and (Tokens[lo + 2].Kind = tkIdent) then
@@ -44023,6 +44039,19 @@ begin
         end;
       end;
   end;
+end;
+
+function PyFJScalarTk(tk: TTypeKind): Boolean;
+{ A slot that holds exactly one kind of value: what an untyped store can
+  corrupt. Variant, class and unknown are not. }
+begin
+  Result := TypeIsFloat(tk) or PyIsMachineIntTk(tk) or TypeIsPromoInt(tk) or
+            (tk = tyBoolean) or (tk = tyAnsiString) or (tk = tyString);
+end;
+
+function PyIfStrU(c: Boolean; const a, b: AnsiString): AnsiString;
+begin
+  if c then Result := a else Result := b;
 end;
 
 procedure PyFJJoinForeignStores;
@@ -44128,7 +44157,38 @@ begin
             else begin ri := rItem[ti * 2]; j := rItem[ti * 2 + 1]; end;
             if (nT = 1) and (nR > 1) then Continue;   { a tuple into one field }
             rtk := PyFJForeignRhsTk(ri, j, k);
-            if rtk = tyUnknown then Continue;
+            if rtk = tyUnknown then
+            begin
+              { An rhs the tokens cannot type -- a parameter whose call sites
+                disagree, a subscript, an untyped call -- may be ANY type at
+                run time, and a scalar slot cannot hold what it is not: a float
+                truncates into an int field, an int into a str field crashes.
+                So a SCALAR field it may reach becomes a variant (correct, and
+                slower). A variant field already holds anything; a CLASS field
+                is left alone, because unknown there is nearly always the same
+                class (`node.next = other`) and a variant would send every
+                member read on it through the dynamic protocol. }
+              rtk := tyVariant;
+              nm := GetTokenStr(x - 1);
+              rci := -1;
+              if x - it = 3 then rci := PyFJRecvCi(k, GetTokenStr(it));
+              ent := -1;
+              if rci >= 0 then ent := PyFJDeclaringEntry(rci, nm);
+              for j := 0 to PyFJCount - 1 do
+                if (PyFJName[j] = nm) and ((ent < 0) or (j = ent)) and
+                   ((rci < 0) or (ent >= 0)) then
+                begin
+                  if PxxDbgEnabled('n.fjforeign') then
+                    WriteLn('PXXDBG n.fjforeign line ', Tokens[it].Line, ' .',
+                            nm, ' rhs UNKNOWN field tk=', PyFJTk[j],
+                            PyIfStrU(PyFJScalarTk(IntToTypeKind(PyFJTk[j])),
+                                     ' -> variant', ' kept'),
+                            PyIfStrU(ent >= 0, ' scoped', ' name-wide'));
+                  if PyFJScalarTk(IntToTypeKind(PyFJTk[j])) then
+                    PyFJTk[j] := Ord(tyVariant);
+                end;
+              Continue;
+            end;
             if rtk = tyString then rtk := tyAnsiString;
             nm := GetTokenStr(x - 1);
             rci := -1;

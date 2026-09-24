@@ -90,6 +90,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
+- `[p 80] [N]` bug-n-a-store-through-a-non-self-receiver-never-widens-the-field-so-a-float-lands-as-raw-bits
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
@@ -111,6 +112,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
 - `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 - `[p 70] [N]` bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
-- `[p 70] [N]` bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 
 _537 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -3,7 +3,8 @@
 # float stored from a free def into a field its own methods keep int landed as
 # its IEEE BITS (1.5 printed 4609434218613702656), a float literal was
 # truncated, and an int into a float field printed 3.0. The .expected is
-# CPython's own output for this file.
+# CPython's own output for this file. PXXDBG=n.fjforeign prints the join
+# each store took.
 #
 # C and D are BYSTANDERS: an unrelated class with a same-named field that only
 # ever holds ints, one declared before the widened class and one after. Their
@@ -22,6 +23,7 @@ class A:
         self.s = 0
         self.f = 0.5
         self.u = 0
+        self.t = "x"
 
 
 class D:
@@ -67,6 +69,22 @@ def tuple_target(b: A):
     print(b.s, x)
 
 
+# SETTER shapes: the value is a bare PARAMETER. Typed from its call sites
+# when they agree (an int into the float field); when they disagree (a float
+# and a str into the int field) the tokens cannot type it, and the scalar
+# field it reaches becomes a variant. Before: 2, 3.0, and a segfault.
+def set_s(b, y):
+    b.s = y
+
+
+def set_f(b, y):
+    b.f = y
+
+
+def set_t(b, y):
+    b.t = y
+
+
 def bystander(c):
     print(c.s, c.s == 7 or c.s == 9, c.s // 2, "%d" % c.s, str(c.s), c.s + 1)
 
@@ -78,6 +96,16 @@ local_recv()
 literal(A())
 chain(A())
 tuple_target(A())
+
+p = A()
+set_s(p, 2.5)
+print(p.s)
+set_s(p, "str")
+print(p.s)
+set_f(p, 3)
+print(p.f)
+set_t(p, 4)
+print(p.t)
 
 m = A()
 m.s = "text"
