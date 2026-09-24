@@ -47,3 +47,6 @@ expect_same: MISMATCH [test_clonehidden26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-24 — auto-closed by the borg watcher: `test-threads#src:test/test_clone_entry_with_a_hidden_result.pas` passes at f61b926d210a (tier native); it was red at 9c14efd7b84a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
