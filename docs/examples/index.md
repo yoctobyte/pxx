@@ -400,7 +400,7 @@ executables with no dynamic loader and no external C library. The sources are
 fetched on demand, not stored in the repository:
 
 ```sh
-tools/install_lib_candidates.sh busybox sqlite zlib lua cjson
+tools/install_lib_candidates.sh busybox sqlite zlib lua cjson quickjs
 ```
 
 | Program | Version | How it was checked | Binary |
@@ -411,6 +411,7 @@ tools/install_lib_candidates.sh busybox sqlite zlib lua cjson
 | **zlib** | 1.3.1 | zlib's own `test/example.c`: output byte-identical to the same program built by GCC | 1.4 MB |
 | **Lua** | 5.4.7 | `test/lua/*.lua` against expected output; the stock `lua.c` interpreter also builds and runs | 1.0 MB |
 | **cJSON** | 1.7.18 | `test/cjson/*.json` round-trip, all five match | 137 KB |
+| **QuickJS** (quickjs-ng) | 0.9.0 | `./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/quickjs test/quickjs/runner.c qjs` (about 11 s), then `./qjs "$(cat test/quickjs/smoke.js)"`: output byte-identical to `test/quickjs/smoke.expected`. Checked 2026-09-25 with pin v424 at checkout `a515adf81`; it needs the C runtime from that checkout or later | 4.9 MB |
 
 SQLite, compiled by PXX from the single-file amalgamation:
 
