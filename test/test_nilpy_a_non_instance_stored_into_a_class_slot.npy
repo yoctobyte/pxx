@@ -1,0 +1,54 @@
+# A value that is not an instance, stored into a slot that held a class
+# instance. The store unboxed the variant with an unchecked pyvarobj, so an
+# int's payload became an instance pointer and the next member read crashed.
+#
+# An INFERRED field (`self.node = N()`, no annotation) is not a declaration,
+# so an untypable store through any receiver widens it to a variant and the
+# value is stored exactly as CPython stores it. Only an ANNOTATED class-typed
+# local keeps its type; a non-instance stored there raises TypeError, the one
+# place this file's output differs from CPython (CPython would store it).
+# An instance and None store as before.
+# bug-n-a-store-through-a-non-self-receiver-never-widens-the-field-so-a-float-lands-as-raw-bits
+
+
+class N:
+    def __init__(self):
+        self.v = 1
+
+
+class H:
+    def __init__(self):
+        self.node = N()
+
+
+def put(h, y):
+    h.node = y
+
+
+def put_typed(h: H, y):
+    h.node = y
+
+
+def local_slot(y):
+    n: N = y
+    return n
+
+
+h = H()
+put(h, N())
+print(h.node.v)
+put(h, None)
+print(h.node is None)
+for bad in (5, "s", 2.5):
+    put(h, bad)
+    print(h.node)
+    put_typed(h, bad)
+    print(h.node)
+    try:
+        local_slot(bad)
+        print("stored")
+    except TypeError:
+        print("TypeError")
+put_typed(h, N())
+print(h.node.v)
+print(local_slot(N()).v)

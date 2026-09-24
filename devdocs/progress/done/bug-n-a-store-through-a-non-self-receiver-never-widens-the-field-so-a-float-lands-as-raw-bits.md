@@ -3,7 +3,7 @@ track: N
 prio: 80
 type: bug
 blocked-by: []
-summary: "FIXED. MECHANISM: a field stored through a receiver other than `self` was never joined, so a float landed in an int slot as its bits. PyFJJoinForeignStores (between the class detect sweep and layout) now joins every `<recv>.NAME = v`: a typable v widens the field by PyWidenBinding; a bare parameter is typed by its annotation or its call sites; a v the tokens cannot type widens a SCALAR field it can reach to variant. Scoped to the receiver class when the tokens name it, name-wide otherwise. A CLASS-typed field is deliberately not widened; a non-instance value reaching one now RAISES TypeError at the store (pyvarobj_store) instead of segfaulting later -- a chosen divergence from CPython, which would store it.""
+summary: "FIXED. MECHANISM: a field stored through a receiver other than `self` was never joined, so a float landed in an int slot as its bits. PyFJJoinForeignStores (between the class detect sweep and layout) now joins every `<recv>.NAME = v`: a typable v widens the field by PyWidenBinding; a bare parameter is typed by its annotation or its call sites; a v the tokens cannot type widens any SCALAR or CLASS field it can reach to variant, so the value is stored as CPython stores it. Scoped to the receiver class when the tokens name it, name-wide otherwise. The one place pxx differs from CPython: a non-instance stored into an ANNOTATED class-typed local (`n: N = y`) raises TypeError (pyvarobj_store), because there the programmer declared the type; CPython would store it.""
 status: done
 ---
 
@@ -125,9 +125,22 @@ which raises TypeError for a non-object tag, passes None as nil, and does not
 retain (the store retains, as PyStoreRhsToClassSlot records). Plain `pyvarobj`
 is untouched, because its dispatch callers need a non-object to fail an `is`
 test, not raise. Fixture
-`test/test_nilpy_a_non_object_stored_into_a_class_slot_raises.npy`; its
+`test/test_nilpy_a_non_instance_stored_into_a_class_slot.npy`; its
 `.expected` is pxx's own output, since CPython would store the value. Pin v421
 (4e32f1dde0ec) prints `stored` on all nine raising rows.
 
 ## Log
 - 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6aa68e085b.
+
+## Amended (2026-09-24, frankb-12, at the coordinator's call)
+
+6aa68e085b raised TypeError at all three class-slot store sites. For an
+INFERRED field that goes the wrong way: `h.node = 5` is working CPython, and
+NilPy may only diverge by accepting more, never by refusing more
+(devdocs/dev/nilpy-semantics-divergences.md). So an untypable store now widens
+an inferred class field to variant, as it already did for scalar fields, and
+reads back 5. pyvarobj_store stays at the store sites and now fires only where
+the slot is still class-typed: the annotated local, and a field whose every
+store the tokens could type. Renamed fixture:
+`test/test_nilpy_a_non_instance_stored_into_a_class_slot.npy`; it matches
+CPython except the three annotated-local rows.

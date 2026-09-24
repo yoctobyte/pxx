@@ -44062,6 +44062,12 @@ begin
             (tk = tyBoolean) or (tk = tyAnsiString) or (tk = tyString);
 end;
 
+function PyFJWidensOnUnknown(tk: TTypeKind): Boolean;
+{ A slot an untypable store can corrupt: one kind of value, or one class. }
+begin
+  Result := PyFJScalarTk(tk) or (tk = tyClass);
+end;
+
 function PyIfStrU(c: Boolean; const a, b: AnsiString): AnsiString;
 begin
   if c then Result := a else Result := b;
@@ -44176,11 +44182,11 @@ begin
                 disagree, a subscript, an untyped call -- may be ANY type at
                 run time, and a scalar slot cannot hold what it is not: a float
                 truncates into an int field, an int into a str field crashes.
-                So a SCALAR field it may reach becomes a variant (correct, and
-                slower). A variant field already holds anything; a CLASS field
-                is left alone, because unknown there is nearly always the same
-                class (`node.next = other`) and a variant would send every
-                member read on it through the dynamic protocol. }
+                So a SCALAR or CLASS field it may reach becomes a variant
+                (correct, and slower): CPython stores whatever it is given, and
+                an inferred field is not a declaration. A variant field already
+                holds anything. Only an ANNOTATED class-typed local keeps its
+                type -- there the store raises (pyvarobj_store). }
               rtk := tyVariant;
               nm := GetTokenStr(x - 1);
               rci := -1;
@@ -44194,10 +44200,10 @@ begin
                   if PxxDbgEnabled('n.fjforeign') then
                     WriteLn('PXXDBG n.fjforeign line ', Tokens[it].Line, ' .',
                             nm, ' rhs UNKNOWN field tk=', PyFJTk[j],
-                            PyIfStrU(PyFJScalarTk(IntToTypeKind(PyFJTk[j])),
+                            PyIfStrU(PyFJWidensOnUnknown(IntToTypeKind(PyFJTk[j])),
                                      ' -> variant', ' kept'),
                             PyIfStrU(ent >= 0, ' scoped', ' name-wide'));
-                  if PyFJScalarTk(IntToTypeKind(PyFJTk[j])) then
+                  if PyFJWidensOnUnknown(IntToTypeKind(PyFJTk[j])) then
                     PyFJTk[j] := Ord(tyVariant);
                 end;
               Continue;
