@@ -32337,6 +32337,14 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo)" "$$($(TESTTMP)/test_xt_httpdemo_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --xtensa-abi=windowed examples/net/httpdemo.pas $(TESTTMP)/test_xt_httpdemo_w
 	tools/expect_same.sh xtensa-win/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo_w)" "$$($(TESTTMP)/test_xt_httpdemo_x64)"
+	# THE SCHEDULER MUST FIT AN ESP32. On --platform=esp its reactor table is
+	# ONE slot (every task reads tid -ENOSYS) and CO_STK is 32 KB; with 64 slots
+	# the table alone was ~150 KB of bss and three plain Spawns ran an S3 out of
+	# heap. bss for this program was 172,560 B before and 24,384 B after; the
+	# 65536 bound fails if the table comes back and leaves room for growth.
+	# bug-b-the-scheduler-s-default-coroutine-stack-does-not-fit-an-esp32
+	bss=$$(./$(COMPILER) --target=esp32s3 --emit-obj test/test_scheduler.pas $(TESTTMP)/test_xt_sched_s3.o | sed -n 's/.*bss=\([0-9]*\)B.*/\1/p'); \
+	  test -n "$$bss" && test "$$bss" -lt 65536 || { echo "FAIL: esp32s3 scheduler bss=$$bss (want < 65536)"; exit 1; }
 	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)

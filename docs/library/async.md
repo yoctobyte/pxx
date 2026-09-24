@@ -16,7 +16,7 @@ The `scheduler` unit provides the core coroutine lifestyle routines. Coroutines 
 ### Key Routines
 
 - **`procedure Spawn(entry: TCoroEntry; arg: Pointer);`**
-  Spawns a new coroutine with a default stack size (64 KB). The `entry` parameter is a procedural type matching `procedure(arg: Pointer)`.
+  Spawns a new coroutine with the default stack size: 192 KB on hosted targets, 32 KB on ESP (`--platform=esp`, any ESP chip), where the stack is real RAM. The ESP default fits ordinary async code (the `httpdemo` example peaks near 18 KB) but not a TLS handshake (~128 KB); use `SpawnSized` for that. The `entry` parameter is a procedural type matching `procedure(arg: Pointer)`.
   
 - **`procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);`**
   Spawns a coroutine with a custom stack size in bytes. This is highly useful for memory-constrained platforms (such as embedded ESP32 targets), where small 4 KB or 8 KB stacks are sufficient and conserve RAM.

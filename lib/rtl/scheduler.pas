@@ -24,6 +24,11 @@ interface
 type
   TCoroEntry = procedure(arg: Pointer);
 
+{ Start a coroutine on a heap stack of the DEFAULT size: 192 KB on hosted
+  targets, 32 KB on ESP (--platform=esp, any ESP chip). The ESP default is sized
+  from measured use (examples/net/httpdemo peaks at ~18 KB) and does NOT fit a
+  TLS handshake, which needs ~128 KB -- use SpawnSized for that, or for anything
+  that recurses deeply. }
 procedure Spawn(entry: TCoroEntry; arg: Pointer);
 { Like Spawn but with an explicit per-coroutine heap-stack size in bytes — the
   RAM-cheap path for constrained devices (e.g. 4-8 KB stacks fit many coroutines
@@ -91,8 +96,25 @@ const
     body returns), not per MAX_CO slot, so an idle program pays nothing. The
     constrained-device case the header describes is unaffected: it already has
     to call SpawnSized with an explicit size, and 4-8 KB stacks there never went
-    through this constant. feature-tls-provider-abstraction }
+    through this constant. feature-tls-provider-abstraction
+
+    EXCEPT ON ESP, WHERE IT IS 32 KB, and that is derived, not guessed. On the
+    ESP-IDF profile a coroutine stack is real heap from internal RAM (the mmap
+    arm is unavailable, so SpawnSized takes GetMem), and 192 KB x three plain
+    Spawns exhausts an ESP32-S3 without PSRAM: test_scheduler aborted with
+    `pxx: out of memory` and examples/net/httpdemo died the same way. Measured
+    high-water marks (stack painted at spawn, scanned at finish, 2026-09-24):
+    httpdemo 18,064 B (qemu-xtensa windowed, its larger coroutine), the
+    20-frame deep-yield test 3,832 B (ESP-IDF S3) and 3,952 B (qemu-user).
+    32 KB is the largest of those plus ~80%. It does NOT cover a real TLS
+    handshake, the 128 KB case above: a TLS coroutine on ESP must SpawnSized,
+    and the interface comment on Spawn says so.
+    bug-b-the-scheduler-s-default-coroutine-stack-does-not-fit-an-esp32 }
+{$ifdef PXX_PLATFORM_ESP}
+  CO_STK = 32768;   { 32 KB }
+{$else}
   CO_STK = 196608;  { 192 KB }
+{$endif}
   { Must round-trip through ONE SIGNED machine word: the guard is written and read
     through PW = ^NativeInt, which is 32-bit and signed on i386/arm32/riscv32. A
     value with the high bit set ($C0DECAFE) sign-extends to a negative on load and
@@ -389,7 +411,22 @@ const
 {$ifdef PXX_SCHED_TINY_REACTORS}
   MAX_REACTORS = 2;    { test-only: makes the exhaustion arm reachable with 3 threads }
 {$else}
+{$ifdef PXX_PLATFORM_ESP}
+  { ONE ON ESP, and that removes no capability, because the table is keyed on
+    SelfTid and under --platform=esp every raw syscall answers -ENOSYS (the
+    xtensa and riscv32 IR_SYSCALL ESP arms): every FreeRTOS task reads tid -38
+    and attaches to slot 0, so slots 1..63 were unreachable there. They were
+    not free, though -- a TReactor carries six MAX_CO-wide arrays, so the table
+    was ~150 KB of bss on every ESP program that used the scheduler, most of
+    an ESP32-S3's internal RAM before a single coroutine stack was allocated.
+    That, and not only CO_STK, is why test_scheduler and httpdemo ran out of
+    heap on the S3. Two TASKS sharing one reactor is the pre-existing ESP
+    limit this table never lifted; see
+    bug-b-the-scheduler-s-default-coroutine-stack-does-not-fit-an-esp32. }
+  MAX_REACTORS = 1;
+{$else}
   MAX_REACTORS = 64;
+{$endif}
 {$endif}
 
 const
