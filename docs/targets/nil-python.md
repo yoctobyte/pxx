@@ -65,7 +65,7 @@ Each of these was reproduced with the compiler named above.
 | --- | --- | --- |
 | `def f(n: int) -> int: return n * n`, then `f(2 ** 40)` | `1208925819614629174706176` | `0` — an `-> int` result is a 64-bit machine integer and wraps silently. Leave the return type unannotated to keep arbitrary precision. |
 | `hex(2 ** 64 + 1)` | `0x10000000000000001` | `0x1` — hex, octal and binary text of an int wider than 64 bits is wrong; `format(x, "x")` on one raises `ValueError`. Decimal `str()` is correct. |
-| `b = 0` at run time, then `7 // b` inside `try/except ZeroDivisionError` | `caught` | `Runtime error 200`, exit code 200; the handler never runs. Only a literal `1 // 0` raises `ZeroDivisionError`. Same for `%`. |
+| inside a function, `b = len(sys.argv) - 1` (0 with no arguments), then `7 // b` inside `try/except ZeroDivisionError` | `caught` | `Runtime error 200`, exit code 200; the handler never runs. The same for a big int that reaches zero and for `divmod(7, b)`. Some shapes do raise and are caught (a literal `1 // 0`, a module-level `b = 0`, a zero divisor passed in as a parameter), so do not rely on the difference; test the divisor first. |
 | `for v in (x * 2 for x in src()):` | lazy | the generator expression is evaluated in full before the loop starts |
 | `a.nope()` where no class declares `nope` | `AttributeError` at run time | compile error: `A has no method nope` |
 | `A.f = g` (replacing a method) | allowed | compile error; classes are fixed at compile time |
