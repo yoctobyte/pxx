@@ -9926,6 +9926,15 @@ function FloatBinopResultTk(ltk, rtk: TTypeKind): TTypeKind;
 begin
   if (ltk = tyExtended) or (rtk = tyExtended) then
     FloatBinopResultTk := tyExtended
+  { A NilPy expression: Python's float is Double on every target, and NilPy's
+    `/` always lowers to a Double call (pytruediv_f), so the Single answer
+    below mistyped the node on ESP -- the parent then emitted a Single op over
+    Doubles (`x/y + x/y` printed 14660154687488.0 on the S3). Same rule as
+    PyTrueDivResultTk in pyparser.inc, which serves the NilPy-only sites.
+    PyExprMode is set only while NilPy parses, so a Pascal unit compiled into
+    the same program keeps its native-depth `Real`. }
+  else if PyExprMode then
+    FloatBinopResultTk := tyDouble
   else if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
     if (ltk = tyDouble) or (rtk = tyDouble) then

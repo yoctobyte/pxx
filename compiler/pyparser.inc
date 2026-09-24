@@ -5751,6 +5751,26 @@ begin
     Result := FindUClassNonRecord(nm);
 end;
 
+{ The type of a Python TRUE DIVISION (`/`, `/=`): Double on every target.
+  FloatBinopResultTk is the PASCAL dialect's rule, where `int / int` is the
+  native depth -- Single on xtensa/riscv32 -- and it must stay so for the
+  Pascal units a NilPy program compiles beside it. It was wrong for NilPy:
+  the lowering (ir.inc, the pytruediv_f arm) computes every numeric `/` as a
+  Double call and retypes the node Double, but the node's PARENT had already
+  been typed at parse time from the Single answer. So on the ESP32-S3
+  `x/y + x/y` was emitted as a Single add over two Doubles and printed
+  14660154687488.0, and `print(1/3)` printed float32's 0.3333333432674408.
+  Python's float is Double everywhere else in NilPy (literals, `float`
+  annotations), so this names what the lowering already produces.
+  test_nilpy_float_repr on the S3 board census, 2026-09-24. }
+function PyTrueDivResultTk(ltk, rtk: TTypeKind): TTypeKind;
+begin
+  if (ltk = tyExtended) or (rtk = tyExtended) then
+    Result := tyExtended
+  else
+    Result := tyDouble;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
@@ -5993,8 +6013,9 @@ begin
     `r = x / 2; return r` were right — the same operator answering differently
     through two paths is the tell (devdocs/dev/normalise-dont-special-case.md).
 
-    FloatBinopResultTk rather than a hardcoded tyDouble: on ESP (xtensa/riscv)
-    Single is first-class and int/int under `/` yields the native depth there.
+    PyTrueDivResultTk, not the Pascal FloatBinopResultTk this once called: the
+    Pascal rule answers Single on ESP, and NilPy's `/` is always a Double call
+    (see PyTrueDivResultTk).
 
     Comparisons, `in`, `not` and the conditional expression are all settled
     ABOVE this point, so `a / b > 1` is still a Boolean and `a / b if c else 0`
@@ -6097,7 +6118,7 @@ begin
   begin
     divL := PyInferExprType(startIdx, divAt);
     divR := PyInferExprType(divAt + 1, endIdx);
-    Result := FloatBinopResultTk(divL, divR);
+    Result := PyTrueDivResultTk(divL, divR);
     PyInferLastCi := -1;
     Exit;
   end;
@@ -34760,7 +34781,7 @@ begin
         ASTSLen[node] := PY_BINOP_AUGMENTED;
       { `/=` is TRUE division: always a float, regardless of operand types
         (`4 /= 2` is 2.0, not 2) -- same rule the plain `/` binop already has
-        via FloatBinopResultTk. Falling through to the generic PyWiden below
+        via PyTrueDivResultTk. Falling through to the generic PyWiden below
         (as every other augmented op does) would keep an int-typed node
         storing a float bit pattern: the same class of bug as
         bug-nilpy-str-of-mixed-mod-prints-double-bits, just for `/=`.
@@ -34774,10 +34795,10 @@ begin
         if PyTypingPass and (ASTKind[lhsNode] = AN_IDENT) and
            (Syms[Integer(ASTIVal[lhsNode])].TypeKind <> tyDouble) then
           PyNoteLocalType(Syms[Integer(ASTIVal[lhsNode])].Name,
-                          FloatBinopResultTk(IntToTypeKind(ASTTk[lhsNode]),
+                          PyTrueDivResultTk(IntToTypeKind(ASTTk[lhsNode]),
                                              IntToTypeKind(ASTTk[CurASTNode])),
                           REC_NONE);
-        ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[lhsNode]),
+        ASTTk[node] := Ord(PyTrueDivResultTk(IntToTypeKind(ASTTk[lhsNode]),
                                               IntToTypeKind(ASTTk[CurASTNode])));
       end
       else
@@ -35064,7 +35085,7 @@ begin
       across trial-parse rounds rather than only the local node's.
       feature-nilpy-power-operator-and-divmod }
     if PyTypingPass and (augTk = tkSlash) and (Syms[symIdx].TypeKind <> tyDouble) then
-      PyNoteLocalType(name, FloatBinopResultTk(Syms[symIdx].TypeKind,
+      PyNoteLocalType(name, PyTrueDivResultTk(Syms[symIdx].TypeKind,
                                                IntToTypeKind(ASTTk[CurASTNode])), REC_NONE);
     PyNoteOptionalTaint(symIdx, CurASTNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
@@ -35080,7 +35101,7 @@ begin
       don't copy the target type otherwise: `n -= 0x10000000000000000` on an
       int target must type the binop PROMO (see the twin lhs-expression site) }
     if augTk = tkSlash then
-      ASTTk[node] := Ord(FloatBinopResultTk(Syms[symIdx].TypeKind,
+      ASTTk[node] := Ord(PyTrueDivResultTk(Syms[symIdx].TypeKind,
                                             IntToTypeKind(ASTTk[CurASTNode])))
     else
       ASTTk[node] := Ord(PyWiden(Syms[symIdx].TypeKind,
@@ -40188,7 +40209,7 @@ begin
 
             registered an Int64 result over a body that stores a double and the
             caller printed 4612811918334230528. The AST side already knows this
-            — both augmented-assignment sites call FloatBinopResultTk and note
+            — both augmented-assignment sites call PyTrueDivResultTk and note
             the local as a float — so this token chase was the third owner of
             the one rule with no copy of it, exactly like PyInferExprType above.
             Handled in the SAME ordered walk rather than a second loop, so a
@@ -40196,7 +40217,7 @@ begin
             bug-n-inferred-return-type-of-true-division-is-int }
             if Tokens[k + 1].Kind = tkTrueDivEq then
             begin
-              t2 := FloatBinopResultTk(chainCur, tyInteger);
+              t2 := PyTrueDivResultTk(chainCur, tyInteger);
               cur := t2;
               chainCur := t2;
               chainRec := -1;
