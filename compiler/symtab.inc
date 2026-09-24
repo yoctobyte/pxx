@@ -15900,9 +15900,9 @@ end;
 
   NOT `const` (read-only, so borrowing is safe and stays free), not var/out
   (IsRef), not an open array (ArrLen 1000, the caller's storage), Pascal only
-  (NilPy and C keep their own conventions), not wasm32 (its epilogue is
-  WasmEmitManagedLocals, not this sweep), not a stackless generator (its params
-  are live state across yields).
+  (NilPy and C keep their own conventions), not a stackless generator (its
+  params are live state across yields). wasm32 releases through
+  WasmEmitManagedLocals rather than this sweep, and asks the same predicate.
   bug-a-a-by-value-string-param-written-by-the-callee-changes-the-callers-string }
 function SymOwnedValueParam(i: Integer): Boolean;
 var k: Integer;
@@ -15912,7 +15912,6 @@ begin
   if Syms[i].Kind <> skParam then Exit;
   if Syms[i].IsRef then Exit;
   if (not IsPascalFrontend) or NilPyUserCode then Exit;
-  if TargetArch = TARGET_WASM32 then Exit;
   if CurProcIsStackless then Exit;
   if SymCellPtr[i] >= 0 then Exit;
   if not (((Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray) or

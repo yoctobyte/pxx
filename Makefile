@@ -30662,6 +30662,11 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/hello.pas $(TESTTMP)/w32_hello.wasm
 	./$(COMPILER) test/hello.pas $(TESTTMP)/w32_hello_x64
 	tools/expect_same.sh wasm32/hello "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_hello.wasm)" "$$($(TESTTMP)/w32_hello_x64)"
+	# A by-value string/dynarray param is owned by the callee: writing it (or
+	# SetLength on it) must leave the caller alone. wasm32 has its own epilogue
+	# and its own SetLength slot address, so it needs its own row.
+	./$(COMPILER) --target=wasm32 test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/w32_by_value_param_owned.wasm
+	tools/expect_same.sh wasm32/by_value_param_owned "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_by_value_param_owned.wasm)" "$$(cat test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.expected)"
 	./$(COMPILER) --target=wasm32 test/test_cross_case_range.pas $(TESTTMP)/w32_case_range.wasm
 	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/w32_case_range_x64
 	tools/expect_same.sh wasm32/case_range "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_case_range.wasm)" "$$($(TESTTMP)/w32_case_range_x64)"

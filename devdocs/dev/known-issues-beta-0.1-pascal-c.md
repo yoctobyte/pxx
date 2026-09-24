@@ -42,18 +42,6 @@ var guard, a: LongInt;
 - Measured on x86-64, both binaries.
 - Ticket: bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type.
 
-### Pascal, wasm32: a by-value parameter is still borrowed
-
-wasm32 has its own epilogue, so the fix below did not reach it.
-
-- `function UpperStr(s: string): string` that writes `s[i]` upper-cases the
-  CALLER's string too.
-- `SetLength(a, 9)` on a by-value dynamic-array parameter has no effect in the
-  callee: `Length(a)` still answers the caller's length. This happens even after
-  `a := nil`.
-- Workaround: copy into a local first (`t := s; ... t[i] := ...`).
-- Measured under wasmtime; the second bullet on both binaries.
-
 ### C, all targets: `long double` is 8 bytes; gcc's is 16
 
 - `sizeof(long double)` = 8. `struct { char c; long double y; }` is 16 here
@@ -114,8 +102,9 @@ wasm32 has its own epilogue, so the fix below did not reach it.
     textbook `UpperStr` returned the right value AND upper-cased the caller's.
     Every native target.
   - A callee that rebound such a parameter leaked one block per call.
-  - Fixed on x86-64, i386, arm32, aarch64, riscv32, esp32c3 and esp32s3.
-    wasm32 is not fixed (see above).
+  - Fixed on x86-64, i386, arm32, aarch64, riscv32, esp32c3, esp32s3 and
+    wasm32. On wasm32, `SetLength(a, 9)` on a by-value dynamic-array
+    parameter also used to have no effect in the callee; that is fixed too.
 - **`examples/parallel/collatz`** printed `total steps = 0`. The bug was in the
   example: a local `n` hid `const N`. pxx now warns on that shape.
 - **A program routine named like a System const** (`function MaxInt(A, B)`) was

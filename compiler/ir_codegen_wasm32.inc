@@ -831,6 +831,21 @@ begin
     WasmMemOp($28, 'i32.load', 2, 0);
 end;
 
+{ The address PXXDynSetLen needs for a whole dynamic-array symbol: its SLOT.
+  WasmLValueAddr answers that for a local and for var/out, but for a BY-VALUE
+  array parameter it performs the ABI oracle's load and answers the HANDLE --
+  the slot holds the handle itself -- so `SetLength(a, 9)` in a callee handed
+  the data pointer over as the slot and Length(a) stayed at the caller's 3.
+  Both SetLength arms ask this, so the rule lives once. }
+procedure WasmDynSetLenSlotAddr(si: Integer);
+begin
+  if (Syms[si].Kind = skParam) and not Syms[si].IsRef and
+     Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+    WasmSlotAddr(si)
+  else
+    WasmLValueAddr(si);
+end;
+
 { Classify a frame slot, recording the body as unlowered if its type has no
   wasm value type at all (a record, a set, a variant). }
 function WasmSlotType(si: Integer; var vt: Byte): Boolean;
@@ -2010,7 +2025,7 @@ begin
     IR_INDEX or IR_FIELD, whose value already IS the address of the slot
     holding the inner handle. Only the whole-symbol spelling auto-loads. }
   if (IRKind[IRA[node]] = IR_LEA) and (IRA[IRA[node]] >= 0) then
-    WasmLValueAddr(IRA[IRA[node]])
+    WasmDynSetLenSlotAddr(IRA[IRA[node]])
   else
     WasmEmitValueAs(IRA[node], WT_I32, 'SetLength target slot');
   WasmEmitValueAs(IRB[node], WT_I32, 'SetLength count');
@@ -3694,7 +3709,7 @@ begin
         WasmUnsupported('SetLength on a dynamic array with no length argument');
         Exit;
       end;
-      WasmLValueAddr(IRA[IRA[argNode]]);
+      WasmDynSetLenSlotAddr(IRA[IRA[argNode]]);
       WasmEmitValueAs(IRA[IRB[argNode]], WT_I32, 'SetLength count');
       if WasmBodyBroken then Exit;
       WasmDataAddr(GetOrAllocSymRTTI(IRA[IRA[argNode]]));
@@ -7243,7 +7258,7 @@ begin
         the thing that tells the two apart, using what AssignStacklessSlots
         already computed. }
       if (not SymSkipScopeExitRelease(i)) and
-         (Syms[i].Kind = skLocal) and (i <> retSym) then
+         SymReleasedAtScopeExit(i) and (i <> retSym) then
       begin
         act := ScopeExitReleaseAction(i, a1, a2, a3);
         if act = SXR_INTF then
