@@ -45,10 +45,10 @@ gated so the smoke reflects the proven plumbing.
 
 ## Notes
 
-- `esp32s3` (Xtensa) is **not** buildable yet: the PAL unit's 7-word
-  `PalBackendVforkAndExec` trips the Xtensa 6-parameter-word cap
-  (`feature-xtensa-stack-args-over-6-words`). esp32c3 (riscv32, 8-word cap) is
-  fine.
+- `esp32s3` (Xtensa): the PAL socket unit now compiles for Xtensa too (checked
+  2026-09-24 with the pinned and HEAD compilers). `examples/esp32/wifi-ap-s3`
+  runs a TCP server on it on real S3 silicon. This loopback smoke has no S3
+  project of its own.
 - Uses the portable PAL directly, not `net.pas`: net.pas's by-value
   `TNetAddress` helpers hit a riscv32 record-result codegen gap
   (`feature-riscv32-record-function-results`).
