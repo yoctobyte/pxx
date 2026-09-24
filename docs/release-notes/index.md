@@ -16,6 +16,10 @@ v424**: commit `0a3a7b5b4`, compiler binary sha256 `93a336a7ba85…`, on
 Where a figure was measured with a different compiler, it says which. If you
 are reading this against a later pin, the figures describe v424, not yours.
 
+The one exception is [Fixed since v424](#fixed-since-v424): those fixes are in
+the development tree and were measured there, and the next pin, v425, will be
+the first to carry them.
+
 ## What PXX is
 
 A self-hosting compiler for the Pascal dialect of Free Pascal, written from
@@ -30,18 +34,24 @@ the Linux kernel. That holds for every frontend.
 
 ## What works
 
-The [examples showcase](../examples/) is the best answer: every entry on it was
+The [examples showcase](../examples/index.md) is the best answer: every entry on it was
 compiled and run with pin v423, and all its example programs were rebuilt
-with v424, where the batch programs printed identical output. It shows the output or a screenshot of each.
-It covers:
+with v424, where the batch programs printed identical output. It shows the
+output or a screenshot of each. The highlights:
 
-- terminal and GTK applications, an IDE written in PXX, and a chess engine;
-- a parallel `for` loop;
-- a Nil Python program shown beside CPython, with the frame rate of each;
-- ESP32 programs run under QEMU;
-- real C code compiled unmodified: SQLite 3.46.0, Lua 5.4.7, zlib 1.3.1,
-  cJSON 1.7.18, and BusyBox, checked against GCC's build of the same sources;
-- [a minimal bootable Linux system](../examples/minimal-linux-system.md) whose
+- **Pascal:** terminal and GTK applications, an IDE written in PXX, a chess
+  engine, a parallel `for` loop, and the compiler itself, which PXX builds to a
+  byte-identical copy.
+- **C:** real code compiled unmodified and checked against GCC's build of the
+  same sources: SQLite 3.46.0, Lua 5.4.7, zlib 1.3.1, cJSON 1.7.18, BusyBox,
+  and the QuickJS 0.9.0 JavaScript engine. See
+  [Getting started with C](../getting-started/c.md).
+- **ESP32:** Pascal, C and Nil Python programs on the ESP32-S3 and ESP32-C3,
+  with units for GPIO, UART, ADC, PWM, I2C, stored settings and timers, and a
+  walk of the examples on a physical ESP32-S3 board. See [ESP32](#esp32) below.
+- **Nil Python:** a program shown beside CPython with the frame rate of each,
+  and a Nil Python program driving GPIO and a timer on the ESP32-S3 board.
+- [A minimal bootable Linux system](../examples/minimal-linux-system.md) whose
   shell and compiler were built by PXX.
 
 ## Languages
@@ -92,38 +102,61 @@ PXX builds bare-metal and ESP-IDF images for esp32s3 (xtensa) and esp32c3
   `e1648bcb4`) that predates v423, not with v424 itself.
 - **Examples:** 15 programs in `examples/esp32/` run under QEMU with pin v423
   and are listed in the [showcase](../examples/#esp32).
-- **On a board:** eight examples, including the GPIO-edge and ADC programs
-  that QEMU cannot exercise, ran correctly on a physical ESP32-S3, built with a
-  development compiler older than v423. Looped for minutes, the Nil Python
-  examples leak memory on every run. A fix is being landed; until it is in,
-  treat Nil Python on ESP as fine for short runs and not yet for long-running
-  use. The details are in the [showcase](../examples/#on-a-real-esp32-s3).
-- **New in v424:** units for I2C (`espi2c`), PWM (`esppwm`) and non-volatile
-  storage (`espnvs`), each with an example in `examples/esp32/` and each
-  checked on an ESP32-S3 board with a development compiler. NVS values survived
-  four reboots. PWM output was measured on its pin: edge counts and duty cycle
-  matched with nothing wired. I2C passed its no-device checks (bus open, empty
-  scan, a missing device reported as missing), but **reading and writing a real
-  I2C device has not been tested yet**.
+- **On a board:** the ESP lane ran all 15 ESP32-S3 examples on one physical
+  ESP32-S3 board (ESP-IDF v6.0.1), built with the v424 compiler, and all 15
+  passed. That includes the GPIO-edge and ADC programs, which QEMU cannot
+  exercise, and two Nil Python programs. The ESP32-C3 has been run only under
+  QEMU, and the ESP32-S2 has only been built.
+- **Peripheral units:** GPIO with edge events (`espgpio`, `interrupts`), UART
+  (`espuart`), continuous ADC (`espadc`), PWM (`esppwm`), I2C (`espi2c`), stored
+  settings (`espnvs`), timers (`esptimer`) and heap figures (`espsys`), each
+  usable from Pascal and from Nil Python. Their interfaces, examples and limits
+  are in [ESP32 peripherals](../library/esp.md). `espuart` is newer than v424's
+  commit; it is library source, so the v424 compiler builds it from a checkout
+  that has it. **Reading and writing a real I2C device has not been tested
+  yet**; the board checks covered the bus without a device.
+- **Long-running programs:** soaking the examples on the board found two string
+  leaks of 44 bytes each: one on every Nil Python `print` of a number, and one
+  on every comparison of a function's string result on xtensa. Both are
+  [fixed since v424](#fixed-since-v424). Until v425, treat Nil Python on ESP as
+  fine for short runs and not yet for long-running use. A long soak of a Nil
+  Python example on the board is still to be done.
 
 ESP is not a Unix: FreeRTOS provides tasks, not processes. Calls with POSIX
 shapes that have no meaning there return an explicit "unsupported" error rather
 than a plausible wrong answer. A getting-started guide for ESP is being written;
 until it lands, see [ESP32](../targets/esp32.md).
 
+## Fixed since v424
+
+These fixes are in the development tree, not in v424; pin v425 will carry
+them. Unless a row says otherwise, each was checked on 2026-09-25 by running
+the same program with v424 and with a development build (compiler sha256
+`5a8648a2450a…`, tree `c570417d8`).
+
+| Fix | Commit | What changes |
+| --- | --- | --- |
+| `print` / `writeln` of a function result leaks | `e7a07c9cd` | Writing a string that a function returned no longer leaks it, on every backend. `writeln(F(k))` 200 times: 190 strings live on v424, 2 now. For Nil Python every `print` of a number, float or container leaked one string; on the ESP32-S3 that was 44 bytes per run. |
+| xtensa: comparing a function's string result leaks | `3671e2940` | `if F(4) <> 'soak'` leaked the result on every evaluation, on xtensa only. Measured by its author: 0 bytes per iteration on the ESP32-S3 board afterwards. |
+| libc `printf` output lost at exit | `dde6816ce`, `93a03391c` | A program that imports from libc now flushes libc's buffers at exit. v424 printed nothing; the development build prints `42 ok`. The follow-up keeps programs that only reach libc weakly, such as threaded ones, static. |
+| A type named like a compiler-internal record gets the wrong layout | `74ebf5593` | `type TProc = record A: array[0..99] of Int64; end` is 800 bytes, as in FPC (v424: 1344). An enum named `TSymbol` is 4 bytes (v424: 104). A class named `TProc` no longer crashes in `Free` (measured by its author). |
+| riscv32 could not export a routine to C | `73ed7a4e4` | `exports f` for a `cdecl` routine now works on riscv32, so a C program in an ESP32-C3 build can link and call it. xtensa still refuses, and the message says why. Measured by its author. |
+| `--shared` off x86-64 reads like an internal error | `45bbfb187` | On aarch64 and arm32, `--shared` now says `shared-library output is x86-64 only`, as i386 did. v424 said `internal: no init/fini thunk prologue`. |
+| A `var` argument of the wrong width through an overloaded routine | `6ff482413` | The refusal now names the parameter and both widths, where v424 said only `no overload of M matches these arguments`. Measured by its author. |
+| C `struct tm` lacks `tm_gmtoff` and `tm_zone` | `f82b42a21` | The C runtime's `struct tm` has both fields and honours `TZ=":zone"`. This is runtime-library source, so v424 picks it up from a checkout at or after the commit; it is what lets QuickJS build. |
+
 ## Known issues
 
 The full list, each row re-run on v424, is on its own page:
 [Known issues in beta 0.1](../reference/known-issues.md). In short:
 
-- A few programs compile and silently give a wrong answer. Examples: a Pascal
-  record named like a compiler-internal type (`TProc`) gets the wrong size; C
+- A few programs compile and silently give a wrong answer. Examples: C
   `long double` is 8 bytes, not GCC's 16; an initialised C `__thread` variable
   reads 0 outside the main thread; on ESP, an uncaught exception reboots or
   stops the chip without a message.
-- Two problems are fixed in the development tree but not in v424: libc `printf`
-  output lost at exit, and a string leak in `writeln` of a function result.
-  Each has a workaround until the next pin.
+- Several problems in v424 are fixed in the development tree, listed in
+  [Fixed since v424](#fixed-since-v424). The known-issues page gives a
+  workaround for each until v425.
 - Integer division by zero gives 0 on ESP and stops the program on desktop.
   That is by design: an embedded device keeps running.
 - Nil Python is Python-ish at best and known to have plenty of issues; its

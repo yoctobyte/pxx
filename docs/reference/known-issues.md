@@ -17,16 +17,6 @@ refusal at least tells you something is wrong.
 
 ## Silently wrong
 
-### Pascal: a record named like a compiler-internal type gets the wrong layout
-
-```pascal
-type TProc = record A: array[0..99] of Int64; end;
-```
-
-`SizeOf(TProc)` is 1344 instead of 800, with no diagnostic. Fourteen names do
-this, `TProc` and `TSymbol` among them.
-**Workaround:** rename the type.
-
 ### C: `long double` is 8 bytes
 
 GCC's `long double` is 16 bytes on x86-64; PXX's is 8, the same as `double`. A
@@ -56,8 +46,8 @@ error at all.
 
 ## Fixed after v424
 
-These are wrong in v424 and fixed in the development tree, so the next pin will
-carry the fixes. Until then, use the workaround.
+These are wrong in v424 and fixed in the development tree, so the next pin, v425,
+will carry the fixes. Until then, use the workaround.
 
 - **libc `printf` output is lost.** A Pascal program that calls libc's `printf`
   through a `varargs` external prints nothing, because the program does not exit
@@ -67,8 +57,16 @@ carry the fixes. Until then, use the workaround.
   string leaks one string per call: 190 of 200 were never freed in a loop.
   **Workaround:** assign the result to a local first (`s := F(k); writeln(s)`),
   which frees everything.
+- **A type named like a compiler-internal record gets the wrong layout.**
+  `type TProc = record A: array[0..99] of Int64; end` has `SizeOf` 1344 instead
+  of 800, and an enum named `TSymbol` is 104 bytes instead of 4, with no
+  diagnostic. Fourteen names do this. **Workaround:** rename the type.
 
-These are two leak rows that were measured and fixed. We are not claiming that
+Each row was re-checked on 2026-09-25 with a development build (compiler sha256
+`5a8648a2450a…`, tree `c570417d8`): `printf` prints `42 ok`, the `writeln` loop
+leaves 2 strings live instead of 190, and the two types are 800 and 4 bytes.
+
+The `writeln` row is one leak that was measured and fixed. We are not claiming that
 PXX has no other leaks of this kind: a wider check of dynamic-array shapes is
 still in progress.
 
@@ -84,8 +82,9 @@ answer silently.
 - **C `setvbuf` with full or line buffering** returns nonzero: PXX's C streams
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused, as shared-library output is
-  x86-64 only. The message reads like an internal error (`no init/fini thunk
-  prologue`); on i386 the same refusal is worded plainly.
+  x86-64 only. On v424 the message reads like an internal error (`no init/fini
+  thunk prologue`); the development tree words it plainly, as i386 already did:
+  `shared-library output is x86-64 only`.
 
 ## By design: math errors
 
@@ -117,5 +116,9 @@ the program, not MicroPython's API.
 
 ## Reporting a problem
 
-See [Reporting bugs](../release-notes/index.md#reporting-bugs). A program that compiles
-and gives a wrong answer is the most useful report you can send.
+Open an issue at <https://github.com/yoctobyte/pxx/issues> with the smallest
+source file that shows the problem, the exact command you ran (including any
+`--target=`), what you expected and what you got, and the output of
+`./pxx --doctor` with the commit of your checkout (`git log -1 --format=%h`).
+A program that compiles and gives a wrong answer is the most useful report you
+can send.
