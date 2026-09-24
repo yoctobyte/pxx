@@ -123,3 +123,12 @@ and it is one row, not a redesign.
 
 ## Log
 - 2026-09-05 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit 2beb2abec.
+
+## 2026-09-24 — "BUILDS" above measured a build, never a run (frankS)
+
+The table's `--emit-obj` rows say BUILDS, and they did; none of those objects
+could RUN under IDF. The exported `app_main` sat at `.text+0`, where object
+mode emitted no C entry, so IDF called an unrelated routine and `main` never
+executed (the user's own `app_main` stayed LOCAL elsewhere). Fixed for riscv32
+by an entry stub -- see feature-c-esp-conformance-coverage. xtensa has the same
+hole, behind the windowed-variadic wall. The decision itself stands.

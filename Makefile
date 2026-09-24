@@ -34026,6 +34026,11 @@ test-c-conformance-arm32: $(COMPILER)
 test-c-conformance-riscv32: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target riscv32
 test-c-conformance-cross: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32
+# ESP-IDF on esp32c3 under Espressif QEMU. NOT in -cross: it needs an ESP-IDF
+# checkout and takes ~30s per test (a relink plus a boot), so it is run by hand
+# or sharded (--shard I/N). Unlike the runner above, a missing suite is exit 2.
+test-c-conformance-esp32c3: $(COMPILER)
+	tools/run_c_conformance_esp.sh ./$(COMPILER)
 	@# THE SUMMARY USED TO BE UNCONDITIONAL, and each of the four targets SKIPs
 	@# when the gitignored c-testsuite is absent -- so `all targets green` was
 	@# printed over four rows that measured nothing, and it was read as coverage
@@ -35462,7 +35467,10 @@ test-emit-obj: $(COMPILER)
 	#    an `external` variable would read zero -- the exact silent-wrong-value
 	#    shape this family exists to prevent. Asserted on the message, because
 	#    any compile failure would satisfy a bare nonzero exit.
-	@printf 'program eimp;\nvar Shared: Integer; external;\nfunction f: Integer; begin f := Shared; end;\nbegin end.\n' > $(TESTTMP)/espx_imp.pas
+	#    The reader must be REACHABLE: only an import something reads is refused
+	#    (an `extern int x;` nobody uses is c-testsuite 00094.c and must build),
+	#    and an uncalled f is dropped before the writer looks.
+	@printf 'program eimp;\nvar Shared: Integer; external;\nfunction f: Integer; begin f := Shared; end;\nvar r: Integer;\nbegin r := f; end.\n' > $(TESTTMP)/espx_imp.pas
 	@! ./$(COMPILER) -Fulib/rtl --emit-obj --target=riscv32 --platform=esp $(TESTTMP)/espx_imp.pas $(TESTTMP)/espx_imp.o >$(TESTTMP)/espx_imp.err 2>&1 || { echo "test-emit-obj: an imported variable was ACCEPTED for an ESP object -- it reads zero"; exit 1; }
 	@grep -q 'imported variable' $(TESTTMP)/espx_imp.err || { echo "test-emit-obj: the ESP import build failed for some OTHER reason, so the row above proves nothing"; head -3 $(TESTTMP)/espx_imp.err; exit 1; }
 	# 4b-nonies. THE ADDRESS OF AN EXTERNAL ROUTINE, on every target that has an
@@ -36260,6 +36268,22 @@ test-emit-obj: $(COMPILER)
 	@# unresolved one would be `U`.
 	nm $(TESTTMP)/c_crtl_xt.o | grep -q ' t PXXMemZero$$'
 	nm $(TESTTMP)/c_crtl_c3.o | grep -q ' t PXXMemZero$$'
+	@# crtl IS PRIVATE IN AN ESP-IDF OBJECT (ObjRuntimeIsPrivate). The IDF image
+	@# links picolibc, so a GLOBAL crtl was 41 `multiple definition` errors and
+	@# a WEAK one would be overridden piecemeal (crtl's printf on picolibc's
+	@# stdout). Asserted on --platform=esp for BOTH ISAs: --target=esp32c3 is a
+	@# hosted-linux object with no undefined symbols, so it cannot contain the
+	@# case. Pinned v416 fails the `!` rows (T malloc, T printf, B stdout).
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/c_reaches_crtl_on_the_esp_idf_profile.c $(TESTTMP)/c_crtl_rvesp.o
+	nm $(TESTTMP)/c_crtl_rvesp.o | grep -q ' t malloc$$'
+	! nm $(TESTTMP)/c_crtl_rvesp.o | grep -Eq ' [TWBDV] (malloc|printf|stdout|close|write)$$'
+	! nm $(TESTTMP)/c_crtl_xt.o | grep -Eq ' [TWBDV] (malloc|printf|stdout|close|write)$$'
+	nm $(TESTTMP)/c_crtl_rvesp.o | grep -q ' T main$$'
+	@# ...and the exported app_main at .text+0 IS an entry that calls main. The
+	@# writer pins app_main at offset 0, where C used to put whatever routine
+	@# came first, so IDF ran unrelated code and main never executed. The stub's
+	@# first word is `addi sp,sp,-32` (0xfe010113); pinned has a C helper there.
+	python3 -c 'import struct,sys; d=open(sys.argv[1],"rb").read(); so,=struct.unpack_from("<I",d,32); n,=struct.unpack_from("<H",d,48); si,=struct.unpack_from("<H",d,50); sh=lambda i: struct.unpack_from("<10I",d,so+40*i); st=sh(si)[4]; nm=lambda h: d[st+h[0]:d.index(b"\0",st+h[0])]; t=[sh(i) for i in range(n) if nm(sh(i))==b".text"][0]; w,=struct.unpack_from("<I",d,t[4]); sys.exit(0 if w==0xfe010113 else "app_main at .text+0 is not the C entry stub: %#x" % w)' $(TESTTMP)/c_crtl_rvesp.o
 	@# THE NEGATIVE CONTROL, and it is the row that keeps the fix a correction
 	@# rather than a widening: bare metal deliberately gets NO default RTL, so
 	@# it must still refuse. A predicate that made every profile build the row

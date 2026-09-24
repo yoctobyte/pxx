@@ -12598,6 +12598,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     cPullsBuiltinHeap: Boolean;   { the default-RTL pull below, decided ONCE -- see its use }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
     cWasmEntry: Boolean;        { wasm32: the entry is synthesised, not emitted -- see the arm }
+    cEspObjEntry: Boolean;      { riscv32 ESP-IDF object: a stub at offset 0 calls main -- see the obj-mode arm }
     cWasmFini: Integer;         { ... and the finalizer runner it will call }
     cWasmWantsEnv: Boolean;     { ... and whether it must fetch the environment first }
     cSfI: Integer;
@@ -12641,6 +12642,7 @@ begin
     never name `environ`). }
   needInit := CNeedsEnvironInit;
   cWasmEntry := False;
+  cEspObjEntry := False;
   cWasmFini := -1;
   cWasmWantsEnv := False;
   initPatch := -1;
@@ -12684,6 +12686,51 @@ begin
       "the writer relocates by section, not by absolute address". One predicate
       would merge four rationales, and the day a fifth output mode arrives some
       of them would be wrong together and silently. }
+
+    { EXCEPT THE ESP-IDF OBJECT, WHICH DOES HAVE AN ENTRY POINT: the ESP object
+      writer exports GLOBAL `app_main` at code offset 0, because that is where
+      the Pascal frontend puts its program body. C put nothing there, so IDF
+      called whatever routine happened to be first -- measured 2026-09-24 on
+      esp32c3: `app_main` at .text+0 was a three-argument helper, the user's
+      own app_main sat LOCAL at 0x16928, and main never ran. Every C program
+      through the IDF route had built and none had executed, in the pinned
+      compiler too. So an IDF object gets a stub here, at offset 0: a zeroed
+      fake initial stack (argc 0, argv and envp each a lone NULL), the
+      initializer shell if one is needed, main(0, argv), the finalizers, and a
+      plain RETURN -- app_main is a FreeRTOS task body, and IDF deletes the task
+      when it returns. main's result has nowhere to go and is dropped.
+      A source with no `main` but its own `app_main` gets that called instead;
+      one with neither (a library of routines for an IDF project) gets the call
+      turned into NOPs, so the entry returns at once. riscv32 only: xtensa's
+      IDF ABI is windowed, which needs its own prologue, and variadic C is not
+      implemented there yet. feature-c-esp-conformance-coverage }
+    if EmitObjMode and (not EmitSharedMode) and
+       (TargetPlatform = PLATFORM_ESP) and (TargetArch = TARGET_RISCV32) and
+       (not EspBareBoot) then
+    begin
+      if CodeLen <> 0 then
+        Error('internal: the ESP C entry stub must be at code offset 0, where ' +
+              'the object writer exports app_main, but code starts at ' +
+              AIntToStr(CodeLen));
+      rv32_addi(reg_sp, reg_sp, -32);
+      rv32_sw(reg_ra, reg_sp, 28);
+      rv32_sw(reg_zero, reg_sp, 0);       { argc = 0 }
+      rv32_sw(reg_zero, reg_sp, 4);       { argv[0] = NULL }
+      rv32_sw(reg_zero, reg_sp, 8);       { envp[0] = NULL }
+      if needInit then
+      begin
+        rv32_addi(reg_a0, reg_sp, 0);     { arg1 = the fake initial stack }
+        initPatch := CodeLen; rv32_auipc(reg_t0, 0); rv32_jalr(reg_ra, reg_t0, 0);
+      end;
+      rv32_addi(reg_a0, reg_zero, 0);     { a0 = argc = 0 }
+      rv32_addi(reg_a1, reg_sp, 4);       { a1 = argv }
+      callPatch := CodeLen; rv32_auipc(reg_t0, 0); rv32_jalr(reg_ra, reg_t0, 0);
+      EmitCallProc(GetFiniRunnerProc);
+      rv32_lw(reg_ra, reg_sp, 28);
+      rv32_addi(reg_sp, reg_sp, 32);
+      rv32_jalr(reg_zero, reg_ra, 0);     { ret }
+      cEspObjEntry := True;
+    end;
   end
   else
   case TargetArch of
@@ -13625,7 +13672,18 @@ begin
   CWarnImplicitSystemImports;
 
   mainIdx := FindProc('main');
-  if mainIdx < 0 then
+  if cEspObjEntry and (mainIdx < 0) then
+    mainIdx := FindProc('app_main');
+  if cEspObjEntry and (mainIdx < 0) then
+  begin
+    { No main and no app_main: an object of routines for an IDF project. The
+      entry must still return rather than jump to offset 0 of nothing, so the
+      two call words become NOPs (addi x0, x0, 0), and callPatch is spent. }
+    Patch32(callPatch, $00000013);
+    Patch32(callPatch + 4, $00000013);
+    callPatch := -1;
+  end
+  else if mainIdx < 0 then
   begin
     { ErrorAt: this runs AFTER both passes, with the cursor sitting past every
       appended unit, so plain Error would print a `near:` window of Pascal RTL
@@ -13660,7 +13718,8 @@ begin
   end;
 
   { Patch the entry stub's call-to-main with main's body address. }
-  PatchEntryStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
+  if callPatch >= 0 then
+    PatchEntryStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
 
   { ... and the pre-main initializer call, the same way. The stub emitted it as
     a forward because the shell's body lives in crtl, which is not pulled until

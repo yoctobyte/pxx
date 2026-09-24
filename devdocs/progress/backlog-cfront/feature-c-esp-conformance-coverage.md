@@ -1,6 +1,7 @@
 ---
 prio: 18
 track: C
+summary: "ESP32-C3 (riscv32, ESP-IDF, QEMU) is WIRED: tools/run_c_conformance_esp.sh (make target test-c-conformance-esp32c3) runs the c-testsuite through a relinked IDF image per test and reads each test's return value off the serial console. Measured 2026-09-24: 218 pass, 1 fail (00053.c, the global struct-tag bug that is red on x86-64 too), 1 skip (00187.c, needs a filesystem the image does not mount), of 220. What remains is the ESP32-S3 leg, walled by feature-a-variadic-c-functions-on-the-windowed-xtensa-abi. Bare metal is out by design: bare carries no crtl."
 ---
 
 # C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare)
@@ -23,3 +24,44 @@ track: C
   2026-06-29 arc; xtensa/ESP may still raise "C program entry stub not
   implemented for this target yet". First step is a bare
   `int main(void){return 42;}` probe on the esp harness.
+
+## 2026-09-24 — C3 wired; three walls in front of it removed (frankS)
+
+Owner: *"c-conformance is desired"*. Getting any C program to RUN under ESP-IDF
+took three fixes first, all measured on esp32c3 under QEMU:
+
+1. **main never ran.** The ESP object writer exports `app_main` at `.text+0`,
+   where Pascal puts its body; C put nothing there, so IDF called whatever
+   routine came first (a three-argument helper, in the case measured). True in
+   pinned v416 as well: C through the IDF route had built and never executed.
+   riscv32 ESP objects now get a C entry stub at offset 0 (a fake zeroed
+   initial stack, the initializer shell, `main(0, argv)` or the source's own
+   `app_main`, the finalizers, return to IDF).
+2. **crtl collided with picolibc.** 41 of 323 exported globals, plus `errno`
+   (TLS in IDF). crtl is now private in an ESP object (`ObjRuntimeIsPrivate`):
+   local code, no exported state; it reaches IDF through the PAL, as the
+   Pascal RTL does. Whether ESP C should use IDF's libc instead is an OPEN
+   owner question -- his lean, 2026-09-24: *"it makes most sense to just use
+   IDF's libraries ... but i'm not sure ... it's a choice - wrap it and keep
+   best portability, or dont wrap it but programmer must be aware"*. This is
+   the "wrap it" arm; do not start the other without his call.
+3. **stdout went nowhere.** The ESP PAL refused fds 0-2; they now go through
+   picolibc's putchar/getchar exactly as builtinheap's PXXIdfStdWrite does.
+
+Two smaller ones the run found: an unreferenced `extern int x;` was refused as
+a data import (00094.c; now only an import something READS is refused), and
+the 1 MiB stock app partition overflowed on 00200.c (the harness's private
+project copy takes IDF's 1.5 MiB single-app table).
+
+Harness controls: a wrong-output, a nonzero-return and a null-store row each
+FAIL for the right reason, and a correct row passes; a missing suite is exit 2,
+not SKIP-and-0. Numbers: 216 rows at compiler sha `a23e896320ec`, the three
+re-runs (00094, 00200, 00187) at `131ae6c99230`, which differs only by the
+import-refusal change.
+
+Side findings. Filed: `bug-c-a-c-call-to-an-external-variadic-function-on-esp-riscv32-reaches-it-without-its-arguments`
+(esp_rom_printf from C prints nothing). Noted, not filed: `--target=esp32c3`
+alone builds a HOSTED-linux object (0 undefined symbols), not an IDF one --
+use `--target=riscv32 --platform=esp`, as tools/esp_run.sh does. And 00207.c
+(VLA) PASSES here while `pxx.skip.riscv32` skips it as "alloca is x86-64
+only" -- that skip may be stale; not re-measured on the desktop riscv32 leg.

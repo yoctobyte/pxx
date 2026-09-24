@@ -4175,6 +4175,33 @@ begin
   if ProcObjRuntimeCopy[procIdx] then ObjProcBind := $20 else ObjProcBind := $10;
 end;
 
+function ObjRuntimeIsPrivate: Boolean;
+{ Is crtl kept OUT of the object's link surface altogether -- LOCAL code, no
+  exported state -- rather than shared WEAK as ObjProcBind argues above?
+
+  On an ESP platform, yes, and weak is actively wrong there. The host is an
+  ESP-IDF image that links its own libc (picolibc) and reaches it from IDF
+  itself, so the picolibc members holding `close`, `read`, `malloc`, `stdout`
+  and the rest are pulled whatever we do. STRONG beats WEAK without a
+  diagnostic, so a weak crtl gets overridden PIECEMEAL: crtl's printf writing
+  through picolibc's `stdout`, a different FILE layout. And GLOBAL, which is
+  what these writers emitted before, is 41 `multiple definition` errors and no
+  image -- measured 2026-09-24 on a printf hello for esp32c3 (gettimeofday,
+  close, select, malloc, memcpy, stdin/stdout/stderr, errno as TLS vs non-TLS).
+
+  The objection ObjProcBind raises against LOCAL -- two objects' heaps -- does
+  not arise here: under PXX_ESP_IDF crtl's malloc/free reach the IDF heap
+  (calloc/free externals), so every object shares one allocator anyway. What
+  stays per-object is crtl's own bookkeeping (its FILE table, errno, optind),
+  which is the Pascal RTL's position on this platform already: every RTL
+  routine is LOCAL so an object cannot collide with its host over an RTL name.
+  And the imports crtl makes of the host by the same NAME it defines -- the U
+  `read` beside crtl's T `read` -- only reach IDF when crtl's copy is local;
+  exported, the linker binds them back to crtl itself. }
+begin
+  ObjRuntimeIsPrivate := TargetPlatform = PLATFORM_ESP;
+end;
+
 function ObjProcSize(procIdx: Integer): Int64;
 begin
   if ProcBodyEnd[procIdx] > Procs[procIdx].BodyAddr then
@@ -4253,7 +4280,8 @@ function ObjDataIsExport(i: Integer): Boolean;
   already been folded back to False for it. }
 begin
   ObjDataIsExport := ObjDataIsCandidate(i) and (not SymCStaticLink[i]) and
-                     (not SymObjDataExternOnly[i]);
+                     (not SymObjDataExternOnly[i]) and
+                     not (SymObjRuntimeCopy[i] and ObjRuntimeIsPrivate);
 end;
 
 function ObjDataIsReferenced(i: Integer): Boolean;
@@ -4432,10 +4460,14 @@ function ObjEspProcIsExported(procIdx: Integer): Boolean;
   definitions of `app_main` in one object, at different values. Measured when
   the export loop was first written: symbol 8 at 0 and symbol 10 at 0x134.
   The entry symbol wins; the user's own stays LOCAL, exactly as it was before
-  any of this. }
+  any of this.
+
+  crtl's own bodies stay LOCAL on an ESP platform too -- see
+  ObjRuntimeIsPrivate. }
 begin
   Result := ObjProcIsExported(procIdx) and
-            (not CaseEqual(Procs[procIdx].Name, 'app_main'));
+            (not CaseEqual(Procs[procIdx].Name, 'app_main')) and
+            not (ProcObjRuntimeCopy[procIdx] and ObjRuntimeIsPrivate);
 end;
 
 procedure ObjPlanEspSymbols(numSectionSyms: Integer;
@@ -4528,8 +4560,12 @@ procedure ObjRefuseEspDataImports;
   bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable }
 var i: Integer;
 begin
+  { Only a REFERENCED import: the hazard is a read of the private slot, and an
+    `extern int x;` nothing uses reads nothing -- gcc emits no symbol for it
+    either. c-testsuite 00094.c is exactly that declaration and nothing else,
+    and it was refused (feature-c-esp-conformance-coverage). }
   for i := 0 to SymCount-1 do
-    if ObjDataIsImport(i) then
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
       ErrorNoPos('--emit-obj: an imported variable (' + Syms[i].Name
         + ') is not supported for xtensa/riscv32 objects: the reference would '
         + 'relocate into this object''s own .bss and read zero. Export an '

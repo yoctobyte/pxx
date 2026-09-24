@@ -136,6 +136,8 @@ function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, s
 implementation
 
 const
+  PAL_STDIN  = 0;
+  PAL_STDOUT = 1;
   PAL_STDERR = 2;
   PAL_PLATFORM_ESP_IDF = 2;
   PAL_ERR_UNSUPPORTED = -38;
@@ -335,10 +337,40 @@ begin
 end;
 {$endif}
 
+{ THE STANDARD STREAMS GO THROUGH picolibc's putchar/getchar, not a refusal.
+  fd 0/1/2 are not VFS fds under IDF (esp_libc stores whatever fd open()
+  returned in its stdin/stdout streams, so write(1, ..) is EBADF), which is why
+  this arm used to answer PAL_ERR_UNSUPPORTED -- and that silenced every C
+  printf on ESP, since crtl's stdout reaches the console only through here
+  (measured 2026-09-24: a printf hello on esp32c3 booted, returned from
+  app_main and printed nothing). Pascal's WriteLn never came this way: it
+  reaches the same putchar through builtinheap's PXXIdfStdWrite/PXXIdfStdRead,
+  which this mirrors byte for byte. Those are implementation-private to the
+  builtin unit, so this is a second spelling of one policy: change both. }
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+function PalIdfPutchar(c: Integer): Integer; cdecl; external name 'putchar';
+function PalIdfGetchar: Integer; cdecl; external name 'getchar';
+{$endif}
+
 function PalBackendRead(handle: Integer; buf: Pointer; len: Integer): Int64;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
+var n, c: Integer; p: PByte;
 begin
-  if handle <= PAL_STDERR then
+  if handle = PAL_STDIN then
+  begin
+    p := PByte(buf);
+    n := 0;
+    while n < len do
+    begin
+      c := PalIdfGetchar;
+      if c < 0 then Break;          { EOF: what was read so far, 0 = EOF }
+      p[n] := Byte(c);
+      Inc(n);
+      if c = 10 then Break;         { a line at a time, as a tty read returns }
+    end;
+    Result := n;
+  end
+  else if handle <= PAL_STDERR then
     Result := PAL_ERR_UNSUPPORTED
   else
     Result := fread(buf, 1, len, Pointer(handle));
@@ -351,8 +383,20 @@ end;
 
 function PalBackendWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
+var i: Integer; p: PByte;
 begin
-  if handle <= PAL_STDERR then
+  if (handle = PAL_STDOUT) or (handle = PAL_STDERR) then
+  begin
+    p := PByte(buf);
+    for i := 0 to len - 1 do
+      if PalIdfPutchar(p[i]) < 0 then
+      begin
+        Result := -1;
+        Exit;
+      end;
+    Result := len;
+  end
+  else if handle <= PAL_STDERR then
     Result := PAL_ERR_UNSUPPORTED
   else
     Result := fwrite(buf, 1, len, Pointer(handle));
