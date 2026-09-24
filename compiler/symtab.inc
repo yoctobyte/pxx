@@ -7687,12 +7687,50 @@ begin
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   { A recycled slot could have been an `except .. as e` binder. AddConst is the
     ONE allocator that does not reset the parallel arrays -- SymGenSlot is not
-    reset here either -- and nothing depends on this line today, because only
+    reset here either (it is now, below) -- and nothing depends on this line today, because only
     skLocal slots are consulted and all four Alloc* that make one do reset it.
     It is here because the file's own rule two functions up is that every
     allocator resets every parallel array, and a flag whose meaning is "do NOT
     release this" is the wrong one to leave resting on an invariant elsewhere. }
   SymIsExcBinder[SymCount] := False;
+  { THE REST OF AllocVar's RESETS, and the reason is not tidiness. A FRESH slot
+    is zero-filled by EnsureSymCapacity, and for the sentinel fields below zero
+    is a VALID answer: SymProcSig = 0 names Procs[0] as the const's procedural
+    signature, so `MY_THING = 4` beside `function my_thing(a)` made
+    `my_thing(7)` an indirect call through Procs[0] -- `procedural call: wrong
+    number of arguments` -- before the refusal that names the const could fire.
+    Whether a const got a fresh slot or a recycled one (whose previous occupant
+    had written -1) depended on how many symbols the builtin prelude left
+    behind, so test_const_shadows_routine_fail passed or failed by POSITION.
+    Callers that give a const a set, pointer or procedural shape write it after
+    this returns, so defaults here cannot hide one. }
+  SymProcSig[SymCount] := -1;
+  SymElemProcSig[SymCount] := -1;
+  SymGenSlot[SymCount] := -1;
+  SymSetEnumId[SymCount] := -1;
+  SymCModule[SymCount] := -1;
+  SymCellPtr[SymCount] := -1;
+  SymPtrElemArrAi[SymCount] := -1;
+  SymPtrElemAlias[SymCount] := -1;
+  SymSetElemTk[SymCount] := 0; SymSetElemLo[SymCount] := 0; SymSetElemHi[SymCount] := -1;
+  SymCLongRank[SymCount] := 0;
+  SymObjDataExternOnly[SymCount] := False;
+  SymCStaticLink[SymCount] := False;
+  SymObjDataScope[SymCount] := False;
+  SymObjRuntimeCopy[SymCount] := False;
+  SymAllocSize[SymCount] := 0;
+  SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
+  SymDynDepth[SymCount] := 0; SymElemDynDepth[SymCount] := 0;
+  SymStrCap[SymCount] := 0; SymStrElemTk[SymCount] := 0;
+  SymFileElemTk[SymCount] := 0; SymFileRecSize[SymCount] := 0;
+  SymIsSub[SymCount] := False; SymSubLo[SymCount] := 0; SymSubHi[SymCount] := 0;
+  SymPtrDepth[SymCount] := 0;
+  SymPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymPtrBaseRec[SymCount] := REC_NONE;
+  SymPtrElemArrLen[SymCount] := 0; SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemStrCap[SymCount] := 0; SymPtrElemStrTk[SymCount] := 0;
+  SymPtrElemDynDepth[SymCount] := 0;
+  SymDynElemRowLen[SymCount] := 0; SymDynElemRowLo[SymCount] := 0;
   DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
