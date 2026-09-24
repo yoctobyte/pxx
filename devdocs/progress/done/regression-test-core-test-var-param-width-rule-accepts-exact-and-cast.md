@@ -34,3 +34,6 @@ ok: /tmp/testmgr-scratch-2195644/test_varwidth_ok26  [code=20589B  data=4552B  b
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-24 — auto-closed by the borg watcher: `test-core#src:test/test_var_param_width_rule_accepts_exact_and_cast.pas` passes at 635caa48b11c (tier native); it was red at e575f1ec8cd0. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
