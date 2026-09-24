@@ -14,6 +14,26 @@ cd pxx
 ./install.sh
 ```
 
+The full history is large (about 1 GB on disk). If you only want to use the
+compiler, a shallow clone carries everything needed, including the pinned
+compiler, and takes seconds instead of minutes:
+
+```sh
+git clone --depth 1 https://github.com/yoctobyte/pxx
+```
+
+`./install.sh` checks that the pinned compiler runs, writes the `./pxx`
+wrapper, and then asks five optional questions. Each defaults to no except the
+last, which opens the demo launcher:
+
+```text
+Put pxx on your PATH (~/.local/bin)? [y/N]
+Fetch & configure Synapse (networking: HTTP/FTP/SMTP, blocking clients)? [y/N]
+Install the ESP32 IDF toolchain (bare-metal / xtensa+riscv32 targets)? [y/N]
+Build the Eliah IDE (needs GTK3 dev libs)? [y/N]
+Explore the example apps now (./demos.sh)? [Y/n]
+```
+
 ## Official sources
 
 There are exactly two, and there is no third:
@@ -76,6 +96,11 @@ For unattended setup:
 ./install.sh --yes
 ```
 
+`--yes` takes each default, and the last default is to open the demo launcher.
+When run in a terminal, it therefore ends at the launcher's
+`pick a demo number (or a/q):` prompt; press `q` to leave. With no terminal
+attached, as in a script or CI, it finishes on its own.
+
 ## Wrapper installs
 
 The wrapper calls the pinned compiler and adds the project library roots, so a
@@ -105,12 +130,14 @@ directories that should be visible to every compile.
 ## Checking an install, and fixing "unit source not found"
 
 Two commands answer almost every question about an install, and neither needs a
-source file:
+source file. From the checkout they are:
 
 ```sh
-pxx --where     # every path this binary resolves, and which tier set it
-pxx --doctor    # what this box can do: cross-run, ESP, gdb, FPC seed, gcc
+./pxx --where     # every path this binary resolves, and which tier set it
+./pxx --doctor    # what this box can do: cross-run, ESP, gdb, FPC seed, gcc
 ```
+
+Once the wrapper is on your `PATH`, plain `pxx` works the same.
 
 **`unit source not found` is the usual first failure**, and `--where` is the
 one-command answer. It prints the roots from the code that resolves them and
@@ -169,11 +196,14 @@ Use `FORCE=1` to refresh an existing candidate:
 FORCE=1 tools/install_lib_candidates.sh lua
 ```
 
-Install QEMU user-mode helpers for Linux cross-target smoke runs:
+Install QEMU user-mode helpers for Linux cross-target smoke runs. This installs
+system packages with `apt-get` (Debian or Ubuntu), so it asks for `sudo`:
 
 ```sh
 tools/install_qemu.sh
 ```
+
+`./pxx --doctor` shows which emulators are already present.
 
 ESP32 setup is larger because it pulls vendor tooling. The root installer offers
 it interactively; after installation, source the ESP-IDF environment printed by
@@ -188,6 +218,12 @@ sudo apt install fpc make
 make bootstrap
 make test
 ```
+
+`make bootstrap` builds the compiler with FPC, rebuilds it with itself, and
+checks that two successive self-built stages are byte-identical; it takes about
+a minute. It installs the result as `compiler/pascal26`. The pinned compiler,
+which `./pxx` uses, is left alone. `make test` is the full test suite and takes
+considerably longer.
 
 You only need FPC for bootstrap or recovery builds. Normal use of a checkout can
 run through the pinned compiler.

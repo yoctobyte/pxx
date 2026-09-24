@@ -32,9 +32,11 @@ name and refuses to overwrite the source file.
 
 PXX emits a final ELF executable directly. There is no assembler or linker
 subprocess in the normal path. That's the default, but not the only output
-PXX can produce — `--emit-obj` writes a relocatable `.o` instead, and its
-assembly-source frontend can write a shared `.so`; see the
-[command-line reference](../reference/cli.md).
+PXX can produce. `--emit-obj` writes a relocatable `.o` instead, and `--shared`
+(or an output name ending in `.so`) writes a shared library on x86-64. Both
+export only the routines marked for C linkage, such as Pascal `cdecl`, so for
+this program they refuse, because it defines nothing another program could
+link against. See the [command-line reference](../reference/cli.md).
 
 ## Next
 

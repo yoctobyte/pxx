@@ -23,14 +23,16 @@ Compile and run:
 
 ```sh
 $ ./pxx hello.pas hello
-ok: hello  [code=65304B  data=2840B  bss=43492B  procs=134]
+ok: hello  [code=600B  data=408B  bss=34600B  procs=37  codeseg=3808B]
 $ ./hello
 Hello, world!
 ```
 
-The four figures are what this build happened to produce; they move as the
-runtime does, so different numbers do not mean something is wrong. The line to
-check is `ok:` and the name of the file it wrote.
+The figures are what this build happened to produce; they move as the runtime
+does, so different numbers do not mean something is wrong. The line to check is
+`ok:` and the name of the file it wrote. The whole executable is about 4.5 KB.
+The compiler also writes `hello.map`, a symbol map for debugging; you can
+ignore it.
 
 PXX writes a complete Linux ELF executable directly — no `as`, no `ld`.
 
@@ -38,7 +40,7 @@ See [First program](./first-program.md) for the same example with a short
 explanation of the source layout and compiler arguments.
 
 If that build instead says `unit source not found`, the compiler is looking in
-the wrong place rather than the program being wrong. Run `pxx --where`: it
+the wrong place rather than the program being wrong. Run `./pxx --where`: it
 prints every root it resolves and marks the missing ones, and it needs no source
 file. See [checking an install](../install/#checking-an-install-and-fixing-unit-source-not-found).
 
@@ -111,13 +113,20 @@ print(sqlite3_libversion_number())
 ```
 
 ```sh
-$ ./pxx ver.npy ver && ./ver
-3045001
+$ ./pxx --no-shims ver.npy ver && ./ver
+3046001
 ```
 
 `import sqlite3` found `sqlite3.h`, read the real declarations out of it, and
-linked `libsqlite3.so.0` — the version printed is whatever the host has. Nothing
-was written by hand to make that call reachable.
+linked `libsqlite3.so.0`. The version printed is whatever the host has (this
+needs the SQLite development headers, for example `libsqlite3-dev`). Nothing was
+written by hand to make that call reachable.
+
+`--no-shims` is what sends the import to the C header. Without it,
+`import sqlite3` means what it means in Python: PXX's own implementation of
+Python's `sqlite3` module (`connect`, `execute`, iterating over rows). That
+implementation covers part of the module, not all of it. Imports resolve PXX's
+own modules first so that the same line always means the same thing.
 
 The same resolver is why `uses gtk3_c;` in Pascal reads a plain C header, and
 why `import re` in Nil Python lands on a genuine Pascal unit
