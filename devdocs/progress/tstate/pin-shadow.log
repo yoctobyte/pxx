@@ -1073,3 +1073,4 @@
 2026-09-24T13:48:14Z	borg	d2ae934a4ef160c7ae288a68cbd03df5aa1274ee	WOULD PIN d2ae934a4ef1 — 13 red(s), none new, 13 inherited from the current pin, self-host clean, streak 6/2
 2026-09-24T13:48:14Z	borg	d2ae934a4ef160c7ae288a68cbd03df5aa1274ee	AUTO-PIN DECLINED — HEAD is 2731484f8847, not the tested d2ae934a4ef1
 2026-09-24T14:17:30Z	borg	edfcc2c0d48a33df8b9f3304819598f0b8dc1b36	would NOT pin edfcc2c0d48a — 2 red(s) the current pin does not have, 13 inherited from the current pin: test-core#src:test/c_thread_local_is_per_thread.c, test-core#src:test/test_a_function_that_reads_a_threadvar_is_not_inlined_as_a_global.pas
+2026-09-24T14:50:01Z	borg	3fe0a55aa8fefc77cd7306424e2fe7012d5901a3	would NOT pin 3fe0a55aa8fe — 2 red(s) the current pin does not have, 13 inherited from the current pin: test-core#src:test/c_thread_local_is_per_thread.c, test-core#src:test/test_a_function_that_reads_a_threadvar_is_not_inlined_as_a_global.pas
