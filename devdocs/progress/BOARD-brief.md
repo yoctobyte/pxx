@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:37 unfinished:17 blocked:10 backlog:42 backlog-umbrella:14 backlog-core:171 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3964 rejected:89`
+`working:35 unfinished:19 blocked:10 backlog:42 backlog-umbrella:14 backlog-core:171 backlog-nilpy:184 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3964 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 
@@ -27,8 +27,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
 - `feature-a-unreferenced-class-rtti-keeps-every-method-alive` [A] — owner: frankb-8e
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
-- `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
-- `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
 - `feature-n-a-non-allocating-restricted-thunk-for-an-isr` [N] — owner: frankh-c0
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
@@ -47,7 +45,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (19) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
@@ -55,6 +53,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — blocked-by: refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
+- `feature-b-buffered-text-io-and-settextbuf` [B]
+- `feature-c-crtl-stdio-buffering-and-setvbuf` [C]
 - `feature-c-diagnostics-name-the-module-they-are-in` [C] — blocked-by: bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - `feature-dynamic-compiler-tables` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
@@ -80,7 +80,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 567, ranked
+## Ready — top 30 of 569, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -113,4 +113,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
 - `[p 70] [N]` bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 
-_537 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_539 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

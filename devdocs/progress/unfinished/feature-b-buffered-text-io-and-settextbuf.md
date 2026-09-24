@@ -4,8 +4,8 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "Make lib/rtl/textfile.pas's read buffer caller-supplyable and add write buffering, so SetTextBuf can exist with FPC's exact semantics. READ SIDE DONE at 8dacaaa15: the inline 4096-byte array became BufPtr/BufSize over an inline DefBuf and SetTextBuf exists, byte-identical to FPC 3.2.2's own run. Write side buffers under C99 7.19.3p7's policy, NOT FPC's — measured: FPC's destroys stdout/stderr ordering whenever stdout is not a tty. DO NOT LAND THE WRITE SIDE ALONE: this is one half of an interlock with feature-c-crtl-stdio-buffering-and-setvbuf, and the two share a flush registry. Ordering between Pascal WriteLn and C printf is correct TODAY only because both sides are unbuffered; buffering either side by itself reorders output inside a single program that mixes them, which is the case pxx exists to support. crtl's setvbuf is also a stub that ignores its arguments and returns SUCCESS -- worse in C than a missing SetTextBuf is in Pascal, because C callers check the return, so it turns a missing feature into a wrong answer. WHAT IS LEFT IS THE WRITE SIDE, and it is bigger than this ticket assumed: MEASURED 2026-09-04, plain `writeln` does NOT go through textfile.pas on any target -- every backend lowers IR_WRITE/IR_WRITELN to its own emitted write, so buffering Output here buys nothing for the common case. See the 2026-09-04 finding in the body before planning it."
-status: working
-owner: franks-ab
+status: unfinished
+owner: 
 ---
 
 # Buffered Text I/O and `SetTextBuf`
@@ -185,3 +185,9 @@ both state that writes are unbuffered and there is nothing to drain. **Both are
 true today.** Whoever adds write buffering rewrites both in that commit, or the
 tree gets a comment that disagrees with its code — the case CLAUDE.md says you
 cannot resolve by looking, because you cannot tell which half is wrong.
+
+## Parked 2026-09-24
+
+held by a stopped seat (franks-ab) since 2026-09-04; read side landed, write side needs the Track A writeln hook, see its 2026-09-04 section
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.

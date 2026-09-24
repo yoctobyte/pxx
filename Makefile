@@ -16772,6 +16772,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cdlfcn "$$($(TESTTMP)/cdlfcn)" "$$(cat test/c_crtl_dlfcn.expected)"
 	./$(COMPILER) -dPXX_DYNLIB_LIBC test/c_crtl_dlfcn.c $(TESTTMP)/cdlfcn_libc
 	tools/expect_same.sh cdlfcn-libc "$$($(TESTTMP)/cdlfcn_libc)" "$$(cat test/c_crtl_dlfcn_libc.expected)"
+	@# setvbuf answers honestly for the unbuffered crtl: _IONBF 0, _IOFBF/_IOLBF
+	@# nonzero. It returned 0 (success) for everything. .expected is crtl's.
+	./$(COMPILER) test/c_crtl_setvbuf_is_honest.c $(TESTTMP)/csetvbuf
+	tools/expect_same.sh csetvbuf "$$($(TESTTMP)/csetvbuf)" "$$(cat test/c_crtl_setvbuf_is_honest.expected)"
 	# THE OTHER HALF OF THE RISCV32 THIRD, and it is not about aggregates: an
 	# 8-byte-ALIGNED variadic slot starts on an EVEN register, for a plain
 	# `double` and an `int64` as much as for a record. riscv32 applied that

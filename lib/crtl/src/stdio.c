@@ -1178,7 +1178,20 @@ int fflush(FILE *stream) { (void)stream; return 0; }
 int feof(FILE *stream) { return stream->eof; }
 int ferror(FILE *stream) { return stream->err; }
 void clearerr(FILE *stream) { stream->err = 0; stream->eof = 0; }
-int setvbuf(FILE *stream, char *buf, int mode, size_t size) { (void)stream; (void)buf; (void)mode; (void)size; return 0; }
+/* setvbuf answers HONESTLY for an unbuffered runtime. Every crtl stream writes
+   straight through, so a request for _IONBF is already true and succeeds, and a
+   request for _IOFBF or _IOLBF cannot be met and FAILS (nonzero; C99 7.19.5.6
+   lets setvbuf fail). It used to return 0 for everything, which told a caller
+   that checks the result that its buffer and mode had been adopted when nothing
+   had happened: a silent wrong answer. The caller's buffer is never retained.
+   Real buffering is feature-c-crtl-stdio-buffering-and-setvbuf. */
+int setvbuf(FILE *stream, char *buf, int mode, size_t size)
+{
+    (void)buf; (void)size;
+    if (!stream) return -1;
+    if (mode == _IONBF) return 0;
+    return -1;   /* _IOFBF, _IOLBF: not available; anything else: invalid mode */
+}
 void setbuf(FILE *stream, char *buf) { (void)stream; (void)buf; }
 
 /* ---- the _unlocked family ------------------------------------------------- */
