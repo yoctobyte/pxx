@@ -2572,6 +2572,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-a-promoint-32bit-bringup | A | 55 | feature | Promotable int: heap tier faults on 32-bit native targets — FIXED | — |
 | feature-a-promoint-check-elision | A | 50 | feature | Promotable int: inline the fast path (check elision) | — |
 | feature-a-promoint-stage2-storage-arith | A | 85 | feature | Promotable int stage 2 — storage, checked arithmetic, Write | — |
+| feature-a-promoint-variant-esp-targets | A+S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-promoint-variant-integration | A | 60 | feature | Promotable int inside a Variant | — |
 | feature-a-promoint-wide-literals | A | 60 | feature | PromoInt cannot be initialised from a literal wider than Int64 | — |
 | feature-a-promotable-int | A | 85 | feature | Promotable int — a new arbitrary-precision integer type (fixnum + heap bignum) | — |

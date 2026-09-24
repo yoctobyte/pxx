@@ -2,9 +2,28 @@
 track: A
 prio: 20
 type: feature
+status: done
 ---
 
 # Promotable int in a Variant: riscv32 / xtensa
+
+**CLOSED BY EVENTS, 2026-09-24 (frankB).** The gate below is met at HEAD
+(compiler af40370a8a91): `test/test_promoint.pas`, Variant section included,
+prints output byte-identical to x86-64 on esp32c3 (`--target=riscv32
+--platform=esp`) and esp32s3 (`--target=xtensa --xtensa-abi=windowed
+--platform=esp`), 35 lines each, run with `tools/esp_run.sh` under Espressif QEMU.
+Neither wall quoted below reproduces. Also compiles with no `--platform`
+(bare/hosted), and linux riscv32 under qemu matches x86-64. No pin dependence
+in the closure itself: nothing changed in the source; this only records the
+measurement.
+
+Separate finding, not this ticket's: a NilPy program on the ESP IDF profile
+costs ~890 KB of code before it does anything (`print("hi")`: 889,804 B riscv32,
+817,439 B xtensa), so the NilPy promo demo does not fit `examples/esp32/hello-c3`'s
+1 MB factory partition. Promo is not the cause: an int accumulator adds ~8 KB
+(897,932 B). The runtime-size mechanism is already recorded under
+[[feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image]] (no DCE on
+the IDF profile yet); `examples/esp32/nilpy-s3` is the project built for it.
 
 Split from [[feature-a-promoint-32bit-bringup]]. The promotable int's own
 arithmetic works on riscv32 (byte-identical to x86-64); only the VARIANT interop
@@ -68,3 +87,6 @@ The riscv32 wall has moved from the Variant *write* path to a builtin-call
 restriction, which is a different diagnosis from the one the ticket carries;
 re-diagnose before estimating it. The xtensa half stands exactly as the
 2026-08-02 note describes it — a unit-inclusion gap, not a missing helper.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
