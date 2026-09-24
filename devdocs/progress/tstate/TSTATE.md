@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `1b36bdb71957` | 2026-09-24T19:56:02Z | RED (native) | 329.9s | `46d2a9430a96` RED |
+| borg | `1b36bdb71957` | 2026-09-24T20:14:25Z | RED (full) | 1081.8s | `1b36bdb71957` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `46d2a9430a96` on borg, 2026-09-24T18:38:34Z (1h ago).**
+**Newest full tier in the fleet: `1b36bdb71957` on borg, 2026-09-24T20:14:25Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `46d2a9430a96` | RED | 1h | — (newest) |
+| borg | `1b36bdb71957` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -29,25 +29,3 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 ## Open regressions
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
-- **CASCADE 17 jobs** (borg): bad `f64af0fd3a0c`, last good `e70ec7bfc320`, 3 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-arm32#src:test/test_const_record_temp.pas`
-  - `test-arm32#src:test/test_cross_aggregate_return.pas`
-  - `test-arm32#src:test/test_cross_byvalue_aggregate_params.pas`
-  - `test-arm32#src:test/test_record_temp_byval_arg.pas`
-  - `test-arm32#src:test/test_set_runtime.pas`
-  - `test-c-conformance#shard0/6`
-  - `test-c-conformance#shard1/6`
-  - `test-c-conformance#shard2/6`
-  - `test-c-conformance#shard3/6`
-  - `test-c-conformance#shard4/6`
-  - `test-c-conformance#shard5/6`
-  - `test-emit-obj#src:test/c_obj_data_dup_a.c`
-  - `test-emit-obj#src:test/c_obj_data_import.c`
-  - `test-emit-obj#src:tools/compiler_srchash.sh`
-  - `test-esp-bare#src:test/test_esp_record_result.pas`
-  - `test-pascal-conformance#shard3/6`
-  - `test-record-abi-mixed-link#src:tools/compiler_srchash.sh`
-  </details>
-- **test-aarch64#src:test/test_set_runtime.pas** — test/test_set_runtime.pas tools/expect_same.sh +1 (borg): bad `f135783b52da`, last good `unknown`, 0 commit(s) in range

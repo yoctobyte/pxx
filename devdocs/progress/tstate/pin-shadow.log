@@ -1082,3 +1082,5 @@
 2026-09-24T18:02:49Z	borg	a7c5f8b0736b540f3ba206e56d29b3bfd1f5891e	would-pin PENDING a7c5f8b0736b — qualifies, streak 1/2
 2026-09-24T18:38:34Z	borg	46d2a9430a963821ab44e4c68ff6dd22867c0d6b	WOULD PIN 46d2a9430a96 — 9 red(s), none new, 9 inherited from the current pin, self-host clean, streak 2/2
 2026-09-24T18:38:34Z	borg	46d2a9430a963821ab44e4c68ff6dd22867c0d6b	AUTO-PIN DECLINED — HEAD is 4eac3502691b, not the tested 46d2a9430a96
+2026-09-24T20:14:25Z	borg	1b36bdb719570527f10dbcf18481fdf0a7b410e6	WOULD PIN 1b36bdb71957 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 3/2
+2026-09-24T20:14:25Z	borg	1b36bdb719570527f10dbcf18481fdf0a7b410e6	AUTO-PIN DECLINED — HEAD is dd5080aad54b, not the tested 1b36bdb71957
