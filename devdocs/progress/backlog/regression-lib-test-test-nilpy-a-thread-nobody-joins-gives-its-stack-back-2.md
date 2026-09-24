@@ -43,3 +43,6 @@ expect_same: MISMATCH [test_nilpy_threadstack]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-24 — the borg watcher saw `lib-test#src:test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy` GREEN at a7c5f8b0736b (tier full) and did NOT close this: this is a repeat stub (`regression-lib-test-test-nilpy-a-thread-nobody-joins-gives-its-stack-back-2`, not `regression-lib-test-test-nilpy-a-thread-nobody-joins-gives-its-stack-back`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
