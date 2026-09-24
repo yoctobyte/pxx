@@ -704,7 +704,7 @@ _none_
 | task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision | B | 30 | task | ELEVEN names, not five, and the number changed because the SIX THAT MOVED CAME BACK as a deliberate duplicate on 2026-09-11. LowerCase, StrLen, StrPas, SysBackTraceStr and StringOfChar are still declared only in lib/rtl/sysutils.pas; AllocMem, DynArraySize, SetString, sLineBreak, UTF8Decode and UTF8Encode are now declared in BOTH sysutils.pas and compiler/builtin/builtin.pas. Nothing here is undecided: lib/rtl and every external corpus build with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so a name that lives only in builtin/ is invisible to them. Measured three times -- `undefined variable (LowerCase)` from inside sysutils.pas, `undefined variable (StringOfChar)` at lib_strpchar.pas:49, and on seven `undefined variable (SetString)` in external/synapse/synautil.pas plus `undefined variable (UTF8Encode)` in testjsondata.pp, which took out four tstate rows for two days. THE TRIGGER IS A PIN whose stable_linux_amd64/default/builtin/builtin.pas carries these names; grep it there, that is the whole test. Then move the five and DELETE the six duplicates from sysutils.pas. Do NOT start before that pin exists. `Error` is a twelfth name and is NOT part of this row: it is compiler-internal here and needs sysutils' exception hierarchy first. | — |
 | task-b-four-fpc-build-artefacts-are-committed-under-lib-asmcore | B | 20 | task | `lib/asmcore/asmcore_base.{o,ppu}` and `lib/asmcore/asmcore_x64.{o,ppu}` are TRACKED IN GIT -- four FPC build artefacts committed at 3d3ed9ab3, in a directory `compiler/compiler.pas` uses and `make bootstrap` compiles with fpc. They are INERT TODAY and that is measured, not assumed: fpc records the source timestamp inside a ppu and rebuilds on any mismatch in either direction, so any checkout makes the .pas disagree with the recorded time and the unit is recompiled. What they are is two committed .ppu in a source tree that nobody knows are there, in the one directory where an fpc-side compile happens. The live version of the hazard is an OPTION change, which the source-time check cannot see: a ppu built with -dFOO is silently reused by a compile without it. Remove them and add the extensions to .gitignore; verify with `make bootstrap` plus the FPC seed canary, which is the consumer that would notice. | — |
 
-## backlog-cfront (8)
+## backlog-cfront (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -715,7 +715,6 @@ _none_
 | feature-c-esp-conformance-coverage | C+S | 18 | feature | BOTH ESP-IDF legs are WIRED: tools/run_c_conformance_esp.sh --chip esp32c3\|esp32s3 (Makefile targets test-c-conformance-esp32c3 / -esp32s3) runs the c-testsuite through a relinked IDF image per test under QEMU and reads each return value off the serial console. CLEAN single-binary, single-tree run 2026-09-24 at 5b95400c1a (tree == origin), compiler sha256 41013170dc747df106e246fc429e6262509f8518fc72de3ea88069761b3ac29e, population = the 220 files of library_candidates/c-testsuite/tests/single-exec: esp32c3 218 pass / 1 fail (00053, the global struct-tag bug, red on x86-64 too) / 1 skip (00187, no filesystem in the image); esp32s3 (windowed xtensa) 217 / 2 / 1 -- 00053 and 00207 (VLA: feature-a-port-alloca-to-xtensa). The concurrent c3 run also showed 00040 as an IDF interrupt-watchdog crash under host load; alone at the same binary and tree it passed 3 of 3, so it is counted as a pass. Bare metal is out by design: bare carries no crtl." | — |
 | feature-c-package-namespace-decision | C | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | idea-c-realworld-test-targets | C | 60 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
-| perf-c-parse-codegen-large-file-superlinear | C | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 
 ## backlog-web (8)
 
@@ -1124,9 +1123,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3963)
+## done (3964)
 
-3963 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3964 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1736,7 +1735,6 @@ _none_
 - [p 25] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 25] [N] feature-nilpy-match-statement
 - [p 25] [A+O] feature-opt-arch-level-and-dispatch
-- [p 25] [C] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
 - [p 25] [A] refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files
 - [p 25] [A] refactor-a-wasm32-is-the-one-target-the-shared-scope-exit-sweep-cannot-be-ported-to-as-a-port
