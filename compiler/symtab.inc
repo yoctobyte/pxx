@@ -11893,6 +11893,50 @@ begin
             not ProcParamIsConst[procIdx * MAX_PROC_PARAMS + argNo];
 end;
 
+procedure CheckVarArgWidth(procIdx, argNo, exprNode: Integer);
+{ A `var`/`out` scalar parameter takes the caller's ADDRESS and the callee
+  writes the parameter's full width through it. Handed a narrower variable,
+  that write lands on whatever the frame put next to it:
+  `procedure P(var x: Int64)` called with a LongInt printed `a=-1 guard=-1`,
+  a neighbour the program never passed anywhere. fpc refuses the call ("Call
+  by var for arg no. 1 has to match exactly"), and so do we now.
+
+  Refused only where it CORRUPTS: both sides scalar (ordinal or float) and
+  their storage widths differ. A same-width mismatch (LongInt for LongWord)
+  is fpc-stricter and harmless, so it stays accepted. An explicit lvalue cast,
+  `P(Int64(a))`, carries the cast's type in ASTTk and is the programmer
+  saying so. Untyped `var x` (Move/FillChar style) is recorded as tyPointer,
+  so it is excluded by ProcParamUntyped, not by its kind.
+  Asked from IRLowerCallArg, the one door every call form's arguments pass
+  through -- plain, overloaded, method, constructor -- so no call spelling
+  can be the one that forgot it.
+  bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it }
+var pt, at: TTypeKind; pw, aw: Integer;
+begin
+  if (not IsPascalFrontend) or NilPyUserCode then Exit;
+  if (procIdx < 0) or (procIdx >= ProcCount) or (argNo < 0) or
+     (argNo >= Procs[procIdx].ParamCount) or (argNo >= MAX_PROC_PARAMS) then Exit;
+  if not ByRefArgNeedsLvalue(procIdx, argNo) then Exit;
+  if Procs[procIdx].Params[argNo].IsArray then Exit;
+  if ProcParamUntyped[procIdx * MAX_PROC_PARAMS + argNo] then Exit;
+  if (exprNode < 0) or IsVarArgLvalueCast(exprNode) then Exit;
+  if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
+     (ASTIVal[exprNode] < SymCount) and Syms[ASTIVal[exprNode]].IsArray then Exit;
+  pt := Procs[procIdx].Params[argNo].TypeKind;
+  at := TTypeKind(ASTTk[exprNode]);
+  if not (TypeIsOrdinal(pt) or TypeIsFloat(pt)) then Exit;
+  if not (TypeIsOrdinal(at) or TypeIsFloat(at)) then Exit;
+  pw := TypeStorageSize(pt, -1);
+  aw := TypeStorageSize(at, -1);
+  if pw = aw then Exit;
+  ErrorAt(ASTLine[exprNode], 'var parameter ' + Procs[procIdx].Params[argNo].Name +
+          ' of ' + Procs[procIdx].Name + ' is ' + Copy(TypeKindName(pt), 3, 64) +
+          ' (' + AIntToStr(pw) + ' bytes) and needs a variable of exactly that ' +
+          'type; this one is ' + Copy(TypeKindName(at), 3, 64) + ' (' +
+          AIntToStr(aw) + ' bytes), and the callee would write ' +
+          AIntToStr(pw) + ' bytes into it');
+end;
+
 function RecIsReferenceShaped(rec: Integer): Boolean;
 { Is this record id one of the two records that are really a REFERENCE?
 
@@ -12631,6 +12675,25 @@ function MatchArgRecMismatch(i, j: Integer; aTk: TTypeKind): Boolean;
 var pr, ar, curr: Integer;
 begin
   Result := False;
+  { A `var`/`out` SCALAR parameter of another WIDTH cannot bind: the callee
+    writes its declared width through the caller's address. As a mere
+    "compatible" row it was viable, and whenever some OTHER argument converted,
+    declaration order picked it over the exact row -- `T(i, a)` with an Int64
+    and a LongInt `var a` overload took the Int64 one and wrote past `a`. fpc
+    picks the exact row, and so does this now; a call with NO fitting row is
+    refused by CheckVarArgWidth when it is lowered.
+    bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it }
+  if (j < MAX_PROC_PARAMS) and (j < Procs[i].ParamCount) and
+     ByRefArgNeedsLvalue(i, j) and (not Procs[i].Params[j].IsArray) and
+     (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) and
+     not (MatchArgArrayValid and MatchArgArray[j]) and
+     (TypeIsOrdinal(Procs[i].Params[j].TypeKind) or TypeIsFloat(Procs[i].Params[j].TypeKind)) and
+     (TypeIsOrdinal(aTk) or TypeIsFloat(aTk)) and
+     (TypeStorageSize(Procs[i].Params[j].TypeKind, -1) <> TypeStorageSize(aTk, -1)) then
+  begin
+    Result := True;
+    Exit;
+  end;
   { A definitely-scalar argument cannot bind an ARRAY parameter. Checked first,
     and independently of the record channel below, because the two facts come
     from different places: argTypes carries a fixed array's ELEMENT kind, so the

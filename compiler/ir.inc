@@ -5243,6 +5243,7 @@ var argTk: TTypeKind;
   pvSinkIsProcVar: Boolean;
   tempIsByValueCopy: Boolean;
 begin
+  if isRefArg then CheckVarArgWidth(cpi, pathIdx, argAST);
   { A SLICE THIS FUNCTION CANNOT BUILD IS REFUSED HERE, BY NAME, AND NOT LEFT TO
     FALL THROUGH. Measured 2026-09-06: with the string base merely declining to
     resolve, `Upper(g[4..7])` still COMPILED -- the argument fell past both

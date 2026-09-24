@@ -6652,6 +6652,30 @@ begin
   FinishCastAsLValueStore := node;
 end;
 
+{ Hand a `var` argument of Val (position k of procIdx) over at the width the
+  parameter DECLARES. Returns the node to pass; when the actual's width
+  differs, that is a hidden temp of the parameter's type and `writeBack` is
+  set to the `actual := temp` statement to run after the call (-1 otherwise).
+  Only scalar actuals are marshalled -- anything else is passed as written and
+  meets CheckVarArgWidth or the ordinary argument rules. }
+function ValMarshalVarArg(procIdx, k, actual: Integer; var writeBack: Integer): Integer;
+var pt, at: TTypeKind; tmp, ident: Integer;
+begin
+  Result := actual;
+  writeBack := -1;
+  if (procIdx < 0) or (k >= Procs[procIdx].ParamCount) or (actual < 0) then Exit;
+  pt := Procs[procIdx].Params[k].TypeKind;
+  at := IntToTypeKind(ASTTk[actual]);
+  if not (TypeIsOrdinal(at) or TypeIsFloat(at)) then Exit;
+  if TypeStorageSize(pt, -1) = TypeStorageSize(at, -1) then Exit;
+  tmp := AllocVar('', pt);
+  Result := GenMakeIdent(tmp, pt);
+  ident := GenMakeIdent(tmp, pt);
+  writeBack := AllocNode(AN_ASSIGN);
+  ASTLeft[writeBack] := actual;
+  ASTRight[writeBack] := ident;
+end;
+
 function ParseStatementAST: Integer;
 var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym, mrefNode: Integer;
@@ -8602,35 +8626,28 @@ begin
           the same coercion a normal call applies. Without it the Char is passed
           where a string pointer is expected and Length(s)/s[i] segfault. }
         RetagCharLitAsStr(exprNode);
-        { The integer `Val` writes an Int64 (8 bytes) through its `var v` param.
-          A narrower destination (the common `var v: Integer`) would be overrun,
-          clobbering the neighbouring `code`/stack and crashing. Marshal through a
-          hidden Int64 temp and truncate into the real destination afterwards. }
-        valTmpSym := -1;
-        if (idx >= 0) and (not TypeIsFloat(Syms[idx].TypeKind)) and
-           TypeIsOrdinal(Syms[idx].TypeKind) and (TypeSlotSize(Syms[idx].TypeKind) < 8) then
-        begin
-          valTmpSym := AllocVar('', tyInt64);
-          valTmpIdent := AllocNode(AN_IDENT);
-          ASTIVal[valTmpIdent] := valTmpSym; ASTTk[valTmpIdent] := Ord(tyInt64);
-        end;
+        { Val's `v` and `code` are `var` parameters of FIXED widths (Int64 /
+          QWord / Double, and Integer), and FPC's Val takes a destination and a
+          code of ANY width. A narrower actual would be overrun: `var v:
+          Integer` clobbered its neighbour, and so did `code: Word` --
+          lib/rtl/charset.pas's own `Val(hs, charpos, code)` wrote four bytes
+          into a Word until CheckVarArgWidth refused it. So each of the two goes
+          through a hidden temp OF THE PARAMETER'S TYPE whenever the widths
+          differ, and is assigned back after the call (which truncates or
+          narrows exactly as an assignment does). The width is read off the
+          NODE, not the root symbol: `Val(s, r.w, c)` names a record. }
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
         lastArg := AllocNode(AN_ARG);
-        if valTmpSym >= 0 then ASTLeft[lastArg] := valTmpIdent
-        else ASTLeft[lastArg] := valNode;
+        ASTLeft[lastArg] := ValMarshalVarArg(procIdx, 1, valNode, valTmpAssign);
         ASTRight[argSeq] := lastArg;
-        opNode := AllocNode(AN_ARG); ASTLeft[opNode] := stepsNode; ASTRight[lastArg] := opNode;
+        opNode := AllocNode(AN_ARG);
+        ASTLeft[opNode] := ValMarshalVarArg(procIdx, 2, stepsNode, valTmpIdent);
+        ASTRight[lastArg] := opNode;
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx; ASTLeft[node] := argSeq; ASTTk[node] := Ord(Procs[procIdx].RetType);
-        if valTmpSym >= 0 then
-        begin
-          { dest := tmp  (truncates the Int64 result into the narrower dest). }
-          valTmpIdent := AllocNode(AN_IDENT);
-          ASTIVal[valTmpIdent] := valTmpSym; ASTTk[valTmpIdent] := Ord(tyInt64);
-          valTmpAssign := AllocNode(AN_ASSIGN);
-          ASTLeft[valTmpAssign] := valNode; ASTRight[valTmpAssign] := valTmpIdent;
-          node := GenMakeSeq(node, GenMakeSeq(valTmpAssign, -1));
-        end;
+        if valTmpIdent >= 0 then valTmpIdent := GenMakeSeq(valTmpIdent, -1);
+        if valTmpAssign >= 0 then valTmpIdent := GenMakeSeq(valTmpAssign, valTmpIdent);
+        if valTmpIdent >= 0 then node := GenMakeSeq(node, valTmpIdent);
       end
       else if OwnNameLValueHere(name) then
       begin

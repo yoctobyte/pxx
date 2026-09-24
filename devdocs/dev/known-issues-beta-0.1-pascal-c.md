@@ -17,22 +17,6 @@ Silent-wrong rows come first. A refusal names the problem; a silent row does not
 
 ## Silently wrong
 
-### Pascal, all targets: a `var` parameter accepts a narrower variable and writes past it
-
-```pascal
-procedure P(var x: Int64); begin x := -1; end;
-var guard, a: LongInt;
-...  guard := 12345; P(a);   { prints a=-1 guard=-1 }
-```
-
-- What you see: a variable you never passed anywhere changes value. It is
-  whichever local the frame places next to the argument, so the symptom moves
-  between builds.
-- fpc refuses the call ("Call by var for arg no. 1 has to match exactly").
-- Workaround: pass a variable of exactly the parameter's type.
-- Measured on x86-64, both binaries.
-- Ticket: bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it.
-
 ### Pascal, all targets: a record named like a compiler-internal record gets the compiler's layout
 
 - What you see: `type TProc = record A: array[0..99] of Int64; end;` gives
@@ -109,6 +93,11 @@ var guard, a: LongInt;
   with `ok:` and rc=0, then trapped under wasmtime (frankd-a3, v423 and
   `448395e492db`). It prints `42` now. A missing runtime helper on wasm32 now
   fails the build instead of producing a module that traps.
+- **A `var` parameter accepted a variable of another width** and the callee
+  wrote past it (`P(var x: Int64)` with a LongInt clobbered a neighbour). Now
+  refused, as fpc does; overloads bind the exact-width row. `Val` with a
+  narrow `code` or destination (a Word, a Single, a record field) wrote past it
+  too and now matches fpc.
 - **`examples/parallel/collatz`** printed `total steps = 0`. The bug was in the
   example: a local `n` hid `const N`. pxx now warns on that shape.
 - **A program routine named like a System const** (`function MaxInt(A, B)`) was

@@ -4,13 +4,13 @@ title: "A `var` parameter accepts a narrower actual and is then written at the D
 track: P
 prio: 75
 type: bug
-status: open
-owner: ""
+status: done
+owner: "frankS"
 found-by: franks-ee
 created: 2026-09-16
 tags: [var-parameters, overload-resolution, type-checking, memory-corruption, silent-wrong-value, fpc-corpus]
 blocked-by: []
-summary: "`procedure P(var x: Int64)` called with a `LongInt` actual COMPILES, and P then writes eight bytes into the caller's four-byte variable, destroying the adjacent local. fpc refuses the same call: `Call by var for arg no. 1 has to match exactly: Got \"LongInt\" expected \"Int64\"`. Eight-line repro below prints `a=-1 guard=-1` -- the sentinel was never passed to anything. This is memory corruption from ordinary, fpc-idiomatic code with NO diagnostic at any stage, and the damage lands on whichever local the frame happens to put next, so the symptom moves between builds and does not point at the call. It also decides OVERLOAD RESOLUTION, and CONDITIONALLY -- which is what makes it hard to reproduce and why the first explanation of it here was wrong: a `var` parameter's exact-type row is honoured only when EVERY OTHER argument binds with NO conversion at all; ONE by-value argument needing ANY conversion -- widening or narrowing, from a variable or from a literal -- masks it, and declaration order decides instead. That is how `lib/rtl/textfile.pas`'s `BlockRead(f, buf, n, c)` with `c: Integer` (the spelling fpc's own charset.pp uses) corrupted the caller's length variable WITH THE EXACT ROW DECLARED. Repaired 2026-09-16 by publishing fpc's four count widths narrowest-first (36/36, fpc 3.2.2 likewise; Int64-first 34/36, fully reversed 33/36, and the exact-length rows survive all three -- which is what isolates the CONVERSION from the order), pinned by `test/lib_blockio.pas` -- but the ordering is a property of this bug, not a fix for it, and it will stop being needed the day resolution refuses a narrowing/widening var actual."
+summary: "FIXED 2026-09-24 (frankS). A `var`/`out` SCALAR parameter now refuses an actual of a different STORAGE WIDTH (`CheckVarArgWidth`, asked from `IRLowerCallArg`, so every call form is covered), and overload resolution treats such a row as non-viable (`MatchArgRecMismatch`), so a converting sibling argument can no longer let declaration order pick the wider row -- fpc's exact row wins. Same-width sign mismatches (LongInt for LongWord) stay accepted: fpc-stricter, cannot corrupt. The census over examples/, lib/rtl, lib/pcl and the top-level test sources (2541 files) found ONE caller, the `Val` intrinsic with a Word `code` in lib/rtl/charset.pas -- a real overrun, fixed by marshalling each Val argument through a temp of the parameter's width."
 ---
 
 # A `var` parameter accepts a narrower actual and is written past its end
@@ -121,3 +121,35 @@ publishes, so the platonic call `BlockRead(f, buf, n, c)` with `c: Integer`
 becomes correct rather than merely accepted. The narrowest-first ORDERING is
 the part that exists only because of this bug, and it is commented as such in
 `lib/rtl/textfile.pas` and pinned by `test/lib_blockio.pas`.
+
+## Resolution, 2026-09-24 (frankS)
+
+- `CheckVarArgWidth` (symtab.inc), called at the top of `IRLowerCallArg`:
+  explicit var/out, not untyped, not an array param, not an explicit lvalue
+  cast, both sides ordinal/float, storage widths differ -> error naming the
+  parameter and both widths. Pascal only (`IsPascalFrontend`, not NilPy).
+- `MatchArgRecMismatch` gains the same test, so every MatchProcCall phase and
+  the method matcher drop the wrong-width var row: `T(i, a)` with Int64-first
+  and LongInt `var a` overloads now binds the LongInt row (fpc's answer; pin
+  v423 binds Int64 and writes past `a`).
+- `Val(s, v, code)`: `ValMarshalVarArg` passes `v` and `code` through temps of
+  the parameter's type whenever the widths differ, width read off the NODE
+  (`Val(s, r.w, c)` names a record). The pin zeroes the neighbouring field and
+  reads `0.00` into a Single destination; HEAD matches fpc 3.2.2 exactly.
+
+Census (population and binary stated so it can be re-derived): every `.pas`
+under examples/, lib/rtl and lib/pcl plus the top-level `.pas` files in test/,
+2541 files, compiled with compiler `e58e22b81da4` (the refusal, before the
+overload and Val fixes, which can only REMOVE refusals); first error per file
+only, so a file refused earlier for another reason is not seen. Hits: 1 --
+`lib/rtl/charset.pas:391` (`Val` with `code: Word`), fixed as above;
+`test/lib_charset.pas` 98/98 at HEAD.
+
+Tests: test_var_param_refuses_a_narrower_variable (method spelling, must not
+compile), test_var_param_width_rule_accepts_exact_and_cast (incl. the overload
+row; the pin prints -1), test_val_writes_each_argument_at_its_own_width
+(.expected is fpc's). All three identical on x86-64, i386, arm32, aarch64,
+riscv32.
+
+The `lib/rtl/textfile.pas` narrowest-first BlockRead ordering is no longer
+load-bearing; left as is (it matches fpc's own declaration order).

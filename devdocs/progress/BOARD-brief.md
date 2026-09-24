@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:19 blocked:9 backlog:41 backlog-umbrella:14 backlog-core:167 backlog-nilpy:182 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:28 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:153 done:3982 rejected:89`
+`working:34 unfinished:19 blocked:9 backlog:41 backlog-umbrella:14 backlog-core:167 backlog-nilpy:182 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:153 done:3983 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 
@@ -78,7 +78,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 562, ranked
+## Ready — top 30 of 561, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -95,7 +95,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-an-unused-import-edge-makes-a-method-receive-an-instance-of-the-wrong-class
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
-- `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
@@ -110,5 +109,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
 - `[p 70] [N]` bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
+- `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 
-_532 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_531 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

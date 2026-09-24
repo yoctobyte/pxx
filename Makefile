@@ -18842,6 +18842,13 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_byref_arg_lvalue_refused.pas $(TESTTMP)/test_byref_refused26 \
 	    > $(TESTTMP)/test_byref_refused.log 2>&1
 	grep -q "by-reference argument must be a variable" $(TESTTMP)/test_byref_refused.log
+	./$(COMPILER) test/test_var_param_width_rule_accepts_exact_and_cast.pas $(TESTTMP)/test_varwidth_ok26
+	tools/expect_same.sh test_varwidth_ok26 "$$($(TESTTMP)/test_varwidth_ok26)" "$$(printf '41 2 6 7 2 5 12345\n42 12345')"
+	! ./$(COMPILER) test/test_var_param_refuses_a_narrower_variable.pas $(TESTTMP)/test_varwidth_refused26 \
+	    > $(TESTTMP)/test_varwidth_refused.log 2>&1
+	grep -q "var parameter x of TC.M is Int64 (8 bytes) and needs a variable of exactly that type" $(TESTTMP)/test_varwidth_refused.log
+	./$(COMPILER) test/test_val_writes_each_argument_at_its_own_width.pas $(TESTTMP)/test_val_widths26
+	tools/expect_same.sh test_val_widths26 "$$($(TESTTMP)/test_val_widths26)" "$$(cat test/test_val_writes_each_argument_at_its_own_width.expected)"
 	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_mlrr26
 	tools/expect_same.sh test_mlrr26 "$$($(TESTTMP)/test_mlrr26)" "$$(printf 'ok   ansistring local\nok   record with managed field\nok   variant local\nok   static array of string\nok   dynamic array of string\ntotal ok 5 / 5')"
 	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_interface_arc_exc26

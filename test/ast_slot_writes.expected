@@ -103,6 +103,8 @@ AN_ARG Left PyMakeObjPtr(baseNode)
 AN_ARG Left PyStarIterableNode(PyZipStarOperand(CurASTNode))
 AN_ARG Left RParseCallArg(procIdx, argSlot)
 AN_ARG Left Result
+AN_ARG Left ValMarshalVarArg(procIdx, 1, valNode, valTmpAssign)
+AN_ARG Left ValMarshalVarArg(procIdx, 2, stepsNode, valTmpIdent)
 AN_ARG Left ZParseExpr
 AN_ARG Left a
 AN_ARG Left a3
@@ -364,6 +366,7 @@ AN_ASSIGN Left RMakeIdent(tempSym)
 AN_ASSIGN Left RMakeIdent(tmpSym)
 AN_ASSIGN Left Result
 AN_ASSIGN Left a3
+AN_ASSIGN Left actual
 AN_ASSIGN Left argIdx
 AN_ASSIGN Left argSeq
 AN_ASSIGN Left asgn
@@ -474,6 +477,7 @@ AN_ASSIGN Right entNode
 AN_ASSIGN Right enumStartNode
 AN_ASSIGN Right exprNode
 AN_ASSIGN Right fieldNode
+AN_ASSIGN Right ident
 AN_ASSIGN Right idn
 AN_ASSIGN Right incN
 AN_ASSIGN Right incNode
@@ -513,7 +517,6 @@ AN_ASSIGN Right vListNode
 AN_ASSIGN Right val
 AN_ASSIGN Right valLit
 AN_ASSIGN Right valNode
-AN_ASSIGN Right valTmpIdent
 AN_ASSIGN Right vals[i]
 AN_ASSIGN Right valueNode
 AN_ASSIGN Right varNode
