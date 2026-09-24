@@ -1865,7 +1865,9 @@ begin
         if CProgramMode and (not IsFloatRISCV32(Syms[IRA[node]].TypeKind)) and
            TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
         begin
-          EmitNode64RISCV32(IRB[node]);                     { a0:a1 = double bits }
+          { EmitFloatOperand, not EmitNode64: a SINGLE RHS is one word of single
+            bits, which __pxx_d2i64 read as a double -- `int w = floatvar` was 0. }
+          EmitFloatOperandRISCV32(IRB[node], tyDouble);     { a0:a1 = double bits }
           procIdx := FindProc('__pxx_d2i64');
           if procIdx < 0 then Error(SoftFloatMissing('__pxx_d2i64'));
           EmitCallProc(procIdx);                            { a0:a1 = truncated int64 }
@@ -2314,7 +2316,7 @@ begin
         if CProgramMode and (not IsFloatRISCV32(tk)) and
            TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
         begin
-          EmitNode64RISCV32(IRB[node]);             { a0:a1 = double bits }
+          EmitFloatOperandRISCV32(IRB[node], tyDouble);   { a0:a1 = double; widens a single }
           procIdx := FindProc('__pxx_d2i64');
           if procIdx < 0 then Error(SoftFloatMissing('__pxx_d2i64'));
           EmitCallProc(procIdx);                    { a0 = truncated int (low word) }

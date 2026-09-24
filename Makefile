@@ -16715,6 +16715,19 @@ test-core: $(COMPILER)
 	tools/expect_same.sh arm32/cvaagg "$$(tools/run_target.sh arm32 $(TESTTMP)/cvaagg_a32)" "$$(cat test/caarch64_variadic_aggregate.expected)"
 	./$(COMPILER) --target=riscv32 test/caarch64_variadic_aggregate.c $(TESTTMP)/cvaagg_rv32
 	tools/expect_same.sh riscv32/cvaagg "$$(tools/run_target.sh riscv32 $(TESTTMP)/cvaagg_rv32)" "$$(cat test/caarch64_variadic_aggregate.expected)"
+	@# IMPLICIT float->int in C: now the same Trunc node an explicit cast builds
+	@# (CConvertAsIfAssigned). It was left to each backend's store and they
+	@# disagreed -- xtensa raw bits, riscv32 a float read as a double, arm32/i386
+	@# 32-bit destinations only -- so all six are the row. .expected is gcc's.
+	@# Pinned v416 differs on xtensa, riscv32, arm32 and i386.
+	./$(COMPILER) test/test_c_float_to_int_implicit.c $(TESTTMP)/cf2i
+	tools/expect_same.sh cf2i "$$($(TESTTMP)/cf2i)" "$$(cat test/test_c_float_to_int_implicit.expected)"
+	for t in aarch64 i386 arm32 riscv32; do \
+	  ./$(COMPILER) --target=$$t test/test_c_float_to_int_implicit.c $(TESTTMP)/cf2i_$$t || exit 1; \
+	  tools/expect_same.sh $$t/cf2i "$$(tools/run_target.sh $$t $(TESTTMP)/cf2i_$$t)" "$$(cat test/test_c_float_to_int_implicit.expected)" || exit 1; \
+	done
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_c_float_to_int_implicit.c $(TESTTMP)/cf2i_xt
+	tools/expect_same.sh xtensa/cf2i "$$(tools/run_target.sh xtensa $(TESTTMP)/cf2i_xt)" "$$(cat test/test_c_float_to_int_implicit.expected)"
 	# THE OTHER HALF OF THE RISCV32 THIRD, and it is not about aggregates: an
 	# 8-byte-ALIGNED variadic slot starts on an EVEN register, for a plain
 	# `double` and an `int64` as much as for a record. riscv32 applied that

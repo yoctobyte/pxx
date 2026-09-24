@@ -2768,7 +2768,15 @@ begin
               end;
               if j = 203 then
               begin
-                EmitI32($EEBD0BC0);                 { vcvt.s32.f64 s0, d0 (round-zero) }
+                { An UNSIGNED 32-bit result converts unsigned: vcvt.s32 saturates
+                  at 2^31, so `(unsigned)3.0e9` was 2147483647 where C gives
+                  3000000000 (in range for unsigned, so defined behaviour). }
+                if (not Is64BitArm32(IntToTypeKind(IRTk[node]))) and
+                   TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
+                   (not TypeSigned(IntToTypeKind(IRTk[node]))) then
+                  EmitI32($EEBC0BC0)                { vcvt.u32.f64 s0, d0 (round-zero) }
+                else
+                  EmitI32($EEBD0BC0);               { vcvt.s32.f64 s0, d0 (round-zero) }
                 EmitI32($EE100A10);                 { vmov r0, s0 }
                 if Is64BitArm32(IntToTypeKind(IRTk[node])) then
                   EmitI32($E1A01FC0);               { mov r1, r0, asr #31 (widen to Int64) }

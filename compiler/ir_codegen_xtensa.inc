@@ -2201,6 +2201,24 @@ begin
             EmitStoreVarXtensa(IRA[node]);
           Exit;
         end;
+        { C float->int: a float RHS into an INTEGER slot truncates (C11 6.3.1.4)
+          through the softfloat __pxx_d2i64, widening a single first -- the
+          conversion the C frontend leaves to the store, as x86-64/i386/aarch64/
+          arm32/riscv32 do it. xtensa stored the raw bits: `int x = 99.0` was 0,
+          `int w = floatvar` 1120141312, and every double passed to an int
+          parameter (the arg goes through a store to an int temp) likewise
+          (c-testsuite 00175 on esp32s3). }
+        if CProgramMode and (not IsFloatXtensa(Syms[IRA[node]].TypeKind)) and
+           TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          EmitFloatOperandXtensa(IRB[node], tyDouble);         { a2:a3 = double }
+          EmitFloatUnaryCallXtensa('__pxx_d2i64', True, True); { a2:a3 = int64 }
+          if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
+            EmitStoreVar64Xtensa(IRA[node])
+          else
+            EmitStoreVarXtensa(IRA[node]);
+          Exit;
+        end;
         if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
         begin
           EmitNode64Xtensa(IRB[node]);
@@ -2665,6 +2683,47 @@ begin
               EmitUnalignedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, 0, 4)
             else
               xtensa_s32i(reg_xtensa_a3, reg_xtensa_a2, 0);
+          end;
+          Exit;
+        end;
+        { C float->int into an integer field/element: the IR_STORE_SYM rule
+          above, for the memory form. }
+        if CProgramMode and (not IsFloatXtensa(tk)) and
+           TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          EmitFloatOperandXtensa(IRB[node], tyDouble);
+          EmitFloatUnaryCallXtensa('__pxx_d2i64', True, True); { a2:a3 = int64 }
+          if (sz = 8) and Is64BitXtensa(tk) then
+          begin
+            XtensaPush64;
+            savedLVW := InLValueWrite;
+            InLValueWrite := True;
+            IREmitNodeXtensa(IRA[node]);
+            InLValueWrite := savedLVW;
+            XtensaPop64ToA4A5;
+            if XtensaAddrIsRagged(IRA[node]) then
+            begin
+              EmitUnalignedStoreXtensa(reg_xtensa_a4, reg_xtensa_a2, 0, 4);
+              EmitUnalignedStoreXtensa(reg_xtensa_a5, reg_xtensa_a2, 4, 4);
+            end
+            else
+            begin
+              xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 0);
+              xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 4);
+            end;
+          end
+          else
+          begin
+            XtensaPushA2;
+            savedLVW := InLValueWrite;
+            InLValueWrite := True;
+            IREmitNodeXtensa(IRA[node]);
+            InLValueWrite := savedLVW;
+            XtensaPopA3;
+            if XtensaAddrIsRagged(IRA[node]) then
+              EmitUnalignedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, 0, sz)
+            else
+              EmitSizedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, sz);
           end;
           Exit;
         end;

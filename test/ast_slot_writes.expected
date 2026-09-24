@@ -161,6 +161,7 @@ AN_ARG Left dcCountIdent
 AN_ARG Left dcTempIdent
 AN_ARG Left dcast
 AN_ARG Left dynFbName
+AN_ARG Left e
 AN_ARG Left elemNode
 AN_ARG Left enStart
 AN_ARG Left endLit
@@ -408,9 +409,9 @@ AN_ASSIGN Right ASTLeft[pairNode]
 AN_ASSIGN Right ASTRight[pairNode]
 AN_ASSIGN Right AllocNode(AN_BINOP)
 AN_ASSIGN Right AllocNode(AN_INT_LIT)
+AN_ASSIGN Right CConvertAsIfAssigned(IntToTypeKind(ASTTk[left]), ASTRight[node])
+AN_ASSIGN Right CConvertAsIfAssigned(declTk, ASTRight[asn])
 AN_ASSIGN Right CLIArrElem[cliBase + ei]
-AN_ASSIGN Right CNormalizeToBool(IntToTypeKind(ASTTk[left]), ASTRight[node])
-AN_ASSIGN Right CNormalizeToBool(declTk, ASTRight[asn])
 AN_ASSIGN Right CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs)
 AN_ASSIGN Right CPromoteCharTo(declTk, initExpr)
 AN_ASSIGN Right CStrInitElem[ei]
@@ -869,7 +870,7 @@ AN_DYN_INSERT Left left
 AN_DYN_INSERT Left valNode
 AN_EXC_HANDLER Left actionSeq
 AN_EXIT Left -1
-AN_EXIT Left CNormalizeToBool(tyBool8, ASTLeft[node])
+AN_EXIT Left CConvertAsIfAssigned(Procs[CurProc].RetType, ASTLeft[node])
 AN_EXIT Left CurASTNode
 AN_EXIT Left ParseCExpr
 AN_EXIT Left PyMakeNone

@@ -949,6 +949,30 @@ begin
   Result := cmp;
 end;
 
+{ C11 6.3.1.4 / 6.5.16.1: a FLOAT converted to an integer type "as if by
+  assignment" truncates toward zero -- the same conversion an explicit cast
+  makes, so it is built as the same node (-203 Trunc; see the cast lowering).
+  It used to be left to each backend's STORE, as a bare float value stored into
+  an int slot, and the backends disagreed: xtensa stored the raw bits
+  (`int x = 99.0` was 0), riscv32 read a float RHS as a double, and arm32/i386
+  converted only 32-bit destinations (`long long ll = d` was garbage) --
+  c-testsuite 00175. The explicit cast was right on all six, so the implicit
+  one now IS that cast. _Bool keeps its own rule (a comparison, 6.3.1.2). }
+function CConvertAsIfAssigned(dstTk: TTypeKind; e: Integer): Integer;
+var call, argSeq: Integer;
+begin
+  Result := CNormalizeToBool(dstTk, e);
+  if Result <> e then Exit;
+  if e < 0 then Exit;
+  if (dstTk = tyBool8) or (dstTk = tyPointer) or TypeIsFloat(dstTk) or
+     (not TypeIsOrdinal(dstTk)) then Exit;
+  if not TypeIsFloat(IntToTypeKind(ASTTk[e])) then Exit;
+  call := AllocNode(AN_CALL); ASTIVal[call] := -203;   { Trunc: float -> int }
+  argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := e;
+  ASTLeft[call] := argSeq; ASTTk[call] := Ord(dstTk);
+  Result := call;
+end;
+
 { C99 6.7.8p21: an aggregate initializer with fewer initializers than members
   zero-initializes the remainder (and 6.7.8p10 semantics for what "zero" means).
   Lower as an `x := Default(T)` assignment BEFORE the listed element stores:
@@ -2665,8 +2689,8 @@ begin
           vaK := 0; argNode := argHead;
           while (argNode >= 0) and (vaK < Procs[procIdx].ParamCount) do
           begin
-            if Procs[procIdx].Params[vaK].TypeKind = tyBool8 then
-              ASTLeft[argNode] := CNormalizeToBool(tyBool8, ASTLeft[argNode]);
+            ASTLeft[argNode] := CConvertAsIfAssigned(Procs[procIdx].Params[vaK].TypeKind,
+                                                     ASTLeft[argNode]);
             argNode := ASTRight[argNode]; Inc(vaK);
           end;
           node := AllocNode(AN_CALL);
@@ -5370,7 +5394,7 @@ begin
       ASTLeft[node] := left;
       ASTRight[node] := CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs);
       { assignment into a _Bool normalises to 0/1 (C99 6.3.1.2) }
-      ASTRight[node] := CNormalizeToBool(IntToTypeKind(ASTTk[left]), ASTRight[node]);
+      ASTRight[node] := CConvertAsIfAssigned(IntToTypeKind(ASTTk[left]), ASTRight[node]);
       ASTTk[node] := ASTTk[left];
       Result := node;
     end;
@@ -7424,7 +7448,7 @@ begin
         idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
         asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn;
         ASTRight[asn] := CPromoteCharTo(declTk, initExpr);
-        ASTRight[asn] := CNormalizeToBool(declTk, ASTRight[asn]);
+        ASTRight[asn] := CConvertAsIfAssigned(declTk, ASTRight[asn]);
         ASTTk[asn] := Ord(declTk);
         seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
         if head = -1 then head := seq else ASTRight[tail] := seq;
@@ -8802,8 +8826,8 @@ begin
       ASTLeft[node] := ParseCExpr;
       { `return e;` from a _Bool function converts to 0/1 like any other
         assignment to _Bool (C99 6.8.6.4p3 -> 6.3.1.2). }
-      if (CurProc >= 0) and (Procs[CurProc].RetType = tyBool8) then
-        ASTLeft[node] := CNormalizeToBool(tyBool8, ASTLeft[node]);
+      if CurProc >= 0 then
+        ASTLeft[node] := CConvertAsIfAssigned(Procs[CurProc].RetType, ASTLeft[node]);
     end
     else
       ASTLeft[node] := -1;
