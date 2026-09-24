@@ -826,14 +826,16 @@ function NDChkIdx(idxNode: Integer; lo, hi: Int64): Integer;
 { {$R+}: wrap ONE N-D subscript in PXXRangeChkI64(i, lo, hi) — the flattened
   Horner index reaches IR as a single expression, so per-dimension bounds can
   only be applied here at composition time (statement-anchored, like every
-  other {$R+} site). Passthrough when checks are off / builtinheap absent
+  other {$R+} site). Passthrough when checks are off; REFUSED when they are
+  on and builtinheap is absent, as in IRWrapChkBounds
   (feature-range-checks-nd-bases). }
 var pi, a1, a2, a3, litN: Integer;
 begin
   Result := idxNode;
   if not StmtRChecks then Exit;
   pi := FindProc('PXXRangeChkI64');
-  if pi < 0 then Exit;
+  if pi < 0 then
+    Error('{$R+}: PXXRangeChkI64 runtime helper not found (builtinheap not loaded)');
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := idxNode; ASTTk[a1] := Ord(tyInt64);
   litN := AllocNode(AN_INT_LIT); ASTIVal[litN] := lo; ASTTk[litN] := Ord(tyInt64);
   a2 := AllocNode(AN_ARG); ASTLeft[a2] := litN; ASTTk[a2] := Ord(tyInt64);

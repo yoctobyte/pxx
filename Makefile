@@ -22195,6 +22195,12 @@ test-core: $(COMPILER)
 	# text -- so the CLAIM is the trap and the exit code, which both compilers agree on.
 	./$(COMPILER) test/test_a_lifted_nested_routine_keeps_its_token_channels.pas $(TESTTMP)/test_liftchan26
 	tools/expect_same.sh test_liftchan26 "$$($(TESTTMP)/test_liftchan26 || echo "exit=$$?")" "$$(printf 'unchecked 20\nbefore-checked\nRuntime error 201 (range check error)\nexit=201')"
+	# {$R+} must trap in a program that needs NOTHING else from builtinheap --
+	# no strings, no arrays. From 523833fde3 it built, printed 44 twice and
+	# exited 0: the helper's unit was not appended and both emitters passed
+	# through in silence. The {$R-} row first is the control.
+	./$(COMPILER) test/test_range_checks_fire_in_a_program_with_no_strings.pas $(TESTTMP)/test_rchknostr26
+	tools/expect_same.sh test_rchknostr26 "$$($(TESTTMP)/test_rchknostr26 || echo "exit=$$?")" "$$(printf '44\nRuntime error 201 (range check error)\nexit=201')"
 	! ./$(COMPILER) test/test_a_lifted_nested_routine_keeps_its_token_channels_diag.pas $(TESTTMP)/test_liftchandiag26 > $(TESTTMP)/test_liftchandiag.log 2>&1
 	grep -q "expected 'then' before '2'" $(TESTTMP)/test_liftchandiag.log
 	grep -q "if q >>> 2 then" $(TESTTMP)/test_liftchandiag.log

@@ -7938,12 +7938,16 @@ end;
 function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer;
 { Wrap an IR value in PXXRangeChkI64(v, lo, hi) — shared by the narrowing-
   store guard and the static-array index guard
-  (feature-pascal-range-checks-r-plus). Passthrough without builtinheap. }
+  (feature-pascal-range-checks-r-plus). Every caller is gated on ASTRChk, so
+  reaching here means {$R+} is in force: a missing helper is REFUSED, never a
+  passthrough. The passthrough silently dropped every check in a program that
+  did not otherwise pull builtinheap, from 523833fde3 until 2026-09-24. }
 var pi, a1, a2, a3: Integer;
 begin
   Result := value;
   pi := FindProc('PXXRangeChkI64');
-  if pi < 0 then Exit;
+  if pi < 0 then
+    Error('{$R+}: PXXRangeChkI64 runtime helper not found (builtinheap not loaded)');
   a1 := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyInt64));
   a2 := IRAppend(IR_ARG,
           IRAppend(IR_CONST_INT, -1, -1, -1, lo, Ord(tyInt64)), -1, -1, 0, Ord(tyInt64));

@@ -309,8 +309,19 @@ begin
       i: Integer; b := i` builds at 38 procs. My first R probe used
       `array[0..3]` and reported 149 -- tkArray forces the heap on its own, so
       the setup had destroyed the thing under test and the row would have
-      justified a trigger that does nothing. }
+      justified a trigger that does nothing.
+
+      CORRECTED 2026-09-24: {$R+} IS A SIBLING. It BUILDS without the unit
+      because both range-check emitters (IRWrapChkBounds, NDChkIdx) fell
+      through to a silent passthrough when PXXRangeChkI64 was absent, so
+      `b := i` at 38 procs built, ran, and stored 44 for 300 with no trap. A
+      build row is not a run row. It surfaced as
+      test_a_lifted_nested_routine_keeps_its_token_channels going red, bisected
+      to this change. Same trigger as {$Q+}, and the emitters now refuse
+      instead of passing through. }
     if (i < Length(TokQChecks)) and TokQChecks[i] then
+      needsHeap := True;
+    if (i < Length(TokRChecks)) and TokRChecks[i] then
       needsHeap := True;
     { A string LITERAL is not evidence on its own -- `WriteLn('Hello')` is the
       program this whole change exists to shrink, and it needs nothing. A
