@@ -4103,7 +4103,7 @@ begin
             end;
           end;
           if (idx <> REC_NONE) and ((szNestCi >= 0) or (FindTypeAlias(name) < 0)) then
-            prevTok := RecSize(idx)
+            prevTok := NamedRecTypeSize(idx)
           else
           begin
             { Named array type (`TArr = array[..] of T` / `array of T`):
@@ -4132,7 +4132,7 @@ begin
               if aliasIdx >= 0 then
               begin
                 if AliasTk[aliasIdx] = Ord(tyRecord) then
-                  prevTok := RecSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
+                  prevTok := NamedRecTypeSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
                 else
                   prevTok := SizeOfSlot(IntToTypeKind(AliasTk[aliasIdx]), AliasStrCap[aliasIdx]);
               end

@@ -18866,6 +18866,8 @@ test-core: $(COMPILER)
 	grep -q "by-reference argument must be a variable" $(TESTTMP)/test_byref_refused.log
 	./$(COMPILER) test/test_a_record_named_like_a_compiler_record_keeps_its_layout.pas $(TESTTMP)/test_recname_layout26
 	tools/expect_same.sh test_recname_layout26 "$$($(TESTTMP)/test_recname_layout26)" "$$(cat test/test_a_record_named_like_a_compiler_record_keeps_its_layout.expected)"
+	./$(COMPILER) test/test_sizeof_of_a_class_type_is_the_reference_width.pas $(TESTTMP)/test_sizeof_classtype26
+	tools/expect_same.sh test_sizeof_classtype26 "$$($(TESTTMP)/test_sizeof_classtype26)" "$$(printf 'TRUE TRUE TRUE TRUE TRUE TRUE\nTRUE TRUE TRUE TRUE TRUE\n7 12345')"
 	./$(COMPILER) test/test_a_class_or_enum_named_like_a_compiler_record_is_not_that_record.pas $(TESTTMP)/test_recname_kinds26
 	tools/expect_same.sh test_recname_kinds26 "$$($(TESTTMP)/test_recname_kinds26)" "$$(printf '42 2 65535\nTRUE TRUE TRUE')"
 	./$(COMPILER) test/test_var_param_width_rule_accepts_exact_and_cast.pas $(TESTTMP)/test_varwidth_ok26

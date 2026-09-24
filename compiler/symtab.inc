@@ -3416,6 +3416,23 @@ begin
   else if rec >= REC_UCLASS_BASE then Result := UClsSize_[rec - REC_UCLASS_BASE];
 end;
 
+function NamedRecTypeSize(rec: Integer): Integer;
+{ SizeOf a TYPE NAME that resolved to a record id. A CLASS is a reference, so
+  the type is pointer-sized exactly as a variable of it is -- RecSize is the
+  INSTANCE, which is TFoo.InstanceSize, not SizeOf(TFoo). Answering RecSize here
+  made `Move(a, b, SizeOf(TFoo))` on two class references copy the instance
+  size out of a pointer-sized variable (32 for three Int64 fields; fpc: 8). A
+  record, an `object` (a value type here, UClsIsRecord) and an interface (its
+  RecSize is already one word) keep RecSize. }
+begin
+  if (rec >= REC_UCLASS_BASE) and (rec - REC_UCLASS_BASE < UClsCount) and
+     (not UClsIsRecord[rec - REC_UCLASS_BASE]) and
+     (not UClsIsInterface[rec - REC_UCLASS_BASE]) then
+    Result := TypeSlotSize(tyClass)
+  else
+    Result := RecSize(rec);
+end;
+
 function RecHasField(rec: Integer; const field: AnsiString): Boolean;
 { Does this record actually HAVE this field? RecFieldOffset below cannot answer
   that -- it is a pure offset function with no error channel, so a field it does
