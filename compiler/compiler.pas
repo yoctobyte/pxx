@@ -465,7 +465,7 @@ begin
 {$endif}
   WriteLn('riscv32                 via qemu-riscv32');
   WriteLn('xtensa                  no                  ESP32/S2/S3 — flash it');
-  WriteLn('wasm32                  no                  registered only — no codegen yet');
+  WriteLn('wasm32                  via wasmtime        WebAssembly (WASI): Pascal, C and Nil Python');
   WriteLn;
   WriteLn('ESP SoC names (imply their arch, and --platform=esp):');
   Write('  ');
@@ -2179,8 +2179,19 @@ begin
     it). It became a function when `import threading` needed to ask the same
     question to tell a wasm32 user that threading is absent rather than
     prescribe this flag, which this line would then refuse. }
+  { WHY THIS IS REFUSED AND NOT A TODO (it used to be the message itself, which
+    told users about our allocator's internals): on a single-core target the
+    existing lock would be UNSAFE rather than merely absent. PXXHeapSpin
+    (builtinheap.pas) is a plain exchange spin with NO interrupt masking, so a
+    task holding it that is preempted by an allocating interrupt handler
+    DEADLOCKS -- the only code that can release the lock is the task the
+    handler is standing on -- and the chip hangs with no output. That is
+    strictly worse than the unlocked allocator it would replace. An acquire
+    here must MASK INTERRUPTS, which is what ESP-IDF chose
+    portENTER_CRITICAL_SAFE for. Do not add a target to the softlock list
+    without that; see devdocs/dev/esp32-hardening-map.md. }
   if ThreadSafeMode and (not TargetHasThreadSafeLocks) then
-  begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only. THIS IS NOT A TODO: on a single-core target the existing lock would be UNSAFE rather than merely absent. PXXHeapSpin (builtinheap.pas) is a plain exchange spin with NO interrupt masking, so a task holding it that is preempted by an allocating interrupt handler DEADLOCKS -- the only code that can release the lock is the task the handler is standing on -- which hangs the chip with no output. That is strictly worse than the unlocked allocator it would be replacing. An acquire here must MASK INTERRUPTS, which is what ESP-IDF chose portENTER_CRITICAL_SAFE for. Do not add a target to the softlock list without that; see devdocs/dev/esp32-hardening-map.md'); Halt(1); end;
+  begin writeln(StdErr, '--threadsafe is available for x86-64, i386, aarch64 and arm32 only; it is refused for ' + TargetArchName(TargetArch) + '.'); Halt(1); end;
   { BARE IS C3 AND S3 ONLY, refused by name for every other NAMED chip. The bare
     image's load org and console are per-chip MMIO, and the table has them for
     exactly two parts: SocIramBase answers the S3's $40378000 for every xtensa

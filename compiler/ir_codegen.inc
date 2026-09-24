@@ -3690,11 +3690,15 @@ begin
       nothing read. HOSTED riscv32/xtensa is what is still genuinely refused. }
     if withHeapArena and (not EspBareBoot) and
        (TargetPlatform <> PLATFORM_ESP) and (BSS_HEAP_ARENA = 0) then
-      Error('target riscv32 (hosted linux): a heap arena needs mmap and '
-            + 'EmitMmapArena has no riscv32 arm. Bare metal '
-            + '(--esp-profile=bare) reserves the arena in BSS; ESP-IDF '
-            + '(--platform=esp) needs no arena at all, because there PXXAlloc '
-            + 'IS calloc (bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+      { The cause, for whoever lifts this: a heap arena needs mmap and
+        EmitMmapArena has no riscv32 arm. Bare metal reserves the arena in BSS,
+        and under ESP-IDF PXXAlloc IS calloc, so neither needs one
+        (bug-a-nilpy-on-cross-targets-four-remaining-walls). Only the Nil
+        Python frontend asks for an arena (pyparser.inc's EmitProgramPrologue
+        is the one call passing True), which is why the message names it. }
+      Error('Nil Python is not supported on hosted riscv32 Linux yet; '
+            + 'build it for the ESP32 instead (--platform=esp or '
+            + '--esp-profile=bare)');
     { ESP-IDF: publish the BSS arena reserved in frontend_prologue.inc. t0/t1
       are caller-saved and nothing has run yet, same as the bare arm below. }
     if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA > 0) then

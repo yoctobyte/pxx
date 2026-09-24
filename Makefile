@@ -3006,7 +3006,7 @@ test-nilpy: $(COMPILER)
 	  case "$$out" in *"not available on this target"*) ;; \
 	    *) echo "wasm32 refusal should not prescribe the flag, got: $$out"; exit 1;; esac; \
 	  out=$$(./$(COMPILER) --target=wasm32 --threadsafe test/test_nilpy_import_threading_refusal.npy $(TESTTMP)/test_nilpy_thrref26 2>&1); \
-	  case "$$out" in *"x86-64/i386/aarch64/arm32 only"*) ;; \
+	  case "$$out" in *"refused for wasm32"*) ;; \
 	    *) echo "wasm32 --threadsafe should still be refused by the driver, got: $$out"; exit 1;; esac; \
 	  ./$(COMPILER) --threadsafe test/test_nilpy_import_threading_refusal.npy $(TESTTMP)/test_nilpy_thrref26 >/dev/null; \
 	  tools/expect_same.sh test_nilpy_thrref26 "$$($(TESTTMP)/test_nilpy_thrref26)" "locked and unlocked"; \
@@ -7855,7 +7855,13 @@ test-threads: $(COMPILER)
 	# heap contract: --threadsafe on a target without the locked runtime is rejected
 	# (x86-64/i386/aarch64 got the locked runtime; riscv32 has no threading PAL, so it is the guard probe)
 	! ./$(COMPILER) --target=riscv32 --threadsafe test/hello.pas $(TESTTMP)/test_threadsafe_riscv32_guard26 > $(TESTTMP)/test_threadsafe_riscv32_guard.log 2>&1
-	grep -q "only" $(TESTTMP)/test_threadsafe_riscv32_guard.log
+	grep -q "refused for riscv32" $(TESTTMP)/test_threadsafe_riscv32_guard.log
+	# ...in one user sentence: the allocator reasoning that used to BE this
+	# message lives in a comment beside the check in compiler.pas now.
+	! grep -q "PXXHeapSpin" $(TESTTMP)/test_threadsafe_riscv32_guard.log
+	# Nil Python on HOSTED riscv32 is refused by name, not by an internal routine.
+	! ./$(COMPILER) --target=riscv32 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_rv_refused26 > $(TESTTMP)/test_npy_rv_refused.log 2>&1
+	grep -q "Nil Python is not supported on hosted riscv32 Linux" $(TESTTMP)/test_npy_rv_refused.log
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas $(TESTTMP)/test_critsec_once26
 	tools/expect_same.sh test_critsec_once26 "$$($(TESTTMP)/test_critsec_once26)" "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	# data-parallel loop runtime (palparallel PXXParallelFor): exact partition (each index once), values, edge ranges. worker count is host-dependent, so gate on the deterministic tail.
