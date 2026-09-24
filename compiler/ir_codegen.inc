@@ -14761,6 +14761,27 @@ begin
     ThreadVarRewriteHigh := INLINE_AST_RESERVE;
 end;
 
+procedure IREmitOwnedParamRetain(sym: Integer);
+var procIdx, first, seq: Integer;
+begin
+  if Syms[sym].IsArray then procIdx := FindProc('PXXDynArrayIncRef')
+  else procIdx := FindProc('PXXStrIncRef');
+  if procIdx < 0 then
+    Error('compiler error: by-value managed parameter `' + Syms[sym].Name
+          + '` needs PXXStrIncRef/PXXDynArrayIncRef (builtinheap not loaded)');
+  { The handle is read THROUGH THE SLOT'S ADDRESS, not by IR_LOAD_SYM: i386
+    refuses a load of an array symbol outright ("arrays not yet supported"),
+    and a slot address plus a pointer-sized load is a shape every backend
+    lowers for every kind. }
+  first := IRAppend(IR_ARG,
+             IRAppend(IR_LOAD_MEM,
+               IRAppend(IR_SLOTADDR, sym, -1, -1, 0, Ord(tyPointer)),
+               -1, -1, 0, Ord(tyPointer)),
+             -1, -1, 0, Ord(tyPointer));
+  seq := IRAppendCall(procIdx, first, -1, Ord(tyUnknown));
+  IRIVal[seq] := 1;   { statement: emit for effect }
+end;
+
 procedure CompileAST(node: Integer);
 var iZeroTmp: Integer;
 begin
@@ -14788,6 +14809,16 @@ begin
     so no consumer below ever meets a threadvar SYMBOL. See the routine. }
   ThreadVarRewriteRange;
   IRReset;
+  { ENTRY HALF OF OWNED VALUE PARAMS: take the callee's reference first thing,
+    so copy-on-write sees the caller's reference as a second one and a rebind
+    has something of its own to release. The exit half is the scope-exit sweep
+    (SymReleasedAtScopeExit). See SymOwnedValueParam for the bug this closes.
+    A missing helper is REFUSED, never skipped: the sweep would still release,
+    and an unmatched release frees the caller's value. }
+  if CurProc >= 0 then
+    for iZeroTmp := 0 to Procs[CurProc].ParamCount - 1 do
+      if SymOwnedValueParam(Procs[CurProc].Params[iZeroTmp].SymIdx) then
+        IREmitOwnedParamRetain(Procs[CurProc].Params[iZeroTmp].SymIdx);
   IRLowerAST(node);
   { THE LANDING-PAD GATE, ASKED WHERE IT CAN SEE THE ANSWER. IRLowerAST has just
     minted this body's hidden argument temps as Syms[] entries, and no machine
@@ -14979,7 +15010,7 @@ begin
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
        if not SymSkipScopeExitRelease(i) then
       begin
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
+        if SymReleasedAtScopeExit(i) and (i <> retSymIdx) then
         begin
           act := ScopeExitReleaseAction(i, a1, a2, a3);
           if act = SXR_INTF then
@@ -15194,7 +15225,7 @@ begin
        if not SymSkipScopeExitRelease(i) then
       begin
         act := ScopeExitReleaseAction(i, a1, a2, a3);
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
            (act = SXR_INTF) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
@@ -15206,7 +15237,7 @@ begin
           EmitCallProc(procIdx);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_ARRIMM) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
@@ -15230,7 +15261,7 @@ begin
             EmitLoadImmArm32(3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_STR) then
         begin
           { `not IsArray`: see the i386 arm — arm32 shared that bug. }
@@ -15268,7 +15299,7 @@ begin
           Patch32(jzPatch,
                   $0A000000 or ((((CodeLen - jzPatch) div 4) - 2) and $00ffffff));
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_VAR) then
         begin
           { `not IsArray`: an array's TypeKind IS its element kind, so
@@ -15284,7 +15315,7 @@ begin
           EmitCallProc(procIdx);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_OBJ) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
@@ -15314,7 +15345,7 @@ begin
             EmitI32($E8BD000E);                        { pop {r1,r2,r3} }
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_PROMO) then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
@@ -15330,7 +15361,7 @@ begin
             EmitI32($E8BD000E);                        { pop {r1,r2,r3} }
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_RECORD) then
         begin
           { Record-with-managed-fields local: release each managed field via the
@@ -15358,7 +15389,7 @@ begin
           EmitCallProc(procIdx);
           EmitI32($E8BD000C);                          { pop {r2,r3} }
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_DYNARR) then
         begin
           { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
@@ -15418,7 +15449,7 @@ begin
        if not SymSkipScopeExitRelease(i) then
       begin
         act := ScopeExitReleaseAction(i, a1, a2, a3);
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
            (act = SXR_INTF) then
         begin
           EmitLoadImmA64(9, Syms[i].Offset);
@@ -15428,7 +15459,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_ARRIMM) then
         begin
           { STATIC array with MANAGED ELEMENTS — every arm here guards
@@ -15451,7 +15482,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_STR) then
         begin
           EmitLoadVarA64(i);                       { x0 = handle }
@@ -15474,7 +15505,7 @@ begin
           Patch32(jzPatch,
                   $B4000000 or ((((CodeLen - jzPatch) div 4) and $7ffff) shl 5));
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_VAR) then
         begin
           { Variant local: clear (releases any managed payload). x0 = address. }
@@ -15484,7 +15515,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXVarClear not found');
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_OBJ) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
@@ -15513,7 +15544,7 @@ begin
             EmitCallProc(procIdx);
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_PROMO) then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope
@@ -15527,7 +15558,7 @@ begin
             EmitCallProc(procIdx);
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_RECORD) then
         begin
           { Record-with-managed-fields local: release each managed field via the
@@ -15553,7 +15584,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_DYNARR) then
         begin
           { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
@@ -15620,7 +15651,7 @@ begin
        if not SymSkipScopeExitRelease(i) then
        begin
         act := ScopeExitReleaseAction(i, a1, a2, a3);
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
            (act = SXR_INTF) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
@@ -15630,7 +15661,7 @@ begin
           EmitLoadConstXtensa(XtensaArgRegN(1), SymTR[i].RecId - REC_UCLASS_BASE);
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_ARRIMM) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element. N-D
@@ -15649,7 +15680,7 @@ begin
               ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_STR) then
         begin
           { A SCALAR AnsiString local. `not IsArray` is load-bearing: an array's
@@ -15687,7 +15718,7 @@ begin
           Patch24(jzPatch,
                   EncodeXtensaBEQZ(reg_xtensa_a2, CodeLen - jzPatch));
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_VAR) then
         begin
           { Variant local: clear (releases any managed payload). arg0 = address. }
@@ -15696,7 +15727,7 @@ begin
           EmitSlotAddrXtensa(XtensaArgRegN(0), i);
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_OBJ) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
@@ -15724,7 +15755,7 @@ begin
             EmitCallProc(procIdx);
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_PROMO) then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
@@ -15737,7 +15768,7 @@ begin
             EmitCallProc(procIdx);
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_RECORD) then
         begin
           { Record-with-managed-fields local: release each managed field via the
@@ -15762,7 +15793,7 @@ begin
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_DYNARR) then
         begin
           { LOCAL DYNAMIC ARRAY — the seventh kind, and it was held back one
@@ -15804,7 +15835,7 @@ begin
        if not SymSkipScopeExitRelease(i) then
        begin
         act := ScopeExitReleaseAction(i, a1, a2, a3);
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
            (act = SXR_INTF) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe).
@@ -15819,7 +15850,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_ARRIMM) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
@@ -15842,7 +15873,7 @@ begin
             EmitLoadImmRISCV32(reg_a3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_STR) then
         begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
@@ -15871,7 +15902,7 @@ begin
           Patch32(jzPatch,
                   EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - jzPatch));
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_VAR) then
         begin
           { Variant local: clear (releases any managed payload). a0 = address. }
@@ -15880,7 +15911,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXVarClear not found');
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_OBJ) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
@@ -15908,7 +15939,7 @@ begin
             EmitCallProc(procIdx);
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_PROMO) then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
@@ -15920,7 +15951,7 @@ begin
             EmitCallProc(procIdx);
           end;
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_RECORD) then
         begin
           { Record-with-managed-fields local: release each managed field via the
@@ -15945,7 +15976,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
         end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        else if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
                 (act = SXR_DYNARR) then
         begin
           { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
@@ -16377,7 +16408,7 @@ begin
   if CurProc >= 0 then
     for i := Procs[CurProc].ScopeBase to SymCount - 1 do
       if (not SymSkipScopeExitRelease(i)) and
-         (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+         SymReleasedAtScopeExit(i) and (i <> retSymIdx) and
          (ScopeExitReleaseAction(i, a1, a2, a3) <> SXR_NONE) then
         Inc(n);
   ManagedSweepSlotCount := n;

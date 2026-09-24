@@ -146,6 +146,8 @@ function TargetHasProcCleanupFrame: Boolean; forward;
 procedure EmitProcCleanupFrameEnterForTarget(var landPatch: Integer); forward;
 procedure EmitProcCleanupLandingPadForTarget(landPatch: Integer); forward;
 function SymSkipScopeExitRelease(i: Integer): Boolean; forward;
+function SymOwnedValueParam(i: Integer): Boolean; forward;
+function SymReleasedAtScopeExit(i: Integer): Boolean; forward;
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean; forward;
 procedure EmitLeaveExceptionFrameX64; forward;
 
@@ -15881,12 +15883,62 @@ begin
     rather than seven to remember. }
 end;
 
+{ A BY-VALUE AnsiString OR DYNAMIC-ARRAY PARAMETER IS OWNED BY THE CALLEE: it
+  takes a reference at entry (CompileAST) and drops it in the scope-exit sweep,
+  exactly as a local does. fpc's model, and the one the STORE side already
+  assumed -- `p := x` releases the old handle, as for any owned slot -- while
+  the entry and exit halves were missing. So:
+
+    function UpperStr(s: string): string;
+    begin for i := 1 to Length(s) do s[i] := UpCase(s[i]); Result := s; end;
+
+  upper-cased the CALLER's string too (copy-on-write saw refcount 1, the
+  caller's own, and wrote in place): silent wrong output from the most textbook
+  Pascal there is, every target, pin v423 included. And a callee that REBOUND
+  the param (`SetLength(a, 9)`, `s := s + 'x'`) leaked the new block on every
+  call, because nothing ever released the value the param ended up holding.
+
+  NOT `const` (read-only, so borrowing is safe and stays free), not var/out
+  (IsRef), not an open array (ArrLen 1000, the caller's storage), Pascal only
+  (NilPy and C keep their own conventions), not wasm32 (its epilogue is
+  WasmEmitManagedLocals, not this sweep), not a stackless generator (its params
+  are live state across yields).
+  bug-a-a-by-value-string-param-written-by-the-callee-changes-the-callers-string }
+function SymOwnedValueParam(i: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if (i < 0) or (i >= SymCount) or (CurProc < 0) then Exit;
+  if Syms[i].Kind <> skParam then Exit;
+  if Syms[i].IsRef then Exit;
+  if (not IsPascalFrontend) or NilPyUserCode then Exit;
+  if TargetArch = TARGET_WASM32 then Exit;
+  if CurProcIsStackless then Exit;
+  if SymCellPtr[i] >= 0 then Exit;
+  if not (((Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray) or
+          (Syms[i].IsArray and (Syms[i].ArrLen = -1))) then Exit;
+  for k := 0 to Procs[CurProc].ParamCount - 1 do
+    if Procs[CurProc].Params[k].SymIdx = i then
+    begin
+      if k < MAX_PROC_PARAMS then
+        Result := not ProcParamIsConst[CurProc * MAX_PROC_PARAMS + k];
+      Exit;
+    end;
+end;
+
+{ The scope-exit sweep's population: every local, plus the owned params above.
+  ONE predicate for the seven copies of the sweep loop. }
+function SymReleasedAtScopeExit(i: Integer): Boolean;
+begin
+  SymReleasedAtScopeExit := (Syms[i].Kind = skLocal) or SymOwnedValueParam(i);
+end;
+
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
   for i := Procs[procIdx].ScopeBase to SymCount - 1 do
-    if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymNeedsManagedCleanup(i) and
+    if SymReleasedAtScopeExit(i) and (i <> retSymIdx) and SymNeedsManagedCleanup(i) and
        (not StacklessPersistentSlotSym(i)) then
     begin
       Result := True;
@@ -16083,7 +16135,7 @@ begin
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
    if not SymSkipScopeExitRelease(i) then
   begin
-    if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
+    if SymReleasedAtScopeExit(i) and (i <> retSymIdx) then
     begin
       act := ScopeExitReleaseAction(i, a1, a2, a3);
       if act = SXR_INTF then

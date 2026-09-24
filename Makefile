@@ -13198,6 +13198,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_to_pointer_seam_leaks.pas $(TESTTMP)/test_dtp26
 	tools/expect_same.sh test_dtp26 "$$($(TESTTMP)/test_dtp26 | tail -1)" "last=3 head=1000"
 	tools/assert_no_leak.sh dynarray_to_pointer_seam 50 $(TESTTMP)/test_dtp26
+	@# A BY-VALUE STRING / DYNARRAY PARAM IS OWNED BY THE CALLEE: the caller's
+	@# value survives a callee that writes into it (UpperStr upper-cased the
+	@# caller's string too, pin v423), AND a callee that rebinds it releases the
+	@# new block (one leaked per call). Output is fpc's, byte for byte; the
+	@# census row is the leak half, which no value comparison can see.
+	./$(COMPILER) -Fulib/rtl test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/test_bvparam26
+	tools/expect_same.sh test_bvparam26 "$$($(TESTTMP)/test_bvparam26)" "$$(cat test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.expected)"
+	./$(COMPILER) -Fulib/rtl -dPXX_ALLOC_CENSUS test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/test_bvparamc26
+	tools/assert_no_leak.sh by_value_param_owned 200 $(TESTTMP)/test_bvparamc26 5000
 	@# An interface RETURNED by a function, and the flush boundary that hid it.
 	@# TWO defects, neither fix working alone (measured by building each on its
 	@# own): the sret temp had no owner, and a loop whose body is not a BEGIN/END
@@ -27163,6 +27172,12 @@ progress-check:
 # i386 cross-target slice (feature-target-i386). Grows with the backend;
 # joins 'make test' when the op coverage is broad enough to matter.
 test-i386: $(COMPILER)
+	# By-value string/dynarray params owned by the callee (see test-core): the
+	# output half and the leak half, on a 32-bit target.
+	./$(COMPILER) --target=i386 -Fulib/rtl test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/test_i386_bvparam
+	tools/expect_same.sh i386/bvparam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_bvparam)" "$$(cat test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.expected)"
+	./$(COMPILER) --target=i386 -Fulib/rtl -dPXX_ALLOC_CENSUS test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/test_i386_bvparamc
+	tools/assert_no_leak.sh i386/by_value_param_owned 200 tools/run_target.sh i386 $(TESTTMP)/test_i386_bvparamc 3000
 	# A 64-bit counter crossing 2^32: Inc/Dec and a counted `for` both moved
 	# only the low word on 32-bit targets. Nine of eleven rows are wrong under
 	# pin af40370a8a91; no x86-64 row can see it.
