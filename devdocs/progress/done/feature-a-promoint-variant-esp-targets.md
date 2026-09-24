@@ -89,4 +89,4 @@ re-diagnose before estimating it. The xtensa half stands exactly as the
 2026-08-02 note describes it — a unit-inclusion gap, not a missing helper.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b2bb1153cc.
