@@ -37,8 +37,8 @@ end;
 To use it, specialize it in the global scope:
 
 ```pascal
-specialize Max<Integer> as MaxInt;
-specialize Max<Double> as MaxDouble;
+specialize Max<Integer> as MaxOfInt;
+specialize Max<Double> as MaxOfDouble;
 ```
 
 Then call the specialized routines like ordinary functions:
@@ -47,7 +47,7 @@ Then call the specialized routines like ordinary functions:
 var
   i: Integer;
 begin
-  i := MaxInt(10, 20);
+  i := MaxOfInt(10, 20);
 end;
 ```
 
@@ -120,7 +120,7 @@ begin
 end;
 
 // Explicit top-level specialization
-specialize Max<Integer> as MaxInt;
+specialize Max<Integer> as MaxOfInt;
 
 // 2. Generic Class
 type
@@ -147,7 +147,7 @@ type
 var
   pair: TIntStrPair;
 begin
-  writeln('Max of 10 and 20: ', MaxInt(10, 20));
+  writeln('Max of 10 and 20: ', MaxOfInt(10, 20));
 
   pair := TIntStrPair.Create(1, 'PXX Compiler');
   writeln('Pair: ', pair.Key, ' = ', pair.Value);
