@@ -3234,7 +3234,16 @@ def classify(lines):
     # sweep a 90s timeout and publish the kill as a RED. Matching the FAMILY
     # rather than the one name is the normalise-don't-special-case call: the
     # next frontend's battery is classed right before anyone notices.
-    if re.search(r"run_[a-z0-9]+_conformance", text):
+    #
+    # Matched on COMMANDS, not on comment lines: `make -n` prints a recipe's
+    # `@# ...` lines as `# ...`, and this class is the one that REWRITES the
+    # job (generate() appends `--shard i/N` to every line). A test-emit-obj
+    # comment naming tools/run_c_conformance_esp.sh made that target a
+    # "conformance" job, so every pxx line in it received `--shard 0/6` and
+    # refused -- six NEW-RED shards at 0a101662f25f for a comment (2026-09-24).
+    # Scoped to this arm only: the other arms merely pick a timeout.
+    cmd_text = "\n".join(ln for ln in lines if not ln.lstrip().startswith("#"))
+    if re.search(r"run_[a-z0-9]+_conformance", cmd_text):
         return "conformance"
     if ("library_candidates" in text or "lua_runner" in text
             or "sqlite" in text or "zlib" in text or "/lua/" in text
