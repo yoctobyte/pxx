@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-24
 found-by: frankS (fixing bug-b-terminalsize-answers-enotty-on-xtensa)
 blocked-by: []
-summary: "HALF FIXED 2026-09-24 (commit `fix(C): a member taken from a type of unknown layout is refused, not read at offset 0`): taking a MEMBER from a type of unknown layout is now refused. WHAT REMAINS is the DECLARATION site, and the mechanism is that a type of unknown size is given size 0 rather than being refused an object -- so `struct nosuch v;` still defines a zero-byte object and `sizeof` of an incomplete type answers 0 instead of erroring. The condition that springs it is any code that sizes an object rather than naming its members: `memset(&v, 0, sizeof v)` compiles to a no-op, `malloc(sizeof(struct opaque))` asks for 0 bytes, and a struct passed or copied by value moves nothing. gcc errors with `storage size of 'v' isn't known` and `invalid application of sizeof to incomplete type`. This half is still SILENT-WRONG-VALUE: no diagnostic, a working binary, a plausible number. NOT a blanket refusal of incomplete types -- `struct opaque *p;`, forward declarations and extern declarations are legal C and this tree's own headers use them; what must be refused is DEFINING an object of, or applying sizeof to, a type whose layout is unknown. The member half that landed measured its false-positive population first (17043 resolving accesses across zlib and lib/crtl/src, zero failing) and that discipline is what this half still needs, on a population that is NOT busybox or sqlite -- neither parses per-file in this tree, and a sweep of busybox answered 0-of-0 without saying so."
+summary: "HALF FIXED 2026-09-24 (commit `fix(C): a member taken from a type of unknown layout is refused, not read at offset 0`): taking a MEMBER from a type of unknown layout is now refused. WHAT REMAINS is the DECLARATION site, and the mechanism is that a type of unknown size is given size 0 rather than being refused an object -- so `struct nosuch v;` still defines a zero-byte object and `sizeof` of an incomplete type answers 0 instead of erroring. The condition that springs it is any code that sizes an object rather than naming its members: `memset(&v, 0, sizeof v)` compiles to a no-op, `malloc(sizeof(struct opaque))` asks for 0 bytes, and a struct passed or copied by value moves nothing. gcc errors with `storage size of 'v' isn't known` and `invalid application of sizeof to incomplete type`. This half is still SILENT-WRONG-VALUE: no diagnostic, a working binary, a plausible number. NOT a blanket refusal of incomplete types -- `struct opaque *p;`, forward declarations and extern declarations are legal C and this tree's own headers use them; what must be refused is DEFINING an object of, or applying sizeof to, a type whose layout is unknown. The member half that landed measured its false-positive population first (17043 resolving accesses across zlib and lib/crtl/src, zero failing) and that discipline is what this half still needs, on a population that is NOT busybox or sqlite -- neither parses per-file in this tree, and a sweep of busybox answered 0-of-0 without saying so. AND THE STATE ENUMERATION IS SHORT BY ONE -- A FOURTH PATH ESCAPES ALL THREE ARMS, measured 2026-09-24 by frankb-8e AFTER the three-arm fix landed and carried by pin v419: `struct S { int a; int b; } __attribute__((aligned));` -- the ARGUMENT-LESS spelling, valid C meaning the target's largest alignment -- compiles with NO diagnostic and reads EVERY member at offset 0. sizeof answers 0 against gcc's 16, `s.a` reads 9 after `s.b=9` overwrote it, 7+9 returns 18, and a member that does not exist (`s.zzz`) is accepted too. MECHANISM, stated so it survives this row being fixed: the layout predicate at cparser.inc:15879 DELIBERATELY declines a struct whose alignment value was not parsed (CAttrAlignedValueOf, clexer.inc:71, returns its initial 0 when no `(` follows `aligned` while CAttrAligned is set anyway from a CStrContains), and that path leaves NO RECORD -- so the member check, guarded on `recId <> REC_NONE`, never runs and missKind=2 never fires although it was written for exactly this dropped-layout case. Any path that abandons a record BEFORE registering it escapes a check keyed on REC_NONE, and there are four such `CAttrAlignValues[i] < 1` early-Exits. NOT A REGRESSION FROM THE THREE-ARM WORK: CAttrAlignedValueOf dates to 63a4a3fc01, so this has been live since aligned support landed. Only the argument-less spelling is affected -- `packed` and `aligned(8)` are both correct, which makes `aligned(8)`/`packed` the positive control and `sizeof == 0` the row that must fail before any fix."
 ---
 
 # An undeclared struct type compiles and reads garbage
@@ -241,3 +241,84 @@ struct and was therefore silent about the state that produced a regression. A
 declaration-site census must deliberately include: a tentative definition
 completed later, a block-scope `extern`, a pointer-to-incomplete, and a struct
 whose body pxx drops.
+
+## 2026-09-24 (frank, frankb-8e) — A FOURTH STATE THE THREE ARMS DO NOT REACH: `__attribute__((aligned))` WITH NO ARGUMENT IS ACCEPTED SILENTLY AND READS EVERY MEMBER AT OFFSET 0
+
+Found from outside this ticket, measured at `44b00e1c19` (so **after** the
+three-arm fix `690d3859ff`, which is an ancestor), compiler `bb681c88af9f`.
+**Carried by pin v419.** Not fixed here, deliberately — see the last section.
+
+### The rows, with a gcc oracle and a control that isolates the attribute
+
+`struct S { int a; int b; }` + the attribute shown, then `s.a=7; s.b=9`:
+
+| declaration | pxx | gcc |
+| --- | --- | --- |
+| no attribute (control) | `sz=8 a=7 b=9` | `sz=8` |
+| `__attribute__((packed))` | `sz=8 a=7 b=9` | `sz=8 a=7 b=9` |
+| `__attribute__((aligned(8)))` | `sz=8 a=7 b=9` | — |
+| **`__attribute__((aligned))`** | **`sz=0 a=9 b=9`** | **`sz=16 a=7 b=9`** |
+| **`struct __attribute__((aligned)) S {...}`** | **`sz=0 a=9 b=9`** | — |
+
+`a` reads **9** because both members resolve to offset 0, so `s.b=9` overwrites
+`s.a`. Confirmed directly: `(char*)&s.a - (char*)&s` and the same for `b` both
+answer **0**, against gcc's 0 and 4, and `sizeof` is **0** against 16.
+`7+9` returns **18**. **No diagnostic at any level.**
+
+Only the **argument-less** spelling. `packed` and `aligned(8)` are both correct,
+which is what makes this the sibling-spelling shape rather than an attribute-wide
+gap — and `aligned` with no argument is valid C, meaning the target's largest
+useful alignment.
+
+### Why the three arms do not fire, which is the part that matters here
+
+`ParseCProgram`'s layout predicate **deliberately** declines a struct whose
+alignment value was not parsed — `cparser.inc:15879`, *"Reject only alignment
+attributes whose value was not parsed"*, `(CAttrFlags[i] and 2) <> 0` and
+`CAttrAlignValues[i] < 1` -> `Result := False`. The value is `< 1` because
+`CAttrAlignedValueOf` (`clexer.inc:71`) returns its initial `Result := 0` when no
+`(` follows `aligned`, while `CAttrAligned` is set regardless from a
+`CStrContains(attrText, 'aligned')` a few lines down.
+
+So this IS the "keep the tag, drop the layout" state this ticket's third arm was
+written for — and `missKind = 2` never fires, because the member check is guarded
+by `recId <> REC_NONE` and this path leaves **no record at all**. The proof is
+that a member that does not exist is also accepted: `s.zzz = 1` on the same
+struct compiles clean. An undeclared tag gets an empty record and reaches the
+arms; this gets nothing and bypasses them.
+
+**So the three-state model is right and its ENUMERATION is short by one.** Stated
+as the mechanism rather than as this row, since the row will be fixed: any path
+that abandons a record BEFORE registering it escapes a member check keyed on
+`recId <> REC_NONE`, and the four `CAttrAlignValues[i] < 1` early-`Exit`s are
+four such paths. The condition that springs it is a shape pxx declines to lay
+out *before* the tag is bound — not one it lays out emptily.
+
+### Age, and why it is not a regression from tonight
+
+`CAttrAlignedValueOf` dates to `63a4a3fc01` *"feat(c): add aligned layout and
+wide varargs"*, so the silent-zero has been live since alignment support landed.
+Tonight's three commits neither caused nor covered it. **Attributed to a range
+before being attributed to a seat**, per CLAUDE.md: the c-conformance
+`shard4/6` NEW-RED on five targets at `692ea558bbe4` is a *different* matter and
+has `134d68dfe3` (the two-arm refusal) as an ancestor while `690d3859ff` (the
+correction) is **not** an ancestor — 01:51 against 01:57 — so that red is very
+likely already repaired at HEAD and simply not re-measured. Someone should
+confirm rather than assume; this ticket's row is older than both.
+
+### NOT FIXED HERE, AND THE REASON IS COORDINATION NOT DIFFICULTY
+
+The fix looks small — do not let an unparsed alignment value reach the layout as
+0, and either use the target's largest alignment (gcc's meaning, 16 on x86-64) or
+refuse with `missKind = 2`'s wording. **But this is the fourth change to this
+code path in one night**, the author has ten measured gcc boundary rows banked
+for the declaration half, and a struct-layout change touches every C program and
+so wants the c-conformance shards rather than a quick gate. Landing a fourth
+variant at 02:00 beside that, without the author, is how the three-state model
+became short by one in the first place.
+
+**Whoever takes it:** `aligned` with no argument is the ONLY spelling affected,
+so the positive control is `aligned(8)` and `packed` staying correct, and the row
+that must fail before the fix is `sizeof == 0`. Do not assert gcc's 16 unless you
+mean to implement largest-alignment; asserting 8 (natural) is a defensible
+divergence and asserting 0 is the bug.
