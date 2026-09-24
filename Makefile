@@ -29199,6 +29199,13 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/charstrptr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
 	./$(COMPILER) --target=riscv32 test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_rv32_chareq
 	tools/expect_same.sh riscv32/chareq "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_chareq)" "$$(cat test/test_char_string_equality_both_directions.expected)"
+	# A PromoInt in 2^31..2^63 is INLINE on x86-64 and HEAP on a 32-bit target,
+	# so promo <-> Variant for that band is reachable only here (and on the
+	# ESP32, which is xtensa/riscv32). The .expected is CPython's. Positive
+	# control at the time: disabling the 32-bit spill in PXXPromoFromInt prints
+	# 0 for 2^40 and this row goes red; no x86-64 row can see that.
+	./$(COMPILER) --target=riscv32 test/test_promoint_variant_32bit_heap_band.pas $(TESTTMP)/test_rv32_promovband
+	tools/expect_same.sh riscv32/promovband "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_promovband)" "$$(cat test/test_promoint_variant_32bit_heap_band.expected)"
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
 	# 32-bit backends carried a hand-rolled arm AHEAD of the shared
 	# ABIParamSlotHoldsValueAddr predicate that was a strict subset of it; this
