@@ -52,16 +52,18 @@ unit interrupts;
   (316,023 B with the only pylib-using routine unreachable). So there is no
   arrangement of this file that is cheaper.
 
-  IT IS PAID ANYWAY AND A SPLIT WOULD NOT HELP. `import X` binds unit `X` first
-  and falls back to `mimic_X` only on a miss (pasparser_proc.inc:6851), so an
+  A SPLIT WOULD NOT HELP, AND IT IS NO LONGER PAID. `import X` binds unit `X`
+  first and falls back to `mimic_X` only on a miss (pasparser_proc.inc), so an
   `interrupts.pas` without the Python surface would still win the import and
-  hand NilPy the Pascal spellings -- IntPush, TIntEvent, a procedure-type
-  callback it cannot supply. One unit is the only structure that resolves. A
-  NilPy program links pylib regardless, so the Python surface costs the intended
-  consumer nothing; the payer is a PASCAL program that uses this unit, and the
-  bare ESP profile -- the SRAM-constrained one -- does not consume lib/rtl at all
-  (no bare Makefile row passes -Fulib/rtl). Revisit if a Pascal ESP program ever
-  needs the pump under a flash budget this does not fit.
+  hand NilPy the Pascal spellings. One unit is the only structure that
+  resolves. What made the cost go away instead is the PXX_NILPY define, which
+  the compiler sets for a NilPy compilation only (compiler.pas, beside
+  PXX_NILPY_STR): the Python surface, the `uses pylib` and the PyCb half of
+  each handler slot are compiled under it, so a Pascal program gets the
+  table above's left column and a NilPy program -- which links pylib anyway --
+  gets the whole unit. The case that forced it, 2026-09-24: a Pascal ESP
+  program using espgpio (examples/esp32/pwm-s3) failed to link, a forward
+  call to PyUtf8CpAt out of CALL8 reach, for a runtime it never called.
 
   THE HIDDEN LOOP (the owner's, built 2026-09-24): a script that registers a
   handler, arms a source and falls off the end keeps being served. It lives
@@ -79,10 +81,16 @@ unit interrupts;
   loop ends when the last source closes, e.g. a handler that calls
   adc.stop(), and the program then ends normally. }
 
+{$ifdef PXX_NILPY_STR}{$define PXX_NILPY}{$endif}   { PIN BRIDGE: the pinned compiler
+  predates PXX_NILPY but sets PXX_NILPY_STR for exactly the same compilations,
+  so a NilPy demo built with $(PXX_STABLE) keeps this unit's Python surface.
+  Delete this line once a pin carries PXX_NILPY (compiler.pas, fc3cce1eb). }
 interface
 
+{$ifdef PXX_NILPY}
 uses pylib;   { Variant, TPyList -- the Python surface below is part of the
                 interface, so the types it names have to be visible here }
+{$endif}
 
 const
   { Source tags. A bare pin number cannot distinguish two sources on one pin
@@ -154,6 +162,7 @@ function  IntLiveSources: Integer;
   that wants a clean slate after reconfiguring its sources. }
 procedure IntReset;
 
+{$ifdef PXX_NILPY}
 { ---- the Python module surface ------------------------------------------- }
 
 { `import interrupts` resolves to THIS unit -- the unit name IS the module name,
@@ -233,6 +242,8 @@ function push(source, id: Integer): Boolean;
 { How many live sources are open -- the hidden loop's second condition. }
 function live_sources: Integer;
 
+{$endif PXX_NILPY}
+
 implementation
 
 uses platform,    { PalPendingDrain -- the blocking-point hook }
@@ -247,7 +258,9 @@ type
       the smell CLAUDE.md names, and it would give source->handler two answers
       that could disagree. pycallback_is() is what makes a slot's Python half
       live, so an unset Variant is simply not a handler. }
+    {$ifdef PXX_NILPY}
     PyCb:   Variant;
+    {$endif}
   end;
 
 const
@@ -379,7 +392,10 @@ end;
   the other's registration with it. }
 function SlotIsLive(idx: Integer): Boolean;
 begin
-  Result := (Handlers[idx].Cb <> nil) or pycallback_is(Handlers[idx].PyCb);
+  Result := Handlers[idx].Cb <> nil;
+  {$ifdef PXX_NILPY}
+  Result := Result or pycallback_is(Handlers[idx].PyCb);
+  {$endif}
 end;
 
 procedure DropSlot(idx: Integer);
@@ -403,7 +419,9 @@ begin
   end;
   Handlers[NHandlers].Source := source;
   Handlers[NHandlers].Cb := nil;
+  {$ifdef PXX_NILPY}
   Handlers[NHandlers].PyCb := pynone;
+  {$endif}
   Result := NHandlers;
   NHandlers := NHandlers + 1;
 end;
@@ -467,8 +485,10 @@ begin
         pcb(ev);
       { The Python half of the SAME slot. Invoked here, on ordinary control
         flow, which is the whole design -- see the unit header. }
+      {$ifdef PXX_NILPY}
       if pycallback_is(Handlers[idx].PyCb) then
         pycallback_call1(Handlers[idx].PyCb, event.Create(ev));
+      {$endif}
     end;
     Delivered := Delivered + 1;
     n := n + 1;
@@ -540,12 +560,15 @@ begin
   begin
     Handlers[i].Source := INT_SRC_NONE;
     Handlers[i].Cb := nil;
+    {$ifdef PXX_NILPY}
     Handlers[i].PyCb := pynone;
+    {$endif}
   end;
   NHandlers := 0;
   InstallHook;
 end;
 
+{$ifdef PXX_NILPY}
 { ---- the Python module surface ------------------------------------------- }
 
 constructor event.Create(const e: TIntEvent);
@@ -624,6 +647,8 @@ function live_sources: Integer;
 begin
   Result := LiveSources;
 end;
+
+{$endif PXX_NILPY}
 
 finalization
   { THE HIDDEN LOOP. See the unit header for when it engages and why a

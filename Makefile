@@ -40022,6 +40022,13 @@ endif
 	# the same reason as the row above.
 	./$(COMPILER) -Fulib/rtl test/test_interrupt_desktop_script_exits.npy $(TESTTMP)/test_interrupt_desktop_exits
 	timeout 10 $(TESTTMP)/test_interrupt_desktop_exits | diff -u test/test_interrupt_desktop_script_exits.expected -
+	# A Pascal program using interrupts links no Python runtime: the Python
+	# surface is under PXX_NILPY. -dPXX_NILPY is the positive control that the
+	# guarded half is what costs the bytes; see the test's header.
+	./$(COMPILER) -Fulib/rtl test/test_interrupts_pascal_no_pylib.pas $(TESTTMP)/test_int_nopylib
+	./$(COMPILER) -Fulib/rtl -dPXX_NILPY test/test_interrupts_pascal_no_pylib.pas $(TESTTMP)/test_int_withpylib
+	tools/expect_same.sh interrupts_pascal_no_pylib.run "$$($(TESTTMP)/test_int_nopylib)" "event 7"
+	tools/expect_same.sh interrupts_pascal_no_pylib.size "$$(( $$(stat -c %s $(TESTTMP)/test_int_nopylib) * 2 < $$(stat -c %s $(TESTTMP)/test_int_withpylib) ))" "1"
 	# uuid.uuid4().hex, which That Space Program names universe objects with.
 	# PREDICATES, not values (a uuid4 is random): 32 lowercase hex digits, version
 	# nibble 4, RFC 4122 variant, the 8-4-4-4-12 str, 200 distinct. Dropping the

@@ -37,9 +37,17 @@ unit espadc;
   examples/esp32/adc-s3. IDF-only; a project using it needs esp_adc in its
   REQUIRES. }
 
+{$ifdef PXX_NILPY_STR}{$define PXX_NILPY}{$endif}   { PIN BRIDGE: the pinned compiler
+  predates PXX_NILPY but sets PXX_NILPY_STR for exactly the same compilations,
+  so a NilPy demo built with $(PXX_STABLE) keeps this unit's Python surface.
+  Delete this line once a pin carries PXX_NILPY (compiler.pas, fc3cce1eb). }
 interface
 
-uses pylib;   { TPyList, for read() }
+{$ifdef PXX_NILPY}
+uses pylib;   { TPyList, for read(). Under PXX_NILPY only, so a Pascal program
+                using this unit does not link the Python runtime (~300 KB,
+                past xtensa's CALL8 reach); see interrupts.pas's header. }
+{$endif}
 
 { Pascal surface. Each returns an esp_err_t; 0 is ESP_OK. }
 function AdcStart(channel, sampleHz: Integer): Integer;
@@ -58,7 +66,9 @@ function AdcPoolOverflows: Integer;
       adc.stop()                                                              }
 function start(channel, sample_hz: Integer): Integer;
 function stop: Integer;
+{$ifdef PXX_NILPY}
 function read: TPyList;
+{$endif}
 function frames: Integer;
 function overflows: Integer;
 { The GPIO pad behind ADC1 channel ch on THIS chip (channel 0 is GPIO1 on the
@@ -224,6 +234,7 @@ begin
   stop := AdcStop;
 end;
 
+{$ifdef PXX_NILPY}
 { What is waiting now, up to READ_MAX samples; timeout 0, so it never blocks
   (ESP_ERR_TIMEOUT with nothing waiting gives an empty list). Invalid samples
   -- the driver's own flag -- are skipped. }
@@ -243,6 +254,7 @@ begin
       Result.append(v);
     end;
 end;
+{$endif}
 
 function frames: Integer;
 begin
