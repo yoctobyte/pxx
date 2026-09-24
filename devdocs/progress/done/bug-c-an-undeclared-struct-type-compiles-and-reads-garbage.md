@@ -540,4 +540,4 @@ It does not: pass 2 skips them with SkipCDeclToSemi. That is why the global
 check runs between the passes. The comment is corrected in the same change.
 
 ## Log
-- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7bc88203e6.
