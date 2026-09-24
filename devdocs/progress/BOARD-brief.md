@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:19 blocked:9 backlog:42 backlog-umbrella:14 backlog-core:169 backlog-nilpy:183 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3971 rejected:89`
+`working:35 unfinished:19 blocked:9 backlog:42 backlog-umbrella:14 backlog-core:169 backlog-nilpy:182 backlog-tools:72 backlog-pascal:13 backlog-decide:49 backlog-libs:29 backlog-cfront:7 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:49 low-prio:76 known-incompat:6 float:23 done-followup:3 decided:153 done:3972 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 
@@ -79,7 +79,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 567, ranked
+## Ready — top 30 of 566, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -89,7 +89,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
-- `[p 80] [N]` bug-n-a-store-through-a-non-self-receiver-never-widens-the-field-so-a-float-lands-as-raw-bits
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
@@ -111,5 +110,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
 - `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 - `[p 70] [N]` bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
+- `[p 70] [N]` bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 
-_537 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_536 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -463,6 +463,7 @@ var
     it cannot read — a warning the user would then see twice for one line. The
     detect pass is invisible by construction, so it stays silent. }
   PyFJDetecting: Boolean;
+  PyUnboxForStore: Boolean;   { PyUnboxVariantForStore: pick pyvarobj_store }
   { The DEF whose body the return-type scan is currently walking: header range
     and body range, in tokens. -1 outside a scan, and every arm that reads them
     is inert then — exactly the shape PyInferSelfCi uses, and for the same
@@ -3850,7 +3851,9 @@ var unboxArg, unboxCall, castNode: Integer;
 begin
   unboxArg := AllocNode(AN_ARG); ASTLeft[unboxArg] := varNode; ASTRight[unboxArg] := -1;
   unboxCall := AllocNode(AN_CALL);
-  if owned then fn := 'pyvarobj_owned' else fn := 'pyvarobj';
+  if owned then fn := 'pyvarobj_owned'
+  else if PyUnboxForStore then fn := 'pyvarobj_store'
+  else fn := 'pyvarobj';
   ASTIVal[unboxCall] := FindProc(fn);
   if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (' + fn + ') not loaded');
   ASTTk[unboxCall] := Ord(tyPointer);
@@ -3906,6 +3909,17 @@ begin
   Result := callN;
 end;
 
+{ The class-slot STORE spelling: checked (pyvarobj_store raises TypeError on a
+  non-object payload), not retained. The three store sites use it; every other
+  unbox keeps plain pyvarobj, whose dispatch callers need a non-object to come
+  back as a failing `is` test, not an exception. }
+function PyUnboxVariantForStore(varNode, ci: Integer): Integer;
+begin
+  PyUnboxForStore := True;
+  Result := PyUnboxVariantToClassEx(varNode, ci, False);
+  PyUnboxForStore := False;
+end;
+
 function PyUnboxVariantToClass(varNode, ci: Integer): Integer;
 begin
   Result := PyUnboxVariantToClassEx(varNode, ci, False);
@@ -3952,8 +3966,7 @@ begin
   if Syms[symIdx].TypeKind <> tyClass then Exit;
   if Syms[symIdx].RecName < REC_UCLASS_BASE then Exit;
   if IntToTypeKind(ASTTk[rhsNode]) <> tyVariant then Exit;
-  Result := PyUnboxVariantToClassEx(rhsNode,
-                                    Syms[symIdx].RecName - REC_UCLASS_BASE, False);
+  Result := PyUnboxVariantForStore(rhsNode, Syms[symIdx].RecName - REC_UCLASS_BASE);
 end;
 
 
@@ -15777,7 +15790,7 @@ begin
     see PyStoreRhsToClassSlot for the trace that settled it. }
   if (IntToTypeKind(UFldTk[fi]) = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) and
      (IntToTypeKind(ASTTk[rhs]) = tyVariant) then
-    rhs := PyUnboxVariantToClassEx(rhs, UFldRec_[fi] - REC_UCLASS_BASE, False);
+    rhs := PyUnboxVariantForStore(rhs, UFldRec_[fi] - REC_UCLASS_BASE);
   Result := AllocNode(AN_ASSIGN);
   ASTLeft[Result] := PyVariantFieldArm(baseNode, ci, fi, fname);
   ASTRight[Result] := rhs;
@@ -35004,7 +35017,7 @@ begin
     if (IntToTypeKind(ASTTk[lhsNode]) = tyClass) and
        (IntToTypeKind(ASTTk[rhsNode]) = tyVariant) and
        (ResolveNodeRec(lhsNode) >= REC_UCLASS_BASE) then
-      rhsNode := PyUnboxVariantToClass(rhsNode, ResolveNodeRec(lhsNode) - REC_UCLASS_BASE);
+      rhsNode := PyUnboxVariantForStore(rhsNode, ResolveNodeRec(lhsNode) - REC_UCLASS_BASE);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
     ASTRight[node] := rhsNode;

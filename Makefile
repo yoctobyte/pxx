@@ -3381,6 +3381,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_tuprebind26 | diff -u test/test_nilpy_tuple_target_rebinds_a_name_across_types.expected -
 	./$(COMPILER) test/test_nilpy_a_store_through_a_non_self_receiver_widens_the_field.npy $(TESTTMP)/test_nilpy_fjforeign26
 	$(TESTTMP)/test_nilpy_fjforeign26 | diff -u test/test_nilpy_a_store_through_a_non_self_receiver_widens_the_field.expected -
+	./$(COMPILER) test/test_nilpy_a_non_object_stored_into_a_class_slot_raises.npy $(TESTTMP)/test_nilpy_clsslotraise26
+	$(TESTTMP)/test_nilpy_clsslotraise26 | diff -u test/test_nilpy_a_non_object_stored_into_a_class_slot_raises.expected -
 	@# an ANNOTATED returned local keeps the def's class result. The values cannot
 	@# see it, so the row asserts the TYPE as a relation: b (annotated) and c
 	@# (annotated, from a nested def) must carry exactly what a (unannotated) does,

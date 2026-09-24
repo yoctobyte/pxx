@@ -1,0 +1,55 @@
+# A value that is not an instance, stored into a slot laid out for a class
+# instance, must RAISE TypeError, not segfault. The store unboxed the variant
+# with an unchecked pyvarobj, so an int's payload became an instance pointer
+# and the first member read crashed. CPython would store the 5 -- a class slot
+# cannot hold it, so this is a deliberate divergence: loud, where it was a
+# crash. The .expected is pxx's, not CPython's, for the raising rows only.
+# An instance and None still store as before.
+# bug-n-a-store-through-a-non-self-receiver-never-widens-the-field-so-a-float-lands-as-raw-bits
+
+
+class N:
+    def __init__(self):
+        self.v = 1
+
+
+class H:
+    def __init__(self):
+        self.node = N()
+
+
+def put(h, y):
+    h.node = y
+
+
+def put_typed(h: H, y):
+    h.node = y
+
+
+def local_slot(y):
+    n: N = y
+    return n
+
+
+h = H()
+put(h, N())
+print(h.node.v)
+put(h, None)
+print(h.node is None)
+for bad in (5, "s", 2.5):
+    try:
+        put(h, bad)
+        print("stored")
+    except TypeError:
+        print("TypeError")
+    try:
+        put_typed(h, bad)
+        print("stored")
+    except TypeError:
+        print("TypeError")
+    try:
+        local_slot(bad)
+        print("stored")
+    except TypeError:
+        print("TypeError")
+print(local_slot(N()).v)

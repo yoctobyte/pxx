@@ -3,7 +3,8 @@ track: N
 prio: 80
 type: bug
 blocked-by: []
-summary: "FIXED, both halves. MECHANISM: a field stored through a receiver other than `self` was never joined, so a float landed in an int slot as its bits. PyFJJoinForeignStores (between the class detect sweep and layout) now joins every `<recv>.NAME = v`: a typable v widens the field by PyWidenBinding; a bare parameter is typed by its annotation or its call sites; a v the tokens cannot type widens a SCALAR field it can reach to variant (correct, slower). Scoped to the receiver class when the tokens name it, name-wide otherwise. KNOWN LIMIT, deliberate: a CLASS-typed field is not widened on an untypable store -- that would send every member read on it through the dynamic protocol -- so a non-class value stored into a class field this way is not covered.""
+summary: "FIXED. MECHANISM: a field stored through a receiver other than `self` was never joined, so a float landed in an int slot as its bits. PyFJJoinForeignStores (between the class detect sweep and layout) now joins every `<recv>.NAME = v`: a typable v widens the field by PyWidenBinding; a bare parameter is typed by its annotation or its call sites; a v the tokens cannot type widens a SCALAR field it can reach to variant. Scoped to the receiver class when the tokens name it, name-wide otherwise. A CLASS-typed field is deliberately not widened; a non-instance value reaching one now RAISES TypeError at the store (pyvarobj_store) instead of segfaulting later -- a chosen divergence from CPython, which would store it.""
+status: done
 ---
 
 # A store through a non-self receiver never widens the field
@@ -113,3 +114,20 @@ annotation, else PyParamTypeFromSites), which cleared `level`. Anything still
 untypable widens a scalar field to variant. After: two lekkerzeilen fields are
 widened, `gain` (audio.py:270) and `left` (ui.py:986). The fixture gained the
 setter rows. Pin v421 (4e32f1dde0ec) gets 9 lines of it wrong.
+
+## RESOLVED, the class-field case (2026-09-24, frankb-12)
+
+`def put(h, y): h.node = y` with y = 5 segfaulted: every store of a variant
+into a class-instance slot unboxed with plain `pyvarobj`, which returns the
+payload unchecked. The three store sites (field through a variant receiver,
+field through a typed receiver, annotated local) now use `pyvarobj_store`,
+which raises TypeError for a non-object tag, passes None as nil, and does not
+retain (the store retains, as PyStoreRhsToClassSlot records). Plain `pyvarobj`
+is untouched, because its dispatch callers need a non-object to fail an `is`
+test, not raise. Fixture
+`test/test_nilpy_a_non_object_stored_into_a_class_slot_raises.npy`; its
+`.expected` is pxx's own output, since CPython would store the value. Pin v421
+(4e32f1dde0ec) prints `stored` on all nine raising rows.
+
+## Log
+- 2026-09-24 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
