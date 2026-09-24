@@ -37,15 +37,6 @@ before treating a successful compile as a production-ready result.
   compile-switch states are still accepted only as inert markers. See
   [directives](./directives.md).
 - The FPC package ecosystem is not bundled.
-- **One known dynamic-array leak.** A dynamic array passed **by value** and then
-  given a new block inside the callee — `SetLength` to a different length, or
-  `a := nil` followed by `SetLength` — is not released when the callee
-  returns: one block per call. Passing it as `const` or `var`, or working on a
-  local copy, does not leak. Measured 2026-09-24 on x86-64 and i386 with a
-  per-call census over 22 dynamic-array shapes (SetLength, sharing, `Copy`,
-  `Concat`, `Insert`/`Delete`, arrays of strings, records and arrays, function
-  results, parameters, class and record fields, `for … in`, exception
-  unwinding); every other shape released everything it allocated.
 
 ## Targets
 
