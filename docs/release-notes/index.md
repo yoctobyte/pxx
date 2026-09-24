@@ -115,17 +115,25 @@ PXX builds bare-metal and ESP-IDF images for esp32s3 (xtensa) and esp32c3
   commit; it is library source, so the v424 compiler builds it from a checkout
   that has it. **Reading and writing a real I2C device has not been tested
   yet**; the board checks covered the bus without a device.
-- **Long-running programs:** soaking the examples on the board found two string
-  leaks of 44 bytes each: one on every Nil Python `print` of a number, and one
-  on every comparison of a function's string result on xtensa. Both are
-  [fixed since v424](#fixed-since-v424). Until v425, treat Nil Python on ESP as
-  fine for short runs and not yet for long-running use. A long soak of a Nil
-  Python example on the board is still to be done.
+- **Memory over time:** the ESP lane ran the examples in a loop on the S3
+  board. With pin v424, `print` of a number leaked memory on every pass
+  (44 bytes per pass in `nilpy-s3`, 220 in `nilpy-hw-s3`, 264 in
+  `gpio-edge-s3`), and on xtensa every comparison of a function's string
+  result leaked too. Both are [fixed since v424](#fixed-since-v424). With a
+  development compiler that has the fixes (sha256 `29956ba5beff…`, tree
+  `9c14efd7b`), those three examples lose 0 bytes per pass. The Nil Python
+  monitor example, `monitor-s3`, ran 193 reports over a 3.5-minute soak with
+  free heap flat, with that compiler and with v424. The timer, PWM, I2C and
+  UART units lose 0 bytes over 300 open/use/close cycles each. **Still
+  leaking:** `adc-s3` in a loop loses about 17.5 KB per pass, because an
+  `adc.read()` whose result is thrown away is never freed. A single run is not
+  affected, and assigning the result or looping over it avoids the leak.
 
 ESP is not a Unix: FreeRTOS provides tasks, not processes. Calls with POSIX
 shapes that have no meaning there return an explicit "unsupported" error rather
-than a plausible wrong answer. A getting-started guide for ESP is being written;
-until it lands, see [ESP32](../targets/esp32.md).
+than a plausible wrong answer. To start, follow
+[Getting started on the ESP32](../getting-started/esp32.md): installing
+ESP-IDF, then a first Pascal, C and Nil Python program.
 
 ## Fixed since v424
 

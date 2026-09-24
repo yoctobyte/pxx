@@ -13,27 +13,31 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Direct ELF executable output: no assembler or linker subprocess for normal
   Pascal programs.
 - Alternate output modes for interop with other toolchains: `--emit-obj`
-  writes a relocatable `.o` on x86-64, riscv32 and xtensa; `--shared` writes an x86-64 `.so`
-  (currently validated via the `.asm` assembly-source frontend).
+  writes a relocatable `.o` on x86-64, i386, aarch64, arm32, riscv32 and
+  xtensa; `--shared` writes a `.so` on x86-64 only. See
+  [Targets](../targets/index.md#what-each-target-supports).
 - Zero-dependency binaries by default: no libc, no `DT_NEEDED`, only Linux
   kernel syscalls at runtime — for every frontend, not just C. Linking a system
   shared library is opt-in and the only thing that adds a dependency; the
   alternative is compiling that library's source in, which keeps the binary
   self-contained.
 - Cross-language imports with no wrapper layer: frontends share one backend,
-  symbol table, and import resolver, so `import`/`uses` resolves a C header, a
-  Pascal unit, or a Nil Python module through the same chain — no FFI blocks,
-  IDL, or generated bindings. See [Cross languages](../targets/cross-languages.md).
+  symbol table, and import resolver. A Pascal `uses` can resolve a C header,
+  and a Nil Python `import` can resolve a Pascal unit or a C header, through the
+  same chain, with no FFI blocks, IDL or generated bindings. Pascal does not
+  import Nil Python modules, and C imports only C headers. See [Cross languages](../targets/cross-languages.md).
 - Byte-identical fixedpoint builds are part of the development gate: the
   compiler rebuilds itself and the two binaries must match to the byte, at the
   default optimisation level. This is the compiler reproducing **its own**
   output — a different claim from the output parity against gcc- and FPC-built
   references described in [Compatibility status](../reference/status.md).
-- DWARF debug info with `-g` on Linux targets.
-- It builds a bootable system: PXX compiles a BusyBox userland — matching a GCC
-  build of the same sources across a differential case list — and links it with
-  no C library, and `tools/mkminimal.sh` packages that shell, a stock Linux
-  kernel and the compiler itself into one BIOS+EFI ISO. See
+- DWARF debug info with `-g` on x86-64, i386, aarch64 and arm32 (not on
+  riscv32 or wasm32).
+- It builds a bootable system: PXX compiles a 19-applet BusyBox userland,
+  including the `ash` shell, whose output matches a GCC build of the same
+  sources across a differential case list. That userland is linked with no C
+  library other than PXX's own, and `tools/mkminimal.sh` packages it, a stock
+  Linux kernel and the compiler itself into one BIOS+EFI ISO. See
   [A minimal Linux system](../examples/minimal-linux-system.md).
 
 ## Language
@@ -55,8 +59,9 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Inline assembly and an assembly-source (`.asm`) frontend are available, but
   should be treated as advanced or unstable surfaces.
 - Alternate high-level frontends: a [C frontend](../targets/c-frontend.md)
-  (C99-class, passes the full c-testsuite conformance battery, and compiles
-  real corpora such as SQLite, Lua, zlib, and tcc) and
+  (C99-class, passes all 220 programs of the c-testsuite conformance battery
+  with pin v424 on x86-64, and compiles real programs such as SQLite, Lua,
+  zlib, cJSON and QuickJS) and
   [Nil Python](../targets/nil-python.md), a statically-typed Python-shaped
   dialect. Both are mainline, gated frontends, not experiments — see
   [compatibility status](../reference/status.md).
@@ -71,8 +76,10 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 ## Targets
 
 - Native Linux x86-64.
-- Cross output for Linux i386, aarch64, and arm32.
-- ESP32-oriented riscv32 and xtensa output for embedded workflows.
+- Cross output for Linux i386, aarch64, arm32 and riscv32, and for wasm32
+  (WebAssembly, run with wasmtime).
+- ESP32 output (riscv32 and xtensa) as an ESP-IDF component or a bare-metal
+  image. See [Targets](../targets/index.md) for what each one supports.
 
 ## Current caution
 

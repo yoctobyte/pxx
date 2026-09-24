@@ -307,8 +307,9 @@ PXX cross-compiles to the ESP32-S3 (Xtensa) and the ESP32-C3 (RISC-V). A
 program becomes a relocatable object that the normal ESP-IDF build links as
 `app_main`. That includes a Python program, which becomes machine code on the
 chip with no interpreter. The examples live in `examples/esp32/`, one ESP-IDF
-project per program and chip. The units they use are documented in
-[ESP32 peripherals](../library/esp.md).
+project per program and chip. To build and flash one yourself, follow
+[Getting started on the ESP32](../getting-started/esp32.md); the units they use
+are documented in [ESP32 peripherals](../library/esp.md).
 
 For this page, each one below was **built with pin v423 and booted under
 Espressif's QEMU**. Its console output was checked against the program's

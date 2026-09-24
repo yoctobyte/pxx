@@ -82,7 +82,8 @@ is chosen by extension, no separate tool:
 ./pxx hello.npy hello_npy   # or hello.py — same frontend, either extension
 ```
 
-For C, start with [Getting started with C](./c.md). See also
+For C, start with [Getting started with C](./c.md). For the ESP32, start with
+[Getting started on the ESP32](./esp32.md). See also
 [C Frontend](../targets/c-frontend.md) and [Nil Python](../targets/nil-python.md).
 
 ## What you just built: a binary that needs nothing

@@ -8,7 +8,7 @@ order: 58
 These units drive the ESP32's hardware from Pascal and from Nil Python. This
 page is the reference: what each unit does, its interface as the unit declares
 it, and how far it has been tested. To set up ESP-IDF, build and flash a first
-program, start with [ESP32](../targets/esp32.md).
+program, start with [Getting started on the ESP32](../getting-started/esp32.md).
 
 All of them are **ESP-IDF only**. They resolve when ESP-IDF links your program,
 so they do not work in a bare-metal image, and each needs an ESP-IDF component
@@ -53,8 +53,10 @@ builds it.
 
 The ESP lane (frankh-95) ran every example below on **one ESP32-S3 board**
 (ESP-IDF v6.0.1, 160 MHz), with the v424 compiler, and all 15 passed. The
-units that open and close a peripheral were also run through 300
-open/use/close cycles each, and none of them leaked memory. **The ESP32-C3 has
+units that open and close a peripheral (timer, PWM, I2C, UART) were also run
+through 300 open/use/close cycles each, and none of them leaked memory. The
+`monitor-s3` example, which reads the ADC, GPIO and heap together, ran 193
+reports over 3.5 minutes with free heap flat. **The ESP32-C3 has
 been tested only under QEMU, and the ESP32-S2 has only been built.** QEMU
 models no GPIO input and no ADC, so the input half of `espgpio` and all of
 `espadc` can only be checked on a board.
@@ -159,7 +161,10 @@ MicroPython's: there is no `machine.Pin` and no `Pin.irq`.
 | | `channel_pad(ch)` | the GPIO pin behind a channel on this chip (channel 0 is GPIO1 on the S3, GPIO0 on the C3) |
 
 Each completed frame is an `interrupts` event with source `INT_SRC_ADC`. A
-handler fetches the samples with `read()`. Only ADC unit 1 is supported, one
+handler fetches the samples with `read()`. **Keep the result**: an
+`adc.read()` whose list is thrown away is never freed, and in a loop that costs
+about 17.5 KB per pass on the S3 board. Assigning the list or looping over it
+frees it. A fix is in progress. Only ADC unit 1 is supported, one
 channel at a time, at 12 dB attenuation and 12 bits. There is no Pascal
 function that returns samples yet; reading them is Python-only.
 
@@ -293,6 +298,8 @@ program, test the divisor yourself.
 
 ## Next
 
-- [ESP32](../targets/esp32.md): setting up ESP-IDF and building a first program.
+- [Getting started on the ESP32](../getting-started/esp32.md): setting up
+  ESP-IDF and building a first program.
+- [ESP32](../targets/esp32.md): the two build modes, code size and floating point.
 - [Examples showcase](../examples/index.md#esp32): the ESP examples and their outputs.
 - [Known issues in beta 0.1](../reference/known-issues.md)

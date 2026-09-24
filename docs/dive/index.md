@@ -13,7 +13,7 @@ rest of the documentation, linked at the end, covers each topic in depth.
 PXX is a from-scratch, self-hosting Pascal compiler.
 It emits Linux ELF executables directly: no external assembler, no external
 linker, and no libc dependency in the default build path. The lexer, parser,
-intermediate representation, all six backends, the runtime library, and the
+intermediate representation, all seven backends, the runtime library, and the
 GTK-based component library are original code written for this project. The
 dialect follows Free Pascal's naming and semantics where practical, but the
 implementation is independent — nothing is copied or ported from FPC,
@@ -50,24 +50,17 @@ assembler, linker, or C compiler invoked during the build.
   cross-target suites in the test matrix rather than by the per-change gate.
 - **Two string ABIs.** The default build uses managed, reference-counted
   strings. Compiling with `-uPXX_MANAGED_STRING` selects an older frozen-string
-  ABI with no dynamic allocation for strings. For a `hello world` that is one
-  `writeln`, the difference is about 15x:
-
-  | | executable |
-  | --- | --- |
-  | default (managed strings) | 68,376 bytes |
-  | `-uPXX_MANAGED_STRING` (frozen) | 4,408 bytes, statically linked |
-
-  Measured 2026-09-05 at commit `ce19e5482` and identical under the pinned
-  compiler, so re-running it is the check: compile
-  `program hello; begin writeln('hello world'); end.` both ways and compare.
-  Both binaries are already stripped; `strip` changes neither. Expect these
-  numbers to move as the RTL does — they are a ratio worth knowing, not a
-  guarantee. See [Types](../language/types.md#strings).
-- **Six code-generating targets, one compiler.** x86-64, i386, aarch64, and
+  ABI with no dynamic allocation for strings. On x86-64 it no longer changes
+  binary size, because unused runtime code is dropped anyway: measured with pin
+  v424, a one-`writeln` hello world is 4,520 bytes both ways, and a program
+  with a string concat is 25,048 bytes both ways. It still matters on ESP bare
+  metal; see [ESP32](../targets/esp32.md). See also
+  [Types](../language/types.md#strings).
+- **Seven code-generating targets, one compiler.** x86-64, i386, aarch64, and
   arm32 self-host byte-identical. riscv32 covers both bare-metal ESP32-C3 and
   hosted 32-bit RISC-V Linux, whose binaries run under `qemu-riscv32`; xtensa
-  targets the ESP32-S2/S3. The three cross self-hosts are proved by a
+  targets the ESP32-S2/S3; wasm32 produces WebAssembly modules run with
+  wasmtime. The three cross self-hosts are proved by a
   triple-stage check — cross-compile the compiler, run *that* binary under QEMU
   to compile the compiler again, `cmp` the two — and are run in the
   managed-string build, which the `cross-bootstrap` rule states is required for
@@ -76,12 +69,14 @@ assembler, linker, or C compiler invoked during the build.
   and is two. `--target=` selects the backend, and
   [Targets](../targets/index.md) is the table that stays current.
 - **Multiple frontends.** The same backend also compiles a C frontend
-  (tested against real-world C, including SQLite and Lua sources), a
+  (all 220 c-testsuite programs pass with pin v424, and it compiles real C
+  such as SQLite, Lua and QuickJS), a
   statically-typed Python-like dialect (Nil Python, `.npy`), and an
   assembly-source frontend.
-- **It boots.** PXX compiles a BusyBox userland — as separate translation units,
-  matching a GCC build of the same sources over a differential case list — and
-  links it with no C library at all. `tools/mkminimal.sh` packages that shell, a
+- **It boots.** PXX compiles a 19-applet BusyBox userland, including the `ash`
+  shell, as separate translation units, matching a GCC build of the same sources
+  over a differential case list. It is linked with `ld` against PXX's own C
+  runtime and no other C library. `tools/mkminimal.sh` packages that shell, a
   stock Linux kernel and the compiler itself into one BIOS+EFI ISO: a system
   whose entire userland is PXX output, and on which the compiler compiles and
   runs both Pascal and C — the latter against PXX's own C runtime, measured in
@@ -96,12 +91,13 @@ assembler, linker, or C compiler invoked during the build.
 Compilation proceeds through five stages, with no external tools invoked:
 
 1. **Lexer** — source text to tokens. Dispatched by file extension: `.pas`
-   Pascal, `.c` C, `.npy` Nil Python, `.bas` early BASIC.
+   Pascal, `.c` C, `.npy` or `.py` Nil Python, `.bas` BASIC, and the
+   experimental `.rs` and `.zig`.
 2. **Parser** — tokens to an AST. Frontends share expression-parsing and
    type-checking where their semantics overlap.
 3. **IR** — the AST lowers to a linear, target-agnostic intermediate
    representation.
-4. **Codegen** — the IR lowers to target machine bytes. Six backends share
+4. **Codegen** — the IR lowers to target machine bytes. Seven backends share
    one IR.
 5. **ELF writer** — the compiler's own linker. Static output by default;
    `PT_DYNAMIC`/`DT_NEEDED`/GOT/PLT are added automatically when a C library
@@ -127,7 +123,8 @@ exceptions, managed strings, dynamic arrays — compiles on all four Linux
 self-host targets. A minimal class-based program was verified to build
 cleanly on x86-64, i386, aarch64, and arm32 while writing this page. The C
 and Nil Python frontends compile against real-world C headers and libraries.
-DWARF debug information (`-g`) is available on all four Linux targets.
+DWARF debug information (`-g`) is available on all four of those targets, and
+not on riscv32 or wasm32.
 
 Known gaps: xtensa and riscv32 are not self-host targets — the compiler emits
 for them but does not compile itself with them (though classes with virtual
@@ -148,7 +145,8 @@ security-sensitive, safety-sensitive, financial, legal, or medical work.
 <summary>Licensing</summary>
 
 PXX is open source, licensed per directory: the compiler is MPL 2.0, the
-runtime and libraries (`lib/**`, `compiler/builtin/`) are zlib, examples are
+runtime and libraries (`compiler/builtin/`, `lib/rtl`, `lib/pcl`, `lib/crtl`
+and `lib/asmcore`) are zlib, examples are
 0BSD, and these docs are CC BY 4.0. Because the zlib-licensed runtime is what
 gets embedded into every binary, programs you compile with PXX carry no license
 obligations from the toolchain. See [Licensing](../reference/licensing.md) for
