@@ -37229,6 +37229,15 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/adc-c3/main/main.npy $(TESTTMP)/adc_demo.o >/dev/null \
 	  && echo "=== adc demo source builds [$$t]: OK ===" || exit 1; \
 	done
+	@# The Pascal peripheral checks (I2C, PWM, NVS): build only here, their runs
+	@# need the S3 (recipes in each main.pas header). Built WITHOUT
+	@# --xtensa-long-calls on purpose: pwm-s3 uses espgpio -> interrupts, and a
+	@# Pascal program that links pylib again overflows CALL8 reach and fails here.
+	@for ex in i2c-s3 pwm-s3 nvs-s3; do \
+	  ./$(COMPILER) --target=esp32s3 --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    examples/esp32/$$ex/main/main.pas $(TESTTMP)/esp_periph_$$ex.o >/dev/null \
+	  && echo "=== $$ex builds [esp32s3, no long calls]: OK ===" || exit 1; \
+	done
 	@# The two BOARD-ONLY tests, build only here -- their runs need silicon and
 	@# their recipes are in their headers. The ring stress is S3-only: it pins a
 	@# task to core 1, and the C3 has one core.
