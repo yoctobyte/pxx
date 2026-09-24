@@ -19,12 +19,11 @@ unit interrupts;
   WHAT IS HERE AND WHAT IS NOT. This is the PUMP half: the queue, the drain at
   the blocking points the RTL already owns, the re-entrancy refusal, the
   per-drain budget, the ring-full policy and the iterator. The GPIO edge SOURCE
-  is deliberately absent and is not blocked on anything here -- it is blocked on
-  hardware, because qemu models no GPIO input path at all (measured in
-  feature-esp-gpio-and-adc-callback-slices with a control arm: a pull-up input
-  reads 0 where silicon reads 1, so the absent edges follow from the absent
-  input path). Everything in this unit is exercised on x86-64 against a
-  synthetic source instead, which needs no board.
+  lives in lib/rtl/platform/esp/espgpio.pas (on_rising / on_falling /
+  on_change), whose ISR calls IntPush and nothing else; it was measured on an
+  ESP32-S3 board on 2026-09-24 (examples/esp32/gpio-edge-s3), because qemu
+  models no GPIO input path at all. Everything in THIS unit is also exercised
+  on x86-64 against a synthetic source, which needs no board.
 
   THE PUMP IS INSTALLED, NOT LINKED IN -- AND THAT IS A CLAIM ABOUT THE HOOK,
   NOT ABOUT THIS UNIT'S OWN SIZE. `platform.PalPendingDrain` is a nil procedure
@@ -87,7 +86,7 @@ const
   INT_SRC_USER  = 3;
   { The synthetic source the host tests push from. Named rather than borrowing
     INT_SRC_GPIO so a test can never be mistaken for evidence about real edge
-    delivery -- which nothing on this box can observe. }
+    delivery, which only a board can give (examples/esp32/gpio-edge-s3). }
   INT_SRC_TEST  = 99;
 
   INT_RING_CAPACITY = 64;
@@ -210,14 +209,14 @@ procedure on_event(source: Integer; const cb: Variant);
 { Push an event as a source would. This is the SYNTHETIC source: it is what a
   host test uses in place of an edge nobody can generate here, and it is also
   the entry point a user's own Pascal or C handler calls. It is deliberately NOT
-  named for GPIO -- there is no GPIO edge source in this tree yet, and a name
-  that implied one would be the plausible-wrong-value failure this design exists
-  to avoid. }
+  named for GPIO: GPIO edges come from espgpio's armed pins, and a synthetic
+  push must not be mistakable for one. }
 function push(source, id: Integer): Boolean;
 
 implementation
 
-uses platform;   { PalPendingDrain -- the blocking-point hook }
+uses platform,    { PalPendingDrain -- the blocking-point hook }
+     palatomic;  { RingCount is shared with an ISR -- see the ring's comment }
 
 type
   THandlerSlot = record
@@ -236,8 +235,29 @@ const
 
 var
   Ring:      array[0 .. INT_RING_CAPACITY - 1] of TIntEvent;
-  RingHead:  Integer;   { next slot to read }
-  RingCount: Integer;   { how many are queued }
+  { A SINGLE-PRODUCER / SINGLE-CONSUMER RING THAT AN INTERRUPT CAN PRE-EMPT
+    AT ANY INSTRUCTION. The producer is an ISR (espgpio's edge handler) and the
+    consumer is ordinary code, on the same core, so every line of IntNext can
+    be interrupted by an IntPush. Two rules make that safe:
+      - each index has ONE writer: RingTail only IntPush writes, RingHead only
+        IntNext writes. The slot a push fills never depends on the consumer's
+        index, so a push landing between IntNext's head advance and its count
+        decrement fills the right slot. Deriving it as Head+Count, as this did
+        first, puts that push one slot past the tail and leaves a hole the
+        consumer later reads as a stale event.
+      - RingCount is the only word both sides WRITE, and it moves by an atomic
+        add. `RingCount := RingCount - 1` is load/subtract/store, and a push
+        between the load and the store is lost from the count: an edge counted
+        as neither delivered nor dropped, which is the COUNT acceptance
+        (pushed == delivered + dropped) failing without a sound.
+    The consumer decrements AFTER copying its slot out, so a stale-high count
+    seen by a push can only make it drop conservatively, never overwrite.
+    NOT covered: two producers pre-empting each other (a task-side `push`
+    interrupted by an ISR push). That is two writers of RingTail; the
+    synthetic source is for host tests, where no ISR exists. }
+  RingHead:  Integer;   { next slot to read; the consumer's }
+  RingTail:  Integer;   { next slot to fill; the producer's }
+  RingCount: LongInt;   { how many are queued; atomic, see above }
   Handlers:  array[0 .. MAX_HANDLERS - 1] of THandlerSlot;
   NHandlers: Integer;
   Dropped:   Int64;
@@ -275,7 +295,8 @@ begin
     Exit;
   end;
   PushSeq := PushSeq + 1;
-  slot := (RingHead + RingCount) mod INT_RING_CAPACITY;
+  slot := RingTail;
+  RingTail := (RingTail + 1) mod INT_RING_CAPACITY;
   Ring[slot].Source := source;
   Ring[slot].Id     := id;
   Ring[slot].Seq    := PushSeq;
@@ -286,7 +307,9 @@ begin
     and there is no nanosecond variant to call. Named StampMs rather than Stamp
     so nobody reads a unit into it that the PAL cannot deliver. }
   Ring[slot].StampMs := PalMonotonicMillis;
-  RingCount := RingCount + 1;
+  { Publish LAST, after the slot is filled: the consumer reads a slot only
+    once the count says it exists. }
+  InterLockedIncrement(RingCount);
   Result := True;
 end;
 
@@ -299,7 +322,7 @@ begin
   end;
   ev := Ring[RingHead];
   RingHead := (RingHead + 1) mod INT_RING_CAPACITY;
-  RingCount := RingCount - 1;
+  InterLockedDecrement(RingCount);
   Result := True;
 end;
 
@@ -470,6 +493,7 @@ procedure IntReset;
 var i: Integer;
 begin
   RingHead := 0;
+  RingTail := 0;
   RingCount := 0;
   Dropped := 0;
   Delivered := 0;

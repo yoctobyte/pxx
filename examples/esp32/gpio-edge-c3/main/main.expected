@@ -1,0 +1,15 @@
+inout 0 0
+armed 0
+after-edges isr 10 pending 10 delivered 0 seen 0
+after-sleep delivered 10 seen 10 pending 0
+event source-is-gpio True id 5
+accounted True
+unarmed-pin isr-added 0
+flood pending 64 dropped>0 True
+flood accounted True seen==delivered True
+rearmed 0
+falling isr-added 10 pending 0
+off 0
+disarmed isr-added 0
+final accounted True
+GPIO-EDGE-DONE

@@ -2,10 +2,26 @@
 prio: 30
 track: B+S
 type: feature
-status: blocked
+status: open
 found: 2026-08-30
 found-by: pxx-b
+summary: "SLICE 2 (GPIO edges) LANDED AND RAN ON AN ESP32-S3 BOARD, 2026-09-24: lib/rtl/platform/esp/espgpio.pas arms a pin (on_rising / on_falling / on_change / edge_off) and its ISR calls only interrupts.IntPush; the handler is registered with interrupts.on_event and runs in the main task at a blocking point. examples/esp32/gpio-edge-s3 matches its spec on silicon: ordering (10 ISR entries, 0 delivered before a blocking point), count (ISR entries == delivered + dropped, including a 100-edge flood into the 64-slot ring), and two controls (an unarmed toggled pin and a disarmed pin add 0 ISR entries). The edge is a pin in INPUT_OUTPUT mode, whose pad feeds its own input, so no jumper and no human. The C3 build compiles and links but no C3 board was attached, so it is unrun. SLICE 3 (ADC conversion-done callback) REMAINS and is no longer blocked on hardware now that a board exists; under qemu adc_oneshot_new_unit never returns. The owner's hidden loop is a follow-on in feature-s-interrupt-events-reach-python-outside-interrupt-context."
 ---
+
+## 2026-09-24 -- slice 2 done on a board (frankH)
+
+The acceptance is the one in feature-s-interrupt-events-reach-python-outside-interrupt-context
+(ordering and count), not "the callback fired". `tools/esp_flash.sh --project
+examples/esp32/gpio-edge-s3` gives `OK -- board output matches main.expected (15 lines)`.
+
+The first cut of interrupts.pas derived the slot a push fills as Head+Count and
+decremented Count with a plain load/subtract/store. Both are wrong once the
+producer is an ISR that can pre-empt the consumer. An edge landing inside
+IntNext is either lost from the count or written one slot past the tail. Fixed
+in the same commit: a producer-owned tail index and an atomic count. The board
+run does NOT exercise that window, because every edge in it is made by the
+consumer task itself, so the fix is argued and not measured. A continuous
+producer (LEDC driving the pin while the task drains) would measure it.
 
 # ESP peripheral callback API — GPIO (slice 2) and ADC (slice 3)
 

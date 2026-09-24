@@ -37060,6 +37060,15 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/nilpy-hw-c3/main/main.npy $(TESTTMP)/nilpy_hw.o >/dev/null \
 	  && echo "=== nilpy-hw demo source builds [$$t]: OK ===" || exit 1; \
 	done
+	@# The GPIO EDGE demo, same reason: espgpio's edge surface (on_rising & co)
+	@# and `import interrupts` together from a .npy. Its RUN is on silicon only
+	@# (tools/esp_flash.sh --project examples/esp32/gpio-edge-s3) -- qemu models
+	@# no GPIO input path, so there is no emulated row to add.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    examples/esp32/gpio-edge-c3/main/main.npy $(TESTTMP)/gpio_edge.o >/dev/null \
+	  && echo "=== gpio-edge demo source builds [$$t]: OK ===" || exit 1; \
+	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build
 	# by name (`unresolved forward: <callee>`) rather than mis-running. A body

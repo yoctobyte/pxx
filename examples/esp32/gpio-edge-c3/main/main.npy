@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: 0BSD
+# GPIO EDGE INTERRUPTS REACH PYTHON, OUTSIDE INTERRUPT CONTEXT -- on silicon.
+# (feature-esp-gpio-and-adc-callback-slices, slice 2)
+#
+# The design is the owner's (2026-09-22): the ISR is Pascal and calls only
+# interrupts.IntPush; this Python handler runs in the main task, at a blocking
+# point. So the acceptance is NOT "the callback ran" -- that passes on an
+# implementation that runs it in the ISR. It is:
+#   ORDERING  nothing is delivered at edge time: after the edges, with no
+#             blocking point in between, `seen` is 0 and the events are pending.
+#   COUNT     ISR entries == delivered + dropped, where the ISR entry count is
+#             kept by the ISR itself (gpio.gpio_edges), not by the queue.
+#
+# THE EDGE IS REAL AND NEEDS NO WIRING. The pin is INPUT_OUTPUT, and the pad
+# feeds its own input path, so each write is a level change the GPIO interrupt
+# hardware sees. Under qemu this program gets no edges at all (qemu models no
+# GPIO input path); it is for a board.
+#
+# Two controls: a second pin, toggled but never armed, must add no ISR entries;
+# and after edge_off the armed pin must stop producing them.
+
+import time
+import interrupts
+import 'espgpio.pas' as gpio
+
+PIN = 5
+OTHER = 6
+N = 10
+FLOOD = 100
+
+seen = [0, -1, -1]    # count, last source, last id
+
+
+def on_edge(ev):
+    seen[0] = seen[0] + 1
+    seen[1] = ev.source
+    seen[2] = ev.id
+
+
+def settle():
+    # A few microseconds without a blocking point, so one rising edge's
+    # interrupt is taken before the next one is made. The GPIO status bit is a
+    # latch: two edges before the ISR clears it are one interrupt.
+    k = 0
+    while k < 50:
+        k = k + 1
+
+
+def pulses(pin, n):
+    for i in range(n):
+        gpio.gpio_write(pin, 1)
+        settle()
+        gpio.gpio_write(pin, 0)
+        settle()
+
+
+def drain():
+    while interrupts.pending() > 0:
+        time.sleep(0)
+
+
+def main():
+    print("inout", gpio.gpio_inout(PIN), gpio.gpio_inout(OTHER))
+    gpio.gpio_write(PIN, 0)
+    interrupts.on_event(interrupts.INT_SRC_GPIO, on_edge)
+    print("armed", gpio.on_rising(PIN))
+
+    pulses(PIN, N)
+    isr = gpio.gpio_edges()
+    print("after-edges isr", isr, "pending", interrupts.pending(),
+          "delivered", interrupts.delivered(), "seen", seen[0])
+
+    time.sleep(0.01)
+    print("after-sleep delivered", interrupts.delivered(), "seen", seen[0],
+          "pending", interrupts.pending())
+    print("event source-is-gpio", seen[1] == interrupts.INT_SRC_GPIO, "id", seen[2])
+    print("accounted", gpio.gpio_edges() == interrupts.delivered() + interrupts.dropped())
+
+    # Control: a pin that is toggled but not armed adds nothing.
+    before = gpio.gpio_edges()
+    pulses(OTHER, N)
+    print("unarmed-pin isr-added", gpio.gpio_edges() - before)
+
+    # More edges than the ring holds, with no blocking point: the overflow is
+    # DROPPED AND COUNTED, and every edge is still accounted for.
+    pulses(PIN, FLOOD)
+    print("flood pending", interrupts.pending(), "dropped>0", interrupts.dropped() > 0)
+    drain()
+    print("flood accounted", gpio.gpio_edges() == interrupts.delivered() + interrupts.dropped(),
+          "seen==delivered", seen[0] == interrupts.delivered())
+
+    # Falling edges, then disarm.
+    print("rearmed", gpio.on_falling(PIN))
+    before = gpio.gpio_edges()
+    pulses(PIN, N)
+    time.sleep(0.01)
+    print("falling isr-added", gpio.gpio_edges() - before, "pending", interrupts.pending())
+
+    print("off", gpio.edge_off(PIN))
+    before = gpio.gpio_edges()
+    pulses(PIN, N)
+    time.sleep(0.01)
+    print("disarmed isr-added", gpio.gpio_edges() - before)
+    print("final accounted", gpio.gpio_edges() == interrupts.delivered() + interrupts.dropped())
+    print("GPIO-EDGE-DONE")
+
+
+main()
