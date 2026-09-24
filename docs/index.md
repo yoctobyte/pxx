@@ -22,8 +22,8 @@ documentation first.
 
 - **Self-hosting.** The compiler is written in its own dialect and reproduces
   itself byte-for-byte.
-- **Multiple targets.** x86-64 (native) plus i386, aarch64, and arm32 cross
-  targets, and bare-metal ESP32 (xtensa / riscv32).
+- **Multiple targets.** x86-64 (native) plus i386, aarch64, arm32, riscv32 and
+  wasm32 cross targets, and ESP32 (xtensa / riscv32).
 - **Multiple frontends.** Pascal is primary, but the same backend also compiles
   C, a Python-like dialect (Nil Python), and its own assembly-source frontend —
   see [Targets](./targets/).

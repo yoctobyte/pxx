@@ -28,7 +28,9 @@ ESP chip names are accepted as targets too. They imply the CPU and
 `--platform=esp`: `esp32`, `esp32s2` and `esp32s3` are xtensa; `esp32c2`,
 `esp32c3`, `esp32c6`, `esp32h2` and `esp32p4` are riscv32. v424 compiles an
 ESP-IDF object for every one of these names. The bare-metal profile supports
-only `esp32s3` and `esp32c3`, and says so for the others. Only the ESP32-S3
+only `esp32s3` and `esp32c3`, and says so for the others. It runs under QEMU
+only; on a real board use the ESP-IDF profile (see
+[known issues](../reference/known-issues.md)). Only the ESP32-S3
 has been run on a physical board; the ESP32-C3 has been run under QEMU; the
 rest have only been compiled.
 

@@ -57,6 +57,16 @@ GCC-compiled code or into a file format.
 `__thread int tl = 7;` reads 7 in `main` and 0 in a thread started with
 `pthread_create`. **Workaround:** assign the value at the start of each thread.
 
+### ESP: bare-metal images do not run on a real chip
+
+Images built with `--esp-profile=bare` fault on the first byte access to a
+global or a string, and their UART output is lost. Measured on an ESP32-S3; a
+bare ESP32-C3 image has never been run on silicon. They run under Espressif's
+QEMU (`qemu-system-xtensa` and `qemu-system-riscv32`), which is what the bare
+profile is for. esptool cannot convert a bare ELF either, since it has no
+section headers. **Workaround:** on hardware, build the program as an ESP-IDF
+component (the default); see [ESP32](../targets/esp32.md).
+
 ### ESP: an uncaught exception does not report itself
 
 On a desktop target an unhandled exception prints a message and the program

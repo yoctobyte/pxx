@@ -23,8 +23,14 @@ There are two integration modes.
 
 Produces a self-contained ELF linked at the SoC SRAM map. No ESP-IDF, no
 FreeRTOS, no linker: the program owns startup (stack setup) and runs directly
-from RAM. QEMU boots it with `-kernel`; on hardware you load it like any
-RAM image.
+from RAM. QEMU boots it with `-kernel`.
+
+**The bare profile is a test vehicle and runs under QEMU only. On a real
+board, use the ESP-IDF mode below.** Measured on an ESP32-S3 on 2026-09-25: a
+bare image boots and reaches `main`, but the first byte-sized memory access
+faults, because the S3 only allows 32-bit accesses where the bare profile
+places its data. Byte writes to the UART are also dropped. A bare ESP32-C3
+image has never been run on silicon.
 
 ```sh
 ./pxx --target=riscv32 --esp-profile=bare blink.pas blink.elf

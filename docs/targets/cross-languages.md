@@ -7,9 +7,10 @@ order: 62
 
 PXX is centered on Pascal, but several frontends share one backend, one symbol
 table, and one `uses`/`import` resolver — the project's working nickname for
-this is **Frankonpiler**. Pascal and C are mainline, gated frontends; Nil
-Python is also mainline (see [Nil Python](./nil-python.md)); BASIC, Rust and
-Zig remain experimental research paths.
+this is **Frankonpiler**. Pascal and C are mainline, gated frontends. Nil
+Python has its own gate too, but it is python-ish and known to have plenty of
+issues (see [Nil Python](./nil-python.md)). BASIC, Rust and Zig remain
+experimental research paths.
 
 ## Frontends by suffix
 
@@ -23,8 +24,8 @@ Zig remain experimental research paths.
 | `.rs` | Rust, experimental |
 | `.zig` | Zig, experimental |
 
-The Pascal frontend is the original, most complete surface. C and Nil Python
-are full peer frontends with their own gates; BASIC, Rust and Zig exist to test
+The Pascal frontend is the original, most complete surface. C is a full peer
+frontend with its own gate, and Nil Python is gated but still rough; BASIC, Rust and Zig exist to test
 interop and backend reuse, and their accepted language subsets are still
 moving.
 

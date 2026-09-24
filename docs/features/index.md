@@ -78,8 +78,8 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Native Linux x86-64.
 - Cross output for Linux i386, aarch64, arm32 and riscv32, and for wasm32
   (WebAssembly, run with wasmtime).
-- ESP32 output (riscv32 and xtensa) as an ESP-IDF component or a bare-metal
-  image. See [Targets](../targets/index.md) for what each one supports.
+- ESP32 output (riscv32 and xtensa) as an ESP-IDF component, or as a
+  bare-metal image for QEMU (bare images do not run on a real chip). See [Targets](../targets/index.md) for what each one supports.
 
 ## Current caution
 

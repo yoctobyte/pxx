@@ -91,8 +91,10 @@ A **refusal** is a compile-time error that names the reason, for example
 
 ## ESP32
 
-PXX builds bare-metal and ESP-IDF images for esp32s3 (xtensa) and esp32c3
-(riscv32), from Pascal, C and Nil Python.
+PXX builds ESP-IDF and bare-metal images for esp32s3 (xtensa) and esp32c3
+(riscv32), from Pascal, C and Nil Python. Bare-metal images are for QEMU only:
+on a real ESP32-S3 they fault on the first byte access, so use the ESP-IDF
+profile on hardware.
 
 - **C conformance:** 219 pass, 0 fail, 1 skip out of the 220 single-program
   tests of c-testsuite, compiled for esp32s3 and run under Espressif's QEMU
