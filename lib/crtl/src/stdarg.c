@@ -264,10 +264,21 @@ void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size,
      Getting this wrong is silent: with the reg area walked 4 bytes early the
      double reads half padding and prints 0.00.
      bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area */
-  if (align > 4) {
-    ap->gp_offset = (ap->gp_offset + 7u) & ~7u;
-    ap->overflow_arg_area =
-        (void *)((((unsigned int)ap->overflow_arg_area) + 7u) & ~7u);
+  /* ALIGN BY ARGUMENT-WORD INDEX, NOT BY ADDRESS. gp_offset keeps counting
+     past the register area (it is the byte index of the next argument word
+     in the whole sequence), and the padding goes wherever that index lands.
+     The caller pads the same way -- an odd word index gets a zero word before
+     an 8-aligned argument, in a register or on the stack -- and pxx's pushed
+     argument block is word-aligned, not 8-aligned. This used to round the
+     overflow ADDRESS up to 8 on every 8-byte argument, even one read from
+     registers, so on riscv32 `printf("%g %g %g %d", 1.0, 2.0, 3.0, 77)`
+     skipped the first stack word and printed a7's copy (the high word of
+     3.0) for the 77. Silent, and on the pin as well. For a caller whose block
+     IS 8-aligned (gcc's 16-aligned sp) the two rules agree. */
+  if (align > 4 && (ap->gp_offset & 7u) != 0) {
+    if (ap->gp_offset >= ap->fp_offset)
+      ap->overflow_arg_area = (char *)ap->overflow_arg_area + 4;
+    ap->gp_offset = ap->gp_offset + 4;
   }
   if (ap->gp_offset + step <= ap->fp_offset) {
     /* Fully inside the register-save area. */
@@ -293,12 +304,13 @@ void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size,
     unsigned int k;
     for (k = 0; k < fromOvf; k++) hi[k] = ((char *)ap->overflow_arg_area)[k];
     ap->overflow_arg_area = (char *)ap->overflow_arg_area + fromOvf;
-    ap->gp_offset = ap->fp_offset;
+    ap->gp_offset = ap->fp_offset + fromOvf;
     addr = lo;
   } else {
     /* Fully past the reg area: the caller placed this arg on the stack. */
     addr = ap->overflow_arg_area;
     ap->overflow_arg_area = (char *)ap->overflow_arg_area + step;
+    ap->gp_offset = ap->gp_offset + step;
   }
   return addr;
 }

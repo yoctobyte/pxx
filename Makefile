@@ -14136,6 +14136,25 @@ test-core: $(COMPILER)
 	# element size, so no row passes by a default.
 	./$(COMPILER) test/test_c_sizeof_of_a_dereferenced_array_and_a_typedef_of_array_typedefs.c $(TESTTMP)/test_c_sizeof_deref26
 	tools/expect_same.sh test_c_sizeof_deref26 "$$($(TESTTMP)/test_c_sizeof_deref26)" "$$(printf '32 32 12 2 32 96\n16 64 16 120 64 4\n4 16 7 1 77\n8 20 20')"
+	# The ILP32 twin: only the first row moves (it holds pointers), and the
+	# expected is gcc -m32's output for the same source.
+	./$(COMPILER) --target=riscv32 test/test_c_sizeof_of_a_dereferenced_array_and_a_typedef_of_array_typedefs.c $(TESTTMP)/test_c_sizeof_deref_rv32
+	tools/expect_same.sh riscv32/test_c_sizeof_deref "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_c_sizeof_deref_rv32)" "$$(printf '16 16 12 2 32 96\n16 64 16 120 64 4\n4 16 7 1 77\n8 20 20')"
+	# Variadic doubles past the argument registers on every 32-bit target:
+	# crtl's va_arg aligned the overflow pointer by ADDRESS where the caller pads
+	# by argument-word index, so printf's fourth double read half the third
+	# (5.30758e-315). Expected is gcc's output; x86-64 is the control.
+	./$(COMPILER) test/test_c_variadic_doubles_past_the_register_area_on_32_bit.c $(TESTTMP)/test_c_vadbl26
+	./$(COMPILER) --target=riscv32 test/test_c_variadic_doubles_past_the_register_area_on_32_bit.c $(TESTTMP)/test_c_vadbl_rv32
+	./$(COMPILER) --target=arm32 test/test_c_variadic_doubles_past_the_register_area_on_32_bit.c $(TESTTMP)/test_c_vadbl_arm32
+	./$(COMPILER) --target=i386 test/test_c_variadic_doubles_past_the_register_area_on_32_bit.c $(TESTTMP)/test_c_vadbl_i386
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_c_variadic_doubles_past_the_register_area_on_32_bit.c $(TESTTMP)/test_c_vadbl_xt
+	@vadbl_exp="$$(printf '1 2 3 4 77\n1 2 3 77\nE 1.5 2 3 4 5 6\n1 1.25 2 2.5 3 3.75 4 4.5\n1234567890123 7 -5 8 99\n1510')"; \
+	  tools/expect_same.sh test_c_vadbl26 "$$($(TESTTMP)/test_c_vadbl26)" "$$vadbl_exp" && \
+	  tools/expect_same.sh riscv32/test_c_vadbl "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_c_vadbl_rv32)" "$$vadbl_exp" && \
+	  tools/expect_same.sh arm32/test_c_vadbl "$$(tools/run_target.sh arm32 $(TESTTMP)/test_c_vadbl_arm32)" "$$vadbl_exp" && \
+	  tools/expect_same.sh i386/test_c_vadbl "$$(tools/run_target.sh i386 $(TESTTMP)/test_c_vadbl_i386)" "$$vadbl_exp" && \
+	  tools/expect_same.sh xtensa/test_c_vadbl "$$(tools/run_target.sh xtensa $(TESTTMP)/test_c_vadbl_xt)" "$$vadbl_exp"
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
 	tools/expect_same.sh test_c_recname26 "$$($(TESTTMP)/test_c_recname26)" "$$(printf 'other\nother\n3')"
 	# A C program links the system library its header names: every prototype
