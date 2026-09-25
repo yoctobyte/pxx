@@ -16184,41 +16184,17 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-25T15:24:25Z",
+  "date": "2026-09-25T15:51:33Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
-   "test-uforth#src:tools/compiler_srchash.sh@1",
-   "test-uforth#src:tools/compiler_srchash.sh@2",
-   "test-uforth#src:tools/compiler_srchash.sh@3",
-   "test-uforth#src:tools/compiler_srchash.sh@4",
-   "test-uforth#src:tools/compiler_srchash.sh@5",
-   "test-uforth#src:tools/compiler_srchash.sh@6",
-   "test-uforth#src:tools/compiler_srchash.sh@7",
-   "test-uforth#src:tools/compiler_srchash.sh@8",
-   "test-uforth#src:tools/compiler_srchash.sh@9",
-   "test-uforth#src:tools/compiler_srchash.sh@10",
-   "test-uforth#src:tools/compiler_srchash.sh@11",
-   "test-uforth#src:tools/compiler_srchash.sh@12",
-   "test-uforth#src:tools/compiler_srchash.sh@13"
+   "tools-devtest#00"
   ],
-  "sha": "c6e47ad35b8176c6d9cc52e954c5500f785bdba9",
+  "sha": "80330f40641f1fcf48744278778cabf1fac7154e",
   "tier": "full",
-  "ver": "v436",
+  "ver": "v437",
   "verdict": "RED",
   "why": {
-   "test-uforth#src:tools/compiler_srchash.sh@1": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@10": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@11": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@12": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@13": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@2": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@3": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@4": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@5": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@6": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@7": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@8": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
-   "test-uforth#src:tools/compiler_srchash.sh@9": "self-host fixedpoint: verified \u2014 1 round(s), 60233027a925 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile"
+   "tools-devtest#00": "Or add the path to ALLOWED_PATHS with a reason. | ---- the 1 hardcoded /tmp path(s), LAST so a `tail` keeps them: | test/test_nilpy_micropython_logging_walls.npy        $TMP%d.txt | FAIL: 1 hardcoded "
   }
  },
  "toolchain": {
