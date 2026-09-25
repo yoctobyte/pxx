@@ -7,10 +7,8 @@ order: 22
 
 The same `pxx` compiler that builds Pascal also compiles C. It picks the C
 frontend from the `.c` extension; there is no separate tool. Everything on this
-page was run with **pin v424** (compiler sha256 `93a336a7ba85…`) on
+page was run with **pin v425** (compiler sha256 `426b2fbf3f08…`) on
 2026-09-25, from the root of a checkout set up as in [Install](../install/index.md).
-The cross-target table and the two libc notes were re-run the same day with
-**pin v425** (compiler sha256 `426b2fbf3f08…`), which is the current pin.
 
 ## Hello, world
 
@@ -28,7 +26,7 @@ int main(void)
 
 ```sh
 $ ./pxx hello.c hello
-ok: hello  [code=61841B  data=12928B  bss=72456B  procs=887  codeseg=65248B]
+ok: hello  [code=61924B  data=12928B  bss=72488B  procs=915  codeseg=65248B]
 $ ./hello
 Hello, world!
 ```
@@ -166,11 +164,11 @@ Hello, pxx!
 
 `--function-sections` matters for size: each object carries its own copy of
 the parts of the runtime it uses, and this flag lets the linker drop the
-duplicates. Here it gives 113 KB instead of 537 KB. `--link` is x86-64 only
+duplicates. Here it gives 113 KB instead of 566 KB. `--link` is x86-64 only
 today, and it prints its section statistics on standard error.
 
 **One translation unit.** A file that includes the others builds as a single
-program, and the result is smallest (78 KB here):
+program, and the result is smallest (79 KB here):
 
 ```c
 /* all.c */

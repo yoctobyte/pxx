@@ -68,7 +68,7 @@ output or a screenshot of each. The highlights:
 ## Targets
 
 The same one-line program, `writeln(6*7)` or its equivalent in each language,
-compiled by pin v424, the previous pin, and run: natively on x86-64, under QEMU user mode for the
+compiled by pin v425 and run: natively on x86-64, under QEMU user mode for the
 other Linux targets (`tools/run_target.sh`), and under wasmtime for wasm32.
 
 | | x86-64 | i386 | aarch64 | arm32 | riscv32 | wasm32 |
@@ -100,7 +100,7 @@ profile on hardware.
   which needs a writable file system the test image does not mount. This was
   measured with a development compiler (binary sha256 `9bcd11d46816`, tree
   `e1648bcb4`) that predates v423, not with v424 itself.
-- **Examples:** 15 programs in `examples/esp32/` run under QEMU with pin v423
+- **Examples:** 15 programs in `examples/esp32/` run under QEMU with pin v425
   and are listed in the [showcase](../examples/#esp32).
 - **On a board:** the ESP lane ran all 15 ESP32-S3 examples on one physical
   ESP32-S3 board (ESP-IDF v6.0.1), built with the v425 compiler, and all 15
@@ -167,8 +167,9 @@ The full list, with the Pascal and C rows re-run on v425, is on its own page:
 - A few programs compile and silently give a wrong answer. Examples: C
   `long double` is 8 bytes, not GCC's 16; an initialised C `__thread` variable
   reads 0 outside the main thread; a C member access on a comma expression,
-  `(x, p)->field`, reads the wrong value; on ESP, an uncaught exception reboots
-  or stops the chip without a message.
+  `(x, p)->field`, reads the wrong value; on ESP, an uncaught exception panics
+  or stops the chip without a message (fixed in the development tree, so the
+  next pin prints it).
 - C compound literals of an array type, such as `(float[4]){1, 2, 3, 4}`, are
   refused.
 - Integer division by zero gives 0 on ESP and stops the program on desktop.

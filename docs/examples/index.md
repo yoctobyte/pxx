@@ -28,9 +28,9 @@ strength of a test that once passed or a claim in another document.
 > **Re-checked 2026-09-25 with pin v425** (commit `4fbf33f69`, sha256
 > `426b2fbf3f08…`). The 20 batch and parallel programs printed output
 > byte-identical to v424's, apart from timing figures, and each binary is the
-> same size. The C and Pascal library rows and the ESP32-S3 board walk were
-> re-run with v425, and each says so. The screenshots and the ESP QEMU runs
-> were not redone for v425.
+> same size. The C and Pascal library rows, the ESP QEMU runs and the ESP32-S3
+> board walk were re-run with v425, and each says so. The screenshots were not
+> redone for v425.
 
 ## Quick start
 
@@ -401,8 +401,8 @@ CPython does, and outside it the language is known to have plenty of issues
 
 ### The other examples, under QEMU
 
-For this page, each one below was **built with pin v423 and booted under
-Espressif's QEMU**. Its console output was checked against the program's
+For this page, each one below was **built with pin v425 and booted under
+Espressif's QEMU** on 2026-09-25, as it was with v423 before. Its console output was checked against the program's
 `main.expected` file or its own verdict line. They were not run on a physical
 board for this page. The prerequisite is the ESP-IDF toolchain
 (`. ~/esp/esp-idf/export.sh`).

@@ -123,8 +123,9 @@ Notes for the bare profile:
   array); a program that does not allocate has no arena at all. When it is
   there, it is the largest thing in a bare image's SRAM. Size it with one of
   `-dPXX_ESP_HEAP_8K`, `-dPXX_ESP_HEAP_16K`, `-dPXX_ESP_HEAP_32K`,
-  `-dPXX_ESP_HEAP_128K`. Measured with v424 on a program that concatenates a
-  string and calls `GetMem`, total bss, the same on both chips:
+  `-dPXX_ESP_HEAP_128K`. Measured with v425 on a program that concatenates a
+  string and calls `GetMem`, total bss, the same on both chips and the same as
+  with v424:
 
   | | 8K | 16K | 32K | 64K (default) | 128K |
   | --- | ---: | ---: | ---: | ---: | ---: |
@@ -137,13 +138,13 @@ Notes for the bare profile:
   arena that fits and is too small for your program is only found at runtime.
 - **`-uPXX_MANAGED_STRING` removes the managed-string runtime** from a
   program that does not need it. The saving is now small, because unused
-  runtime code is dropped anyway. Measured with v424 on the hello program
+  runtime code is dropped anyway. Measured with v425 on the hello program
   above, code bytes:
 
   | | esp32c3 | esp32s3 |
   | --- | ---: | ---: |
-  | default | 3,668 | 3,452 |
-  | `-uPXX_MANAGED_STRING` | 892 | 1,288 |
+  | default | 3,668 | 3,488 |
+  | `-uPXX_MANAGED_STRING` | 892 | 1,324 |
 
   With `ShortString` instead of `AnsiString` the program is already under
   1.4 KB and the flag changes nothing. **Getting it wrong is a compile error,
@@ -193,7 +194,7 @@ which the runtime is stuck with rather than choosing:
 
 ## Code size and memory footprint
 
-Measured with **pin v424** on 2026-09-25, `--esp-profile=bare`. The compiler
+Measured with **pin v425** on 2026-09-25, `--esp-profile=bare`. The compiler
 prints the figures on its `ok:` line:
 
 ```sh
@@ -203,10 +204,14 @@ prints the figures on its `ok:` line:
 | Program | Chip | code | data | bss |
 | --- | --- | ---: | ---: | ---: |
 | empty (`begin end.`) | esp32c3 | 20 B | 336 B | 640 B |
-| empty | esp32s3 | 58 B | 336 B | 640 B |
+| empty | esp32s3 | 94 B | 336 B | 640 B |
 | hello, above (UART writes, `AnsiString`) | esp32c3 | 3,668 B | 528 B | 1,276 B |
-| a string concat and a `GetMem` | esp32c3 | 19,416 B | 480 B | 66,816 B |
-| a string concat and a `GetMem` | esp32s3 | 15,720 B | 480 B | 66,816 B |
+| a string concat and a `GetMem` | esp32c3 | 13,956 B | 560 B | 66,816 B |
+| a string concat and a `GetMem` | esp32s3 | 11,388 B | 560 B | 66,816 B |
+
+Compared with v424, every esp32c3 figure is the same. Every esp32s3 program is
+36 bytes larger, because the S3 entry stub now uses a long jump that reaches a
+main body at any distance (`e0db3791c`).
 
 Unused runtime code is dropped, so a program pays for what it uses. The big
 step is the first allocation, which brings in the allocator and the 64 KiB heap
@@ -221,10 +226,10 @@ itself. `-dPXX_ESP_HEAP_16K` brings that down to under a tenth.
 
 The ESP cores are compiled without FPU codegen; float operations lower to
 integer soft-float kernels. They are linked in when a program uses a float and
-not otherwise, with no `uses` needed. Measured with v424 on bare images, a
-program that multiplies a `Double` and truncates it is 15,644 bytes of code on
-the esp32c3 and 14,084 on the esp32s3. The same program with `Int64` in place
-of the `Double` is 544 bytes on both. 64-bit integer arithmetic (`Int64`/`UInt64`, including
+not otherwise, with no `uses` needed. Measured with v425 on bare images, a
+program that multiplies a `Double` and truncates it is 15,548 bytes of code on
+the esp32c3 and 14,024 on the esp32s3. The same program with `Int64` in place
+of the `Double` is under 500 bytes on both (448 and 487). 64-bit integer arithmetic (`Int64`/`UInt64`, including
 multiply, divide and shifts) is always available and validated against the
 x86-64 oracle.
 
@@ -249,8 +254,8 @@ Most of the shared-IR language surface works on the ESP targets: records,
 sets, 64-bit integers, dynamic arrays, proc-typed variables (indirect
 calls), `@proc`, and stackless generators. Classes (with virtual dispatch)
 work on both ESP targets. `try`/`except`/`finally` (including re-raise)
-works on the bare profile of both chips. An unhandled exception does not print
-a message: see [Known issues](../reference/known-issues.md#esp-an-uncaught-exception-does-not-report-itself). Generators on any non-x86-64 target must use the stackless
+works on the bare profile of both chips. With v425 an unhandled exception does
+not print a message; the next pin prints it. See [Known issues](../reference/known-issues.md#esp-an-uncaught-exception-does-not-report-itself). Generators on any non-x86-64 target must use the stackless
 form:
 
 ```pascal

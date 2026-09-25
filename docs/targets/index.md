@@ -26,7 +26,7 @@ actually does.
 
 ESP chip names are accepted as targets too. They imply the CPU and
 `--platform=esp`: `esp32`, `esp32s2` and `esp32s3` are xtensa; `esp32c2`,
-`esp32c3`, `esp32c6`, `esp32h2` and `esp32p4` are riscv32. v424 compiles an
+`esp32c3`, `esp32c6`, `esp32h2` and `esp32p4` are riscv32. v425 compiles an
 ESP-IDF object for every one of these names. The bare-metal profile supports
 only `esp32s3` and `esp32c3`, and says so for the others. It runs under QEMU
 only; on a real board use the ESP-IDF profile (see
@@ -53,9 +53,7 @@ For ESP32 targets, start with the board-specific examples under
 
 ## What each target supports
 
-Measured with **pin v424** (compiler sha256 `93a336a7ba85…`) on 2026-09-25,
-the previous pin. The `math.h` row and the refusal messages below were
-re-checked with **pin v425** (compiler sha256 `426b2fbf3f08…`) the same day.
+Measured with **pin v425** (compiler sha256 `426b2fbf3f08…`) on 2026-09-25.
 Programs other than x86-64 ones were run under QEMU user mode, and wasm32 under
 wasmtime; none of the Linux cross targets was run on real hardware for this
 table.
@@ -69,15 +67,17 @@ table.
 | `--emit-obj` (relocatable object) | yes | yes | yes | yes | yes | refused |
 | `--shared` (shared library) | yes | refused | refused | refused | refused | refused |
 | Nil Python | yes | yes | yes | yes | refused | yes |
-| C with `#include <math.h>` | yes | yes | yes | yes | yes | yes (refused in v424) |
+| C with `#include <math.h>` | yes | yes | yes | yes | yes | yes |
+
+Compared with the previous pin, v424, one cell changed: wasm32 C with
+`math.h` was refused there.
 
 Every **refused** cell is a compile-time error that names the reason; none
-produces a program that runs wrongly. From v425 each message says in plain
-words what is unsupported, for example `--threadsafe is available for x86-64,
-i386, aarch64 and arm32 only; it is refused for riscv32.` On v424, three of them
-were worded for compiler developers: `--shared` on aarch64 and arm32,
-`--threadsafe` on riscv32 and wasm32, and Nil Python on riscv32
-(`a heap arena needs mmap`). `xtensa` also has an object writer; it is the
+produces a program that runs wrongly. Most messages say in plain words what is
+unsupported, for example `--threadsafe is available for x86-64, i386, aarch64
+and arm32 only; it is refused for riscv32.` One gives the wrong reason:
+`--shared` on wasm32 answers that an exported routine is not `cdecl`, even when
+it is; the real reason is that shared-library output is x86-64 only. `xtensa` also has an object writer; it is the
 ESP-IDF route.
 
 ## Pages

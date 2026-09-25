@@ -7,9 +7,8 @@ order: 94
 
 These are the problems we know about in the beta 0.1 compiler, **pin v425**
 (commit `4fbf33f69`, compiler sha256 `426b2fbf3f08…`). The Pascal and C rows
-were re-run on v425 on 2026-09-25, on x86-64 Linux. The ESP rows were measured
-under Espressif's QEMU on both chips with the previous pin, v424, and each says
-so. A row that is fixed in the development tree but not yet in a pin says so,
+were re-run on v425 on 2026-09-25, on x86-64 Linux, and the ESP rows under
+Espressif's QEMU on both chips, except where a row names another compiler. A row that is fixed in the development tree but not yet in a pin says so,
 with a workaround for v425.
 
 Problems that **compile and silently give a wrong answer** come first, because a
@@ -62,18 +61,19 @@ component (the default); see [ESP32](../targets/esp32.md).
 ### ESP: an uncaught exception does not report itself
 
 On a desktop target an unhandled exception prints a message and the program
-exits. On the ESP32-C3 the chip reboots and runs the program again, in a loop.
-On the ESP32-S3 the program stops after its last output line, with no message.
-**Workaround:** catch exceptions at the top level of the program.
+exits. With v425 under ESP-IDF, the ESP32-C3 panics with a register dump and
+no message from the program, and the ESP32-S3 stops after its last output line,
+with no message. **Workaround:** catch exceptions at the top level of the
+program. The development tree fixes the message (`7eeb3d755`), and it is a
+compiler change, so it arrives with the next pin: the program then prints
+`Unhandled exception: <Class>: <Message>`, as on a desktop, before it stops.
+How the program should end after that, stopping or restarting, is still being
+decided. A runtime error such as a range-check failure already prints its
+message with v425.
 
-### ESP: `Trunc` of an out-of-range float into a 32-bit integer wraps
-
-`Trunc(1e30)` stored in a `LongInt` gives -1. The same value stored in an
-`Int64` saturates to 9223372036854775807. Only the 32-bit case is inconsistent;
-see [by design](#by-design-math-errors) for why ESP does not stop on a math
-error at all.
-
-The three ESP rows above were measured with v424.
+The exception row was measured with v425 under Espressif's QEMU on both chips.
+The bare-metal row was measured on a physical ESP32-S3 with v424 and has not
+been re-run on the board with v425.
 
 ## Fixed in v425
 
@@ -127,6 +127,14 @@ answer silently.
   as `expected C expression`. cglm's `GLM_MAT4_IDENTITY` has this shape.
   **Workaround:** declare a named array and initialise it.
 
+## By design: `Trunc` of an out-of-range float into a 32-bit integer
+
+`Trunc(1e30)` stored in an `Int64` saturates to 9223372036854775807. Stored in
+a `LongInt` it gives -1, the low 32 bits of that saturated value. This is the
+same on every target, desktop and ESP (measured with v425). A float that does
+not fit the integer type it is truncated into has no meaningful integer value;
+test the range first if the input can be that large.
+
 ## By design: math errors
 
 An embedded device should keep running when a sensor produces a value that
@@ -140,9 +148,10 @@ the two behave differently on purpose:
 | Nil Python: `//` and `%` by zero | `ZeroDivisionError`, except in some shapes that stop with runtime error 200 (see the [Nil Python limits](../targets/nil-python.md#known-limits)) | gives 0, the program continues |
 | Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
 
-Each cell was measured on v424, the previous pin. The ESP column was measured under QEMU on both
-chips for Pascal and Nil Python, and on the S3 for C. This
-is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
+Each cell was measured on v425. The desktop column was run on x86-64, i386,
+aarch64, arm32 and riscv32 Linux (Nil Python has no hosted riscv32). The ESP
+column was measured under Espressif's QEMU on both chips, for Pascal, C and
+Nil Python. This is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
 test the divisor yourself.
 
 ## Nil Python

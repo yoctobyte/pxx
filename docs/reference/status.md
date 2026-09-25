@@ -169,7 +169,7 @@ AArch64, ARM32 and 32-bit RISC-V (Linux), to `wasm32` (WebAssembly, run with
 wasmtime), and to the ESP32's `riscv32` and `xtensa`: seven backends in all.
 Most of the above runs on the cross targets too, but per-target status is a
 separate axis with its own gates; [Targets](../targets/index.md#what-each-target-supports)
-has the per-target table, measured on the previous pin, v424.
+has the per-target table, measured on v425.
 
 ## How this is measured
 

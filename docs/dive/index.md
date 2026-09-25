@@ -52,7 +52,7 @@ assembler, linker, or C compiler invoked during the build.
   strings. Compiling with `-uPXX_MANAGED_STRING` selects an older frozen-string
   ABI with no dynamic allocation for strings. On x86-64 it no longer changes
   binary size, because unused runtime code is dropped anyway: measured with pin
-  v424, a one-`writeln` hello world is 4,520 bytes both ways, and a program
+  v425, a one-`writeln` hello world is 4,520 bytes both ways, and a program
   with a string concat is 25,048 bytes both ways. It still matters on ESP bare
   metal; see [ESP32](../targets/esp32.md). See also
   [Types](../language/types.md#strings).

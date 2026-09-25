@@ -43,11 +43,10 @@ passes lists or events, or would hide Pascal's own `Write`/`Read`, so it is
 compiled only into Nil Python programs. A Pascal program that uses these units
 does not carry the Python runtime.
 
-Everything on this page compiles with **pin v424** (compiler sha256
-`93a336a7ba85…`) from both languages, for both the ESP32-S3 (xtensa) and the
-ESP32-C3 (riscv32), given a checkout at or after `bf67f1a46` for `espuart`. The
-S3 examples were built and run again with **pin v425** (compiler sha256
-`426b2fbf3f08…`), whose checkout has `espuart`.
+Everything on this page compiles with **pin v425** (compiler sha256
+`426b2fbf3f08…`) from both languages, for both the ESP32-S3 (xtensa) and the
+ESP32-C3 (riscv32): one Pascal program and one Nil Python program that use every
+unit were compiled for each chip on 2026-09-25.
 
 ## How it was verified
 
@@ -295,7 +294,7 @@ causes a math error, so on the ESP32 family:
 
 On a desktop target the same integer division stops the program with runtime
 error 200. [Known issues](../reference/known-issues.md#by-design-math-errors)
-has the full table as measured on v424. If a zero divisor must stop your ESP
+has the full table as measured on v425. If a zero divisor must stop your ESP
 program, test the divisor yourself.
 
 ## Next
