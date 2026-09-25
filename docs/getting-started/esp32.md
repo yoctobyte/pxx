@@ -165,7 +165,7 @@ f-strings, `time.sleep`, and the ESP units) is on well-tested ground.
 
 The ESP units live in `lib/rtl/platform/esp`. Each has a Pascal surface and a
 Python surface in the same file: `espgpio` (pins and edge interrupts),
-`espadc` (continuous ADC sampling), `esptimer`, `espi2c`, `esppwm`, `espuart`,
+`espadc` (continuous ADC sampling), `esptimer`, `espi2c`, `espspi` (SPI), `esppwm`, `espuart`,
 `espnvs` (settings that survive a reboot), `espsys` (free heap, uptime) and
 `interrupts`, the event pump. Their full interfaces, and how each one was
 checked, are in the [ESP peripheral reference](../library/esp.md).

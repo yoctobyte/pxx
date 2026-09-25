@@ -3,7 +3,7 @@ title: ESP32 peripherals
 order: 58
 ---
 
-# ESP32 peripherals — `espgpio`, `espuart`, `espadc`, `esppwm`, `espi2c`, `espnvs`, `esptimer`, `espsys`, `interrupts`
+# ESP32 peripherals — `espgpio`, `espuart`, `espadc`, `esppwm`, `espi2c`, `espspi`, `espnvs`, `esptimer`, `espsys`, `interrupts`
 
 These units drive the ESP32's hardware from Pascal and from Nil Python. This
 page is the reference: what each unit does, its interface as the unit declares
@@ -38,21 +38,23 @@ In Python, a peripheral unit is imported by file name, as above. `interrupts`
 is the exception: it is a registered Python module, imported as
 `import interrupts`.
 
-The Python half of `interrupts`, `espadc`'s `read`, `espi2c` and `espuart`
-passes lists or events, or would hide Pascal's own `Write`/`Read`, so it is
+The Python half of `interrupts`, `espadc`'s `read`, `espi2c`, `espspi` and
+`espuart` passes lists or events, or would hide Pascal's own `Write`/`Read`, so it is
 compiled only into Nil Python programs. A Pascal program that uses these units
 does not carry the Python runtime.
 
 Everything on this page compiles with **pin v425** (compiler sha256
 `426b2fbf3f08…`) from both languages, for both the ESP32-S3 (xtensa) and the
 ESP32-C3 (riscv32): one Pascal program and one Nil Python program that use every
-unit were compiled for each chip on 2026-09-25.
+unit were compiled for each chip on 2026-09-25, and `espspi`, which landed
+after that, was compiled the same way from both languages the same day.
 
 ## How it was verified
 
 The ESP lane (frankh-95) ran every example below on **one ESP32-S3 board**
 (ESP-IDF v6.0.1, 160 MHz), with the v424 compiler and again with the v425
-compiler, and all 15 passed both times. The
+compiler, and all 15 passed both times. `spi-s3` is newer and has run on
+the v425 compiler only. The
 units that open and close a peripheral (timer, PWM, I2C, UART) were also run
 through 300 open/use/close cycles each, and none of them leaked memory. The
 `monitor-s3` example, which reads the ADC, GPIO and heap together, ran 193
@@ -68,6 +70,7 @@ models no GPIO input and no ADC, so the input half of `espgpio` and all of
 | `espadc` + `interrupts` | `adc-s3` (Python) | output matches `main.expected` |
 | `esppwm` | `pwm-s3` | 15 of 15 checks, with nothing wired |
 | `espi2c` | `i2c-s3` | 5 of 5 checks on an empty bus; **no device tested** |
+| `espspi` | `spi-s3` | 18 of 18 checks with nothing wired, on v425; **no device tested** |
 | `espnvs` | `nvs-s3` | 0 failures over four boots |
 | `esptimer` | `timer-s3`, `nilpy-hw-s3` | runs as intended |
 | `espsys` | `uart-s3` | used for the heap figures in the checks above |
@@ -228,6 +231,44 @@ covered opening the bus, scanning an empty bus, and reporting a missing
 device. The device test needs two jumper wires (GPIO17 to GPIO15 and GPIO18 to
 GPIO16) that have not been fitted yet. The clock source is set per chip and
 was checked on the S3 only.
+
+## `espspi` — SPI bus master
+
+`REQUIRES esp_driver_spi`
+
+| Pascal | Python | What it does |
+| --- | --- | --- |
+| `SpiOpen(host, sck, mosi, miso)` | `open(sck, mosi, miso)`, `open_host(host, sck, mosi, miso)` | open the bus; `open` uses `SPI2_HOST` |
+| `SpiClose` | `close()` | close the bus and remove its devices |
+| `SpiIsOpen` | | whether the bus is open |
+| `SpiAddDevice(cs, hz, mode)` | `device(cs, baudrate, mode)` | add a device by its CS pin, SPI mode 0 to 3 |
+| `SpiActualKHz(cs)` | | the clock the driver actually chose, in kHz |
+| `SpiTransfer(cs, wr, rd, len)` | `write_readinto(cs, [bytes], buf)` | write and read at the same time |
+| `SpiWrite(cs, data, len)` | `write(cs, [bytes])` | write bytes |
+| `SpiRead(cs, data, len, fill)` | `read(cs, n, fill)`, `readinto(cs, buf, fill)` | read bytes, clocking out `fill` meanwhile |
+
+There is one bus per program, and several devices can share it, such as a
+display and an SD card. Every transfer names its device by its CS pin, the way
+`espi2c` names one by its address. A device whose CS line your program drives
+itself is added with `cs = -1`. `SPI2_HOST` is 1; the S3 and S2 also have
+`SPI3_HOST` (2).
+
+Transfers are polled, so they spin instead of sleeping, which suits short
+sensor transactions. DMA is on, so one Pascal transfer can be up to 4,096
+bytes. In Python, bytes go in and out as lists of ints from 0 to 255, at most
+256 per call, and a failed `read` returns an empty list. Errors are ESP-IDF
+codes: `SPI_ERR_INVALID_ARG`, `SPI_ERR_NOT_OPEN`, `SPI_ERR_NOT_FOUND`,
+`SPI_ERR_NOT_SUPPORTED`.
+
+The clock source is set per chip, and only the S3, C3 and S2 are in the table.
+`SpiOpen` on any other chip returns `SPI_ERR_NOT_SUPPORTED` instead of guessing.
+
+**Talking to a real device has not been tested.** The `spi-s3` checks ran on
+the S3 board with pin v425 and nothing wired: MISO read `$FF` with its pull-up
+and `$00` with its pull-down, a GPIO-matrix loopback echoed the bytes written,
+and a 1,024-byte write took 8,255 µs at 1 MHz and 1,071 µs at 8 MHz. Under
+QEMU only opening the bus and adding a device run. The C3 and S2 have only
+been built.
 
 ## `espnvs` — settings that survive a reboot
 

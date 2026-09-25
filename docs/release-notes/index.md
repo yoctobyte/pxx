@@ -108,11 +108,11 @@ profile on hardware.
   exercise, and two Nil Python programs. The ESP32-C3 has been run only under
   QEMU, and the ESP32-S2 has only been built.
 - **Peripheral units:** GPIO with edge events (`espgpio`, `interrupts`), UART
-  (`espuart`), continuous ADC (`espadc`), PWM (`esppwm`), I2C (`espi2c`), stored
+  (`espuart`), continuous ADC (`espadc`), PWM (`esppwm`), I2C (`espi2c`), SPI (`espspi`), stored
   settings (`espnvs`), timers (`esptimer`) and heap figures (`espsys`), each
   usable from Pascal and from Nil Python. Their interfaces, examples and limits
-  are in [ESP32 peripherals](../library/esp.md). **Reading and writing a real I2C device has not been tested
-  yet**; the board checks covered the bus without a device.
+  are in [ESP32 peripherals](../library/esp.md). **Talking to a real I2C or SPI device has not
+  been tested yet**; the board checks covered each bus without a device.
 - **Memory over time:** the ESP lane ran the examples in a loop on the S3
   board. With v424, `print` of a number leaked memory on every pass (44 bytes
   per pass in `nilpy-s3`, 220 in `nilpy-hw-s3`, 264 in `gpio-edge-s3`), on
