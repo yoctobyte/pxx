@@ -16172,20 +16172,14 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-25T17:27:24Z",
+  "date": "2026-09-25T20:09:20Z",
   "red": [
-   "test-core#src:test/c_crtl_wait.c",
-   "test-nilpy#src:test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy",
-   "tools-devtest#00"
+   "test-core#src:test/c_crtl_wait.c"
   ],
-  "sha": "cdea900f09de58bdde7ad41dcdde4b212eca4c80",
+  "sha": "687cf1185c467aa1b3968cacb2fdbcaf5557948c",
   "tier": "full",
-  "ver": "v438",
-  "verdict": "RED",
-  "why": {
-   "test-nilpy#src:test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy": "ok: $TMP  [code=416878B  data=103845B  bss=65564B  procs=2519  codeseg=417504B] | test_nilpy_dead_path_control_guard_resolves: FAIL - rc=0 (want 1: the guarded import RESOLVED, so the tail is the live",
-   "tools-devtest#00": "Or add the path to ALLOWED_PATHS with a reason. | ---- the 1 hardcoded /tmp path(s), LAST so a `tail` keeps them: | test/test_nilpy_micropython_logging_walls.npy        $TMP%d.txt | FAIL: 1 hardcoded "
-  }
+  "ver": "v439",
+  "verdict": "RED"
  },
  "toolchain": {
   "espqemu-riscv32": "9.2.2",
