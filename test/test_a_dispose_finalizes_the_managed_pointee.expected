@@ -1,0 +1,11 @@
+control sees a leak: TRUE
+record bytes/iter=0
+string bytes/iter=0
+dynarray bytes/iter=0
+interface bytes/iter=0
+variant bytes/iter=0
+nested bytes/iter=0
+field-pointer bytes/iter=0
+element-pointer bytes/iter=0
+unmanaged bytes/iter=0
+nil bytes/iter=0

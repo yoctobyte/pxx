@@ -6677,6 +6677,110 @@ begin
   ASTRight[writeBack] := ident;
 end;
 
+{ Dispose(p): FINALIZE p^, then FreeMem(p).
+
+  It was FreeMem alone, so every managed thing the block held -- a record's
+  AnsiString field, a ^string's string, a ^dynarray's array, a ^interface's
+  reference, a ^Variant's payload -- was never released. `New(p); p^.s :=
+  s2; Dispose(p)` leaked the string on every target (33 B/iter for a 16-char
+  string, x86-64, i386, aarch64, arm32, riscv32, xtensa both ABIs), where fpc
+  frees it. Measured, not reasoned: fpc reads 0 on the same rows.
+
+  The finalize is built from the SAME nodes the hand-written spelling parses
+  to -- `Finalize(p^)` for a record or Variant, `p^ := ''` for a string, `p^
+  := nil` for a dyn array or interface, `Finalize(p^)` for a fixed array of
+  any managed element -- so it lowers through the paths every
+  assignment and every explicit Finalize already exercise, not a new one.
+
+  Guarded by `p <> nil`: the string/nil stores and PXXVarClear would write
+  through nil, and Dispose(nil) was harmless here before (fpc raises 216 on
+  it for a managed pointee -- we keep the harmless answer rather than add a
+  crash). The record helper is nil-safe on its own; the guard costs one
+  compare and keeps every arm the same shape.
+
+  Only when p can be re-read with no effect (PureDesignator): the pointer is
+  evaluated up to three times. `Dispose(NextNode())` keeps the old FreeMem-
+  only lowering. }
+function BuildDisposeStmt(valNode: Integer): Integer;
+var freeCall, argSeq, der, fin, cond, nilLit, pair, emptyLit, rec: Integer;
+    tk: TTypeKind; recName, derefRem, derefBaseTk, derefBaseRec: Integer;
+    saCnt, saRec, saSz: Integer; saTk: TTypeKind;
+begin
+  argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+  freeCall := AllocNode(AN_CALL);
+  ASTIVal[freeCall] := -Ord(tkFreeMem);
+  ASTLeft[freeCall] := argSeq; ASTTk[freeCall] := Ord(tyInteger);
+  Result := freeCall;
+  if (IntToTypeKind(ASTTk[valNode]) <> tyPointer) or ASTIsPoisoned(valNode) or
+     (not PureDesignator(valNode)) then Exit;
+
+  der := AllocNode(AN_DEREF);
+  ASTLeft[der] := CloneAST(valNode);
+  tk := tyInteger; recName := REC_NONE;
+  ResolveDerefShape(ASTLeft[der], tk, recName, derefRem, derefBaseTk, derefBaseRec);
+  ASTSOffset[der] := derefRem;
+  ASTSLen[der] := derefBaseTk;
+  if derefBaseRec > 0 then ASTIVal[der] := derefBaseRec;
+  ASTTk[der] := StrValTk(tk);
+
+  fin := -1;
+  if StaticArraySourceInfo(der, saCnt, saTk, saRec, saSz) then
+  begin
+    { p: ^array[..] of T -- asked FIRST, because the deref carries the
+      ELEMENT's type and the arms below would read one element }
+    if ManagedElemKind(Ord(saTk), saRec) > 0 then
+    begin
+      fin := AllocNode(AN_MANAGED_INIT);
+      ASTLeft[fin] := der; ASTRight[fin] := -1; ASTIVal[fin] := 1;
+    end;
+  end
+  else if derefRem > 0 then
+    { p: ^^T -- p^ is itself a pointer, which owns nothing }
+    fin := -1
+  else if NodeDynDepth(der) > 0 then
+  begin
+    nilLit := AllocNode(AN_INT_LIT); ASTTk[nilLit] := Ord(tyPointer);
+    fin := GenMakeAssign(der, nilLit);
+  end
+  else if (tk = tyAnsiString) or (tk = tyString) then
+  begin
+    emptyLit := AllocNode(AN_STR_LIT);
+    ASTSOffset[emptyLit] := 0; ASTSLen[emptyLit] := 0;
+    ASTTk[emptyLit] := Ord(tyString);
+    fin := GenMakeAssign(der, emptyLit);
+  end
+  else if tk = tyVariant then
+  begin
+    fin := AllocNode(AN_MANAGED_INIT);
+    ASTLeft[fin] := der; ASTRight[fin] := -1; ASTIVal[fin] := 1;
+  end
+  else if tk = tyRecord then
+  begin
+    rec := ResolveNodeRec(der);
+    if rec >= REC_UCLASS_BASE then
+    begin
+      if UClsIsInterface[rec - REC_UCLASS_BASE] then
+      begin
+        nilLit := AllocNode(AN_INT_LIT); ASTTk[nilLit] := Ord(tyPointer);
+        fin := GenMakeAssign(der, nilLit);
+      end
+      else if RecordHasManagedFields(rec) then
+      begin
+        fin := AllocNode(AN_MANAGED_INIT);
+        ASTLeft[fin] := der; ASTRight[fin] := -1; ASTIVal[fin] := 1;
+      end;
+    end;
+  end;
+  if fin < 0 then Exit;
+
+  nilLit := AllocNode(AN_INT_LIT); ASTTk[nilLit] := Ord(tyPointer);
+  cond := GenMakeBinop(tkNeq, CloneAST(valNode), nilLit, tyBoolean);
+  pair := AllocNode(AN_PAIR); ASTLeft[pair] := fin; ASTRight[pair] := -1;
+  Result := AllocNode(AN_IF);
+  ASTLeft[Result] := cond; ASTRight[Result] := pair;
+  Result := GenMakeSeq(Result, GenMakeSeq(freeCall, -1));
+end;
+
 function ParseStatementAST: Integer;
 var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym, mrefNode: Integer;
@@ -6708,6 +6812,7 @@ var
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
   frozenDest: Integer;   { Insert/Delete over a FROZEN string destination: the original lvalue, read-modify-written through a managed temp. -1 = the destination is already managed. See BuildFrozenStrVarArgRMW. }
   miArg, miEmpty, miCnt: Integer; miIsFin: Boolean; miArgTk: TTypeKind;   { Initialize/Finalize }
+  miSaCnt, miSaRec, miSaSz: Integer; miSaTk: TTypeKind;   { ...its whole-fixed-array probe }
   pfIsPF: Boolean; pfK, pfDepth: Integer;
   insSrcSym: Integer;   { Insert(srcArr, arr, i): the source array's symbol, else -1 }
   insSplice: Boolean;   { …and whether this call IS the splice — true for a named source array AND for a retagged element list, which has no symbol }
@@ -7065,8 +7170,12 @@ begin
         { ...and the desugar is for the ONE-ELEMENT form only. `x := ''` says
           nothing about elements 1..n-1, so a count has to reach the lowering,
           which walks the descriptor per element. }
+        { ...and NOT for a whole fixed array, whose node carries the ELEMENT's
+          type: `Finalize(arrOfStr)` became `arr := ''`, which finalized
+          nothing, where fpc empties every element. The lowering walks it. }
         if miIsFin and (miCnt < 0) and
-           ((miArgTk = tyAnsiString) or (miArgTk = tyString)) then
+           ((miArgTk = tyAnsiString) or (miArgTk = tyString)) and
+           (not StaticArraySourceInfo(miArg, miSaCnt, miSaTk, miSaRec, miSaSz)) then
         begin
           miEmpty := AllocNode(AN_STR_LIT);
           ASTSOffset[miEmpty] := 0; ASTSLen[miEmpty] := 0;
@@ -8326,16 +8435,13 @@ begin
       else if CaseEqual(name, 'Dispose') and SoftIntrinsicOpen('Dispose', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
-        { Dispose(p): return the block to the free list (= FreeMem(p)).
+        { Dispose(p): finalize p^, then return the block (BuildDisposeStmt).
           Guarded like New above. }
         Next; Expect(tkLParen, '(');
         ParseExpr; valNode := CurASTNode;
         RefuseExtendedNewDispose('Dispose');
         Expect(tkRParen, ')');
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-        node := AllocNode(AN_CALL);
-        ASTIVal[node] := -Ord(tkFreeMem);
-        ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
+        node := BuildDisposeStmt(valNode);
       end
       else if CaseEqual(name, 'ReallocMem') and SoftIntrinsicOpen('ReallocMem', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
@@ -8439,55 +8545,6 @@ begin
           else stepsNode := GenMakeIntLit(0);
         end;
         opNode := TextStrArg(exprNode, stepsNode, decNode, 'Str');
-        node := AllocNode(AN_ASSIGN);
-        ASTLeft[node] := valNode; ASTRight[node] := opNode;
-      end
-      else if CaseEqual(name, 'Dispose') and SoftIntrinsicOpen('Dispose', qUnit) and
-              (Tokens[TokPos].Kind = tkLParen) then
-      begin
-        { Dispose(p): return the block to the free list (= FreeMem(p)).
-          Guarded like New above. }
-        Next; Expect(tkLParen, '(');
-        ParseExpr; valNode := CurASTNode;
-        RefuseExtendedNewDispose('Dispose');
-        Expect(tkRParen, ')');
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-        node := AllocNode(AN_CALL);
-        ASTIVal[node] := -Ord(tkFreeMem);
-        ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
-      end
-      else if CaseEqual(name, 'ReallocMem') and SoftIntrinsicOpen('ReallocMem', qUnit) and
-              (Tokens[TokPos].Kind = tkLParen) then
-      begin
-        { ReallocMem(p, newsize): resize the block p points at, preserving
-          min(oldsize, newsize) bytes, and store the new pointer back into p.
-          Old size comes from the block's header; old block is freed. Modelled
-          as p := <realloc>(p, newsize) (special id -103). p must be a simple
-          pointer variable. Guarded like New above. }
-        Next; Expect(tkLParen, '(');
-        if CurTok.Kind <> tkIdent then Error('ReallocMem: expected pointer variable');
-        valNode := ParseIntrinsicDestLValue(idx);   { assign target }
-        Expect(tkComma, ',');
-        ParseExpr;                                      { new size -> CurASTNode }
-        Expect(tkRParen, ')');
-
-        if idx >= 0 then
-        begin
-          exprNode := AllocNode(AN_IDENT);              { old pointer value }
-          ASTIVal[exprNode] := idx; ASTTk[exprNode] := Ord(tyPointer);
-        end
-        else
-          { field/complex lvalue (ReallocMem(FList, ...) in a method): reuse the
-            resolved lvalue node as the read — AN_IDENT(-1) was a load_sym(-1)
-            IR verify error. Double-lowering the node is pure address math. }
-          exprNode := valNode;
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
-        ASTRight[argSeq] := AllocNode(AN_ARG);
-        ASTLeft[ASTRight[argSeq]] := CurASTNode;        { new size }
-
-        opNode := AllocNode(AN_CALL);
-        ASTIVal[opNode] := -103;
-        ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyPointer);
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end

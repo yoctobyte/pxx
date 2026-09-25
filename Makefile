@@ -19921,6 +19921,18 @@ test-core: $(COMPILER)
 	# a fix that released the block and not the elements halves every short-literal
 	# row and still leaks, so a probe built only from 'x' cannot see it.
 	# Pre-fix 367 MB over these 4M calls; post-fix 392 KB.
+	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
+	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
+	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
+	# Every row must read 0; the GetMem control must still see its 64.
+	./$(COMPILER) test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_n
+	tools/expect_same.sh dispfin "$$($(TESTTMP)/test_dispfin_n)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
+	# pointer to one releases them all. The node carries the ELEMENT's type, so
+	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
+	# Dispose, and `fin: 56 08 79 1011` where fpc prints `00 00 70 011`).
+	./$(COMPILER) test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.pas $(TESTTMP)/test_finarr_n
+	tools/expect_same.sh finarr "$$($(TESTTMP)/test_finarr_n)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
 	./$(COMPILER) test/test_array_ctor_no_leak.pas $(TESTTMP)/test_array_ctor_no_leak26
 	tools/expect_same.sh test_array_ctor_no_leak26 "$$($(TESTTMP)/test_array_ctor_no_leak26)" "ok 4000000"
 	@if [ -x /usr/bin/time ]; then \
@@ -27625,6 +27637,18 @@ progress-check:
 # i386 cross-target slice (feature-target-i386). Grows with the backend;
 # joins 'make test' when the op coverage is broad enough to matter.
 test-i386: $(COMPILER)
+	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
+	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
+	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
+	# Every row must read 0; the GetMem control must still see its 64.
+	./$(COMPILER) --target=i386 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_i386
+	tools/expect_same.sh i386/dispfin "$$(tools/run_target.sh i386 $(TESTTMP)/test_dispfin_i386)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
+	# pointer to one releases them all. The node carries the ELEMENT's type, so
+	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
+	# Dispose, and `fin: 56 08 79 1011` where fpc prints `00 00 70 011`).
+	./$(COMPILER) --target=i386 test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.pas $(TESTTMP)/test_finarr_i386
+	tools/expect_same.sh i386/finarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_finarr_i386)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
 	# By-value string/dynarray params owned by the callee (see test-core): the
 	# output half and the leak half, on a 32-bit target.
 	./$(COMPILER) --target=i386 -Fulib/rtl test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/test_i386_bvparam
@@ -28867,6 +28891,18 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh i386 $(TESTTMP)/genpromo_i386)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
 
 test-aarch64: $(COMPILER)
+	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
+	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
+	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
+	# Every row must read 0; the GetMem control must still see its 64.
+	./$(COMPILER) --target=aarch64 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_a64
+	tools/expect_same.sh aarch64/dispfin "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_dispfin_a64)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
+	# pointer to one releases them all. The node carries the ELEMENT's type, so
+	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
+	# Dispose, and `fin: 56 08 79 1011` where fpc prints `00 00 70 011`).
+	./$(COMPILER) --target=aarch64 test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.pas $(TESTTMP)/test_finarr_a64
+	tools/expect_same.sh aarch64/finarr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_finarr_a64)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
 	# DOES A C FUNCTION READ ITS ARGUMENTS WHERE A REAL aarch64 COMPILER PUTS
 	# THEM? clang compiles the same signature and the two prologues are compared
 	# on register placement. It is the only row here with an opinion from
@@ -29860,6 +29896,18 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_static_string_literal "$$(tools/run_target.sh aarch64 $(TESTTMP)/ssl_a64 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a64_x64 | grep -v '^pxx-census')"
 
 test-riscv32: $(COMPILER)
+	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
+	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
+	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
+	# Every row must read 0; the GetMem control must still see its 64.
+	./$(COMPILER) --target=riscv32 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_rv32
+	tools/expect_same.sh riscv32/dispfin "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_dispfin_rv32)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
+	# pointer to one releases them all. The node carries the ELEMENT's type, so
+	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
+	# Dispose, and `fin: 56 08 79 1011` where fpc prints `00 00 70 011`).
+	./$(COMPILER) --target=riscv32 test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.pas $(TESTTMP)/test_finarr_rv32
+	tools/expect_same.sh riscv32/finarr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_finarr_rv32)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
 	# A 64-bit counter crossing 2^32: Inc/Dec and a counted `for` both moved
 	# only the low word on 32-bit targets. Nine of eleven rows are wrong under
 	# pin af40370a8a91; no x86-64 row can see it.
@@ -31595,6 +31643,26 @@ test-wasm32: $(COMPILER)
 	 echo "  sigpred: wasm32 refuses SetSignalHandler at compile time, with the reason"
 	@echo "wasm32: 53 rows green (46 default + 7 shortstring; 0 excluded)"
 test-xtensa: $(COMPILER)
+	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
+	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
+	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
+	# Every row must read 0; the GetMem control must still see its 64.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_xt
+	tools/expect_same.sh xtensa/dispfin "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispfin_xt)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
+	# pointer to one releases them all. The node carries the ELEMENT's type, so
+	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
+	# Dispose, and `fin: 56 08 79 1011` where fpc prints `00 00 70 011`).
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.pas $(TESTTMP)/test_finarr_xt
+	tools/expect_same.sh xtensa/finarr "$$(tools/run_target.sh xtensa $(TESTTMP)/test_finarr_xt)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_xtw
+	tools/expect_same.sh xtensa-windowed/dispfin "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispfin_xtw)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
+	# pointer to one releases them all. The node carries the ELEMENT's type, so
+	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
+	# Dispose, and `fin: 56 08 79 1011` where fpc prints `00 00 70 011`).
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.pas $(TESTTMP)/test_finarr_xtw
+	tools/expect_same.sh xtensa-windowed/finarr "$$(tools/run_target.sh xtensa $(TESTTMP)/test_finarr_xtw)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
 	# A RECORD RESULT REUSED IN A LOOP RELEASES THE PREVIOUS VALUE. xtensa's
 	# aggregate copy-out raw-copied Result over the caller's hidden destination,
 	# so a loop that reuses one result temp orphaned every earlier value's
@@ -32967,6 +33035,18 @@ test-xtensa: $(COMPILER)
 	@echo "=== test-xtensa: coroutines/async on Call0 AND windowed (vs the x86-64 oracle), esp32s3 = windowed on IDF, asyncnet parity ==="
 
 test-arm32: $(COMPILER)
+	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
+	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their
+	# value (pin v438: 56/56/64/16/56 B/iter, 160 for a nested record); fpc 0.
+	# Every row must read 0; the GetMem control must still see its 64.
+	./$(COMPILER) --target=arm32 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_arm32
+	tools/expect_same.sh arm32/dispfin "$$(tools/run_target.sh arm32 $(TESTTMP)/test_dispfin_arm32)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
+	# pointer to one releases them all. The node carries the ELEMENT's type, so
+	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
+	# Dispose, and `fin: 56 08 79 1011` where fpc prints `00 00 70 011`).
+	./$(COMPILER) --target=arm32 test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.pas $(TESTTMP)/test_finarr_arm32
+	tools/expect_same.sh arm32/finarr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_finarr_arm32)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
 	# THE READ-ONLY DATA SEGMENT ON arm32 -- the same pair as test-aarch64's first
 	# rows: the literal store faults with the split, runs with --no-ro-data.
 	# feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident

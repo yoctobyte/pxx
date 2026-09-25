@@ -873,6 +873,7 @@ AN_COMPOUND_LITERAL Left seq
 AN_COMPOUND_LITERAL Left sq
 AN_COMPOUND_LITERAL Left vaSeq
 AN_COMPOUND_LITERAL Left zseq
+AN_DEREF Left CloneAST(valNode)
 AN_DEREF Left GenMakeIdent(idx, tyPointer)
 AN_DEREF Left GenMakeIdent(ps, tyPointer)
 AN_DEREF Left GenMakeSlotAddr(i)
@@ -961,6 +962,7 @@ AN_IF Left smGuardCall
 AN_IF Left smNotNode
 AN_IF Left vtNotNode
 AN_IF Right elsePair
+AN_IF Right pair
 AN_IF Right pairN
 AN_IF Right pairNode
 AN_INCDEC Left CurASTNode
@@ -1007,8 +1009,10 @@ AN_IS_TEST Left exprNode
 AN_IS_TEST Left left
 AN_IS_TEST Left unboxCall
 AN_IS_TEST Left xNode
+AN_MANAGED_INIT Left der
 AN_MANAGED_INIT Left identNode
 AN_MANAGED_INIT Left miArg
+AN_MANAGED_INIT Right -1
 AN_MANAGED_INIT Right miCnt
 AN_METACLASS_NEW Right crefNode
 AN_METHODREF Left node
@@ -1070,6 +1074,7 @@ AN_PAIR Left dcall
 AN_PAIR Left dn
 AN_PAIR Left elseBody
 AN_PAIR Left elseSeq
+AN_PAIR Left fin
 AN_PAIR Left flCall
 AN_PAIR Left flRaiseCall
 AN_PAIR Left getCall

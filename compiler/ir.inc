@@ -10066,6 +10066,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     miArg, miRec, miPi, miArgN, miCnt, miDescN, miCntN: Integer;   { Initialize/Finalize }
     miTk: TTypeKind; miIsFin: Boolean;
+    miSaCnt, miSaRec, miSaSz, miSaKind, miSaAddr, miSaA2, miSaA3: Integer; miSaTk: TTypeKind;   { ...a whole fixed array }
     convAmbig: Boolean;             { two conversion operators equally apply — see the assign arm }
     promoLhs, promoRhs, promoDst, promoSym, promoOp: Integer;   { promotable-int slot lowering }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
@@ -12618,7 +12619,58 @@ begin
       miArg := ASTLeft[node];
       miCnt := ASTRight[node];          { the ELEMENT COUNT, or -1 }
       miTk := IntToTypeKind(ASTTk[miArg]);
-      if miTk = tyRecord then
+      if (miCnt < 0) and
+         StaticArraySourceInfo(miArg, miSaCnt, miSaTk, miSaRec, miSaSz) then
+      begin
+        { A WHOLE FIXED ARRAY: every element, not the first. The node carries
+          the ELEMENT's type, so this has to be asked before the record arm
+          below -- which read `Finalize(arrOfRec)` as one record and finalized
+          element 0 -- and the parser keeps `Finalize(arrOfStr)` away from its
+          string desugar for the same reason. Finalize is the scope-exit
+          release walk (PXXArrayReleaseImmediate, the same (kind, ref) pair
+          IRManagedArrayCopy passes) followed by a zero fill, which is the empty
+          state for every managed kind and what makes a second Finalize release
+          nothing; Initialize is the zero fill alone. An unmanaged element is a
+          no-op, as in fpc. }
+        miSaKind := ManagedElemKind(Ord(miSaTk), miSaRec);
+        if miSaKind = 0 then
+          Result := IRAppend(IR_NOP, -1, -1, -1, 0, Ord(tyInteger))
+        else
+        begin
+          miSaAddr := AllocVar('', tyPointer);   { needed twice; lowered once }
+          IRAppend(IR_STORE_SYM, miSaAddr, IRLowerAddress(miArg), -1, 0, Ord(tyPointer));
+          if miIsFin then
+          begin
+            miPi := FindProc('PXXArrayReleaseImmediate');
+            if miPi < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
+            miArgN := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, miSaAddr, -1, -1, 0, Ord(tyPointer)),
+                        -1, -1, 0, Ord(tyPointer));
+            miSaA2 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, miSaCnt, Ord(tyNativeInt)),
+                        -1, -1, 0, Ord(tyNativeInt));
+            IRB[miArgN] := miSaA2;
+            miSaA3 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, miSaKind, Ord(tyInteger)),
+                        -1, -1, 0, Ord(tyInteger));
+            IRB[miSaA2] := miSaA3;
+            if miSaKind = 3 then
+              IRB[miSaA3] := IRAppend(IR_ARG,
+                               IRAppend(IR_CONST_DATA, -1, -1, -1,
+                                 -(RECORD_RTTI_DATAREF_BASE + (miSaRec - REC_UCLASS_BASE)),
+                                 Ord(tyPointer)),
+                               -1, -1, 0, Ord(tyPointer))
+            else
+              IRB[miSaA3] := IRAppend(IR_ARG,
+                               IRAppend(IR_CONST_INT, -1, -1, -1,
+                                 ManagedElemRef(Ord(miSaTk), miSaRec), Ord(tyPointer)),
+                               -1, -1, 0, Ord(tyPointer));
+            miDescN := IRAppendCall(miPi, miArgN, -1, Ord(tyNativeInt));
+            IRIVal[miDescN] := 1;   { statement: emit for effect }
+          end;
+          Result := IRAppend(IR_DEFAULT_MEM,
+                      IRAppend(IR_LOAD_SYM, miSaAddr, -1, -1, 0, Ord(tyPointer)), -1,
+                      REC_NONE, miSaCnt * miSaSz, Ord(tyRecord));
+        end;
+      end
+      else if miTk = tyRecord then
       begin
         miRec := ResolveNodeRec(miArg);
         if miRec < REC_UCLASS_BASE then
