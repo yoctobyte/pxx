@@ -220,7 +220,8 @@ begin
   else if (Pos('No serial data received', outp) > 0) or
           (Pos('Failed to connect', outp) > 0) then
     EspPortProblem := 'no ESP chip answered on this port'
-  else if Pos('command not found', outp) > 0 then
+  else if (Pos('esptool: command not found', outp) > 0) or
+          (Pos('esptool: not found', outp) > 0) then
     EspPortProblem := 'esptool was not found: is ESP-IDF installed ' +
       '(~/esp/esp-idf or ESP_IDF_DIR)?';
 end;
@@ -245,7 +246,7 @@ end;
 procedure AddMatches(var a: TStrArray; const mask: AnsiString);
 var sr: TSearchRec;
 begin
-  if FindFirst('/dev/' + mask, 0, sr) = 0 then
+  if FindFirst('/dev/' + mask, faSysFile, sr) = 0 then   { a tty is a device: faSysFile, as in FPC }
   begin
     repeat
       if (sr.Name <> '.') and (sr.Name <> '..') then

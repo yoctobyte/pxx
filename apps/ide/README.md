@@ -18,6 +18,7 @@ apps/ide/
   garin/   # core — shared, render-agnostic
   eliah/   # GTK face   (build first)
   ilja/    # ANSI face  (later)
+  esp/     # GTK face for ESP32 boards (working name; awaiting its Hebrew one)
 ```
 
 ## Hard rules
@@ -35,3 +36,31 @@ apps/ide/
 apps/ide/build.sh        # uses the pinned stable compiler
 apps/ide/eliah/eliah     # run
 ```
+
+## The ESP32 face (`apps/ide/esp`, working name)
+
+A folder tree, an editor, and one button that builds an ESP-IDF project for
+the chip on the USB port, flashes it, and follows its serial output.
+
+```sh
+apps/ide/esp/build.sh                        # pinned stable compiler
+apps/ide/esp/espide [folder]                 # default: examples/esp32
+apps/ide/esp/espide --auto <project> [secs]  # detect, build+flash, monitor secs, exit
+```
+
+- **A project** is what `tools/esp_flash.sh --project` builds: a folder with
+  `CMakeLists.txt` and `build.sh`, like every `examples/esp32/<name>-<chip>`.
+  The face walks up from the selected file to find one; any other folder is
+  refused in one sentence that points at `examples/esp32`.
+- **The chip.** `Detect` asks every `/dev/ttyACM*` and `/dev/ttyUSB*` with
+  `esptool chip-id` (which resets the board). The chip selector's `auto`
+  follows the detected board, and **with no board it refuses and says so. It
+  never builds for a default chip.** A project whose folder suffix, or
+  `set-target`, names another chip than the board is refused too.
+- **Build+Flash** runs `tools/esp_flash.sh --project` (the project's own
+  `build.sh` holds the flags), then opens the port as a serial monitor
+  (115200). `Stop` ends a running child; Detect and Build+Flash close the
+  monitor first, because esptool needs the port.
+- Serial ports need the `dialout` group.
+- The decisions live in `garin/espproj.pas` and are tested headlessly by
+  `apps/ide/test.sh` (bochan); the face only renders them.

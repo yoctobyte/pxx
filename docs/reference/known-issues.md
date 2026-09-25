@@ -164,6 +164,12 @@ differences from CPython are recorded beside it. On ESP, the model is
 MicroPython's assumptions about a small device, such as math errors not halting
 the program, not MicroPython's API.
 
+One leak is open: when a `for` loop's target variable already holds an object
+before the loop starts, rebinding it on each iteration does not release the
+old value, so one object is kept per iteration. `for t in ts: t.join()` after
+an earlier `t = Thread(...)` is the case that was measured. A loop variable
+with a fresh name avoids it. A fix is in progress.
+
 ## Reporting a problem
 
 Open an issue at <https://github.com/yoctobyte/pxx/issues> with the smallest

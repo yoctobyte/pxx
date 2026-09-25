@@ -488,6 +488,18 @@ begin
   CheckTrue(e, 'stream ends on its own', not sp.Running);
   CheckStr(e, 'stream output', spOut, 'one' + #10 + 'two' + #10);
   CheckInt(e, 'stream exit code', sp.ExitCode, 3);
+  writeln('-- runner: a large stream arrives whole --');
+  CheckTrue(e, 'big stream starts',
+    StreamStart(sp, '/bin/sh', ['-c', 'head -c 300000 /dev/zero | tr ''\000'' x']));
+  spOut := '';
+  spTurns := 0;
+  while sp.Running and (spTurns < 2000) do
+  begin
+    spOut := spOut + StreamPoll(sp, 100);
+    Inc(spTurns);
+  end;
+  CheckInt(e, 'all 300000 bytes', Length(spOut), 300000);
+  CheckTrue(e, 'bytes are intact', (spOut[1] = 'x') and (spOut[300000] = 'x'));
   writeln('-- runner: StreamStop --');
   CheckTrue(e, 'long child starts',
     StreamStart(sp, '/bin/sh', ['-c', 'exec sleep 30']));
@@ -532,7 +544,12 @@ begin
   CheckTrue(e, 'explicit chip, no board', EspDecideChip('esp32c3', '', 'esp32c3', chip, why));
   tree := EspListTree('examples/esp32/hello-s3', 3);
   CheckTrue(e, 'tree lists main/ before files', (Length(tree) > 2) and (tree[0] = 'main/'));
-  CheckTrue(e, 'tree recurses into main/', Pos('main/main.pas', ' ' + tree[1] + tree[2] + tree[3]) > 0);
+  { search every entry: a local build leaves main.o and libpxx_app.a in main/,
+    so main.pas's index depends on the checkout }
+  ok := False;
+  for spTurns := 0 to Length(tree) - 1 do
+    if tree[spTurns] = 'main/main.pas' then ok := True;
+  CheckTrue(e, 'tree recurses into main/', ok);
 
   Halt(EduthReport(e));
 end.

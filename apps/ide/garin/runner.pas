@@ -133,7 +133,11 @@ begin
     n := PalRead(p.Fd, @buf[0], 4096);
     if n > 0 then
     begin
-      for i := 0 to Integer(n) - 1 do res := res + Chr(buf[i]);
+      { presize and fill: appending a Char at a time is quadratic in the
+        chunk, and a build log arrives 64 KB per poll }
+      i := Length(res);
+      SetLength(res, i + Integer(n));
+      Move(buf[0], res[i + 1], Integer(n));
       Inc(reads);
       timeoutMs := 0;                            { only the first wait blocks }
     end
