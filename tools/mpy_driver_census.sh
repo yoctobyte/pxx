@@ -14,7 +14,8 @@
 # is behind it is unknown until it moves (a compile stops at one error).
 #
 # The table names the compiler (sha256) and the driver population, so a row
-# can be re-derived. Ends with MPY-DRIVER-CENSUS-COMPLETE.
+# can be re-derived. A row whose driver directory is absent reads
+# "not installed", never a wall. Ends with MPY-DRIVER-CENSUS-COMPLETE.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -51,12 +52,24 @@ echo "drivers: $(grep '^| [a-z0-9]* |' "$C/PROVENANCE.md" | grep -vc '^| driver 
 echo
 echo "| driver | compiles | first wall |"
 echo "| --- | --- | --- |"
-ok=0; n=0
+ok=0; n=0; absent=0
 while IFS='|' read -r drv dir; do
   n=$((n + 1))
   log="$OUT/$drv.log"
-  fu=(); IFS=':' read -ra dirs <<< "$dir"
-  for d in "${dirs[@]}"; do fu+=("-Fu$C/$d"); done
+  fu=(); miss=""; IFS=':' read -ra dirs <<< "$dir"
+  for d in "${dirs[@]}"; do
+    fu+=("-Fu$C/$d")
+    [ -d "$C/$d" ] || miss="${miss:+$miss, }$d"
+  done
+  # A driver that is not on disk is not a compile wall: the compiler would
+  # report "no unit named <driver>", which reads exactly like one. A plain
+  # install_lib_candidates.sh skips a directory that exists, so rows added to
+  # the recipe after the first fetch are absent until FORCE=1.
+  if [ -n "$miss" ]; then
+    absent=$((absent + 1))
+    echo "| $drv | not installed | $miss missing: FORCE=1 tools/install_lib_candidates.sh micropython-drivers |"
+    continue
+  fi
   if "$PXX" --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals \
        -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/rtl/platform/esp" "${fu[@]}" \
        "test/mpy_drivers/m_$drv.npy" "$OUT/$drv.o" > "$log" 2>&1 && [ -s "$OUT/$drv.o" ]; then
@@ -71,5 +84,6 @@ while IFS='|' read -r drv dir; do
 done <<< "$ROWS"
 echo
 echo "compiled: $ok of $n"
+[ "$absent" -gt 0 ] && echo "not installed: $absent of $n (not measured; see the rows)"
 echo "logs: $OUT"
 echo MPY-DRIVER-CENSUS-COMPLETE

@@ -42,7 +42,8 @@ from ordinary program flow, where it can print and allocate freely. There is no
 | `micropython` | `const()`, imported as `from micropython import const` |
 | `framebuf` | `FrameBuffer` in all seven formats (`MONO_VLSB`, `MONO_HLSB`, `MONO_HMSB`, `RGB565`, `GS2_HMSB`, `GS4_HMSB`, `GS8`): `fill`, `pixel`, `hline`, `vline`, `line`, `rect`, `fill_rect`, `scroll`, `blit` (with a transparent key and a palette) and `text` |
 | `time` | CPython's `time`, plus MicroPython's `sleep_ms`, `sleep_us`, `ticks_ms`, `ticks_us`, `ticks_cpu`, `ticks_diff` and `ticks_add` |
-| `utime`, `ustruct`, `uos`, … | MicroPython's old `u`-prefixed names, each an alias of the plain module |
+| `utime` | MicroPython's `utime`, a module of its own: `localtime`, `gmtime`, `mktime` and `time` in MicroPython's forms, plus the sleep and tick functions (see below) |
+| `ustruct`, `uos`, … | MicroPython's other old `u`-prefixed names, each an alias of the plain module |
 | `network`, `socket`, `open()`, `os` | Wi-Fi, TCP sockets and files, described under **Wi-Fi and sockets** and **Files** in [ESP32 peripherals](./esp.md) |
 
 A project that uses `machine` needs `esp_driver_gpio`, `esp_driver_i2c` and
@@ -132,16 +133,30 @@ the last item is microseconds). The time is UTC, because there are no time
 zones. The clock starts from 1970-01-01 at each boot. To keep the time across
 a reset, use an external clock chip such as a DS3231.
 
-**`utime`: not finished yet.** Today `utime` is an alias of `time`, so the
-tick and sleep functions work, but `utime.localtime()` and `utime.mktime()` do
-not exist yet. When they land they will use MicroPython's forms, not CPython's:
+```python
+import utime
 
-- `localtime()` returns an **8-tuple**, as MicroPython does. CPython returns a
-  9-field `struct_time`.
-- `mktime()` accepts 8 or 9 items and returns an `int`.
+t = utime.localtime(86400 * 365)
+print(t)
+print(utime.mktime(t))
+print(utime.mktime((2026, 9, 25, 12, 0, 0, 0, 0)))
+```
+
+This prints `(1971, 1, 1, 0, 0, 0, 4, 1)`, `31536000` and `1790337600`.
+
+`utime` uses MicroPython's forms, not CPython's:
+
+- `localtime()` and `gmtime()` return an **8-tuple** (year, month, day, hour,
+  minute, second, weekday, day of the year), as MicroPython does. CPython
+  returns a 9-field `struct_time`. There are no time zones, so the two
+  functions are the same.
+- `mktime()` accepts 8 or 9 items, ignores the weekday and day of the year,
+  and returns an `int`.
+- `time()` returns whole seconds as an `int`.
 
 `time` itself keeps CPython's forms, because a CPython program can import
-`time` and none can import `utime`.
+`time` and none can import `utime`. `import utime as time`, a common line in
+drivers, gets `utime`.
 
 **The epoch is 1970-01-01, which differs from MicroPython on the ESP32.**
 MicroPython's ESP32 port counts seconds from 2000-01-01, as its v1.26.1 source
@@ -173,18 +188,29 @@ queue is full, is under **`interrupts`** in [ESP32 peripherals](./esp.md).
 ## Trying real drivers
 
 A fetch recipe downloads a set of widely used drivers, each at a pinned
-upstream commit with its licence (all MIT). The drivers are downloaded, not
-included in the pxx source tree:
+upstream commit. The drivers are downloaded, not included in the pxx source
+tree:
 
 ```sh
 tools/install_lib_candidates.sh micropython-drivers
 ```
 
 It writes `library_candidates/micropython-drivers/PROVENANCE.md`, which lists
-each driver's file, repository and commit. The set is ssd1306 and sdcard from
-micropython-lib, bme280 and ads1x15 by Robert Hammelrath, the MPU6050 from
-micropython-IMU, Peter Hinch's DS3231, max7219 by Mike Causer, and st7789 by
-Russ Hughes.
+each driver's file, repository and commit. The set has sixteen drivers:
+
+- from micropython-lib: ssd1306, sdcard, dht, ds18x20 (with its onewire
+  module) and neopixel;
+- by Robert Hammelrath: bme280, ads1x15 and sh1106;
+- the MPU6050 from micropython-IMU, and Peter Hinch's DS3231;
+- by Mike Causer: max7219 and tm1637;
+- st7789 by Russ Hughes, ina219 by Chris Borrill (with micropython-lib's
+  `logging`, which its instructions say to copy onto the board), hcsr04 by
+  rsc1975, and a bh1750 driver by catdog2.
+
+All are MIT-licensed except hcsr04 and bh1750, which are Apache-2.0.
+
+The recipe skips a download that is already there. If the set has grown since
+you last fetched it, fetch again with `FORCE=1` in front of the command.
 
 To measure how many of them compile:
 
@@ -195,22 +221,27 @@ tools/mpy_driver_census.sh
 For each driver it compiles a small MicroPython-style main program
 (`test/mpy_drivers/m_<driver>.npy`) together with the unchanged driver, for the
 ESP32-S3. It then prints a table with the compiler and source revision used.
-"Compiles" means an object file was produced; nothing runs on a board.
+"Compiles" means an object file was produced; nothing runs on a board. A driver
+that has not been downloaded is shown as "not installed", not as an error.
 
 **Each row shows only the first error.** A compile stops at its first error,
 so a row cannot show whether more problems follow. When that first problem is
 fixed, the driver may compile or it may stop at the next one.
 
-The table on 2026-09-25, with **pin v431**:
+The table on 2026-09-25, with **pin v435** and the library at revision
+`7ea045145a` (first error only):
 
 | driver | compiles | first error |
 | --- | --- | --- |
-| max7219 | yes | |
-| ssd1306 | no | a base-class method calls a method that only the subclass defines, and the base class itself derives from a class in another module |
-| bme280, ads1x15, st7789 | no | `const()` used without `from micropython import const` (MicroPython allows this) |
-| mpu6050 | no | `map()` with two iterables |
-| ds3231 | no | `utime.mktime`, which does not exist yet (see above) |
-| sdcard | no | `memoryview` is not supported |
+| ssd1306, bme280, ads1x15, mpu6050, ds3231, max7219, sdcard, ds18x20, neopixel, sh1106, hcsr04, tm1637, bh1750 | yes | |
+| st7789 | no | the `@micropython.viper` decorator, and the `ptr8`/`ptr16` views it uses, are not supported |
+| dht | no | an import in a branch the driver does not take on the ESP32 (`from esp import dht_readinto`, after a `hasattr(machine, ...)` test) is still resolved when compiling |
+| ina219 | no | `logging` sets `self.stream` from a conditional expression whose type the compiler cannot work out yet |
+
+"Compiles" is not "works": the timing-critical functions ds18x20, neopixel,
+hcsr04 and dht rely on (`_onewire`, `machine.bitstream`,
+`machine.time_pulse_us` and `machine.dht_readinto`) are new and have not yet
+been checked on a board.
 
 Every one of these is being worked on, and this table is out of date as soon as
 one is fixed. To see the current state, run `tools/mpy_driver_census.sh`.
