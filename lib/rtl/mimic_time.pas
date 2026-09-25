@@ -96,6 +96,21 @@ function strptime(const s, fmt: AnsiString): struct_time;
 { Format `t`, or the current time when it is omitted (UTC -- see the header). }
 function strftime(const fmt: AnsiString; t: struct_time = nil): AnsiString;
 
+{ MicroPython's extensions to `time` (and all of `utime`, which is this module
+  under its old name -- lib/rtl/mimic_utime.py). A MicroPython program and its
+  device drivers write `time.sleep_ms(10)` and `time.ticks_diff(...)`; NilPy is
+  upward compatible with CPython, so carrying the extra names costs a CPython
+  program nothing. The ticks are MicroPython's: they wrap at 2**30
+  (TICKS_PERIOD), so ticks_diff and ticks_add are the ONLY correct arithmetic
+  on them, exactly as its docs require. }
+procedure sleep_ms(ms: Int64);
+procedure sleep_us(us: Int64);
+function ticks_ms: Int64;
+function ticks_us: Int64;
+function ticks_cpu: Int64;
+function ticks_diff(ticks1, ticks2: Int64): Int64;
+function ticks_add(ticks, delta: Int64): Int64;
+
 { Pascal surface: days from 1970-01-01 to a proleptic Gregorian date, and
   back. Shared with mimic_calendar's timegm, so there is one calendar here. }
 function DaysFromCivil(y, m, d: Int64): Int64;
@@ -203,6 +218,46 @@ begin
     nsec := 0;
   PalNanosleep(sec, nsec);
   PalDrainPending;
+end;
+
+const
+  TICKS_PERIOD = Int64(1) shl 30;
+
+procedure sleep_ms(ms: Int64);
+begin
+  if ms > 0 then sleep(ms / 1000.0);
+end;
+
+procedure sleep_us(us: Int64);
+begin
+  if us > 0 then sleep(us / 1000000.0);
+end;
+
+function ticks_ms: Int64;
+begin
+  Result := Trunc(monotonic * 1000.0) and (TICKS_PERIOD - 1);
+end;
+
+function ticks_us: Int64;
+begin
+  Result := Trunc(monotonic * 1000000.0) and (TICKS_PERIOD - 1);
+end;
+
+function ticks_cpu: Int64;
+begin
+  Result := ticks_us;
+end;
+
+{ MicroPython's definition: the signed distance in (-PERIOD/2, PERIOD/2]. }
+function ticks_diff(ticks1, ticks2: Int64): Int64;
+begin
+  Result := ((ticks1 - ticks2 + (TICKS_PERIOD div 2)) and (TICKS_PERIOD - 1))
+            - (TICKS_PERIOD div 2);
+end;
+
+function ticks_add(ticks, delta: Int64): Int64;
+begin
+  Result := (ticks + delta) and (TICKS_PERIOD - 1);
 end;
 
 function perf_counter: Double;

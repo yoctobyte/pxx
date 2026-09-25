@@ -1047,6 +1047,17 @@ test-nilpy: $(COMPILER)
 	# the fix is in compiler/builtin and inert in the pin until the next one.
 	./$(COMPILER) test/test_nilpy_file_oserrors.npy $(TESTTMP)/test_nilpy_fileoserr26
 	$(TESTTMP)/test_nilpy_fileoserr26 | diff -u test/test_nilpy_file_oserrors.expected -
+	# A BOXED argument (promotable int, Variant) to an INLINED Pascal leaf: the
+	# inliner lowered it raw, i.e. its slot ADDRESS or its TAG, so -O2 and -O0
+	# disagreed. Both levels here, against the -O0 values; the Pascal twin has
+	# the Variant half. Pin v427 fails every row.
+	@for o in -O2 -O3; do \
+	  ./$(COMPILER) $$o -Futest test/test_nilpy_inline_boxed_args.npy $(TESTTMP)/test_nilpy_inlbox26 >/dev/null \
+	  && $(TESTTMP)/test_nilpy_inlbox26 | diff -u test/test_nilpy_inline_boxed_args.expected - \
+	  && ./$(COMPILER) $$o test/test_inline_variant_arg.pas $(TESTTMP)/test_inline_variant_arg26 >/dev/null \
+	  && tools/expect_same.sh "test_inline_variant_arg $$o" "$$($(TESTTMP)/test_inline_variant_arg26)" "205 795 200 21" \
+	  || exit 1; \
+	done
 	# `self.n += 1 if s > 0 else 2` -- a DOTTED augmented target reaches the
 	# shared C compound-assign tail, which parsed the RHS with Pascal precedence,
 	# so the assignment became the THEN ARM of a conditional the program never
@@ -37644,12 +37655,15 @@ test-esp-idf: $(COMPILER)
 	done
 	@# network.WLAN(STA_IF): the no-credentials board test and the owner's join
 	@# recipe (placeholders, never credentials); recipes in their headers.
+	@# Spelled out, not looped over a name list: tools/check_test_wiring.py finds
+	@# a test by its literal path, and `test/$$f.npy` hid both files from it.
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
-	  for f in esp_board_wifi_sta esp_board_wifi_sta_join; do \
-	    ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
-	      test/$$f.npy $(TESTTMP)/$$f.o >/dev/null \
-	    && echo "=== $$f builds [$$t]: OK ===" || exit 1; \
-	  done; \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_wifi_sta.npy $(TESTTMP)/esp_board_wifi_sta.o >/dev/null \
+	  && echo "=== esp_board_wifi_sta builds [$$t]: OK ===" || exit 1; \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_wifi_sta_join.npy $(TESTTMP)/esp_board_wifi_sta_join.o >/dev/null \
+	  && echo "=== esp_board_wifi_sta_join builds [$$t]: OK ===" || exit 1; \
 	done
 	@# NilPy files through IDF's VFS (board recipe in the test's header). The
 	@# filesystem is pxx_fs's OPTIONAL mount, reached by a `weakexternal`, so

@@ -6416,6 +6416,26 @@ begin
   DefImplPark := True;
 end;
 
+{ MicroPython's MICRO-LIBRARY spelling: `import ustruct`, `utime`, `uos` ...
+  are that port's names for the standard modules, still written by most
+  published device drivers (bme280's `from ustruct import unpack`, ads1x15's
+  `import utime as time`). MicroPython itself now treats them as aliases of
+  the plain names, so do we. A FIXED table -- the list in MicroPython's own
+  docs -- rather than "strip a leading u", so a real module whose name happens
+  to start with u (`uuid`, `urllib`) is never touched. '' = not an alias. }
+function MicroPythonUAlias(const lo: AnsiString): AnsiString;
+begin
+  Result := '';
+  if (Length(lo) < 3) or (lo[1] <> 'u') then Exit;
+  if (lo = 'uarray') or (lo = 'ubinascii') or (lo = 'ucollections') or
+     (lo = 'uerrno') or (lo = 'uhashlib') or (lo = 'uheapq') or (lo = 'uio') or
+     (lo = 'ujson') or (lo = 'uos') or (lo = 'urandom') or (lo = 'ure') or
+     (lo = 'uselect') or (lo = 'usocket') or (lo = 'ussl') or
+     (lo = 'ustruct') or (lo = 'usys') or (lo = 'utime') or (lo = 'uzlib') or
+     (lo = 'uasyncio') or (lo = 'uplatform') then
+    Result := Copy(lo, 2, Length(lo) - 1);
+end;
+
 procedure ParseUsesUnitBody(const name: AnsiString;
   diagLine: Integer; const diagSpell: AnsiString);
 { DIAGNOSTIC ORIGIN, supplied by a caller whose CurTok has already moved past
@@ -6433,6 +6453,7 @@ procedure ParseUsesUnitBody(const name: AnsiString;
   loader, wrong as output to a human.
   bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker }
 var
+  uReal: AnsiString; uI: Integer;
   lo, cName, path: AnsiString;
   startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;
   aliasEdgeIdx: Integer;
@@ -6800,6 +6821,60 @@ begin
 
   savedCurrentCLibrary := CurrentCLibrary;
   CurrentCLibrary := '';
+  { MicroPython's u-prefixed name for a standard module: import the plain
+    module and alias the qualifier, so `import utime as time` and `from
+    ustruct import unpack` bind to the one implementation, whatever `struct`
+    reaches -- a real unit or its mimic_ -- and never a mimic_ustruct.
+    BEFORE the source lookup, not after it: the lookup's host-header probe
+    answers `utime` with /usr/include/utime.h (a POSIX utime(2) wrapper), and
+    a Python program writing `import utime` means MicroPython's module. }
+  if isNilPy and pyLookupOK and (not isPath) and (not softMissOK) and
+     (MicroPythonUAlias(lo) <> '') then
+  begin
+    CurrentCLibrary := savedCurrentCLibrary;
+    { the plain name is resolved as the SAME kind of import -- the language
+      this one named was claimed and cleared above }
+    PyImportLang := pyImportLang;
+{$ifndef PXX_NO_NILPY}
+    { The import-closure pre-pass only LEXES what an import reaches and must
+      leave no trace (see IMPORT-CLOSURE LEXING below): lex the plain module,
+      release the slot, record nothing. Treating it as the real import marked
+      `utime` done, and the real import then skipped it. }
+    if PyLexClosureMode then
+    begin
+      ParseUsesUnit(MicroPythonUAlias(lo));
+      CompiledUnitCount := savedCUC;
+      Exit;
+    end;
+{$endif}
+    ParseUsesUnit(MicroPythonUAlias(lo));
+    if SoftUnitMissed then
+      CompiledUnitCount := savedCUC
+    else
+    begin
+      { Alias to where the plain name LANDED (`time` -> mimic_time), not to
+        the plain name: `import utime as time` makes `time` an alias of
+        `utime`, and utime -> time would then point back at itself. }
+      uReal := MicroPythonUAlias(lo);
+      for uI := UnitAliasCount - 1 downto 0 do
+        if Strs[UnitAliasName[uI]].Text = uReal then
+        begin
+          uReal := Strs[UnitAliasReal[uI]].Text;
+          Break;
+        end;
+      if UnitAliasCount < MAX_UNIT_ALIASES then
+      begin
+        UnitAliasName[UnitAliasCount] := InternStr(lo);
+        UnitAliasReal[UnitAliasCount] := InternStr(uReal);
+        Inc(UnitAliasCount);
+      end
+      else
+        Error('too many unit aliases (raise MAX_UNIT_ALIASES)');
+      ConcatThree('note: ', lo, ' -> ' + MicroPythonUAlias(lo) + ' (MicroPython name)', emsg);
+      WriteLn(emsg);
+    end;
+    Exit;
+  end;
   ResolveUsesUnitSource(name, lo, cName, isPath, isAmbientLoad, diagLine, diagSpell,
                         pasLookupOK, pyLookupOK, pyImportLang, pyDotted,
                         pyDottedIsPath, pyRelLevel, path, isCUnit, isCHeader,

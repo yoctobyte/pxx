@@ -7778,7 +7778,7 @@ function IRInlineExpand(callNode, cpi: Integer): Integer;
 var item, n, clonedRoot, tsym, identNode, aval, resSym, savedRetRecId: Integer;
     rawArg: array[0..MAX_PROC_PARAMS-1] of Integer;
     boundAST: array[0..MAX_PROC_PARAMS-1] of Integer;
-    ptk: TTypeKind; anyImpure: Boolean;
+    ptk: TTypeKind; anyImpure, argBoxed: Boolean;
 begin
   IRInlineExpand := -1;
   { Pass 1: collect args + validate count (no IR emitted yet). }
@@ -7817,13 +7817,27 @@ begin
     exactly as they would as standalone expressions. }
   for n := 0 to InlineParamCnt[cpi] - 1 do
   begin
-    if (not anyImpure) and InlineArgIsPure(rawArg[n]) then
+    { A BOXED argument -- a promotable int {tag, payload} or a Variant -- is
+      never substituted and never lowered raw: an inlined parameter is always
+      a machine scalar (InlineScalarTk), and the raw lowering of a boxed value
+      is its slot ADDRESS (promo) or its TAG (Variant). It goes through
+      IRLowerCallArg, the conversion the ordinary call uses -- promo narrowing
+      mod 2^64, the float widening, the Variant unbox -- so an inlined call and
+      a real one cannot disagree. At -O2 `m.f(w)` for `w = 7 - 1` handed the
+      callee an address while -O0 gave 6; methods were fine only because they
+      are not inlined. }
+    argBoxed := TypeIsPromoInt(IntToTypeKind(ASTTk[rawArg[n]])) or
+                (IntToTypeKind(ASTTk[rawArg[n]]) = tyVariant);
+    if (not anyImpure) and InlineArgIsPure(rawArg[n]) and (not argBoxed) then
       boundAST[n] := rawArg[n]
     else
     begin
       ptk := Procs[cpi].Params[n].TypeKind;
       tsym := AllocVar('', ptk);
-      aval := IRLowerAST(rawArg[n]);
+      if argBoxed then
+        aval := IRLowerCallArg(cpi, n, rawArg[n], False)
+      else
+        aval := IRLowerAST(rawArg[n]);
       { A FROZEN string value bound to a Pointer parameter needs the +8
         length-prefix skip — the same decay the ordinary call-argument path
         applies in the AN_CALL arm below (and the assign, binop and return paths

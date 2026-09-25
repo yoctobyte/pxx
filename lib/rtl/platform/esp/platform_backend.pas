@@ -136,6 +136,8 @@ function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, s
 
 implementation
 
+uses newliberrno;
+
 const
   PAL_STDIN  = 0;
   PAL_STDOUT = 1;
@@ -222,92 +224,16 @@ function lwip_ioctl(s: Integer; cmd: LongWord; argp: Pointer): Integer; cdecl; e
 { ERRNO, IN THE NUMBERING THE PAL PROMISES. The PAL's contract is -errno in
   LINUX numbering (PAL_NET_ETIMEDOUT = -110, and the POSIX backend hands back
   the raw syscall result), so a caller can compare against PAL_NET_* and a
-  NilPy OSError can carry CPython's number. lwIP reports a failure as -1 and
-  leaves the cause in NEWLIB's errno, whose numbering is NOT Linux's for 69
-  names -- ETIMEDOUT is 116 there, EINPROGRESS 119, EHOSTUNREACH 118 -- so this
-  backend used to return a bare -1 and every socket error read "[Errno 1]".
-  The table below is GENERATED, not recalled: the toolchain's sys/errno.h
-  (xtensa and riscv32 are identical) joined by NAME with CPython's errno
-  module, and only the names whose numbers differ are listed; the other 50
-  (EAGAIN 11, ECONNRESET 104, ECONNREFUSED 111, ...) pass through. }
+  NilPy OSError can carry CPython's number. lwIP and newlib report a failure
+  as -1 and leave the cause in NEWLIB's errno, whose numbering is NOT Linux's
+  for 69 names (ETIMEDOUT is 116 there), so this backend used to return a
+  bare -1 and every socket error read "[Errno 1]". The translation is
+  compiler/builtin/newliberrno.pas -- ONE generated table, shared with NilPy's
+  file I/O. This unit carried its own copy while the table lived in pypal,
+  which a Pascal ESP program cannot link (it needs the builtin string
+  helpers); INERT UNDER A PIN OLDER THAN THE ONE THAT CARRIES newliberrno. }
 function __errno: PInteger; cdecl; external;
 
-function EspLinuxErrno(e: Integer): Integer;
-begin
-  case e of
-    35: EspLinuxErrno := 42;   { ENOMSG }
-    36: EspLinuxErrno := 43;   { EIDRM }
-    37: EspLinuxErrno := 44;   { ECHRNG }
-    38: EspLinuxErrno := 45;   { EL2NSYNC }
-    39: EspLinuxErrno := 46;   { EL3HLT }
-    40: EspLinuxErrno := 47;   { EL3RST }
-    41: EspLinuxErrno := 48;   { ELNRNG }
-    42: EspLinuxErrno := 49;   { EUNATCH }
-    43: EspLinuxErrno := 50;   { ENOCSI }
-    44: EspLinuxErrno := 51;   { EL2HLT }
-    45: EspLinuxErrno := 35;   { EDEADLK }
-    46: EspLinuxErrno := 37;   { ENOLCK }
-    50: EspLinuxErrno := 52;   { EBADE }
-    51: EspLinuxErrno := 53;   { EBADR }
-    52: EspLinuxErrno := 54;   { EXFULL }
-    53: EspLinuxErrno := 55;   { ENOANO }
-    54: EspLinuxErrno := 56;   { EBADRQC }
-    55: EspLinuxErrno := 57;   { EBADSLT }
-    56: EspLinuxErrno := 35;   { EDEADLOCK }
-    57: EspLinuxErrno := 59;   { EBFONT }
-    74: EspLinuxErrno := 72;   { EMULTIHOP }
-    76: EspLinuxErrno := 73;   { EDOTDOT }
-    77: EspLinuxErrno := 74;   { EBADMSG }
-    80: EspLinuxErrno := 76;   { ENOTUNIQ }
-    81: EspLinuxErrno := 77;   { EBADFD }
-    82: EspLinuxErrno := 78;   { EREMCHG }
-    83: EspLinuxErrno := 79;   { ELIBACC }
-    84: EspLinuxErrno := 80;   { ELIBBAD }
-    85: EspLinuxErrno := 81;   { ELIBSCN }
-    86: EspLinuxErrno := 82;   { ELIBMAX }
-    87: EspLinuxErrno := 83;   { ELIBEXEC }
-    88: EspLinuxErrno := 38;   { ENOSYS }
-    90: EspLinuxErrno := 39;   { ENOTEMPTY }
-    91: EspLinuxErrno := 36;   { ENAMETOOLONG }
-    92: EspLinuxErrno := 40;   { ELOOP }
-    106: EspLinuxErrno := 97;   { EAFNOSUPPORT }
-    107: EspLinuxErrno := 91;   { EPROTOTYPE }
-    108: EspLinuxErrno := 88;   { ENOTSOCK }
-    109: EspLinuxErrno := 92;   { ENOPROTOOPT }
-    110: EspLinuxErrno := 108;   { ESHUTDOWN }
-    112: EspLinuxErrno := 98;   { EADDRINUSE }
-    113: EspLinuxErrno := 103;   { ECONNABORTED }
-    114: EspLinuxErrno := 101;   { ENETUNREACH }
-    115: EspLinuxErrno := 100;   { ENETDOWN }
-    116: EspLinuxErrno := 110;   { ETIMEDOUT }
-    117: EspLinuxErrno := 112;   { EHOSTDOWN }
-    118: EspLinuxErrno := 113;   { EHOSTUNREACH }
-    119: EspLinuxErrno := 115;   { EINPROGRESS }
-    120: EspLinuxErrno := 114;   { EALREADY }
-    121: EspLinuxErrno := 89;   { EDESTADDRREQ }
-    122: EspLinuxErrno := 90;   { EMSGSIZE }
-    123: EspLinuxErrno := 93;   { EPROTONOSUPPORT }
-    124: EspLinuxErrno := 94;   { ESOCKTNOSUPPORT }
-    125: EspLinuxErrno := 99;   { EADDRNOTAVAIL }
-    126: EspLinuxErrno := 102;   { ENETRESET }
-    127: EspLinuxErrno := 106;   { EISCONN }
-    128: EspLinuxErrno := 107;   { ENOTCONN }
-    129: EspLinuxErrno := 109;   { ETOOMANYREFS }
-    131: EspLinuxErrno := 87;   { EUSERS }
-    132: EspLinuxErrno := 122;   { EDQUOT }
-    133: EspLinuxErrno := 116;   { ESTALE }
-    134: EspLinuxErrno := 95;   { ENOTSUP }
-    135: EspLinuxErrno := 123;   { ENOMEDIUM }
-    138: EspLinuxErrno := 84;   { EILSEQ }
-    139: EspLinuxErrno := 75;   { EOVERFLOW }
-    140: EspLinuxErrno := 125;   { ECANCELED }
-    141: EspLinuxErrno := 131;   { ENOTRECOVERABLE }
-    142: EspLinuxErrno := 130;   { EOWNERDEAD }
-    143: EspLinuxErrno := 86;   { ESTRPIPE }
-  else
-    EspLinuxErrno := e;
-  end;
-end;
 
 { A lwIP return: itself when it succeeded, else -errno (Linux numbering). }
 function EspNet(rc: Integer): Integer;
@@ -316,7 +242,7 @@ begin
   if rc >= 0 then begin EspNet := rc; Exit; end;
   e := __errno^;
   if e <= 0 then EspNet := rc   { no cause recorded: keep lwIP's own value }
-  else EspNet := -EspLinuxErrno(e);
+  else EspNet := -NewlibToLinuxErrno(e);
 end;
 {$endif}
 
@@ -1326,7 +1252,7 @@ begin
   if rc < 0 then
     Result := rc
   else
-    Result := -EspLinuxErrno(err);   { SO_ERROR holds a NEWLIB errno too }
+    Result := -NewlibToLinuxErrno(err);   { SO_ERROR holds a NEWLIB errno too }
 end;
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin

@@ -1,0 +1,9 @@
+int64 6 int32 6 byte 6 word 6
+bool False True double 6.0
+second arg 94 first arg -94 both 12
+inline expr 75 7
+wraps 300
+variant 205 205 205 795
+in a def (42, 40)
+ticks 2 5 5
+INLINE BOXED OK
