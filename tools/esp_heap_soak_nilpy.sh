@@ -4,7 +4,7 @@
 # the NilPy counterpart of tools/esp_heap_soak.sh, which rewrites a Pascal main
 # and cannot take a Python one.
 #
-#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] <example-dir-name>
+#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] [--settle S] <example-dir-name>
 #
 # The example is staged OUT OF TREE (symlinks dereferenced; the checkout stays
 # byte-clean) and a footer is appended to its main.npy:
@@ -28,15 +28,23 @@
 # and at the same scale as the measurement. tools/esp_heap_soak.sh measured that
 # header as 12 on both chips, 2026-09-25.
 #
+# --settle S idles S seconds after the passes and reads the heap again:
+#   SOAK-SETTLED delta=<bytes still gone>
+# which separates a leak from memory that is only HELD for a while. lwIP keeps
+# every closed TCP connection in TIME_WAIT for 2*TCP_MSL (IDF: 120 s), so a
+# program that opens connections shows a per-pass cost that returns once they
+# expire; a leak does not return.
+#
 # Built with the example's own build.sh (so its flags, partition table and
 # sdkconfig), with the PINNED compiler unless SOAK_PXX says otherwise.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CONTROL=0; PASSES="${SOAK_N:-10}"
+CONTROL=0; PASSES="${SOAK_N:-10}"; SETTLE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --control) CONTROL=1; shift ;;
     --passes) PASSES="$2"; shift 2 ;;
+    --settle) SETTLE="$2"; shift 2 ;;
     *) break ;;
   esac
 done
@@ -46,7 +54,7 @@ SRC="$REPO_ROOT/examples/esp32/$EX"
 PXX="${SOAK_PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"
 TIMEOUT="${SOAK_TIMEOUT:-240}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
-BODY="$REPO_ROOT/tools/esp_soak_nilpy/$EX.npy"
+BODY="${SOAK_BODY:-$REPO_ROOT/tools/esp_soak_nilpy/$EX.npy}"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/esp-soak-nilpy.XXXXXX")"
 QPID=""
@@ -96,6 +104,10 @@ fi
   printf '_soak_h1 = _soak_board.free_heap()\n'
   printf '_soak_d = _soak_h0 - _soak_h1\n'
   printf 'print("SOAK-RESULT delta=" + str(_soak_d) + " passes=%d bpp=" + str(_soak_d // %d))\n' "$PASSES" "$PASSES"
+  if [ "$SETTLE" != 0 ]; then
+    printf 'import time as _soak_time\n_soak_time.sleep_ms(%d)\n' "$((SETTLE * 1000))"
+    printf 'print("SOAK-SETTLED delta=" + str(_soak_h0 - _soak_board.free_heap()) + " after=%ds")\n' "$SETTLE"
+  fi
   printf 'print("SOAK-COMPLETE")\n'
 } >> main/main.npy
 
@@ -125,6 +137,8 @@ tag="$EX $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
 r="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-RESULT' | head -1 || true)"
 if [ -n "$r" ]; then
   echo "SOAK $tag ${r#SOAK-RESULT }"
+  st="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-SETTLED' | head -1 || true)"
+  [ -n "$st" ] && echo "SOAK $tag settled ${st#SOAK-SETTLED }"
 else
   echo "SOAK $tag NO-RESULT after ${t}s; last serial lines:"
   tr -d '\r' < "$W/serial.log" | tail -8 | sed 's/^/  | /'

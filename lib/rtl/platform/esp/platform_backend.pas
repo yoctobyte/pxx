@@ -951,9 +951,29 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+{ lwIP's TCP/IP task must be running before the first socket call, or
+  lwip_socket asserts in tcpip_send_msg_wait_sem and the chip reboots (measured
+  2026-09-25 under the S3's QEMU: a NilPy program serving HTTP on 127.0.0.1
+  without touching `network`). A Pascal program calls esp_netif_init itself
+  (net-c3, dns-c3); a Python program has nothing to call, and on MicroPython
+  loopback sockets work with the radio off, because its port starts the stack
+  at boot. So the first socket starts it here. esp_netif_init is idempotent
+  (it returns ESP_OK once the task runs), so pxx_esp's Wi-Fi bring-up and the
+  Pascal examples calling it again are unaffected. WEAK: a project that does
+  not REQUIRE esp_netif links with this nil and behaves as before. }
+function EspNetifInit: Integer; cdecl; weakexternal name 'esp_netif_init';
+var EspNetifTried: Boolean;
+{$endif}
+
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
+  if not EspNetifTried then
+  begin
+    EspNetifTried := True;
+    if @EspNetifInit <> nil then EspNetifInit;
+  end;
   Result := EspNet(lwip_socket(domain, kind, proto));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
