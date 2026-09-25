@@ -5285,33 +5285,45 @@ begin
           node := inode;
         end;
       end
-      else if (ASTKind[node] = AN_IDENT) and
-              (SymPtrElemArrLen[ASTIVal[node]] > 0) and (CurTok.Kind = tkLBrack) then
+      else if (ASTKind[node] = AN_IDENT) and (SymPtrElemArrLen[ASTIVal[node]] > 0) then
       begin
+        { Pointer to array `elem (*p)[A][B]..`. The pointee's dims come from
+          SymArrDimSpan when it has more than one, else the one row length.
+          Horner-flatten every subscript present: acc = i (the pointer index),
+          then acc = acc*dim[d] + next for each pointee subscript.
+          - FULL index (one subscript per pointee dim): AN_INDEX over the POINTER
+            base, which loads p and strides by the element, so the address is
+            load(p) + acc*sizeof(elem).
+          - PARTIAL index `p[i]` / `p[i][j]` on `(*p)[A][B]`: C decays the
+            sub-array to its ADDRESS. This arm used to take only the full form
+            (partial was "a rarer follow-up"), so `int *r = p[1]` fell to the
+            generic subscript and LOADED the element -- a float row read as a
+            pointer, SIGSEGV on the store through it (cglm's glm_rotate_make:
+            `glm_vec3_scale(axisn, v[0], m[0])` on a `mat4 m` param). Now it is
+            the byte address p + acc * sizeof(the remaining sub-array), with the
+            ASTSLen stamp saying what that address steps by -- the same shape and
+            the same stamp the array and field partial-index arms build. }
         si := ASTIVal[node];
-        if SymPtrElemNDims[si] > 1 then
+        if SymPtrElemNDims[si] > 1 then ndimsF := SymPtrElemNDims[si] else ndimsF := 1;
+        flatNode := idxExpr;             { first subscript = the pointer index }
+        ndi := 0;
+        while (CurTok.Kind = tkLBrack) and (ndi < ndimsF) do
         begin
-          { Multi-dim pointee `elem (*p)[A][B]..`: `p[i][j][k]` flattens by Horner
-            over the pointee dims — acc = i (the pointer index); for each pointee
-            dim d: acc = acc*dim[d] + next-subscript. AN_INDEX over the POINTER base
-            loads p and strides by the element size, so the address is
-            load(p) + (i*A*B + j*B + k)*sizeof(elem). }
-          flatNode := idxExpr;           { first subscript = the pointer index }
-          ndi := 0;
-          while (CurTok.Kind = tkLBrack) and (ndi < SymPtrElemNDims[si]) do
-          begin
-            Next;                        { '[' }
-            spanD := SymArrDimSpan[si * MAX_ARR_DIMS + ndi];
-            strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := spanD; ASTTk[strideLit] := Ord(tyInteger);
-            mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
-            ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
-            idxExpr := ParseCExpr;
-            Expect(tkRBrack, ']');
-            inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
-            ASTLeft[inode] := mulNode; ASTRight[inode] := idxExpr; ASTTk[inode] := Ord(tyInteger);
-            flatNode := inode;
-            Inc(ndi);
-          end;
+          Next;                          { '[' }
+          if ndimsF > 1 then spanD := SymArrDimSpan[si * MAX_ARR_DIMS + ndi]
+          else spanD := SymPtrElemArrLen[si];
+          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := spanD; ASTTk[strideLit] := Ord(tyInteger);
+          mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+          ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
+          idxExpr := ParseCExpr;
+          Expect(tkRBrack, ']');
+          inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
+          ASTLeft[inode] := mulNode; ASTRight[inode] := idxExpr; ASTTk[inode] := Ord(tyInteger);
+          flatNode := inode;
+          Inc(ndi);
+        end;
+        if ndi >= ndimsF then
+        begin
           inode := AllocNode(AN_INDEX);
           ASTLeft[inode] := node;
           ASTRight[inode] := flatNode;
@@ -5320,24 +5332,21 @@ begin
         end
         else
         begin
-          { Pointer-to-array `elem (*p)[N]`: `p[i][j]` addresses *(p) as a `[.][N]`
-            row-major block. Flatten to AN_INDEX(p, i*N + j); AN_INDEX over a POINTER
-            base LOADS p and strides by the element size (PtrElemTk = elem), so the
-            address is load(p) + (i*N + j)*sizeof(elem). Only the full two-subscript
-            form is modelled here (partial `p[i]` row-decay is a rarer follow-up). }
-          rowStride := SymPtrElemArrLen[si];
-          Next;                          { second '[' }
-          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInteger);
+          { bytes of one element, then of the sub-array left after ndi pointee
+            subscripts (dims ndi..n-1), and of ITS element (dims ndi+1..n-1) }
+          if Syms[si].PtrElemTk = tyRecord then rowStride := RecSize(Syms[si].PtrElemRec)
+          else rowStride := TypeSlotSize(Syms[si].PtrElemTk);
+          for ndi2 := ndimsF - 1 downto ndi + 1 do
+            if ndimsF > 1 then rowStride := rowStride * SymArrDimSpan[si * MAX_ARR_DIMS + ndi2];
+          spanD := rowStride;            { what the decayed address steps by }
+          if ndimsF > 1 then rowStride := rowStride * SymArrDimSpan[si * MAX_ARR_DIMS + ndi]
+          else rowStride := rowStride * SymPtrElemArrLen[si];
+          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
-          ASTLeft[mulNode] := idxExpr; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
-          idxExpr := ParseCExpr;         { second subscript }
-          Expect(tkRBrack, ']');
-          flatNode := AllocNode(AN_BINOP); ASTIVal[flatNode] := Ord(tkPlus);
-          ASTLeft[flatNode] := mulNode; ASTRight[flatNode] := idxExpr; ASTTk[flatNode] := Ord(tyInteger);
-          inode := AllocNode(AN_INDEX);
-          ASTLeft[inode] := node;
-          ASTRight[inode] := flatNode;
-          ASTTk[inode] := Ord(Syms[si].PtrElemTk);
+          ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
+          inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
+          ASTLeft[inode] := node; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
+          ASTSLen[inode] := spanD;
           node := inode;
         end;
       end

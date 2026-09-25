@@ -572,7 +572,6 @@ AN_BINOP Left guard
 AN_BINOP Left hi
 AN_BINOP Left identN
 AN_BINOP Left idn
-AN_BINOP Left idxExpr
 AN_BINOP Left incNode
 AN_BINOP Left l
 AN_BINOP Left left
