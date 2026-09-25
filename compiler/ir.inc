@@ -506,6 +506,10 @@ begin
   IRArgRecId[IRCount] := REC_NONE;
   IRCtorProc[IRCount] := -1;
   IRSetLenBaseCap[IRCount] := 0;
+  if ((kind = IR_LOAD_SYM) or (kind = IR_STORE_SYM) or (kind = IR_LEA) or
+      (kind = IR_SLOTADDR) or (kind = IR_DYNDATA)) and
+     (a >= 0) and (a < SymCount) then
+    SymIRReached[a] := True;
   Result := IRCount;
   Inc(IRCount);
 end;

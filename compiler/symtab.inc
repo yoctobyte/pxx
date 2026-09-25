@@ -6386,7 +6386,7 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymObjDataExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(ObjDataStrOff, n);
+  SetLength(SymObjDataExternOnly, n);    SetLength(SymIRReached, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(SymTlsOffset, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   SetLength(SymArrAi, n);
@@ -6578,6 +6578,7 @@ begin
   Syms[SymCount].ConstVal := 0;
   SymCLongRank[SymCount]  := 0;
   SymObjDataExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
+  SymIRReached[SymCount] := False;
   SymCStaticLink[SymCount] := False;
   SymCModule[SymCount] := -1;   { not a C module until CRecordGlobalLinkage says so; -1 is the same sentinel CModuleOfTok returns for the main source }
   SymObjDataScope[SymCount] := False;   { outside the object's data surface until a frontend says otherwise }
@@ -7763,6 +7764,7 @@ begin
   SymSetElemTk[SymCount] := 0; SymSetElemLo[SymCount] := 0; SymSetElemHi[SymCount] := -1;
   SymCLongRank[SymCount] := 0;
   SymObjDataExternOnly[SymCount] := False;
+  SymIRReached[SymCount] := False;
   SymCStaticLink[SymCount] := False;
   SymObjDataScope[SymCount] := False;
   SymObjRuntimeCopy[SymCount] := False;

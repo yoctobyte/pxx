@@ -4317,6 +4317,46 @@ begin
     end;
 end;
 
+procedure CheckUndefinedExternData;
+{ An EXECUTABLE that uses a C `extern` variable nothing defines is refused.
+  ld refuses it too ("undefined reference to `ghost'"), and so does pxx's own
+  Pascal frontend for `var x: T; external;` in an executable, for the same
+  reason. Without this the name kept the private .bss slot its declaration
+  reserved (see ObjReportImportedDataWaste), and the program read zero, or an
+  empty string, with no diagnostic.
+  An object leaves it UND for the linker, and a shared library for its host,
+  so both are exempt. A name crtl owns is never an import (ObjDataIsImport),
+  so `stdin` or `environ` declared by a header cannot trip this. The use test is
+  SymIRReached, which every target's lowering sets, not the x86-only GlobFix
+  that ObjDataIsReferenced reads. Only a declaration nobody USES is let
+  through, as with ld. }
+var i, n: Integer; names, more: AnsiString;
+begin
+  if EmitObjMode or EmitSharedMode then Exit;
+  n := 0; names := '';
+  for i := 0 to SymCount - 1 do
+    if ObjDataIsImport(i) and SymIRReached[i] then
+    begin
+      if n < 8 then
+      begin
+        if n > 0 then names := names + ', ';
+        names := names + '`' + Syms[i].Name + '''';
+      end;
+      Inc(n);
+    end;
+  if n = 0 then Exit;
+  if n > 8 then
+  begin
+    Str(n - 8, more);
+    names := names + ' and ' + more + ' more';
+  end;
+  ErrorNoPos('undefined reference to extern variable ' + names +
+             ': it is declared `extern'' and used, and nothing defines it. ' +
+             'An executable has no import for it to bind to, so it would read ' +
+             'zero. Define it in one translation unit, or build with --emit-obj ' +
+             'and link it where it is defined');
+end;
+
 procedure ObjReportImportedDataWaste;
 { How much .bss this object reserved for names it can never address.
 

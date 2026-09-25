@@ -23640,6 +23640,15 @@ test-core: $(COMPILER)
 	# i386/aarch64/arm32/riscv32 when added.
 	./$(COMPILER) test/crtl_rand48.c $(TESTTMP)/crtl_r48_26
 	$(TESTTMP)/crtl_r48_26 | diff -u test/crtl_rand48.expected -
+	# A used `extern` variable that nothing defines is refused in an executable
+	# (it used to read zero silently); the legitimate shapes still compile. Values
+	# are gcc's.
+	if ./$(COMPILER) test/c_undefined_extern_data_is_refused.c $(TESTTMP)/c_uxd26 > $(TESTTMP)/c_uxd26.err 2>&1; then \
+	  echo "FAIL: c_uxd26 compiled; an undefined extern variable must be refused"; exit 1; fi; \
+	grep -q "undefined reference to extern variable .ghost_str., .ghost_int." $(TESTTMP)/c_uxd26.err || \
+	  { echo "FAIL: c_uxd26 refused for another reason:"; cat $(TESTTMP)/c_uxd26.err; exit 1; }
+	./$(COMPILER) test/c_extern_data_legitimate_shapes.c $(TESTTMP)/c_exd26
+	tools/expect_same.sh c_exd26 "$$($(TESTTMP)/c_exd26)" "$$(printf '12 4 1 1 1\n0')"
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

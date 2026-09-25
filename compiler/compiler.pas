@@ -3280,6 +3280,7 @@ begin
     the last point at which a method fixup can be asked whether its target has
     code, and the only one before the writers. }
   DropBodilessMethodFixups;
+  CheckUndefinedExternData;
   if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then
