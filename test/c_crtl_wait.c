@@ -137,20 +137,28 @@ int main(void)
          w == -1 ? "minus1" : "BAD", e,
          st == (int)SENTINEL ? "UNTOUCHED" : "written");
 
-  /* 6. Stopped, then continued. Two rows out of one child. */
+  /* 6. Stopped, then continued. Two rows out of one child.
+     The child must NOT exit between SIGCONT and the WCONTINUED wait: waitpid
+     reports an exit whatever the flags say, so a child that won that race made
+     the "continued" row read exited=1 code=5 and "after-cont" read ECHILD. That
+     was a RACE IN THE TEST, and it hit the gcc oracle as readily as pxx (a
+     STILL-RED on a loaded full-tier box, 2026-09-25). The child blocks on `go`
+     after it is continued, and the parent releases it only after collecting the
+     continued report. */
   {
-    int rdy[2];
-    if (pipe(rdy) != 0) { perror("pipe"); return 2; }
+    int rdy[2], go[2];
+    if (pipe(rdy) != 0 || pipe(go) != 0) { perror("pipe"); return 2; }
     st = SENTINEL;
     p = fork();
     if (p == 0) {
       char c = 'x';
-      close(rdy[0]);
+      close(rdy[0]); close(go[1]);
       if (write(rdy[1], &c, 1) != 1) _exit(3);
       raise(SIGSTOP);
+      if (read(go[0], &c, 1) != 1) _exit(4);
       _exit(5);
     }
-    close(rdy[1]);
+    close(rdy[1]); close(go[0]);
     if (waitbyte(rdy[0]) != 0) { printf("stopped          SETUP FAILED\n"); return 2; }
     errno = 0; w = waitpid(p, &st, WUNTRACED); e = errno;
     show("stopped", w, p, st, e);
@@ -159,6 +167,8 @@ int main(void)
     st = SENTINEL;
     errno = 0; w = waitpid(p, &st, WCONTINUED); e = errno;
     show("continued", w, p, st, e);
+    { char c = 'g'; if (write(go[1], &c, 1) != 1) { printf("after-cont SETUP FAILED\n"); return 2; } }
+    close(go[1]);
 
     st = SENTINEL;
     errno = 0; w = waitpid(p, &st, 0); e = errno;
