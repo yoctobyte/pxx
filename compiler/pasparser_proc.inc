@@ -3436,10 +3436,20 @@ begin
   { ...and FINALIZE the managed `out` parameters, for the same reason and in the
     same place: the body must not be able to observe (or hand back) whatever the
     caller's variable happened to hold. Managed kinds only — an ordinal `out` is
-    indistinguishable from `var` in FPC too. See ClearManagedOutParam. }
+    indistinguishable from `var` in FPC too. See ClearManagedOutParam.
+    Each clear is its OWN CompileAST, so it runs under RcSuppressAssign exactly
+    as CompilePendingLocalInits' do: otherwise it emits the -O2 r14/r15 residency
+    save+load a first time, the body emits it again into a fresh slot, and the
+    one epilogue restores the second slot -- which holds the PARAMETER. So
+    `function F(A: LongInt; out R: TManagedRec)` handed A back to its caller in
+    r14: `procedure W(depth: Integer); ... F(16, r); WriteLn(depth)` printed 16,
+    and FindFirst(.., sr) inside a recursive directory walk stopped it at depth 1.
+    bug-a-o2-miscompiles-disassembler is the same shape through the other door. }
+  RcSuppressAssign := True;
   for i := 0 to nparams - 1 do
     if pout[i] and (i < MAX_PROC_PARAMS) then
       ClearManagedOutParam(Procs[procIdx].Params[i].SymIdx);
+  RcSuppressAssign := False;
   { A `label` section that came after everything else — the decl loop above
     stops at the out-param clearing, so a trailing one still lands here. }
   while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label') do

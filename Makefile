@@ -15009,6 +15009,15 @@ test-core: $(COMPILER)
 	# rows are negative controls: FPC does NOT clear those, so clearing them
 	# would be a divergence the other way. Last row is the ARC check — the clear
 	# releases the caller's reference, so a second owner must survive it.
+	# A managed `out` param's entry finalize must not re-emit the -O2 residency
+	# save: the caller's first param came back as the callee's first argument,
+	# and a method's Self as 0. -O2, -O3 and -O0 all print fpc's output.
+	./$(COMPILER) -O2 test/test_out_managed_param_keeps_the_caller_s_registers.pas $(TESTTMP)/test_out_regs226
+	tools/expect_same.sh test_out_regs226 "$$($(TESTTMP)/test_out_regs226)" "$$(printf 'string-rec 7 x\ndynarr-rec 7 2\nintf-rec 7 TRUE\nvariant-rec 7 5\nplain-rec 7 1\nansistring 7 y\ntwo-outs 7 3\nmethod Self 70 93 23')"
+	./$(COMPILER) -O3 test/test_out_managed_param_keeps_the_caller_s_registers.pas $(TESTTMP)/test_out_regs326
+	tools/expect_same.sh test_out_regs326 "$$($(TESTTMP)/test_out_regs326)" "$$(printf 'string-rec 7 x\ndynarr-rec 7 2\nintf-rec 7 TRUE\nvariant-rec 7 5\nplain-rec 7 1\nansistring 7 y\ntwo-outs 7 3\nmethod Self 70 93 23')"
+	./$(COMPILER) -O0 test/test_out_managed_param_keeps_the_caller_s_registers.pas $(TESTTMP)/test_out_regs026
+	tools/expect_same.sh test_out_regs026 "$$($(TESTTMP)/test_out_regs026)" "$$(printf 'string-rec 7 x\ndynarr-rec 7 2\nintf-rec 7 TRUE\nvariant-rec 7 5\nplain-rec 7 1\nansistring 7 y\ntwo-outs 7 3\nmethod Self 70 93 23')"
 	./$(COMPILER) -Fulib/rtl test/test_out_parameter_of_a_managed_type_is_cleared.pas $(TESTTMP)/test_out_param_cleared26
 	tools/expect_same.sh test_out_param_cleared26 "$$($(TESTTMP)/test_out_param_cleared26)" "$$(printf 'str      []\ndyn      0\nintf     TRUE\nvariant  []\nrec      [] 3\nassigned [set]\nvarassn  [set]\nrecassn  [set] 9\nint      42\nvarint   42\nchar     [z]\nshortstr [y]\nunmgdrec 1 2\nmethod   []\nclassm   []\ntwoout   [][B][C]\nmixed    []\nfuncout  [] 1\nnested   []\nuntyped  5\nsurvive  [payload-] 7 bad=0')"
 
