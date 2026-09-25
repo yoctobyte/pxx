@@ -695,6 +695,7 @@ AN_CALL Left argSeq2
 AN_CALL Left argsHead
 AN_CALL Left asrtA0
 AN_CALL Left atDflt
+AN_CALL Left atFld
 AN_CALL Left bArg
 AN_CALL Left bfArgP
 AN_CALL Left bfIsArg
@@ -848,6 +849,7 @@ AN_COMMA Right PyMakeIdent(tmpSym)
 AN_COMMA Right PyMakeNone
 AN_COMMA Right PyMakeTruthy(PyMakeIdent(aSym))
 AN_COMMA Right Result
+AN_COMMA Right atRecv
 AN_COMMA Right callN
 AN_COMMA Right chMid
 AN_COMMA Right chSeq

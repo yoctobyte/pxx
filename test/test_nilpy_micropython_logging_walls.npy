@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: 0BSD
+# micropython-lib's logging.py (ina219 imports it), wall by wall. Every row is
+# CPython's too: `TZ='CET-1CEST,M3.5.0,M10.5.0/3' python3 <this>` matches
+# .expected. The TZ is a POSIX rule so no zone file is needed on the host.
+import sys
+import time
+import os
+
+# 1. a field from a MODULE GLOBAL inside a conditional expression
+_stream = sys.stdout
+class StreamHandler:
+    def __init__(self, stream=None):
+        self.stream = _stream if stream is None else stream
+    def emit(self, s):
+        self.stream.write(s + "\n")
+        if hasattr(self.stream, "flush"):
+            self.stream.flush()
+StreamHandler().emit("default stream")
+StreamHandler(sys.stdout).emit("given stream")
+
+# 2. sys.stdout / sys.stderr are stream OBJECTS: in a variable, a parameter,
+#    a ternary, and from-imported with a method on it
+from sys import stdout
+h = sys.stdout
+print(h.write("held in a variable\n"))
+def emit(stream, s):
+    stream.write(s + "\n")
+emit(sys.stdout, "through a parameter")
+f = sys.stdout if len(sys.argv) > 0 else sys.stderr
+f.write("through a ternary\n")
+stdout.write("from-imported\n")
+print("to stdout by file=", file=sys.stdout)
+print(h.fileno(), sys.stderr.fileno(), hasattr(h, "write"))
+
+# 3. open()'s encoding from a VARIABLE (logging.FileHandler)
+class FileHandler(StreamHandler):
+    def __init__(self, filename, mode="a", encoding="UTF-8"):
+        super().__init__(stream=open(filename, mode=mode, encoding=encoding))
+    def close(self):
+        self.stream.close()
+path = "/tmp/pxx_logging_walls_%d.txt" % int(time.monotonic() * 1000000)
+fh = FileHandler(path, mode="w")
+fh.emit("into a file")
+fh.close()
+print(repr(open(path).read()))
+os.remove(path)
+
+# 4. time.localtime, with the zone's DST switches to the second
+for t in [0, 1711846799, 1711846800, 1729990799, 1729990800, 2200000000]:
+    a = time.localtime(t)
+    print(t, a.tm_year, a.tm_mon, a.tm_mday, a.tm_hour, a.tm_min, a.tm_sec,
+          a.tm_wday, a.tm_yday, a.tm_isdst)
+print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(1729990800)))
+
+# 5. BaseException
+e = ValueError("x")
+print(isinstance(e, BaseException), isinstance(3, BaseException))
+try:
+    raise KeyError("k")
+except BaseException as ex:
+    print("caught", type(ex).__name__)
+
+# 6. hasattr on the sys module
+print(hasattr(sys, "argv"), hasattr(sys, "no_such_member"))
+
+# 7. *args forwarded through a DYNAMIC receiver
+class Logger:
+    def log(self, level, msg, *args):
+        print(level, msg % args)
+_loggers = {}
+def getLogger(name="root"):
+    if name not in _loggers:
+        _loggers[name] = Logger()
+    return _loggers[name]
+def log(level, msg, *args):
+    getLogger().log(level, msg, *args)
+log(20, "bus voltage %d mV on %s", 3300, "ina219")
+print("LOGGING WALLS OK")

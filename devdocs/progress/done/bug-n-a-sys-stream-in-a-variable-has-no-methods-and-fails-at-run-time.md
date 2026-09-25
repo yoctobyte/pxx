@@ -3,13 +3,13 @@ slug: bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time
 track: N
 type: bug
 prio: 60
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankB
 tags: [nilpy, sys, streams, silent, lekkerzeilen]
 blocked-by: []
-summary: "`h = sys.stdout` then `h.write(x)` COMPILES and dies at run time with `TypeError: object is not callable`, having written nothing. `sys.stdout`/`sys.stderr` are modelled as a bare fd INTEGER (AN_INT_LIT, 1 and 2) and an Integer has no methods. The dotted spelling `sys.stdout.write(x)` was fixed 2026-09-10 by wiring the three-segment table entries sys.stdin already had; this is the spelling the table cannot reach. The fix is to make a stream an OBJECT — pylib's TPyFile already is one — and it cannot land alone: PyParsePrintFile asserts `ASTKind = AN_INT_LIT` and value 1 or 2, so print's file= handling must move in the same change or every `print(..., file=sys.stderr)` goes red."
+summary: "FIXED 2026-09-25: `sys.stdout`/`sys.stderr` as a value are pylib's TPyFile on fd 1/2 (pysys_stream, one instance per stream), so a stream in a variable, parameter, field or ternary has write/flush/close/fileno. `print(..., file=sys.stderr)` still reads the fd back out of the call. sys.stdin stays the fd (select() and `for line in sys.stdin` consume it). print(file=<any other stream>) is still refused at compile time."
 ---
 
 # Measured 2026-09-10, compiler `4d3d006cf973`
@@ -74,3 +74,20 @@ that fixed the dotted spelling.
 The three-line program above must exit 0 and put `TO-STDERR` on fd 2. And
 `print(..., file=sys.stderr)` must still work — assert both, because a fix that
 only satisfies the first is the regression this ticket exists to prevent.
+
+# Resolution, 2026-09-25 (frankH)
+
+Found on the ina219 path: micropython-lib logging.py keeps `_stream =
+sys.stderr` and writes through `self.stream`. PyParseSysStream builds
+`pysys_stream(fd)` for stdout/stderr; PyParsePrintFile reads the fd from its
+argument, so print's file= path is the one it was. Both controls from this
+ticket hold: the three-line program exits 0 with TO-STDERR on fd 2, and
+`print(..., file=sys.stderr)` is unchanged (full test-nilpy). Rows:
+test_nilpy_micropython_logging_walls.npy, section 2.
+
+Left for Track B: lib/rtl/mimic_argparse.py:607 carries a revert-when-fixed
+note for this ticket. Its code is correct CPython behaviour as it stands, so
+only the note is stale.
+
+## Log
+- 2026-09-25 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

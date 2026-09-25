@@ -328,7 +328,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (183)
+## backlog-nilpy (182)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -388,7 +388,6 @@ _none_
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
 | bug-n-a-store-to-a-getter-only-property-masks-the-getter-from-then-on | N | 45 | bug | A store to a property that has a getter and NO setter falls through to the dynamic-attribute store, and because pydynattr_get consults that store BEFORE the property, every subsequent READ of that name returns the stored value instead of calling the getter. The defect is the MASKING, not the acceptance: a computed property silently becomes a stale data field, and a read that was correct before the write is wrong after it. Springs whenever a program assigns to a read-only property on a receiver whose class the frontend cannot name. | — |
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
-| bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time | N | 60 | bug | `h = sys.stdout` then `h.write(x)` COMPILES and dies at run time with `TypeError: object is not callable`, having written nothing. `sys.stdout`/`sys.stderr` are modelled as a bare fd INTEGER (AN_INT_LIT, 1 and 2) and an Integer has no methods. The dotted spelling `sys.stdout.write(x)` was fixed 2026-09-10 by wiring the three-segment table entries sys.stdin already had; this is the spelling the table cannot reach. The fix is to make a stream an OBJECT — pylib's TPyFile already is one — and it cannot land alone: PyParsePrintFile asserts `ASTKind = AN_INT_LIT` and value 1 or 2, so print's file= handling must move in the same change or every `print(..., file=sys.stderr)` goes red. | — |
 | bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def | N | 55 | bug | `def p(x: str): return x.partition(' ')` prints raw memory instead of ('C', ' ', 'minor'). The same call outside a def is correct, and split/rsplit through the same def-return path are correct. Pre-existing — reproduces on pinned. | — |
 | bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
@@ -1120,9 +1119,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3988)
+## done (3989)
 
-3988 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3989 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1326,7 +1325,6 @@ _none_
 - [p 60] [N] bug-n-a-qualified-def-value-read-is-invisible-when-the-def-s-module-is-parsed-first
 - [p 60] [N] bug-n-a-returned-nested-def-reads-zero-for-its-captures-past-arity-three
 - [p 60] [N] bug-n-a-shared-slot-class-attribute-is-invisible-to-the-dynamic-getter
-- [p 60] [N] bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time
 - [p 60] [N] bug-n-an-aliased-from-import-binds-a-same-named-pascal-routine-the-plain-spelling-refuses
 - [p 60] [N] bug-n-async-def-and-await-are-not-implemented
 - [p 60] [N] bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value

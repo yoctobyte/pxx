@@ -15,10 +15,9 @@
 # wrote. Matching CPython there would mean adding a buffer to become less
 # correct.
 #
-# DELIBERATELY ABSENT: `h = sys.stdout` then `h.write(x)`. That COMPILES and
-# dies at run time with "TypeError: object is not callable", because a stream is
-# still an fd INTEGER and an Integer has no methods. It is a real defect with a
-# real ticket -- and a row here would be asserting the crash, not the feature.
+# `h = sys.stdout` then `h.write(x)` -- a stream in a variable, parameter or
+# field -- works since sys.stdout/sys.stderr became TPyFile objects; its rows
+# are in test_nilpy_micropython_logging_walls.npy.
 # bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time
 
 import sys

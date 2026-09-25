@@ -3667,6 +3667,10 @@ begin
                   and let PyBindKwArgs order the chain and fill the holes }
                 if CurTok.Kind = tkRParen then Break;
                 Expect(tkComma, ',');
+                { a TRAILING comma after a keyword -- the multi-line call
+                  `self.mk(\n a,\n extend=x,\n)` (uforth.py:1384). The count
+                  below no longer ends the loop, so the `)` must. }
+                if CurTok.Kind = tkRParen then Break;
                 { counted only up to the last parameter: `s.init(m, baudrate=5,
                   phase=0)` has more arguments than parameters when one is a
                   duplicate, and stopping on the count left `phase` behind as

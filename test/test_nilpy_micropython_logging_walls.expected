@@ -1,0 +1,22 @@
+default stream
+given stream
+held in a variable
+19
+through a parameter
+through a ternary
+from-imported
+to stdout by file=
+1 2 True
+'into a file\n'
+0 1970 1 1 1 0 0 3 1 0
+1711846799 2024 3 31 1 59 59 6 91 0
+1711846800 2024 3 31 3 0 0 6 91 1
+1729990799 2024 10 27 2 59 59 6 301 1
+1729990800 2024 10 27 2 0 0 6 301 0
+2200000000 2039 9 19 1 6 40 0 262 1
+2024-10-27 02:00:00
+True False
+caught KeyError
+True False
+20 bus voltage 3300 mV on ina219
+LOGGING WALLS OK

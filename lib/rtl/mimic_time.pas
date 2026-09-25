@@ -88,12 +88,19 @@ function perf_counter: Double;
   day before. }
 function gmtime(secs: Double): struct_time;
 
+{ Seconds since the epoch to LOCAL time: the zone TZ names, else
+  /etc/localtime (a TZif file, footer rule included), with tm_isdst set. No
+  zone to read -- a board, a container without one -- is UTC, which is also
+  MicroPython's own localtime. The no-argument form is the current time. }
+function localtime(secs: Double): struct_time; overload;
+function localtime: struct_time; overload;
+
 { Parse `s` against `fmt`. Fields the format does not name default to
   CPython's 1900-01-01 00:00:00, and tm_isdst is -1. A mismatch, an
   out-of-range field or unconverted trailing text raises ValueError. }
 function strptime(const s, fmt: AnsiString): struct_time;
 
-{ Format `t`, or the current time when it is omitted (UTC -- see the header). }
+{ Format `t`, or the current LOCAL time when it is omitted, as CPython does. }
 function strftime(const fmt: AnsiString; t: struct_time = nil): AnsiString;
 
 { MicroPython's extensions to `time` (and all of `utime`, which is this module
@@ -345,6 +352,258 @@ begin
   FillDerived(Result);
 end;
 
+{ ---- local time ------------------------------------------------------------
+  The zone is loaded ONCE, on the first localtime: TZ if set (a zone name under
+  /usr/share/zoneinfo, an absolute path, or a POSIX rule such as
+  `CET-1CEST,M3.5.0,M10.5.0/3`), else /etc/localtime. A TZif file supplies its
+  transitions (the 64-bit v2 block when there is one) and, past the last of
+  them, its footer rule -- which is ALL a "slim" zone file carries. }
+var
+  TzLoaded: Boolean;             { globals start zeroed }
+  TzTrans: array of Int64;       { transition instants, UTC seconds }
+  TzTransType: array of Integer; { the ttinfo each one switches to }
+  TzOff: array of Int64;         { ttinfo: seconds EAST of UTC }
+  TzDst: array of Integer;       { ttinfo: is_dst }
+  TzRule: AnsiString;            { POSIX footer, '' when absent }
+
+function TzBE(const b: AnsiString; at, n: Integer): Int64;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to n - 1 do Result := (Result shl 8) or Ord(b[at + i]);
+  { sign-extend a 4-byte field }
+  if (n = 4) and (Result >= $80000000) then Result := Result - $100000000;
+end;
+
+function TzReadFile(const path: AnsiString; out data: AnsiString): Boolean;
+var fd: Integer; got: Int64; buf: array[0..4095] of Char; i: Integer;
+begin
+  data := '';
+  Result := False;
+  fd := PalOpen(PChar(path), 0, 0);
+  if fd < 0 then Exit;
+  repeat
+    got := PalRead(fd, @buf[0], 4096);
+    for i := 0 to Integer(got) - 1 do data := data + buf[i];
+  until (got <= 0) or (Length(data) > 1048576);
+  PalClose(fd);
+  Result := (Length(data) >= 44) and (Copy(data, 1, 4) = 'TZif');
+end;
+
+procedure TzParseFile(const b: AnsiString);
+var p, isut, isstd, leap, tcnt, ycnt, ccnt, tsz, i, e: Integer;
+begin
+  p := 1;                                          { 1-based header start }
+  tsz := 4;
+  if (b[5] >= '2') then
+  begin
+    { skip the v1 block to the v2 header, whose times are 8 bytes }
+    isut := TzBE(b, p + 20, 4); isstd := TzBE(b, p + 24, 4);
+    leap := TzBE(b, p + 28, 4); tcnt := TzBE(b, p + 32, 4);
+    ycnt := TzBE(b, p + 36, 4); ccnt := TzBE(b, p + 40, 4);
+    p := p + 44 + tcnt * 4 + tcnt + ycnt * 6 + ccnt + leap * 8 + isstd + isut;
+    if (p + 44 > Length(b) + 1) or (Copy(b, p, 4) <> 'TZif') then Exit;
+    tsz := 8;
+  end;
+  isut := TzBE(b, p + 20, 4); isstd := TzBE(b, p + 24, 4);
+  leap := TzBE(b, p + 28, 4); tcnt := TzBE(b, p + 32, 4);
+  ycnt := TzBE(b, p + 36, 4); ccnt := TzBE(b, p + 40, 4);
+  p := p + 44;
+  if p + tcnt * (tsz + 1) + ycnt * 6 > Length(b) + 1 then Exit;
+  SetLength(TzTrans, tcnt); SetLength(TzTransType, tcnt);
+  for i := 0 to tcnt - 1 do TzTrans[i] := TzBE(b, p + i * tsz, tsz);
+  p := p + tcnt * tsz;
+  for i := 0 to tcnt - 1 do TzTransType[i] := Ord(b[p + i]);
+  p := p + tcnt;
+  SetLength(TzOff, ycnt); SetLength(TzDst, ycnt);
+  for i := 0 to ycnt - 1 do
+  begin
+    TzOff[i] := TzBE(b, p + i * 6, 4);
+    TzDst[i] := Ord(b[p + i * 6 + 4]);
+  end;
+  p := p + ycnt * 6 + ccnt + leap * (tsz + 4) + isstd + isut;
+  { the footer: "\n<rule>\n", v2+ only }
+  if (tsz = 8) and (p <= Length(b)) and (b[p] = #10) then
+  begin
+    e := p + 1;
+    while (e <= Length(b)) and (b[e] <> #10) do Inc(e);
+    TzRule := Copy(b, p + 1, e - p - 1);
+  end;
+end;
+
+procedure TzLoad;
+var tz, data: AnsiString; i: Integer;
+begin
+  TzLoaded := True;
+  TzRule := '';
+  tz := GetEnvironmentVariable('TZ');
+  { SET but EMPTY is UTC (glibc, and so CPython) -- not the same as unset }
+  if tz = '' then
+    for i := 1 to GetEnvironmentVariableCount do
+      if GetEnvironmentString(i) = 'TZ=' then Exit;
+  if (tz <> '') and (tz[1] = ':') then tz := Copy(tz, 2, Length(tz));
+  if tz = '' then
+  begin
+    if TzReadFile('/etc/localtime', data) then TzParseFile(data);
+    Exit;
+  end;
+  if (tz[1] = '/') and TzReadFile(tz, data) then begin TzParseFile(data); Exit; end;
+  if TzReadFile('/usr/share/zoneinfo/' + tz, data) then begin TzParseFile(data); Exit; end;
+  TzRule := tz;                                    { a bare POSIX rule }
+end;
+
+{ POSIX rule pieces. A name is letters, or <...> with anything inside. }
+procedure TzSkipName(const r: AnsiString; var i: Integer);
+begin
+  if (i <= Length(r)) and (r[i] = '<') then
+  begin
+    while (i <= Length(r)) and (r[i] <> '>') do Inc(i);
+    Inc(i);
+  end
+  else
+    while (i <= Length(r)) and (((r[i] >= 'A') and (r[i] <= 'Z')) or
+                                ((r[i] >= 'a') and (r[i] <= 'z'))) do Inc(i);
+end;
+
+function TzNum(const r: AnsiString; var i: Integer): Int64;
+begin
+  Result := 0;
+  while (i <= Length(r)) and (r[i] >= '0') and (r[i] <= '9') do
+  begin
+    Result := Result * 10 + Ord(r[i]) - Ord('0');
+    Inc(i);
+  end;
+end;
+
+{ [+-]hh[:mm[:ss]] as seconds, sign as written }
+function TzHms(const r: AnsiString; var i: Integer): Int64;
+var neg: Boolean;
+begin
+  neg := False;
+  if (i <= Length(r)) and ((r[i] = '+') or (r[i] = '-')) then
+  begin
+    neg := r[i] = '-';
+    Inc(i);
+  end;
+  Result := TzNum(r, i) * 3600;
+  if (i <= Length(r)) and (r[i] = ':') then
+  begin
+    Inc(i); Result := Result + TzNum(r, i) * 60;
+    if (i <= Length(r)) and (r[i] = ':') then begin Inc(i); Result := Result + TzNum(r, i); end;
+  end;
+  if neg then Result := -Result;
+end;
+
+{ `Mm.w.d[/time]` -> the UTC instant in year y, given the offset in effect
+  just before it. False for the Jn / n forms, which this does not read. }
+function TzRuleInstant(const r: AnsiString; var i: Integer; y, offBefore: Int64;
+                       out inst: Int64): Boolean;
+var m, w, d, first, dow1, mday, secs: Int64;
+begin
+  Result := False;
+  inst := 0;
+  if (i > Length(r)) or (r[i] <> 'M') then Exit;
+  Inc(i); m := TzNum(r, i);
+  if (i > Length(r)) or (r[i] <> '.') then Exit;
+  Inc(i); w := TzNum(r, i);
+  if (i > Length(r)) or (r[i] <> '.') then Exit;
+  Inc(i); d := TzNum(r, i);
+  secs := 7200;                                    { 02:00 by default }
+  if (i <= Length(r)) and (r[i] = '/') then begin Inc(i); secs := TzHms(r, i); end;
+  if (m < 1) or (m > 12) then Exit;
+  first := DaysFromCivil(y, m, 1);
+  { weekday of the 1st, Sunday = 0; 1970-01-01 was a Thursday }
+  dow1 := first + 4 - FloorDiv(first + 4, 7) * 7;
+  mday := 1 + (d - dow1 + 7) mod 7 + (w - 1) * 7;
+  while mday > DaysInMonth(y, m) do mday := mday - 7;
+  inst := (DaysFromCivil(y, m, mday)) * 86400 + secs - offBefore;
+  Result := True;
+end;
+
+{ The offset (seconds east) and dst flag a POSIX rule gives instant t. }
+function TzRuleOffset(const r: AnsiString; t: Int64; out isdst: Integer): Int64;
+var i: Integer; stdOff, dstOff, y, mo, d, s1, s2: Int64; hasDst: Boolean;
+begin
+  isdst := 0;
+  i := 1;
+  TzSkipName(r, i);
+  stdOff := -TzHms(r, i);                          { POSIX offsets are WEST }
+  Result := stdOff;
+  if i > Length(r) then Exit;
+  TzSkipName(r, i);
+  dstOff := stdOff + 3600;
+  if (i <= Length(r)) and (r[i] <> ',') then dstOff := -TzHms(r, i);
+  hasDst := (i <= Length(r)) and (r[i] = ',');
+  if not hasDst then Exit;
+  Inc(i);
+  CivilFromDays(FloorDiv(t + stdOff, 86400), y, mo, d);
+  if not TzRuleInstant(r, i, y, stdOff, s1) then Exit;
+  if (i > Length(r)) or (r[i] <> ',') then Exit;
+  Inc(i);
+  if not TzRuleInstant(r, i, y, dstOff, s2) then Exit;
+  if s1 < s2 then hasDst := (t >= s1) and (t < s2)     { northern }
+  else hasDst := not ((t >= s2) and (t < s1));         { southern }
+  if hasDst then begin Result := dstOff; isdst := 1; end;
+end;
+
+function TzOffsetAt(t: Int64; out isdst: Integer): Int64;
+var lo, hi, mid, k: Integer;
+begin
+  if not TzLoaded then TzLoad;
+  isdst := 0;
+  Result := 0;
+  if Length(TzOff) = 0 then
+  begin
+    if TzRule <> '' then Result := TzRuleOffset(TzRule, t, isdst);
+    Exit;
+  end;
+  if (Length(TzTrans) = 0) or (t < TzTrans[0]) then
+  begin
+    { before the first transition: the first standard-time type }
+    k := 0;
+    while (k < Length(TzDst)) and (TzDst[k] <> 0) do Inc(k);
+    if k >= Length(TzDst) then k := 0;
+    if (Length(TzTrans) = 0) and (TzRule <> '') then
+    begin
+      Result := TzRuleOffset(TzRule, t, isdst);
+      Exit;
+    end;
+    Result := TzOff[k]; isdst := TzDst[k];
+    Exit;
+  end;
+  if (t >= TzTrans[High(TzTrans)]) and (TzRule <> '') then
+  begin
+    Result := TzRuleOffset(TzRule, t, isdst);
+    Exit;
+  end;
+  lo := 0; hi := High(TzTrans);
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if TzTrans[mid] <= t then lo := mid else hi := mid - 1;
+  end;
+  k := TzTransType[lo];
+  if (k >= 0) and (k < Length(TzOff)) then
+  begin
+    Result := TzOff[k]; isdst := TzDst[k];
+  end;
+end;
+
+function localtime(secs: Double): struct_time;
+var whole, off: Int64; dst: Integer;
+begin
+  whole := Trunc(secs);
+  if Double(whole) > secs then whole := whole - 1;
+  off := TzOffsetAt(whole, dst);
+  Result := gmtime(Double(whole + off));
+  Result.tm_isdst := dst;
+end;
+
+function localtime: struct_time;
+begin
+  Result := localtime(time);
+end;
+
 function StrptimeMismatch(const s, fmt: AnsiString): ValueError;
 begin
   Result := ValueError.Create('time data ''' + s + ''' does not match format ''' + fmt + '''');
@@ -436,7 +695,7 @@ function strftime(const fmt: AnsiString; t: struct_time = nil): AnsiString;
 var j: Integer;
     c: Char;
 begin
-  if t = nil then t := gmtime(time);
+  if t = nil then t := localtime(time);
   Result := '';
   j := 1;
   while j <= Length(fmt) do

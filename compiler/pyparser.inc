@@ -14605,6 +14605,22 @@ begin
   ASTTk[Result] := Ord(tyInteger);
   ASTRight[Result] := -1;
   LastExprTk := tyInteger;
+  { stdout / stderr are OBJECTS -- pysys_stream's TPyFile -- so a stream held
+    in a variable, a field or a parameter has write/flush/close. The fd rides
+    as the call's argument, where PyParsePrintFile reads it back. stdin stays
+    the fd: select() and `for line in sys.stdin` consume it as one.
+    bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time }
+  if nm = 'stdin' then Exit;
+  procIdx := FindProc('pysys_stream');
+  if procIdx < 0 then Exit;
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := Result; ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyClass);
+  ASTRight[Result] := ProcRetRecId[procIdx];
+  ASTLeft[Result] := argNode;
+  LastExprTk := tyClass;
 end;
 
 { ---- stdlib dotted calls: os.path.join(...), sys.exit(...) ----------------
@@ -14874,6 +14890,16 @@ begin
   begin
     pname := PyStdlibCallProc(base + '.' + aliasMem);
     if pname <> '' then begin nTok := 1; Result := True; Exit; end;
+  end;
+  { ...and a from-imported OBJECT with a method on it: `from sys import stderr`
+    then `stderr.write(x)`. The name is the member, so the dotted name is
+    base.member.method -- dropping the member asked for `sys.write` and raised
+    AttributeError at run time. }
+  if (base <> '') and (TokPos + 2 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+     (Tokens[TokPos + 2].Kind = tkLParen) then
+  begin
+    pname := PyStdlibCallProc(base + '.' + aliasMem + '.' + GetTokenStr(TokPos + 1));
+    if pname <> '' then begin nTok := 3; Result := True; Exit; end;
   end;
   { through the module-alias root: `import os as o` makes o.getcwd() this door too }
   base := PyUnitAliasRootName(GetTokenStr(TokPos - 1));
@@ -22340,6 +22366,26 @@ begin
       if CurTok.Kind = tkComma then Next else Break;
       Continue;
     end;
+    { ...and into a method that COLLECTS: the operand is SPLICED into the
+      packing, the arm PyParseClassMethodCall has. This loop had only the
+      expanding one, so forwarding `*args` through a dynamic receiver --
+      logging's `getLogger().log(level, msg, *args)` -- died as `expected
+      expression` at the '*'. }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkStar) and (ProcPyStarIdx[hitPi] >= 0) then
+    begin
+      Next;                              { the '*' }
+      ParseArgExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      ASTIVal[argNode] := PY_ARG_SPLICE;
+      ASTRight[argNode] := -1;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(i);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
     kwIdx := PyKwArgIndex(hitPi, 1);
     if kwIdx <> 0 then anyKw := True;
     ParseArgExpr;
@@ -26030,6 +26076,7 @@ end;
   file model NilPy does not have yet, and silently writing it to stdout would
   be worse than refusing. }
 function PyParsePrintFile: Integer;
+var node: Integer;
 begin
   { sys.stdout / sys.stderr resolve to their fd as an ordinary expression (see
     PyParseSysStream), so this just parses one and reads the constant back.
@@ -26037,10 +26084,15 @@ begin
     model NilPy does not have, and quietly writing it to stdout would be worse
     than refusing. }
   PyParseBoolExpr;
-  if (CurASTNode < 0) or (ASTKind[CurASTNode] <> AN_INT_LIT) or
-     ((ASTIVal[CurASTNode] <> 1) and (ASTIVal[CurASTNode] <> 2)) then
+  node := CurASTNode;
+  { the stream OBJECT (PyParseSysStream): its fd is the call's argument }
+  if (node >= 0) and (ASTKind[node] = AN_CALL) and
+     (ASTIVal[node] = FindProc('pysys_stream')) and (ASTLeft[node] >= 0) then
+    node := ASTLeft[ASTLeft[node]];
+  if (node < 0) or (ASTKind[node] <> AN_INT_LIT) or
+     ((ASTIVal[node] <> 1) and (ASTIVal[node] <> 2)) then
     Error('Nil Python: print file= expects sys.stdout or sys.stderr');
-  Result := ASTIVal[CurASTNode];
+  Result := ASTIVal[node];
 end;
 
 function PyParsePrint: Integer;
@@ -42427,8 +42479,18 @@ function PyRhsOnlyNamesThisMethodBinds(methodStart, rhsAt,
   still fires for it -- which is the case this error exists for. A CALL ends
   the scan too: `self.v = f(cx)` is the expression scanner's job and it types
   it, so widening here would only take work away from a reader that does it
-  better. Names after a dot are attribute selectors, not bindings. }
+  better. Names after a dot are attribute selectors, not bindings.
+
+  A MODULE-level binding is a real binding too: micropython-lib's logging.py
+  writes `self.stream = _stream if stream is None else stream` with
+  `_stream = sys.stderr` at module level (ina219 imports it). The
+  module-global arms of the field pre-pass each type ONE whole-RHS shape (a
+  literal, `K()`, a def, an import) and `sys.stderr` is none of them, so the
+  name was unbound here and the class refused. It is the same binding question
+  asked of the module's own tokens (PyModuleBindingsOf), and a name bound
+  nowhere still errors. }
 var k, n: Integer;
+    mb: array[0..PY_MAX_MODULE_BINDINGS-1] of Integer;
 begin
   Result := False;
   n := 0;
@@ -42437,11 +42499,18 @@ begin
         not (Tokens[k].Kind in [tkNewline, tkDedent, tkSemicolon, tkEOF]) do
   begin
     if (Tokens[k].Kind = tkIdent) and
-       not ((k > rhsAt) and (Tokens[k - 1].Kind = tkDot)) then
+       not ((k > rhsAt) and (Tokens[k - 1].Kind = tkDot)) and
+       { operator KEYWORDS that lex as identifiers here -- `x if s is None
+         else y` is expression syntax, not three names to bind }
+       not ((GetTokenStr(k) = 'is') or (GetTokenStr(k) = 'not') or
+            (GetTokenStr(k) = 'in') or (GetTokenStr(k) = 'if') or
+            (GetTokenStr(k) = 'else') or (GetTokenStr(k) = 'and') or
+            (GetTokenStr(k) = 'or')) then
     begin
       if (k + 1 < limit) and (Tokens[k + 1].Kind = tkLParen) then Exit;
       if PyHeaderHasParam(methodStart, rhsAt, GetTokenStr(k)) or
-         PyMethodBindsLocal(methodStart, rhsAt, GetTokenStr(k)) then Inc(n)
+         PyMethodBindsLocal(methodStart, rhsAt, GetTokenStr(k)) or
+         (PyModuleBindingsOf(GetTokenStr(k), mb) > 0) then Inc(n)
       else Exit;
     end;
     Inc(k);
@@ -55396,6 +55465,10 @@ begin
                   and let PyBindKwArgs order the chain and fill the holes }
                 if CurTok.Kind = tkRParen then Break;
                 Expect(tkComma, ',');
+                { a TRAILING comma after a keyword -- the multi-line call
+                  `self.mk(\n a,\n extend=x,\n)` (uforth.py:1384). The count
+                  below no longer ends the loop, so the `)` must. }
+                if CurTok.Kind = tkRParen then Break;
                 { counted only up to the last parameter: `s.init(m, baudrate=5,
                   phase=0)` has more arguments than parameters when one is a
                   duplicate, and stopping on the count left `phase` behind as
@@ -55765,9 +55838,10 @@ end;
   name. Before this the argument was not reached at all: the builtin took the
   second argument as the mode, so `open(p, encoding="ascii")` died on
   "undefined variable (encoding)". CurTok is the argument's first token. }
-procedure PyOpenCheckTextArg(const role: AnsiString);
+function PyOpenCheckTextArg(const role: AnsiString): Boolean;
 var v, f: AnsiString; i: Integer; c: Char; ok: Boolean;
 begin
+  Result := True;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind in [tkComma, tkRParen]) then
   begin
     if CurTok.Kind = tkNil then Exit;          { None: the default }
@@ -55803,9 +55877,10 @@ begin
             + 'errors strict, newline empty or None)');
     end;
   end;
-  Error('Nil Python: open()''s ' + role + ' must be a string literal or None '
-        + 'here -- it is checked at compile time, because a value open cannot '
-        + 'honour would otherwise be silently ignored');
+  { not a literal -- `open(p, encoding=encoding)` with a parameter
+    (logging.FileHandler). Judged when the call RUNS instead, against the same
+    set, by pyopen_text_arg_check; the caller builds that. }
+  Result := False;
 end;
 
 procedure PyParseFactorCore;
@@ -55848,7 +55923,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     rndIntArg: Boolean;      { …and was it an INTEGER? then round is identity }
     rndArgTk, rndRawTk: TTypeKind;   { its type, to restore after the identity }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
-    opnMode, opnPos: Integer; opnKw: AnsiString;   { open(): the mode, wherever it was written }
+    opnMode, opnPos: Integer; opnKw, opnRole: AnsiString;   { open(): the mode, wherever it was written }
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
@@ -58042,6 +58117,31 @@ begin
               gaUnit := -1;   { absent and no default: CPython raises. Not ours. }
           end;
         end;
+        { `hasattr(sys, "exc_info")` -- a COMPILER-PROVIDED module, which is no
+          unit and no symbol, so the arm above cannot see it and ParseExpr died
+          on `undefined variable (sys)` (micropython-lib logging.py:156). Folded
+          the same way: True exactly for the members this sys models, as a
+          value or as a call, so the branch it guards is the one that works. }
+        if (gaUnit < 0) and (not atIsGet) and isNilPy and (CurTok.Kind = tkIdent) and
+           (TokPos + 2 < TokCount) and (Tokens[TokPos].Kind = tkComma) and
+           (Tokens[TokPos + 1].Kind = tkString) and
+           (Tokens[TokPos + 2].Kind = tkRParen) and (FindSym(CurTok.SVal) < 0) and
+           (PyUnitAliasRootName(CurTok.SVal) = 'sys') then
+        begin
+          gaMemb := GetTokenStr(TokPos + 1);
+          node := AllocNode(AN_BOOL_LIT);
+          if PyIsStdlibMemberValue('sys', gaMemb, False) or
+             (PyStdlibCallProc('sys.' + gaMemb) <> '') then
+            ASTIVal[node] := 1
+          else
+            ASTIVal[node] := 0;
+          ASTTk[node] := Ord(tyBoolean);
+          Next; Next; Next;              { sys , "name" }
+          Expect(tkRParen, ')');
+          CurASTNode := node;
+          LastExprTk := tyBoolean;
+          Exit;
+        end;
         if gaUnit >= 0 then
         begin
           Next;                          { the unit alias }
@@ -58641,12 +58741,38 @@ begin
           else
           begin
             { open(file, mode, buffering, encoding, errors, newline, ...) }
+            opnRole := '';
             if (opnKw = 'encoding') or ((opnKw = '') and (opnPos = 3)) then
-              PyOpenCheckTextArg('encoding')
+              opnRole := 'encoding'
             else if (opnKw = 'errors') or ((opnKw = '') and (opnPos = 4)) then
-              PyOpenCheckTextArg('errors')
+              opnRole := 'errors'
             else if (opnKw = 'newline') or ((opnKw = '') and (opnPos = 5)) then
-              PyOpenCheckTextArg('newline');
+              opnRole := 'newline';
+            if (opnRole <> '') and not PyOpenCheckTextArg(opnRole) then
+            begin
+              { a run-time check, evaluated ahead of the path: see
+                pyopen_text_arg_check }
+              ParseArgExpr;
+              node := AllocNode(AN_STR_LIT);
+              ASTSOffset[node] := StoredName(opnRole);
+              ASTSLen[node] := Length(opnRole);
+              ASTTk[node] := Ord(tyString);
+              atFld := AllocNode(AN_ARG);
+              ASTLeft[atFld] := node;
+              node := AllocNode(AN_ARG);
+              ASTLeft[node] := CurASTNode; ASTRight[node] := -1;
+              ASTRight[atFld] := node;
+              node := AllocNode(AN_CALL);
+              ASTIVal[node] := FindProc('pyopen_text_arg_check');
+              if ASTIVal[node] < 0 then
+                Error('Nil Python: pylib (pyopen_text_arg_check) not loaded');
+              ASTTk[node] := Ord(tyInt64);
+              ASTLeft[node] := atFld;
+              atFld := AllocNode(AN_COMMA);
+              ASTLeft[atFld] := node; ASTRight[atFld] := atRecv;
+              ASTTk[atFld] := ASTTk[atRecv];
+              atRecv := atFld;
+            end;
             { skip one argument, balanced across nested parens }
             atFld := 0;
             while (CurTok.Kind <> tkEOF) and

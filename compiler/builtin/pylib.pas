@@ -526,6 +526,14 @@ type
     function GetArgs: TPyList;
     property args: TPyList read GetArgs;
   end;
+  { CPython's root of every exception. An ALIAS of Exception, as IOError is of
+    OSError, because here Exception already IS that root: KeyboardInterrupt,
+    SystemExit and GeneratorExit derive from it (bug-n-sys-exit-is-a-halt-so-
+    no-handler-sees-it tracks moving them out). So `except BaseException:` and
+    `isinstance(x, BaseException)` -- micropython-lib logging.py:155 -- answer
+    what CPython answers for every exception this dialect can raise. Absent, it
+    was "unknown exception class BaseException" at compile time. }
+  BaseException     = Exception;
   ValueError        = class(Exception) end;
   { Python raises this for x/0, x//0 and x%0. It had no class at all, so the
     integer paths fell through to the Pascal runtime's error 200 (which no
@@ -1776,6 +1784,14 @@ function pystderr_isatty: Boolean;
   Returns the character count CPython returns. }
 function pystdout_write(const s: AnsiString): Integer;
 function pystderr_write(const s: AnsiString): Integer;
+{ `sys.stdout` / `sys.stderr` as a VALUE: a TPyFile on fd 1 / 2, the object
+  `open()` returns, so `h = sys.stderr; h.write(x)`, a stream parameter, and
+  logging's `self.stream = _stream if stream is None else stream` all reach
+  write/flush/close. One instance per stream for the life of the program;
+  each call answers a +1 reference, as every object-returning routine here
+  does. sys.stdin stays its fd: select() and `for line in sys.stdin` read it
+  as one. bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time }
+function pysys_stream(fd: Int64): TPyFile;
 { sys.stdout.flush() / sys.stderr.flush().
 
   FUNCTIONS returning None, not procedures, and that was not the first cut:
@@ -2414,6 +2430,12 @@ function pybytes_eq(a, b: TPyBytes): Boolean;
   from the two objects' HEAP ADDRESSES
   (bug-nilpy-list-ordering-compares-heap-addresses, the bytes half). }
 function pybytes_cmp(a, b: TPyBytes): Int64;
+{ open()'s encoding / errors / newline when the value is not a literal --
+  `open(p, encoding=encoding)` with a parameter, logging.FileHandler's shape.
+  The same accepted set the frontend judges a literal against
+  (PyOpenCheckTextArg), judged when the call RUNS: open reads bytes and never
+  decodes, so a value that would need a decode is refused, not ignored. }
+function pyopen_text_arg_check(const role: AnsiString; const v: Variant): Int64;
 function pyfile_open(const path, mode: AnsiString): TPyFile;
 { `s.rjust(w)` / `s.rjust(w, fill)` — right-align in a field of w characters.
   Python returns the string UNCHANGED when it is already at least that long
@@ -15147,6 +15169,23 @@ begin
   Result := PyPalIsatty(2);
 end;
 
+var PySysStreamObj: array[1..2] of TPyFile;
+
+function pysys_stream(fd: Int64): TPyFile;
+var f: TPyFile;
+begin
+  if (fd < 1) or (fd > 2) then fd := 1;
+  f := PySysStreamObj[fd];
+  if f = nil then
+  begin
+    f := TPyFile.Create;   { this reference is the cache's, never released }
+    f.FFd := fd;
+    PySysStreamObj[fd] := f;
+  end;
+  PXXObjRetain(Pointer(f));
+  Result := f;
+end;
+
 function pystdout_write(const s: AnsiString): Integer;
 begin
   { The count is of the string we were HANDED, which is what CPython reports:
@@ -20877,6 +20916,36 @@ constructor TPyFile.Create;
 begin
   FFd := -1;
   FBinary := False;
+end;
+
+function pyopen_text_arg_check(const role: AnsiString; const v: Variant): Int64;
+var t, f: AnsiString; i: Integer; c: Char; ok: Boolean;
+begin
+  Result := 0;
+  if pyvartag(v) = 0 then Exit;     { None }
+  if not pyvar_is_strtag(v) then
+    raise TypeError.Create('open() argument ''' + role + ''' must be str or None, not '
+                           + pytype_name_v(v));
+  t := pystr_of(v);
+  f := '';
+  for i := 1 to Length(t) do
+  begin
+    c := t[i];
+    if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    if c = '_' then c := '-';
+    f := f + c;
+  end;
+  if role = 'encoding' then
+    ok := (f = 'utf-8') or (f = 'utf8') or (f = 'ascii') or
+          (f = 'us-ascii') or (f = 'latin-1') or (f = 'latin1') or
+          (f = 'iso-8859-1')
+  else if role = 'errors' then
+    ok := f = 'strict'
+  else
+    ok := t = '';
+  if not ok then
+    raise ValueError.Create('open(..., ' + role + '=' + t + ') is not supported: '
+                            + 'open reads bytes and never decodes');
 end;
 
 function pyfile_open(const path, mode: AnsiString): TPyFile;

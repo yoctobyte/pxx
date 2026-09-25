@@ -1122,6 +1122,12 @@ test-nilpy: $(COMPILER)
 	# not resolve imports in its dead arms -- dht.py's `from esp import`.
 	./$(COMPILER) test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.py $(TESTTMP)/test_nilpy_deadif26
 	$(TESTTMP)/test_nilpy_deadif26 | diff -u test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.expected -
+	./$(COMPILER) test/test_nilpy_a_trailing_comma_after_a_keyword_argument.npy $(TESTTMP)/test_nilpy_trailkw26
+	$(TESTTMP)/test_nilpy_trailkw26 | diff -u test/test_nilpy_a_trailing_comma_after_a_keyword_argument.expected -
+	# micropython-lib logging.py's walls (ina219), CPython's .expected. TZ is a
+	# POSIX rule so the localtime rows need no zone file on the host.
+	./$(COMPILER) test/test_nilpy_micropython_logging_walls.npy $(TESTTMP)/test_nilpy_mplogging26
+	TZ='CET-1CEST,M3.5.0,M10.5.0/3' $(TESTTMP)/test_nilpy_mplogging26 | diff -u test/test_nilpy_micropython_logging_walls.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const.npy $(TESTTMP)/test_nilpy_mpconst26
 	$(TESTTMP)/test_nilpy_mpconst26 | diff -u test/test_nilpy_micropython_const.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const_import.npy $(TESTTMP)/test_nilpy_mpconsti26

@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: 0BSD
+# A multi-line method call whose LAST argument is a keyword followed by a
+# trailing comma. uforth.py:1384 (the owner's demo) stopped compiling with
+# "expected expression" at the `)` when the keyword arm stopped counting
+# arguments toward arity (driver walls W4, a457570295); the `)` ends the list.
+# CPython's .expected.
+class S:
+    def __init__(self):
+        self.block_extend = False
+        self.block_first = 0
+
+class VM:
+    def mk(self, a: int, b: int, c: int, extend: bool = False) -> S:
+        return S()
+
+    def go(self, source: S) -> bool:
+        blk = 1
+        last_blk = 2
+        line_idx = 3
+        next_source = self.mk(
+            blk,
+            last_blk,
+            line_idx,
+            extend=source.block_extend,
+        )
+        next_source.block_first = source.block_first
+        return True
+
+print(VM().go(S()))
+class T:
+    def init(self, baudrate=1, phase=0):
+        print("init", baudrate, phase)
+s = T()
+s.init(
+    3,
+    phase=4,
+)
+try:
+    s.init(
+        3,
+        baudrate=5,
+    )
+except TypeError as e:
+    print(e)
+# every argument-loop spelling, each ending in `kw=...,` then `)`
+def fn(a, b=0, c=0):
+    return a + b * 10 + c * 100
+print("function", fn(
+    1,
+    c=3,
+))
+class P:
+    def __init__(self, x, y=0, z=0):
+        self.v = x + y * 10 + z * 100
+print("constructor", P(
+    1,
+    z=4,
+).v)
+class Q:
+    def m(self, a, b=0):
+        return a + b * 10
+dyn = 1
+dyn = Q()
+print("dynamic receiver", dyn.m(
+    2,
+    b=5,
+))
+def mkq():
+    return Q()
+print("call result", mkq().m(
+    3,
+    b=6,
+))
+try:
+    dyn.m(
+        2,
+        a=5,
+    )
+except TypeError as e:
+    print("dynamic duplicate:", e)
+print("TRAILING KW COMMA OK")

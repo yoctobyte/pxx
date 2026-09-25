@@ -83,3 +83,13 @@ future lambda-based probe.
 because the tuple is consumed by the sort rather than returned to Python — case
 13 above. So a naive "does sorting still work?" check will pass and is not
 evidence the bug is absent. Test by *returning* the value.
+
+# 2026-09-25 (frankH): a second body shape, a CONSTRUCTOR call
+
+`class Q: def m(self, a): return a` then `(lambda: Q())().m(3)` raises
+`AttributeError: 'NoneType' object has no attribute 'm'`; CPython prints 3.
+Measured with two builds of 5573bd550d plus uncommitted work (with and without
+the trailing-comma fix), which agree; the pinned compiler (v435, sha of stable_linux_amd64/default/pinned
+on 2026-09-25) fails the same way. v435 already carries a457570295, so this
+does not date the bug; nothing older was run. Same symptom as above with nothing captured,
+which suggests the cause is the object-typed lambda RESULT and not the capture.
