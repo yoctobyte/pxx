@@ -298,13 +298,16 @@ Both screenshots show the same built scene, the same launch and the same
 single frame captured shortly after start-up, which is why the camera views
 differ.
 
-**It compiles and runs. It is not yet as fast as CPython.** The project's own
-frame-rate measurement of this scene is **PXX 1.89 fps against CPython 37.1 fps**:
-the median over 20-frame windows of 150-second runs, with audio and vsync on,
-on one machine, one program at a time. That measurement was taken by the
+**It compiles and runs. It is not yet as fast as CPython.** A frame rate there is
+a property of the scene. The project's own measurement on the `world/roofs`
+region (4 tiles), the scene the demo starts in, is **PXX 1.89 fps against
+CPython 37.1 fps**: the median over 20-frame windows of 150-second runs, with
+audio and vsync on, on one machine, one program at a time. Other scenes
+behave very differently, and no other lekkerzeilen frame rate is current.
+That measurement was taken by the
 lekkerzeilen project on **pin v416**, not re-run for this page. That
-measurement's own notes list compiler fixes that landed after v416, so a v423
-figure may differ. The gap is the work in progress; the result that stands is
+measurement's own notes list compiler fixes that landed after v416, so a figure
+from a later pin may differ. The gap is the work in progress; the result that stands is
 that a large 3D Python application with sound builds into one native binary
 and runs.
 

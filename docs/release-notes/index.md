@@ -47,8 +47,9 @@ output or a screenshot of each. The highlights:
 - **ESP32:** Pascal, C and Nil Python programs on the ESP32-S3 and ESP32-C3,
   with units for GPIO, UART, ADC, PWM, I2C, stored settings and timers, and a
   walk of the examples on a physical ESP32-S3 board. See [ESP32](#esp32) below.
-- **Nil Python:** a program shown beside CPython with the frame rate of each,
-  and a Nil Python program driving GPIO and a timer on the ESP32-S3 board.
+- **Nil Python:** lekkerzeilen, a 3D sailing simulator written in ordinary
+  Python, compiled into one native binary and shown beside CPython (still much
+  slower; the showcase gives its one measured scene), and a Nil Python program driving GPIO and a timer on the ESP32-S3 board.
 - [A minimal bootable Linux system](../examples/minimal-linux-system.md) whose
   shell and compiler were built by PXX.
 
