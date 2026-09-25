@@ -60,6 +60,11 @@ PXX="${SOAK_PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"
 TIMEOUT="${SOAK_TIMEOUT:-240}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 BODY="${SOAK_BODY:-$REPO_ROOT/tools/esp_soak_nilpy/$EX.npy}"
+# Resolve a relative SOAK_BODY against the caller's directory NOW: the body is
+# read after the cd into the stage below, where a relative path names nothing,
+# and a missing body silently falls back to soaking main() instead.
+case "$BODY" in /*) ;; *) BODY="$PWD/$BODY" ;; esac
+[ -f "$BODY" ] || [ -z "${SOAK_BODY:-}" ] || { echo "soak: SOAK_BODY $BODY does not exist" >&2; exit 2; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/esp-soak-nilpy.XXXXXX")"
 STAGE="$EX"; [ -n "$AS" ] && STAGE="${EX%-*}-$AS"

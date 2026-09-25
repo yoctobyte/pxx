@@ -1,21 +1,40 @@
-PARKED 2026-09-25 by frankS at stand-down -- NOT RUN ON THE CHIP.
-Apply with `git apply devdocs/dev/parked-patches/esp-qemu-mpy-net-harness.patch`.
-QEMU row for MicroPython's ntptime + umqtt.simple + umqtt.robust on the S3/C3,
-built on frankb-12's qemueth (c6e47ad35b). Desktop half verified by hand
-(pxx and CPython ntptime both 1704079545; both umqtt sessions complete
-against mpy_net_stub.py). The chip half has never been executed. Run:
-  PXX=compiler/pascal26 tools/esp_qemu_mpy_net.sh nilpy-s3   # then -c3
-PXX must be HEAD until a pin carries 2026-09-25's NilPy import fixes.
-ntptime is staged with port 123 replaced (unprivileged bind; see the header).
-The S3 has a context-dependent leak frankb-12 is reducing; the C3 is the
-clean control. See LOGBOOK 2026-09-25 frankS "OPEN WALLS".
+PARKED 2026-09-25 (frankS wrote it, frankB ran it) -- S3 GREEN, C3 STALLS.
+Apply from the repo root: git apply devdocs/dev/parked-patches/esp-qemu-mpy-net-harness.patch
+Needs: tools/install_lib_candidates.sh micropython-net, ESP-IDF, Espressif QEMU.
+Run:   tools/esp_qemu_mpy_net.sh nilpy-hw-s3     (then nilpy-hw-c3)
+It uses the -hw- projects: ntptime.settime imports machine, and mimic_machine
+links the I2C/RMT drivers, which the plain nilpy-s3/-c3 projects do not
+require (they fail to link on i2c_master_transmit_receive).
+
+What it does: MicroPython's ntptime, umqtt.simple and umqtt.robust, compiled
+unchanged (ntptime's port 123 excepted, see the script header), on an emulated
+chip, over qemueth + slirp, against tools/esp_qemu_net/mpy_net_stub.py (a tiny
+MQTT broker + NTP server). Rows: desktop, chip transcript = desktop, ntp =
+CPython, broker, then a 1000-iteration free-heap census per library, a
+kept-clients positive control, and a stub session count.
+
+MEASURED 2026-09-25 with pin v438 (7de3e7ffa3, binary bcbfc4471590):
+  nilpy-hw-s3: every row OK, 3.5 min wall.
+    census ntptime -1 B/iter, umqtt.simple 0, umqtt.robust 0 (bound 16);
+    control 340 B/iter (must exceed 16); stub saw 1220/1020/1021 sessions.
+  nilpy-hw-c3: desktop, chip, ntp and broker OK; ntptime census -1 B/iter;
+    then the chip goes SILENT during the umqtt.simple census. No crash, no
+    reboot, flat heap; the stub's last session closed cleanly.
+    Reduced: a C3 loop of ONLY umqtt.simple connect/publish/disconnect
+    stalls after 421 sessions (about 80-100 chip-ms each). The S3 does 2240
+    in one run. The earlier C3 urequests hang (a sleep_ms after about 1000
+    requests) may be the same thing. UNDIAGNOSED: QEMU's C3 model, riscv32
+    codegen, or lwIP state. Next step would be to start QEMU with -s, attach
+    riscv32 gdb at the stall and read the PC/backtrace.
+Land it when the C3 completes, or land it S3-only with the C3 row named as a
+known stall.
 
 diff --git a/tools/esp_qemu_mpy_net.sh b/tools/esp_qemu_mpy_net.sh
 new file mode 100755
-index 0000000..6783dbf
+index 0000000..adf65c2
 --- /dev/null
 +++ b/tools/esp_qemu_mpy_net.sh
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,169 @@
 +#!/usr/bin/env bash
 +# SPDX-License-Identifier: MPL-2.0
 +# MicroPython's networking libraries on an emulated ESP32, against a host stub:
@@ -23,7 +42,11 @@ index 0000000..6783dbf
 +# source (tools/install_lib_candidates.sh micropython-net), talking to
 +# tools/esp_qemu_net/mpy_net_stub.py over QEMU's open_eth + slirp.
 +#
-+#   tools/esp_qemu_mpy_net.sh nilpy-s3|nilpy-c3
++#   tools/esp_qemu_mpy_net.sh nilpy-hw-s3|nilpy-hw-c3
++#
++# The -hw- projects, not nilpy-s3/-c3: ntptime.settime imports machine, and
++# mimic_machine links the ESP I2C/RMT drivers, which only the -hw- projects
++# REQUIRE (the plain ones fail to link on i2c_master_transmit_receive).
 +#
 +# ONE EDIT TO ONE LIBRARY, and it is the environment's, not the library's:
 +# ntptime sends to port 123, which an unprivileged user cannot bind on the host
@@ -38,11 +61,21 @@ index 0000000..6783dbf
 +#   ntp       ntptime.time() on the chip equals CPython running the same staged
 +#             ntptime.py against the same stub
 +#   broker    the stub's log for the chip run shows both clients' sessions
++#   census:<lib>  free heap across 1000 dropped iterations of ntptime.time(),
++#             an umqtt.simple session and an umqtt.robust session (each after
++#             20 warm-ups) costs under BOUND bytes per iteration (default 16)
++#   control   keeping 200 umqtt.simple clients reads ABOVE the bound, or the
++#             heap reading could not have seen a leak
++#   sessions  the stub saw every census session connect
++# The census is tools/esp_qemu_net/mpy_net_census.npy, appended to the chip's
++# program only (the desktop has no free_heap). QEMU runs this far slower than
++# real time, so the default timeout is generous; the emulated chip's own ms figures
++# are printed beside each census row.
 +# Last line: MPYNET-QEMU-COMPLETE. Grep for that; the wrapper's status is not
 +# the verdict. Built with the PINNED compiler unless PXX says otherwise.
 +set -euo pipefail
 +REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-+EX="${1:?usage: esp_qemu_mpy_net.sh nilpy-s3|nilpy-c3}"
++EX="${1:?usage: esp_qemu_mpy_net.sh nilpy-hw-s3|nilpy-hw-c3}"
 +case "$EX" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *) echo "mpynet: $EX is not -c3/-s3" >&2; exit 2 ;; esac
 +SRC="$REPO_ROOT/examples/esp32/$EX"
 +[ -f "$SRC/main/main.npy" ] || { echo "mpynet: $EX has no main/main.npy" >&2; exit 2; }
@@ -52,7 +85,8 @@ index 0000000..6783dbf
 +  echo "MPYNET-QEMU-COMPLETE"; exit 0
 +fi
 +PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"
-+TIMEOUT="${MPYNET_TIMEOUT:-300}"
++TIMEOUT="${MPYNET_TIMEOUT:-1800}"   # the S3 census measured 3.5 min wall, 2026-09-25
++BOUND="${MPYNET_BOUND:-16}"
 +ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 +
 +W="$(mktemp -d "${TMPDIR:-/tmp}/esp-qemu-mpynet.XXXXXX")"
@@ -80,10 +114,14 @@ index 0000000..6783dbf
 +  grep -q "getaddrinfo(host, $NTP_PORT)" "$W/ntp/ntptime.py" \
 +    || fail_out stage "ntptime.py no longer has the getaddrinfo(host, 123) line this edits"
 +}
-+client() {       # $1 host, $2 preamble file or empty, $3 out
++client() {       # $1 host, $2 preamble file or empty, $3 out, $4 "census" to append it
 +  { if [ -n "$2" ]; then cat "$2"; fi
 +    sed -e "s/@HOST@/$1/g" -e "s/@MQTT_PORT@/$MQTT_PORT/g" -e '/^@PREAMBLE@$/d' \
-+      "$REPO_ROOT/tools/esp_qemu_net/mpy_net_client.npy"; } > "$3"
++      "$REPO_ROOT/tools/esp_qemu_net/mpy_net_client.npy"
++    if [ "${4:-}" = census ]; then
++      printf '\n\n'
++      sed -e "s/@HOST@/$1/g" -e "s/@MQTT_PORT@/$MQTT_PORT/g" "$REPO_ROOT/tools/esp_qemu_net/mpy_net_census.npy"
++    fi; } > "$3"
 +}
 +LIBFU="-Fu$W/ntp -Fu$LIB/umqtt.simple -Fu$LIB/umqtt.robust"
 +
@@ -114,7 +152,7 @@ index 0000000..6783dbf
 +printf '\nCONFIG_ETH_USE_OPENETH=y\nCONFIG_LWIP_TCP_MSL=500\nCONFIG_ESP_INT_WDT=n\nCONFIG_ESP_TASK_WDT_EN=n\n' >> sdkconfig.defaults
 +sed -i -e 's/REQUIRES \([^)]*\))/REQUIRES \1 qemueth)/' main/CMakeLists.txt
 +printf 'import %sqemueth.pas%s as qemueth\nrc = qemueth.up(30000)\nprint("MPYNET-ETH rc=" + str(rc))\n' "'" "'" > "$W/preamble.npy"
-+client 10.0.2.2 "$W/preamble.npy" main/main.npy
++client 10.0.2.2 "$W/preamble.npy" main/main.npy census
 +sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" build.sh
 +
 +. "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
@@ -130,7 +168,7 @@ index 0000000..6783dbf
 +  -nographic -serial mon:stdio -monitor none >"$W/serial.log" 2>&1 &
 +QPID=$!
 +t=0
-+while [ $t -lt "$TIMEOUT" ] && ! grep -qa 'MPYNET-COMPLETE\|Rebooting\|Unhandled exception' "$W/serial.log"; do sleep 1; t=$((t + 1)); done
++while [ $t -lt "$TIMEOUT" ] && ! grep -qa 'MPYNET-CENSUS-DONE\|Rebooting\|Unhandled exception' "$W/serial.log"; do sleep 1; t=$((t + 1)); done
 +kill "$QPID" 2>/dev/null || true; QPID=""
 +stop_stub
 +tr -d '\r' < "$W/serial.log" > "$W/serial.txt"
@@ -143,9 +181,28 @@ index 0000000..6783dbf
 +else echo "MPYNET-ROW chip FAIL"; sed 's/^/  | /' "$W/chip.diff" | head -20; fi
 +if [ "$(grep -a '^ntptime ' "$W/chip.txt" || true)" = "$(cat "$W/oracle.txt")" ]; then echo "MPYNET-ROW ntp OK ($(cat "$W/oracle.txt") = CPython)"
 +else echo "MPYNET-ROW ntp FAIL (chip: $(grep -a '^ntptime ' "$W/chip.txt" || echo none); CPython: $(cat "$W/oracle.txt"))"; fi
-+if [ "$(grep -c '^CONNECT client pxx-' "$W/stub.chip.log")" = 2 ] && [ "$(grep -c '^DISCONNECT' "$W/stub.chip.log")" = 2 ]; then
-+  echo "MPYNET-ROW broker OK (two sessions, $(grep -c '^PUBLISH' "$W/stub.chip.log") publishes)"
-+else echo "MPYNET-ROW broker FAIL"; sed 's/^/  | /' "$W/stub.chip.log"; fi
++# The transcript's sessions are the ones before the census's first connect.
++sed '/^CONNECT client cen-/,$d' "$W/stub.chip.log" > "$W/stub.transcript.log"
++if [ "$(grep -c '^CONNECT client pxx-' "$W/stub.transcript.log")" = 2 ] && [ "$(grep -c '^DISCONNECT' "$W/stub.transcript.log")" = 2 ]; then
++  echo "MPYNET-ROW broker OK (two sessions, $(grep -c '^PUBLISH' "$W/stub.transcript.log") publishes)"
++else echo "MPYNET-ROW broker FAIL"; sed 's/^/  | /' "$W/stub.transcript.log"; fi
++
++grep -qa '^MPYNET-CENSUS-DONE' "$W/serial.txt" \
++  || fail_out census "no MPYNET-CENSUS-DONE after ${t}s" "$(grep -a 'MPYNET-HEAP\|MPYNET-CENSUS\|Rebooting\|Guru' "$W/serial.txt" | tail -5)"
++bpi() { sed -n 's/.* bpi=\(-\{0,1\}[0-9]*\).*/\1/p'; }
++for lib in ntptime umqtt.simple umqtt.robust; do
++  row="$(grep -a "^MPYNET-CENSUS $lib " "$W/serial.txt" || true)"; b="$(printf '%s' "$row" | bpi)"
++  if [ -n "$b" ] && [ "$b" -lt "$BOUND" ]; then echo "MPYNET-ROW census:$lib OK (${row#MPYNET-CENSUS }, bound $BOUND)"
++  else echo "MPYNET-ROW census:$lib FAIL (${row#MPYNET-CENSUS }, bound $BOUND)"; fi
++done
++row="$(grep -a '^MPYNET-CENSUS control ' "$W/serial.txt" || true)"; b="$(printf '%s' "$row" | bpi)"
++if [ -n "$b" ] && [ "$b" -gt "$BOUND" ]; then echo "MPYNET-ROW control OK (${row#MPYNET-CENSUS }, must exceed $BOUND)"
++else echo "MPYNET-ROW control FAIL (${row#MPYNET-CENSUS }: keeping clients did not read above the bound)"; fi
++# 20 warm-ups + 1000 per library, plus the control's 200 simple sessions.
++ns="$(grep -c '^CONNECT client cen-simple' "$W/stub.chip.log" || true)"; nr="$(grep -c '^CONNECT client cen-robust' "$W/stub.chip.log" || true)"
++nq="$(grep -c '^NTP query answered' "$W/stub.chip.log" || true)"
++if [ "$ns" = 1220 ] && [ "$nr" = 1020 ] && [ "$nq" -ge 1021 ]; then echo "MPYNET-ROW sessions OK (stub saw simple=$ns robust=$nr ntp=$nq)"
++else echo "MPYNET-ROW sessions FAIL (stub saw simple=$ns robust=$nr ntp=$nq; want 1220, 1020, >=1021)"; fi
 +echo "MPYNET-QEMU-COMPLETE"
 diff --git a/tools/esp_qemu_net/mpy_net_stub.py b/tools/esp_qemu_net/mpy_net_stub.py
 new file mode 100644
@@ -275,3 +332,65 @@ index 0000000..07d25ef
 +r.disconnect()
 +print("umqtt.robust ok")
 +print("MPYNET-COMPLETE")
+diff --git a/tools/esp_qemu_net/mpy_net_census.npy b/tools/esp_qemu_net/mpy_net_census.npy
+new file mode 100644
+index 0000000..53f12a4
+--- /dev/null
++++ b/tools/esp_qemu_net/mpy_net_census.npy
+@@ -0,0 +1,56 @@
++# SPDX-License-Identifier: 0BSD
++# tools/esp_qemu_mpy_net.sh appends this to the CHIP's main.npy only, after the
++# transcript's MPYNET-COMPLETE: the desktop row has no free_heap to read.
++# Free heap across 1000 dropped iterations per library, after 20 warm-ups, and
++# a POSITIVE CONTROL that keeps 200 umqtt.simple clients, which must read a
++# clearly nonzero cost per iteration, or the heap reading cannot see a leak.
++# Census clients connect as `cen-*`, so the broker row's count of the
++# transcript's own `pxx-*` sessions is unaffected.
++import time as _cen_time
++import 'espsys.pas' as board
++
++
++def ntp_once():
++    return ntptime.time()
++
++
++def simple_once():
++    k = MQTTClient("cen-simple", "@HOST@", port=@MQTT_PORT@)
++    k.connect()
++    k.publish(b"pxx/c", b"x")
++    k.disconnect()
++    return k
++
++
++def robust_once():
++    k = RobustClient("cen-robust", "@HOST@", port=@MQTT_PORT@)
++    k.connect()
++    k.publish(b"pxx/c", b"x")
++    k.disconnect()
++    return k
++
++
++def census(name, f):
++    for i in range(20):
++        f()
++    h0 = board.free_heap()
++    t0 = _cen_time.ticks_ms()
++    for i in range(1000):
++        f()
++        if i % 250 == 249:
++            print("MPYNET-HEAP " + name + " after=" + str(i + 1) + " free=" + str(board.free_heap()))
++    h1 = board.free_heap()
++    ms = (_cen_time.ticks_ms() - t0) // 1000
++    print("MPYNET-CENSUS " + name + " n=1000 delta=" + str(h0 - h1) + " bpi=" + str((h0 - h1) // 1000) + " chip_ms_per_iter=" + str(ms))
++
++
++census("ntptime", ntp_once)
++census("umqtt.simple", simple_once)
++census("umqtt.robust", robust_once)
++kept = []
++h2 = board.free_heap()
++for i in range(200):
++    kept.append(simple_once())
++h3 = board.free_heap()
++print("MPYNET-CENSUS control n=200 delta=" + str(h2 - h3) + " bpi=" + str((h2 - h3) // 200) + " live=" + str(len(kept)))
++print("MPYNET-CENSUS-DONE")
