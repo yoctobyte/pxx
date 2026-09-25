@@ -118,3 +118,6 @@ separates those two.
 *Measured by the toko-watch seat, check-in 2c. Not claiming the ticket; not
 re-laning it. The `track: B` guess in the frontmatter was derived from the OLD
 failing step and may now be wrong for the same reason the job name is.*
+
+## Log
+- 2026-09-25 — the borg watcher saw `lib-test#src:tools/crtl_reachability.py` GREEN at b34ae35bdcb2 (tier full) and did NOT close this: this is a repeat stub (`regression-lib-test-crtl-reachability-9`, not `regression-lib-test-crtl-reachability`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
