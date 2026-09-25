@@ -21,12 +21,14 @@ THE PACKING, per format (from MicroPython's extmod/modframebuf.c):
 For the packed mono and grey formats the stride is rounded up to a whole byte,
 as MicroPython does.
 
-ABSENT, and each raises rather than drawing something wrong:
-  * text() -- it needs an 8x8 font table, and MicroPython's is third-party data
-    that this tree does not carry yet. It raises NotImplementedError.
-  * ellipse() and poly(), which none of the census drivers call.
+text() uses MicroPython's own 8x8 font, vendored in mimic_framebuf_font.py
+(MIT; see lib/rtl/THIRD-PARTY.md).
+
+ABSENT: ellipse() and poly(), which none of the census drivers call.
 Everything else, clipping included, follows modframebuf.c.
 """
+
+from mimic_framebuf_font import FONT_8X8
 
 MONO_VLSB = 0
 MVLSB = 0
@@ -271,5 +273,24 @@ class FrameBuffer:
             y1 = y1 + 1
             y0 = y0 + 1
 
-    def text(self, s, x, y, c=1):
-        raise NotImplementedError("framebuf.text: no 8x8 font in this build")
+    def text(self, s, x0, y0, c=1):
+        # modframebuf.c's framebuf_text: one glyph per UTF-8 BYTE (so a
+        # non-ASCII character draws as several glyph-127 boxes, as there),
+        # 8 columns each, clipped per pixel.
+        for chr in s.encode("utf-8"):
+            if chr < 32 or chr > 127:
+                chr = 127
+            base = (chr - 32) * 8
+            j = 0
+            while j < 8:
+                if 0 <= x0 and x0 < self.width:
+                    col = FONT_8X8[base + j]
+                    y = y0
+                    while col:
+                        if col & 1:
+                            if 0 <= y and y < self.height:
+                                self._set(x0, y, c)
+                        col = col >> 1
+                        y = y + 1
+                j = j + 1
+                x0 = x0 + 1
