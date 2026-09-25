@@ -16057,13 +16057,13 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-25T10:50:16Z",
+  "date": "2026-09-25T12:56:06Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c"
   ],
-  "sha": "2df022754847ef8c49244958cd6f3c8641e4fb16",
+  "sha": "ffe3a7708e841e38a960b2949ea412d74fdc6b03",
   "tier": "full",
-  "ver": "v433",
+  "ver": "v434",
   "verdict": "RED"
  },
  "toolchain": {
