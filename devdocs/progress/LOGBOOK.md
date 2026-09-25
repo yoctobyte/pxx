@@ -5202,3 +5202,4 @@ the ordering rule again, and the arrangement everyone writes is the green one.
 2026-09-25 | frankB | lib/rtl/json.pas,calc.pas,examples/vm | leak sweep: json parse-error paths leaked reader+partial tree, calc.Eval its reader, vmdemo its TMachines; all per-run, now flat; guard row added
 2026-09-25 | frankB | tools/testmgr.py | skip hole in e098cf9 full: host-lib scanner read '-I/usr/include/...;' from a make -n recipe COMMENT and false-skipped c_extern_data_legitimate_shapes; comment lines now ignored
 2026-09-25 | frankB | tools/twatch_pin_identity_devtest.py | 'real checkout untouched' compared vs HEAD so pre-existing stable dirt (post-pin fulls) went RED; now start-vs-end hashes + NOTE for pre-dirt + fixture control
+2026-09-25 | frankB | lib/crtl/src/pthread.c | PTHREAD_MUTEX_RECURSIVE was ignored -> relock self-deadlock; stock threadsafe sqlite hung on first statement; now owner+depth

@@ -23686,6 +23686,10 @@ test-core: $(COMPILER)
 	# leaked ~3500 blocks over this loop; the output never showed it).
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_b_json_calc_error_paths_free.pas $(TESTTMP)/jcerr26
 	tools/assert_no_leak.sh json_calc_error_paths 64 $(TESTTMP)/jcerr26
+	# A RECURSIVE pthread mutex re-locks for its owner (crtl ignored the type, so
+	# stock threadsafe sqlite deadlocked). timeout: the old crtl hangs here.
+	./$(COMPILER) --threadsafe test/crtl_pthread_recursive_mutex.c $(TESTTMP)/crtl_prm26
+	tools/expect_same.sh crtl_prm26 "$$(timeout 30 $(TESTTMP)/crtl_prm26)" "counter 400000 ready 4 unlock 0 extra-unlock 1 settype-bad 22"
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

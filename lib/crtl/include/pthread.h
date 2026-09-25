@@ -22,17 +22,23 @@
 /* Thread identity = the kernel tid; copyable by value, compared with ==. */
 typedef long pthread_t;
 
-/* pthread_mutex_t is a single futex word, laid out to match palsync's
- * TMutex (record State: Integer). Zeroed == free, so a {0} static initialiser
- * and MallocZero both yield a valid unlocked mutex. */
-typedef struct { int __state; } pthread_mutex_t;
+/* pthread_mutex_t starts with the futex word, laid out to match palsync's
+ * TMutex (record State: Integer), which is all the Pascal side ever touches.
+ * The type, owner tid and depth after it are C-side only and make a RECURSIVE
+ * mutex re-lockable by its owner. Zeroed == a free NORMAL mutex, so a {0}
+ * static initialiser and MallocZero both yield a valid unlocked mutex. */
+typedef struct { int __state; int __type; long __owner; int __count; } pthread_mutex_t;
 #define PTHREAD_MUTEX_INITIALIZER { 0 }
 
-/* Attributes are accepted and ignored (the homegrown recursive-mutex path never
- * compiles the settype call; kept so any config still parses/links). */
-typedef struct { int __unused; } pthread_mutexattr_t;
+/* The type is honoured for RECURSIVE; ERRORCHECK locks like NORMAL. It used
+ * to be accepted and ignored, so stock threadsafe SQLite (which re-locks a
+ * recursive mutex) deadlocked on its first statement. */
+typedef struct { int __type; } pthread_mutexattr_t;
 typedef struct { int __unused; } pthread_attr_t;
-#define PTHREAD_MUTEX_RECURSIVE 1
+#define PTHREAD_MUTEX_NORMAL     0
+#define PTHREAD_MUTEX_RECURSIVE  1
+#define PTHREAD_MUTEX_ERRORCHECK 2
+#define PTHREAD_MUTEX_DEFAULT    PTHREAD_MUTEX_NORMAL
 
 int  pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr);
 int  pthread_mutex_destroy(pthread_mutex_t *m);

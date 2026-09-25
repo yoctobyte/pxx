@@ -28,21 +28,59 @@ extern long long __pxx_pmonotonic_ns(void);
 
 /* ---- mutex ---- */
 
+/* A RECURSIVE mutex is the futex lock plus an owner tid and a depth: the owner
+ * re-locking only counts. __owner is written only by the thread holding the
+ * lock, so a thread comparing it with its own tid can only match an entry it
+ * made itself. */
 int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
-  (void)attr;
   __pxx_pmutex_init(m);
+  m->__type = attr ? attr->__type : PTHREAD_MUTEX_NORMAL;
+  m->__owner = 0;
+  m->__count = 0;
   return 0;
 }
 int pthread_mutex_destroy(pthread_mutex_t *m) { (void)m; return 0; }  /* futex: no teardown */
 
-int pthread_mutex_lock(pthread_mutex_t *m)    { __pxx_pmutex_lock(m);   return 0; }
-int pthread_mutex_unlock(pthread_mutex_t *m)  { __pxx_pmutex_unlock(m); return 0; }
-int pthread_mutex_trylock(pthread_mutex_t *m) { return __pxx_pmutex_trylock(m); }
+int pthread_mutex_lock(pthread_mutex_t *m) {
+  if (m->__type == PTHREAD_MUTEX_RECURSIVE) {
+    long self = (long)__pxx_pthread_self();
+    if (m->__owner == self) { m->__count++; return 0; }
+    __pxx_pmutex_lock(m);
+    m->__owner = self;
+    m->__count = 1;
+    return 0;
+  }
+  __pxx_pmutex_lock(m);
+  return 0;
+}
+int pthread_mutex_unlock(pthread_mutex_t *m) {
+  if (m->__type == PTHREAD_MUTEX_RECURSIVE) {
+    if (m->__owner != (long)__pxx_pthread_self()) return 1;   /* EPERM */
+    if (--m->__count > 0) return 0;
+    m->__owner = 0;
+  }
+  __pxx_pmutex_unlock(m);
+  return 0;
+}
+int pthread_mutex_trylock(pthread_mutex_t *m) {
+  int r;
+  if (m->__type == PTHREAD_MUTEX_RECURSIVE) {
+    long self = (long)__pxx_pthread_self();
+    if (m->__owner == self) { m->__count++; return 0; }
+    r = __pxx_pmutex_trylock(m);
+    if (r == 0) { m->__owner = self; m->__count = 1; }
+    return r;
+  }
+  return __pxx_pmutex_trylock(m);
+}
 
-/* Attributes are ignored (homegrown recursive mutex never calls settype). */
-int pthread_mutexattr_init(pthread_mutexattr_t *a)            { (void)a; return 0; }
-int pthread_mutexattr_destroy(pthread_mutexattr_t *a)         { (void)a; return 0; }
-int pthread_mutexattr_settype(pthread_mutexattr_t *a, int t)  { (void)a; (void)t; return 0; }
+int pthread_mutexattr_init(pthread_mutexattr_t *a)    { a->__type = PTHREAD_MUTEX_NORMAL; return 0; }
+int pthread_mutexattr_destroy(pthread_mutexattr_t *a) { (void)a; return 0; }
+int pthread_mutexattr_settype(pthread_mutexattr_t *a, int t) {
+  if (t < PTHREAD_MUTEX_NORMAL || t > PTHREAD_MUTEX_ERRORCHECK) return 22;  /* EINVAL */
+  a->__type = t;
+  return 0;
+}
 
 /* ---- once + condition variables (QuickJS js_once/js_cond surface) ---- */
 
@@ -64,8 +102,13 @@ int pthread_cond_destroy(pthread_cond_t *c)   { (void)c; return 0; }  /* futex: 
 int pthread_cond_signal(pthread_cond_t *c)    { __pxx_pcond_signal(c);    return 0; }
 int pthread_cond_broadcast(pthread_cond_t *c) { __pxx_pcond_broadcast(c); return 0; }
 
+/* The wait releases the futex word; a recursive mutex's owner and depth are
+ * cleared for the duration (another thread will lock it) and restored after. */
 int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
+  long owner = m->__owner; int count = m->__count;
+  m->__owner = 0;
   __pxx_pcond_wait(c, m);
+  m->__owner = owner; m->__count = count;
   return 0;
 }
 
@@ -84,7 +127,13 @@ int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
   long long ns = (long long)abstime->tv_sec * 1000000000LL
                + (long long)abstime->tv_nsec - now_ns;
   if (ns < 0) ns = 0;
-  return __pxx_pcond_timedwait(c, m, ns);
+  {
+    long owner = m->__owner; int count = m->__count, r;
+    m->__owner = 0;
+    r = __pxx_pcond_timedwait(c, m, ns);
+    m->__owner = owner; m->__count = count;
+    return r;
+  }
 }
 
 /* ---- identity ---- */
