@@ -1,0 +1,130 @@
+# SOAK-REPLACES-MAIN
+# SPDX-License-Identifier: 0BSD
+# tools/esp_heap_soak_nilpy.sh body for nilpy-station-s3: its HTTP self-fetch
+# loop over 127.0.0.1. QEMU has no radio and no ADC, so the access point is
+# not started and readings() answers the fields that need neither; respond,
+# handle, serve_pending and self_fetch are the demo's own, copied verbatim
+# (tools/esp_heap_soak_nilpy.sh cannot import them without running the
+# demo's top level, which starts the radio).
+import json
+import socket
+import 'espsys.pas' as board
+
+PORT = 80
+stats = {"frames": 0, "requests": 0}
+
+PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PXX station</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:2em;background:#10141c;color:#e8ecf2}
+h1{color:#7cc4ff;font-size:1.4em}td{padding:.25em 1.2em .25em 0}
+code{color:#ffd479;font-size:1.2em}small{color:#8a94a6}
+</style></head><body>
+<h1>PXX station &mdash; NilPy on an ESP32-S3</h1>
+<table>
+<tr><td>ADC (GPIO<span id="pin">?</span>, raw 0..4095)</td><td><code id="adc_raw">-</code></td></tr>
+<tr><td>chip temperature</td><td><code id="temperature_c">-</code> &deg;C</td></tr>
+<tr><td>uptime</td><td><code id="uptime_s">-</code> s</td></tr>
+<tr><td>free heap</td><td><code id="free_heap">-</code> bytes</td></tr>
+<tr><td>stations on this network</td><td><code id="stations">-</code></td></tr>
+<tr><td>requests served</td><td><code id="requests">-</code></td></tr>
+</table>
+<p><small>Served by a Python program compiled to machine code by pxx.
+The page polls <a href="/data" style="color:#7cc4ff">/data</a> once a second.</small></p>
+<script>
+async function tick(){
+  try{
+    const d = await (await fetch('/data',{cache:'no-store'})).json();
+    for (const k in d){ const e=document.getElementById(k); if(e) e.textContent=d[k]; }
+    document.getElementById('pin').textContent=d.adc_pin;
+  }catch(e){}
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body></html>
+"""
+
+
+def readings():
+    return {
+        "uptime_s": board.uptime_ms() // 1000,
+        "free_heap": board.free_heap(),
+        "requests": stats["requests"],
+    }
+
+
+def respond(conn, status, ctype, body):
+    data = body.encode()
+    head = ("HTTP/1.1 " + status + "\r\n"
+            + "Content-Type: " + ctype + "\r\n"
+            + "Content-Length: " + str(len(data)) + "\r\n"
+            + "Cache-Control: no-store\r\n"
+            + "Connection: close\r\n\r\n")
+    conn.sendall(head.encode() + data)
+
+
+def handle(conn, addr):
+    conn.setblocking(True)
+    req = conn.recv(1024).decode()
+    line = req.split("\r\n")[0]
+    parts = line.split(" ")
+    path = "/"
+    if len(parts) > 1:
+        path = parts[1]
+    stats["requests"] = stats["requests"] + 1
+    if path == "/data":
+        respond(conn, "200 OK", "application/json", json.dumps(readings()))
+    elif path == "/":
+        respond(conn, "200 OK", "text/html; charset=utf-8", PAGE)
+    else:
+        respond(conn, "404 Not Found", "text/plain", "not found\n")
+    conn.close()
+    print("http", addr[0], line)
+
+
+def serve_pending():
+    # At most a few per frame, so a burst of requests cannot starve the loop.
+    n = 0
+    while n < 4:
+        try:
+            conn, addr = srv.accept()
+        except OSError:
+            return
+        handle(conn, addr)
+        n = n + 1
+
+
+def self_fetch(path):
+    c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    c.connect(("127.0.0.1", PORT))
+    c.sendall(("GET " + path + " HTTP/1.0\r\n\r\n").encode())
+    serve_pending()
+    got = b""
+    while True:
+        chunk = c.recv(512)
+        if not chunk:
+            break
+        got = got + chunk
+    c.close()
+    text = got.decode()
+    cut = text.find("\r\n\r\n")
+    return text.split("\r\n")[0], text[cut + 4:]
+
+
+srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind(("0.0.0.0", PORT))
+srv.listen(4)
+srv.setblocking(False)
+
+
+def soak_body():
+    self_fetch("/")
+    self_fetch("/data")
+    self_fetch("/nope")
+
+
+status, body = self_fetch("/data")
+print("self-fetch /data ->", status, sorted(json.loads(body).keys()))

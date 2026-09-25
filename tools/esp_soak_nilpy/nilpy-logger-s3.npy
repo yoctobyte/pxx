@@ -1,0 +1,29 @@
+# SOAK-REPLACES-MAIN
+# SPDX-License-Identifier: 0BSD
+# tools/esp_heap_soak_nilpy.sh body for nilpy-logger-s3: its HTTP paths that
+# need neither the radio (QEMU has none) nor the FAT partition, driven over
+# 127.0.0.1 through the demo's own logger.handle / web.fetch. The flash and
+# Wi-Fi paths are soaked on the board by test/esp_board_logger.npy.
+import logger
+import web
+
+logger.state["trace"] = 0
+logger.state["mode"] = "setup"
+srv = web.listen(logger.PORT)
+
+
+def serve():
+    logger.serve_pending(srv)
+
+
+def soak_body():
+    logger.state["mode"] = "setup"
+    web.fetch(logger.PORT, "GET", "/", "", serve)
+    web.fetch(logger.PORT, "POST", "/save", "ssid=&password=", serve)
+    web.fetch(logger.PORT, "POST", "/save", "ssid=caf%C3%A9+net&password=short", serve)
+    logger.state["mode"] = "logging"
+    web.fetch(logger.PORT, "GET", "/nope", "", serve)
+
+
+st, body = web.fetch(logger.PORT, "GET", "/", "", serve)
+print("setup page", st, body.find('name="ssid"') >= 0)
