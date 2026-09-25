@@ -1,0 +1,7 @@
+SPI-MASTER SPI2 SCK=12 MOSI=11 MISO=13, no device, no wire
+open PASS (0)
+open twice refused PASS (259)
+unknown cs PASS (261)
+device 1 MHz PASS (0)
+actual clock PASS (1000)
+device 8 MHz PASS (0)

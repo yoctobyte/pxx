@@ -37379,6 +37379,21 @@ test-esp-idf: $(COMPILER)
 	  tail -1 $(TESTTMP)/test_esp_idf_isrctx.out; \
 	else \
 	  echo "esp32c3 isrctx-c3 FAILED"; tail -15 $(TESTTMP)/test_esp_idf_isrctx.out; exit 1; fi
+	@# THE SPI MASTER'S BUS AND DEVICE LAYER UNDER QEMU (espspi.pas, S3): open,
+	@# the two refusals, two devices added, and the clock the driver reports
+	@# back -- the unit's mirrored IDF structs going through the real driver.
+	@# Negative control, measured 2026-09-25: the clock written one field late
+	@# (input_delay_ns) makes IDF refuse the device and this row go red. qemu's
+	@# SPI2 never completes a transaction, so the transfer rows are board-only:
+	@# examples/esp32/spi-s3 on silicon, 18 rows, recipe in its main.pas.
+	@: > $(TESTTMP)/test_esp_idf_spi.out
+	@if bash -c '. "$$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 && tools/esp_project_build.sh examples/esp32/spi-s3 qemu-assert' \
+	    > $(TESTTMP)/test_esp_idf_spi.out 2>&1; then \
+	  tail -1 $(TESTTMP)/test_esp_idf_spi.out; \
+	elif [ "$$?" = "77" ]; then \
+	  tail -1 $(TESTTMP)/test_esp_idf_spi.out; \
+	else \
+	  echo "esp32s3 spi-s3 FAILED"; tail -15 $(TESTTMP)/test_esp_idf_spi.out; exit 1; fi
 	@for chip in esp32c3 esp32s3; do \
 	  echo "--- $$chip esp_timer callback"; \
 	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
@@ -37498,11 +37513,11 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/adc-c3/main/main.npy $(TESTTMP)/adc_demo.o >/dev/null \
 	  && echo "=== adc demo source builds [$$t]: OK ===" || exit 1; \
 	done
-	@# The Pascal peripheral checks (I2C, PWM, NVS, UART): build only here, their runs
+	@# The Pascal peripheral checks (I2C, SPI, PWM, NVS, UART): build only here, their runs
 	@# need the S3 (recipes in each main.pas header). Built WITHOUT
 	@# --xtensa-long-calls on purpose: pwm-s3 uses espgpio -> interrupts, and a
 	@# Pascal program that links pylib again overflows CALL8 reach and fails here.
-	@for ex in i2c-s3 pwm-s3 nvs-s3 uart-s3; do \
+	@for ex in i2c-s3 spi-s3 pwm-s3 nvs-s3 uart-s3; do \
 	  ./$(COMPILER) --target=esp32s3 --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    examples/esp32/$$ex/main/main.pas $(TESTTMP)/esp_periph_$$ex.o >/dev/null \
 	  && echo "=== $$ex builds [esp32s3, no long calls]: OK ===" || exit 1; \
@@ -37516,6 +37531,13 @@ test-esp-idf: $(COMPILER)
 	@./$(COMPILER) --target=esp32s3 --xtensa-long-calls --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_isr_no_alloc.pas $(TESTTMP)/esp_board_isr_no_alloc.o >/dev/null \
 	  && echo "=== esp_board_isr_no_alloc builds [esp32s3]: OK ===" || exit 1
+	@# espspi's NilPy surface, the board half of which is
+	@# test/esp_board_spi_surface.npy (recipe in its header).
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_spi_surface.npy $(TESTTMP)/esp_board_spi_surface.o >/dev/null \
+	  && echo "=== esp_board_spi_surface builds [$$t]: OK ===" || exit 1; \
+	done
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_hidden_loop.npy $(TESTTMP)/esp_board_hidden_loop.o >/dev/null \

@@ -1,0 +1,11 @@
+open 0
+device 0
+no such cs 261
+write 0
+read fill 0x3c [60, 60, 60]
+read fill 0 [0, 0]
+write_readinto 0 [1, 2, 128, 255]
+readinto 0 [195, 195]
+length mismatch 258
+close 0
+SPI-SURFACE-DONE

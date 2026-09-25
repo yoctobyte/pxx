@@ -1,0 +1,28 @@
+# BOARD ONLY (ESP32-S3): espspi's NilPy surface, with no device and no wire.
+#
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=$PWD/test/esp_board_spi_surface.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-hw-s3 --no-verify --seconds 10
+#   and compare the program's lines (open .. SPI-SURFACE-DONE) with
+#   test/esp_board_spi_surface.expected
+#
+# The Pascal half, the pull-up/pull-down reads and the write timing are in
+# examples/esp32/spi-s3. This is the Python names over the same unit: MISO is
+# put on the MOSI pad (GPIO 11), so full duplex reads back what it sent --
+# the MOSI->MISO jumper, made inside the chip by the GPIO matrix. read()'s
+# third argument is MicroPython's `write=` fill byte, so a read clocking out
+# 0x3C reads 0x3C back, and one clocking out 0x00 reads zeros.
+import 'espspi.pas' as spi
+
+print("open", spi.open(12, 11, 11))
+print("device", spi.device(10, 1000000, 0))
+print("no such cs", spi.write(9, [1]))
+print("write", spi.write(10, [0xA5, 0x5A]))
+print("read fill 0x3c", spi.read(10, 3, 0x3C))
+print("read fill 0", spi.read(10, 2, 0))
+buf = [0, 0, 0, 0]
+print("write_readinto", spi.write_readinto(10, [1, 2, 0x80, 0xFF], buf), buf)
+b2 = [9, 9]
+print("readinto", spi.readinto(10, b2, 0xC3), b2)
+print("length mismatch", spi.write_readinto(10, [1, 2], buf))
+print("close", spi.close())
+print("SPI-SURFACE-DONE")
