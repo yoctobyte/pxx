@@ -72,6 +72,43 @@ def git(args, cwd):
                           text=True)
 
 
+def artefact_state(root):
+    """{relpath: content sha256 or '-> target'} for every file under the
+    checkout's stable_linux_amd64. Compared START against END, not against
+    HEAD: the question is whether THIS devtest touched the real checkout."""
+    import hashlib
+    base = os.path.join(root, "stable_linux_amd64")
+    out = {}
+    for d, _dirs, files in os.walk(base):
+        for n in files:
+            fp = os.path.join(d, n)
+            rel = os.path.relpath(fp, root)
+            if os.path.islink(fp):
+                out[rel] = "-> " + os.readlink(fp)
+                continue
+            h = hashlib.sha256()
+            with open(fp, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            out[rel] = h.hexdigest()
+    return out
+
+
+# Taken before anything below runs. The END check used to be
+# `git diff --quiet HEAD -- stable_linux_amd64`, which also answers for dirt
+# that was there BEFORE this devtest started, so it reddened a checkout whose
+# stable tree differed from HEAD for reasons of its own (seen twice, 2026-09-25,
+# in fulls that ran after a pin landed past the tested sha). Report that dirt,
+# never blame this devtest for it.
+REAL_START = artefact_state(REPO)
+_pre = subprocess.run(["git", "status", "--porcelain", "--", "stable_linux_amd64"],
+                      cwd=REPO, capture_output=True, text=True).stdout.strip()
+if _pre:
+    print("NOTE: the real checkout's stable_linux_amd64 already differs from "
+          "HEAD before this devtest runs (not this devtest's doing):\n  "
+          + _pre.replace("\n", "\n  "))
+
+
 def build_fixture(tmp):
     """A repo shaped like a real pin: tree T, then the pin commit as its CHILD.
 
@@ -267,14 +304,27 @@ try:
     check("verify_pin left the fixture clean",
           git(["status", "--porcelain"], fx.path).stdout.strip() == "",
           git(["status", "--porcelain"], fx.path).stdout.strip()[:120])
+
+    # Positive control for the start/end comparison below, run on the FIXTURE
+    # (never the real checkout): a touch inside the window must show.
+    s0 = artefact_state(fx.path)
+    with open(os.path.join(fx.path, "stable_linux_amd64/default/VERSION"), "a") as f:
+        f.write("x")
+    check("control: a touch of stable_linux_amd64 inside the window is SEEN",
+          artefact_state(fx.path) != s0)
+    git(["checkout", "HEAD", "--", twatch.PIN_ARTEFACT_REL], fx.path)
+    check("control: ...and restoring it makes the states equal again",
+          artefact_state(fx.path) == s0)
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 
 # The real checkout must be untouched: an earlier draft drove verify_pin with a
 # clone pointing at REPO, so the restore ran against the actual working tree.
+_end = artefact_state(REPO)
 check("the real checkout's pinned artefacts are untouched",
-      subprocess.run(["git", "diff", "--quiet", "HEAD", "--",
-                      "stable_linux_amd64"], cwd=REPO).returncode == 0)
+      _end == REAL_START,
+      ", ".join(sorted(k for k in set(REAL_START) | set(_end)
+                       if REAL_START.get(k) != _end.get(k)))[:200])
 
 if FAILED:
     print("\n%d RED:" % len(FAILED))
