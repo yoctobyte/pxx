@@ -111,93 +111,11 @@ function PyPalHasGetdents: Boolean;
   than decoding a struct stat itself, so a new target is one arm here. }
 function PyPalStatModeSize(path: Pointer; var mode: Int64; var size: Int64): Int64;
 
-{ NEWLIB'S ERRNO, IN LINUX NUMBERING -- the one copy of this table (the PAL
-  contract everywhere is -errno in Linux's numbering, and newlib's differs for
-  69 names: ETIMEDOUT is 116 there, 110 on Linux). GENERATED, not recalled: the
-  ESP toolchain's sys/errno.h (xtensa and riscv32 identical) joined by NAME with
-  CPython's errno module, listing only the names whose numbers differ; the
-  other 50 pass through. lib/rtl/platform/esp/platform_backend.pas still
-  carries a copy until a pin carries this function -- then it uses this one. }
-function PyPalLinuxErrno(newlibErrno: Integer): Integer;
 
 implementation
 
-function PyPalLinuxErrno(newlibErrno: Integer): Integer;
-begin
-  case newlibErrno of
-    35: PyPalLinuxErrno := 42;   { ENOMSG }
-    36: PyPalLinuxErrno := 43;   { EIDRM }
-    37: PyPalLinuxErrno := 44;   { ECHRNG }
-    38: PyPalLinuxErrno := 45;   { EL2NSYNC }
-    39: PyPalLinuxErrno := 46;   { EL3HLT }
-    40: PyPalLinuxErrno := 47;   { EL3RST }
-    41: PyPalLinuxErrno := 48;   { ELNRNG }
-    42: PyPalLinuxErrno := 49;   { EUNATCH }
-    43: PyPalLinuxErrno := 50;   { ENOCSI }
-    44: PyPalLinuxErrno := 51;   { EL2HLT }
-    45: PyPalLinuxErrno := 35;   { EDEADLK }
-    46: PyPalLinuxErrno := 37;   { ENOLCK }
-    50: PyPalLinuxErrno := 52;   { EBADE }
-    51: PyPalLinuxErrno := 53;   { EBADR }
-    52: PyPalLinuxErrno := 54;   { EXFULL }
-    53: PyPalLinuxErrno := 55;   { ENOANO }
-    54: PyPalLinuxErrno := 56;   { EBADRQC }
-    55: PyPalLinuxErrno := 57;   { EBADSLT }
-    56: PyPalLinuxErrno := 35;   { EDEADLOCK }
-    57: PyPalLinuxErrno := 59;   { EBFONT }
-    74: PyPalLinuxErrno := 72;   { EMULTIHOP }
-    76: PyPalLinuxErrno := 73;   { EDOTDOT }
-    77: PyPalLinuxErrno := 74;   { EBADMSG }
-    80: PyPalLinuxErrno := 76;   { ENOTUNIQ }
-    81: PyPalLinuxErrno := 77;   { EBADFD }
-    82: PyPalLinuxErrno := 78;   { EREMCHG }
-    83: PyPalLinuxErrno := 79;   { ELIBACC }
-    84: PyPalLinuxErrno := 80;   { ELIBBAD }
-    85: PyPalLinuxErrno := 81;   { ELIBSCN }
-    86: PyPalLinuxErrno := 82;   { ELIBMAX }
-    87: PyPalLinuxErrno := 83;   { ELIBEXEC }
-    88: PyPalLinuxErrno := 38;   { ENOSYS }
-    90: PyPalLinuxErrno := 39;   { ENOTEMPTY }
-    91: PyPalLinuxErrno := 36;   { ENAMETOOLONG }
-    92: PyPalLinuxErrno := 40;   { ELOOP }
-    106: PyPalLinuxErrno := 97;   { EAFNOSUPPORT }
-    107: PyPalLinuxErrno := 91;   { EPROTOTYPE }
-    108: PyPalLinuxErrno := 88;   { ENOTSOCK }
-    109: PyPalLinuxErrno := 92;   { ENOPROTOOPT }
-    110: PyPalLinuxErrno := 108;   { ESHUTDOWN }
-    112: PyPalLinuxErrno := 98;   { EADDRINUSE }
-    113: PyPalLinuxErrno := 103;   { ECONNABORTED }
-    114: PyPalLinuxErrno := 101;   { ENETUNREACH }
-    115: PyPalLinuxErrno := 100;   { ENETDOWN }
-    116: PyPalLinuxErrno := 110;   { ETIMEDOUT }
-    117: PyPalLinuxErrno := 112;   { EHOSTDOWN }
-    118: PyPalLinuxErrno := 113;   { EHOSTUNREACH }
-    119: PyPalLinuxErrno := 115;   { EINPROGRESS }
-    120: PyPalLinuxErrno := 114;   { EALREADY }
-    121: PyPalLinuxErrno := 89;   { EDESTADDRREQ }
-    122: PyPalLinuxErrno := 90;   { EMSGSIZE }
-    123: PyPalLinuxErrno := 93;   { EPROTONOSUPPORT }
-    124: PyPalLinuxErrno := 94;   { ESOCKTNOSUPPORT }
-    125: PyPalLinuxErrno := 99;   { EADDRNOTAVAIL }
-    126: PyPalLinuxErrno := 102;   { ENETRESET }
-    127: PyPalLinuxErrno := 106;   { EISCONN }
-    128: PyPalLinuxErrno := 107;   { ENOTCONN }
-    129: PyPalLinuxErrno := 109;   { ETOOMANYREFS }
-    131: PyPalLinuxErrno := 87;   { EUSERS }
-    132: PyPalLinuxErrno := 122;   { EDQUOT }
-    133: PyPalLinuxErrno := 116;   { ESTALE }
-    134: PyPalLinuxErrno := 95;   { ENOTSUP }
-    135: PyPalLinuxErrno := 123;   { ENOMEDIUM }
-    138: PyPalLinuxErrno := 84;   { EILSEQ }
-    139: PyPalLinuxErrno := 75;   { EOVERFLOW }
-    140: PyPalLinuxErrno := 125;   { ECANCELED }
-    141: PyPalLinuxErrno := 131;   { ENOTRECOVERABLE }
-    142: PyPalLinuxErrno := 130;   { EOWNERDEAD }
-    143: PyPalLinuxErrno := 86;   { ESTRPIPE }
-  else
-    PyPalLinuxErrno := newlibErrno;
-  end;
-end;
+uses newliberrno;   { the newlib->Linux errno table, shared with Pascal's ESP backend }
+
 
 { ===== ESP-IDF: files through IDF's VFS, not through a kernel ===============
 
@@ -208,7 +126,7 @@ end;
   ever worked on an ESP: open() raised "[Errno 1]" for every path.
 
   THE FILESYSTEM is FAT-on-flash with wear levelling, mounted at IDF prefix
-  /fs by the pxx_esp component (lib/rtl/platform/esp/idf/pxx_esp/pxx_fs.c)
+  /fs by the pxx_fs component (lib/rtl/platform/esp/idf/pxx_fs/pxx_fs.c)
   when the partition table has a `storage` FAT partition. Python never sees
   that prefix: as on MicroPython, "/" is the filesystem's root and a relative
   path is relative to it (there is no chdir). A project without the component
@@ -260,7 +178,7 @@ var e: Integer;
 begin
   e := EspErrnoPtr^;
   if e <= 0 then EspFail := -5          { EIO: failed with nothing recorded }
-  else EspFail := -PyPalLinuxErrno(e);
+  else EspFail := -NewlibToLinuxErrno(e);
 end;
 
 function EspRet(r: Integer): Int64;
