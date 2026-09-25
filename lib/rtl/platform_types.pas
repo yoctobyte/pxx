@@ -38,6 +38,17 @@ const
     working flags parameter looks like from the outside. }
   PAL_ERR_INVALID = -22;
 
+  { Readiness poll event/result bits, re-exported by platform.pas. These ARE
+    Linux poll(2)'s values, so the posix backend passes them straight through;
+    IDF's lwIP numbers the same bits differently (OUT is 8 there, and 4 is
+    POLLRDBAND), so the ESP backend must translate -- it did not until
+    2026-09-25, and every timed send and connect on a board timed out. }
+  PAL_POLL_IN  = $001;
+  PAL_POLL_OUT = $004;
+  PAL_POLL_ERR = $008;
+  PAL_POLL_HUP = $010;
+  PAL_POLL_NVAL = $020;
+
 type
   TPalFileStat = record
     Size: Int64;

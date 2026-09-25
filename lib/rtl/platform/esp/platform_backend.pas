@@ -1209,15 +1209,47 @@ begin
 end;
 {$endif}
 
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+{ PAL's poll bits are Linux's (platform_types.pas). IDF builds lwIP with
+  esp_libc's numbering, NOT vanilla lwIP's: components/lwip/port/include/
+  lwipopts.h includes <sys/poll.h> first, so lwip/sockets.h's own
+  `#if !defined(POLLIN)` block is skipped, and
+  components/esp_libc/platform_include/sys/poll.h gives IN 1, OUT 8, ERR $20,
+  HUP $40, NVAL $80. Passed through unchanged, a wait for PAL_POLL_OUT ($004)
+  asked for POLLRDBAND, which a TCP socket never raises -- so every timed send
+  and every timed connect on a board gave up with TimeoutError while the same
+  code was right on Linux (measured on an S3, 2026-09-25). Vanilla lwIP's
+  table (OUT 2) is the wrong one to copy: 2 is RDNORM here. }
+function PalToLwipPoll(ev: Integer): Integer;
+begin
+  Result := 0;
+  if (ev and PAL_POLL_IN) <> 0 then Result := Result or $01;
+  if (ev and PAL_POLL_OUT) <> 0 then Result := Result or $08;
+  if (ev and PAL_POLL_ERR) <> 0 then Result := Result or $20;
+  if (ev and PAL_POLL_HUP) <> 0 then Result := Result or $40;
+  if (ev and PAL_POLL_NVAL) <> 0 then Result := Result or $80;
+end;
+
+function LwipToPalPoll(ev: Integer): Integer;
+begin
+  Result := 0;
+  if (ev and $01) <> 0 then Result := Result or PAL_POLL_IN;
+  if (ev and $08) <> 0 then Result := Result or PAL_POLL_OUT;
+  if (ev and $20) <> 0 then Result := Result or PAL_POLL_ERR;
+  if (ev and $40) <> 0 then Result := Result or PAL_POLL_HUP;
+  if (ev and $80) <> 0 then Result := Result or PAL_POLL_NVAL;
+end;
+{$endif}
+
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
 var pfd: array[0..1] of Integer;
 begin
   pfd[0] := handle;
-  pfd[1] := events and $FFFF;
+  pfd[1] := PalToLwipPoll(events) and $FFFF;
   Result := EspNet(lwip_poll(@pfd[0], 1, timeoutMs));
   if Result > 0 then
-    Result := (pfd[1] shr 16) and $FFFF;
+    Result := LwipToPalPoll((pfd[1] shr 16) and $FFFF);
 end;
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
@@ -1227,12 +1259,30 @@ end;
 
 { Set-shaped poll. Under IDF this is lwip_poll over the caller's own array —
   lwIP's struct pollfd has the same int-then-two-shorts layout as Linux's, so
-  nothing is repacked. Bare answers PAL_ERR_UNSUPPORTED like every other socket
-  entry there: ESP is not a Unix, and a refusal beats a wrong answer. }
+  the array is not repacked, but its event BITS are numbered differently (see
+  PalToLwipPoll): events are translated in place for the call and put back,
+  and revents come back in PAL's numbering. Bare answers PAL_ERR_UNSUPPORTED
+  like every other socket entry there: ESP is not a Unix, and a refusal beats
+  a wrong answer. }
 function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
+var i: Integer; ev: PSmallInt; saved: array of SmallInt;
 begin
+  SetLength(saved, nfds);
+  for i := 0 to nfds - 1 do
+  begin
+    ev := PSmallInt(PByte(fds) + i * 8 + 4);
+    saved[i] := ev^;
+    ev^ := SmallInt(PalToLwipPoll(ev^ and $FFFF));
+  end;
   Result := EspNet(lwip_poll(fds, nfds, timeoutMs));
+  for i := 0 to nfds - 1 do
+  begin
+    ev := PSmallInt(PByte(fds) + i * 8 + 4);
+    ev^ := saved[i];
+    Inc(ev);
+    ev^ := SmallInt(LwipToPalPoll(ev^ and $FFFF));
+  end;
 end;
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin

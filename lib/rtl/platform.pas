@@ -49,13 +49,14 @@ const
   PAL_NET_ENOTSUP = -95;      { EOPNOTSUPP — the backend has no such facility }
   PAL_NET_ENAMETOOLONG = -36; { a socket path that does not fit sun_path }
 
-  { Readiness poll event/result bits (Linux poll(2) values, shared across PAL
-    arches). PalPoll returns the OR of the revents bits that fired. }
-  PAL_POLL_IN  = $001;
-  PAL_POLL_OUT = $004;
-  PAL_POLL_ERR = $008;
-  PAL_POLL_HUP = $010;
-  PAL_POLL_NVAL = $020;
+  { Readiness poll event/result bits. Defined in platform_types, where the
+    backends can see them (the ESP backend translates them to lwIP's). PalPoll
+    returns the OR of the revents bits that fired. }
+  PAL_POLL_IN  = platform_types.PAL_POLL_IN;
+  PAL_POLL_OUT = platform_types.PAL_POLL_OUT;
+  PAL_POLL_ERR = platform_types.PAL_POLL_ERR;
+  PAL_POLL_HUP = platform_types.PAL_POLL_HUP;
+  PAL_POLL_NVAL = platform_types.PAL_POLL_NVAL;
 
   PAL_SHUT_RD = 0;
   PAL_SHUT_WR = 1;
