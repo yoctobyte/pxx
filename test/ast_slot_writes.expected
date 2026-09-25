@@ -877,6 +877,7 @@ AN_DYN_COPY Left node
 AN_DYN_DELETE Left valNode
 AN_DYN_INSERT Left left
 AN_DYN_INSERT Left valNode
+AN_EXC_HANDLER Left GenMakeSeq(GenMakeCall6(p, tyUnknown, -1, -1, -1, -1, -1, -1), -1)
 AN_EXC_HANDLER Left actionSeq
 AN_EXIT Left -1
 AN_EXIT Left CConvertAsIfAssigned(Procs[CurProc].RetType, ASTLeft[node])
@@ -1209,8 +1210,10 @@ AN_TERNARY Right rbPair
 AN_TERNARY Right rngPair
 AN_TERNARY Right thenElse
 AN_TERNARY Right valNode
+AN_TRY_EXCEPT Left bodyNode
 AN_TRY_EXCEPT Left trySeq
 AN_TRY_EXCEPT Right actionSeq
+AN_TRY_EXCEPT Right handler
 AN_TRY_EXCEPT Right handlerHead
 AN_TRY_FINALLY Left bodyNode
 AN_TRY_FINALLY Left innerNode

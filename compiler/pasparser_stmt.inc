@@ -136,6 +136,7 @@ end;
 
 procedure ParseBlock; forward;
 function WrapMainBodyManagementOps(bodyNode: Integer): Integer; forward;  { class operator Initialize/Finalize on globals }
+function WrapEspUnhandledReport(bodyNode: Integer): Integer; forward;  { ESP: print an uncaught exception before the park }
 function SLHasYield(node: Integer): Boolean; forward;  { the generator for-in desugar needs it ~1300 lines before SLCheckEligible defines it }
 
 function ParseIfStatementAST: Integer;
@@ -9950,7 +9951,7 @@ end;
 procedure ParseBlock;
 var node: Integer;
 begin
-  node := WrapMainBodyManagementOps(ParseBlockAST);
+  node := WrapEspUnhandledReport(WrapMainBodyManagementOps(ParseBlockAST));
   CompileAST(node);
   ASTNodeCount := ASTArenaFloor;
 end;

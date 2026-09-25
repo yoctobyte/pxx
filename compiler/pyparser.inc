@@ -50599,7 +50599,7 @@ begin
   ASTLeft[blockNode] := mainNode;
   ASTTk[blockNode] := Ord(tyUnknown);
   PyExprMode := False;
-  CompileAST(blockNode);
+  CompileAST(WrapEspUnhandledReport(blockNode));
   { Unit FINALIZATION, in reverse init order, after the program body — like
     Pascal's driver, and like FPC. `atexit.register(fn)` is a finalization
     handler, so without this an imported module's exit code never ran. }

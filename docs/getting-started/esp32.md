@@ -215,15 +215,28 @@ same Pascal and C programs stop with runtime error 200, as they always have.
 `try`/`except` in Pascal catch as they do on a PC; measured on the S3 with a
 `ValueError` raised and caught.
 
-**An exception nobody catches stops the program without a message.** On the
-ESP targets the program's exit path is a loop that never returns, so an
-uncaught exception, a `Halt`, or a runtime error prints nothing and parks the
-main task. About five seconds later ESP-IDF's task watchdog reports it (`E
-(5434) task_wdt: Task watchdog got triggered ... CPU 0: main`), measured on
-the S3; with IDF's default settings that is a warning, not a restart. So a
-device that goes quiet after its last line of output, followed by `task_wdt`
-lines, has almost certainly hit this: wrap the body of the main loop in
-`try`/`except` and print the error.
+**An exception nobody catches prints its message, then the program stops.**
+The line is the same one a PC prints, `Unhandled exception: <class>: <message>`,
+for a Pascal `raise` and for a NilPy `raise` alike. After it the main task
+parks in a loop that never returns. About five seconds later ESP-IDF's task
+watchdog reports that (`E (5317) task_wdt: Task watchdog got triggered ...`);
+with IDF's default settings that is a warning, not a restart. Measured on the
+S3 board with the development compiler after pin v425 (v425 itself prints
+nothing here and just parks):
+
+```text
+before raise
+Unhandled exception: ValueError: boom from python
+E (5435) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:
+```
+
+**A runtime error prints too**, and then the program ends without a watchdog
+report: `{$R+}` indexing past an array printed `Runtime error 201 (range check
+error)` on the S3.
+
+So a device that goes quiet after an `Unhandled exception:` line has stopped
+there on purpose. To keep it running, catch the error in the main loop:
+`try`/`except` in Pascal, `try`/`except` in Python.
 
 ## 7. Libraries not yet wrapped
 

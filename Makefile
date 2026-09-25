@@ -37431,6 +37431,21 @@ test-esp-idf: $(COMPILER)
 	    else echo "$$chip $$b MISMATCH"; exit 1; fi; \
 	  done; \
 	done
+	@# AN UNCAUGHT EXCEPTION PRINTS BEFORE THE PARK on the IDF profile, both
+	@# ISAs: the hosted "Unhandled exception: <Class>: <Message>" line, from the
+	@# main-body catch-all (WrapEspUnhandledReport), then the unchanged park. The
+	@# pinned compiler before it prints only "before raise". Compared up to the
+	@# first IDF error line: the park is the old busy loop, which task_wdt reports
+	@# about 5 s later, and under QEMU on C3 the interrupt watchdog then reboots it
+	@# (the same ending the raise stub always had; see the writeln-end row).
+	@for chip in esp32c3 esp32s3; do \
+	  echo "--- $$chip uncaught exception prints"; \
+	  ESP_RUN_TIMEOUT=20 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_esp_uncaught_exception_prints.pas 2>/dev/null | grep -v 'main_task' \
+	    | awk '/^E \(|Guru Meditation|ESP-ROM/{exit} {print}' > $(TESTTMP)/test_esp_uncaught.$$chip || true; \
+	  if diff -u test/test_esp_uncaught_exception_prints.expected $(TESTTMP)/test_esp_uncaught.$$chip; then echo "$$chip uncaught exception prints ok"; \
+	  else echo "$$chip uncaught exception prints MISMATCH"; exit 1; fi; \
+	done
 	@# NILPY MATH ERRORS KEEP AN ESP RUNNING: // and % by zero give 0, / and the
 	@# math domain/range errors give IEEE inf/nan, no raise, one boot. Through
 	@# the nilpy build.sh (esp_run's shared project is too small for a NilPy

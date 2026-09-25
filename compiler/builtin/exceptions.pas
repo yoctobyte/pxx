@@ -73,7 +73,35 @@ type
     property HelpContext: Integer read FHelpContext write FHelpContext;
   end;
 
+{ The ESP profile's last-chance report. A hosted target prints an uncaught
+  exception from the raise stub itself, with a write(2) that ESP has no kernel
+  for, so on ESP the stub only ever parked -- the program stopped with no word
+  about why. The compiler wraps an ESP program's main body in a catch-all whose
+  handler is this call (WrapEspUnhandledReport), so the report is ordinary
+  Pascal on every ESP ISA, with the same text the hosted stub prints.
+
+  THEN THE SAME PARK AS BEFORE, deliberately NOT Halt. On IDF, Halt runs the
+  finalizers and deletes the task (PXXIdfTaskEnd), which is a different ending:
+  no watchdog report, no reboot. Whether an uncaught error should park or reboot
+  is the owner's open decision (print+park versus print+reboot). Until he makes
+  it, only the message is added, and the ending stays the busy self-loop the raise
+  stub parked in, which IDF's task watchdog reports a few seconds later. }
+procedure PXXReportUnhandled;
+
 implementation
+
+procedure PXXReportUnhandled;
+var o: TObject;
+begin
+  o := TObject(__pxxExceptObject);
+  if o = nil then
+    writeln('Unhandled exception')
+  else if o is ExceptionBase then
+    writeln('Unhandled exception: ', o.ClassName, ': ', ExceptionBase(o).msg)
+  else
+    writeln('Unhandled exception: ', o.ClassName);
+  while True do ;
+end;
 
 constructor ExceptionBase.Create(const m: AnsiString);
 begin

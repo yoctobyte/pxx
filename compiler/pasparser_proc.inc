@@ -925,6 +925,36 @@ begin
   Result := WrapManagementOpsRange(0, SymCount - 1, -1, True, bodyNode);
 end;
 
+{ ESP (the IDF profile) has no kernel for the raise stub's hosted
+  "Unhandled exception" write, so an uncaught exception used to park the program
+  SILENTLY. Wrap the main body in a catch-all whose handler is the builtin
+  PXXReportUnhandled: it prints the hosted text, then parks in the same busy
+  loop the raise stub always parked in.
+  Shared by the Pascal and NilPy drivers, so both frontends print the same line.
+  Bare is left alone: it has no console writer that works on silicon (its UART
+  byte stores are dropped there) and it is a test vehicle. A program that never
+  pulled the exceptions unit has no reporter, and keeps the silent park. }
+function WrapEspUnhandledReport(bodyNode: Integer): Integer;
+var p, handler: Integer;
+begin
+  Result := bodyNode;
+  if (TargetPlatform <> PLATFORM_ESP) or EspBareBoot or (not ExceptionUsed) then Exit;
+  { By UNIT, not FindProc: `exceptions` is usually reached only through
+    sysutils or pylib, so its routines are not visible from the program's scope
+    and FindProc answers -1 for a unit that IS loaded. }
+  p := FindCompiledUnit('exceptions');
+  if p < 0 then Exit;
+  p := FindProcInUnit('PXXReportUnhandled', p);
+  if p < 0 then Exit;
+  handler := AllocNode(AN_EXC_HANDLER);
+  ASTIVal[handler] := -1;
+  ASTSOffset[handler] := -1;
+  ASTLeft[handler] := GenMakeSeq(GenMakeCall6(p, tyUnknown, -1, -1, -1, -1, -1, -1), -1);
+  Result := AllocNode(AN_TRY_EXCEPT);
+  ASTLeft[Result] := bodyNode;
+  ASTRight[Result] := handler;
+end;
+
 procedure ParseSubroutine;
 var
   pzi      : Integer;  { pFixedLen/pFixedLo entry-zero loop }
