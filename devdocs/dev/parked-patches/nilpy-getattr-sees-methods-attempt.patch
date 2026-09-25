@@ -1,0 +1,98 @@
+diff --git a/compiler/pyparser.inc b/compiler/pyparser.inc
+index 2f5bda7fe9..e6bdbb081c 100644
+--- a/compiler/pyparser.inc
++++ b/compiler/pyparser.inc
+@@ -15166,6 +15166,64 @@ begin
+   Result := callNode;
+ end;
+ 
++function PyMakeMethodRead(recvNode: Integer; const attr: AnsiString): Integer;
++{ `getattr(o, "m")` where `m` is a plain METHOD — the bound-method VALUE that the
++  paren-less `o.m` already builds, reached from the one place that has only a
++  NAME. -1 when the receiver has no user class or declares no such method, so
++  the caller keeps its dynamic-store path.
++
++  The EXACT sibling of PyMakePropRead above, and the defect is the one its own
++  comment describes, one attribute kind over. `hasattr` learned about methods
++  first (PyAttrExists, via bug-nilpy-hasattr-on-a-builtin-container-or-str-
++  answers-false) and `getattr` never did, so the two disagreed about the same
++  name in the loudest possible way: hasattr(o, "m") answered True and
++  getattr(o, "m") then raised `AttributeError: 'C' object has no attribute 'm'`
++  for a method plainly declared on the class. That is the same trade the
++  property ticket called out — a wrongly-taken branch for a crash — except here
++  it was never completed, because atExists consults PyAttrExists under
++  `not atIsGet`: hasattr only.
++
++  Measured 2026-09-13 on lekkerzeilen --starts. `_has_ground` does
++  `key_at = getattr(region, "key_at", None)`, and the silent arm is the one that
++  matters: with a DEFAULT the caller skips the dynamic path entirely (it is
++  `getattr(e, "errno", 1)`'s behaviour and deliberate), so the probe answered
++  None for a method that exists, the containment lambda `key_at(x, z) in index`
++  answered False, and the app reported the remembered position as belonging to
++  another world. No diagnostic anywhere.
++
++  Three things this does NOT claim, each measured rather than assumed:
++  a COMPUTED name was already correct (it routes to PyMakeDynAttrByExpr, whose
++  runtime resolver does see methods), a PROPERTY was already correct (the arm
++  above), and a VARIANT receiver was already correct (no static class, so it
++  falls to the same runtime resolver). Only a STATICALLY class-typed receiver
++  with a LITERAL name was wrong — which is why a probe written with a loop
++  variable for the name reports everything healthy, and mine did before I
++  noticed the name was not a literal.
++
++  Interfaces are excluded, matching the paren-less `o.m` site this mirrors: an
++  interface method has no proc to take the address of. }
++var rec, ci, fi, mpi: Integer;
++begin
++  Result := -1;
++  if recvNode < 0 then Exit;
++  rec := ResolveNodeRec(recvNode);
++  if rec < REC_UCLASS_BASE then Exit;
++  ci := rec - REC_UCLASS_BASE;
++  if UClsIsInterface[ci] then Exit;
++  fi := FindUMeth(ci, attr);
++  if fi < 0 then Exit;
++  mpi := UMthProc_[fi];
++  if mpi < 0 then Exit;
++  if PxxDbgEnabled('n.bfn') then
++    WriteLn('PXXDBG n.bfn getattr-meth ', attr, ' ci=', ci, ' fi=', fi,
++            ' mpi=', mpi, ' name=', Procs[mpi].Name,
++            ' isfunc=', Ord(Procs[mpi].IsFunc),
++            ' nparams=', Procs[mpi].ParamCount,
++            ' ret=', Ord(Procs[mpi].RetType));
++  Result := PyMakeBoundMethod(mpi, recvNode);
++  ASTTk[Result] := Ord(tyVariant);
++end;
++
+ { `v.field(args)` where `v` is a VARIANT and `field` holds a function value:
+   unbox to the owning class, read the field, call through it. }
+ { ONE arm of a variant field CALL: unbox the receiver, hard-cast it to `ci`,
+@@ -45854,6 +45912,12 @@ begin
+         if (CurTok.Kind <> tkLParen) and
+            (mci >= 0) and not UClsIsInterface[mci] then
+         begin
++          if PxxDbgEnabled('n.bfn') then
++            WriteLn('PXXDBG n.bfn ordinary-meth ', fieldName, ' ci=', mci,
++                    ' fi=', mmi, ' mpi=', mpi, ' name=', Procs[mpi].Name,
++                    ' isfunc=', Ord(Procs[mpi].IsFunc),
++                    ' nparams=', Procs[mpi].ParamCount,
++                    ' ret=', Ord(Procs[mpi].RetType));
+           node := PyMakeBoundMethod(mpi, node);
+           tk := tyVariant; recName := REC_NONE;
+           ASTTk[node] := Ord(tyVariant);
+@@ -48697,6 +48761,15 @@ begin
+           (bug-nilpy-hasattr-does-not-see-a-property) }
+         atProp := -1;
+         if atFld < 0 then atProp := PyMakePropRead(atRecv, atName);
++        { ...and a plain METHOD is the SIBLING of that, which was never done:
++          hasattr saw methods (PyAttrExists, under `not atIsGet`) and getattr
++          did not, so the two disagreed and getattr RAISED for a method hasattr
++          had just said yes to. Same variable, because from here on a bound
++          method value and a property read are the same thing: a node to hand
++          back instead of the dynamic store. See PyMakeMethodRead for why only a
++          literal name on a statically class-typed receiver was ever wrong. }
++        if (atFld < 0) and (atProp < 0) then
++          atProp := PyMakeMethodRead(atRecv, atName);
+         if atProp >= 0 then atExists := True;
+         atDflt := -1;
+         if CurTok.Kind = tkComma then
