@@ -5093,6 +5093,27 @@ begin
              (ASTKind[ASTLeft[n]] = AN_INDEX) or (ASTKind[ASTLeft[n]] = AN_DEREF));
 end;
 
+function ASTSubtreeRuns(n, depth: Integer): Boolean;
+{ Does evaluating this subtree RUN anything -- a call of any kind, an
+  assignment, an Inc/Dec, a comma sequence, a fresh array or object? Walked
+  through ASTChildLeft/ASTChildRight, so a slot that holds a symbol or proc
+  index is never read as a node. Too deep to see the bottom answers True: the
+  caller then materialises once, which is always correct. }
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if depth > 48 then begin Result := True; Exit; end;
+  case ASTKind[n] of
+    AN_CALL, AN_VIRTUAL_CALL, AN_CLASS_VIRTUAL_CALL, AN_INTF_CALL, AN_CALL_IND,
+    AN_SYSCALL, AN_ASSIGN, AN_INCDEC, AN_COMPOUND_ASSIGN, AN_COMMA,
+    AN_ARRAY_CTOR, AN_METACLASS_NEW:
+      Result := True;
+  else
+    Result := ASTSubtreeRuns(ASTChildLeft(n), depth + 1) or
+              ASTSubtreeRuns(ASTChildRight(n), depth + 1);
+  end;
+end;
+
 function PureDesignator(n: Integer): Boolean;
 { A node that can be re-evaluated with no observable effect: a variable, a field
   or element of one, a dereference, or a cast over any of those. Callers that
@@ -5101,7 +5122,16 @@ function PureDesignator(n: Integer): Boolean;
 
   A cast recurses into its operand rather than being accepted outright: `(f() as
   T)` is a cast, and re-evaluating it re-calls f(). An `as` cast also re-runs its
-  runtime type check per copy, which is wasteful but not observable. }
+  runtime type check per copy, which is wasteful but not observable.
+
+  The SHAPE is not enough, and it was the whole test until 2026-09-26: an
+  element, field or dereference counted as pure whatever sat BELOW it, so
+  `a[Pick()]`, `F().x` and `F()^` were all "re-readable". Dispose cloned
+  `Slots[Slot(i)]` three times -- Slot ran three times per Dispose and the
+  block it freed was not the one it finalized (56 B/iter) -- and `a[F()].Free`
+  had the same three calls. So the designator must also contain nothing that
+  runs (ASTSubtreeRuns); both callers already materialise anything else into a
+  hidden temp. }
 var depth: Integer;
 begin
   PureDesignator := False;
@@ -5111,7 +5141,7 @@ begin
     if (ASTKind[n] = AN_IDENT) or (ASTKind[n] = AN_FIELD) or
        (ASTKind[n] = AN_INDEX) or (ASTKind[n] = AN_DEREF) then
     begin
-      PureDesignator := True;
+      PureDesignator := not ASTSubtreeRuns(n, 0);
       Exit;
     end;
     if (ASTKind[n] = AN_CLASS_CAST) or (ASTKind[n] = AN_PTR_CAST) or

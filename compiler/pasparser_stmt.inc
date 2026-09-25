@@ -6698,19 +6698,86 @@ end;
   crash). The record helper is nil-safe on its own; the guard costs one
   compare and keeps every arm the same shape.
 
-  Only when p can be re-read with no effect (PureDesignator): the pointer is
-  evaluated up to three times. `Dispose(NextNode())` keeps the old FreeMem-
-  only lowering. }
+  The pointer is read up to three times (compare, finalize, free), so it must
+  be re-readable with no effect. When it is not -- `Dispose(NextNode())`, a
+  call, an index with a call in it -- it is evaluated ONCE into a hidden temp
+  declared from the expression's own pointer alias (NodePtrAlias), exactly as
+  `var t: PRec` would be, and everything below reads the temp. Pascal spells a
+  function result's pointer type by name, so the alias is there for every
+  call; only an expression with no alias at all keeps FreeMem alone. That arm
+  leaked the managed pointee (Dispose(F()) was the one open leak of the
+  pre-release sweep). }
+procedure ResetLastTypeChannel; forward;
+procedure LoadPointerAliasChannel(aliasIdx: Integer); forward;
+
+function SpillRunningIndices(n: Integer; var pre: Integer): Boolean;
+{ Walk a designator's spine (element, field, dereference, cast) and move every
+  ordinal INDEX that runs something into a hidden temp evaluated once, in
+  source order, appending `t := <index>` to `pre`. `Slots[Pick()]` becomes
+  `t := Pick(); ... Slots[t]`, which is re-readable and keeps every type the
+  element already had -- the shape BuildDisposeStmt cannot type a whole-pointer
+  temp for, because an element has no pointer alias of its own. False when
+  anything that runs is left that is NOT an ordinal index (a call as the base,
+  say); the tree is then partly rewritten, which is still one evaluation each. }
+var idx, t: Integer; itk: TTypeKind;
+begin
+  Result := True;
+  while n >= 0 do
+    case ASTKind[n] of
+      AN_IDENT: Exit;
+      AN_FIELD, AN_DEREF, AN_CLASS_CAST, AN_PTR_CAST, AN_AS_CAST:
+        n := ASTLeft[n];
+      AN_INDEX:
+      begin
+        if not SpillRunningIndices(ASTLeft[n], pre) then begin Result := False; Exit; end;
+        idx := ASTRight[n];
+        if ASTSubtreeRuns(idx, 0) then
+        begin
+          itk := IntToTypeKind(ASTTk[idx]);
+          if not TypeIsOrdinal(itk) then begin Result := False; Exit; end;
+          t := AllocVar('', itk);
+          pre := GenMakeSeq(pre, GenMakeSeq(GenMakeAssign(GenMakeIdent(t, itk), idx), -1));
+          ASTRight[n] := GenMakeIdent(t, itk);
+        end;
+        Exit;
+      end;
+    else
+      begin Result := False; Exit; end;
+    end;
+end;
+
 function BuildDisposeStmt(valNode: Integer): Integer;
 var freeCall, argSeq, der, fin, cond, nilLit, pair, emptyLit, rec: Integer;
     tk: TTypeKind; recName, derefRem, derefBaseTk, derefBaseRec: Integer;
     saCnt, saRec, saSz: Integer; saTk: TTypeKind;
+    spill, spillAlias, spillSym: Integer;
 begin
+  spill := -1;
+  if (IntToTypeKind(ASTTk[valNode]) = tyPointer) and (not ASTIsPoisoned(valNode)) and
+     (not PureDesignator(valNode)) then
+  begin
+    spillAlias := NodePtrAlias(valNode);
+    if spillAlias < 0 then
+      { no pointer type to declare a temp with: make the designator itself
+        re-readable by evaluating its running indices once. Whether that
+        sufficed is PureDesignator's question below, not this one's. }
+      SpillRunningIndices(valNode, spill)
+    else
+    begin
+      ResetLastTypeChannel;
+      LoadPointerAliasChannel(spillAlias);
+      spillSym := AllocVar('', tyPointer);
+      ResetLastTypeChannel;
+      spill := GenMakeAssign(GenMakeIdent(spillSym, tyPointer), valNode);
+      valNode := GenMakeIdent(spillSym, tyPointer);
+    end;
+  end;
   argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
   freeCall := AllocNode(AN_CALL);
   ASTIVal[freeCall] := -Ord(tkFreeMem);
   ASTLeft[freeCall] := argSeq; ASTTk[freeCall] := Ord(tyInteger);
   Result := freeCall;
+  if spill >= 0 then Result := GenMakeSeq(spill, GenMakeSeq(freeCall, -1));
   if (IntToTypeKind(ASTTk[valNode]) <> tyPointer) or ASTIsPoisoned(valNode) or
      (not PureDesignator(valNode)) then Exit;
 
@@ -6779,6 +6846,7 @@ begin
   Result := AllocNode(AN_IF);
   ASTLeft[Result] := cond; ASTRight[Result] := pair;
   Result := GenMakeSeq(Result, GenMakeSeq(freeCall, -1));
+  if spill >= 0 then Result := GenMakeSeq(spill, Result);
 end;
 
 function ParseStatementAST: Integer;

@@ -19938,6 +19938,8 @@ test-core: $(COMPILER)
 	# Every row must read 0; the GetMem control must still see its 64.
 	./$(COMPILER) test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_n
 	tools/expect_same.sh dispfin "$$($(TESTTMP)/test_dispfin_n)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	./$(COMPILER) test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_n
+	tools/expect_same.sh dispcall "$$($(TESTTMP)/test_dispcall_n)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
@@ -27654,6 +27656,8 @@ test-i386: $(COMPILER)
 	# Every row must read 0; the GetMem control must still see its 64.
 	./$(COMPILER) --target=i386 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_i386
 	tools/expect_same.sh i386/dispfin "$$(tools/run_target.sh i386 $(TESTTMP)/test_dispfin_i386)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	./$(COMPILER) --target=i386 test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_i386
+	tools/expect_same.sh i386/dispcall "$$(tools/run_target.sh i386 $(TESTTMP)/test_dispcall_i386)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
@@ -28908,6 +28912,8 @@ test-aarch64: $(COMPILER)
 	# Every row must read 0; the GetMem control must still see its 64.
 	./$(COMPILER) --target=aarch64 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_a64
 	tools/expect_same.sh aarch64/dispfin "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_dispfin_a64)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	./$(COMPILER) --target=aarch64 test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_a64
+	tools/expect_same.sh aarch64/dispcall "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_dispcall_a64)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
@@ -29913,6 +29919,8 @@ test-riscv32: $(COMPILER)
 	# Every row must read 0; the GetMem control must still see its 64.
 	./$(COMPILER) --target=riscv32 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_rv32
 	tools/expect_same.sh riscv32/dispfin "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_dispfin_rv32)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	./$(COMPILER) --target=riscv32 test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_rv32
+	tools/expect_same.sh riscv32/dispcall "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_dispcall_rv32)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
@@ -31660,6 +31668,8 @@ test-xtensa: $(COMPILER)
 	# Every row must read 0; the GetMem control must still see its 64.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_xt
 	tools/expect_same.sh xtensa/dispfin "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispfin_xt)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_xt
+	tools/expect_same.sh xtensa/dispcall "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispcall_xt)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
@@ -31668,6 +31678,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/finarr "$$(tools/run_target.sh xtensa $(TESTTMP)/test_finarr_xt)" "$$(cat test/test_a_finalize_of_a_whole_fixed_array_walks_every_element.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_xtw
 	tools/expect_same.sh xtensa-windowed/dispfin "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispfin_xtw)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_xtw
+	tools/expect_same.sh xtensa-windowed/dispcall "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispcall_xtw)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through
@@ -33052,6 +33064,8 @@ test-arm32: $(COMPILER)
 	# Every row must read 0; the GetMem control must still see its 64.
 	./$(COMPILER) --target=arm32 test/test_a_dispose_finalizes_the_managed_pointee.pas $(TESTTMP)/test_dispfin_arm32
 	tools/expect_same.sh arm32/dispfin "$$(tools/run_target.sh arm32 $(TESTTMP)/test_dispfin_arm32)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
+	./$(COMPILER) --target=arm32 test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_arm32
+	tools/expect_same.sh arm32/dispcall "$$(tools/run_target.sh arm32 $(TESTTMP)/test_dispcall_arm32)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through

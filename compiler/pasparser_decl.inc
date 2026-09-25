@@ -502,6 +502,61 @@ end;
   which also makes it correct under the recursion the inner body does for
   `file of T` and element types.
   regression-test-core-test-record-nested-type-section }
+procedure ResetLastTypeChannel;
+{ Every LastType* channel a type parse hands to AllocVar and friends, cleared.
+  ParseTypeKindInner's own preamble, lifted so a SYNTHESISED declaration (a
+  hidden temp typed from an alias, BuildDisposeStmt) starts from the same
+  clean channel a parsed one does. }
+begin
+  LastTypeRecId := REC_NONE;
+  LastTypeAlias := -1;
+  LastTypePointerElemTk := tyUnknown;
+  LastTypePointerStrElemTk := 0;
+  LastTypePointerStrCap := 0;
+  LastTypeStrElemTk := tyUnknown;
+  LastTypePointerElemRec := REC_NONE;
+  LastTypePointerAlias := -1;
+  LastTypePointerElemArrAi := -1;
+  LastTypePointerElemAlias := -1;
+  LastTypePointerDepth := 0;
+  LastTypePointerBaseTk := Ord(tyUnknown);
+  LastTypePointerBaseRec := REC_NONE;
+  LastTypeProcSig := -1;
+  LastTypeSemId := -1;
+  LastTypeStrCap := 0;
+  LastTypeFileRecSize := 0;
+  LastTypeFileElemTk := 0;
+  LastTypeDynElemRowLen := 0; LastTypeDynElemRowLo := 0;
+  LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
+end;
+
+procedure LoadPointerAliasChannel(aliasIdx: Integer);
+{ The pointer-alias arm of ParseTypeKindInner: load the LastTypePointer*
+  channel from alias `aliasIdx`, so a following AllocVar('', tyPointer) records
+  exactly what `var p: <that alias>` records. One body for the parsed name and
+  for a hidden temp typed from a call's result alias (BuildDisposeStmt). }
+begin
+  LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
+  LastTypePointerElemRec := AliasElemRec[aliasIdx];
+  { The alias may still be an unresolved FORWARD (`PNode = ^TNode` ahead
+    of TNode): its element is REC_NONE right now and only
+    ResolvePendingPointerAliases fills it in. Record which alias this was
+    so a field declared here can be re-read then. }
+  LastTypePointerAlias := aliasIdx;
+  LastTypePointerElemArrAi := AliasPtrElemArrAi[aliasIdx];
+  LastTypePointerElemAlias := AliasPtrElemAlias[aliasIdx];
+  LastTypePointerDepth := AliasPtrDepth[aliasIdx];
+  LastTypePointerBaseTk := AliasPtrBaseTk[aliasIdx];
+  LastTypePointerBaseRec := AliasPtrBaseRec[aliasIdx];
+  { ...and the pointee's string width, so `var p: PWStr` stamps it
+    on the symbol and Length(p^) counts characters. An alias is
+    where a pointer type is almost always spelled, so without this
+    the capture above reaches nothing. }
+  LastTypePointerStrElemTk := AliasPtrStrElemTk[aliasIdx];
+  LastTypePointerStrCap := AliasPtrStrCap[aliasIdx];
+  LastTypeProcSig := AliasProcSig[aliasIdx];
+end;
+
 function ParseTypeKindInner: TTypeKind; forward;
 
 procedure RecordPendingPtrTarget(const nm: AnsiString);
@@ -741,26 +796,7 @@ var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     childPtrAlias: Integer;   { `^TP`: the pointee's own pointer-alias index, else -1 }
     wasPacked: Boolean;
 begin
-  LastTypeRecId := REC_NONE;
-  LastTypeAlias := -1;
-  LastTypePointerElemTk := tyUnknown;
-  LastTypePointerStrElemTk := 0;
-  LastTypePointerStrCap := 0;
-  LastTypeStrElemTk := tyUnknown;
-  LastTypePointerElemRec := REC_NONE;
-  LastTypePointerAlias := -1;
-  LastTypePointerElemArrAi := -1;
-  LastTypePointerElemAlias := -1;
-  LastTypePointerDepth := 0;
-  LastTypePointerBaseTk := Ord(tyUnknown);
-  LastTypePointerBaseRec := REC_NONE;
-  LastTypeProcSig := -1;
-  LastTypeSemId := -1;
-  LastTypeStrCap := 0;
-  LastTypeFileRecSize := 0;
-  LastTypeFileElemTk := 0;
-  LastTypeDynElemRowLen := 0; LastTypeDynElemRowLo := 0;
-  LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
+  ResetLastTypeChannel;
   { A subrange whose bounds are NAMED (`sat..sun`) or CALL-SHAPED
     (`low(TCGLoc)..pred(LOC_CREFERENCE)`) rather than spelled as literals.
     Checked before the case because `case CurTok.Kind of` cannot dispatch on
@@ -1517,25 +1553,7 @@ begin
               end
               else if AliasTk[aliasIdx] = Ord(tyPointer) then
               begin
-                LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
-                LastTypePointerElemRec := AliasElemRec[aliasIdx];
-                { The alias may still be an unresolved FORWARD (`PNode = ^TNode` ahead
-                  of TNode): its element is REC_NONE right now and only
-                  ResolvePendingPointerAliases fills it in. Record which alias this was
-                  so a field declared here can be re-read then. }
-                LastTypePointerAlias := aliasIdx;
-                LastTypePointerElemArrAi := AliasPtrElemArrAi[aliasIdx];
-                LastTypePointerElemAlias := AliasPtrElemAlias[aliasIdx];
-                LastTypePointerDepth := AliasPtrDepth[aliasIdx];
-                LastTypePointerBaseTk := AliasPtrBaseTk[aliasIdx];
-                LastTypePointerBaseRec := AliasPtrBaseRec[aliasIdx];
-                { ...and the pointee's string width, so `var p: PWStr` stamps it
-                  on the symbol and Length(p^) counts characters. An alias is
-                  where a pointer type is almost always spelled, so without this
-                  the capture above reaches nothing. }
-                LastTypePointerStrElemTk := AliasPtrStrElemTk[aliasIdx];
-                LastTypePointerStrCap := AliasPtrStrCap[aliasIdx];
-                LastTypeProcSig := AliasProcSig[aliasIdx];
+                LoadPointerAliasChannel(aliasIdx);
                 Result := tyPointer;
               end
               else

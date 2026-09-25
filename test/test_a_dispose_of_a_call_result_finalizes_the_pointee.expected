@@ -1,0 +1,13 @@
+control sees a leak: TRUE
+record bytes/iter=0 calls/dispose=1.00
+string bytes/iter=0 calls/dispose=1.00
+dynarray bytes/iter=0 calls/dispose=1.00
+interface bytes/iter=0 calls/dispose=1.00
+variant bytes/iter=0 calls/dispose=1.00
+nested bytes/iter=0 calls/dispose=1.00
+fixed-array bytes/iter=0 calls/dispose=1.00
+method bytes/iter=0 calls/dispose=1.00
+element-by-call bytes/iter=0 calls/dispose=1.00
+unmanaged bytes/iter=0 calls/dispose=1.00
+nil bytes/iter=0 calls/dispose=1.00
+free-element-by-call calls/free=1.00

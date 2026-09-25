@@ -48,6 +48,14 @@ checkout at or after that commit fixes it with the v425 compiler too.
 **Workaround with the v425 checkout:** build SQLite with
 `-DSQLITE_THREADSAFE=0`, or avoid re-locking a mutex you already hold.
 
+### Pascal: `.Free` on an element indexed by a function call runs the call four times
+
+`a[Pick(i)].Free` calls `Pick` four times, so a `Pick` with side effects runs
+them four times, and the object freed can differ from the one tested for
+`nil`. The development tree evaluates it once; it is a compiler change, so it
+arrives with the next pin. **Workaround with v425:** put the index in a local
+first: `k := Pick(i); a[k].Free`.
+
 ### ESP: bare-metal images do not run on a real chip
 
 Images built with `--esp-profile=bare` fault on the first byte access to a
@@ -81,9 +89,9 @@ Before the beta, every leak test in the tree was re-run on the development tree:
 164 automated leak checks, and 49 Pascal shapes on seven targets at `-O0` to
 `-O3`, covering strings, dynamic arrays, managed records, interfaces, closures,
 exceptions, classes, generics and threads. Each check also ran a deliberate leak
-to prove it could catch one. Two Pascal leaks in v425 turned up, both in
-`Dispose`. They are fixed in the development tree, and both are compiler
-changes, so the fixes arrive with the next pin (`687cf1185`):
+to prove it could catch one. Three Pascal leaks in v425 turned up, all in
+`Dispose` and `Finalize`. They are fixed in the development tree, and all are
+compiler changes, so the fixes arrive with the next pin:
 
 - **`Dispose(p)` did not finalize the thing `p` points at.** When `p` points at
   a record with a string, dynamic-array, interface or `Variant` field, or at a
@@ -94,10 +102,9 @@ changes, so the fixes arrive with the next pin (`687cf1185`):
   first element.** `Finalize(a)` for `a: array[0..3] of string` kept elements 1
   to 3. The same happened through `Dispose` of a pointer to such an array.
   **Workaround with v425:** finalize the elements in a loop.
-
-One leak is still open. `Dispose(F())`, where the pointer is the result of a
-function call, frees the memory but does not finalize a managed pointee.
-**Workaround:** assign the result to a variable and dispose of that.
+- **`Dispose(F())` did not finalize the pointee when the pointer came from a
+  function call.** **Workaround with v425:** assign the pointer to a
+  variable and dispose of that.
 
 Program-level global variables are not finalized when the program exits. This
 is a one-time cost at exit, not a leak that grows while the program runs.
