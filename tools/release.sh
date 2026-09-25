@@ -27,6 +27,12 @@ EMIT_ONLY_TARGETS=(xtensa riscv32)              # emit-only (no host self-host)
 COMPILER="compiler/pascal26"
 COMPILER_SRC="compiler/compiler.pas"
 XFAIL_FILE="tools/release-xfail.txt"
+# The pinned compiler the release binary must BE. A release, the docs' "measured
+# on vN" and Track T's grade should all name one artefact, and a pin's binary is
+# the fixedpoint of its tree, so the identity test is byte equality of the two
+# binaries -- not a pin number, not a commit subject (prose about a pin outnumbers
+# pin commits many times over; see CLAUDE.md, "The name is not the thing").
+PIN_DIR="${RELEASE_PIN_DIR:-stable_linux_amd64/default}"
 DIST="${RELEASE_DIST:-dist}"               # override to build on another disk
 # Codename theme: mathematicians/computing pioneers, alphabetical — the tool
 # suggests the next unused initial; the maintainer may override.
@@ -258,6 +264,8 @@ main() {
   echo " tag:      $tag"
   echo " codename: $codename"
   echo " dist:     $DIST/pxx-$tag/  (+ tarball, MANIFEST.sha256)"
+  echo " built at: $(git rev-parse --short=10 HEAD)  compiler $(sha256sum "$COMPILER" | cut -c1-12)"
+  echo " pin:      $(pin_identity || true)"
   if [[ $PUBLISH -eq 0 ]]; then
     echo " mode:     DRY-RUN — nothing tagged or published."
     echo "           re-run with --publish to cut it for real."
@@ -423,10 +431,31 @@ run_selfcheck() {
   rm -rf "$tmp"
 }
 
+# Is the release binary the pinned binary? Prints one line, returns 0 on a match.
+# compiler/pascal26 is what build_dist builds every pxx-<arch> with, and its own
+# bytes are the manifest's pxx-x86_64 (it is a fixedpoint), so comparing it with
+# the pin answers for the whole bundle.
+pin_identity() {
+  local pin="$PIN_DIR/pinned" ver rel want
+  ver="$(cat "$PIN_DIR/VERSION" 2>/dev/null || echo '?')"
+  [[ -e "$pin" ]] || { echo "NOT A PIN (no pinned binary at $pin)"; return 1; }
+  rel="$(sha256sum "$COMPILER" | awk '{print $1}')"
+  want="$(sha256sum "$pin" | awk '{print $1}')"
+  if [[ "$rel" == "$want" ]]; then
+    echo "release binary == pin v$ver (${rel:0:12})"
+  else
+    echo "NOT A PIN (release ${rel:0:12} vs pin v$ver ${want:0:12}) -- cut a pin on this tree first"
+    return 1
+  fi
+}
+
 # Side-effecting. Human-state seatbelt, then tag+push (CI) or gh release (--local).
 publish() {
   local tag="$1" codename="$2"
   echo "==> publish guards"
+  # FIRST, before any prompt: a release whose binary is not a pin names an
+  # artefact nothing else in the project measured.
+  pin_identity || die "publish: the release binary is not the pinned binary"
   [[ -z "$(git status --porcelain)" ]] || die "working tree dirty — commit/stash first"
   git fetch -q origin || true
   [[ -z "$(git -C "$REPO_ROOT" rev-list "@{u}..HEAD" 2>/dev/null)$(git rev-list "HEAD..@{u}" 2>/dev/null)" ]] \
