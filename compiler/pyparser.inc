@@ -26417,8 +26417,59 @@ begin
   Result := seq;
 end;
 
+procedure PySkipIndentedBlock; forward;
+
+{ Step over the suite after an `if`/`elif`/`else` colon without parsing it:
+  an indented block, or the rest of a one-line `if x: stmt`. }
+procedure PySkipSuite;
+begin
+  if CurTok.Kind = tkNewline then
+  begin
+    Next;
+    PySkipIndentedBlock;
+  end
+  else
+  begin
+    while (CurTok.Kind <> tkNewline) and (CurTok.Kind <> tkEOF) do Next;
+    if CurTok.Kind = tkNewline then Next;
+  end;
+end;
+
+{ Step over an `elif <cond>:` header: the condition runs to the first colon
+  outside brackets, which is where the parser would stop it too. }
+procedure PySkipElifHeader;
+var depth: Integer;
+begin
+  Next;                                { elif }
+  depth := 0;
+  while (CurTok.Kind <> tkEOF) and not ((depth = 0) and (CurTok.Kind = tkColon)) do
+  begin
+    if CurTok.Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)   { braces lex as begin/end }
+    else if CurTok.Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth);
+    Next;
+  end;
+  Expect(tkColon, ':');
+end;
+
+{ An `if` whose condition is decided at COMPILE TIME -- `if True:`, or
+  `hasattr(<unit>, "<literal>")`, which folds to a literal against the unit's
+  declarations -- has arms that cannot run, and those are consumed without
+  being PARSED, because parsing is what resolves their imports. This is the
+  rule PyParseFallbackImportTry already applies to a dead guarded-import arm,
+  applied to the other way Python spells platform selection. micropython-lib's
+  dht.py is the shape:
+
+      if hasattr(machine, "dht_readinto"):
+          from machine import dht_readinto
+      elif sys.platform.startswith("esp"):
+          from esp import dht_readinto            <- MicroPython's esp has none
+
+  MicroPython takes the first arm, and so do we, but the elif's import was
+  still resolved and failed the build for a branch no board runs. CPython never
+  executes a dead arm either, so skipping it is agreement, not a divergence:
+  anything it would have bound stays unbound, exactly as there. }
 function PyParseIf: Integer;
-var node, pairNode, condNode, thenNode, elseNode, condHoist: Integer;
+var node, pairNode, condNode, thenNode, elseNode, condHoist, lit: Integer;
 begin
   Next;
   PyParseBoolExpr;
@@ -26426,9 +26477,32 @@ begin
   { protect the condition's hoisted setup from the nested suites' flush }
   condHoist := PyHoistHead; PyHoistHead := -1;
   Expect(tkColon, ':');
-  thenNode := PyParseSuite;
+  lit := -1;                           { -1 undecided, 0 false, 1 true }
+  if ASTKind[condNode] = AN_BOOL_LIT then lit := Ord(ASTIVal[condNode] <> 0);
+  if lit = 0 then
+  begin
+    PySkipSuite;
+    thenNode := -1;
+  end
+  else
+    thenNode := PyParseSuite;
   elseNode := -1;
-  if PyIsIdent('elif') then
+  if lit = 1 then
+  begin
+    { every later arm is dead }
+    while PyIsIdent('elif') or (CurTok.Kind = tkElse) do
+    begin
+      if CurTok.Kind = tkElse then
+      begin
+        Next;
+        Expect(tkColon, ':');
+      end
+      else
+        PySkipElifHeader;
+      PySkipSuite;
+    end;
+  end
+  else if PyIsIdent('elif') then
     elseNode := PyParseIf()
   else if CurTok.Kind = tkElse then
   begin
@@ -34747,10 +34821,15 @@ begin
       and does not diagnose that later read — laxity in the same direction as
       the keyword-only marker (we accept programs CPython rejects, and run every
       program we accept the same way). The censused use is `del sections` as an
-      explicit "this parameter is deliberately unused". }
+      explicit "this parameter is deliberately unused".
+
+      A MODULE name too, the same way: a unit is a compile-time namespace with
+      no binding to remove. micropython-lib's dht.py ends its platform import
+      with `del machine`, to keep the module out of its own namespace. }
     if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind in [tkNewline, tkDedent, tkEOF]) and
-       (FindSym(CurTok.SVal) >= 0) then
+       ((FindSym(CurTok.SVal) >= 0) or
+        (FindUnitOrAlias(LowerCase(CurTok.SVal)) >= 0)) then
     begin
       Next;
       Result := -1;
@@ -49660,6 +49739,107 @@ begin
   PyLexImportClosureRange(0, MainProgramTokCount);
 end;
 
+{ The token-level twin of PyParseIf's dead-arm decision, for the import walk,
+  which runs before anything is parsed: the condition of the `if`/`elif` whose
+  keyword is at token k, when it is one of the shapes the parser folds to a
+  literal -- `True`, `False`, `hasattr(<unit>, "<literal>")` -- answered the
+  same way (UnitDeclaresNameExactly, with a symbol of that name shadowing the
+  unit, as the parser's gate has it). 1 true, 0 false, -1 undecided; colonAt is
+  the colon ending the condition. A shape this does not know is undecided, and
+  undecided keeps today's behaviour: both arms walked. }
+function PyStaticIfCondAt(k: Integer; out colonAt: Integer): Integer;
+var c, u: Integer;
+begin
+  Result := -1;
+  colonAt := -1;
+  c := k + 1;
+  if (c + 1 < MainProgramTokCount) and (Tokens[c + 1].Kind = tkColon) then
+  begin
+    colonAt := c + 1;
+    if Tokens[c].Kind = tkTrue then Result := 1
+    else if Tokens[c].Kind = tkFalse then Result := 0;
+  end
+  else if (c + 6 < MainProgramTokCount) and (Tokens[c].Kind = tkIdent) and
+          TokenCaseEqual(c, 'hasattr') and (Tokens[c + 1].Kind = tkLParen) and
+          (Tokens[c + 2].Kind = tkIdent) and (Tokens[c + 3].Kind = tkComma) and
+          (Tokens[c + 4].Kind = tkString) and (Tokens[c + 5].Kind = tkRParen) and
+          (Tokens[c + 6].Kind = tkColon) then
+  begin
+    colonAt := c + 6;
+    if FindSym(GetTokenStr(c + 2)) >= 0 then Exit;
+    u := FindUnitOrAlias(LowerCase(GetTokenStr(c + 2)));
+    if u < 0 then Exit;
+    Result := Ord(UnitDeclaresNameExactly(GetTokenStr(c + 4), u));
+  end;
+end;
+
+{ The last token of the suite after the colon at colonAt: the tkDedent that
+  closes an indented block, or the tkNewline that ends a one-line suite. }
+function PySuiteEndAt(colonAt: Integer): Integer;
+var k, d: Integer;
+begin
+  k := colonAt + 1;
+  if (k + 1 < MainProgramTokCount) and (Tokens[k].Kind = tkNewline) and
+     (Tokens[k + 1].Kind = tkIndent) then
+  begin
+    k := k + 1;
+    d := 0;
+    while k < MainProgramTokCount do
+    begin
+      if Tokens[k].Kind = tkIndent then Inc(d)
+      else if Tokens[k].Kind = tkDedent then
+      begin
+        Dec(d);
+        if d = 0 then Break;
+      end;
+      Inc(k);
+    end;
+  end
+  else
+    while (k < MainProgramTokCount) and (Tokens[k].Kind <> tkNewline) do Inc(k);
+  Result := k;
+end;
+
+{ Where the if-statement whose clause suite ends at `last` continues: past
+  every later `elif`/`else` clause, so a decided-true arm can skip them all. }
+function PyIfChainEndAt(last: Integer): Integer;
+var j, colonAt, dummy: Integer;
+begin
+  Result := last;
+  while True do
+  begin
+    j := Result + 1;
+    while (j < MainProgramTokCount) and (Tokens[j].Kind = tkNewline) do Inc(j);
+    if j >= MainProgramTokCount then Exit;
+    if Tokens[j].Kind = tkElse then
+    begin
+      if (j + 1 >= MainProgramTokCount) or (Tokens[j + 1].Kind <> tkColon) then Exit;
+      Result := PySuiteEndAt(j + 1);
+    end
+    else if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'elif') then
+    begin
+      dummy := PyStaticIfCondAt(j, colonAt);
+      if colonAt < 0 then
+      begin
+        { a condition this cannot parse: find its colon the way the parser's
+          header skip does }
+        colonAt := j + 1;
+        dummy := 0;
+        while (colonAt < MainProgramTokCount) and
+              not ((dummy = 0) and (Tokens[colonAt].Kind = tkColon)) do
+        begin
+          if Tokens[colonAt].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(dummy)
+          else if Tokens[colonAt].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(dummy);
+          Inc(colonAt);
+        end;
+        if colonAt >= MainProgramTokCount then Exit;
+      end;
+      Result := PySuiteEndAt(colonAt);
+    end
+    else Exit;
+  end;
+end;
+
 procedure PyPreScanImports;
 { THIS WALK HAS NO NOTION OF REACHABILITY, and that is the whole of
   bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved.
@@ -49702,7 +49882,14 @@ var i, depth, savedTok, tryAt, j, tryHandlerAt, deadFrom: Integer;
     tryDepthS, clauseS, tryHandlerS: array[0..31] of Integer;
     tryMissedS, guardSeenS, guardMissedS: array[0..31] of Boolean;
     tos: Integer;                      { SAVED enclosing levels; 0 = the scalars are the only try }
+    { The dead elif/else arms of `if`s decided TRUE, pending: an arm is walked
+      before its dead siblings are reached, so a range is recorded at the `if`
+      and jumped when the walk arrives. Nested decided ifs push in order, so the
+      top is always the nearest range. }
+    skipFromS, skipToS: array[0..31] of Integer;
+    skipTop: Integer;
 begin
+  skipTop := 0;
   savedTok := TokPos;
   i := PyScanLo;
   depth := 0;
@@ -49715,6 +49902,12 @@ begin
   tos := 0;
   while i < MainProgramTokCount do
   begin
+    while (skipTop > 0) and (i = skipFromS[skipTop - 1]) do
+    begin
+      i := skipToS[skipTop - 1] + 1;
+      Dec(skipTop);
+    end;
+    if i >= MainProgramTokCount then Break;
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then
     begin
@@ -49866,6 +50059,34 @@ begin
           end;
         end
         else Break;          { a clause of THIS try follows — it stays open }
+      end;
+    end
+    else if ((Tokens[i].Kind = tkIf) or
+             ((Tokens[i].Kind = tkIdent) and TokenCaseEqual(i, 'elif'))) and
+            ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            (PyStaticIfCondAt(i, j) >= 0) then
+    begin
+      { AN `if` DECIDED AT COMPILE TIME: its dead arms are not walked, for the
+        reason PyParseIf skips them -- walking is resolving, and MicroPython's
+        dht.py imports from a module its own platform does not have, in the
+        arm that platform never takes. A skipped suite runs from its tkIndent
+        to its closing tkDedent, so `depth` needs no correction. }
+      if PyStaticIfCondAt(i, j) = 1 then
+      begin
+        { walk this arm; skip every elif/else after it once it is over }
+        k := PySuiteEndAt(j);
+        kdepth := PyIfChainEndAt(k);
+        if (kdepth > k) and (skipTop < 32) then
+        begin
+          skipFromS[skipTop] := k + 1;
+          skipToS[skipTop] := kdepth;
+          Inc(skipTop);
+        end;
+      end
+      else
+      begin
+        { skip this arm; a following elif/else is its own decision }
+        i := PySuiteEndAt(j);
       end;
     end
     else if (Tokens[i].Kind = tkTry) and

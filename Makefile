@@ -1118,6 +1118,10 @@ test-nilpy: $(COMPILER)
 	# invalid call that is a TypeError only when it RUNS. CPython's .expected.
 	./$(COMPILER) test/test_nilpy_micropython_driver_walls2.npy $(TESTTMP)/test_nilpy_mpwalls2_26
 	$(TESTTMP)/test_nilpy_mpwalls2_26 | diff -u test/test_nilpy_micropython_driver_walls2.expected -
+	# an `if` decided at compile time (True/False/hasattr(<module>, "lit")) does
+	# not resolve imports in its dead arms -- dht.py's `from esp import`.
+	./$(COMPILER) test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.py $(TESTTMP)/test_nilpy_deadif26
+	$(TESTTMP)/test_nilpy_deadif26 | diff -u test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const.npy $(TESTTMP)/test_nilpy_mpconst26
 	$(TESTTMP)/test_nilpy_mpconst26 | diff -u test/test_nilpy_micropython_const.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const_import.npy $(TESTTMP)/test_nilpy_mpconsti26
