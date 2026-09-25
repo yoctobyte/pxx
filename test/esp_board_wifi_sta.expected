@@ -1,0 +1,14 @@
+sta active before False
+sta active True
+status before connect is STAT_IDLE True
+isconnected before connect False
+scan found networks True
+every record is (bytes, 6 bytes, channel 1..14, rssi < 0, auth, False) True
+right after connect: CONNECTING True
+no such network: STAT_NO_AP_FOUND True within 30 s True
+isconnected False
+ifconfig without a network 0.0.0.0
+ap and sta together True True
+scan with the AP up True
+sta off, ap stays False True
+WIFI-STA-DONE

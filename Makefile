@@ -37613,6 +37613,15 @@ test-esp-idf: $(COMPILER)
 	    test/esp_board_socket_errors.npy $(TESTTMP)/esp_board_socket_errors.o >/dev/null \
 	  && echo "=== esp_board_socket_errors builds [$$t]: OK ===" || exit 1; \
 	done
+	@# network.WLAN(STA_IF): the no-credentials board test and the owner's join
+	@# recipe (placeholders, never credentials); recipes in their headers.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  for f in esp_board_wifi_sta esp_board_wifi_sta_join; do \
+	    ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	      test/$$f.npy $(TESTTMP)/$$f.o >/dev/null \
+	    && echo "=== $$f builds [$$t]: OK ===" || exit 1; \
+	  done; \
+	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build
 	# by name (`unresolved forward: <callee>`) rather than mis-running. A body

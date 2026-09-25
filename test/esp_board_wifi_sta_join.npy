@@ -1,0 +1,61 @@
+# BOARD ONLY, THE OWNER'S STEP: join a REAL network and be reached through it.
+# The credentials never enter the tree -- this file carries placeholders, and
+# the substituted copy lives in /tmp. From the repo root on plexus:
+#
+#   sed -e 's|@SSID@|YourNetwork|' -e 's|@KEY@|YourPassword|' \
+#     test/esp_board_wifi_sta_join.npy > /tmp/pxx_join.npy
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=/tmp/pxx_join.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-station-s3 --no-verify --seconds 100
+#
+# (a `|` in the password needs another sed delimiter). Then, while it runs:
+#   * the serial log shows `joined: status STAT_GOT_IP True` and `address <ip>`;
+#   * from plexus or a phone on the same network:  curl http://<ip>:8080/
+#     answers `hello from an ESP32-S3 on your network`, and the log shows
+#     `served <your ip>`; it serves for 60 s, then prints JOIN-DONE.
+# A wrong password ends at `status 202` (STAT_WRONG_PASSWORD), an absent
+# network at 201 (STAT_NO_AP_FOUND) -- within 30 s either way, never a hang.
+# Afterwards: rm /tmp/pxx_join.npy
+import network
+import socket
+import time
+import 'espsys.pas' as board
+
+SSID = "@SSID@"
+KEY = "@KEY@"
+if SSID == "@" + "SSID@":
+    print("refusing: substitute @SSID@ and @KEY@ first (recipe in the header)")
+else:
+    sta = network.WLAN(network.STA_IF)
+    sta.active(True)
+    sta.config(reconnects=3)
+    sta.connect(SSID, KEY)
+    t0 = board.uptime_ms()
+    while sta.status() == network.STAT_CONNECTING and board.uptime_ms() - t0 < 30000:
+        time.sleep(0.25)
+    st = sta.status()
+    print("joined: status STAT_GOT_IP", st == network.STAT_GOT_IP, "status", st)
+    if sta.isconnected():
+        cfg = sta.ifconfig()
+        print("address", cfg[0], "gateway", cfg[2], "dns", cfg[3], "rssi", sta.status("rssi"))
+        srv = socket.socket()
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("0.0.0.0", 8080))
+        srv.listen(2)
+        srv.settimeout(1.0)
+        t0 = board.uptime_ms()
+        while board.uptime_ms() - t0 < 60000:
+            try:
+                conn, addr = srv.accept()
+            except TimeoutError:
+                continue
+            conn.settimeout(2.0)
+            try:
+                conn.recv(512)
+                conn.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\nhello from an ESP32-S3 on your network\n")
+            except OSError as e:
+                print("client error", str(e))
+            conn.close()
+            print("served", addr[0])
+        srv.close()
+    sta.disconnect()
+print("JOIN-DONE")

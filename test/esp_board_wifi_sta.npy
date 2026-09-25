@@ -1,0 +1,66 @@
+# BOARD ONLY (ESP32-S3): network.WLAN(STA_IF), the parts that need no
+# credentials -- active(), a scan() of the real neighbourhood, and a connect()
+# to a network that does not exist ending in STAT_NO_AP_FOUND rather than a
+# hang. Joining a REAL network is the owner's step (credentials stay out of
+# the tree); its recipe is test/esp_board_wifi_sta_join.npy.
+#
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=$PWD/test/esp_board_wifi_sta.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-station-s3 --no-verify --seconds 40
+#   and compare the program's lines (sta .. WIFI-STA-DONE) with
+#   test/esp_board_wifi_sta.expected. The `info:` line after the token counts
+#   the networks seen, which depends on where the board is, and is not compared.
+#
+# status() follows MicroPython's port (ports/esp32/network_wlan.c): connect()
+# returns at once, the driver keeps retrying, and status() reports the last
+# disconnect reason while it does -- so the loop below ends at 201.
+import network
+import time
+import 'espsys.pas' as board
+
+sta = network.WLAN(network.STA_IF)
+print("sta active before", sta.active())
+sta.active(True)
+print("sta active", sta.active())
+print("status before connect is STAT_IDLE", sta.status() == network.STAT_IDLE)
+print("isconnected before connect", sta.isconnected())
+
+nets = sta.scan()
+print("scan found networks", len(nets) > 0)
+shape = True
+for n in nets:
+    ssid, bssid, channel, rssi, auth, hidden = n
+    if len(bssid) != 6 or channel < 1 or channel > 14 or rssi >= 0 or rssi < -127:
+        shape = False
+    if auth < 0 or hidden:
+        shape = False
+    if len(ssid) > 32:
+        shape = False
+print("every record is (bytes, 6 bytes, channel 1..14, rssi < 0, auth, False)", shape)
+
+t0 = board.uptime_ms()
+sta.connect("PXX-NO-SUCH-NETWORK-7F3A", "not-a-real-key")
+first = sta.status()
+print("right after connect: CONNECTING", first == network.STAT_CONNECTING)
+while sta.status() == network.STAT_CONNECTING and board.uptime_ms() - t0 < 30000:
+    time.sleep(0.25)
+ms = board.uptime_ms() - t0
+print("no such network: STAT_NO_AP_FOUND", sta.status() == network.STAT_NO_AP_FOUND, "within 30 s", ms < 30000)
+print("isconnected", sta.isconnected())
+print("ifconfig without a network", sta.ifconfig()[0])
+sta.disconnect()
+
+ap = network.WLAN(network.AP_IF)
+ap.config(essid="PXX-STA-TEST", password="pascal26")
+ap.active(True)
+print("ap and sta together", ap.active(), sta.active())
+print("scan with the AP up", len(sta.scan()) > 0)
+sta.active(False)
+print("sta off, ap stays", sta.active(), ap.active())
+print("WIFI-STA-DONE")
+# A count and the strongest signal, never the names: the networks around the
+# board are the neighbours', and a log gets pasted into tickets.
+best = -128
+for n in nets:
+    if n[3] > best:
+        best = n[3]
+print("info:", len(nets), "networks, strongest rssi", best)
