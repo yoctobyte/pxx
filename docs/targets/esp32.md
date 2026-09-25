@@ -282,5 +282,6 @@ end;
 ## Next
 
 - [ESP32 peripherals](../library/esp.md)
+- [The ESP32 IDE](../getting-started/esp-ide.md)
 - [Cross-compilation](./cross-compilation.md)
 - [Targets overview](./index.md)

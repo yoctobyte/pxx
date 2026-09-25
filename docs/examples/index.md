@@ -220,7 +220,9 @@ frame rates shown inside them are not representative of a real GPU.
 Lazarus- and Delphi-inspired but deliberately stripped down, with everything
 tiled into one window. It is early work and the layout still shows it. It also
 doubles as a real-world stress test for the compiler. It builds in about nine
-seconds, and its headless core test reported `168 passed, 0 failed`.
+seconds, and its headless core test reports `202 passed, 0 failed` with pin
+v426. A second face for ESP32 boards, [the ESP32 IDE](../getting-started/esp-ide.md),
+shares the same core.
 
 ```sh
 apps/ide/build.sh       # builds apps/ide/eliah/eliah with the pinned compiler

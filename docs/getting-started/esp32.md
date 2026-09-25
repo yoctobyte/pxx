@@ -12,7 +12,8 @@ application by ESP-IDF's own build.
 
 This page takes you from an empty machine to a program running on a board. The
 reference material (the bare-metal profile, code size, floating point) is in
-[ESP32 / Microcontrollers](../targets/esp32.md).
+[ESP32 / Microcontrollers](../targets/esp32.md). To detect, build, flash and monitor from
+one window, see [The ESP32 IDE](./esp-ide.md).
 
 **What this page was verified on.** Every command below was run on an
 ESP32-S3 devkit (native USB, `/dev/ttyACM0`) with ESP-IDF v6.0.1 and the PXX
