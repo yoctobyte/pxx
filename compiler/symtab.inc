@@ -14643,10 +14643,13 @@ end;
   arm32 the first door a --shared build met was this file's
   "internal: no init/fini thunk prologue" -- correct to refuse, and wrong to
   word it as a compiler fault -- while i386, which has a thunk, reached the
-  writer's clean sentence. Both now ask this. }
+  writer's clean sentence. Both now ask this.
+  It refuses only a --shared build (EmitSharedMode). The thunk prologue is
+  shared with an --emit-obj object's .init_array, so an unconditional refusal
+  there stopped every i386 object with initialisers (four T rows, 2026-09-25). }
 procedure RefuseSharedOffX86_64;
 begin
-  if TargetArch <> TARGET_X86_64 then
+  if EmitSharedMode and (TargetArch <> TARGET_X86_64) then
     ErrorNoPos('--shared: shared-library output is x86-64 only');
 end;
 
