@@ -38,7 +38,10 @@ class FileHandler(StreamHandler):
         super().__init__(stream=open(filename, mode=mode, encoding=encoding))
     def close(self):
         self.stream.close()
-path = "/tmp/pxx_logging_walls_%d.txt" % int(time.monotonic() * 1000000)
+# Scratch dir from the environment, TESTMGR_TMP first: see
+# test_nilpy_class_named_like_an_rtl_record.npy for why that order.
+path = ((os.environ.get("TESTMGR_TMP") or os.environ.get("TESTTMP") or "/tmp")
+        + "/pxx_logging_walls_%d.txt" % int(time.monotonic() * 1000000))
 fh = FileHandler(path, mode="w")
 fh.emit("into a file")
 fh.close()

@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: 0BSD
+# hasattr(<module>, "<name>") is True exactly when <module>.<name> resolves.
+# math is a unit (lib/rtl/math.pas, which spells Sqrt/Floor) AND a dotted-call
+# table (math.sqrt, math.gcd); the fold asked only the unit's exact
+# declarations and answered False for all four names below while each of them
+# resolved. sys is no unit at all. CPython's .expected.
+import math
+import math as m
+import sys
+import collections
+print(hasattr(math, "sqrt"), hasattr(math, "floor"), hasattr(math, "pi"),
+      hasattr(math, "gcd"), hasattr(math, "nosuch"))
+# NOT a row: hasattr(math, "SQRT") is True here, False in CPython -- a unit
+# member resolves case-insensitively through the door too (math.SQRT(4.0)
+# compiles), and only a misspelling asks. Chosen, see PyModuleHasAttr.
+print(hasattr(m, "sqrt"), hasattr(m, "nosuch"))
+print(hasattr(sys, "argv"), hasattr(sys, "stderr"), hasattr(sys, "no_such_member"))
+print(hasattr(collections, "deque"), hasattr(collections, "no_such_thing"))
+# the dead-arm skip (PyStaticIfCondAt) asks the same predicate
+if hasattr(math, "sqrt"):
+    print("sqrt arm", math.sqrt(16.0))
+else:
+    import no_such_module_anywhere
+print("HASATTR MODULE OK")

@@ -49880,6 +49880,48 @@ begin
   PyLexImportClosureRange(0, MainProgramTokCount);
 end;
 
+{ `hasattr(<recv>, "<memb>")` on a MODULE, decided at compile time: 1 when
+  `<recv>.<memb>` resolves, 0 when it does not, -1 when recv is not a module
+  this can judge (a symbol of that name shadows the module, as everywhere).
+  ONE predicate for the parser's fold and PyStaticIfCondAt's token-level twin,
+  so the two layers cannot answer differently.
+
+  It asks every route the attribute DOOR takes, not only the unit's
+  declarations. `math` is both a unit (lib/rtl/math.pas, which spells Sqrt and
+  Floor) and a dotted-call table (`math.sqrt`, `math.gcd`), so a
+  declarations-only test answered False for all of sqrt/floor/pi/gcd while
+  every one of them resolved (found by franks-a3). `sys` is no unit at all and
+  is answered by its modelled members. }
+function PyModuleHasAttr(const recv, memb: AnsiString): Integer;
+var u: Integer; root: AnsiString;
+begin
+  Result := -1;
+  if FindSym(recv) >= 0 then Exit;
+  u := FindUnitOrAlias(LowerCase(recv));
+  root := PyUnitAliasRootName(recv);
+  if root = '' then root := LowerCase(recv);
+  { CASE-INSENSITIVE for a unit, because that is how the door resolves a
+    member of one -- lib/rtl units are Pascal, and `math.pi` reaches math.pas's
+    Pi. So `hasattr(math, "SQRT")` answers True where CPython says False; only
+    a misspelling reaches that, and `math.SQRT(4.0)` compiles here too. }
+  if ((u >= 0) and (UnitDeclaresNameExactly(memb, u) or
+                    (FindProcInUnit(memb, u) >= 0) or
+                    (FindSymInUnit(memb, u) >= 0) or
+                    (FindUClassInUnit(memb, u) >= 0))) or
+     PyIsStdlibMemberValue(root, memb, False) or
+     (PyStdlibCallProc(root + '.' + memb) <> '') then
+    Result := 1
+  { a NO needs the whole module in view: a unit not loaded yet -- the import
+    walk runs before `math` is -- may still declare it, so that stays
+    undecided and both arms are walked, which is today's behaviour. The same
+    holds for a YES that only the unit's declarations can give: at walk time
+    `hasattr(math, "gcd")` is undecided (math.pas declares gcd, the table does
+    not) while `hasattr(math, "sqrt")` is decided by the table. The parser,
+    which runs with the unit loaded, answers both. }
+  else if (u >= 0) or (root = 'sys') then
+    Result := 0;
+end;
+
 { The token-level twin of PyParseIf's dead-arm decision, for the import walk,
   which runs before anything is parsed: the condition of the `if`/`elif` whose
   keyword is at token k, when it is one of the shapes the parser folds to a
@@ -49907,10 +49949,7 @@ begin
           (Tokens[c + 6].Kind = tkColon) then
   begin
     colonAt := c + 6;
-    if FindSym(GetTokenStr(c + 2)) >= 0 then Exit;
-    u := FindUnitOrAlias(LowerCase(GetTokenStr(c + 2)));
-    if u < 0 then Exit;
-    Result := Ord(UnitDeclaresNameExactly(GetTokenStr(c + 4), u));
+    Result := PyModuleHasAttr(GetTokenStr(c + 2), GetTokenStr(c + 4));
   end;
 end;
 
@@ -58185,6 +58224,26 @@ begin
           FindSym FIRST, for the reason ConsumeUnitQualifier gives: a local or
           global spelled like a module shadows it, and the value door beside this
           one gates the same way. }
+        { hasattr on a MODULE: folded by PyModuleHasAttr, the predicate
+          PyStaticIfCondAt's dead-arm twin uses too. Before the getattr
+          machinery below, which would refuse a CLASS member that hasattr
+          only has to answer True for. `hasattr(sys, "exc_info")` also comes
+          here (micropython-lib logging.py:156), sys being no unit. }
+        if (not atIsGet) and isNilPy and (CurTok.Kind = tkIdent) and
+           (TokPos + 2 < TokCount) and (Tokens[TokPos].Kind = tkComma) and
+           (Tokens[TokPos + 1].Kind = tkString) and
+           (Tokens[TokPos + 2].Kind = tkRParen) and
+           (PyModuleHasAttr(CurTok.SVal, GetTokenStr(TokPos + 1)) >= 0) then
+        begin
+          node := AllocNode(AN_BOOL_LIT);
+          ASTIVal[node] := PyModuleHasAttr(CurTok.SVal, GetTokenStr(TokPos + 1));
+          ASTTk[node] := Ord(tyBoolean);
+          Next; Next; Next;              { recv , "name" }
+          Expect(tkRParen, ')');
+          CurASTNode := node;
+          LastExprTk := tyBoolean;
+          Exit;
+        end;
         gaUnit := -1; gaPi := -1; gaSi := -1; gaDeclared := False;
         if isNilPy and (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
            (Tokens[TokPos].Kind = tkComma) and
@@ -58254,31 +58313,6 @@ begin
             else if atIsGet and (Tokens[TokPos + 2].Kind <> tkComma) then
               gaUnit := -1;   { absent and no default: CPython raises. Not ours. }
           end;
-        end;
-        { `hasattr(sys, "exc_info")` -- a COMPILER-PROVIDED module, which is no
-          unit and no symbol, so the arm above cannot see it and ParseExpr died
-          on `undefined variable (sys)` (micropython-lib logging.py:156). Folded
-          the same way: True exactly for the members this sys models, as a
-          value or as a call, so the branch it guards is the one that works. }
-        if (gaUnit < 0) and (not atIsGet) and isNilPy and (CurTok.Kind = tkIdent) and
-           (TokPos + 2 < TokCount) and (Tokens[TokPos].Kind = tkComma) and
-           (Tokens[TokPos + 1].Kind = tkString) and
-           (Tokens[TokPos + 2].Kind = tkRParen) and (FindSym(CurTok.SVal) < 0) and
-           (PyUnitAliasRootName(CurTok.SVal) = 'sys') then
-        begin
-          gaMemb := GetTokenStr(TokPos + 1);
-          node := AllocNode(AN_BOOL_LIT);
-          if PyIsStdlibMemberValue('sys', gaMemb, False) or
-             (PyStdlibCallProc('sys.' + gaMemb) <> '') then
-            ASTIVal[node] := 1
-          else
-            ASTIVal[node] := 0;
-          ASTTk[node] := Ord(tyBoolean);
-          Next; Next; Next;              { sys , "name" }
-          Expect(tkRParen, ')');
-          CurASTNode := node;
-          LastExprTk := tyBoolean;
-          Exit;
         end;
         if gaUnit >= 0 then
         begin

@@ -1122,6 +1122,10 @@ test-nilpy: $(COMPILER)
 	# not resolve imports in its dead arms -- dht.py's `from esp import`.
 	./$(COMPILER) test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.py $(TESTTMP)/test_nilpy_deadif26
 	$(TESTTMP)/test_nilpy_deadif26 | diff -u test/test_nilpy_an_if_decided_at_compile_time_skips_its_dead_arms.expected -
+	# hasattr(<module>, "x") answers what <module>.x resolves to: the unit's
+	# declarations case-insensitively, the dotted-call table, sys's members.
+	./$(COMPILER) test/test_nilpy_hasattr_on_a_module_asks_every_route_the_attribute_does.npy $(TESTTMP)/test_nilpy_hasattrmod26
+	$(TESTTMP)/test_nilpy_hasattrmod26 | diff -u test/test_nilpy_hasattr_on_a_module_asks_every_route_the_attribute_does.expected -
 	./$(COMPILER) test/test_nilpy_a_trailing_comma_after_a_keyword_argument.npy $(TESTTMP)/test_nilpy_trailkw26
 	$(TESTTMP)/test_nilpy_trailkw26 | diff -u test/test_nilpy_a_trailing_comma_after_a_keyword_argument.expected -
 	# micropython-lib logging.py's walls (ina219), CPython's .expected. TZ is a
