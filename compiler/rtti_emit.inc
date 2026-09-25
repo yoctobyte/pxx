@@ -951,8 +951,42 @@ begin
   ClassRttiName := nm;
 end;
 
+{ The proc a class's header names as its DESTRUCTOR (+128), or -1.
+
+  The nearest `Destroy` declared by a PASCAL class on the parent chain. A class
+  whose members match case-SENSITIVELY is a NilPy (or C) class, and its methods
+  are skipped: a Python `def Destroy(self)` or tkinter's `destroy()` is an
+  ordinary method, and running it because an object died would be a call the
+  program never made. TObject's empty default answers -1, so a class with no
+  destructor of its own costs the runtime no call. }
+function RttiClassDestructor(ci: Integer): Integer;
+var curr, i, base, cnt, pi: Integer;
+begin
+  Result := -1;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    if not UClsCaseSensFields[curr] then
+    begin
+      base := UClsMBase[curr];
+      cnt := UClsMCount[curr];
+      for i := 0 to cnt - 1 do
+        if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], 'destroy') and
+           (not UMthIsStatic[base + i]) and (not UMthIsCtor[base + i]) and
+           (not UMthNoSelf[base + i]) then
+        begin
+          pi := UMthProc_[base + i];
+          if (pi >= 0) and (not CaseEqual(Procs[pi].Name, '__pxxTObjectDestroy')) then
+            Result := pi;
+          Exit;
+        end;
+    end;
+    curr := UClsParent[curr];
+  end;
+end;
+
 procedure EmitRTTI;
-var ci, i, j, k, base, cnt, hdr, strIdx, etid: Integer;
+var ci, i, j, k, base, cnt, hdr, strIdx, etid, dtorPi: Integer;
     propCount, methCount, fieldCount, ifaceCount, firstOff, entryOff: Integer;
     regEntries, entryPos, tobjCi: Integer;
     nm: AnsiString;
@@ -1059,6 +1093,14 @@ begin
         holding an object. This is what published-method reflection dispatches on. }
       if UClsVMTOffset[ci] >= 8 then
         AddDataPtrFix(UClsVMTOffset[ci] - 8, hdr);
+
+      { +128: the destructor the NilPy refcount runs at the last reference
+        (RTTI_CLS_SIZE). Interfaces have none. The HAS_DTOR bit in flatCount is
+        set on EVERY class header, slot filled or not: it says the slot exists. }
+      dtorPi := -1;
+      if not UClsIsInterface[ci] then dtorPi := RttiClassDestructor(ci);
+      if dtorPi >= 0 then AddMethodFix(hdr + 128, dtorPi, MFK_RTTIMETH);
+      PatchDataU64(hdr + 112, RTTI_FLAT_HAS_DTOR);
 
       { published properties (own). Reserve the whole array contiguously BEFORE
         filling: EmitPropInfo interns names (which append to Data[]), so records
@@ -1174,7 +1216,8 @@ begin
         RTTI is read-only by default in a hosted executable, so nothing may fill
         it in at run time. __pxxInheritsFrom follows these, which is how
         is/as/except see a NilPy base that was flattened rather than made the
-        parent. A class with none keeps both words zero. }
+        parent. A class with none has a zero COUNT; the word still carries
+        RTTI_FLAT_HAS_DTOR (written above), so readers mask. }
       cnt := 0;
       for i := 0 to UClsFlatN - 1 do
         if (UClsFlatOwner[i] = ci) and (UClsRTTIOff[UClsFlatBase[i]] >= 0) then Inc(cnt);
@@ -1189,7 +1232,7 @@ begin
             AddDataPtrFix(firstOff + k * 8, UClsRTTIOff[UClsFlatBase[i]]);
             Inc(k);
           end;
-        PatchDataU64(hdr + 112, cnt);
+        PatchDataU64(hdr + 112, cnt or RTTI_FLAT_HAS_DTOR);
         AddDataPtrFix(hdr + 120, firstOff);
       end;
     end;

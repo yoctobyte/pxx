@@ -3050,6 +3050,21 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_for_rebind_releases 200 $(TESTTMP)/test_nilpy_for_rebind26 30000 rebind
 	@if tools/assert_no_leak.sh nilpy_for_rebind_control 200 $(TESTTMP)/test_nilpy_for_rebind26 30000 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_for_rebind control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# The last NilPy reference to a Pascal object runs its destructor, once:
+	# every row prints a destructor COUNT, so a missed or doubled Destroy is a
+	# different number (a quiet leak cannot pass). -dPXX_HEAP_DEBUG so a double
+	# destroy that frees twice reads as $$DD. Measured also on aarch64, i386,
+	# arm32 (qemu-user) and esp32s3/esp32c3 (tools/esp_run.sh with
+	# ESP_RUN_PROJECT=nilpy-s3|nilpy-c3); the pin prints 0 on the first row.
+	./$(COMPILER) -dPXX_HEAP_DEBUG -Futest test/test_nilpy_the_last_reference_runs_the_pascal_destructor.npy $(TESTTMP)/test_nilpy_dtor26
+	$(TESTTMP)/test_nilpy_dtor26 | diff -u test/test_nilpy_the_last_reference_runs_the_pascal_destructor.expected -
+	# ...and what a destructor frees stops leaking: array.array's buffer and a
+	# wave file read without close(). `keep` is the positive control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_pascal_object_frees_its_buffer_at_the_last_reference.npy $(TESTTMP)/test_nilpy_dtor_buf26
+	tools/assert_no_leak.sh nilpy_dtor_array 200 $(TESTTMP)/test_nilpy_dtor_buf26 array $(TESTTMP)/nilpy_dtor_clip.wav
+	tools/assert_no_leak.sh nilpy_dtor_wave 200 $(TESTTMP)/test_nilpy_dtor_buf26 wave $(TESTTMP)/nilpy_dtor_clip.wav
+	@if tools/assert_no_leak.sh nilpy_dtor_control 200 $(TESTTMP)/test_nilpy_dtor_buf26 keep $(TESTTMP)/nilpy_dtor_clip.wav >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_dtor control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	@# ...and the two REFUSALS, which are different questions and used to be one
 	@# answer. Where the locks exist, the flag is the remedy and the diagnostic
 	@# names it. Where they do NOT (wasm32 here), prescribing the flag was a dead

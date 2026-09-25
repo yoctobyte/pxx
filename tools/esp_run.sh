@@ -54,6 +54,11 @@ case "$CHIP" in
     QEMU="$(ls "$HOME"/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1)" ;;
   *) echo "esp_run: unknown chip '$CHIP' (esp32s3|esp32c3)" >&2; exit 2 ;;
 esac
+# ESP_RUN_PROJECT=<name under examples/esp32> links into another IDF project
+# with the same main component shape -- nilpy-s3 / nilpy-c3 for a NilPy
+# program, whose runtime does not fit hello's stock 1 MB app partition
+# ("app partition is too small"). The chip's own flags are unchanged.
+if [ -n "${ESP_RUN_PROJECT:-}" ]; then PROJ="$REPO_ROOT/examples/esp32/$ESP_RUN_PROJECT"; fi
 
 [ -x "$PXX" ]    || { echo "esp_run: compiler not built ($PXX)" >&2; exit 2; }
 [ -n "$QEMU" ]   || { echo "esp_run: Espressif qemu for $CHIP not found" >&2; exit 2; }
@@ -132,8 +137,12 @@ else
 fi
 
 cd build
+# The flash size the PROJECT was configured for, not a constant: the NilPy
+# projects' factory partition alone is 3.75 MB, and an image filled to 2 MB
+# does not boot -- silently, with no output after the bootloader.
+FLASHSZ="$(sed -n 's/^#define CONFIG_ESPTOOLPY_FLASHSIZE "\(.*\)"/\1/p' config/sdkconfig.h 2>/dev/null | head -1)"
 python -m esptool --chip "$CHIP" merge-bin -o "$FLASH" \
-  @flash_args --fill-flash-size 2MB >/dev/null 2>&1
+  @flash_args --fill-flash-size "${FLASHSZ:-2MB}" >/dev/null 2>&1
 
 SER="$(mktemp)"
 timeout "$TIMEOUT" "$QEMU" -M "$CHIP" \

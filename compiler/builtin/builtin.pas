@@ -2506,7 +2506,8 @@ begin
       Result := True;
       Exit;
     end;
-    n := PPxxInt_(PtrUInt(cur) + PXX_RTTI_FLATCOUNT)^;
+    { low 24 bits: the count; bit 24 is RTTI_FLAT_HAS_DTOR (defs.inc) }
+    n := PPxxInt_(PtrUInt(cur) + PXX_RTTI_FLATCOUNT)^ and $FFFFFF;
     if n > 0 then
     begin
       bases := PPxxPtr_(PtrUInt(cur) + PXX_RTTI_FLATBASES)^;

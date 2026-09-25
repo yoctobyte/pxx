@@ -1,0 +1,53 @@
+# When the last NilPy reference to an object implemented in Pascal drops, the
+# Pascal class's destructor runs -- the way CPython runs a C type's dealloc.
+# Before, the refcount reached zero, released the managed fields and freed the
+# block without ever calling Destroy, so whatever a destructor frees leaked
+# (mimic_array's buffer: live 109 -> 1009 over 100 -> 1000 arrays).
+#
+# Each row prints the running count of destructor calls. Counted adds 1 per
+# Destroy, Holder adds 100, so a missed or doubled destructor shows as a
+# different number:
+#   - last reference dropped: once;
+#   - Pascal hands an object to Python and then .Free's its own reference:
+#     Destroy runs AT the Free, and NOT again when Python lets go (the header
+#     remembers it was destroyed);
+#   - Pascal creates and frees an object Python never saw: once;
+#   - a destructor that itself drops a Python reference (re-entrant rc=0):
+#     holder 100 plus the inner object 1.
+# The holder row runs inside a function on purpose. A method called through a
+# module-level VARIANT-typed name keeps the last receiver alive until the next
+# such call (a bounded deferral that predates this; see LOGBOOK 2026-09-25), so
+# at module level the holder's Destroy would run late rather than never.
+import sys
+import 'nilpy_destructor_box.pas' as d
+
+print("start", d.destroyed())
+c = d.Counted(1)
+c = None
+print("last ref drop runs Destroy once:", d.destroyed())
+s = d.share_then_free()
+print("after explicit Free, Python still holding:", d.destroyed())
+s = None
+print("Free then last-ref release (no second Destroy):", d.destroyed())
+d.make_and_free()
+print("Free with no Python refs:", d.destroyed())
+
+
+def holder_case():
+    h = d.Holder()
+    h.hold(d.Counted(3))
+
+
+holder_case()
+print("Destroy that drops a Python ref (holder 100 + inner 1):", d.destroyed())
+
+
+def churn(n):
+    i = 0
+    while i < n:
+        x = d.Counted(i)
+        i = i + 1
+
+
+churn(1000)
+print("after churn:", d.destroyed())

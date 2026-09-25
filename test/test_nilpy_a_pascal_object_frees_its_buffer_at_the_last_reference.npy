@@ -1,0 +1,40 @@
+# The two Python-facing Pascal classes whose destructor owns a raw buffer must
+# give it back when the last reference drops -- array.array's element buffer
+# and a wave file's data buffer (read with no close(), so ONLY the destructor
+# can free it). Measured before destructors ran at the last reference:
+# array.array live 109 -> 1009 over 100 -> 1000, wave 116 -> 1016.
+#
+# Modes (argv[1]); argv[2] is a scratch path for the wave clip:
+#   array, wave  must stay under assert_no_leak's bound.
+#   keep         POSITIVE CONTROL: every array is kept alive, so the same bound
+#                must trip. Without it a dead census would pass the other two.
+import sys
+import array
+import wave
+
+mode = sys.argv[1]
+path = sys.argv[2]
+w = wave.open(path, "wb")
+w.setnchannels(1)
+w.setsampwidth(2)
+w.setframerate(8000)
+w.writeframes(b"\x01\x00\x02\x00\x03\x00\x04\x00")
+w.close()
+kept = []
+
+
+def churn(n):
+    i = 0
+    while i < n:
+        if mode == "wave":
+            r = wave.open(path, "rb")
+            fr = r.readframes(4)
+        else:
+            a = array.array("i", [1, 2, 3, 4])
+            if mode == "keep":
+                kept.append(a)
+        i = i + 1
+
+
+churn(3000)
+print("done", mode)

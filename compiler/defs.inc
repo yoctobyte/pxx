@@ -625,7 +625,20 @@ const
   RTTI_KIND_METHOD = 5;   { reserved; event/method-pointer props }
 
   { RTTI blob byte layouts (all fields 8 bytes) }
-  RTTI_CLS_SIZE    = 128; { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces,unitName,classInfo,flatCount,flatBases
+  RTTI_CLS_SIZE    = 136; { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces,unitName,classInfo,flatCount,flatBases,destructor
+                            +8 at +128: the class's DESTRUCTOR code address, or 0 when
+                            nothing but TObject's empty default resolves. The NilPy
+                            refcount runs it when the last reference drops
+                            (PyObjFinalize). Its PRESENCE is announced by
+                            RTTI_FLAT_HAS_DTOR in the flatCount word, and that is
+                            what makes growing it safe WITHOUT bumping
+                            PXX_RTL_LAYOUT_VERSION: a stale seed writes 128-byte
+                            headers and no flag, so the new runtime reads "no
+                            destructor" instead of the next blob's name pointer. A
+                            bump would have been worse than the hazard: every seat's
+                            seed AND the pinned binary carry version 1, so
+                            `make seed-from-stable` would refuse too, and only an FPC
+                            bootstrap or the next pin could recover.
                             +16 at +112/+120: the classes FLATTENED into this one (NilPy
                             multiple inheritance), count then a pointer to that many RTTI
                             blob pointers, which __pxxInheritsFrom follows so is/as/except
@@ -686,6 +699,12 @@ const
     the flag unless MAX_UCLASS grows past 16 million.
     bug-p-a-variant-cannot-hold-an-interface }
   RTTI_IF_ID_MASK  = $FFFFFF;
+  { The class header's flatCount word (+112) carries this bit when the header
+    has the +128 destructor slot (see RTTI_CLS_SIZE). Bit 24 for the same
+    32-bit reason as RTTI_IF_ID_COM; the count itself stays in the low 24 bits,
+    and every reader masks with RTTI_FLAT_COUNT_MASK. }
+  RTTI_FLAT_HAS_DTOR   = $1000000;
+  RTTI_FLAT_COUNT_MASK = $FFFFFF;
   RTTI_IF_ID_COM   = $1000000;
 
   RTTI_IFACE_SIZE  = 32;  { {GUID:16, IMT pointer:8, interface id:8 (see RTTI_IF_ID_COM)} — the per-class

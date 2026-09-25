@@ -1,0 +1,7 @@
+start 0
+last ref drop runs Destroy once: 1
+after explicit Free, Python still holding: 2
+Free then last-ref release (no second Destroy): 2
+Free with no Python refs: 3
+Destroy that drops a Python ref (holder 100 + inner 1): 104
+after churn: 1104
