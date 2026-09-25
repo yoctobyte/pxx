@@ -16031,16 +16031,18 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-25T07:59:14Z",
+  "date": "2026-09-25T09:37:05Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
+   "test-c-abi-mixed-link#src:tools/compiler_srchash.sh",
    "tools-devtest#00"
   ],
-  "sha": "e77c5d2416d6a41f88930386feb695885eb6296a",
+  "sha": "607fa287a1a5dfb06b8b7703ef1c02cfcebbdeb4",
   "tier": "full",
-  "ver": "v427",
+  "ver": "v431",
   "verdict": "RED",
   "why": {
+   "test-c-abi-mixed-link#src:tools/compiler_srchash.sh": "Nothing untracked or modified locally, so no stray file explains it: | this stamp was written for a DIFFERENT TREE. Usual cause is a pull | -- or a sync, which pulls -- with no rebuild after it. | A s",
    "tools-devtest#00": "Wire each into a rule, or add it to test/UNWIRED.txt with a reason. | check-test-wiring: 2 exemption(s) whose only reference is a tools/ script NAMING the path \u2014 a mention is not proof anything runs i"
   }
  },
