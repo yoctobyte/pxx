@@ -1,0 +1,47 @@
+# A NilPy __init__ must fill the object the CALLER gets back, on windowed
+# xtensa too (the ESP32-S3's ABI).
+#
+# Windowed xtensa passes a hidden aggregate-result pointer as argument WORD 0.
+# The caller sent it whenever ABIRetViaHiddenDestProc said so, and an __init__
+# (hidden-dest RetType, no result slot) says so. But the callee's parameter
+# copy shifted only when the body had allocated a slot to stash the pointer
+# in. So __init__ took the caller's scratch as `self`, every field it stored
+# landed there, and every object on the S3 came back zeroed: `A2(21, 22).a`
+# was 0, and urequests.Response(...).content was None. Every other target
+# carries the pointer in a non-argument register, which is why x86-64,
+# riscv32 and call0 xtensa were right all along.
+
+
+class A2:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+
+class A5:
+    def __init__(self, a, b, c, d, e):
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+        self.e = e
+
+
+class P:
+    def __init__(self):
+        self.x = 5
+
+
+class Kid(A2):
+    def __init__(self, a):
+        A2.__init__(self, a, a + 1)
+        self.k = "kid"
+
+
+x = A2(21, 22)
+print("A2", x.a, x.b)
+x5 = A5(51, 52, 53, 54, "five")
+print("A5", x5.a, x5.b, x5.c, x5.d, x5.e)
+print("P", P().x)
+k = Kid(7)
+print("Kid", k.a, k.b, k.k)

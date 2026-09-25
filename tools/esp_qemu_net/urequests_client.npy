@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: 0BSD
+# tools/esp_qemu_urequests.sh stages this as main.npy, with the two
+# at-sign placeholders below filled in (the host server's port, and the
+# transcript). It is the closest thing to the silicon row (S3 as a
+# station, a server on the desktop) that runs without a board: QEMU's
+# emulated Ethernet under slirp, the host's test server reached at 10.0.2.2.
+#
+# The transcript is test/lib_mimic_urequests.npy's own, pasted in, so the
+# chip runs the same calls the desktop row diffs against CPython `requests`.
+# Then the census: free heap across 1000 requests whose responses are
+# dropped, and a POSITIVE CONTROL that keeps 200 of them, which must read a
+# clearly nonzero cost per request, or the heap reading cannot see a leak.
+import urequests
+import 'espsys.pas' as board
+import 'qemueth.pas' as qemueth
+
+rc = qemueth.up(30000)
+print("UREQ-ETH rc=" + str(rc))
+base = "http://10.0.2.2:@PORT@"
+print("UREQ-BEGIN")
+@TRANSCRIPT@
+
+
+def one():
+    r = urequests.get(base + "/hello")
+    n = r.status_code + len(r.text)
+    r.close()
+    return n
+
+
+def one_kept(kept):
+    r = urequests.get(base + "/hello")
+    n = r.status_code + len(r.text)
+    r.close()
+    kept.append(r)
+    return n
+
+
+total = 0
+for i in range(20):
+    total = total + one()
+h0 = board.free_heap()
+for i in range(1000):
+    total = total + one()
+    if i % 100 == 99:
+        print("UREQ-HEAP after=" + str(i + 1) + " free=" + str(board.free_heap()))
+h1 = board.free_heap()
+print("UREQ-CENSUS dropped n=1000 delta=" + str(h0 - h1) + " bpr=" + str((h0 - h1) // 1000) + " total=" + str(total))
+kept = []
+h2 = board.free_heap()
+for i in range(200):
+    total = total + one_kept(kept)
+h3 = board.free_heap()
+print("UREQ-CENSUS kept n=200 delta=" + str(h2 - h3) + " bpr=" + str((h2 - h3) // 200) + " live=" + str(len(kept)))
+print("UREQ-COMPLETE")

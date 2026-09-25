@@ -2847,8 +2847,17 @@ begin
     pw := 0;
     { Windowed carries the hidden aggregate-result pointer as the implicit
       FIRST argument word (EmitAggregateDestStash already spilled it), so the
-      declared parameters start at word 1. Call0 uses a8 and does not shift. }
-    if (XtensaABI = XTENSA_ABI_WINDOWED) and (ProcAggregateDestSym[procIdx] >= 0) then
+      declared parameters start at word 1. Call0 uses a8 and does not shift.
+      The shift asks the CALLER's question (ir_codegen_xtensa.inc IR_CALL:
+      ABIRetViaHiddenDestProc), not whether this body allocated a slot to
+      stash the pointer in. A NilPy __init__ has a hidden-dest RetType and no
+      dest slot (isCtor skips $pyresult), so the caller sent word 0 = the
+      scratch dest and this loop read it as `self`: every field __init__
+      stored went into the caller's scratch and every S3 object came back
+      zeroed. Every other target carries the pointer in a NON-argument
+      register (r10, ecx, x8, r12, t1), which is why only windowed xtensa
+      could see the two predicates disagree. }
+    if (XtensaABI = XTENSA_ABI_WINDOWED) and ABIRetViaHiddenDestProc(procIdx) then
       pw := 1;
     if XtensaABI = XTENSA_ABI_WINDOWED then
       xtInBias := 32                       { entry sp, 32 in the prologue }

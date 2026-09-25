@@ -37670,6 +37670,20 @@ test-esp-idf: $(COMPILER)
 	    > $(TESTTMP)/nilpy_esp_math.$$c.log 2>&1; then echo "nilpy-$$c math errors keep running ok"; \
 	  else tail -n 30 $(TESTTMP)/nilpy_esp_math.$$c.log; echo "nilpy-$$c math errors MISMATCH"; exit 1; fi; \
 	done
+	@# A NILPY __init__ FILLS THE OBJECT THE CALLER GETS BACK, on the S3 too.
+	@# Windowed xtensa passes the hidden result pointer as argument word 0; the
+	@# caller sent it for an __init__ and the callee did not skip it, so every
+	@# field landed in the caller's scratch and every S3 object came back zeroed
+	@# (urequests.Response(...).content was None). No hosted xtensa row can see
+	@# it: NilPy does not build for --platform=posix xtensa. c3 is the control.
+	@for c in c3 s3; do \
+	  if PXX=$(CURDIR)/$(COMPILER) \
+	    PXX_MAIN=$(CURDIR)/test/test_nilpy_a_constructor_keeps_its_fields_on_windowed_xtensa.npy \
+	    PXX_EXPECT=$(CURDIR)/test/test_nilpy_a_constructor_keeps_its_fields_on_windowed_xtensa.expected \
+	    bash -c ". \"\$$HOME/esp/esp-idf/export.sh\" >/dev/null 2>&1 && tools/esp_project_build.sh examples/esp32/nilpy-$$c qemu-assert" \
+	    > $(TESTTMP)/nilpy_esp_ctor.$$c.log 2>&1; then echo "nilpy-$$c constructor keeps its fields ok"; \
+	  else tail -n 30 $(TESTTMP)/nilpy_esp_ctor.$$c.log; echo "nilpy-$$c constructor keeps its fields MISMATCH"; exit 1; fi; \
+	done
 
 	@# THE HARDWARE DEMO'S SOURCE, both ESP ISAs, BUILD ONLY -- the qemu run of
 	@# it lives in examples/esp32/nilpy-hw-{c3,s3}/build.sh, as for the other
