@@ -748,7 +748,15 @@ begin
   f.Ticker.OnTimer := @EspForm.OnTick;
   f.OnResize := @EspForm.OnFormResize;
 
-  if (start <> '') and (start[1] <> '/') then start := f.RepoRoot + '/' + start;
+  { a relative folder is the caller's first (espide.sh runs from any CWD),
+    else the checkout's: `espide examples/esp32/hello-s3` works anywhere }
+  if (start <> '') and (start[1] <> '/') then
+  begin
+    if DirectoryExists(ExpandFileName(start)) then
+      start := ExpandFileName(start)
+    else
+      start := f.RepoRoot + '/' + start;
+  end;
   f.RootEdit.Text := start;
   f.OnOpen(nil);
   f.ChipBox.ItemIndex := 0;

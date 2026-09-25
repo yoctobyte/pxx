@@ -43,10 +43,16 @@ A folder tree, an editor, and one button that builds an ESP-IDF project for
 the chip on the USB port, flashes it, and follows its serial output.
 
 ```sh
-apps/ide/esp/build.sh                        # pinned stable compiler
+./espide.sh [folder]                         # from the repo root: builds if stale, then starts
+apps/ide/esp/build.sh                        # or by hand: pinned stable compiler
 apps/ide/esp/espide [folder]                 # default: examples/esp32
 apps/ide/esp/espide --auto <project> [secs]  # detect, build+flash, monitor secs, exit
 ```
+
+`espide.sh` rebuilds when the binary is missing or older than anything in
+`apps/ide/esp`, `apps/ide/garin`, `lib/pcl` or `lib/rtl`, or than the pinned
+compiler. It works from any directory, and it prints a one-line fix, then
+starts anyway, when the user is not in the `dialout` group.
 
 - **A project** is what `tools/esp_flash.sh --project` builds: a folder with
   `CMakeLists.txt` and `build.sh`, like every `examples/esp32/<name>-<chip>`.
@@ -61,6 +67,7 @@ apps/ide/esp/espide --auto <project> [secs]  # detect, build+flash, monitor secs
   `build.sh` holds the flags), then opens the port as a serial monitor
   (115200). `Stop` ends a running child; Detect and Build+Flash close the
   monitor first, because esptool needs the port.
-- Serial ports need the `dialout` group.
+- Serial ports need the `dialout` group. A relative folder argument is looked
+  up in the current directory first, then in the checkout.
 - The decisions live in `garin/espproj.pas` and are tested headlessly by
   `apps/ide/test.sh` (bochan); the face only renders them.

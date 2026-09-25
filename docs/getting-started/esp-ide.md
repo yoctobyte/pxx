@@ -38,15 +38,36 @@ an ESP32-S3 devkit (`/dev/ttyACM0`). No ESP32-C3 board has been tried; see
 
 ## Build and start it
 
-From the root of the checkout:
+`espide.sh` at the root of the checkout does both:
+
+```sh
+./espide.sh                              # opens examples/esp32
+./espide.sh examples/esp32/hello-s3      # opens that folder
+```
+
+It builds the IDE first when the binary is missing or older than its sources
+(`apps/ide/esp`, `apps/ide/garin`, `lib/pcl`, `lib/rtl`) or the pinned
+compiler, which takes about ten seconds. Then it starts the IDE with your
+arguments. It works from any directory. A relative folder is looked up in your
+current directory first, then in the checkout, so
+`examples/esp32/hello-s3` works from anywhere. If you are not in the
+`dialout` group, it prints one line saying how to fix that, and starts the
+IDE anyway:
+
+```text
+espide.sh: to use the board's serial port, run: sudo usermod -aG dialout <you>  -- then log out and back in.
+espide.sh: you are in the dialout group, but this login predates it: log out and back in to use the board's serial port.
+```
+
+The first line is for a user who is not in the group. The second is for a
+user who was added but has not logged in again since.
+
+To build and run it by hand instead:
 
 ```sh
 apps/ide/esp/build.sh                    # built: apps/ide/esp/espide
-apps/ide/esp/espide                      # opens examples/esp32
 apps/ide/esp/espide examples/esp32/hello-s3
 ```
-
-The build uses the pinned compiler and takes about ten seconds.
 
 ## Using it
 
@@ -134,8 +155,8 @@ Two options run the IDE unattended. The window still opens, so under a
 headless session run it with `xvfb-run -a`.
 
 ```sh
-apps/ide/esp/espide --gui-smoke                           # opens, paints, prints GUI SMOKE OK
-apps/ide/esp/espide --auto examples/esp32/hello-s3 10     # detect, build+flash, monitor 10 s
+./espide.sh --gui-smoke                           # opens, paints, prints GUI SMOKE OK
+./espide.sh --auto examples/esp32/hello-s3 10     # detect, build+flash, monitor 10 s
 ```
 
 `--auto` prints the log to standard output and ends with
