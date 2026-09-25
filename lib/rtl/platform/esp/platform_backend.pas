@@ -154,6 +154,10 @@ const
 
   PAL_NET_AF_INET = 2;
   PAL_NET_ENOTSUP = -95;   { lwIP has no AF_UNIX }
+  { the same values as platform.pas's PAL_NET_*, which this unit cannot see
+    (platform uses it); they are the PAL contract's Linux numbers }
+  PAL_NET_ECONNRESET = -104;
+  PAL_NET_ECONNREFUSED = -111;
   { lwIP's numbering (lwip/sockets.h), NOT Linux's. These were 1 / 2 / 4, the
     Linux values, from the first cut of this unit: every SO_REUSEADDR set and
     every SO_ERROR read on ESP asked lwIP for an option that does not exist
@@ -214,6 +218,106 @@ function lwip_getsockopt(s, level, optname: Integer; optval: Pointer; optlen: Po
 function lwip_getsockname(s: Integer; name: Pointer; namelen: Pointer): Integer; cdecl; external;
 function lwip_getpeername(s: Integer; name: Pointer; namelen: Pointer): Integer; cdecl; external;
 function lwip_ioctl(s: Integer; cmd: LongWord; argp: Pointer): Integer; cdecl; external;
+
+{ ERRNO, IN THE NUMBERING THE PAL PROMISES. The PAL's contract is -errno in
+  LINUX numbering (PAL_NET_ETIMEDOUT = -110, and the POSIX backend hands back
+  the raw syscall result), so a caller can compare against PAL_NET_* and a
+  NilPy OSError can carry CPython's number. lwIP reports a failure as -1 and
+  leaves the cause in NEWLIB's errno, whose numbering is NOT Linux's for 69
+  names -- ETIMEDOUT is 116 there, EINPROGRESS 119, EHOSTUNREACH 118 -- so this
+  backend used to return a bare -1 and every socket error read "[Errno 1]".
+  The table below is GENERATED, not recalled: the toolchain's sys/errno.h
+  (xtensa and riscv32 are identical) joined by NAME with CPython's errno
+  module, and only the names whose numbers differ are listed; the other 50
+  (EAGAIN 11, ECONNRESET 104, ECONNREFUSED 111, ...) pass through. }
+function __errno: PInteger; cdecl; external;
+
+function EspLinuxErrno(e: Integer): Integer;
+begin
+  case e of
+    35: EspLinuxErrno := 42;   { ENOMSG }
+    36: EspLinuxErrno := 43;   { EIDRM }
+    37: EspLinuxErrno := 44;   { ECHRNG }
+    38: EspLinuxErrno := 45;   { EL2NSYNC }
+    39: EspLinuxErrno := 46;   { EL3HLT }
+    40: EspLinuxErrno := 47;   { EL3RST }
+    41: EspLinuxErrno := 48;   { ELNRNG }
+    42: EspLinuxErrno := 49;   { EUNATCH }
+    43: EspLinuxErrno := 50;   { ENOCSI }
+    44: EspLinuxErrno := 51;   { EL2HLT }
+    45: EspLinuxErrno := 35;   { EDEADLK }
+    46: EspLinuxErrno := 37;   { ENOLCK }
+    50: EspLinuxErrno := 52;   { EBADE }
+    51: EspLinuxErrno := 53;   { EBADR }
+    52: EspLinuxErrno := 54;   { EXFULL }
+    53: EspLinuxErrno := 55;   { ENOANO }
+    54: EspLinuxErrno := 56;   { EBADRQC }
+    55: EspLinuxErrno := 57;   { EBADSLT }
+    56: EspLinuxErrno := 35;   { EDEADLOCK }
+    57: EspLinuxErrno := 59;   { EBFONT }
+    74: EspLinuxErrno := 72;   { EMULTIHOP }
+    76: EspLinuxErrno := 73;   { EDOTDOT }
+    77: EspLinuxErrno := 74;   { EBADMSG }
+    80: EspLinuxErrno := 76;   { ENOTUNIQ }
+    81: EspLinuxErrno := 77;   { EBADFD }
+    82: EspLinuxErrno := 78;   { EREMCHG }
+    83: EspLinuxErrno := 79;   { ELIBACC }
+    84: EspLinuxErrno := 80;   { ELIBBAD }
+    85: EspLinuxErrno := 81;   { ELIBSCN }
+    86: EspLinuxErrno := 82;   { ELIBMAX }
+    87: EspLinuxErrno := 83;   { ELIBEXEC }
+    88: EspLinuxErrno := 38;   { ENOSYS }
+    90: EspLinuxErrno := 39;   { ENOTEMPTY }
+    91: EspLinuxErrno := 36;   { ENAMETOOLONG }
+    92: EspLinuxErrno := 40;   { ELOOP }
+    106: EspLinuxErrno := 97;   { EAFNOSUPPORT }
+    107: EspLinuxErrno := 91;   { EPROTOTYPE }
+    108: EspLinuxErrno := 88;   { ENOTSOCK }
+    109: EspLinuxErrno := 92;   { ENOPROTOOPT }
+    110: EspLinuxErrno := 108;   { ESHUTDOWN }
+    112: EspLinuxErrno := 98;   { EADDRINUSE }
+    113: EspLinuxErrno := 103;   { ECONNABORTED }
+    114: EspLinuxErrno := 101;   { ENETUNREACH }
+    115: EspLinuxErrno := 100;   { ENETDOWN }
+    116: EspLinuxErrno := 110;   { ETIMEDOUT }
+    117: EspLinuxErrno := 112;   { EHOSTDOWN }
+    118: EspLinuxErrno := 113;   { EHOSTUNREACH }
+    119: EspLinuxErrno := 115;   { EINPROGRESS }
+    120: EspLinuxErrno := 114;   { EALREADY }
+    121: EspLinuxErrno := 89;   { EDESTADDRREQ }
+    122: EspLinuxErrno := 90;   { EMSGSIZE }
+    123: EspLinuxErrno := 93;   { EPROTONOSUPPORT }
+    124: EspLinuxErrno := 94;   { ESOCKTNOSUPPORT }
+    125: EspLinuxErrno := 99;   { EADDRNOTAVAIL }
+    126: EspLinuxErrno := 102;   { ENETRESET }
+    127: EspLinuxErrno := 106;   { EISCONN }
+    128: EspLinuxErrno := 107;   { ENOTCONN }
+    129: EspLinuxErrno := 109;   { ETOOMANYREFS }
+    131: EspLinuxErrno := 87;   { EUSERS }
+    132: EspLinuxErrno := 122;   { EDQUOT }
+    133: EspLinuxErrno := 116;   { ESTALE }
+    134: EspLinuxErrno := 95;   { ENOTSUP }
+    135: EspLinuxErrno := 123;   { ENOMEDIUM }
+    138: EspLinuxErrno := 84;   { EILSEQ }
+    139: EspLinuxErrno := 75;   { EOVERFLOW }
+    140: EspLinuxErrno := 125;   { ECANCELED }
+    141: EspLinuxErrno := 131;   { ENOTRECOVERABLE }
+    142: EspLinuxErrno := 130;   { EOWNERDEAD }
+    143: EspLinuxErrno := 86;   { ESTRPIPE }
+  else
+    EspLinuxErrno := e;
+  end;
+end;
+
+{ A lwIP return: itself when it succeeded, else -errno (Linux numbering). }
+function EspNet(rc: Integer): Integer;
+var e: Integer;
+begin
+  if rc >= 0 then begin EspNet := rc; Exit; end;
+  e := __errno^;
+  if e <= 0 then EspNet := rc   { no cause recorded: keep lwIP's own value }
+  else EspNet := -EspLinuxErrno(e);
+end;
 {$endif}
 
 { lwIP/BSD sockaddr_in: byte 0 = sin_len, byte 1 = sin_family (NOT the Linux
@@ -924,7 +1028,7 @@ end;
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_socket(domain, kind, proto);
+  Result := EspNet(lwip_socket(domain, kind, proto));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -935,7 +1039,7 @@ var one: Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   one := enabled;
-  Result := lwip_setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, @one, 4);
+  Result := EspNet(lwip_setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, @one, 4));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -944,7 +1048,7 @@ end;
 function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_setsockopt(handle, level, optname, valPtr, valLen);
+  Result := EspNet(lwip_setsockopt(handle, level, optname, valPtr, valLen));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -955,7 +1059,7 @@ var flags: Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   if enabled <> 0 then flags := O_NONBLOCK else flags := 0;
-  Result := lwip_fcntl(handle, F_SETFL, flags);
+  Result := EspNet(lwip_fcntl(handle, F_SETFL, flags));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -966,7 +1070,7 @@ var sa: array[0..15] of Byte;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   FillSockAddrIpv4(@sa[0], hostAddr, port);
-  Result := lwip_bind(handle, @sa[0], 16);
+  Result := EspNet(lwip_bind(handle, @sa[0], 16));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -985,7 +1089,12 @@ var sa: array[0..15] of Byte;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   FillSockAddrIpv4(@sa[0], hostAddr, port);
-  Result := lwip_connect(handle, @sa[0], 16);
+  Result := EspNet(lwip_connect(handle, @sa[0], 16));
+  { lwIP reports EVERY RST as ECONNRESET, including the one answering our SYN.
+    That is a refusal -- no connection existed to be reset -- and it is what
+    Linux, and so the PAL contract, calls ECONNREFUSED. Measured on the S3: a
+    connect to a closed 127.0.0.1 port read [Errno 104] until this line. }
+  if Result = PAL_NET_ECONNRESET then Result := PAL_NET_ECONNREFUSED;
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1042,7 +1151,7 @@ end;
 function PalBackendListen(handle, backlog: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_listen(handle, backlog);
+  Result := EspNet(lwip_listen(handle, backlog));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1051,7 +1160,7 @@ end;
 function PalBackendAccept(handle: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_accept(handle, nil, nil);
+  Result := EspNet(lwip_accept(handle, nil, nil));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1097,7 +1206,7 @@ begin
   rc := XlatMsgFlags(flags, f);
   if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_recv(handle, buf, len, f);
+  Result := EspNet(lwip_recv(handle, buf, len, f));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1112,7 +1221,7 @@ begin
   rc := XlatMsgFlags(flags, f);
   if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_send(handle, buf, len, f);
+  Result := EspNet(lwip_send(handle, buf, len, f));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1121,7 +1230,7 @@ end;
 function PalBackendShutdown(handle, how: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_shutdown(handle, how);
+  Result := EspNet(lwip_shutdown(handle, how));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1130,7 +1239,7 @@ end;
 function PalBackendSocketClose(handle: Integer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_close(handle);
+  Result := EspNet(lwip_close(handle));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1143,7 +1252,7 @@ begin
   if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   FillSockAddrIpv4(@sa[0], hostAddr, port);
-  Result := lwip_sendto(handle, buf, len, f, @sa[0], 16);
+  Result := EspNet(lwip_sendto(handle, buf, len, f, @sa[0], 16));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1162,7 +1271,7 @@ begin
   if rc <> 0 then begin Result := rc; Exit; end;
   for i := 0 to 15 do sa[i] := 0;
   addrlen := 16;
-  Result := lwip_recvfrom(handle, buf, len, f, @sa[0], @addrlen);
+  Result := EspNet(lwip_recvfrom(handle, buf, len, f, @sa[0], @addrlen));
   if Result >= 0 then
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
 end;
@@ -1180,7 +1289,7 @@ var pfd: array[0..1] of Integer;
 begin
   pfd[0] := handle;
   pfd[1] := events and $FFFF;
-  Result := lwip_poll(@pfd[0], 1, timeoutMs);
+  Result := EspNet(lwip_poll(@pfd[0], 1, timeoutMs));
   if Result > 0 then
     Result := (pfd[1] shr 16) and $FFFF;
 end;
@@ -1197,7 +1306,7 @@ end;
 function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
 begin
-  Result := lwip_poll(fds, nfds, timeoutMs);
+  Result := EspNet(lwip_poll(fds, nfds, timeoutMs));
 end;
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
@@ -1213,11 +1322,11 @@ var
 begin
   err := 0;
   optlen := 4;
-  rc := lwip_getsockopt(handle, SOL_SOCKET, SO_ERROR, @err, @optlen);
+  rc := EspNet(lwip_getsockopt(handle, SOL_SOCKET, SO_ERROR, @err, @optlen));
   if rc < 0 then
     Result := rc
   else
-    Result := -err;
+    Result := -EspLinuxErrno(err);   { SO_ERROR holds a NEWLIB errno too }
 end;
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
 begin
@@ -1235,7 +1344,7 @@ var
 begin
   for i := 0 to 15 do sa[i] := 0;
   addrlen := 16;
-  rc := lwip_getsockname(handle, @sa[0], @addrlen);
+  rc := EspNet(lwip_getsockname(handle, @sa[0], @addrlen));
   outAddr := 0;
   outPort := 0;
   if rc >= 0 then
@@ -1260,7 +1369,7 @@ var
 begin
   for i := 0 to 15 do sa[i] := 0;
   addrlen := 16;
-  rc := lwip_getpeername(handle, @sa[0], @addrlen);
+  rc := EspNet(lwip_getpeername(handle, @sa[0], @addrlen));
   outAddr := 0;
   outPort := 0;
   if rc >= 0 then
@@ -1278,7 +1387,7 @@ end;
 function PalBackendGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_getsockopt(handle, level, optname, valPtr, lenPtr);
+  Result := EspNet(lwip_getsockopt(handle, level, optname, valPtr, lenPtr));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1287,7 +1396,7 @@ end;
 function PalBackendIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
 begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_ioctl(handle, LongWord(cmd), argp);
+  Result := EspNet(lwip_ioctl(handle, LongWord(cmd), argp));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -1303,7 +1412,7 @@ var
 begin
   for i := 0 to 15 do sa[i] := 0;
   addrlen := 16;
-  rc := lwip_accept(handle, @sa[0], @addrlen);
+  rc := EspNet(lwip_accept(handle, @sa[0], @addrlen));
   outAddr := 0;
   outPort := 0;
   if rc >= 0 then

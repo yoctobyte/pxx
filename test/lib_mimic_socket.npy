@@ -51,5 +51,54 @@ except OSError:
     print("unknown host -> OSError")
 with socket.socket() as s:
     print("with ok", s.fileno() >= 0)
+
+# ERRORS AND TIMEOUTS: CPython's OSError subclass and its exact str().
+srv.setblocking(False)
+try:
+    srv.accept()
+except OSError as e:
+    print("non-blocking accept:", str(e))
+print("gettimeout after setblocking(False):", srv.gettimeout())
+srv.settimeout(0.2)
+print("gettimeout:", srv.gettimeout())
+try:
+    srv.accept()
+    print("accept: unexpected connection")
+except TimeoutError as e:
+    print("accept with timeout: TimeoutError", str(e))
+cli = socket.socket()
+cli.connect(("127.0.0.1", port))
+conn, addr = srv.accept()
+conn.settimeout(0.1)
+try:
+    conn.recv(16)
+    print("recv: unexpected data")
+except TimeoutError as e:
+    print("recv with timeout: TimeoutError", str(e))
+cli.sendall(b"late")
+print("recv after data:", conn.recv(16))
+conn.close()
+cli.close()
+srv.settimeout(None)
+print("gettimeout after None:", srv.gettimeout())
+try:
+    srv.settimeout(-1)
+except ValueError as e:
+    print("negative timeout: ValueError", str(e))
+
+# a port nobody listens on: bound, then closed, so it is free and closed
+gone = socket.socket()
+gone.bind(("127.0.0.1", 0))
+dead = gone.getsockname()[1]
+gone.close()
+for t in [None, 1.0]:
+    c = socket.socket()
+    c.settimeout(t)
+    try:
+        c.connect(("127.0.0.1", dead))
+        print("connect: unexpected success")
+    except ConnectionRefusedError as e:
+        print("refused connect, timeout", t, ": ConnectionRefusedError", str(e))
+    c.close()
 srv.close()
 print("done")

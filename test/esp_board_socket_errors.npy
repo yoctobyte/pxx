@@ -1,0 +1,84 @@
+# BOARD ONLY (ESP32-S3): socket errors carry CPython's errno, subclass and
+# text on the lwIP backend, and settimeout gives up instead of hanging.
+#
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=$PWD/test/esp_board_socket_errors.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-station-s3 --no-verify --seconds 20
+#   and compare the program's lines (ap .. SOCKET-ERRORS-DONE) with
+#   test/esp_board_socket_errors.expected
+#
+# Before the errno translation in lib/rtl/platform/esp/platform_backend.pas a
+# failed socket call on ESP raised "[Errno 1]" whatever the cause: lwIP
+# returns -1 and leaves the cause in NEWLIB's errno, whose numbering is not
+# Linux's (ETIMEDOUT 116, EINPROGRESS 119, EHOSTUNREACH 118); and settimeout
+# refused any positive value. A refused connect also needs the RST-to-SYN
+# note in the backend's connect: lwIP calls it ECONNRESET. The expected text is CPython-on-Linux's for the
+# same calls (measured with test/lib_mimic_socket.npy, which runs there).
+import network
+import socket
+import 'espsys.pas' as board
+
+ap = network.WLAN(network.AP_IF)
+ap.config(essid="PXX-ERRNO", password="pascal26")
+ap.active(True)
+print("ap", ap.ifconfig()[0])
+
+srv = socket.socket()
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind(("0.0.0.0", 8080))
+srv.listen(2)
+
+srv.setblocking(False)
+try:
+    srv.accept()
+except OSError as e:
+    print("non-blocking accept:", str(e))
+
+srv.settimeout(0.3)
+t0 = board.uptime_ms()
+try:
+    srv.accept()
+    print("accept: unexpected connection")
+except TimeoutError as e:
+    ms = board.uptime_ms() - t0
+    print("accept timeout: TimeoutError", str(e), "after 250..1000 ms", ms >= 250 and ms < 1000)
+
+# a port nobody listens on
+for t in [None, 1.0]:
+    c = socket.socket()
+    c.settimeout(t)
+    try:
+        c.connect(("127.0.0.1", 8081))
+        print("connect: unexpected success")
+    except OSError as e:
+        print("refused connect, timeout", t, ":", type(e).__name__, str(e))
+    c.close()
+
+# an address on the AP's own subnet with nobody behind it: ARP never answers,
+# so only the timeout can end this -- it must, rather than hang
+c = socket.socket()
+c.settimeout(1.5)
+t0 = board.uptime_ms()
+try:
+    c.connect(("192.168.4.77", 80))
+    print("connect: unexpected success")
+except OSError as e:
+    ms = board.uptime_ms() - t0
+    print("unreachable host:", type(e).__name__, str(e), "within 3 s", ms < 3000)
+c.close()
+
+# a recv that times out, then one that gets data
+srv.settimeout(None)
+cli = socket.socket()
+cli.connect(("127.0.0.1", 8080))
+conn, addr = srv.accept()
+conn.settimeout(0.2)
+try:
+    conn.recv(16)
+except TimeoutError as e:
+    print("recv timeout: TimeoutError", str(e))
+cli.sendall(b"late")
+print("recv after data:", conn.recv(16))
+conn.close()
+cli.close()
+srv.close()
+print("SOCKET-ERRORS-DONE")

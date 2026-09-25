@@ -13,19 +13,23 @@ unit mimic_socket;
   accept -> (conn, (ip, port)), connect((host, port)), recv, send, sendall,
   close, setsockopt(SOL_SOCKET, SO_REUSEADDR, 1), setblocking, getsockname,
   fileno, and `with`. A host is a dotted quad, '' / '0.0.0.0' (any) or
-  'localhost'.
+  'localhost'. settimeout / gettimeout in all three of CPython's modes: None
+  blocks, 0 is non-blocking, and t > 0 makes connect, accept, recv and send
+  each give up after t seconds with TimeoutError('timed out') -- done as
+  CPython does it, a non-blocking socket plus a poll per call.
 
   WHAT IT REFUSES, loudly: any family but AF_INET and any type but
   SOCK_STREAM (OSError at construction, not a socket that quietly is TCP);
   a host name other than 'localhost' (there is no resolver here -- CPython
-  would look it up, and guessing is worse than refusing); settimeout with a
-  positive value (the PAL has no per-socket timeout; accepting the number and
-  blocking forever would turn "give up after 2 s" into "hang"). settimeout(None)
-  and settimeout(0) are the blocking and non-blocking modes and are honoured.
+  would look it up, and guessing is worse than refusing).
 
-  ERRORS are OSError, as in CPython, and a non-blocking call with nothing to
-  do raises BlockingIOError, a subclass of it -- so `except OSError:` catches
-  both, exactly as there. `socket.error` is OSError, as in CPython 3.
+  ERRORS are raised as CPython raises them: the OSError SUBCLASS its errno
+  selects (ConnectionRefusedError, ConnectionResetError, TimeoutError,
+  BlockingIOError, ...) with the text CPython-on-Linux prints --
+  `[Errno 111] Connection refused`. The PAL hands back -errno in Linux
+  numbering on every backend (the ESP one translates lwIP's newlib errno), so
+  the number means the same thing on a desktop and on an ESP32.
+  `socket.error` is OSError, as in CPython 3.
 
   The constants are CPython-on-Linux's values, because they are what a
   program prints; they are mapped to the PAL's own at each call, never passed
@@ -51,7 +55,8 @@ type
   socket = class
   private
     FHandle: Integer;
-    FBlocking: Boolean;
+    FTimeoutMs: Integer;   { -1 blocking (None), 0 non-blocking, else the timeout }
+    procedure Wait(events: Integer);
   public
     constructor Create(family: Integer = AF_INET; type_: Integer = SOCK_STREAM;
       proto: Integer = 0);
@@ -65,6 +70,7 @@ type
     procedure setsockopt(level, optname, value: Integer);
     procedure setblocking(flag: Boolean);
     procedure settimeout(const value: Variant);
+    function gettimeout: Variant;
     function getsockname: TPyList;
     procedure shutdown(how: Integer);
     procedure close;
@@ -76,11 +82,71 @@ type
 implementation
 
 { PAL error codes are negative errnos in the Linux numbering on every backend. }
-procedure Fail(const what: AnsiString; rc: Int64);
+{ glibc's strerror text, which is what CPython on Linux prints, for the
+  errnos a socket call can produce; anything else prints its number only. }
+function SockStrError(e: Integer): AnsiString;
 begin
-  if (rc = PAL_NET_EAGAIN) or (rc = PAL_NET_EINPROGRESS) then
-    raise BlockingIOError.Create('[Errno 11] Resource temporarily unavailable');
-  raise OSError.Create('[Errno ' + IntToStr(-rc) + '] ' + what);
+  case e of
+    1: SockStrError := 'Operation not permitted';
+    4: SockStrError := 'Interrupted system call';
+    5: SockStrError := 'Input/output error';
+    9: SockStrError := 'Bad file descriptor';
+    11: SockStrError := 'Resource temporarily unavailable';
+    12: SockStrError := 'Cannot allocate memory';
+    13: SockStrError := 'Permission denied';
+    22: SockStrError := 'Invalid argument';
+    23: SockStrError := 'Too many open files in system';
+    24: SockStrError := 'Too many open files';
+    32: SockStrError := 'Broken pipe';
+    88: SockStrError := 'Socket operation on non-socket';
+    89: SockStrError := 'Destination address required';
+    90: SockStrError := 'Message too long';
+    91: SockStrError := 'Protocol wrong type for socket';
+    92: SockStrError := 'Protocol not available';
+    93: SockStrError := 'Protocol not supported';
+    95: SockStrError := 'Operation not supported';
+    97: SockStrError := 'Address family not supported by protocol';
+    98: SockStrError := 'Address already in use';
+    99: SockStrError := 'Cannot assign requested address';
+    100: SockStrError := 'Network is down';
+    101: SockStrError := 'Network is unreachable';
+    102: SockStrError := 'Network dropped connection on reset';
+    103: SockStrError := 'Software caused connection abort';
+    104: SockStrError := 'Connection reset by peer';
+    105: SockStrError := 'No buffer space available';
+    106: SockStrError := 'Transport endpoint is already connected';
+    107: SockStrError := 'Transport endpoint is not connected';
+    108: SockStrError := 'Cannot send after transport endpoint shutdown';
+    110: SockStrError := 'Connection timed out';
+    111: SockStrError := 'Connection refused';
+    112: SockStrError := 'Host is down';
+    113: SockStrError := 'No route to host';
+    114: SockStrError := 'Operation already in progress';
+    115: SockStrError := 'Operation now in progress';
+  else
+    SockStrError := 'Unknown error ' + IntToStr(e);
+  end;
+end;
+
+{ Raise what CPython raises for -errno `rc`: the PEP 3151 subclass the errno
+  selects, str() `[Errno N] <strerror>`. `what` names the call only when the
+  backend reported no errno at all (a bare -1 with nothing behind it). }
+procedure Fail(const what: AnsiString; rc: Int64);
+var e: Integer; msg: AnsiString;
+begin
+  e := -rc;
+  if e <= 0 then raise OSError.Create(what + ' failed (no errno)');
+  msg := '[Errno ' + IntToStr(e) + '] ' + SockStrError(e);
+  case e of
+    11, 114, 115: raise BlockingIOError.Create(msg);   { EAGAIN EALREADY EINPROGRESS }
+    32, 108: raise BrokenPipeError.Create(msg);         { EPIPE ESHUTDOWN }
+    103: raise ConnectionAbortedError.Create(msg);
+    104: raise ConnectionResetError.Create(msg);
+    111: raise ConnectionRefusedError.Create(msg);
+    110: raise TimeoutError.Create(msg);
+    4: raise InterruptedError.Create(msg);
+  end;
+  raise OSError.Create(msg);
 end;
 
 function IpText(a: LongWord): AnsiString;
@@ -144,7 +210,7 @@ begin
     raise OSError.Create('socket: only AF_INET is supported');
   if type_ <> SOCK_STREAM then
     raise OSError.Create('socket: only SOCK_STREAM is supported');
-  FBlocking := True;
+  FTimeoutMs := -1;
   FHandle := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
   if FHandle < 0 then Fail('socket', FHandle);
 end;
@@ -164,10 +230,22 @@ begin
   if rc < 0 then Fail('listen', rc);
 end;
 
+{ Timeout mode only: block up to the timeout for `events`, else raise
+  TimeoutError('timed out'), CPython's own words (socket.timeout is it). }
+procedure socket.Wait(events: Integer);
+var rc: Integer;
+begin
+  if FTimeoutMs <= 0 then Exit;
+  rc := PalPoll(FHandle, events, FTimeoutMs);
+  if rc < 0 then Fail('poll', rc);
+  if rc = 0 then raise TimeoutError.Create('timed out');
+end;
+
 function socket.accept: TPyList;
 var h, port: Integer; addr: LongWord; conn: socket; l: TPyList;
 begin
   addr := 0; port := 0;
+  Wait(PAL_POLL_IN);
   h := PalAcceptIpv4(FHandle, addr, port);
   if h < 0 then Fail('accept', h);
   conn := socket.Create;
@@ -185,6 +263,16 @@ var addr: LongWord; port, rc: Integer;
 begin
   SplitAddress(address, addr, port);
   rc := PalConnectIpv4(FHandle, addr, port);
+  if (rc = PAL_NET_EINPROGRESS) and (FTimeoutMs > 0) then
+  begin
+    { the socket is non-blocking underneath: wait for the handshake, then
+      ask it how it went }
+    Wait(PAL_POLL_OUT);
+    rc := PalGetSockError(FHandle);
+    { a handshake answered by RST was REFUSED; lwIP's SO_ERROR says reset
+      (the ESP backend's connect has the same note), Linux says refused }
+    if rc = PAL_NET_ECONNRESET then rc := PAL_NET_ECONNREFUSED;
+  end;
   if rc < 0 then Fail('connect', rc);
 end;
 
@@ -194,6 +282,7 @@ begin
   if bufsize < 0 then raise OSError.Create('recv: negative buffersize');
   r := TPyBytes.Create(bufsize);
   got := 0;
+  if bufsize > 0 then Wait(PAL_POLL_IN);
   if bufsize > 0 then got := PalRecv(FHandle, r.FData, bufsize);
   if got < 0 then Fail('recv', got);
   r.FLen := got;
@@ -204,6 +293,7 @@ function socket.send(data: TPyBytes): Integer;
 var sent: Int64;
 begin
   if data.FLen = 0 then begin send := 0; Exit; end;
+  Wait(PAL_POLL_OUT);
   sent := PalSend(FHandle, data.FData, data.FLen);
   if sent < 0 then Fail('send', sent);
   send := sent;
@@ -215,6 +305,7 @@ begin
   done := 0;
   while done < data.FLen do
   begin
+    Wait(PAL_POLL_OUT);
     sent := PalSend(FHandle, PByte(data.FData) + done, data.FLen - done);
     if sent < 0 then Fail('sendall', sent);
     done := done + sent;
@@ -234,22 +325,32 @@ begin
 end;
 
 procedure socket.setblocking(flag: Boolean);
-var rc, nb: Integer;
 begin
-  if flag then nb := 0 else nb := 1;
-  rc := PalSetSocketNonBlocking(FHandle, nb);
-  if rc < 0 then Fail('setblocking', rc);
-  FBlocking := flag;
+  if flag then settimeout(pynone) else settimeout(0);
 end;
 
 procedure socket.settimeout(const value: Variant);
-var f: Double;
+var f: Double; rc, ms: Integer;
 begin
-  if pystr_of(value) = 'None' then begin setblocking(True); Exit; end;
-  f := value;
-  if f = 0 then begin setblocking(False); Exit; end;
-  raise OSError.Create('settimeout: only None (blocking) and 0 (non-blocking) are supported; ' +
-    'the platform layer has no per-socket timeout');
+  if pystr_of(value) = 'None' then ms := -1
+  else
+  begin
+    f := value;
+    if f < 0 then raise ValueError.Create('Timeout value out of range');
+    ms := Round(f * 1000);
+    if (ms = 0) and (f > 0) then ms := 1;   { a positive timeout never means non-blocking }
+  end;
+  { None is a blocking socket; 0 and a timeout are non-blocking underneath }
+  if ms < 0 then rc := PalSetSocketNonBlocking(FHandle, 0)
+  else rc := PalSetSocketNonBlocking(FHandle, 1);
+  if rc < 0 then Fail('settimeout', rc);
+  FTimeoutMs := ms;
+end;
+
+function socket.gettimeout: Variant;
+begin
+  if FTimeoutMs < 0 then gettimeout := pynone
+  else gettimeout := FTimeoutMs / 1000.0;
 end;
 
 function socket.getsockname: TPyList;

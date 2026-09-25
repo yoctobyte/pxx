@@ -37586,6 +37586,12 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/nilpy-station-s3/main/main.npy $(TESTTMP)/nilpy_station.o >/dev/null \
 	  && echo "=== nilpy-station demo source builds [$$t]: OK ===" || exit 1; \
 	done
+	@# Socket errno/timeout board test (recipe in its header): build only here.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_socket_errors.npy $(TESTTMP)/esp_board_socket_errors.o >/dev/null \
+	  && echo "=== esp_board_socket_errors builds [$$t]: OK ===" || exit 1; \
+	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build
 	# by name (`unresolved forward: <callee>`) rather than mis-running. A body

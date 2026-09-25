@@ -6,4 +6,14 @@ sent 24
 reply b'HTTP/1.0 200 OK\r\n\r\nhello'
 unknown host -> OSError
 with ok True
+non-blocking accept: [Errno 11] Resource temporarily unavailable
+gettimeout after setblocking(False): 0.0
+gettimeout: 0.2
+accept with timeout: TimeoutError timed out
+recv with timeout: TimeoutError timed out
+recv after data: b'late'
+gettimeout after None: None
+negative timeout: ValueError Timeout value out of range
+refused connect, timeout None : ConnectionRefusedError [Errno 111] Connection refused
+refused connect, timeout 1.0 : ConnectionRefusedError [Errno 111] Connection refused
 done

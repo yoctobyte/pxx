@@ -1,0 +1,9 @@
+ap 192.168.4.1
+non-blocking accept: [Errno 11] Resource temporarily unavailable
+accept timeout: TimeoutError timed out after 250..1000 ms True
+refused connect, timeout None : ConnectionRefusedError [Errno 111] Connection refused
+refused connect, timeout 1.0 : ConnectionRefusedError [Errno 111] Connection refused
+unreachable host: TimeoutError timed out within 3 s True
+recv timeout: TimeoutError timed out
+recv after data: b'late'
+SOCKET-ERRORS-DONE
