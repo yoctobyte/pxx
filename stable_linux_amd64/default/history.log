@@ -426,3 +426,4 @@
 2026-09-25T06:23:05Z  v426  7b742af6f9dfd8188335a209797c5fd634bdd83cd6c1a5a0b446220d5dad1afc  3f3685a8f2cec5b9cb821dd6588f2cb2f71c3dab  fix(threads): census leaks: FreeOnTerminate handles, NilPy Thread handles, reap-table UAF, pthread_detach
 2026-09-25T07:30:21Z  v427  354cd45e6373c44ead3da2c1f09821c98d22e4dc405641ea219371ad965a077a  e77c5d2416d6a41f88930386feb695885eb6296a  feat(N,S,A): NilPy files on ESP-IDF, CPython file errors, weakexternal in objects
 2026-09-25T08:15:48Z  v428  660b5effc408384f63af7366218b91bdfd58b61a92d672aa0112ae88a200a315  dd30aa4fb8ecbd73e1063686bd3005fcd45d610c  tstate(borg): 1cf7c75873ca RED (native)
+2026-09-25T08:28:25Z  v429  7b9e0614de39e6cbc0ef7f3051f5d2f4bdef690f9c310c0a6863aef94fada9f6  cf6fcb0cae8872629bf6b34e94d8886a27d07931  tools: esp_heap_soak.sh, a free-heap soak of an ESP example under QEMU
