@@ -34193,6 +34193,8 @@ begin
     Expect(tkAssign, '=');
   end;
   PyParseBoolExpr;
+  { `a = b = 1, 2`: the shared value is a tuple, as for a single target }
+  if CurTok.Kind = tkComma then CurASTNode := PyMakeTupleFrom(CurASTNode);
   chainTmp := AllocVar(PyHiddenName('chain'), PyStorageTk(ASTTk[CurASTNode]));
   Syms[chainTmp].RecName := ResolveNodeRec(CurASTNode);
   SymSyncTypeRef(chainTmp);
@@ -35540,9 +35542,18 @@ begin
       begin
         PyParseBoolExpr;
         rhsNode := CurASTNode;
-        { `g = lambda ...`: box the closure/bound-fn pointer so the name is a
-          variant and `g(...)` reaches the dynamic-call path at all. }
-        rhsNode := PyBoxCallableValue(rhsNode);
+        { `x = a, b` binds a TUPLE, exactly as `return a, b` returns one
+          (ds3231: `result = YY, MM, DD, hh, mm, ss, wday - 1, 0`). The same
+          builder as return and yield, so the three spellings cannot drift.
+          Without it the statement ended at the first comma: "expected
+          newline after statement" in a def, "expected expression" at module
+          scope. }
+        if CurTok.Kind = tkComma then
+          rhsNode := PyMakeTupleFrom(rhsNode)
+        else
+          { `g = lambda ...`: box the closure/bound-fn pointer so the name is
+            a variant and `g(...)` reaches the dynamic-call path at all. }
+          rhsNode := PyBoxCallableValue(rhsNode);
       end;
     end;
     if symIdx < 0 then

@@ -374,6 +374,17 @@ begin
       if pdepth <= 0 then Exit;   { statement-level newline: not adjacent }
       Inc(j);
     end
+    else if ch = '#' then
+    begin
+      { A COMMENT is whitespace to the join, as it is to CPython:
+        `("ab"  # one` then `"cd")` is one literal. The header above always
+        promised this skip and the loop never had it, so a comment after the
+        first piece -- trailing or on its own line -- broke on `#`, the join
+        never happened, and the parse died on "expected ')' before '"cd"'".
+        Only up to the newline; whether the newline keeps the pieces adjacent
+        stays the pdepth rule's decision. }
+      while (j <= srcLen) and (src[j] <> #10) do Inc(j);
+    end
     else break;
   end;
   if j > srcLen then Exit;

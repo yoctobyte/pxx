@@ -525,6 +525,8 @@ test-nilpy: $(COMPILER)
 	sh test/nilpy_str_default_bss.sh ./$(COMPILER) $(TESTTMP)
 	./$(COMPILER) test/test_nilpy_bitwise_invert_of_a_variant_or_bool_is_an_integer.py $(TESTTMP)/test_nilpy_invert26
 	tools/expect_same.sh test_nilpy_invert26 "$$($(TESTTMP)/test_nilpy_invert26)" "$$(printf '4 2\n(-3, -5, -3)\n(-4, -9, -4)\n-2 -1 -6 0 -2')"
+	./$(COMPILER) test/test_nilpy_bare_tuple_assignment_and_commented_literal_concatenation.py $(TESTTMP)/test_nilpy_baretup26
+	tools/expect_same.sh test_nilpy_baretup26 "$$($(TESTTMP)/test_nilpy_baretup26)" "$$(printf "(26, 9, 25, 12, 30, 0, 2, 0) (1, 2) ('a', 2) ('a', 2) (7,) 1\nabcd b'abcd' abcd2 p 5")"
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links
