@@ -1100,3 +1100,4 @@
 2026-09-25T05:15:23Z	borg	fdca56b72841d402f8b2996f959993ec287c8817	would-pin PENDING fdca56b72841 — qualifies, streak 1/2
 2026-09-25T06:24:43Z	borg	712f0f0986626ccb89c8430d0712dc335acc1966	WOULD PIN 712f0f098662 — 3 red(s), none new, 3 inherited from the current pin, self-host clean, streak 2/2
 2026-09-25T06:24:43Z	borg	712f0f0986626ccb89c8430d0712dc335acc1966	AUTO-PIN DECLINED — HEAD is b3e42922d5ed, not the tested 712f0f098662
+2026-09-25T07:25:27Z	borg	835dfc0f3d5fd0e30cf8f81afef620fe7f0c9e37	would NOT pin 835dfc0f3d5f — 1 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00
