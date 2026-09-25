@@ -90,4 +90,4 @@ note for this ticket. Its code is correct CPython behaviour as it stands, so
 only the note is stale.
 
 ## Log
-- 2026-09-25 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-25 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1b02d0b272.
