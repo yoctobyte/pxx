@@ -826,8 +826,10 @@ AN_COMMA Left asgn
 AN_COMMA Left blockNode
 AN_COMMA Left callNode
 AN_COMMA Left chAssign
+AN_COMMA Left dupSide
 AN_COMMA Left frAsn
 AN_COMMA Left hStmts[k]
+AN_COMMA Left k
 AN_COMMA Left left
 AN_COMMA Left mcallNode
 AN_COMMA Left node
@@ -836,6 +838,8 @@ AN_COMMA Left pyPrintNode
 AN_COMMA Left right
 AN_COMMA Left setTmpAssign
 AN_COMMA Left tmpAssign
+AN_COMMA Right ASTLeft[lastArg]
+AN_COMMA Right ASTLeft[n]
 AN_COMMA Right AllocNode(AN_INT_LIT)
 AN_COMMA Right CurASTNode
 AN_COMMA Right ParseCExpr
@@ -852,6 +856,7 @@ AN_COMMA Right ctorValN
 AN_COMMA Right frIdn
 AN_COMMA Right idx
 AN_COMMA Right innerComma
+AN_COMMA Right k
 AN_COMMA Right node
 AN_COMMA Right setInnerComma
 AN_COMMA Right sub

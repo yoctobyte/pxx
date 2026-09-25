@@ -1113,10 +1113,21 @@ test-nilpy: $(COMPILER)
 	# one-line micropython.py). $(COMPILER): inert in the pin until the next.
 	./$(COMPILER) test/test_nilpy_micropython_driver_walls.npy $(TESTTMP)/test_nilpy_mpwalls26
 	$(TESTTMP)/test_nilpy_mpwalls26 | diff -u test/test_nilpy_micropython_driver_walls.expected -
+	# the second group (v432 census): >8 unpack targets, `x & 2 > 0` with Python
+	# precedence, a multi-line parenthesised target list, and a statically
+	# invalid call that is a TypeError only when it RUNS. CPython's .expected.
+	./$(COMPILER) test/test_nilpy_micropython_driver_walls2.npy $(TESTTMP)/test_nilpy_mpwalls2_26
+	$(TESTTMP)/test_nilpy_mpwalls2_26 | diff -u test/test_nilpy_micropython_driver_walls2.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const.npy $(TESTTMP)/test_nilpy_mpconst26
 	$(TESTTMP)/test_nilpy_mpconst26 | diff -u test/test_nilpy_micropython_const.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const_import.npy $(TESTTMP)/test_nilpy_mpconsti26
 	$(TESTTMP)/test_nilpy_mpconsti26 | diff -u test/test_nilpy_micropython_const_import.expected -
+	# `import utime` is mimic_utime (MicroPython's shapes), in every spelling;
+	# `as time` alone in its file, the arrangement a first-wins alias table fails.
+	./$(COMPILER) test/test_nilpy_micropython_utime.npy $(TESTTMP)/test_nilpy_mputime26
+	$(TESTTMP)/test_nilpy_mputime26 | diff -u test/test_nilpy_micropython_utime.expected -
+	./$(COMPILER) test/test_nilpy_micropython_utime_as_time.npy $(TESTTMP)/test_nilpy_mputimeas26
+	$(TESTTMP)/test_nilpy_mputimeas26 | diff -u test/test_nilpy_micropython_utime_as_time.expected -
 	# `self.n += 1 if s > 0 else 2` -- a DOTTED augmented target reaches the
 	# shared C compound-assign tail, which parsed the RHS with Pascal precedence,
 	# so the assignment became the THEN ARM of a conditional the program never

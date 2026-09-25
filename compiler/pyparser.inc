@@ -800,6 +800,7 @@ function PyParseFor: Integer; forward;
 function PyParseForTargetSlot(slot: Integer): AnsiString; forward; { Nil Python: one entry of a for target list; a `(p, q)` group becomes a hidden name }
 function PySkipTargetGroup(i: Integer): Integer; forward; { Nil Python: step over a `(a, b)` group in an unpack target list, or -1 }
 function PySkipOneTupleTargetGroup(i: Integer): Integer; forward; { Nil Python: step over a `(n,)` ONE-element tuple target, or -1 }
+function PyParenTargetListAssign(i: Integer): Integer; forward; { Nil Python: `(a, o.w,) =` -- a WHOLE target list in parentheses; the `=`'s index, or -1 }
 { Defined further down, beside the comprehension machinery that was its first
   caller; PyParseTry now renames an `except ... as` binder with it too, and that
   sits EARLIER in this include — the FPC seed build needs the forward. }
@@ -2378,6 +2379,18 @@ begin
   end;
 end;
 
+{ A BARE comparison: what the shared ParseExpr atom hands back for `b > c`
+  when it binds the comparison tighter than a bitwise operator beside it. }
+function PyIsBareCmp(n: Integer): Boolean;
+begin
+  Result := False;
+  if (n < 0) or (ASTKind[n] <> AN_BINOP) then Exit;
+  if ASTSLen[n] = PY_BINOP_PARENED then Exit;
+  case ASTIVal[n] of
+    Ord(tkEq), Ord(tkNeq), Ord(tkLt), Ord(tkLe), Ord(tkGt), Ord(tkGe): Result := True;
+  end;
+end;
+
 function PyBitTk(n: Integer): TTypeKind;
 { The type a bitwise operand contributes to PyWiden. A Python bool IS an int
   (bool subclasses int), so it must widen with the integers rather than falling
@@ -3132,7 +3145,7 @@ end;
 
 { Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
 procedure PyParseBitOperand;
-var node, castDepth, litNode: Integer;
+var node, castDepth, litNode, cmpNode: Integer;
 begin
   if PyIsIdent('isinstance') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
@@ -3230,7 +3243,14 @@ begin
       read 0 (a lost bit in frankd-a3's framebuf shim) or SIGSEGV'd on a tag
       compare through address 0, depending on what consumed it. A bool
       operand answered `~True` False where CPython answers -2. }
-    PyBitGuard(CurASTNode);
+    { `~x > 0` is `(~x) > 0`: the atom handed back the comparison, so the
+      complement goes onto its LEFT operand (see PyBitRotate). }
+    cmpNode := -1;
+    if PyIsBareCmp(CurASTNode) then
+    begin
+      cmpNode := CurASTNode;
+      CurASTNode := ASTLeft[cmpNode];
+    end;
     litNode := AllocNode(AN_INT_LIT);
     ASTIVal[litNode] := -1;
     ASTTk[litNode] := Ord(tyInt64);
@@ -3238,48 +3258,14 @@ begin
     ASTLeft[node] := CurASTNode; ASTRight[node] := litNode;
     ASTTk[node] := Ord(PyBitWiden(CurASTNode, litNode));
     CurASTNode := node;
+    if cmpNode >= 0 then
+    begin
+      ASTLeft[cmpNode] := node;
+      CurASTNode := cmpNode;
+    end;
   end
   else
     ParseExpr;   { comparison + arithmetic atom }
-end;
-
-procedure PyParseShift;
-var left, right, node: Integer; op: TTokenKind; w: TTypeKind;
-begin
-  PyParseBitOperand;
-  left := CurASTNode;
-  while (CurTok.Kind = tkShl) or (CurTok.Kind = tkShr) do
-  begin
-    op := CurTok.Kind;
-    Next; PyParseBitOperand; right := CurASTNode;
-    { a user class dispatches its own __lshift__/__rshift__ before the generic
-      bitwise typing, which would otherwise widen tyClass to a variant and
-      segfault -- see PyBitDunder. }
-    if op = tkShl then node := PyBitDunder('__lshift__', left, right)
-    else node := PyBitDunder('__rshift__', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    PyBitGuard(left); PyBitGuard(right);
-    { a VARIANT operand dispatches at run time, as `& | ^` do: an object held
-      in a variant reaches its __lshift__/__rlshift__ (it raised RunError 219,
-      a numeric coercion refusing the object), and an int keeps the promo
-      runtime the inline shift already used. }
-    if op = tkShl then node := PyBitVariantCall('pyshl_v', left, right)
-    else node := PyBitVariantCall('pyshr_v', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op);
-    ASTLeft[node] := left; ASTRight[node] := right;
-    { A shift of machine ints is typed PROMO: `1 << 64` must promote past
-      Int64 (CPython), and Python's >> is arithmetic floor division while the
-      native shr is logical — both need the promo runtime, unconditionally.
-      Variant operands keep the variant typing; the variant binop routes
-      shifts through the same runtime (NilPy-only op map). }
-    w := PyBitWiden(left, right);
-    if (w = tyInteger) or (w = tyInt64) or (w = tyBoolean) then
-      w := tyPromoInt64;
-    ASTTk[node] := Ord(w);
-    left := node;
-  end;
-  CurASTNode := left;
 end;
 
 { A bitwise operator with a VARIANT operand -> the pylib `_v` helper, or -1
@@ -3308,6 +3294,116 @@ begin
   ASTLeft[Result] := arg0;
 end;
 
+{ ONE binary bitwise operation on two operands that are NOT comparisons: the
+  set/dict operators, a class's dunder, then the machine op. `op` is the TOKEN
+  (tkShl, tkShr, tkAmp, tkXor, tkPipe). Split out of the four precedence loops
+  so PyBitRotate can apply it to the operands a comparison was hiding. }
+function PyBitCombine(op: TTokenKind; left, right: Integer): Integer;
+var node: Integer; w: TTypeKind;
+begin
+  if op = tkPipe then
+  begin
+    { `d1 | d2` — PEP 584 dict union, checked first since dict is a distinct
+      tyClass identity from set's own TPyList use of `|` (union). See
+      pydict_or / pyset_or. }
+    if PyNodeIsPyDict(left) and PyNodeIsPyDict(right) then
+    begin Result := PyMakeDictBinCall('pydict_or', left, right); Exit; end;
+    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin Result := PyMakeListBinCall('pyset_or', left, right); Exit; end;
+    node := PyBitDunder('__or__', left, right);
+  end
+  else if op = tkAmp then
+  begin
+    { `a & b` on two sets is intersection, not a bitwise AND on their heap
+      pointers — see pyset_and's own comment
+      (bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic). }
+    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin Result := PyMakeListBinCall('pyset_and', left, right); Exit; end;
+    node := PyBitDunder('__and__', left, right);
+  end
+  else if op = tkXor then
+  begin
+    { `a ^ b` on two sets is symmetric difference — see pyset_xor. }
+    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
+    begin Result := PyMakeListBinCall('pyset_xor', left, right); Exit; end;
+    node := PyBitDunder('__xor__', left, right);
+  end
+  else if op = tkShl then
+    { a user class dispatches its own __lshift__/__rshift__ before the generic
+      bitwise typing, which would otherwise widen tyClass to a variant and
+      segfault -- see PyBitDunder. }
+    node := PyBitDunder('__lshift__', left, right)
+  else
+    node := PyBitDunder('__rshift__', left, right);
+  if node >= 0 then begin Result := node; Exit; end;
+  PyBitGuard(left); PyBitGuard(right);
+  { a VARIANT operand dispatches at run time (PyBitVariantCall): an object in
+    a variant reaches its dunder, a set or dict its own operator, an int the
+    promo runtime the inline op already used. }
+  if op = tkAmp then node := PyBitVariantCall('pybitand_v', left, right)
+  else if op = tkPipe then node := PyBitVariantCall('pybitor_v', left, right)
+  else if op = tkXor then node := PyBitVariantCall('pybitxor_v', left, right)
+  else if op = tkShl then node := PyBitVariantCall('pyshl_v', left, right)
+  else node := PyBitVariantCall('pyshr_v', left, right);
+  if node >= 0 then begin Result := node; Exit; end;
+  node := AllocNode(AN_BINOP);
+  if op = tkAmp then ASTIVal[node] := Ord(tkAnd)
+  else if op = tkPipe then ASTIVal[node] := Ord(tkOr)
+  else ASTIVal[node] := Ord(op);
+  ASTLeft[node] := left; ASTRight[node] := right;
+  w := PyBitWiden(left, right);
+  { A shift of machine ints is typed PROMO: `1 << 64` must promote past
+    Int64 (CPython), and Python's >> is arithmetic floor division while the
+    native shr is logical — both need the promo runtime, unconditionally.
+    Variant operands keep the variant typing; the variant binop routes
+    shifts through the same runtime (NilPy-only op map). }
+  if ((op = tkShl) or (op = tkShr)) and
+     ((w = tyInteger) or (w = tyInt64) or (w = tyBoolean)) then
+    w := tyPromoInt64;
+  ASTTk[node] := Ord(w);
+  Result := node;
+end;
+
+{ PYTHON'S PRECEDENCE, recovered from the shared atom's. ParseExpr binds a
+  comparison TIGHTER than & | ^ << >>, Python LOOSER, so `x & 2 > 0` arrives
+  as `x & (2 > 0)` where Python means `(x & 2) > 0` (mpu6050's driver). That
+  used to be refused ("parenthesize the comparison"). It is now re-associated:
+  a bare comparison on the RIGHT takes the operation into its LEFT operand,
+  `a & (l < r)` -> `(a & l) < r`, and one on the LEFT takes it into its
+  RIGHT, `(l < r) & b` -> `l < (r & b)`. Applied at every level, so
+  `a | b > c & d` comes out `(a | b) > (c & d)`, CPython's grouping. Both
+  sides comparisons (`a < b & c < d`, a CHAINED comparison in Python) still
+  reach PyBitGuard's refusal: chained compares are not this shape. }
+function PyBitRotate(op: TTokenKind; left, right: Integer): Integer;
+begin
+  if PyIsBareCmp(right) and (not PyIsBareCmp(left)) then
+  begin
+    ASTLeft[right] := PyBitCombine(op, left, ASTLeft[right]);
+    Result := right;
+  end
+  else if PyIsBareCmp(left) and (not PyIsBareCmp(right)) then
+  begin
+    ASTRight[left] := PyBitCombine(op, ASTRight[left], right);
+    Result := left;
+  end
+  else
+    Result := PyBitCombine(op, left, right);
+end;
+
+procedure PyParseShift;
+var left, right: Integer; op: TTokenKind;
+begin
+  PyParseBitOperand;
+  left := CurASTNode;
+  while (CurTok.Kind = tkShl) or (CurTok.Kind = tkShr) do
+  begin
+    op := CurTok.Kind;
+    Next; PyParseBitOperand; right := CurASTNode;
+    left := PyBitRotate(op, left, right);
+  end;
+  CurASTNode := left;
+end;
+
 procedure PyParseBitAnd;
 var left, right, node: Integer;
 begin
@@ -3316,26 +3412,7 @@ begin
   while CurTok.Kind = tkAmp do
   begin
     Next; PyParseShift; right := CurASTNode;
-    { `a & b` on two sets is intersection, not a bitwise AND on their heap
-      pointers — see pyset_and's own comment
-      (bug-nilpy-set-and-dict-operators-do-raw-pointer-arithmetic). Checked
-      before PyBitGuard, which has nothing useful to say about a class
-      operand either way. }
-    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
-    begin
-      node := PyMakeListBinCall('pyset_and', left, right);
-      left := node;
-      Continue;
-    end;
-    node := PyBitDunder('__and__', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    PyBitGuard(left); PyBitGuard(right);
-    node := PyBitVariantCall('pybitand_v', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
-    ASTLeft[node] := left; ASTRight[node] := right;
-    ASTTk[node] := Ord(PyBitWiden(left, right));
-    left := node;
+    left := PyBitRotate(tkAmp, left, right);
   end;
   CurASTNode := left;
 end;
@@ -3348,22 +3425,7 @@ begin
   while CurTok.Kind = tkXor do
   begin
     Next; PyParseBitAnd; right := CurASTNode;
-    { `a ^ b` on two sets is symmetric difference — see pyset_xor. }
-    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
-    begin
-      node := PyMakeListBinCall('pyset_xor', left, right);
-      left := node;
-      Continue;
-    end;
-    node := PyBitDunder('__xor__', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    PyBitGuard(left); PyBitGuard(right);
-    node := PyBitVariantCall('pybitxor_v', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
-    ASTLeft[node] := left; ASTRight[node] := right;
-    ASTTk[node] := Ord(PyBitWiden(left, right));
-    left := node;
+    left := PyBitRotate(tkXor, left, right);
   end;
   CurASTNode := left;
 end;
@@ -3376,30 +3438,7 @@ begin
   while CurTok.Kind = tkPipe do
   begin
     Next; PyParseBitXor; right := CurASTNode;
-    { `d1 | d2` — PEP 584 dict union, checked first since dict is a distinct
-      tyClass identity from set's own TPyList use of `|` (union). See
-      pydict_or / pyset_or. }
-    if PyNodeIsPyDict(left) and PyNodeIsPyDict(right) then
-    begin
-      node := PyMakeDictBinCall('pydict_or', left, right);
-      left := node;
-      Continue;
-    end;
-    if PyNodeIsPyList(left) and PyNodeIsPyList(right) then
-    begin
-      node := PyMakeListBinCall('pyset_or', left, right);
-      left := node;
-      Continue;
-    end;
-    node := PyBitDunder('__or__', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    PyBitGuard(left); PyBitGuard(right);
-    node := PyBitVariantCall('pybitor_v', left, right);
-    if node >= 0 then begin left := node; Continue; end;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
-    ASTLeft[node] := left; ASTRight[node] := right;
-    ASTTk[node] := Ord(PyBitWiden(left, right));
-    left := node;
+    left := PyBitRotate(tkPipe, left, right);
   end;
   CurASTNode := left;
 end;
@@ -9996,9 +10035,12 @@ end;
   keyword, which is every Pascal call and most NilPy ones. }
 procedure PyBindKwArgs(mpi: Integer; var argsHead, lastArg, nArgs: Integer);
 var slot: array[0..MAX_PROC_PARAMS-1] of Integer;
-    n, k, pos, maxIdx, i: Integer;
+    n, k, pos, maxIdx, i, dupSide, pe, a0, lit: Integer;
     anyKw, sawKw: Boolean;
+    dupMsg: AnsiString;
 begin
+  dupMsg := '';
+  dupSide := -1;
   anyKw := False;
   n := argsHead;
   while n >= 0 do
@@ -10030,8 +10072,29 @@ begin
     if (k < 0) or (k >= MAX_PROC_PARAMS) then
       Error('Nil Python: too many arguments to ' + Procs[mpi].Name);
     if slot[k] >= 0 then
-      Error('Nil Python: ' + Procs[mpi].Name + ' got multiple values for parameter '''
-            + Procs[mpi].Params[k].Name + '''');
+    begin
+      { STATICALLY invalid, and still not a compile error: CPython raises
+        TypeError when the call RUNS, so a driver that spells it in a branch it
+        never takes works there (st7789 probes `s.MASTER` and calls
+        `s.init(m, baudrate=..)` only in the `else:`). Warn, keep the value for
+        its side effects, and raise at run time. }
+      if dupMsg = '' then
+      begin
+        dupMsg := Procs[mpi].Name + '() got multiple values for argument '''
+                  + Procs[mpi].Params[k].Name + '''';
+        Warn('Nil Python: ' + dupMsg + ' -- a TypeError when this call runs');
+      end;
+      if dupSide < 0 then dupSide := ASTLeft[n]
+      else
+      begin
+        k := AllocNode(AN_COMMA);
+        ASTLeft[k] := dupSide; ASTRight[k] := ASTLeft[n];
+        ASTTk[k] := ASTTk[ASTLeft[n]];
+        dupSide := k;
+      end;
+      n := ASTRight[n];
+      Continue;
+    end;
     slot[k] := n;
     if k > maxIdx then maxIdx := k;
     n := ASTRight[n];
@@ -10077,6 +10140,35 @@ begin
     devdocs/dev/normalise-dont-special-case.md
     feature-nilpy-list-sort-inplace-key-reverse }
   PyCoerceCallableArgsIn(mpi, argsHead);
+  { the duplicate's run-time TypeError, riding on the LAST argument so the
+    values before it are evaluated first, as CPython evaluates all of them
+    before it binds. The last one's own value is NOT evaluated -- it sits
+    behind the raise. Chosen: the call is only ever written by mistake, and
+    evaluating it first would need a temp of its type, which a by-ref
+    parameter cannot take. }
+  if dupMsg <> '' then
+  begin
+    pe := FindProc('PyCallTypeError');
+    if pe < 0 then Error('Nil Python: ' + dupMsg);
+    lit := AllocNode(AN_STR_LIT);
+    ASTSOffset[lit] := StoredName(dupMsg);
+    ASTSLen[lit] := Length(dupMsg);
+    ASTTk[lit] := Ord(tyString);
+    a0 := AllocNode(AN_ARG);
+    ASTLeft[a0] := lit; ASTRight[a0] := -1;
+    k := AllocNode(AN_CALL);
+    ASTIVal[k] := pe; ASTLeft[k] := a0; ASTTk[k] := Ord(tyInt64);
+    if dupSide >= 0 then
+    begin
+      i := AllocNode(AN_COMMA);
+      ASTLeft[i] := dupSide; ASTRight[i] := k; ASTTk[i] := Ord(tyInt64);
+      k := i;
+    end;
+    i := AllocNode(AN_COMMA);
+    ASTLeft[i] := k; ASTRight[i] := ASTLeft[lastArg];
+    ASTTk[i] := ASTTk[ASTLeft[lastArg]];
+    ASTLeft[lastArg] := i;
+  end;
 end;
 
 { The NilPy FORMS at the head of ParseFactor: `type(x).__name__`, `super().m()`
@@ -33523,17 +33615,18 @@ begin
 end;
 
 function PyParseUnpackAssign: Integer;
-var names: array[0..7] of AnsiString;
-    flds: array[0..7] of AnsiString;    { attribute target, or '' for a plain name }
-    tmps: array[0..7] of Integer;
+var names: array of AnsiString;
+    flds: array of AnsiString;    { attribute target, or '' for a plain name }
+    tmps: array of Integer;
     { a SUBSCRIPT target — `h[i], h[j] = h[j], h[i]`. subIdx is the index node
       of the LAST bracket and subBase the value it indexes (already a read for
       an inner step, e.g. `m[i]` in `m[i][j]`); -1 when the target is a plain
       name or an attribute.
       bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
-    subBase: array[0..7] of Integer;
-    subIdx: array[0..7] of Integer;
-    vals: array[0..7] of Integer;       { each value's node, before any temp }
+    subBase: array of Integer;
+    subIdx: array of Integer;
+    vals: array of Integer;       { each value's node, before any temp }
+    cap: Integer;   { the arrays' length: grown, never a limit (bme280 unpacks 9+) }
     tgtBase: Integer;
     nTargets, nValues, i, symIdx, node, seq, tk: Integer;
     unpCi, unpIdx, unpElem: Integer;
@@ -33541,6 +33634,9 @@ var names: array[0..7] of AnsiString;
     nestOwner: Integer;   { this target list's nested groups (PyNestEmit) }
     tupleTarget, oneTupleParen: Boolean;
 begin
+  cap := 8;
+  SetLength(names, cap); SetLength(flds, cap); SetLength(tmps, cap);
+  SetLength(subBase, cap); SetLength(subIdx, cap); SetLength(vals, cap);
   nTargets := 0;
   starAt := -1;
   nestOwner := PyNestBegin;
@@ -33551,7 +33647,10 @@ begin
     every gate here used to read `nTargets > 1`, which is true for every
     ordinary unpack and false for exactly this one. }
   tupleTarget := False;
-  oneTupleParen := PySkipOneTupleTargetGroup(TokPos - 1) > 0;
+  { the whole list in parentheses -- `(a,) = xs` or `(m, o.w,) = xs`: eat the
+    '(' and read the inside as the plain list; PyParenTargetListAssign }
+  oneTupleParen := (PySkipOneTupleTargetGroup(TokPos - 1) > 0) or
+                   (PyParenTargetListAssign(TokPos - 1) > 0);
   if oneTupleParen then Next;                { the '(' }
   repeat
     if CurTok.Kind = tkStar then
@@ -33564,7 +33663,14 @@ begin
       starAt := nTargets;
       Next;
     end;
-    if nTargets >= 8 then Error('Nil Python: at most 8 unpacking targets');
+    { NO fixed limit: CPython has none, and bme280 unpacks nine calibration
+      words in one statement. The arrays grow here instead of refusing. }
+    if nTargets >= cap then
+    begin
+      cap := cap * 2;
+      SetLength(names, cap); SetLength(flds, cap); SetLength(tmps, cap);
+      SetLength(subBase, cap); SetLength(subIdx, cap); SetLength(vals, cap);
+    end;
     { a NESTED group — `a, (b, c) = ...`. Bound to a hidden name here like any
       other target, and unpacked into the user's names after every outer store;
       the same desugar the nested LOOP target uses, and for the same reason
@@ -33646,7 +33752,16 @@ begin
     drained by PyDrainIfCursor, so every shim and user iterable had this.
     bug-n-a-tuple-unpack-target-is-typed-as-the-tuple-not-as-its-element }
   if (nValues = 1) and ((nTargets > 1) or tupleTarget) then
+  begin
+    { `a, b, c = range(3)` -- a RANGE is not a cursor, so the drain below left
+      it and the refusal further down fired ("not a list, tuple or variant").
+      Materialised here, at the unpack site only: `x in r` and friends also go
+      through PyDrainIfCursor and must keep the range. }
+    if (IntToTypeKind(ASTTk[vals[0]]) = tyClass) and (FindUClass('TPyRange') >= 0) and
+       (ResolveNodeRec(vals[0]) = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+      vals[0] := PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_range', vals[0]));
     vals[0] := PyDrainIfCursor(vals[0]);
+  end;
   for i := 0 to nValues - 1 do
   begin
     tk := ASTTk[vals[i]];
@@ -33902,6 +34017,60 @@ begin
   end;
 end;
 
+function PyParenTargetListAssign(i: Integer): Integer;
+{ `(m, o.w,) = v` -- the WHOLE target list in parentheses, answering the index
+  of the `=` behind its `)`, or -1. The parentheses are grouping and change
+  nothing, so PyParseUnpackAssign eats them and reads the inside with the
+  one-line list's own element loop: attributes, subscripts, a star, nested
+  groups and a trailing comma all come for free. Before this such a list only
+  reached PySkipTargetGroup, whose elements are NAMES, so `(r, o.w) = ...` and
+  any trailing comma fell through to an expression and died as `undefined
+  variable (m)` -- st7789's driver writes its window as a multi-line
+  `(\n m,\n o.w,\n) = ...`. At least one comma: `(o.w) = v` is not a tuple
+  and keeps its old path. The same element grammar as PyUnpackTargetAhead's. }
+var nstar: Integer; sawComma: Boolean;
+begin
+  Result := -1;
+  if (i >= TokCount) or (Tokens[i].Kind <> tkLParen) then Exit;
+  Inc(i);
+  nstar := 0;
+  sawComma := False;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkStar then
+    begin
+      Inc(nstar);
+      if nstar > 1 then Exit;
+      Inc(i);
+      if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
+    end;
+    if Tokens[i].Kind = tkLParen then
+    begin
+      i := PySkipTargetGroup(i);
+      if i < 0 then Exit;
+    end
+    else if Tokens[i].Kind = tkIdent then
+    begin
+      Inc(i);
+      if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+         (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+      i := PySkipTargetSubscripts(i);
+    end
+    else Exit;
+    if (i < TokCount) and (Tokens[i].Kind = tkComma) then
+    begin
+      sawComma := True;
+      Inc(i);
+      if (i < TokCount) and (Tokens[i].Kind = tkRParen) then Break;
+      Continue;
+    end;
+    Break;
+  end;
+  if sawComma and (i + 1 < TokCount) and (Tokens[i].Kind = tkRParen) and
+     (Tokens[i + 1].Kind = tkAssign) then
+    Result := i + 1;
+end;
+
 { Does an `a, b = ...` target list start here? Only a bare comma-separated name
   list followed by `=` qualifies — anything else is left to the ordinary paths. }
 function PyUnpackTargetAhead: Boolean;
@@ -33921,9 +34090,10 @@ begin
     general group path because PySkipTargetGroup requires two or more elements
     and must keep doing so: `(a) = xs` is not a tuple target and binds the whole
     value. The trailing COMMA is the discriminator, not the parentheses. }
-  if (PySkipOneTupleTargetGroup(i) > 0) and
-     (PySkipOneTupleTargetGroup(i) < TokCount) and
-     (Tokens[PySkipOneTupleTargetGroup(i)].Kind = tkAssign) then
+  if ((PySkipOneTupleTargetGroup(i) > 0) and
+      (PySkipOneTupleTargetGroup(i) < TokCount) and
+      (Tokens[PySkipOneTupleTargetGroup(i)].Kind = tkAssign)) or
+     (PyParenTargetListAssign(i) > 0) then
   begin
     Result := True;
     Exit;
@@ -55005,7 +55175,11 @@ begin
                   and let PyBindKwArgs order the chain and fill the holes }
                 if CurTok.Kind = tkRParen then Break;
                 Expect(tkComma, ',');
-                Inc(mai);
+                { counted only up to the last parameter: `s.init(m, baudrate=5,
+                  phase=0)` has more arguments than parameters when one is a
+                  duplicate, and stopping on the count left `phase` behind as
+                  `expected ')'`. The `)` above ends the loop instead. }
+                if mai < Procs[mpi].ParamCount-1 then Inc(mai);
                 Continue;
               end;
               if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then

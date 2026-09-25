@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: 0BSD
+# ...and the driver spelling, alone in its file so nothing earlier binds `time`.
+import utime as time
+print(len(time.gmtime(0)), time.gmtime(0)[:3])
+time.sleep_ms(1)
+print("UTIME AS TIME OK")

@@ -6263,12 +6263,18 @@ begin
     is ps -> pkga_sub -> mimic_pkga_sub, and stopping at the first hop left the
     qualifier pointing at a unit that was never compiled. Bounded by the table
     size, so a cyclic pair cannot spin. }
+  { NEWEST FIRST: an alias is a BINDING, and Python's later import rebinds the
+    name. First-wins let an alias registered while compiling an IMPORTED module
+    shadow the program's own: mimic_utime does `import time as _time`, which
+    registers the shim alias time -> mimic_time, so a driver's
+    `import utime as time` (registered after it) never won, and time.localtime()
+    resolved against CPython's time. }
   j := 0;
   while j < UnitAliasCount do
   begin
-    i := 0;
-    while (i < UnitAliasCount) and (Strs[UnitAliasName[i]].Text <> lo) do Inc(i);
-    if i >= UnitAliasCount then Break;
+    i := UnitAliasCount - 1;
+    while (i >= 0) and (Strs[UnitAliasName[i]].Text <> lo) do Dec(i);
+    if i < 0 then Break;
     Result := UnitAliasReal[i];
     lo := Strs[Result].Text;
     Inc(j);

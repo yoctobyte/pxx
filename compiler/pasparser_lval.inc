@@ -3667,7 +3667,11 @@ begin
                   and let PyBindKwArgs order the chain and fill the holes }
                 if CurTok.Kind = tkRParen then Break;
                 Expect(tkComma, ',');
-                Inc(mai);
+                { counted only up to the last parameter: `s.init(m, baudrate=5,
+                  phase=0)` has more arguments than parameters when one is a
+                  duplicate, and stopping on the count left `phase` behind as
+                  `expected ')'`. The `)` above ends the loop instead. }
+                if mai < Procs[mpi].ParamCount-1 then Inc(mai);
                 Continue;
               end;
               if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then

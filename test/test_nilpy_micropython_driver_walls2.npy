@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: 0BSD
+# MicroPython driver walls, second group (frankd-a3's v432 census): each row is
+# a construct a real board driver writes and pxx refused. CPython prints the
+# same -- this file is a differential row: `python3 <this>` must match .expected.
+#
+# 1. more than 8 unpacking targets (bme280 reads nine calibration words)
+# 2. a bitwise op beside a comparison, with PYTHON's precedence:
+#    `x[0] & 0x02 > 0` is `x[0] & (0x02 > 0)`
+x = [0x07, 0x02]
+print(x[0] & 0x02 > 0, x[1] & 0x04 > 0)
+a = 6
+b = 3
+print(a & b > 1, a | b == 7, a ^ b != 5, a << 1 > 11, a >> 1 < 3)
+print(a | b > 2 & 3, ~a < 0, ~a > -8)
+print(1 < a & b, (a & b) > 1, a & (b > 1))
+f = 2.5
+print(a & b > f, a & b >= 2.0)
+v = [1, 2]
+w = v[0]
+if len(v) > 5:
+    w = "s"
+print(w & 1 == 1)
+import struct
+a, b, c, d, e, f, g, h, i = range(9)
+print(a, e, i)
+t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12 = struct.unpack("<HhhHhhhhhhhh", bytes(range(24)))
+print(t1, t9, t12)
+p, *rest, q, r, s, u, v, w, x, y = range(15)
+print(p, rest, q, y)
+class O:
+    pass
+o = O()
+o.a, o.b, m0, m1, m2, m3, m4, m5, m6, m7 = list("abcdefghij")
+print(o.a, o.b, m7)
+def fn():
+    k1, k2, k3, k4, k5, k6, k7, k8, k9, k10 = [i * i for i in range(10)]
+    return k10 + k1
+print(fn())
+# 3. a parenthesised target list across lines, with an attribute (st7789)
+class O2:
+    pass
+o = O2()
+(
+    m,
+    o.w,
+) = (1, 2)
+print(m, o.w)
+(r, o.w) = (5, 6)
+print(r, o.w)
+(p, q,) = [3, 4]
+print(p, q)
+xs = [0, 0, 0]
+(xs[0], *rest) = (7, 8, 9)
+print(xs, rest)
+((a, b), c) = ((1, 2), 3)
+print(a, b, c)
+(a, b), c = (4, 5), 6
+print(a, b, c)
+(z) = (1, 2)
+print(z)
+(y,) = (9,)
+print(y)
+def f():
+    (
+        u,
+        v,
+    ) = divmod(17, 5)
+    return u + v
+print(f())
+# 4. a statically invalid call is a TypeError when it RUNS, not a compile error:
+#    st7789 calls s.init(m, baudrate=..) only in a branch its board never takes
+class S:
+    def init(self, baudrate=1, phase=0):
+        print("init", baudrate, phase)
+def g(baudrate=1, phase=0):
+    print("g", baudrate, phase)
+def side(v):
+    print("side", v)
+    return v
+s = S()
+try:
+    m = s.MASTER
+except AttributeError:
+    s.init(baudrate=5, phase=0)
+else:
+    s.init(m, baudrate=5, phase=0)
+try:
+    s.init(side(1), baudrate=side(2), phase=3)
+except TypeError as e:
+    print("TypeError:", e)
+try:
+    g(side(4), baudrate=side(5))
+except TypeError as e:
+    print("TypeError:", e)
+if len("x") == 2:
+    g(1, baudrate=2, phase=3)
+s.init(7, phase=8)
+print("done")
+try:
+    s.init(2, nope=3)
+except TypeError as e:
+    print("TypeError:", e)
+print("DRIVER WALLS 2 OK")

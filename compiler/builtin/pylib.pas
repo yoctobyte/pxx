@@ -9756,6 +9756,18 @@ begin
   PyNotSubscriptable := 0;   { unreachable }
 end;
 
+{ A call that is STATICALLY invalid -- `s.init(m, baudrate=5)` where m already
+  filled baudrate. CPython raises TypeError when such a call RUNS, and only
+  then, so a driver that spells one in a branch it never takes (st7789's
+  `try: s.MASTER / else: s.init(m, ...)`) runs fine there. The frontend warns
+  and builds this in, carrying CPython's message. A FUNCTION for the same reason
+  as PyIndexTypeError: it rides inside the call's argument list. }
+function PyCallTypeError(const msg: AnsiString): Int64;
+begin
+  raise TypeError.Create(msg);
+  PyCallTypeError := 0;   { unreachable }
+end;
+
 function PyIndexTypeError(const seqKind: AnsiString;
                           const clsName: AnsiString): Int64;
 begin

@@ -6548,7 +6548,7 @@ begin
      (lo = 'uerrno') or (lo = 'uhashlib') or (lo = 'uheapq') or (lo = 'uio') or
      (lo = 'ujson') or (lo = 'uos') or (lo = 'urandom') or (lo = 'ure') or
      (lo = 'uselect') or (lo = 'usocket') or (lo = 'ussl') or
-     (lo = 'ustruct') or (lo = 'usys') or (lo = 'utime') or (lo = 'uzlib') or
+     (lo = 'ustruct') or (lo = 'usys') or (lo = 'uzlib') or
      (lo = 'uasyncio') or (lo = 'uplatform') then
     Result := Copy(lo, 2, Length(lo) - 1);
 end;

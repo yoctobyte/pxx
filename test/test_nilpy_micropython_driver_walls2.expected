@@ -1,0 +1,31 @@
+True False
+True True False True False
+True True True
+True True 0
+False True
+True
+0 4 8
+256 4368 5910
+0 [1, 2, 3, 4, 5, 6] 7 14
+a b j
+81
+1 2
+5 6
+3 4
+[7, 0, 0] [8, 9]
+1 2 3
+4 5 6
+(1, 2)
+9
+5
+init 5 0
+side 1
+side 2
+TypeError: S.init() got multiple values for argument 'baudrate'
+side 4
+side 5
+TypeError: g() got multiple values for argument 'baudrate'
+init 7 8
+done
+TypeError: S.init() got an unexpected keyword argument 'nope'
+DRIVER WALLS 2 OK

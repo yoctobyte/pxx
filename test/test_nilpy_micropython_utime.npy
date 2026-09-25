@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: 0BSD
+# `import utime` is MicroPython's module (lib/rtl/mimic_utime.py: 8-tuples,
+# an int mktime), not an alias of CPython's time, and every spelling a driver
+# uses reaches it. `import utime as time` is the one that shows the alias
+# table's ORDER: mimic_utime's own `import time` registers `time` first, and a
+# first-wins table then handed the program CPython's time. NilPy-only, so the
+# .expected is written by hand.
+import time
+import utime
+print(len(utime.gmtime(0)), utime.gmtime(0), time.gmtime(0).tm_yday)
+print(type(utime.mktime(utime.gmtime(0))).__name__)
+from utime import ticks_diff
+print(ticks_diff(7, 2))
