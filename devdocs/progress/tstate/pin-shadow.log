@@ -1113,3 +1113,4 @@
 2026-09-25T16:18:10Z	borg	2846fcdd3e2c65832c6e3de865c47e1ddf30539b	would NOT pin 2846fcdd3e2c — 1 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00
 2026-09-25T16:44:50Z	borg	1ab5960d4d650b19cb2960ed35b398c47f4eaa35	would NOT pin 1ab5960d4d65 — 1 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00
 2026-09-25T17:48:06Z	borg	c3e2fbfaa1ae2490e7a7a890cc6a6e1c7fe25bcb	would NOT pin c3e2fbfaa1ae — 1 red(s) the current pin does not have, 4 inherited from the current pin: test-nilpy#src:test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy
+2026-09-25T19:05:32Z	borg	b53d87308781dbeb5f8ece5870725c040503fb6f	would NOT pin b53d87308781 — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-nilpy#src:test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy
