@@ -9837,6 +9837,57 @@ begin
                        (TypeStorageSize(tk, -1) <= 4);
 end;
 
+{ A FLOAT CONVERTED TO A 64-BIT UNSIGNED INTEGER went through the signed
+  conversion, so everything from 2^63 up saturated to High(Int64): C's
+  `(unsigned long long)1e19` was 9223372036854775807 where gcc gives
+  10000000000000000000, on every target, and so was the implicit `u = d` and
+  Pascal's `q := d` into a QWord (both reach here as -203/-204 tagged tyUInt64).
+  Found by tcc's own tests2/134 under a pxx-built tcc.
+
+  Rewritten here, once, as `d >= 2^63 ? T(d - 2^63) xor 2^63 : T(d)` with T the
+  same intrinsic at Int64 -- the conversion every backend already implements
+  and saturates, so no backend changes. d - 2^63 is exact for d in [2^63, 2^64)
+  (both share the exponent range; Sterbenz), so the high half loses nothing.
+  Out of range follows the saturation policy of the signed case: +Inf and
+  anything >= 2^64 give High(QWord) (T saturates to High(Int64), the xor sets
+  the top bit), NaN gives 0. A negative source wraps as it does in gcc. The
+  operand is evaluated once, into a Double temp. }
+function IRLowerFloatToU64(node, cpi: Integer): Integer;
+var dSym, asg, cond, sub, hi, hix, lo, tern, pair, a, lit: Integer;
+  function DRef: Integer;
+  begin
+    DRef := AllocNode(AN_IDENT); ASTIVal[DRef] := dSym; ASTTk[DRef] := Ord(tyDouble);
+  end;
+  function TwoTo63: Integer;
+  begin
+    TwoTo63 := AllocNode(AN_FLOAT_LIT);
+    ASTIVal[TwoTo63] := Int64($43E0000000000000); ASTTk[TwoTo63] := Ord(tyDouble);
+  end;
+  function Conv(e: Integer): Integer;
+  begin
+    Conv := AllocNode(AN_CALL); ASTIVal[Conv] := cpi; ASTTk[Conv] := Ord(tyInt64);
+    a := AllocNode(AN_ARG); ASTLeft[a] := e; ASTLeft[Conv] := a;
+  end;
+begin
+  dSym := AllocVar('', tyDouble);
+  a := AllocNode(AN_IDENT); ASTIVal[a] := dSym; ASTTk[a] := Ord(tyDouble);
+  asg := AllocNode(AN_ASSIGN); ASTLeft[asg] := a; ASTRight[asg] := ASTLeft[ASTLeft[node]];
+  IRMarkStatementNode(IRLowerAST(asg));
+  cond := AllocNode(AN_BINOP); ASTIVal[cond] := Ord(tkGe);
+  ASTLeft[cond] := DRef; ASTRight[cond] := TwoTo63; ASTTk[cond] := Ord(tyBoolean);
+  sub := AllocNode(AN_BINOP); ASTIVal[sub] := Ord(tkMinus);
+  ASTLeft[sub] := DRef; ASTRight[sub] := TwoTo63; ASTTk[sub] := Ord(tyDouble);
+  hi := Conv(sub);
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := Int64($8000000000000000); ASTTk[lit] := Ord(tyInt64);
+  hix := AllocNode(AN_BINOP); ASTIVal[hix] := Ord(tkXor);
+  ASTLeft[hix] := hi; ASTRight[hix] := lit; ASTTk[hix] := Ord(tyInt64);
+  lo := Conv(DRef);
+  pair := AllocNode(AN_PAIR); ASTLeft[pair] := hix; ASTRight[pair] := lo;
+  tern := AllocNode(AN_TERNARY); ASTLeft[tern] := cond; ASTRight[tern] := pair;
+  ASTTk[tern] := Ord(tyUInt64);
+  Result := IRLowerAST(tern);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
@@ -13994,7 +14045,11 @@ begin
       begin
         rndCall := AllocNode(AN_CALL);
         ASTIVal[rndCall] := -204;         { Round: nearest, ties to even }
-        ASTTk[rndCall] := Ord(tyInt64);
+        { a QWord destination takes the unsigned conversion (IRLowerFloatToU64) }
+        if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyUInt64 then
+          ASTTk[rndCall] := Ord(tyUInt64)
+        else
+          ASTTk[rndCall] := Ord(tyInt64);
         rndArg := AllocNode(AN_ARG);
         ASTLeft[rndArg] := ASTRight[node];
         ASTLeft[rndCall] := rndArg;
@@ -15894,6 +15949,13 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       cpi := ASTIVal[node];
       item := ASTLeft[node];
       PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
+      if ((cpi = -203) or (cpi = -204)) and
+         (IntToTypeKind(ASTTk[node]) = tyUInt64) and (item >= 0) and
+         TypeIsFloat(IntToTypeKind(ASTTk[ASTLeft[item]])) then
+      begin
+        Result := IRLowerFloatToU64(node, cpi);
+        Exit;
+      end;
       { REFUSE A DIRECT CALL to a routine declared `interrupt;` -- the sibling
         spelling of the AN_PROCADDR refusal further down this same case, and the
         same fault. Such a body returns via a trap-return (riscv32 `mret`,

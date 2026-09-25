@@ -23658,6 +23658,18 @@ test-core: $(COMPILER)
 	# emits -I/usr/include/x86_64-linux-gnu; the host sys/types.h then shadowed crtl's).
 	./$(COMPILER) -I/usr/include/x86_64-linux-gnu test/c_std_system_root_on_the_include_path.c $(TESTTMP)/c_ssr26
 	tools/expect_same.sh c_ssr26 "$$($(TESTTMP)/c_ssr26)" "pid 42 int64 -5"
+	# A float converted to a 64-bit unsigned from 2^63 up (it saturated to
+	# High(Int64) on every target). .expected is gcc's output; the conversion is
+	# one IR rewrite, so a 32-bit row and an ARM row ride along. Then Pascal's
+	# QWord := Double, which reaches the same rewrite through Round.
+	./$(COMPILER) test/c_float_to_u64.c $(TESTTMP)/c_f2u26
+	$(TESTTMP)/c_f2u26 | diff -u test/c_float_to_u64.expected -
+	./$(COMPILER) --target=i386 test/c_float_to_u64.c $(TESTTMP)/c_f2u26_386
+	tools/run_target.sh i386 $(TESTTMP)/c_f2u26_386 | diff -u test/c_float_to_u64.expected -
+	./$(COMPILER) --target=arm32 test/c_float_to_u64.c $(TESTTMP)/c_f2u26_arm32
+	tools/run_target.sh arm32 $(TESTTMP)/c_f2u26_arm32 | diff -u test/c_float_to_u64.expected -
+	./$(COMPILER) test/test_a_double_to_qword.pas $(TESTTMP)/dqw26
+	tools/expect_same.sh dqw26 "$$($(TESTTMP)/dqw26)" "$$(printf '0 10000000000000000000\n1 9223372036854775808\n2 18000000000000000000\n3 4\n4 2\nsingle 9999999980506447872')"
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

@@ -365,6 +365,7 @@ AN_ASSIGN Left RMakeIdent(symIdx)
 AN_ASSIGN Left RMakeIdent(tempSym)
 AN_ASSIGN Left RMakeIdent(tmpSym)
 AN_ASSIGN Left Result
+AN_ASSIGN Left a
 AN_ASSIGN Left a3
 AN_ASSIGN Left actual
 AN_ASSIGN Left argIdx
@@ -406,6 +407,7 @@ AN_ASSIGN Left vbLhs
 AN_ASSIGN Left vcLhs
 AN_ASSIGN Left vrIndex
 AN_ASSIGN Left wIdent
+AN_ASSIGN Right ASTLeft[ASTLeft[node]]
 AN_ASSIGN Right ASTLeft[currArg]
 AN_ASSIGN Right ASTLeft[item]
 AN_ASSIGN Right ASTLeft[pairNode]
@@ -531,6 +533,7 @@ AN_AWAIT Left ParseStatementAST()
 AN_BINOP Left CloneAST(SetLenDimNode[0])
 AN_BINOP Left CloneAST(SetLenDimNode[k])
 AN_BINOP Left CurASTNode
+AN_BINOP Left DRef
 AN_BINOP Left PyClsAttrOvrGet(node, fieldName, cvIdx)
 AN_BINOP Left PyClsAttrOvrGet(node, fieldName, fldIdx)
 AN_BINOP Left PyMakeDynAttrGet(baseNode, fname)
@@ -561,6 +564,7 @@ AN_BINOP Left flGuardCall
 AN_BINOP Left flat
 AN_BINOP Left flatNode
 AN_BINOP Left guard
+AN_BINOP Left hi
 AN_BINOP Left identN
 AN_BINOP Left idn
 AN_BINOP Left idxExpr
@@ -603,6 +607,7 @@ AN_BINOP Right PyMakeIdent(cbN)
 AN_BINOP Right PyMakeIdent(nSym)
 AN_BINOP Right PyMakeIdent(rngStopSym)
 AN_BINOP Right PyMakeTruthy(right)
+AN_BINOP Right TwoTo63
 AN_BINOP Right WsMkInt(0)
 AN_BINOP Right acc
 AN_BINOP Right andN
@@ -1048,6 +1053,7 @@ AN_PAIR Left elseSeq
 AN_PAIR Left flCall
 AN_PAIR Left flRaiseCall
 AN_PAIR Left getCall
+AN_PAIR Left hix
 AN_PAIR Left identNode
 AN_PAIR Left initN
 AN_PAIR Left initNode
@@ -1102,6 +1108,7 @@ AN_PAIR Right flCall
 AN_PAIR Right flRaiseCall
 AN_PAIR Right limitN
 AN_PAIR Right limitNode
+AN_PAIR Right lo
 AN_PAIR Right p2
 AN_PAIR Right pair2
 AN_PAIR Right right
@@ -1176,6 +1183,7 @@ AN_SWITCH Right bodyNode
 AN_TERNARY Left bfIsCall
 AN_TERNARY Left clsCondCall
 AN_TERNARY Left cnd
+AN_TERNARY Left cond
 AN_TERNARY Left condN
 AN_TERNARY Left condNode
 AN_TERNARY Left dynFbCond
