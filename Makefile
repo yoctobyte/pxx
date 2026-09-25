@@ -23630,6 +23630,16 @@ test-core: $(COMPILER)
 	# not the pin: the header->source map is compiled in. Values are gcc's.
 	./$(COMPILER) test/crtl_utime_getrusage.c $(TESTTMP)/crtl_ugr26
 	tools/expect_same.sh crtl_ugr26 "$$($(TESTTMP)/crtl_ugr26 $(TESTTMP)/crtl_ugr26.tmp)" "$$(printf 'utime 0\natime 1000000000 mtime 1234567890\nutime-now 0\nmoved 1\nutime-missing -1 errno-ENOENT 1\ngetrusage 0\nmaxrss>0 1 utime-usec-ok 1\nbad-who -1 einval 1')"
+	# sendmsg/recvmsg on an unconnected UDP socket, header + payload iovecs and
+	# msg_name: ENet's shape. One message is one datagram. The old crtl sent
+	# -1 (EDESTADDRREQ) and then blocked in recvmsg, hence the timeout.
+	./$(COMPILER) test/crtl_sendmsg_datagram.c $(TESTTMP)/crtl_smg26
+	tools/expect_same.sh crtl_smg26 "$$(timeout 10 $(TESTTMP)/crtl_smg26)" "$$(printf 'sent 12\nreceived 12 namelen 16 family-inet 1 same-port 1 loopback 1\nr1 HD r2 R r3 load')"
+	# The rand48 family (cglm's harness calls drand48). A 48-bit LCG, so the
+	# .expected is glibc's own output, byte for byte; also identical on
+	# i386/aarch64/arm32/riscv32 when added.
+	./$(COMPILER) test/crtl_rand48.c $(TESTTMP)/crtl_r48_26
+	$(TESTTMP)/crtl_r48_26 | diff -u test/crtl_rand48.expected -
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

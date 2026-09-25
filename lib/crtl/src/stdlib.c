@@ -678,6 +678,70 @@ static unsigned long long __crtl_rand_state = 1;
 
 void srand(unsigned int seed) { __crtl_rand_state = seed; }
 
+/* ---- rand48 (see stdlib.h). glibc starts the global X at ZERO when nothing
+   seeded it, and so does this. ---- */
+static unsigned short __crtl_r48_x[3] = { 0, 0, 0 };
+static unsigned long long __crtl_r48_a = 0x5DEECE66DULL;
+static unsigned short __crtl_r48_c = 0xB;
+static unsigned short __crtl_r48_old[3];
+
+/* Advance xsubi one step and return the new 48-bit value. */
+static unsigned long long __crtl_r48_step(unsigned short *xs) {
+  unsigned long long x = (unsigned long long)xs[0] |
+                         ((unsigned long long)xs[1] << 16) |
+                         ((unsigned long long)xs[2] << 32);
+  x = (x * __crtl_r48_a + __crtl_r48_c) & 0xFFFFFFFFFFFFULL;
+  xs[0] = (unsigned short)(x & 0xFFFF);
+  xs[1] = (unsigned short)((x >> 16) & 0xFFFF);
+  xs[2] = (unsigned short)((x >> 32) & 0xFFFF);
+  return x;
+}
+
+/* X * 2^-48 is exact in a double (48 < 53 bits), and it is what glibc's
+   build-a-mantissa-in-[1,2)-then-subtract-1 produces. */
+double erand48(unsigned short xsubi[3]) {
+  return (double)__crtl_r48_step(xsubi) * (1.0 / 281474976710656.0);
+}
+double drand48(void) { return erand48(__crtl_r48_x); }
+
+long nrand48(unsigned short xsubi[3]) {
+  return (long)(__crtl_r48_step(xsubi) >> 17);
+}
+long lrand48(void) { return nrand48(__crtl_r48_x); }
+
+/* The top 32 bits as a SIGNED 32-bit value, sign-extended to long. */
+long jrand48(unsigned short xsubi[3]) {
+  return (long)(int)(unsigned int)(__crtl_r48_step(xsubi) >> 16);
+}
+long mrand48(void) { return jrand48(__crtl_r48_x); }
+
+void srand48(long seedval) {
+  __crtl_r48_x[0] = 0x330E;
+  __crtl_r48_x[1] = (unsigned short)(seedval & 0xFFFF);
+  __crtl_r48_x[2] = (unsigned short)((seedval >> 16) & 0xFFFF);
+  __crtl_r48_a = 0x5DEECE66DULL;
+  __crtl_r48_c = 0xB;
+}
+
+/* Returns the PREVIOUS X in a static buffer, as POSIX says. */
+unsigned short *seed48(unsigned short seed16v[3]) {
+  int i;
+  for (i = 0; i < 3; i++) __crtl_r48_old[i] = __crtl_r48_x[i];
+  for (i = 0; i < 3; i++) __crtl_r48_x[i] = seed16v[i];
+  __crtl_r48_a = 0x5DEECE66DULL;
+  __crtl_r48_c = 0xB;
+  return __crtl_r48_old;
+}
+
+void lcong48(unsigned short param[7]) {
+  int i;
+  for (i = 0; i < 3; i++) __crtl_r48_x[i] = param[i];
+  __crtl_r48_a = (unsigned long long)param[3] |
+                 ((unsigned long long)param[4] << 16) |
+                 ((unsigned long long)param[5] << 32);
+  __crtl_r48_c = param[6];
+}
+
 /* THE RANGE IS 31 BITS, and that is a compatibility fact rather than a taste.
    RAND_MAX was 32767 -- C99's required MINIMUM, and legal -- but real code
    selects an implementation on it and simply refuses the small one:

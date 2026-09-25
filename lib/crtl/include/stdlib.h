@@ -58,6 +58,20 @@ int rand(void);
 int rand_r(unsigned int *seed);
 void srand(unsigned int seed);
 
+/* The POSIX rand48 family: one 48-bit LCG, X' = (a*X + c) mod 2^48, with
+   a = 0x5DEECE66D and c = 0xB until lcong48 changes them. Deterministic and
+   identical to glibc for a given seed. The *rand48(xsubi) forms keep X in the
+   caller's array (xsubi[0] is the low 16 bits) but share a and c. */
+double drand48(void);
+double erand48(unsigned short xsubi[3]);
+long lrand48(void);
+long nrand48(unsigned short xsubi[3]);
+long mrand48(void);
+long jrand48(unsigned short xsubi[3]);
+void srand48(long seedval);
+unsigned short *seed48(unsigned short seed16v[3]);
+void lcong48(unsigned short param[7]);
+
 /* mkstemp/mkdtemp: the trailing XXXXXX is replaced and the name is claimed by
    an O_EXCL create (or a mkdir), so the exclusion comes from the syscall, not
    from the quality of the guess. The digits come from the clock and the pid —

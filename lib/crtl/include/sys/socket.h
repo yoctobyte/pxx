@@ -7,12 +7,19 @@
 
 #include <sys/_types.h>
 typedef __socklen_t socklen_t;
+/* glibc's marker for "socklen_t is typedef'd". Portable code (enet's unix.c)
+   tests it before supplying its own `typedef int socklen_t`, which conflicts
+   with this unsigned one. */
+#define __socklen_t_defined 1
 typedef unsigned short sa_family_t;
 
 struct sockaddr {
   sa_family_t sa_family;
   char sa_data[14];
 };
+
+/* listen() backlog ceiling; glibc's value. enet's unix.c uses it. */
+#define SOMAXCONN 4096
 
 #define AF_UNSPEC 0
 #define AF_UNIX 1        /* == AF_LOCAL; busybox names it AF_UNIX */

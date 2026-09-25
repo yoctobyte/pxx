@@ -666,41 +666,77 @@ int getnameinfo(const struct sockaddr *sa, socklen_t salen,
   return 0;
 }
 
-/* sendmsg/recvmsg: scatter/gather over the PAL's single-buffer send/recv.
-   The PAL has no native iovec syscall, so concatenate: sendmsg walks the iovec
-   and sends each fragment in order; recvmsg fills each fragment in turn. Good
-   for the stream/datagram uses ENet and friends make (a small iovec of a
-   header + payload); msg_name (address) and control data are ignored (crtl is
-   connected-socket / IPv4-only at this layer). */
+/* sendmsg/recvmsg over the PAL's single-buffer send/recv.
+
+   ONE message is ONE call. The iovec is gathered into one buffer and sent
+   once, and received once and scattered. Sending each fragment with its own
+   send() is right for a stream and WRONG FOR A DATAGRAM: every fragment
+   becomes a separate packet. msg_name is honoured: with an address it is
+   sendto/recvfrom, and recvmsg reports the sender and sets msg_namelen.
+   ENet builds every packet as a header iovec plus payload iovecs on an
+   UNCONNECTED UDP socket, so the old version sent a 4-byte header with no
+   destination (EDESTADDRREQ) and no peer ever connected.
+   Control data is not carried: msg_controllen comes back 0. */
+static size_t __crtl_iov_total(const struct msghdr *msg) {
+  size_t k, n = 0;
+  for (k = 0; k < msg->msg_iovlen; k++) n += msg->msg_iov[k].iov_len;
+  return n;
+}
+
 ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
-  ssize_t total = 0, r;
-  size_t k;
-  if (!msg) return -1;
-  for (k = 0; k < msg->msg_iovlen; k++) {
-    struct iovec *v = &msg->msg_iov[k];
-    if (v->iov_len == 0) continue;
-    r = send(sockfd, v->iov_base, v->iov_len, flags);
-    if (r < 0) return total > 0 ? total : r;
-    total += r;
-    if ((size_t)r < v->iov_len) break;   /* short write: stop, report progress */
+  size_t k, n, off;
+  char *buf;
+  ssize_t r;
+  if (!msg) { errno = EINVAL; return -1; }
+  n = __crtl_iov_total(msg);
+  if (msg->msg_iovlen == 1) buf = (char *)msg->msg_iov[0].iov_base;
+  else {
+    buf = (char *)malloc(n ? n : 1);
+    if (!buf) { errno = ENOMEM; return -1; }
+    for (k = 0, off = 0; k < msg->msg_iovlen; k++) {
+      memcpy(buf + off, msg->msg_iov[k].iov_base, msg->msg_iov[k].iov_len);
+      off += msg->msg_iov[k].iov_len;
+    }
   }
-  return total;
+  if (msg->msg_name)
+    r = sendto(sockfd, buf, n, flags, (const struct sockaddr *)msg->msg_name,
+               msg->msg_namelen);
+  else
+    r = send(sockfd, buf, n, flags);
+  if (msg->msg_iovlen != 1) free(buf);
+  return r;
 }
 
 ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
-  ssize_t total = 0, r;
-  size_t k;
-  if (!msg) return -1;
-  for (k = 0; k < msg->msg_iovlen; k++) {
-    struct iovec *v = &msg->msg_iov[k];
-    if (v->iov_len == 0) continue;
-    r = recv(sockfd, v->iov_base, v->iov_len, flags);
-    if (r < 0) return total > 0 ? total : r;
-    total += r;
-    if ((size_t)r < v->iov_len) break;   /* short read: no more data queued */
+  size_t k, n, off, part;
+  char *buf;
+  ssize_t r;
+  socklen_t alen;
+  if (!msg) { errno = EINVAL; return -1; }
+  n = __crtl_iov_total(msg);
+  if (msg->msg_iovlen == 1) buf = (char *)msg->msg_iov[0].iov_base;
+  else {
+    buf = (char *)malloc(n ? n : 1);
+    if (!buf) { errno = ENOMEM; return -1; }
   }
+  if (msg->msg_name) {
+    alen = msg->msg_namelen;
+    r = recvfrom(sockfd, buf, n, flags, (struct sockaddr *)msg->msg_name, &alen);
+    if (r >= 0) msg->msg_namelen = alen;
+  } else
+    r = recv(sockfd, buf, n, flags);
+  if (msg->msg_iovlen != 1) {
+    for (k = 0, off = 0; r > 0 && k < msg->msg_iovlen && off < (size_t)r; k++) {
+      part = msg->msg_iov[k].iov_len;
+      if (part > (size_t)r - off) part = (size_t)r - off;
+      memcpy(msg->msg_iov[k].iov_base, buf + off, part);
+      off += part;
+    }
+    free(buf);
+  }
+  msg->msg_controllen = 0;
   msg->msg_flags = 0;
-  return total;
+  return r;
 }
 
 /* poll: the PAL has no readiness primitive yet, so this is a minimal
