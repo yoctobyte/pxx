@@ -423,3 +423,4 @@
 2026-09-24T19:10:47Z  v423  113a515bbdc90e56c5eb0a0e6f48791d088eba08f97e9a69183e3bc0aa07dc65  8083f245263ae956c237eb3afaae9dd0b81be0a6  tstate(borg): bench 46d2a9430a96 RED (0 bench rows, 550 conf)
 2026-09-24T22:00:55Z  v424  93a336a7ba851eb178fe9560f66af08b9b94a62834883a0a11ecae61399e09d9  4d9b004c80816282852cae6f9a6002dc18ad591f  fix(A): wasm32 asks for a release helper only when a slot needs one
 2026-09-25T01:14:33Z  v425  426b2fbf3f08f08ab498e063e9e8b1dc5963cc9eee057bebff304036d41e287a  e098cf93f0848af6387bb0ac036b2f9a5211d80a  logbook: demos#00 borg red has the lib-units cause, fixed by 2b4409bd0c
+2026-09-25T06:23:05Z  v426  7b742af6f9dfd8188335a209797c5fd634bdd83cd6c1a5a0b446220d5dad1afc  3f3685a8f2cec5b9cb821dd6588f2cb2f71c3dab  fix(threads): census leaks: FreeOnTerminate handles, NilPy Thread handles, reap-table UAF, pthread_detach

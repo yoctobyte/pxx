@@ -164,7 +164,7 @@ implementation
              renameat, ppoll and readlinkat does NOT hold here (i386 220,
              arm32 217), and the derived 247 is another syscall entirely.
              Three instruments now agree and they fail differently:
-             devdocs/dev/syscall-maps/arm32.txt (a qemu -strace SWEEP, not a
+             tools/syscall-maps/arm32.txt (a qemu -strace SWEEP, not a
              header read) has `217 getdents64'; the original ticket's own text
              cites 217 while arguing the offset does not extend; and
              os.listdir was run end to end under qemu-arm and returned the
