@@ -15970,20 +15970,16 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-24T23:01:38Z",
+  "date": "2026-09-25T01:47:29Z",
   "red": [
-   "lib-test#src:tools/crtl_reachability.py",
-   "test-core#src:test/test_var_param_width_rule_accepts_exact_and_cast.pas",
    "test-core#src:test/c_crtl_wait.c",
-   "tools-devtest#00",
-   "demos#00"
+   "tools-devtest#00"
   ],
-  "sha": "4d9b004c80816282852cae6f9a6002dc18ad591f",
+  "sha": "e098cf93f0848af6387bb0ac036b2f9a5211d80a",
   "tier": "full",
-  "ver": "v424",
+  "ver": "v425",
   "verdict": "RED",
   "why": {
-   "test-core#src:test/test_var_param_width_rule_accepts_exact_and_cast.pas": "ok: $TMP  [code=20589B  data=4552B  bss=35388B  procs=158  codeseg=24288B]",
    "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
   }
  },
