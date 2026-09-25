@@ -16206,13 +16206,13 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-25T20:09:20Z",
+  "date": "2026-09-25T21:41:59Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c"
   ],
-  "sha": "687cf1185c467aa1b3968cacb2fdbcaf5557948c",
+  "sha": "0b6fffa0cbe4af3241d4ca9bb383ab7a1b02b116",
   "tier": "full",
-  "ver": "v439",
+  "ver": "v440",
   "verdict": "RED"
  },
  "toolchain": {
