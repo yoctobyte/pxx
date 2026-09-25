@@ -105,7 +105,11 @@ STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 # stables without yanking B's ground; B only moves when A blesses a version.
 # Override to pin a specific version ad hoc, e.g.
 #   make lib-test PXX_STABLE=stable_linux_amd64/default/v9
-PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
+# A RELEASE TARBALL has no stable_linux_amd64/: there the stable compiler is
+# the host's compiler/pxx-<arch>, which tools/pxx_stable.sh resolves (the one
+# place that knows that fallback). Without it `make test-fpjson` and every
+# PXX_STABLE target died in a tarball with "no stable compiler at .../pinned".
+PXX_STABLE ?= $(if $(wildcard $(STABLE_DEFAULT_DIR)/pinned),$(STABLE_DEFAULT_DIR)/pinned,$(shell tools/pxx_stable.sh 2>/dev/null))
 
 # The GTK3 include root, for anything that reaches lib/pcl/gtk3_c.h. That file
 # is `#include <gtk/gtk.h>` against the INSTALLED headers now, and gtk-2.0 is a

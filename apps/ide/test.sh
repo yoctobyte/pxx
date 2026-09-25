@@ -5,11 +5,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PXX="${PXX_STABLE:-$ROOT/stable_linux_amd64/default/pinned}"
+# tools/pxx_stable.sh: .../pinned in a checkout, compiler/pxx-<arch> in a
+# release tarball (which has no stable_linux_amd64/), plus the host --target
+# that a cross-built pxx-<arch> needs.
+PXX="${PXX_STABLE:-$("$ROOT/tools/pxx_stable.sh")}"
+PXXT=()
+[ -n "${PXX_STABLE:-}" ] || PXXT=($("$ROOT/tools/pxx_stable.sh" --target-flag))
 
 test -x "$PXX" || { echo "No stable compiler at $PXX" >&2; exit 1; }
 
-"$PXX" \
+"$PXX" "${PXXT[@]}" \
   -Fu"$ROOT/lib/rtl" \
   -Fu"$ROOT/apps/ide/garin" \
   -Fu"$ROOT/apps/ide/eduth" \

@@ -4,7 +4,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PXX="${PXX_STABLE:-$ROOT/stable_linux_amd64/default/pinned}"
+# tools/pxx_stable.sh: .../pinned in a checkout, compiler/pxx-<arch> in a
+# release tarball (which has no stable_linux_amd64/), plus the host --target
+# that a cross-built pxx-<arch> needs.
+PXX="${PXX_STABLE:-$("$ROOT/tools/pxx_stable.sh")}"
+PXXT=()
+[ -n "${PXX_STABLE:-}" ] || PXXT=($("$ROOT/tools/pxx_stable.sh" --target-flag))
 
 test -x "$PXX" || { echo "No stable compiler at $PXX" >&2; exit 1; }
 
@@ -39,7 +44,7 @@ GTK3_INC="$(pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || true)"
 # indistinguishable except in the size line (procs=1046 for libpng's ~1000
 # declarations vs procs=293 for the Pascal unit). A witness must name a symbol
 # only the Pascal unit provides.
-"$PXX" \
+"$PXX" "${PXXT[@]}" \
   -Fu"$ROOT/lib/pcl" \
   -Fu"$ROOT/lib/rtl" \
   -Fu"$ROOT/apps/ide/garin" \

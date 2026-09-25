@@ -228,7 +228,11 @@ TARGETS_SET=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --pinned)  COMPILER="$ROOT/stable_linux_amd64/default/pinned"; shift ;;
+    # The stable compiler: .../pinned in a checkout, compiler/pxx-x86_64 in a
+    # release tarball (tools/pxx_stable.sh). Every target here is named
+    # explicitly except x86_64, whose default IS x86-64, so the host flag that
+    # helper can print is never needed.
+    --pinned)  COMPILER="$("$ROOT/tools/pxx_stable.sh")" || exit 1; shift ;;
     --keep)    KEEP=1; shift ;;
     --targets) TARGETS="$2"; TARGETS_SET=1; shift 2 ;;
     --applets) APPLETS="$2"; shift 2 ;;

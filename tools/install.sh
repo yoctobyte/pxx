@@ -50,26 +50,11 @@ fi
 if [ -n "$COMPILER_OVERRIDE" ]; then
   PINNED="$COMPILER_OVERRIDE"
 else
-  PINNED="${ROOT}/stable_linux_amd64/default/pinned"
-  # A RELEASE TARBALL HAS NO stable_linux_amd64/: its compilers are
-  # compiler/pxx-<arch>, one per host. Without this arm the documented
-  # --bindir died in a tarball with "no compiler at .../pinned" (measured
-  # 2026-09-25). A pxx-<arch> built by the x86-64 compiler still EMITS x86-64
-  # by default, so off x86_64 the wrapper names the host target, as the root
-  # install.sh does.
-  if [ ! -e "$PINNED" ]; then
-    case "$(uname -m)" in
-      x86_64|amd64)        hostarch=x86_64 ;;
-      aarch64|arm64)       hostarch=aarch64 ;;
-      armv7l|armv6l|armhf) hostarch=arm32 ;;
-      i386|i486|i586|i686) hostarch=i386 ;;
-      *)                   hostarch="" ;;
-    esac
-    if [ -n "$hostarch" ] && [ -x "$ROOT/compiler/pxx-$hostarch" ]; then
-      PINNED="$ROOT/compiler/pxx-$hostarch"
-      [ "$hostarch" != x86_64 ] && [ -z "$TARGET_ARCH" ] && TARGET_ARCH="$hostarch"
-    fi
-  fi
+  # .../pinned in a checkout; compiler/pxx-<host arch> in a release tarball,
+  # which has no stable_linux_amd64/ (tools/pxx_stable.sh). Off x86_64 that
+  # binary needs the host target named, as the root install.sh does.
+  PINNED="$("$SCRIPT_DIR/pxx_stable.sh")" || exit 1
+  [ -n "$TARGET_ARCH" ] || TARGET_ARCH="$("$SCRIPT_DIR/pxx_stable.sh" --target-flag | sed 's/^--target=//')"
 fi
 if [ ! -e "$PINNED" ]; then
   echo "no compiler at $PINNED" >&2
