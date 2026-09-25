@@ -267,8 +267,9 @@ The clock source is set per chip, and only the S3, C3 and S2 are in the table.
 the S3 board with pin v425 and nothing wired: MISO read `$FF` with its pull-up
 and `$00` with its pull-down, a GPIO-matrix loopback echoed the bytes written,
 and a 1,024-byte write took 8,255 µs at 1 MHz and 1,071 µs at 8 MHz. Under
-QEMU only opening the bus and adding a device run. The C3 and S2 have only
-been built.
+QEMU the S3 opens the bus, adds devices and reads the clock back, but no
+transfer runs, because QEMU's SPI never completes one. For the C3 the unit
+has only been compiled, and nothing has been built for the S2.
 
 ## `espnvs` — settings that survive a reboot
 
