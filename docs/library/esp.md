@@ -11,8 +11,8 @@ it, and how far it has been tested. To set up ESP-IDF, build and flash a first
 program, start with [Getting started on the ESP32](../getting-started/esp32.md).
 
 Wi-Fi and TCP sockets from Nil Python, with MicroPython's `network` and
-CPython's `socket`, are covered near the end of the page, under **Wi-Fi and
-sockets**.
+CPython's `socket`, and files on flash with Python's `open()` and `os`, are
+covered near the end of the page, under **Wi-Fi and sockets** and **Files**.
 
 All of them are **ESP-IDF only**. They resolve when ESP-IDF links your program,
 so they do not work in a bare-metal image, and each needs an ESP-IDF component
@@ -532,6 +532,112 @@ The three snippets above compile for the ESP32-S3 with pin v426 (compiler
 sha256 `7b742af6f9df…`) against the tree at `6ee238bc47`. The station half
 of `network` landed after v426 was cut. It is library code only, so v426
 compiles it.
+
+## Files — `open()` and `os` on flash (Nil Python)
+
+A Nil Python program on the ESP32 reads and writes files with Python's own
+`open()` and `os`. The files live on the chip's flash, in a FAT filesystem
+with wear levelling, in the partition table's `storage` partition.
+
+**`/` is the root of that filesystem**, as on MicroPython. A relative path is
+relative to it, and there is no `chdir`: `os.getcwd()` is always `/`. ESP-IDF
+mounts the filesystem under a prefix of its own, but your program never sees
+that prefix: not in a path you pass, not in `os.listdir()`, and not in an
+error message.
+
+```python
+import os
+
+f = open("/log.txt", "a")
+f.write("boot\n")
+f.close()
+
+print(open("log.txt").read())        # a relative path: the same file
+print(os.listdir("/"))
+print(os.stat("/log.txt").st_size, os.path.isfile("/log.txt"))
+if not os.path.isdir("/data"):
+    os.mkdir("/data")
+```
+
+The filesystem is mounted the first time your program names a path, not at
+boot. If the partition will not mount, as on a newly flashed board whose
+partition is still blank, `pxx_fs` formats it then, as MicroPython does.
+
+### What a project needs
+
+The filesystem is **opt-in per project**. `examples/esp32/nilpy-station-s3`
+has all three pieces, so copy from it:
+
+- **the `pxx_fs` component**: `lib/rtl/platform/esp/idf` in
+  `EXTRA_COMPONENT_DIRS` (its top-level `CMakeLists.txt`), and `pxx_fs` in
+  `REQUIRES` (its `main/CMakeLists.txt`);
+- **a `storage` row** in its `partitions.csv`;
+- **the matching settings** in its `sdkconfig.defaults`.
+
+**Without the `pxx_fs` component** the program still builds and links, but
+it has no filesystem: every path answers `FileNotFoundError`
+(`[Errno 2] No such file or directory`). That includes `/`.
+
+### Errors
+
+A failed file call raises the same `OSError` subclass as CPython on Linux,
+with the same text, so `except FileNotFoundError:` works as it does on a PC:
+
+```python
+try:
+    text = open("/config.json").read()
+except FileNotFoundError:
+    text = "{}"                      # first boot: no settings yet
+except OSError as e:
+    print("cannot read settings:", type(e).__name__, str(e))
+    text = "{}"
+print(text)
+```
+
+`test/esp_board_files.npy` provokes each case on the board. This is what the
+board printed; each error line is the case, then the exception's class, then
+`str(e)`:
+
+```text
+read back 'hello from flash\n'
+size 17
+isfile True isdir / True
+listdir ['d', 'hello.txt']
+open a missing file -> FileNotFoundError [Errno 2] No such file or directory: '/nope.txt'
+open a directory -> IsADirectoryError [Errno 21] Is a directory: '/d'
+create in a missing directory -> FileNotFoundError [Errno 2] No such file or directory: '/nodir/x.txt'
+mkdir an existing directory -> FileExistsError [Errno 17] File exists: '/d'
+stat a missing path -> FileNotFoundError [Errno 2] No such file or directory: '/nope.txt'
+fill the partition -> OSError [Errno 28] No space left on device
+after cleanup, write works True
+listdir after []
+ESP FILES OK
+```
+
+The rows up to `stat a missing path` print the same under CPython on a PC,
+run against a scratch directory, apart from the directory's name. The
+`No space left on device` row comes from writing until the partition is
+full; after the file is removed, writing works again.
+
+### How far it is tested
+
+- On one ESP32-S3 board, with the `nilpy-station-s3` project:
+  `test/esp_board_files.npy` matches all 13 lines above. The board test uses
+  absolute paths; relative paths go through the same path mapping, but no board
+  test checks them.
+- A project **without** `pxx_fs` builds, links, and answers
+  `FileNotFoundError` for every path, as described above.
+- **Not tested:** a read-only partition, or any storage but the internal
+  flash. There is **no `os.mount()`**, so an SD card or a second partition
+  cannot be mounted from Python. Nothing has run on an ESP32-C3 board.
+
+Both snippets compile for the ESP32-S3 with pin v427 (compiler sha256
+`354cd45e6373…`), the first pin that carries the file support. The same
+compile refuses `os.mount("/sd", "/sd")`.
+
+For **Pascal** files on the ESP32, the C3 example `fs-c3` mounts FAT, writes,
+seeks and reads back, under QEMU. See the
+[examples showcase](../examples/index.md#esp32).
 
 ## Math errors do not stop the chip
 
