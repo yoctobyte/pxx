@@ -434,3 +434,4 @@
 2026-09-25T12:25:22Z  v434  3c9ef7ce729a8fd691c8e94a476a8231db8747764cf57d39e18e41acceb9ea86  ffe3a7708e841e38a960b2949ea412d74fdc6b03  feat(nilpy,B): urequests client; runtime helpers release fresh containers; bitwise ops dispatch on a variant
 2026-09-25T13:27:31Z  v435  5d08cc804c4f688e416ced0504b9ed00f1a601eadde95de9d8541e7333b54888  a457570295cc25d0bbe69221b4415008b5ea5899  fix(N): MicroPython driver walls 1-4 and `import utime as time`
 2026-09-25T14:51:38Z  v436  60233027a925d5a7a4f8f1197477f0fc746d2b8ff5039bf0bc73f51221d8fcf7  c6e47ad35b8176c6d9cc52e954c5500f785bdba9  fix(A,S): a NilPy __init__ fills the caller's object on windowed xtensa; a QEMU network row for urequests
+2026-09-25T15:21:24Z  v437  38ca53cc2178547863de7af569e39fe9312c9397f6b8626b3b0aad79700765a3  80330f40641f1fcf48744278778cabf1fac7154e  docs(progress): record the shas the resolves landed as
