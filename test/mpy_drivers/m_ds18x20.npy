@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: micropython-lib's ds18x20 over onewire, unchanged (tools/mpy_driver_census.sh).
+from machine import Pin
+import time
+import onewire
+import ds18x20
+
+ds = ds18x20.DS18X20(onewire.OneWire(Pin(5)))
+roms = ds.scan()
+print("ds18x20: found", len(roms))
+if roms:
+    ds.convert_temp()
+    time.sleep_ms(750)
+    for rom in roms:
+        print("ds18x20:", ds.read_temp(rom))

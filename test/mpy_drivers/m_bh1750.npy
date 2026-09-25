@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: catdog2/mpy_bh1750fvi_esp8266, unchanged (tools/mpy_driver_census.sh).
+from machine import Pin, I2C
+import bh1750fvi
+
+i2c = I2C(0, scl=Pin(9), sda=Pin(8))
+try:
+    print("bh1750:", bh1750fvi.sample(i2c), "lx")
+except OSError as e:
+    print("bh1750: no device:", e)

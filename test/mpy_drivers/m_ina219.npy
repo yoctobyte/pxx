@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: chrisb2/pyb_ina219 with micropython-lib's logging, unchanged (tools/mpy_driver_census.sh).
+from machine import Pin, I2C
+from ina219 import INA219
+
+SHUNT_OHMS = 0.1
+i2c = I2C(0, scl=Pin(9), sda=Pin(8))
+try:
+    ina = INA219(SHUNT_OHMS, i2c)
+    ina.configure()
+    print("Bus Voltage: %.3f V" % ina.voltage())
+    print("Current: %.3f mA" % ina.current())
+    print("Power: %.3f mW" % ina.power())
+except OSError as e:
+    print("ina219: no device:", e)

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: micropython-lib's dht, unchanged (tools/mpy_driver_census.sh).
+from machine import Pin
+import dht
+
+try:
+    d = dht.DHT22(Pin(4))
+    d.measure()
+    print("dht22:", d.temperature(), "C", d.humidity(), "%")
+except OSError as e:
+    print("dht22: no device:", e)

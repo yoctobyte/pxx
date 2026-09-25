@@ -26,7 +26,8 @@ if [ ! -f "$C/PROVENANCE.md" ]; then
 fi
 OUT="$(mktemp -d)"
 
-# driver | directory the main's import resolves in
+# driver | directory the main's import resolves in (':'-separated when the
+# driver imports a sibling from another directory, as ds18x20 imports onewire)
 ROWS="ssd1306|micropython-lib/micropython/drivers/display/ssd1306
 bme280|BME280
 ads1x15|ads1x15
@@ -34,7 +35,15 @@ mpu6050|micropython-mpu9x50
 ds3231|micropython-samples/DS3231
 max7219|micropython-max7219
 st7789|st7789py_mpy/lib
-sdcard|micropython-lib/micropython/drivers/storage/sdcard"
+sdcard|micropython-lib/micropython/drivers/storage/sdcard
+dht|micropython-lib/micropython/drivers/sensor/dht
+ds18x20|micropython-lib/micropython/drivers/sensor/ds18x20:micropython-lib/micropython/drivers/bus/onewire
+neopixel|micropython-lib/micropython/drivers/led/neopixel
+sh1106|SH1106
+ina219|pyb_ina219:micropython-lib/python-stdlib/logging
+hcsr04|micropython-hcsr04
+tm1637|micropython-tm1637
+bh1750|bh1750fvi"
 
 echo "compiler: $PXX ($(sha256sum "$(readlink -f "$PXX")" | cut -c1-12))"
 echo "tree: $(git -C "$ROOT" rev-parse --short=10 HEAD)"
@@ -46,8 +55,10 @@ ok=0; n=0
 while IFS='|' read -r drv dir; do
   n=$((n + 1))
   log="$OUT/$drv.log"
+  fu=(); IFS=':' read -ra dirs <<< "$dir"
+  for d in "${dirs[@]}"; do fu+=("-Fu$C/$d"); done
   if "$PXX" --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals \
-       -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/rtl/platform/esp" -Fu"$C/$dir" \
+       -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/rtl/platform/esp" "${fu[@]}" \
        "test/mpy_drivers/m_$drv.npy" "$OUT/$drv.o" > "$log" 2>&1 && [ -s "$OUT/$drv.o" ]; then
     ok=$((ok + 1))
     bss="$(grep -o 'bss=[0-9]*B' "$log" | tail -1)"

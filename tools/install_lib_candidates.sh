@@ -116,6 +116,16 @@ MPY_MAX7219_URL="https://github.com/mcauser/micropython-max7219"
 MPY_MAX7219_COMMIT="22195dcc56dc4e305848573946cdae68b9dd34dc"   # MIT
 MPY_ST7789_URL="https://github.com/russhughes/st7789py_mpy"
 MPY_ST7789_COMMIT="7265925bd0c092e8105200d18b2dba9dfbc12c27"    # MIT
+MPY_SH1106_URL="https://github.com/robert-hh/SH1106"
+MPY_SH1106_COMMIT="fe674238f9e186c4a3801773b2dbd0100a662400"    # MIT
+MPY_INA219_URL="https://github.com/chrisb2/pyb_ina219"
+MPY_INA219_COMMIT="3099aae0f166aa6eeb272fe3f13d12f9c9885635"    # MIT
+MPY_HCSR04_URL="https://github.com/rsc1975/micropython-hcsr04"
+MPY_HCSR04_COMMIT="17eafe3730ce27a880ba45f4c4891efeb112bf82"    # Apache-2.0
+MPY_TM1637_URL="https://github.com/mcauser/micropython-tm1637"
+MPY_TM1637_COMMIT="cc9ecc642787b0c8afcb318a52865b855b4f0e5f"    # MIT
+MPY_BH1750_URL="https://github.com/catdog2/mpy_bh1750fvi_esp8266"
+MPY_BH1750_COMMIT="a66f11f88c6694b499fe92cbd627ede9f51b6c5c"    # Apache-2.0
 SQLITE_ZIP="sqlite-amalgamation-3460000"
 SQLITE_URL="https://www.sqlite.org/2024/${SQLITE_ZIP}.zip"
 SQLITE_SHA256="712a7d09d2a22652fb06a49af516e051979a3984adb067da86760e60ed51a7f5"
@@ -514,17 +524,25 @@ fetch_micropython_drivers() {
   # fetch_commit replaces $DEST/<its subdir>, so each upstream gets its own;
   # and it sets the global \`sub\`, which is why this one is called mpd.
   fetch_commit "$MPYLIB_URL" "$mpd/micropython-lib" "$MPYLIB_COMMIT" \
-    micropython/drivers/display/ssd1306 micropython/drivers/storage/sdcard LICENSE
+    micropython/drivers/display/ssd1306 micropython/drivers/storage/sdcard \
+    micropython/drivers/sensor/dht micropython/drivers/sensor/ds18x20 \
+    micropython/drivers/bus/onewire micropython/drivers/led/neopixel \
+    python-stdlib/logging LICENSE
   fetch_commit "$MPY_BME280_URL" "$mpd/BME280" "$MPY_BME280_COMMIT"
   fetch_commit "$MPY_ADS1X15_URL" "$mpd/ads1x15" "$MPY_ADS1X15_COMMIT"
   fetch_commit "$MPY_IMU_URL" "$mpd/micropython-mpu9x50" "$MPY_IMU_COMMIT"
   fetch_commit "$MPY_SAMPLES_URL" "$mpd/micropython-samples" "$MPY_SAMPLES_COMMIT" DS3231 LICENSE
   fetch_commit "$MPY_MAX7219_URL" "$mpd/micropython-max7219" "$MPY_MAX7219_COMMIT"
   fetch_commit "$MPY_ST7789_URL" "$mpd/st7789py_mpy" "$MPY_ST7789_COMMIT" lib LICENSE
+  fetch_commit "$MPY_SH1106_URL" "$mpd/SH1106" "$MPY_SH1106_COMMIT"
+  fetch_commit "$MPY_INA219_URL" "$mpd/pyb_ina219" "$MPY_INA219_COMMIT" ina219.py LICENSE.md
+  fetch_commit "$MPY_HCSR04_URL" "$mpd/micropython-hcsr04" "$MPY_HCSR04_COMMIT"
+  fetch_commit "$MPY_TM1637_URL" "$mpd/micropython-tm1637" "$MPY_TM1637_COMMIT" tm1637.py LICENSE.txt
+  fetch_commit "$MPY_BH1750_URL" "$mpd/bh1750fvi" "$MPY_BH1750_COMMIT"
   cat > "$top/PROVENANCE.md" <<EOF
 # MicroPython device drivers (NilPy ESP driver census)
 Each is compiled UNCHANGED. Installed by tools/install_lib_candidates.sh;
-gitignored, never committed. All MIT.
+gitignored, never committed. MIT, except hcsr04 and bh1750 (Apache-2.0).
 | driver | file | upstream | commit |
 | --- | --- | --- | --- |
 | ssd1306 | micropython-lib/micropython/drivers/display/ssd1306/ssd1306.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
@@ -535,6 +553,14 @@ gitignored, never committed. All MIT.
 | ds3231 | micropython-samples/DS3231/ds3231_port.py | ${MPY_SAMPLES_URL} | ${MPY_SAMPLES_COMMIT} |
 | max7219 | micropython-max7219/max7219.py | ${MPY_MAX7219_URL} | ${MPY_MAX7219_COMMIT} |
 | st7789 | st7789py_mpy/lib/st7789py.py | ${MPY_ST7789_URL} | ${MPY_ST7789_COMMIT} |
+| dht | micropython-lib/micropython/drivers/sensor/dht/dht.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| ds18x20 | micropython-lib/micropython/drivers/sensor/ds18x20/ds18x20.py, ../../bus/onewire/onewire.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| neopixel | micropython-lib/micropython/drivers/led/neopixel/neopixel.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| sh1106 | SH1106/sh1106.py | ${MPY_SH1106_URL} | ${MPY_SH1106_COMMIT} |
+| ina219 | pyb_ina219/ina219.py, micropython-lib/python-stdlib/logging/logging.py | ${MPY_INA219_URL} | ${MPY_INA219_COMMIT} |
+| hcsr04 | micropython-hcsr04/hcsr04.py | ${MPY_HCSR04_URL} | ${MPY_HCSR04_COMMIT} |
+| tm1637 | micropython-tm1637/tm1637.py | ${MPY_TM1637_URL} | ${MPY_TM1637_COMMIT} |
+| bh1750 | bh1750fvi/bh1750fvi.py | ${MPY_BH1750_URL} | ${MPY_BH1750_COMMIT} |
 EOF
   say "$mpd -> $top"
 }

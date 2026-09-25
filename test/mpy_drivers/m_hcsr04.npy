@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: rsc1975/micropython-hcsr04, unchanged (tools/mpy_driver_census.sh).
+from hcsr04 import HCSR04
+
+sensor = HCSR04(trigger_pin=12, echo_pin=13, echo_timeout_us=10000)
+try:
+    print("hcsr04:", sensor.distance_cm(), "cm")
+except OSError as e:
+    print("hcsr04: no echo:", e)

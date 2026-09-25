@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: micropython-lib's neopixel, unchanged (tools/mpy_driver_census.sh).
+from machine import Pin
+import neopixel
+
+np = neopixel.NeoPixel(Pin(48), 8)
+np.fill((0, 0, 0))
+np[0] = (255, 0, 0)
+np[7] = (0, 0, 64)
+np.write()
+print("neopixel:", len(np), np[0])

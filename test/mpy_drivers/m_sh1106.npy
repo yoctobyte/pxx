@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: robert-hh/SH1106, unchanged (tools/mpy_driver_census.sh).
+from machine import Pin, I2C
+import sh1106
+
+i2c = I2C(0, scl=Pin(9), sda=Pin(8), freq=400000)
+try:
+    display = sh1106.SH1106_I2C(128, 64, i2c, Pin(16), 0x3c)
+    display.sleep(False)
+    display.fill(0)
+    display.text('Testing 1', 0, 0, 1)
+    display.show()
+    print("sh1106: drawn")
+except OSError as e:
+    print("sh1106: no device:", e)
