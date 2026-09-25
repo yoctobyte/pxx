@@ -55,6 +55,7 @@ const
   GPIO_MODE_INPUT        = 1;
   GPIO_MODE_OUTPUT       = 2;
   GPIO_MODE_INPUT_OUTPUT = 3;
+  GPIO_MODE_INPUT_OUTPUT_OD = 7;   { input | output | open-drain }
 
   { gpio_int_type_t, from hal/gpio_types.h, under our own names }
   GPIO_EDGE_NONE    = 0;   { GPIO_INTR_DISABLE; renamed, it is the same identifier as gpio_intr_disable }
@@ -96,6 +97,11 @@ function gpio_input(pin: Integer): Integer;
 { Drive the pin AND read it. The pad feeds its own input path, so writing it
   makes a real edge that the interrupt hardware sees, with nothing wired. }
 function gpio_inout(pin: Integer): Integer;
+{ Open-drain and readable: writing 1 releases the line and 0 pulls it low, so a
+  device on a shared wire (1-Wire, a DHT) can pull it low against us without a
+  fight. gpio_inout drives BOTH levels, which would short a device holding the
+  line low. }
+function gpio_opendrain(pin: Integer): Integer;
 
 { Internal pull resistor on a pin, digital or analog. On an ADC pad, set it
   AFTER adc start: the ADC driver clears the pulls when it claims the pad. }
@@ -252,6 +258,14 @@ begin
   rc := gpio_reset_pin(pin);
   if rc <> 0 then begin gpio_inout := rc; Exit; end;
   gpio_inout := gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT);
+end;
+
+function gpio_opendrain(pin: Integer): Integer;
+var rc: Integer;
+begin
+  rc := gpio_reset_pin(pin);
+  if rc <> 0 then begin gpio_opendrain := rc; Exit; end;
+  gpio_opendrain := gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT_OD);
 end;
 
 function gpio_pullup(pin: Integer): Integer;

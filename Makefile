@@ -37724,6 +37724,13 @@ test-esp-idf: $(COMPILER)
 	    test/esp_board_spi_surface.npy $(TESTTMP)/esp_board_spi_surface.o >/dev/null \
 	  && echo "=== esp_board_spi_surface builds [$$t]: OK ===" || exit 1; \
 	done
+	@# MicroPython's pin protocols (time_pulse_us, bitstream, dht_readinto,
+	@# _onewire); the QEMU run and its .expected are in the test's header.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_qemu_mpy_pin_protocols.npy $(TESTTMP)/esp_qemu_mpy_pin_protocols.o >/dev/null \
+	  && echo "=== esp_qemu_mpy_pin_protocols builds [$$t]: OK ===" || exit 1; \
+	done
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_hidden_loop.npy $(TESTTMP)/esp_board_hidden_loop.o >/dev/null \

@@ -7,10 +7,10 @@
 # (test/esp_board_spi_surface.npy); an archive the program does not call adds
 # nothing to the image (measured 2026-09-25: the default nilpy-hw-s3 image is
 # 0x132ed0 bytes with it and without it, after a reconfigure and relink).
-idf_component_register(REQUIRES esp_timer esp_driver_gpio esp_driver_spi lwip esp_netif)
+idf_component_register(REQUIRES esp_timer esp_driver_gpio esp_driver_spi esp_driver_i2c esp_driver_rmt lwip esp_netif)
 
 add_prebuilt_library(pxx_app "${CMAKE_CURRENT_LIST_DIR}/libpxx_app.a"
-                     REQUIRES esp_timer esp_driver_gpio esp_driver_spi lwip esp_netif)
+                     REQUIRES esp_timer esp_driver_gpio esp_driver_spi esp_driver_i2c esp_driver_rmt lwip esp_netif)
 target_link_libraries(${COMPONENT_LIB} INTERFACE pxx_app)
 # Nothing in this component references app_main, so force the linker to keep
 # pulling it from the archive (ESP-IDF's startup task calls it).

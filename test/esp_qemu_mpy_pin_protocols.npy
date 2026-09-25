@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: 0BSD
+# QEMU (ESP32-S3, ESP32-C3): MicroPython's microsecond pin protocols with nothing wired,
+# which is every arm a QEMU GPIO can witness: the pulse timeouts, dht's
+# ETIMEDOUT, the 1-Wire CRC and bitstream's error path. Espressif's QEMU does not model the RMT peripheral (the write times
+# out, so this prints `bitstream 110` where silicon prints `bitstream sent`)
+# nor pad pulls (every input reads 0, whatever its pull), which is why a
+# 1-Wire reset and readbyte are not here: with nothing wired they would read
+# a presence pulse and 0 under QEMU, where silicon reads False and 255.
+#
+#   ESP_RUN_PROJECT=nilpy-hw-s3 ESP_PXXFLAGS="--xtensa-long-calls -Fu$PWD/lib/rtl -Fu$PWD/lib/rtl/platform/esp" \
+#     tools/esp_run.sh test/esp_qemu_mpy_pin_protocols.npy
+#   and compare the program's lines (pulse .. PIN-PROTOCOLS-DONE; IDF's own
+#   `E (..) rmt:` log line is not one) with test/esp_qemu_mpy_pin_protocols.expected.
+#   Measured identical on esp32s3 and esp32c3 (--chip esp32c3, nilpy-hw-c3).
+#
+# A real pulse, a DHT's answer, a 1-Wire device and the WS2812's colour need
+# silicon: those rows are PENDING board access.
+from machine import Pin, time_pulse_us, bitstream, dht_readinto
+import _onewire
+
+down = Pin(4, Pin.IN, Pin.PULL_DOWN)
+print("pulse never starts", time_pulse_us(down, 1, 2000))
+print("pulse never ends", time_pulse_us(down, 0, 2000))
+
+ow = Pin(5)
+ow.init(Pin.OPEN_DRAIN, Pin.PULL_UP)
+rom = bytearray(b"\x28\xff\x4b\x46\x92\x15\x03")
+print("crc8", _onewire.crc8(rom))
+rom.append(_onewire.crc8(rom))
+print("crc8 of rom+crc", _onewire.crc8(rom))
+
+buf = bytearray(5)
+try:
+    dht_readinto(Pin(6), buf)
+    print("dht answered", list(buf))
+except OSError as e:
+    print("dht", e.args[0])
+
+led = Pin(8, Pin.OUT)      # the C3 devkit's WS2812; the S3's is 48 or 38
+try:
+    bitstream(led, 0, (400, 850, 800, 450), bytearray(b"\x10\x00\x00"))
+    print("bitstream sent")
+except OSError as e:
+    print("bitstream", e.args[0])
+print("PIN-PROTOCOLS-DONE")

@@ -31,11 +31,17 @@ unit mimic_machine;
 
   Only for an ESP build: this file lives in lib/rtl/platform/esp, on the unit
   path of an --platform=esp compile and nothing else. A project needs
-  esp_driver_gpio, esp_driver_i2c and esp_driver_spi in its REQUIRES. }
+  esp_driver_gpio, esp_driver_i2c, esp_driver_spi and esp_driver_rmt in its
+  REQUIRES (rmt for bitstream).
+
+  The microsecond pin protocols MicroPython writes in C are here too:
+  time_pulse_us and dht_readinto are espmpyport's translation of MicroPython's
+  own (MIT, see that unit), and bitstream drives the RMT peripheral as
+  MicroPython's ESP32 port does. }
 
 interface
 
-uses pylib, sysutils, espgpio, espi2c, espspi, mimic_time;
+uses pylib, sysutils, espgpio, espi2c, espspi, mimic_time, espmpyport;
 
 type
   Pin = class
@@ -119,6 +125,20 @@ type
     procedure init(t: TPyList);
   end;
 
+{ The width of the next pulse at pulse_level, in microseconds, waiting at most
+  timeout_us for it to start and at most timeout_us for it to end. Returns -2
+  when it never started and -1 when it never ended; it does not raise. }
+function time_pulse_us(pin: Pin; pulse_level: Integer; timeout_us: Integer = 1000000): Integer;
+
+{ Send buf out on pin as a bitstream. encoding 0 is the only one MicroPython
+  has: each bit, MSB first, is a high then a low, timed by the 4-tuple of
+  nanoseconds (high_0, low_0, high_1, low_1). This is what a WS2812 wants. }
+procedure bitstream(pin: Pin; encoding: Integer; timing: TPyList; buf: TPyBytes);
+
+{ Read a DHT11/DHT22's 40 bits into buf[0..4]. OSError ETIMEDOUT when the
+  sensor does not answer. dht.py checks the checksum. }
+procedure dht_readinto(pin: Pin; buf: TPyBytes);
+
 implementation
 
 const
@@ -167,7 +187,7 @@ begin
   if value >= 0 then GpioSetLevel(id, value and 1);
   if mode = OUT then gpio_output(id)
   else if mode = &IN then gpio_input(id)
-  else if mode = OPEN_DRAIN then gpio_inout(id);
+  else if mode = OPEN_DRAIN then gpio_opendrain(id);
   if (mode = OUT) and (value >= 0) then GpioSetLevel(id, value and 1);
   if pull = PULL_UP then gpio_pullup(id)
   else if pull = PULL_DOWN then gpio_pulldown(id);
@@ -465,6 +485,118 @@ end;
 procedure RTC.init(t: TPyList);
 begin
   datetime(t);
+end;
+
+{ ---- microsecond pin protocols (espmpyport) -------------------------------- }
+
+function time_pulse_us(pin: Pin; pulse_level: Integer; timeout_us: Integer): Integer;
+begin
+  time_pulse_us := MpyTimePulseUs(PinId(pin), Ord(pulse_level <> 0), timeout_us);
+end;
+
+procedure dht_readinto(pin: Pin; buf: TPyBytes);
+begin
+  if buf.FLen < 5 then raise ValueError.Create('buffer too small');
+  if not MpyDhtReadinto(PinId(pin), PByte(buf.FData)) then
+    RaiseEsp(ESP_ERR_TIMEOUT);
+end;
+
+{ ---- bitstream, over RMT -------------------------------------------------- }
+
+function rmt_new_tx_channel(cfg: Pointer; ret_chan: Pointer): Integer; external;
+function rmt_new_bytes_encoder(cfg: Pointer; ret_enc: Pointer): Integer; external;
+function rmt_enable(chan: Pointer): Integer; external;
+function rmt_disable(chan: Pointer): Integer; external;
+function rmt_del_channel(chan: Pointer): Integer; external;
+function rmt_del_encoder(enc: Pointer): Integer; external;
+function rmt_transmit(chan: Pointer; enc: Pointer; payload: Pointer;
+  bytes: Integer; cfg: Pointer): Integer; external;
+function rmt_tx_wait_all_done(chan: Pointer; timeout_ms: Integer): Integer; external;
+
+const
+  RMT_CLK_SRC_APB   = 4;          { SOC_MOD_CLK_APB }
+  RMT_RESOLUTION_HZ = 40000000;   { MicroPython's: one tick = 25 ns }
+
+type
+  { rmt_tx_channel_config_t, rmt_bytes_encoder_config_t and
+    rmt_transmit_config_t as IDF v6.0 lays them out; the layout
+    examples/esp32/rgb-s3 drives a WS2812 with on silicon. }
+  TRmtTxConfig = record
+    gpio_num, clk_src, resolution_hz, mem_block_symbols,
+    trans_queue_depth, intr_priority, flags: Integer;
+  end;
+  TRmtBytesEncConfig = record
+    bit0, bit1, flags: Integer;
+  end;
+  TRmtTransmitConfig = record
+    loop_count, flags: Integer;
+  end;
+
+{ One RMT symbol: a high of hi_ns then a low of lo_ns. The word is
+  duration0:15 | level0:1 | duration1:15 | level1:1. }
+function RmtSymbol(hi_ns, lo_ns: Int64): Integer;
+var hi, lo: Int64;
+begin
+  { truncating, as MicroPython's (counter_clk_khz * ns) / 1e6 }
+  hi := hi_ns * (RMT_RESOLUTION_HZ div 1000000) div 1000;
+  lo := lo_ns * (RMT_RESOLUTION_HZ div 1000000) div 1000;
+  if (hi < 1) or (lo < 1) or (hi > 32767) or (lo > 32767) then
+    raise ValueError.Create('bitstream timing out of range');
+  RmtSymbol := Integer(hi or (1 shl 15) or (lo shl 16));
+end;
+
+function TxTimeoutMs(timing: TPyList; len: Integer): Integer;
+var b0, b1, slow: Int64;
+begin
+  b0 := Int64(timing.at(0)) + Int64(timing.at(1));
+  b1 := Int64(timing.at(2)) + Int64(timing.at(3));
+  if b0 > b1 then slow := b0 else slow := b1;
+  TxTimeoutMs := (3 * len div 2) * (1 + (8 * slow) div 1000);
+end;
+
+procedure bitstream(pin: Pin; encoding: Integer; timing: TPyList; buf: TPyBytes);
+var txcfg: TRmtTxConfig; enccfg: TRmtBytesEncConfig; sendcfg: TRmtTransmitConfig;
+    chan, enc: Pointer; rc: Integer;
+begin
+  if encoding <> 0 then raise ValueError.Create('encoding must be 0');
+  if timing.count <> 4 then raise ValueError.Create('timing must be a 4-tuple');
+  enccfg.bit0 := RmtSymbol(timing.at(0), timing.at(1));
+  enccfg.bit1 := RmtSymbol(timing.at(2), timing.at(3));
+  enccfg.flags := 1;                  { msb_first }
+  sendcfg.loop_count := 0;
+  sendcfg.flags := 0;
+  txcfg.gpio_num := PinId(pin);
+  txcfg.clk_src := RMT_CLK_SRC_APB;
+  txcfg.resolution_hz := RMT_RESOLUTION_HZ;
+  txcfg.mem_block_symbols := 64;
+  txcfg.trans_queue_depth := 1;
+  txcfg.intr_priority := 0;
+  txcfg.flags := 0;
+  { A channel per call, deleted after, as MicroPython's esp32 port does, so
+    the pin is free for anything else between writes. }
+  chan := nil;
+  enc := nil;
+  rc := rmt_new_tx_channel(@txcfg, @chan);
+  if rc = 0 then rc := rmt_new_bytes_encoder(@enccfg, @enc);
+  if rc = 0 then rc := rmt_enable(chan);
+  if (rc = 0) and (buf.FLen > 0) then
+  begin
+    rc := rmt_transmit(chan, enc, buf.FData, buf.FLen, @sendcfg);
+    { MicroPython's wait: 50% longer than the stream at its slowest bit }
+    if rc = 0 then rc := rmt_tx_wait_all_done(chan, TxTimeoutMs(timing, buf.FLen));
+  end;
+  if chan <> nil then
+  begin
+    rmt_disable(chan);
+    rmt_del_channel(chan);
+  end;
+  if enc <> nil then rmt_del_encoder(enc);
+  { Deleting the channel disables the pad's output. Hand it back to the GPIO
+    matrix driving low, as MicroPython does after its RMT write: level first,
+    so the return to GPIO cannot put a stray high on a WS2812 data line. }
+  GpioSetLevel(txcfg.gpio_num, 0);
+  GpioSetDirection(txcfg.gpio_num, GPIO_MODE_OUTPUT);
+  if rc <> 0 then RaiseEsp(rc);
 end;
 
 end.
