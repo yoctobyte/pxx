@@ -504,6 +504,17 @@ sources are fetched on demand, not stored in the repository:
 tools/install_lib_candidates.sh busybox sqlite zlib lua cjson duktape quickjs tcc tiny-regex-c enet
 ```
 
+That script fetches into a git checkout only. In a release archive, which is
+not one, it stops with `library_candidates/ is NOT gitignored — refusing to
+fetch`. For BusyBox the archive has its own route, in its `README.md` under
+"Demo: build busybox with pxx": download `busybox-1.36.1.tar.bz2` from
+busybox.net, then build it with `tools/busybox_diff.sh --build-only`. Run
+from a fresh beta.1 archive, that built a 209,096-byte static
+`busybox_x86_64` with `cat echo ls wc`, and `busybox_x86_64 echo hello`
+printed `hello`. Configuring BusyBox's tree needs GCC on the host; the build
+after that does not. The other libraries in the table have no archive route
+yet: use a checkout.
+
 Every row was re-run on 2026-09-25 with **pin v425** (commit `4fbf33f69`,
 compiler sha256 `426b2fbf3f08…`) at checkout `41a347978`. Each row says how
 it was checked: against the recipe's expected output, against the same driver

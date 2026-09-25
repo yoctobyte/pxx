@@ -22,17 +22,19 @@ than a failure: no i386 or AArch64 image has been built.
 
 Besides the ISO tools [described below](#reproducing-it-under-virtualbox), the
 build needs a BusyBox source tree
-(`tools/install_lib_candidates.sh busybox`), `binutils` for `as` and `ld`,
+(`tools/install_lib_candidates.sh busybox` in a checkout; from a release
+archive, fetch BusyBox 1.36.1 as the archive's `README.md` shows and point
+`PXX_BUSYBOX_DIR` at it), `binutils` for `as` and `ld`,
 network access to fetch the kernel, and **GCC** — the first command is a
 differential against a GCC build of the same sources, so without it there is no
 reference and no result. Note also that `tools/mkminimal.sh` defaults to
 `compiler/pascal26`, the compiler in your own checkout, rather than the pinned
 stable one; pass `PXX=` to choose.
 
-What you get, booted:
+What you get, booted (from the beta.1 release archive, on 2026-09-25):
 
 ```
-  pxx minimal system -- Linux 6.12.81-0-virt
+  pxx minimal system -- Linux 6.12.110-0-virt
   shell:    /bin/ash (busybox)
   compiler: pascal26 at /opt/pxx/compiler
 
@@ -40,9 +42,13 @@ BusyBox v1.36.1 (pxx-diff) built-in shell (ash)
 # cat > h.pas
 program h; begin writeln('hi'); end.
 # pascal26 h.pas h && ./h
-ok: h  [code=69400B  data=4184B  bss=46600B  procs=145]
+ok: h  [code=600B  data=400B  bss=34600B  procs=37  codeseg=3808B]
 hi
 ```
+
+The kernel version is whatever Alpine serves when the image is built, and
+the figures on the `ok:` line vary between compilers. This applet set has no
+`poweroff`; press ctrl-a then x to leave QEMU, as `mkminimal.sh` says when it boots.
 
 ## What is in the image
 
