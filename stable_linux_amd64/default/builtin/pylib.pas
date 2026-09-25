@@ -16655,7 +16655,12 @@ begin
     if PyClosureFinalizeHook <> nil then PyClosureFinalizeHook(objp);
     Exit;
   end;
-  if rawKind <> 0 then
+  { rawKind 3 is a class instance whose destructor already ran (an explicit
+    Pascal `.Free` reached here through PXXObjFree -- pylib's own code frees
+    its temporaries that way). It takes EVERY arm below exactly as kind 0
+    does, containers included, and only skips the destructor call at the end:
+    an early exit to PXXClassFinalize here leaked a freed TPyList's items. }
+  if (rawKind <> 0) and (rawKind <> 3) then
   begin
     { bound pair: drop the pair's ref on its receiver. Code is either a proc
       address or a refcounted closure obj — release both ends (magic-guarded,
@@ -16747,9 +16752,15 @@ begin
     it.FGenStep := nil;
     Exit;
   end;
-  { user class / anything else: release managed + variant fields via the
-    class layout descriptor walker (kind 5 = variant slots, which recurses
-    back through PXXObjRelease for held containers) }
+  { user class / anything else. Its DESTRUCTOR first -- the last reference
+    dropping is this object's death, and a Pascal class that wrote a Destroy
+    wrote it to run then (mimic_array's FData leaked one buffer per array
+    without it). Then the managed + variant fields via the class layout
+    descriptor walker (kind 5 = variant slots, which recurses back through
+    PXXObjRelease for held containers). Destroy then field finalization is
+    Pascal's own Free order. A NilPy class names no destructor, so this is a
+    no-op for it. }
+  if rawKind <> 3 then PXXClassRunDestructor(objp);
   PXXClassFinalize(objp);
 end;
 

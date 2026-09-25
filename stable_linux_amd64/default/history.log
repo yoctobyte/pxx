@@ -430,3 +430,4 @@
 2026-09-25T08:48:24Z  v430  d054ebd6f44ee1820d4d9373868932cd41a2613dfcbb37014fec56815d8ec928  f6e762b31a8fb5ee09663ecec0e03841c5973812  fix(nilpy): a bare tuple on the right of `=`; literal joins across a comment
 2026-09-25T09:08:05Z  v431  1e80d2b7f8a73c7e82af096054681b15bc09c5eb4416f3e1d1e82c238aeb4b49  607fa287a1a5dfb06b8b7703ef1c02cfcebbdeb4  tstate(borg): 75efbf4b567d RED (native)
 2026-09-25T09:52:29Z  v432  b1cf1353b945b208cf1d213b941b1afc41359b3c6fea6bb8abb68d6e5192c3d2  e5bf80753e6e1be76c65b5a91d9c0f97ed57a760  fix(N,S): ESP open() flags come from the real libc; MicroPython driver walls
+2026-09-25T10:17:33Z  v433  3faebcc8161835c0bf5f21d71af833e5e4746cc2cd4f15c15af2fa7a7031a2fd  2df022754847ef8c49244958cd6f3c8641e4fb16  fix(T): the stamp devtest no longer rewrites the live stamp under a parallel tier

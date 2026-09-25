@@ -361,6 +361,14 @@ const
   { second RAW flavor: a pyeval closure object — finalized through the same
     hook with rawKind=2 (pylib forwards to pyeval's registry free) }
   PXX_OBJ_MAGIC_RAW2 = $505942E1;
+  { A class instance whose DESTRUCTOR HAS ALREADY RUN -- an explicit `.Free`
+    (the desugar's Destroy chain, then PXXObjFree), or the rc=0 path below
+    starting one. Still a live refcounted instance in every other respect, so
+    Retain/Release treat it exactly like PXX_OBJ_MAGIC; the only difference is
+    that the finalize hook is told (rawKind 3) not to run the destructor again.
+    Without it, Pascal code that frees an object Python also holds would have
+    its Destroy run twice: once by Free, once when the last reference drops. }
+  PXX_OBJ_MAGIC_DONE = $505942D1;
   { The runtime data layout THIS RTL implements. Twin of defs.inc's
     PXX_RTL_LAYOUT_VERSION — the compiler compares the two when it links this
     unit and refuses a mismatch. Bump BOTH together when a layout changes.
@@ -440,6 +448,12 @@ function PXXObjAllocRaw2(size: NativeInt): Pointer;
 procedure PXXObjRetain(p: Pointer);
 procedure PXXObjRelease(p: Pointer);
 procedure PXXObjFree(p: Pointer);
+{ Run the Pascal DESTRUCTOR of a class instance whose last NilPy reference just
+  dropped -- the one its class RTTI names at +128 (defs.inc RTTI_CLS_SIZE).
+  Called by pylib's PyObjFinalize before the managed fields are finalized,
+  which is Pascal's own Free order. No-op for a class with no destructor, and
+  for a header written by a compiler that predates the slot. }
+procedure PXXClassRunDestructor(inst: Pointer);
 { TRUE iff p is a live PXX_OBJ_MAGIC_RAW block -- today that means exactly one
   thing, a pybound_new {code,recv} pair (see the constant's own comment) --
   so this doubles as "is this bare POINTER a bound-method/def-value object",
@@ -3741,7 +3755,7 @@ begin
   base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
   t := PMachineWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
-     (t <> PXX_OBJ_MAGIC_RAW2) then
+     (t <> PXX_OBJ_MAGIC_RAW2) and (t <> PXX_OBJ_MAGIC_DONE) then
   begin
 {$ifdef PXX_HEAP_DEBUG}
     { The magic reads as poison: this object is in quarantine, so somebody is
@@ -3806,7 +3820,7 @@ begin
   base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
   t := PMachineWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
-     (t <> PXX_OBJ_MAGIC_RAW2) then
+     (t <> PXX_OBJ_MAGIC_RAW2) and (t <> PXX_OBJ_MAGIC_DONE) then
   begin
 {$ifdef PXX_HEAP_DEBUG}
     { Releasing an object that is already in quarantine — a double release, the
@@ -3846,6 +3860,8 @@ begin
         PXXObjFinalizeHook(p, 1)
       else if t = PXX_OBJ_MAGIC_RAW2 then
         PXXObjFinalizeHook(p, 2)
+      else if t = PXX_OBJ_MAGIC_DONE then
+        PXXObjFinalizeHook(p, 3)
       else
         PXXObjFinalizeHook(p, 0);
     end;
@@ -4015,8 +4031,15 @@ end;
 procedure PXXObjFree(p: Pointer);
 begin
   if p = nil then Exit;
-  if PXXObjPlausible(p) and (PMachineWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC) then
-    PXXObjRelease(p)
+  if PXXObjPlausible(p) and ((PMachineWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC) or
+                             (PMachineWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC_DONE)) then
+  begin
+    { The desugar has just run the Destroy chain: say so in the header, so the
+      last release (now, or later if Python still holds it) does not run it a
+      second time. }
+    PMachineWord(Int64(p) - 8)^ := PXX_OBJ_MAGIC_DONE;
+    PXXObjRelease(p);
+  end
   else
   begin
 { NO LONGER GATED ON THE PROFILE -- these bodies are pure pointer/memory code.
@@ -4029,6 +4052,34 @@ begin
 { (end of the formerly profile-gated span) }
     PXXFree(p);
   end;
+end;
+
+procedure PXXClassRunDestructor(inst: Pointer);
+type TPXXDtor = procedure(Inst: Pointer);
+const
+  RTTI_FLATWORD = 112;          { defs.inc: flatCount, with RTTI_FLAT_HAS_DTOR }
+  RTTI_DTOR     = 128;          { defs.inc: RTTI_CLS_SIZE's destructor slot }
+  FLAT_HAS_DTOR = $1000000;
+var vmt, rtti, code: Pointer;
+    d: TPXXDtor;
+begin
+  if inst = nil then Exit;
+  vmt := Pointer(PMachineWord(inst)^);
+  if vmt = nil then Exit;
+  rtti := Pointer(PMachineWord(Pointer(Int64(vmt) - 8))^);
+  if rtti = nil then Exit;
+  if (PMachineWord(Pointer(Int64(rtti) + RTTI_FLATWORD))^ and FLAT_HAS_DTOR) = 0 then Exit;
+  code := Pointer(PMachineWord(Pointer(Int64(rtti) + RTTI_DTOR))^);
+  if code = nil then Exit;
+  { Mark it destroyed and hold a reference for the destructor's duration. The
+    count is already 0 here; a destructor that passes Self somewhere which
+    retains and releases it would otherwise take it back to 0 and finalize the
+    instance a second time from inside its own destructor. The caller frees
+    the block afterwards whatever the count reads. }
+  PMachineWord(Int64(inst) - 8)^ := PXX_OBJ_MAGIC_DONE;
+  PMachineWord(PXXHdrRC(inst))^ := 1;
+  d := TPXXDtor(code);
+  d(inst);
 end;
 
 { COM/ARC interface refcount helpers. `p` is the ADDRESS OF THE SLOT holding an
