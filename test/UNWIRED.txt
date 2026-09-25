@@ -147,3 +147,4 @@ test/test_foreign_thread_exception_chain.pas  a libc pthread inherits its creato
 # declared in prepasserr_mid the same ladder answers correctly, so a two-unit
 # fixture would pass on the unfixed compiler and prove nothing.
 test/prepasserr_base.pas  fixture unit for test_p_a_prepass_cannot_raise_an_error_directive.pas: declares the type ONE UNIT FURTHER than the directive, which is the variable the test turns on; nothing runs it directly by design
+test/discardlist.pas  helper unit imported by test_a_discarded_class_result_from_a_pascal_call_is_released.npy (test-nilpy)

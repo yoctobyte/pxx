@@ -25120,6 +25120,90 @@ begin
   Result := -1;
 end;
 
+{ Is a class-typed result of a call to proc p OWNED by the caller? See the
+  note in PyBindDiscardedValue. }
+function PyDiscardedCallIsOwned(p: Integer): Boolean;
+var j: Integer;
+begin
+  Result := True;
+  if ProcUnitIdx[p] < 0 then Exit;
+  for j := 0 to Procs[p].ParamCount - 1 do
+    if Procs[p].Params[j].TypeKind = tyClass then
+    begin
+      Result := False;
+      Exit;
+    end;
+end;
+
+{ Bind an expression statement's discarded class value to a hidden local.
+  Called from BOTH expression-statement arms of PyParseStatement: the bare
+  one and the dotted one (`obj.m()`, `u.read()`), which returned its node
+  directly and so never reached the binder. }
+function PyBindDiscardedValue(stmt: Integer): Integer;
+var discSym, discNew, node: Integer;
+begin
+  Result := stmt;
+  { A CONSTRUCTION WHOSE VALUE GOES NOWHERE -- `P(1, 2)` as a bare statement --
+    LEAKED IT, one instance per execution, forever. A construction is lowered
+    through a conduit local that holds its rc=1 "for whoever consumes the
+    expression" (SymIsCtorResultTemp, defs.inc), and here nobody consumes it, so
+    nothing ever releases it. CPython drops it at the end of the statement.
+    Measured 2026-09-15: 56 bytes/call, 0 under CPython, against a `p = P(1, 2)`
+    control reading 0 on both -- so it is the DISCARD, not the class.
+
+    Bound to a hidden tyClass local, which is the same ownership the assignment
+    spelling already has and which is why that spelling was always clean:
+    PyClassSymArcEligible has no name filter, so this temp gets rebind-release
+    and scope-exit release like any other NilPy class local. In a loop the slot
+    is reused, so iteration N+1's store releases iteration N's object and only
+    the last one waits for scope exit -- bounded, not merely deferred.
+
+    NOT released at end of STATEMENT, which is what CPython does and what a
+    reader will ask for. That would need a release the lowering has no place to
+    emit, and it would be the arg-spill mistake again in a new position: the
+    only thing that makes this safe is that the object outlives every borrow
+    taken during the statement.
+    bug-n-a-construction-whose-value-is-discarded-is-never-released
+
+    The same holds for ANY call whose result is a class, not only a
+    construction: the assignment lowering (ir.inc, the NilPy class-local
+    rebinding arm) takes every call result as OWNED (IRNodeYieldsOwnedRef),
+    so `u.read()` dropped a +1 that `x = u.read()` releases. Measured
+    2026-09-25 (frankh-95, adc-s3 rebooting from OOM): a Pascal-unit function
+    returning a 64-element TPyList, called bare 500 times, left live=949
+    against live=5 for the assigned spelling. Binding it here gives the
+    discard exactly the assignment's ownership, so it cannot be wrong where
+    the assignment is right.
+
+    BUT NOT EVERY CLASS RESULT IS OWNED, and a borrowed one bound here is
+    RELEASED: `s.add(k)` is TPyList.add, which returns Self, so the widened
+    binder freed the set on the first add (`len(s)` read 2 for 50 adds). A
+    Pascal callee does no return-retain, so its result is owned only when it
+    cannot be one of its inputs: no class-typed parameter, which excludes
+    every method (Self) and every function handing back an argument. A def of
+    THIS NilPy program (ProcUnitIdx < 0 -- NilPy user code is the main
+    program, see NilPyUserCode) is always owned: its return arm retains a
+    borrow (IRNodeYieldsOwnedRef's note). The assignment lowering still takes
+    every class-typed call as owned, so `t = s.add(k)` has the same flaw;
+    nobody writes that, and everyone writes `s.add(k)`. }
+  if (Result >= 0) and (ASTKind[Result] = AN_CALL) and
+     (((ASTIVal[Result] = -Ord(tkGetMem)) and
+       (Integer(ASTRight[Result]) >= REC_UCLASS_BASE)) or
+      ((Integer(ASTIVal[Result]) >= 0) and
+       (IntToTypeKind(ASTTk[Result]) = tyClass) and
+       PyDiscardedCallIsOwned(ASTIVal[Result]))) then
+  begin
+    discNew := Result;         { the call whose value is dropped }
+    discSym := AllocVar(PyHiddenName('disc'), tyClass);
+    Syms[discSym].RecName := ResolveNodeRec(discNew);
+    SymSyncTypeRef(discSym);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(discSym);
+    ASTRight[node] := discNew;
+    Result := node;
+  end;
+end;
+
 function PyParseStatement: Integer; forward;
 procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever it appears (pyparser.inc) }
 { Consume an optional `as <name>` after an imported MODULE and register the
@@ -34125,7 +34209,6 @@ var chainN: Integer;   { targets in a chained assignment `a = b = v` }
     cmpTmp, cmpSeq, cmpAsgn: Integer;   { comprehension into a non-list target }
     cmpExisted: Boolean;
     asrtCond, asrtMsg, asrtProc, asrtA0, asrtA1: Integer;   { assert statement }
-    discSym, discNew: Integer;         { binder for a DISCARDED construction }
     delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
     delSavedInDel: Boolean;
     setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
@@ -34740,7 +34823,7 @@ begin
       method-call expression statement before a ';' on a one-line suite. }
     if CurTok.Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon] then
     begin
-      Result := lhsNode;   { expression statement, e.g. obj.method() }
+      Result := PyBindDiscardedValue(lhsNode);   { expression statement, e.g. obj.method() }
       Exit;
     end;
     { `self.x: T = expr` — an annotated FIELD assignment. The annotation was
@@ -35533,40 +35616,7 @@ begin
     Exit;
   end;
   Result := CurASTNode;
-  { A CONSTRUCTION WHOSE VALUE GOES NOWHERE -- `P(1, 2)` as a bare statement --
-    LEAKED IT, one instance per execution, forever. A construction is lowered
-    through a conduit local that holds its rc=1 "for whoever consumes the
-    expression" (SymIsCtorResultTemp, defs.inc), and here nobody consumes it, so
-    nothing ever releases it. CPython drops it at the end of the statement.
-    Measured 2026-09-15: 56 bytes/call, 0 under CPython, against a `p = P(1, 2)`
-    control reading 0 on both -- so it is the DISCARD, not the class.
-
-    Bound to a hidden tyClass local, which is the same ownership the assignment
-    spelling already has and which is why that spelling was always clean:
-    PyClassSymArcEligible has no name filter, so this temp gets rebind-release
-    and scope-exit release like any other NilPy class local. In a loop the slot
-    is reused, so iteration N+1's store releases iteration N's object and only
-    the last one waits for scope exit -- bounded, not merely deferred.
-
-    NOT released at end of STATEMENT, which is what CPython does and what a
-    reader will ask for. That would need a release the lowering has no place to
-    emit, and it would be the arg-spill mistake again in a new position: the
-    only thing that makes this safe is that the object outlives every borrow
-    taken during the statement.
-    bug-n-a-construction-whose-value-is-discarded-is-never-released }
-  if (Result >= 0) and (ASTKind[Result] = AN_CALL) and
-     (ASTIVal[Result] = -Ord(tkGetMem)) and
-     (Integer(ASTRight[Result]) >= REC_UCLASS_BASE) then
-  begin
-    discNew := Result;         { the construction whose value is dropped }
-    discSym := AllocVar(PyHiddenName('disc'), tyClass);
-    Syms[discSym].RecName := ResolveNodeRec(discNew);
-    SymSyncTypeRef(discSym);
-    node := AllocNode(AN_ASSIGN);
-    ASTLeft[node] := PyMakeIdent(discSym);
-    ASTRight[node] := discNew;
-    Result := node;
-  end;
+  Result := PyBindDiscardedValue(Result);
 end;
 
 function PyParseBlock: Integer;

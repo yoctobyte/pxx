@@ -1,0 +1,40 @@
+# A class-typed call result used as a bare statement is released, like the
+# same call assigned to a name. `u.read()` and `h.make()` go through the
+# DOTTED expression-statement arm, which returned the call node directly and
+# never reached the discard binder the bare arm had, so every call leaked its
+# result: 64-element lists, ~17.5 KB per run on the ESP32-S3 adc demo, which
+# rebooted from OOM. Pin v424 leaves live=1002 here; the fixed one
+# leaves a handful.
+#
+# And the release must NOT reach a BORROWED result: `s.add(k)` is TPyList.add,
+# which returns Self, so releasing it freed the set on the first add. The last
+# line of output is that guard: 50 adds must leave 50 elements.
+import 'discardlist.pas' as u
+
+class Box:
+    def __init__(self, n):
+        self.n = n
+
+class Maker:
+    def make(self):
+        return Box(3)
+
+def main():
+    h = Maker()
+    k = 0
+    while k < 500:
+        u.read()
+        h.make()
+        k = k + 1
+    s = set()
+    k = 0
+    while k < 50:
+        s.add(k)
+        k = k + 1
+    x = u.read()
+    print(len(x))
+    print(h.make().n)
+    print(len(s))
+    print("DISCARDRESULT OK")
+
+main()

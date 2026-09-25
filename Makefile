@@ -3403,6 +3403,11 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_print_of_a_converted_value_releases_its_string.npy $(TESTTMP)/test_nilpy_prconv26
 	$(TESTTMP)/test_nilpy_prconv26 | diff -u test/test_print_of_a_converted_value_releases_its_string.expected -
 	tools/assert_no_leak.sh nilpy_print_conversion_release 100 $(TESTTMP)/test_nilpy_prconv26
+	@# a class-typed call result as a bare DOTTED statement (`u.read()`, `h.make()`)
+	@# is released like the assigned spelling. Pin v424 leaves live=1002 here.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_a_discarded_class_result_from_a_pascal_call_is_released.npy $(TESTTMP)/test_nilpy_discres26
+	$(TESTTMP)/test_nilpy_discres26 | diff -u test/test_a_discarded_class_result_from_a_pascal_call_is_released.expected -
+	tools/assert_no_leak.sh nilpy_discarded_class_result 100 $(TESTTMP)/test_nilpy_discres26
 	@# an ANNOTATED returned local keeps the def's class result. The values cannot
 	@# see it, so the row asserts the TYPE as a relation: b (annotated) and c
 	@# (annotated, from a nested def) must carry exactly what a (unannotated) does,
