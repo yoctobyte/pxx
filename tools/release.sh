@@ -485,21 +485,41 @@ publish() {
   read -rp "PUBLISH $tag (codename $codename)? type the tag to confirm: " confirm || true
   [[ "$confirm" == "$tag" ]] || die "confirmation mismatch — aborted"
 
+  [[ $LOCAL -eq 0 ]] || have gh || die "--local needs the gh CLI"
+
+  # Record the codename IN the release: commit it, push it, THEN tag that
+  # commit. This used to append the line and never commit it, so every publish
+  # left the tree dirty and the tag without its own ledger entry, and the owner
+  # had to hand-commit after the seatbelt ritual.
+  # Plain `git push`, never tools/sync.sh: a rebase would put commits nobody
+  # gated under the tag. If origin moved since the guard above, the push is
+  # refused; the commit is then dropped again (--keep: the tree was verified
+  # clean, so it holds only this line) and nothing is tagged.
+  local ledger="devdocs/release-notes/CODENAMES"
   mkdir -p "$REPO_ROOT/devdocs/release-notes"
-  echo "$tag $codename" >> "$REPO_ROOT/devdocs/release-notes/CODENAMES"
+  grep -qxF "$tag $codename" "$REPO_ROOT/$ledger" 2>/dev/null \
+    || echo "$tag $codename" >> "$REPO_ROOT/$ledger"
+  git -C "$REPO_ROOT" add "$ledger"
+  git -C "$REPO_ROOT" commit -q -m "release: $tag, codename $codename" -- "$ledger" \
+    || die "could not commit $ledger"
+  if ! git -C "$REPO_ROOT" push -q origin HEAD; then
+    git -C "$REPO_ROOT" reset -q --keep HEAD~1
+    die "origin moved during the publish ritual; nothing tagged, CODENAMES commit dropped. Pull, re-gate, re-run."
+  fi
+  git -C "$REPO_ROOT" tag -a "$tag" -m "PXX $tag — codename $codename"
+  git -C "$REPO_ROOT" push -q origin "$tag" || die "tag $tag created locally but its push failed"
+  echo "==> committed $ledger, pushed it, tagged $tag on that commit and pushed the tag"
 
   if [[ $LOCAL -eq 1 ]]; then
-    have gh || die "--local needs the gh CLI"
     # Prefer a hand-authored body at devdocs/release-notes/<tag>.md; fall back to
-    # GitHub's auto-generated notes when none is prepared.
+    # GitHub's auto-generated notes when none is prepared. The tag already
+    # exists, so gh publishes THAT commit, not whatever the default branch is.
     local notes_args=(--generate-notes) nf="$REPO_ROOT/devdocs/release-notes/$tag.md"
     [[ -f "$nf" ]] && { notes_args=(--notes-file "$nf"); echo "==> release body: $nf"; }
     gh release create "$tag" "$DIST/pxx-$tag.tar.gz" "$DIST/SHA256SUMS" \
       "$DIST/pxx-$tag/MANIFEST.sha256" \
       --title "PXX $tag — $codename" "${notes_args[@]}"
   else
-    git tag -a "$tag" -m "PXX $tag — codename $codename"
-    git push origin "$tag"
     # The CI release workflow is MANUAL-ONLY (workflow_dispatch) — pushing the tag
     # does NOT auto-publish. Dispatch it explicitly here, having already passed the
     # interactive seatbelt + typed-tag confirmation above. No gh -> print the
