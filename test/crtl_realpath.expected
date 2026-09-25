@@ -2,7 +2,7 @@
 d                -> BASE/d
 ./d/./sub/../f   -> BASE/d/f
 d//sub///        -> BASE/d/sub
-../../../../..   -> /
+../ x40 ..       -> /
 lnk              -> BASE/d
 lnk/sub          -> BASE/d/sub
 lsub/..          -> BASE/d

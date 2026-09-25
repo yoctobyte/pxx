@@ -27,7 +27,10 @@ static const char *ename(int e) {
   }
 }
 
-static void show(const char *p) {
+static void show_as(const char *label, const char *p);
+static void show(const char *p) { show_as(p, p); }
+
+static void show_as(const char *label, const char *p) {
   char buf[PATH_MAX];
   char *a, *b;
   errno = 0;
@@ -37,17 +40,25 @@ static void show(const char *p) {
   b = realpath(p, buf);
   int eb = errno;
   if (!a) {
-    printf("%-16s -> NULL %s%s\n", p, ename(ea), (!b && ea == eb) ? "" : " (buffer form differs)");
+    printf("%-16s -> NULL %s%s\n", label, ename(ea), (!b && ea == eb) ? "" : " (buffer form differs)");
     return;
   }
-  if (!b || strcmp(a, b) != 0) printf("%-16s -> buffer form differs\n", p);
-  if (strncmp(a, base, baselen) == 0) printf("%-16s -> BASE%s\n", p, a + baselen);
-  else printf("%-16s -> %s\n", p, a);
+  if (!b || strcmp(a, b) != 0) printf("%-16s -> buffer form differs\n", label);
+  if (strncmp(a, base, baselen) == 0) printf("%-16s -> BASE%s\n", label, a + baselen);
+  else printf("%-16s -> %s\n", label, a);
   free(a);
 }
 
 int main(void) {
-  char tmpl[] = "/tmp/pxxrpXXXXXX";
+  /* The scratch root in the order tools/testmgr_hardcoded_tmp_devtest.py
+     asks for: testmgr's per-run dir, then make's, then the default. The
+     output prints paths relative to the resolved base, so it is the same
+     whichever root is used. */
+  const char *root = getenv("TESTMGR_TMP");
+  if (!root) root = getenv("TESTTMP");
+  if (!root) root = "/tmp";
+  char tmpl[PATH_MAX];
+  snprintf(tmpl, sizeof tmpl, "%s/pxxrpXXXXXX", root);
   char abs_target[PATH_MAX + 8];
   char *dir = mkdtemp(tmpl);
   if (!dir || chdir(dir) != 0) { printf("setup failed\n"); return 1; }
@@ -70,7 +81,12 @@ int main(void) {
   show("d");
   show("./d/./sub/../f");
   show("d//sub///");
-  show("../../../../..");
+  /* `..` past the root stays at the root. The scratch dir's depth depends on
+     TESTMGR_TMP/TESTTMP, so climb far more levels than any of them has. */
+  char up[40 * 3 + 3] = "";
+  for (int k = 0; k < 40; k++) strcat(up, "../");
+  strcat(up, "..");
+  show_as("../ x40 ..", up);
   show("lnk");
   show("lnk/sub");
   show("lsub/..");

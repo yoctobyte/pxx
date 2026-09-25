@@ -33,6 +33,17 @@
 # ARGS` REPLACES the --args list, so a `run > /dev/null` silently drops argv.
 # That is how the first draft of this tool measured a program that crashed on
 # a NULL argv[1] as "0 allocations".
+#
+# And do NOT `set startup-with-shell off`. gdb stores --args as ONE string,
+# shell-escaped, and without a shell older gdb splits that string on whitespace
+# and never unescapes it. On borg, 2026-09-25, the devtest's argument
+# `it's "a" b  c` (13 chars) measured live=6. 6 is the length of `it\'s\`, the
+# first whitespace-split word of the escaped string (inferred from that count,
+# not observed; borg's gdb was not inspected). gdb 17 is correct, so the same
+# tool was green on plexus. With the
+# shell (gdb's default) /bin/sh does the unescaping, on every gdb, and `exec`
+# keeps the pid, so the exit_group catchpoint is the program's own. gdb
+# starts it through $SHELL, which is pinned to /bin/sh: the escaping is POSIX.
 set -uo pipefail
 
 bin="${1:?usage: census_at_exit.sh <binary> [args...]}"
@@ -45,9 +56,8 @@ if [ -z "$addr" ]; then
   exit 2
 fi
 
-out=$(timeout "${CENSUS_TIMEOUT:-300}" gdb -q -batch -nx \
+out=$(SHELL=/bin/sh timeout "${CENSUS_TIMEOUT:-300}" gdb -q -batch -nx \
         -ex 'set pagination off' \
-        -ex 'set startup-with-shell off' \
         -ex 'catch syscall exit_group' \
         -ex 'run' \
         -ex "call ((void(*)(void))$addr)()" \
