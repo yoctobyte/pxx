@@ -1,0 +1,21 @@
+# SOAK-REPLACES-MAIN
+# SPDX-License-Identifier: 0BSD
+# S3-only leak reproducer (frankD, 2026-09-25), run with:
+#   SOAK_BODY=tools/esp_soak_nilpy/leak-one-size.npy tools/esp_heap_soak_nilpy.sh --passes 40 --settle 150 nilpy-logger-s3
+# (nilpy-logger-s3 only for its web.npy; --as c3 builds the same for the C3.)
+# CONTROL for leak-mixed-sizes.npy: the same flow with one body size only. Flat on the S3 (kept -1640 after settle at 40 passes, pin v435/v437).
+import web
+
+srv = web.listen(8080)
+
+
+def serve():
+    conn, addr = srv.accept()
+    method, path, body = web.read_request(conn)
+    web.respond(conn, "400 Bad Request", "text/plain", "no\n")
+    conn.close()
+
+
+def soak_body():
+    for i in range(4):
+        web.fetch(8080, "POST", "/save", "ssid=&password=", serve)
