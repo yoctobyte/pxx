@@ -23654,6 +23654,10 @@ test-core: $(COMPILER)
 	  { echo "FAIL: c_uxd26 refused for another reason:"; cat $(TESTTMP)/c_uxd26.err; exit 1; }
 	./$(COMPILER) test/c_extern_data_legitimate_shapes.c $(TESTTMP)/c_exd26
 	tools/expect_same.sh c_exd26 "$$($(TESTTMP)/c_exd26)" "$$(printf '12 4 1 1 1\n0')"
+	# -I naming a standard system root is ignored, as in gcc (borg's GTK pkg-config
+	# emits -I/usr/include/x86_64-linux-gnu; the host sys/types.h then shadowed crtl's).
+	./$(COMPILER) -I/usr/include/x86_64-linux-gnu test/c_std_system_root_on_the_include_path.c $(TESTTMP)/c_ssr26
+	tools/expect_same.sh c_ssr26 "$$($(TESTTMP)/c_ssr26)" "pid 42 int64 -5"
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

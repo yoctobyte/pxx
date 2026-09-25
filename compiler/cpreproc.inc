@@ -2590,6 +2590,44 @@ end;
   /usr/include fallback grabs host headers with the wrong ABI. Appended AFTER
   user -I roots (registered at option-parse time), so -I still wins. Suppressed
   by -nostdinc. }
+{ Is this `-I` root one of the host's STANDARD system include directories:
+  /usr/include, /usr/local/include, or a multiarch /usr/include/<triple>? Those
+  hold the host libc's own sys/ and bits/ headers. }
+function CIsStdSystemRoot(const s: AnsiString): Boolean;
+var rest: AnsiString; j: Integer;
+begin
+  Result := (s = '/usr/include/') or (s = '/usr/local/include/');
+  if Result then Exit;
+  if (Length(s) <= 13) or (Copy(s, 1, 13) <> '/usr/include/') then Exit;
+  rest := Copy(s, 14, Length(s) - 13);          { '<one segment>/' or deeper }
+  for j := 1 to Length(rest) - 1 do
+    if rest[j] = '/' then Exit;                  { deeper than one segment }
+  Result := Pos('-linux-', rest) > 0;
+end;
+
+{ A `-I` naming a standard system directory is IGNORED, as gcc ignores it ("If
+  a standard system include directory ... is also specified with -I, the -I
+  option is ignored"). Only on a native build, where the host fallback below
+  crtl still searches it. A -I root is searched BEFORE pxx's crtl headers, so
+  honouring it put the host libc's sys/types.h ahead of crtl's, and the two
+  sets of typedefs collided ("conflicting types for typedef '__pid_t'",
+  "... 'int64_t'"). `pkg-config --cflags gtk+-3.0` emits
+  -I/usr/include/x86_64-linux-gnu on some distros (Ubuntu 24.04: borg) and not
+  on others (plexus), so seven lib/pcl units failed on one box only. }
+procedure DropStdSystemIncludeRoots;
+var i, n: Integer;
+begin
+  if TargetArch <> TARGET_X86_64 then Exit;
+  n := 0;
+  for i := 0 to CIncludeDirCount - 1 do
+    if not CIsStdSystemRoot(CIncludeDirs[i]) then
+    begin
+      CIncludeDirs[n] := CIncludeDirs[i];
+      Inc(n);
+    end;
+  CIncludeDirCount := n;
+end;
+
 procedure AddDefaultCIncludeDirs;
 var d, hdir: AnsiString; ci: Integer;
 begin
@@ -2599,6 +2637,7 @@ begin
     be pulled many times over one compile. }
   if DefaultCIncludeDirsAdded then Exit;
   DefaultCIncludeDirsAdded := True;
+  DropStdSystemIncludeRoots;
   { Tier 3: pxx.cfg `incpath` lines — below any user -I (registered already, at
     option-parse time) and above the defaults below. }
   PxxCfgLoad;
