@@ -37345,7 +37345,7 @@ test-esp-idf: $(COMPILER)
 	@# A failure branch that assumes its evidence exists is the same defect as a
 	@# comparison whose inputs were never proven to exist.
 	@: > $(TESTTMP)/test_esp_idf_fs.out
-	@if bash -c 'cd examples/esp32/fs-c3 && . "$$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 && ./build.sh qemu-assert' \
+	@if bash -c '. "$$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 && tools/esp_project_build.sh examples/esp32/fs-c3 qemu-assert' \
 	    > $(TESTTMP)/test_esp_idf_fs.out 2>&1; then \
 	  tail -1 $(TESTTMP)/test_esp_idf_fs.out; \
 	else \
@@ -37372,7 +37372,7 @@ test-esp-idf: $(COMPILER)
 	@# (task ctx = 0 AND ISR ctx <> 0) re-derived from the serial text, not the
 	@# app's own status word.
 	@: > $(TESTTMP)/test_esp_idf_isrctx.out
-	@if bash -c 'cd examples/esp32/isrctx-c3 && . "$$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 && ./build.sh qemu-assert' \
+	@if bash -c '. "$$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 && tools/esp_project_build.sh examples/esp32/isrctx-c3 qemu-assert' \
 	    > $(TESTTMP)/test_esp_idf_isrctx.out 2>&1; then \
 	  tail -1 $(TESTTMP)/test_esp_idf_isrctx.out; \
 	elif [ "$$?" = "77" ]; then \
@@ -37461,7 +37461,7 @@ test-esp-idf: $(COMPILER)
 	  if PXX=$(CURDIR)/$(COMPILER) \
 	    PXX_MAIN=$(CURDIR)/test/test_nilpy_esp_math_errors_keep_running.npy \
 	    PXX_EXPECT=$(CURDIR)/test/test_nilpy_esp_math_errors_keep_running.expected \
-	    bash -c "cd examples/esp32/nilpy-$$c && . \"\$$HOME/esp/esp-idf/export.sh\" >/dev/null 2>&1 && ./build.sh qemu-assert" \
+	    bash -c ". \"\$$HOME/esp/esp-idf/export.sh\" >/dev/null 2>&1 && tools/esp_project_build.sh examples/esp32/nilpy-$$c qemu-assert" \
 	    > $(TESTTMP)/nilpy_esp_math.$$c.log 2>&1; then echo "nilpy-$$c math errors keep running ok"; \
 	  else tail -n 30 $(TESTTMP)/nilpy_esp_math.$$c.log; echo "nilpy-$$c math errors MISMATCH"; exit 1; fi; \
 	done

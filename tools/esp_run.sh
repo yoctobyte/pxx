@@ -73,12 +73,22 @@ esac
 # own "ok" line would have passed a program that never ran. The lock is on
 # the project DIRECTORY (no lock file to ignore), held to exit, so it covers
 # compile, link, merge and the qemu run that reads the image lazily.
-exec 9<"$PROJ"
+#
+# OUT OF TREE since 2026-09-25: the project is staged under $TMPDIR and built
+# there (tools/esp_stage.sh says why -- in-tree build/ dirs filled plexus's /),
+# so the lock is on the STAGED directory, which is still one per checkout and
+# project. The checkout's examples/esp32 is left byte-clean.
+# shellcheck disable=SC1091
+. "$REPO_ROOT/tools/esp_stage.sh"
+STAGED="$(esp_stage_path "$PROJ")"
+mkdir -p "$STAGED"
+exec 9<"$STAGED"
 flock 9
+esp_stage_sync "$PROJ" "$STAGED" || { echo "esp_run: staging $PROJ to $STAGED failed" >&2; exit 1; }
 FLASH="$(mktemp --suffix=.bin)"
 trap 'rm -f "$FLASH"' EXIT
 
-cd "$PROJ"
+cd "$STAGED"
 # The compile runs from INSIDE the project, so any -Fu in ESP_PXXFLAGS must be
 # absolute. Its diagnostics used to go to /dev/null along with the "ok:" line,
 # so a failed compile aborted with no output at all and looked like a program

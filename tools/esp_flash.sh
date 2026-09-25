@@ -171,10 +171,20 @@ fi
 # with tools/esp_run.sh, and a concurrent run there swaps the program under
 # the image this writes to the board. Same lock, on the project directory,
 # held to exit -- see esp_run.sh for the measurement.
-exec 9<"$PROJ"
+#
+# OUT OF TREE since 2026-09-25, exactly as esp_run.sh: the project is staged
+# under $TMPDIR (tools/esp_stage.sh) and its build.sh runs THERE, so neither a
+# hello-* build nor a --project build writes into the checkout, and the lock
+# moves to the staged directory, still one per checkout and project.
+# shellcheck disable=SC1091
+. "$REPO_ROOT/tools/esp_stage.sh"
+STAGED="$(esp_stage_path "$PROJ")"
+mkdir -p "$STAGED"
+exec 9<"$STAGED"
 flock 9
+esp_stage_sync "$PROJ" "$STAGED" || { echo "esp_flash: staging $PROJ to $STAGED failed" >&2; exit 1; }
 
-cd "$PROJ" || exit 1
+cd "$STAGED" || exit 1
 
 if [ -n "$PROJECT" ]; then
   # DELEGATED: the project's build.sh owns the flags, the partition table and
