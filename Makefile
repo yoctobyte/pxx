@@ -531,6 +531,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_escapes26 | diff -u test/test_nilpy_str_escapes_are_code_points_bytes_escapes_are_bytes.expected -
 	! ./$(COMPILER) test/test_nilpy_named_unicode_escape_is_refused_fail.py $(TESTTMP)/test_nilpy_nescape26 > $(TESTTMP)/test_nilpy_nescape.log 2>&1
 	grep -q "escapes are not supported" $(TESTTMP)/test_nilpy_nescape.log
+	./$(COMPILER) test/test_nilpy_a_base_method_calls_a_method_only_a_subclass_defines.py $(TESTTMP)/test_nilpy_latebind26
+	$(TESTTMP)/test_nilpy_latebind26 | diff -u test/test_nilpy_a_base_method_calls_a_method_only_a_subclass_defines.expected -
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links

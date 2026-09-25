@@ -51620,6 +51620,77 @@ begin
   end;
 end;
 
+function PyLateBoundMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
+{ `self.hook()` in a class that does not declare hook, where a SUBCLASS does --
+  the template-method shape (micropython-lib drivers: a base's write routine
+  calling a write_data only the concrete panel class defines). Python resolves
+  the name on the RUNTIME class, so this is legal, and on a bare base instance
+  it is AttributeError at run time. The closed-world check below refused it at
+  compile time ("B has no method hook").
+
+  Built as a conditional chain, one arm per TOPMOST descendant that declares
+  the method: `D1.hook(self, ..) if self is a D1 else (D2.hook(..) if ... else
+  <dynamic call>)`. Each arm is the ordinary typed method call (virtual, so a
+  deeper override below D is still reached), which keeps the subclass method's
+  own ABI; routing through the dynamic-attribute getter instead would need
+  every same-named method normalised to the all-variant ABI. The final arm IS
+  the dynamic call, so a bare base raises CPython's AttributeError by name.
+  The argument list is re-parsed per arm from the same '(' -- only the selected
+  arm runs -- and whatever an arm's parse hoists is folded back into that arm.
+  Returns -1, consuming nothing, when no descendant declares the name. }
+var d, nC, k, savedTok, endTok, hs, arm, cond, pair, tern, elseArm: Integer;
+    cands: array[0..63] of Integer;
+begin
+  Result := -1;
+  nC := 0;
+  for d := 0 to UClsCount - 1 do
+    if (d <> ci) and IsSubclassOf(d, ci) and (FindUMeth(d, mname) >= 0) and
+       (FindUMeth(UClsParent[d], mname) < 0) and (nC < 64) then
+    begin
+      cands[nC] := d;
+      Inc(nC);
+    end;
+  if nC = 0 then Exit;
+  if ASTKind[baseNode] <> AN_IDENT then baseNode := PyEvalOnce(baseNode);
+  savedTok := TokPos;                    { CurTok is the call's '(' }
+  hs := PyHoistTail;
+  elseArm := PyMakeDynCall(PyMakeDynAttrGet(baseNode, mname));
+  elseArm := PyFoldHoistSince(hs, elseArm);
+  endTok := TokPos;
+  tern := elseArm;
+  for k := nC - 1 downto 0 do
+  begin
+    TokPos := savedTok - 1;
+    Next;
+    hs := PyHoistTail;
+    arm := PyParseClassMethodCall(baseNode, cands[k], mname);
+    arm := PyFoldHoistSince(hs, arm);
+    if IntToTypeKind(ASTTk[arm]) = tyUnknown then
+    begin
+      { a method with no result is None as a value }
+      pair := AllocNode(AN_COMMA);
+      ASTLeft[pair] := arm;
+      ASTRight[pair] := PyMakeNone;
+      ASTTk[pair] := ASTTk[ASTRight[pair]];
+      arm := pair;
+    end;
+    cond := AllocNode(AN_IS_TEST);
+    ASTLeft[cond] := baseNode;
+    ASTIVal[cond] := cands[k];
+    ASTTk[cond] := Ord(tyBoolean);
+    pair := AllocNode(AN_PAIR);
+    ASTLeft[pair] := arm;
+    ASTRight[pair] := tern;
+    tern := AllocNode(AN_TERNARY);
+    ASTLeft[tern] := cond;
+    ASTRight[tern] := pair;
+    ASTTk[tern] := Ord(tyVariant);
+  end;
+  TokPos := endTok - 1;
+  Next;
+  Result := tern;
+end;
+
 function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -53660,10 +53731,22 @@ begin
           no method fn", while `g = args.fn; g(args)` worked. }
         if (CurTok.Kind = tkLParen) and (not PyDynAttrEverAssigned(fieldName)) and
            (FindUMeth(recName - REC_UCLASS_BASE, '__getattr__') < 0) then
+        begin
+          { ...unless a SUBCLASS declares it: late binding, see
+            PyLateBoundMethodCall. }
+          callIndNode := PyLateBoundMethodCall(node, recName - REC_UCLASS_BASE,
+                                               fieldName);
+          if callIndNode >= 0 then
+          begin
+            node := callIndNode;
+            tk := tyVariant; recName := REC_NONE;
+            Continue;
+          end;
           Error('Nil Python: ' +
                 PyRawName(UClsNOff[recName - REC_UCLASS_BASE],
                           UClsNLen[recName - REC_UCLASS_BASE])
                 + ' has no method ' + fieldName);
+        end;
         node := PyMakeDynAttrGet(node, fieldName);
         tk := tyVariant; recName := REC_NONE;
         Continue;

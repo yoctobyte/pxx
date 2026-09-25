@@ -1,0 +1,7 @@
+10 800 5.0
+<a> <bee>
+7 3
+2 [5, 'A5']
+[5, 'A5', 'A0']
+AttributeError 'Base' object has no attribute 'scale'
+AttributeError 'Base' object has no attribute 'hook'

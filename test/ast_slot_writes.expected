@@ -819,6 +819,7 @@ AN_CLASSREF Right 1
 AN_CLASS_CAST Left CurASTNode
 AN_CLASS_CAST Left unboxCall
 AN_COMMA Left Result
+AN_COMMA Left arm
 AN_COMMA Left asgn
 AN_COMMA Left blockNode
 AN_COMMA Left callNode
@@ -991,6 +992,7 @@ AN_INTF_CALL Left firstArg
 AN_INTF_CALL Right node
 AN_INTF_CALL Right recvNode
 AN_INT_LIT Right -1
+AN_IS_TEST Left baseNode
 AN_IS_TEST Left callN
 AN_IS_TEST Left exprNode
 AN_IS_TEST Left left
@@ -1042,6 +1044,7 @@ AN_PAIR Left REnumField(baseNode, optRec, 'Some.0')
 AN_PAIR Left Result
 AN_PAIR Left WriteLit('true')
 AN_PAIR Left ZFieldNode(RMakeIdent(symIdx), '__val', elemTk)
+AN_PAIR Left arm
 AN_PAIR Left armN
 AN_PAIR Left arms[i].BodyNode
 AN_PAIR Left asgN
@@ -1122,6 +1125,7 @@ AN_PAIR Right pair2
 AN_PAIR Right right
 AN_PAIR Right rngLt
 AN_PAIR Right stmtNode
+AN_PAIR Right tern
 AN_PARFOR Left callNode
 AN_PTR_CAST Left CurASTNode
 AN_PTR_CAST Left node
