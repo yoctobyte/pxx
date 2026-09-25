@@ -13,17 +13,36 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
-PXX="compiler/pxx"
 SRC="compiler/compiler.pas"
-[[ -x "$PXX" ]] || { echo "selfcheck: no $PXX — run ./setup.sh first"; exit 1; }
+# THE HOST'S OWN BINARY, found here rather than through a compiler/pxx that a
+# separate setup step had to create first: the README's tarball sequence is
+# ./install.sh then ./selfcheck.sh, and this used to stop with "no compiler/pxx
+# -- run ./setup.sh first" (measured 2026-09-25). A pxx-<arch> built by the
+# x86-64 compiler still EMITS x86-64 by default, so off x86_64 it is run with
+# the host target named; check 2's explicit --target comes later on the command
+# line and wins, because the last --target does.
+case "$(uname -m)" in
+  x86_64|amd64)        arch=x86_64 ;;
+  i386|i486|i586|i686) arch=i386 ;;
+  aarch64|arm64)       arch=aarch64 ;;
+  armv7l|armv6l|armhf) arch=arm32 ;;
+  *) echo "selfcheck: unsupported host arch '$(uname -m)' (have: x86_64 i386 aarch64 arm32)"; exit 1 ;;
+esac
+[[ -x "compiler/pxx-$arch" ]] || { echo "selfcheck: no compiler/pxx-$arch in this release"; exit 1; }
+HOSTT=()
+[[ "$arch" == x86_64 ]] || HOSTT=("--target=$arch")
+PXX=("compiler/pxx-$arch" "${HOSTT[@]}")
 [[ -f "$SRC" ]] || { echo "selfcheck: this release omits compiler source ($SRC) — cannot self-verify"; exit 1; }
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 fail=0
 
 echo "== check 1: self-fixedpoint (determinism on this host) =="
-"$PXX" "$SRC" "$tmp/gen1" >/dev/null
-"$tmp/gen1" "$SRC" "$tmp/gen2" >/dev/null
+"${PXX[@]}" "$SRC" "$tmp/gen1" >/dev/null
+# gen1 is a compiler built BY a cross-built binary, so it too defaults to
+# x86-64: without the host target, gen2 would be an x86-64 binary and could
+# never equal an aarch64 gen1.
+"$tmp/gen1" "${HOSTT[@]}" "$SRC" "$tmp/gen2" >/dev/null
 if cmp -s "$tmp/gen1" "$tmp/gen2"; then
   echo "  OK  gen1 == gen2"
 else
@@ -35,7 +54,7 @@ if [[ -f MANIFEST.sha256 ]]; then
   while read -r want path; do
     [[ "$path" == compiler/pxx-* ]] || continue
     t="${path#compiler/pxx-}"
-    "$PXX" --target="$t" "$SRC" "$tmp/out-$t" >/dev/null
+    "${PXX[@]}" --target="$t" "$SRC" "$tmp/out-$t" >/dev/null
     got="$(sha256sum "$tmp/out-$t" | awk '{print $1}')"
     if [[ "$got" == "$want" ]]; then echo "  OK  $t reproduces"; else echo "  FAIL $t: $got != $want"; fail=1; fi
   done < MANIFEST.sha256

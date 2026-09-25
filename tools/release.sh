@@ -338,8 +338,12 @@ build_dist() {
   # x86-64 binary IS the fixedpoint, so `make` in the bundle verifies in one
   # round and needs nothing outside it.
   cp "$d/compiler/pxx-x86_64" "$d/compiler/pascal26"
-  # Top-level convenience entry points (also under tools/).
-  cp -a tools/setup.sh "$d/setup.sh" 2>/dev/null || true
+  # Top-level entry point (also under tools/). ONE quick start, the same in
+  # README, the install page and RELEASE.md: ./install.sh --yes writes ./pxx,
+  # which every docs page uses, and ./selfcheck.sh finds the host binary itself.
+  # setup.sh used to ship here as a second route that put pxx on PATH and wrote
+  # no ./pxx, so the three quick starts disagreed (measured 2026-09-25). It
+  # stays in tools/, unshipped at the top.
   cp -a tools/selfcheck.sh "$d/selfcheck.sh" 2>/dev/null || true
   write_release_readme "$d" "$tag" "$codename"
   ( cd "$DIST" && tar czf "pxx-$tag.tar.gz" "pxx-$tag" )
@@ -375,8 +379,12 @@ system, all in one download.** Run it as-is, or rebuild everything from the
 included source — no separate packages to fetch.
 
 ## Quick start (run)
-    ./setup.sh            # puts \`pxx\` on PATH (uses the prebuilt host binary)
-    pxx examples/primes/sieve.pas /tmp/sieve && /tmp/sieve
+    ./install.sh --yes    # writes ./pxx: this host's prebuilt compiler + the library roots
+    ./pxx examples/primes/sieve.pas /tmp/sieve && /tmp/sieve
+    ./selfcheck.sh        # optional: rebuild every shipped binary, diff against MANIFEST.sha256
+
+Run \`./install.sh\` without \`--yes\` at a terminal to be offered \`pxx\` on your
+PATH as well (a wrapper in ~/.local/bin).
 
 ## Layout
     compiler/             compiler source (*.pas / *.inc) + builtin/
@@ -387,7 +395,7 @@ included source — no separate packages to fetch.
     docs/                 public user documentation
     Makefile, tools/      build + verification system
     MANIFEST.sha256       SHA-256 of each prebuilt binary (reproducible)
-    setup.sh, selfcheck.sh  install + reproduce helpers
+    install.sh, selfcheck.sh  setup (writes ./pxx) + reproduce helpers
 
 ## Rebuild from source
     make                       # compiler/pascal26 ships as the seed; verifies the fixed point
@@ -420,7 +428,9 @@ EOF
 }
 
 # Reproduce check, run the way a USER runs it: unpack the TARBALL somewhere
-# outside the repo, ./setup.sh, ./selfcheck.sh. This used to rebuild each target
+# outside the repo, ./install.sh --yes, a ./pxx smoke, ./selfcheck.sh -- the
+# documented quick start, with HOME pointed into the scratch dir so nothing
+# lands in the invoking user's home. This used to rebuild each target
 # with ./compiler/pascal26 -- the very binary that had just built them -- and
 # compare, which proves only that one binary gives the same answer twice. From
 # the unpacked tarball it proves the shipped native binary, reading only what
@@ -429,11 +439,15 @@ EOF
 # this host. A file the bundle forgot to ship fails here, not on a user's box.
 run_selfcheck() {
   local tag="$1" tmp log
-  echo "==> selfcheck: unpack pxx-$tag.tar.gz, ./setup.sh, ./selfcheck.sh"
+  echo "==> selfcheck: unpack pxx-$tag.tar.gz, ./install.sh --yes, ./pxx, ./selfcheck.sh"
   tmp="$(mktemp -d)"
   tar -xzf "$DIST/pxx-$tag.tar.gz" -C "$tmp"
   log="$DIST/selfcheck-$tag.log"
-  ( cd "$tmp/pxx-$tag" && ./setup.sh "$tmp/bin" </dev/null && ./selfcheck.sh ) > "$log" 2>&1 || true
+  mkdir -p "$tmp/home"
+  ( cd "$tmp/pxx-$tag" && export HOME="$tmp/home" \
+      && ./install.sh --yes --no-path </dev/null \
+      && ./pxx examples/primes/sieve.pas "$tmp/sieve" && "$tmp/sieve" >/dev/null \
+      && ./selfcheck.sh ) > "$log" 2>&1 || true
   sed 's/^/    /' "$log"
   grep -qx 'selfcheck: PASS' "$log" || die "selfcheck: FAILED from the unpacked tarball (log: $log)"
   rm -rf "$tmp"

@@ -5,7 +5,8 @@
 # compiler with this checkout's library roots already on the unit search path.
 #
 # The wrapper points at stable_linux_amd64/default/pinned (a symlink), so a
-# later `make pin` is picked up automatically — no reinstall needed. It scans
+# later `make pin` is picked up automatically — no reinstall needed. In a release
+# tarball, which has no stable_linux_amd64/, it points at compiler/pxx-<host arch>. It scans
 # lib/ for directories that actually contain units (.pas/.pp/.h) and passes each
 # as a -Fu root, so `pxx foo.pas` resolves rtl/pcl units (and C-header bindings
 # like gtk3_c.h) from any working directory, with no flags.
@@ -50,6 +51,25 @@ if [ -n "$COMPILER_OVERRIDE" ]; then
   PINNED="$COMPILER_OVERRIDE"
 else
   PINNED="${ROOT}/stable_linux_amd64/default/pinned"
+  # A RELEASE TARBALL HAS NO stable_linux_amd64/: its compilers are
+  # compiler/pxx-<arch>, one per host. Without this arm the documented
+  # --bindir died in a tarball with "no compiler at .../pinned" (measured
+  # 2026-09-25). A pxx-<arch> built by the x86-64 compiler still EMITS x86-64
+  # by default, so off x86_64 the wrapper names the host target, as the root
+  # install.sh does.
+  if [ ! -e "$PINNED" ]; then
+    case "$(uname -m)" in
+      x86_64|amd64)        hostarch=x86_64 ;;
+      aarch64|arm64)       hostarch=aarch64 ;;
+      armv7l|armv6l|armhf) hostarch=arm32 ;;
+      i386|i486|i586|i686) hostarch=i386 ;;
+      *)                   hostarch="" ;;
+    esac
+    if [ -n "$hostarch" ] && [ -x "$ROOT/compiler/pxx-$hostarch" ]; then
+      PINNED="$ROOT/compiler/pxx-$hostarch"
+      [ "$hostarch" != x86_64 ] && [ -z "$TARGET_ARCH" ] && TARGET_ARCH="$hostarch"
+    fi
+  fi
 fi
 if [ ! -e "$PINNED" ]; then
   echo "no compiler at $PINNED" >&2
