@@ -31559,6 +31559,18 @@ test-wasm32: $(COMPILER)
 	 echo "  sigpred: wasm32 refuses SetSignalHandler at compile time, with the reason"
 	@echo "wasm32: 53 rows green (46 default + 7 shortstring; 0 excluded)"
 test-xtensa: $(COMPILER)
+	# A RECORD RESULT REUSED IN A LOOP RELEASES THE PREVIOUS VALUE. xtensa's
+	# aggregate copy-out raw-copied Result over the caller's hidden destination,
+	# so a loop that reuses one result temp orphaned every earlier value's
+	# managed fields (pin v437: 176 B/call per loop row, 304 for parse; native
+	# was always 0). It was the ESP32-S3's NilPy int() leak. Both ABIs, since
+	# they emit the release call with different argument registers.
+	./$(COMPILER) test/test_a_record_result_reused_in_a_loop_releases_the_previous_value.pas $(TESTTMP)/test_rrloop26
+	tools/expect_same.sh test_rrloop26 "$$($(TESTTMP)/test_rrloop26)" "$$(printf 'straight bytes/call=0\nfor-loop bytes/call=0\nwhile-loop bytes/call=0\nparse bytes/call=0\nparse=200 25')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_a_record_result_reused_in_a_loop_releases_the_previous_value.pas $(TESTTMP)/test_rrloop_xt
+	tools/expect_same.sh xtensa/test_rrloop "$$(tools/run_target.sh xtensa $(TESTTMP)/test_rrloop_xt)" "$$(printf 'straight bytes/call=0\nfor-loop bytes/call=0\nwhile-loop bytes/call=0\nparse bytes/call=0\nparse=200 25')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_record_result_reused_in_a_loop_releases_the_previous_value.pas $(TESTTMP)/test_rrloop_xtw
+	tools/expect_same.sh xtensa-windowed/test_rrloop "$$(tools/run_target.sh xtensa $(TESTTMP)/test_rrloop_xtw)" "$$(printf 'straight bytes/call=0\nfor-loop bytes/call=0\nwhile-loop bytes/call=0\nparse bytes/call=0\nparse=200 25')"
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
 	# the shared runtime helper at EVERY field width including 0 -- there is no

@@ -17162,6 +17162,52 @@ begin
           PXXMemMove(dest, &Result, size). Call0 took the pointer from a8;
           windowed took it from incoming argument word 0 — either way the
           prologue stashed it in a frame slot by now. }
+        if (Syms[retSymIdx].TypeKind = tyRecord) and not Syms[retSymIdx].IsArray and
+           RecordHasManagedFields(SymTR[retSymIdx].RecId) then
+        begin
+          { A reused destination still holds the previous value's managed
+            handles; release them before the raw copy orphans them. The arm
+            riscv32, arm32, aarch64 and i386 carry, and xtensa alone did not:
+            a record-returning call in a LOOP reuses one hidden result temp, so
+            every iteration after the first leaked the last value's dynamic
+            arrays and strings. It is what made NilPy int("25") / int("200") on
+            an S3 leak 192 B per call -- the two keys share a PXXPromoFromStr
+            cache slot, so every call took the TBig path, whose
+            `r := BAddSigned(BMul(r, ten), ...)` loop is exactly that shape.
+            The interface half first, as on the other arms.
+            bug-a-a-record-copy-does-not-retain-an-interface-field }
+          if RecordHasComIntfFields(SymTR[retSymIdx].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);       { a2 = dest ptr }
+              if XtensaABI = XTENSA_ABI_WINDOWED then
+              begin
+                xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+                EmitLoadDataRefXtensa(reg_xtensa_a11,
+                  -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+              end
+              else
+                EmitLoadDataRefXtensa(reg_xtensa_a3,
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);           { a2 = dest ptr }
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+          begin
+            xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+            EmitLoadDataRefXtensa(reg_xtensa_a11,
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+          end
+          else
+            EmitLoadDataRefXtensa(reg_xtensa_a3,
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+          EmitCallProc(procIdx);
+        end;
         EmitFrameAddrXtensa(reg_xtensa_a3, Syms[retSymIdx].Offset);   { a3 = &Result (src) }
         EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest ptr }
         sz := AggRetCopySize(retSymIdx);
