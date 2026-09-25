@@ -14574,6 +14574,7 @@ var
   mangIdx, mangAny, mangBound: Integer;   { `<unit>_pas_<Name>` candidate scan; mangAny = any candidate (for the diagnostic), mangBound = the one the signature selected }
   defPeekPos: Integer; isDefinition: Boolean;   { does a body follow? (bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine) }
   apDims: array[0..MAX_ARR_DIMS-1] of Integer;   { `T name[][A][B]` param: the bracket dims }
+  apTdN: Integer; apTdDims: array[0..MAX_ARR_DIMS-1] of Integer;   { an array-TYPEDEF param's own dims, appended after the bracket ones }
   apN, apK, apProd: Integer;
 begin
   { A `static`/`static inline` function DEFINED in a header reached by `uses`.
@@ -14813,10 +14814,27 @@ begin
             pptrarrlen[nparams] := 0;
             pptrndims[nparams] := 0;
           end;
+          { An ARRAY-TYPEDEF parameter is an array parameter too: `vec4 v` is
+            `float v[4]` and `mat4 m` (typedef vec4 mat4[4]) is `float m[4][4]`,
+            and `vec4 m[]` is `float m[][4]` -- the typedef's dims follow the
+            bracket ones. It skipped the decay below entirely, so `v[0]` read
+            the POINTER ITSELF as the element and `m[i][j]` flattened wrong (cglm:
+            every glm_* function takes `mat4 m`). }
+          apTdN := 0;
+          if (pdepths[nparams] = 0) and (CTypeTypedefArrLen >= 0) then
+          begin
+            apTdN := CTypeTypedefNDims;
+            for apK := 0 to apTdN - 1 do apTdDims[apK] := CTypeTypedefDims[apK];
+            if apTdN = 0 then   { a one-dim typedef may record only its length }
+            begin
+              apTdN := 1;
+              apTdDims[0] := CTypeTypedefArrLen;
+            end;
+          end;
           { C array parameter `T name[...]` decays to a pointer `T *name` (lua
             ltable `computesizes(unsigned int nums[], ...)`). Consume the bracket
             dimension(s) and retype the param as pointer-to-element. }
-          if CurTok.Kind = tkLBrack then
+          if (CurTok.Kind = tkLBrack) or (apTdN > 0) then
           begin
             apN := 0;
             while CurTok.Kind = tkLBrack do
@@ -14843,6 +14861,12 @@ begin
                 Next;
               until (sz = 0) or (CurTok.Kind = tkEOF);
             end;
+            for apK := 0 to apTdN - 1 do
+              if apN < MAX_ARR_DIMS then
+              begin
+                apDims[apN] := apTdDims[apK];
+                Inc(apN);
+              end;
             { the FIRST dimension decays away; the rest are the pointee's shape }
             if (apN >= 2) and (pdepths[nparams] = 0) then
             begin

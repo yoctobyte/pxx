@@ -14203,6 +14203,11 @@ test-core: $(COMPILER)
 	# on x86-64 (the sizeof rows are pointer-width).
 	./$(COMPILER) test/test_c_pointer_to_an_array_typedef_and_pointer_array_literals.c $(TESTTMP)/test_c_ptr_arr_td26
 	tools/expect_same.sh test_c_ptr_arr_td26 "$$($(TESTTMP)/test_c_ptr_arr_td26)" "$$(printf '6 6 7 18\n7 6\n4\n7\n10 8\n8 8\n24 32\ntwo\n16')"
+	# An array-TYPEDEF parameter (`vec4 v`, cglm's `mat4 m`, `vec4 m[]`) decays
+	# like its spelled form; `v[0]` read the pointer itself. gcc's output on
+	# x86-64 (the last row is pointer-width sizeofs).
+	./$(COMPILER) test/test_c_an_array_typedef_parameter_decays_like_its_spelled_form.c $(TESTTMP)/test_c_td_param26
+	tools/expect_same.sh test_c_td_param26 "$$($(TESTTMP)/test_c_td_param26)" "$$(printf 'p1 3.5 5.25 9.75\np2 3.5 5.25 9.75\np3 3.5 5.25 9.75\np5 0 9.75\n7.5 10 0 0\n0 13.5 0 0\n0 0 7 0\n2 4.25 1 1\n7.5 1 30\n1.25 2.5 3.5 7\n20')"
 	./$(COMPILER) test/test_c_macro_alias_chain_rescans.c $(TESTTMP)/test_c_macro_alias26
 	tools/expect_same.sh test_c_macro_alias26 "$$($(TESTTMP)/test_c_macro_alias26)" "$$(printf '42 42 42 42\n21 22 43\n4 102 200 7\n1001 6 42 42')"
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
