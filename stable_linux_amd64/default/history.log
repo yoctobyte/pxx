@@ -438,3 +438,4 @@
 2026-09-25T16:55:35Z  v438  bcbfc447159031be07e3819b5d00723372b55d9ede9846a7498bf14802af65a2  cdea900f09de58bdde7ad41dcdde4b212eca4c80  feat(N,B,S): MicroPython networking census -- umqtt/ntptime compile for the S3; import and subscript fixes
 2026-09-25T19:35:15Z  v439  234383049c6b24af445a8ad350511427de5845670564f865cb8202d8fc33c145  687cf1185c467aa1b3968cacb2fdbcaf5557948c  fix(A): Dispose finalizes its managed pointee, and Finalize of a whole fixed array walks every element
 2026-09-25T21:14:20Z  v440  8bfa6543bc28878f9e5acf2258d5a84bf42abcd1a559e70778767aae487db2ac  0b6fffa0cbe4af3241d4ca9bb383ab7a1b02b116  fix(N,A,B): a lambda passed straight as an argument is released after the call
+2026-09-25T22:05:28Z  v441  4ebfa2d047a27eae32246a00f0ccb5cb09ae7f92105aa3adfd5a51d484d2e2a2  c50502d1a47b6f6693359406fe964aa908728af8  fix(A,P): Dispose(F()) finalizes the pointee, and a designator with a call in it is no longer re-read
