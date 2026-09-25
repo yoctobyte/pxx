@@ -16,7 +16,16 @@
 # fixture flap on any unrelated page the process happens to fault in; asserting
 # "under 200 bytes per call" would pass on the unfixed compiler, which leaked
 # exactly 199. 50 is comfortably below the smallest defect (199) and far above
-# ordinary noise at 40000 iterations.
+# ordinary noise.
+#
+# N IS A SLOPE, NOT A SOAK. It was 12000, which made this ~47 s against
+# testmgr's 90 s unit budget, and borg under load timed it out five times
+# (2026-09-23..25) with nothing leaking. RSS moves in 4096-byte pages, so the
+# resolution is 4096/N bytes per call: at N=1000 one stray page reads 4, still
+# 12x under the limit, and the smallest defect this file was written against
+# (199) is ~50 pages. Measured 2026-09-25 at N=1000, three runs: every row 0
+# or 4, control 352, ~4 s at load 10. The control is what keeps the smaller N
+# honest -- it must still MOVE at this scale, and it does by 3.5x its limit.
 #
 # `retain` IS THE POSITIVE CONTROL AND THE FIXTURE IS WORTHLESS WITHOUT IT:
 # every other row here asserts a number stays near ZERO, so a broken instrument
@@ -70,7 +79,7 @@ for i in range(16):
 D = {}
 for i in range(32):
     D["k%d" % i] = i
-N = 12000
+N = 1000
 LEAK_LIMIT = 50          # bytes per call
 held = []
 
