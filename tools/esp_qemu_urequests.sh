@@ -21,7 +21,7 @@
 #               SKIP when python3 has no `requests`.
 #   census      free heap over 1000 requests with dropped responses costs
 #               under BOUND bytes per request (default 16)...
-#   control     ...and keeping 200 responses costs over it, so the reading
+#   control     ...and keeping 50 responses costs over it, so the reading
 #               can see a leak at all.
 # Last line: UREQ-QEMU-COMPLETE. Grep for that; the wrapper's status is not
 # the verdict. Built with the PINNED compiler unless PXX says otherwise.
@@ -32,7 +32,11 @@ case "$EX" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *) echo "ureq: $EX is 
 SRC="$REPO_ROOT/examples/esp32/$EX"
 [ -f "$SRC/main/main.npy" ] || { echo "ureq: $EX has no main/main.npy" >&2; exit 2; }
 PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"
-TIMEOUT="${UREQ_TIMEOUT:-600}"
+# 50, not 200: a kept response is about 1 KB, and 200 of them exhausted the
+# S3 image's ~200 KB free heap on pin v438 (pxx: out of memory, reboot).
+# The timeout is for an IDLE box, where the S3 run takes a few minutes;
+# sharing the host with other QEMUs slowed it about 20x on 2026-09-25.
+TIMEOUT="${UREQ_TIMEOUT:-1800}"
 BOUND="${UREQ_BOUND:-16}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
