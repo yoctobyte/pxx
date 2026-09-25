@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: 0BSD
+# A WI-FI DATA LOGGER, IN PYTHON, ON AN ESP32-S3: the classic MicroPython
+# device flow, compiled to machine code by pxx's NilPy frontend.
+#
+#   1. At boot it reads /config.json from flash.
+#   2. No usable config: it starts Wi-Fi "PXX-SETUP" (password "pxx-setup")
+#      and serves a form at http://192.168.4.1/. Submitting it writes
+#      /config.json and the logger joins that network straight away.
+#   3. A config: it joins that network, three attempts. If they all fail it
+#      goes back to the setup network -- it never hangs on a network that is
+#      gone or a password that is wrong.
+#   4. Joined: every 5 s it appends "uptime_s,temperature_c,free_heap" to
+#      /log.csv. At 16 KB that file becomes /log.1.csv and a new one starts.
+#      It serves a status page at / and the logs at /log.csv and /log.1.csv;
+#      "Forget this network" on the status page goes back to step 2.
+#
+# The files are on the board's flash (FAT, the `storage` partition in
+# partitions.csv, mounted by the pxx_fs component), so they survive a reset
+# and a power cut. /config.json holds the Wi-Fi password in plain text, as
+# MicroPython's own setups do: anyone who can read the flash can read it.
+#
+# The code is in three modules next to this file: logstore.npy (the files),
+# web.npy (HTTP) and logger.npy (Wi-Fi and the flow). test/esp_board_logger.npy
+# drives the same modules on a board without any real network.
+#
+# ON A BOARD, from the repo root:
+#   tools/esp_flash.sh --project examples/esp32/nilpy-logger-s3 --port /dev/ttyACM0
+# A board with no /config.json prints main.expected. Then, with a phone or a
+# laptop (board plus your Wi-Fi):
+#   1. join Wi-Fi "PXX-SETUP", password "pxx-setup", open http://192.168.4.1/;
+#   2. enter your network's name and password and press "Save and join";
+#   3. the serial log shows `joined <your network> at <ip>`; open http://<ip>/
+#      from a device on that network, and http://<ip>/log.csv after a while.
+import logger
+
+logger.run()

@@ -37618,6 +37618,16 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/nilpy-station-s3/main/main.npy $(TESTTMP)/nilpy_station.o >/dev/null \
 	  && echo "=== nilpy-station demo source builds [$$t]: OK ===" || exit 1; \
 	done
+	@# The logger demo (config.json on FAT, setup page, STA join with fallback,
+	@# a rotating CSV log over HTTP) and its board driver, which imports the
+	@# demo's modules; the run is on the S3 (test/esp_board_logger.npy's header).
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    examples/esp32/nilpy-logger-s3/main/main.npy $(TESTTMP)/nilpy_logger.o >/dev/null \
+	  && ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    -Fu$(CURDIR)/examples/esp32/nilpy-logger-s3/main test/esp_board_logger.npy $(TESTTMP)/esp_board_logger.o >/dev/null \
+	  && echo "=== nilpy-logger demo and board driver build [$$t]: OK ===" || exit 1; \
+	done
 	@# Socket errno/timeout board test (recipe in its header): build only here.
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \

@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: 0BSD
+# BOARD ONLY (ESP32-S3): the nilpy-logger-s3 demo's flow, checked without a
+# real Wi-Fi network. It drives the demo's own modules (logger, logstore, web
+# in examples/esp32/nilpy-logger-s3/main) and fetches its pages over
+# 127.0.0.1, so it needs no phone and no credentials. From the repo root:
+#
+#   PXX_MAIN=$PWD/test/esp_board_logger.npy \
+#   PXX_EXTRA_FLAGS=-Fu$PWD/examples/esp32/nilpy-logger-s3/main \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-logger-s3 --no-verify --seconds 150
+#
+# and compare the lines up to LOGGER-TEST-DONE with test/esp_board_logger.expected
+# (the `info:` line after it carries the heap numbers and is not compared).
+#
+# IT LEAVES A CONFIG BEHIND ON PURPOSE: /config.json naming a network that does
+# not exist. Flash the demo itself next (tools/esp_flash.sh --project
+# examples/esp32/nilpy-logger-s3 --no-verify --seconds 60): its first lines
+# must name that network, which proves the file survived a flash and a reset,
+# and it must then fall back to the setup page after three attempts. Reset it
+# again to see the same. The demo's "Forget this network" (POST /forget)
+# removes the file.
+import os
+import logger
+import logstore
+import web
+import 'espsys.pas' as board
+
+BOGUS = "PXX-NO-SUCH-NETWORK-5C1E"
+
+
+def clean():
+    logstore.forget_config()
+    logstore.remove("config.tmp")
+    logstore.remove("log.csv")
+    logstore.remove("log.1.csv")
+
+
+clean()
+print("fresh: config", logstore.load_config())
+
+# 1. setup page, then the form POST writes /config.json
+logger.start_setup()
+print("setup ap active", logger.ap.active(), "at", logger.state["ip"])
+srv = web.listen(logger.PORT)
+
+
+def serve():
+    logger.serve_pending(srv)
+
+
+st, body = web.fetch(logger.PORT, "GET", "/", "", serve)
+print("GET / ->", st, "form", body.find('name="ssid"') >= 0)
+st, body = web.fetch(logger.PORT, "POST", "/save", "ssid=&password=", serve)
+print("POST empty ssid ->", st, "config", logstore.load_config())
+st, body = web.fetch(logger.PORT, "POST", "/save", "ssid=x&password=short", serve)
+print("POST short password ->", st)
+form = "ssid=" + BOGUS + "&password=not+a+real%2Bkey"
+st, body = web.fetch(logger.PORT, "POST", "/save", form, serve)
+print("POST good form ->", st, "reinit", logger.state["reinit"])
+print("config written", logstore.load_config())
+logger.state["reinit"] = 0
+
+# 2. an unusable config is treated as none
+f = open("/config.json", "w")
+f.write("{broken")
+f.close()
+logger.start()
+print("broken config -> mode", logger.state["mode"])
+
+# 3. a config naming a network that is not there: three attempts, then the
+#    setup page again -- within a bound, never a hang
+logstore.save_config(BOGUS, "not a real+key")
+t0 = board.uptime_ms()
+logger.start()
+print("bogus network -> mode", logger.state["mode"], "ap", logger.ap.active(),
+      "sta", logger.sta.active(), "within 60 s", board.uptime_ms() - t0 < 60000)
+
+# 4. logging, rotation at the cap, and the log served over HTTP. Logging mode
+#    is entered by hand here: joining needs a real network.
+logger.state["mode"] = "logging"
+logger.state["ssid"] = "test"
+for i in range(40):
+    logger.log_reading(512)
+print("rotation: log.1.csv", logstore.exists("log.1.csv"),
+      "both within the cap", logstore.log_size("log.csv") <= 512,
+      logstore.log_size("log.1.csv") <= 512)
+st, body = web.fetch(logger.PORT, "GET", "/log.csv", "", serve)
+print("GET /log.csv ->", st, "same as the file", body == logstore.log_text("log.csv"),
+      "header", body.startswith(logstore.LOG_HEADER))
+st, body = web.fetch(logger.PORT, "GET", "/log.1.csv", "", serve)
+print("GET /log.1.csv ->", st, "same as the file", body == logstore.log_text("log.1.csv"))
+st, body = web.fetch(logger.PORT, "GET", "/", "", serve)
+print("GET / ->", st, "status page", body.find("readings logged") >= 0)
+st, body = web.fetch(logger.PORT, "GET", "/nope", "", serve)
+print("GET /nope ->", st)
+
+# 5. soak: a reading and two page fetches per cycle, with rotation every
+#    ~25 cycles; the free heap must be flat after warm-up
+heap = []
+logger.state["trace"] = 0
+for i in range(300):
+    logger.log_reading(512)
+    web.fetch(logger.PORT, "GET", "/", "", serve)
+    web.fetch(logger.PORT, "GET", "/log.csv", "", serve)
+    if i == 49 or i == 299:
+        heap.append(board.free_heap())
+print("soak: 300 cycles, heap flat after warm-up (within 1024 bytes)",
+      heap[0] - heap[1] < 1024)
+
+# leave the bogus config for the reset check (see the header)
+logstore.remove("log.csv")
+logstore.remove("log.1.csv")
+logstore.save_config(BOGUS, "not a real+key")
+print("left /config.json for", logstore.load_config()[0])
+print("LOGGER-TEST-DONE")
+print("info: heap at cycle 50", heap[0], "at cycle 300", heap[1], "requests",
+      logger.state["requests"])

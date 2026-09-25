@@ -1,0 +1,206 @@
+# SPDX-License-Identifier: 0BSD
+# The logger's device flow: Wi-Fi setup page, joining, logging, serving.
+# main.npy calls run(); test/esp_board_logger.npy calls the same functions
+# one at a time and checks each over 127.0.0.1.
+import network
+import time
+import esp32
+import 'espsys.pas' as board
+import logstore
+import web
+
+PORT = 80
+SETUP_SSID = "PXX-SETUP"
+SETUP_PASSWORD = "pxx-setup"
+JOIN_ATTEMPTS = 3
+ATTEMPT_MS = 15000
+LOG_EVERY_MS = 5000
+LOG_CAP = 16384
+
+state = {"mode": "", "ssid": "", "ip": "", "requests": 0, "lines": 0,
+         "reinit": 0, "next_log": 0, "trace": 1}
+
+ap = network.WLAN(network.AP_IF)
+sta = network.WLAN(network.STA_IF)
+
+SETUP_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PXX logger setup</title>
+<style>body{font-family:system-ui,sans-serif;margin:2em;max-width:28em}
+input{display:block;width:100%;margin:.3em 0 1em;padding:.4em;font-size:1em}
+button{padding:.5em 1.5em;font-size:1em}</style></head><body>
+<h1>PXX logger setup</h1>
+<p>Which Wi-Fi network should the logger join?</p>
+<form method="post" action="/save">
+<label>Network name <input name="ssid" maxlength="32" required></label>
+<label>Password (empty for an open network)
+<input name="password" type="password" maxlength="63"></label>
+<button type="submit">Save and join</button>
+</form></body></html>
+"""
+
+
+def html_escape(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def reading_line():
+    return (str(board.uptime_ms() // 1000) + "," + str(esp32.mcu_temperature())
+            + "," + str(board.free_heap()) + "\n")
+
+
+def log_reading(cap):
+    logstore.log_append(reading_line(), cap)
+    state["lines"] = state["lines"] + 1
+
+
+def status_page():
+    rows = [("network", html_escape(state["ssid"])),
+            ("address", state["ip"]),
+            ("uptime", str(board.uptime_ms() // 1000) + " s"),
+            ("chip temperature", str(esp32.mcu_temperature()) + " &deg;C"),
+            ("free heap", str(board.free_heap()) + " bytes"),
+            ("readings logged since boot", str(state["lines"])),
+            ("/log.csv", str(logstore.log_size("log.csv")) + " bytes"),
+            ("requests served", str(state["requests"]))]
+    out = ("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+           + "<meta http-equiv=\"refresh\" content=\"5\"><title>PXX logger</title>"
+           + "</head><body style=\"font-family:system-ui,sans-serif;margin:2em\">"
+           + "<h1>PXX logger</h1><table>")
+    for name, value in rows:
+        out = out + "<tr><td>" + name + "</td><td><b>" + value + "</b></td></tr>"
+    return (out + "</table><p><a href=\"/log.csv\">log.csv</a> &middot; "
+            + "<a href=\"/log.1.csv\">log.1.csv</a> (the previous one)</p>"
+            + "<form method=\"post\" action=\"/forget\"><button>Forget this "
+            + "network</button></form></body></html>\n")
+
+
+def handle(conn):
+    method, path, body = web.read_request(conn)
+    state["requests"] = state["requests"] + 1
+    if state["mode"] == "setup":
+        if method == "POST" and path == "/save":
+            f = logstore.form_fields(body)
+            ssid = ""
+            password = ""
+            if "ssid" in f:
+                ssid = f["ssid"]
+            if "password" in f:
+                password = f["password"]
+            if len(ssid) < 1 or len(ssid) > 32 or (len(password) > 0 and len(password) < 8):
+                web.respond(conn, "400 Bad Request", "text/plain",
+                            "A network name of 1 to 32 characters is required, and a"
+                            + " password needs at least 8 characters (or none).\n")
+            else:
+                logstore.save_config(ssid, password)
+                state["reinit"] = 1
+                web.respond(conn, "200 OK", "text/plain",
+                            "Saved. Joining " + ssid + " now; if that fails, this"
+                            + " setup network comes back.\n")
+        else:
+            web.respond(conn, "200 OK", "text/html; charset=utf-8", SETUP_PAGE)
+    elif path == "/log.csv" or path == "/log.1.csv":
+        web.respond(conn, "200 OK", "text/csv", logstore.log_text(path[1:]))
+    elif method == "POST" and path == "/forget":
+        logstore.forget_config()
+        state["reinit"] = 1
+        web.respond(conn, "200 OK", "text/plain",
+                    "Forgotten. Join Wi-Fi " + SETUP_SSID + " to set a new network.\n")
+    elif path == "/":
+        web.respond(conn, "200 OK", "text/html; charset=utf-8", status_page())
+    else:
+        web.respond(conn, "404 Not Found", "text/plain", "not found\n")
+    conn.close()
+    if state["trace"] == 1:
+        print("http", method, path)
+
+
+def serve_pending(srv):
+    # At most a few per call, so a burst of requests cannot starve logging.
+    n = 0
+    while n < 4:
+        try:
+            conn, addr = srv.accept()
+        except OSError:
+            return
+        handle(conn)
+        n = n + 1
+
+
+def start_setup():
+    sta.active(False)
+    ap.config(essid=SETUP_SSID, password=SETUP_PASSWORD)
+    ap.active(True)
+    state["mode"] = "setup"
+    state["ssid"] = ""
+    state["ip"] = ap.ifconfig()[0]
+    print("setup: join Wi-Fi", SETUP_SSID, "(password " + SETUP_PASSWORD + ") and open http://"
+          + state["ip"] + "/")
+
+
+def join(ssid, password):
+    # True once joined. Each attempt ends when the driver reports why it could
+    # not connect, or after ATTEMPT_MS, so a bad network ends here -- never a
+    # hang.
+    ap.active(False)
+    sta.active(True)
+    sta.config(reconnects=0)
+    attempt = 1
+    while attempt <= JOIN_ATTEMPTS:
+        sta.connect(ssid, password)
+        t0 = board.uptime_ms()
+        while sta.status() == network.STAT_CONNECTING and board.uptime_ms() - t0 < ATTEMPT_MS:
+            time.sleep(0.25)
+        if sta.isconnected():
+            state["mode"] = "logging"
+            state["ssid"] = ssid
+            state["ip"] = sta.ifconfig()[0]
+            print("joined", ssid, "at", state["ip"] + ": open http://" + state["ip"] + "/")
+            return True
+        print("join", ssid + ": attempt", attempt, "of", JOIN_ATTEMPTS, "-> status", sta.status())
+        sta.disconnect()
+        attempt = attempt + 1
+    return False
+
+
+def start():
+    # The boot decision, and the one after every change of settings.
+    ssid, password = logstore.load_config()
+    if len(ssid) == 0:
+        print("logger: no usable /config.json")
+        start_setup()
+        return
+    print("logger: /config.json names", ssid)
+    if not join(ssid, password):
+        print("join failed: back to the setup page")
+        start_setup()
+
+
+def run():
+    start()
+    srv = web.listen(PORT)
+    print("http listening on port", PORT)
+
+    def serve():
+        serve_pending(srv)
+
+    # One self-check, so a serial log proves the server answers: fetch our own
+    # front page over 127.0.0.1, the way a phone would over Wi-Fi.
+    status, body = web.fetch(PORT, "GET", "/", "", serve)
+    print("self-check: GET / ->", status, state["mode"], "page",
+          body.find("PXX logger") >= 0)
+    state["next_log"] = board.uptime_ms()
+    while True:
+        serve()
+        if state["reinit"] == 1:
+            state["reinit"] = 0
+            start()
+        if state["mode"] == "logging":
+            if not sta.isconnected():
+                print("lost", state["ssid"] + ": joining again")
+                start()
+            elif board.uptime_ms() >= state["next_log"]:
+                log_reading(LOG_CAP)
+                state["next_log"] = state["next_log"] + LOG_EVERY_MS
+        time.sleep(0.05)

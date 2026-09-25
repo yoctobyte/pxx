@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: 0BSD
+# A very small HTTP/1.1 server for the logger: one request per connection, a
+# non-blocking listening socket polled from the main loop, and a client for
+# fetching the board's own pages over 127.0.0.1 (the self-checks). No Wi-Fi
+# here either, so it also runs on a PC.
+import socket
+
+
+def listen(port):
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("0.0.0.0", port))
+    srv.listen(4)
+    srv.setblocking(False)
+    return srv
+
+
+def read_request(conn):
+    # (method, path, body). The body of a form POST can arrive after the
+    # headers, so read until Content-Length bytes of it are in.
+    conn.settimeout(2.0)
+    data = b""
+    while data.find(b"\r\n\r\n") < 0 and len(data) < 4096:
+        chunk = conn.recv(512)
+        if not chunk:
+            break
+        data = data + chunk
+    cut = data.find(b"\r\n\r\n")
+    if cut < 0:
+        return ("", "", "")
+    head = data[:cut].decode()
+    body = data[cut + 4:]
+    lines = head.split("\r\n")
+    parts = lines[0].split(" ")
+    if len(parts) < 2:
+        return ("", "", "")
+    want = 0
+    for h in lines[1:]:
+        if h.lower().startswith("content-length:"):
+            want = int(h[15:].strip())
+    while len(body) < want and len(body) < 4096:
+        chunk = conn.recv(512)
+        if not chunk:
+            break
+        body = body + chunk
+    return (parts[0], parts[1], body.decode())
+
+
+def respond(conn, status, ctype, body):
+    data = body.encode()
+    head = ("HTTP/1.1 " + status + "\r\n"
+            + "Content-Type: " + ctype + "\r\n"
+            + "Content-Length: " + str(len(data)) + "\r\n"
+            + "Cache-Control: no-store\r\n"
+            + "Connection: close\r\n\r\n")
+    conn.sendall(head.encode() + data)
+
+
+def fetch(port, method, path, body, serve):
+    # Ask our own server for a page. `serve` is the function that answers
+    # pending requests: this runs in the one task there is, so the request is
+    # sent, then answered, then read back.
+    c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    c.settimeout(5.0)
+    c.connect(("127.0.0.1", port))
+    req = method + " " + path + " HTTP/1.0\r\n"
+    if len(body) > 0:
+        req = (req + "Content-Type: application/x-www-form-urlencoded\r\n"
+               + "Content-Length: " + str(len(body)) + "\r\n")
+    c.sendall((req + "\r\n" + body).encode())
+    serve()
+    got = b""
+    while True:
+        chunk = c.recv(512)
+        if not chunk:
+            break
+        got = got + chunk
+    c.close()
+    text = got.decode()
+    cut = text.find("\r\n\r\n")
+    return (text.split("\r\n")[0], text[cut + 4:])

@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: 0BSD
+# The logger's FILES: its Wi-Fi settings in /config.json and its readings in
+# /log.csv, on the ESP32's flash (FAT, the `storage` partition; see main.npy).
+# Nothing here touches the radio or a chip register, so the same module runs
+# on a PC against a scratch directory: set paths["root"] first.
+import json
+import os
+from urllib.parse import unquote
+
+paths = {"root": "/"}
+
+LOG_HEADER = "uptime_s,temperature_c,free_heap\n"
+
+
+def path(name):
+    return paths["root"] + name
+
+
+def exists(name):
+    return os.path.isfile(path(name))
+
+
+def remove(name):
+    try:
+        os.remove(path(name))
+    except OSError:
+        pass
+
+
+# ---- /config.json -----------------------------------------------------------
+
+def load_config():
+    # (ssid, password), or ("", "") when the file is missing or not a usable
+    # config -- the caller treats both the same way: run the setup page.
+    try:
+        f = open(path("config.json"))
+        text = f.read()
+        f.close()
+    except OSError:
+        return ("", "")
+    try:
+        cfg = json.loads(text)
+        ssid = str(cfg["ssid"])
+        password = str(cfg["password"])
+    except (ValueError, KeyError, TypeError):
+        return ("", "")
+    if len(ssid) == 0 or len(ssid) > 32:
+        return ("", "")
+    return (ssid, password)
+
+
+def save_config(ssid, password):
+    # Written to a temporary name and renamed over the old file, so a reset in
+    # the middle leaves either the old config or the new one, never half.
+    f = open(path("config.tmp"), "w")
+    f.write(json.dumps({"ssid": ssid, "password": password}))
+    f.close()
+    remove("config.json")
+    os.rename(path("config.tmp"), path("config.json"))
+
+
+def forget_config():
+    remove("config.json")
+
+
+# ---- the setup form ---------------------------------------------------------
+
+def form_fields(body):
+    # application/x-www-form-urlencoded: "ssid=My+Net&password=p%40ss"
+    fields = {}
+    for pair in body.split("&"):
+        eq = pair.find("=")
+        if eq > 0:
+            key = unquote(pair[:eq].replace("+", " "))
+            fields[key] = unquote(pair[eq + 1:].replace("+", " "))
+    return fields
+
+
+# ---- /log.csv ---------------------------------------------------------------
+
+def log_size(name):
+    try:
+        return os.stat(path(name)).st_size
+    except OSError:
+        return -1
+
+
+def log_append(line, cap):
+    # Append one reading. When /log.csv would grow past `cap` bytes it becomes
+    # /log.1.csv (replacing the previous one) and a fresh /log.csv starts, so
+    # the two together never hold much more than 2 * cap.
+    size = log_size("log.csv")
+    if size >= 0 and size + len(line) > cap:
+        remove("log.1.csv")
+        os.rename(path("log.csv"), path("log.1.csv"))
+        size = -1
+    f = open(path("log.csv"), "a")
+    if size < 0:
+        f.write(LOG_HEADER)
+    f.write(line)
+    f.close()
+
+
+def log_text(name):
+    try:
+        f = open(path(name))
+        text = f.read()
+        f.close()
+        return text
+    except OSError:
+        return ""

@@ -1,0 +1,9 @@
+# Name,   Type, SubType, Offset,  Size,   Flags
+# One large app: the NilPy runtime is ~3 MB of code (flash, not SRAM) without
+# --dce, which the stock 1 MB factory partition cannot hold.
+nvs,      data, nvs,     ,        0x6000,
+phy_init, data, phy,     ,        0x1000,
+factory,  app,  factory, ,        0x3C0000,
+# The filesystem open() and os see, mounted by lib/rtl/platform/esp/idf/pxx_fs
+# (Python's "/" is its root). The rest of the 4 MB; fs-c3's row, smaller.
+storage,  data, fat,     ,        0x30000,
