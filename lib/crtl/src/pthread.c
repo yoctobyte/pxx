@@ -18,6 +18,7 @@ extern int       __pxx_pmutex_trylock(void *m);       /* 0 = acquired, 16 = EBUS
 extern long long __pxx_pthread_self(void);
 extern long long __pxx_pthread_create(void *h, void *(*start)(void *), void *arg);
 extern void      __pxx_pthread_join(void *h);
+extern int       __pxx_pthread_exited(void *h);
 extern void      __pxx_pcond_init(void *c);
 extern void      __pxx_pcond_signal(void *c);
 extern void      __pxx_pcond_broadcast(void *c);
@@ -149,6 +150,8 @@ int pthread_equal(pthread_t a, pthread_t b)  { return a == b; }
 struct pxx_thr_slot {
   long long      tid;                /* > 0 when live */
   int            used;
+  int            detached;           /* pthread_detach: nobody will join; the
+                                        slot is reclaimed once the thread exits */
   unsigned char  h[PXX_HANDLE_BYTES];
   void        *(*start)(void *);     /* the caller's start routine and arg, */
   void          *arg;                /* run by pxx_thr_trampoline, which    */
@@ -168,6 +171,23 @@ static void *pxx_thr_trampoline(void *p) {
   return s->ret;
 }
 
+/* A detached thread's slot holds its handle, and the kernel writes that handle
+ * at thread exit, so the slot cannot be freed at detach time. It is freed here,
+ * once the thread has exited: the join then returns at once and releases the
+ * stack. Called with the registry lock held, from create (so a program that
+ * detaches every thread never runs out of slots) and from detach. */
+static void pxx_thr_reap_detached(void) {
+  int i;
+  for (i = 0; i < PXX_PTHREAD_MAX; i++) {
+    if (pxx_thr_reg[i].used && pxx_thr_reg[i].detached && __pxx_pthread_exited(pxx_thr_reg[i].h)) {
+      __pxx_pthread_join(pxx_thr_reg[i].h);
+      pxx_thr_reg[i].used = 0;
+      pxx_thr_reg[i].detached = 0;
+      pxx_thr_reg[i].tid = 0;
+    }
+  }
+}
+
 int pthread_create(pthread_t *t, const pthread_attr_t *attr,
                    void *(*start)(void *), void *arg) {
   int i, slot = -1;
@@ -175,6 +195,7 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
   (void)attr;
 
   __pxx_pmutex_lock(&pxx_thr_reg_lock);
+  pxx_thr_reap_detached();
   for (i = 0; i < PXX_PTHREAD_MAX; i++) {
     if (!pxx_thr_reg[i].used) { slot = i; pxx_thr_reg[i].used = 1; break; }
   }
@@ -182,6 +203,7 @@ int pthread_create(pthread_t *t, const pthread_attr_t *attr,
 
   /* Spawn under the registry lock: PalThreadCreate fills the handle bytes and
      returns the child tid. Serialising spawns is fine for test-scale fan-out. */
+  pxx_thr_reg[slot].detached = 0;
   pxx_thr_reg[slot].start = start;
   pxx_thr_reg[slot].arg   = arg;
   pxx_thr_reg[slot].ret   = 0;
@@ -206,6 +228,7 @@ int pthread_join(pthread_t t, void **retval) {
   }
   __pxx_pmutex_unlock(&pxx_thr_reg_lock);
   if (slot < 0) return 3;                  /* ESRCH */
+  if (pxx_thr_reg[slot].detached) return 22;  /* EINVAL: not joinable */
 
   __pxx_pthread_join(pxx_thr_reg[slot].h); /* blocks on the child-tid futex */
   if (retval) *retval = pxx_thr_reg[slot].ret;
@@ -215,4 +238,22 @@ int pthread_join(pthread_t t, void **retval) {
   pxx_thr_reg[slot].tid  = 0;
   __pxx_pmutex_unlock(&pxx_thr_reg_lock);
   return 0;
+}
+
+/* crtl had no pthread_detach, so a C program that detaches its workers did not
+ * compile ("call to undeclared function"; found 2026-09-25 by the thread leak
+ * census). */
+int pthread_detach(pthread_t t) {
+  int i, found = 0;
+  __pxx_pmutex_lock(&pxx_thr_reg_lock);
+  for (i = 0; i < PXX_PTHREAD_MAX; i++) {
+    if (pxx_thr_reg[i].used && !pxx_thr_reg[i].detached && pxx_thr_reg[i].tid == (long long)t) {
+      pxx_thr_reg[i].detached = 1;
+      found = 1;
+      break;
+    }
+  }
+  if (found) pxx_thr_reap_detached();   /* it may have exited already */
+  __pxx_pmutex_unlock(&pxx_thr_reg_lock);
+  return found ? 0 : 3;                  /* ESRCH */
 }

@@ -2997,6 +2997,10 @@ test-nilpy: $(COMPILER)
 	# gets blamed on whatever landed beside it.
 	./$(COMPILER) --threadsafe test/test_nilpy_the_threading_module.npy $(TESTTMP)/test_nilpy_threading26
 	$(TESTTMP)/test_nilpy_threading26 | diff -u test/test_nilpy_the_threading_module.expected -
+	# A started Thread gives its PAL handle back, joined or not. Before the fix
+	# this ended at ~850 live blocks for 800 threads.
+	./$(COMPILER) --threadsafe -dPXX_ALLOC_CENSUS test/test_nilpy_a_finished_thread_gives_its_handle_back.npy $(TESTTMP)/test_nilpy_thread_handle26
+	tools/assert_no_leak.sh nilpy_thread_handle_released 200 $(TESTTMP)/test_nilpy_thread_handle26
 	@# ...and the two REFUSALS, which are different questions and used to be one
 	@# answer. Where the locks exist, the flag is the remedy and the diagnostic
 	@# names it. Where they do NOT (wasm32 here), prescribing the flag was a dead
@@ -7625,6 +7629,10 @@ test-threads: $(COMPILER)
 	tools/run_target.sh aarch64 $(TESTTMP)/c_pjoin26_a64 | diff -u test/c_pthread_join_returns_value.expected -
 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_join_returns_value.c $(TESTTMP)/c_pjoin26_arm32
 	tools/run_target.sh arm32 $(TESTTMP)/c_pjoin26_arm32 | diff -u test/c_pthread_join_returns_value.expected -
+	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_detach.c $(TESTTMP)/c_pdetach26_a64
+	tools/run_target.sh aarch64 $(TESTTMP)/c_pdetach26_a64 | diff -u test/c_pthread_detach.expected -
+	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_detach.c $(TESTTMP)/c_pdetach26_arm32
+	tools/run_target.sh arm32 $(TESTTMP)/c_pdetach26_arm32 | diff -u test/c_pthread_detach.expected -
 	# THE OTHER HALF OF THE SAME PASS, and it fails by printing a WRONG NUMBER
 	# rather than by crashing. RewriteThreadVarRefs arms on the program declaring
 	# any threadvar and rewrites every AN_IDENT whose SymTlsOffset is >= 0; -1 is
@@ -17370,6 +17378,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_errno_per_thread26 "$$($(TESTTMP)/c_errno_per_thread26)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_join_returns_value.c $(TESTTMP)/c_pjoin26
 	$(TESTTMP)/c_pjoin26 | diff -u test/c_pthread_join_returns_value.expected -
+	# pthread_detach, which crtl did not have. 300 detached threads through a
+	# 64-slot registry: without the reclaim, create 65 fails with EAGAIN.
+	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_detach.c $(TESTTMP)/c_pdetach26
+	$(TESTTMP)/c_pdetach26 | diff -u test/c_pthread_detach.expected -
 	# Host headers crtl does not ship parse (crtl <features.h> -> glue <sys/cdefs.h>),
 	# and __GLIBC__ stays undefined (the test #errors if it is not).
 	./$(COMPILER) test/c_host_header_needs_cdefs_glue.c $(TESTTMP)/c_hosthdr26 2>/dev/null
@@ -38959,6 +38971,14 @@ lib-test: pxx-stable-check
 	# cthreads shim. Expectations are FPC's own output for the same program.
 	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas $(TESTTMP)/lib_fpc_thread_surface
 	tools/expect_same.sh lib_fpc_thread_surface "$$($(TESTTMP)/lib_fpc_thread_surface | tail -n 1)" "FPCTHREAD OK"
+	# A joined thread leaves the PAL's reap table (it held freed handles, and
+	# -dPXX_HEAP_DEBUG makes that deterministic: +399 mappings before the fix),
+	# and FreeOnTerminate threads free their handles without CheckSynchronize
+	# (~1100 live blocks for 600 threads before the fix).
+	$(PXX_STABLE) --threadsafe -dPXX_HEAP_DEBUG -Fulib/rtl test/test_a_joined_thread_leaves_the_pal_reap_table.pas $(TESTTMP)/lib_reap_table
+	tools/expect_same.sh lib_reap_table "$$($(TESTTMP)/lib_reap_table | tail -n 1)" "REAPTABLE OK"
+	$(PXX_STABLE) --threadsafe -dPXX_ALLOC_CENSUS -Fulib/rtl test/test_freeonterminate_threads_give_their_handles_back.pas $(TESTTMP)/lib_fot_handles
+	tools/assert_no_leak.sh freeonterminate_handles_released 200 $(TESTTMP)/lib_fot_handles
 	# A finished thread must REPORT itself finished, on WHICHEVER route made it.
 	# The pthread route (x86-64 + libc already linked) has no CLONE_CHILD_CLEARTID,
 	# so the trampoline clears the handle's TidWord by hand; without that,

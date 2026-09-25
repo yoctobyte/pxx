@@ -97,8 +97,19 @@ const
 function PalThreadCreate(var h: TThreadHandle; entry: TThreadEntry; arg: Pointer;
                          stackSize: Int64): Integer;
 
-{ Block until the thread exits, then release its stack. Idempotent once joined. }
+{ Block until the thread exits, then release its stack. Idempotent once joined.
+  On return the PAL holds no reference to h, so the caller may free it. }
 procedure PalThreadJoin(var h: TThreadHandle);
+
+{ Give up a HEAP handle (GetMem'd) of a thread that will never be joined: the
+  PAL frees the stack and then the handle itself once the kernel reports the
+  thread dead. The handle cannot be freed by its owner before that -- the kernel
+  writes TidWord at thread exit -- and a thread cannot free its own. Safe to
+  call from the thread itself (a FreeOnTerminate destructor) and on an already
+  dead or joined thread (freed at once). The caller must not touch h afterwards.
+  On the glibc pthread route the handle is kept, as before: glibc owns that
+  thread and its trampoline, so no word here says when h is no longer read. }
+procedure PalThreadRelease(h: PThreadHandle);
 
 { PalFutexWait / PalFutexWake / PalFutexWaitTimeout moved to `palfutex`, which
   depends on nothing: waiting on a word must not inherit __pxxclone's
@@ -420,6 +431,9 @@ const
   PAL_REAP_SLOTS = 256;
 var
   gReap:      array[0..PAL_REAP_SLOTS - 1] of PThreadHandle;
+  { gReapOwned[i]: the PAL owns gReap[i] itself (PalThreadRelease) and frees
+    it after the stack. False for a handle its caller still owns. }
+  gReapOwned: array[0..PAL_REAP_SLOTS - 1] of Boolean;
   gReapCount: Integer;
   gReapLock:  TMutex;
 
@@ -442,6 +456,16 @@ end;
   Entries are removed by swapping the tail in, so the list holds only threads
   that are still running or not yet swept -- never one entry per thread ever
   created. }
+{ Remove entry i by swapping the tail in. Caller holds gReapLock. }
+procedure ReapDropAt(i: Integer);
+begin
+  gReap[i] := gReap[gReapCount - 1];
+  gReapOwned[i] := gReapOwned[gReapCount - 1];
+  gReap[gReapCount - 1] := nil;
+  gReapOwned[gReapCount - 1] := False;
+  gReapCount := gReapCount - 1;
+end;
+
 procedure ReapSweep;
 var
   i: Integer;
@@ -464,13 +488,31 @@ begin
           concurrent Join between the zeroing and the unmap. }
         ignore := __pxxrawsyscall(SYS_munmap, base, size, 0, 0, 0, 0);
       end;
-      gReap[i] := gReap[gReapCount - 1];
-      gReap[gReapCount - 1] := nil;
-      gReapCount := gReapCount - 1;
+      { A released handle: nobody else holds it, and the kernel has written
+        its last word to it (TidWord = 0 above). }
+      if gReapOwned[i] then FreeMem(p);
+      ReapDropAt(i);
     end
     else
       i := i + 1;
   end;
+  MutexUnlock(gReapLock);
+end;
+
+{ Forget h without touching its stack. PalThreadJoin calls it once the stack is
+  released, and that is the fix for a use-after-free. The table used to keep a
+  joined handle until the next sweep, and every caller frees its handle right
+  after the join: TThread.Destroy, CloseThread (the handle is inline in its
+  slot), and crtl's pthread registry, which reuses the slot's bytes for the
+  next thread. The sweep then read TidWord and StackBase out of freed or reused
+  memory. It was benign only while that memory still happened to hold zeroes. }
+procedure ReapUnregister(h: PThreadHandle);
+var i: Integer;
+begin
+  MutexLock(gReapLock);
+  i := 0;
+  while i < gReapCount do
+    if gReap[i] = h then ReapDropAt(i) else i := i + 1;
   MutexUnlock(gReapLock);
 end;
 
@@ -481,16 +523,15 @@ end;
   somehow not set, or the table is full, the handle is simply not registered:
   its stack then leaks exactly as it did before this existed, which is the one
   failure mode that cannot make anything worse. }
-procedure ReapRegister(h: PThreadHandle);
+procedure ReapRegisterLocked(h: PThreadHandle);   { caller holds gReapLock }
 begin
   if (h = nil) or (h^.StackBase <= 0) or (h^.TidWord = 0) then Exit;
-  MutexLock(gReapLock);
   if gReapCount < PAL_REAP_SLOTS then
   begin
     gReap[gReapCount] := h;
+    gReapOwned[gReapCount] := False;
     gReapCount := gReapCount + 1;
   end;
-  MutexUnlock(gReapLock);
 end;
 
 function PalThreadCreate(var h: TThreadHandle; entry: TThreadEntry; arg: Pointer;
@@ -589,18 +630,27 @@ begin
   { Child stack grows down from the high end; must be 16-byte aligned (mmap is
     page-aligned and stackSize is a multiple of 16, so the top is too). }
   { NOTE: this parent-side store of h.Tid races the child's startup — the child
-    can run before it lands. See the RACE CONTRACT on TThreadHandle. }
+    can run before it lands. See the RACE CONTRACT on TThreadHandle.
+    gReapLock is HELD ACROSS THE CLONE AND THE REGISTRATION: a child can finish
+    and PalThreadRelease its own handle before this returns (a FreeOnTerminate
+    thread with a short body does), and the release must then find the entry
+    already in the table. Without the lock it could register the handle
+    itself, the parent then add it a second time, and the second entry would
+    be read after the first one's sweep freed it. }
+  MutexLock(gReapLock);
   h.Tid := __pxxclone(PXX_CLONE_THREAD, h.StackBase + h.StackSize,
                       entry, arg, @h.TidWord);
   if h.Tid <= 0 then
   begin
     { clone failed: reclaim the stack, report failure. }
+    MutexUnlock(gReapLock);
     ignore := __pxxrawsyscall(SYS_munmap, h.StackBase, h.StackSize, 0, 0, 0, 0);
     h.StackBase := 0;
     Result := -1;
     Exit;
   end;
-  ReapRegister(@h);
+  ReapRegisterLocked(@h);
+  MutexUnlock(gReapLock);
   Result := 0;
 end;
 
@@ -636,6 +686,47 @@ begin
     same mapping right now. ReapTakeStack settles which of the two owns it. }
   if ReapTakeStack(@h, base, size) then
     ignore := __pxxrawsyscall(SYS_munmap, base, size, 0, 0, 0, 0);
+  ReapUnregister(@h);
+end;
+
+procedure PalThreadRelease(h: PThreadHandle);
+var
+  i: Integer;
+  found: Boolean;
+  base, size, ignore: Int64;
+begin
+  if h = nil then Exit;
+{$ifdef CPUX86_64}
+  if h^.PthreadId <> 0 then Exit;   { glibc's thread: see the interface note }
+{$endif}
+  found := False;
+  MutexLock(gReapLock);
+  for i := 0 to gReapCount - 1 do
+    if gReap[i] = h then
+    begin
+      gReapOwned[i] := True;          { the next sweep after its death frees it }
+      found := True;
+    end;
+  if (not found) and (h^.TidWord <> 0) and (gReapCount < PAL_REAP_SLOTS) then
+  begin
+    { Alive but not in the table (joined-and-restarted is not a thing, so this
+      is a handle ReapRegister skipped while the table was full): take it now. }
+    gReap[gReapCount] := h;
+    gReapOwned[gReapCount] := True;
+    gReapCount := gReapCount + 1;
+    found := True;
+  end;
+  MutexUnlock(gReapLock);
+  if found then Exit;
+  if h^.TidWord = 0 then
+  begin
+    { Already dead: joined, or swept and dropped. Nothing will write to it. }
+    if ReapTakeStack(h, base, size) then
+      ignore := __pxxrawsyscall(SYS_munmap, base, size, 0, 0, 0, 0);
+    FreeMem(h);
+  end;
+  { Else alive with the table full: the handle and its stack stay, which is
+    what ReapRegister already does for a full table. }
 end;
 
 end.

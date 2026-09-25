@@ -1,0 +1,63 @@
+# A started Thread must give its PAL handle back when the Thread object goes.
+#
+# threading.Thread GetMem'd a TThreadHandle in start() and nothing ever freed
+# it. Measured 2026-09-25 at pin v425, 100 vs 1000 threads: +1.2 live blocks
+# per thread for every started shape (plain target, args=, bound method,
+# daemon), flat for Threads never started. A destructor cannot fix it: a
+# Pascal class freed by the NilPy refcount never has its destructor run.
+#
+# Built -dPXX_ALLOC_CENSUS and bounded by tools/assert_no_leak.sh; before the
+# fix this program ended with about 600 live blocks. Both halves run, joined
+# and daemon-never-joined, because the handle is freed on different sides:
+# the joiner frees what it joined, and a body nobody is joining hands its own
+# handle to the PAL.
+
+import threading
+
+
+def body(k):
+    pass
+
+
+class Done:
+    def __init__(self):
+        self.ev = threading.Event()
+
+    def run(self):
+        self.ev.set()
+
+
+# THE CENSUS REPORTS ON A GEOMETRIC THRESHOLD, not at exit, so the last line
+# assert_no_leak reads is a mid-run sample. Every phase therefore runs in waves
+# of 10 that finish before the next wave starts: whatever the sample catches is
+# at most one wave in flight, never a backlog, and the leak it guards against
+# grows with every wave.
+
+# Daemon threads nobody joins: the body hands its handle to the PAL.
+i = 0
+while i < 200:
+    ds = []
+    for k in range(10):
+        d = Done()
+        th = threading.Thread(target=d.run, daemon=True)
+        th.start()
+        ds.append(d)
+    for dd in ds:
+        dd.ev.wait(5.0)
+    i = i + 10
+
+# Joined threads: the joiner frees what it joined.
+i = 0
+while i < 600:
+    ts = []
+    for k in range(10):
+        t = threading.Thread(target=body, args=(k,))
+        t.start()
+        ts.append(t)
+    # A FRESH loop name, not `t`: a for-loop that rebinds a name already
+    # holding a Pascal-class object leaks that object once per loop
+    # (compiler-side, logged 2026-09-25), and this row is about the handle.
+    for u in ts:
+        u.join()
+    i = i + 10
+print("threads 800")

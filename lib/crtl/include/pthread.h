@@ -82,5 +82,6 @@ int  pthread_equal(pthread_t a, pthread_t b);
 int  pthread_create(pthread_t *t, const pthread_attr_t *attr,
                     void *(*start)(void *), void *arg);
 int  pthread_join(pthread_t t, void **retval);
+int  pthread_detach(pthread_t t);
 
 #endif /* _PXX_PTHREAD_H */

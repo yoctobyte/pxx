@@ -35,8 +35,8 @@ type
     { The thread handle lives on the HEAP, not inline: the kernel futex-writes
       the handle's TidWord at thread exit (CLONE_CHILD_CLEARTID), so its address
       must outlive the thread even when FreeOnTerminate destroys the instance
-      from inside the thread. Allocated by Start; released after join (or by
-      the CheckSynchronize reaper for self-freed threads). }
+      from inside the thread. Allocated by Start; released after join (or,
+      for a self-freed thread, by the PAL via PalThreadRelease). }
     FHandlePtr:    PThreadHandle;
     FStarted:      Boolean;
     FFinished:     Boolean;
@@ -161,8 +161,7 @@ function WaitForThreadTerminate(id: TThreadID; timeoutMs: Int64): PtrInt;
   BeginThread; after it, the id is no longer known. }
 procedure CloseThread(id: TThreadID);
 
-{ Drain the Synchronize/Queue backlog (and reap the handles/stacks of
-  FreeOnTerminate threads that have since exited). Call it periodically FROM
+{ Drain the Synchronize/Queue backlog. Call it periodically FROM
   THE MAIN THREAD (e.g. inside the main loop that waits for workers). Returns
   True if at least one queued call ran. }
 function CheckSynchronize: Boolean;
@@ -196,20 +195,11 @@ type
     NextEntry: PSyncEntry;
   end;
 
-  { A FreeOnTerminate thread's heap handle, parked until the main thread can
-    join it (frees the 1 MiB child stack) and release the handle block. }
-  PReapNode = ^TReapNode;
-  TReapNode = record
-    Handle:   PThreadHandle;
-    NextNode: PReapNode;
-  end;
-
 var
   SyncLock: TMutex;         { zeroed BSS record = unlocked, no init needed }
   SyncHead: PSyncEntry;
   SyncTail: PSyncEntry;
   MainTid:  Int64;
-  ReapHead: PReapNode;      { guarded by SyncLock too (same pump drains it) }
   RegHead:  TThread;        { CurrentThread registry, guarded by SyncLock }
   MainThreadObj: TThread;   { lazy placeholder for CurrentThread on main }
 
@@ -233,7 +223,6 @@ end;
 function CheckSynchronize: Boolean;
 var
   e: PSyncEntry;
-  r, rn: PReapNode;
 begin
   Result := False;
   while True do
@@ -256,22 +245,6 @@ begin
       e^.DoneWord := 1;
       PalFutexWake(@e^.DoneWord, 1);
     end;
-  end;
-
-  { Reap exited FreeOnTerminate threads: join (releases the child stack; the
-    thread exits within a few instructions of parking its handle, so any wait
-    here is momentary) and release the heap handle. }
-  MutexLock(SyncLock);
-  r := ReapHead;
-  ReapHead := nil;
-  MutexUnlock(SyncLock);
-  while r <> nil do
-  begin
-    PalThreadJoin(r^.Handle^);
-    FreeMem(r^.Handle);
-    rn := r^.NextNode;
-    FreeMem(r);
-    r := rn;
   end;
 end;
 
@@ -336,19 +309,6 @@ begin
       p := p.FNextThread;
     end;
   end;
-  MutexUnlock(SyncLock);
-end;
-
-{ Park a self-freed thread's handle for the main pump to join + release. }
-procedure ReaperPush(h: PThreadHandle);
-var
-  n: PReapNode;
-begin
-  GetMem(n, SizeOf(TReapNode));
-  n^.Handle := h;
-  MutexLock(SyncLock);
-  n^.NextNode := ReapHead;
-  ReapHead := n;
   MutexUnlock(SyncLock);
 end;
 
@@ -465,7 +425,14 @@ begin
   if FHandlePtr <> nil then
   begin
     if PalThreadSelf = FHandlePtr^.Tid then
-      ReaperPush(FHandlePtr)   { FreeOnTerminate: main pump joins + frees it }
+      { FreeOnTerminate: this thread cannot free the handle it is standing on
+        (the kernel writes TidWord at exit), so the PAL frees stack and handle
+        once the thread is dead. This used to park it for CheckSynchronize,
+        and a program that never called that (most console programs, and FPC
+        needs no such call) kept two blocks and a 1 MiB stack mapping per
+        thread: measured 2026-09-25 at 2 live blocks per thread, 100 vs 1000
+        threads. }
+      PalThreadRelease(FHandlePtr)
     else
       FreeMem(FHandlePtr);     { already joined by WaitFor above }
   end;
@@ -667,7 +634,6 @@ initialization
   MainTid := PalThreadSelf;
   SyncHead := nil;
   SyncTail := nil;
-  ReapHead := nil;
   RegHead := nil;
   MainThreadObj := nil;
   MutexInit(SyncLock);

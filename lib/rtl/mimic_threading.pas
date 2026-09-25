@@ -132,6 +132,25 @@ type
     FHandlePtr: PThreadHandle;
     FStarted: Boolean;
     FJoined: Boolean;
+    { WHO FREES FHandlePtr. It used to be nobody: one block per thread
+      started, measured 2026-09-25 at pin v425, 100 vs 1000 threads, +1.2 live
+      blocks per thread for every started shape (plain, args=, bound method,
+      daemon), and flat for Threads never started. A destructor cannot do it,
+      because a Pascal class freed by the NilPy refcount never has its
+      destructor run (PyObjFinalize releases managed fields only). So:
+      - a JOINER frees the handle it joined;
+      - a body that finishes holding the LAST reference to its Thread hands
+        its handle to the PAL (PalThreadRelease, which frees it once the
+        kernel reports the thread dead) and leaves the non-daemon registry.
+        With no other reference, nobody can join it later.
+      A body that finishes while someone else still holds the Thread keeps
+      the handle, so a join stays synchronous: CPython's join returns after
+      the thread has exited, and the stack-reclaim fixture measures exactly
+      that. An earlier cut released on "no join in progress" instead, and a
+      join arriving after the body returned then came back before the kernel
+      had finished the thread. That was 1 run in 10 at load 23, and the
+      fixture caught it. The one case still leaking a handle: a Thread held,
+      never joined, then dropped (its destructor never runs). }
     constructor Create(target: Variant = 0; args: Variant = 0;
                        daemon: Boolean = False; name: AnsiString = '');
     procedure start;
@@ -240,6 +259,20 @@ end;
 
   Everything this touches allocates (a Variant call frame, whatever the Python
   body does), which is why --threadsafe is not optional. }
+{ The body is over. See FHandlePtr's note for the rule. The refcount is read
+  straight from the object header (PXXHdrRC, builtinheap): 1 means the only
+  reference left is ThreadLauncher's own, taken in Thread.start, so no joiner
+  exists or can appear. Anything else keeps the handle for the joiner. A plain
+  read is enough: a stale 2 only leaks one handle, and 1 can only fall. }
+procedure ThreadBodyDone(t: Thread);
+type PRC = ^NativeInt;
+begin
+  if PRC(PXXHdrRC(Pointer(t)))^ <> 1 then Exit;
+  PalThreadRelease(t.FHandlePtr);
+  t.FHandlePtr := nil;
+  LiveRemove(t);    { nothing left to join at exit }
+end;
+
 procedure ThreadLauncher(arg: Pointer);
 var
   t: Thread;
@@ -259,6 +292,7 @@ begin
     land first and come off another thread's count -- see Thread.start. }
   if not pycallback_is(t.FTarget) then
   begin
+    ThreadBodyDone(t);
     PyThreadLiveDec;
     { Thread.start's retain, given back. Last use of `t` on this path. }
     PXXObjRelease(Pointer(t));
@@ -293,6 +327,7 @@ begin
       three, and calling with the wrong arity would either crash or silently
       drop arguments -- both worse than a message naming the limit. }
     WriteLn(StdErr, 'threading: Thread(args=...) supports at most 3 arguments');
+  ThreadBodyDone(t);
   PyThreadLiveDec;
   { THE RETAIN TAKEN IN Thread.start, GIVEN BACK. This must be the LAST use of
     `t` in this procedure: at rc=0 it frees the block, so anything touching a
@@ -372,16 +407,22 @@ begin
     Given back in ThreadLauncher on every exit path, including the
     not-callable one. }
   PXXObjRetain(Pointer(Self));
+  { Registered and marked started BEFORE the create: a short body can finish,
+    and ThreadBodyDone take it out of the registry, before PalThreadCreate
+    returns. Added after, it would sit there finished, and possibly freed, for
+    finalization to join. }
+  FStarted := True;
+  if not daemon then LiveAdd(Self);
   if PalThreadCreate(FHandlePtr^, @ThreadLauncher, Pointer(Self), 0) <> 0 then
   begin
+    LiveRemove(Self);
+    FStarted := False;
     PXXObjRelease(Pointer(Self));   { no child will run, so give it back here }
     PyThreadLiveDec;
     FreeMem(FHandlePtr);
     FHandlePtr := nil;
     raise Exception.Create('threading: could not start a new thread');
   end;
-  FStarted := True;
-  if not daemon then LiveAdd(Self);
 end;
 
 function Thread.is_alive: Boolean;
@@ -391,8 +432,19 @@ begin
   { TidWord is the kernel's own liveness bit: set at clone time
     (CLONE_PARENT_SETTID), cleared as the thread's last act
     (CLONE_CHILD_CLEARTID). Reading it is the cheapest true answer there is,
-    and it needs no bookkeeping of ours to stay correct. }
+    and it needs no bookkeeping of ours to stay correct. A caller asking holds
+    a reference, so the body never gives this handle away under it. }
   is_alive := FHandlePtr^.TidWord <> 0;
+end;
+
+{ Join completed: the handle is this joiner's to free. }
+procedure ThreadJoinDone(t: Thread);
+begin
+  PalThreadJoin(t.FHandlePtr^);
+  FreeMem(t.FHandlePtr);
+  t.FHandlePtr := nil;
+  t.FJoined := True;
+  LiveRemove(t);
 end;
 
 function Thread.join(timeout: Double = PY_NO_TIMEOUT): Variant;
@@ -406,9 +458,7 @@ begin
   if (not FStarted) or FJoined or (FHandlePtr = nil) then Exit;
   if timeout < 0.0 then
   begin
-    PalThreadJoin(FHandlePtr^);
-    FJoined := True;
-    LiveRemove(Self);
+    ThreadJoinDone(Self);
     Exit;
   end;
   { A TIMED join, which PalThreadJoin does not offer. Same handshake, waiting
@@ -433,9 +483,7 @@ begin
     and a timed-out join is precisely the case where it has not exited. }
   if FHandlePtr^.TidWord = 0 then
   begin
-    PalThreadJoin(FHandlePtr^);
-    FJoined := True;
-    LiveRemove(Self);
+    ThreadJoinDone(Self);
   end;
 end;
 

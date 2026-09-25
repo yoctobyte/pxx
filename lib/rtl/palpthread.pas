@@ -34,6 +34,9 @@ function  __pxx_pthread_self: Int64;
   entries are void). }
 function  __pxx_pthread_create(h: PThreadHandle; entry: TThreadEntry; arg: Pointer): Int64;
 procedure __pxx_pthread_join(h: PThreadHandle);
+{ 1 once the thread has exited (the kernel cleared TidWord), else 0: lets the C
+  shim reclaim a DETACHED thread's slot with a join that cannot block. }
+function  __pxx_pthread_exited(h: PThreadHandle): LongInt;
 
 { Condition variables + one-time init for crtl pthread_cond_*/pthread_once
   (palsync TCondVar seq-futex + RunOnce). c/o point at the C structs whose
@@ -79,6 +82,11 @@ end;
 procedure __pxx_pthread_join(h: PThreadHandle);
 begin
   PalThreadJoin(h^);
+end;
+
+function __pxx_pthread_exited(h: PThreadHandle): LongInt;
+begin
+  if h^.TidWord = 0 then __pxx_pthread_exited := 1 else __pxx_pthread_exited := 0;
 end;
 
 procedure __pxx_pcond_init(c: PCondVar);      begin CondInit(c^);      end;
