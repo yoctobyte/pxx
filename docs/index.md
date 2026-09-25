@@ -14,6 +14,12 @@ runtime and the ELF bytes is its own code, no toolchain dependencies.
 > security-sensitive, safety-sensitive, financial, legal, medical, or public
 > network-facing work.
 
+> **Looking for sponsors.** Active development is paused after the first beta,
+> `0.1` "Blaise" (September 2026). We are looking for sponsors to continue it:
+> memory-leak hardening across every target, Nil Python maturity, and more
+> platforms. If you or your organisation would fund that, open an issue at
+> <https://github.com/yoctobyte/pxx/issues> titled "Sponsorship".
+
 [Dive](./dive/) is a single-page technical overview of the project, for
 readers who want the substance without browsing the rest of this
 documentation first.

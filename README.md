@@ -16,6 +16,17 @@ component streaming groundwork, C interop, and mainline C and Nil Python
 frontends alongside experimental BASIC, Rust and Zig ones. The long-term
 direction is a multi-language native compiler sharing one IR and backend.
 
+## Looking for sponsors
+
+**Active development is paused after the first beta, `0.1` "Blaise"
+(September 2026). We are looking for sponsors to continue it.** What exists
+today: a self-hosting Pascal compiler, mostly on par with Free Pascal's
+dialect, for the common Linux CPU targets and the ESP32, with C and Nil Python
+frontends alongside. What continued development would bring: memory-leak
+hardening across every target, Nil Python maturity, and more platforms. If you
+or your organisation would fund that, open an issue at
+<https://github.com/yoctobyte/pxx/issues> titled "Sponsorship".
+
 ## ⚠️ Security warning — do not expose to a network
 
 PXX is early, unaudited, experimental software. The compiler, its runtime, and
