@@ -4,7 +4,7 @@
 # the NilPy counterpart of tools/esp_heap_soak.sh, which rewrites a Pascal main
 # and cannot take a Python one.
 #
-#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] [--settle S] <example-dir-name>
+#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] [--settle S] [--as c3|s3] <example-dir-name>
 #
 # The example is staged OUT OF TREE (symlinks dereferenced; the checkout stays
 # byte-clean) and a footer is appended to its main.npy:
@@ -35,16 +35,21 @@
 # program that opens connections shows a per-pass cost that returns once they
 # expire; a leak does not return.
 #
+# --as c3|s3 stages the example under the OTHER chip's suffix (build.sh takes
+# the chip from the directory name), so one program is soaked on both chips:
+# e.g. the S3-only logger on the C3, to separate a chip-specific cost.
+#
 # Built with the example's own build.sh (so its flags, partition table and
 # sdkconfig), with the PINNED compiler unless SOAK_PXX says otherwise.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CONTROL=0; PASSES="${SOAK_N:-10}"; SETTLE=0
+CONTROL=0; PASSES="${SOAK_N:-10}"; SETTLE=0; AS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --control) CONTROL=1; shift ;;
     --passes) PASSES="$2"; shift 2 ;;
     --settle) SETTLE="$2"; shift 2 ;;
+    --as) AS="$2"; shift 2 ;;
     *) break ;;
   esac
 done
@@ -57,6 +62,7 @@ ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 BODY="${SOAK_BODY:-$REPO_ROOT/tools/esp_soak_nilpy/$EX.npy}"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/esp-soak-nilpy.XXXXXX")"
+STAGE="$EX"; [ -n "$AS" ] && STAGE="${EX%-*}-$AS"
 QPID=""
 cleanup() {
   [ -n "$QPID" ] && kill "$QPID" 2>/dev/null
@@ -64,11 +70,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$W/$EX"
+mkdir -p "$W/$STAGE"
 tar -C "$SRC" -h --exclude=build --exclude=sdkconfig --exclude='*.o' --exclude='*.a' -cf - . \
-  | tar -C "$W/$EX" -xf -
-cd "$W/$EX"
-case "$EX" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *) echo "soak: $EX is not -c3/-s3" >&2; exit 2 ;; esac
+  | tar -C "$W/$STAGE" -xf -
+cd "$W/$STAGE"
+case "$STAGE" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *) echo "soak: $EX is not -c3/-s3" >&2; exit 2 ;; esac
 
 cat > main/soakctl.pas <<'PAS'
 { SPDX-License-Identifier: MPL-2.0 }
@@ -116,8 +122,8 @@ sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" build.sh
 # the checkout, which the stage is not in
 sed -i -e "s|\${CMAKE_CURRENT_LIST_DIR}/\.\./\.\./\.\.|$REPO_ROOT|g" CMakeLists.txt
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
-if ! PXX="$PXX" PXX_EXTRA_FLAGS="-Fu$W/$EX/main ${PXX_EXTRA_FLAGS:-}" bash build.sh >"$W/build.log" 2>&1; then
-  echo "SOAK $EX $CHIP BUILD-FAIL"; grep -a -m3 'error' "$W/build.log" | sed 's/^/  | /'
+if ! PXX="$PXX" PXX_EXTRA_FLAGS="-Fu$W/$STAGE/main ${PXX_EXTRA_FLAGS:-}" bash build.sh >"$W/build.log" 2>&1; then
+  echo "SOAK $STAGE $CHIP BUILD-FAIL"; grep -a -m3 'error' "$W/build.log" | sed 's/^/  | /'
   tail -5 "$W/build.log" | sed 's/^/  | /'
   echo "SOAK-COMPLETE"; exit 1
 fi
@@ -133,7 +139,7 @@ QPID=$!
 t=0
 while [ $t -lt "$TIMEOUT" ] && ! grep -qa 'SOAK-COMPLETE' "$W/serial.log"; do sleep 1; t=$((t + 1)); done
 kill "$QPID" 2>/dev/null || true; QPID=""
-tag="$EX $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
+tag="$STAGE $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
 r="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-RESULT' | head -1 || true)"
 if [ -n "$r" ]; then
   echo "SOAK $tag ${r#SOAK-RESULT }"

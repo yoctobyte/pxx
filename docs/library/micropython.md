@@ -228,14 +228,13 @@ that has not been downloaded is shown as "not installed", not as an error.
 so a row cannot show whether more problems follow. When that first problem is
 fixed, the driver may compile or it may stop at the next one.
 
-The table on 2026-09-25, with **pin v435** and the library at revision
-`7ea045145a` (first error only):
+The table on 2026-09-25, with **pin v436** and the source tree at revision
+`c253a21ddc` (first error only):
 
 | driver | compiles | first error |
 | --- | --- | --- |
-| ssd1306, bme280, ads1x15, mpu6050, ds3231, max7219, sdcard, ds18x20, neopixel, sh1106, hcsr04, tm1637, bh1750 | yes | |
+| ssd1306, bme280, ads1x15, mpu6050, ds3231, max7219, sdcard, dht, ds18x20, neopixel, sh1106, hcsr04, tm1637, bh1750 | yes | |
 | st7789 | no | the `@micropython.viper` decorator, and the `ptr8`/`ptr16` views it uses, are not supported |
-| dht | no | an import in a branch the driver does not take on the ESP32 (`from esp import dht_readinto`, after a `hasattr(machine, ...)` test) is still resolved when compiling |
 | ina219 | no | `logging` sets `self.stream` from a conditional expression whose type the compiler cannot work out yet |
 
 "Compiles" is not "works": the timing-critical functions ds18x20, neopixel,
