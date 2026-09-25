@@ -154,3 +154,5 @@ operators now share this ticket.
 - `@` / `@=`: a variant operand goes to pymatmul_v / pyaugmatmul_v, from the pasparser_expr `@` arm and from both `@=` sites.
 - `12 & c`: PyBitDunder takes the reflected `__r<op>__` when only the right operand is a user class. It used to call the left operand's dunder on an int and segfault.
 - set.add returns None. The literal and comprehension desugars call the new add_self.
+
+Fixed in commit 4a4167bc65.
