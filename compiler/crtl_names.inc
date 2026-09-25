@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  636 functions across 65 headers. }
+  638 functions across 65 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -136,8 +136,8 @@ begin
     'q': Result :=
       ' qsort:stdlib.h ';
     'r': Result :=
-      ' raise:signal.h rand:stdlib.h rand_r:stdlib.h rawmemchr:string.h read:unistd.h ' +
-      ' readdir:dirent.h readlink:unistd.h readv:sys/uio.h realloc:stdlib.h ' +
+      ' raise:signal.h rand:stdlib.h rand_r:stdlib.h random:stdlib.h rawmemchr:string.h ' +
+      ' read:unistd.h readdir:dirent.h readlink:unistd.h readv:sys/uio.h realloc:stdlib.h ' +
       ' reallocarray:stdlib.h realpath:stdlib.h reboot:sys/reboot.h recv:sys/socket.h ' +
       ' recvfrom:sys/socket.h recvmsg:sys/socket.h regcomp:regex.h regerror:regex.h ' +
       ' regexec:regex.h regfree:regex.h remainder:math.h remove:stdio.h removexattr:sys/xattr.h ' +
@@ -164,7 +164,7 @@ begin
       ' signbit:math.h sigprocmask:signal.h sigsuspend:signal.h sigtimedwait:signal.h ' +
       ' sigwait:signal.h sin:math.h sinf:math.h sinh:math.h sleep:unistd.h snprintf:stdio.h ' +
       ' socket:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h srand:stdlib.h ' +
-      ' srand48:stdlib.h sscanf:stdio.h stat:sys/stat.h statfs:sys/statfs.h ' +
+      ' srand48:stdlib.h srandom:stdlib.h sscanf:stdio.h stat:sys/stat.h statfs:sys/statfs.h ' +
       ' statvfs:sys/statvfs.h stpcpy:string.h stpncpy:string.h strcasestr:string.h ' +
       ' strcat:string.h strchr:string.h strchrnul:string.h strcmp:string.h strcoll:string.h ' +
       ' strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h ' +

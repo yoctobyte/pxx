@@ -953,6 +953,19 @@ begin
     if Result < 0 then CPExprUnsigned := True;
     Exit;
   end;
+  { A character constant: 'x', '\n', '\x41', and the prefixed forms L'x',
+    u'x', U'x'. It is an int in #if (C 6.10.1p4), valued exactly as the lexer
+    values it, by the same routine. }
+  if (CPExprText[CPExprPos] in ['L', 'u', 'U']) and (CPExprPos < CPExprEnd) and
+     (CPExprText[CPExprPos + 1] = '''') then
+    Inc(CPExprPos);
+  if CPExprText[CPExprPos] = '''' then
+  begin
+    Inc(CPExprPos);
+    Result := CDecodeCharBody(CPExprText, CPExprPos, CPExprEnd);
+    if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '''') then Inc(CPExprPos);
+    Exit;
+  end;
   if CPIsIdentStart(CPExprText[CPExprPos]) then
   begin
     a := CPExprPos;

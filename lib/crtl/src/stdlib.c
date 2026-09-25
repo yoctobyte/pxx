@@ -829,6 +829,10 @@ int rand(void) {
   return (int)((__crtl_rand_state >> 33) & 0x7fffffffULL);
 }
 
+/* random/srandom share rand's generator and state, as glibc's do. */
+long random(void) { return (long)rand(); }
+void srandom(unsigned int seed) { srand(seed); }
+
 /* rand_r: the caller owns the state, so there is nothing process-wide to race
    on. IT CANNOT SHARE rand()'s GENERATOR, AND THAT IS FORCED BY THE SIGNATURE
    RATHER THAN CHOSEN: POSIX types the seed as `unsigned int', so there are 32

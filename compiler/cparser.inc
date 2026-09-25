@@ -2579,7 +2579,23 @@ begin
         else if name = '__builtin_parityl' then name := '__pxx_builtin_parity' + CLongWidthSuffix
         else if name = '__builtin_bswap16' then name := '__pxx_builtin_bswap16'
         else if name = '__builtin_bswap32' then name := '__pxx_builtin_bswap32'
-        else if name = '__builtin_bswap64' then name := '__pxx_builtin_bswap64';
+        else if name = '__builtin_bswap64' then name := '__pxx_builtin_bswap64'
+        { gcc's builtin spellings of LIBRARY functions mean exactly the library
+          function, so they are the plain crtl call. bison output uses
+          __builtin_memcpy for YYCOPY whenever __GNUC__ is defined, which pxx
+          defines -- so every bison parser (busybox kconfig's zconf.tab.c) hit
+          "undeclared function". An explicit list, not a prefix strip: the other
+          __builtin_ names above and below have their own semantics. }
+        else if (name = '__builtin_memcpy') or (name = '__builtin_memmove') or
+                (name = '__builtin_memset') or (name = '__builtin_memcmp') or
+                (name = '__builtin_strlen') or (name = '__builtin_strcmp') or
+                (name = '__builtin_strncmp') or (name = '__builtin_strcpy') or
+                (name = '__builtin_strncpy') or (name = '__builtin_strchr') or
+                (name = '__builtin_strrchr') or (name = '__builtin_strcat') or
+                (name = '__builtin_abort') or (name = '__builtin_exit') or
+                (name = '__builtin_malloc') or (name = '__builtin_calloc') or
+                (name = '__builtin_free') then
+          name := Copy(name, 11, Length(name) - 10);
         { A FUNCTION-POINTER PARAMETER OR LOCAL OF THIS FUNCTION SHADOWS a
           file-scope function of the same name, and it must be asked about
           BEFORE FindProc, because FindProc cannot see scope at all.

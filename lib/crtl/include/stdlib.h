@@ -57,6 +57,11 @@ int rand(void);
    cannot drive rand()'s 64-bit generator. Range is still [0, RAND_MAX]. */
 int rand_r(unsigned int *seed);
 void srand(unsigned int seed);
+/* POSIX random/srandom: the SAME generator as rand/srand, as in glibc, where
+   rand() is random(). Range [0, 2^31-1]. The sequence is not glibc's (see
+   rand). busybox kconfig's conf.c calls random() for randconfig. */
+long random(void);
+void srandom(unsigned int seed);
 
 /* The POSIX rand48 family: one 48-bit LCG, X' = (a*X + c) mod 2^48, with
    a = 0x5DEECE66D and c = 0xB until lcong48 changes them. Deterministic and

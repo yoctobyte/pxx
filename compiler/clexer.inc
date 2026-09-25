@@ -544,6 +544,65 @@ begin
   if (path <> '') and (path[1] <> '<') then PasMarkTokFile(TokCount, path);
 end;
 
+{ The value of ONE character-constant body, s[pos] being the first byte after
+  the opening quote; pos is left just past that character (the closing quote,
+  if any, is the caller's). Shared by the lexer and the preprocessor's #if
+  evaluator so the two cannot disagree about what 'x' is: #if had no arm for a
+  character constant at all and read every one as 0, so gperf's standard
+  `#if ... (' ' == 32) && ...` charset guard hit its #error (busybox kconfig's
+  zconf.hash.c) and `#if 'A'` was false. Values are the byte, 0..255, as the
+  lexer has always produced them. }
+function CDecodeCharBody(const s: AnsiString; var pos: Integer; last: Integer): Int64;
+var n: Int64; ch: Char;
+begin
+  Result := 0;
+  if pos > last then Exit;
+  if s[pos] <> '\' then
+  begin
+    Result := Ord(s[pos]);
+    Inc(pos);
+    Exit;
+  end;
+  Inc(pos);
+  if pos > last then Exit;
+  case s[pos] of
+    'n': Result := 10;
+    't': Result := 9;
+    'r': Result := 13;
+    'a': Result := 7;
+    'b': Result := 8;
+    'f': Result := 12;
+    'v': Result := 11;
+    '\': Result := Ord('\');
+    '''': Result := Ord('''');
+    '"': Result := Ord('"');
+    '0'..'7': begin
+      n := Ord(s[pos]) - 48;
+      if (pos + 1 <= last) and (s[pos+1] in ['0'..'7']) then
+      begin
+        Inc(pos); n := n * 8 + (Ord(s[pos]) - 48);
+        if (pos + 1 <= last) and (s[pos+1] in ['0'..'7']) then
+        begin Inc(pos); n := n * 8 + (Ord(s[pos]) - 48); end;
+      end;
+      Result := n and 255;
+    end;
+    'x': begin
+      n := 0;
+      while (pos + 1 <= last) and (s[pos+1] in ['0'..'9','a'..'f','A'..'F']) do
+      begin
+        Inc(pos);
+        ch := s[pos];
+        if ch in ['0'..'9'] then n := n*16 + (Ord(ch)-48)
+        else if ch in ['a'..'f'] then n := n*16 + (Ord(ch)-87)
+        else n := n*16 + (Ord(ch)-55);
+      end;
+      Result := n and 255;
+    end;
+    else Result := Ord(s[pos]);
+  end;
+  Inc(pos);
+end;
+
 procedure CLexOne;
 var
 {$ifdef FPC}
@@ -747,55 +806,7 @@ begin
   if c = '''' then
   begin
     Inc(SrcPos);
-    if (SrcPos <= Length(Source)) and (Source[SrcPos] = '\') then
-    begin
-      Inc(SrcPos);
-      if SrcPos <= Length(Source) then
-      begin
-        case Source[SrcPos] of
-          'n': CurTok.IVal := 10;
-          't': CurTok.IVal := 9;
-          'r': CurTok.IVal := 13;
-          'a': CurTok.IVal := 7;
-          'b': CurTok.IVal := 8;
-          'f': CurTok.IVal := 12;
-          'v': CurTok.IVal := 11;
-          '\': CurTok.IVal := Ord('\');
-          '''': CurTok.IVal := Ord('''');
-          '"': CurTok.IVal := Ord('"');
-          '0'..'7': begin
-            n := Ord(Source[SrcPos]) - 48;
-            if (SrcPos + 1 <= Length(Source)) and (Source[SrcPos+1] in ['0'..'7']) then
-            begin
-              Inc(SrcPos); n := n * 8 + (Ord(Source[SrcPos]) - 48);
-              if (SrcPos + 1 <= Length(Source)) and (Source[SrcPos+1] in ['0'..'7']) then
-              begin Inc(SrcPos); n := n * 8 + (Ord(Source[SrcPos]) - 48); end;
-            end;
-            CurTok.IVal := n and 255;
-          end;
-          'x': begin
-            n := 0;
-            while (SrcPos + 1 <= Length(Source)) and
-                  (Source[SrcPos+1] in ['0'..'9','a'..'f','A'..'F']) do
-            begin
-              Inc(SrcPos);
-              c := Source[SrcPos];
-              if c in ['0'..'9'] then n := n*16 + (Ord(c)-48)
-              else if c in ['a'..'f'] then n := n*16 + (Ord(c)-87)
-              else n := n*16 + (Ord(c)-55);
-            end;
-            CurTok.IVal := n and 255;
-          end;
-          else  CurTok.IVal := Ord(Source[SrcPos]);
-        end;
-        Inc(SrcPos);
-      end;
-    end
-    else if SrcPos <= Length(Source) then
-    begin
-      CurTok.IVal := Ord(Source[SrcPos]);
-      Inc(SrcPos);
-    end;
+    CurTok.IVal := CDecodeCharBody(Source, SrcPos, Length(Source));
     if (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') then Inc(SrcPos);
     CurTok.Kind := tkInteger; Exit;
   end;

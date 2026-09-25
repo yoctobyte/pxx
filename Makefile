@@ -23697,6 +23697,16 @@ test-core: $(COMPILER)
 	# on all 19 rows (tcc's #pragma once, tests2/18).
 	./$(COMPILER) test/crtl_realpath.c $(TESTTMP)/crtl_rp26
 	$(TESTTMP)/crtl_rp26 | diff -u test/crtl_realpath.expected -
+	# A character constant in #if ('A', '\n', L'x') was read as 0; gperf's charset
+	# guard (busybox kconfig) then hit its #error. .expected is gcc's output.
+	./$(COMPILER) test/c_if_char_constant.c $(TESTTMP)/c_ifch26
+	$(TESTTMP)/c_ifch26 | diff -u test/c_if_char_constant.expected -
+	# gcc's __builtin_memcpy & co. are the library call (bison's YYCOPY under __GNUC__).
+	./$(COMPILER) test/c_builtin_libc_names.c $(TESTTMP)/c_bltn26
+	$(TESTTMP)/c_bltn26 | diff -u test/c_builtin_libc_names.expected -
+	# POSIX random/srandom, over rand's generator (busybox kconfig's conf.c).
+	./$(COMPILER) test/crtl_random_srandom.c $(TESTTMP)/crtl_rnd26
+	tools/expect_same.sh crtl_rnd26 "$$($(TESTTMP)/crtl_rnd26)" "same-as-rand 1 in-range 1 repeats 1"
 	# json's parse-error paths and calc's Eval free what they allocate (they
 	# leaked ~3500 blocks over this loop; the output never showed it).
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_b_json_calc_error_paths_free.pas $(TESTTMP)/jcerr26
