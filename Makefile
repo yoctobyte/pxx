@@ -7974,6 +7974,13 @@ test-threads: $(COMPILER)
 	# self-hosted byte-identically while broken, because it builds at the default
 	# -O level: the fixedpoint gate cannot see an -O3-only defect.
 	# feature-opt-o3-register-pressure W1 slice 5
+	# -O3 float residents read and written directly by the fused tree (no xmm0
+	# hop). Resident on the right of - and /, so a swapped or wrong register
+	# changes the value; expected is -O0's and fpc's output.
+	./$(COMPILER) -O3 test/test_o3_float_resident_operands.pas $(TESTTMP)/test_o3fres326
+	tools/expect_same.sh test_o3fres326 "$$($(TESTTMP)/test_o3fres326)" "$$(printf -- '-19270475.375325\n3595467.445362')"
+	./$(COMPILER) -O0 test/test_o3_float_resident_operands.pas $(TESTTMP)/test_o3fres026
+	tools/expect_same.sh test_o3fres026 "$$($(TESTTMP)/test_o3fres026)" "$$(printf -- '-19270475.375325\n3595467.445362')"
 	./$(COMPILER) -O3 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid326
 	tools/expect_same.sh test_cmpresid326 "$$($(TESTTMP)/test_cmpresid326)" "$$(printf 'acc=393213\none=131071\ndone')"
 	./$(COMPILER) -O0 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid026

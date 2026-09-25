@@ -7288,27 +7288,56 @@ begin
                    and (FloatTreeMaxReg(node, 2) <= 6);
 end;
 
+{ The xmm8..13 register holding a float tree LEAF, or 0 when the leaf is not a
+  load of a resident Double. The fused tree reads such a leaf straight from its
+  resident register: EmitLoadVar would put it in xmm0 first and the tree would
+  then copy xmm0 on, and those two moves per operand sat on the loop-carried
+  dependency path. Measured 2026-09-25 by hand-editing mandelbrot's -O3 loop,
+  the copy chains alone were -O3's largest remaining gap to fpc -O2 (2.1x ->
+  about 1.4x). feature-opt-double-code-is-2-to-4x-fpc-and-o3-already-halves-it }
+function FloatResidentLeafXmm(node: Integer): Integer;
+begin
+  FloatResidentLeafXmm := 0;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_LOAD_SYM then Exit;
+  if Syms[IRA[node]].IsArray then Exit;
+  if not ((Syms[IRA[node]].Kind = skLocal) or (Syms[IRA[node]].Kind = skParam)) then Exit;
+  FloatResidentLeafXmm := FloatResidentXmmOf(IRA[node]);
+end;
+
 procedure EmitFloatTree(node, dst: Integer);
-var op: TTokenKind; idx: Integer;
+var op: TTokenKind; idx, rx: Integer;
 begin
   if FloatArithNode(node) then
   begin
     EmitFloatTree(IRA[node], dst);      { left  -> xmm<dst>   }
-    EmitFloatTree(IRB[node], dst + 1);  { right -> xmm<dst+1> }
+    rx := FloatResidentLeafXmm(IRB[node]);
+    if rx = 0 then
+      EmitFloatTree(IRB[node], dst + 1);  { right -> xmm<dst+1> }
     op := IntToTokenKind(IRC[node]);
-    EmitB($F2); EmitB($0F);
+    EmitB($F2);
+    if rx <> 0 then EmitB($41);         { REX.B: the source is xmm8..13 }
+    EmitB($0F);
     case op of
       tkPlus:  EmitB($58);   { addsd }
       tkMinus: EmitB($5C);   { subsd }
       tkStar:  EmitB($59);   { mulsd }
       tkSlash: EmitB($5E);   { divsd }
     end;
-    EmitB($C0 or (dst shl 3) or (dst + 1)); { op xmm<dst>, xmm<dst+1> (= left OP right) }
+    if rx <> 0 then
+      EmitB($C0 or (dst shl 3) or (rx - 8))   { op xmm<dst>, xmm<resident> }
+    else
+      EmitB($C0 or (dst shl 3) or (dst + 1)); { op xmm<dst>, xmm<dst+1> (= left OP right) }
     Exit;
   end;
 
   { leaf }
-  if (IRKind[node] = IR_LOAD_SYM) and (not Syms[IRA[node]].IsArray) and
+  rx := FloatResidentLeafXmm(node);
+  if rx <> 0 then
+  begin
+    EmitB($41); EmitB($0F); EmitB($28); EmitB($C0 or (dst shl 3) or (rx - 8)); { movaps xmm<dst>, xmm<resident> }
+  end
+  else if (IRKind[node] = IR_LOAD_SYM) and (not Syms[IRA[node]].IsArray) and
      TypeIsFloat(Syms[IRA[node]].TypeKind) and
      ((Syms[IRA[node]].Kind = skLocal) or (Syms[IRA[node]].Kind = skParam) or
       (Syms[IRA[node]].Kind = skGlobal)) then
@@ -7595,7 +7624,7 @@ begin
 end;
 
 procedure IREmitNode(node: Integer);
-var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
+var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
     chrCmpPfx: Integer;     { length-prefix width of the frozen string in a Char<->String comparison }
     srcFrozenTk: TTypeKind; { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
@@ -8622,6 +8651,33 @@ begin
           if (OptLevel >= 3) and (not InLValueWrite) and W2InPlaceEligible(node) then
           begin
             EmitW2InPlace(node);
+            Exit;
+          end;
+          { -O3: a store into a resident Double whose frame slot is dead
+            (FloatResidentSlotIsDead) writes the resident register straight
+            from the fused tree's xmm2, or from the source resident for a plain
+            copy, instead of xmm2 -> rax -> xmm0 -> resident. rax still gets
+            the value, as the general path leaves it. Same copy-chain finding as
+            FloatResidentLeafXmm. }
+          if (OptLevel >= 3) and (not InLValueWrite) and
+             FloatResidentSlotIsDead(symIdx) and
+             TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) and
+             (FloatTreeFits(IRB[node]) or (FloatResidentLeafXmm(IRB[node]) <> 0)) then
+          begin
+            rx := FloatResidentXmmOf(symIdx);
+            if FloatTreeFits(IRB[node]) then
+            begin
+              EmitFloatTree(IRB[node], 2);
+              EmitB($44); EmitB($0F); EmitB($28); EmitB($C0 or ((rx - 8) shl 3) or 2); { movaps xmm<resident>, xmm2 }
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($D0);             { movq rax, xmm2 }
+            end
+            else
+            begin
+              sx := FloatResidentLeafXmm(IRB[node]);
+              EmitB($45); EmitB($0F); EmitB($28); EmitB($C0 or ((rx - 8) shl 3) or (sx - 8)); { movaps xmm<resident>, xmm<source> }
+              EmitB($66); EmitB($4C); EmitB($0F); EmitB($7E); EmitB($C0 or ((sx - 8) shl 3)); { movq rax, xmm<source> }
+            end;
+            PoisonFloatResidentSlot(symIdx);
             Exit;
           end;
           IREmitNode(IRB[node]);

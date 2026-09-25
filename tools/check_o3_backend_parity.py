@@ -109,7 +109,11 @@ EXPECTED = {
     # purpose: promoting only x86-64 would make the proven default emit
     # different memory behaviour per backend, which is the drift this file
     # exists to catch.
-    "ir_codegen.inc": 22,
+    # 2026-09-25: 22 -> 23, the direct resident-Double store in IR_STORE_SYM
+    # (feature-opt-double-code-is-2-to-4x-fpc-and-o3-already-halves-it). It
+    # extends the in-tree XMM fusion (EmitFloatTree), which aarch64 has no
+    # counterpart of at all, so it is one-armed with the pass it belongs to.
+    "ir_codegen.inc": 23,
     "ir_codegen_aarch64.inc": 10,
     "ir_codegen386.inc": 0,
     "ir_codegen_arm32.inc": 0,

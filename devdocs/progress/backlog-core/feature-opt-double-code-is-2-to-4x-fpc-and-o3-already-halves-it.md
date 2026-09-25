@@ -3,7 +3,7 @@ track: A
 prio: 45
 type: feature
 blocked-by: []
-summary: "Double loops at the default -O2 run 2-4x slower than fpc -O2 because a double lives in its frame slot and travels as raw bits through rax plus a push/pop per operand. The -O3 float residency and in-tree XMM fusion already remove that and halve the gap. What -O3 still loses to fpc is copy chains on the loop-carried path: EmitFloatTree loads each resident leaf into xmm0 and then moves it to xmm<dst>, and each store goes xmm2 -> rax -> xmm0 -> resident. Measured by hand-editing the -O3 loop: removing the copies brings mandelbrot to fpc parity. Two moves: (1) promote the -O3 float residency and fusion to -O2 through the O-lane gate; (2) load and store residents directly."
+summary: "Double loops at the default -O2 run 2-4x slower than fpc -O2 because a double lives in its frame slot and travels as raw bits through rax plus a push/pop per operand. The -O3 float residency and in-tree XMM fusion remove that and halve the gap. The copy-chain half at -O3 (a resident operand or store going through xmm0) is DONE: resident leaves and stores are now read and written directly, and mandelbrot -O3 went from 2.09x to 1.35x fpc. OPEN: promote the -O3 float residency and fusion to -O2 as ONE switchable promotion behind the O-lane gates (PROMISE: the numbers here; PROOF: T's opt sweep at -O3, green, skip_holes 0). This is after v425, and whether it goes into the release is frankuser's call. Values that are not resident (record fields, as in nbody) do not benefit from either change."
 status: new
 owner: ""
 ---
@@ -76,3 +76,16 @@ dependency path.
 3. Branching on the flags for a float compare in a loop condition, and
    dropping the rax bridge at an assignment, are each worth about 0.1-0.2x
    here. They matter only after move 2.
+
+## 2026-09-25: copy-chain fix landed (-O3 only)
+
+`FloatResidentLeafXmm` plus the direct resident store in `IR_STORE_SYM`.
+Built binaries, min of 5, same checksum in every row:
+- mandelbrot -O3: 1217 ms (2.09x) -> 790 ms (**1.35x**); the proxy predicted about 1.4-1.5x.
+- nbody -O3: 249 ms (1.51x) -> 245 ms (1.49x). Its hot values are record fields
+  and so never resident; this fix does not reach them.
+- -O2 output of mandelbrot is byte-identical.
+- optdiff over the 396 test programs that name a double type: 370 pass,
+  26 skip (they fail at -O0 too), 0 diff.
+- Positive control: pointing the new operand encoding at the neighbouring
+  register reddened both the new test and mandelbrot's checksum.
