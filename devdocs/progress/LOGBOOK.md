@@ -5203,3 +5203,4 @@ the ordering rule again, and the arrangement everyone writes is the green one.
 2026-09-25 | frankB | tools/testmgr.py | skip hole in e098cf9 full: host-lib scanner read '-I/usr/include/...;' from a make -n recipe COMMENT and false-skipped c_extern_data_legitimate_shapes; comment lines now ignored
 2026-09-25 | frankB | tools/twatch_pin_identity_devtest.py | 'real checkout untouched' compared vs HEAD so pre-existing stable dirt (post-pin fulls) went RED; now start-vs-end hashes + NOTE for pre-dirt + fixture control
 2026-09-25 | frankB | lib/crtl/src/pthread.c | PTHREAD_MUTEX_RECURSIVE was ignored -> relock self-deadlock; stock threadsafe sqlite hung on first statement; now owner+depth
+2026-09-25 | frankB | (scope) C undefined extern FUNCTION | LOUD, not silent: warn at compile + loader 'undefined symbol', rc 127 on x86-64/i386/aarch64/arm32 (default and DYNLIB_LIBC); riscv32 refuses at compile time. No link-time refusal needed

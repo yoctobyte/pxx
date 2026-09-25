@@ -23690,6 +23690,12 @@ test-core: $(COMPILER)
 	# stock threadsafe sqlite deadlocked). timeout: the old crtl hangs here.
 	./$(COMPILER) --threadsafe test/crtl_pthread_recursive_mutex.c $(TESTTMP)/crtl_prm26
 	tools/expect_same.sh crtl_prm26 "$$(timeout 30 $(TESTTMP)/crtl_prm26)" "counter 400000 ready 4 unlock 0 extra-unlock 1 settype-bad 22"
+	# The implicit-libc-import warning lists the program's symbols, never the
+	# compiler-made libc$fflush import.
+	./$(COMPILER) test/c_implicit_libc_import_warning.c $(TESTTMP)/c_ilw26 > $(TESTTMP)/c_ilw26.log 2>&1
+	grep -q 'crtl does not define ffsll ' $(TESTTMP)/c_ilw26.log || { echo 'FAIL: c_ilw26 warning:'; cat $(TESTTMP)/c_ilw26.log; exit 1; }
+	if grep -q 'libc\$$' $(TESTTMP)/c_ilw26.log; then echo 'FAIL: c_ilw26 warning names a compiler-made libc$$ import'; cat $(TESTTMP)/c_ilw26.log; exit 1; fi
+	tools/expect_same.sh c_ilw26 "$$($(TESTTMP)/c_ilw26)" "ffsll 9"
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

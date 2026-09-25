@@ -12810,6 +12810,12 @@ begin
       unit that every --threadsafe program pulls in. The census is right to be
       strict; the warning was answering about the wrong population. }
     if ProcWeakExternal[procIdx] then continue;
+    { `libc$fflush` / `libc$syscall` / `libc$errno_location` are imports the
+      COMPILER manufactures (EnsureLibcFflushProc and friends) once a program
+      already imports from libc. They are not the program's, and the warning
+      told the user "crtl does not define libc$fflush", a name no C source can
+      spell, beside the one symbol that actually needed their attention. }
+    if Copy(Procs[procIdx].Name, 1, 5) = 'libc$' then continue;
     if n > 0 then AppendString(names, ', ');
     AppendString(names, Procs[procIdx].Name);
     Inc(n);
