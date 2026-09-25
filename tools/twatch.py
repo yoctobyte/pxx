@@ -8311,7 +8311,12 @@ def materialize_tstate(repo, ref=None, dst=None):
 
     Unlike `states_at`, this brings the WHOLE subtree — reports/, bench.tsv,
     conformance.tsv — so the dashboard and any future reader can use it too.
-    `git archive` in one shot rather than a `git show` per file.
+    One tree read rather than a `git show` per file. NOT `git archive`: that
+    honours export-ignore, and 4ff96d712 (2026-09-25) export-ignored devdocs/
+    so release bundles stop shipping the workshop, which turned every archive of
+    this subtree into an EMPTY tar with rc 0 and this helper into a silent None
+    for every reader. A throwaway index plus checkout-index reads the tree
+    as-is, whatever the attributes say about a release.
 
     Returns the directory holding `<dst>/devdocs/progress/tstate/...`, or None
     when the ref has no tstate (fresh clone, no remote) so the caller can fall
@@ -8332,13 +8337,21 @@ def materialize_tstate(repo, ref=None, dst=None):
         dst = tempfile.mkdtemp(prefix="tstate-at.")
         atexit.register(shutil.rmtree, dst, ignore_errors=True)
     try:
-        with subprocess.Popen(["git", "archive", ref, TSTATE_REL], cwd=repo,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL) as ar:
-            rc = subprocess.run(["tar", "-x", "-C", dst], stdin=ar.stdout,
+        env = dict(os.environ,
+                   GIT_INDEX_FILE=os.path.join(dst, ".tstate-at.index"))
+        rc = subprocess.run(["git", "read-tree", "--prefix=" + TSTATE_REL + "/",
+                             ref + ":" + TSTATE_REL], cwd=repo, env=env,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL).returncode
+        if rc == 0:
+            rc = subprocess.run(["git", "checkout-index", "-a",
+                                 "--prefix=" + os.path.join(dst, "")],
+                                cwd=repo, env=env, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL).returncode
-            ar.stdout.close()
-            ar.wait()
+        try:
+            os.remove(env["GIT_INDEX_FILE"])
+        except OSError:
+            pass
         if rc != 0 or not os.path.isdir(os.path.join(dst, TSTATE_REL)):
             return None
     except (OSError, subprocess.SubprocessError):
