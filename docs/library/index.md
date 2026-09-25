@@ -83,6 +83,7 @@ an ESP backend path in an ESP32 object build.
 | Unit | Description |
 | --- | --- |
 | [ESP32 peripherals](./esp.md) | `espgpio`, `espuart`, `espadc`, `esppwm`, `espi2c`, `espspi`, `espnvs`, `esptimer`, `espsys` and `interrupts`: pins, serial, analog input, PWM, I2C, SPI, stored settings and timers on the ESP32, from Pascal and Nil Python. |
+| [MicroPython code on pxx](./micropython.md) | `machine` (`Pin`, `I2C`, `SPI`, `RTC`), `framebuf`, `micropython.const` and MicroPython's `time` names on the ESP32, so published MicroPython drivers compile unchanged; how to fetch and measure real drivers. |
 
 For project-local units, pass additional roots with `-Fu`:
 

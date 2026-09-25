@@ -152,7 +152,9 @@ Then it ends normally. On a desktop there is no such source, so this never
 applies there.
 
 The names follow MicroPython where a name existed, but the design is not
-MicroPython's: there is no `machine.Pin` and no `Pin.irq`.
+MicroPython's: there is no `Pin.irq`. MicroPython's `machine.Pin` exists (see
+[MicroPython code on pxx](./micropython.md)), but an edge on it is delivered
+here, as an event.
 
 ## `espadc` — continuous analog sampling
 
