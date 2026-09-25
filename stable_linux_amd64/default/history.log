@@ -422,3 +422,4 @@
 2026-09-24T17:11:54Z  v422  0ad0b556b98b9922fdd9fd111543e4091544e7255c722e27c192bb1d341ccf58  591e2a7eee2096be79fabb70a5ecc45f3b5419d2  fix(A): the emitted nil check reaches a program whose only need is a procvar
 2026-09-24T19:10:47Z  v423  113a515bbdc90e56c5eb0a0e6f48791d088eba08f97e9a69183e3bc0aa07dc65  8083f245263ae956c237eb3afaae9dd0b81be0a6  tstate(borg): bench 46d2a9430a96 RED (0 bench rows, 550 conf)
 2026-09-24T22:00:55Z  v424  93a336a7ba851eb178fe9560f66af08b9b94a62834883a0a11ecae61399e09d9  4d9b004c80816282852cae6f9a6002dc18ad591f  fix(A): wasm32 asks for a release helper only when a slot needs one
+2026-09-25T01:14:33Z  v425  426b2fbf3f08f08ab498e063e9e8b1dc5963cc9eee057bebff304036d41e287a  e098cf93f0848af6387bb0ac036b2f9a5211d80a  logbook: demos#00 borg red has the lib-units cause, fixed by 2b4409bd0c

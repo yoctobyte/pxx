@@ -3256,6 +3256,17 @@ begin
   if len > 0 then r := PXXSysWrite(1, Int64(p), len);
 end;
 
+{ PXXWriteStrMW for a handle the WRITE owns -- a concat or a fresh call result,
+  as IRNodeOwnsManagedStr decides -- releasing it afterwards. The helper-call
+  backends (xtensa, riscv32, wasm32) pick this at compile time; the inline
+  writers release in place. Without it every `print(<float/int/container>)`
+  leaked the string its conversion built. }
+procedure PXXWriteStrMWOwned(p: Pointer; wid: NativeInt);
+begin
+  PXXWriteStrMW(p, wid);
+  PXXStrDecRef(p);
+end;
+
 { Copy a NUL-terminated C string into a FROZEN string buffer (8-byte length
   prefix + chars), capped at 255 chars. ParamStr's hidden temp dest. }
 procedure PXXCStrToFrozen(dst: Pointer; src: Pointer);
