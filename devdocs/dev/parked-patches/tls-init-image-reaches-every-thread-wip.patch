@@ -1,0 +1,533 @@
+diff --git a/Makefile b/Makefile
+index a83f2a9cd6..07bfd91b70 100644
+--- a/Makefile
++++ b/Makefile
+@@ -7584,6 +7584,18 @@ test-threads: $(COMPILER)
+ 	tools/expect_same.sh aarch64/c_thread_local26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_thread_local26_a64)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
+ 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26_arm32
+ 	tools/expect_same.sh arm32/c_thread_local26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_thread_local26_arm32)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
++	# An initialised thread-local starts at its initialiser in every thread,
++	# not only in main: each new block copies the init image
++	# (TLS_SLOT_INIT_IMAGE). Before, a child read 0 on every target. The rows
++	# discriminate a copy of the image from a copy of main's CURRENT block (main
++	# writes 6 first) and check a grandchild gets it too. Oracle: gcc.
++	# bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main
++	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26
++	tools/expect_same.sh c_tlinit26 "$$($(TESTTMP)/c_tlinit26)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
++	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26_a64
++	tools/expect_same.sh aarch64/c_tlinit26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_tlinit26_a64)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
++	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26_arm32
++	tools/expect_same.sh arm32/c_tlinit26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_tlinit26_arm32)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
+ 	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_a64
+ 	tools/expect_same.sh aarch64/c_errno_per_thread26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_errno_per_thread26_a64)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
+ 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_arm32
+diff --git a/compiler/compiler.pas b/compiler/compiler.pas
+index 9ae49fd0f4..b11b9d8977 100644
+--- a/compiler/compiler.pas
++++ b/compiler/compiler.pas
+@@ -1129,6 +1129,7 @@ begin
+   LinkGcSections := True;
+   TlsMainInstalled := False;
+   TlsBaseUsed := False;
++  BSS_TLS_IMAGE := -1;
+   TlsStrictUsed := False;
+   TlsSharedWarned := False;
+   EmitSharedMode := False;
+diff --git a/compiler/defs.inc b/compiler/defs.inc
+index 4fb4cb48a1..53053fb979 100644
+--- a/compiler/defs.inc
++++ b/compiler/defs.inc
+@@ -1242,7 +1242,16 @@ const
+     in a handler, unwinding past it) strands this set, which costs that thread
+     its fast path for the rest of its life and costs correctness nothing. }
+   TLS_SLOT_HEAP_MAGBUSY = 12;
+-  TLS_SLOT_FIRST_FREE = 13;
++  { The address of the thread-local INIT IMAGE, or 0 when no thread-local has an
++    initialiser. A C `__thread int x = 5;` is initialised by a store in main's
++    prologue, which reaches only the MAIN thread's block. So each such store also
++    writes a TlsUserBytes-sized image in BSS (CompilePendingGlobalInits), and every
++    new block copies the image into its user area: the clone legs and
++    palthread's PxxPthreadStart. The image of a variable with no initialiser is
++    0, so the copy also gives the zero start that the language requires.
++    bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main }
++  TLS_SLOT_INIT_IMAGE = 13;
++  TLS_SLOT_FIRST_FREE = 14;
+   { ---- the per-thread heap magazine -------------------------------------
+     A short free LIST per size class, held thread-locally so that a GetMem or
+     FreeMem of a common size takes NO LOCK and makes NO CALL. Class i holds
+@@ -7161,6 +7170,7 @@ var
+   TlsBaseUsed     : Boolean;     { a non-x86-64 backend emitted IR_TLSBASE. Read by the ELF writer: in a DYNAMIC binary on those targets the one thread register belongs to the libc the loader brought in, so the read falls back to the main thread's block, one shared copy. See TargetHasTlsBlock. }
+   TlsSharedWarned : Boolean;     { the dynamic-binary shared-copy warning was printed; ResolveSynthImportLibraries runs once per DT_NEEDED builder }
+   TlsStrictUsed   : Boolean;     { a Pascal `threadvar` got a slot, or `__pxxTlsBase` was named. Neither has ever compiled with a shared copy, so the ELF writer REFUSES the dynamic fallback for these, where C's `__thread` only warns. }
++  BSS_TLS_IMAGE   : Integer;     { the thread-local init image (TlsUserBytes), or -1 when there is none (offset 0 is a real address); see TLS_SLOT_INIT_IMAGE }
+   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
+   TlsUserUsed     : Integer;     { bytes of TlsUserBytes handed out to `threadvar` declarations so far; the bump allocator's only state }
+   TlsUserBytes    : Integer;     { the source-declared `threadvar` area, in bytes. TLS_USER_BYTES_DEFAULT unless -dPXX_TLS_USER_<rung> asked otherwise; set ONCE by ApplyTlsUserBytesOption before EmitTlsMainInstall and never touched again during a compile -- that invariant is the whole reason the fold of __pxxTlsBlockSize is sound. }
+diff --git a/compiler/ir_codegen.inc b/compiler/ir_codegen.inc
+index 32aa37c34f..cd8c539425 100644
+--- a/compiler/ir_codegen.inc
++++ b/compiler/ir_codegen.inc
+@@ -127,9 +127,10 @@ procedure EmitAcquireHeapLock;
+   recording, since the first reading sends you looking for an accessor that is
+   already here.
+ 
+-  Slot budget, RE-READ from defs.inc rather than carried forward: 0..12 are
+-  taken (the magazine's own busy flag is 12) and TLS_SLOT_FIRST_FREE = 13, so
+-  THREE map slots are free, not four. The magazine did not need them -- it took
++  Slot budget, RE-READ from defs.inc rather than carried forward: 0..13 are
++  taken (the magazine's own busy flag is 12, the init image 13) and
++  TLS_SLOT_FIRST_FREE = 14, so TWO map slots are free. The magazine did not
++  need them -- it took
+   a 64-slot TAIL past the map (TLS_SLOT_HEAP_MAG = 16) and the block grew to
+   1152 to hold it, which is stack the thread already owns. Both numbers in
+   this paragraph were one lower when it was written; a slot count in prose is a
+@@ -1950,6 +1951,19 @@ begin
+   TlsBlockSize := TLS_USER_FIRST_OFF + TlsUserBytes;
+ end;
+ 
++procedure EmitTlsInitImageAlloc;
++{ The thread-local INIT IMAGE: TlsUserBytes of BSS laid out like a block's user
++  area. Initialiser stores write it (CompilePendingGlobalInits) and every new
++  block copies it (the clone legs, PxxPthreadStart). See TLS_SLOT_INIT_IMAGE.
++  None when the user area is empty, and then slot 13 stays 0 and nothing
++  copies. Untouched BSS pages cost no memory. }
++begin
++  BSS_TLS_IMAGE := -1;   { -1, NOT 0: offset 0 is a real BSS address, and on x86-64 the image IS the first allocation }
++  if TlsUserBytes <= 0 then Exit;
++  BSSSize := (BSSSize + 15) and (not 15);
++  BSS_TLS_IMAGE := BSSSize; Inc(BSSSize, TlsUserBytes);
++end;
++
+ procedure EmitTlsMainInstall;
+ { The MAIN thread's TLS block. Cloned threads get theirs from the clone stub
+   (thread_emit.inc); the main thread passes through no stub, and a static pxx
+@@ -1998,8 +2012,22 @@ begin
+     TlsMainInstalled := True;
+     BSSSize := (BSSSize + 15) and (not 15);
+     BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TlsBlockSize);
++    EmitTlsInitImageAlloc;
+     if TargetArch = TARGET_AARCH64 then
+     begin
++      { slot 13 = the init image, BEFORE the dynamic-binary skip: in a dynamic
++        binary this block is the fallback every thread-local read lands on,
++        and the initialiser stores reach the image through it. }
++      if BSS_TLS_IMAGE >= 0 then
++      begin
++        EmitI32($18000049);                     { ldr  w9, [pc+8] }
++        EmitI32($14000002);                     { b    [pc+8] }
++        EmitGlobRef(BSS_TLS_MAIN);
++        EmitI32($1800004A);                     { ldr  w10, [pc+8] }
++        EmitI32($14000002);                     { b    [pc+8] }
++        EmitGlobRef(BSS_TLS_IMAGE);
++        EmitI32($F9000000 or ((TLS_SLOT_INIT_IMAGE) shl 10) or (9 shl 5) or 10);  { str x10, [x9, #8*slot] }
++      end;
+       EmitI32($D53BD049);                       { mrs  x9, tpidr_el0 }
+       pSkip := CodeLen; EmitI32($B5000009);     { cbnz x9, .skip (patched) }
+       EmitI32($18000049);                       { ldr  w9, [pc+8] }
+@@ -2011,6 +2039,16 @@ begin
+     end
+     else
+     begin
++      if BSS_TLS_IMAGE >= 0 then
++      begin
++        EmitI32($E59F0000);                     { ldr  r0, [pc] }
++        EmitI32($EA000000);                     { b    .+8 }
++        EmitGlobRef(BSS_TLS_MAIN);
++        EmitI32($E59F1000);                     { ldr  r1, [pc] }
++        EmitI32($EA000000);                     { b    .+8 }
++        EmitGlobRef(BSS_TLS_IMAGE);
++        EmitI32($E5801000 or (8 * TLS_SLOT_INIT_IMAGE));   { str  r1, [r0, #8*slot] }
++      end;
+       EmitI32($EE1D9F70);                       { mrc  p15, 0, r9, c13, c0, 3  (TPIDRURO) }
+       EmitI32($E3590000);                       { cmp  r9, #0 }
+       pSkip := CodeLen; EmitI32($1A000000);     { bne  .skip (patched) }
+@@ -2025,6 +2063,7 @@ begin
+     Exit;
+   end;
+   TlsMainInstalled := True;
++  EmitTlsInitImageAlloc;
+   { The block, plus 16 bytes past its end used ONCE, here, as the `struct
+     rlimit` getrlimit writes into. Past the end rather than in a slot, because
+     the slot map is an ABI other code reads and this scratch is not part of it. }
+@@ -2070,6 +2109,12 @@ begin
+     'mov eax, %', 158,                         { arch_prctl }
+     'syscall'
+   ]);
++  if BSS_TLS_IMAGE >= 0 then
++    EmitAsmX64([
++      'mov r9, @glob', BSS_TLS_MAIN,
++      'mov rax, @glob', BSS_TLS_IMAGE,
++      'mov [r9+%], rax', 8 * TLS_SLOT_INIT_IMAGE
++    ]);
+ end;
+ 
+ procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer);
+diff --git a/compiler/paslexer.inc b/compiler/paslexer.inc
+index 2c8d15b7f3..857b8db622 100644
+--- a/compiler/paslexer.inc
++++ b/compiler/paslexer.inc
+@@ -1243,6 +1243,12 @@ begin
+     name := 'PXX_TS_HARDLOCK';
+     PasDefine(name);
+   end;
++  { A CAPABILITY define, for lib/rtl code that uses the init-image builtins
++    (__pxxTlsUserOff, __pxxTlsUserBytes, __pxxTlsInitImageSlotOff). Without it
++    the pinned compiler, which predates them, could not build live lib/rtl
++    until the next pin. Retire it once every pin in use has the builtins. }
++  name := 'PXX_HAS_TLS_INIT_IMAGE';
++  PasDefine(name);
+ end;
+ 
+ procedure PasApplyMimicDefines;
+diff --git a/compiler/pasparser_expr.inc b/compiler/pasparser_expr.inc
+index 6aaae325b3..8139a567de 100644
+--- a/compiler/pasparser_expr.inc
++++ b/compiler/pasparser_expr.inc
+@@ -4408,7 +4408,9 @@ begin
+         Exit;
+       end;
+ 
+-      if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize') then
++      if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize')
++         or CaseEqual(name, '__pxxTlsUserOff') or CaseEqual(name, '__pxxTlsUserBytes')
++         or CaseEqual(name, '__pxxTlsInitImageSlotOff') then
+       begin
+         { The two sizes the clone stub carves off a child stack, as compile-time
+           constants the RTL can READ instead of restating.
+@@ -4424,7 +4426,12 @@ begin
+           Constants, not calls -- they fold to an AN_INT_LIT here, so a `const`
+           in the RTL can be defined from them.
+           bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state }
++        { The other three are what a trampoline needs to start a block from the
++          init image (TLS_SLOT_INIT_IMAGE), for the same no-restating reason. }
+         if CaseEqual(name, '__pxxTlsBlockSize') then i64v := TlsBlockSize
++        else if CaseEqual(name, '__pxxTlsUserOff') then i64v := TLS_USER_FIRST_OFF
++        else if CaseEqual(name, '__pxxTlsUserBytes') then i64v := TlsUserBytes
++        else if CaseEqual(name, '__pxxTlsInitImageSlotOff') then i64v := 8 * TLS_SLOT_INIT_IMAGE
+         else i64v := SIG_ALTSTACK_SIZE;
+         Next;
+         if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+diff --git a/compiler/pasparser_prog.inc b/compiler/pasparser_prog.inc
+index d44c1881fb..3d0e6297df 100644
+--- a/compiler/pasparser_prog.inc
++++ b/compiler/pasparser_prog.inc
+@@ -729,6 +729,47 @@ begin
+ 
+     CompileAST(assignNode);
+     ASTNodeCount := ASTArenaFloor;
++
++    { A THREAD-LOCAL's initialiser reached only the MAIN thread's block above.
++      Copy the value just stored into the init image as well:
++      `(slot 13)^[offset] := sym`. Every new block starts as a copy of the
++      image (TLS_SLOT_INIT_IMAGE), so this is what hands the value to other
++      threads. Built from nodes the lowering already handles: AN_TLSBASE plus
++      an offset, AN_DEREF, and a byte-offset pointer AN_BINOP. The value side
++      is the symbol itself, which ThreadVarRewriteRange turns into a read of
++      the main block, so it is the value that was just stored, whatever its
++      initialiser kind.
++      bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main }
++    if (BSS_TLS_IMAGE >= 0) and (SymTlsOffset[PendingInitSym[i]] >= 0) then
++    begin
++      innerAddr := AllocNode(AN_TLSBASE);
++      ASTTk[innerAddr] := Ord(tyPointer);
++      ASTIVal[innerAddr] := 8 * TLS_SLOT_INIT_IMAGE;
++      valNode := AllocNode(AN_DEREF);
++      ASTLeft[valNode] := innerAddr;
++      ASTTk[valNode] := Ord(tyPointer);
++      ASTNilChk[valNode] := 0;
++      idxLit := AllocNode(AN_INT_LIT);
++      ASTIVal[idxLit] := SymTlsOffset[PendingInitSym[i]] - TLS_USER_FIRST_OFF;
++      ASTTk[idxLit] := Ord(tyInt64);
++      innerAddr := AllocNode(AN_BINOP);
++      ASTIVal[innerAddr] := Ord(tkPlus);
++      ASTLeft[innerAddr] := valNode;
++      ASTRight[innerAddr] := idxLit;
++      ASTTk[innerAddr] := Ord(tyPointer);
++      target := AllocNode(AN_DEREF);
++      ASTLeft[target] := innerAddr;
++      ASTTk[target] := Ord(Syms[PendingInitSym[i]].TypeKind);
++      ASTNilChk[target] := 0;
++      valNode := AllocNode(AN_IDENT);
++      ASTIVal[valNode] := PendingInitSym[i];
++      ASTTk[valNode] := Ord(Syms[PendingInitSym[i]].TypeKind);
++      assignNode := AllocNode(AN_ASSIGN);
++      ASTLeft[assignNode] := target;
++      ASTRight[assignNode] := valNode;
++      CompileAST(assignNode);
++      ASTNodeCount := ASTArenaFloor;
++    end;
+   end;
+ end;
+ 
+diff --git a/compiler/thread_emit.inc b/compiler/thread_emit.inc
+index 87b3a9dbd8..63aa0377bd 100644
+--- a/compiler/thread_emit.inc
++++ b/compiler/thread_emit.inc
+@@ -68,7 +68,7 @@ end;
+ procedure EnsureCloneStub;
+ var
+   jmpOver: Integer;
+-  pNoInst, pNoInst2: Integer;   { the child's skip-the-install branches (aarch64, arm32) }
++  pNoInst, pNoInst2, pCopy: Integer;   { the child's skip-the-install branches (aarch64, arm32) }
+   pParent: Integer;   { the child/parent split, patched in ALL FOUR legs: rel8 on
+                         x86-64/i386, a branch immediate on aarch64/arm32 }
+ begin
+@@ -157,7 +157,9 @@ begin
+     { jnz .parent -- COMPUTED. It was 30 hand-counted bytes over ten
+       instructions of child setup, and every one of them is a line someone may
+       add to. }
+-    EmitB($75); pParent := CodeLen; EmitB(0);         { jnz .parent }
++    { rel32, not rel8: the child sequence passed 127 bytes when it gained the
++      init-image copy (2026-09-24), and PatchRel8 refused it at build time. }
++    EmitB($0F); EmitB($85); pParent := CodeLen; EmitI32(0);   { jnz .parent }
+     { ---- child: rsp = tlsBlock-16, [rsp]=entry [rsp+8]=arg ---- }
+     { Install the TLS block FIRST, before anything Pascal runs. clone does not
+       reset the thread pointer, so a child that skipped this would read the PARENT's block --
+@@ -170,10 +172,36 @@ begin
+       (feature-a-thread-local-storage-via-clone-settls). GS, not fs: fs belongs
+       to libc, and a pxx program may link one. syscall clobbers rcx and r11;
+       both are dead here (arg was staged on the stack above). }
++    { r12 = the PARENT's init-image pointer, read through gs BEFORE the
++      install replaces it. See TLS_SLOT_INIT_IMAGE. }
++    if TlsUserBytes > 0 then
++    begin
++      EmitB($65); EmitB($4C); EmitB($8B); EmitB($24); EmitB($25);
++        EmitI32(8 * TLS_SLOT_INIT_IMAGE);             { mov r12, gs:[8*slot] }
++    end;
+     EmitB($BF); EmitI32($1001);                       { mov edi, ARCH_SET_GS }
+     EmitB($48); EmitB($8D); EmitB($74); EmitB($24); EmitB($10); { lea rsi, [rsp+16] }
+     EmitB($B8); EmitI32(158);                         { mov eax, 158 (arch_prctl) }
+     EmitB($0F); EmitB($05);                           { syscall }
++    { ---- start the user area from the init image, when there is one ----
++      The block was zeroed above; the image holds every thread-local's
++      initial value (0 where it has no initialiser), so this is the start C
++      requires for `__thread int x = 5;`. The pointer is handed on in the
++      new block's own slot, so a thread this thread creates copies it too. }
++    if TlsUserBytes > 0 then
++    begin
++      EmitB($4D); EmitB($85); EmitB($E4);             { test r12, r12 }
++      EmitB($74); pNoInst := CodeLen; EmitB(0);       { jz .nocopy }
++      EmitB($4C); EmitB($89); EmitB($E6);             { mov rsi, r12 }
++      EmitB($48); EmitB($8D); EmitB($BC); EmitB($24);
++        EmitI32(16 + TLS_USER_FIRST_OFF);             { lea rdi, [rsp+16+user] }
++      EmitB($B9); EmitI32(TlsUserBytes);              { mov ecx, TlsUserBytes }
++      EmitB($FC);                                     { cld }
++      EmitB($F3); EmitB($A4);                         { rep movsb }
++      EmitB($4C); EmitB($89); EmitB($A4); EmitB($24);
++        EmitI32(16 + 8 * TLS_SLOT_INIT_IMAGE);        { mov [rsp+16+8*slot], r12 }
++      PatchRel8(pNoInst);                             { .nocopy: }
++    end;
+     { ---- register the alt stack carved above, on THIS thread ---- }
+     { The stack_t is built on the child's own stack rather than in BSS for the
+       same reason the buffer is per-thread: a shared struct is a race between
+@@ -210,7 +238,7 @@ begin
+     EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60  (SYS_exit) }
+     EmitB($0F); EmitB($05);                           { syscall  (thread exits here) }
+     { ---- .parent: rax already = child tid ---- }
+-    PatchRel8(pParent);
++    Patch32(pParent, CodeLen - (pParent + 4));
+     EmitB($C3);                                       { ret }
+     { patch the jump-over to land here, past the stub. }
+     Patch32(jmpOver, CodeLen - (jmpOver + 4));
+@@ -319,8 +347,25 @@ begin
+     EmitI32($F940012A);                 { ldr  x10, [x9] }
+     EmitI32($EB0A013F);                 { cmp  x9, x10 }
+     pNoInst2 := CodeLen; EmitI32($54000001);  { b.ne .noinst (patched) }
++    { x11 = the parent's init-image pointer; see the x86-64 leg. }
++    EmitI32($F9400000 or (TLS_SLOT_INIT_IMAGE shl 10) or (9 shl 5) or 11);  { ldr x11, [x9, #8*slot] }
+     EmitI32($910043E9);                 { add  x9, sp, #16        (the block) }
+     EmitI32($D51BD049);                 { msr  tpidr_el0, x9 }
++    if TlsUserBytes > 0 then
++    begin
++      if (TLS_USER_FIRST_OFF > 4095) or (TlsUserBytes mod 8 <> 0) then
++        Error('compiler error: the aarch64 clone leg copies the init image with a 12-bit offset and 8-byte steps');
++      pCopy := CodeLen; EmitI32($B400000B);   { cbz  x11, .nocopy (patched) }
++      EmitI32($91000000 or (TLS_USER_FIRST_OFF shl 10) or (9 shl 5) or 12);  { add x12, x9, #user }
++      EmitLoadImmA64(13, TlsUserBytes);       { x13 = count }
++      EmitI32($AA0B03EE);                 { mov  x14, x11 }
++      EmitI32($F84085CF);                 { .c: ldr x15, [x14], #8 }
++      EmitI32($F800858F);                 { str  x15, [x12], #8 }
++      EmitI32($F10021AD);                 { subs x13, x13, #8 }
++      EmitI32($54FFFFA1);                 { b.ne .c }
++      EmitI32($F9000000 or (TLS_SLOT_INIT_IMAGE shl 10) or (9 shl 5) or 11);  { str x11, [x9, #8*slot] }
++      Patch32(pCopy, $B400000B or ((((CodeLen - pCopy) div 4) and $7FFFF) shl 5));
++    end;
+     Patch32(pNoInst, $B4000009 or ((((CodeLen - pNoInst) div 4) and $7FFFF) shl 5));
+     Patch32(pNoInst2, $54000001 or ((((CodeLen - pNoInst2) div 4) and $7FFFF) shl 5));
+     EmitI32($F94003E1);                 { ldr  x1, [sp]           (entry) }
+@@ -383,9 +428,30 @@ begin
+     EmitI32($E599A000);                 { ldr r10, [r9] }
+     EmitI32($E159000A);                 { cmp r9, r10 }
+     pNoInst2 := CodeLen; EmitI32($1A000000);  { bne .noinst (patched) }
++    { r8 = the parent's init-image pointer; see the x86-64 leg. }
++    EmitI32($E5998000 or (8 * TLS_SLOT_INIT_IMAGE));   { ldr r8, [r9, #8*slot] }
+     EmitI32($E28D0010);                 { add r0, sp, #16       (the block) }
+     EmitLoadImmArm32(7, $F0005);        { r7 = __ARM_NR_set_tls }
+     EmitI32($EF000000);                 { svc 0 }
++    if TlsUserBytes > 0 then
++    begin
++      if TlsUserBytes mod 4 <> 0 then
++        Error('compiler error: the arm32 clone leg copies the init image in 4-byte steps');
++      EmitI32($E3580000);                 { cmp r8, #0 }
++      pCopy := CodeLen; EmitI32($0A000000);   { beq .nocopy (patched) }
++      EmitI32($E28DA010);                 { add r10, sp, #16      (the block) }
++      EmitLoadImmArm32(12, TLS_USER_FIRST_OFF);
++      EmitI32($E08AA00C);                 { add r10, r10, r12     (its user area) }
++      EmitLoadImmArm32(9, TlsUserBytes);  { r9 = count }
++      EmitI32($E1A03008);                 { mov r3, r8 }
++      EmitI32($E4932004);                 { .c: ldr r2, [r3], #4 }
++      EmitI32($E48A2004);                 { str r2, [r10], #4 }
++      EmitI32($E2599004);                 { subs r9, r9, #4 }
++      EmitI32($1AFFFFFB);                 { bne .c }
++      EmitI32($E28DA010);                 { add r10, sp, #16 }
++      EmitI32($E58A8000 or (8 * TLS_SLOT_INIT_IMAGE));   { str r8, [r10, #8*slot] }
++      Patch32(pCopy, $0A000000 or ((((CodeLen - pCopy) div 4) - 2) and $00FFFFFF));
++    end;
+     Patch32(pNoInst, $0A000000 or ((((CodeLen - pNoInst) div 4) - 2) and $00FFFFFF));
+     Patch32(pNoInst2, $1A000000 or ((((CodeLen - pNoInst2) div 4) - 2) and $00FFFFFF));
+     EmitI32($E59D1000);                 { ldr r1, [sp]          (entry) }
+diff --git a/lib/rtl/palthread.pas b/lib/rtl/palthread.pas
+index a328654b6b..a6c611a453 100644
+--- a/lib/rtl/palthread.pas
++++ b/lib/rtl/palthread.pas
+@@ -287,7 +287,7 @@ function PxxPthreadStart(a: Pointer): Pointer; cdecl;
+   all-zero magazine IS "every size class empty". }
+ var
+   h: PThreadHandle;
+-  blk, ignore, tlsBytes, altBytes: Int64;
++  blk, ignore, tlsBytes, altBytes, img, k: Int64;
+   ss: array[0..2] of Int64;
+   fn: TThreadEntry;
+ begin
+@@ -303,11 +303,32 @@ begin
+     fold to literals here, so it costs two register loads per thread. }
+   tlsBytes := __pxxTlsBlockSize;
+   altBytes := __pxxSigAltStackSize;
++  { The CREATOR's init-image pointer, read while gs is still the creator's
++    block. A raw pointer read, which the ordering rule above allows. The copy
++    below starts this block's thread-locals at their initial values rather than
++    at 0 (TLS_SLOT_INIT_IMAGE in the compiler). }
++  img := 0;
++{$ifdef PXX_HAS_TLS_INIT_IMAGE}
++  if __pxxTlsUserBytes > 0 then
++    img := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
++{$endif}
+   blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes + altBytes,
+                          PROT_RW, MAP_ANON_PRIV, -1, 0);
+   if blk > 0 then
+   begin
+     PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
++{$ifdef PXX_HAS_TLS_INIT_IMAGE}
++    if img <> 0 then
++    begin
++      k := 0;
++      while k < __pxxTlsUserBytes do
++      begin
++        PInt64(blk + __pxxTlsUserOff + k)^ := PInt64(img + k)^;
++        k := k + 8;
++      end;
++      PInt64(blk + __pxxTlsInitImageSlotOff)^ := img;
++    end;
++{$endif}
+     ignore := __pxxrawsyscall(SYS_arch_prctl, ARCH_SET_GS, blk, 0, 0, 0, 0);
+     ss[0] := blk + tlsBytes;                   { ss_sp }
+     ss[1] := 0;                                { ss_flags }
+diff --git a/test/ast_slot_writes.expected b/test/ast_slot_writes.expected
+index b7b87b467b..6ec3eee350 100644
+--- a/test/ast_slot_writes.expected
++++ b/test/ast_slot_writes.expected
+@@ -859,6 +859,7 @@ AN_DEREF Left callNode
+ AN_DEREF Left fieldNode
+ AN_DEREF Left identNode
+ AN_DEREF Left inner
++AN_DEREF Left innerAddr
+ AN_DEREF Left node
+ AN_DEREF Left operand
+ AN_DEREF Left ptrNode
+diff --git a/test/test_tls_base.pas b/test/test_tls_base.pas
+index 7aa0696980..12cc674b9a 100644
+--- a/test/test_tls_base.pas
++++ b/test/test_tls_base.pas
+@@ -198,8 +198,11 @@ begin
+     (tid, stack low, stack high), so asserting they are zero here is asserting
+     the opposite of the contract -- which is how this loop failed the day the
+     bounds landed, and it has earned its keep three more times since. }
++  { ...EXCEPT 13, which since 2026-09-24 is the init image's address
++    (TLS_SLOT_INIT_IMAGE), written by the same entry code whenever the program
++    has a thread-local user area. It is the compiler's, like 1..3. }
+   for i := 12 to 15 do
+-    if PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0 then Inc(errors);
++    if (i <> 13) and (PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0) then Inc(errors);
+ 
+   { and the manual path still works, over the top of that block }
+   { Installing our own block over the entry one leaves slots 1..3 zero, so every
+diff --git a/test/c_thread_local_initialiser_reaches_every_thread.c b/test/c_thread_local_initialiser_reaches_every_thread.c
+new file mode 100644
+index 0000000000..2ed5690a47
+--- /dev/null
++++ b/test/c_thread_local_initialiser_reaches_every_thread.c
+@@ -0,0 +1,53 @@
++/* An initialised thread-local starts at its initialiser in EVERY thread, not
++   only in main.
++   bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main
++
++   The initialiser is a store in main's prologue, and before the fix it reached
++   only the main thread's block: a child read 0 where gcc reads 5. Now each
++   initialiser store also writes an init image, and every new block starts as a
++   copy of it (TLS_SLOT_INIT_IMAGE in the compiler).
++
++   Each row is chosen so that an obvious wrong mechanism fails it:
++     child-x=5       the initialiser, not 0 (the bug itself, and the default)
++     child-y=0       an UNinitialised neighbour still starts at 0, so the copy
++                     did not smear anything into it
++     child-z=-7      a second initialised variable at a different offset
++     grandchild-x=5  a thread made by a thread gets the image too, so the
++                     pointer is handed on and not only read from main's block
++     main-x=6        main changed its copy BEFORE creating the thread, and the
++                     child still saw 5: a copy of main's CURRENT block would
++                     print child-x=6, which is why main writes 6 first
++   The expected output is gcc's, and identical on every target that gives
++   threads a block. */
++#include <stdio.h>
++#include <pthread.h>
++
++__thread int x = 5;
++__thread long y;
++__thread int z = -7;
++
++static void *grandchild(void *a) {
++    printf("grandchild-x=%d\n", x);
++    return 0;
++}
++
++static void *child(void *a) {
++    pthread_t g;
++    printf("child-x=%d\n", x);
++    printf("child-y=%ld\n", y);
++    printf("child-z=%d\n", z);
++    x = 50;
++    pthread_create(&g, 0, grandchild, 0);
++    pthread_join(g, 0);
++    return 0;
++}
++
++int main(void) {
++    pthread_t t;
++    x = 6;
++    y = 2;
++    pthread_create(&t, 0, child, 0);
++    pthread_join(t, 0);
++    printf("main-x=%d\n", x);
++    return 0;
++}
+diff --git a/test/c_thread_local_initialiser_reaches_every_thread.expected b/test/c_thread_local_initialiser_reaches_every_thread.expected
+new file mode 100644
+index 0000000000..b6027c1aeb
+--- /dev/null
++++ b/test/c_thread_local_initialiser_reaches_every_thread.expected
+@@ -0,0 +1,5 @@
++child-x=5
++child-y=0
++child-z=-7
++grandchild-x=5
++main-x=6

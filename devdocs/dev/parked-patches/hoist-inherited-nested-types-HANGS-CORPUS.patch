@@ -1,0 +1,97 @@
+diff --git a/compiler/pasparser_generic.inc b/compiler/pasparser_generic.inc
+index 753bb47a8c..1ec30aca90 100644
+--- a/compiler/pasparser_generic.inc
++++ b/compiler/pasparser_generic.inc
+@@ -3699,16 +3699,16 @@ begin
+   HoistDeclEndAt := -1;
+ end;
+ 
+-{ Find the nested TYPE declarations of one template's class body and record each
+-  one's name and RHS extent. Nothing is hoisted here -- this only builds the
+-  candidate set; HoistUsed decides. }
+-procedure CollectHoistCandidates(ti: Integer; const specName: AnsiString);
++{ Find the nested TYPE declarations of ONE template's class body and APPEND each
++  one's name and RHS extent to the candidate set. Nothing is hoisted here -- this
++  only builds the candidate set; HoistUsed decides. Appends rather than resets so
++  the wrapper below can walk an ancestor chain; call the wrapper, not this. }
++procedure CollectHoistCandidatesFrom(ti: Integer; const specName: AnsiString);
+ var ts, tc, j, depth, k, pdepth: Integer;
+     inTypeSec, isModifier: Boolean;
+     nm: AnsiString;
+ 
+ begin
+-  HoistCount := 0;
+   ts := Templates[ti].TokStart;
+   tc := Templates[ti].TokCount;
+   depth := 0;
+@@ -3797,6 +3797,70 @@ begin
+ end;
+ 
+ 
++{ The candidate set for ONE specialization: this template's nested types, then
++  every ANCESTOR TEMPLATE'S, all under this specialization's own prefix.
++
++  THE ANCESTOR ARM IS THE WHOLE POINT AND IT WAS MISSING. A nested type is
++  hoisted so that naming it as a generic argument mints a name unique to this
++  specialization -- `TWithPointers$LongInt$PT` rather than the bare `PT`. Scanning
++  only the template's own body meant an INHERITED nested type was never a
++  candidate, so `TEnum<PT>` inside a descendant kept the literal spelling `PT`:
++  every specialization of every descendant minted the SAME `TEnum$PT`, the second
++  one collided ("duplicate class name"), and the first reported `unknown type: PT`
++  against the template's own line because the argument it was handed is a name
++  that exists in no scope at all.
++
++  MEASURED BOUNDARY, fpc 3.2.2 compiles all of them:
++    nested `PT = ^T` declared in the SAME template as the use  -- worked
++    the same alias INHERITED from an ancestor template         -- refused <- this
++    the ancestor declaring it but nobody naming it as an arg   -- worked
++  So the discriminator is where the nested type is DECLARED, not how many
++  specializations exist: one instantiation is enough to fail, and the corpus's
++  four-way collision is the same defect counted again.
++
++  SCOPE, stated rather than discovered later: the ancestor's RHS is substituted
++  under the substitution set in force HERE, which is keyed by NAME. A descendant
++  that renames the parameter it passes up (`TD<U> = class(TAnc<U>)` where TAnc
++  declares `PT = ^T`) leaves `T` unsubstituted and fails LOUDLY with `unknown
++  type: T` -- wrong, but not silent, and not a regression: it did not work before
++  either.
++  bug-p-a-nested-type-inherited-from-an-ancestor-template-is-not-hoisted }
++procedure CollectHoistCandidates(ti: Integer; const specName: AnsiString);
++var anc, guard, i, gEnd, nargs, j: Integer; ancNm: AnsiString;
++begin
++  HoistCount := 0;
++  anc := ti;
++  guard := 0;
++  while (anc >= 0) and (guard < MAX_HOISTED_NESTED) do
++  begin
++    CollectHoistCandidatesFrom(anc, specName);
++    Inc(guard);
++    { The ancestor clause is `class [abstract|sealed] ( specialize NAME<...> )`,
++      so the group starts within the first few tokens. Bounded on purpose: the
++      FIRST group in a template body is the ancestor only while we are still in
++      the head, and a member's own `specialize` further down is not one. }
++    i := 0;
++    gEnd := -1;
++    while (i < 6) and (i < Templates[anc].TokCount) and (gEnd < 0) do
++    begin
++      if TemplateTokens[Templates[anc].TokStart + i].Kind = tkSemicolon then Break;
++      gEnd := NestedSpecGroup(Templates[anc].TokStart, i, Templates[anc].TokCount);
++      if gEnd < 0 then Inc(i);
++    end;
++    if gEnd < 0 then Break;
++    ancNm := GetTokenStrFromRaw(TemplateTokens[Templates[anc].TokStart + i + 1].SOffset,
++                                TemplateTokens[Templates[anc].TokStart + i + 1].SLen);
++    nargs := 0;
++    j := i + 3;
++    while j < gEnd do
++    begin
++      if TemplateTokens[Templates[anc].TokStart + j].Kind <> tkComma then Inc(nargs);
++      Inc(j);
++    end;
++    anc := FindNameableTemplate(ancNm, nargs);
++  end;
++end;
++
+ { Record every `specialize NAME<args>` in one template-arena range as a nested
+   prerequisite, skipping this declaration itself and anything already known or
+   already queued. One body, three callers (the class body, each buffered method,
