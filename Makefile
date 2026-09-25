@@ -533,6 +533,39 @@ test-nilpy: $(COMPILER)
 	grep -q "escapes are not supported" $(TESTTMP)/test_nilpy_nescape.log
 	./$(COMPILER) test/test_nilpy_a_base_method_calls_a_method_only_a_subclass_defines.py $(TESTTMP)/test_nilpy_latebind26
 	$(TESTTMP)/test_nilpy_latebind26 | diff -u test/test_nilpy_a_base_method_calls_a_method_only_a_subclass_defines.expected -
+	./$(COMPILER) test/test_nilpy_a_def_with_no_return_used_as_a_value_is_none.py $(TESTTMP)/test_nilpy_noneret26
+	$(TESTTMP)/test_nilpy_noneret26 | diff -u test/test_nilpy_a_def_with_no_return_used_as_a_value_is_none.expected -
+	./$(COMPILER) test/test_nilpy_a_narrow_print_temp_does_not_clobber_the_result_pointer.py $(TESTTMP)/test_nilpy_narrowtemp26
+	$(TESTTMP)/test_nilpy_narrowtemp26 | diff -u test/test_nilpy_a_narrow_print_temp_does_not_clobber_the_result_pointer.expected -
+	./$(COMPILER) test/test_nilpy_a_class_whose_base_is_module_qualified_is_hoisted.py $(TESTTMP)/test_nilpy_qualbase26
+	$(TESTTMP)/test_nilpy_qualbase26 | diff -u test/test_nilpy_a_class_whose_base_is_module_qualified_is_hoisted.expected -
+	# A discarded class result of a Pascal METHOD is released when its body only
+	# returns what it minted (ClassifyProcResultFresh): `a.tobytes()` stays flat,
+	# `keep` is the positive control and must trip the bound, and TPyList.add's
+	# borrowed Self survives under PXX_HEAP_DEBUG. The verdict row pins the
+	# classifier: Self, a field, an element, a mixed-path body read as borrowed.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_discarded_fresh_pascal_method_result_is_released.npy $(TESTTMP)/test_nilpy_freshdisc26
+	tools/assert_no_leak.sh nilpy_fresh_method_discard 300 $(TESTTMP)/test_nilpy_freshdisc26 fresh 5000
+	@if tools/assert_no_leak.sh nilpy_fresh_method_discard_control 300 $(TESTTMP)/test_nilpy_freshdisc26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_fresh_method_discard control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_discarded_fresh_pascal_method_result_is_released.npy $(TESTTMP)/test_nilpy_freshdisc_hd26
+	tools/expect_same.sh nilpy_borrowed_method_discard "$$($(TESTTMP)/test_nilpy_freshdisc_hd26 borrowed 5000)" "borrowed done 50 True False"
+	# A stamp helper that hands back its argument is a borrow when the argument
+	# is already owned (list()/bytes()/bytearray(): released twice before) and
+	# the only owner when it is an unbound construction (set(): must not leak).
+	# stderr is merged so a single "RELEASE of a FREED object" line fails it.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_stamped_empty_container_is_released_once.py $(TESTTMP)/test_nilpy_stamponce26
+	tools/expect_same.sh nilpy_stamped_container_released_once "$$($(TESTTMP)/test_nilpy_stamponce26 2>&1)" "300"
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_stamped_empty_container_is_released_once.py $(TESTTMP)/test_nilpy_stamponce_c26
+	tools/assert_no_leak.sh nilpy_stamped_container_no_leak 100 $(TESTTMP)/test_nilpy_stamponce_c26
+	# int()/str() of a fresh string (slice, concat, method result) release it --
+	# the ESP logger's `int(h[15:].strip())`. `keep` is the positive control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_int_and_str_of_a_fresh_string_release_it.npy $(TESTTMP)/test_nilpy_intstrfresh26
+	tools/expect_same.sh nilpy_int_str_fresh_value "$$($(TESTTMP)/test_nilpy_intstrfresh26 fresh 1000 2>/dev/null)" "120000"
+	tools/assert_no_leak.sh nilpy_int_str_fresh_released 50 $(TESTTMP)/test_nilpy_intstrfresh26 fresh 1000
+	@if tools/assert_no_leak.sh nilpy_int_str_fresh_control 50 $(TESTTMP)/test_nilpy_intstrfresh26 keep 1000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_int_str_fresh control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links
@@ -4244,7 +4277,7 @@ test-nilpy: $(COMPILER)
 	@# a def with no return, or one falling off the end, must not leak
 	@# whatever garbage a prior call left in the return register/slot
 	./$(COMPILER) test/test_nilpy_implicit_return_none.npy $(TESTTMP)/test_nilpy_implret26
-	tools/expect_same.sh test_nilpy_implret26 "$$($(TESTTMP)/test_nilpy_implret26)" "$$(printf '1073794252\n0\nTrue\n0\nTrue')"
+	tools/expect_same.sh test_nilpy_implret26 "$$($(TESTTMP)/test_nilpy_implret26)" "$$(printf '1073794252\nNone\nTrue\nNone\nTrue')"
 	@# a[i] = b[j] = v must store into EVERY target, not just the rightmost
 	./$(COMPILER) test/test_nilpy_chained_subscript_assign.npy $(TESTTMP)/test_nilpy_chainedsub26
 	tools/expect_same.sh test_nilpy_chainedsub26 "$$($(TESTTMP)/test_nilpy_chainedsub26)" "$$(printf '[3, 3]\n%s\n42 42\n[6, 2, 3]' "['x', 'y'] 7 7")"

@@ -1,0 +1,17 @@
+m 1
+meth None True True
+bare None True True
+cond+ 2 False False
+cond- None True True
+val 3 False False
+f 2
+func None True True
+gbare None True True
+h+ 5 False False
+h- None True True
+m 3
+None branch
+f 4
+None
+True
+1 6 2 [0, 1, 2] None None 4

@@ -909,6 +909,122 @@ begin
 end;
 
 { A routine's own locals. }
+{ Does this value hand the caller a reference it OWNS? A construction does,
+  and so does a call to a function already classified fresh. Everything else --
+  Self, a parameter, a field, an element, a local, a cast -- may be borrowed. }
+function ResultExprIsFresh(n: Integer): Boolean;
+var p: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if IsNilLiteralNode(n) then begin Result := True; Exit; end;
+  if (ASTKind[n] = AN_CALL) and (Integer(ASTIVal[n]) = -Ord(tkGetMem)) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  p := NodeCallProcIdx(n);
+  if p >= 0 then Result := ProcResultFresh[p];
+end;
+
+{ Which parameter of procIdx this value is: its index, -2 for a parameter
+  with no identifiable slot, -1 for anything that is not a parameter. }
+function ResultExprParamIdx(procIdx, n: Integer): Integer;
+var j, sym, cp, a, k: Integer;
+begin
+  Result := -1;
+  if n < 0 then Exit;
+  { THROUGH a call that itself hands back one of ITS arguments:
+    `Result := PassThrough(Self)` returns Self as surely as `Result := Self`. }
+  cp := NodeCallProcIdx(n);
+  if cp >= 0 then
+  begin
+    if ProcResultArgIdx[cp] = -2 then begin Result := -2; Exit; end;
+    if ProcResultArgIdx[cp] < 0 then Exit;
+    a := ASTLeft[n];
+    k := 0;
+    while (a >= 0) and (k < ProcResultArgIdx[cp]) do
+    begin
+      a := ASTRight[a];
+      Inc(k);
+    end;
+    if a < 0 then begin Result := -2; Exit; end;
+    Result := ResultExprParamIdx(procIdx, ASTLeft[a]);
+    Exit;
+  end;
+  if ASTKind[n] <> AN_IDENT then Exit;
+  sym := Integer(ASTIVal[n]);
+  if (sym < 0) or (sym >= SymCount) or (Syms[sym].Kind <> skParam) then Exit;
+  Result := -2;
+  for j := 0 to Procs[procIdx].ParamCount - 1 do
+    if Procs[procIdx].Params[j].SymIdx = sym then
+    begin
+      Result := j;
+      Exit;
+    end;
+end;
+
+procedure NoteResultArg(procIdx, n: Integer; var argIdx: Integer);
+var j: Integer;
+begin
+  j := ResultExprParamIdx(procIdx, n);
+  if j = -1 then Exit;
+  if argIdx = -1 then argIdx := j
+  else if argIdx <> j then argIdx := -2;
+end;
+
+procedure ScanResultStores(procIdx, node, retSym: Integer; var allFresh: Boolean;
+  var argIdx, budget: Integer);
+begin
+  if node < 0 then Exit;
+  if budget <= 0 then begin allFresh := False; Exit; end;
+  Dec(budget);
+  if (ASTKind[node] = AN_ASSIGN) and (ASTLeft[node] >= 0) and
+     (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] = retSym) then
+  begin
+    if not ResultExprIsFresh(ASTRight[node]) then allFresh := False;
+    NoteResultArg(procIdx, ASTRight[node], argIdx);
+    Exit;
+  end;
+  if (ASTKind[node] = AN_EXIT) and (ASTLeft[node] >= 0) then
+  begin
+    if not ResultExprIsFresh(ASTLeft[node]) then allFresh := False;
+    NoteResultArg(procIdx, ASTLeft[node], argIdx);
+    Exit;
+  end;
+  ScanResultStores(procIdx, ASTChildLeft(node), retSym, allFresh, argIdx, budget);
+  ScanResultStores(procIdx, ASTChildRight(node), retSym, allFresh, argIdx, budget);
+end;
+
+{ OWNED OR BORROWED, read off the body rather than declared. A Pascal callee
+  does no return-retain, so its class result is +1 exactly when every value it
+  returns was minted for the caller: `Result := TPyList.Create`, a call to a
+  fresh function. `Result := Self` (TPyList.add), an element of a container
+  field (TComponent.FindComponent, TJSONValue.GetItem -- borrowed is FPC's own
+  contract there, so no "always owned" convention could hold) or a local reads
+  as borrowed, and so does a body with ONE such path among fresh ones. Every
+  unprovable case falls to borrowed, whose cost is today's leak; nothing
+  borrowed can come out fresh, so the discard binder never frees a live object.
+  Measured over lib/rtl + pylib at the time of writing: 107 methods with a
+  class result, verdicts printed by PXXDBG=p.fresh. }
+procedure ClassifyProcResultFresh(procIdx, bodyNode: Integer);
+var allFresh: Boolean; argIdx, budget: Integer;
+begin
+  ProcResultFresh[procIdx] := False;
+  ProcResultArgIdx[procIdx] := -1;
+  if (not Procs[procIdx].IsFunc) or (Procs[procIdx].RetType <> tyClass) or
+     (Procs[procIdx].RetSymIdx < 0) or (bodyNode < 0) then Exit;
+  allFresh := True;
+  argIdx := -1;
+  budget := 200000;
+  ScanResultStores(procIdx, bodyNode, Procs[procIdx].RetSymIdx, allFresh, argIdx, budget);
+  if budget <= 0 then begin allFresh := False; argIdx := -2; end;
+  ProcResultFresh[procIdx] := allFresh;
+  ProcResultArgIdx[procIdx] := argIdx;
+  if PxxDbgWants('p.fresh', '*') then
+    WriteLn('PXXDBG p.fresh ', Procs[procIdx].Name, ' ', allFresh, ' arg=', argIdx);
+end;
+
 function WrapManagementOps(procIdx, bodyNode: Integer): Integer;
 begin
   if procIdx < 0 then Result := bodyNode
@@ -3689,6 +3805,7 @@ begin
               ' param-unit=', savedBodyUnitIdx,
               ' FindSym(Self)=', FindSym('Self'));
     inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
+    ClassifyProcResultFresh(procIdx, inlineBodyNode);
     CurrentUnitIdx := savedBodyUnitIdx;
     SpecBodyHostUnitIdx := savedSpecHost;
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);

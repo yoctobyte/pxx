@@ -1,0 +1,31 @@
+# int() and str() of a FRESH string -- a slice, a concat, a method result --
+# release it. The -200/-201 intrinsics built their pylib call themselves and
+# skipped the owning-temp binding every other managed-string argument gets,
+# so each call leaked the temporary (live=1001 at N=1000). The real-world
+# shape is the ESP logger's Content-Length parse, `int(h[15:].strip())`.
+#
+#   fresh  every shape, N calls          -- live stays flat
+#   keep   keep each fresh string alive  -- the positive control: the census
+#          must SEE these strings, so this trips the bound
+import sys
+
+def f():
+    h = "34"
+    c = "Content-Length: 12"
+    t = int(h[0:2]) + int(h + "") + int(h.lower()) + int(c[15:].strip())
+    s = str(h + "") + str(c[16:]) + str(h.lower())
+    return t + len(s)
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "fresh"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 1000
+if mode == "fresh":
+    total = 0
+    for i in range(n):
+        total += f()
+    print(total)
+else:
+    kept = []
+    h = "34"
+    for i in range(n):
+        kept.append(h + "")
+    print(len(kept))

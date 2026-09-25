@@ -5136,6 +5136,19 @@ var
   ProcPyAliasRebindTok: array of Integer;
   ProcHdrTok  : array of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
   ProcRetRecId : array of Integer; { record id for tyRecord results }
+  { A Pascal function's class result is a FRESH (+1, caller-owned) reference:
+    every value its body returns is a construction or a call to a function
+    that is itself fresh. False (borrowed, or not provable) otherwise --
+    Self, a parameter, a field, an element, a local. Read by NilPy's discard
+    binder (PyDiscardedCallIsOwned), which releases a dropped result only when
+    this is set, so a wrong False leaks and a wrong True cannot arise from a
+    borrowed spelling. Set by ClassifyProcResultFresh (pasparser_proc.inc). }
+  ProcResultFresh : array of Boolean;
+  { ...and its sibling: which PARAMETER the proc hands back, if any --
+    `Result := l` in pylist_mark_list, `Result := Self` in TPyList.add.
+    -1 = none is returned; j >= 0 = only parameter j is; -2 = a parameter is
+    returned but not one identifiable slot. Read by IRCallReturnsBorrowedArg. }
+  ProcResultArgIdx : array of Integer;
   ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }
   ProcVaOverflowSym : array of Integer; { C variadic: this proc's `__va_overflow` LOCAL, or -1. Recorded because wasm32 receives the variadic area as a TRAILING PARAMETER and has to store it into that local at body entry, and by then the C scope that FindSym('__va_overflow') would need is long closed. Every register target sets the local from its own prologue instead and never reads this. bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse }
   ProcRetIsDynArray : array of Boolean; { result is `array of T` (pointer-sized heap handle) }

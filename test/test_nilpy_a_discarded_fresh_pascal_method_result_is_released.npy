@@ -1,0 +1,31 @@
+# A Pascal METHOD whose class result is fresh (array_.tobytes mints a
+# TPyBytes) and whose value is DISCARDED is released: `a.tobytes()` as a
+# statement. Before ClassifyProcResultFresh the discard binder skipped every
+# Pascal method, because some return a borrowed Self, and this leaked one
+# TPyBytes per call (213 -> 2013 live over 1800 calls).
+#
+#   fresh     discard a.tobytes() N times         -- live stays bounded
+#   keep      append each a.tobytes() to a list   -- the positive control:
+#             the census must SEE these objects, so this trips the bound
+#   borrowed  discard s.add(k) (TPyList.add returns Self) -- must NOT be
+#             released; the set stays alive and correct
+import sys
+import array
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "fresh"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 5000
+a = array.array('B', [1, 2, 3, 4])
+if mode == "fresh":
+    for i in range(n):
+        a.tobytes()
+    print("fresh done", len(a.tobytes()))
+elif mode == "keep":
+    kept = []
+    for i in range(n):
+        kept.append(a.tobytes())
+    print("keep done", len(kept))
+else:
+    s = set()
+    for i in range(n):
+        s.add(i % 50)
+    print("borrowed done", len(s), 7 in s, 50 in s)

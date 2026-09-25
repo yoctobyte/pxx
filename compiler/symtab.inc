@@ -14411,7 +14411,7 @@ begin
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcLexParent, n);
   SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcDeclImpl, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
-  SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcAggregateDestSym, n);
+  SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcResultFresh, n);  SetLength(ProcResultArgIdx, n);  SetLength(ProcAggregateDestSym, n);
   SetLength(ProcVaOverflowSym, n);
   SetLength(ProcRetIsDynArray, n);  SetLength(ProcRetFixedArrBytes, n);  SetLength(ProcRetArrAi, n);
   SetLength(ProcIsAsync, n);  SetLength(ProcIsGenerator, n);  SetLength(ProcIsStackless, n);
@@ -14488,6 +14488,8 @@ begin
   ProcPyAliasRebindTok[ProcCount] := -1;  { -1 = no import alias rebinds this name }
   ProcHdrTok[ProcCount]       := 0;   { 0 = always visible; ParseSubroutine stamps main-program headers }
   ProcRetRecId[ProcCount]     := REC_NONE;
+  ProcResultFresh[ProcCount]  := False;
+  ProcResultArgIdx[ProcCount] := -1;
   ProcAggregateDestSym[ProcCount] := -1;
   ProcVaOverflowSym[ProcCount] := -1;
   ProcRetIsDynArray[ProcCount] := False;

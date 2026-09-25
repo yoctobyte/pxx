@@ -5242,6 +5242,106 @@ begin
   if ASTRightIsChild(node) then Result := IRASTHasComma(ASTRight[node]);
 end;
 
+{ Bind a FRESH managed string -- a slice, a concat, a method or call result,
+  anything that is not an existing lvalue -- to a hidden owning local and hand
+  back a load of it. The general call path does this inline for every
+  managed-string parameter (argIsManagedTemp in IRLowerAST's AN_CALL arm);
+  the Nil Python int()/str() intrinsics (-200/-201) build their pylib call
+  themselves and skipped it, so the refcount-1 temporary had no owner:
+  `int(h[0:2])` leaked one string per call (live=1001 at N=1000; ~35 B per
+  POST on the S3 logger's Content-Length parse), while `y = h[0:2]; int(y)`,
+  float() and len() were flat. `force` binds unconditionally, for a value the
+  caller knows it just minted (pystr_ofchar). An lvalue is a borrow and passes
+  through untouched. }
+function IRBindFreshStrArg(argAST, value: Integer; force: Boolean): Integer;
+var sym: Integer;
+begin
+  Result := value;
+  if not force then
+  begin
+    if (argAST < 0) or (IntToTypeKind(ASTTk[argAST]) <> tyAnsiString) then Exit;
+    if (ASTKind[argAST] = AN_IDENT) or (ASTKind[argAST] = AN_FIELD) or
+       (ASTKind[argAST] = AN_INDEX) or (ASTKind[argAST] = AN_STR_LIT) then Exit;
+  end;
+  sym := AllocVar('', tyAnsiString);
+  SymIsHiddenArgTemp[sym] := True;
+  IRAppend(IR_STORE_SYM, sym, value, -1, 0, Ord(tyAnsiString));
+  Result := IRAppend(IR_LOAD_SYM, sym, -1, -1, 0, Ord(tyAnsiString));
+end;
+
+{ A call to a Pascal LIBRARY routine that hands back one of its own arguments
+  (ProcResultArgIdx, read off its body by ClassifyProcResultFresh):
+  pylist_mark_list and the other mark_* stamps return the list they were
+  given; TPyList.add returns Self. NilPy defs never qualify: their return arm
+  retains a borrow. Such a call is never spilled into an owning argument temp
+  (IRLowerCallArg) -- it constructs nothing. }
+function IRCallIsPassThrough(n: Integer): Boolean;
+var p: Integer;
+begin
+  Result := False;
+  p := NodeCallProcIdx(n);
+  if p < 0 then Exit;
+  Result := (ProcResultArgIdx[p] <> -1) and (ProcUnitIdx[p] >= 0) and
+            (not UnitIsPyModule(ProcUnitIdx[p]));
+end;
+
+{ The k-th argument VALUE of call n, or -1. }
+function IRCallArgNode(n, k: Integer): Integer;
+var a, i: Integer;
+begin
+  Result := -1;
+  a := ASTLeft[n];
+  i := 0;
+  while (a >= 0) and (i < k) do
+  begin
+    a := ASTRight[a];
+    Inc(i);
+  end;
+  if a >= 0 then Result := ASTLeft[a];
+end;
+
+{ Does this ARGUMENT, in position k, carry a +1 nobody has bound? A
+  construction in position 0 does -- IRLowerCallArg spills a construction to
+  an owning temp only from position 1 on (the receiver guard) -- and so does a
+  pass-through call whose own passed-through argument does. Everything else is
+  either bound already or spilled to a temp that owns it. }
+function IRArgIsUnboundOwned(a, k: Integer): Boolean;
+var p: Integer;
+begin
+  Result := False;
+  if a < 0 then Exit;
+  if (ASTKind[a] = AN_CALL) and (Integer(ASTIVal[a]) = -Ord(tkGetMem)) then
+  begin
+    Result := k = 0;
+    Exit;
+  end;
+  if not IRCallIsPassThrough(a) then Exit;
+  p := NodeCallProcIdx(a);
+  if ProcResultArgIdx[p] < 0 then Exit;
+  Result := IRArgIsUnboundOwned(IRCallArgNode(a, ProcResultArgIdx[p]), ProcResultArgIdx[p]);
+end;
+
+{ Is this call's result a BORROW of an object someone else owns? A pass-through
+  whose argument is already bound (the hoisted temp under `bytes()`, a local)
+  returns that owner's object: take it as a new +1 and the object has two
+  owners and is released twice -- `b = list()`, `bytes()`, `bytearray()` under
+  -dPXX_HEAP_DEBUG: "RELEASE of a FREED object" once per call (frankb-12). But
+  `set()` is pylist_mark_set(TPyList.Create) with NOTHING else holding the
+  construction, so there the result IS the only +1 and a borrow reading leaks
+  it (live=1871 over 2000 calls, measured). Unprovable cases (-2) read as a
+  borrow: the store retains, and the cost is a leak, never a double release. }
+function IRCallReturnsBorrowedArg(n: Integer): Boolean;
+var p: Integer;
+begin
+  Result := False;
+  if not IRCallIsPassThrough(n) then Exit;
+  p := NodeCallProcIdx(n);
+  Result := True;
+  if ProcResultArgIdx[p] >= 0 then
+    Result := not IRArgIsUnboundOwned(IRCallArgNode(n, ProcResultArgIdx[p]),
+                                      ProcResultArgIdx[p]);
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -5594,7 +5694,10 @@ begin
          free functions, not methods). All NilPy results are owned + the consumer
          borrows, so spill+release stays balanced regardless of the param tag. }
        or ((Integer(ASTIVal[argAST]) >= 0) and
-           (ProcRetRecId[Integer(ASTIVal[argAST])] >= REC_UCLASS_BASE)) ) then
+           (ProcRetRecId[Integer(ASTIVal[argAST])] >= REC_UCLASS_BASE)) ) and
+     { ...but a borrow of an argument is not a construction: its object
+       already has an owner (the hoisted temp under `bytes()`). }
+     (not IRCallIsPassThrough(argAST)) then
   begin
     tmpSym := AllocVar('', tyClass);
     if (Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
@@ -8326,6 +8429,9 @@ begin
      (ASTKind[n] = AN_INTF_CALL) or (ASTKind[n] = AN_CALL_IND) or
      (ASTKind[n] = AN_METACLASS_NEW)) and
     (IntToTypeKind(ASTTk[n]) = tyClass);
+  { EXCEPT a borrow of an argument: see IRCallReturnsBorrowedArg. }
+  if IRNodeYieldsOwnedRef and IRCallReturnsBorrowedArg(n) then
+    IRNodeYieldsOwnedRef := False;
 end;
 
 function IRSrcIsCallable(n: Integer): Boolean;
@@ -16276,7 +16382,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           if procIdx < 0 then Error('int: pystr_ofchar (pylib) not loaded');
           value := IRLowerAST(argVal);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyChar));
-          value := IRAppendCall(procIdx, argNode, -1, Ord(tyAnsiString));
+          value := IRBindFreshStrArg(argVal,
+                     IRAppendCall(procIdx, argNode, -1, Ord(tyAnsiString)), True);
           procIdx := FindProc('pystr_to_int');
           if procIdx < 0 then Error('int: pystr_to_int (pylib) not loaded');
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
@@ -16293,7 +16400,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           procIdx := FindProc('pystr_to_promo');
           if procIdx < 0 then Error('int: pystr_to_promo (pylib) not loaded');
           promoDst := IRPromoTempSlot(promoSym);
-          value := IRLowerCallArg(procIdx, 1, argVal, Procs[procIdx].Params[1].IsRef);
+          value := IRBindFreshStrArg(argVal,
+                     IRLowerCallArg(procIdx, 1, argVal, Procs[procIdx].Params[1].IsRef), False);
           argNode := IRAppend(IR_ARG, promoDst, -1, -1, 0, Ord(tyPointer));
           value := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
           IRB[argNode] := value;
@@ -16307,7 +16415,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             ValueError on junk rather than yielding a silent 0. }
           procIdx := FindProc('pystr_to_int');
           if procIdx < 0 then Error('int: pystr_to_int (pylib) not loaded');
-          value := IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef);
+          value := IRBindFreshStrArg(argVal,
+                     IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef), False);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
           Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
           Exit;
@@ -16335,7 +16444,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           else
             procIdx := IRFindProc1ByArgTk('pystr_of', argTk);
           if procIdx < 0 then Error('str: pystr_of (pylib) overload not found');
-          value := IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef);
+          value := IRBindFreshStrArg(argVal,
+                     IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef), False);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
           Result := IRAppendCall(procIdx, argNode, -1, Ord(Procs[procIdx].RetType));
           Exit;

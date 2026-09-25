@@ -13697,6 +13697,22 @@ begin
             WriteLn('PXXDBG a.htemp STORE sym=', i, ' off=', Syms[i].Offset,
                     ' form=record');
         end
+        else if (not Syms[i].IsArray) and
+                (TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) < 8) then
+        begin
+          { A NARROW temp (a print() argument that is a plain Integer) sits
+            4-aligned with its neighbour four bytes above, and a qword store
+            zeroed the neighbour: a def returning a Variant got its hidden
+            result pointer's low half wiped by `print(1)` and SIGSEGVed in the
+            epilogue's copy-out (`def d(): print(1); return None`, pre-existing,
+            made common when a def that falls off the end began returning None).
+            Zero exactly the slot, as EmitZeroLocalSlotForTarget's own note
+            warns. }
+          EmitZeroLocalSlotForTarget(i, TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId));
+          if PxxDbgEnabled('a.htemp') then
+            WriteLn('PXXDBG a.htemp STORE sym=', i, ' off=', Syms[i].Offset,
+                    ' form=narrow');
+        end
         else
         begin
           EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);

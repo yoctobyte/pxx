@@ -25181,6 +25181,10 @@ var j: Integer;
 begin
   Result := True;
   if ProcUnitIdx[p] < 0 then Exit;
+  { a body that returns only what it minted (ClassifyProcResultFresh) is owned
+    whatever its parameters are -- `a.tobytes()` on a method, which the rule
+    below had to leave leaking because Self is a class parameter }
+  if ProcResultFresh[p] then Exit;
   for j := 0 to Procs[p].ParamCount - 1 do
     if Procs[p].Params[j].TypeKind = tyClass then
     begin
@@ -41037,10 +41041,118 @@ begin
   PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
 end;
 
+function PyBlockAlwaysExits(k: Integer): Boolean;
+{ Does the block whose INDENT is at `k` leave the routine on EVERY path --
+  `return`/`raise` as its last reachable statement, an if/elif/else chain whose
+  arms all do, or a `while True:` with no `break` in it? Anything else counts
+  as falling off the end.
+
+  The mistake this can make is chosen: a block wrongly judged to fall off makes
+  the def's result a variant, which is still CORRECT (slower). One wrongly
+  judged to exit would keep the int 0 this exists to remove. So every shape it
+  does not understand (try, with, for, a one-line suite) answers False. }
+var depth, j, e: Integer; stmtStart, exits, allArms, hasElse: Boolean;
+begin
+  PyBlockAlwaysExits := False;
+  if (k >= TokCount) or (Tokens[k].Kind <> tkIndent) then Exit;
+  exits := False;
+  Inc(k);
+  stmtStart := True;
+  while k < TokCount do
+  begin
+    case Tokens[k].Kind of
+      tkDedent: begin PyBlockAlwaysExits := exits; Exit; end;
+      tkNewline: begin stmtStart := True; Inc(k); Continue; end;
+      tkIndent:
+        begin
+          { a nested block belonging to a statement not analysed below }
+          if not PySkipToMatchingDedent(k) then Exit;
+          stmtStart := True;
+          Continue;
+        end;
+    end;
+    if not stmtStart then begin Inc(k); Continue; end;
+    stmtStart := False;
+    if Tokens[k].Kind in [tkExit, tkRaise] then exits := True
+    else if (Tokens[k].Kind = tkIf) or
+            ((Tokens[k].Kind = tkWhile) and (k + 1 < TokCount) and
+             (Tokens[k + 1].Kind = tkTrue)) then
+    begin
+      { walk the whole chain: each arm is `head ... : NEWLINE INDENT..DEDENT` }
+      allArms := True; hasElse := Tokens[k].Kind = tkWhile;
+      while True do
+      begin
+        j := k; depth := 0;
+        while (j < TokCount) and not ((depth = 0) and (Tokens[j].Kind = tkColon)) do
+        begin
+          if Tokens[j].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+          else if Tokens[j].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
+          else if Tokens[j].Kind = tkNewline then Break;
+          Inc(j);
+        end;
+        if (j + 2 >= TokCount) or (Tokens[j].Kind <> tkColon) or
+           (Tokens[j + 1].Kind <> tkNewline) or (Tokens[j + 2].Kind <> tkIndent) then
+          Exit;                                  { one-line suite: not analysed }
+        if Tokens[k].Kind = tkWhile then
+        begin
+          { `while True:` leaves only by return/raise -- unless it breaks }
+          e := j + 2;
+          if not PySkipToMatchingDedent(e) then Exit;
+          for depth := j + 2 to e - 1 do
+            if Tokens[depth].Kind = tkBreak then allArms := False;
+          k := e;
+          Break;
+        end;
+        if not PyBlockAlwaysExits(j + 2) then allArms := False;
+        e := j + 2;
+        if not PySkipToMatchingDedent(e) then Exit;
+        k := e;
+        if (k < TokCount) and (Tokens[k].Kind = tkElse) then hasElse := True
+        else if not ((k < TokCount) and (Tokens[k].Kind = tkIdent) and
+                     TokenCaseEqual(k, 'elif')) then Break;
+      end;
+      if allArms and hasElse then exits := True;
+      stmtStart := True;
+      Continue;
+    end;
+    Inc(k);
+  end;
+end;
+
+function PyDefMayFallOffEnd(defIdx: Integer): Boolean;
+{ Can the def whose `def` token is at defIdx reach the end of its body -- and so
+  return None, as Python does? A GENERATOR (any `yield` in the body) is left
+  alone: falling off its end is how it finishes, not a None result. }
+var j, depth, e: Integer;
+begin
+  PyDefMayFallOffEnd := False;
+  j := defIdx; depth := 0;
+  while (j < TokCount) and not ((depth = 0) and (Tokens[j].Kind = tkColon)) do
+  begin
+    if Tokens[j].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[j].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth);
+    Inc(j);
+  end;
+  if (j + 2 >= TokCount) or (Tokens[j + 1].Kind <> tkNewline) or
+     (Tokens[j + 2].Kind <> tkIndent) then Exit;
+  e := j + 2;
+  if not PySkipToMatchingDedent(e) then Exit;
+  for depth := j + 2 to e - 1 do
+    if (Tokens[depth].Kind = tkIdent) and TokenCaseEqual(depth, 'yield') then Exit;
+  PyDefMayFallOffEnd := not PyBlockAlwaysExits(j + 2);
+end;
+
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var sawNone: Boolean;
 begin
   Result := PyInferDefRetTypeScan(methodStart, retRec, sawNone);
+  { FALLING OFF THE END returns None exactly as a bare `return` does, so it is
+    the same fact as sawNone and takes the same rule below. It was the one None
+    the scan could not see (the note above PyDefReturnsAConditionallyRebound
+    Param called it flow analysis, out of scope): a def with no return at all,
+    or one returning a value on some paths only, handed back the tyInteger
+    floor's 0, so `r = o.m(); if r is None:` took the wrong branch. }
+  if (not sawNone) and PyDefMayFallOffEnd(methodStart) then sawNone := True;
   { A typed parameter rebound on SOME path only: the value at the return is
     either the parameter's declared type or the rebinding's, so the signature
     has to be wide enough for both. See the helper for why this is narrower
@@ -46849,6 +46961,39 @@ end;
 
   The real pass later resets each class's field window and rebuilds it, so
   these entries are orphaned rather than duplicated. }
+function PyHoistQualifiedBase(k, ci: Integer): Integer;
+{ The base of `class C(mod.Base):` for the header sweep, where token k is `mod`.
+  The class statement resolves a qualified base through ConsumeUnitQualifier and
+  FindUClassInUnit, which work on the CURSOR; the sweep walks token INDICES, so
+  it parks the cursor on k, asks the same pair, and puts the cursor back by
+  re-reading Tokens[] (never a saved copy of CurTok -- see PyEvalParamDefault).
+
+  The sweep used to look only at a bare name, so a qualified base read as
+  unresolved and the class was not hoisted -- and a subclass of an unhoisted
+  class is not hoisted either, so the whole family was registered only after
+  the base's method BODIES were compiled. A base method calling a method only
+  its subclass declares then found no subclass and was refused: micropython-
+  lib's `class SSD1306(framebuf.FrameBuffer)`, whose write routine calls the
+  write_cmd its I2C/SPI subclasses supply.
+  -1 when the qualifier is not a loaded module or the name is not a class of
+  it; a qualified base can never be the class being declared. }
+var saved, u: Integer; nm: AnsiString;
+begin
+  Result := -1;
+  saved := TokPos;
+  TokPos := k;
+  Next;                        { CurTok = Tokens[k] }
+  nm := CurTok.SVal;
+  u := ConsumeUnitQualifier(nm);
+  if u >= 0 then
+  begin
+    Result := FindUClassInUnit(CurTok.SVal, u);
+    if Result = ci then Result := -1;
+  end;
+  TokPos := saved - 1;
+  Next;
+end;
+
 procedure PyClassHeaderSweep(phase: Integer);
 { One walk over every `class` header in the token stream. Run TWICE, and the
   two runs are not the same job:
@@ -46953,6 +47098,10 @@ begin
               answer (with the lazy shell when pylib is absent). }
             if TokenCaseEqual(i + 3, 'Exception') then
               baseCi := PyEnsureExceptionClass
+            else if (i + 5 < MainProgramTokCount) and
+                    (Tokens[i + 4].Kind = tkDot) then
+              { `mod.Base` -- the module's class, as PyParseClass resolves it }
+              baseCi := PyHoistQualifiedBase(i + 3, ci)
             else
               baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
             { `class C(object):` -- and an erased `Generic[T]`/`Protocol` --
