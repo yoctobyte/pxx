@@ -1721,6 +1721,10 @@ function pystr_reverse(const s: AnsiString): AnsiString;
   Binding it to None lets the file COMPILE, exactly as CPython compiles a
   module whose `try: import X` failed; this is what happens if such a name is
   actually USED, and it names the module so the message is actionable. }
+{ An import in a function body whose module does not exist: compiled to a call
+  of this at that line, so it raises when the function REACHES the import, as
+  CPython does, and not at compile time. The message is CPython's. }
+function pyimport_missing(const name: AnsiString): Variant;
 function pyoptional_missing(const what: AnsiString): Variant;
 { A member a module we DO provide does not have — `sys.version_info` on a build
   that has no version_info. A DIFFERENT thing from the above, and it shared its
@@ -14635,6 +14639,12 @@ begin
     i := j - 1;
   end;
   pystr_reverse := r;
+end;
+
+function pyimport_missing(const name: AnsiString): Variant;
+begin
+  pyimport_missing := pynone;
+  raise ModuleNotFoundError.Create('No module named ''' + name + '''');
 end;
 
 function pyoptional_missing(const what: AnsiString): Variant;
