@@ -100,6 +100,27 @@ For unattended setup:
 it ends by printing `run ./demos.sh to explore the example apps`. The launcher
 is also skipped when no terminal is attached, as in a script or CI.
 
+## From a release archive
+
+A release archive holds the source, the libraries, the examples and these
+docs, plus a prebuilt compiler for each host (`compiler/pxx-x86_64`, `-i386`,
+`-aarch64`, `-arm32`). It has no `stable_linux_amd64/` pinned compiler; the
+steps below set up the prebuilt one instead. From the
+directory you downloaded it to:
+
+```sh
+sha256sum -c SHA256SUMS            # with the .tar.gz beside it
+tar xzf pxx-<version>.tar.gz && cd pxx-<version>
+./install.sh --yes                 # writes ./pxx, the wrapper every page here uses
+./pxx test/hello.pas /tmp/hello && /tmp/hello
+./setup.sh                         # points compiler/pxx at this host's binary
+./selfcheck.sh                     # needs ./setup.sh first
+```
+
+`./setup.sh` also offers to link `pxx` into `~/.local/bin` when run at a
+terminal. `./selfcheck.sh` stops with `no compiler/pxx — run ./setup.sh first`
+if you skip that step. `tools/install.sh`, below, works in a checkout only.
+
 ## Wrapper installs
 
 The wrapper calls the pinned compiler and adds the project library roots, so a
@@ -157,10 +178,10 @@ names.
 
 Called directly, the compiler guesses its library roots from its own directory.
 `PXX_HOME` replaces that guess, and is what makes an unpacked tarball work from
-anywhere without installing a wrapper:
+anywhere without installing a wrapper. With the archive unpacked as `/opt/pxx`:
 
 ```sh
-PXX_HOME=/opt/pxx /opt/pxx/bin/pascal26 hello.pas hello
+PXX_HOME=/opt/pxx /opt/pxx/compiler/pxx-x86_64 hello.pas hello
 ```
 
 (A wrapper made by `tools/install.sh` passes its bundled roots as `-Fu`, and

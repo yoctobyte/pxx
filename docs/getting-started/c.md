@@ -57,10 +57,35 @@ and a subset of `pthread.h`. A program using only these stays static.
 
 Threads are part of it: a `pthread_create` program builds with
 `--threadsafe` and is still static. Without that flag the compiler refuses and
-tells you to add it.
+tells you to add it. `threads.c`:
+
+```c
+#include <pthread.h>
+#include <stdio.h>
+
+static void *work(void *arg)
+{
+    int *n = arg;
+    *n = *n * 2;
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t t;
+    int n = 21;
+
+    pthread_create(&t, NULL, work, &n);
+    pthread_join(t, NULL);
+    printf("%d\n", n);
+    return 0;
+}
+```
 
 ```sh
-./pxx --threadsafe threads.c threads
+$ ./pxx --threadsafe threads.c threads
+$ ./threads
+42
 ```
 
 Full details, and the gaps, are on the [C frontend](../targets/c-frontend.md)

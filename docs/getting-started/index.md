@@ -75,7 +75,23 @@ Run cross binaries under QEMU user-mode (see the repo's `tools/run_target.sh`).
 ## Other frontends
 
 The same compiler also accepts `.c` and `.npy` source directly — the frontend
-is chosen by extension, no separate tool:
+is chosen by extension, no separate tool. `hello.c`:
+
+```c
+#include <stdio.h>
+
+int main(void)
+{
+    printf("Hello, world!\n");
+    return 0;
+}
+```
+
+`hello.npy`:
+
+```python
+print("Hello, world!")
+```
 
 ```sh
 ./pxx hello.c hello_c
