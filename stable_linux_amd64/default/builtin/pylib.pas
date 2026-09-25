@@ -1612,6 +1612,9 @@ function pysys_getswitchinterval: Double;
 { Raise CPython's OSError for a failed syscall: the right SUBCLASS for the
   errno, wearing CPython's own message. See the body. }
 procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
+{ The same, for a failure CPython reports WITHOUT a file name -- a write or a
+  close on an open file: `[Errno 28] No space left on device`. }
+procedure pyos_raise_oserror(err: Int64);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 { os.replace(src, dst) — rename that OVERWRITES an existing destination.
@@ -1636,6 +1639,10 @@ function pyos_replace(const src: AnsiString; const dst: AnsiString): Integer;
   parameter actually called `exist_ok`. }
 function pyos_makedirs(const name: AnsiString; mode: Integer = 511;
                        exist_ok: Boolean = False): Integer;
+{ os.mkdir(path[, mode]) — ONE directory, FileExistsError if it is there
+  already and FileNotFoundError if its parent is not. MicroPython has this and
+  not makedirs, so it is the spelling a board program writes. }
+function pyos_mkdir(const path: AnsiString; mode: Integer = 511): Integer;
 { os.rmdir(path) — remove an EMPTY directory, raising on failure exactly as
   os.remove does. Deliberately NOT recursive: CPython's os.rmdir refuses a
   non-empty directory with ENOTEMPTY, and a shim that deleted the contents
@@ -14032,39 +14039,27 @@ begin
 end;
 
 function pyos_path_isdir(const p: AnsiString): Boolean;
-{$ifdef CPUX86_64}
-var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
-{$endif}
+var cs: AnsiString; mode, size: Int64;
 begin
   Result := False;
-{$ifdef CPUX86_64}
   if Length(p) = 0 then Exit;
   cs := p + #0;
-  FillChar(buf[0], SizeOf(buf), 0);
-  r := PyPalStat(@cs[1], @buf[0]);
-  if r < 0 then Exit;                  { missing path is False, not an error }
-  Result := ((PInt64(@buf[24])^ and $FFFFFFFF) and $F000) = $4000;   { S_IFDIR }
-{$else}
-  raise NotImplementedError.Create('os.path.isdir needs stat, which is x86-64 only here');
-{$endif}
+  case PyPalStatModeSize(@cs[1], mode, size) of
+    0: Result := (mode and $F000) = $4000;   { S_IFDIR }
+    -38: raise NotImplementedError.Create('os.path.isdir needs stat, which is x86-64 and ESP-IDF only here');
+  end;                                  { missing path is False, not an error }
 end;
 
 function pyos_path_isfile(const p: AnsiString): Boolean;
-{$ifdef CPUX86_64}
-var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
-{$endif}
+var cs: AnsiString; mode, size: Int64;
 begin
   Result := False;
-{$ifdef CPUX86_64}
   if Length(p) = 0 then Exit;
   cs := p + #0;
-  FillChar(buf[0], SizeOf(buf), 0);
-  r := PyPalStat(@cs[1], @buf[0]);
-  if r < 0 then Exit;
-  Result := ((PInt64(@buf[24])^ and $FFFFFFFF) and $F000) = $8000;   { S_IFREG }
-{$else}
-  raise NotImplementedError.Create('os.path.isfile needs stat, which is x86-64 only here');
-{$endif}
+  case PyPalStatModeSize(@cs[1], mode, size) of
+    0: Result := (mode and $F000) = $8000;   { S_IFREG }
+    -38: raise NotImplementedError.Create('os.path.isfile needs stat, which is x86-64 and ESP-IDF only here');
+  end;                                  { missing path is False, not an error }
 end;
 
 function pyos_path_splitext(const p: AnsiString): TPyList;
@@ -14588,28 +14583,70 @@ end;
   the mapping is direct. An errno with no dedicated class is a plain OSError,
   which is also what CPython does.
   bug-nilpy-a-failed-file-syscall-loses-both-its-class-and-its-message }
-procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
-var e: Int64; txt, msg: AnsiString;
+{ glibc's strerror text -- what CPython on Linux prints -- for the errnos a
+  file call produces. An errno outside the table prints CPython's fallback. }
+function pyos_errno_text(e: Int64): AnsiString;
 begin
-  e := err;
-  if e < 0 then e := -e;
-  if e = 2 then txt := 'No such file or directory'
-  else if e = 13 then txt := 'Permission denied'
-  else if e = 17 then txt := 'File exists'
-  else if e = 20 then txt := 'Not a directory'
-  else if e = 21 then txt := 'Is a directory'
-  else if e = 4 then txt := 'Interrupted system call'
-  else if e = 9 then txt := 'Bad file descriptor'
-  else txt := 'OS error';
-  msg := '[Errno ' + StrInt(e, 0) + '] ' + txt + ': ''' + path + '''';
-  if path2 <> '' then msg := msg + ' -> ''' + path2 + '''';
+  case e of
+    1: Result := 'Operation not permitted';
+    2: Result := 'No such file or directory';
+    4: Result := 'Interrupted system call';
+    5: Result := 'Input/output error';
+    9: Result := 'Bad file descriptor';
+    12: Result := 'Cannot allocate memory';
+    13: Result := 'Permission denied';
+    16: Result := 'Device or resource busy';
+    17: Result := 'File exists';
+    18: Result := 'Invalid cross-device link';
+    19: Result := 'No such device';
+    20: Result := 'Not a directory';
+    21: Result := 'Is a directory';
+    22: Result := 'Invalid argument';
+    23: Result := 'Too many open files in system';
+    24: Result := 'Too many open files';
+    27: Result := 'File too large';
+    28: Result := 'No space left on device';
+    29: Result := 'Illegal seek';
+    30: Result := 'Read-only file system';
+    32: Result := 'Broken pipe';
+    36: Result := 'File name too long';
+    38: Result := 'Function not implemented';
+    39: Result := 'Directory not empty';
+    95: Result := 'Operation not supported';
+  else
+    Result := 'Unknown error ' + StrInt(e, 0);
+  end;
+end;
+
+{ The PEP 3151 subclass for errno `e`, raised with `msg`. }
+procedure pyos_raise_for(e: Int64; const msg: AnsiString);
+begin
   if e = 2 then raise FileNotFoundError.Create(msg);
-  if e = 13 then raise PermissionError.Create(msg);
+  if (e = 13) or (e = 1) then raise PermissionError.Create(msg);
   if e = 17 then raise FileExistsError.Create(msg);
   if e = 20 then raise NotADirectoryError.Create(msg);
   if e = 21 then raise IsADirectoryError.Create(msg);
   if e = 4 then raise InterruptedError.Create(msg);
+  if e = 32 then raise BrokenPipeError.Create(msg);
   raise OSError.Create(msg);
+end;
+
+procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
+var e: Int64; msg: AnsiString;
+begin
+  e := err;
+  if e < 0 then e := -e;
+  msg := '[Errno ' + StrInt(e, 0) + '] ' + pyos_errno_text(e) + ': ''' + path + '''';
+  if path2 <> '' then msg := msg + ' -> ''' + path2 + '''';
+  pyos_raise_for(e, msg);
+end;
+
+procedure pyos_raise_oserror(err: Int64);
+var e: Int64;
+begin
+  e := err;
+  if e < 0 then e := -e;
+  pyos_raise_for(e, '[Errno ' + StrInt(e, 0) + '] ' + pyos_errno_text(e));
 end;
 
 function pyos_remove(const path: AnsiString): Integer;
@@ -14687,6 +14724,11 @@ begin
   pyos_raise_ioerror(r, path, '');
 end;
 
+function pyos_mkdir(const path: AnsiString; mode: Integer = 511): Integer;
+begin
+  Result := pyos_mkdir_one(path, True, mode);
+end;
+
 function pyos_makedirs(const name: AnsiString; mode: Integer = 511;
                        exist_ok: Boolean = False): Integer;
 var i: Integer;
@@ -14714,21 +14756,19 @@ begin
 end;
 
 function pyos_stat(const path: AnsiString): TPyStat;
-var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
+var cs: AnsiString; r, mode, size: Int64;
 begin
-  { Real stat on x86-64 (uforth FILE-STATUS: a missing file must raise a
-    catchable OSError like CPython). Other targets keep the zeroed stub —
-    their struct stat layouts differ and no gated caller observes the value. }
+  { Real stat where pypal knows the layout -- x86-64 and ESP-IDF (uforth
+    FILE-STATUS: a missing file must raise a catchable OSError like CPython).
+    Other targets keep the zeroed stub: no gated caller observes the value. }
   Result := TPyStat.Create;
-{$ifdef CPUX86_64}
   cs := path + #0;
-  FillChar(buf[0], SizeOf(buf), 0);
-  r := PyPalStat(@cs[1], @buf[0]);
+  r := PyPalStatModeSize(@cs[1], mode, size);
+  if r = -38 then Exit;
   if r < 0 then
     pyos_raise_ioerror(r, path, '');
-  Result.st_mode := PInt64(@buf[24])^ and $FFFFFFFF;   { u32 st_mode (uid sits above) }
-  Result.st_size := PInt64(@buf[48])^;
-{$endif}
+  Result.st_mode := mode;
+  Result.st_size := size;
 end;
 
 function pystdin_readline: AnsiString;
@@ -20468,6 +20508,16 @@ begin
       call in try/except and turns it into a nonzero ior — the Forth-2012
       DELETE-FILE test reopens a deleted file expecting failure, not a halt). }
     pyos_raise_ioerror(fd, path, '');
+  { a DIRECTORY opens read-only on Linux and on IDF alike; CPython refuses it
+    with IsADirectoryError, and so do we. A 0-byte read answers EISDIR on a
+    directory and 0 on anything else, so it costs nothing and needs no stat
+    layout per target. }
+  if flags = PYPAL_O_RDONLY then
+    if PyPalRead(fd, @z[1], 0) = -21 then
+    begin
+      PyPalClose(fd);
+      pyos_raise_ioerror(-21, path, '');
+    end;
   Result := TPyFile.Create;
   Result.FFd := fd;
   { 'b' anywhere in the mode is CPython's own test for a binary stream }
@@ -20610,6 +20660,9 @@ function TPyFile.write(b: TPyBytes): Int64;
 begin
   if (b = nil) or (b.FLen = 0) then begin Result := 0; Exit; end;
   Result := PyPalWrite(FFd, b.FData, b.FLen);
+  { a failed write RAISES in CPython (`[Errno 28] No space left on device`);
+    it used to come back here as a negative count nobody looked at }
+  if Result < 0 then pyos_raise_oserror(Result);
 end;
 
 function TPyFile.write(const s: AnsiString): Int64;
@@ -20618,6 +20671,7 @@ begin
     encode step, matching how pyopen treats latin-1/utf-8 of ASCII as identity }
   if Length(s) = 0 then begin Result := 0; Exit; end;
   Result := PyPalWrite(FFd, @s[1], Length(s));
+  if Result < 0 then pyos_raise_oserror(Result);
 end;
 
 function TPyFile.write(const v: Variant): Int64;
@@ -20685,7 +20739,12 @@ end;
 procedure TPyFile.close;
 var r: Int64;
 begin
+  { closing twice is a no-op in CPython; a close that FAILS raises there (on
+    ESP it is where a buffered write meets a full partition) }
+  if FFd < 0 then Exit;
   r := PyPalClose(FFd);
+  FFd := -1;
+  if r < 0 then pyos_raise_oserror(r);
 end;
 
 function TPyFile.fileno: Int64;

@@ -424,3 +424,4 @@
 2026-09-24T22:00:55Z  v424  93a336a7ba851eb178fe9560f66af08b9b94a62834883a0a11ecae61399e09d9  4d9b004c80816282852cae6f9a6002dc18ad591f  fix(A): wasm32 asks for a release helper only when a slot needs one
 2026-09-25T01:14:33Z  v425  426b2fbf3f08f08ab498e063e9e8b1dc5963cc9eee057bebff304036d41e287a  e098cf93f0848af6387bb0ac036b2f9a5211d80a  logbook: demos#00 borg red has the lib-units cause, fixed by 2b4409bd0c
 2026-09-25T06:23:05Z  v426  7b742af6f9dfd8188335a209797c5fd634bdd83cd6c1a5a0b446220d5dad1afc  3f3685a8f2cec5b9cb821dd6588f2cb2f71c3dab  fix(threads): census leaks: FreeOnTerminate handles, NilPy Thread handles, reap-table UAF, pthread_detach
+2026-09-25T07:30:21Z  v427  354cd45e6373c44ead3da2c1f09821c98d22e4dc405641ea219371ad965a077a  e77c5d2416d6a41f88930386feb695885eb6296a  feat(N,S,A): NilPy files on ESP-IDF, CPython file errors, weakexternal in objects
