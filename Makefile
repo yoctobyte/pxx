@@ -19169,6 +19169,11 @@ test-core: $(COMPILER)
 	# on exactly the regression this is guarding against.
 	! ./$(COMPILER) test/library_exports_not_cdecl_fail.pas $(TESTTMP)/lib_exp_1 >$(TESTTMP)/lib_exp_1.err 2>&1
 	grep -q 'which is not `cdecl`' $(TESTTMP)/lib_exp_1.err
+	# --shared off x86-64 says so FIRST: wasm32 selects no C convention, so the
+	# exports check refused every routine of this cdecl library as "not cdecl".
+	! ./$(COMPILER) --target=wasm32 --shared test/test_library_exports.pas $(TESTTMP)/lib_exp_w >$(TESTTMP)/lib_exp_w.err 2>&1
+	grep -q -- '--shared: shared-library output is x86-64 only' $(TESTTMP)/lib_exp_w.err
+	! grep -q 'which is not `cdecl`' $(TESTTMP)/lib_exp_w.err
 	! ./$(COMPILER) test/library_exports_unknown_name_fail.pas $(TESTTMP)/lib_exp_2 >$(TESTTMP)/lib_exp_2.err 2>&1
 	grep -q 'which is not a routine declared in this library' $(TESTTMP)/lib_exp_2.err
 	! ./$(COMPILER) test/library_exports_in_a_program_fail.pas $(TESTTMP)/lib_exp_3 >$(TESTTMP)/lib_exp_3.err 2>&1

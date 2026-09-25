@@ -1123,6 +1123,11 @@ procedure ValidateExports;
   contradicted the writer it was supposed to agree with. Measured. }
 var i, pi: Integer;
 begin
+  { A --shared build off x86-64 is refused whatever it exports, and saying so
+    comes first: wasm32 selects no C convention at all, so every export read
+    "not `cdecl`" on a routine declared cdecl -- a wrong reason for a right
+    refusal. }
+  if ExportCount > 0 then RefuseSharedOffX86_64;
   for i := 0 to ExportCount - 1 do
   begin
     pi := FindProc(ExportName[i]);
