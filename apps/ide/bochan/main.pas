@@ -7,7 +7,7 @@ program bochan;
   that garin is render-agnostic. }
 
 uses buffer, eduth, docmodel, lfmload, builder, project, perspective, registry,
-  typinfo, selection;
+  typinfo, selection, runner, espproj;
 
 type
   { Synthetic class hierarchy to exercise registry enumeration headlessly (no
@@ -61,6 +61,10 @@ var
   sel: TSelectionModel;
   selLn: Integer;
   selTxt: AnsiString;
+  sp: TStreamProc;
+  spOut, why, chip: AnsiString;
+  spTurns: Integer;
+  tree: TStrArray;
 
 begin
   EduthInit(e);
@@ -469,6 +473,66 @@ begin
   end
   else
     CheckTrue(e, 'sel sample.lfm present', False);
+
+  { scenario: the non-blocking runner (garin/runner StreamStart/Poll/Stop) }
+  writeln('-- runner: StreamStart / StreamPoll --');
+  CheckTrue(e, 'stream starts',
+    StreamStart(sp, '/bin/sh', ['-c', 'echo one; echo two; exit 3']));
+  spOut := '';
+  spTurns := 0;
+  while sp.Running and (spTurns < 200) do
+  begin
+    spOut := spOut + StreamPoll(sp, 100);
+    Inc(spTurns);
+  end;
+  CheckTrue(e, 'stream ends on its own', not sp.Running);
+  CheckStr(e, 'stream output', spOut, 'one' + #10 + 'two' + #10);
+  CheckInt(e, 'stream exit code', sp.ExitCode, 3);
+  writeln('-- runner: StreamStop --');
+  CheckTrue(e, 'long child starts',
+    StreamStart(sp, '/bin/sh', ['-c', 'exec sleep 30']));
+  CheckStr(e, 'poll returns without output', StreamPoll(sp, 50), '');
+  CheckTrue(e, 'still running after a poll', sp.Running);
+  StreamStop(sp);
+  CheckTrue(e, 'stopped', not sp.Running);
+  CheckInt(e, 'killed by SIGTERM', sp.ExitCode, 128 + 15);
+
+  { scenario: espproj — chip decisions and project recognition }
+  writeln('-- espproj --');
+  CheckStr(e, 'esptool S3', EspChipFromEsptool('Detecting chip type... ESP32-S3' + #10 +
+    'Connected to ESP32-S3 on /dev/ttyACM0:' + #10), 'esp32s3');
+  CheckStr(e, 'esptool C3', EspChipFromEsptool('Connected to ESP32-C3 on /dev/ttyACM1:'), 'esp32c3');
+  CheckStr(e, 'esptool none', EspChipFromEsptool('A fatal error occurred: Failed to connect'), '');
+  CheckTrue(e, 'permission problem named',
+    Pos('dialout', EspPortProblem('[Errno 13] Permission denied: ''/dev/ttyACM0''')) > 0);
+  CheckStr(e, 'chip label', EspChipLabel('esp32c3'), 'ESP32-C3');
+  CheckStr(e, 'suffix chip', EspProjectChip('examples/esp32/hello-c3'), 'esp32c3');
+  CheckStr(e, 'suffix chip s3', EspProjectChip('examples/esp32/timer-s3/'), 'esp32s3');
+  CheckStr(e, 'an IDF project', EspProjectProblem('examples/esp32/hello-s3'), '');
+  CheckTrue(e, 'a bare folder is refused',
+    Pos('not an ESP-IDF project', EspProjectProblem('apps/ide/bochan/fixtures')) > 0);
+  CheckStr(e, 'root from a source file',
+    EspFindProjectRoot('examples/esp32/hello-s3/main/main.pas', 'examples/esp32'),
+    'examples/esp32/hello-s3');
+  CheckStr(e, 'no root above a bare folder',
+    EspFindProjectRoot('apps/ide/bochan/fixtures/three.txt', 'apps/ide'), '');
+  { 'auto' with no board refuses: the S3 is never a silent default }
+  CheckTrue(e, 'auto + no board refuses',
+    not EspDecideChip('auto', '', '', chip, why));
+  CheckTrue(e, 'auto + no board says so', Pos('No board detected', why) = 1);
+  CheckStr(e, 'auto + no board picks nothing', chip, '');
+  CheckTrue(e, 'auto follows the board', EspDecideChip('auto', 'esp32c3', '', chip, why));
+  CheckStr(e, 'auto chip', chip, 'esp32c3');
+  CheckTrue(e, 'project/board mismatch refuses',
+    not EspDecideChip('auto', 'esp32s3', 'esp32c3', chip, why));
+  CheckTrue(e, 'mismatch names both chips',
+    (Pos('ESP32-C3', why) > 0) and (Pos('ESP32-S3', why) > 0));
+  CheckTrue(e, 'selector/board mismatch refuses',
+    not EspDecideChip('esp32c3', 'esp32s3', '', chip, why));
+  CheckTrue(e, 'explicit chip, no board', EspDecideChip('esp32c3', '', 'esp32c3', chip, why));
+  tree := EspListTree('examples/esp32/hello-s3', 3);
+  CheckTrue(e, 'tree lists main/ before files', (Length(tree) > 2) and (tree[0] = 'main/'));
+  CheckTrue(e, 'tree recurses into main/', Pos('main/main.pas', ' ' + tree[1] + tree[2] + tree[3]) > 0);
 
   Halt(EduthReport(e));
 end.
