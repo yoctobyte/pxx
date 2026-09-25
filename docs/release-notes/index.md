@@ -126,10 +126,11 @@ profile on hardware.
   `9c14efd7b`), those three examples lose 0 bytes per pass. The Nil Python
   monitor example, `monitor-s3`, ran 193 reports over a 3.5-minute soak with
   free heap flat, with that compiler and with v424. The timer, PWM, I2C and
-  UART units lose 0 bytes over 300 open/use/close cycles each. **Still
-  leaking:** `adc-s3` in a loop loses about 17.5 KB per pass, because an
-  `adc.read()` whose result is thrown away is never freed. A single run is not
-  affected, and assigning the result or looping over it avoids the leak.
+  UART units lose 0 bytes over 300 open/use/close cycles each. With v424,
+  `adc-s3` in a loop loses about 17.5 KB per pass, because an `adc.read()`
+  whose result is thrown away is never freed. Assigning the result or looping
+  over it avoids that, and it is
+  [fixed since v424](#fixed-since-v424).
 
 ESP is not a Unix: FreeRTOS provides tasks, not processes. Calls with POSIX
 shapes that have no meaning there return an explicit "unsupported" error rather
@@ -157,6 +158,7 @@ the same program with v424 and with a development build (compiler sha256
 | C `struct tm` lacks `tm_gmtoff` and `tm_zone` | `f82b42a21` | The C runtime's `struct tm` has both fields and honours `TZ=":zone"`. This is runtime-library source, so v424 picks it up from a checkout at or after the commit; it is what lets QuickJS build. |
 | tcc does not compile | `3c1952549`, `8d32d8c8a` | PXX compiles the Tiny C Compiler again, and that tcc compiles C and itself byte-identical to a GCC-built tcc (measured with compiler `5852ed1d21c6…`, tree `ed6297d5b`). The first commit is in the C runtime, so with v424 and a current checkout the build gets further, but it still stops at an `#include` inside a function call's arguments in `tccpp.c`. `tcc -run` does not work: it needs glibc's `libc.so.6` at run time. |
 | C `sizeof` of a dereferenced array, a typedef of array typedefs, `sizeof (t)->key` | `7b781ce15` | `sizeof *table` for `char *table[][4]` is 32, not 8, so `sizeof a / sizeof *a` counts rows correctly. `typedef vec4 mat4[4]` is 64 bytes and can be initialised as a local, and `sizeof (t)->key` parses. A probe of all three prints the same as gcc (`32 3 64 8 16`), where v424 refuses it. tiny-regex-c's own `test1`, which counts its test table this way, crashed on v424 and now passes 76 of 76, with output identical to gcc's; its `test2` and `test_compile` match gcc too. Measured with compiler `9be250c24665…`, tree `7b781ce15`. |
+| A discarded class result from a dotted call leaks (`adc.read()`) | `c4eb85dc39` | In Nil Python, a call such as `adc.read()` or `h.make()` used as a bare statement now releases the object it returns, as the assigned form always did. The fix's own test leaves 1,002 objects live on v424 and 6 with the fix (compiler `790bc11fb9c2…`, tree `f35e6ff62`). On the ESP32-S3 board, `adc-s3` looped 60 times keeps its free heap at 271,232 bytes from the first pass to the last, where a compiler without the fix fell from 253,688 to 78,252 bytes by pass 10 (board run by the ESP lane, compiler `790bc11fb9c2…`, ESP-IDF v6.0.1). |
 
 ## Known issues
 

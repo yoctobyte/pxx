@@ -465,9 +465,10 @@ v424 itself (ESP-IDF v6.0.1), and all fifteen checks passed. The details are in
 **Long-running use.** Re-run in a loop with a compiler from before the leak
 fixes, `nilpy-s3`, `nilpy-hw-s3` and `gpio-edge-s3` lost about 44, 220 and 264
 bytes per pass. Pin v424 predates those fixes, so expect the same from it. With
-the fixes, which the next pin will carry, all three stay flat. `adc-s3` in a loop still loses about 17 KB per pass, because an
-`adc.read()` whose result is thrown away is not released. Assigning the
-result, as `monitor-s3` does, avoids it.
+the fixes, which the next pin will carry, all three stay flat. With v424,
+`adc-s3` in a loop also loses about 17 KB per pass, because an `adc.read()`
+whose result is thrown away is not released. That is fixed after v424 as well
+(`c4eb85dc39`). On v424, assign the result, as `monitor-s3` does.
 
 Still unverified: `adc-c3` and `gpio-edge-c3`, because there was no C3 board
 and QEMU delivers no ADC readings or GPIO edges; and `hello-s2`, which builds

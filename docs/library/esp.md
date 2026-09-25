@@ -161,10 +161,11 @@ MicroPython's: there is no `machine.Pin` and no `Pin.irq`.
 | | `channel_pad(ch)` | the GPIO pin behind a channel on this chip (channel 0 is GPIO1 on the S3, GPIO0 on the C3) |
 
 Each completed frame is an `interrupts` event with source `INT_SRC_ADC`. A
-handler fetches the samples with `read()`. **Keep the result**: an
-`adc.read()` whose list is thrown away is never freed, and in a loop that costs
-about 17.5 KB per pass on the S3 board. Assigning the list or looping over it
-frees it. A fix is in progress. Only ADC unit 1 is supported, one
+handler fetches the samples with `read()`. **With pin v424, keep the
+result**: an `adc.read()` whose list is thrown away is never freed, and in a
+loop that costs about 17.5 KB per pass on the S3 board. Assigning the list or
+looping over it frees it. This is fixed after v424 (`c4eb85dc39`), so the next
+pin releases a discarded result too. Only ADC unit 1 is supported, one
 channel at a time, at 12 dB attenuation and 12 bits. There is no Pascal
 function that returns samples yet; reading them is Python-only.
 

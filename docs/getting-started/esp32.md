@@ -298,7 +298,10 @@ One ESP32-S3 devkit on `/dev/ttyACM0`, ESP-IDF v6.0.1, CPU at 160 MHz,
   loop, lost bytes on every pass with an earlier compiler (`bb17d23beea5`):
   `nilpy-s3` about 44, `nilpy-hw-s3` about 220, `gpio-edge-s3` about 264.
   Pin v424 predates that fix, so expect the same from it. With the later
-  compiler all three are flat. `adc-s3` run in a loop
-  still loses about 17 KB per pass with both of those compilers: its `adc.read()` calls whose
-  result is thrown away are not yet released. Assigning the result, as
-  `monitor-s3` does, avoids it.
+  compiler all three are flat. `adc-s3` run in a loop lost about 17.5 KB per
+  pass with both of those compilers, because an `adc.read()` whose result is
+  thrown away was not released: with `bb17d23beea5` its free heap fell from
+  253,688 to 78,252 bytes by pass 10. That is fixed after v424 (`c4eb85dc39`).
+  With compiler `790bc11fb9c2` (built from `e94295369`), 60 passes keep the free
+  heap at 271,232 bytes from pass 0 to pass 60, with the lowest point at
+  264,440 throughout. On v424, assign the result, as `monitor-s3` does.
