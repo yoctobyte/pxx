@@ -1,0 +1,62 @@
+# Runtime helpers that BUILD a container and hand it on must not keep a
+# reference to it. Each of these leaked on pin v433, once per call; the
+# urequests soak (1000 requests, flat) found them by walking one request:
+#
+#   variant list + list, bytes + bytes, list * n   pyadd_v / pymul_v: `Result :=
+#       obj` retained the new object, whose creation ref was never dropped
+#   bytes growth (append, extend, variant bytes +)  PyBytesEnsure dropped the
+#       old buffer instead of freeing it
+#   f(**d), d1 | d2, d.update(d2)                  keylist/vallist snapshots
+#       never released (pydict_merge, pydict_or, TPyDict.update)
+#   iter(d), iter(<variant dict>), reversed(<variant dict>)
+#       the fresh keylist, retained by the iterator, never released
+#
+# Operands come out of a mixed list so they are VARIANTS: a statically typed
+# operand takes the compile-time path, which was already balanced.
+#
+#   <n> all    every operation above, n times; must stay under the bound
+#   <n> keep   POSITIVE CONTROL: the same loop keeps every result alive, so
+#              the same bound must trip. Without it a dead census would pass.
+import sys
+
+n = int(sys.argv[1])
+mode = sys.argv[2]
+src = [b"ab", 2, [1, 2], {"x": 1, "y": 2}]
+
+
+def hint(p, x=None, y=None):
+    return p
+
+
+def one(src):
+    b = src[0]
+    k = src[1]
+    l = src[2]
+    d = src[3]
+    got = []
+    got.append(b + b)
+    got.append(l + l)
+    got.append(l * k)
+    bb = bytearray(b"")
+    for i in range(20):
+        bb.append(i)
+    got.append(bb)
+    got.append(hint(1, **d))
+    got.append(d | {"z": 3})
+    c = {"k": 0}
+    c.update(d)
+    got.append(c)
+    got.append(next(iter(d)))
+    got.append(next(reversed(d)))
+    return got
+
+
+kept = []
+total = 0
+for i in range(n):
+    got = one(src)
+    total = total + len(got[0]) + len(got[1]) + len(got[2]) + len(got[3])
+    total = total + got[4] + len(got[5]) + len(got[6])
+    if mode == "keep":
+        kept.append(got)
+print(mode, n, total, got[7], got[8])

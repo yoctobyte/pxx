@@ -3255,6 +3255,32 @@ begin
   CurASTNode := left;
 end;
 
+{ A bitwise operator with a VARIANT operand -> the pylib `_v` helper, or -1
+  when neither operand is a variant. The inline AN_BINOP runs integer
+  arithmetic on whatever the variant holds, so a set or a dict that came out
+  of a list, an unannotated parameter or an attribute was ORed as its HANDLE:
+  `d | {"z": 3}` printed an address and `s | t` / `s & t` / `s ^ t` gave an
+  empty set, silently. The helpers dispatch on the runtime tag -- user dunder,
+  then set/dict, then the same arbitrary-precision int arm the inline path had
+  -- so an int operand computes exactly as before. The static set/dict arms
+  above each caller still take a statically typed pair first. }
+function PyBitVariantCall(const fname: AnsiString; left, right: Integer): Integer;
+var procIdx, arg0, arg1: Integer;
+begin
+  Result := -1;
+  if (IntToTypeKind(ASTTk[left]) <> tyVariant) and
+     (IntToTypeKind(ASTTk[right]) <> tyVariant) then Exit;
+  procIdx := FindProc(fname);
+  if procIdx < 0 then Exit;
+  arg0 := AllocNode(AN_ARG); ASTLeft[arg0] := left;
+  arg1 := AllocNode(AN_ARG); ASTLeft[arg1] := right;
+  ASTRight[arg0] := arg1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyVariant);
+  ASTLeft[Result] := arg0;
+end;
+
 procedure PyParseBitAnd;
 var left, right, node: Integer;
 begin
@@ -3277,6 +3303,8 @@ begin
     node := PyBitDunder('__and__', left, right);
     if node >= 0 then begin left := node; Continue; end;
     PyBitGuard(left); PyBitGuard(right);
+    node := PyBitVariantCall('pybitand_v', left, right);
+    if node >= 0 then begin left := node; Continue; end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
     ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(PyBitWiden(left, right));
@@ -3303,6 +3331,8 @@ begin
     node := PyBitDunder('__xor__', left, right);
     if node >= 0 then begin left := node; Continue; end;
     PyBitGuard(left); PyBitGuard(right);
+    node := PyBitVariantCall('pybitxor_v', left, right);
+    if node >= 0 then begin left := node; Continue; end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
     ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(PyBitWiden(left, right));
@@ -3337,6 +3367,8 @@ begin
     node := PyBitDunder('__or__', left, right);
     if node >= 0 then begin left := node; Continue; end;
     PyBitGuard(left); PyBitGuard(right);
+    node := PyBitVariantCall('pybitor_v', left, right);
+    if node >= 0 then begin left := node; Continue; end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
     ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(PyBitWiden(left, right));

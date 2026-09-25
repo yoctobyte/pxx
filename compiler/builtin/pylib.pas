@@ -6000,9 +6000,16 @@ begin
 end;
 
 function iter(d: TPyDict): TPyIter; overload;
+var ks: TPyList;
 begin
-  if d = nil then Result := pyiter_of_list(TPyList.Create)
-  else Result := pyiter_of_list(d.keylist);
+  { pyiter_of_list RETAINS its list, and both lists here are freshly
+    constructed (keylist builds one), so the iterator must end up the only
+    owner: build, hand over, drop ours. Without the release `iter(d)` leaked
+    the key snapshot once per call. }
+  if d = nil then ks := TPyList.Create
+  else ks := d.keylist;
+  Result := pyiter_of_list(ks);
+  PXXObjRelease(Pointer(ks));
 end;
 
 function iter(b: TPyBytes): TPyIter; overload;
@@ -7262,12 +7269,14 @@ begin
     keys := a.keylist;
     for i := 0 to keys.count - 1 do
       Result.store(keys.at(i), a.fetch(keys.at(i)));
+    PXXObjRelease(Pointer(keys));   { keylist constructs a fresh list }
   end;
   if b <> nil then
   begin
     keys := b.keylist;
     for i := 0 to keys.count - 1 do
       Result.store(keys.at(i), b.fetch(keys.at(i)));
+    PXXObjRelease(Pointer(keys));
   end;
 end;
 
@@ -8999,6 +9008,11 @@ begin
   kl := src.keylist;
   vl := src.vallist;
   for i := 0 to kl.count - 1 do dst.store(kl.at(i), vl.at(i));
+  { keylist/vallist CONSTRUCT their lists (see dict()); releasing them is the
+    caller's job. Unreleased, every `f(**d)` forward leaked both -- this is
+    the merge the forwarder's hoisted kwargs copy goes through. }
+  PXXObjRelease(Pointer(kl));
+  PXXObjRelease(Pointer(vl));
 end;
 
 procedure pydict_merge_any(dst: TPyDict; const src: Variant);
@@ -9227,6 +9241,9 @@ begin
     else
       store(k, vs.at(i));
   end;
+  { keylist/vallist construct fresh lists; see dict() }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
 end;
 
 { Insertion sort over an index vector: a Counter here holds a handful of note or
@@ -10216,7 +10233,9 @@ begin
       end;
       Inc(k);
     end;
-    Result := rep;
+    { takes over rep's rc=1 -- `Result := rep` retained it and the list leaked
+      once per variant repeat (see pyadd_v's list arm) }
+    r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(rep)));
     Exit;
   end;
   sp := nil; np := nil;
@@ -10834,7 +10853,12 @@ begin
       joined.FKind := TPyList(oa).FKind;
       for ji := 0 to TPyList(oa).count - 1 do joined.append(TPyList(oa).at(ji));
       for ji := 0 to TPyList(ob).count - 1 do joined.append(TPyList(ob).at(ji));
-      Result := joined;
+      { The variant TAKES OVER the new object's rc=1, as the user-dunder arm
+        of PyVarUserArith does. `Result := joined` retained it (rc=2 against
+        the one release the caller's variant makes), so every variant
+        `list + list` leaked the whole new list; the bytes arm below and
+        pymul_v's list repeat had the same line. }
+      r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(joined)));
       Exit;
     end;
     { bytes + bytes -> a NEW bytes, the sibling of the list arm above and of the
@@ -10851,7 +10875,7 @@ begin
       jb.FLen := 0;
       jb.extend(TPyBytes(oa));
       jb.extend(TPyBytes(ob));
-      Result := jb;
+      r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(jb)));   { takes over rc=1, see the list arm }
       Exit;
     end;
   end;
@@ -10955,6 +10979,49 @@ begin
   Result := pyadd_v(a, b);
 end;
 
+{ The CONTAINER arm of `|` `&` `^` `-` over two VARIANTS: set with set
+  through the typed pyset_* helpers (which raise for a non-set operand, the
+  CPython answer for a list), dict | dict through pydict_or. Returns False when
+  neither operand is an object, so the numeric arm runs as before.
+
+  Without it the bitwise ops ran pyvar_to_int on both operands, which for an
+  object answers its HANDLE: `d | {"z": 3}` on a dict that came out of a list
+  printed an address, and `s | {3}` / `s & t` / `s ^ t` on variant sets gave an
+  empty result -- silently, on the ordinary set/dict idioms; `s - t` raised
+  "expected a number". An object with no arm here now raises TypeError instead
+  of doing arithmetic on its address. The new container is handed to the
+  variant, which takes over its rc=1 (see pyadd_v's list arm). }
+function PyVarSetOp(const a: Variant; const b: Variant; op: Integer;
+                    const sym: AnsiString; var res: Variant): Boolean;
+var oa, ob: TObject; rl: TPyList; rd: TPyDict; r: PPyVarRec;
+begin
+  Result := False;
+  if (pyvartag(a) <> 7) and (pyvartag(b) <> 7) then Exit;
+  Result := True;
+  r := PPyVarRec(@res);
+  oa := nil; ob := nil;
+  if pyvartag(a) = 7 then oa := TObject(pyvarobj(a));
+  if pyvartag(b) = 7 then ob := TObject(pyvarobj(b));
+  if (oa <> nil) and (ob <> nil) and (oa is TPyList) and (ob is TPyList) then
+  begin
+    if op = 0 then rl := pyset_or(TPyList(oa), TPyList(ob))
+    else if op = 1 then rl := pyset_and(TPyList(oa), TPyList(ob))
+    else if op = 2 then rl := pyset_xor(TPyList(oa), TPyList(ob))
+    else rl := pyset_sub(TPyList(oa), TPyList(ob));
+    r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(rl)));
+    Exit;
+  end;
+  if (op = 0) and (oa <> nil) and (ob <> nil) and (oa is TPyDict) and (ob is TPyDict) then
+  begin
+    rd := pydict_or(TPyDict(oa), TPyDict(ob));
+    r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(rd)));
+    Exit;
+  end;
+  raise TypeError.Create('unsupported operand type(s) for ' + sym + ': ' + Chr(39) +
+                         pytype_name_v(a) + Chr(39) + ' and ' + Chr(39) +
+                         pytype_name_v(b) + Chr(39));
+end;
+
 function pysub_v(const a: Variant; const b: Variant): Variant;
 var pa, pb, r: PPyVarRec;
     ia, ib, ir: Int64;   { machine-word result, checked for overflow }
@@ -10967,6 +11034,7 @@ begin
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
   if PyVarUserArith(a, b, '__sub__', '__rsub__', Result) then Exit;
+  if PyVarSetOp(a, b, 3, '-', Result) then Exit;   { set - set; see PyVarSetOp }
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -11008,16 +11076,49 @@ end;
 
 function pybitand_v(const a: Variant; const b: Variant): Variant;
 begin
+  if PyVarUserArith(a, b, '__and__', '__rand__', Result) then Exit;
+  if PyVarSetOp(a, b, 1, '&', Result) then Exit;
+  { an ARBITRARY-PRECISION operand stays exact, as on the inline path the
+    compiler used before routing variant bitwise ops here (op 6) }
+  { bool and bool is a bool in Python, not an int (VT_BOOL is tag 4) }
+  if (pyvartag(a) = 4) and (pyvartag(b) = 4) then
+  begin
+    Result := pyvar_of_bool(((pyvar_to_int(a) and pyvar_to_int(b)) and 1) <> 0);
+    Exit;
+  end;
+  if PXXPromoVarArithTry(@Result, @a, @b, 6) <> 0 then Exit;
   Result := pyvar_of_int(pyvar_to_int(a) and pyvar_to_int(b));
 end;
 
 function pybitor_v(const a: Variant; const b: Variant): Variant;
 begin
+  if PyVarUserArith(a, b, '__or__', '__ror__', Result) then Exit;
+  if PyVarSetOp(a, b, 0, '|', Result) then Exit;
+  { an ARBITRARY-PRECISION operand stays exact, as on the inline path the
+    compiler used before routing variant bitwise ops here (op 7) }
+  { bool or bool is a bool in Python, not an int (VT_BOOL is tag 4) }
+  if (pyvartag(a) = 4) and (pyvartag(b) = 4) then
+  begin
+    Result := pyvar_of_bool(((pyvar_to_int(a) or pyvar_to_int(b)) and 1) <> 0);
+    Exit;
+  end;
+  if PXXPromoVarArithTry(@Result, @a, @b, 7) <> 0 then Exit;
   Result := pyvar_of_int(pyvar_to_int(a) or pyvar_to_int(b));
 end;
 
 function pybitxor_v(const a: Variant; const b: Variant): Variant;
 begin
+  if PyVarUserArith(a, b, '__xor__', '__rxor__', Result) then Exit;
+  if PyVarSetOp(a, b, 2, '^', Result) then Exit;
+  { an ARBITRARY-PRECISION operand stays exact, as on the inline path the
+    compiler used before routing variant bitwise ops here (op 8) }
+  { bool xor bool is a bool in Python, not an int (VT_BOOL is tag 4) }
+  if (pyvartag(a) = 4) and (pyvartag(b) = 4) then
+  begin
+    Result := pyvar_of_bool(((pyvar_to_int(a) xor pyvar_to_int(b)) and 1) <> 0);
+    Exit;
+  end;
+  if PXXPromoVarArithTry(@Result, @a, @b, 8) <> 0 then Exit;
   Result := pyvar_of_int(pyvar_to_int(a) xor pyvar_to_int(b));
 end;
 
@@ -11809,6 +11910,11 @@ begin
   end;
   dst := PByte(NativeInt(np) + need);
   dst^ := 0;
+  { The old buffer is OWNED here: a view (the only borrowed FData) raised in
+    PyBytesNoResize above, and PyObjFinalize frees a non-view's FData the same
+    way. Dropping it instead leaked one buffer per growth -- per append() of a
+    byte, and per variant `bytes + bytes` (pyadd_v pre-sizes, then extends). }
+  if b.FData <> nil then FreeMem(b.FData);
   b.FData := np;
   b.FLen := need;
 end;
@@ -15115,7 +15221,7 @@ begin
 end;
 
 function pyiter_v(const v: Variant): TPyIter;
-var o: TObject;
+var o: TObject; dks: TPyList;
 begin
   if pyvartag(v) = 6 then begin Result := pyiter_of_str(VariantToStr(v)); Exit; end;
   if pyvartag(v) = 7 then
@@ -15126,7 +15232,15 @@ begin
     if o is TPyIter then begin Result := TPyIter(o); Exit; end;
     if o is TPyList then begin Result := pyiter_of_list(TPyList(o)); Exit; end;
     { a dict iterates its KEYS, as `for k in d` and `list(d)` both do }
-    if o is TPyDict then begin Result := pyiter_of_list(TPyDict(o).keylist); Exit; end;
+    { keylist is fresh and pyiter_of_list retains: hand it over, drop ours
+      (see iter(d: TPyDict)) }
+    if o is TPyDict then
+    begin
+      dks := TPyDict(o).keylist;
+      Result := pyiter_of_list(dks);
+      PXXObjRelease(Pointer(dks));
+      Exit;
+    end;
     if o is TPyBytes then begin Result := pyiter_of_list(list(TPyBytes(o))); Exit; end;
     if o is TPyFile then begin Result := pyiter_of_list(TPyFile(o).readlines); Exit; end;
     { a RANGE hands back a FRESH cursor every time — that is what re-iterable
@@ -19563,7 +19677,7 @@ begin
 end;
 
 function reversed(const v: Variant): TPyIter; overload;
-var o: TObject; seq: TPyList;
+var o: TObject; seq, dks: TPyList;
 begin
   if pyvartag(v) = 7 then
   begin
@@ -19574,7 +19688,14 @@ begin
       REJECTS the code: drain and reverse what came out. }
     if o is TPyRange then begin Result := reversed(TPyRange(o)); Exit; end;
     if o is TPyIter then begin Result := reversed(pyiter_drain(TPyIter(o))); Exit; end;
-    if o is TPyDict then begin Result := reversed(TPyDict(o).keylist); Exit; end;
+    { fresh keylist, retained by the reversed iterator: drop ours }
+    if o is TPyDict then
+    begin
+      dks := TPyDict(o).keylist;
+      Result := reversed(dks);
+      PXXObjRelease(Pointer(dks));
+      Exit;
+    end;
     { any other USER object that is ITERABLE -- by `__iter__` or by the
       old-style `__getitem__` sequence protocol -- materialised through the one
       chain and reversed, exactly as the cursor arm above does. Without it this

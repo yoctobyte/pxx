@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 blocked-by: []
-summary: "`c & 12` where c reads as a VARIANT holding a user object never reaches __and__: it coerces the object to an int instead. Same for |, ^, << and >>. This is what blocks the augmented halves &=, |=, ^=, <<= and >>=."
+summary: "Two shapes are left. (1) `<<` and `>>` with a VARIANT operand holding a user object still coerce it to an int (RunError 219) and never call __lshift__/__rshift__. (2) The augmented `&= |= ^= <<= >>=` on a variant target never try an in-place dunder, and never mutate a set or dict in place. The plain `& | ^` got their variant arm on 2026-09-25. Also found: a reflected bitwise dunder with a statically class-typed RIGHT operand (`12 & c`, calling C.__rand__) segfaults, and it does on pin v433 too."
 ---
 
 # `&`, `|`, `^`, `<<`, `>>` on a variant user object skip the dunder
@@ -112,3 +112,37 @@ already have: `if PyVarUserArith(a, b, '__matmul__', '__rmatmul__', Result)
 then Exit;` at the top of the variant `@` routine. Not fixed in that commit
 because the dispatch ticket's fixture had to stay about dispatch; six
 operators now share this ticket.
+
+## Addendum 2026-09-25 (frankB): `& | ^` fixed; shifts, augmented and reflected-static are still open
+
+- **What landed.** `PyParseBitAnd/Xor/Or` now route a pair with a VARIANT operand
+  to `pybitand_v/pybitxor_v/pybitor_v` (`PyBitVariantCall`, in `pyparser.inc`).
+  The IR arm this ticket proposed is not used, and that is deliberate. At IR
+  level `tkAnd`/`tkOr` with a variant operand also covers the synthesized
+  boolean `and`/`or` nodes (`PyParseBoolExpr` builds a `tkOr` AN_BINOP), so the
+  parser is the one place that only sees the operator.
+- **The helper order.** Each helper tries, in order:
+  1. `PyVarUserArith`, the dunder and its reflection;
+  2. `PyVarSetOp`: set with set through `pyset_*`, dict | dict through
+     `pydict_or`, TypeError for any other object;
+  3. bool with bool, giving a bool;
+  4. `PXXPromoVarArithTry` with the inline path's op codes 6, 7 and 8, so a big
+     int stays exact;
+  5. the machine-int fallback.
+  `pysub_v` got the `PyVarSetOp` arm too, for set `-`.
+- **Measured.** `test/test_nilpy_a_bitwise_operator_on_a_variant_dispatches_on_its_type.npy`
+  diffs the plain operators against CPython's output: int, big int, negative,
+  bool, dunder (with `__ror__` through a variant), set, set with a literal,
+  dict, a list that must raise, and a loop. Every row matches at HEAD. Pin v433
+  diverges from the bool row on.
+- **Still open.** `<<` and `>>` are not routed. The augmented forms need
+  in-place twins, because `s |= t` must mutate the set the other names see, and
+  routing them to the plain helper would rebind to a new set. `12 & c` with `c`
+  statically class-typed never enters these helpers (neither operand is a
+  variant) and segfaults, the same on the pin: the static dunder dispatch
+  (`PyBitDunder`) only tries the LEFT operand's class.
+- **This ticket's repro is not the variant case today.** The `p_and(c)`
+  parameter is call-site-typed as `C`, so `c & 12` already reaches `__and__`
+  statically on pin v433 (it prints 4). The variant shape is an operand that
+  comes out of a list, which is what the fixture uses.
+

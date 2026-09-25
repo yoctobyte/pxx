@@ -1,0 +1,60 @@
+# `|` `&` `^` (and set `-`) with a VARIANT operand dispatch on what the
+# variant holds: a user class's dunder, a set, a dict, a bool, an int of any
+# size. Every operand here comes out of a list, so it is a variant.
+#
+# Before, the compiler lowered these to integer arithmetic on the variant: a
+# dict or set was ORed as its HANDLE (`d | {"z": 3}` printed an address,
+# `s | t` gave an empty set), a user class's __and__/__or__/__xor__ was never
+# called (AttributeError on the int that came back), and `s - t` raised
+# "expected a number". The .expected is CPython's output for this file.
+#
+# NOT covered, still open (bug-n-a-bitwise-or-shift-operator-on-a-variant-
+# user-object-never-reaches-its-dunder): << and >>, the augmented forms
+# (`s |= t` must mutate in place), and a reflected dunder with a statically
+# class-typed right operand (`12 & c`).
+
+
+class C:
+    def __init__(self, v):
+        self.v = v
+
+    def __and__(self, o):
+        return C(self.v & o)
+
+    def __or__(self, o):
+        return C(self.v | o)
+
+    def __xor__(self, o):
+        return C(self.v ^ o)
+
+    def __ror__(self, o):
+        return C(o | self.v | 64)
+
+
+src = [6, 3, 2 ** 70, -5, True, False, C(20), [1], {1, 2}, {"a": 1}, {2, 3}]
+a = src[0]
+b = src[1]
+big = src[2]
+neg = src[3]
+t = src[4]
+f = src[5]
+c = src[6]
+s = src[8]
+d = src[9]
+u = src[10]
+print("int", a | b, a & b, a ^ b, a | 1, 8 | b, a & 12, a ^ 255)
+print("big", big | a, big & (big - 1), big ^ 1)
+print("neg", neg | 2, neg & 7, neg ^ -1)
+print("bool", t | f, t & f, t ^ t, t | 2)
+print("dunder", (c & 12).v, (c | 3).v, (c ^ 5).v, (3 | c).v)
+print("set", sorted(s | u), sorted(s & u), sorted(s ^ u), sorted(s - u))
+print("set+literal", sorted(s | {9}), sorted({2, 7} & s))
+print("dict", d | {"z": 3}, {"q": 0} | d)
+try:
+    print(src[7] | src[7])
+except TypeError as e:
+    print("TypeError", e)
+x = 0
+for i in range(5):
+    x = x | src[i % 2]
+print("loop", x)

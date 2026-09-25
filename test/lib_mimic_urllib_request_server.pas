@@ -80,6 +80,13 @@ begin
       'm=' + req.Method + ' ct=' + ct + ' b=' + body);
   end
 
+  else if req.Path = '/json' then
+    { a JSON document for urequests' Response.json() (lib_mimic_urequests.npy) }
+    Handler := HttpBuildResponse(200, 'OK',
+      'Content-Type: application/json'#13#10 +
+      'Connection: keep-alive'#13#10,
+      '{"name": "pxx", "n": [1, 2, 3], "ok": true, "nested": {"k": null}}')
+
   else if req.Path = '/quit' then
   begin
     gQuit := True;

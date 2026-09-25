@@ -1,0 +1,61 @@
+# urequests (lib/rtl/mimic_urequests.py) against the local test server
+# test/lib_mimic_urllib_request_server.pas.
+#
+#   lib_mimic_urequests <port>              the oracle transcript
+#   lib_mimic_urequests <port> soak <n>     n requests, each response dropped
+#   lib_mimic_urequests <port> keep <n>     POSITIVE CONTROL: every response kept
+#
+# The transcript is diffed against the SAME file run under CPython, with
+# test/urequests_oracle/ on PYTHONPATH: MicroPython's urequests semantics
+# (no redirect following, one connection per request) over CPython
+# `requests`. So the diff compares this client with a real one talking to the
+# same server, not with our own idea of what the server says.
+#
+# The soak runs under the allocation census (the lib-test row), and the keep
+# control must trip the same bound. Without the control, a dead census would
+# pass the soak.
+import sys
+import urequests
+
+port = sys.argv[1]
+base = "http://127.0.0.1:" + port
+
+if len(sys.argv) > 2:
+    mode = sys.argv[2]
+    n = int(sys.argv[3])
+    kept = []
+    total = 0
+    for i in range(n):
+        r = urequests.get(base + "/hello")
+        total = total + r.status_code + len(r.text)
+        r.close()
+        if mode == "keep":
+            kept.append(r)
+    print(mode, n, total)
+    sys.exit(0)
+
+r = urequests.get(base + "/hello")
+print(r.status_code, r.reason, r.headers["Content-Type"], repr(r.text))
+r.close()
+r = urequests.get(base + "/notfound")
+print(r.status_code, r.reason, repr(r.text))
+r = urequests.get(base + "/json")
+d = r.json()
+print(r.status_code, r.headers["Content-Type"], d["name"], d["n"][1], d["ok"], d["nested"]["k"])
+r = urequests.post(base + "/echo", json={"a": 1, "b": "x"})
+print(r.status_code, r.text)
+r = urequests.post(base + "/echo", data="k=v", headers={"Content-Type": "application/x-www-form-urlencoded"})
+print(r.status_code, r.text)
+r = urequests.put(base + "/echo", data=b"raw")
+print(r.status_code, r.text)
+r = urequests.patch(base + "/echo", data="p")
+print(r.status_code, r.text)
+r = urequests.delete(base + "/echo")
+print(r.status_code, r.text)
+# not followed: the 3xx comes back as it is, with its Location
+r = urequests.get(base + "/redirect")
+print("redirect", r.status_code, r.headers["Location"])
+r = urequests.head(base + "/hello")
+print("head", r.status_code, len(r.content))
+print(len(r.content) == 0, type(r.content) is bytes)
+print("URequests OK")

@@ -3098,6 +3098,19 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_dtor_wave 200 $(TESTTMP)/test_nilpy_dtor_buf26 wave $(TESTTMP)/nilpy_dtor_clip.wav
 	@if tools/assert_no_leak.sh nilpy_dtor_control 200 $(TESTTMP)/test_nilpy_dtor_buf26 keep $(TESTTMP)/nilpy_dtor_clip.wav >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_dtor control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# Runtime helpers that BUILD a container and hand it on keep no reference
+	# to it: variant list/bytes +, list *, bytes growth, f(**d), d | e,
+	# d.update(e), iter/reversed of a dict. Each leaked once per call on pin
+	# v433; the urequests soak found them. `keep` is the positive control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_fresh_container_from_a_runtime_helper_is_released.npy $(TESTTMP)/test_nilpy_fresh26
+	tools/assert_no_leak.sh nilpy_fresh_container_released 300 $(TESTTMP)/test_nilpy_fresh26 3000 all
+	@if tools/assert_no_leak.sh nilpy_fresh_container_control 300 $(TESTTMP)/test_nilpy_fresh26 3000 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_fresh_container control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# `|` `&` `^` and set `-` on a VARIANT dispatch on what it holds (dunder,
+	# set, dict, bool, int of any size) instead of doing integer arithmetic on
+	# a handle. The .expected is CPython's output for the file.
+	./$(COMPILER) test/test_nilpy_a_bitwise_operator_on_a_variant_dispatches_on_its_type.npy $(TESTTMP)/test_nilpy_varbits26
+	$(TESTTMP)/test_nilpy_varbits26 | diff -u test/test_nilpy_a_bitwise_operator_on_a_variant_dispatches_on_its_type.expected -
 	@# ...and the two REFUSALS, which are different questions and used to be one
 	@# answer. Where the locks exist, the flag is the remedy and the diagnostic
 	@# names it. Where they do NOT (wasm32 here), prescribing the flag was a dead
@@ -39611,6 +39624,12 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_mimic_urllib_request_server.pas $(TESTTMP)/lib_urllib_server
 	$(PXX_STABLE) test/lib_mimic_urllib_request.npy $(TESTTMP)/lib_urllib_client
 	$(PXX_STABLE) test/lib_mimic_urllib_request_refusals.npy $(TESTTMP)/lib_urllib_refusals
+	# urequests (lib/rtl/mimic_urequests.py, MicroPython's HTTP client) against
+	# the same server. Built with ./$(COMPILER), not the pin: its soak row
+	# depends on runtime leak fixes in this tree's compiler/builtin (variant
+	# bytes +, bytes growth, f(**d)), which no pin before v434 carries.
+	./$(COMPILER) test/lib_mimic_urequests.npy $(TESTTMP)/lib_urequests
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/lib_mimic_urequests.npy $(TESTTMP)/lib_urequests_census
 	# pathname2url / url2pathname need NO server -- they are pure string work --
 	# and their expectation is PINNED rather than diffed against the host
 	# python3. CPython's answer changed in 3.13 (an absolute path gained the
@@ -39652,6 +39671,22 @@ lib-test: pxx-stable-check
 	      && echo "  lib-test: mimic_urllib_request matches CPython" \
 	      || { echo "FAIL: mimic_urllib_request diverges from CPython"; diff $(TESTTMP)/lib_urllib_cpy.txt $(TESTTMP)/lib_urllib_pxx.txt | head -20; exit 1; }; \
 	  else echo "  lib-test: python3 absent, skipping the urllib oracle diff"; fi; \
+	  : "urequests: its transcript, then the SAME file under CPython requests"; \
+	  : "(test/urequests_oracle/ adapts it to MicroPython's no-redirect,"; \
+	  : "one-connection-per-request semantics), then a 1000-request soak under"; \
+	  : "the allocation census with the keep control that must trip"; \
+	  $(TESTTMP)/lib_urequests $$uport > $(TESTTMP)/lib_urequests_pxx.txt 2>&1; \
+	  tools/expect_same.sh lib_urequests "$$(tail -n 1 $(TESTTMP)/lib_urequests_pxx.txt)" "URequests OK" \
+	    || { echo "FAIL: urequests client did not finish"; tail -20 $(TESTTMP)/lib_urequests_pxx.txt; exit 1; }; \
+	  if command -v python3 >/dev/null 2>&1 && python3 -c "import requests" 2>/dev/null; then \
+	    PYTHONPATH=test/urequests_oracle python3 test/lib_mimic_urequests.npy $$uport > $(TESTTMP)/lib_urequests_cpy.txt 2>&1; \
+	    diff $(TESTTMP)/lib_urequests_cpy.txt $(TESTTMP)/lib_urequests_pxx.txt >/dev/null \
+	      && echo "  lib-test: urequests matches CPython requests" \
+	      || { echo "FAIL: urequests diverges from CPython requests"; diff $(TESTTMP)/lib_urequests_cpy.txt $(TESTTMP)/lib_urequests_pxx.txt | head -20; exit 1; }; \
+	  else echo "  lib-test: python3 requests absent, skipping the urequests oracle diff"; fi; \
+	  tools/assert_no_leak.sh lib_urequests_soak 300 $(TESTTMP)/lib_urequests_census $$uport soak 1000; \
+	  if tools/assert_no_leak.sh lib_urequests_control 300 $(TESTTMP)/lib_urequests_census $$uport keep 1000 >/dev/null 2>&1; then \
+	    echo "FAIL: lib_urequests control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi; \
 	  kill $$srv 2>/dev/null || true
 	# lib/pcl/tkhtmlview is a NilPy library, so CPython is an oracle for it the
 	# way it is for nilsh above: the SAME source, on real tkinter, must render
