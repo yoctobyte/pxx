@@ -228,11 +228,10 @@ build of the same file on x86-64:
 | aarch64 | `3 7 19 42 \| 1.4142 \| 6 \| 64-bit` |
 | arm32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
 | riscv32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
-| wasm32 | refused: `wasm: var-name pool full` |
+| wasm32 | v424 refuses it: `wasm: var-name pool full`; the development tree prints `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
 
-On wasm32, C programs using `stdio.h`, `stdlib.h` and `string.h` build and
-run under wasmtime, but any program that includes `math.h` is refused with that
-message. That applies to v424 and to the development tree.
+On v424, any wasm32 C program that includes `math.h` is refused with that
+message. The development tree builds and runs them under wasmtime.
 
 C also runs on the ESP32 chips; see [ESP32](../targets/esp32.md).
 

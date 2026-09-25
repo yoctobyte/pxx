@@ -185,6 +185,10 @@ var
   WasmFuncNVar   : array[0..MAX_WASM_FUNCS-1] of Integer;
   WasmVarNames   : array[0..MAX_WASM_VARNAMES-1] of AnsiString;
   WasmVarNameLen : Integer;
+  { Scratch for WasmCompactPools: the live ranges are gathered here and copied
+    back, because a resumed body leaves its old range behind in both pools. }
+  WasmVarNamesTmp: array[0..MAX_WASM_VARNAMES-1] of AnsiString;
+  WasmLocalTmp   : array[0..MAX_WASM_LOCALS-1] of Byte;
   { Per-BODY buffers for locals and param/local names, flushed into the pools
     above by WasmBodyEnd — exactly as WFB is flushed into WasmCodePool.
 
@@ -1266,6 +1270,42 @@ begin
   WasmBodyResume := True;
 end;
 
+{ Drop the ranges WasmBodyResume orphaned from the locals and name pools.
+  Every resume copies a body's names and locals out and WasmBodyEnd appends
+  them again, so a body emitted in many chunks leaves a copy of its growing
+  list behind per chunk. Measured 2026-09-25 on a wasm32 C program including
+  <math.h>: the name pool held 65244 entries of which 3819 were live, main's
+  351 names re-copied per resume, and it failed `var-name pool full` with 94%
+  of the pool dead. Run only when a pool is about to overflow, so a module
+  that fits is laid out byte-for-byte as before. `skip` is the slot being
+  sealed: its recorded range is the stale one it is about to replace. }
+procedure WasmCompactPools(skip: Integer);
+var i, j, n: Integer;
+begin
+  n := 0;
+  for i := 0 to WasmFuncCount - 1 do
+    if (i <> skip) and (WasmFuncNVar[i] > 0) then
+    begin
+      for j := 0 to WasmFuncNVar[i] - 1 do
+        WasmVarNamesTmp[n + j] := WasmVarNames[WasmFuncVarOfs[i] + j];
+      WasmFuncVarOfs[i] := n;
+      n := n + WasmFuncNVar[i];
+    end;
+  for i := 0 to n - 1 do WasmVarNames[i] := WasmVarNamesTmp[i];
+  WasmVarNameLen := n;
+  n := 0;
+  for i := 0 to WasmFuncCount - 1 do
+    if (i <> skip) and (WasmFuncNLoc[i] > 0) then
+    begin
+      for j := 0 to WasmFuncNLoc[i] - 1 do
+        WasmLocalTmp[n + j] := WasmLocalPool[WasmFuncLocOfs[i] + j];
+      WasmFuncLocOfs[i] := n;
+      n := n + WasmFuncNLoc[i];
+    end;
+  for i := 0 to n - 1 do WasmLocalPool[i] := WasmLocalTmp[i];
+  WasmLocalLen := n;
+end;
+
 { Seal the scratch body into the code pool for a function slot. }
 procedure WasmBodyEnd(slot: Integer);
 var i: Integer;
@@ -1288,6 +1328,8 @@ begin
   { Flush the per-body locals and names into the pools, recording THIS slot's
     offsets — so pool order follows body-COMPLETION order and a slot reserved
     earlier by a call is filled in correctly. }
+  if (WasmLocalLen + WFLocLen > MAX_WASM_LOCALS) or
+     (WasmVarNameLen + WFVarLen > MAX_WASM_VARNAMES) then WasmCompactPools(slot);
   if WasmLocalLen + WFLocLen > MAX_WASM_LOCALS then WasmFail('wasm: local pool full');
   if WasmVarNameLen + WFVarLen > MAX_WASM_VARNAMES then WasmFail('wasm: var-name pool full');
   WasmFuncLocOfs[slot] := WasmLocalLen;

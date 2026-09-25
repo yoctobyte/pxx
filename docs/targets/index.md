@@ -67,7 +67,7 @@ table.
 | `--emit-obj` (relocatable object) | yes | yes | yes | yes | yes | refused |
 | `--shared` (shared library) | yes | refused | refused | refused | refused | refused |
 | Nil Python | yes | yes | yes | yes | refused | yes |
-| C with `#include <math.h>` | yes | yes | yes | yes | yes | refused |
+| C with `#include <math.h>` | yes | yes | yes | yes | yes | refused in v424, yes in the development tree |
 
 Every **refused** cell is a compile-time error that names the reason; none
 produces a program that runs wrongly. On v424, three of the messages are

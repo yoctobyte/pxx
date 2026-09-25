@@ -67,6 +67,14 @@ will carry the fixes. Until then, use the workaround.
   string leaks one string per call: 190 of 200 were never freed in a loop.
   **Workaround:** assign the result to a local first (`s := F(k); writeln(s)`),
   which frees everything.
+- **C `printf` with a `double` prints wrong values on riscv32** once the call
+  has more arguments than fit in registers (for example four `double`s, three
+  `double`s and an `int`, or a `double` and five `int`s). The extra arguments
+  print as a tiny number such as `5.30758e-315` or as garbage, with no
+  diagnostic. Hosted xtensa does the same, and so does any C function that reads
+  its own `va_list`. **Workaround:** split the call into several shorter ones.
+- **A wasm32 C program that includes `math.h` is refused** with
+  `wasm: var-name pool full`. **Workaround:** none on wasm32.
 - **A type named like a compiler-internal record gets the wrong layout.**
   `type TProc = record A: array[0..99] of Int64; end` has `SizeOf` 1344 instead
   of 800, and an enum named `TSymbol` is 104 bytes instead of 4, with no

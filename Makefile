@@ -17720,6 +17720,12 @@ test-core: $(COMPILER)
 	   "$$(PXX_WASM_HOSTED_PROBE=set-by-the-caller tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_hosted.wasm)" \
 	   "$$(PXX_WASM_HOSTED_PROBE=set-by-the-caller $(TESTTMP)/c_wasm32_hosted_gcc)"
 	@echo "test-core: hosted C on wasm32 -- printf formatting and getenv match gcc, through WASI"
+	# <math.h> on wasm32 was refused `wasm: var-name pool full`: a resumed body
+	# left its old name list behind in the pool per chunk (3819 of 65244 live).
+	# The encoder compacts on overflow; the output must match gcc's build.
+	gcc -std=gnu99 -o $(TESTTMP)/c_wasm32_math_gcc test/c_wasm32_math_h.c -lm
+	./$(COMPILER) --target=wasm32 test/c_wasm32_math_h.c $(TESTTMP)/c_wasm32_math.wasm
+	@tools/expect_same.sh c_wasm32_math_h "$$(tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_math.wasm)" "$$($(TESTTMP)/c_wasm32_math_gcc)"
 	# WHICH OPERATIONS ARE SIGNED, on all seven targets, against gcc. A rule
 	# that is wrong in either direction gives a plausible wrong NUMBER and no
 	# crash, and the two directions hide each other -- so the subject carries
