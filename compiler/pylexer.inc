@@ -609,6 +609,11 @@ begin
       q := Source[i + 1];
       runStart := PyFsLen + 1;
       PyFsPut('bytes(');
+      { #1 marks the literal as a BYTES body for the main lexer, which strips
+        it: there a numeric escape is one raw byte, not a code point, and \u,
+        \U and \N are not escapes. A user-written bytes("\xe9", "utf-8") gets
+        no marker and so keeps str semantics, as in CPython. }
+      PyFsPutCh(#1);
       PyFsPutCh(q);
       Inc(i, 2);
       while i <= n do
@@ -874,6 +879,54 @@ begin
   PyTrailingDotFloat := not ((Source[P + 1] = '.') or PyIsIdentCont(Source[P + 1]));
 end;
 
+{ `cnt` hex digits at src[at..], as a value; False (v untouched) unless all
+  `cnt` are present and hex. Serves the \x, \u and \U escapes. }
+function PyHexRun(const src: AnsiString; at, cnt: Integer; var v: Int64): Boolean;
+var k: Integer; d: Int64;
+begin
+  Result := False;
+  if at + cnt - 1 > Length(src) then Exit;
+  d := 0;
+  for k := at to at + cnt - 1 do
+    case src[k] of
+      '0'..'9': d := d * 16 + Ord(src[k]) - Ord('0');
+      'a'..'f': d := d * 16 + Ord(src[k]) - Ord('a') + 10;
+      'A'..'F': d := d * 16 + Ord(src[k]) - Ord('A') + 10;
+    else Exit;
+    end;
+  v := d;
+  Result := True;
+end;
+
+{ Append a numeric escape's value. In a BYTES literal it is one raw byte. In a
+  STR literal it is a CODE POINT, and a NilPy str is UTF-8, so anything past
+  ASCII is its UTF-8 sequence: "\xe9" is the same one-character string as a
+  literal e-acute, and encodes to [195, 169] exactly as CPython's does. It
+  used to append the raw byte for every literal, which made "\xe9" a lone
+  invalid byte that encode("utf-8") passed through as [233]. }
+procedure PyAppendCodePoint(var s: AnsiString; cp: Int64; asByte: Boolean);
+begin
+  if asByte or (cp < $80) then AppendChar(s, Chr(cp and $FF))
+  else if cp < $800 then
+  begin
+    AppendChar(s, Chr($C0 or (cp shr 6)));
+    AppendChar(s, Chr($80 or (cp and $3F)));
+  end
+  else if cp < $10000 then
+  begin
+    AppendChar(s, Chr($E0 or (cp shr 12)));
+    AppendChar(s, Chr($80 or ((cp shr 6) and $3F)));
+    AppendChar(s, Chr($80 or (cp and $3F)));
+  end
+  else
+  begin
+    AppendChar(s, Chr($F0 or (cp shr 18)));
+    AppendChar(s, Chr($80 or ((cp shr 12) and $3F)));
+    AppendChar(s, Chr($80 or ((cp shr 6) and $3F)));
+    AppendChar(s, Chr($80 or (cp and $3F)));
+  end;
+end;
+
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;
@@ -927,7 +980,8 @@ var
   floatStart, fpos: Integer;
   k: TTokenKind;
   numBase, digit, startLine: Integer;
-  hasDigit, isTriple, rawStr: Boolean;
+  hasDigit, isTriple, rawStr, bytesStr: Boolean;
+  cpv: Int64;
   decText: AnsiString;   { the literal's exact decimal digits, for the over-Int64 case }
 begin
   if not PyLexAppending then
@@ -1063,6 +1117,14 @@ begin
         Checked BEFORE the identifier branch, which would otherwise lex the
         prefix as a one-letter name followed by an ordinary string. }
       rawStr := False;
+      bytesStr := False;
+      if (c = #1) and (P + 1 <= Length(Source)) and
+         ((Source[P + 1] = '"') or (Source[P + 1] = '''')) then
+      begin
+        bytesStr := True;       { the pre-pass's BYTES-literal marker }
+        Inc(P);
+        c := Source[P];
+      end;
       if ((c = 'r') or (c = 'R')) and (P + 1 <= Length(Source)) and
          ((Source[P + 1] = '"') or (Source[P + 1] = '''')) then
       begin
@@ -1294,34 +1356,47 @@ begin
                   end;
                 'x':
                   begin
-                    { \xHH — two hex digits, CPython's numeric byte escape
-                      (bug-nilpy-bytes-literal-escapes-not-decoded). A
-                      malformed \x stays literal text, the lax-dialect
-                      fallback below. }
-                    if (P + 2 <= Length(Source)) and
-                       (Source[P+1] in ['0'..'9', 'a'..'f', 'A'..'F']) and
-                       (Source[P+2] in ['0'..'9', 'a'..'f', 'A'..'F']) then
+                    { \xHH -- two hex digits (bug-nilpy-bytes-literal-escapes-
+                      not-decoded): a byte in bytes, a code point in str. A
+                      malformed \x stays literal text, the lax-dialect fallback
+                      below. }
+                    if PyHexRun(Source, P + 1, 2, cpv) then
                     begin
-                      digit := 0;
-                      case Source[P+1] of
-                        '0'..'9': digit := Ord(Source[P+1]) - Ord('0');
-                        'a'..'f': digit := Ord(Source[P+1]) - Ord('a') + 10;
-                        'A'..'F': digit := Ord(Source[P+1]) - Ord('A') + 10;
-                      end;
-                      digit := digit * 16;
-                      case Source[P+2] of
-                        '0'..'9': digit := digit + Ord(Source[P+2]) - Ord('0');
-                        'a'..'f': digit := digit + Ord(Source[P+2]) - Ord('a') + 10;
-                        'A'..'F': digit := digit + Ord(Source[P+2]) - Ord('A') + 10;
-                      end;
-                      AppendChar(s, Chr(digit));
+                      PyAppendCodePoint(s, cpv, bytesStr);
                       Inc(P, 2);
                     end
                     else begin AppendChar(s, '\'); AppendChar(s, 'x'); end;
                   end;
+                'u', 'U':
+                  begin
+                    { \uXXXX and \UXXXXXXXX: a code point, str only. In bytes
+                      they are not escapes and CPython keeps them as text, as
+                      does a malformed or out-of-range one here. }
+                    if Source[P] = 'u' then digit := 4 else digit := 8;
+                    if (not bytesStr) and PyHexRun(Source, P + 1, digit, cpv) and
+                       (cpv <= $10FFFF) then
+                    begin
+                      PyAppendCodePoint(s, cpv, False);
+                      Inc(P, digit);
+                    end
+                    else begin AppendChar(s, '\'); AppendChar(s, Source[P]); end;
+                  end;
+                'N':
+                  begin
+                    { \N plus a braced NAME needs the Unicode name table, which is not
+                      carried. Refused LOUDLY: it used to stay literal text, a
+                      silently wrong string. Bytes keep it as text, as CPython
+                      does. }
+                    if (not bytesStr) and (P + 1 <= Length(Source)) and
+                       (Source[P + 1] = '{') then
+                      ErrorAt(SrcLine, 'Nil Python: \N{...} escapes are not supported'
+                              + ' -- write the character, or \u / \U with its code point');
+                    AppendChar(s, '\'); AppendChar(s, 'N');
+                  end;
                 '0'..'7':
                   begin
-                    { \ooo — one to three octal digits (\0 = NUL). }
+                    { \ooo -- one to three octal digits (\0 = NUL): a byte in
+                      bytes, a code point in str, like \x. }
                     digit := Ord(Source[P]) - Ord('0');
                     if (P + 1 <= Length(Source)) and (Source[P+1] in ['0'..'7']) then
                     begin
@@ -1334,7 +1409,7 @@ begin
                         Inc(P);
                       end;
                     end;
-                    AppendChar(s, Chr(digit));
+                    PyAppendCodePoint(s, digit, bytesStr);
                   end;
                 else begin AppendChar(s, '\'); AppendChar(s, Source[P]); end;
               end;
