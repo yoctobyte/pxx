@@ -56,6 +56,7 @@ program Esp32IsrCtx;
 function esp_timer_create(args: Pointer; outHandle: Pointer): Integer; external;
 function esp_timer_start_periodic(handle: Pointer; periodUs: Int64): Integer; external;
 function esp_timer_stop(handle: Pointer): Integer; external;
+function esp_timer_delete(handle: Pointer): Integer; external;
 
 procedure esp_rom_printf(fmt: string; v: Integer); external;
 procedure vTaskDelay(ticks: Integer); external;
@@ -108,13 +109,14 @@ begin
   isrHits := isrHits + 1;
 end;
 
-{ Create and start one periodic timer with the given dispatch method.
-  Returns 0 on success, or the failing SDK rc (nonzero) so the caller can
-  report WHICH half failed rather than a bare false. }
-function StartOne(cb: Pointer; nm: Pointer; dispatch, ms: Integer): Integer;
+{ Create and start one periodic timer with the given dispatch method, handing
+  its handle back in `h` (nil if it was never created) so the caller can stop
+  and DELETE it. Returns 0 on success, or the failing SDK rc (nonzero) so the
+  caller can report WHICH half failed rather than a bare false. }
+function StartOne(cb: Pointer; nm: Pointer; dispatch, ms: Integer;
+                  var h: Pointer): Integer;
 var
   args: TEspTimerCreateArgs;
-  h: Pointer;
   rc: Integer;
 begin
   args.callback := cb;
@@ -135,6 +137,7 @@ end;
 
 var
   mainCtx, waited, status, rc: Integer;
+  taskTimer, isrTimer: Pointer;
 begin
   taskCtx := NOT_FIRED;
   isrCtx  := NOT_FIRED;
@@ -149,7 +152,7 @@ begin
   esp_rom_printf('PXX isrctx: main ctx=%d'#10, mainCtx);
   if mainCtx <> 0 then status := status or 1;
 
-  rc := StartOne(@OnTaskTick, @taskName[0], ESP_TIMER_TASK, 100);
+  rc := StartOne(@OnTaskTick, @taskName[0], ESP_TIMER_TASK, 100, taskTimer);
   if rc <> 0 then
   begin
     status := status or 2;
@@ -160,7 +163,7 @@ begin
     CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD produces, because 1 is then
     ESP_TIMER_MAX rather than ESP_TIMER_ISR. Reported separately from the task
     arm for exactly that reason. }
-  rc := StartOne(@OnIsrTick, @isrName[0], ESP_TIMER_ISR, 100);
+  rc := StartOne(@OnIsrTick, @isrName[0], ESP_TIMER_ISR, 100, isrTimer);
   if rc <> 0 then
   begin
     status := status or 4;
@@ -200,6 +203,21 @@ begin
     esp_rom_printf('PXX isrctx: PAIR OK status=%d'#10, status)
   else
     esp_rom_printf('PXX isrctx: PAIR FAILED status=%d'#10, status);
+
+  { Release both timers. esp_timer_create allocates each one from the heap and
+    only esp_timer_delete gives it back (a running timer must be stopped
+    first), so an example that stops here without it teaches its readers to
+    leak: a heap soak of this program read 72 B per run, 2026-09-25. }
+  if taskTimer <> nil then
+  begin
+    esp_timer_stop(taskTimer);
+    esp_timer_delete(taskTimer);
+  end;
+  if isrTimer <> nil then
+  begin
+    esp_timer_stop(isrTimer);
+    esp_timer_delete(isrTimer);
+  end;
 
   { park politely so the FreeRTOS idle task keeps feeding the WDT }
   while True do
