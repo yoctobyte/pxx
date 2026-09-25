@@ -23682,6 +23682,10 @@ test-core: $(COMPILER)
 	# on all 19 rows (tcc's #pragma once, tests2/18).
 	./$(COMPILER) test/crtl_realpath.c $(TESTTMP)/crtl_rp26
 	$(TESTTMP)/crtl_rp26 | diff -u test/crtl_realpath.expected -
+	# json's parse-error paths and calc's Eval free what they allocate (they
+	# leaked ~3500 blocks over this loop; the output never showed it).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_b_json_calc_error_paths_free.pas $(TESTTMP)/jcerr26
+	tools/assert_no_leak.sh json_calc_error_paths 64 $(TESTTMP)/jcerr26
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

@@ -31,25 +31,29 @@ procedure RunProg(const name, src, want: AnsiString);
 var m: TMachine; got: AnsiString;
 begin
   m := TMachine.Create;
-  write(name, ': ');
-  if not m.Assemble(src) then
-  begin
-    ok := False;
-    writeln('ASM FAIL: ', m.Err);
-    Exit;
-  end;
-  got := m.Run;
-  if not m.Ok then
-  begin
-    ok := False;
-    writeln('RUN FAIL: ', m.Err);
-    Exit;
-  end;
-  if got = want then writeln('ok (', Disp(want), ')')
-  else
-  begin
-    ok := False;
-    writeln('FAIL: got [', Disp(got), '] want [', Disp(want), ']');
+  try
+    write(name, ': ');
+    if not m.Assemble(src) then
+    begin
+      ok := False;
+      writeln('ASM FAIL: ', m.Err);
+      Exit;
+    end;
+    got := m.Run;
+    if not m.Ok then
+    begin
+      ok := False;
+      writeln('RUN FAIL: ', m.Err);
+      Exit;
+    end;
+    if got = want then writeln('ok (', Disp(want), ')')
+    else
+    begin
+      ok := False;
+      writeln('FAIL: got [', Disp(got), '] want [', Disp(want), ']');
+    end;
+  finally
+    m.Free;
   end;
 end;
 
@@ -106,6 +110,7 @@ begin
   if m2.Assemble('push 1'#10'frobnicate 2'#10'halt'#10) then
   begin ok := False; writeln('FAIL: expected asm error'); end
   else writeln('rejected (', m2.Err, ')');
+  m2.Free;
 
   writeln;
   if ok then writeln('ALL OK') else writeln('FAILURES');

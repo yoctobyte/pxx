@@ -245,6 +245,7 @@ begin
   if rd.FPos <= rd.FLen then rd.FOk := False;   { trailing junk }
   ok := rd.FOk;
   if ok then Result := v else Result := 0;
+  rd.Free;   { one reader per call; it leaked one object per Eval }
 end;
 
 end.

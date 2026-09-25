@@ -510,19 +510,26 @@ begin
     Result := arr;
     Exit;
   end;
-  while True do
-  begin
-    Self.SkipWS;
-    child := Self.ParseValue;           { temp before Add }
-    arr.Add(child);
-    Self.SkipWS;
-    if Self.Peek = ',' then Self.FPos := Self.FPos + 1
-    else if Self.Peek = ']' then
+  { A parse error raises out of the loop; the array built so far is freed
+    on the way, or every rejected document leaked its partial tree. }
+  try
+    while True do
     begin
-      Self.FPos := Self.FPos + 1;
-      Break;
-    end
-    else Self.Fail('expected , or ]');
+      Self.SkipWS;
+      child := Self.ParseValue;           { temp before Add }
+      arr.Add(child);
+      Self.SkipWS;
+      if Self.Peek = ',' then Self.FPos := Self.FPos + 1
+      else if Self.Peek = ']' then
+      begin
+        Self.FPos := Self.FPos + 1;
+        Break;
+      end
+      else Self.Fail('expected , or ]');
+    end;
+  except
+    arr.FreeTree;
+    raise;
   end;
   Result := arr;
 end;
@@ -539,25 +546,31 @@ begin
     Result := obj;
     Exit;
   end;
-  while True do
-  begin
-    Self.SkipWS;
-    if Self.Peek <> '"' then Self.Fail('expected string key');
-    key := Self.ParseString;
-    Self.SkipWS;
-    if Self.Peek <> ':' then Self.Fail('expected :');
-    Self.FPos := Self.FPos + 1;
-    Self.SkipWS;
-    child := Self.ParseValue;           { temp before AddPair }
-    obj.AddPair(key, child);
-    Self.SkipWS;
-    if Self.Peek = ',' then Self.FPos := Self.FPos + 1
-    else if Self.Peek = '}' then
+  { as ParseArray: a parse error frees the object built so far }
+  try
+    while True do
     begin
+      Self.SkipWS;
+      if Self.Peek <> '"' then Self.Fail('expected string key');
+      key := Self.ParseString;
+      Self.SkipWS;
+      if Self.Peek <> ':' then Self.Fail('expected :');
       Self.FPos := Self.FPos + 1;
-      Break;
-    end
-    else Self.Fail('expected , or }');
+      Self.SkipWS;
+      child := Self.ParseValue;           { temp before AddPair }
+      obj.AddPair(key, child);
+      Self.SkipWS;
+      if Self.Peek = ',' then Self.FPos := Self.FPos + 1
+      else if Self.Peek = '}' then
+      begin
+        Self.FPos := Self.FPos + 1;
+        Break;
+      end
+      else Self.Fail('expected , or }');
+    end;
+  except
+    obj.FreeTree;
+    raise;
   end;
   Result := obj;
 end;
@@ -601,11 +614,17 @@ begin
   rd.FSrc := src;
   rd.FLen := Length(src);
   rd.FPos := 1;
-  v := rd.ParseValue;
+  try
+    v := rd.ParseValue;
+  except
+    rd.Free;                      { a rejected document frees its reader }
+    raise;
+  end;
   rd.SkipWS;
   if rd.FPos <= rd.FLen then
   begin
     rd.Free;
+    v.FreeTree;                   { ...and a trailing-junk one its tree }
     raise EJSONError.Create('JSON: trailing data');
   end;
   rd.Free;
