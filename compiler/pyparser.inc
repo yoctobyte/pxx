@@ -29557,7 +29557,7 @@ begin
     bodyNode := PySeqAppend(bodyNode, node);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(sym2);
-    ASTRight[node] := elemNode;
+    ASTRight[node] := PyStoreRhsToClassSlot(sym2, elemNode);
     bodyNode := PySeqAppend(bodyNode, node);
   end
   else if pairMode then
@@ -29579,12 +29579,12 @@ begin
     node := PyPairItem(PyMakeIdent(pairSym), 0);
     elemNode2 := AllocNode(AN_ASSIGN);
     ASTLeft[elemNode2] := PyMakeIdent(symIdx);
-    ASTRight[elemNode2] := node;
+    ASTRight[elemNode2] := PyStoreRhsToClassSlot(symIdx, node);
     bodyNode := PySeqAppend(bodyNode, elemNode2);
     node := PyPairItem(PyMakeIdent(pairSym), 1);
     elemNode2 := AllocNode(AN_ASSIGN);
     ASTLeft[elemNode2] := PyMakeIdent(sym2);
-    ASTRight[elemNode2] := node;
+    ASTRight[elemNode2] := PyStoreRhsToClassSlot(sym2, node);
     bodyNode := PySeqAppend(bodyNode, elemNode2);
     { and any names past the second — `for anchor, weight, label in triples:` }
     for xi := 0 to nExtra - 1 do
@@ -29592,15 +29592,25 @@ begin
       node := PyPairItem(PyMakeIdent(pairSym), xi + 2);
       elemNode2 := AllocNode(AN_ASSIGN);
       ASTLeft[elemNode2] := PyMakeIdent(extraSyms[xi]);
-      ASTRight[elemNode2] := node;
+      ASTRight[elemNode2] := PyStoreRhsToClassSlot(extraSyms[xi], node);
       bodyNode := PySeqAppend(bodyNode, elemNode2);
     end;
   end
   else
   begin
+    { The element comes out of the container as a VARIANT. When the target is
+      a name the program already bound to a class instance (`t = Thread(...)`
+      at module level, then `for t in ts:`), the slot is class-typed, and a
+      raw variant store bypasses the class-rebinding ARC in the lowering. That
+      ARC only fires for a class-typed right-hand side, so the object the
+      name held before the loop was never released: one leak per loop.
+      Measured on the idiomatic thread join loop at 1.2 objects per thread.
+      Every target store in this desugar goes through the same helper an
+      ordinary `x = v` does, so a loop binding and an assignment are one
+      spelling. It is a no-op for a variant or scalar target. }
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(symIdx);
-    ASTRight[node] := elemNode;
+    ASTRight[node] := PyStoreRhsToClassSlot(symIdx, elemNode);
     bodyNode := PySeqAppend(bodyNode, node);
   end;
 
@@ -29611,7 +29621,7 @@ begin
     if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(sym2);
-    ASTRight[node] := elemNode;
+    ASTRight[node] := PyStoreRhsToClassSlot(sym2, elemNode);
     bodyNode := PySeqAppend(bodyNode, node);
   end;
 
@@ -30213,10 +30223,10 @@ begin
   { loop body: x = za[zi]; y = zb[zi]; <body>; zi += 1 }
   bodyNode := -1;
   node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(xSym);
-  ASTRight[node] := PyCallMeth1(listCi, 'at', PyMakeIdent(caSym), PyMakeIdent(iSym));
+  ASTRight[node] := PyStoreRhsToClassSlot(xSym, PyCallMeth1(listCi, 'at', PyMakeIdent(caSym), PyMakeIdent(iSym)));
   bodyNode := PySeqAppend(bodyNode, node);
   node := AllocNode(AN_ASSIGN); ASTLeft[node] := PyMakeIdent(ySym);
-  ASTRight[node] := PyCallMeth1(listCi, 'at', PyMakeIdent(cbSym), PyMakeIdent(iSym));
+  ASTRight[node] := PyStoreRhsToClassSlot(ySym, PyCallMeth1(listCi, 'at', PyMakeIdent(cbSym), PyMakeIdent(iSym)));
   bodyNode := PySeqAppend(bodyNode, node);
   { one-line suite accepted too — see the range path's note }
   bodyNode := PySeqAppend(bodyNode, PyParseSuite);

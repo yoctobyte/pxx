@@ -3007,6 +3007,14 @@ test-nilpy: $(COMPILER)
 	# this ended at ~850 live blocks for 800 threads.
 	./$(COMPILER) --threadsafe -dPXX_ALLOC_CENSUS test/test_nilpy_a_finished_thread_gives_its_handle_back.npy $(TESTTMP)/test_nilpy_thread_handle26
 	tools/assert_no_leak.sh nilpy_thread_handle_released 200 $(TESTTMP)/test_nilpy_thread_handle26
+	# `for t in ts:` over a name that already holds an object releases that
+	# object (the join-loop leak). $(COMPILER), not the pin: the fix is in the
+	# for desugar, and the pin ends at ~28000 live here. `keep` is the positive
+	# control and must trip the same bound.
+	./$(COMPILER) --threadsafe -dPXX_ALLOC_CENSUS test/test_nilpy_a_for_loop_rebinding_an_object_name_releases_the_old_object.npy $(TESTTMP)/test_nilpy_for_rebind26
+	tools/assert_no_leak.sh nilpy_for_rebind_releases 200 $(TESTTMP)/test_nilpy_for_rebind26 30000 rebind
+	@if tools/assert_no_leak.sh nilpy_for_rebind_control 200 $(TESTTMP)/test_nilpy_for_rebind26 30000 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_for_rebind control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	@# ...and the two REFUSALS, which are different questions and used to be one
 	@# answer. Where the locks exist, the flag is the remedy and the diagnostic
 	@# names it. Where they do NOT (wasm32 here), prescribing the flag was a dead

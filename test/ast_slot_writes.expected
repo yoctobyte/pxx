@@ -423,8 +423,6 @@ AN_ASSIGN Right CStrInitElem[ei]
 AN_ASSIGN Right CurASTNode
 AN_ASSIGN Right GParseExpr
 AN_ASSIGN Right MakeDynConcat(dcRead, CurASTNode)
-AN_ASSIGN Right PyCallMeth1(listCi, 'at', PyMakeIdent(caSym), PyMakeIdent(iSym))
-AN_ASSIGN Right PyCallMeth1(listCi, 'at', PyMakeIdent(cbSym), PyMakeIdent(iSym))
 AN_ASSIGN Right PyCallMeth1(listCi, 'count', PyMakeIdent(caSym), -1)
 AN_ASSIGN Right PyCallMeth1(listCi, 'count', PyMakeIdent(cbSym), -1)
 AN_ASSIGN Right PyClsAttrNode(i)
@@ -442,6 +440,13 @@ AN_ASSIGN Right PyMakeIdent(keyN)
 AN_ASSIGN Right PyPairItem(PyMakeIdent(host), PyNestRecIdx[r])
 AN_ASSIGN Right PyStarOperandAsList(ASTLeft[n], rbListCi)
 AN_ASSIGN Right PyStarOperandAsList(CurASTNode, listCi)
+AN_ASSIGN Right PyStoreRhsToClassSlot(extraSyms[xi], node)
+AN_ASSIGN Right PyStoreRhsToClassSlot(sym2, elemNode)
+AN_ASSIGN Right PyStoreRhsToClassSlot(sym2, node)
+AN_ASSIGN Right PyStoreRhsToClassSlot(symIdx, elemNode)
+AN_ASSIGN Right PyStoreRhsToClassSlot(symIdx, node)
+AN_ASSIGN Right PyStoreRhsToClassSlot(xSym, PyCallMeth1(listCi, 'at', PyMakeIdent(caSym), PyMake
+AN_ASSIGN Right PyStoreRhsToClassSlot(ySym, PyCallMeth1(listCi, 'at', PyMakeIdent(cbSym), PyMake
 AN_ASSIGN Right RArrIndexNode(RMakeIdent(symIdx), 0, Ord(tyRecord))
 AN_ASSIGN Right RArrIndexNode(fieldNode, 0, ASTTk[fieldNode])
 AN_ASSIGN Right RBinOp(tkPlus, RMakeIdent(symIdx), oneNode, tyInt64)

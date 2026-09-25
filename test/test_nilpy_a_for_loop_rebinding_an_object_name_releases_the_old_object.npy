@@ -1,0 +1,37 @@
+# A `for` loop whose target name already holds a Pascal-class object must
+# release that object when the loop rebinds the name.
+#
+# The idiom is the thread join loop:
+#     t = threading.Thread(target=f); t.start(); ts.append(t)
+#     for t in ts: t.join()
+# At module level `t` is a class-typed slot. The loop's element comes out of
+# the list as a VARIANT and was stored raw, which bypassed the class-rebind
+# ARC, so the object `t` held before the loop was never released: one leak per
+# loop, measured at 1.2 objects per thread on the join loop (live 130 -> 1210
+# over 100 -> 1000 threads, the fresh-name spelling `for u in ts:` flat at 36).
+# threading.Event stands in for Thread here: the same class-typed slot, no
+# thread start.
+#
+# Modes:
+#   rebind  the defect's shape; must stay under the bound.
+#   keep    POSITIVE CONTROL: every event is kept alive on purpose, so the same
+#           bound must trip. Without it a dead census would pass `rebind`.
+# Waves of 10, so assert_no_leak's mid-run census sample is a steady state.
+import sys
+import threading
+
+n = int(sys.argv[1])
+mode = sys.argv[2]
+kept = []
+i = 0
+while i < n:
+    es = []
+    for k in range(10):
+        e = threading.Event()
+        es.append(e)
+    for e in es:
+        e.set()
+    if mode == "keep":
+        kept.append(e)
+    i = i + 10
+print("waves", n // 10, "set", e.is_set())
