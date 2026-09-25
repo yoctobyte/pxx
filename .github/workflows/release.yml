@@ -27,8 +27,12 @@ jobs:
           fetch-depth: 0               # tags + history
       - name: deps (FPC seed + QEMU)
         run: sudo apt-get update && sudo apt-get install -y fpc qemu-user
+      # compiler/pascal26 is untracked, so a fresh checkout has no seed and a bare
+      # `make compiler/pascal26` stops at "seed missing" (measured 2026-09-25 in a
+      # fresh clone). Seed from the committed pin, as the Makefile's own advice
+      # says; the build then converges to this tag's fixedpoint.
       - name: build compiler
-        run: make compiler/pascal26
+        run: cp stable_linux_amd64/default/pinned compiler/pascal26 && make compiler/pascal26
       - name: gate + build dist + manifest + reproduce (for this tag)
         run: tools/release.sh --build-for "${{ inputs.tag }}" --no-seatbelt
       - name: create GitHub Release
@@ -43,5 +47,5 @@ jobs:
             echo "release body: devdocs/release-notes/$TAG.md"
           fi
           gh release create "$TAG" \
-            "dist/pxx-$TAG.tar.gz" "dist/pxx-$TAG/MANIFEST.sha256" \
+            "dist/pxx-$TAG.tar.gz" "dist/SHA256SUMS" "dist/pxx-$TAG/MANIFEST.sha256" \
             --title "PXX $TAG" "${NOTES[@]}"

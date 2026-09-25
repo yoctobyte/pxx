@@ -232,6 +232,7 @@ main() {
     run_gate
     build_dist "$BUILD_FOR" "${cn:-unnamed}"
     run_selfcheck "$BUILD_FOR"
+    echo "==> build-for: pin: $(pin_identity || true)"
     echo "==> build-for: dist/pxx-$BUILD_FOR ready for publish"
     exit 0
   fi
