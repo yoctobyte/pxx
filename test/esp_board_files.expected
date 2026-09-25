@@ -1,0 +1,13 @@
+read back 'hello from flash\n'
+size 17
+isfile True isdir / True
+listdir ['d', 'hello.txt']
+open a missing file -> FileNotFoundError [Errno 2] No such file or directory: '/nope.txt'
+open a directory -> IsADirectoryError [Errno 21] Is a directory: '/d'
+create in a missing directory -> FileNotFoundError [Errno 2] No such file or directory: '/nodir/x.txt'
+mkdir an existing directory -> FileExistsError [Errno 17] File exists: '/d'
+stat a missing path -> FileNotFoundError [Errno 2] No such file or directory: '/nope.txt'
+fill the partition -> OSError [Errno 28] No space left on device
+after cleanup, write works True
+listdir after []
+ESP FILES OK

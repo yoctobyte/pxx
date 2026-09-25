@@ -1041,6 +1041,12 @@ test-nilpy: $(COMPILER)
 	# non-constant default must be READ from its def-time global, not rebuilt.
 	./$(COMPILER) test/test_nilpy_star_unpack_into_defaults.npy $(TESTTMP)/test_nilpy_stardflt26
 	$(TESTTMP)/test_nilpy_stardflt26 | diff -u test/test_nilpy_star_unpack_into_defaults.expected -
+	# A failing file call raises CPython's SUBCLASS with CPython's text, and a
+	# failed write raises at all -- open() on a directory and a write to
+	# /dev/full were silent. .expected is CPython's own output. $(COMPILER):
+	# the fix is in compiler/builtin and inert in the pin until the next one.
+	./$(COMPILER) test/test_nilpy_file_oserrors.npy $(TESTTMP)/test_nilpy_fileoserr26
+	$(TESTTMP)/test_nilpy_fileoserr26 | diff -u test/test_nilpy_file_oserrors.expected -
 	# `self.n += 1 if s > 0 else 2` -- a DOTTED augmented target reaches the
 	# shared C compound-assign tail, which parsed the RHS with Pascal precedence,
 	# so the assignment became the THEN ARM of a conditional the program never
@@ -37626,6 +37632,16 @@ test-esp-idf: $(COMPILER)
 	      test/$$f.npy $(TESTTMP)/$$f.o >/dev/null \
 	    && echo "=== $$f builds [$$t]: OK ===" || exit 1; \
 	  done; \
+	done
+	@# NilPy files through IDF's VFS (board recipe in the test's header). The
+	@# filesystem is pxx_fs's OPTIONAL mount, reached by a `weakexternal`, so
+	@# the object must carry it WEAK UND -- GLOBAL (what every --emit-obj writer
+	@# wrote until 2026-09-25) fails the link of any project without pxx_fs.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_files.npy $(TESTTMP)/esp_board_files.o >/dev/null \
+	  && readelf -sW $(TESTTMP)/esp_board_files.o | grep -q ' WEAK .* UND pxx_fs_mount$$' \
+	  && echo "=== esp_board_files builds, pxx_fs_mount WEAK [$$t]: OK ===" || exit 1; \
 	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build

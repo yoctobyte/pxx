@@ -3041,6 +3041,19 @@ procedure ObjPlanEspSymbols(numSectionSyms: Integer;
 procedure ObjRefuseEspDataImports; forward;
 function ObjEspProcIsExported(procIdx: Integer): Boolean; forward;
 
+function ObjExtBind(extIdx: Integer): Byte;
+{ st_info for an imported function's UND symbol: $10 GLOBAL NOTYPE, or $20
+  WEAK NOTYPE for a `weakexternal`. The dynamic writers already honoured the
+  bit; the four --emit-obj writers wrote every import GLOBAL, so an object
+  said the OPPOSITE of the source -- a required symbol where it asked for an
+  optional one -- and the final link refused a program whose own `@f <> nil`
+  test was written for exactly that absence. An undefined weak resolves to 0
+  in a static link, which is the nil the caller tests for. }
+begin
+  if ProcWeakExternal[ExternalProc[extIdx]] then ObjExtBind := $20
+  else ObjExtBind := $10;
+end;
+
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -3197,7 +3210,7 @@ begin
     if ObjDataStrOff[i] >= 0 then
       writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 7);
   for i := 0 to ExternalCount-1 do
-    writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0);
+    writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
 
   { .strtab -- proc names in INDEX order, not symbol order (see the planner). }
   writeU8(f, 0);
@@ -3468,7 +3481,7 @@ begin
     if ObjDataStrOff[i] >= 0 then
       writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 5);
   for i := 0 to ExternalCount-1 do
-    writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0); { GLOBAL NOTYPE UNDEF }
+    writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0); { NOTYPE UNDEF, GLOBAL or WEAK }
 
   { .strtab -- proc names in INDEX order, not symbol order (see the planner). }
   writeU8(f, 0);
@@ -5324,7 +5337,7 @@ begin
     if ObjDataIsExport(i) then
       writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), 5, Syms[i].Offset, SymAllocSize[i]);
   for i := 0 to ExternalCount-1 do
-    writeSym64(f, ObjExtStrOff[i], $10, 0, 0, 0);  { GLOBAL NOTYPE UNDEF }
+    writeSym64(f, ObjExtStrOff[i], ObjExtBind(i), 0, 0, 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
     size lives on the DEFINITION in another TU -- `extern char b[];` carries
     none -- so emitting anything but 0 here would be inventing it. }
@@ -6019,7 +6032,7 @@ begin
     if ObjDataIsExport(i) then
       writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], ObjDataExportInfo(i), 5);
   for i := 0 to ExternalCount-1 do
-    writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0);  { GLOBAL NOTYPE UNDEF }
+    writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
       writeSym32(f, ObjDataStrOff[i], 0, 0, $10, 0);

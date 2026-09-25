@@ -1,0 +1,12 @@
+open a missing file -> FileNotFoundError [Errno 2] No such file or directory: '/nonexistent-dir-7f3a/x.txt'
+open a directory -> IsADirectoryError [Errno 21] Is a directory: '/tmp'
+write to a full device -> OSError [Errno 28] No space left on device
+stat a missing path -> FileNotFoundError [Errno 2] No such file or directory: '/nonexistent-dir-7f3a'
+remove a missing file -> FileNotFoundError [Errno 2] No such file or directory: '/nonexistent-dir-7f3a/x.txt'
+listdir a missing directory -> FileNotFoundError [Errno 2] No such file or directory: '/nonexistent-dir-7f3a'
+mkdir an existing directory -> FileExistsError [Errno 17] File exists: '/tmp'
+isdir /tmp True isfile /tmp False
+isdir missing False
+stat /tmp is a directory True
+literal through a temporary True
+FILE OSERRORS OK

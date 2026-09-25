@@ -1,0 +1,53 @@
+# A failing file call raises CPython's OSError SUBCLASS wearing CPython's own
+# text -- `[Errno 2] No such file or directory: 'x'` -- and a failed WRITE or
+# CLOSE raises at all. Two of these used to be silent: open() on a directory
+# returned a file object (Linux opens a directory read-only; CPython refuses
+# it with IsADirectoryError), and a write to a full device came back as a
+# negative count nobody looked at. Differential against CPython: the
+# .expected is CPython's output, byte for byte.
+import os
+
+def attempt(what, fn):
+    try:
+        fn()
+        print(what, "-> no error")
+    except OSError as e:
+        print(what, "->", type(e).__name__, str(e))
+
+def missing():
+    open("/nonexistent-dir-7f3a/x.txt")
+
+def adir():
+    open("/tmp")
+
+def full():
+    f = open("/dev/full", "w")
+    f.write("x" * 10)
+    f.close()
+
+def stat_missing():
+    os.stat("/nonexistent-dir-7f3a")
+
+def remove_missing():
+    os.remove("/nonexistent-dir-7f3a/x.txt")
+
+def listdir_missing():
+    os.listdir("/nonexistent-dir-7f3a")
+
+def mkdir_exists():
+    os.mkdir("/tmp")
+
+attempt("open a missing file", missing)
+attempt("open a directory", adir)
+attempt("write to a full device", full)
+attempt("stat a missing path", stat_missing)
+attempt("remove a missing file", remove_missing)
+attempt("listdir a missing directory", listdir_missing)
+attempt("mkdir an existing directory", mkdir_exists)
+print("isdir /tmp", os.path.isdir("/tmp"), "isfile /tmp", os.path.isfile("/tmp"))
+print("isdir missing", os.path.isdir("/nonexistent-dir-7f3a"))
+print("stat /tmp is a directory", (os.stat("/tmp").st_mode & 0o170000) == 0o040000)
+# A str LITERAL through a TEMPORARY receiver took the bytes overload and wrote
+# from a nil buffer (EFAULT, silent until writes raised). A variable was fine.
+print("literal through a temporary", open("/dev/null", "w").write("lit") == 3)
+print("FILE OSERRORS OK")

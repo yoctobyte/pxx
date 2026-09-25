@@ -14461,6 +14461,7 @@ begin
   else if dotted = 'os.listdir' then Result := 'pyos_listdir'
   else if dotted = 'os.replace' then Result := 'pyos_replace'
   else if dotted = 'os.makedirs' then Result := 'pyos_makedirs'
+  else if dotted = 'os.mkdir' then Result := 'pyos_mkdir'
   else if dotted = 'os.rmdir' then Result := 'pyos_rmdir'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
   { No GIL here, so there is nothing to tune — accepted and remembered rather
@@ -19094,6 +19095,14 @@ begin
     if j >= MAX_PROC_PARAMS then Break;
     if j > Procs[pIdx].ParamCount - 1 then Break;
     tk := ASTTk[ASTLeft[an]];
+    { A string LITERAL is typed tyString (the inline frozen string) and a
+      pylib parameter is tyAnsiString, so on the class-typed path the literal
+      scored against NEITHER overload and the first DECLARED won --
+      `open(p, "w").write("x")` passed a str as TPyBytes and wrote from a nil
+      buffer (EFAULT, or a panic inside FAT on an ESP). A str VARIABLE was
+      already tyAnsiString and fine. A literal is a str; score it as one. }
+    if (tk = Ord(tyString)) and (Procs[pIdx].Params[j].TypeKind = tyAnsiString) then
+      tk := Ord(tyAnsiString);
     if tk = Ord(Procs[pIdx].Params[j].TypeKind) then
     begin
       Inc(Result);

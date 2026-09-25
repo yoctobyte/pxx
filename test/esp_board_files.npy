@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: 0BSD
+# NilPy files on an ESP32, board row: open()/os against FAT-on-flash, with
+# CPython's exceptions. Python's "/" is the `storage` partition's root
+# (lib/rtl/platform/esp/idf/pxx_fs mounts it at IDF's /fs; the prefix never
+# shows here), and a relative path is relative to it, as on MicroPython.
+#   PXX_MAIN=test/esp_board_files.npy tools/esp_flash.sh \
+#     --project examples/esp32/nilpy-station-s3 --port /dev/ttyACM0
+# The rows up to the full-partition one are also CPython's: run this with
+# ROOT set to a scratch directory and they print the same, root aside.
+import os
+
+ROOT = "/"
+
+def attempt(what, fn):
+    try:
+        fn()
+        print(what, "-> no error")
+    except OSError as e:
+        print(what, "->", type(e).__name__, str(e))
+
+def clean(name):
+    try:
+        os.remove(ROOT + name)
+    except OSError:
+        pass
+
+clean("hello.txt")
+clean("big.bin")
+try:
+    os.rmdir(ROOT + "d")
+except OSError:
+    pass
+
+f = open(ROOT + "hello.txt", "w")
+f.write("hello from flash\n")
+f.close()
+print("read back", repr(open(ROOT + "hello.txt").read()))
+print("size", os.stat(ROOT + "hello.txt").st_size)
+print("isfile", os.path.isfile(ROOT + "hello.txt"), "isdir /", os.path.isdir(ROOT))
+os.mkdir(ROOT + "d")
+print("listdir", sorted(os.listdir(ROOT)))
+
+def missing():
+    open(ROOT + "nope.txt")
+
+def adir():
+    open(ROOT + "d")
+
+def into_missing_dir():
+    open(ROOT + "nodir/x.txt", "w")
+
+def mkdir_again():
+    os.mkdir(ROOT + "d")
+
+def stat_missing():
+    os.stat(ROOT + "nope.txt")
+
+attempt("open a missing file", missing)
+attempt("open a directory", adir)
+attempt("create in a missing directory", into_missing_dir)
+attempt("mkdir an existing directory", mkdir_again)
+attempt("stat a missing path", stat_missing)
+
+def fill():
+    f = open(ROOT + "big.bin", "wb")
+    block = b"x" * 4096
+    try:
+        while True:
+            f.write(block)
+    finally:
+        try:
+            f.close()
+        except OSError:
+            pass
+
+if ROOT == "/":
+    attempt("fill the partition", fill)
+    clean("big.bin")
+    print("after cleanup, write works", open(ROOT + "hello.txt", "a").write("more\n") == 5)
+os.remove(ROOT + "hello.txt")
+os.rmdir(ROOT + "d")
+print("listdir after", os.listdir(ROOT))
+print("ESP FILES OK")
