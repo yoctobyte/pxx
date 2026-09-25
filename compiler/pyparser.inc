@@ -2418,17 +2418,37 @@ function PyBitDunder(const mname: AnsiString; left, right: Integer): Integer;
   excluded so set `&`/`|`/`^` and dict `|` keep their real semantics; those are
   checked by the callers before this is reached, and the guard here is
   belt-and-braces for any container this frontend grows later. }
-var ci, errIdx, node: Integer;
+var ci, errIdx, node: Integer; rname: AnsiString;
 begin
   PyBitDunder := -1;
-  if IntToTypeKind(ASTTk[left]) <> tyClass then Exit;
-  if ResolveNodeRec(left) < REC_UCLASS_BASE then Exit;
-  if PyRecIsPylibOwnClass(ResolveNodeRec(left)) then Exit;
-  ci := ResolveNodeRec(left) - REC_UCLASS_BASE;
-  if FindUMeth(ci, mname) >= 0 then
+  if (IntToTypeKind(ASTTk[left]) <> tyClass) or
+     (ResolveNodeRec(left) < REC_UCLASS_BASE) or
+     PyRecIsPylibOwnClass(ResolveNodeRec(left)) then
   begin
-    node := PyCallMeth1(ci, mname, left, right);
-    if node >= 0 then begin PyBitDunder := node; Exit; end;
+    { THE REFLECTED FORM: `12 & c` with a user class on the RIGHT only. It
+      fell to the generic AN_BINOP, which widened tyClass to a variant and
+      dereferenced the handle as a variant record -- a silent SIGSEGV, on pin
+      v433 too. CPython asks the right operand's __rand__/__rlshift__/...;
+      so do we, and without one it is the same runtime TypeError. }
+    if (IntToTypeKind(ASTTk[right]) <> tyClass) or
+       (ResolveNodeRec(right) < REC_UCLASS_BASE) or
+       PyRecIsPylibOwnClass(ResolveNodeRec(right)) then Exit;
+    rname := '__r' + Copy(mname, 3, Length(mname) - 2);
+    ci := ResolveNodeRec(right) - REC_UCLASS_BASE;
+    if FindUMeth(ci, rname) >= 0 then
+    begin
+      node := PyCallMeth1(ci, rname, right, left);
+      if node >= 0 then begin PyBitDunder := node; Exit; end;
+    end;
+  end
+  else
+  begin
+    ci := ResolveNodeRec(left) - REC_UCLASS_BASE;
+    if FindUMeth(ci, mname) >= 0 then
+    begin
+      node := PyCallMeth1(ci, mname, left, right);
+      if node >= 0 then begin PyBitDunder := node; Exit; end;
+    end;
   end;
   errIdx := FindProc('PyNotBitOperandError');
   if errIdx < 0 then Error('Nil Python: pylib (PyNotBitOperandError) not loaded');
@@ -3239,6 +3259,13 @@ begin
     else node := PyBitDunder('__rshift__', left, right);
     if node >= 0 then begin left := node; Continue; end;
     PyBitGuard(left); PyBitGuard(right);
+    { a VARIANT operand dispatches at run time, as `& | ^` do: an object held
+      in a variant reaches its __lshift__/__rlshift__ (it raised RunError 219,
+      a numeric coercion refusing the object), and an int keeps the promo
+      runtime the inline shift already used. }
+    if op = tkShl then node := PyBitVariantCall('pyshl_v', left, right)
+    else node := PyBitVariantCall('pyshr_v', left, right);
+    if node >= 0 then begin left := node; Continue; end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op);
     ASTLeft[node] := left; ASTRight[node] := right;
     { A shift of machine ints is typed PROMO: `1 << 64` must promote past
@@ -24494,8 +24521,8 @@ begin
   PyHoistStmt(asgn);
   if dedup then
   begin
-    mmi := FindUMeth(ci, 'add');
-    if mmi < 0 then Error('Nil Python: TPyList.add not found');
+    mmi := FindUMeth(ci, 'add_self');
+    if mmi < 0 then Error('Nil Python: TPyList.add_self not found');
   end
   else
   begin
@@ -29808,7 +29835,7 @@ begin
     begin
       PyParseBoolExpr;
       if PyCompIsSet then
-        node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'add',
+        node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'add_self',
                             PyMakeIdent(PyCompTarget), CurASTNode)
       else
         node := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
@@ -31159,7 +31186,7 @@ begin
         deduplication at all — the probe has to COLLIDE.
         bug-nilpy-set-comprehension-over-range-does-not-deduplicate }
       if PyCompIsSet then
-        bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'add',
+        bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'add_self',
                                PyMakeIdent(PyCompTarget), CurASTNode)
       else
         bodyNode := PyCallMeth1(PyNodeListCi(PyMakeIdent(PyCompTarget)), 'append',
@@ -31783,15 +31810,17 @@ function PyAugMarkedTok(k: TTokenKind): Boolean;
   through pymul_v_inplace and returns before the marked AN_BINOP is built, so
   including it would be a second, dead route.
 
-  The bitwise and shift operators are not here either, and that is a REAL gap
-  rather than a routing detail: `c & 12` on a variant holding a user object
-  does not reach __and__ at all today — the IR has no variant arm for them, so
-  there is nothing for a marker to select. Marking them would select a
-  `pyaug<op>_v` that the lowering never asks for.
+  The bitwise and shift operators ARE here since the IR grew their variant
+  arm: `c &= 0x0F` on a variant holding a user object calls __iand__, and a
+  variant set's `|=` updates it in place.
   bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder }
 begin
   PyAugMarkedTok := (k = tkPlus) or (k = tkMinus) or (k = tkSlash) or
-                    (k = tkDiv) or (k = tkMod);
+                    (k = tkDiv) or (k = tkMod) or
+                    { the bitwise five now have the IR arm and the pyaug twins
+                      (pyaugbitand_v ... pyaugshr_v) }
+                    (k = tkAnd) or (k = tkOr) or (k = tkXor) or
+                    (k = tkShl) or (k = tkShr);
 end;
 
 function PyAugBinTok(k: TTokenKind): TTokenKind;
@@ -34988,7 +35017,15 @@ begin
       { see the twin bare-name site: `@=` off a user class is a TypeError }
       if augTk = tkAt then
       begin
-        Result := PyMakeUnsupportedOperand;
+        node := PyBitVariantCall('pyaugmatmul_v', lhsNode, CurASTNode);
+        if node >= 0 then
+        begin
+          Result := AllocNode(AN_ASSIGN);
+          ASTLeft[Result] := CloneAST(lhsNode);
+          ASTRight[Result] := node;
+        end
+        else
+          Result := PyMakeUnsupportedOperand;
         Exit;
       end;
       { `o.xs *= 2` / `d[k] *= 2` on a SEQUENCE — the repeat, see PyAugMulNode }
@@ -35307,7 +35344,17 @@ begin
       (bug-nilpy-matmul-operator-does-not-parse). }
     if augTk = tkAt then
     begin
-      Result := PyMakeUnsupportedOperand;
+      { ...except a VARIANT target, whose object only has a type at run time:
+        pylib's __imatmul__ / __matmul__ / __rmatmul__, then rebind }
+      node := PyBitVariantCall('pyaugmatmul_v', PyMakeIdent(symIdx), CurASTNode);
+      if node >= 0 then
+      begin
+        Result := AllocNode(AN_ASSIGN);
+        ASTLeft[Result] := PyMakeIdent(symIdx);
+        ASTRight[Result] := node;
+      end
+      else
+        Result := PyMakeUnsupportedOperand;
       Exit;
     end;
     { `xs *= 2` / `s *= 2` on a SEQUENCE — the repeat, see PyAugMulNode }

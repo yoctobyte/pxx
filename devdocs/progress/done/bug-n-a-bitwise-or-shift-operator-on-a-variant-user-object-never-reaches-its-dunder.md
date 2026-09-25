@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 blocked-by: []
-summary: "Two shapes are left. (1) `<<` and `>>` with a VARIANT operand holding a user object still coerce it to an int (RunError 219) and never call __lshift__/__rshift__. (2) The augmented `&= |= ^= <<= >>=` on a variant target never try an in-place dunder, and never mutate a set or dict in place. The plain `& | ^` got their variant arm on 2026-09-25. Also found: a reflected bitwise dunder with a statically class-typed RIGHT operand (`12 & c`, calling C.__rand__) segfaults, and it does on pin v433 too."
+summary: "FIXED 2026-09-25. With a VARIANT operand, `<<`/`>>` and `@` call the user dunder or its reflected form; `@` otherwise raises TypeError. The augmented `&= |= ^= <<= >>= @=` try the in-place dunder first and mutate a set or dict in place. A statically class-typed RIGHT operand (`12 & c`) calls __rand__ and friends. set.add returns None. Every shape is diffed against CPython in test_nilpy_bitwise_and_shift_on_a_variant_operand."
 ---
 
 # `&`, `|`, `^`, `<<`, `>>` on a variant user object skip the dunder
@@ -146,3 +146,11 @@ operators now share this ticket.
   statically on pin v433 (it prints 4). The variant shape is an operand that
   comes out of a list, which is what the fixture uses.
 
+
+## Resolution (2026-09-25, frankS)
+
+- The shifts: pyshl_v/pyshr_v try PyVarUserArith before the promo shift (ops 9/10). PyParseShift routes a variant operand to them.
+- Augmented `& | ^ << >>`: PyAugMarkedTok marks them on a variant target, and the IR arm calls pyaug{bitand,bitor,bitxor,shl,shr}_v. Each helper tries the in-place dunder, then does a set/dict in-place update (PyVarSetAugInPlace), then falls back to the plain helper.
+- `@` / `@=`: a variant operand goes to pymatmul_v / pyaugmatmul_v, from the pasparser_expr `@` arm and from both `@=` sites.
+- `12 & c`: PyBitDunder takes the reflected `__r<op>__` when only the right operand is a user class. It used to call the left operand's dunder on an int and segfault.
+- set.add returns None. The literal and comprehension desugars call the new add_self.

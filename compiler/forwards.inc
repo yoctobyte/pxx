@@ -48,6 +48,9 @@ function PyNodeIsUserIterable(node: Integer): Boolean; forward;
 function PyMakeIterOf(node: Integer): Integer; forward;
 { One-argument call to a plain pylib function; PyMakeIterOf sits above it. }
 function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer; forward;
+{ Two-operand call to a pylib `_v` helper when either side is a variant;
+  the `@` arm in pasparser_expr.inc sits above it. }
+function PyBitVariantCall(const fname: AnsiString; left, right: Integer): Integer; forward;
 function PyRecIsComplex(recId: Integer): Boolean; forward;
 function PyNodeIsComplex(n: Integer): Boolean; forward;
 function PyComplexCoerce(n: Integer): Integer; forward;

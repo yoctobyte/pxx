@@ -565,6 +565,8 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_int_str_fresh_released 50 $(TESTTMP)/test_nilpy_intstrfresh26 fresh 1000
 	@if tools/assert_no_leak.sh nilpy_int_str_fresh_control 50 $(TESTTMP)/test_nilpy_intstrfresh26 keep 1000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_int_str_fresh control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
+	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"

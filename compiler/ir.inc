@@ -13437,6 +13437,34 @@ begin
         Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
         Exit;
       end;
+      { An AUGMENTED bitwise or shift on a variant target -- `r &= m`,
+        `c <<= 2`, `s |= t`. The parser marks it PY_BINOP_AUGMENTED only on a
+        variant target (PyAugMarkedTok); the pyaug twin tries the in-place
+        dunder, then an in-place set/dict update, then the binary helper, so an
+        int target computes exactly as the inline path did. }
+      if PyNodeIsUser(node) and (ASTSLen[node] = PY_BINOP_AUGMENTED) and
+         ((Integer(ASTIVal[node]) = Ord(tkAnd)) or (Integer(ASTIVal[node]) = Ord(tkOr)) or
+          (Integer(ASTIVal[node]) = Ord(tkXor)) or (Integer(ASTIVal[node]) = Ord(tkShl)) or
+          (Integer(ASTIVal[node]) = Ord(tkShr))) and
+         ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant)) then
+      begin
+        if Integer(ASTIVal[node]) = Ord(tkAnd) then fdName := 'pyaugbitand_v'
+        else if Integer(ASTIVal[node]) = Ord(tkOr) then fdName := 'pyaugbitor_v'
+        else if Integer(ASTIVal[node]) = Ord(tkXor) then fdName := 'pyaugbitxor_v'
+        else if Integer(ASTIVal[node]) = Ord(tkShl) then fdName := 'pyaugshl_v'
+        else fdName := 'pyaugshr_v';
+        cpi := FindProc(fdName);
+        if cpi < 0 then Error('Nil Python: ' + fdName + ' (pylib) not loaded');
+        left := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, Ord(tyVariant));
+        right := IRLowerCallArg(cpi, 1, ASTRight[node], Procs[cpi].Params[1].IsRef);
+        last := IRAppend(IR_ARG, right, -1, -1, 0, Ord(tyVariant));
+        IRB[first] := last;
+        ASTTk[node] := Ord(tyVariant);
+        Result := IRAppendCall(cpi, first, -1, Ord(tyVariant));
+        Exit;
+      end;
       { The REST of the arithmetic and ordering family over a VARIANT operand.
         `*`, `//` and `%` got their tag dispatch above one bug at a time; `-`,
         `/` and the four orderings never did, so the operand's HANDLE was used

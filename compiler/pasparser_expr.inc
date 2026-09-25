@@ -10697,12 +10697,17 @@ begin
     if PyExprMode and (op = tkAt) then
     begin
       node := -1;
-      if (IntToTypeKind(ASTTk[left]) = tyClass) and
+      { a VARIANT left operand only has a type at run time: pylib dispatches
+        its dunder, then the static right's reflected one }
+      if IntToTypeKind(ASTTk[left]) = tyVariant then
+        node := PyBitVariantCall('pymatmul_v', left, right);
+      if (node < 0) and (IntToTypeKind(ASTTk[left]) = tyClass) and
          (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
          (not PyRecIsPylibOwnClass(ResolveNodeRec(left))) then
         node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__matmul__',
                             left, right);
       if node < 0 then node := PyReflectedDunder(PyReflName(op), left, right);
+      if node < 0 then node := PyBitVariantCall('pymatmul_v', left, right);
       if node < 0 then node := PyMakeUnsupportedOperand;
       CurASTNode := node;
       continue;

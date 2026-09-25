@@ -327,7 +327,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (184)
+## backlog-nilpy (183)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -336,7 +336,6 @@ _none_
 | bug-n-a-bare-import-of-a-c-header-only-name-builds-a-binary-that-cannot-exec | N | 50 | bug | `import strings` in a .npy resolves to /usr/include/strings.h, synthesises `libstrings.so` from the header's own file NAME, and emits a DT_NEEDED no loader can satisfy. Verified against the PINNED compiler (2026-09-10): the build succeeds, `readelf -d` shows `Shared library: [libstrings.so]`, and the program dies at exec with `cannot open shared object file`. At HEAD it is a compile error instead, because e53eff428's guard catches exactly this -- so the OBSERVABLE has already moved from silent-broken-binary to loud-refusal, and this row is about the remaining half: nothing should have emitted that DT_NEEDED in the first place. NOT a resolution bug: `strings` is DELIBERATELY absent from pasparser_proc.inc's curated bare-import list (an ordinary Pascal unit sharing a Python name, named there beside `classes` and `types`), so falling through to the host header is the documented behaviour. Six of the seven RTL/header name collisions on this box -- math, menu, netdb, png, regex, zlib -- resolve to the unit; `strings` is the one that reaches a header, which is why nobody hit this before. | feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym |
 | bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing | N | 35 | bug |  | — |
 | bug-n-a-bare-tuple-returned-from-a-mimic-module-method-arrives-as-its-string-repr | N | 60 | bug | A BARE tuple returned from a method of a class in a mimic (lib/rtl) module arrives at the caller as a STRING holding the tuple's repr: type(r) is str and r == (a, b) is False. A tuple inside a returned LIST survives intact, and the identical code in a plain local module or inline is correct -- so this is the mimic-module return route, not tuples, not dict iteration, and not imports generally. Found as the single failing assertion (24 of 25) in test/lib_mimic_xml_sax_xmlreader.npy, which Track T auto-filed against an unrelated compiler-only sha. | — |
-| bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder | N | 45→70 | bug | Two shapes are left. (1) `<<` and `>>` with a VARIANT operand holding a user object still coerce it to an int (RunError 219) and never call __lshift__/__rshift__. (2) The augmented `&= \|= ^= <<= >>=` on a variant target never try an in-place dunder, and never mutate a set or dict in place. The plain `& \| ^` got their variant arm on 2026-09-25. Also found: a reflected bitwise dunder with a statically class-typed RIGHT operand (`12 & c`, calling C.__rand__) segfaults, and it does on pin v433 too. | — |
 | bug-n-a-builtin-function-is-not-a-first-class-value | N | 45 | bug | `call_it(print, x)` gives `error: undefined variable (print)` while `call_it(own_fn, x)` works -- a USER function is a value and a BUILTIN is not. Ordinary Python: a builtin passed as a callback. Three sites in lekkerzeilen's entry-point closure, all `announce=None if quiet else print`, which is what walls the demo at app.py:561. The conditional is not involved; a bare argument reproduces it. | — |
 | bug-n-a-call-result-discarded-in-a-boolean-context-is-never-released | N | 45 | bug | > | — |
 | bug-n-a-chained-assignment-through-a-call-result-target-still-stores-right-to-left | N | 25 | bug | `box(1)[idx(\"i\")] = box(2)[idx(\"j\")] = 7` evaluates its target subexpressions in the wrong order and prints the right values, so nothing can see it. Measured 2026-09-10 against the FIXED chain arm: pxx gives `[1, 2, 'j', 'i']` where CPython gives `[1, 'i', 2, 'j']`, and both stores land. This is the NAMED RESIDUAL of bug-n-a-chained-assignment-to-two-attributes-does-not-parse, which put every target shape whose receiver is a NAME onto one left-to-right arm; a target whose receiver is a CALL is not one of those shapes, so it still falls through to PyParseLValueAST's nested right-associative reading. Ranked low deliberately, not because the divergence is small but because a chain whose targets are call results is not a shape any corpus here writes -- one measured instance, written by hand to find the boundary. What makes it worth a row at all is that it is SILENT: the values are right and only the side effects of the target subexpressions differ, which is the same property that let the general case sit unreported. | — |
@@ -1120,9 +1119,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3987)
+## done (3988)
 
-3987 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3988 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1240,7 +1239,6 @@ _none_
 - [p 70] [A+N] bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 - [p 70] [A] bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program (unblocks 1)
 - [p 70] [A] bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 1)
-- [p 70] [N] bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)
 - [p 70] [A] feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - [p 70] [A+O] feature-opt-rtti-emit-on-use (unblocks 1)
 - [p 70] [A] bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
@@ -1251,6 +1249,7 @@ _none_
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - [p 70] [N] bug-n-a-staticmethod-called-through-cls-raises-attributeerror
 - [p 70] [N] bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
+- [p 70] [N] bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [N] bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
 - [p 70] [T] bug-t-a-cascade-bounded-at-track-t-s-own-bookkeeping-commit-reports-itself-as-not-a-lead
@@ -1809,7 +1808,6 @@ _none_
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
-- **1** — bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder
 - **1** — bug-n-os-environ-and-os-sep-are-not-values
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-when-called-back-from-the-pascal-side
