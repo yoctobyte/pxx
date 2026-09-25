@@ -182,6 +182,8 @@ function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
   fourth iterable shape is what showed that dispatch to be the wrong mechanism
   rather than merely a verbose one. }
 function pymap_iter_i(key: Pointer; up: TPyIter): TPyIter;
+{ `map(f, a, b, ...)`: see pylib's pyiter_map_star. }
+function pymap_star_iter(const cb: Variant; items: TPyList): TPyIter;
 function pyfilter_iter_i(key: Pointer; up: TPyIter): TPyIter;
 
 { Build a closure from raw SOURCE text — the compiled frontend's lowering of a
@@ -6576,6 +6578,36 @@ function pyfilter_iter(key: Pointer; const v: Variant): TPyIter;
 begin
   PyIterCallHook := @PyCallKey1;
   Result := pyiter_filter(key, v);
+end;
+
+{ One zipped tuple spread into a call of the callable VALUE cb -- the same
+  pyvar_callv<n> an ordinary `c(x, y)` on a variant callee reaches, so a def,
+  a lambda, a bound method and a builtin (`map(max, a, b)`) all dispatch as
+  they would when called directly. Eight is that family's ceiling. }
+function PyCallStarV(const cb: Variant; tp: Pointer): Variant;
+var n: Integer; t: TPyList;
+begin
+  t := TPyList(tp);
+  n := 0;
+  if t <> nil then n := t.count;
+  case n of
+    1: Result := pyvar_callv1(cb, t.at(0));
+    2: Result := pyvar_callv2(cb, t.at(0), t.at(1));
+    3: Result := pyvar_callv3(cb, t.at(0), t.at(1), t.at(2));
+    4: Result := pyvar_callv4(cb, t.at(0), t.at(1), t.at(2), t.at(3));
+    5: Result := pyvar_callv5(cb, t.at(0), t.at(1), t.at(2), t.at(3), t.at(4));
+    6: Result := pyvar_callv6(cb, t.at(0), t.at(1), t.at(2), t.at(3), t.at(4), t.at(5));
+    7: Result := pyvar_callv7(cb, t.at(0), t.at(1), t.at(2), t.at(3), t.at(4), t.at(5), t.at(6));
+    8: Result := pyvar_callv8(cb, t.at(0), t.at(1), t.at(2), t.at(3), t.at(4), t.at(5), t.at(6), t.at(7));
+  else
+    raise TypeError.Create('map() over more than eight iterables is not supported');
+  end;
+end;
+
+function pymap_star_iter(const cb: Variant; items: TPyList): TPyIter;
+begin
+  PyIterStarHook := @PyCallStarV;
+  Result := pyiter_map_star(cb, items);
 end;
 
 function pymap_iter_i(key: Pointer; up: TPyIter): TPyIter;

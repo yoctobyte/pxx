@@ -93,6 +93,15 @@ begin
     141: NewlibToLinuxErrno := 131;   { ENOTRECOVERABLE }
     142: NewlibToLinuxErrno := 130;   { EOWNERDEAD }
     143: NewlibToLinuxErrno := 86;   { ESTRPIPE }
+    { PICOLIBC-only names (IDF 6 builds with picolibc; newlib stops at 143).
+      The 124 names both define agree, measured against both toolchains'
+      sys/errno.h (xtensa and riscv32 identical), so these five are the whole
+      difference. }
+    144: NewlibToLinuxErrno := 133;   { EHWPOISON }
+    145: NewlibToLinuxErrno := 120;   { EISNAM }
+    146: NewlibToLinuxErrno := 127;   { EKEYEXPIRED }
+    147: NewlibToLinuxErrno := 129;   { EKEYREJECTED }
+    148: NewlibToLinuxErrno := 128;   { EKEYREVOKED }
   else
     NewlibToLinuxErrno := newlibErrno;
   end;
