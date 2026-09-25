@@ -99,13 +99,11 @@ You can specify a comma-separated list of soname stems (e.g., `--system-libs=m` 
 ### 3. Integration Libraries Default
 A header that `lib/crtl` does not provide, such as `zlib.h`, `sqlite3.h` or
 GTK's, is read from the host's `/usr/include`, and the compiler warns that it
-did so. **Fixed after v424:** each function it declares is imported from the
-library that defines it on your machine (`libz.so.1` for `zlib.h`), so the
-program links and runs. A function the header's library does not export
-stays with libc. On pin v424 every such function was imported from
-`libc.so.6`, and the program compiled and failed when started with
-`undefined symbol`; compile the library's source in instead, or import it
-from Pascal (`uses sqlite3`) or Nil Python. See
+did so. Each function it declares is imported from the library that defines
+it on your machine (`libz.so.1` for `zlib.h`), so the program links and runs.
+A function the header's library does not export stays with libc. This is so
+from pin v425; v424 imported every such function from `libc.so.6`, and the
+program failed when started with `undefined symbol`. See
 [Getting started with C](../getting-started/c.md#using-the-hosts-c-library-instead).
 
 ---

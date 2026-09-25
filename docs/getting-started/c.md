@@ -9,6 +9,8 @@ The same `pxx` compiler that builds Pascal also compiles C. It picks the C
 frontend from the `.c` extension; there is no separate tool. Everything on this
 page was run with **pin v424** (compiler sha256 `93a336a7ba85…`) on
 2026-09-25, from the root of a checkout set up as in [Install](../install/index.md).
+The cross-target table and the two libc notes were re-run the same day with
+**pin v425** (compiler sha256 `426b2fbf3f08…`), which is the current pin.
 
 ## Hello, world
 
@@ -77,23 +79,22 @@ libraries instead of the built-in runtime:
 | `./pxx --system-libs=m prog.c prog` | `libm.so.6` only; everything else built in |
 | `./pxx --system-libs prog.c prog` | `libc.so.6` and `libm.so.6` |
 
-**Fixed after v424:** with `--system-libs` (all of libc), v424 loses whatever
-the program printed with `printf`, because the program does not exit through
-libc and libc never flushes its buffer. The development tree fixes this. On
-v424, call `fflush(stdout)` before `main` returns.
+With `--system-libs` (all of libc), a program's `printf` output is flushed at
+exit. v424 lost it, because the program does not exit through libc; if you are
+on v424, call `fflush(stdout)` before `main` returns.
 
-**Fixed after v424: other system libraries, such as zlib, SQLite or GTK,
-link from C.** A function declared in a system header binds to that header's
-shared library when the library on your machine exports it, so
-`#include <zlib.h>` records `libz.so.1` and the program runs. On v424 the
-program compiles, records only `libc.so.6`, and fails when started with
-`undefined symbol: zlibVersion`. There are two ways around that on v424:
+**Other system libraries, such as zlib, SQLite or GTK, link from C.** A
+function declared in a system header binds to that header's shared library
+when the library on your machine exports it, so `#include <zlib.h>` records
+`libz.so.1` and the program runs. v424 recorded only `libc.so.6`, and the
+program failed when started with `undefined symbol: zlibVersion`.
+
+You can also avoid the system library altogether:
 
 - Compile the library's **source** into your program, as the programs below do.
   The result is static.
 - Import the library from Pascal (`uses sqlite3`) or from
-  [Nil Python](../targets/nil-python.md). Those routes do link the system
-  library.
+  [Nil Python](../targets/nil-python.md).
 
 The compiler still warns that the header came from `/usr/include`. A GTK
 program also needs `--threadsafe`, because GTK's headers include
@@ -218,8 +219,8 @@ int main(void)
 tools/run_target.sh aarch64 cross.a64
 ```
 
-Built with v424 and run under QEMU user mode, each output matches GCC's
-build of the same file on x86-64:
+Built with v425 and run under QEMU user mode (wasm32 under wasmtime), each
+output matches GCC's build of the same file on x86-64:
 
 | Target | Output |
 | --- | --- |
@@ -228,10 +229,10 @@ build of the same file on x86-64:
 | aarch64 | `3 7 19 42 \| 1.4142 \| 6 \| 64-bit` |
 | arm32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
 | riscv32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
-| wasm32 | v424 refuses it: `wasm: var-name pool full`; the development tree prints `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
+| wasm32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
 
-On v424, any wasm32 C program that includes `math.h` is refused with that
-message. The development tree builds and runs them under wasmtime.
+v424 refused any wasm32 C program that includes `math.h`, with
+`wasm: var-name pool full`; v425 builds them.
 
 C also runs on the ESP32 chips; see [ESP32](../targets/esp32.md).
 

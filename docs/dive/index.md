@@ -69,7 +69,7 @@ assembler, linker, or C compiler invoked during the build.
   and is two. `--target=` selects the backend, and
   [Targets](../targets/index.md) is the table that stays current.
 - **Multiple frontends.** The same backend also compiles a C frontend
-  (all 220 c-testsuite programs pass with pin v424, and it compiles real C
+  (all 220 c-testsuite programs pass with pin v425, and it compiles real C
   such as SQLite, Lua and QuickJS), a
   statically-typed Python-like dialect (Nil Python, `.npy`), and an
   assembly-source frontend.

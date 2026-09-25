@@ -24,6 +24,13 @@ strength of a test that once passed or a claim in another document.
 > programs printed output byte-identical to v423's, apart from timing figures,
 > and every binary is the same size as under v423. The screenshots, the ESP
 > runs and the C-library rows were not redone for v424.
+>
+> **Re-checked 2026-09-25 with pin v425** (commit `4fbf33f69`, sha256
+> `426b2fbf3f08…`). The 20 batch and parallel programs printed output
+> byte-identical to v424's, apart from timing figures, and each binary is the
+> same size. The C and Pascal library rows and the ESP32-S3 board walk were
+> re-run with v425, and each says so. The screenshots and the ESP QEMU runs
+> were not redone for v425.
 
 ## Quick start
 
@@ -383,7 +390,8 @@ adc start 0
 The soak was measured on 2026-09-25 on an ESP32-S3 devkit (ESP-IDF v6.0.1,
 160 MHz), with a compiler built after pin v424 (sha256 `29956ba5beff…`, tree
 `9c14efd7b`). The checked-in example, with `REPORTS = 10`, also runs on the
-board with pin v424 itself. The raw capture and the exact program are kept in
+board with pin v424 and with pin v425: on v425 its ten reports read an ADC mean
+of 3861 to 3863 and free heap between 257,976 and 262,088 bytes. The raw capture and the exact program are kept in
 `devdocs/evidence/monitor-s3-soak-2026-09-25/`.
 
 Nil Python is python-ish: this program stays inside the core that behaves as
@@ -450,7 +458,8 @@ total 59 3
 ### On a real ESP32-S3
 
 The examples were also flashed to an ESP32-S3 devkit on 2026-09-24/25 with pin
-v424 itself (ESP-IDF v6.0.1), and all fifteen checks passed. The details are in
+v424, and again on 2026-09-25 with pin v425 (ESP-IDF v6.0.1). All fifteen
+checks passed both times. The details are in
 [Getting started on the ESP32](../getting-started/esp32.md#verified-with).
 
 | Example | Language | Result on the board |
@@ -462,13 +471,13 @@ v424 itself (ESP-IDF v6.0.1), and all fifteen checks passed. The details are in
 | hello-s3, timer-s3, rgb-s3, i2c-s3, pwm-s3, uart-s3, nvs-s3 | Pascal | each prints its own pass line |
 | wifi-ap-s3 | Pascal | starts the access point and reaches `HTTP server listening on port 80`; no client connected during the test |
 
-**Long-running use.** Re-run in a loop with a compiler from before the leak
-fixes, `nilpy-s3`, `nilpy-hw-s3` and `gpio-edge-s3` lost about 44, 220 and 264
-bytes per pass. Pin v424 predates those fixes, so expect the same from it. With
-the fixes, which the next pin will carry, all three stay flat. With v424,
-`adc-s3` in a loop also loses about 17 KB per pass, because an `adc.read()`
-whose result is thrown away is not released. That is fixed after v424 as well
-(`c4eb85dc39`). On v424, assign the result, as `monitor-s3` does.
+**Long-running use.** Re-run in a loop with v424, `nilpy-s3`, `nilpy-hw-s3`
+and `gpio-edge-s3` lose about 44, 220 and 264 bytes per pass, and `adc-s3`
+about 17 KB per pass, because an `adc.read()` whose result is thrown away is
+not released. v425 carries the fixes for all of these. With a compiler that has
+the first fixes (sha256 `29956ba5beff…`), the first three stay flat. With v425
+itself, `adc-s3` looped 60 times keeps its free heap at 271,232 bytes from the
+first pass to the last.
 
 Still unverified: `adc-c3` and `gpio-edge-c3`, because there was no C3 board
 and QEMU delivers no ADC readings or GPIO edges; and `hello-s2`, which builds
@@ -481,35 +490,38 @@ PXX's C frontend compiles third-party C as released, together with PXX's own
 C runtime (`lib/crtl`) in place of glibc. There is one exception. zlib is
 built as a single translation unit, where one anonymous `typedef struct` would
 be repeated, and that is invalid C, which GCC rejects too. So the recipe gives
-that struct a tag in a copy of `gzguts.h`. The results below are static
-executables with no dynamic loader and no external C library. The sources are
-fetched on demand, not stored in the repository:
+that struct a tag in a copy of `gzguts.h`. Apart from tcc, the results below
+are static executables with no dynamic loader and no external C library. The
+sources are fetched on demand, not stored in the repository:
 
 ```sh
-tools/install_lib_candidates.sh busybox sqlite zlib lua cjson duktape quickjs
+tools/install_lib_candidates.sh busybox sqlite zlib lua cjson duktape quickjs tcc tiny-regex-c enet
 ```
 
-The zlib, Lua, cJSON and Duktape rows were re-run on 2026-09-25 with **pin
-v424** (compiler sha256 `93a336a7ba85…`) at checkout `f26d3a23b`. Each was
-checked two ways: against the recipe's expected output, and against the same
-driver program built by GCC and linked with glibc. The binary sizes are for
+Every row was re-run on 2026-09-25 with **pin v425** (commit `4fbf33f69`,
+compiler sha256 `426b2fbf3f08…`) at checkout `41a347978`. Each row says how
+it was checked: against the recipe's expected output, against the same driver
+program built by GCC and linked with glibc, or both. The binary sizes are for
 builds without `-g`.
 
 | Program | Version | How it was checked | Binary |
 | --- | --- | --- | --- |
 | **BusyBox**, unity build | 1.36.1 | `tools/busybox_diff.sh --pinned --targets x86_64`: applets `cat` and `echo` as one translation unit; output byte-identical to a GCC build over 29 cases | 171 KB |
 | **BusyBox**, linked by PXX itself | same | `tools/busybox_diff.sh --pinned --pxx-link --targets x86_64 --applets "cat echo ls wc sort ash"`: 55 objects linked by `pascal26 --link` with no external linker; no `PT_INTERP`; byte-identical to GCC over 82 cases | 20 MB |
-| **SQLite** | 3.46.0 | amalgamation plus a ten-line `sqlite3_exec` driver; the SQL session below | 3.3 MB |
+| **SQLite** | 3.46.0 | amalgamation plus a ten-line `sqlite3_exec` driver; the SQL session below | 3.2 MB |
 | **zlib** | 1.3.1 | zlib's own `test/example.c`: output byte-identical to the same program built by GCC | 717 KB |
 | **Lua** | 5.4.7 | the six `test/lua/*.lua` programs: all match the expected output, and all six outputs are byte-identical to the GCC build; the stock `lua.c` interpreter also builds and runs | 968 KB |
 | **cJSON** | 1.7.18 | the five `test/cjson/*.json` documents round-trip: all match the expected output and the GCC build | 149 KB |
 | **Duktape** | 2.7.0 | a JavaScript engine: `test/duktape/duk_smoke.c` runs a curated script, exits 42, and prints 29 lines byte-identical to the expected output and to the GCC build | 1.4 MB |
-| **QuickJS** (quickjs-ng) | 0.9.0 | `./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/quickjs test/quickjs/runner.c qjs` (about 11 s), then `./qjs "$(cat test/quickjs/smoke.js)"`: output byte-identical to `test/quickjs/smoke.expected`. Checked 2026-09-25 with pin v424 at checkout `a515adf81`; it needs the C runtime from that checkout or later | 4.9 MB |
+| **QuickJS** (quickjs-ng) | 0.9.0 | `./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/quickjs test/quickjs/runner.c qjs` (about 11 s), then `./qjs "$(cat test/quickjs/smoke.js)"`: output byte-identical to `test/quickjs/smoke.expected`. | 4.9 MB |
+| **tcc**, the Tiny C Compiler | mob `a338258d` | from the repository root, `./pxx -Ilibrary_candidates/tcc library_candidates/tcc/tcc.c tcc`. That tcc compiles a C program into the same executable, byte for byte, as a GCC-built tcc does, and compiles `tcc.c` into a tcc byte-identical to the one the GCC-built tcc produces, which then reproduces itself. It uses tcc's own build tree for `config.h` and `libtcc1.a`. Unlike the other rows it links glibc's `libc.so.6` dynamically. `tcc -run` needs a different build; see [Status](../reference/status.md) | 1.8 MB |
+| **tiny-regex-c** | `f2632c6d` | its own three test programs, each built together with `re.c`: `test1` passes 76 of 76, and all three print the same as the GCC build. `test1` counts its test table with `sizeof a / sizeof *a`, which v424 got wrong | 102 KB (`test1`) |
+| **ENet**, reliable UDP networking | 1.3.18 | its eight Unix `.c` files (all but `win32.c`) built as one unit with a 50-line driver in which a server and a client, in one process, connect over `127.0.0.1` and send one reliable packet each way: `result: connected=1 server=1 client=1`, output identical to the GCC build | 196 KB |
 
 SQLite, compiled by PXX from the single-file amalgamation:
 
 ```sh
-./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/sqlite driver.c /tmp/sqlmini
+./pxx -DSQLITE_THREADSAFE=0 -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/sqlite driver.c /tmp/sqlmini
 /tmp/sqlmini "create table boats(id integer primary key, name text, knots real);
   insert into boats(name, knots) values ('Aurora', 6.5), ('Wind', 8.0), ('Kees', NULL);
   select * from boats;
@@ -526,7 +538,12 @@ SQLite, compiled by PXX from the single-file amalgamation:
 ```
 
 Here `driver.c` is `#include "sqlite3.c"` plus a `main` that opens `:memory:`
-and passes its argument to `sqlite3_exec`.
+and passes its argument to `sqlite3_exec`. `-DSQLITE_THREADSAFE=0` builds SQLite
+without its own locking, which a single-threaded program does not need. Without
+it, SQLite's mutexes use `<pthread.h>` and the compiler asks for
+`--threadsafe`. A `--threadsafe` build needs a checkout at or after `3f28aafab`:
+with the C runtime of v425's own checkout it hangs in `sqlite3_open` (see
+[Known issues](../reference/known-issues.md)).
 
 zlib's own test program gives the same output as the GCC build, byte for byte:
 
@@ -552,8 +569,8 @@ are fetched on demand:
 tools/install_lib_candidates.sh fcl-json fpc-testsuite
 ```
 
-Re-run on 2026-09-25 with **pin v424** (compiler sha256 `93a336a7ba85…`) at
-checkout `896d93932`.
+Re-run on 2026-09-25 with **pin v425** (compiler sha256 `426b2fbf3f08…`) at
+checkout `41a347978`.
 
 | Program | Version | How it was checked | Binary |
 | --- | --- | --- | --- |

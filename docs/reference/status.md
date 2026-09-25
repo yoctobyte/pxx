@@ -46,26 +46,32 @@ The C frontend compiles standard C directly to native ELF in a single pass (see
 
 | Corpus | What it demonstrates |
 | --- | --- |
-| **c-testsuite** | All 220 programs of the standard C conformance battery pass (pin v424, x86-64, 2026-09-25). |
+| **c-testsuite** | All 220 programs of the standard C conformance battery pass (pin v425, x86-64, 2026-09-25). |
 | **zlib** | Compresses with output **byte-for-byte identical to a gcc-built zlib's** output. |
-| **SQLite** | The amalgamation compiles and runs — in-memory and file-backed databases, CRUD, and multi-threaded access — as a **libc-free, zero-dependency** binary. |
+| **SQLite** | The amalgamation compiles and runs — in-memory and file-backed databases, CRUD, and multi-threaded access — as a **libc-free, zero-dependency** binary. A multi-threaded (`--threadsafe`) build needs the C runtime from a checkout at or after `3f28aafab`; with pin v425's own checkout it hangs in `sqlite3_open`. |
 | **Lua** | The reference interpreter compiles and runs Lua programs. |
 | **cJSON** | Parses and serialises. |
 | **QuickJS** (quickjs-ng 0.9.0) | The JavaScript engine compiles as a zero-dependency binary and runs the in-tree smoke test byte-for-byte. |
+| **tcc** (Tiny C Compiler, mob at `a338258d`) | PXX compiles `tcc.c`. That tcc builds a C program byte-identical to the one a GCC-built tcc builds, and compiles `tcc.c` into a tcc byte-identical to the GCC-built tcc's, which then reproduces itself (pin v425, 2026-09-25). See the `-run` note below. |
+| **tiny-regex-c** | Its three test programs print the same as the GCC build; `test1` passes 76 of 76 (pin v425). |
+| **ENet** 1.3.18 (commit `5a9c537f`) | A reliable-UDP networking library: a server and a client in one program connect over localhost and exchange a packet each way, with output identical to the GCC build (pin v425). |
 | **BusyBox** | Compiles as separate translation units, BusyBox's own way, with output **matching a GCC build of the same sources** across a differential case list. A PXX-built BusyBox also boots as PID 1 under a real kernel — see [A minimal Linux system](../examples/minimal-linux-system.md). |
 
 ### Partial / in progress
 
-- **tcc** (Tiny C Compiler, mob at `a338258d`): works again with a compiler
-  built after pin v424, and will ship in the next pin. Measured 2026-09-25 with
-  compiler sha256 `5852ed1d21c6…` at checkout `ed6297d5b`: PXX compiles
-  `tcc.c`; that tcc builds a C program byte-identical to the one a GCC-built
-  tcc builds; and it compiles `tcc.c` itself into a tcc byte-identical to the
-  GCC-built tcc's, which then reproduces itself. Two limits: the PXX-built tcc
-  links the system C library dynamically, and its `-run` mode does not work,
-  because it has to load glibc's `libc.so.6` at run time. Programs built with
-  `-o` are unaffected. **Pin v424 itself** still stops in `tccpp.c`, at an
-  `#include` inside a function call's arguments.
+- **`tcc -run`** runs a C program in memory instead of writing a file, so tcc
+  has to load the host's C library at run time. Both PXX builds of tcc link
+  glibc's `libc.so.6` dynamically. The default build cannot use `-run`: it
+  stops with `libc.so.6: unrecognized file type`. Build tcc with
+  `-dPXX_DYNLIB_LIBC` and `-run` works, `-lm` included:
+  `pascal26 -dPXX_DYNLIB_LIBC -DONE_SOURCE=1 tcc.c tcc`, with `libtcc1.a` and
+  `runmain.o` in tcc's `-B` directory. With v425, 135 of the 137 programs in
+  tcc's `tests/tests2` print the same under `-run` as with a GCC-built tcc.
+  The two that differ are fixed in the development tree: a `double` converted
+  to a 64-bit unsigned integer saturates at 2^63 (`60de228a1`, a compiler fix),
+  and `#pragma once` does not recognise a header included by another path,
+  because `realpath` did not resolve the path (`3ee6e2431`, in the C runtime,
+  so a checkout at or after it gives 136 of 137 with v425).
 - A number of candidate corpora (graphics, networking, and game libraries) are
   staged for bring-up but not yet claimed.
 
@@ -163,7 +169,7 @@ AArch64, ARM32 and 32-bit RISC-V (Linux), to `wasm32` (WebAssembly, run with
 wasmtime), and to the ESP32's `riscv32` and `xtensa`: seven backends in all.
 Most of the above runs on the cross targets too, but per-target status is a
 separate axis with its own gates; [Targets](../targets/index.md#what-each-target-supports)
-has the per-target table, measured on v424.
+has the per-target table, measured on the previous pin, v424.
 
 ## How this is measured
 

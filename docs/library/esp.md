@@ -45,14 +45,15 @@ does not carry the Python runtime.
 
 Everything on this page compiles with **pin v424** (compiler sha256
 `93a336a7ba85…`) from both languages, for both the ESP32-S3 (xtensa) and the
-ESP32-C3 (riscv32). `espuart` is newer than v424's commit, so it needs a
-checkout at or after `bf67f1a46`; it is library source, so the v424 compiler
-builds it.
+ESP32-C3 (riscv32), given a checkout at or after `bf67f1a46` for `espuart`. The
+S3 examples were built and run again with **pin v425** (compiler sha256
+`426b2fbf3f08…`), whose checkout has `espuart`.
 
 ## How it was verified
 
 The ESP lane (frankh-95) ran every example below on **one ESP32-S3 board**
-(ESP-IDF v6.0.1, 160 MHz), with the v424 compiler, and all 15 passed. The
+(ESP-IDF v6.0.1, 160 MHz), with the v424 compiler and again with the v425
+compiler, and all 15 passed both times. The
 units that open and close a peripheral (timer, PWM, I2C, UART) were also run
 through 300 open/use/close cycles each, and none of them leaked memory. The
 `monitor-s3` example, which reads the ADC, GPIO and heap together, ran 193
@@ -161,11 +162,11 @@ MicroPython's: there is no `machine.Pin` and no `Pin.irq`.
 | | `channel_pad(ch)` | the GPIO pin behind a channel on this chip (channel 0 is GPIO1 on the S3, GPIO0 on the C3) |
 
 Each completed frame is an `interrupts` event with source `INT_SRC_ADC`. A
-handler fetches the samples with `read()`. **With pin v424, keep the
-result**: an `adc.read()` whose list is thrown away is never freed, and in a
-loop that costs about 17.5 KB per pass on the S3 board. Assigning the list or
-looping over it frees it. This is fixed after v424 (`c4eb85dc39`), so the next
-pin releases a discarded result too. Only ADC unit 1 is supported, one
+handler fetches the samples with `read()`. From pin v425 a result that is
+thrown away is released too: `adc-s3` looped 60 times on the S3 board keeps its
+free heap at 271,232 bytes. **With pin v424, keep the result**: there, an
+`adc.read()` whose list is thrown away is never freed, which costs about
+17.5 KB per pass. Only ADC unit 1 is supported, one
 channel at a time, at 12 dB attenuation and 12 bits. There is no Pascal
 function that returns samples yet; reading them is Python-only.
 

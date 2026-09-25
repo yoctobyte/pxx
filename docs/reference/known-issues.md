@@ -5,12 +5,12 @@ order: 94
 
 # Known issues in beta 0.1
 
-These are the problems we know about in the beta 0.1 compiler, **pin v424**
-(commit `0a3a7b5b4`, compiler sha256 `93a336a7ba85…`). Every row was re-run on
-v424 on 2026-09-25 before it was listed here; rows that no longer reproduced
-were dropped. Pascal and C rows were run on x86-64 Linux, and ESP rows under
-Espressif's QEMU on both chips. A row that is fixed in the development tree but
-not yet in a pin says so, with a workaround for v424.
+These are the problems we know about in the beta 0.1 compiler, **pin v425**
+(commit `4fbf33f69`, compiler sha256 `426b2fbf3f08…`). The Pascal and C rows
+were re-run on v425 on 2026-09-25, on x86-64 Linux. The ESP rows were measured
+under Espressif's QEMU on both chips with the previous pin, v424, and each says
+so. A row that is fixed in the development tree but not yet in a pin says so,
+with a workaround for v425.
 
 Problems that **compile and silently give a wrong answer** come first, because a
 refusal at least tells you something is wrong.
@@ -29,6 +29,25 @@ GCC-compiled code or into a file format.
 
 `__thread int tl = 7;` reads 7 in `main` and 0 in a thread started with
 `pthread_create`. **Workaround:** assign the value at the start of each thread.
+
+### C: a member access on a comma expression reads the wrong value
+
+`((void) f(), &t[i])->value` reads garbage instead of `t[i].value`, with no
+diagnostic. The comma expression itself is right: assigning it to a pointer
+first and then reading `p->value` gives the correct value. stb_ds's `shget`
+macro has this shape, so `shget` returns garbage while `shgeti` finds the right
+index. **Workaround:** assign the comma expression to a pointer variable first,
+or use `shgeti` and index the array yourself.
+
+### C: re-locking a recursive `pthread` mutex hangs
+
+A mutex set to `PTHREAD_MUTEX_RECURSIVE` deadlocks the second time the same
+thread locks it, although `pthread_mutexattr_settype` returned 0. SQLite built
+with `--threadsafe` hangs in `sqlite3_open` because of this. The C runtime in
+the development tree fixes it (`3f28aafab`). It is library source, so a
+checkout at or after that commit fixes it with the v425 compiler too.
+**Workaround with the v425 checkout:** build SQLite with
+`-DSQLITE_THREADSAFE=0`, or avoid re-locking a mutex you already hold.
 
 ### ESP: bare-metal images do not run on a real chip
 
@@ -54,58 +73,40 @@ On the ESP32-S3 the program stops after its last output line, with no message.
 see [by design](#by-design-math-errors) for why ESP does not stop on a math
 error at all.
 
-## Fixed after v424
+The three ESP rows above were measured with v424.
 
-These are wrong in v424 and fixed in the development tree, so the next pin, v425,
-will carry the fixes. Until then, use the workaround.
+## Fixed in v425
 
-- **libc `printf` output is lost.** A Pascal program that calls libc's `printf`
-  through a `varargs` external prints nothing, because the program does not exit
-  through libc and libc never flushes its buffer. **Workaround:** call
-  `fflush(nil)` before the program ends.
-- **`writeln` of a function result leaks.** `writeln(F(k))` where `F` returns a
-  string leaks one string per call: 190 of 200 were never freed in a loop.
-  **Workaround:** assign the result to a local first (`s := F(k); writeln(s)`),
-  which frees everything.
-- **C `printf` with a `double` prints wrong values on riscv32** once the call
-  has more arguments than fit in registers (for example four `double`s, three
-  `double`s and an `int`, or a `double` and five `int`s). The extra arguments
-  print as a tiny number such as `5.30758e-315` or as garbage, with no
-  diagnostic. Hosted xtensa does the same, and so does any C function that reads
-  its own `va_list`. **Workaround:** split the call into several shorter ones.
-- **A wasm32 C program that includes `math.h` is refused** with
-  `wasm: var-name pool full`. **Workaround:** none on wasm32.
-- **A type named like a compiler-internal record gets the wrong layout.**
-  `type TProc = record A: array[0..99] of Int64; end` has `SizeOf` 1344 instead
-  of 800, and an enum named `TSymbol` is 104 bytes instead of 4, with no
-  diagnostic. Fourteen names do this. **Workaround:** rename the type.
+These were wrong in the previous pin, v424, and are fixed in v425. Each was
+re-run on 2026-09-25 with both pins. If you are still on v424, the workaround
+is given.
+
+- **libc `printf` output was lost at exit.** A Pascal program that calls libc's
+  `printf` through a `varargs` external printed nothing, because libc never
+  flushed its buffer. v425 prints `42 ok`. On v424, call `fflush(nil)` before
+  the program ends.
+- **`writeln` of a function result leaked.** `writeln(F(k))` where `F` returns a
+  string leaked one string per call: 190 of 200 were never freed on v424. On
+  v424, assign the result to a local first.
+- **C `printf` with a `double` printed wrong values on riscv32** once the call
+  had more arguments than fit in registers. This was in the C runtime, so any
+  checkout after `64483b8e4` has the fix; v425 prints `1.5 2.5 3.5 4.5` as GCC
+  does.
+- **A wasm32 C program that includes `math.h` was refused** with
+  `wasm: var-name pool full`. v425 builds it and it runs under wasmtime.
+- **A type named like a compiler-internal record got the wrong layout.**
+  `type TProc = record A: array[0..99] of Int64; end` had `SizeOf` 1344 instead
+  of 800 on v424, and an enum named `TSymbol` 104 bytes instead of 4. v425
+  gives 800 and 4. On v424, rename the type.
 - **An ESP32-S3 bare-metal program that declares a `Double` and uses managed
-  strings** fails to build with `j displacement … is outside the encodable
-  range`. The ESP32-C3 and the ESP-IDF mode are not affected. **Workaround:**
-  keep floats out of the program, or build it as an ESP-IDF component; see
-  [ESP32](../targets/esp32.md), "Mode 1: Bare metal". Fixed in `e0db3791c`: the
-  program builds and prints its output under `qemu-system-xtensa`.
-- **C: `sizeof *a` of a multidimensional array is the size of a pointer.** For
-  `char *table[][4]`, `sizeof *table` is 8 instead of 32, so
-  `sizeof a / sizeof *a` counts too many rows and a loop over it runs past the
-  array. **Workaround:** write `sizeof a[0]`.
-- **C: a typedef of an array of a typedef'd array loses a dimension.** With
-  `typedef float vec4[4]; typedef vec4 mat4[4];` a `mat4` is 16 bytes instead
-  of 64 and its elements read 0, and an initialised local `mat4` is refused
-  with `expected C expression`. **Workaround:** declare it as `vec4 m[4]`.
-- **C: `sizeof (t)->key` is refused** with `expected ')'`. **Workaround:**
-  write `sizeof t->key` or `sizeof ((t)->key)`.
-
-  The three C rows are checked against gcc on x86-64 by
-  `test_c_sizeof_of_a_dereferenced_array_and_a_typedef_of_array_typedefs.c`.
-
-Each row was re-checked on 2026-09-25 with a development build (compiler sha256
-`5a8648a2450a…`, tree `c570417d8`): `printf` prints `42 ok`, the `writeln` loop
-leaves 2 strings live instead of 190, and the two types are 800 and 4 bytes.
-
-The `writeln` row is one leak that was measured and fixed. We are not claiming that
-PXX has no other leaks of this kind: a wider check of dynamic-array shapes is
-still in progress.
+  strings** failed to build on v424 with `j displacement … is outside the
+  encodable range`. v425 builds it, and it prints its output under
+  `qemu-system-xtensa`.
+- **C `sizeof` of a multidimensional array, a typedef of array typedefs, and
+  `sizeof (t)->key`.** On v424, `sizeof *table` for `char *table[][4]` was 8
+  instead of 32, a `typedef vec4 mat4[4]` was 16 bytes instead of 64, and
+  `sizeof (t)->key` was refused. v425 prints `32 3 64 8 16` for a probe of all
+  three, the same as GCC.
 
 ## Refused, with a message
 
@@ -118,10 +119,13 @@ answer silently.
   shares one copy. Single-threaded programs are unaffected.
 - **C `setvbuf` with full or line buffering** returns nonzero: PXX's C streams
   are unbuffered, and the call says so rather than claiming success.
-- **`--shared` on aarch64 and arm32** is refused, as shared-library output is
-  x86-64 only. On v424 the message reads like an internal error (`no init/fini
-  thunk prologue`); the development tree words it plainly, as i386 already did:
-  `shared-library output is x86-64 only`.
+- **`--shared` on aarch64 and arm32** is refused with
+  `shared-library output is x86-64 only`, as on i386.
+- **C compound literals of an array type** are refused:
+  `(vec4){1, 2, 3, 4}` with `typedef float vec4[4]`, `(float[4][4]){...}`, and
+  `(mat4){...}` for a typedef of array typedefs. Each gives a parse error such
+  as `expected C expression`. cglm's `GLM_MAT4_IDENTITY` has this shape.
+  **Workaround:** declare a named array and initialise it.
 
 ## By design: math errors
 
@@ -136,7 +140,7 @@ the two behave differently on purpose:
 | Nil Python: `//` and `%` by zero | `ZeroDivisionError`, except in some shapes that stop with runtime error 200 (see the [Nil Python limits](../targets/nil-python.md#known-limits)) | gives 0, the program continues |
 | Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
 
-Each cell was measured on v424. The ESP column was measured under QEMU on both
+Each cell was measured on v424, the previous pin. The ESP column was measured under QEMU on both
 chips for Pascal and Nil Python, and on the S3 for C. This
 is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
 test the divisor yourself.

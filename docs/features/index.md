@@ -60,7 +60,7 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
   should be treated as advanced or unstable surfaces.
 - Alternate high-level frontends: a [C frontend](../targets/c-frontend.md)
   (C99-class, passes all 220 programs of the c-testsuite conformance battery
-  with pin v424 on x86-64, and compiles real programs such as SQLite, Lua,
+  with pin v425 on x86-64, and compiles real programs such as SQLite, Lua,
   zlib, cJSON and QuickJS) and
   [Nil Python](../targets/nil-python.md), a statically-typed Python-shaped
   dialect. Both are mainline, gated frontends, not experiments — see

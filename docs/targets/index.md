@@ -19,9 +19,9 @@ PXX can emit native and cross-target output from the same compiler invocation.
 | `xtensa` | ESP32-S2/S3 object or bare-metal image. | See [ESP32](./esp32.md). |
 | `wasm32` | WebAssembly module. | Run with `wasmtime`. |
 
-`pxx --list-targets` prints this list for your build. On v424 it describes
-wasm32 as "registered only — no codegen yet". That line is wrong, and the
-development tree corrects it (`3472ffc42`); the table below shows what wasm32
+`pxx --list-targets` prints this list for your build. From pin v425 it
+describes wasm32 as `via wasmtime` for Pascal, C and Nil Python; v424 wrongly
+said "registered only — no codegen yet". The table below shows what wasm32
 actually does.
 
 ESP chip names are accepted as targets too. They imply the CPU and
@@ -53,7 +53,9 @@ For ESP32 targets, start with the board-specific examples under
 
 ## What each target supports
 
-Measured with **pin v424** (compiler sha256 `93a336a7ba85…`) on 2026-09-25.
+Measured with **pin v424** (compiler sha256 `93a336a7ba85…`) on 2026-09-25,
+the previous pin. The `math.h` row and the refusal messages below were
+re-checked with **pin v425** (compiler sha256 `426b2fbf3f08…`) the same day.
 Programs other than x86-64 ones were run under QEMU user mode, and wasm32 under
 wasmtime; none of the Linux cross targets was run on real hardware for this
 table.
@@ -67,15 +69,16 @@ table.
 | `--emit-obj` (relocatable object) | yes | yes | yes | yes | yes | refused |
 | `--shared` (shared library) | yes | refused | refused | refused | refused | refused |
 | Nil Python | yes | yes | yes | yes | refused | yes |
-| C with `#include <math.h>` | yes | yes | yes | yes | yes | refused in v424, yes in the development tree |
+| C with `#include <math.h>` | yes | yes | yes | yes | yes | yes (refused in v424) |
 
 Every **refused** cell is a compile-time error that names the reason; none
-produces a program that runs wrongly. On v424, three of the messages are
-worded for compiler developers rather than users: `--shared` on aarch64 and
-arm32, `--threadsafe` on riscv32 and wasm32, and Nil Python on riscv32
-(`a heap arena needs mmap`). The development tree rewords all three
-(`45bbfb187`, `3472ffc42`). `xtensa` also has an object writer; it
-is the ESP-IDF route.
+produces a program that runs wrongly. From v425 each message says in plain
+words what is unsupported, for example `--threadsafe is available for x86-64,
+i386, aarch64 and arm32 only; it is refused for riscv32.` On v424, three of them
+were worded for compiler developers: `--shared` on aarch64 and arm32,
+`--threadsafe` on riscv32 and wasm32, and Nil Python on riscv32
+(`a heap arena needs mmap`). `xtensa` also has an object writer; it is the
+ESP-IDF route.
 
 ## Pages
 

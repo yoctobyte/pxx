@@ -143,7 +143,7 @@ is a deliberate trade, not a limitation, and you can decline it: point the
 compiler at the library's **source** and it compiles that in instead.
 
 ```sh
-./pxx -Ilib/crtl/include -Ilib/crtl/src -Ipath/to/sqlite prog.c prog
+./pxx -DSQLITE_THREADSAFE=0 -Ilib/crtl/include -Ilib/crtl/src -Ipath/to/sqlite prog.c prog
 ```
 
 with the C side pulling the implementation in directly:
@@ -151,6 +151,11 @@ with the C side pulling the implementation in directly:
 ```c
 #include "sqlite3.c"
 ```
+
+`-DSQLITE_THREADSAFE=0` is for a single-threaded program. A program that uses
+SQLite from several threads builds with `--threadsafe` instead, from a checkout
+at or after `3f28aafab`; with the C runtime of pin v425's own checkout such a
+build hangs.
 
 Now SQLite is *part of* your binary, dead-code-eliminated with everything else,
 and `ldd` again reports no dynamic dependencies. Both routes are exercised by

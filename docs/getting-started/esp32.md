@@ -292,16 +292,22 @@ One ESP32-S3 devkit on `/dev/ttyACM0`, ESP-IDF v6.0.1, CPU at 160 MHz,
   `i2c-s3`, `pwm-s3`, `uart-s3` and `nvs-s3` print their own pass lines; the
   `myprog.pas` and `hello.c` short forms match the PC. `monitor-s3` was run
   with that compiler too, and with the later one below.
+- **The same walk with pin v425** (binary sha256 `426b2fbf3f08`, repository at
+  `4fbf33f69`), on 2026-09-25: fifteen of fifteen passed again, each judged
+  the same way, and both short forms match the PC. `monitor-s3` with
+  `REPORTS = 10` reads an ADC mean of 3861 to 3863 and free heap between
+  257,976 and 262,088 bytes.
 - **The heap figures** were measured with a later compiler (`29956ba5beff`,
   repository at `9c14efd7b`), which carries two leak fixes made during this
   check. `monitor-s3` is flat with both. Three examples, each re-run in a
   loop, lost bytes on every pass with an earlier compiler (`bb17d23beea5`):
   `nilpy-s3` about 44, `nilpy-hw-s3` about 220, `gpio-edge-s3` about 264.
-  Pin v424 predates that fix, so expect the same from it. With the later
-  compiler all three are flat. `adc-s3` run in a loop lost about 17.5 KB per
-  pass with both of those compilers, because an `adc.read()` whose result is
-  thrown away was not released: with `bb17d23beea5` its free heap fell from
-  253,688 to 78,252 bytes by pass 10. That is fixed after v424 (`c4eb85dc39`).
-  With compiler `790bc11fb9c2` (built from `e94295369`), 60 passes keep the free
-  heap at 271,232 bytes from pass 0 to pass 60, with the lowest point at
-  264,440 throughout. On v424, assign the result, as `monitor-s3` does.
+  Pin v424 predates that fix, so expect the same from it; v425 carries it.
+  With the later compiler all three are flat. `adc-s3` run in a loop lost about
+  17.5 KB per pass with both of those compilers, because an `adc.read()` whose
+  result is thrown away was not released: with `bb17d23beea5` its free heap
+  fell from 253,688 to 78,252 bytes by pass 10. v425 carries that fix too
+  (`c4eb85dc39`): with pin v425, 60 passes keep the free heap at 271,232 bytes
+  from pass 0 to pass 60, with the lowest point at 264,440 throughout, the same
+  as compiler `790bc11fb9c2` (built from `e94295369`) measured before the pin.
+  On v424, assign the result, as `monitor-s3` does.
