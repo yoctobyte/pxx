@@ -4,7 +4,7 @@
 # the NilPy counterpart of tools/esp_heap_soak.sh, which rewrites a Pascal main
 # and cannot take a Python one.
 #
-#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] [--settle S] [--as c3|s3] <example-dir-name>
+#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] [--settle S] [--as c3|s3] [--checkpoints 10,40,160] <example-dir-name>
 #
 # The example is staged OUT OF TREE (symlinks dereferenced; the checkout stays
 # byte-clean) and a footer is appended to its main.npy:
@@ -39,17 +39,24 @@
 # the chip from the directory name), so one program is soaked on both chips:
 # e.g. the S3-only logger on the C3, to separate a chip-specific cost.
 #
+# --checkpoints K1,K2,... runs max(K) passes in ONE boot and prints the heap
+# delta after each Ki cumulative passes:
+#   SOAK <example> <chip> at passes=<Ki> delta=<bytes> bpp=<bytes per pass>
+# Growth from K1 to Kn at a steady slope is a leak; a delta that stops moving
+# is a plateau (a pool, TIME_WAIT). It replaces --passes.
+#
 # Built with the example's own build.sh (so its flags, partition table and
 # sdkconfig), with the PINNED compiler unless SOAK_PXX says otherwise.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CONTROL=0; PASSES="${SOAK_N:-10}"; SETTLE=0; AS=""
+CONTROL=0; PASSES="${SOAK_N:-10}"; SETTLE=0; AS=""; CHECKS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --control) CONTROL=1; shift ;;
     --passes) PASSES="$2"; shift 2 ;;
     --settle) SETTLE="$2"; shift 2 ;;
     --as) AS="$2"; shift 2 ;;
+    --checkpoints) CHECKS="$2"; shift 2 ;;
     *) break ;;
   esac
 done
@@ -111,7 +118,17 @@ fi
   [ "$CONTROL" = 1 ] && printf '    _soak_ctl.leak64()\n'
   printf '\n\n_soak_pass()\n_soak_pass()\n'
   printf '_soak_h0 = _soak_board.free_heap()\n'
-  printf 'for _soak_i in range(%d):\n    _soak_pass()\n' "$PASSES"
+  if [ -n "$CHECKS" ]; then
+    PASSES="$(printf '%s\n' ${CHECKS//,/ } | sort -n | tail -1)"
+    printf '_soak_done = 0\n'
+    for k in ${CHECKS//,/ }; do
+      printf 'while _soak_done < %d:\n    _soak_pass()\n    _soak_done = _soak_done + 1\n' "$k"
+      printf '_soak_dk = _soak_h0 - _soak_board.free_heap()\n'
+      printf 'print("SOAK-AT passes=%d delta=" + str(_soak_dk) + " bpp=" + str(_soak_dk // %d))\n' "$k" "$k"
+    done
+  else
+    printf 'for _soak_i in range(%d):\n    _soak_pass()\n' "$PASSES"
+  fi
   printf '_soak_h1 = _soak_board.free_heap()\n'
   printf '_soak_d = _soak_h0 - _soak_h1\n'
   printf 'print("SOAK-RESULT delta=" + str(_soak_d) + " passes=%d bpp=" + str(_soak_d // %d))\n' "$PASSES" "$PASSES"
@@ -148,6 +165,7 @@ tag="$STAGE $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
 r="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-RESULT' | head -1 || true)"
 if [ -n "$r" ]; then
   echo "SOAK $tag ${r#SOAK-RESULT }"
+  tr -d '\r' < "$W/serial.log" | grep -a '^SOAK-AT ' | sed "s|^SOAK-AT |SOAK $tag at |" || true
   st="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-SETTLED' | head -1 || true)"
   [ -n "$st" ] && echo "SOAK $tag settled ${st#SOAK-SETTLED }"
 else
