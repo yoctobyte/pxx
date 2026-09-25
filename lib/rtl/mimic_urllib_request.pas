@@ -958,7 +958,7 @@ begin
   l := TPyList.Create;
   l.append(filename);
   l.append(resp.headers);
-  urlretrieve := tuple(l);
+  urlretrieve := pylist_mark_tuple(l);   { tuple(l) would COPY and strand l }
 end;
 
 end.

@@ -37573,6 +37573,14 @@ test-esp-idf: $(COMPILER)
 	    test/esp_board_hidden_loop.npy $(TESTTMP)/esp_board_hidden_loop.o >/dev/null \
 	  && echo "=== esp_board_hidden_loop builds [$$t]: OK ===" || exit 1; \
 	done
+	@# The station demo (network + socket + json + espadc from the hidden loop):
+	@# its run is on the S3 (examples/esp32/nilpy-station-s3, main.expected, and
+	@# the phone steps in main.npy's header), and no qemu models the Wi-Fi.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    examples/esp32/nilpy-station-s3/main/main.npy $(TESTTMP)/nilpy_station.o >/dev/null \
+	  && echo "=== nilpy-station demo source builds [$$t]: OK ===" || exit 1; \
+	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build
 	# by name (`unresolved forward: <callee>`) rather than mis-running. A body
@@ -40372,6 +40380,19 @@ endif
 	# variant bits reddens the variant row. The .expected came from CPython.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_uuid.npy $(TESTTMP)/lib_mimic_uuid
 	$(TESTTMP)/lib_mimic_uuid | diff -u test/lib_mimic_uuid.expected -
+	# socket, the IPv4 TCP subset over the PAL, a DIFFERENTIAL: the .expected is
+	# CPython's output. ./$(COMPILER), not the pin: the shim's class is named
+	# like its module, which needed a ConsumeUnitQualifier fix no pin carries
+	# yet (pin v425 builds this and segfaults at accept). Move it to
+	# $(PXX_STABLE) once a pin does.
+	./$(COMPILER) -Fulib/rtl test/lib_mimic_socket.npy $(TESTTMP)/lib_mimic_socket
+	timeout 10 $(TESTTMP)/lib_mimic_socket | diff -u test/lib_mimic_socket.expected -
+	# The LEAK row beside it: socket.accept, codecs.charmap_* and json.dumps
+	# built a list and returned tuple(l), which copies and strands it. Values
+	# were right throughout, so only the census can fail this (recipe and
+	# controls in the fixture's header).
+	./$(COMPILER) -Fulib/rtl -dPXX_ALLOC_CENSUS test/lib_mimic_result_tuple_leak.npy $(TESTTMP)/lib_mimic_result_tuple_leak
+	tools/assert_no_leak.sh lib_mimic_result_tuple_leak 300 timeout 20 $(TESTTMP)/lib_mimic_result_tuple_leak
 	# hashlib.sha1 -- the RTL had no SHA-1; TSP keys its speech cache on one. A
 	# DIFFERENTIAL over the FIPS 180-4 vectors, the 55/56/63/64/65-byte padding
 	# edges, all 256 byte values and a split update(); the .expected came from

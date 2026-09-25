@@ -1,0 +1,55 @@
+# socket, the IPv4 TCP subset (lib/rtl/mimic_socket.pas), against CPython:
+# the .expected is python3's output of this file. One process, no threads:
+# connect() completes against the listen backlog before accept() runs, so a
+# client and a server fit in one straight-line script.
+#
+# ALSO THE REGRESSION ROW FOR A COMPILER FIX (pasparser_name.inc,
+# ConsumeUnitQualifier): the shim's class is named `socket`, like the module,
+# and accept() builds a new one with `socket.Create`. Before the fix, inside
+# the shim that qualifier resolved to the pending unit entry `socket`, the
+# constructor ran on Self instead of making a connection object, and this
+# script segfaulted at `srv.accept()` (measured 2026-09-25). Built with
+# ./$(COMPILER), not the pin, until a pin carries the fix.
+import socket
+
+srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind(("127.0.0.1", 0))
+srv.listen(4)
+host, port = srv.getsockname()
+print("bound", host, port > 0)
+
+srv.setblocking(False)
+try:
+    srv.accept()
+    print("accept: unexpected connection")
+except OSError:
+    print("accept: nothing pending -> OSError")
+srv.setblocking(True)
+
+cli = socket.socket()
+cli.connect(("localhost", port))
+cli.sendall(b"GET / HTTP/1.0\r\n\r\n")
+conn, addr = srv.accept()
+print("peer", addr[0])
+req = conn.recv(512)
+print("request", req)
+n = conn.send(b"HTTP/1.0 200 OK\r\n\r\nhello")
+print("sent", n)
+conn.close()
+reply = b""
+while True:
+    chunk = cli.recv(4)
+    if not chunk:
+        break
+    reply = reply + chunk
+print("reply", reply)
+cli.close()
+try:
+    socket.socket().connect(("no.such.host.invalid", 1))
+except OSError:
+    print("unknown host -> OSError")
+with socket.socket() as s:
+    print("with ok", s.fileno() >= 0)
+srv.close()
+print("done")

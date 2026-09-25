@@ -154,11 +154,24 @@ const
 
   PAL_NET_AF_INET = 2;
   PAL_NET_ENOTSUP = -95;   { lwIP has no AF_UNIX }
-  SOL_SOCKET = 1;
-  SO_REUSEADDR = 2;
-  SO_ERROR = 4;
+  { lwIP's numbering (lwip/sockets.h), NOT Linux's. These were 1 / 2 / 4, the
+    Linux values, from the first cut of this unit: every SO_REUSEADDR set and
+    every SO_ERROR read on ESP asked lwIP for an option that does not exist
+    and got -1. The Pascal wifi-ap example ignores that return, so nothing
+    showed it until mimic_socket raised on it (2026-09-25, on the S3). }
+  SOL_SOCKET = $FFF;
+  SO_REUSEADDR = $0004;
+  SO_ERROR = $1007;
   F_SETFL = 4;
-  O_NONBLOCK = 1;
+  { NEWLIB's value, because IDF compiles lwIP against newlib's <fcntl.h> and
+    lwIP's own `#define O_NONBLOCK 1` is only a fallback that never applies
+    there. It was 1: in newlib that is O_WRONLY, which lwip_fcntl's F_SETFL
+    masks off as an access-mode bit before it looks, so every
+    PalSetSocketNonBlocking(h, 1) on ESP set the socket BLOCKING and returned
+    0. Measured on the S3, 2026-09-25: a non-blocking listen socket's accept
+    blocked forever with nothing pending. The xtensa and riscv32 toolchains
+    both preprocess O_NONBLOCK to 0x4000. }
+  O_NONBLOCK = $4000;
 
 type
   PB = ^Byte;

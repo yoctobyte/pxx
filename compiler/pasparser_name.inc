@@ -449,6 +449,21 @@ begin
     bug-n-importing-both-f-and-F-from-one-module-loses-the-class }
   if isNilPy and NameHasUpper(name) and PyIsClassTypeExact(name) then Exit;
 
+  { …and a CLASS DECLARED IN THE UNIT BEING COMPILED beats a unit of the same
+    name, which is ordinary Pascal scoping: the unit's own declarations are
+    searched before the names of other units. It is reachable because a NilPy
+    import marks the name it asked for as compiled BEFORE the shim that
+    answers it is parsed, so inside lib/rtl/mimic_socket.pas the qualifier
+    `socket` in `socket.Create` found the pending unit entry `socket`, `.`
+    was consumed, and `Create` then bound unqualified to the current class's
+    method -- the constructor re-run on Self, no new instance, no diagnostic.
+    Measured 2026-09-25: a mimic unit whose class zork's method returns
+    `zork.Create(n + 1)` printed 0 under `import zork` and 4 imported by path
+    or under any other module name, and mimic_socket.accept crashed. The
+    exact-case exception above stays as it is: it is about the IMPORTING
+    scope, where the module really does win. }
+  if (CurrentUnitIdx >= 0) and (FindUClassInUnit(name, CurrentUnitIdx) >= 0) then Exit;
+
   cand := name;
   bestUnit := -1; bestExtra := -1;
   { 0-extra: the bare name is the unit, member = Tokens[TokPos+1]. }

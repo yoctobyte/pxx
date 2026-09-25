@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: 0BSD
+# A LEAK ROW, NOT A VALUE ROW: every value below was already right while each
+# call leaked, so only tools/assert_no_leak.sh (built -dPXX_ALLOC_CENSUS) can
+# fail it. Three RTL paths that built a result list and returned tuple(l),
+# which COPIES, so the list -- and anything created only to go into it -- was
+# never released:
+#   socket.accept()        ~7 blocks per call (the (conn, (ip, port)) tuple)
+#   codecs.charmap_*()     ~6 per encode+decode pair
+#   json.dumps(<dict>)     ~2 per call (its keylist)
+# Found as an ESP32 heap falling ~4.6 KB per 5 requests in
+# examples/esp32/nilpy-station-s3; 400 rounds here puts any one of them far
+# over the bound. Built with ./$(COMPILER): the socket half needs the
+# ConsumeUnitQualifier fix that lib_mimic_socket.npy pins.
+import socket
+import codecs
+import json
+
+srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind(("127.0.0.1", 0))
+srv.listen(4)
+port = srv.getsockname()[1]
+tbl = "".join([chr(i) for i in range(256)])
+cmap = codecs.charmap_build(tbl)
+
+got = 0
+k = 0
+while k < 400:
+    c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    c.connect(("127.0.0.1", port))
+    conn, addr = srv.accept()
+    c.sendall(b"ping")
+    got = got + len(conn.recv(16))
+    conn.close()
+    c.close()
+    e = codecs.charmap_encode("abc", "strict", cmap)
+    d = codecs.charmap_decode(b"abc", "strict", tbl)
+    s = json.dumps({"k": k, "addr": addr[0]}, sort_keys=True)
+    k = k + 1
+srv.close()
+print(got, len(e[0]), d[1], s)

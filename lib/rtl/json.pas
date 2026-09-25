@@ -700,7 +700,8 @@ begin
     JsonPyDumpDict := '{}';
     exit;
   end;
-  ks := d.keylist;
+  ks := d.keylist;   { a fresh list, ours to release: it leaked two blocks per dumps() }
+  try
   doSort := sortKeys and (n <= MAX_SORT_KEYS);
   if doSort then
   begin
@@ -725,6 +726,9 @@ begin
     if indent > 0 then sep := ',' else sep := ', ';
   end;
   JsonPyDumpDict := r + JsonPyIndentStr(indent, depth) + '}';
+  finally
+    PXXObjRelease(Pointer(ks));
+  end;
 end;
 
 function JsonPyDumpValue(const v: Variant; indent, depth: Integer;

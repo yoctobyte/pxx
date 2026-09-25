@@ -295,7 +295,7 @@ begin
   t.append(decode);
   t.append(streamreader);
   t.append(streamwriter);
-  as_tuple := tuple(t);
+  as_tuple := pylist_mark_tuple(t);   { tuple(t) would COPY and strand t }
 end;
 
 { ---- the charmap trio ---------------------------------------------------- }
@@ -355,7 +355,7 @@ begin
   t := TPyList.Create;
   t.append(out_);
   t.append(input.count);
-  charmap_decode := tuple(t);
+  charmap_decode := pylist_mark_tuple(t);   { tuple(t) would COPY and strand t }
 end;
 
 function charmap_encode(const input: AnsiString; const errors: AnsiString;
@@ -392,8 +392,9 @@ begin
     b.put(i, acc[i]);
   t := TPyList.Create;
   t.append(b);
+  PXXObjRelease(Pointer(b));   { the tuple holds it now }
   t.append(n);
-  charmap_encode := tuple(t);
+  charmap_encode := pylist_mark_tuple(t);   { tuple(t) would COPY and strand t }
 end;
 
 { ---- the built-in codecs ------------------------------------------------- }

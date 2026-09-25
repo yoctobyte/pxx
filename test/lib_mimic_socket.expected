@@ -1,0 +1,9 @@
+bound 127.0.0.1 True
+accept: nothing pending -> OSError
+peer 127.0.0.1
+request b'GET / HTTP/1.0\r\n\r\n'
+sent 24
+reply b'HTTP/1.0 200 OK\r\n\r\nhello'
+unknown host -> OSError
+with ok True
+done

@@ -1,0 +1,207 @@
+# SPDX-License-Identifier: 0BSD
+# A WEATHER-STATION-STYLE STATUS PAGE, IN PYTHON, ON AN ESP32-S3.
+#
+# The board starts its own Wi-Fi network and serves one page with live
+# readings: an ADC pin, the chip's temperature, uptime and free heap. The page
+# polls /data once a second, so the numbers move while you watch. There is no
+# interpreter on the chip: this file is compiled by pxx's NilPy frontend to
+# xtensa machine code and linked by the normal ESP-IDF build.
+#
+#   join Wi-Fi "PXX-NILPY", password "pascal26", open http://192.168.4.1/
+#
+# It is written against the names a MicroPython or CPython programmer already
+# knows -- network.WLAN(network.AP_IF), socket, json, esp32.mcu_temperature --
+# plus two of pxx's own ESP units for what those libraries have no name for.
+#
+# THE HIDDEN LOOP DOES THE SERVING. The main body sets everything up and then
+# FALLS OFF THE END. Because an ADC handler is registered and the ADC is a
+# live source, the program keeps running in interrupts' hidden loop: every
+# ADC frame (about 16 a second at 1 kHz, 64 samples a frame) delivers
+# on_frame, which answers whatever HTTP requests are waiting. The listening
+# socket is non-blocking, so a frame with no visitor costs one refused
+# accept(). Nothing here runs in interrupt context.
+#
+# SELF-FETCH. Before it falls off the end, the program fetches its own / and
+# /data over 127.0.0.1, through the same server code a phone reaches, and it
+# fetches /data once more from INSIDE the hidden loop (frame 16). Those lines
+# are in main.expected, so a board run proves the HTTP path, and that it keeps
+# serving after the main body ended, without a Wi-Fi client. A phone proves
+# the radio.
+#
+# ON A BOARD, from the repo root:
+#   tools/esp_flash.sh --project examples/esp32/nilpy-station-s3 --port /dev/ttyACM0
+# The ADC reads GPIO1 (ADC1 channel 0); leave it floating, or wire a pot.
+#
+# WITH A PHONE (the part a board run cannot check -- the radio):
+#   1. flash as above and keep the serial monitor open;
+#   2. join Wi-Fi "PXX-NILPY", password "pascal26" (the phone may warn there
+#      is no internet; stay connected);
+#   3. open http://192.168.4.1/ -- the table fills in and the uptime counts
+#      up once a second, "stations on this network" reads 1;
+#   4. the serial log shows `pxx-net: station <mac> joined` and then one
+#      `http 192.168.4.x GET /data HTTP/1.1` line per second.
+# Leave it a few minutes: "free heap" should hold steady, not fall.
+
+import json
+import network
+import socket
+import esp32
+import interrupts
+import 'espadc.pas' as adc
+import 'espsys.pas' as board
+
+SSID = "PXX-NILPY"
+PASSWORD = "pascal26"
+PORT = 80
+ADC_CH = 0
+ADC_HZ = 1000
+
+stats = {"frames": 0, "requests": 0}
+
+PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PXX station</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:2em;background:#10141c;color:#e8ecf2}
+h1{color:#7cc4ff;font-size:1.4em}td{padding:.25em 1.2em .25em 0}
+code{color:#ffd479;font-size:1.2em}small{color:#8a94a6}
+</style></head><body>
+<h1>PXX station &mdash; NilPy on an ESP32-S3</h1>
+<table>
+<tr><td>ADC (GPIO<span id="pin">?</span>, raw 0..4095)</td><td><code id="adc_raw">-</code></td></tr>
+<tr><td>chip temperature</td><td><code id="temperature_c">-</code> &deg;C</td></tr>
+<tr><td>uptime</td><td><code id="uptime_s">-</code> s</td></tr>
+<tr><td>free heap</td><td><code id="free_heap">-</code> bytes</td></tr>
+<tr><td>stations on this network</td><td><code id="stations">-</code></td></tr>
+<tr><td>requests served</td><td><code id="requests">-</code></td></tr>
+</table>
+<p><small>Served by a Python program compiled to machine code by pxx.
+The page polls <a href="/data" style="color:#7cc4ff">/data</a> once a second.</small></p>
+<script>
+async function tick(){
+  try{
+    const d = await (await fetch('/data',{cache:'no-store'})).json();
+    for (const k in d){ const e=document.getElementById(k); if(e) e.textContent=d[k]; }
+    document.getElementById('pin').textContent=d.adc_pin;
+  }catch(e){}
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body></html>
+"""
+
+
+def readings():
+    samples = adc.read()
+    mean = -1
+    if len(samples) > 0:
+        mean = sum(samples) // len(samples)
+    return {
+        "adc_raw": mean,
+        "adc_pin": adc.channel_pad(ADC_CH),
+        "temperature_c": esp32.mcu_temperature(),
+        "uptime_s": board.uptime_ms() // 1000,
+        "free_heap": board.free_heap(),
+        "stations": ap.status("stations"),
+        "requests": stats["requests"],
+    }
+
+
+def respond(conn, status, ctype, body):
+    data = body.encode()
+    head = ("HTTP/1.1 " + status + "\r\n"
+            + "Content-Type: " + ctype + "\r\n"
+            + "Content-Length: " + str(len(data)) + "\r\n"
+            + "Cache-Control: no-store\r\n"
+            + "Connection: close\r\n\r\n")
+    conn.sendall(head.encode() + data)
+
+
+def handle(conn, addr):
+    conn.setblocking(True)
+    req = conn.recv(1024).decode()
+    line = req.split("\r\n")[0]
+    parts = line.split(" ")
+    path = "/"
+    if len(parts) > 1:
+        path = parts[1]
+    stats["requests"] = stats["requests"] + 1
+    if path == "/data":
+        respond(conn, "200 OK", "application/json", json.dumps(readings()))
+    elif path == "/":
+        respond(conn, "200 OK", "text/html; charset=utf-8", PAGE)
+    else:
+        respond(conn, "404 Not Found", "text/plain", "not found\n")
+    conn.close()
+    print("http", addr[0], line)
+
+
+def serve_pending():
+    # At most a few per frame, so a burst of requests cannot starve the loop.
+    n = 0
+    while n < 4:
+        try:
+            conn, addr = srv.accept()
+        except OSError:
+            return
+        handle(conn, addr)
+        n = n + 1
+
+
+def on_frame(ev):
+    stats["frames"] = stats["frames"] + 1
+    serve_pending()
+    if stats["frames"] == 16:
+        # Once, about a second after the main body ended: fetch /data from
+        # inside the hidden loop. The line it prints is the evidence that
+        # serving continues after the program "finished".
+        status, body = self_fetch("/data")
+        print("hidden loop: frame 16 self-fetch /data ->", status,
+              "requests", json.loads(body)["requests"])
+
+
+def self_fetch(path):
+    c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    c.connect(("127.0.0.1", PORT))
+    c.sendall(("GET " + path + " HTTP/1.0\r\n\r\n").encode())
+    serve_pending()
+    got = b""
+    while True:
+        chunk = c.recv(512)
+        if not chunk:
+            break
+        got = got + chunk
+    c.close()
+    text = got.decode()
+    cut = text.find("\r\n\r\n")
+    return text.split("\r\n")[0], text[cut + 4:]
+
+
+ap = network.WLAN(network.AP_IF)
+ap.config(essid=SSID, password=PASSWORD)
+ap.active(True)
+ip = ap.ifconfig()[0]
+print("wifi ap", SSID, "active", ap.active(), "at", ip)
+
+srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind(("0.0.0.0", PORT))
+srv.listen(4)
+srv.setblocking(False)
+print("http listening on port", PORT)
+
+print("adc start", adc.start(ADC_CH, ADC_HZ))
+t = esp32.mcu_temperature()
+print("temperature plausible", t > 0 and t < 100)
+
+status, body = self_fetch("/")
+print("self-fetch / ->", status, "page", len(body) == len(PAGE))
+status, body = self_fetch("/data")
+d = json.loads(body)
+print("self-fetch /data ->", status, "keys", sorted(d.keys()))
+print("self-fetch /data adc in range", d["adc_raw"] >= -1 and d["adc_raw"] <= 4095,
+      "heap > 0", d["free_heap"] > 0)
+
+interrupts.on_event(interrupts.INT_SRC_ADC, on_frame)
+print("serving http://" + ip + "/ from the hidden loop")
