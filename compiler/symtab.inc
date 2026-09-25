@@ -19914,7 +19914,7 @@ begin
 end;
 
 function ResolveNodeRec(node: Integer): Integer;
-var baseNode, baseRec, fIdx, innerNode, dwDepth: Integer; fieldName: AnsiString;
+var baseNode, baseRec, fIdx, innerNode, dwDepth, idxBase: Integer; fieldName: AnsiString;
 begin
   if ASTKind[node] = AN_IDENT then
   begin
@@ -20022,28 +20022,41 @@ begin
   end
   else if ASTKind[node] = AN_INDEX then
   begin
-    if ASTKind[ASTLeft[node]] = AN_IDENT then
+    { A comma base yields its right operand, and an assignment base its
+      destination: `(i, t)[1].value` indexes t, `(p = q)[1].value` indexes p.
+      Neither had an arm, so the record was REC_NONE and `.value` was read at
+      offset 0 (the comma is stb_ds's shget). }
+    idxBase := ASTLeft[node];
+    while (idxBase >= 0) and
+          ((ASTKind[idxBase] = AN_COMMA) or (ASTKind[idxBase] = AN_ASSIGN)) do
+      if ASTKind[idxBase] = AN_COMMA then idxBase := ASTRight[idxBase]
+      else idxBase := ASTLeft[idxBase];
+    if (ASTKind[idxBase] = AN_TERNARY) and (ASTSOffset[idxBase] <> REC_NONE) then
+      { `(c ? p : q)[i]`: the parser records both arms' pointed-at record on
+        the ternary (CNodePtrElemRec reads the same slot). }
+      Result := ASTSOffset[idxBase]
+    else if ASTKind[idxBase] = AN_IDENT then
     begin
-      if Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyPointer then
-        Result := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec
+      if Syms[ASTIVal[idxBase]].TypeKind = tyPointer then
+        Result := Syms[ASTIVal[idxBase]].PtrElemRec
       else
-        Result := Syms[ASTIVal[ASTLeft[node]]].ElemRecName;
+        Result := Syms[ASTIVal[idxBase]].ElemRecName;
     end
-    else if ASTKind[ASTLeft[node]] = AN_FIELD then
+    else if ASTKind[idxBase] = AN_FIELD then
     begin
-      baseRec := ResolveNodeRec(ASTLeft[ASTLeft[node]]);
-      fieldName := GetASTIdentName(ASTLeft[node]);
+      baseRec := ResolveNodeRec(ASTLeft[idxBase]);
+      fieldName := GetASTIdentName(idxBase);
       fIdx := -1;
       if baseRec >= REC_UCLASS_BASE then
         fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
       if (fIdx >= 0) and (UFldTk[fIdx] = Ord(tyPointer)) then
         Result := UFldPtrElemRec[fIdx]
       else
-        Result := ResolveNodeRec(ASTLeft[node]);
+        Result := ResolveNodeRec(idxBase);
     end
-    else if ASTKind[ASTLeft[node]] = AN_INDEX then
-      Result := ResolveNodeRec(ASTLeft[node])
-    else if ASTKind[ASTLeft[node]] = AN_DEREF then
+    else if ASTKind[idxBase] = AN_INDEX then
+      Result := ResolveNodeRec(idxBase)
+    else if ASTKind[idxBase] = AN_DEREF then
       { `p^[i].field` — p points at a named ARRAY of records. The deref already
         yields the ELEMENT's record (a pointer-to-array's PtrElemRec IS the
         element's), so the subscript changes the address and not the record.
@@ -20051,12 +20064,12 @@ begin
         over: no arm here meant REC_NONE, so the field lookup found nothing and
         `.field` was applied at OFFSET 0 — `p^[1].b` answered `p^[1].a`.
         bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
-      Result := ResolveNodeRec(ASTLeft[node])
-    else if (ASTKind[ASTLeft[node]] = AN_CALL) or
-            (ASTKind[ASTLeft[node]] = AN_VIRTUAL_CALL) or
-            (ASTKind[ASTLeft[node]] = AN_CLASS_VIRTUAL_CALL) or
-            (ASTKind[ASTLeft[node]] = AN_INTF_CALL) or
-            (ASTKind[ASTLeft[node]] = AN_CALL_IND) then
+      Result := ResolveNodeRec(idxBase)
+    else if (ASTKind[idxBase] = AN_CALL) or
+            (ASTKind[idxBase] = AN_VIRTUAL_CALL) or
+            (ASTKind[idxBase] = AN_CLASS_VIRTUAL_CALL) or
+            (ASTKind[idxBase] = AN_INTF_CALL) or
+            (ASTKind[idxBase] = AN_CALL_IND) then
       { An array-returning call indexed directly: `MkR[i].field`. ProcRetRecId
         of an array-of-record result already holds the ELEMENT record, which is
         what the index yields — so the ordinary call arm answers it. Every OTHER
@@ -20064,18 +20077,18 @@ begin
         the field lookup found nothing, and the `.field` was applied at OFFSET 0:
         `MkR[1].b` and `MkR[1].c` both answered `MkR[1].a`, silently.
         bug-a-indexing-a-function-call-result-drops-the-field-selector }
-      Result := ResolveNodeRec(ASTLeft[node])
-    else if ASTKind[ASTLeft[node]] = AN_ADDR then
+      Result := ResolveNodeRec(idxBase)
+    else if ASTKind[idxBase] = AN_ADDR then
       { `(&X)[i]` indexes a pointer to X, so the element record is X's own record. }
-      Result := ResolveNodeRec(ASTLeft[ASTLeft[node]])
-    else if ASTKind[ASTLeft[node]] = AN_PTR_CAST then
+      Result := ResolveNodeRec(ASTLeft[idxBase])
+    else if ASTKind[idxBase] = AN_PTR_CAST then
       { `((T *) x)[i]` — element record is the cast's pointee record (alias table).
         Without this the record id is lost and the subsequent `.field` type-tag
         defaults to tyInteger (4 bytes), truncating 8-byte pointer fields — the
         duktape value-stack `((duk_tval *) ...)[i].v.heaphdr` access, whose
         truncated pointer later crashes duk_pcompile. }
-      if ASTIVal[ASTLeft[node]] >= 0 then
-        Result := AliasElemRec[ASTIVal[ASTLeft[node]]]
+      if ASTIVal[idxBase] >= 0 then
+        Result := AliasElemRec[ASTIVal[idxBase]]
       else
         Result := REC_NONE
     else

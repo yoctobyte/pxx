@@ -3896,6 +3896,9 @@ function IRArrayElemStride(node: Integer): Integer; forward;
 function IRPointerStride(node: Integer): Integer;
 var elemTk: TTypeKind; recId, aliasIdx: Integer; fieldName: AnsiString;
 begin
+  { A comma yields its right operand, so it scales like it: `(i, p)[2]` and
+    `(i, p) + 1` used the default stride and read the wrong element. }
+  while (node >= 0) and (ASTKind[node] = AN_COMMA) do node := ASTRight[node];
   elemTk := tyUnknown;
   recId := REC_NONE;
   if ASTKind[node] = AN_IDENT then

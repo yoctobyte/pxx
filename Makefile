@@ -14170,6 +14170,11 @@ test-core: $(COMPILER)
 	# An alias chain `#define A B`, `#define B F` in front of a function macro:
 	# only one level was rescanned, so A(x) failed "call to undeclared function:
 	# F" (stb_ds.h). Expected is gcc's output.
+	# `->`/`.`/`[]` on a pointer out of a comma, a conditional or an assignment:
+	# the comma had no arm in the C type queries, so stb_ds's shget read `->value`
+	# at offset 0. Expected is gcc's output.
+	./$(COMPILER) test/test_c_member_access_through_a_comma_ternary_or_assignment.c $(TESTTMP)/test_c_comma_member26
+	tools/expect_same.sh test_c_comma_member26 "$$($(TESTTMP)/test_c_comma_member26)" "$$(printf '2 2 2\n30 2 2\n2 3\n3\n2\n1\n3\n3\na\n7\n3\n2')"
 	./$(COMPILER) test/test_c_macro_alias_chain_rescans.c $(TESTTMP)/test_c_macro_alias26
 	tools/expect_same.sh test_c_macro_alias26 "$$($(TESTTMP)/test_c_macro_alias26)" "$$(printf '42 42 42 42\n21 22 43\n4 102 200 7\n1001 6 42 42')"
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26

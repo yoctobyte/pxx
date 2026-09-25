@@ -2833,8 +2833,21 @@ begin
   end;
 end;
 
+{ The node whose VALUE a comma expression yields: `(a, b, c)` is c, and a GNU
+  statement expression is modelled the same way. Every type query below asks
+  this first, so a pointer through a comma keeps its pointed-at record. Without
+  it `((void)0, &t[i])->value` found no record and read the field at offset 0
+  (stb_ds's shget). ResolveNodeRec and the ast_arena queries already looked
+  through AN_COMMA; these C helpers did not. }
+function CCommaValue(node: Integer): Integer;
+begin
+  while (node >= 0) and (ASTKind[node] = AN_COMMA) do node := ASTRight[node];
+  Result := node;
+end;
+
 function CNodePtrDepth(node: Integer): Integer;
 begin
+  node := CCommaValue(node);
   Result := 0;
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
@@ -2899,6 +2912,7 @@ end;
 function CNodePtrBaseTk(node: Integer): Integer;
 var baseNode: Integer;
 begin
+  node := CCommaValue(node);
   Result := Ord(tyUnknown);
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
@@ -2939,6 +2953,7 @@ function CNodePointeeTk(node: Integer): Integer;
 var recId, inner, depth, baseTk, elemSz, elemRec: Integer;
     fieldName: AnsiString; elemTk: TTypeKind;
 begin
+  node := CCommaValue(node);
   Result := Ord(tyInteger);
   if node < 0 then Exit;
   { An ARRAY compound literal decays to a pointer whose pointee is the array's
@@ -3109,6 +3124,7 @@ end;
   on it means C `->` (deref then field) rather than direct field access. }
 function CNodeIsPointer(node: Integer): Boolean;
 begin
+  node := CCommaValue(node);
   Result := False;
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
@@ -3145,6 +3161,7 @@ end;
 function CNodeDecaysToPointer(node: Integer): Boolean;
 var recId: Integer; fieldName: AnsiString;
 begin
+  node := CCommaValue(node);
   Result := CNodeIsPointer(node);
   if Result or (node < 0) then Exit;
   if ASTKind[node] = AN_IDENT then
@@ -3163,6 +3180,7 @@ end;
 function CNodePtrElemRec(node: Integer): Integer;
 var baseNode, recId: Integer; fieldName: AnsiString;
 begin
+  node := CCommaValue(node);
   Result := REC_NONE;
   if node < 0 then Exit;
   if (ASTKind[node] = AN_COMPOUND_LITERAL) and Syms[ASTIVal[node]].IsArray then
@@ -4322,6 +4340,7 @@ function CDerefDecayStride(node: Integer): Integer;
 var base, si, k, lvl, stamp, elemSz, elemRec, suffK, suffNext, d, nd: Integer;
     elemTk: TTypeKind;
 begin
+  node := CCommaValue(node);
   Result := 0;
   base := node;
   stamp := 0;
