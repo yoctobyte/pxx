@@ -428,3 +428,4 @@
 2026-09-25T08:15:48Z  v428  660b5effc408384f63af7366218b91bdfd58b61a92d672aa0112ae88a200a315  dd30aa4fb8ecbd73e1063686bd3005fcd45d610c  tstate(borg): 1cf7c75873ca RED (native)
 2026-09-25T08:28:25Z  v429  7b9e0614de39e6cbc0ef7f3051f5d2f4bdef690f9c310c0a6863aef94fada9f6  cf6fcb0cae8872629bf6b34e94d8886a27d07931  tools: esp_heap_soak.sh, a free-heap soak of an ESP example under QEMU
 2026-09-25T08:48:24Z  v430  d054ebd6f44ee1820d4d9373868932cd41a2613dfcbb37014fec56815d8ec928  f6e762b31a8fb5ee09663ecec0e03841c5973812  fix(nilpy): a bare tuple on the right of `=`; literal joins across a comment
+2026-09-25T09:08:05Z  v431  1e80d2b7f8a73c7e82af096054681b15bc09c5eb4416f3e1d1e82c238aeb4b49  607fa287a1a5dfb06b8b7703ef1c02cfcebbdeb4  tstate(borg): 75efbf4b567d RED (native)
