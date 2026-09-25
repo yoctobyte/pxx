@@ -72,7 +72,7 @@ import sys
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MAPS = ROOT / "devdocs/dev/syscall-maps"
+MAPS = ROOT / "tools/syscall-maps"
 HDR = ROOT / "lib/crtl/include/sys/syscall.h"
 
 # name -> (mode, #if line that opens the arm, consecutive distinct triple,
@@ -229,7 +229,7 @@ def block(arch, named, markers, cfg):
     out = [cfg["begin"],
            "/* %s. NOT from a kernel header -- there is none on this box for this" % cfg["blurb"],
            "   target -- but MEASURED, by tools/qemu_syscall_map.sh, and emitted here by",
-           "   tools/gen_crtl_syscalls.py from devdocs/dev/syscall-maps/%s.txt." % arch,
+           "   tools/gen_crtl_syscalls.py from tools/syscall-maps/%s.txt." % arch,
            "   Do not hand-edit: regenerate.",
            "",
            "   IT IS AN ORACLE ABOUT QEMU, not about a kernel on real hardware. Every",

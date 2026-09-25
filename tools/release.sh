@@ -331,6 +331,12 @@ build_dist() {
     ./"$COMPILER" --target="$t" "$COMPILER_SRC" "$d/compiler/pxx-$t" >/dev/null
     ( cd "$d" && sha256sum "compiler/pxx-$t" >> MANIFEST.sha256 )
   done
+  # compiler/pascal26 is the seed `make` expects. A checkout seeds it from
+  # stable_linux_amd64/, which a bundle does not ship, so the README's own `make`
+  # died with "seed missing" in an unpacked tarball (measured 2026-09-25). The
+  # x86-64 binary IS the fixedpoint, so `make` in the bundle verifies in one
+  # round and needs nothing outside it.
+  cp "$d/compiler/pxx-x86_64" "$d/compiler/pascal26"
   # Top-level convenience entry points (also under tools/).
   cp -a tools/setup.sh "$d/setup.sh" 2>/dev/null || true
   cp -a tools/selfcheck.sh "$d/selfcheck.sh" 2>/dev/null || true
@@ -374,6 +380,7 @@ included source — no separate packages to fetch.
 ## Layout
     compiler/             compiler source (*.pas / *.inc) + builtin/
     compiler/pxx-<arch>   prebuilt binaries: x86_64, i386, aarch64, arm32
+    compiler/pascal26     the x86_64 binary again, as the seed \`make\` builds from
     lib/                  RTL + PCL libraries (compiled from source)
     examples/             sample programs
     docs/                 public user documentation
@@ -382,8 +389,8 @@ included source — no separate packages to fetch.
     setup.sh, selfcheck.sh  install + reproduce helpers
 
 ## Rebuild from source
-    cp compiler/pxx-x86_64 compiler/pascal26   # seed from the shipped binary (no FPC)
-    make compiler/pascal26     # rebuild; converges to the same byte-identical fixed point
+    make                       # compiler/pascal26 ships as the seed; verifies the fixed point
+    make test                  # the regression suite, as in a checkout
     # — or, from pure source with no binary at all:
     make bootstrap             # FPC seeds gen0, then it self-hosts (needs fpc)
     make test-fpc              # optional: prove FPC still compiles us (compliance)

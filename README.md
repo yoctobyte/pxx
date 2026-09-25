@@ -59,6 +59,20 @@ choose to ignore this, you do so entirely at your own risk.
 Prerequisites: Linux x86-64 and GNU `make`. FPC is needed only for bootstrap or
 recovery builds.
 
+**From a release tarball** (`pxx-<version>.tar.gz`), unpack it and set up in
+place. There is no `stable_linux_amd64/` in a tarball; its compilers are
+`compiler/pxx-<arch>`, one per host, and `compiler/pascal26` is the x86-64 one:
+
+```sh
+tar xzf pxx-<version>.tar.gz && cd pxx-<version>
+./install.sh --yes          # writes ./pxx: the compiler plus the library roots
+./pxx test/hello.pas /tmp/hello && /tmp/hello
+./selfcheck.sh              # rebuilds every shipped binary; must match MANIFEST.sha256
+```
+
+`make` and `make test` work in the tarball as they do in a checkout. The rest
+of this section is for a git checkout.
+
 **A fresh checkout already ships a working compiler** at
 `stable_linux_amd64/default/pinned`, so you can compile something before you
 build anything. `./install.sh` is the friendly setup path — it checks that a
@@ -141,7 +155,8 @@ mkdir -p "$HOME/.local/bin"
 ln -sfn "$PWD/compiler/pascal26" "$HOME/.local/bin/pxx"
 ```
 
-Optional PATH symlink for the latest recorded stable compiler:
+Optional PATH symlink for the latest recorded stable compiler (git checkout
+only; from a tarball, run `./install.sh` and answer yes to the PATH offer):
 
 ```sh
 mkdir -p "$HOME/.local/bin"

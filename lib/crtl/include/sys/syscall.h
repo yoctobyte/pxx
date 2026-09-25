@@ -18,7 +18,7 @@
  *
  * Every word of that is still the rule; what changed is that the numbers are
  * no longer guessed. tools/qemu_syscall_map.sh sweeps a range under
- * qemu -strace and writes devdocs/dev/syscall-maps/<arch>.txt, and
+ * qemu -strace and writes tools/syscall-maps/<arch>.txt, and
  * tools/gen_crtl_syscalls.py emits these two arms from it. THAT MAKES THEM AN
  * ORACLE ABOUT QEMU AND NOT ABOUT A KERNEL ON REAL HARDWARE -- which is the
  * whole population that exercises them here, and is stamped into each block so
@@ -2511,7 +2511,7 @@
 #elif defined(__arm__)
 /* arm32 EABI. NOT from a kernel header -- there is none on this box for this
    target -- but MEASURED, by tools/qemu_syscall_map.sh, and emitted here by
-   tools/gen_crtl_syscalls.py from devdocs/dev/syscall-maps/arm32.txt.
+   tools/gen_crtl_syscalls.py from tools/syscall-maps/arm32.txt.
    Do not hand-edit: regenerate.
 
    IT IS AN ORACLE ABOUT QEMU, not about a kernel on real hardware. Every
@@ -3308,7 +3308,7 @@
 #else
 /* xtensa-linux. NOT from a kernel header -- there is none on this box for this
    target -- but MEASURED, by tools/qemu_syscall_map.sh, and emitted here by
-   tools/gen_crtl_syscalls.py from devdocs/dev/syscall-maps/xtensa.txt.
+   tools/gen_crtl_syscalls.py from tools/syscall-maps/xtensa.txt.
    Do not hand-edit: regenerate.
 
    IT IS AN ORACLE ABOUT QEMU, not about a kernel on real hardware. Every

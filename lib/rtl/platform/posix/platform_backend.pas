@@ -352,7 +352,7 @@ const
     assigns __NR_wait4 260 in its LEGACY block, which a 32-bit port does not
     enable; the modern spelling is waitid. Two instruments agree and they fail
     differently: this box's include/uapi/asm-generic/unistd.h puts wait4 behind
-    the legacy guard, and devdocs/dev/syscall-maps/riscv32.txt -- a qemu sweep,
+    the legacy guard, and tools/syscall-maps/riscv32.txt -- a qemu sweep,
     not a header read -- has NOTHING at 260 and DOES have 95 waitid. Every
     other target this repo builds for has both (i386 114/284, arm32 114/280,
     aarch64 260/95, xtensa 121/122); rv32 has waitid alone. So the declaration
