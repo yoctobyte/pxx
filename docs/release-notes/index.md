@@ -97,9 +97,8 @@ profile on hardware.
 - **C conformance:** 219 pass, 0 fail, 1 skip out of the 220 single-program
   tests of c-testsuite, compiled for esp32s3 and run under Espressif's QEMU
   (`tools/run_c_conformance_esp.sh --chip esp32s3`). The skip is `00187.c`,
-  which needs a writable file system the test image does not mount. This was
-  measured with a development compiler (binary sha256 `9bcd11d46816`, tree
-  `e1648bcb4`) that predates v423, not with v424 itself.
+  which needs a writable file system the test image does not mount. Measured
+  with pin v425 (sha256 `426b2fbf3f08`) on 2026-09-25.
 - **Examples:** 15 programs in `examples/esp32/` run under QEMU with pin v425
   and are listed in the [showcase](../examples/#esp32).
 - **On a board:** the ESP lane ran all 15 ESP32-S3 examples on one physical
