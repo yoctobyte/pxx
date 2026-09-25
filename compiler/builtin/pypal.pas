@@ -54,6 +54,7 @@ const
   PYPAL_O_CREAT  = 64;
   PYPAL_O_TRUNC  = 512;
   PYPAL_O_APPEND = 1024;
+  PYPAL_O_EXCL   = 128;    { open(p, "x") }
 
 { False on a target with no syscall table below — every entry point then fails
   softly (negative / empty) rather than issuing syscall 0. }
@@ -160,6 +161,9 @@ function EspPutchar(c: Integer): Integer; cdecl; external name 'putchar';
   and has no filesystem -- every path answers ENOENT. Called once, lazily, on
   the first path a program names, so it runs in a task and not at boot. }
 function EspFsMount: Integer; cdecl; weakexternal name 'pxx_fs_mount';
+{ open()'s flags from Linux numbering to the libc IDF was built with, in C,
+  where the O_* values come from that libc's own headers. See EspFlags. }
+function EspFsOflags(linuxFlags: Integer): Integer; cdecl; weakexternal name 'pxx_fs_oflags';
 function EspGetchar: Integer; cdecl; external name 'getchar';
 
 const
@@ -214,15 +218,22 @@ begin
       EspDirSlot := fd - ESP_DIRFD_BASE;
 end;
 
+{ NOT A TABLE, and the table it replaces is why. IDF 6 builds with PICOLIBC
+  (O_CREAT $40, O_TRUNC $200, O_APPEND $400), and the numbers written here
+  were NEWLIB's ($200, $400, $8) -- so on silicon open(p, "w") APPENDED and
+  open(p, "a") on a missing file raised ENOENT, silently, with every desktop
+  row green. Found by frankd-a3 on an S3. The translation is pxx_fs_oflags in
+  lib/rtl/platform/esp/idf/pxx_fs/pxx_fs.c, compiled against the libc that
+  actually runs, so a libc switch cannot strand it again. Reached through the
+  same WEAK reference as pxx_fs_mount: a project without pxx_fs has no
+  filesystem, so only the access mode is passed and every open answers ENOENT
+  there, as every path already did. }
 function EspFlags(flags: Int64): Integer;
-var f: Integer;
 begin
-  f := flags and 3;                                      { O_ACCMODE, same value }
-  if (flags and PYPAL_O_CREAT) <> 0 then f := f or $200;
-  if (flags and PYPAL_O_TRUNC) <> 0 then f := f or $400;
-  if (flags and PYPAL_O_APPEND) <> 0 then f := f or $8;
-  if (flags and 128) <> 0 then f := f or $800;           { O_EXCL }
-  EspFlags := f;
+  if @EspFsOflags <> nil then
+    EspFlags := EspFsOflags(Integer(flags))
+  else
+    EspFlags := Integer(flags and 3);
 end;
 
 function EspOpenPath(path: Pointer; flags, mode: Int64): Int64;

@@ -167,6 +167,9 @@ type
   { pyeval's PyCallKey1, installed into PyIterCallHook: the one entry point
     that knows all four callable representations. See that variable. }
   TPyIterCall = function(key: Pointer; const a0: Variant): Variant;
+  { ...and its N-argument twin for `map(f, a, b, ...)`: the callable as a
+    VARIANT (pyeval's pyvar_callv<n> dispatch) and one zipped tuple, spread. }
+  TPyIterStarCall = function(const cb: Variant; t: Pointer): Variant;   { t: the TPyList tuple, declared below }
   { A stackless generator's step function: `function(instance): Boolean`,
     has-next. See PYITER_K_SLGEN. }
   TPyGenStep = function(inst: Pointer): Boolean;
@@ -549,7 +552,25 @@ type
       missing 7. }
     constructor CreateRendered(const shown: AnsiString);
   end;
-  OSError           = class(Exception) end;
+  { CPython's errno/strerror pair. `OSError(19, "ENODEV")` has str
+    "[Errno 19] ENODEV" (pyexc_setargs renders it), .errno 19 and .strerror
+    "ENODEV"; a one-argument OSError has both None. DERIVED from args, like
+    args itself is, so a raise through the multi-argument fold and one from
+    pylib's own file calls (pyos_raise_for, which stores the same pair) answer
+    alike. MicroPython drivers test `e.errno` or `e.args[0]` against an errno
+    to tell "no device" from a real failure, so both must see the number.
+    The three-argument form (a filename) is NOT handled: str and args are
+    CPython's only up to two arguments. }
+  OSError           = class(Exception)
+  public
+    { __prop_get_ spelling: the runtime getattr (PyPropertyGet) finds a
+      property by that name, which is how a receiver typed only as an
+      exception -- `except Exception as e` -- reaches it. }
+    function __prop_get_errno: Variant;
+    function __prop_get_strerror: Variant;
+    property errno: Variant read __prop_get_errno;
+    property strerror: Variant read __prop_get_strerror;
+  end;
   AttributeError    = class(Exception) end;
   EOFError          = class(Exception) end;
   KeyboardInterrupt = class(Exception) end;
@@ -659,6 +680,19 @@ type
       what CPython REJECTS and therefore laxity rather than a defect — see the
       ticket. bug-nilpy-bytearray-and-bytes-are-the-same-type }
     FIsByteArray: Boolean;
+    { A MEMORYVIEW is a TPyBytes that BORROWS: FData points into FViewOf's
+      buffer (retained, so it outlives the view), and nothing here frees it.
+      Enough for what MicroPython drivers do with one -- slice it without
+      copying and hand the slice to readinto()/write() so the bytes land in
+      the original buffer (sdcard.py) -- not the whole buffer protocol.
+      NOT GUARDED, unlike CPython: resizing a bytearray that has a live view
+      is CPython's BufferError, and here the view keeps reading the old block
+      (PyBytesEnsure copies and never frees it, so it is stale, not freed).
+      An export count was built and taken out again: a slice through a VARIANT
+      receiver leaks (bug-n-a-variant-call-result-that-returns-a-fresh-object-
+      is-retained-by-the-caller), so its export never came back and a correct
+      program's later resize raised. Add the guard when that leak is fixed. }
+    FViewOf: TObject;
     { TWO spellings, because a SUBCLASS needs the parameterless one. `class
       BA(bytearray)` with no __init__ of its own emits a call to the base's
       no-argument Create, and TPyBytes had only Create(n) — so constructing any
@@ -1343,6 +1377,8 @@ function bytearray(const v: Variant): TPyBytes; overload;
   returning the same object would be a silent aliasing bug rather than a missing
   feature (bug-nilpy-bytearray-constructor-only-accepts-a-length). }
 function bytearray(b: TPyBytes): TPyBytes; overload;
+{ memoryview(b): a view of b's bytes, sharing them -- see TPyBytes.FViewOf. }
+function memoryview(b: TPyBytes): TPyBytes;
 { bytearray([1, 2, 3]) — an iterable of ints. An element outside 0..255 raises
   ValueError as CPython does, rather than truncating to a byte: a truncation
   here would be a wrong VALUE in a buffer, which is exactly the failure mode
@@ -1615,6 +1651,11 @@ procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: An
 { The same, for a failure CPython reports WITHOUT a file name -- a write or a
   close on an open file: `[Errno 28] No space left on device`. }
 procedure pyos_raise_oserror(err: Int64);
+{ OSError(e, strerr) with CPython's shape -- str "[Errno e] strerr", args
+  (e, strerr), .errno e -- and the errno's PEP 3151 subclass. For a runtime
+  that names the error itself: mimic_machine raises "[Errno 19] ENODEV", the
+  text MicroPython prints, where the file calls print glibc's sentence. }
+procedure pyos_raise_errno(e: Int64; const strerr: AnsiString);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 { os.replace(src, dst) — rename that OVERWRITES an existing destination.
@@ -1766,6 +1807,7 @@ var
     finaliser above does. A cursor whose hook is unset raises rather than
     silently yielding the unmapped element. }
   PyIterCallHook: TPyIterCall;
+  PyIterStarHook: TPyIterStarCall;
 
 { ---- cursors (TPyIter) -------------------------------------------------
   The two-call protocol: `pyiter_has` prefetches, `pyiter_take` consumes. See
@@ -1825,6 +1867,12 @@ function pyiter_map_conv(conv: Int64; const v: Variant): TPyIter;
 function pyiter_map_i(key: Pointer; up: TPyIter): TPyIter;
 function pyiter_filter_i(key: Pointer; up: TPyIter): TPyIter;
 function pyiter_map_conv_i(conv: Int64; up: TPyIter): TPyIter;
+{ `map(f, a, b, ...)` -- f called with one element from EACH iterable, lazily,
+  stopping at the shortest, which is CPython's rule and exactly zip's. So it is
+  a MAP over a zip_n cursor whose tuples are SPREAD into the call; the callable
+  rides in FSrc (a Variant, since arity > 1 goes through pyvar_callv<n>) and
+  FStart = 4 marks the spread. }
+function pyiter_map_star(const cb: Variant; items: TPyList): TPyIter;
 function pyiter_has(it: TPyIter): Boolean;
 function pyiter_take(it: TPyIter): Variant;
 { `next(it)` / `next(it, default)`: advance one step. Exhaustion RAISES
@@ -5562,7 +5610,8 @@ begin
   else if o is TPyDict then Result := 'dict'
   else if o is TPyBytes then
   begin
-    if TPyBytes(o).FIsByteArray then Result := 'bytearray' else Result := 'bytes';
+    if TPyBytes(o).FViewOf <> nil then Result := 'memoryview'
+    else if TPyBytes(o).FIsByteArray then Result := 'bytearray' else Result := 'bytes';
   end
   { one class, eight cursor kinds — `type(map(f, xs)).__name__` is 'map' and
     `type(reversed(xs)).__name__` is 'list_reverseiterator', so the NAME comes
@@ -11714,10 +11763,37 @@ begin
   p^ := v;
 end;
 
+procedure PyBytesNoResize(b: TPyBytes);
+begin
+  if b.FViewOf <> nil then
+    raise ValueError.Create('memoryview assignment: lvalue and rvalue have different structures');
+end;
+
+{ A view of `n` bytes at `data`, inside `root` (never itself a view). }
+function PyMemView(root: TPyBytes; data: Pointer; n: Integer): TPyBytes;
+begin
+  Result := TPyBytes.Create(0);
+  FreeMem(Result.FData);
+  Result.FData := data;
+  Result.FLen := n;
+  Result.FViewOf := root;
+  PXXObjRetain(Pointer(root));
+end;
+
+function memoryview(b: TPyBytes): TPyBytes;
+begin
+  if b = nil then raise TypeError.Create('memoryview: a bytes-like object is required');
+  if b.FViewOf <> nil then
+    Result := PyMemView(TPyBytes(b.FViewOf), b.FData, b.FLen)
+  else
+    Result := PyMemView(b, b.FData, b.FLen);
+end;
+
 procedure PyBytesEnsure(b: TPyBytes; need: Integer);
 var np: Pointer; k: Integer; src, dst: PByte;
 begin
   if need <= b.FLen then Exit;
+  PyBytesNoResize(b);
   { need + 1, and a zero at [need] — same invariant as the constructor. }
   GetMem(np, need + 1);
   for k := 0 to need - 1 do
@@ -12441,6 +12517,12 @@ function pybytes_slice(b: TPyBytes; lo, hi: Integer): TPyBytes;
 var k: Integer; src, dst: PByte;
 begin
   PySliceBounds(b.FLen, lo, hi);
+  { a slice of a VIEW is a view -- no copy, which is the reason to have one }
+  if b.FViewOf <> nil then
+  begin
+    Result := PyMemView(TPyBytes(b.FViewOf), Pointer(NativeInt(b.FData) + lo), hi - lo);
+    Exit;
+  end;
   Result := TPyBytes.Create(hi - lo);
   { a slice of a bytearray is a BYTEARRAY, of bytes is bytes — the tag has to
     travel with every operation that builds a new buffer from an old one, or it
@@ -12460,6 +12542,7 @@ begin
   PySliceBounds(b.FLen, lo, hi);
   if src.FLen <> (hi - lo) then
   begin
+    PyBytesNoResize(b);
     { Python bytearray slice assignment RESIZES on a length mismatch —
       inserting or deleting bytes and shifting the tail. uforth's 2VARIABLE
       leans on this (`memory[h:h+16] = b'..' * 16` with a 64-byte value,
@@ -13848,6 +13931,25 @@ begin
   Result := e;
   if e = nil then Exit;
   ExceptionBase(e).argsv := t;
+  { OSError's two-argument form prints as CPython's errno sentence, not as
+    the tuple repr every other multi-argument exception prints. }
+  if (e is OSError) and (t <> nil) and (t.count = 2) then
+    ExceptionBase(e).msg := '[Errno ' + pyexc_msgstr(t.at(0)) + '] ' +
+                            pyexc_msgstr(t.at(1));
+end;
+
+function OSError.__prop_get_errno: Variant;
+begin
+  Result := pynone;
+  if (argsv <> nil) and (TPyList(argsv).count >= 2) then
+    Result := TPyList(argsv).at(0);
+end;
+
+function OSError.__prop_get_strerror: Variant;
+begin
+  Result := pynone;
+  if (argsv <> nil) and (TPyList(argsv).count >= 2) then
+    Result := TPyList(argsv).at(1);
 end;
 
 function Exception.GetArgs: TPyList;
@@ -14619,16 +14721,42 @@ begin
 end;
 
 { The PEP 3151 subclass for errno `e`, raised with `msg`. }
+procedure pyos_raise_args(e: Int64; const msg: AnsiString; const strerr: AnsiString);
+var x: Exception; t: TPyList;
+begin
+  if e = 2 then x := FileNotFoundError.Create(msg)
+  else if (e = 13) or (e = 1) then x := PermissionError.Create(msg)
+  else if e = 17 then x := FileExistsError.Create(msg)
+  else if e = 20 then x := NotADirectoryError.Create(msg)
+  else if e = 21 then x := IsADirectoryError.Create(msg)
+  else if e = 4 then x := InterruptedError.Create(msg)
+  else if e = 32 then x := BrokenPipeError.Create(msg)
+  else if e = 110 then x := TimeoutError.Create(msg)
+  else x := OSError.Create(msg);
+  { args is CPython's (errno, strerror) -- the path is in str() only -- so
+    e.errno and e.args[0] read the number. Reuse the 1-tuple the ctor built. }
+  t := TPyList(x.argsv);
+  if t = nil then
+  begin
+    t := TPyList.Create;
+    t.FKind := PYSEQ_TUPLE;
+    x.argsv := t;
+  end
+  else
+    t.clear;
+  t.append(e);
+  t.append(strerr);
+  raise x;
+end;
+
 procedure pyos_raise_for(e: Int64; const msg: AnsiString);
 begin
-  if e = 2 then raise FileNotFoundError.Create(msg);
-  if (e = 13) or (e = 1) then raise PermissionError.Create(msg);
-  if e = 17 then raise FileExistsError.Create(msg);
-  if e = 20 then raise NotADirectoryError.Create(msg);
-  if e = 21 then raise IsADirectoryError.Create(msg);
-  if e = 4 then raise InterruptedError.Create(msg);
-  if e = 32 then raise BrokenPipeError.Create(msg);
-  raise OSError.Create(msg);
+  pyos_raise_args(e, msg, pyos_errno_text(e));
+end;
+
+procedure pyos_raise_errno(e: Int64; const strerr: AnsiString);
+begin
+  pyos_raise_args(e, '[Errno ' + StrInt(e, 0) + '] ' + strerr, strerr);
 end;
 
 procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
@@ -15140,6 +15268,15 @@ begin
   Result.FStart := conv;
 end;
 
+function pyiter_map_star(const cb: Variant; items: TPyList): TPyIter;
+begin
+  Result := pyiter_map_i(nil, pyiter_zip_n(items));
+  Result.FStart := 4;
+  Result.FSrc := TPyList.Create;
+  PXXObjRetain(Pointer(Result.FSrc));
+  Result.FSrc.append(cb);
+end;
+
 function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -15255,6 +15392,12 @@ begin
       begin
         if pyvartag(ev) = 6 then mv := pystr_to_int(pystr_of(ev))
         else mv := pyvar_to_int(ev);
+      end
+      else if it.FStart = 4 then
+      begin
+        if PyIterStarHook = nil then
+          raise TypeError.Create('map(): callable dispatch is unavailable');
+        mv := PyIterStarHook(it.FSrc.at(0), pyvarobj(ev));
       end
       else if it.FStart = 2 then mv := pystr_of(ev)
       else if it.FStart = 3 then
@@ -16549,6 +16692,14 @@ begin
   if o is TPyBytes then
   begin
     by := TPyBytes(objp);
+    if by.FViewOf <> nil then
+    begin
+      { a view borrowed its bytes; give back the reference, free nothing }
+      PXXObjRelease(Pointer(by.FViewOf));
+      by.FViewOf := nil;
+      by.FData := nil; by.FLen := 0;
+      Exit;
+    end;
     if by.FData <> nil then FreeMem(by.FData);
     by.FData := nil; by.FLen := 0;
     Exit;
@@ -20483,12 +20634,13 @@ begin
 end;
 
 function pyfile_open(const path, mode: AnsiString): TPyFile;
-var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW, wantAppend: Boolean;
+var flags, fd: Int64; z: AnsiString; i: Integer; wantCreate, wantRW, wantAppend, wantExcl: Boolean;
 begin
-  wantCreate := False; wantRW := False; wantAppend := False;
+  wantCreate := False; wantRW := False; wantAppend := False; wantExcl := False;
   for i := 1 to Length(mode) do
   begin
     if mode[i] = 'w' then wantCreate := True;
+    if mode[i] = 'x' then wantExcl := True;
     if mode[i] = 'a' then wantAppend := True;
     if mode[i] = '+' then wantRW := True;
   end;
@@ -20496,7 +20648,11 @@ begin
     every write to it failed silently -- `open(p,"a")` then f.write(...) kept
     the earlier content and dropped the new
     (bug-nilpy-file-write-drops-data-and-read-to-print-dumps-rtti-memory). }
-  if wantAppend then
+  { 'x' -- create, and FileExistsError if it is there -- was not checked
+    either, so it opened read-only and "succeeded" on an existing file. }
+  if wantExcl then
+    flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_EXCL
+  else if wantAppend then
     flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_APPEND
   else if wantCreate then flags := PYPAL_O_RDWR + PYPAL_O_CREAT + PYPAL_O_TRUNC
   else if wantRW then flags := PYPAL_O_RDWR

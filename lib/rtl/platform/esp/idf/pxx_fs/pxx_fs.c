@@ -47,3 +47,23 @@ int pxx_fs_mount(void)
     s_state = 1;
     return 0;
 }
+
+// open()'s flags, from LINUX numbering (what pypal and Python's os module
+// speak) to THIS libc's. In C, and here, so that the numbers come from the
+// libc the project is actually built with rather than from a table: IDF 6
+// builds with picolibc (O_CREAT 0x40, O_TRUNC 0x200, O_APPEND 0x400), and a
+// table copied from newlib's headers (0x200, 0x400, 0x8) made "w" APPEND and
+// "a" on a missing file fail ENOENT, on silicon, with no diagnostic.
+// pypal calls this through the same WEAK reference as pxx_fs_mount; without
+// this component there is no filesystem to open anything on.
+#include <fcntl.h>
+
+int pxx_fs_oflags(int linux_flags)
+{
+    int f = linux_flags & 3;            // O_RDONLY/O_WRONLY/O_RDWR: 0/1/2 in every libc here
+    if (linux_flags & 0100)  f |= O_CREAT;
+    if (linux_flags & 0200)  f |= O_EXCL;
+    if (linux_flags & 01000) f |= O_TRUNC;
+    if (linux_flags & 02000) f |= O_APPEND;
+    return f;
+}

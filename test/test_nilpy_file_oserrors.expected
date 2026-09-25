@@ -9,4 +9,5 @@ isdir /tmp True isfile /tmp False
 isdir missing False
 stat /tmp is a directory True
 literal through a temporary True
+x on an existing file -> FileExistsError [Errno 17] File exists: '/dev/null'
 FILE OSERRORS OK

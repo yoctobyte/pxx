@@ -199,6 +199,7 @@ AN_ARG Left litN
 AN_ARG Left litNode
 AN_ARG Left lo
 AN_ARG Left loNode
+AN_ARG Left mapFn
 AN_ARG Left mexprNode
 AN_ARG Left mselfArg
 AN_ARG Left n
@@ -778,6 +779,7 @@ AN_CALL Right ProcRetRecId[ASTIVal[Result]]
 AN_CALL Right ProcRetRecId[helperPi]
 AN_CALL Right ProcRetRecId[iterPi]
 AN_CALL Right ProcRetRecId[k]
+AN_CALL Right ProcRetRecId[mapProc]
 AN_CALL Right ProcRetRecId[mpi]
 AN_CALL Right ProcRetRecId[pi]
 AN_CALL Right ProcRetRecId[ppPi]

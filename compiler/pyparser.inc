@@ -12911,6 +12911,21 @@ begin
   ASTLeft[Result] := a0;
 end;
 
+{ The class a class-typed CALL node yields. Normally the callee's declared
+  return class -- but the multi-argument exception fold wraps a construction
+  in pyexc_setargs, whose declared return is TObject, and records the real
+  class in ASTRight ("keep the record identity"). Reading ProcRetRecId there
+  typed `e = OSError(19, "ENODEV")` as a TObject, so every attribute on it,
+  `.args` included, went to the runtime lookup and missed. }
+function PyCallResultRecId(node: Integer): Integer;
+var pi: Integer;
+begin
+  pi := Integer(ASTIVal[node]);
+  Result := ProcRetRecId[pi];
+  if (ASTRight[node] >= REC_UCLASS_BASE) and (Procs[pi].Name = 'pyexc_setargs') then
+    Result := ASTRight[node];
+end;
+
 { `zip(*rows)`, and any zip of more than four streams -> pyiter_zip_n over a
   LIST of iterables. The fixed two/three/four-way lowering above counts the
   streams while PARSING, which is why the transpose idiom -- the commonest zip
@@ -13000,16 +13015,19 @@ end;
 { Four already-parsed zip operands plus every remaining one, collected into a
   TPyList temp. CurTok is the comma before the fifth. }
 function PyZipTailList(a, b, c, d: Integer): Integer;
+{ -2 in b/c/d means "not parsed yet": map(f, a, b, ...) hands over only its
+  first iterable and lets the comma loop below take the rest. }
 var tmpSym: Integer;
 begin
   tmpSym := PyNewContainerTemp('TPyList', 'zipn');
   PyContainerCall1(tmpSym, 'TPyList', 'append', a, -1);
-  PyContainerCall1(tmpSym, 'TPyList', 'append', b, -1);
-  PyContainerCall1(tmpSym, 'TPyList', 'append', c, -1);
-  PyContainerCall1(tmpSym, 'TPyList', 'append', d, -1);
+  if b <> -2 then PyContainerCall1(tmpSym, 'TPyList', 'append', b, -1);
+  if c <> -2 then PyContainerCall1(tmpSym, 'TPyList', 'append', c, -1);
+  if d <> -2 then PyContainerCall1(tmpSym, 'TPyList', 'append', d, -1);
   while CurTok.Kind = tkComma do
   begin
     Next;
+    if CurTok.Kind = tkRParen then Break;   { a trailing comma, as CPython allows }
     ParseArgExpr;
     PyContainerCall1(tmpSym, 'TPyList', 'append', CurASTNode, -1);
   end;
@@ -35078,8 +35096,8 @@ begin
             (ASTKind[rhsNode] = AN_CALL) and (Integer(ASTIVal[rhsNode]) >= 0) and
             (Integer(ASTIVal[rhsNode]) < ProcCount) and
             (IntToTypeKind(ASTTk[rhsNode]) = tyClass) and
-            (ProcRetRecId[Integer(ASTIVal[rhsNode])] >= REC_UCLASS_BASE) then
-      Syms[ASTIVal[lhsNode]].RecName := ProcRetRecId[Integer(ASTIVal[rhsNode])];
+            (PyCallResultRecId(rhsNode) >= REC_UCLASS_BASE) then
+      Syms[ASTIVal[lhsNode]].RecName := PyCallResultRecId(rhsNode);
     { Storing a VARIANT (dict/list element, dynamically typed) into a tyClass slot
       must unbox to the instance pointer — otherwise the raw variant overwrites the
       8-byte class slot and the object reads as garbage / loses identity. }
@@ -35574,7 +35592,7 @@ begin
             (Procs[ASTIVal[rhsNode]].RetType = tyClass) then
       { class-returning call (e.g. a chained list-literal append): carry the
         result class so methods/subscripts on the variable resolve }
-      Syms[symIdx].RecName := ProcRetRecId[ASTIVal[rhsNode]]
+      Syms[symIdx].RecName := PyCallResultRecId(rhsNode)
     else if (Syms[symIdx].TypeKind = tyClass) and
             (ResolveNodeRec(rhsNode) >= REC_UCLASS_BASE) then
       { any other class-valued RHS — notably a FIELD access, `x = o.inner`.
@@ -55202,7 +55220,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     cpyPi: Integer;   { Copy(s,i,n)[k]: the __pxxStrCopy proc index, kept past ci's reuse }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
-    mapProc, mapConv: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
+    mapProc, mapConv, mapFn: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
     rndArg: Integer;   { first operand of NilPy round(x, n) }
     rndIntArg: Boolean;      { …and was it an INTEGER? then round is identity }
     rndArgTk, rndRawTk: TTypeKind;   { its type, to restore after the identity }
@@ -58103,6 +58121,21 @@ begin
         LastExprTk := tyDouble;
         Exit;
       end
+      else if (name = 'const') and (TokPos < TokCount) and
+              (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
+      begin
+        { MicroPython's `const(5)`: a BUILTIN there, used with no import by
+          drivers (bme280, ads1x15, st7789) to mark a compile-time constant.
+          Its value is its argument, so this is the argument's own node with
+          its own type -- `X = const(5)` is an int local, not a variant.
+          CPython has no such name (NameError); NilPy is upward compatible, and
+          `from micropython import const` binds lib/rtl/mimic_micropython.py's
+          def instead (FindSym finds it, so this arm stands aside). }
+        Next; Expect(tkLParen, '(');
+        PyParseBoolExpr;
+        Expect(tkRParen, ')');
+        Exit;
+      end
       else if (name = 'map') and (TokPos < TokCount) and
               (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
       begin
@@ -58160,9 +58193,45 @@ begin
         else
         begin
           PyParseBoolExpr;
+          mapFn := CurASTNode;
           exprNode := PyMakeCallablePtrArg(CurASTNode, 'the function map() applies');
           Expect(tkComma, ',');
           PyParseBoolExpr;
+          if CurTok.Kind = tkComma then
+          begin
+            { `map(f, a, b, ...)` -- f takes one element from EACH iterable,
+              stopping at the shortest (CPython's rule, and zip's). The
+              iterables become zip_n's list and the tuples are spread into a
+              call of f as a callable VALUE, the same pyvar_callv<n> a direct
+              `f(x, y)` on a variant reaches; the one-iterable form below
+              keeps its pointer dispatch. `list(map(max, lo, v))` is
+              vector3d.py (mpu6050). }
+            if IntToTypeKind(ASTTk[mapFn]) <> tyVariant then
+            begin
+              if ASTKind[mapFn] = AN_PROCADDR then
+                mapFn := PyMakeFuncValueFor(Integer(ASTIVal[mapFn]),
+                                            Procs[Integer(ASTIVal[mapFn])].Name)
+              else
+                mapFn := PyBoxCallableValue(mapFn);
+            end;
+            if (mapFn < 0) or (IntToTypeKind(ASTTk[mapFn]) <> tyVariant) then
+              Error('Nil Python: map() over several iterables needs a callable value here');
+            node := PyZipTailList(CurASTNode, -2, -2, -2);
+            Expect(tkRParen, ')');
+            mapProc := FindProc('pymap_star_iter');
+            if mapProc < 0 then Error('Nil Python: pyeval (pymap_star_iter) not loaded');
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := mapFn;
+            argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := node; ASTRight[argSeq2] := -1;
+            ASTRight[argSeq] := argSeq2;
+            node := AllocNode(AN_CALL);
+            ASTIVal[node] := mapProc;
+            ASTLeft[node] := argSeq;
+            ASTTk[node] := Ord(tyClass);
+            ASTRight[node] := ProcRetRecId[mapProc];
+            CurASTNode := node;
+            LastExprTk := tyClass;
+            Exit;
+          end;
           Expect(tkRParen, ')');
           CurASTNode := PyMakeIterOf(CurASTNode);
           mapProc := FindProc('pymap_iter_i');

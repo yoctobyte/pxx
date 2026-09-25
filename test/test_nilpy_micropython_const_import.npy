@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: 0BSD
+# ...and the spelling CPython also runs: `from micropython import const`
+# binds lib/rtl/mimic_micropython.py's def, and the builtin arm stands aside.
+from micropython import const
+_ADDR = const(0x76)
+print(_ADDR + 1, type(_ADDR).__name__)

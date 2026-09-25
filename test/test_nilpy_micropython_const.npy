@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: 0BSD
+# MicroPython's const() BUILTIN, used with no import by drivers (bme280,
+# ads1x15, st7789). CPython has no such name, so this is NilPy-only and its
+# .expected is written by hand: const(x) is x, with x's own type.
+_ADDR = const(0x76)
+_REG = const(-3)
+NAME = const("bme")
+def f():
+    return const(3) * 2
+print(_ADDR + 1, _REG, NAME, type(_ADDR).__name__, f())
+print("CONST OK")

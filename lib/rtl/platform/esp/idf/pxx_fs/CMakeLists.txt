@@ -6,4 +6,4 @@ idf_component_register(SRCS "pxx_fs.c"
                        REQUIRES fatfs wear_levelling esp_partition)
 # pypal's reference is WEAK, and a weak reference does not pull an archive
 # member into the link -- so keep it explicitly.
-target_link_libraries(${COMPONENT_LIB} INTERFACE "-u pxx_fs_mount")
+target_link_libraries(${COMPONENT_LIB} INTERFACE "-u pxx_fs_mount" "-u pxx_fs_oflags")

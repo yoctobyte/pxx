@@ -40,6 +40,40 @@ print("isfile", os.path.isfile(ROOT + "hello.txt"), "isdir /", os.path.isdir(ROO
 os.mkdir(ROOT + "d")
 print("listdir", sorted(os.listdir(ROOT)))
 
+# The open MODES, each against the libc's own O_* numbering (pxx_fs_oflags).
+# With newlib's numbers under IDF 6's picolibc, "w" appended and "a" on a
+# missing file raised ENOENT -- rows that pass on every desktop.
+f = open(ROOT + "modes.txt", "w")
+f.write("abcdefgh")
+f.close()
+f = open(ROOT + "modes.txt", "w")
+f.write("XY")
+f.close()
+print("w truncates", repr(open(ROOT + "modes.txt").read()))
+clean("fresh.txt")
+f = open(ROOT + "fresh.txt", "a")
+f.write("one")
+f.close()
+f = open(ROOT + "fresh.txt", "a")
+f.write("two")
+f.close()
+print("a creates then appends", repr(open(ROOT + "fresh.txt").read()))
+
+def excl_existing():
+    open(ROOT + "modes.txt", "x")
+
+def rplus_missing():
+    open(ROOT + "nope-rplus.txt", "r+")
+
+attempt("x on an existing file", excl_existing)
+attempt("r+ on a missing file", rplus_missing)
+f = open(ROOT + "modes.txt", "r+")
+f.write("Q")
+f.close()
+print("r+ overwrites in place", repr(open(ROOT + "modes.txt").read()))
+clean("modes.txt")
+clean("fresh.txt")
+
 def missing():
     open(ROOT + "nope.txt")
 

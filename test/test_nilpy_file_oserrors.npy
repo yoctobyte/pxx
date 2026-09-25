@@ -50,4 +50,10 @@ print("stat /tmp is a directory", (os.stat("/tmp").st_mode & 0o170000) == 0o0400
 # A str LITERAL through a TEMPORARY receiver took the bytes overload and wrote
 # from a nil buffer (EFAULT, silent until writes raised). A variable was fine.
 print("literal through a temporary", open("/dev/null", "w").write("lit") == 3)
+# open(p, "x") -- create, refuse an existing file -- opened READ-ONLY and
+# "succeeded". /dev/null always exists.
+def excl_existing():
+    open("/dev/null", "x")
+
+attempt("x on an existing file", excl_existing)
 print("FILE OSERRORS OK")

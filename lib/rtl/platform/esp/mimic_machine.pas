@@ -141,8 +141,10 @@ begin
   if e = MP_ENODEV then name := 'ENODEV'
   else if e = MP_ETIMEDOUT then name := 'ETIMEDOUT'
   else name := '';
-  if name <> '' then raise OSError.Create('[Errno ' + IntToStr(e) + '] ' + name);
-  raise OSError.Create('[Errno ' + IntToStr(e) + ']');
+  { (e, name) as args, so a driver's `e.errno == 19` and `e.args[0] == 19`
+    both hold, as they do on MicroPython. }
+  if name = '' then name := 'Unknown error';
+  pyos_raise_errno(e, name);
 end;
 
 function PinId(p: Pin): Integer;

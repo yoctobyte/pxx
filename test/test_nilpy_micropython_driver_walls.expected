@@ -1,0 +1,16 @@
+[4, 5, 6]
+[17, 28]
+[9, 18, 27]
+[18, 24]
+[8, 9]
+[1, 9, 5] 12
+8 memoryview
+b'\x00ab\x00' bytearray(b'\x00\x00ab\x00\x00\x00\x00')
+bytearray(b'ABCDEFGH')
+122 b'GH' b'FG'
+ValueError memoryview assignment: lvalue and rvalue have different structures
+[Errno 19] ENODEV 19 ENODEV (19, 'ENODEV')
+None (19,) 19
+110 110 [Errno 110] ETIMEDOUT
+FileNotFoundError 2 No such file or directory (2, 'No such file or directory')
+DRIVER WALLS OK

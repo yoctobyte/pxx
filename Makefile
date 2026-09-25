@@ -1071,6 +1071,17 @@ test-nilpy: $(COMPILER)
 	  && tools/expect_same.sh "test_inline_variant_arg $$o" "$$($(TESTTMP)/test_inline_variant_arg26)" "205 795 200 21" \
 	  || exit 1; \
 	done
+	# What MicroPython drivers do that NilPy refused: map over several
+	# iterables, a memoryview filled through its slices, OSError's errno pair.
+	# .expected is CPython's output. Then MicroPython's const(), bare (NilPy
+	# only, hand-written .expected) and imported (CPython's, with a
+	# one-line micropython.py). $(COMPILER): inert in the pin until the next.
+	./$(COMPILER) test/test_nilpy_micropython_driver_walls.npy $(TESTTMP)/test_nilpy_mpwalls26
+	$(TESTTMP)/test_nilpy_mpwalls26 | diff -u test/test_nilpy_micropython_driver_walls.expected -
+	./$(COMPILER) test/test_nilpy_micropython_const.npy $(TESTTMP)/test_nilpy_mpconst26
+	$(TESTTMP)/test_nilpy_mpconst26 | diff -u test/test_nilpy_micropython_const.expected -
+	./$(COMPILER) test/test_nilpy_micropython_const_import.npy $(TESTTMP)/test_nilpy_mpconsti26
+	$(TESTTMP)/test_nilpy_mpconsti26 | diff -u test/test_nilpy_micropython_const_import.expected -
 	# `self.n += 1 if s > 0 else 2` -- a DOTTED augmented target reaches the
 	# shared C compound-assign tail, which parsed the RHS with Pascal precedence,
 	# so the assignment became the THEN ARM of a conditional the program never
@@ -37684,11 +37695,13 @@ test-esp-idf: $(COMPILER)
 	@# filesystem is pxx_fs's OPTIONAL mount, reached by a `weakexternal`, so
 	@# the object must carry it WEAK UND -- GLOBAL (what every --emit-obj writer
 	@# wrote until 2026-09-25) fails the link of any project without pxx_fs.
+	@# pxx_fs_oflags too: open()'s O_* translation, in C against the real libc.
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_files.npy $(TESTTMP)/esp_board_files.o >/dev/null \
 	  && readelf -sW $(TESTTMP)/esp_board_files.o | grep -q ' WEAK .* UND pxx_fs_mount$$' \
-	  && echo "=== esp_board_files builds, pxx_fs_mount WEAK [$$t]: OK ===" || exit 1; \
+	  && readelf -sW $(TESTTMP)/esp_board_files.o | grep -q ' WEAK .* UND pxx_fs_oflags$$' \
+	  && echo "=== esp_board_files builds, pxx_fs_mount and pxx_fs_oflags WEAK [$$t]: OK ===" || exit 1; \
 	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build

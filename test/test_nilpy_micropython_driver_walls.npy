@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: 0BSD
+# What MicroPython drivers do that NilPy refused, each row CPython's own
+# output (.expected is `python3` of this file): map over several iterables
+# (vector3d.py), a memoryview sliced and filled in place (sdcard.py), and
+# OSError's errno pair (machine.I2C raises it; drivers test e.errno or
+# e.args[0]).
+
+def h(a, b):
+    return a * 10 + b
+
+class V:
+    def __init__(self, k):
+        self.k = k
+    def mix(self, a, b, c):
+        return (a + b + c) * self.k
+
+# map(f, a, b, ...): the interesting iterable LAST, and one shorter than the rest
+print(list(map(max, [1, 5, 3], [4, 2, 6])))
+print(list(map(h, [1, 2, 3], [7, 8])))
+print(list(map(lambda a, b: a - b, (10, 20, 30), [1, 2, 3])))
+print(list(map(V(2).mix, [1, 2], [3, 4], [5, 6])))
+print(list(map(pow, [2, 3], range(3, 1, -1))))
+lo = [9, 9, 9]
+lo = list(map(min, lo, [1, 10, 5]))
+print(lo, sum(map(h, [1], [2], )))
+
+# memoryview: slices share the buffer, so a filler writes through
+def fill(buf, v):
+    for i in range(len(buf)):
+        buf[i] = v + i
+
+buf = bytearray(8)
+mv = memoryview(buf)
+print(len(mv), type(mv).__name__)
+mv[2:4] = b"ab"
+print(bytes(mv[1:5]), buf)
+for off in range(0, 8, 4):
+    fill(mv[off:off + 4], 0x41 + off)
+print(buf)
+mv[0] = 0x7A
+print(buf[0], bytes(mv[-2:]), bytes(mv[4:][1:3]))
+try:
+    mv[0:2] = b"xyz"
+except ValueError as e:
+    print("ValueError", e)
+
+# OSError(errno, strerror), both spellings of reading it back
+e = OSError(19, "ENODEV")
+print(str(e), e.errno, e.strerror, e.args)
+f = OSError(19)
+print(f.errno, f.args, str(f))
+try:
+    raise OSError(110, "ETIMEDOUT")
+except OSError as x:
+    print(x.errno, x.args[0], x)
+try:
+    open("/nonexistent-dir/zz")
+except OSError as y:
+    print(type(y).__name__, y.errno, y.strerror, y.args)
+print("DRIVER WALLS OK")
