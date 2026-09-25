@@ -14175,6 +14175,12 @@ test-core: $(COMPILER)
 	# at offset 0. Expected is gcc's output.
 	./$(COMPILER) test/test_c_member_access_through_a_comma_ternary_or_assignment.c $(TESTTMP)/test_c_comma_member26
 	tools/expect_same.sh test_c_comma_member26 "$$($(TESTTMP)/test_c_comma_member26)" "$$(printf '2 2 2\n30 2 2\n2 3\n3\n2\n1\n3\n3\na\n7\n3\n2')"
+	# Array-typed compound literals of every shape (`(vec4){..}`, `(mat4){..}` =
+	# cglm's GLM_MAT4_IDENTITY, `(float[4][4]){..}`, `(T[][2])`, records,
+	# designators) and a cast to a pointer to array `(float (*)[4])p` subscripted
+	# by rows. All but the flat 1-D literal were refused. Expected is gcc's output.
+	./$(COMPILER) test/test_c_array_typed_compound_literals.c $(TESTTMP)/test_c_array_cl26
+	tools/expect_same.sh test_c_array_cl26 "$$($(TESTTMP)/test_c_array_cl26)" "$$(printf '1 2 3 4\n1 2 3 4 5 0\n0 4 0 9 0\n2 0 3 6\n4 5 0\n10 6\n39 36\n24 32 24 24\n3\n3 1 64\n4 2 6 9\n7 8 42\n7')"
 	./$(COMPILER) test/test_c_macro_alias_chain_rescans.c $(TESTTMP)/test_c_macro_alias26
 	tools/expect_same.sh test_c_macro_alias26 "$$($(TESTTMP)/test_c_macro_alias26)" "$$(printf '42 42 42 42\n21 22 43\n4 102 200 7\n1001 6 42 42')"
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26

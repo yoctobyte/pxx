@@ -818,6 +818,7 @@ AN_COMMA Left asgn
 AN_COMMA Left blockNode
 AN_COMMA Left callNode
 AN_COMMA Left chAssign
+AN_COMMA Left frAsn
 AN_COMMA Left hStmts[k]
 AN_COMMA Left left
 AN_COMMA Left mcallNode
@@ -840,11 +841,13 @@ AN_COMMA Right chMid
 AN_COMMA Right chSeq
 AN_COMMA Right condNode
 AN_COMMA Right ctorValN
+AN_COMMA Right frIdn
 AN_COMMA Right idx
 AN_COMMA Right innerComma
 AN_COMMA Right node
 AN_COMMA Right setInnerComma
 AN_COMMA Right sub
+AN_COMMA Right t
 AN_COMMA Right valNode
 AN_COMPOUND_ASSIGN Left left
 AN_COMPOUND_ASSIGN Left valNode

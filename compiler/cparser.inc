@@ -3610,7 +3610,7 @@ end;
 
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
-    cNDims, cDim, cSpanSym: Integer;
+    cNDims, cDim, cSpanSym, cRest, cD: Integer;
     szTdI: Integer;   { walks an array typedef's inherent dims for a type-name operand }
     cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
@@ -3655,24 +3655,38 @@ begin
     begin
       Next;                                   { the inner '(' }
       cTk := ParseCDeclType;
+      { Every dimension: the cast's own `[N]`s, then an array typedef's (`vec4`,
+        `mat4`) -- the first may be `[]`. The size is the product of them all. }
       cArrLen := -99;
+      cRest := 1;
+      if (CTypePtrDepth = 0) and (CTypeTypedefArrLen >= 0) then
+        for cD := 0 to CTypeTypedefNDims - 1 do cRest := cRest * CTypeTypedefDims[cD];
       if (CTypePtrDepth = 0) and (CurTok.Kind = tkLBrack) then
       begin
         Next;
         if CurTok.Kind = tkRBrack then cArrLen := -1   { `[]` — count the init }
         else begin cArrLen := CEvalConstExpr; CCheckArrayExtent(cArrLen); end;
         Expect(tkRBrack, ']');
-      end;
+        while CurTok.Kind = tkLBrack do
+        begin
+          Next;
+          cRest := cRest * CEvalConstExpr;
+          Expect(tkRBrack, ']');
+        end;
+      end
+      else if (CTypePtrDepth = 0) and (CTypeTypedefArrLen >= 0) then
+        cArrLen := 1;
       cOK := False;
       if (cArrLen <> -99) and (CurTok.Kind = tkRParen) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkBegin) then
       begin
         { counted from the OPENING BRACE's token index, which is TokPos while
-          CurTok is still the ')' — after the Next it is one past it }
+          CurTok is still the ')' — after the Next it is one past it. A `[]`
+          over rows counts braced rows; brace-elided scalars fill whole rows. }
         if cArrLen = -1 then cArrLen := CBraceTopLevelInitCountAt(TokPos);
         Next;                                 { ')' }
         if cArrLen < 0 then cArrLen := 0;
-        sz := cArrLen * CTypeSizeBytes(cTk);
+        sz := cArrLen * cRest * CTypeSizeBytes(cTk);
         cOK := True;
       end;
       if not cOK then begin TokPos := savedPos - 1; Next; end   { rewind: not one }
@@ -4245,6 +4259,97 @@ begin
   Result := node;
 end;
 
+{ C99 6.5.2.5 ARRAY compound literal of ANY shape: `(vec4){..}` through an
+  array typedef, `(float[4][4]){{1},{0,2}}`, `(mat4){..}` through a typedef of
+  an array typedef, and `(T[]){..}`. The temp is shaped exactly like a local
+  `T tmp[d0]..[dn] = {..}` -- the same SymArrNDims / SymArrDimSpan record -- and
+  filled by the same brace-elision walker a local aggregate uses
+  (CInitLocalAggregate), so nested braces, short rows and designators mean
+  what they mean in a declaration. Yields the temp's base address (decay).
+  dims[0] = -1 is an unsized first dimension, sized from the initializer.
+  cglm's GLM_MAT4_IDENTITY is `((mat4){{1,0,0,0},...})`. }
+function CParseCompoundLiteralArrN(elemTk, elemRec, nDims: Integer;
+  const dims: array of Integer): Integer;
+var tmpSym, total, eb, d, span0, seq, chain, t, node, depth, top, p, savedRecId: Integer;
+begin
+  eb := 1;
+  for d := 1 to nDims - 1 do eb := eb * dims[d];
+  if eb < 1 then eb := 1;
+  span0 := dims[0];
+  if span0 < 0 then
+  begin
+    { Unsized first dimension: count the initializer's top-level entries by a
+      token scan. A braced entry is one row; bare scalars fill rows eb at a time. }
+    depth := 0; top := 0; p := TokPos - 1;
+    span0 := 0;
+    while p < TokCount do
+    begin
+      if Tokens[p].Kind = tkBegin then
+      begin
+        if depth = 1 then Inc(span0);
+        Inc(depth);
+      end
+      else if Tokens[p].Kind = tkEnd then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end
+      else if (depth = 1) and (Tokens[p].Kind <> tkComma) then
+      begin
+        if (p = TokPos - 1) or (Tokens[p - 1].Kind = tkComma) or (Tokens[p - 1].Kind = tkBegin) then
+          Inc(top);
+      end;
+      Inc(p);
+    end;
+    span0 := span0 + (top + eb - 1) div eb;
+    if span0 < 1 then span0 := 1;
+  end;
+  total := span0 * eb;
+  savedRecId := LastTypeRecId;
+  if IntToTypeKind(elemTk) = tyRecord then LastTypeRecId := elemRec;
+  tmpSym := AllocArray('', IntToTypeKind(elemTk), 0, total - 1);
+  LastTypeRecId := savedRecId;
+  if nDims >= 2 then
+  begin
+    SymArrNDims[tmpSym] := nDims;
+    SymArrDimLo[tmpSym * MAX_ARR_DIMS + 0] := 0;
+    SymArrDimSpan[tmpSym * MAX_ARR_DIMS + 0] := span0;
+    for d := 1 to nDims - 1 do
+    begin
+      SymArrDimLo[tmpSym * MAX_ARR_DIMS + d] := 0;
+      SymArrDimSpan[tmpSym * MAX_ARR_DIMS + d] := dims[d];
+    end;
+  end;
+  seq := CMakeZeroLocal(tmpSym, IntToTypeKind(elemTk));
+  chain := CInitLocalAggregate(tmpSym, elemTk, elemRec, total, nDims, span0, eb, True);
+  if chain <> -1 then
+  begin
+    t := seq;
+    while ASTRight[t] <> -1 do t := ASTRight[t];
+    ASTRight[t] := chain;
+  end;
+  node := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[node] := tmpSym;
+  ASTLeft[node] := seq;
+  ASTTk[node] := Ord(tyPointer);
+  Result := node;
+  if nDims >= 2 then
+  begin
+    { A MULTI-DIMENSIONAL literal decays to a pointer to its first ROW, and the
+      compound-literal node only knows its element: `((mat4){..})[1][0]` stepped
+      one float for the `[1]`. Yield the temp itself after the fill, as
+      `(fill, tmp)` -- a named multi-dimensional array, which every subscript
+      and decay path already handles. }
+    t := AllocNode(AN_IDENT);
+    ASTIVal[t] := tmpSym;
+    ASTTk[t] := elemTk;
+    Result := AllocNode(AN_COMMA);
+    ASTLeft[Result] := node;
+    ASTRight[Result] := t;
+    ASTTk[Result] := elemTk;
+  end;
+end;
+
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 { Materialise a SCALAR compound literal's converted value into an anonymous
   temp and yield an addressable lvalue (C99 6.5.2.5: a compound literal has
@@ -4407,7 +4512,11 @@ end;
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
-    frTmp, frIdn, frAsn, frSeq: Integer;
+    frTmp, frIdn, frAsn, frSeq, clNDims, clD, clP: Integer;
+    clDesig: Boolean;
+    castPaLen, castPaNDims: Integer;
+    castPaDims: array[0..MAX_ARR_DIMS - 1] of Integer;
+    clDims: array[0..MAX_ARR_DIMS - 1] of Integer;
     clScalar: Boolean;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
     notv: Int64;
@@ -4445,24 +4554,61 @@ begin
     castPtrElemProcSig := CTypePtrElemProcSig;  { ptr-to-fn-ptr cast `(ft*)e`: pointee callee sig }
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     clRecId := CTypeBaseRec;    { captured before Expect for a possible compound literal }
+    { `(T (*)[N]..)e`: a pointer to ARRAY. The operand's recursive parse clobbers
+      the CType* globals, so capture the pointee's dims now. }
+    castPaLen := CTypePtrElemArrLen;
+    castPaNDims := CTypePtrElemNDims;
+    for clD := 0 to MAX_ARR_DIMS - 1 do castPaDims[clD] := CTypePtrElemDim[clD];
     { Abstract array declarator in a cast: `(elem[N])` / `(elem[])` — ParseCDeclType
       stops at the '[', so consume the dimension here. Marks a possible ARRAY
       compound literal (arrCastLen >= -1); non-array casts leave it -99. }
     arrCastLen := -99;
-    if (castDepth = 0) and (CurTok.Kind = tkLBrack) then
+    { Every `[N]` of the abstract declarator, then an array typedef's own dims
+      (`(vec4)`, `(mat4)`, `(vec4[2])` is [2][4]). }
+    clNDims := 0;
+    while (castDepth = 0) and (CurTok.Kind = tkLBrack) and (clNDims < MAX_ARR_DIMS) do
     begin
       Next;
-      if CurTok.Kind = tkRBrack then arrCastLen := -1   { unsized `[]`, sized from the init }
-      else arrCastLen := CEvalConstExpr;
+      if CurTok.Kind = tkRBrack then clDims[clNDims] := -1   { unsized `[]`, sized from the init }
+      else clDims[clNDims] := CEvalConstExpr;
       Expect(tkRBrack, ']');
+      Inc(clNDims);
     end;
+    if (castDepth = 0) and (CTypeTypedefArrLen >= 0) then
+      for clD := 0 to CTypeTypedefNDims - 1 do
+        if clNDims < MAX_ARR_DIMS then
+        begin
+          clDims[clNDims] := CTypeTypedefDims[clD];
+          Inc(clNDims);
+        end;
+    if clNDims > 0 then arrCastLen := clDims[0];
     Expect(tkRParen, ')');
     { C99 6.5.2.5 compound literal: a brace after the cast type is NOT a cast of
       a braced expr — materialise the anonymous object and yield it. }
-    if (CurTok.Kind = tkBegin) and (arrCastLen <> -99) then
+    if (CurTok.Kind = tkBegin) and (clNDims > 0) then
     begin
-      { array compound literal `(elem[]){...}` -> decays to a pointer; chain postfix. }
-      Result := ParseCPostfixTail(CParseCompoundLiteralArr(Ord(castTk), arrCastLen));
+      { array compound literal -> decays to a pointer; chain postfix. The flat
+        one-dimensional scalar form keeps its own builder; every other shape
+        (more dims, a typedef'd shape, record elements) takes the general one. }
+      { a `[k] =` designator at the top level needs the aggregate walker too }
+      clDesig := False; clD := 0; clP := TokPos - 1;
+      while clP < TokCount do
+      begin
+        if Tokens[clP].Kind = tkBegin then Inc(clD)
+        else if Tokens[clP].Kind = tkEnd then
+        begin
+          Dec(clD);
+          if clD = 0 then Break;
+        end
+        else if (clD = 1) and (Tokens[clP].Kind = tkLBrack) and
+                ((Tokens[clP - 1].Kind = tkBegin) or (Tokens[clP - 1].Kind = tkComma)) then
+          clDesig := True;
+        Inc(clP);
+      end;
+      if (clNDims = 1) and (CTypeTypedefArrLen < 0) and (castTk <> tyRecord) and not clDesig then
+        Result := ParseCPostfixTail(CParseCompoundLiteralArr(Ord(castTk), arrCastLen))
+      else
+        Result := ParseCPostfixTail(CParseCompoundLiteralArrN(Ord(castTk), clRecId, clNDims, clDims));
       Exit;
     end;
     if (CurTok.Kind = tkBegin) and (castTk = tyRecord) and (castDepth = 0)
@@ -4665,6 +4811,29 @@ begin
     end
     else ASTTk[node] := Ord(castTk);
     if clScalar then node := CScalarLitLValue(node, IntToTypeKind(ASTTk[node]));
+    if (castDepth = 1) and (castPaLen > 0) and (not clScalar) and (CurProc >= 0) then
+    begin
+      { A cast to a POINTER TO ARRAY yields a value whose `[i]` steps whole rows.
+        The alias record above carries only the element, so `((float (*)[4])p)[3][3]`
+        read p[3+3] and a float of it went to printf as an integer. Land the value
+        in a hidden local declared exactly like `float (*t)[4]`, which every
+        subscript, deref and stride path already handles, and yield `(t = e, t)`. }
+      clP := AllocVar('', tyPointer);
+      SymPtrElemArrLen[clP] := castPaLen;
+      SymPtrElemNDims[clP] := castPaNDims;
+      if castPaNDims > 1 then
+        for clD := 0 to castPaNDims - 1 do
+          SymArrDimSpan[clP * MAX_ARR_DIMS + clD] := castPaDims[clD];
+      SetSymPointerType(clP, IntToTypeKind(castElemTk), castElemRec, 1, castBaseTk, castBaseRec);
+      frIdn := AllocNode(AN_IDENT); ASTIVal[frIdn] := clP; ASTTk[frIdn] := Ord(tyPointer);
+      frAsn := AllocNode(AN_ASSIGN); ASTLeft[frAsn] := frIdn; ASTRight[frAsn] := node;
+      ASTTk[frAsn] := Ord(tyPointer);
+      frIdn := AllocNode(AN_IDENT); ASTIVal[frIdn] := clP; ASTTk[frIdn] := Ord(tyPointer);
+      node := AllocNode(AN_COMMA);
+      ASTLeft[node] := frAsn;
+      ASTRight[node] := frIdn;
+      ASTTk[node] := Ord(tyPointer);
+    end;
     Result := node;
     Exit;
   end;
@@ -6360,17 +6529,25 @@ begin
     detect the exact `( * ident ) [` shape. The pointer strides by elem size and
     `p[i][j]` flattens to i*N+j (ParseCPostfix). Records the row length in
     CTypePtrElemArrLen and the name in CTypeFnPtrName so the caller allocates it. }
+  { The ABSTRACT form `elem (*)[N]` -- a cast, a sizeof, an unnamed prototype
+    parameter -- is the same type with no name. It fell to the fn-pointer arm
+    below, which recorded no row, so `((float (*)[4])p)[i][j]` stepped one
+    element per row. }
   if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
-     (Tokens[TokPos+1].Kind = tkIdent) and (Tokens[TokPos+2].Kind = tkRParen) and
-     (Tokens[TokPos+3].Kind = tkLBrack) then
+     (((Tokens[TokPos+1].Kind = tkIdent) and (Tokens[TokPos+2].Kind = tkRParen) and
+       (Tokens[TokPos+3].Kind = tkLBrack)) or
+      ((Tokens[TokPos+1].Kind = tkRParen) and (Tokens[TokPos+2].Kind = tkLBrack))) then
   begin
     fpRet := Result;                 { element scalar type (before the pointer) }
     Next;                            { consume '(' }
     Next;                            { consume '*' }
-    CTypeFnPtrName := CurTok.SVal;    { the declarator name (current token) }
-    CTypeFnPtrNameOff := Tokens[TokPos-1].SOffset;
-    CTypeFnPtrNameLen := Tokens[TokPos-1].SLen;
-    Next;                            { consume name -> ')' }
+    if CurTok.Kind = tkIdent then
+    begin
+      CTypeFnPtrName := CurTok.SVal;    { the declarator name (current token) }
+      CTypeFnPtrNameOff := Tokens[TokPos-1].SOffset;
+      CTypeFnPtrNameLen := Tokens[TokPos-1].SLen;
+      Next;                            { consume name -> ')' }
+    end;
     Next;                            { consume ')' -> '[' }
     Next;                            { consume '[' }
     paArrLen := CEvalConstExpr;      { N (first / only dim) }
