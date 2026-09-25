@@ -16087,18 +16087,14 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-25T10:23:10Z",
+  "date": "2026-09-25T10:50:16Z",
   "red": [
-   "test-core#src:test/c_crtl_wait.c",
-   "tools-devtest#00"
+   "test-core#src:test/c_crtl_wait.c"
   ],
-  "sha": "e5bf80753e6e1be76c65b5a91d9c0f97ed57a760",
+  "sha": "2df022754847ef8c49244958cd6f3c8641e4fb16",
   "tier": "full",
-  "ver": "v432",
-  "verdict": "RED",
-  "why": {
-   "tools-devtest#00": "Wire each into a rule, or add it to test/UNWIRED.txt with a reason. | check-test-wiring: 2 exemption(s) whose only reference is a tools/ script NAMING the path \u2014 a mention is not proof anything runs i"
-  }
+  "ver": "v433",
+  "verdict": "RED"
  },
  "toolchain": {
   "espqemu-riscv32": "9.2.2",
