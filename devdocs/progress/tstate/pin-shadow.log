@@ -1095,3 +1095,4 @@
 2026-09-25T02:21:18Z	borg	b34ae35bdcb2589872f2f7767cffcdf38ea70e8b	would NOT pin b34ae35bdcb2 — 1 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00
 2026-09-25T02:55:37Z	borg	3ade7edb0d39b24cf042f7a9522da172b113b4ef	would NOT pin 3ade7edb0d39 — 2 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00, tools-devtest-sh#00
 2026-09-25T03:28:33Z	borg	0672391a429edf5c52dc3fe0cd1673b1fc9660b9	would NOT pin 0672391a429e — 2 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00, tools-devtest-sh#00
+2026-09-25T04:02:10Z	borg	5f749cc5f275190cd73f9d425e27aae08e46ed7c	would NOT pin 5f749cc5f275 — 2 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00, tools-devtest-sh#00
