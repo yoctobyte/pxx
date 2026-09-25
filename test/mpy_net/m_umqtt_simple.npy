@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: 0BSD
+# Network census: library compiled unchanged (tools/mpy_driver_census.sh net).
+from umqtt.simple import MQTTClient
+
+c = MQTTClient("pxx", "10.0.2.2", port=1883)
+try:
+    c.connect()
+    c.publish(b"pxx/t", b"hello")
+    c.disconnect()
+    print("umqtt.simple: published")
+except OSError as e:
+    print("umqtt.simple: no broker:", e)

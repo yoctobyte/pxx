@@ -36,7 +36,9 @@ unit mimic_struct;
 
   ABSENT, and each would be a hard error rather than a wrong answer: `s`/`p`
   (byte strings), `?` (bool), `c` (char), `n`/`N`/`P` (native-size ints),
-  `e` (half floats), `x` (pad bytes), and `pack_into`/`iter_unpack`.
+  `e` (half floats), `x` (pad bytes), and `iter_unpack`.
+  `pack_into` joined the module 2026-09-25, for MicroPython's umqtt.simple
+  (`struct.pack_into("!H", pkt, 2, pid)`); it is still absent on Struct.
   `unpack_from` was in that list until 2026-09-19, when That Space Program's
   ephemeris reader needed it; it is below now, on the module and on Struct. Adding any of them is a small edit to ItemSize and the two
   loops; leaving them out is not a design, just an unmet need.
@@ -149,6 +151,23 @@ function unpack(const fmt: AnsiString; b: TPyBytes): TPyList;
   slices. The buffer is what `mmap.mmap` hands back, which is a TPyBytes here
   (mimic_mmap), so the one signature serves both. }
 function unpack_from(const fmt: AnsiString; b: TPyBytes; offset: Integer = 0): TPyList;
+
+{ pack_into(fmt, buffer, offset, v1, ...) -- pack() written INTO a bytearray at
+  `offset` instead of returned. Same ladder-plus-*args shape as pack, for the
+  same reason; each funnels into pack_into_list. A negative offset counts from
+  the end, and the three range errors are CPython's words. }
+procedure pack_into_list(const fmt: AnsiString; buf: TPyBytes; offset: Integer; args: TPyList);
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1: Variant); overload;
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1, a2: Variant); overload;
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1, a2, a3: Variant); overload;
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1, a2, a3, a4: Variant); overload;
+{$PYSTAR}
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    args: TPyList); overload;
 
 type
   { struct.Struct(fmt) -- one format, parsed once and reused.
@@ -407,28 +426,28 @@ end;
 function pack(const fmt: AnsiString; const a1: Variant): TPyBytes;
 var l: TPyList;
 begin
-  l := TPyList.Create; l.append(a1); pack := pack_list(fmt, l);
+  l := TPyList.Create; l.append(a1); pack := pack_list(fmt, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function pack(const fmt: AnsiString; const a1, a2: Variant): TPyBytes;
 var l: TPyList;
 begin
   l := TPyList.Create; l.append(a1); l.append(a2);
-  pack := pack_list(fmt, l);
+  pack := pack_list(fmt, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function pack(const fmt: AnsiString; const a1, a2, a3: Variant): TPyBytes;
 var l: TPyList;
 begin
   l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3);
-  pack := pack_list(fmt, l);
+  pack := pack_list(fmt, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function pack(const fmt: AnsiString; const a1, a2, a3, a4: Variant): TPyBytes;
 var l: TPyList;
 begin
   l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3); l.append(a4);
-  pack := pack_list(fmt, l);
+  pack := pack_list(fmt, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function pack(const fmt: AnsiString;
@@ -437,7 +456,7 @@ var l: TPyList;
 begin
   l := TPyList.Create;
   l.append(a1); l.append(a2); l.append(a3); l.append(a4); l.append(a5);
-  pack := pack_list(fmt, l);
+  pack := pack_list(fmt, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function pack(const fmt: AnsiString;
@@ -447,7 +466,7 @@ begin
   l := TPyList.Create;
   l.append(a1); l.append(a2); l.append(a3);
   l.append(a4); l.append(a5); l.append(a6);
-  pack := pack_list(fmt, l);
+  pack := pack_list(fmt, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function pack(const fmt: AnsiString;
@@ -457,7 +476,7 @@ begin
   l := TPyList.Create;
   l.append(a1); l.append(a2); l.append(a3); l.append(a4);
   l.append(a5); l.append(a6); l.append(a7);
-  pack := pack_list(fmt, l);
+  pack := pack_list(fmt, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 { Read `sz` bytes out of `src` at `off` into `dst`, un-reversing if needed. The
@@ -566,6 +585,69 @@ begin
   unpack := DecodeAt(fmt, b, 0);
 end;
 
+procedure pack_into_list(const fmt: AnsiString; buf: TPyBytes; offset: Integer; args: TPyList);
+var raw: TPyBytes; need, at: Integer;
+begin
+  need := calcsize(fmt);
+  at := offset;
+  if at < 0 then
+  begin
+    if at + buf.FLen < 0 then
+      raise error.Create('offset ' + IntToStr(offset) + ' out of range for '
+                         + IntToStr(buf.FLen) + '-byte buffer');
+    at := at + buf.FLen;
+    if at + need > buf.FLen then
+      raise error.Create('no space to pack ' + IntToStr(need)
+                         + ' bytes at offset ' + IntToStr(offset));
+  end
+  else if at + need > buf.FLen then
+    raise error.Create('pack_into requires a buffer of at least '
+                       + IntToStr(at + need) + ' bytes for packing '
+                       + IntToStr(need) + ' bytes at offset ' + IntToStr(at)
+                       + ' (actual buffer size is ' + IntToStr(buf.FLen) + ')');
+  raw := pack_list(fmt, args);
+  if need > 0 then Move(raw.FData^, (PByte(buf.FData) + at)^, need);
+  PXXObjRelease(Pointer(raw));
+end;
+
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1: Variant);
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1);
+  pack_into_list(fmt, buf, offset, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
+end;
+
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1, a2: Variant);
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1); l.append(a2);
+  pack_into_list(fmt, buf, offset, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
+end;
+
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1, a2, a3: Variant);
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3);
+  pack_into_list(fmt, buf, offset, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
+end;
+
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    const a1, a2, a3, a4: Variant);
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3); l.append(a4);
+  pack_into_list(fmt, buf, offset, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
+end;
+
+procedure pack_into(const fmt: AnsiString; buf: TPyBytes; offset: Integer;
+                    args: TPyList);
+begin
+  pack_into_list(fmt, buf, offset, args);
+end;
+
 { CPython's three messages, word for word: a negative offset past the start, a
   negative offset whose item runs off the end, and a non-negative one that does. }
 function unpack_from(const fmt: AnsiString; b: TPyBytes; offset: Integer = 0): TPyList;
@@ -650,28 +732,28 @@ end;
 function Struct.pack(const a1: Variant): TPyBytes;
 var l: TPyList;
 begin
-  l := TPyList.Create; l.append(a1); Result := StructPackList(format, l);
+  l := TPyList.Create; l.append(a1); Result := StructPackList(format, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function Struct.pack(const a1, a2: Variant): TPyBytes;
 var l: TPyList;
 begin
   l := TPyList.Create; l.append(a1); l.append(a2);
-  Result := StructPackList(format, l);
+  Result := StructPackList(format, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function Struct.pack(const a1, a2, a3: Variant): TPyBytes;
 var l: TPyList;
 begin
   l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3);
-  Result := StructPackList(format, l);
+  Result := StructPackList(format, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function Struct.pack(const a1, a2, a3, a4: Variant): TPyBytes;
 var l: TPyList;
 begin
   l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3); l.append(a4);
-  Result := StructPackList(format, l);
+  Result := StructPackList(format, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function Struct.pack(const a1, a2, a3, a4, a5: Variant): TPyBytes;
@@ -679,7 +761,7 @@ var l: TPyList;
 begin
   l := TPyList.Create;
   l.append(a1); l.append(a2); l.append(a3); l.append(a4); l.append(a5);
-  Result := StructPackList(format, l);
+  Result := StructPackList(format, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function Struct.pack(const a1, a2, a3, a4, a5, a6: Variant): TPyBytes;
@@ -688,7 +770,7 @@ begin
   l := TPyList.Create;
   l.append(a1); l.append(a2); l.append(a3);
   l.append(a4); l.append(a5); l.append(a6);
-  Result := StructPackList(format, l);
+  Result := StructPackList(format, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 function Struct.pack(const a1, a2, a3, a4, a5, a6, a7: Variant): TPyBytes;
@@ -697,7 +779,7 @@ begin
   l := TPyList.Create;
   l.append(a1); l.append(a2); l.append(a3); l.append(a4);
   l.append(a5); l.append(a6); l.append(a7);
-  Result := StructPackList(format, l);
+  Result := StructPackList(format, l); PXXObjRelease(Pointer(l));   { the ladder's own list }
 end;
 
 end.

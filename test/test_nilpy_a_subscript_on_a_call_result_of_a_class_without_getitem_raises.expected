@@ -1,0 +1,6 @@
+TypeError: 'P' object is not subscriptable
+TypeError: 'socket' object is not subscriptable
+TypeError: 'P' object is not subscriptable
+TypeError: 'P' object does not support item assignment
+TypeError: 'P' object is not subscriptable
+42

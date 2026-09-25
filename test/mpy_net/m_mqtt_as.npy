@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: 0BSD
+# Network census: library compiled unchanged (tools/mpy_driver_census.sh net).
+import asyncio
+from mqtt_as import MQTTClient, config
+
+config["server"] = "10.0.2.2"
+config["ssid"] = ""
+config["wifi_pw"] = ""
+
+
+async def main(client):
+    await client.connect()
+    await client.publish("pxx/t", "hello", qos=1)
+    print("mqtt_as: published")
+
+
+client = MQTTClient(config)
+try:
+    asyncio.run(main(client))
+finally:
+    client.close()

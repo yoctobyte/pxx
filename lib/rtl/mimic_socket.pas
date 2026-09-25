@@ -18,10 +18,14 @@ unit mimic_socket;
   each give up after t seconds with TimeoutError('timed out') -- done as
   CPython does it, a non-blocking socket plus a poll per call.
 
+  UDP: socket(AF_INET, SOCK_DGRAM) with sendto, recvfrom -> (data, (ip,
+  port)), and recv; settimeout works on it as on TCP. getaddrinfo(host, port)
+  returns MicroPython's single entry. A host NAME resolves through dns.pas
+  (lwIP's resolver on an ESP) and an unknown one raises gaierror; MicroPython's
+  umqtt and ntptime asked for both (tools/mpy_driver_census.sh net).
   WHAT IT REFUSES, loudly: any family but AF_INET and any type but
-  SOCK_STREAM (OSError at construction, not a socket that quietly is TCP);
-  a host name other than 'localhost' (there is no resolver here -- CPython
-  would look it up, and guessing is worse than refusing).
+  SOCK_STREAM / SOCK_DGRAM (OSError at construction, not a socket that quietly
+  is TCP).
 
   ERRORS are raised as CPython raises them: the OSError SUBCLASS its errno
   selects (ConnectionRefusedError, ConnectionResetError, TimeoutError,
@@ -37,11 +41,14 @@ unit mimic_socket;
 
 interface
 
-uses pylib, sysutils, platform;
+uses pylib, sysutils, platform, dns, dns_wire_core;   { TDnsIpv4Array }
 
 const
   AF_INET      = 2;
   SOCK_STREAM  = 1;
+  SOCK_DGRAM   = 2;
+  IPPROTO_TCP  = 6;
+  IPPROTO_UDP  = 17;
   SOL_SOCKET   = 1;
   SO_REUSEADDR = 2;
   SHUT_RD      = 0;
@@ -51,12 +58,15 @@ const
 type
   BlockingIOError = class(OSError) end;
   error = OSError;
+  gaierror = class(OSError) end;
 
   socket = class
   private
     FHandle: Integer;
     FTimeoutMs: Integer;   { -1 blocking (None), 0 non-blocking, else the timeout }
+    FType: Integer;        { SOCK_STREAM or SOCK_DGRAM }
     procedure Wait(events: Integer);
+    function RecvFull(p: PByte; want: Integer): Integer;
   public
     constructor Create(family: Integer = AF_INET; type_: Integer = SOCK_STREAM;
       proto: Integer = 0);
@@ -67,6 +77,18 @@ type
     function recv(bufsize: Integer): TPyBytes;
     function send(data: TPyBytes): Integer;
     procedure sendall(data: TPyBytes);
+    function sendto(data: TPyBytes; const address: TPyList): Integer;
+    function recvfrom(bufsize: Integer): TPyList;
+    { MicroPython's stream methods, which its socket carries and CPython's does
+      not (py/stream.c, v1.26.1). read(n) loops until n bytes or EOF, as
+      mp_stream_rw does; read() reads to EOF; readinto fills the buffer or up to
+      nbytes; readline keeps the newline; write(buf[, max_len]) and
+      write(buf, off, max_len) write everything they are given and return the
+      count. umqtt is written against these. }
+    function read(n: Integer = -1): TPyBytes;
+    function readinto(buf: TPyBytes; nbytes: Integer = -1): Integer;
+    function readline(size: Integer = -1): TPyBytes;
+    function write(const data: Variant; a2: Integer = -1; a3: Integer = -1): Integer;
     procedure setsockopt(level, optname, value: Integer);
     procedure setblocking(flag: Boolean);
     procedure settimeout(const value: Variant);
@@ -78,6 +100,15 @@ type
     function __enter__: socket;
     procedure __exit__(const a, b, c: Variant);
   end;
+
+{ getaddrinfo(host, port) -> [(family, type, proto, canonname, (ip, port))].
+  ONE entry, as MicroPython returns, and every MicroPython caller reads
+  [0][-1]; CPython lists one per socket type when `type_` is 0. A dotted quad,
+  '' and 'localhost' need no lookup; any other name goes through dns.pas
+  (lwIP's resolver on an ESP, whose nameservers come by DHCP). A name that
+  does not resolve raises gaierror, an OSError, as CPython does. }
+function getaddrinfo(const host: AnsiString; port: Integer; family: Integer = 0;
+  type_: Integer = 0; proto: Integer = 0; flags: Integer = 0): TPyList;
 
 implementation
 
@@ -178,9 +209,28 @@ begin
     else
       ok := False;
   if (not ok) or (dots <> 3) or (part < 0) then
-    raise OSError.Create('socket: cannot resolve host ''' + host +
-      ''' (only dotted quads and localhost; there is no resolver here)');
+    raise gaierror.Create('[Errno -2] Name or service not known');
   HostAddr := (acc shl 8) or LongWord(part);
+end;
+
+{ HostAddr, or a dns.pas lookup when the host is a name. }
+function ResolveAddr(const host: AnsiString): LongWord;
+var ips: TDnsIpv4Array; count, rc, i: Integer; numeric: Boolean;
+begin
+  numeric := (host = '') or (host = 'localhost');
+  if not numeric then
+  begin
+    numeric := True;
+    for i := 1 to Length(host) do
+      if not (((host[i] >= '0') and (host[i] <= '9')) or (host[i] = '.')) then
+        numeric := False;
+  end;
+  if numeric then begin ResolveAddr := HostAddr(host); Exit; end;
+  count := 0;
+  rc := DnsResolveHost(host, ips, count);
+  if (rc < 0) or (count < 1) then
+    raise gaierror.Create('[Errno -2] Name or service not known');
+  ResolveAddr := ips[0];
 end;
 
 procedure SplitAddress(const address: TPyList; var addr: LongWord; var port: Integer);
@@ -190,7 +240,7 @@ begin
     raise OSError.Create('socket: an AF_INET address is a (host, port) pair');
   h := address.at(0);
   port := address.at(1);
-  addr := HostAddr(h);
+  addr := ResolveAddr(h);
 end;
 
 function AddrPair(addr: LongWord; port: Integer): TPyList;
@@ -208,10 +258,14 @@ constructor socket.Create(family: Integer; type_: Integer; proto: Integer);
 begin
   if family <> AF_INET then
     raise OSError.Create('socket: only AF_INET is supported');
-  if type_ <> SOCK_STREAM then
-    raise OSError.Create('socket: only SOCK_STREAM is supported');
+  if (type_ <> SOCK_STREAM) and (type_ <> SOCK_DGRAM) then
+    raise OSError.Create('socket: only SOCK_STREAM and SOCK_DGRAM are supported');
   FTimeoutMs := -1;
-  FHandle := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  FType := type_;
+  if type_ = SOCK_DGRAM then
+    FHandle := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0)
+  else
+    FHandle := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
   if FHandle < 0 then Fail('socket', FHandle);
 end;
 
@@ -312,6 +366,125 @@ begin
   end;
 end;
 
+function socket.sendto(data: TPyBytes; const address: TPyList): Integer;
+var addr: LongWord; port: Integer; sent: Int64;
+begin
+  SplitAddress(address, addr, port);
+  Wait(PAL_POLL_OUT);
+  sent := PalSendToIpv4(FHandle, data.FData, data.FLen, addr, port);
+  if sent < 0 then Fail('sendto', sent);
+  sendto := sent;
+end;
+
+function socket.recvfrom(bufsize: Integer): TPyList;
+var r: TPyBytes; got: Int64; addr: LongWord; port: Integer; l: TPyList;
+begin
+  if bufsize < 0 then raise OSError.Create('recvfrom: negative buffersize');
+  r := TPyBytes.Create(bufsize);
+  addr := 0; port := 0;
+  Wait(PAL_POLL_IN);
+  got := PalRecvFromIpv4(FHandle, r.FData, bufsize, addr, port);
+  if got < 0 then Fail('recvfrom', got);
+  r.FLen := got;
+  l := TPyList.Create;
+  l.append(TObject(r));
+  PXXObjRelease(Pointer(r));   { the list holds it now }
+  l.append(TObject(AddrPair(addr, port)));
+  recvfrom := pylist_mark_tuple(l);
+end;
+
+{ Recv into p until want bytes or EOF; the count actually read. }
+function socket.RecvFull(p: PByte; want: Integer): Integer;
+var done: Integer; got: Int64;
+begin
+  done := 0;
+  while done < want do
+  begin
+    Wait(PAL_POLL_IN);
+    got := PalRecv(FHandle, p + done, want - done);
+    if got < 0 then Fail('read', got);
+    if got = 0 then Break;
+    done := done + got;
+  end;
+  RecvFull := done;
+end;
+
+function socket.read(n: Integer): TPyBytes;
+var r, buf: TPyBytes; chunk, got: Integer;
+begin
+  if n >= 0 then
+  begin
+    r := TPyBytes.Create(n);
+    r.FLen := RecvFull(PByte(r.FData), n);
+    read := r;
+    Exit;
+  end;
+  { read(): to EOF, a chunk at a time, as stream_readall does }
+  r := TPyBytes.Create(0);
+  chunk := 256;
+  buf := TPyBytes.Create(chunk);
+  repeat
+    got := RecvFull(PByte(buf.FData), chunk);
+    buf.FLen := got;
+    r.extend(buf);
+    buf.FLen := chunk;
+  until got < chunk;
+  PXXObjRelease(Pointer(buf));
+  read := r;
+end;
+
+function socket.readinto(buf: TPyBytes; nbytes: Integer): Integer;
+begin
+  if (nbytes < 0) or (nbytes > buf.FLen) then nbytes := buf.FLen;
+  readinto := RecvFull(PByte(buf.FData), nbytes);
+end;
+
+function socket.readline(size: Integer): TPyBytes;
+var r: TPyBytes; c: Byte;
+begin
+  r := TPyBytes.Create(0);
+  while (size < 0) or (r.FLen < size) do
+  begin
+    if RecvFull(@c, 1) = 0 then Break;
+    r.append(c);
+    if c = 10 then Break;
+  end;
+  readline := r;
+end;
+
+function socket.write(const data: Variant; a2: Integer; a3: Integer): Integer;
+var off, len, total, done: Integer; sent: Int64; o: TObject; p: PByte; text: AnsiString;
+begin
+  { a bytes-like object, or a str, whose UTF-8 bytes MicroPython writes }
+  o := nil;
+  if pyvar_is_objtag(data) then o := TObject(pyvarobj(data));
+  if (o <> nil) and (o is TPyBytes) then
+  begin
+    p := PByte(TPyBytes(o).FData);
+    total := TPyBytes(o).FLen;
+  end
+  else
+  begin
+    text := pystr_of(data);
+    p := PByte(PAnsiChar(text));
+    total := Length(text);
+  end;
+  off := 0; len := total;
+  if a3 >= 0 then begin off := a2; len := a3; end
+  else if a2 >= 0 then len := a2;
+  if off > total then off := total;
+  if len > total - off then len := total - off;
+  done := 0;
+  while done < len do
+  begin
+    Wait(PAL_POLL_OUT);
+    sent := PalSend(FHandle, p + off + done, len - done);
+    if sent < 0 then Fail('write', sent);
+    done := done + sent;
+  end;
+  write := done;
+end;
+
 procedure socket.setsockopt(level, optname, value: Integer);
 var rc: Integer;
 begin
@@ -388,6 +561,26 @@ end;
 procedure socket.__exit__(const a, b, c: Variant);
 begin
   close;
+end;
+
+function getaddrinfo(const host: AnsiString; port: Integer; family: Integer;
+  type_: Integer; proto: Integer; flags: Integer): TPyList;
+var e, l: TPyList; v: Variant;
+begin
+  if (family <> 0) and (family <> AF_INET) then
+    raise gaierror.Create('[Errno -9] Address family for hostname not supported');
+  if type_ = 0 then type_ := SOCK_STREAM;
+  if proto = 0 then
+    if type_ = SOCK_DGRAM then proto := IPPROTO_UDP else proto := IPPROTO_TCP;
+  e := TPyList.Create;
+  v := AF_INET; e.append(v);
+  v := type_; e.append(v);
+  v := proto; e.append(v);
+  v := ''; e.append(v);
+  e.append(TObject(AddrPair(ResolveAddr(host), port)));
+  l := TPyList.Create;
+  l.append(TObject(pylist_mark_tuple(e)));
+  getaddrinfo := l;
 end;
 
 end.

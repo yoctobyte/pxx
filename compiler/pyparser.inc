@@ -83,6 +83,9 @@ type
   TPyFieldCands = array[0..PY_MAX_FIELD_CANDIDATES - 1] of Integer;
 
 var
+  { `|<module>:<line>|` for each function-body import already warned about as
+    missing: a body is parsed more than once and the warning is said once. }
+  PyImportMissWarned: AnsiString;
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
   PyLocalCount: Integer;
   PyModuleLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
@@ -2597,6 +2600,25 @@ begin
       Next;
     end;
   end;
+end;
+
+function PyMakeImportMissingCall(const name: AnsiString): Integer;
+var procIdx, argNode, litNode: Integer;
+begin
+  procIdx := FindProc('pyimport_missing');
+  if procIdx < 0 then Error('Nil Python: pylib (pyimport_missing) not loaded');
+  litNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[litNode] := StoredName(name);
+  ASTSLen[litNode] := Length(name);
+  ASTTk[litNode] := Ord(tyString);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := litNode;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTLeft[Result] := argNode;
+  ASTTk[Result] := Ord(tyVariant);
+  LastExprTk := tyVariant;
 end;
 
 function PyMakeOptionalMissingCall(const what: AnsiString): Integer;
@@ -34640,6 +34662,9 @@ var chainN: Integer;   { targets in a chained assignment `a = b = v` }
     delSavedInDel: Boolean;
     setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
     subA1, subA2, subRead: Integer; subPow: Boolean;   { `<expr>[k] op= v` — bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
+    impStart, impK, impLine, impSavedAliases, impSavedHoist: Integer;   { an import in a function body }
+    impInBlock: Boolean;
+    impMod: AnsiString;
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -34861,6 +34886,53 @@ begin
       following line read as a continuation. The unit is registered exactly as
       the run would; only the newline handling differs.
       bug-nilpy-function-level-import-drops-body. }
+    { IN A FUNCTION BODY, A MODULE THAT DOES NOT EXIST IS A RUNTIME ERROR.
+      CPython runs an import when control reaches it, so `if self.ssl is True:
+      import ssl` (umqtt.simple) is fine on every call that does not ask for
+      TLS. The import resolves softly here; on a miss it compiles to a raise of
+      ModuleNotFoundError at this line, with a warning so the missing module is
+      still visible at build time, and the rest of its block -- dead behind the
+      raise, and naming the module -- is not compiled. PyPreScanImports makes
+      the same decision on the same tokens. At module level a miss stays the
+      error it was: nothing could run past it. }
+    if (CurProc >= 0) and not SoftUnitResolve then
+    begin
+      impStart := TokPos - 1;
+      impInBlock := (impStart > 0) and
+                    (Tokens[impStart - 1].Kind in [tkNewline, tkIndent, tkDedent]);
+      impMod := '';
+      impK := impStart + 1;
+      while (impK < TokCount) and (Tokens[impK].Kind in [tkIdent, tkDot]) do
+      begin
+        if Tokens[impK].Kind = tkDot then impMod := impMod + '.'
+        else impMod := impMod + GetTokenStr(impK);
+        Inc(impK);
+      end;
+      impLine := CurTok.Line;
+      impSavedAliases := UnitAliasCount;
+      impSavedHoist := PyHoistHead;
+      SoftUnitResolve := True;
+      SoftUnitMissed := False;
+      PyParseOneImport;
+      SoftUnitResolve := False;
+      if SoftUnitMissed then
+      begin
+        SoftUnitMissed := False;
+        UnitAliasCount := impSavedAliases;
+        PyHoistHead := impSavedHoist;
+        if Pos('|' + impMod + ':' + AIntToStr(impLine) + '|', PyImportMissWarned) = 0 then
+        begin
+          PyImportMissWarned := PyImportMissWarned + '|' + impMod + ':' + AIntToStr(impLine) + '|';
+          WarnAt(impLine, 'import: no module named ' + impMod +
+            ' -- this function raises ModuleNotFoundError when it reaches the import');
+        end;
+        Result := PyMakeImportMissingCall(impMod);
+        if impInBlock then PySkipRestOfBlock;
+        Exit;
+      end;
+      Result := -1;
+      Exit;
+    end;
     PyParseOneImport;
     Result := -1;
     Exit;
@@ -49957,8 +50029,15 @@ var i, depth, savedTok, tryAt, j, tryHandlerAt, deadFrom: Integer;
       top is always the nearest range. }
     skipFromS, skipToS: array[0..31] of Integer;
     skipTop: Integer;
+    { The `def` bodies enclosing the walk, as the index of each body's last
+      token: an import inside one runs only when the function does, so a
+      module it names that does not exist is CPython's runtime ImportError at
+      that line, not a compile error. See the import arm. }
+    defEndS: array[0..63] of Integer;
+    defTop, restEnd, rd: Integer;
 begin
   skipTop := 0;
+  defTop := 0;
   savedTok := TokPos;
   i := PyScanLo;
   depth := 0;
@@ -49977,6 +50056,7 @@ begin
       Dec(skipTop);
     end;
     if i >= MainProgramTokCount then Break;
+    while (defTop > 0) and (i > defEndS[defTop - 1]) do Dec(defTop);
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then
     begin
@@ -50158,6 +50238,25 @@ begin
         i := PySuiteEndAt(j);
       end;
     end
+    else if (Tokens[i].Kind = tkFunction) and (defTop < 64) then
+    begin
+      { the header's colon is the first one outside brackets: annotations and
+        defaults sit inside the parameter parentheses }
+      j := i + 1;
+      k := 0;
+      while (j < MainProgramTokCount) and not ((k = 0) and (Tokens[j].Kind = tkColon)) do
+      begin
+        if Tokens[j].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(k)
+        else if Tokens[j].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(k)
+        else if Tokens[j].Kind = tkNewline then Break;
+        Inc(j);
+      end;
+      if (j < MainProgramTokCount) and (Tokens[j].Kind = tkColon) then
+      begin
+        defEndS[defTop] := PySuiteEndAt(j);
+        Inc(defTop);
+      end;
+    end
     else if (Tokens[i].Kind = tkTry) and
             ((tryAt < 0) or (tos < 32)) then
     begin
@@ -50205,12 +50304,41 @@ begin
       savedSoft := SoftUnitResolve;
       savedMissed := SoftUnitMissed;
       savedAliases := UnitAliasCount;
-      if tryAt >= 0 then
+      if (tryAt >= 0) or (defTop > 0) then
       begin
         SoftUnitResolve := True;
         SoftUnitMissed := False;      { read OUR run, not an earlier one's }
       end;
       PyParseImportRun;
+      { AN UNGUARDED IMPORT IN A FUNCTION BODY THAT MISSED: the parser compiles
+        it to a raise of ModuleNotFoundError (PyParseStatement's import arm) and
+        does not compile the rest of its block, which is dead behind the raise
+        and names the module that is not there -- so this walk must not resolve
+        that rest either. The rest runs to the DEDENT closing the block, which
+        stays walked so `depth` is right. umqtt.simple's `import ssl` under
+        `if self.ssl is True:` is the shape. }
+      if (tryAt < 0) and (defTop > 0) and SoftUnitMissed then
+      begin
+        UnitAliasCount := savedAliases;
+        restEnd := TokPos - 1;
+        rd := 0;
+        while restEnd < MainProgramTokCount do
+        begin
+          if Tokens[restEnd].Kind = tkIndent then Inc(rd)
+          else if Tokens[restEnd].Kind = tkDedent then
+          begin
+            if rd = 0 then Break;
+            Dec(rd);
+          end;
+          Inc(restEnd);
+        end;
+        if (restEnd - 1 >= TokPos - 1) and (skipTop < 32) then
+        begin
+          skipFromS[skipTop] := TokPos - 1;
+          skipToS[skipTop] := restEnd - 1;
+          Inc(skipTop);
+        end;
+      end;
       { Recorded before the restore, which is what makes the miss invisible to
         everyone else and still usable here. }
       { THE BODY'S run is the guard; a handler's or an else's own import run is
@@ -52029,11 +52157,21 @@ begin
 
         pylib's OWN classes are excluded: TPyList and friends carry a DEFAULT
         PROPERTY and are served by the arm below, the same exclusion the named
-        path makes. }
+        path makes.
+
+        AND A CLASS WITH NEITHER DUNDER COMES HERE TOO, unless it has a default
+        property. Gating on "declares __getitem__ or __setitem__" left such a
+        class to the raw AN_INDEX at the bottom of this loop: `mk()[0]`
+        answered the instance's ADDRESS where CPython raises `'P' object is not
+        subscriptable`, and so did `gmtime(0)[0]` on a struct_time before it
+        learned __getitem__ (ntptime's `EPOCH_YEAR = gmtime(0)[0]`). The named
+        receiver raised correctly all along. The arm already builds that raise
+        for a missing getter and PyNoSetitemError for a missing setter. }
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) and
          (not PyRecIsPylibOwnClass(recId)) and
          ((FindUMeth(recId - REC_UCLASS_BASE, '__getitem__') >= 0) or
-          (FindUMeth(recId - REC_UCLASS_BASE, '__setitem__') >= 0)) then
+          (FindUMeth(recId - REC_UCLASS_BASE, '__setitem__') >= 0) or
+          (FindDefaultProp(recId - REC_UCLASS_BASE) < 0)) then
       begin
         ci := recId - REC_UCLASS_BASE;
         { WRITE or read? Peek past the balanced [...] for a trailing '=', the

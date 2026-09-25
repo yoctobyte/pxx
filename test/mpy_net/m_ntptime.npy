@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: 0BSD
+# Network census: library compiled unchanged (tools/mpy_driver_census.sh net).
+import ntptime
+
+ntptime.host = "10.0.2.2"
+try:
+    print("ntptime:", ntptime.time())
+except OSError as e:
+    print("ntptime: no server:", e)

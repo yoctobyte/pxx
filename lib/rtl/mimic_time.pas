@@ -38,8 +38,10 @@ unit mimic_time;
   a zone database lands in sysutils, this follows it.
 
   `struct_time` is a class with the nine `tm_*` fields, not CPython's tuple
-  subclass, so it cannot be indexed or unpacked. Nothing that calls it does
-  either; `calendar.timegm` (mimic_calendar) reads the fields.
+  subclass. It INDEXES as the tuple does -- `gmtime(0)[0]` is the year, a
+  negative index counts from the end, len() is 9 -- because MicroPython's
+  gmtime returns a plain tuple and its libraries read it that way (ntptime's
+  `EPOCH_YEAR = gmtime(0)[0]`). It is not unpackable and has no tuple repr.
 
   Absent, and said out loud rather than approximated: `localtime`/`mktime`
   (they need that zone database), `monotonic_ns`/`time_ns` (trivial once
@@ -66,6 +68,8 @@ type
   public
     tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec: Integer;
     tm_wday, tm_yday, tm_isdst: Integer;
+    function __getitem__(const k: Variant): Variant;
+    function __len__: Integer;
   end;
 
 { Seconds from an arbitrary origin, never going backwards. CPython leaves the
@@ -325,6 +329,31 @@ end;
 
 { The two derived fields, from the date. 1970-01-01 was a Thursday, which is 3
   counting from Monday = 0. }
+function struct_time.__getitem__(const k: Variant): Variant;
+var i: Integer;
+begin
+  i := Integer(pyvar_to_int(k));
+  if i < 0 then i := i + 9;
+  case i of
+    0: Result := tm_year;
+    1: Result := tm_mon;
+    2: Result := tm_mday;
+    3: Result := tm_hour;
+    4: Result := tm_min;
+    5: Result := tm_sec;
+    6: Result := tm_wday;
+    7: Result := tm_yday;
+    8: Result := tm_isdst;
+  else
+    raise IndexError.Create('tuple index out of range');
+  end;
+end;
+
+function struct_time.__len__: Integer;
+begin
+  Result := 9;
+end;
+
 procedure FillDerived(st: struct_time);
 var days: Int64;
 begin

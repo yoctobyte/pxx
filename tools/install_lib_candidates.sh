@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab|micropython-drivers] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab|micropython-drivers|micropython-net] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -132,6 +132,10 @@ MPY_TM1637_URL="https://github.com/mcauser/micropython-tm1637"
 MPY_TM1637_COMMIT="cc9ecc642787b0c8afcb318a52865b855b4f0e5f"    # MIT
 MPY_BH1750_URL="https://github.com/catdog2/mpy_bh1750fvi_esp8266"
 MPY_BH1750_COMMIT="a66f11f88c6694b499fe92cbd627ede9f51b6c5c"    # Apache-2.0
+MPY_MQTTAS_URL="https://github.com/peterhinch/micropython-mqtt"
+MPY_MQTTAS_COMMIT="c5b16e88eb2ac4799f93c3ce291a20f3ed8aa4c0"    # MIT
+MPY_MICRODOT_URL="https://github.com/miguelgrinberg/microdot"
+MPY_MICRODOT_COMMIT="7742db9ff9f49635de3387145fafe56bf2377a97"  # MIT
 SQLITE_ZIP="sqlite-amalgamation-3460000"
 SQLITE_URL="https://www.sqlite.org/2024/${SQLITE_ZIP}.zip"
 SQLITE_SHA256="712a7d09d2a22652fb06a49af516e051979a3984adb067da86760e60ed51a7f5"
@@ -522,6 +526,36 @@ EOF
   say "stb -> $DEST/stb"
 }
 
+# MicroPython networking libraries for the NilPy ESP network census
+# (tools/mpy_driver_census.sh net), compiled UNCHANGED. micropython-lib's are
+# at the drivers' pinned commit.
+fetch_micropython_net() {
+  mpn=micropython-net
+  if present "$mpn"; then say "$mpn present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  top="$DEST/$mpn"
+  mkdir -p "$top"
+  fetch_commit "$MPYLIB_URL" "$mpn/micropython-lib" "$MPYLIB_COMMIT" \
+    micropython/umqtt.simple micropython/umqtt.robust micropython/net/ntptime \
+    micropython/uaiohttpclient LICENSE
+  fetch_commit "$MPY_MQTTAS_URL" "$mpn/micropython-mqtt" "$MPY_MQTTAS_COMMIT" mqtt_as LICENSE
+  fetch_commit "$MPY_MICRODOT_URL" "$mpn/microdot" "$MPY_MICRODOT_COMMIT" src/microdot LICENSE
+  cat > "$top/PROVENANCE.md" <<EOF
+# MicroPython networking libraries (NilPy ESP network census)
+Each is compiled UNCHANGED. Installed by tools/install_lib_candidates.sh;
+gitignored, never committed. All MIT.
+| driver | file | upstream | commit |
+| --- | --- | --- | --- |
+| umqtt_simple | micropython-lib/micropython/umqtt.simple/umqtt/simple.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| umqtt_robust | micropython-lib/micropython/umqtt.robust/umqtt/robust.py (+ simple.py) | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| ntptime | micropython-lib/micropython/net/ntptime/ntptime.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| uaiohttpclient | micropython-lib/micropython/uaiohttpclient/uaiohttpclient.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| mqtt_as | micropython-mqtt/mqtt_as/__init__.py | ${MPY_MQTTAS_URL} | ${MPY_MQTTAS_COMMIT} |
+| microdot | microdot/src/microdot/microdot.py | ${MPY_MICRODOT_URL} | ${MPY_MICRODOT_COMMIT} |
+| asyncio_streams | (none: the main is the program, asyncio.start_server / open_connection) | -- | -- |
+EOF
+  say "$mpn -> $top"
+}
+
 fetch_micropython_drivers() {
   mpd=micropython-drivers
   if present "$mpd"; then say "$mpd present (FORCE=1 to re-fetch) — skip"; return 0; fi
@@ -760,6 +794,7 @@ EOF
     stb)           fetch_stb ;;
     cglm)          fetch_cglm ;;
     micropython-drivers) fetch_micropython_drivers ;;
+    micropython-net) fetch_micropython_net ;;
     enet)          fetch_enet ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;

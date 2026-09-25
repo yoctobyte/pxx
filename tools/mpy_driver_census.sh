@@ -20,15 +20,25 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 PXX="${PXX:-$("$ROOT/tools/pxx_stable.sh")}"
-C="$ROOT/library_candidates/micropython-drivers"
+# The set: `drivers` (the default) or `net`, MicroPython's networking
+# libraries. Same loop, same flags; each set has its own fetched tree, its own
+# PROVENANCE.md and its own mains (test/mpy_<set>/m_<name>.npy).
+SET="${1:-drivers}"
+case "$SET" in
+  drivers|net) ;;
+  *) echo "mpy_driver_census: unknown set '$SET' (drivers|net)" >&2; exit 2 ;;
+esac
+C="$ROOT/library_candidates/micropython-$SET"
+MAINS="test/mpy_$SET"
 if [ ! -f "$C/PROVENANCE.md" ]; then
-  echo "mpy_driver_census: no drivers under $C -- run tools/install_lib_candidates.sh micropython-drivers" >&2
+  echo "mpy_driver_census: nothing under $C -- run tools/install_lib_candidates.sh micropython-$SET" >&2
   exit 2
 fi
 OUT="$(mktemp -d)"
 
 # driver | directory the main's import resolves in (':'-separated when the
 # driver imports a sibling from another directory, as ds18x20 imports onewire)
+if [ "$SET" = drivers ]; then
 ROWS="ssd1306|micropython-lib/micropython/drivers/display/ssd1306
 bme280|BME280
 ads1x15|ads1x15
@@ -45,10 +55,19 @@ ina219|pyb_ina219:micropython-lib-logging/python-stdlib/logging
 hcsr04|micropython-hcsr04
 tm1637|micropython-tm1637
 bh1750|bh1750fvi"
+else
+ROWS="umqtt_simple|micropython-lib/micropython/umqtt.simple
+umqtt_robust|micropython-lib/micropython/umqtt.robust:micropython-lib/micropython/umqtt.simple
+ntptime|micropython-lib/micropython/net/ntptime
+uaiohttpclient|micropython-lib/micropython/uaiohttpclient
+mqtt_as|micropython-mqtt
+microdot|microdot/src
+asyncio_streams|."
+fi
 
 echo "compiler: $PXX ($(sha256sum "$(readlink -f "$PXX")" | cut -c1-12))"
 echo "tree: $(git -C "$ROOT" rev-parse --short=10 HEAD)"
-echo "drivers: $(grep '^| [a-z0-9]* |' "$C/PROVENANCE.md" | grep -vc '^| driver |') rows in $C/PROVENANCE.md"
+echo "$SET: $(grep '^| [a-z0-9_]* |' "$C/PROVENANCE.md" | grep -vc '^| driver |') rows in $C/PROVENANCE.md"
 echo
 echo "| driver | compiles | first wall |"
 echo "| --- | --- | --- |"
@@ -67,12 +86,12 @@ while IFS='|' read -r drv dir; do
   # the recipe after the first fetch are absent until FORCE=1.
   if [ -n "$miss" ]; then
     absent=$((absent + 1))
-    echo "| $drv | not installed | $miss missing: FORCE=1 tools/install_lib_candidates.sh micropython-drivers |"
+    echo "| $drv | not installed | $miss missing: FORCE=1 tools/install_lib_candidates.sh micropython-$SET |"
     continue
   fi
   if "$PXX" --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals \
        -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/rtl/platform/esp" "${fu[@]}" \
-       "test/mpy_drivers/m_$drv.npy" "$OUT/$drv.o" > "$log" 2>&1 && [ -s "$OUT/$drv.o" ]; then
+       "$MAINS/m_$drv.npy" "$OUT/$drv.o" > "$log" 2>&1 && [ -s "$OUT/$drv.o" ]; then
     ok=$((ok + 1))
     bss="$(grep -o 'bss=[0-9]*B' "$log" | tail -1)"
     echo "| $drv | yes | -- ($bss) |"

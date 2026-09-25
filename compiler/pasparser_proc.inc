@@ -5507,6 +5507,7 @@ var
   cdir, bdir, rtldir, lcldir, asmdir: AnsiString;
   deferredCPath, deferredCContent, pasRefusedPath: AnsiString;
   deferredCIsHeader: Boolean;
+  nsDir, nsName, nsProbe: AnsiString; nsIdx, nsFd: Integer; nsIsRegular: Boolean;   { namespace-package portions }
 begin
   isCUnit := False;
   isCHeader := False;
@@ -5679,6 +5680,41 @@ begin
       bug-a-package-and-sibling-module-resolution-is-the-corpus-wall }
     PyTryPackageSource(PyRelativeDir(CurUnitDir, pyRelLevel), lo, True,
                        path, UnitContent);
+    { A NAMESPACE PACKAGE -- a package directory with no `__init__` -- can be
+      split across several roots, and CPython finds a relative import's
+      module in any PORTION of it: micropython-lib ships umqtt.robust and
+      umqtt.simple as two separate `umqtt/` directories, and robust.py's
+      `from . import simple` is found only because an install merges them.
+      So on a miss, a relative import from such a package also probes
+      `<root>/<package>/` under every -Fu root. A regular package (one with an
+      `__init__`) has exactly one directory, so it never reaches this. }
+    if (Length(UnitContent) = 0) and (pyRelLevel >= 1) then
+    begin
+      nsDir := PyRelativeDir(CurUnitDir, pyRelLevel);
+      nsName := nsDir;
+      if (Length(nsName) > 0) and (nsName[Length(nsName)] = '/') then
+        nsName := Copy(nsName, 1, Length(nsName) - 1);
+      nsIdx := Length(nsName);
+      while (nsIdx > 0) and (nsName[nsIdx] <> '/') do Dec(nsIdx);
+      nsName := Copy(nsName, nsIdx + 1, Length(nsName) - nsIdx);
+      nsIsRegular := False;
+      nsProbe := nsDir + '__init__.py';
+      nsFd := sysopen(nsProbe, 0);
+      if nsFd >= 0 then begin sysclose(nsFd); nsIsRegular := True; end;
+      nsProbe := nsDir + '__init__.npy';
+      nsFd := sysopen(nsProbe, 0);
+      if nsFd >= 0 then begin sysclose(nsFd); nsIsRegular := True; end;
+      if (Length(nsName) > 0) and (not nsIsRegular) then
+      begin
+        nsIdx := 0;
+        while (Length(UnitContent) = 0) and (nsIdx < PasUnitDirCount) do
+        begin
+          PyTryPackageSource(PasUnitDirs[nsIdx] + nsName + '/', lo, True,
+                             path, UnitContent);
+          Inc(nsIdx);
+        end;
+      end;
+    end;
     if Length(UnitContent) > 0 then isPyUnit := True;
   end;
 

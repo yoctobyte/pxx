@@ -1128,6 +1128,20 @@ test-nilpy: $(COMPILER)
 	# POSIX rule so the localtime rows need no zone file on the host.
 	./$(COMPILER) test/test_nilpy_micropython_logging_walls.npy $(TESTTMP)/test_nilpy_mplogging26
 	TZ='CET-1CEST,M3.5.0,M10.5.0/3' $(TESTTMP)/test_nilpy_mplogging26 | diff -u test/test_nilpy_micropython_logging_walls.expected -
+	./$(COMPILER) test/test_nilpy_binascii_hexlify_unhexlify_and_base64.py $(TESTTMP)/test_nilpy_binascii26
+	$(TESTTMP)/test_nilpy_binascii26 | diff -u test/test_nilpy_binascii_hexlify_unhexlify_and_base64.expected -
+	./$(COMPILER) test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.py $(TESTTMP)/test_nilpy_udp26
+	$(TESTTMP)/test_nilpy_udp26 | diff -u test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.expected -
+	./$(COMPILER) test/test_nilpy_struct_pack_into_a_bytearray.py $(TESTTMP)/test_nilpy_packinto26
+	$(TESTTMP)/test_nilpy_packinto26 | diff -u test/test_nilpy_struct_pack_into_a_bytearray.expected -
+	./$(COMPILER) test/test_nilpy_a_missing_module_imported_in_a_function_raises_when_reached.py $(TESTTMP)/test_nilpy_lazyimp26
+	$(TESTTMP)/test_nilpy_lazyimp26 | diff -u test/test_nilpy_a_missing_module_imported_in_a_function_raises_when_reached.expected -
+	./$(COMPILER) -Futest/nilpy_nsportion/r1 -Futest/nilpy_nsportion/r2 test/test_nilpy_a_relative_import_finds_a_namespace_package_portion_in_another_root.py $(TESTTMP)/test_nilpy_nsportion26
+	$(TESTTMP)/test_nilpy_nsportion26 | diff -u test/test_nilpy_a_relative_import_finds_a_namespace_package_portion_in_another_root.expected -
+	./$(COMPILER) test/test_nilpy_a_subscript_on_a_call_result_of_a_class_without_getitem_raises.py $(TESTTMP)/test_nilpy_callsub26
+	$(TESTTMP)/test_nilpy_callsub26 | diff -u test/test_nilpy_a_subscript_on_a_call_result_of_a_class_without_getitem_raises.expected -
+	./$(COMPILER) test/test_nilpy_time_struct_time_indexes_like_a_tuple.py $(TESTTMP)/test_nilpy_structtime26
+	$(TESTTMP)/test_nilpy_structtime26 | diff -u test/test_nilpy_time_struct_time_indexes_like_a_tuple.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const.npy $(TESTTMP)/test_nilpy_mpconst26
 	$(TESTTMP)/test_nilpy_mpconst26 | diff -u test/test_nilpy_micropython_const.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const_import.npy $(TESTTMP)/test_nilpy_mpconsti26

@@ -1,0 +1,7 @@
+bytearray(b'\x00\x00\x124\x00\x00\x00\x00')
+bytearray(b'\x01\x00\xef\xbe\xad\xde\x00\x00')
+bytearray(b'\x01\x00\xef\xbe\xad\xde\x00\x07')
+bytearray(b'\x01\x00\xef\x01\x02\x03\x04\x05')
+error: pack_into requires a buffer of at least 9 bytes for packing 2 bytes at offset 7 (actual buffer size is 8)
+error: offset -9 out of range for 8-byte buffer
+error: no space to pack 2 bytes at offset -1

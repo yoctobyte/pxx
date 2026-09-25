@@ -1,0 +1,10 @@
+b'001bff'
+b'de:ad:be:ef'
+b''
+b'\x00\xff\x1b'
+b'\xde\xad\xbe\xef'
+b'cHh4\n'
+b'cHh4'
+b'pxx'
+ValueError: Odd-length string
+Error: Non-hexadecimal digit found

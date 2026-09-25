@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: 0BSD
+# Network census: library compiled unchanged (tools/mpy_driver_census.sh net).
+# MicroPython's asyncio stream pattern: start_server + open_connection.
+import asyncio
+
+
+async def handle(reader, writer):
+    line = await reader.readline()
+    writer.write(line)
+    await writer.drain()
+    writer.close()
+    await writer.wait_closed()
+
+
+async def main():
+    server = await asyncio.start_server(handle, "0.0.0.0", 8081)
+    reader, writer = await asyncio.open_connection("127.0.0.1", 8081)
+    writer.write(b"ping\n")
+    await writer.drain()
+    print("asyncio streams:", await reader.readline())
+    writer.close()
+    server.close()
+
+
+asyncio.run(main())
