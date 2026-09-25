@@ -13,14 +13,37 @@
 # pin 133 commits older.
 # bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources
 #
-# Uses `make -n`, so it RUNS NOTHING: it asks make which recipe it would choose,
-# which is precisely the question the bug got wrong. Whole thing is under a
-# second and it never builds, never mutates a binary, and never races the
-# watcher. The one file it touches is the stamp, moved aside and put back.
+# Mostly `make -n`: it asks make which recipe it would choose, which is
+# precisely the question the bug got wrong. The rows that must RUN make refuse
+# before compiling anything.
+#
+# IT TOUCHES NOTHING IN THE TREE. Every make call runs against a PRIVATE copy of
+# the binary and the stamp (COMPILER= and COMPILER_STAMP= on the command line,
+# which beat the Makefile's own assignments), and the empty-hash row plants its
+# script privately through COMPILER_SRCHASH=. It used to delete, rewrite and
+# `touch` the LIVE compiler/.pascal26.fixedpoint and compiler/pascal26, and to
+# overwrite tools/compiler_srchash.sh, "moved aside and put back" -- and this
+# header said it "never races the watcher". It did: testmgr runs it as
+# tools-devtest-sh IN PARALLEL with every job whose dry run inlined the
+# always-running $(COMPILER) verify, and T full 607fa28 went NEW-RED on
+# test-c-abi-mixed-link with "sed: can't read compiler/.pascal26.fixedpoint"
+# (step 1's delete) and "written for DIFFERENT SOURCES" (the planted
+# `srchash deadbeef`) -- this script's own plants, read by a bystander.
 set -u
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 
-STAMP=compiler/.pascal26.fixedpoint
+LIVE_STAMP=compiler/.pascal26.fixedpoint
+PRIV=$(mktemp -d)
+STAMP="$PRIV/pascal26.fixedpoint"
+BIN="$PRIV/pascal26"
+EMPTYHASH="$PRIV/srchash_empty.sh"
+[ -f "$LIVE_STAMP" ] && cp "$LIVE_STAMP" "$STAMP"
+[ -f compiler/pascal26 ] && cp -p compiler/pascal26 "$BIN"
+# make, aimed at the private pair; any build intermediates go private too.
+pmake() {
+  make --no-print-directory COMPILER="$BIN" COMPILER_STAMP="$STAMP" \
+    BUILD_COMPILER="$PRIV/build" VERIFY_COMPILER="$PRIV/verify" "$@"
+}
 fails=0
 
 check() {   # $1=name $2=got $3=want
@@ -34,14 +57,14 @@ if [ -f "$STAMP" ]; then had_stamp=yes; cp "$STAMP" "$BAK"; fi
 restore() {   # idempotent: step 3 calls it too, then the trap calls it again
   if [ "$had_stamp" = yes ] && [ -f "$BAK" ]; then cp "$BAK" "$STAMP"; fi
 }
-trap 'restore; rm -f "$BAK"' EXIT
+trap 'rm -f "$BAK" "$STAMP" "$BIN" "$EMPTYHASH"; rmdir "$PRIV" 2>/dev/null' EXIT
 
 # --- 1. the fixedpoint loop is the STAMP's work, not the binary's ------------
 # With no stamp, make must plan to run the loop -- however new the binary is.
 # This is the reported bug: before the fix the same state planned nothing.
 rm -f "$STAMP"
-touch compiler/pascal26 2>/dev/null
-out=$(make -n compiler/pascal26 2>&1)
+touch "$BIN" 2>/dev/null
+out=$(pmake -n "$BIN" 2>&1)
 case "$out" in *"converged after"*) r=yes;; *) r=no;; esac
 check "no stamp: the fixedpoint loop is planned even with a newer binary" "$r" "yes"
 
@@ -57,8 +80,8 @@ check "no stamp: the loop writes the stamp" "$r" "yes"
 # check independent of every timestamp.
 restore
 [ -f "$STAMP" ] || { echo "  SKIP no stamp to test with -- run make compiler/pascal26 first"; exit 0; }
-touch compiler/pascal26 2>/dev/null
-out=$(make -n compiler/pascal26 2>&1)
+touch "$BIN" 2>/dev/null
+out=$(pmake -n "$BIN" 2>&1)
 case "$out" in *sha256sum*) r=yes;; *) r=no;; esac
 check "stamp present, binary newer: the sha verify is still planned" "$r" "yes"
 
@@ -92,11 +115,11 @@ check "the verify names its own provenance" "$r" "yes"
 # This one has to RUN make rather than use -n, since the check lives in the
 # recipe. It is still cheap: the refusal happens before anything is compiled.
 restore
-if [ -f "$STAMP" ] && [ -x compiler/pascal26 ]; then
+if [ -f "$STAMP" ] && [ -x "$BIN" ]; then
   cp "$STAMP" "$BAK.src5b"
-  printf 'rounds 2\nsha256 %s\n' "$(sha256sum compiler/pascal26 | cut -d' ' -f1)" > "$STAMP"
-  touch compiler/pascal26 "$STAMP"
-  out=$(make compiler/pascal26 2>&1)
+  printf 'rounds 2\nsha256 %s\n' "$(sha256sum "$BIN" | cut -d' ' -f1)" > "$STAMP"
+  touch "$BIN" "$STAMP"
+  out=$(pmake "$BIN" 2>&1)
   case "$out" in *"written for DIFFERENT SOURCES"*) r=yes;; *) r=no;; esac
   check "a stamp written for OTHER sources is refused, not read back as success" "$r" "yes"
   case "$out" in *"self-host fixedpoint: verified"*) r=yes;; *) r=no;; esac
@@ -111,8 +134,8 @@ fi
 # would break every build in the repo and would look exactly like a guard.
 restore
 if [ -f "$STAMP" ]; then
-  touch compiler/pascal26
-  out=$(make compiler/pascal26 2>&1)
+  touch "$BIN"
+  out=$(pmake "$BIN" 2>&1)
   case "$out" in *"self-host fixedpoint: verified"*) r=yes;; *) r=no;; esac
   check "an honest stamp for the CURRENT sources still verifies" "$r" "yes"
   case "$out" in *"written for DIFFERENT SOURCES"*) r=yes;; *) r=no;; esac
@@ -132,28 +155,28 @@ fi
 # message and say NEITHER, rather than claiming a set change from an empty
 # count. That is 5b above, which plants exactly that shape.
 restore
-if [ -f "$STAMP" ] && [ -x compiler/pascal26 ]; then
+if [ -f "$STAMP" ] && [ -x "$BIN" ]; then
   cp "$STAMP" "$BAK.src5cc"
   live_n=$(tools/compiler_srchash.sh --list | wc -l | tr -d ' ')
-  bin_sha=$(sha256sum compiler/pascal26 | cut -d' ' -f1)
+  bin_sha=$(sha256sum "$BIN" | cut -d' ' -f1)
 
   printf 'rounds 1\nsha256 %s\nsrchash deadbeef\nsrccount %s\n' "$bin_sha" "$((live_n - 1))" > "$STAMP"
-  touch compiler/pascal26 "$STAMP"
-  out=$(make compiler/pascal26 2>&1)
+  touch "$BIN" "$STAMP"
+  out=$(pmake "$BIN" 2>&1)
   case "$out" in *"THE FILE SET CHANGED"*) r=yes;; *) r=no;; esac
   check "a DIFFERENT file count is reported as a set change" "$r" "yes"
 
   printf 'rounds 1\nsha256 %s\nsrchash deadbeef\nsrccount %s\n' "$bin_sha" "$live_n" > "$STAMP"
-  touch compiler/pascal26 "$STAMP"
-  out=$(make compiler/pascal26 2>&1)
+  touch "$BIN" "$STAMP"
+  out=$(pmake "$BIN" 2>&1)
   case "$out" in *"CONTENTS changed"*) r=yes;; *) r=no;; esac
   check "an EQUAL file count is reported as a contents change" "$r" "yes"
   case "$out" in *"THE FILE SET CHANGED"*) r=yes;; *) r=no;; esac
   check "...and does NOT also claim the set changed" "$r" "no"
 
   printf 'rounds 1\nsha256 %s\nsrchash deadbeef\n' "$bin_sha" > "$STAMP"
-  touch compiler/pascal26 "$STAMP"
-  out=$(make compiler/pascal26 2>&1)
+  touch "$BIN" "$STAMP"
+  out=$(pmake "$BIN" 2>&1)
   case "$out" in *"predates the srccount field"*) r=yes;; *) r=no;; esac
   check "a legacy stamp says it cannot tell set from contents" "$r" "yes"
 
@@ -172,10 +195,10 @@ fi
 # error. The repair was to move the logic into the script, where it costs the
 # dry run one line. This row is the tripwire that was missing.
 restore
-dryn=$(make -n compiler/pascal26 2>/dev/null | wc -l | tr -d ' ')
+dryn=$(pmake -n "$BIN" 2>/dev/null | wc -l | tr -d ' ')
 if [ "$dryn" -le 40 ]; then r=yes; else r=no; fi
 check "the compiler recipe's dry run stays small (${dryn} lines, cap 40)" "$r" "yes"
-case "$(make -n compiler/pascal26 2>/dev/null)" in
+case "$(pmake -n "$BIN" 2>/dev/null)" in
   *'$(MAKE)'*|*"make --no-print-directory"*) r=yes;; *) r=no;;
 esac
 check "...and invokes no recursive make, which -n executes for real" "$r" "no"
@@ -220,18 +243,15 @@ fi
 # this row is the control that keeps it that way: it plants a script that runs
 # and prints nothing, which is exactly the shape a missing interpreter produced.
 restore
-if [ -f "$STAMP" ] && [ -x compiler/pascal26 ]; then
+if [ -f "$STAMP" ] && [ -x "$BIN" ]; then
   cp "$STAMP" "$BAK.src5d"
-  cp tools/compiler_srchash.sh "$BAK.script5d"
-  printf '#!/bin/sh\nexit 0\n' > tools/compiler_srchash.sh
-  chmod +x tools/compiler_srchash.sh
-  touch compiler/pascal26 "$STAMP"
-  out=$(make compiler/pascal26 2>&1)
+  printf '#!/bin/sh\nexit 0\n' > "$EMPTYHASH"
+  chmod +x "$EMPTYHASH"
+  touch "$BIN" "$STAMP"
+  out=$(pmake COMPILER_SRCHASH="$EMPTYHASH" "$BIN" 2>&1)
   rc=$?
-  cp "$BAK.script5d" tools/compiler_srchash.sh
-  chmod +x tools/compiler_srchash.sh
   cp "$BAK.src5d" "$STAMP"
-  rm -f "$BAK.script5d" "$BAK.src5d"
+  rm -f "$BAK.src5d"
 
   case "$out" in *"produced NO source hash"*) r=yes;; *) r=no;; esac
   check "an unmeasurable source hash is refused, not compared equal" "$r" "yes"
@@ -248,7 +268,7 @@ if [ -f "$STAMP" ] && [ -x compiler/pascal26 ]; then
 fi
 
 # --- 6. the stamp is a build artifact, not a tracked file --------------------
-if git check-ignore -q "$STAMP" 2>/dev/null; then r=yes; else r=no; fi
+if git check-ignore -q "$LIVE_STAMP" 2>/dev/null; then r=yes; else r=no; fi
 check "the stamp is gitignored" "$r" "yes"
 
 echo
