@@ -16016,18 +16016,14 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-25T01:47:29Z",
+  "date": "2026-09-25T07:05:50Z",
   "red": [
-   "test-core#src:test/c_crtl_wait.c",
-   "tools-devtest#00"
+   "test-core#src:test/c_crtl_wait.c"
   ],
-  "sha": "e098cf93f0848af6387bb0ac036b2f9a5211d80a",
+  "sha": "3f3685a8f2cec5b9cb821dd6588f2cb2f71c3dab",
   "tier": "full",
-  "ver": "v425",
-  "verdict": "RED",
-  "why": {
-   "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
-  }
+  "ver": "v426",
+  "verdict": "RED"
  },
  "toolchain": {
   "espqemu-riscv32": "9.2.2",
