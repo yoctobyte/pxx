@@ -15168,6 +15168,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_hintdir26 "$$($(TESTTMP)/test_hintdir26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_hint_directive_on_a_generic_type.pas $(TESTTMP)/test_hintdirgen26
 	tools/expect_same.sh test_hintdirgen26 "$$($(TESTTMP)/test_hintdirgen26 | tail -1)" "ALL OK"
+	./$(COMPILER) test/test_dotted_program_name.pas $(TESTTMP)/test_dotprog26
+	tools/expect_same.sh test_dotprog26 "$$($(TESTTMP)/test_dotprog26)" "dotted program ok"
+	./$(COMPILER) test/test_dotted_library_name.pas $(TESTTMP)/libtest_dotlib26.so
+	readelf --dyn-syms $(TESTTMP)/libtest_dotlib26.so | grep -q ' DottedAnswer$$'
 	./$(COMPILER) -Fulib/rtl test/test_out_of_line_generic_constructor.pas $(TESTTMP)/test_oolgenctor26
 	tools/expect_same.sh test_oolgenctor26 "$$($(TESTTMP)/test_oolgenctor26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_open_array_of_a_named_dynamic_array.pas $(TESTTMP)/test_oadynelem26

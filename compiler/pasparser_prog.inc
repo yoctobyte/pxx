@@ -1217,8 +1217,11 @@ begin
   begin
     Next;
     if CurTok.Kind = tkEOF then Error('expected program name');
-    DbgProgName := CurTok.SVal;  { -g: names the main-body subprogram }
-    Next;  { program name can be any identifier (even keyword) }
+    { The name can be any identifier (even a keyword), and it can be DOTTED --
+      `program testrunner.rtlgenerics;`, `library my.lib;` -- the same
+      ident('.'ident)* a unit header and a `uses` entry take, so the three read
+      one way. rtl-generics' test runner opens with one. }
+    DbgProgName := ReadDottedUsesName;  { -g: names the main-body subprogram }
     if CurTok.Kind = tkLParen then
       begin Next; while CurTok.Kind <> tkRParen do Next; Next; end;
     Eat(tkSemicolon);
