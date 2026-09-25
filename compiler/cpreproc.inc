@@ -1721,22 +1721,6 @@ begin
   end;
 end;
 
-{ If object macro mi's entire body is a single identifier that names a FUNCTION
-  macro, return that function macro's index (else -1). Handles aliases like
-  `#define setsvalue2n setsvalue`, where `setsvalue2n(args)` must expand the
-  inner function macro with the args that follow in the source. }
-function CPObjectAliasFuncMacro(mi: Integer): Integer;
-var off, len, i, fm: Integer;
-begin
-  Result := -1;
-  off := CPMValueOff[mi]; len := CPMValueLen[mi];
-  if (len <= 0) or (not CPIsIdentStart(CPrepChars[off])) then Exit;
-  for i := 0 to len - 1 do
-    if not CPIsIdentChar(CPrepChars[off + i]) then Exit;
-  fm := CPFindMacroPool(off, len);
-  if (fm >= 0) and CPMFunction[fm] then Result := fm;
-end;
-
 { True iff s (after trimming trailing whitespace) ends in an identifier that
   names a FUNCTION macro; returns its index in mi. Used for the C99 6.10.3.4
   rescan where a macro's fully-expanded output ends in a function-like macro
@@ -1812,7 +1796,7 @@ end;
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString);
 var
-  p, a, b, mi, q, depth, argc, argBase, ai, innerMi: Integer;
+  p, a, b, mi, q, depth, argc, argBase, ai: Integer;
   q2, grpEnd, tailMi: Integer;
   expanded, combined: AnsiString;
   quote: Char;
@@ -1885,19 +1869,6 @@ begin
         dynMacroHit := False;
       if not dynMacroHit then
       begin
-      { Object-macro alias of a function macro `#define A FUNC` used as `A(args)`:
-        redirect to FUNC so the function-macro path below pulls the args that
-        follow in the source (lua's setsvalue2n / setobj2n). }
-      if (mi >= 0) and (not CPMFunction[mi]) then
-      begin
-        innerMi := CPObjectAliasFuncMacro(mi);
-        if innerMi >= 0 then
-        begin
-          q := p;
-          while (q <= last) and (src[q] in [' ', #9]) do Inc(q);
-          if (q <= last) and (src[q] = '(') then mi := innerMi;
-        end;
-      end;
       if (mi < 0) then
         CPAppendRange(dst, src, a, b)
       else if not CPMFunction[mi] then
@@ -1914,9 +1885,36 @@ begin
           
           CPSetTempStrLength(level, 0);
           CPExpandObjectForLevel(mi, level);
-          CPExpandRangeForLevel(level, dst);
-          
+          expanded := '';
+          CPExpandRangeForLevel(level, expanded);
+
           Dec(CPActiveMacroCount);
+          { The same C99 6.10.3.4 rescan the function-macro arm does below: an
+            object macro whose FULLY expanded output ends in a function-like
+            macro name takes the '(...)' that follows in the source. This is
+            what makes an alias chain work at any depth -- `#define B F`,
+            `#define A B`, `A(x)` -> B -> F, then F(x) -- and also lua's
+            `#define setsvalue2n setsvalue` and a body like `#define A B + F`.
+            There used to be a special case that redirected only an object
+            macro whose body was exactly a function-macro name, one level
+            deep, so `A(x)` above reached the parser as `F (x)`: "call to
+            undeclared function: F" (stb_ds.h's shlen -> stbds_shlen ->
+            stbds_hmlen(t)). }
+          q2 := p;
+          while (q2 <= last) and (src[q2] in [' ', #9]) do Inc(q2);
+          grpEnd := 0;
+          if (q2 <= last) and (src[q2] = '(') and
+             CPStrTailFuncMacro(expanded, tailMi) and
+             (not CPMacroIsActive(tailMi)) then
+            grpEnd := CPBalancedGroupEnd(src, q2, last);
+          if grpEnd > 0 then
+          begin
+            combined := expanded + Copy(src, q2, grpEnd - q2);
+            CPExpandRange(combined, 1, Length(combined), level + 1, dst);
+            p := grpEnd;
+          end
+          else
+            dst := dst + expanded;
         end;
       end
       else

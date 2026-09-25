@@ -14160,6 +14160,11 @@ test-core: $(COMPILER)
 	  tools/expect_same.sh arm32/test_c_vadbl "$$(tools/run_target.sh arm32 $(TESTTMP)/test_c_vadbl_arm32)" "$$vadbl_exp" && \
 	  tools/expect_same.sh i386/test_c_vadbl "$$(tools/run_target.sh i386 $(TESTTMP)/test_c_vadbl_i386)" "$$vadbl_exp" && \
 	  tools/expect_same.sh xtensa/test_c_vadbl "$$(tools/run_target.sh xtensa $(TESTTMP)/test_c_vadbl_xt)" "$$vadbl_exp"
+	# An alias chain `#define A B`, `#define B F` in front of a function macro:
+	# only one level was rescanned, so A(x) failed "call to undeclared function:
+	# F" (stb_ds.h). Expected is gcc's output.
+	./$(COMPILER) test/test_c_macro_alias_chain_rescans.c $(TESTTMP)/test_c_macro_alias26
+	tools/expect_same.sh test_c_macro_alias26 "$$($(TESTTMP)/test_c_macro_alias26)" "$$(printf '42 42 42 42\n21 22 43\n4 102 200 7\n1001 6 42 42')"
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
 	tools/expect_same.sh test_c_recname26 "$$($(TESTTMP)/test_c_recname26)" "$$(printf 'other\nother\n3')"
 	# A C program links the system library its header names: every prototype
