@@ -2143,13 +2143,31 @@ test-nilpy: $(COMPILER)
 	  || { echo "test_nilpy_dead_path_control_handler_falls_through: FAIL - rc=$$rc (want 1: the handler does not exit, so the tail IS reachable and its missing import must still be an error)"; printf '%s\n' "$$out"; exit 1; }
 	# (b) THE GUARDED IMPORT RESOLVES. Then the handler is dead and the tail is
 	# live, which is the opposite branch -- a skip keyed on the try statement
-	# rather than on the MISS would wrongly swallow this one.
-	@printf 'def sel():\n    try:\n        import math\n    except ImportError:\n        return "no"\n    import also_no_such_module_9f2a\n    return "yes"\nprint(sel())\n' > $(TESTTMP)/nilpy_deadctl_hit.npy
+	# rather than on the MISS would wrongly swallow this one. Two forms, since
+	# cdea900f09 gave an in-function miss CPython's semantics (a warning at
+	# compile time, ModuleNotFoundError when reached):
+	# (b1) MODULE LEVEL, where a missing import is still a compile error: rc=1.
+	@printf 'try:\n    import math\nexcept ImportError:\n    raise SystemExit("no")\nimport also_no_such_module_9f2a\nprint("yes")\n' > $(TESTTMP)/nilpy_deadctl_hit.npy
 	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_deadctl_hit.npy $(TESTTMP)/test_nilpy_deadhit26 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "1" \
 	   && printf '%s\n' "$$out" | grep -q 'no unit named also_no_such_module_9f2a' \
 	  || { echo "test_nilpy_dead_path_control_guard_resolves: FAIL - rc=$$rc (want 1: the guarded import RESOLVED, so the tail is the live branch and its missing import must still be an error)"; printf '%s\n' "$$out"; exit 1; }
+	# (b2) IN A FUNCTION: the miss must be WARNED at compile time and must RAISE
+	# when reached. A skip that swallowed the live tail would print "yes" and
+	# exit 0, so the runtime row still catches a guard hiding a missing module.
+	@printf 'def sel():\n    try:\n        import math\n    except ImportError:\n        return "no"\n    import also_no_such_module_9f2a\n    return "yes"\nprint(sel())\n' > $(TESTTMP)/nilpy_deadctl_hitfn.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_deadctl_hitfn.npy $(TESTTMP)/test_nilpy_deadhitfn26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "0" \
+	   && printf '%s\n' "$$out" | grep -q 'warning: import: no module named also_no_such_module_9f2a -- this function raises ModuleNotFoundError' \
+	  || { echo "test_nilpy_dead_path_control_guard_resolves_in_a_function: FAIL - compile rc=$$rc (want 0 and the missing-module warning)"; printf '%s\n' "$$out"; exit 1; }
+	@run=$$($(TESTTMP)/test_nilpy_deadhitfn26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" != "0" \
+	   && printf '%s\n' "$$run" | grep -q "ModuleNotFoundError: No module named 'also_no_such_module_9f2a'" \
+	   && ! printf '%s\n' "$$run" | grep -q '^yes$$' \
+	  || { echo "test_nilpy_dead_path_control_guard_resolves_in_a_function: FAIL - run rc=$$rc (want nonzero with ModuleNotFoundError: the tail is live and its import must raise)"; printf '%s\n' "$$run"; exit 1; }
 	# A `try:` arm killed by a failed guarded import must not leave its unit
 	# ALIAS behind. The alias table is FIRST-WINS, so a surviving row from the
 	# dead arm beat the handler's binding of the same name: the handler ran,
