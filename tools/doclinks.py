@@ -42,7 +42,10 @@ URL = re.compile(r'https?://[^\s<>"\'\\`)\]]+[^\s<>"\'\\`)\].,;:!?]')
 # Not links.  `https://` inside an inline code fence is documentation OF a URL
 # shape, and example.com is an intentional placeholder -- both would otherwise
 # be reported forever, which is how a checker gets ignored and then deleted.
-IGNORE = re.compile(r'^https?://(www\.)?example\.(com|org)|^https?://`')
+# A private or loopback address (a board's own access point, 192.168.4.1) names
+# a device on the READER's network, never a page this host can reach.
+IGNORE = re.compile(r'^https?://(www\.)?example\.(com|org)|^https?://`'
+                    r'|^https?://(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)')
 
 # The pages docs/** delegates CONTENT to.  Substrings that must survive in the
 # rendered text -- deliberately weak (a word, not a number), because the point is

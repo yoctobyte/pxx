@@ -476,6 +476,7 @@ checks passed both times. The details are in
 | adc-s3 | Pascal | output matches `main.expected`: real ADC readings |
 | hello-s3, timer-s3, rgb-s3, i2c-s3, pwm-s3, uart-s3, nvs-s3 | Pascal | each prints its own pass line |
 | wifi-ap-s3 | Pascal | starts the access point and reaches `HTTP server listening on port 80`; no client connected during the test |
+| nilpy-station-s3 | Python | a Wi-Fi status page (`PXX-NILPY`, `http://192.168.4.1/`); all 12 lines of `main.expected`, including HTTP fetches of its own pages over `127.0.0.1`, on 2026-09-25. See [Wi-Fi and sockets](../library/esp.md) |
 
 **Long-running use.** Re-run in a loop with v424, `nilpy-s3`, `nilpy-hw-s3`
 and `gpio-edge-s3` lose about 44, 220 and 264 bytes per pass, and `adc-s3`

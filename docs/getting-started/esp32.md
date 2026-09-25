@@ -275,8 +275,7 @@ unit with a Pascal and a Python surface and a board check:
 
 | driver | estimate | note |
 | --- | --- | --- |
-| SPI master | a day | device and transaction structs to mirror; needs a loopback wire to check |
-| Wi-Fi from Pascal or Python | a day | `examples/esp32/wifi-ap-s3` already brings up an access point and serves HTTP, with the Wi-Fi bring-up in C |
+| Wi-Fi from Pascal | a day | Nil Python already has it: MicroPython's `network` and CPython's `socket`, see [Wi-Fi and sockets](../library/esp.md). `examples/esp32/wifi-ap-s3` brings up an access point from Pascal, with the Wi-Fi bring-up in C |
 
 ## What is and is not proven
 
@@ -285,7 +284,7 @@ proven than the S3, and this table says exactly how much less:
 
 | chip | how far it is proven |
 | --- | --- |
-| **ESP32-S3** | **Run on the board.** `hello-s3`, `timer-s3`, `rgb-s3`, `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3`, `adc-s3`, `monitor-s3`, `pwm-s3` and `i2c-s3` (empty bus only, see section 7). `wifi-ap-s3` brings its access point up, but no client has connected to it yet. The C conformance suite passes 219 of 220 under the S3's QEMU (`tools/run_c_conformance_esp.sh --chip esp32s3`; one test skipped). |
+| **ESP32-S3** | **Run on the board.** `hello-s3`, `timer-s3`, `rgb-s3`, `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3`, `adc-s3`, `monitor-s3`, `pwm-s3`, `i2c-s3` (empty bus only, see section 7) and `nilpy-station-s3` (its HTTP self-fetches; see [Wi-Fi and sockets](../library/esp.md)). `wifi-ap-s3` brings its access point up, but no client has connected to it yet. The C conformance suite passes 219 of 220 under the S3's QEMU (`tools/run_c_conformance_esp.sh --chip esp32s3`; one test skipped). |
 | **ESP32-C3** | **QEMU only, never on a board.** `hello-c3`, `timer-c3`, `nilpy-c3`, `nilpy-hw-c3`, `isrctx-c3`, `fs-c3`, `gpio-c3`, `net-c3` and `dns-c3` run under Espressif's QEMU. `adc-c3` and `gpio-edge-c3` build, but QEMU has no ADC or GPIO input to drive them, so they are unverified. |
 | **ESP32-S2** | **Builds only.** `hello-s2` compiles and links for it; it has not been run anywhere. |
 | **ESP32 (the original)** | **QEMU only, and by hand.** A Pascal program (integer division, `Int64`, `Double`, strings, a class) and a Python program match the PC's output under Espressif's QEMU (`qemu-system-xtensa -M esp32`), built with `--target=esp32` into a copy of an IDF project set to the esp32 target. There is no example project for this chip, `tools/esp_flash.sh` and `tools/esp_run_bare.sh` do not accept it, and it has not been run on a board. |

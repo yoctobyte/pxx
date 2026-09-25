@@ -10,6 +10,10 @@ page is the reference: what each unit does, its interface as the unit declares
 it, and how far it has been tested. To set up ESP-IDF, build and flash a first
 program, start with [Getting started on the ESP32](../getting-started/esp32.md).
 
+Wi-Fi and TCP sockets from Nil Python, with MicroPython's `network` and
+CPython's `socket`, are covered near the end of the page, under **Wi-Fi and
+sockets**.
+
 All of them are **ESP-IDF only**. They resolve when ESP-IDF links your program,
 so they do not work in a bare-metal image, and each needs an ESP-IDF component
 in your project's `REQUIRES`, listed per unit below. The units live in
@@ -51,7 +55,7 @@ after that, was compiled the same way from both languages the same day.
 
 ## How it was verified
 
-The ESP lane (frankh-95) ran every example below on **one ESP32-S3 board**
+Every example below was run on **one ESP32-S3 board**
 (ESP-IDF v6.0.1, 160 MHz), with the v424 compiler and again with the v425
 compiler, and all 15 passed both times. `spi-s3` is newer and has run on
 the v425 compiler only. The
@@ -323,6 +327,211 @@ No extra component.
 
 A program meant to run for a long time should watch `free_heap()`: a leak
 produces no wrong output, only a free heap that keeps falling.
+
+## Wi-Fi and sockets — `network`, `socket` (Nil Python)
+
+A Nil Python program on the ESP32 brings up Wi-Fi with MicroPython's
+`network` module and talks TCP with CPython's `socket` module. Both use the
+names a MicroPython or CPython programmer already knows. They are Python
+modules only: there is no Pascal surface for Wi-Fi yet.
+
+`import network` works only in an ESP build. `import socket` is the same module
+on a desktop and on the ESP32, so a server written against CPython's names runs
+on both.
+
+**Your project needs the `pxx_esp` component.** It is the C half of `network`,
+in `lib/rtl/platform/esp/idf/pxx_esp`. Copy `CMakeLists.txt` and
+`main/CMakeLists.txt` from `examples/esp32/nilpy-station-s3`: the first adds
+the component folder with `EXTRA_COMPONENT_DIRS`, and the second lists
+`pxx_esp` in `REQUIRES`. Without it, the link fails and names
+`pxx_wifi_ap_start`.
+
+### An access point
+
+```python
+import network
+
+ap = network.WLAN(network.AP_IF)
+ap.config(essid="MY-BOARD", password="choose-a-password")
+ap.active(True)
+print(ap.ifconfig())   # ('192.168.4.1', '255.255.255.0', '192.168.4.1', '0.0.0.0')
+```
+
+Call `config()` before `active(True)`: the settings are applied when the
+access point starts, and `config()` on a running access point restarts it.
+`ssid=` is accepted as another spelling of `essid=`, as newer MicroPython
+versions accept it. `ap.status('stations')` answers how many stations are
+connected.
+
+### Joining a network (station)
+
+**Board plus your Wi-Fi.** Put your own network's name and password where the
+placeholders are.
+
+```python
+import network
+import time
+
+sta = network.WLAN(network.STA_IF)
+sta.active(True)
+for ssid, bssid, channel, rssi, auth, hidden in sta.scan():
+    print(ssid, channel, rssi, auth == network.AUTH_OPEN)
+
+sta.config(reconnects=3)             # give up after three retries; -1 (the default) retries forever
+sta.connect("<your-ssid>", "<your-password>")
+while sta.status() == network.STAT_CONNECTING:
+    time.sleep(0.25)
+
+if sta.isconnected():
+    ip, mask, gateway, dns = sta.ifconfig()
+    print("address", ip, "signal", sta.status("rssi"), "dBm")
+elif sta.status() == network.STAT_WRONG_PASSWORD:
+    print("wrong password")
+elif sta.status() == network.STAT_NO_AP_FOUND:
+    print("no such network")
+else:
+    print("not connected, status", sta.status())
+```
+
+This follows MicroPython's ESP32 port:
+
+- `connect()` returns at once. The Wi-Fi driver keeps retrying in the
+  background, until `config(reconnects=n)` runs out.
+- `status()` is `STAT_IDLE` before `connect()`, `STAT_CONNECTING` while it
+  tries and `STAT_GOT_IP` once connected. If a try fails, it keeps the reason
+  while the driver retries, so the loop above ends instead of spinning:
+  `STAT_NO_AP_FOUND` (201) for a network that is not there,
+  `STAT_WRONG_PASSWORD` (202) for a wrong password. The values are
+  MicroPython's.
+- `scan()` needs an active station. It returns one tuple per network seen:
+  `(ssid, bssid, channel, rssi, authmode, hidden)`. `ssid` is `bytes`,
+  `bssid` is 6 `bytes`, and `authmode` is one of `AUTH_OPEN`, `AUTH_WEP`,
+  `AUTH_WPA_PSK`, `AUTH_WPA2_PSK`, `AUTH_WPA_WPA2_PSK`, `AUTH_WPA2_ENTERPRISE`,
+  `AUTH_WPA3_PSK` or `AUTH_WPA2_WPA3_PSK`. `hidden` is always `False`.
+- `ifconfig()` is `(ip, netmask, gateway, dns)`. It answers `'0.0.0.0'` for
+  the address until the station has one.
+- `status('rssi')` is the signal strength of the network you joined, in dBm.
+- The access point and the station can be active at the same time.
+- `disconnect()` leaves the network, and `active(False)` turns the station off.
+
+### Where it differs from MicroPython
+
+- `status('stations')` answers the **number** of connected stations, where
+  MicroPython answers a list of them.
+- `connect(bssid=...)` is not supported, and neither is the query form of
+  `config()`, such as `config('mac')`.
+- Nothing is stored in flash. The network name and password your program
+  passes are kept in RAM only. MicroPython's ESP32 port does the same.
+
+### Sockets, timeouts and errors
+
+`socket` covers IPv4 TCP: `socket()`, `bind`, `listen`, `accept`, `connect`,
+`recv`, `send`, `sendall`, `close`, `setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)`,
+`setblocking`, `settimeout`, `gettimeout`, `getsockname`, `fileno`, and
+`with`. A host is a dotted address such as `'192.168.4.1'`, `''` or
+`'0.0.0.0'` for any address, or `'localhost'`. It refuses other host names,
+because there is no name lookup, and it refuses any socket that is not
+`AF_INET`, `SOCK_STREAM`.
+
+`settimeout()` works in CPython's three modes. `None` blocks, `0` never
+waits, and a number of seconds makes `connect`, `accept`, `recv` and `send`
+give up after that long with `TimeoutError('timed out')`.
+
+Errors are raised the way CPython on Linux raises them: the `OSError`
+subclass that the error number selects, with the same text. So a program
+catches the same exceptions and prints the same messages on the board as on a
+desktop. `socket.error` is `OSError`, as in CPython 3.
+
+```python
+import socket
+
+c = socket.socket()
+c.settimeout(2.0)                    # None blocks, 0 is non-blocking, t > 0 gives up after t seconds
+try:
+    c.connect(("192.168.4.2", 80))
+    c.sendall(b"GET / HTTP/1.0\r\n\r\n")
+    print(c.recv(512))
+except ConnectionRefusedError as e:
+    print("refused:", str(e))             # refused: [Errno 111] Connection refused
+except TimeoutError as e:
+    print("gave up:", str(e))             # gave up: timed out
+except OSError as e:
+    print("other:", str(e))
+c.close()
+```
+
+`test/esp_board_socket_errors.npy` provokes each case on the board. Each line
+it printed is the text before the colon, then the exception's class name
+where the test prints one, then `str(e)`:
+
+```text
+non-blocking accept: [Errno 11] Resource temporarily unavailable
+accept timeout: TimeoutError timed out after 250..1000 ms True
+refused connect, timeout None : ConnectionRefusedError [Errno 111] Connection refused
+refused connect, timeout 1.0 : ConnectionRefusedError [Errno 111] Connection refused
+unreachable host: TimeoutError timed out within 3 s True
+recv timeout: TimeoutError timed out
+```
+
+The first line is an `accept()` on a non-blocking socket with nobody waiting,
+which raises `BlockingIOError`. The unreachable host is an address on the
+board's own network that nobody answers: the `connect()` ends at its timeout
+instead of hanging.
+
+### The example: `nilpy-station-s3`
+
+`examples/esp32/nilpy-station-s3` is a status page in Python. The board starts
+its own Wi-Fi network, `PXX-NILPY` with the password `pascal26`, and serves a
+page at `http://192.168.4.1/`. The page shows an ADC reading, the chip's
+temperature, uptime, free heap and the number of connected stations, and it
+updates once a second. It uses `network`, `socket` and `json`, plus `espadc`
+and `espsys`.
+
+The main body sets everything up and then ends. The page keeps being served
+from `interrupts`' hidden loop: each ADC frame, about 16 a second, answers the
+requests that are waiting. Before its main body ends, the program fetches its
+own `/` and `/data` over `127.0.0.1`. It fetches `/data` once more from inside
+the hidden loop. So a board run with no phone still checks the HTTP path, and
+checks that serving goes on after the main body has ended:
+
+```sh
+tools/esp_flash.sh --project examples/esp32/nilpy-station-s3 --port /dev/ttyACM0
+```
+
+```text
+wifi ap PXX-NILPY active True at 192.168.4.1
+http listening on port 80
+...
+self-fetch / -> HTTP/1.1 200 OK page True
+...
+serving http://192.168.4.1/ from the hidden loop
+http 127.0.0.1 GET /data HTTP/1.0
+hidden loop: frame 16 self-fetch /data -> HTTP/1.1 200 OK requests 3
+```
+
+To see the page, **use the board plus a phone or laptop**: join `PXX-NILPY`
+and open `http://192.168.4.1/`. The steps are in the header of
+`main/main.npy`.
+
+### How far it is tested
+
+All of this was run on one ESP32-S3 board on 2026-09-25:
+
+| What | On the board |
+| --- | --- |
+| `nilpy-station-s3` | all 12 lines of `main.expected`, the self-fetches included |
+| socket errors and timeouts (`test/esp_board_socket_errors.npy`) | every line matches what CPython prints for the same calls on Linux, and nothing hangs |
+| station (`test/esp_board_wifi_sta.npy`) | `active`, a `scan()` of the networks nearby with every record well formed, a `connect()` to a network that does not exist ending at `STAT_NO_AP_FOUND` within 30 seconds, and the access point and station together |
+
+**Joining a real network has not been checked yet.** It needs a board and a
+Wi-Fi network with its password. `test/esp_board_wifi_sta_join.npy` is the
+recipe for it, with placeholders for the credentials. Nothing has been run on
+an ESP32-C3.
+
+The three snippets above compile for the ESP32-S3 with pin v426 (compiler
+sha256 `7b742af6f9df…`) against the tree at `6ee238bc47`. The station half
+of `network` landed after v426 was cut. It is library code only, so v426
+compiles it.
 
 ## Math errors do not stop the chip
 
