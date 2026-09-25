@@ -16176,6 +16176,7 @@
     "cdea900f09de58bdde7ad41dcdde4b212eca4c80",
     "7de3e7ffa3b58480d141d46b8d574f02d5f410fa"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy tools/expect_same.sh",
    "status": "fail"
   }
