@@ -3129,6 +3129,14 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_fresh_container_released 300 $(TESTTMP)/test_nilpy_fresh26 3000 all
 	@if tools/assert_no_leak.sh nilpy_fresh_container_control 300 $(TESTTMP)/test_nilpy_fresh26 3000 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_fresh_container control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# json.loads frees its parse tree and hands its fresh lists/dicts over to
+	# the result instead of retaining them. Leaked ~25 objects per call before;
+	# `keep` is the positive control, and the values pin b["s"] == "x".
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_json_loads_frees_its_tree.npy $(TESTTMP)/test_nilpy_jsonfree26
+	$(TESTTMP)/test_nilpy_jsonfree26 2000 drop 2>/dev/null | diff -u test/test_nilpy_json_loads_frees_its_tree.expected -
+	tools/assert_no_leak.sh nilpy_json_loads_frees_its_tree 300 $(TESTTMP)/test_nilpy_jsonfree26 2000 drop
+	@if tools/assert_no_leak.sh nilpy_json_loads_control 300 $(TESTTMP)/test_nilpy_jsonfree26 2000 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_json_loads control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	# `|` `&` `^` and set `-` on a VARIANT dispatch on what it holds (dunder,
 	# set, dict, bool, int of any size) instead of doing integer arithmetic on
 	# a handle. The .expected is CPython's output for the file.

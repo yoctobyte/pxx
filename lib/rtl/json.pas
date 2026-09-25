@@ -770,7 +770,7 @@ end;
 
 { The value tree -> the Python value world. }
 function JsonPyFromTree(v: TJSONValue): Variant;
-var i, n, code: Integer; l: TPyList; d: TPyDict; iv: Int64;
+var i, n, code: Integer; l: TPyList; d: TPyDict; iv: Int64; r: PPyVarRec;
     vv: Variant; ks: AnsiString; child: TJSONValue;
 begin
   if v = nil then
@@ -794,7 +794,11 @@ begin
         l := TPyList.Create;
         n := v.Count;
         for i := 0 to n - 1 do l.append(JsonPyFromTree(v.GetItem(i)));
-        JsonPyFromTree := l;
+        { The result TAKES OVER the new list's rc=1. `JsonPyFromTree := l`
+          retained it (rc=2 against the caller's one release), so every
+          loads() leaked every list and dict it built. }
+        r := @Result;
+        r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(l)));
       end;
     jkObject:
       begin
@@ -811,7 +815,8 @@ begin
           vv := JsonPyFromTree(child);
           d.store(ks, vv);
         end;
-        JsonPyFromTree := d;
+        r := @Result;
+        r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(d)));
       end;
   else
     JsonPyFromTree := pynone;
@@ -833,12 +838,14 @@ begin
     on E: EJSONError do raise JSONDecodeError.Create(E.Message);
   end;
   loads := JsonPyFromTree(tree);
-  { The tree is NOT freed here. Its strings are what the converted variants
-    hold, and releasing them left the Python values pointing at freed text —
-    `{"n": 1, "s": "x"}` came back with b["s"] = "n". Freeing it needs the
-    conversion to copy every string first; until then the tree is left to the
-    program's lifetime, which for a settings file read once is no leak worth
-    the risk of a dangling one. }
+  { The tree is freed. It used not to be ("its strings are what the converted
+    variants hold": `{"n": 1, "s": "x"}` once came back with b["s"] = "n"), and
+    that left every loads() leaking its whole tree -- a JSON client polling a
+    server ran an ESP32 out of heap. The strings are refcounted AnsiStrings, so
+    each variant holds its own reference; the b["s"] = "n" case was the
+    argument-list temp mix-up fixed with locals in JsonPyFromTree's object arm,
+    and test_nilpy_json_loads_frees_its_tree pins both. }
+  tree.FreeTree;
 end;
 
 procedure dump(const obj: Variant; f: TPyFile; ensure_ascii: Boolean;

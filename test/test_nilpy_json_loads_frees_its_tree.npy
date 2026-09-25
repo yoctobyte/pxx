@@ -1,0 +1,21 @@
+# json.loads builds a parse tree, converts it to Python values, and must free
+# BOTH halves it no longer owns. Before 2026-09-25 it leaked every call. The
+# tree was never freed (a comment feared the variants still pointed at its
+# text; they hold their own AnsiString references), and `JsonPyFromTree := l`
+# RETAINED every fresh list and dict. A JSON client polling a server on an
+# ESP32 ran out of heap from this alone: ~1.5 KB per small document.
+#
+#   <n> drop   n loads, each result dropped: live objects must stay flat
+#   <n> keep   POSITIVE CONTROL, every result kept: the same bound must trip
+# The printed values also pin the case the old comment feared:
+# {"n": 1, "s": "x"} must come back with b["s"] == "x".
+import json
+import sys
+n = int(sys.argv[1])
+keep = []
+for i in range(n):
+    b = json.loads('{"n": 1, "s": "x", "l": [1, "two", {"k": null}], "f": 1.5, "t": true}')
+    if sys.argv[2] == "keep":
+        keep.append(b)
+print(b, b["s"], b["l"][1], b["l"][2]["k"])
+print(json.loads('"just a string"'), json.loads("[]"), json.loads("{}"))
