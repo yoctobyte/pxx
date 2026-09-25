@@ -520,6 +520,9 @@ test-nilpy: $(COMPILER)
 	# $(PXX_STABLE) — the fix is a compiler change and is inert in the pin until
 	# the next one carries it.
 	sh test/nilpy_parg_zero_init.sh ./$(COMPILER) $(TESTTMP)
+	# A str default / str-literal-typed hidden global must not cost 8 MiB of .bss
+	# each; the output was always right, so the row asserts the SIZE.
+	sh test/nilpy_str_default_bss.sh ./$(COMPILER) $(TESTTMP)
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links

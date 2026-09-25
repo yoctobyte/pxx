@@ -8075,6 +8075,21 @@ end;
 
 { Evaluate one such attribute into its hidden global, at the point the class
   statement runs. CurTok is the attribute name. }
+function PyStorageTk(tk: Integer): TTypeKind;
+{ The type a NilPy VARIABLE gets when it is typed after a VALUE node. A str
+  literal's node is tyString -- the literal's type, right for the value -- but
+  tyString STORAGE is the fixed buffer, and a GLOBAL of it is STRING_CAP + 8
+  bytes (AllocateSymOffset): 8,388,616 B of .bss per variable. Every hidden
+  global typed from a literal paid that -- each `def f(s, safe="/")` default
+  8 MiB (mimic_urllib_parse's three made any urllib.parse import 25 MB and
+  unlinkable on the S3), and `a = b = "x"` 25 MB. A Python str is a managed
+  handle, so its storage is tyAnsiString, as every annotation site already
+  maps it by hand. }
+begin
+  Result := IntToTypeKind(tk);
+  if Result = tyString then Result := tyAnsiString;
+end;
+
 procedure PyEmitClassAttrExpr(ci: Integer; eqAt: Integer);
 var nm, gname: AnsiString; gsym, valNode, asgn, fi: Integer;
 begin
@@ -8093,7 +8108,7 @@ begin
   gsym := FindSym(gname);
   if gsym < 0 then
   begin
-    gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+    gsym := AllocVar(gname, PyStorageTk(ASTTk[valNode]));
     Syms[gsym].RecName := ResolveNodeRec(valNode);
     SymSyncTypeRef(gsym);
   end
@@ -8390,7 +8405,7 @@ begin
       bug-nilpy-non-constant-parameter-defaults-silently-become-none }
     savedCurProc := CurProc;
     CurProc := -1;
-    gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+    gsym := AllocVar(gname, PyStorageTk(ASTTk[valNode]));
     CurProc := savedCurProc;
     Syms[gsym].RecName := ResolveNodeRec(valNode);
     SymSyncTypeRef(gsym);
@@ -8807,7 +8822,7 @@ begin
   gsym := FindSym(gname);
   if gsym < 0 then
   begin
-    gsym := AllocVar(gname, IntToTypeKind(ASTTk[valNode]));
+    gsym := AllocVar(gname, PyStorageTk(ASTTk[valNode]));
     Syms[gsym].RecName := ResolveNodeRec(valNode);
     SymSyncTypeRef(gsym);
   end;
@@ -18295,7 +18310,7 @@ var sym, asgn: Integer;
 begin
   PyEvalOnce := node;
   if node < 0 then Exit;
-  sym := AllocVar(PyHiddenName('recv'), IntToTypeKind(ASTTk[node]));
+  sym := AllocVar(PyHiddenName('recv'), PyStorageTk(ASTTk[node]));
   Syms[sym].RecName := ResolveNodeRec(node);
   SymSyncTypeRef(sym);
   asgn := AllocNode(AN_ASSIGN);
@@ -27390,7 +27405,7 @@ begin
       if entNode >= 0 then
       begin
         symIdx := PyProgSym(varName);
-        if symIdx < 0 then symIdx := AllocVar(varName, IntToTypeKind(ASTTk[entNode]));
+        if symIdx < 0 then symIdx := AllocVar(varName, PyStorageTk(ASTTk[entNode]));
         if IntToTypeKind(ASTTk[entNode]) = tyClass then
         begin
           Syms[symIdx].RecName := ResolveNodeRec(entNode);
@@ -27471,7 +27486,7 @@ begin
     varName := CurTok.SVal;
     Next;
     symIdx := PyProgSym(varName);
-    if symIdx < 0 then symIdx := AllocVar(varName, IntToTypeKind(ASTTk[exprNode]));
+    if symIdx < 0 then symIdx := AllocVar(varName, PyStorageTk(ASTTk[exprNode]));
     if IntToTypeKind(ASTTk[exprNode]) = tyClass then
     begin
       Syms[symIdx].RecName := ResolveNodeRec(exprNode);
@@ -34166,7 +34181,7 @@ begin
     Expect(tkAssign, '=');
   end;
   PyParseBoolExpr;
-  chainTmp := AllocVar(PyHiddenName('chain'), IntToTypeKind(ASTTk[CurASTNode]));
+  chainTmp := AllocVar(PyHiddenName('chain'), PyStorageTk(ASTTk[CurASTNode]));
   Syms[chainTmp].RecName := ResolveNodeRec(CurASTNode);
   SymSyncTypeRef(chainTmp);
   node := AllocNode(AN_ASSIGN);
