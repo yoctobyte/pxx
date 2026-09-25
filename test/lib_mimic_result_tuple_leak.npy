@@ -9,8 +9,8 @@
 #   json.dumps(<dict>)     ~2 per call (its keylist)
 # Found as an ESP32 heap falling ~4.6 KB per 5 requests in
 # examples/esp32/nilpy-station-s3; 400 rounds here puts any one of them far
-# over the bound. Built with ./$(COMPILER): the socket half needs the
-# ConsumeUnitQualifier fix that lib_mimic_socket.npy pins.
+# over the bound. The socket half needs pin v426 or later (the
+# ConsumeUnitQualifier fix that lib_mimic_socket.npy pins).
 import socket
 import codecs
 import json

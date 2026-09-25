@@ -8,8 +8,8 @@
 # and accept() builds a new one with `socket.Create`. Before the fix, inside
 # the shim that qualifier resolved to the pending unit entry `socket`, the
 # constructor ran on Self instead of making a connection object, and this
-# script segfaulted at `srv.accept()` (measured 2026-09-25). Built with
-# ./$(COMPILER), not the pin, until a pin carries the fix.
+# script segfaulted at `srv.accept()` (measured 2026-09-25, pin v425). Pin
+# v426 carries the fix; lib-test builds this with $(PXX_STABLE).
 import socket
 
 srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

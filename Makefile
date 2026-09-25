@@ -40430,17 +40430,16 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_uuid.npy $(TESTTMP)/lib_mimic_uuid
 	$(TESTTMP)/lib_mimic_uuid | diff -u test/lib_mimic_uuid.expected -
 	# socket, the IPv4 TCP subset over the PAL, a DIFFERENTIAL: the .expected is
-	# CPython's output. ./$(COMPILER), not the pin: the shim's class is named
-	# like its module, which needed a ConsumeUnitQualifier fix no pin carries
-	# yet (pin v425 builds this and segfaults at accept). Move it to
-	# $(PXX_STABLE) once a pin does.
-	./$(COMPILER) -Fulib/rtl test/lib_mimic_socket.npy $(TESTTMP)/lib_mimic_socket
+	# CPython's output. It needs pin v426 or later: the shim's class is named
+	# like its module, which took a ConsumeUnitQualifier fix (v425 built this
+	# and segfaulted at accept).
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_socket.npy $(TESTTMP)/lib_mimic_socket
 	timeout 10 $(TESTTMP)/lib_mimic_socket | diff -u test/lib_mimic_socket.expected -
 	# The LEAK row beside it: socket.accept, codecs.charmap_* and json.dumps
 	# built a list and returned tuple(l), which copies and strands it. Values
 	# were right throughout, so only the census can fail this (recipe and
 	# controls in the fixture's header).
-	./$(COMPILER) -Fulib/rtl -dPXX_ALLOC_CENSUS test/lib_mimic_result_tuple_leak.npy $(TESTTMP)/lib_mimic_result_tuple_leak
+	$(PXX_STABLE) -Fulib/rtl -dPXX_ALLOC_CENSUS test/lib_mimic_result_tuple_leak.npy $(TESTTMP)/lib_mimic_result_tuple_leak
 	tools/assert_no_leak.sh lib_mimic_result_tuple_leak 300 timeout 20 $(TESTTMP)/lib_mimic_result_tuple_leak
 	# hashlib.sha1 -- the RTL had no SHA-1; TSP keys its speech cache on one. A
 	# DIFFERENTIAL over the FIPS 180-4 vectors, the 55/56/63/64/65-byte padding
