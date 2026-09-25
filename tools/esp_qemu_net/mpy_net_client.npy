@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: 0BSD
+# tools/esp_qemu_mpy_net.sh stages this as main.npy with @HOST@, @MQTT_PORT@
+# and @PREAMBLE@ filled in. The libraries are MicroPython's own, unchanged,
+# except ntptime's fixed port 123 (see the script). The same file, with
+# HOST=127.0.0.1 and no preamble, is the desktop row.
+@PREAMBLE@
+import ntptime
+from umqtt.simple import MQTTClient
+from umqtt.robust import MQTTClient as RobustClient
+
+print("MPYNET-BEGIN")
+ntptime.host = "@HOST@"
+print("ntptime", ntptime.time())
+got = []
+
+
+def cb(topic, msg):
+    got.append((topic, msg))
+
+
+c = MQTTClient("pxx-simple", "@HOST@", port=@MQTT_PORT@)
+c.set_callback(cb)
+c.connect()
+c.publish(b"pxx/t", b"hello")
+c.publish(b"pxx/q", b"qos1", qos=1)
+c.subscribe(b"pxx/in")
+c.wait_msg()
+c.ping()
+c.disconnect()
+print("umqtt.simple", got)
+r = RobustClient("pxx-robust", "@HOST@", port=@MQTT_PORT@)
+r.connect()
+r.publish(b"pxx/r", b"robust")
+r.disconnect()
+print("umqtt.robust ok")
+print("MPYNET-COMPLETE")

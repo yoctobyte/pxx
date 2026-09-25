@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: 0BSD
+# The C3 umqtt.simple stall, reduced (MPYNET_CENSUS=stall in
+# tools/esp_qemu_mpy_net.sh): connect/publish/disconnect in a loop, and every
+# 25 sessions the session count, the free heap and the socket number the
+# session was given. A socket or lwIP handle that is never given back shows up
+# as a climbing fd long before anything runs out; a flat fd with a stall points
+# somewhere else. MPYNET-STALL-DONE after 3000 sessions (the S3 did 2240 in one
+# run; the C3 stopped after 421 on pin v438).
+import 'espsys.pas' as board
+
+
+def stall_once():
+    k = MQTTClient("cen-simple", "@HOST@", port=@MQTT_PORT@)
+    k.connect()
+    fd = k.sock.fileno()
+    k.publish(b"pxx/c", b"x")
+    k.disconnect()
+    return fd
+
+
+h0 = board.free_heap()
+for i in range(3000):
+    fd = stall_once()
+    if i % 25 == 24:
+        print("MPYNET-STALL n=" + str(i + 1) + " fd=" + str(fd) + " free=" + str(board.free_heap()) + " delta=" + str(h0 - board.free_heap()))
+print("MPYNET-STALL-DONE")
+print("MPYNET-CENSUS-DONE")

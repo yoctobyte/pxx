@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: 0BSD
+# tools/esp_qemu_mpy_net.sh appends this to the CHIP's main.npy only, after the
+# transcript's MPYNET-COMPLETE: the desktop row has no free_heap to read.
+# Free heap across 1000 dropped iterations per library, after 20 warm-ups, and
+# a POSITIVE CONTROL that keeps 200 umqtt.simple clients, which must read a
+# clearly nonzero cost per iteration, or the heap reading cannot see a leak.
+# Census clients connect as `cen-*`, so the broker row's count of the
+# transcript's own `pxx-*` sessions is unaffected.
+import time as _cen_time
+import 'espsys.pas' as board
+
+
+def ntp_once():
+    return ntptime.time()
+
+
+def simple_once():
+    k = MQTTClient("cen-simple", "@HOST@", port=@MQTT_PORT@)
+    k.connect()
+    k.publish(b"pxx/c", b"x")
+    k.disconnect()
+    return k
+
+
+def robust_once():
+    k = RobustClient("cen-robust", "@HOST@", port=@MQTT_PORT@)
+    k.connect()
+    k.publish(b"pxx/c", b"x")
+    k.disconnect()
+    return k
+
+
+def census(name, f):
+    for i in range(20):
+        f()
+    h0 = board.free_heap()
+    t0 = _cen_time.ticks_ms()
+    for i in range(1000):
+        f()
+        if i % 250 == 249:
+            print("MPYNET-HEAP " + name + " after=" + str(i + 1) + " free=" + str(board.free_heap()))
+    h1 = board.free_heap()
+    ms = (_cen_time.ticks_ms() - t0) // 1000
+    print("MPYNET-CENSUS " + name + " n=1000 delta=" + str(h0 - h1) + " bpi=" + str((h0 - h1) // 1000) + " chip_ms_per_iter=" + str(ms))
+
+
+census("ntptime", ntp_once)
+census("umqtt.simple", simple_once)
+census("umqtt.robust", robust_once)
+kept = []
+h2 = board.free_heap()
+for i in range(200):
+    kept.append(simple_once())
+h3 = board.free_heap()
+print("MPYNET-CENSUS control n=200 delta=" + str(h2 - h3) + " bpi=" + str((h2 - h3) // 200) + " live=" + str(len(kept)))
+print("MPYNET-CENSUS-DONE")

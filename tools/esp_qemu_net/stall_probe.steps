@@ -1,0 +1,16 @@
+printf "STALL-GDB pc\n"
+p/a $pc
+bt 12
+printf "STALL-GDB current task %s\n", pxCurrentTCBs[0]->pcTaskName
+stall_tasklist xDelayedTaskList1
+stall_tasklist xDelayedTaskList2
+stall_tasklist xSuspendedTaskList
+stall_ready
+stall_openeth
+stall_pcbs tcp_active_pcbs
+stall_pcbs tcp_tw_pcbs
+stall_pcbs tcp_bound_pcbs
+stall_pcbs tcp_listen_pcbs.pcbs
+stall_pcbs udp_pcbs
+stall_sockets
+detach

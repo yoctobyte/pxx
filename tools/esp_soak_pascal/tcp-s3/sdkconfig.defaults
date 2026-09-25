@@ -1,0 +1,4 @@
+CONFIG_LWIP_NETIF_LOOPBACK=y
+CONFIG_LWIP_LOOPBACK_MAX_PBUFS=8
+# 2*MSL = 1 s, so a pass's TIME_WAIT pcbs drain inside the next pass's lead-in
+CONFIG_LWIP_TCP_MSL=500

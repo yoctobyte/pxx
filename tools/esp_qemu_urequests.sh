@@ -19,7 +19,7 @@
 #               a 3xx not followed, head) equals CPython `requests` run on
 #               the host against the SAME server (test/urequests_oracle/).
 #               SKIP when python3 has no `requests`.
-#   census      free heap over 1000 requests with dropped responses costs
+#   census      free heap over UREQ_N (1000) requests with dropped responses costs
 #               under BOUND bytes per request (default 16)...
 #   control     ...and keeping 50 responses costs over it, so the reading
 #               can see a leak at all.
@@ -38,6 +38,12 @@ PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"
 # sharing the host with other QEMUs slowed it about 20x on 2026-09-25.
 TIMEOUT="${UREQ_TIMEOUT:-1800}"
 BOUND="${UREQ_BOUND:-16}"
+# UREQ_N: requests in the dropped-response census (default 1000). A slow drift
+# can hide inside 1000 -- a 0.6 B/request drift is 600 B there, under one heap
+# block's granularity -- so the long soak runs 10000, with a free-heap
+# checkpoint every N/10 (UREQ-HEAP ... delta=) to tell growth from a plateau.
+# Raise UREQ_TIMEOUT with it: ~3 min per 1000 on an idle box.
+NREQ="${UREQ_N:-1000}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/esp-qemu-ureq.XXXXXX")"
@@ -87,7 +93,7 @@ cp "$REPO_ROOT/tools/esp_qemu_net/qemueth.pas" main/
 # (vPortYield in lwIP's tcpip task), which is the emulator's clock, not ours.
 printf '\nCONFIG_ETH_USE_OPENETH=y\nCONFIG_LWIP_TCP_MSL=500\nCONFIG_ESP_INT_WDT=n\nCONFIG_ESP_TASK_WDT_EN=n\n' >> sdkconfig.defaults
 sed -i -e 's/REQUIRES \([^)]*\))/REQUIRES \1 qemueth)/' main/CMakeLists.txt
-python3 - "$REPO_ROOT" "$PORT" <<'PY'
+python3 - "$REPO_ROOT" "$PORT" "$NREQ" <<'PY'
 import sys
 root, port = sys.argv[1], sys.argv[2]
 src = open(root + "/test/lib_mimic_urequests.npy").read().split("\n")
@@ -95,6 +101,7 @@ src = open(root + "/test/lib_mimic_urequests.npy").read().split("\n")
 start = next(i for i, l in enumerate(src) if l.startswith('r = urequests.get(base + "/hello")'))
 tmpl = open(root + "/tools/esp_qemu_net/urequests_client.npy").read()
 tmpl = tmpl.replace("@PORT@", port).replace("@TRANSCRIPT@", "\n".join(src[start:]).rstrip("\n"))
+tmpl = tmpl.replace("@N@", sys.argv[3])
 open("main/main.npy", "w").write(tmpl)
 PY
 sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" build.sh
@@ -110,10 +117,28 @@ case "$CHIP" in
 esac
 ( cd build && python -m esptool --chip "$CHIP" merge-bin -o "$W/flash.bin" @flash_args --fill-flash-size 4MB >/dev/null 2>&1 )
 "$QEMU" -M "$CHIP" -drive file="$W/flash.bin",if=mtd,format=raw -nic user,model=open_eth \
-  -nographic -serial mon:stdio -monitor none >"$W/serial.log" 2>&1 &
+  -nographic -serial mon:stdio -monitor none ${UREQ_GDB_PORT:+-gdb tcp::$UREQ_GDB_PORT} >"$W/serial.log" 2>&1 &
 QPID=$!
-t=0
-while [ $t -lt "$TIMEOUT" ] && ! grep -qa 'UREQ-COMPLETE\|Rebooting' "$W/serial.log"; do sleep 1; t=$((t + 1)); done
+t=0; lastsz=-1; still=0
+while [ $t -lt "$TIMEOUT" ] && ! grep -qa 'UREQ-COMPLETE\|Rebooting' "$W/serial.log"; do
+  sleep 1; t=$((t + 1))
+  # UREQ_GDB_PORT=<n>: QEMU gets a gdbserver, and a chip SILENT for UREQ_STALL_S
+  # seconds (default 600: a checkpoint is N/10 requests apart) after the
+  # transcript ended is read once with esp_qemu_net/stall_probe.gdb.
+  if [ -n "${UREQ_GDB_PORT:-}" ] && grep -qa '^URequests OK' "$W/serial.log"; then
+    sz=$(stat -c %s "$W/serial.log")
+    if [ "$sz" = "$lastsz" ]; then still=$((still + 1)); else still=0; lastsz=$sz; fi
+    if [ "$still" -ge "${UREQ_STALL_S:-600}" ]; then
+      case "$CHIP" in esp32s3) GDB=xtensa-esp32s3-elf-gdb ;; *) GDB=riscv32-esp-elf-gdb ;; esac
+      GDBBIN="$(ls "$HOME"/.espressif/tools/*-gdb/*/*/bin/$GDB | head -1)"
+      echo "UREQ-STALLED after ${still}s silent at $(grep -a '^UREQ-HEAP\|^URequests OK' "$W/serial.log" | tail -1 | tr -d '\r')"
+      STEPS=(); while IFS= read -r l; do STEPS+=(-ex "$l"); done < "$REPO_ROOT/tools/esp_qemu_net/stall_probe.steps"
+      timeout 120 "$GDBBIN" -q -batch -ex "target remote :$UREQ_GDB_PORT" \
+        -x "$REPO_ROOT/tools/esp_qemu_net/stall_probe.gdb" "${STEPS[@]}" "$(ls build/*.elf | head -1)" 2>&1 | grep -a 'STALL-GDB\|^\$\|^#' | head -120
+      break
+    fi
+  fi
+done
 kill "$QPID" 2>/dev/null || true; QPID=""
 tr -d '\r' < "$W/serial.log" > "$W/serial.txt"
 grep -qa 'UREQ-COMPLETE' "$W/serial.txt" \
@@ -133,6 +158,7 @@ db="$(printf '%s' "$d" | sed -n 's/.* bpr=\(-\{0,1\}[0-9]*\).*/\1/p')"
 kb="$(printf '%s' "$k" | sed -n 's/.* bpr=\(-\{0,1\}[0-9]*\).*/\1/p')"
 if [ -n "$db" ] && [ "$db" -lt "$BOUND" ]; then echo "UREQ-ROW census OK (${d#UREQ-CENSUS }, bound $BOUND)"
 else echo "UREQ-ROW census FAIL (${d#UREQ-CENSUS }, bound $BOUND)"; fi
+grep -a "^UREQ-HEAP " "$W/serial.txt" | sed "s/^/  | /" || true
 if [ -n "$kb" ] && [ "$kb" -gt "$BOUND" ]; then echo "UREQ-ROW control OK (${k#UREQ-CENSUS }, must exceed $BOUND)"
 else echo "UREQ-ROW control FAIL (${k#UREQ-CENSUS }: keeping responses did not read above the bound)"; fi
 echo "UREQ-QEMU-COMPLETE"

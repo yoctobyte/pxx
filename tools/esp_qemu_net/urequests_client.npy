@@ -39,13 +39,14 @@ def one_kept(kept):
 total = 0
 for i in range(20):
     total = total + one()
+N = @N@
 h0 = board.free_heap()
-for i in range(1000):
+for i in range(N):
     total = total + one()
-    if i % 100 == 99:
-        print("UREQ-HEAP after=" + str(i + 1) + " free=" + str(board.free_heap()))
+    if i % (N // 10) == N // 10 - 1:
+        print("UREQ-HEAP after=" + str(i + 1) + " free=" + str(board.free_heap()) + " delta=" + str(h0 - board.free_heap()))
 h1 = board.free_heap()
-print("UREQ-CENSUS dropped n=1000 delta=" + str(h0 - h1) + " bpr=" + str((h0 - h1) // 1000) + " total=" + str(total))
+print("UREQ-CENSUS dropped n=" + str(N) + " delta=" + str(h0 - h1) + " bpr=" + str((h0 - h1) // N) + " total=" + str(total))
 kept = []
 h2 = board.free_heap()
 for i in range(50):

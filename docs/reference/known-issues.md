@@ -75,6 +75,59 @@ The exception row was measured with v425 under Espressif's QEMU on both chips.
 The bare-metal row was measured on a physical ESP32-S3 with v424 and has not
 been re-run on the board with v425.
 
+## Memory leaks
+
+Before the beta, every leak test in the tree was re-run on the development tree:
+164 automated leak checks, and 49 Pascal shapes on seven targets at `-O0` to
+`-O3`, covering strings, dynamic arrays, managed records, interfaces, closures,
+exceptions, classes, generics and threads. Each check also ran a deliberate leak
+to prove it could catch one. Two Pascal leaks in v425 turned up, both in
+`Dispose`. They are fixed in the development tree, and both are compiler
+changes, so the fixes arrive with the next pin (`687cf1185`):
+
+- **`Dispose(p)` did not finalize the thing `p` points at.** When `p` points at
+  a record with a string, dynamic-array, interface or `Variant` field, or at a
+  string, dynamic array, interface or `Variant` itself, those were not released:
+  16 to 160 bytes were lost per `Dispose`, on every target.
+  **Workaround with v425:** call `Finalize(p^)` before `Dispose(p)`.
+- **`Finalize` of a whole fixed array of managed elements released only the
+  first element.** `Finalize(a)` for `a: array[0..3] of string` kept elements 1
+  to 3. The same happened through `Dispose` of a pointer to such an array.
+  **Workaround with v425:** finalize the elements in a loop.
+
+One leak is still open. `Dispose(F())`, where the pointer is the result of a
+function call, frees the memory but does not finalize a managed pointee.
+**Workaround:** assign the result to a variable and dispose of that.
+
+Program-level global variables are not finalized when the program exits. This
+is a one-time cost at exit, not a leak that grows while the program runs.
+
+On ESP, networking was soaked under Espressif's QEMU with the development-tree
+compiler, and none of these runs showed memory or sockets growing:
+
+| what ran | chip | result |
+| --- | --- | --- |
+| 10,000 HTTP requests with `urequests` (Nil Python) | ESP32-S3 | 64 bytes in total over 10,000 requests |
+| 1,000 sessions each of `ntptime`, `umqtt.simple` and `umqtt.robust` (Nil Python) | ESP32-S3 | 0 bytes per session |
+| 3,000 MQTT sessions with `umqtt.simple` (Nil Python) | ESP32-C3 | the same socket number every session; heap flat after the first 25 |
+| 320 TCP connections over loopback, server and client in Pascal | ESP32-S3 | 0 bytes over 40 passes |
+
+Each run was checked against a deliberate leak, which it caught. The other
+ESP soaks drift by about 0.6 bytes per pass, too little for the instrument to
+tell apart from noise.
+
+Two limits apply to these measurements:
+
+- **Wi-Fi on a real chip has not been measured.** All of the above ran over
+  QEMU's emulated Ethernet.
+- **Long network runs on the ESP32-C3 stop under QEMU** after a few hundred to
+  a few thousand requests: the program stops making progress, although memory
+  and sockets are not exhausted. At the stall, the emulated network card holds
+  received frames and has an interrupt pending that is never delivered, so the
+  program waits forever for data that has already arrived. This happens below
+  the compiled program, in the emulator's network path, and has not been seen
+  on the ESP32-S3. It has not been measured on a physical C3.
+
 ## Fixed in v425
 
 These were wrong in the previous pin, v424, and are fixed in v425. Each was
@@ -164,11 +217,20 @@ differences from CPython are recorded beside it. On ESP, the model is
 MicroPython's assumptions about a small device, such as math errors not halting
 the program, not MicroPython's API.
 
-One leak is open: when a `for` loop's target variable already holds an object
-before the loop starts, rebinding it on each iteration does not release the
-old value, so one object is kept per iteration. `for t in ts: t.join()` after
-an earlier `t = Thread(...)` is the case that was measured. A loop variable
-with a fresh name avoids it. A fix is in progress.
+Two leaks in v425 are fixed in the development tree, and both are compiler
+changes, so they arrive with the next pin:
+
+- When a `for` loop's target variable already held an object before the loop
+  started, rebinding it on each iteration did not release the old value, so one
+  object was kept per iteration. `for t in ts: t.join()` after an earlier
+  `t = Thread(...)` is the case that was measured. Fixed by `5f77c0522`.
+  **Workaround with v425:** give the loop variable a fresh name.
+- A `lambda` passed straight as an argument, as in
+  `sorted(xs, key=lambda v: -v)` or `obj.set(lambda x: x + 1)`, kept its closure
+  alive after the call: one object per call. Fixed by `0b6fffa0c`.
+  **Workaround with v425:** bind the lambda to a name first
+  (`k = lambda v: -v`, then `sorted(xs, key=k)`). A lambda bound to a name was
+  always released.
 
 ## Reporting a problem
 
