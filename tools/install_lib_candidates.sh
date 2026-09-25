@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab|micropython-drivers] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -99,6 +99,23 @@ HTML5LIB_URL="https://github.com/html5lib/html5lib-python"
 HTML5LIB_COMMIT="f87487a4ada2d6cf223bdd182774a01ba3c84618"       # 1.1 tag
 
 SQLITE_VERSION="3.46.0"
+
+# MicroPython device drivers, UNCHANGED, for the NilPy ESP driver census:
+# one pinned upstream each (sparse where the repo is large).
+MPYLIB_URL="https://github.com/micropython/micropython-lib"
+MPYLIB_COMMIT="4fa59bd6a5916783e8503e9f2339627c8cffa5bf"        # MIT
+MPY_BME280_URL="https://github.com/robert-hh/BME280"
+MPY_BME280_COMMIT="a9a708015b149c23cf332f591b8371d217e416c1"    # MIT (LICENSE)
+MPY_ADS1X15_URL="https://github.com/robert-hh/ads1x15"
+MPY_ADS1X15_COMMIT="8981f67137cdb01044c080863c653a7d7e7c87f6"   # MIT (file header)
+MPY_IMU_URL="https://github.com/micropython-IMU/micropython-mpu9x50"
+MPY_IMU_COMMIT="ae68046e310224ebc3e196a1e3692de018991dbb"       # MIT
+MPY_SAMPLES_URL="https://github.com/peterhinch/micropython-samples"
+MPY_SAMPLES_COMMIT="6c4b362c0c0eb2ab8424dbe63587283154293ad0"   # MIT
+MPY_MAX7219_URL="https://github.com/mcauser/micropython-max7219"
+MPY_MAX7219_COMMIT="22195dcc56dc4e305848573946cdae68b9dd34dc"   # MIT
+MPY_ST7789_URL="https://github.com/russhughes/st7789py_mpy"
+MPY_ST7789_COMMIT="7265925bd0c092e8105200d18b2dba9dfbc12c27"    # MIT
 SQLITE_ZIP="sqlite-amalgamation-3460000"
 SQLITE_URL="https://www.sqlite.org/2024/${SQLITE_ZIP}.zip"
 SQLITE_SHA256="712a7d09d2a22652fb06a49af516e051979a3984adb067da86760e60ed51a7f5"
@@ -489,6 +506,39 @@ EOF
   say "stb -> $DEST/stb"
 }
 
+fetch_micropython_drivers() {
+  mpd=micropython-drivers
+  if present "$mpd"; then say "$mpd present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  top="$DEST/$mpd"
+  mkdir -p "$top"
+  # fetch_commit replaces $DEST/<its subdir>, so each upstream gets its own;
+  # and it sets the global \`sub\`, which is why this one is called mpd.
+  fetch_commit "$MPYLIB_URL" "$mpd/micropython-lib" "$MPYLIB_COMMIT" \
+    micropython/drivers/display/ssd1306 micropython/drivers/storage/sdcard LICENSE
+  fetch_commit "$MPY_BME280_URL" "$mpd/BME280" "$MPY_BME280_COMMIT"
+  fetch_commit "$MPY_ADS1X15_URL" "$mpd/ads1x15" "$MPY_ADS1X15_COMMIT"
+  fetch_commit "$MPY_IMU_URL" "$mpd/micropython-mpu9x50" "$MPY_IMU_COMMIT"
+  fetch_commit "$MPY_SAMPLES_URL" "$mpd/micropython-samples" "$MPY_SAMPLES_COMMIT" DS3231 LICENSE
+  fetch_commit "$MPY_MAX7219_URL" "$mpd/micropython-max7219" "$MPY_MAX7219_COMMIT"
+  fetch_commit "$MPY_ST7789_URL" "$mpd/st7789py_mpy" "$MPY_ST7789_COMMIT" lib LICENSE
+  cat > "$top/PROVENANCE.md" <<EOF
+# MicroPython device drivers (NilPy ESP driver census)
+Each is compiled UNCHANGED. Installed by tools/install_lib_candidates.sh;
+gitignored, never committed. All MIT.
+| driver | file | upstream | commit |
+| --- | --- | --- | --- |
+| ssd1306 | micropython-lib/micropython/drivers/display/ssd1306/ssd1306.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| sdcard | micropython-lib/micropython/drivers/storage/sdcard/sdcard.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
+| bme280 | BME280/bme280_float.py | ${MPY_BME280_URL} | ${MPY_BME280_COMMIT} |
+| ads1x15 | ads1x15/ads1x15.py | ${MPY_ADS1X15_URL} | ${MPY_ADS1X15_COMMIT} |
+| mpu6050 | micropython-mpu9x50/imu.py, vector3d.py | ${MPY_IMU_URL} | ${MPY_IMU_COMMIT} |
+| ds3231 | micropython-samples/DS3231/ds3231_port.py | ${MPY_SAMPLES_URL} | ${MPY_SAMPLES_COMMIT} |
+| max7219 | micropython-max7219/max7219.py | ${MPY_MAX7219_URL} | ${MPY_MAX7219_COMMIT} |
+| st7789 | st7789py_mpy/lib/st7789py.py | ${MPY_ST7789_URL} | ${MPY_ST7789_COMMIT} |
+EOF
+  say "$mpd -> $top"
+}
+
 fetch_cglm() {
   if present cglm; then say "cglm present (FORCE=1 to re-fetch) — skip"; return 0; fi
   fetch_commit "$CGLM_URL" cglm "$CGLM_COMMIT"
@@ -676,6 +726,7 @@ EOF
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
     cglm)          fetch_cglm ;;
+    micropython-drivers) fetch_micropython_drivers ;;
     enet)          fetch_enet ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;
