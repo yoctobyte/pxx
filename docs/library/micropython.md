@@ -203,9 +203,15 @@ each driver's file, repository and commit. The set has sixteen drivers:
 - by Robert Hammelrath: bme280, ads1x15 and sh1106;
 - the MPU6050 from micropython-IMU, and Peter Hinch's DS3231;
 - by Mike Causer: max7219 and tm1637;
-- st7789 by Russ Hughes, ina219 by Chris Borrill (with micropython-lib's
-  `logging`, which its instructions say to copy onto the board), hcsr04 by
-  rsc1975, and a bh1750 driver by catdog2.
+- st7789 by Russ Hughes, ina219 by Chris Borrill, hcsr04 by rsc1975, and a
+  bh1750 driver by catdog2.
+
+ina219 is tested **with a period `logging.py`**: micropython-lib's `logging`
+as of November 2022, which its instructions say to copy onto the board. The
+driver reads `logging._level`, a module variable that later versions of
+`logging` removed, so it fails with today's `logging` on MicroPython and
+CPython too. The recipe fetches that older `logging.py` for it and records
+its commit.
 
 All are MIT-licensed except hcsr04 and bh1750, which are Apache-2.0.
 
@@ -228,14 +234,14 @@ that has not been downloaded is shown as "not installed", not as an error.
 so a row cannot show whether more problems follow. When that first problem is
 fixed, the driver may compile or it may stop at the next one.
 
-The table on 2026-09-25, with **pin v436** and the source tree at revision
-`c253a21ddc` (first error only):
+The table on 2026-09-25, with **pin v437** and the source tree at revision
+`58619ee29b` (first error only):
 
 | driver | compiles | first error |
 | --- | --- | --- |
 | ssd1306, bme280, ads1x15, mpu6050, ds3231, max7219, sdcard, dht, ds18x20, neopixel, sh1106, hcsr04, tm1637, bh1750 | yes | |
 | st7789 | no | the `@micropython.viper` decorator, and the `ptr8`/`ptr16` views it uses, are not supported |
-| ina219 | no | `logging` sets `self.stream` from a conditional expression whose type the compiler cannot work out yet |
+| ina219 (with the period `logging.py`) | no | inside the class body, a class attribute refers by its bare name to one defined a few lines earlier (`__ADC_CONVERSION = {ADC_9BIT: ...}`), which Python allows |
 
 "Compiles" is not "works": the timing-critical functions ds18x20, neopixel,
 hcsr04 and dht rely on (`_onewire`, `machine.bitstream`,

@@ -41,7 +41,7 @@ dht|micropython-lib/micropython/drivers/sensor/dht
 ds18x20|micropython-lib/micropython/drivers/sensor/ds18x20:micropython-lib/micropython/drivers/bus/onewire
 neopixel|micropython-lib/micropython/drivers/led/neopixel
 sh1106|SH1106
-ina219|pyb_ina219:micropython-lib/python-stdlib/logging
+ina219|pyb_ina219:micropython-lib-logging/python-stdlib/logging
 hcsr04|micropython-hcsr04
 tm1637|micropython-tm1637
 bh1750|bh1750fvi"

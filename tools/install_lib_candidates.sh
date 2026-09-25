@@ -104,6 +104,12 @@ SQLITE_VERSION="3.46.0"
 # one pinned upstream each (sparse where the repo is large).
 MPYLIB_URL="https://github.com/micropython/micropython-lib"
 MPYLIB_COMMIT="4fa59bd6a5916783e8503e9f2339627c8cffa5bf"        # MIT
+# ina219 reads logging._level, a module global that micropython-lib's logging
+# dropped in 58bab0a (2022-12-19). CPython's and today's MicroPython logging
+# lack it too, so the driver gets the logging it was written against: this is
+# the last commit that has it. The module states no licence of its own, so the
+# repository's MIT default applies (its LICENSE says so).
+MPYLIB_LOGGING_COMMIT="a9e52d085c37c7ad6a275e001dd7f2113a1e50e7" # MIT
 MPY_BME280_URL="https://github.com/robert-hh/BME280"
 MPY_BME280_COMMIT="a9a708015b149c23cf332f591b8371d217e416c1"    # MIT (LICENSE)
 MPY_ADS1X15_URL="https://github.com/robert-hh/ads1x15"
@@ -526,7 +532,8 @@ fetch_micropython_drivers() {
   fetch_commit "$MPYLIB_URL" "$mpd/micropython-lib" "$MPYLIB_COMMIT" \
     micropython/drivers/display/ssd1306 micropython/drivers/storage/sdcard \
     micropython/drivers/sensor/dht micropython/drivers/sensor/ds18x20 \
-    micropython/drivers/bus/onewire micropython/drivers/led/neopixel \
+    micropython/drivers/bus/onewire micropython/drivers/led/neopixel LICENSE
+  fetch_commit "$MPYLIB_URL" "$mpd/micropython-lib-logging" "$MPYLIB_LOGGING_COMMIT" \
     python-stdlib/logging LICENSE
   fetch_commit "$MPY_BME280_URL" "$mpd/BME280" "$MPY_BME280_COMMIT"
   fetch_commit "$MPY_ADS1X15_URL" "$mpd/ads1x15" "$MPY_ADS1X15_COMMIT"
@@ -557,7 +564,7 @@ gitignored, never committed. MIT, except hcsr04 and bh1750 (Apache-2.0).
 | ds18x20 | micropython-lib/micropython/drivers/sensor/ds18x20/ds18x20.py, ../../bus/onewire/onewire.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
 | neopixel | micropython-lib/micropython/drivers/led/neopixel/neopixel.py | ${MPYLIB_URL} | ${MPYLIB_COMMIT} |
 | sh1106 | SH1106/sh1106.py | ${MPY_SH1106_URL} | ${MPY_SH1106_COMMIT} |
-| ina219 | pyb_ina219/ina219.py, micropython-lib/python-stdlib/logging/logging.py | ${MPY_INA219_URL} | ${MPY_INA219_COMMIT} |
+| ina219 | pyb_ina219/ina219.py, with the period micropython-lib-logging/python-stdlib/logging/logging.py (${MPYLIB_URL} @ ${MPYLIB_LOGGING_COMMIT}, MIT) | ${MPY_INA219_URL} | ${MPY_INA219_COMMIT} |
 | hcsr04 | micropython-hcsr04/hcsr04.py | ${MPY_HCSR04_URL} | ${MPY_HCSR04_COMMIT} |
 | tm1637 | micropython-tm1637/tm1637.py | ${MPY_TM1637_URL} | ${MPY_TM1637_COMMIT} |
 | bh1750 | bh1750fvi/bh1750fvi.py | ${MPY_BH1750_URL} | ${MPY_BH1750_COMMIT} |
