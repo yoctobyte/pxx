@@ -1,0 +1,395 @@
+diff --git a/compiler/builtin/pylib.pas b/compiler/builtin/pylib.pas
+index 53c6f0b3dc..33a51e7870 100644
+--- a/compiler/builtin/pylib.pas
++++ b/compiler/builtin/pylib.pas
+@@ -15197,6 +15197,19 @@ type
+     { TotN pointers to NUL-terminated parameter names. nil when unknown, which
+       the dispatcher treats exactly as it did before names existed. }
+     Names: Pointer;
++    { The callee's RETURN KIND and a pointer to TotN parameter kinds, both in
++      the compiler's own ty* numbering (see PYSIG_OFF_RETKIND in defs.inc).
++      They answer the one question this bridge could not previously ask: does
++      the callee actually match the callable-value ABI -- every parameter a
++      `const Variant`, the result a Variant through a hidden destination
++      pointer? For an unannotated def it does, which is why the assumption held
++      for so long. For a def with a concrete return type or an annotated
++      parameter it does not, and the mismatch is silent rather than loud.
++      0 in RetKind = a procedure. nil in ParamKinds = the producer could not
++      supply them, and then the bridge behaves exactly as it did before they
++      existed -- the same contract Names and Dflts already carry. }
++    RetKind: Int64;
++    ParamKinds: Pointer;
+   end;
+   PPySigRec = ^TPySigRec;
+   PPointer = ^Pointer;
+diff --git a/compiler/defs.inc b/compiler/defs.inc
+index 111df4d552..bb8b5f2521 100644
+--- a/compiler/defs.inc
++++ b/compiler/defs.inc
+@@ -1898,8 +1898,17 @@ const
+       +24 StarIdx PLUS ONE    0 = no `*args`; folded in here rather than left
+                               beside the pointer in TPyBound, so one concept
+                               keeps one mechanism
+-      +32 defaults array ptr  TotN VARIANTS (16 bytes each: {VType, Payload}),
++      +32 Dflts array ptr     TotN VARIANTS (16 bytes each: {VType, Payload}),
+                               indexed by user-space parameter number
++      +40 Names array ptr     TotN name pointers    -- see PYSIG_OFF_NAMES
++      +48 RetKind             the result's ty*, 0 = a procedure
++      +56 ParamKinds ptr      TotN ty* words        -- see PYSIG_OFF_PARAMKINDS
++
++    THIS TABLE IS PINNED, and it is pinned because it was already stale: it
++    stopped at +32 while three more fields existed, and a table that reads as a
++    census is worse than no table. tools/pysig_layout.py derives all THREE
++    copies of this layout -- these rows, the PYSIG_OFF_* constants below, and
++    pylib.pas's TPySigRec -- from their own sources and refuses a disagreement.
+ 
+     Only slots [ReqN, TotN) are ever read: Python requires defaults to be
+     TRAILING and NilPy matches (see ProcParamHasDefault, "Trailing params
+@@ -1913,7 +1922,7 @@ const
+     expensive failure shape (a plausible wrong value far from the cause), so the
+     unfilled state gets a tag no variant can legally wear and any consumer must
+     treat it as a hard error rather than a value. }
+-  PYSIG_SIZE       = 48;
++  PYSIG_SIZE       = 64;
+   { An illegal variant tag, so "never filled in" cannot be mistaken for a value.
+     Deliberately NOT 0: see the layout note above -- 0 is VT_EMPTY is None. }
+   PYSIG_DFLT_UNSET = -1;
+@@ -1930,6 +1939,31 @@ const
+     second mechanism: one carrier answers every signature question.
+     bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
+   PYSIG_OFF_NAMES  = 40;
++  { +48 the def's RETURN KIND, and +56 a pointer to TotN kind words, one per
++    declared parameter -- both the COMPILER's own `ty*` numbering (Ord of a
++    TTypeKind), the same numbering PMethInfo.RetKind/ParamKinds carry and for
++    the same reason: they select a CALLING SHAPE, which FPC's coarser kinds
++    cannot express. 0 in RetKind means a procedure, exactly as in PMethInfo.
++
++    WHY A CALLABLE VALUE NEEDS THEM. Every callable-value dispatcher calls
++    through a Variant-returning function pointer with a hidden destination
++    pointer, and passes every argument as a `const Variant`. That is the
++    callable-value ABI and it is right for an unannotated def, which is most of
++    them. A def with a CONCRETE return type or an ANNOTATED parameter does not
++    match it, and the mismatch is silent: a container result comes back as a
++    raw pointer read as an integer, and a `list`-annotated parameter is handed
++    a variant address where the body expects an object pointer, which
++    segfaults.
++    Today that is papered over by NORMALISING such a def at parse time
++    (PyDefUsedAsValue), which needs the value read to be VISIBLE to a token
++    scan -- and a read in a module lexed later is not, so import order decides
++    whether the program is correct
++    (bug-n-a-qualified-def-value-read-is-invisible-when-the-def-s-module-is-parsed-first).
++    Carrying the kinds on the record instead lets the BRIDGE marshal the way
++    PyHostCall already does for a method, which is an answer no parse order can
++    defeat. }
++  PYSIG_OFF_RETKIND = 48;
++  PYSIG_OFF_PARAMKINDS = 56;
+ 
+   { ResolveDataRefSentinel's answers (emit.inc). It is the ONE decoder for the
+     families below -- compiler.pas's fixup loop and wasm32's late-cell pass both
+diff --git a/compiler/rtti_emit.inc b/compiler/rtti_emit.inc
+index 05605ee893..cd42a81ca3 100644
+--- a/compiler/rtti_emit.inc
++++ b/compiler/rtti_emit.inc
+@@ -475,6 +475,7 @@ end;
+ 
+ procedure EmitPySignatures;
+ var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend, namesOff: Integer;
++    pkindsOff: Integer;
+     lastDecl: Integer;   { one past the last DECLARED (non-collector) parameter }
+ begin
+   { ProcCapacity, not MAX_PROCS: these tables are allocated to fit (see
+@@ -568,13 +569,36 @@ begin
+     if PxxDbgEnabled('n.sig') then
+       WriteLn('PXXDBG n.sig pi=', pi, ' name=', Procs[pi].Name,
+               ' paramCount=', Procs[pi].ParamCount, ' firstUser=', firstUser,
+-              ' nUser=', nUser, ' reqN=', reqN, ' off=', DataLen);
++              ' nUser=', nUser, ' reqN=', reqN, ' off=', DataLen,
++              ' retkind=', Ord(Procs[pi].RetType), ' isfunc=', Procs[pi].IsFunc);
+     DataPutZeros(PYSIG_SIZE);
+     AddMethodFix(ProcSigOff[pi] + PYSIG_OFF_CODE, pi);
+     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_REQN, reqN);
+     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_TOTN, nUser);
+     if ProcPyStarIdx[pi] >= 0 then
+       PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_STAR, ProcPyStarIdx[pi] + 1);
++    { RETURN KIND and PARAMETER KINDS, the compiler's own ty* numbering, exactly
++      as EmitMethInfo records them for a method (miPos + 24 and + 32). 0 = a
++      procedure. They say whether the callee actually matches the
++      callable-value ABI -- an all-Variant parameter list and a Variant result
++      through a hidden destination pointer -- which is a question the bridge
++      could not previously ask, so it assumed yes and was silently wrong for
++      every def that had a concrete return type or an annotated parameter.
++      SELF IS EXCLUDED from the kind block, unlike EmitMethInfo's, because every
++      other count on this record is user-space (see the header) and one record
++      with two indexing conventions is how an off-by-one gets written. The
++      block is `nUser` words and is indexed by the same i as Dflts and Names. }
++    if Procs[pi].IsFunc then
++      PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_RETKIND, Ord(Procs[pi].RetType));
++    if nUser > 0 then
++    begin
++      pkindsOff := DataLen;
++      DataPutZeros(nUser * 8);
++      for k := firstUser to lastDecl - 1 do
++        PatchDataU64(pkindsOff + (k - firstUser) * 8,
++                     Ord(Procs[pi].Params[k].TypeKind));
++      AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_PARAMKINDS, pkindsOff);
++    end;
+     if nUser > 0 then
+     begin
+       dfltOff := DataLen;
+diff --git a/tools/pysig_layout.py b/tools/pysig_layout.py
+new file mode 100755
+index 0000000000..c459bcebc8
+--- /dev/null
++++ b/tools/pysig_layout.py
+@@ -0,0 +1,251 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: MPL-2.0
++"""The callable-signature record has THREE copies of one layout. Pin them.
++
++A NilPy `def` reached as a VALUE is called through a static signature record:
++the compiler writes it (`EmitPySignatures`, rtti_emit.inc) against byte offsets
++in `compiler/defs.inc`, and `compiler/builtin/pylib.pas` reads it back through a
++Pascal `record` whose field order IS those offsets. Nothing related the two, and
++a third copy -- the prose `+N name` table above the constants -- reads as a
++census of the layout.
++
++THE THIRD COPY WAS ALREADY STALE WHEN THIS WAS WRITTEN, which is why the table
++is pinned and not merely the two machine-readable halves. It stopped at `+32`
++while `+40` (Names) existed and had for some time, each later field having been
++documented in its own comment further down instead. Nobody re-derived the table,
++because a table does not look like a claim.
++
++WHAT A DISAGREEMENT COSTS, and it is this repo's expensive shape rather than a
++crash: the record is filled by ONE producer and read by ONE consumer, so a
++half-applied `PYSIG_SIZE` bump does not fail to link and does not fault. The
++reader simply lands one field short or one field long and returns a plausible
++wrong value -- a default read out of a name pointer, a keyword matched against a
++`ty*` word. The dispatcher has no way to notice: every field is 8 bytes and
++every bit pattern is a legal Int64.
++
++BOTH SIDES ARE DERIVED FROM THEIR OWN SOURCE. A hand-written table of expected
++offsets in this file would be a FOURTH copy of the thing that was already wrong
++once, and it would have passed on the day the prose table went stale.
++
++Two independent properties, because they fail differently:
++  - SIZE     PYSIG_SIZE must equal the record's own total width. Catches a field
++             added on one side only, which is the realistic drift.
++  - ORDER    the Nth `PYSIG_OFF_*` constant, the Nth record field and the Nth
++             prose row must all name the same slot. Catches a REORDER, which the
++             offsets alone cannot see -- two swapped 8-byte fields occupy the
++             same two offsets.
++
++The ORDER check needs no name map: a constant's token (`PYSIG_OFF_STAR` ->
++`STAR`) must be a PREFIX of the uppercased field name (`Star`, or a later
++`StarIdx`). That is a rule, not a third list, so it cannot itself go stale --
++and it is why `PYSIG_OFF_PARAMKINDS` is spelled out rather than abbreviated to
++`PKINDS`, which no rule could relate to `ParamKinds`.
++
++Run: tools/pysig_layout.py [--verbose] [--self-check]   (exit 0 = pass)
++"""
++import os
++import re
++import sys
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++DEFS = os.path.join(ROOT, "compiler", "defs.inc")
++PYLIB = os.path.join(ROOT, "compiler", "builtin", "pylib.pas")
++
++# Widths of the Pascal types this record is ALLOWED to use, in bytes. An unknown
++# type is a hard error and not an assumed 8: the record's own header says "all
++# fields 8 bytes", and a future `Integer` field silently counted as 8 would make
++# this guard pass on the exact layout it exists to refuse.
++WIDTHS = {"pointer": 8, "int64": 8}
++
++
++def fail(msg):
++    print("pysig_layout: FAIL  " + msg)
++    return False
++
++
++def strip_braces(text):
++    """Pascal `{ ... }` comments out, so a comment cannot look like a field."""
++    out, depth = [], 0
++    for ch in text:
++        if ch == "{":
++            depth += 1
++        elif ch == "}":
++            if depth:
++                depth -= 1
++        elif depth == 0:
++            out.append(ch)
++    return "".join(out)
++
++
++def read_constants(defs_src):
++    """[(name, offset)] in DECLARATION order, plus PYSIG_SIZE."""
++    size = None
++    m = re.search(r"^\s*PYSIG_SIZE\s*=\s*(\d+)\s*;", defs_src, re.M)
++    if m:
++        size = int(m.group(1))
++    offs = []
++    for m in re.finditer(r"^\s*PYSIG_OFF_([A-Z0-9_]+)\s*=\s*(\d+)\s*;", defs_src, re.M):
++        offs.append((m.group(1), int(m.group(2))))
++    return size, offs
++
++
++def read_record(pylib_src):
++    """[(field, offset)] for TPySigRec, offsets computed from the widths."""
++    m = re.search(r"^\s*TPySigRec\s*=\s*record\b(.*?)^\s*end\s*;", pylib_src,
++                  re.M | re.S)
++    if not m:
++        return None, "TPySigRec = record ... end; not found in pylib.pas"
++    body = strip_braces(m.group(1))
++    fields, off = [], 0
++    for decl in body.split(";"):
++        decl = decl.strip()
++        if not decl:
++            continue
++        if ":" not in decl:
++            return None, "cannot parse a field declaration: %r" % decl
++        names, ty = decl.split(":", 1)
++        ty = ty.strip().lower()
++        if ty not in WIDTHS:
++            return None, ("field type %r is not one this layout may use "
++                          "(known: %s) -- see WIDTHS in tools/pysig_layout.py"
++                          % (ty, ", ".join(sorted(WIDTHS))))
++        for name in names.split(","):
++            name = name.strip()
++            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name):
++                return None, "cannot parse a field name: %r" % name
++            fields.append((name, off))
++            off += WIDTHS[ty]
++    return fields, off
++
++
++def read_prose(defs_src):
++    """[(name, offset)] from the `+N name` rows of the layout table."""
++    m = re.search(r"All fields 8 bytes, matching the RTTI blobs next door:\n(.*?)\n\s*\n",
++                  defs_src, re.S)
++    if not m:
++        return None, ("the prose layout table was not found. It is pinned on "
++                      "purpose (it was stale once); if it moved, move this "
++                      "anchor with it rather than deleting the check.")
++    rows = []
++    for line in m.group(1).split("\n"):
++        r = re.match(r"^\s*\+(\d+)\s+([A-Za-z_][A-Za-z0-9_]*)", line)
++        if r:
++            rows.append((r.group(2), int(r.group(1))))
++    return rows, None
++
++
++def check(defs_src, pylib_src, verbose=False):
++    ok = True
++    size, consts = read_constants(defs_src)
++    if size is None:
++        return fail("PYSIG_SIZE not found in compiler/defs.inc")
++    if not consts:
++        return fail("no PYSIG_OFF_* constants found in compiler/defs.inc")
++    fields, err = read_record(pylib_src)
++    if fields is None:
++        return fail(err)
++    prose, err = read_prose(defs_src)
++    if prose is None:
++        return fail(err)
++    _, recsize = read_record(pylib_src)
++
++    if verbose:
++        print("  consts: " + ", ".join("%s@%d" % c for c in consts))
++        print("  record: " + ", ".join("%s@%d" % f for f in fields))
++        print("  prose : " + ", ".join("%s@%d" % p for p in prose))
++
++    # SIZE -- the realistic drift: a field added on one side only.
++    if recsize != size:
++        ok = fail("PYSIG_SIZE is %d but TPySigRec is %d bytes wide (%d fields). "
++                  "A half-applied layout change does not fail to link and does "
++                  "not fault; the reader lands one field off and returns a "
++                  "plausible wrong value."
++                  % (size, recsize, len(fields)))
++
++    # ORDER -- three sequences, same slots, same offsets.
++    for label, seq in (("TPySigRec (pylib.pas)", fields),
++                       ("the prose layout table (defs.inc)", prose)):
++        if len(seq) != len(consts):
++            ok = fail("%d PYSIG_OFF_* constants but %d entries in %s. Every "
++                      "field of this record needs a named offset, and every "
++                      "named offset needs a field."
++                      % (len(consts), len(seq), label))
++            continue
++        for i, ((cname, coff), (fname, foff)) in enumerate(zip(consts, seq)):
++            if coff != foff:
++                ok = fail("slot %d: PYSIG_OFF_%s = %d but %s has %s at +%d"
++                          % (i, cname, coff, label, fname, foff))
++            if not fname.upper().startswith(cname):
++                ok = fail("slot %d: PYSIG_OFF_%s does not name %s in %s. The "
++                          "constant's token must be a PREFIX of the field name "
++                          "-- a reorder on one side leaves the offsets intact "
++                          "and this is the only thing that sees it."
++                          % (i, cname, fname, label))
++    return ok
++
++
++def self_check():
++    """Every mutation below MUST be refused. A guard that cannot fail is not one.
++
++    Each is a real drift someone could commit, not a scrambled file: a field
++    added on one side, a SIZE bumped without the field, two fields swapped, and
++    the prose table left one row short -- which is the drift that actually
++    happened."""
++    defs = open(DEFS, encoding="utf-8", errors="surrogateescape").read()
++    pylib = open(PYLIB, encoding="utf-8", errors="surrogateescape").read()
++
++    if not check(defs, pylib):
++        print("pysig_layout: SELF-CHECK CANNOT RUN -- the tree is already RED")
++        return False
++
++    cases = []
++    # a field added to the record, nothing else touched
++    cases.append(("a field added to TPySigRec only", defs,
++                  pylib.replace("    ParamKinds: Pointer;\n",
++                                "    ParamKinds: Pointer;\n    Extra: Int64;\n", 1)))
++    # PYSIG_SIZE bumped without the field
++    cases.append(("PYSIG_SIZE bumped without a field", 
++                  re.sub(r"(PYSIG_SIZE\s*=\s*)\d+", r"\g<1>72", defs, count=1), pylib))
++    # two fields swapped in the record: same offsets, wrong slots
++    cases.append(("two record fields swapped", defs,
++                  pylib.replace("    Dflts: Pointer;", "    XDfltsX: Pointer;", 1)
++                       .replace("    Names: Pointer;", "    Dflts: Pointer;", 1)
++                       .replace("    XDfltsX: Pointer;", "    Names: Pointer;", 1)))
++    # the prose table left one row short -- the drift that actually happened
++    cases.append(("a row dropped from the prose table",
++                  re.sub(r"^ +\+56 ParamKinds.*\n", "", defs, count=1, flags=re.M),
++                  pylib))
++    # a constant whose token no longer names its field
++    cases.append(("a constant renamed away from its field",
++                  defs.replace("PYSIG_OFF_PARAMKINDS", "PYSIG_OFF_PKINDS"), pylib))
++
++    ok = True
++    for name, d, p in cases:
++        if d == defs and p == pylib:
++            print("pysig_layout: SELF-CHECK BROKEN -- %r mutated nothing, so it "
++                  "proves nothing. The anchor it edits has moved." % name)
++            ok = False
++            continue
++        print("  positive control: %s" % name)
++        if check(d, p):
++            print("pysig_layout: SELF-CHECK FAILED -- %r was ACCEPTED" % name)
++            ok = False
++    if ok:
++        print("pysig_layout: self-check OK -- %d mutations, all refused" % len(cases))
++    return ok
++
++
++def main():
++    verbose = "--verbose" in sys.argv
++    if "--self-check" in sys.argv:
++        return 0 if self_check() else 1
++    defs = open(DEFS, encoding="utf-8", errors="surrogateescape").read()
++    pylib = open(PYLIB, encoding="utf-8", errors="surrogateescape").read()
++    if not check(defs, pylib, verbose):
++        return 1
++    print("pysig_layout: OK -- the three copies of the signature layout agree")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
