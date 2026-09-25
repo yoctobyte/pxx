@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: 0BSD
+# utime (lib/rtl/mimic_utime.py): MicroPython shapes -- localtime is an 8-tuple,
+# mktime takes 8 or 9 items and returns an int. Values checked against CPython
+# (time.gmtime()[:8], calendar.timegm). Imported by its file name because
+# `import utime` still aliases to `time` in the compiler until that entry goes.
+import mimic_utime as utime
+for secs in (0, 951782400, 1790336745, -1, 4102444799):
+    t = utime.localtime(secs)
+    print(secs, t, utime.mktime(t), utime.mktime(t + (0,)))
+(YY, MM, mday, hh, mm, ss, wday, yday) = utime.localtime(1790336745)
+print(YY, MM, mday, wday, yday)
+print(type(utime.time()).__name__, utime.time() > 1700000000)
+try:
+    utime.mktime((1, 2, 3))
+except TypeError as e:
+    print("TypeError", e)

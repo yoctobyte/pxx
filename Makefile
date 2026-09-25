@@ -40513,6 +40513,8 @@ endif
 	# CPython, and one round constant off by one reddens 13 of 14 rows.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_hashlib.npy $(TESTTMP)/lib_mimic_hashlib
 	$(TESTTMP)/lib_mimic_hashlib | diff -u test/lib_mimic_hashlib.expected -
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_utime.npy $(TESTTMP)/lib_mimic_utime
+	$(TESTTMP)/lib_mimic_utime | diff -u test/lib_mimic_utime.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"

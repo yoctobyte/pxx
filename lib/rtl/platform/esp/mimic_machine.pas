@@ -35,7 +35,7 @@ unit mimic_machine;
 
 interface
 
-uses pylib, sysutils, espgpio, espi2c, espspi;
+uses pylib, sysutils, espgpio, espi2c, espspi, mimic_time;
 
 type
   Pin = class
@@ -416,34 +416,8 @@ type
 function gettimeofday(tv: Pointer; tz: Pointer): Integer; cdecl; external;
 function settimeofday(tv: Pointer; tz: Pointer): Integer; cdecl; external;
 
-{ Howard Hinnant's days_from_civil / civil_from_days: exact for every date,
-  no tables, no floating point. }
-function RtcDaysFromCivil(y, m, d: Int64): Int64;
-var era, yoe, doy, doe: Int64;
-begin
-  if m <= 2 then y := y - 1;
-  if y >= 0 then era := y div 400 else era := (y - 399) div 400;
-  yoe := y - era * 400;
-  if m > 2 then doy := (153 * (m - 3) + 2) div 5 + d - 1
-  else doy := (153 * (m + 9) + 2) div 5 + d - 1;
-  doe := yoe * 365 + yoe div 4 - yoe div 100 + doy;
-  RtcDaysFromCivil := era * 146097 + doe - 719468;
-end;
-
-procedure RtcCivilFromDays(z: Int64; var y, m, d: Int64);
-var era, doe, yoe, doy, mp: Int64;
-begin
-  z := z + 719468;
-  if z >= 0 then era := z div 146097 else era := (z - 146096) div 146097;
-  doe := z - era * 146097;
-  yoe := (doe - doe div 1460 + doe div 36524 - doe div 146096) div 365;
-  y := yoe + era * 400;
-  doy := doe - (365 * yoe + yoe div 4 - yoe div 100);
-  mp := (5 * doy + 2) div 153;
-  d := doy - (153 * mp + 2) div 5 + 1;
-  if mp < 10 then m := mp + 3 else m := mp - 9;
-  if m <= 2 then y := y + 1;
-end;
+{ The calendar is mimic_time's (DaysFromCivil / CivilFromDays), so time.gmtime
+  and this clock can never disagree about a date. }
 
 constructor RTC.Create(id: Integer);
 begin
@@ -459,7 +433,7 @@ begin
   days := tv.tv_sec div 86400;
   rem := tv.tv_sec - days * 86400;
   if rem < 0 then begin rem := rem + 86400; days := days - 1; end;
-  RtcCivilFromDays(days, y, m, d);
+  mimic_time.CivilFromDays(days, y, m, d);
   l := TPyList.Create;
   v := y;                       l.append(v);
   v := m;                       l.append(v);
@@ -480,7 +454,7 @@ begin
     raise ValueError.Create('requested length 8 but object has length ' + IntToStr(t.count));
   y := t.at(0); m := t.at(1); d := t.at(2);
   hh := t.at(4); mm := t.at(5); ss := t.at(6);
-  tv.tv_sec := RtcDaysFromCivil(y, m, d) * 86400 + hh * 3600 + mm * 60 + ss;
+  tv.tv_sec := mimic_time.DaysFromCivil(y, m, d) * 86400 + hh * 3600 + mm * 60 + ss;
   tv.tv_usec := t.at(7);
   tv.pad := 0;
   settimeofday(@tv, nil);
