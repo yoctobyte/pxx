@@ -132,6 +132,17 @@ def main():
     check(gb and "pxx-absent-dir" in gb[0],
           "an -I naming a missing directory is flagged", str(gb))
     check(gg is None, "and one naming a present directory is not", str(gg))
+    # A shell COMMENT runs nothing, so a path it mentions is not a need. make -n
+    # echoes recipe comments into the job; one reading "emits
+    # -I/usr/include/x86_64-linux-gnu; the host ..." was captured with its ';'
+    # and skipped test/c_extern_data_legitimate_shapes.c on every box (the
+    # 2026-09-25 full's skip hole). The positive control is `bad` above: the
+    # same absent directory on a real command line must still be flagged.
+    cm = job("./$(COMPILER) test/x.c $(TESTTMP)/x",
+             "# prose naming -I/usr/include/pxx-absent-dir; not a command")
+    gc = tm.missing_dev_requirement(cm, roots)
+    check(gc is None, "an -I inside a shell comment line is not a requirement",
+          str(gc))
 
     print("5. a job that RUNS under xvfb needs xvfb, which is a third profile")
     import shutil

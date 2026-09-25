@@ -2021,7 +2021,11 @@ def missing_dev_requirement(job, fallback_roots):
     absent one, and the tempting answer -- treat unknown as absent -- converts
     a red that someone reads into a skip that nobody does.
     """
-    for ln in job.lines:
+    # A shell comment line (make -n echoes recipe comments) runs nothing, so
+    # a path its prose mentions is not a requirement. Skipping a job over one
+    # is a FALSE SKIP, and this docstring says which direction that costs.
+    lines = [ln for ln in job.lines if not ln.lstrip().startswith("#")]
+    for ln in lines:
         for inc in _DASH_I_RE.findall(ln):
             if not os.path.isdir(inc.rstrip("/")):
                 return (inc, _pkg_for(inc))
@@ -2029,7 +2033,7 @@ def missing_dev_requirement(job, fallback_roots):
             return ("xvfb-run on PATH", "xvfb")
     if not fallback_roots:
         return None
-    for src in job.lines:
+    for src in lines:
         for tok in src.split():
             if not tok.endswith(".pas"):
                 continue
