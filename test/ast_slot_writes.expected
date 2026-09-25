@@ -637,6 +637,7 @@ AN_BINOP Right left
 AN_BINOP Right limitNode
 AN_BINOP Right lit
 AN_BINOP Right litN
+AN_BINOP Right litNode
 AN_BINOP Right lnB
 AN_BINOP Right loLit
 AN_BINOP Right mask
@@ -1014,7 +1015,6 @@ AN_NEG Left RParseUnary()
 AN_NEG Left ZParseUnary()
 AN_NEG Left left
 AN_NEG Left operand
-AN_NOT Left CurASTNode
 AN_NOT Left GParsePrimary()
 AN_NOT Left PyMakeIdent(flagSym)
 AN_NOT Left RParseUnary()

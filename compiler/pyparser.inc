@@ -3112,7 +3112,7 @@ end;
 
 { Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
 procedure PyParseBitOperand;
-var node, castDepth: Integer;
+var node, castDepth, litNode: Integer;
 begin
   if PyIsIdent('isinstance') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
@@ -3201,10 +3201,22 @@ begin
       CurASTNode := node;
       Exit;
     end;
+    { `~x` IS `x ^ -1` for every int and bool, so it goes through the xor
+      path: PyBitWiden types it and a VARIANT operand takes the variant binop.
+      It used to be an AN_NOT typed after its OPERAND, and AN_NOT is integer
+      (bitwise) not only while that type is an integer. A variant operand
+      lowered as LOGICAL not: pyvar_to_bool, xor 1, and that 0/1 then handed
+      on as a variant pointer. So `~(1 << bit)` with `bit` a variant parameter
+      read 0 (a lost bit in frankd-a3's framebuf shim) or SIGSEGV'd on a tag
+      compare through address 0, depending on what consumed it. A bool
+      operand answered `~True` False where CPython answers -2. }
     PyBitGuard(CurASTNode);
-    node := AllocNode(AN_NOT);
-    ASTLeft[node] := CurASTNode;
-    ASTTk[node] := ASTTk[CurASTNode];   { integer-typed AN_NOT = bitwise not }
+    litNode := AllocNode(AN_INT_LIT);
+    ASTIVal[litNode] := -1;
+    ASTTk[litNode] := Ord(tyInt64);
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
+    ASTLeft[node] := CurASTNode; ASTRight[node] := litNode;
+    ASTTk[node] := Ord(PyBitWiden(CurASTNode, litNode));
     CurASTNode := node;
   end
   else
