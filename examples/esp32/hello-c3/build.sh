@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
-PXX="$REPO_ROOT/compiler/pascal26"
+PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"  # the pin in a checkout, compiler/pxx-<arch> in a release
 
 # See net-c3/build.sh: --platform=esp (IDF heap) and --no-signals (no
 # rt_sigaction in the prologue) are both required, and each is silent when

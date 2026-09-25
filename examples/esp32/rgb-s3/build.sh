@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
-PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
+PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"  # the pin in a checkout, compiler/pxx-<arch> in a release
 
 rm -f main/main.o main/libpxx_app.a
 "$PXX" --target=xtensa --xtensa-abi=windowed --platform=esp main/main.pas main/main.o

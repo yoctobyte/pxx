@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-PXX="$ROOT/compiler/pascal26"
+PXX="${PXX:-$("$ROOT/tools/pxx_stable.sh")}"  # the pin in a checkout, compiler/pxx-<arch> in a release
 
 cd "$(dirname "$0")"
 

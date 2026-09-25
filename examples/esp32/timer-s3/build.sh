@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
-PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
+PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"  # the pin in a checkout, compiler/pxx-<arch> in a release
 
 # --no-signals as well as --platform=esp: the signal runtime's rt_sigaction
 # install is an ecall in app_main's prologue, fatal under FreeRTOS.

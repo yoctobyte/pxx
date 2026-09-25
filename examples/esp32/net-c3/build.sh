@@ -12,9 +12,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 
-# Track B builds against the pinned stable compiler, not the in-flux one.
-PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
-[ -x "$PXX" ] || PXX="$REPO_ROOT/compiler/pascal26"
+# Track B builds against the stable compiler, not the in-flux one.
+PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"  # the pin in a checkout, compiler/pxx-<arch> in a release
 
 # --platform=esp and --no-signals are BOTH required, and each is silent when
 # missing:
