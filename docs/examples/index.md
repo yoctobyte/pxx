@@ -391,8 +391,9 @@ The soak was measured on 2026-09-25 on an ESP32-S3 devkit (ESP-IDF v6.0.1,
 160 MHz), with a compiler built after pin v424 (sha256 `29956ba5beff…`, tree
 `9c14efd7b`). The checked-in example, with `REPORTS = 10`, also runs on the
 board with pin v424 and with pin v425: on v425 its ten reports read an ADC mean
-of 3861 to 3863 and free heap between 257,976 and 262,088 bytes. The raw capture and the exact program are kept in
-`devdocs/evidence/monitor-s3-soak-2026-09-25/`.
+of 3861 to 3863 and free heap between 257,976 and 262,088 bytes. The raw
+capture and the exact program are kept in the repository, in
+[`devdocs/evidence/monitor-s3-soak-2026-09-25/`](https://github.com/yoctobyte/pxx/tree/master/devdocs/evidence/monitor-s3-soak-2026-09-25).
 
 Nil Python is python-ish: this program stays inside the core that behaves as
 CPython does, and outside it the language is known to have plenty of issues

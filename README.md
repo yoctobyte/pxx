@@ -153,13 +153,13 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 - [Public documentation](docs/index.md) — install, getting started, language,
   features, targets, library, and reference pages. Published at
   <https://pxxc.org/docs/>; the Markdown here is the source it renders.
-- [Internal documentation index](devdocs/README.md)
-- [Legacy command line](devdocs/cli.md)
-- [Legacy dialect notes](devdocs/dialect/README.md)
-- [Not implemented](devdocs/not-implemented.md)
-- [Not stable](devdocs/not-stable.md)
-- [Developer docs](devdocs/developer/README.md)
-- [Agent instructions](agents/AGENTS.md) — guidelines and workflow for AI agents working on this repo.
+- Internal documentation — plans, progress tickets, legacy command-line and
+  dialect notes, developer docs — is in the repository's
+  [`devdocs/`](https://github.com/yoctobyte/pxx/tree/master/devdocs). It is not
+  part of a release bundle.
+- [Agent instructions](https://github.com/yoctobyte/pxx/blob/master/agents/AGENTS.md)
+  — guidelines and workflow for AI agents working on this repo (repository
+  only).
 
 ## Repository Layout
 
@@ -169,7 +169,8 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
   compiler-specific runtime unit auto-included into compiled programs: heap
   allocator, `Str`/`Val`, variant helpers).
 - `docs/` - public website documentation.
-- `devdocs/` - project state, plans, progress tickets, and historic handovers.
+- `devdocs/` - project state, plans, progress tickets, and historic handovers
+  (repository only; not in a release bundle).
 - `lib/` - Pascal library units used by tests and demos (`rtl/`, `pcl/`).
 - `stable_linux_amd64/` - stable/recovery compiler binaries. The default channel
   uses managed `AnsiString`; historical managed/frozen channels may remain for

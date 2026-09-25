@@ -59,9 +59,9 @@ before treating a successful compile as a production-ready result.
 
 ## Reporting gaps
 
-If a documented example fails against the pinned compiler, file a progress ticket
-under `devdocs/progress/backlog` with the command, source, expected result, and
-actual result.
+If a documented example fails against the pinned compiler, open an issue at
+<https://github.com/yoctobyte/pxx/issues> with the command, the source, the
+result you expected and the result you got.
 
 ## Next
 
