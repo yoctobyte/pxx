@@ -1,0 +1,19 @@
+.                -> BASE
+d                -> BASE/d
+./d/./sub/../f   -> BASE/d/f
+d//sub///        -> BASE/d/sub
+../../../../..   -> /
+lnk              -> BASE/d
+lnk/sub          -> BASE/d/sub
+lsub/..          -> BASE/d
+labs             -> BASE/d/f
+d/sub/up         -> BASE/d/f
+nope             -> NULL ENOENT
+d/nope/x         -> NULL ENOENT
+dangling         -> NULL ENOENT
+loop1            -> NULL ELOOP
+d/f/             -> NULL ENOTDIR
+d/f/..           -> NULL ENOTDIR
+d/f/x            -> NULL ENOTDIR
+                 -> NULL ENOENT
+(null)           -> NULL EINVAL

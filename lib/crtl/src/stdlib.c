@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 
@@ -282,17 +283,76 @@ int atoi(const char *s) {
   return v * sign;
 }
 
-/* No symlink/./.. resolution — identity copy (absolute input assumed). Enough
-   for tcc's include-path canonicalisation; a real walk needs readlink. */
+/* realpath: an absolute path with every symlink, `.` and `..` resolved, each
+   component checked to exist. It used to be an identity copy, so `./x.h` and
+   `../d/x.h` never compared equal and tcc's `#pragma once` included one header
+   three times (tests2/18). Errors are glibc's: ENOENT for a missing component
+   or a dangling link, ENOTDIR for a non-directory followed by more path (a
+   trailing slash included), ELOOP after 40 links (glibc's MAXSYMLINKS),
+   ENAMETOOLONG past PATH_MAX, EINVAL for NULL. `..` of a symlinked directory
+   is taken in the TARGET, as in the kernel, because the link is resolved
+   before the `..` is seen. */
 char *realpath(const char *path, char *resolved) {
-  size_t n;
-  if (!path) return 0;
-  n = strlen(path);
-  if (!resolved) {
-    resolved = (char *)malloc(n + 1);
-    if (!resolved) return 0;
+  char out[PATH_MAX], rest[PATH_MAX], link[PATH_MAX];
+  size_t ol, rl, cl, tl, i;
+  int links = 0;
+  struct stat st;
+  const char *comp;
+  if (!path) { errno = EINVAL; return 0; }
+  if (!*path) { errno = ENOENT; return 0; }
+  rl = strlen(path);
+  if (rl >= PATH_MAX) { errno = ENAMETOOLONG; return 0; }
+  memcpy(rest, path, rl + 1);
+  if (rest[0] == '/') { out[0] = '/'; out[1] = 0; }
+  else if (!getcwd(out, sizeof out)) return 0;
+  ol = strlen(out);
+  i = 0;
+  for (;;) {
+    while (rest[i] == '/') i++;
+    if (!rest[i]) break;
+    comp = rest + i;
+    cl = 0;
+    while (comp[cl] && comp[cl] != '/') cl++;
+    i += cl;
+    if (cl == 1 && comp[0] == '.') continue;
+    if (cl == 2 && comp[0] == '.' && comp[1] == '.') {
+      while (ol > 1 && out[ol - 1] != '/') ol--;
+      if (ol > 1) ol--;
+      out[ol] = 0;
+      continue;
+    }
+    if (ol + (ol > 1) + cl >= PATH_MAX) { errno = ENAMETOOLONG; return 0; }
+    if (ol > 1) out[ol++] = '/';
+    memcpy(out + ol, comp, cl);
+    ol += cl;
+    out[ol] = 0;
+    if (lstat(out, &st) != 0) return 0;
+    if (S_ISLNK(st.st_mode)) {
+      ssize_t n;
+      if (++links > 40) { errno = ELOOP; return 0; }
+      n = readlink(out, link, sizeof link - 1);
+      if (n < 0) return 0;
+      tl = (size_t)n;
+      /* new rest = link target + what was left of the old one */
+      rl = strlen(rest + i);
+      if (tl + rl + 1 >= PATH_MAX) { errno = ENAMETOOLONG; return 0; }
+      memmove(rest + tl, rest + i, rl + 1);
+      memcpy(rest, link, tl);
+      i = 0;
+      /* drop the link's own name; an absolute target restarts at the root */
+      ol -= cl;
+      if (ol > 1) ol--;
+      out[ol] = 0;
+      if (rest[0] == '/') { out[0] = '/'; out[1] = 0; ol = 1; }
+      continue;
+    }
+    if (!S_ISDIR(st.st_mode) && rest[i]) { errno = ENOTDIR; return 0; }
   }
-  memcpy(resolved, path, n + 1);
+  if (!resolved) {
+    resolved = (char *)malloc(ol + 1);
+    if (!resolved) { errno = ENOMEM; return 0; }
+  }
+  memcpy(resolved, out, ol + 1);
   return resolved;
 }
 

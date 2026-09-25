@@ -23670,6 +23670,11 @@ test-core: $(COMPILER)
 	tools/run_target.sh arm32 $(TESTTMP)/c_f2u26_arm32 | diff -u test/c_float_to_u64.expected -
 	./$(COMPILER) test/test_a_double_to_qword.pas $(TESTTMP)/dqw26
 	tools/expect_same.sh dqw26 "$$($(TESTTMP)/dqw26)" "$$(printf '0 10000000000000000000\n1 9223372036854775808\n2 18000000000000000000\n3 4\n4 2\nsingle 9999999980506447872')"
+	# realpath(): ./.. folding, symlinks, and the ENOENT/ENOTDIR/ELOOP/EINVAL
+	# paths. .expected is glibc's output; the old identity-copy realpath differed
+	# on all 19 rows (tcc's #pragma once, tests2/18).
+	./$(COMPILER) test/crtl_realpath.c $(TESTTMP)/crtl_rp26
+	$(TESTTMP)/crtl_rp26 | diff -u test/crtl_realpath.expected -
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an
