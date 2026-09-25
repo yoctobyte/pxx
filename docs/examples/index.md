@@ -160,12 +160,12 @@ C library. The screenshots were captured from each program running in an
 | Program | Source | |
 | --- | --- | --- |
 | 2048 | `examples/g2048/console_2048.pas` | ![2048 in a terminal](../assets/showcase/g2048.png) |
-| Klondike solitaire | `examples/solitaire/console_solitaire.pas` | ![Klondike solitaire in a terminal](../assets/showcase/solitaire.png) |
+| Klondike solitaire | `examples/solitaire/console_solitaire.pas` (build with `-Fuexamples/solitaire_gui`, where its card engine lives; `./demos.sh` does this) | ![Klondike solitaire in a terminal](../assets/showcase/solitaire.png) |
 | Sudoku game | `examples/sudoku/sudoku_game.pas` | ![Interactive Sudoku](../assets/showcase/sudoku_game.png) |
 | Text adventure | `examples/adventure/adventure.pas` (run from `examples/adventure/`, it reads `world.dat`) | ![Text adventure with pixel-art scene](../assets/showcase/adventure.png) |
 | Menu widgets | `examples/tui/menudemo.pas` | ![TUI menu](../assets/showcase/menudemo.png) |
 | File browser | `examples/fm/fm.pas` (`fm --interactive [path]`; with no flag it renders once and exits) | ![Terminal file browser](../assets/showcase/fm.png) |
-| Mandelbrot zoom | `examples/mandelbrot/mandelzoom.pas`: animated truecolor zoom using integer asm kernels on all cores | ![Mandelbrot zoom in a terminal](../assets/showcase/mandelzoom.png) |
+| Mandelbrot zoom | `examples/mandelbrot/mandelzoom.pas`: animated truecolor zoom using integer asm kernels on all cores (build with `--threadsafe`) | ![Mandelbrot zoom in a terminal](../assets/showcase/mandelzoom.png) |
 | Video player | `examples/player/player.pas`: `player <video>`, decodes through an `ffmpeg` child process and draws in truecolor blocks | ![Terminal video player](../assets/showcase/player.png) |
 
 The chess engine (`examples/chess/chess.pas`) and the kiosk are
@@ -581,7 +581,7 @@ checkout `41a347978`.
 | **fcl-json** (`fpjson`, `jsonparser`, `jsonscanner`) with the **fpcunit** test framework | FPC 3.2.2 release | fcl-json's own test suite, `tjrun.pp`: `run: 203 failures: 0 errors: 0`, the same result as the Free Pascal 3.2.2 build. One file is replaced: fpcunit's `testutils`, which reads Free Pascal's internal VMT layout, is swapped for `test/fpjson/testutils.pas`. Every other unit is used unmodified | 870 KB, static |
 | **Free Pascal's own test suite** (`tests/test`) | FPC 3.2.2 release | `tools/run_pascal_conformance.sh`, on a curated 550 of the directory's 1,447 programs. Each must compile, run and exit as the test specifies, or be refused where the test expects a compile error. **427 pass, 0 fail.** 50 do not apply here (another CPU or target, or suite machinery PXX does not model). 73 are skipped, each with a written reason in `test/pascal-conformance/pxx.skip`: 39 are open gaps, 23 are deliberate differences, 9 wait on a design decision and 2 are programs PXX accepts where Free Pascal refuses them | – |
 
-The fcl-json recipe is `make test-fpjson`, which uses the pinned compiler. The test-suite runner takes the compiler as its first argument: `tools/run_pascal_conformance.sh stable_linux_amd64/default/pinned`.
+The fcl-json recipe is `make test-fpjson`, which uses the pinned compiler. The test-suite runner takes the compiler as its first argument: `tools/run_pascal_conformance.sh compiler/pascal26`. In a checkout, pass `stable_linux_amd64/default/pinned` instead to reproduce the pin v425 figures above; a release archive ships no pinned compiler.
 
 ## A bootable minimal Linux system
 

@@ -40,12 +40,17 @@ cross-target smoke runs. Binaries that deliberately use external C libraries may
 need a guest dynamic loader and libc; `tools/run_target.sh` honors
 `QEMU_LD_PREFIX` and `PXX_CROSS_SYSROOT` for those cases.
 
-ESP32 flows use target-specific helpers and may require vendor tooling:
+ESP32 flows use target-specific helpers and need Espressif's toolchain
+(`. ~/esp/esp-idf/export.sh`). The hello examples are ESP-IDF programs, so
+they boot under QEMU through the ESP-IDF runner:
 
 ```sh
-tools/esp_run_bare.sh --chip esp32c3 examples/esp32/hello-c3/main/main.pas
-tools/esp_run_bare.sh --chip esp32s3 examples/esp32/hello-s3/main/main.pas
+tools/esp_run.sh --chip esp32c3 examples/esp32/hello-c3/main/main.pas
+tools/esp_run.sh --chip esp32s3 examples/esp32/hello-s3/main/main.pas
 ```
+
+`tools/esp_run_bare.sh` is for bare-metal programs only; a program that calls
+ESP-IDF functions, like these two, cannot build bare.
 
 See [ESP32 / Microcontrollers](./esp32.md) for the bare-metal and ESP-IDF
 integration modes, footprint numbers, and the soft-float contract.

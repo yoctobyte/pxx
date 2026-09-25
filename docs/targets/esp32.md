@@ -32,9 +32,11 @@ faults, because the S3 only allows 32-bit accesses where the bare profile
 places its data. Byte writes to the UART are also dropped. A bare ESP32-C3
 image has never been run on silicon.
 
+With the program below saved as `esphello.pas`:
+
 ```sh
-./pxx --target=riscv32 --esp-profile=bare blink.pas blink.elf
-tools/esp_run_bare.sh --chip esp32c3 blink.pas     # compile + boot under QEMU
+./pxx --target=riscv32 --esp-profile=bare esphello.pas esphello.elf
+tools/esp_run_bare.sh --chip esp32c3 esphello.pas     # compile + boot under QEMU
 ```
 
 Under the bare profile the compiler defines `PXX_ESP_BARE`, so one source

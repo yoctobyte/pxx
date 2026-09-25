@@ -112,14 +112,13 @@ directory you downloaded it to:
 sha256sum -c SHA256SUMS            # with the .tar.gz beside it
 tar xzf pxx-<version>.tar.gz && cd pxx-<version>
 ./install.sh --yes                 # writes ./pxx, the wrapper every page here uses
-./pxx test/hello.pas /tmp/hello && /tmp/hello
-./setup.sh                         # points compiler/pxx at this host's binary
-./selfcheck.sh                     # needs ./setup.sh first
+./pxx examples/primes/sieve.pas /tmp/sieve && /tmp/sieve
+./selfcheck.sh                     # optional: rebuilds the shipped compilers, compares with MANIFEST.sha256
 ```
 
-`./setup.sh` also offers to link `pxx` into `~/.local/bin` when run at a
-terminal. `./selfcheck.sh` stops with `no compiler/pxx — run ./setup.sh first`
-if you skip that step. `tools/install.sh`, below, works in a checkout only.
+Run `./install.sh` without `--yes` at a terminal to be offered a `pxx` link
+in `~/.local/bin`, or use `tools/install.sh`, below, which works in a release
+archive as in a checkout.
 
 ## Wrapper installs
 
