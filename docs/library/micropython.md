@@ -77,7 +77,8 @@ for i in range(3):
 With no device on the bus, a write fails with `OSError` errno 19 and a bus
 timeout with errno 110, just as on MicroPython's ESP32 port, so a driver's
 initialisation fails instead of hanging. That errno mapping comes from the
-library source. On a board, it has been checked only in the no-device case.
+library source and matches MicroPython's ESP32 port. It has not yet been
+checked on a board.
 
 Where `machine` differs from MicroPython:
 
