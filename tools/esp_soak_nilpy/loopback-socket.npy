@@ -1,0 +1,19 @@
+# SOAK-REPLACES-MAIN
+# SPDX-License-Identifier: 0BSD
+# A socket in a NilPy ESP program that never touches `network` or pxx_esp:
+# bind, listen and close on 127.0.0.1. Run it against the PLAIN projects,
+#   SOAK_BODY=tools/esp_soak_nilpy/loopback-socket.npy \
+#     tools/esp_heap_soak_nilpy.sh nilpy-s3      (and nilpy-c3)
+# The first socket must start lwIP's TCP/IP task itself (PalBackendSocket's
+# esp_netif_init). While that reference was WEAK it resolved to nil in every
+# project without pxx_esp, and this body asserted in tcpip_send_msg_wait_sem
+# and rebooted, 64 times in 90 s, before printing a single SOAK line. So a
+# SOAK line here is the row, and NO-RESULT is the regression.
+import socket
+
+
+def soak_body():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    s.listen(1)
+    s.close()

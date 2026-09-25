@@ -960,9 +960,15 @@ end;
   loopback sockets work with the radio off, because its port starts the stack
   at boot. So the first socket starts it here. esp_netif_init is idempotent
   (it returns ESP_OK once the task runs), so pxx_esp's Wi-Fi bring-up and the
-  Pascal examples calling it again are unaffected. WEAK: a project that does
-  not REQUIRE esp_netif links with this nil and behaves as before. }
-function EspNetifInit: Integer; cdecl; weakexternal name 'esp_netif_init';
+  Pascal examples calling it again are unaffected. STRONG, not weak: a weak
+  undefined symbol pulls no archive member, so the weak form resolved to nil
+  (and the socket still asserted) in every project that did not otherwise link
+  esp_netif_init, which was every NilPy project except the two that REQUIRE
+  pxx_esp (measured: plain nilpy-s3, 64 assert-reboots in 90 s). The strong
+  reference costs nothing to resolve: these projects build every IDF component
+  (none sets COMPONENTS/MINIMAL_BUILD), which is also how lwip_socket above
+  resolves in timer-c3, whose main REQUIRES only esp_timer. }
+function EspNetifInit: Integer; cdecl; external name 'esp_netif_init';
 var EspNetifTried: Boolean;
 {$endif}
 
@@ -972,7 +978,7 @@ begin
   if not EspNetifTried then
   begin
     EspNetifTried := True;
-    if @EspNetifInit <> nil then EspNetifInit;
+    EspNetifInit;
   end;
   Result := EspNet(lwip_socket(domain, kind, proto));
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
