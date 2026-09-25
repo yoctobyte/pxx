@@ -21,7 +21,20 @@ esac
 
 bin="compiler/pxx-$arch"
 [[ -x "$bin" ]] || { echo "setup: missing $bin in this release"; exit 1; }
-ln -sf "pxx-$arch" compiler/pxx
+# Every pxx-<arch> is built by the x86_64 compiler with --target=<arch>, and a
+# compiler built that way still EMITS x86-64 by default: measured 2026-09-25,
+# pxx-aarch64 under qemu turned hello.pas into an x86-64 ELF. A bare symlink
+# would hand an aarch64 user a compiler whose output cannot run on their
+# machine. So off x86_64, compiler/pxx is a two-line wrapper that names the
+# host target; an explicit --target later on the command line still wins (the
+# last one does), which selfcheck.sh relies on.
+rm -f compiler/pxx
+if [[ "$arch" == x86_64 ]]; then
+  ln -s "pxx-$arch" compiler/pxx
+else
+  printf '#!/bin/sh\nexec "$(dirname "$0")/pxx-%s" --target=%s "$@"\n' "$arch" "$arch" > compiler/pxx
+  chmod +x compiler/pxx
+fi
 echo "setup: native arch = $arch -> compiler/pxx -> pxx-$arch"
 
 # Verify the binary actually runs + finds its libs here.
@@ -32,7 +45,14 @@ else
 fi
 
 target_dir="${1:-$HOME/.local/bin}"
-read -rp "symlink 'pxx' into $target_dir? [Y/n] " ans || true
+# No TTY (a script, CI, release.sh's own rehearsal): a failed read left $ans
+# empty and the default Y then wrote into the invoking user's ~/.local/bin.
+# Only a person at a terminal gets the symlink.
+if [[ -t 0 ]]; then
+  read -rp "symlink 'pxx' into $target_dir? [Y/n] " ans || true
+else
+  ans=n
+fi
 case "${ans:-Y}" in
   n|N) echo "setup: skipped PATH symlink. Run directly via $ROOT/compiler/pxx" ;;
   *)   mkdir -p "$target_dir"

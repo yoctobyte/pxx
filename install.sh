@@ -74,9 +74,20 @@ case "$(uname -m)" in
   *)                   HOSTARCH="" ;;
 esac
 NATIVE="$ROOT/native/pxx-$HOSTARCH"
+# A release bundle (tools/release.sh) ships no stable_linux_amd64/ and no
+# native/ -- both are export-ignored -- and carries a freshly built
+# compiler/pxx-<arch> for every host instead. Without this arm, install.sh run
+# from an unpacked release found no compiler at all on x86_64 and fell through
+# to "make bootstrap, needs FPC".
+RELEASE_BIN="$ROOT/compiler/pxx-$HOSTARCH"
 
 if runs_here "$PINNED"; then
   note "stable compiler OK: $PINNED"          # x86-64 host: pinned auto-tracks re-pins
+elif [ -n "$HOSTARCH" ] && runs_here "$RELEASE_BIN"; then
+  COMPILER="$RELEASE_BIN"
+  # A cross-built pxx-<arch> still emits x86-64 by default; name the host.
+  [ "$HOSTARCH" != x86_64 ] && WRAP_TARGET="$HOSTARCH"
+  note "release compiler OK: $RELEASE_BIN"
 elif [ -n "$HOSTARCH" ] && runs_here "$NATIVE"; then
   COMPILER="$NATIVE"; WRAP_TARGET="$HOSTARCH"  # committed native cross binary
   note "native compiler OK: $NATIVE  (target $HOSTARCH)"

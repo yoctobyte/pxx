@@ -27,7 +27,7 @@ EMIT_ONLY_TARGETS=(xtensa riscv32)              # emit-only (no host self-host)
 COMPILER="compiler/pascal26"
 COMPILER_SRC="compiler/compiler.pas"
 XFAIL_FILE="tools/release-xfail.txt"
-DIST="dist"
+DIST="${RELEASE_DIST:-dist}"               # override to build on another disk
 # Codename theme: mathematicians/computing pioneers, alphabetical — the tool
 # suggests the next unused initial; the maintainer may override.
 CODENAME_POOL=(Babbage Curry Dijkstra Euler Floyd Goedel Hopper Iverson \
@@ -374,8 +374,8 @@ included source — no separate packages to fetch.
     setup.sh, selfcheck.sh  install + reproduce helpers
 
 ## Rebuild from source
-    make seed-from-stable      # seed working binary from the shipped stable (no FPC)
-    make test                  # byte-identical self-host fixed point (no FPC)
+    cp compiler/pxx-x86_64 compiler/pascal26   # seed from the shipped binary (no FPC)
+    make compiler/pascal26     # rebuild; converges to the same byte-identical fixed point
     # — or, from pure source with no binary at all:
     make bootstrap             # FPC seeds gen0, then it self-hosts (needs fpc)
     make test-fpc              # optional: prove FPC still compiles us (compliance)
@@ -403,19 +403,23 @@ This is a $( [[ "$tag" == *-* ]] && echo "prerelease" || echo "stable release" )
 EOF
 }
 
-# Reproduce-from-this-host check: recompute the manifest, compare to the built one.
+# Reproduce check, run the way a USER runs it: unpack the TARBALL somewhere
+# outside the repo, ./setup.sh, ./selfcheck.sh. This used to rebuild each target
+# with ./compiler/pascal26 -- the very binary that had just built them -- and
+# compare, which proves only that one binary gives the same answer twice. From
+# the unpacked tarball it proves the shipped native binary, reading only what
+# the tarball carries (builtin/, lib/, the compiler source), rebuilds EVERY
+# shipped binary byte for byte, and that a compiler it builds is a fixedpoint on
+# this host. A file the bundle forgot to ship fails here, not on a user's box.
 run_selfcheck() {
-  local tag="$1" t h1 h2 tmp        # $d split out: same-line $tag is unbound under set -u
-  local d="$DIST/pxx-$tag"
-  echo "==> selfcheck: reproduce manifest from this host"
+  local tag="$1" tmp log
+  echo "==> selfcheck: unpack pxx-$tag.tar.gz, ./setup.sh, ./selfcheck.sh"
   tmp="$(mktemp -d)"
-  for t in "${HOST_TARGETS[@]}"; do
-    ./"$COMPILER" --target="$t" "$COMPILER_SRC" "$tmp/pxx-$t" >/dev/null
-    h1="$(sha256sum "$tmp/pxx-$t" | awk '{print $1}')"
-    h2="$(awk -v f="compiler/pxx-$t" '$2==f{print $1}' "$d/MANIFEST.sha256")"
-    [[ "$h1" == "$h2" ]] || die "selfcheck: $t does not reproduce ($h1 != $h2)"
-    echo "    $t reproduces OK"
-  done
+  tar -xzf "$DIST/pxx-$tag.tar.gz" -C "$tmp"
+  log="$DIST/selfcheck-$tag.log"
+  ( cd "$tmp/pxx-$tag" && ./setup.sh "$tmp/bin" </dev/null && ./selfcheck.sh ) > "$log" 2>&1 || true
+  sed 's/^/    /' "$log"
+  grep -qx 'selfcheck: PASS' "$log" || die "selfcheck: FAILED from the unpacked tarball (log: $log)"
   rm -rf "$tmp"
 }
 

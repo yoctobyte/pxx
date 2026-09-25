@@ -62,3 +62,26 @@ stable_linux_amd64/   export-ignore
 CLAUDE.md             export-ignore
 .gitattributes        export-ignore
 .github/              export-ignore
+# The 2026-06-26 docs split (601c08105f) moved docs/progress, docs/dev,
+# docs/developer, docs/historic and docs/lore under devdocs/ and dropped their
+# export-ignore lines on the way, so from then on every bundle shipped the whole
+# workshop: 73M of tickets, playbooks and anomaly ELFs, half the archive. Public
+# user docs stay in docs/. Measured 2026-09-25 with `git archive HEAD <dir> | wc -c`.
+devdocs/              export-ignore
+.claude/              export-ignore
+# Committed dev binaries a user cannot use and the release replaces:
+#   compiler/pascal26-fpc*  FPC-built seeds from 2026-06-30, not the shipped compiler
+#   native/                 per-arch compilers from 2026-06-24; the bundle ships a
+#                           fresh compiler/pxx-<arch> for every host instead, and
+#                           install.sh prefers that
+#   ss/                     a 2026-09-02 shortstring census scratch dir
+compiler/pascal26-fpc     export-ignore
+compiler/pascal26-fpc2    export-ignore
+compiler/pascal26-fpcdbg  export-ignore
+native/               export-ignore
+ss/                   export-ignore
+# Stray files committed by accident alongside unrelated fixes (0728155f2e,
+# f9fdca595d): an FPC log, a probe unit and an app's settings file at the root.
+/w2.log                     export-ignore
+/wmid.pas                   export-ignore
+/songformatter_settings.ini export-ignore
