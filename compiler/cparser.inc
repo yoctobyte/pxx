@@ -3229,7 +3229,7 @@ begin
   end
   else if ASTKind[node] = AN_INDEX then
   begin
-    baseNode := ASTLeft[node];
+    baseNode := CCommaValue(ASTLeft[node]);   { `(0, arr)[i]->f`: the comma's array }
     if ASTKind[baseNode] = AN_IDENT then
       Result := Syms[ASTIVal[baseNode]].PtrElemRec
     else if ASTKind[baseNode] = AN_FIELD then
@@ -3677,7 +3677,7 @@ begin
       cRest := 1;
       if (CTypePtrDepth = 0) and (CTypeTypedefArrLen >= 0) then
         for cD := 0 to CTypeTypedefNDims - 1 do cRest := cRest * CTypeTypedefDims[cD];
-      if (CTypePtrDepth = 0) and (CurTok.Kind = tkLBrack) then
+      if CurTok.Kind = tkLBrack then   { `(int *[]){..}` too: an array of pointers }
       begin
         Next;
         if CurTok.Kind = tkRBrack then cArrLen := -1   { `[]` — count the init }
@@ -4285,7 +4285,7 @@ end;
   dims[0] = -1 is an unsized first dimension, sized from the initializer.
   cglm's GLM_MAT4_IDENTITY is `((mat4){{1,0,0,0},...})`. }
 function CParseCompoundLiteralArrN(elemTk, elemRec, nDims: Integer;
-  const dims: array of Integer): Integer;
+  const dims: array of Integer; ptrDepth, pElemTk, pElemRec, pBaseTk, pBaseRec: Integer): Integer;
 var tmpSym, total, eb, d, span0, seq, chain, t, node, depth, top, p, savedRecId: Integer;
 begin
   eb := 1;
@@ -4325,6 +4325,13 @@ begin
   if IntToTypeKind(elemTk) = tyRecord then LastTypeRecId := elemRec;
   tmpSym := AllocArray('', IntToTypeKind(elemTk), 0, total - 1);
   LastTypeRecId := savedRecId;
+  if ptrDepth > 0 then
+  begin
+    { `(int *[]){&x, &y}` / cglm's `(mat4 *[]){&a, &b}`: an array of POINTERS,
+      recorded like a local `int *a[2]` so `*a[i]` knows its pointee. }
+    SetSymPointerType(tmpSym, IntToTypeKind(pElemTk), pElemRec, ptrDepth, pBaseTk, pBaseRec);
+    SymSyncTypeRef(tmpSym);
+  end;
   if nDims >= 2 then
   begin
     SymArrNDims[tmpSym] := nDims;
@@ -4349,7 +4356,7 @@ begin
   ASTLeft[node] := seq;
   ASTTk[node] := Ord(tyPointer);
   Result := node;
-  if nDims >= 2 then
+  if (nDims >= 2) or (ptrDepth > 0) then
   begin
     { A MULTI-DIMENSIONAL literal decays to a pointer to its first ROW, and the
       compound-literal node only knows its element: `((mat4){..})[1][0]` stepped
@@ -4582,7 +4589,7 @@ begin
     { Every `[N]` of the abstract declarator, then an array typedef's own dims
       (`(vec4)`, `(mat4)`, `(vec4[2])` is [2][4]). }
     clNDims := 0;
-    while (castDepth = 0) and (CurTok.Kind = tkLBrack) and (clNDims < MAX_ARR_DIMS) do
+    while (CurTok.Kind = tkLBrack) and (clNDims < MAX_ARR_DIMS) do
     begin
       Next;
       if CurTok.Kind = tkRBrack then clDims[clNDims] := -1   { unsized `[]`, sized from the init }
@@ -4621,10 +4628,14 @@ begin
           clDesig := True;
         Inc(clP);
       end;
-      if (clNDims = 1) and (CTypeTypedefArrLen < 0) and (castTk <> tyRecord) and not clDesig then
+      if castDepth > 0 then
+        Result := ParseCPostfixTail(CParseCompoundLiteralArrN(Ord(tyPointer), REC_NONE, clNDims, clDims,
+          castDepth, castElemTk, castElemRec, castBaseTk, castBaseRec))
+      else if (clNDims = 1) and (CTypeTypedefArrLen < 0) and (castTk <> tyRecord) and not clDesig then
         Result := ParseCPostfixTail(CParseCompoundLiteralArr(Ord(castTk), arrCastLen))
       else
-        Result := ParseCPostfixTail(CParseCompoundLiteralArrN(Ord(castTk), clRecId, clNDims, clDims));
+        Result := ParseCPostfixTail(CParseCompoundLiteralArrN(Ord(castTk), clRecId, clNDims, clDims,
+          0, 0, REC_NONE, 0, REC_NONE));
       Exit;
     end;
     if (CurTok.Kind = tkBegin) and (castTk = tyRecord) and (castDepth = 0)
@@ -6535,6 +6546,21 @@ begin
       CTypeElemTk := Ord(tyPointer);
       CTypeElemRec := baseRec;
     end;
+    { `mat4 *m` / `vec4 *v` -- ONE star over an ARRAY typedef is a pointer to
+      array, the same type as `float (*m)[4][4]`, and must carry the same row
+      record. It recorded none, so `(*m)[1][1]` read the wrong element (cglm's
+      glm_mat4_mulN takes `mat4 *matrices[]`). Every declarator site already
+      reads CTypePtrElemArrLen/NDims/Dim, so setting them here is the whole fix. }
+    if (CTypePtrDepth = 1) and (CTypeTypedefArrLen > 0) and (CTypeTypedefNDims > 0) then
+    begin
+      CTypePtrElemNDims := CTypeTypedefNDims;
+      CTypePtrElemArrLen := 1;
+      for tdDimI := 0 to CTypeTypedefNDims - 1 do
+      begin
+        CTypePtrElemDim[tdDimI] := CTypeTypedefDims[tdDimI];
+        CTypePtrElemArrLen := CTypePtrElemArrLen * CTypeTypedefDims[tdDimI];
+      end;
+    end;
     Result := tyPointer;
     CTypeIsVoid := False;
   end;
@@ -6915,6 +6941,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     beStack: array[0..MAX_ARR_DIMS-1] of Integer;
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
+    tdNDimsL: Integer; tdDimsL: array[0..MAX_ARR_DIMS - 1] of Integer;
     tdDi: Integer;   { walks an array typedef's inherent dims }
     wcp, wnb, wsoff, wslen: Integer;
     curElemIdx, rangeHi, maxElemIdx, dk: Integer;
@@ -6929,6 +6956,8 @@ begin
   cliBase := CLIArrTop;
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
+  tdNDimsL := CTypeTypedefNDims;   { ...and ALL of them, for `mat4 *m` (a [4][4] pointee) }
+  for di := 0 to MAX_ARR_DIMS - 1 do tdDimsL[di] := CTypeTypedefDims[di];
   { Capture the pointer element type/record now — ParseCExpr below must not
     clobber the CType* globals (it does not run ParseCDeclType). }
   elemTkOrd := CTypeElemTk;
@@ -7785,6 +7814,18 @@ begin
           converge on one stamping instead of this one growing a private rule. }
         if (tdArrLen >= 1) and (declPtrDepth >= 1) then
           SymPtrElemArrLen[idx] := tdArrLen;
+        { a MULTI-dim array typedef (`mat4 *m`, [4][4]) is a pointer to that
+          whole array: stamp every dim, as `float (*m)[4][4]` does }
+        if (tdArrLen >= 1) and (declPtrDepth = 1) and (tdNDimsL > 1) then
+        begin
+          SymPtrElemArrLen[idx] := 1;
+          SymPtrElemNDims[idx] := tdNDimsL;
+          for di := 0 to tdNDimsL - 1 do
+          begin
+            SymArrDimSpan[idx * MAX_ARR_DIMS + di] := tdDimsL[di];
+            SymPtrElemArrLen[idx] := SymPtrElemArrLen[idx] * tdDimsL[di];
+          end;
+        end;
         if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
         { `ft *pf` — pointer to a fn-pointer: the pointee sig lets `(*pf)(args)`
           resolve (SymElemProcSig channel, shared with `pf[0](args)`). }
@@ -14829,6 +14870,10 @@ begin
             begin
               pelemtk[nparams] := Ord(tyPointer);   { `T *name[]` -> pointer-to-pointer }
               Inc(pdepths[nparams]);
+              { ...so a pointee-array stamp from `mat4 *` describes the ELEMENT's
+                pointee, not this parameter's: `m[i]` steps one pointer. }
+              pptrarrlen[nparams] := 0;
+              pptrndims[nparams] := 0;
             end;
             ptypes[nparams] := tyPointer;
           end;

@@ -5230,6 +5230,18 @@ begin
   end;
 end;
 
+{ Does an argument expression contain a comma operator anywhere -- the stb_ds
+  shape `((void) f(k), &t[temp])->value` has it under a field access, not at
+  the top. Used to pin such an argument's value at its own position. }
+function IRASTHasComma(node: Integer): Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_COMMA then begin Result := True; Exit; end;
+  if ASTLeftIsChild(node) and IRASTHasComma(ASTLeft[node]) then begin Result := True; Exit; end;
+  if ASTRightIsChild(node) then Result := IRASTHasComma(ASTRight[node]);
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -5240,6 +5252,7 @@ var argTk: TTypeKind;
     srcAddr: Integer;
     value: Integer;
     caCount, caElemRec, caElemSz, caSym, savedRec: Integer;
+    cmHad: Boolean; cmTk: TTypeKind; cmTmp, cmVal: Integer;   { comma-argument pin }
     caElemTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall, caNone: Integer;
     oaEligible: Boolean;
@@ -6330,6 +6343,7 @@ begin
 
     csmith: `func_10(((*g_3), g_15), ...)` segfaulted, while `func_10(g_15, ...)` --
     the same struct, passed directly -- was fine. }
+  cmHad := False;
   while ASTKind[argAST] = AN_COMMA do
   begin
     { IRMarkStatementNode, exactly as the AN_COMMA arm of IRLowerAST does: the IR is
@@ -6338,6 +6352,36 @@ begin
       silently not call bump(). }
     IRDiscardValue(ASTLeft[argAST], IRLowerAST(ASTLeft[argAST]));
     argAST := ASTRight[argAST];
+    cmHad := True;
+  end;
+  { ...and the VALUE must be taken there too. The left operand above is a
+    statement, emitted where it is lowered; the right one is a value node,
+    emitted only when the call materialises its arguments -- after EVERY
+    argument's left operand. `f((look(1), a[t]), (look(2), a[t]))` read t=2
+    twice (gcc and clang: 1 then 2), and stb_ds's shget, `((void)
+    stbds_shgeti(t,k), &t[temp])->value`, passed twice in one printf, printed
+    the second key's value for both -- there the comma is BELOW a field access,
+    so any comma inside the argument counts. Store a SCALAR value into a temp at
+    this point, a statement in order, and pass the temp. Records, strings and
+    arrays keep the parameter-aware path below (a comma is not an lvalue). }
+  if (not cmHad) and IsCFrontend and (not isRefArg) then cmHad := IRASTHasComma(argAST);
+  if cmHad and IsCFrontend and (not isRefArg) then
+  begin
+    cmTk := IntToTypeKind(ASTTk[argAST]);
+    if (TypeIsOrdinal(cmTk) or (cmTk = tyPointer) or (cmTk = tyDouble)) and
+       (ASTKind[argAST] <> AN_STR_LIT) and (ASTKind[argAST] <> AN_COMPOUND_LITERAL) and
+       not ((ASTKind[argAST] = AN_IDENT) and Syms[ASTIVal[argAST]].IsArray) then
+    begin
+      cmVal := IRLowerAST(argAST);
+      if IntToTypeKind(IRTk[cmVal]) = cmTk then
+      begin
+        cmTmp := AllocVar('', cmTk);
+        IRAppend(IR_STORE_SYM, cmTmp, cmVal, -1, 0, Ord(cmTk));
+        argAST := AllocNode(AN_IDENT);
+        ASTIVal[argAST] := cmTmp;
+        ASTTk[argAST] := Ord(cmTk);
+      end;
+    end;
   end;
 
   { A FRESH dyn-array call result reaching an OPEN-ARRAY parameter has no owner.

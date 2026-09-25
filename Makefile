@@ -14185,6 +14185,16 @@ test-core: $(COMPILER)
 	# by rows. All but the flat 1-D literal were refused. Expected is gcc's output.
 	./$(COMPILER) test/test_c_array_typed_compound_literals.c $(TESTTMP)/test_c_array_cl26
 	tools/expect_same.sh test_c_array_cl26 "$$($(TESTTMP)/test_c_array_cl26)" "$$(printf '1 2 3 4\n1 2 3 4 5 0\n0 4 0 9 0\n2 0 3 6\n4 5 0\n10 6\n39 36\n24 32 24 24\n3\n3 1 64\n4 2 6 9\n7 8 42\n7')"
+	# A call argument containing a comma is evaluated completely before the next
+	# argument (stb_ds shget twice in one printf printed the second key twice).
+	# The interesting argument sits first, last and in the middle. gcc's output.
+	./$(COMPILER) test/test_c_comma_argument_completes_before_the_next_argument.c $(TESTTMP)/test_c_comma_arg26
+	tools/expect_same.sh test_c_comma_arg26 "$$($(TESTTMP)/test_c_comma_arg26)" "$$(printf '20 30 7\n7 20 30\n20 7 40\n20 30 40\n20 30 5\n6 15\na d\n0.5 1.5')"
+	# `mat4 *q` is `float (*q)[4][4]` (local, param, cast), and array-of-pointer
+	# compound literals `(int *[]){&x,&y}` / cglm's `(mat4 *[]){..}`. gcc's output
+	# on x86-64 (the sizeof rows are pointer-width).
+	./$(COMPILER) test/test_c_pointer_to_an_array_typedef_and_pointer_array_literals.c $(TESTTMP)/test_c_ptr_arr_td26
+	tools/expect_same.sh test_c_ptr_arr_td26 "$$($(TESTTMP)/test_c_ptr_arr_td26)" "$$(printf '6 6 7 18\n7 6\n4\n7\n10 8\n8 8\n24 32\ntwo\n16')"
 	./$(COMPILER) test/test_c_macro_alias_chain_rescans.c $(TESTTMP)/test_c_macro_alias26
 	tools/expect_same.sh test_c_macro_alias26 "$$($(TESTTMP)/test_c_macro_alias26)" "$$(printf '42 42 42 42\n21 22 43\n4 102 200 7\n1001 6 42 42')"
 	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
