@@ -1,0 +1,192 @@
+diff --git a/compiler/compiler.pas b/compiler/compiler.pas
+index 1b33051d0a..b161c08324 100644
+--- a/compiler/compiler.pas
++++ b/compiler/compiler.pas
+@@ -1077,6 +1077,7 @@ begin
+   ASTNodeCount := INLINE_AST_RESERVE;   { per-proc AST starts above the low inline reserve; the per-body resets restore this, but the FIRST allocation (before any reset) must not land in [0..INLINE_AST_RESERVE) and collide with retained inline nodes }
+   EnsureTokCapacity(65536);   { bootstrap the dynamic token arrays before any lexer runs }
+   InliningActive := 0;
++  PromoteFloatResidency := PROMOTE_FLOAT_RESIDENCY;
+   OptLevel := 2;   { -O2 is the default (feature-optimization-levels): ~1.34x faster / ~11% smaller, self-host -O2 fixedpoint byte-identical. -O0 is still selectable; opt passes gate on OptLevel>=tier.
+      -O0 IS NO LONGER THE BYTE-IDENTITY REFERENCE. It now prunes the dead arm of
+      a constant-condition `if`/`while`, because gcc, clang and tcc all do at -O0
+@@ -1301,6 +1302,13 @@ begin
+       OptLevelExplicit := True;
+       Inc(i);
+     end
++    else if option = '--o2-float-residency' then
++    begin
++      { Stages the -O2 promotion of the float residency and fusion; see
++        PROMOTE_FLOAT_RESIDENCY in defs.inc. }
++      PromoteFloatResidency := True;
++      Inc(i);
++    end
+     else if (option = '-O0') or (option = '-O1') or (option = '-O2') or (option = '-O3') then
+     begin
+       OptLevel := Ord(option[3]) - Ord('0');
+diff --git a/compiler/defs.inc b/compiler/defs.inc
+index 3eaae99993..c97621270a 100644
+--- a/compiler/defs.inc
++++ b/compiler/defs.inc
+@@ -1589,6 +1589,15 @@ const
+   IR_IO_UNLOCK     = 67; { release the I/O statement lock (depth-counted; owner cleared at depth 0). }
+   MAX_LOOPSYM_SCAN = 64; { -O3 loop-residency: cap on distinct syms tallied inside a body's loop ranges (UnifiedResidencyAssign); overflow just means later syms are not residency candidates. }
+   RC_RESIDENT_SLOTS = 6;  { GPR residency table size — the LARGEST pool any backend assigns from (aarch64 x19..x24; x86-64 uses 4 of them, r12..r15). See the RcResident* declarations: sizing it by x86-64's pool is what made aarch64 -O3 write past the end of three parallel arrays. }
++  { THE -O2 PROMOTION SWITCH for the float loop residency (xmm8..13 on x86-64,
++    d8..d13 on aarch64) and the x86-64 in-tree XMM fusion. False: both stay
++    -O3-only and -O2 codegen is unchanged. True: -O2 gets them too, and the
++    INTEGER residency stays -O3. Flip it only with the O-lane gates met: PROMISE
++    (feature-opt-double-code-is-2-to-4x-fpc-and-o3-already-halves-it: mandelbrot
++    4.0x -> 1.35x fpc at -O3) and PROOF (T's opt sweep at -O3, green,
++    skip_holes 0). `--o2-float-residency` turns it on for one compile, so the
++    promoted -O2 can be swept and measured before anyone flips this. }
++  PROMOTE_FLOAT_RESIDENCY = False;
+   FR_RESIDENT_MAX  = 6;  { -O3 float loop residency: max tyDouble locals/params held in xmm8..xmm13 (xmm14/15 kept free as general scratch). Callee-saved in the pxx internal ABI, save-iff-used — allowed in bodies with calls (see FrResidentCount). }
+   IR_CONST_DATA    = 68; { generic data-reference constant: IRIVal = Data[] offset OR a negative dataref sentinel (RECORD_RTTI/CLASSREF/SYM_RTTI bases, resolved by the pre-link fixup pass). Value = absolute data address in the accumulator. Lets IR-level CALLS pass descriptor addresses (e.g. a record layout descriptor to PXXDynArrayRetainImmediate) instead of needing a bespoke per-backend op. }
+   IR_MULHI         = 69; { __pxxmulhi_u64(a, b): IRA = a, IRB = b. UNSIGNED widening 64x64->128 multiply, yielding the HIGH 64 bits in the accumulator (the low half is an ordinary tkStar multiply). x86-64 = `mul r64` (RDX:RAX), aarch64 = `umulh`. 64-BIT TARGETS ONLY -- IRLowerAST rejects it on the 32-bit targets, which have no such instruction, so the 32-bit backends never see this op and need no case. Callers get a portable path via lib/rtl's MulHiU64 wrapper ({$IFDEF CPU64} intrinsic {$ELSE} Pascal fallback). Exists so bignum/field arithmetic can use saturated 64-bit limbs instead of a reduced radix. }
+@@ -3922,6 +3931,7 @@ var
+   DumpIR : Boolean;
+   DumpProcMap : Boolean;  { --proc-map: print 'PROC hexvaddr name' per routine to stderr (profiler symbolication) }
+   EmitMapFile : Boolean;  { emit <out>.map (addr->proc symbol table). ON by default — it is the ONLY symbolication for the stripped binaries, so a crash address stays lookup-able. --no-map suppresses it (clean output dirs / release), --map forces it. }
++  PromoteFloatResidency : Boolean;  { PROMOTE_FLOAT_RESIDENCY, or --o2-float-residency; read only through FloatResidencyOn }
+   OptLevel : Integer;     { -O0..-O3: optimization level. 0 (default) = the historic 1:1 emission — the self-host byte-identity gate runs at -O0 and is NEVER affected by opt passes; each pass gates on OptLevel >= its tier. }
+   WarnedMissedFold : Boolean;  { one-shot latch for IROptWarnMissedFold: a foldable const-const / identity IR_BINOP reached codegen (const-fold was measured 0-fire and not shipped; this tripwire flags a future pass that starts producing them). }
+   WarnedMissedFoldBranch : Boolean;  { the SECOND latch, one per detector. One latch served all three, and the const-const BINOP detector fires on nearly every -O2 compile (inline produces foldable BINOPs), so it set the shared latch first and the const-condition BRANCH detector -- quiet, and the guard for a load-time bug -- was never reached. Measured 2026-08-30: --warn-missed-fold on a program whose `if True` kept its dead arm reported the BINOP and said nothing about the branch. A noisy detector must not be able to silence a quiet one. bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start }
+diff --git a/compiler/ir_codegen.inc b/compiler/ir_codegen.inc
+index 50b3dc00a1..215bf24309 100644
+--- a/compiler/ir_codegen.inc
++++ b/compiler/ir_codegen.inc
+@@ -8659,7 +8659,7 @@ begin
+             copy, instead of xmm2 -> rax -> xmm0 -> resident. rax still gets
+             the value, as the general path leaves it. Same copy-chain finding as
+             FloatResidentLeafXmm. }
+-          if (OptLevel >= 3) and (not InLValueWrite) and
++          if FloatResidencyOn and (not InLValueWrite) and
+              FloatResidentSlotIsDead(symIdx) and
+              TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) and
+              (FloatTreeFits(IRB[node]) or (FloatResidentLeafXmm(IRB[node]) <> 0)) then
+@@ -9361,7 +9361,7 @@ begin
+ 
+         { -O3 in-tree XMM fusion: a call-free float arithmetic tree evaluates
+           straight into xmm2..xmm6 and bridges to the rax value model once. }
+-        if (OptLevel >= 3) and (not InLValueWrite) and FloatTreeFits(node) then
++        if FloatResidencyOn and (not InLValueWrite) and FloatTreeFits(node) then
+         begin
+           EmitFloatTree(node, 2);
+           EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($D0); { movq rax, xmm2 }
+@@ -13438,7 +13438,7 @@ begin
+       begin
+         left := IRA[node];
+         right := IRB[node];
+-        if (OptLevel >= 3) and FloatTreeFits(node) then Exit;
++        if FloatResidencyOn and FloatTreeFits(node) then Exit;
+         if (OptLevel >= 1) and (IRKind[right] = IR_CONST_INT) then
+           IRFirstEvaluated := IRFirstEvaluated(left)
+         else if (OptLevel >= 1) and LeafSymRcxLoadable(right) then
+@@ -14363,7 +14363,7 @@ begin
+   RcProcHasExc := False;
+   for k := 0 to IRCount - 1 do
+     if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
+-  if OptLevel < 3 then Exit;
++  if not FloatResidencyOn then Exit;
+   if CurProc < 0 then Exit;
+   if RcSuppressAssign then Exit;
+   if TargetArch <> TARGET_X86_64 then Exit;
+@@ -14444,6 +14444,8 @@ begin
+     accesses (mandelbrot, whose kernel is entirely float): indistinguishable, so
+     this takes the simpler rule rather than a per-class split no measurement
+     asks for. }
++  { Below -O3 only the FLOAT half is on (PromoteFloatResidency): no GPR slots. }
++  if OptLevel < 3 then nFree := 0;
+   islot := 0; fslot := 0;
+   while (islot < nFree) or (fslot < FR_RESIDENT_MAX) do
+   begin
+@@ -14544,7 +14546,7 @@ begin
+     hold residents, and main itself never gets residents (CurProc<0 exits the
+     assign pass) — there is nothing for a boundary wrap to protect. }
+   if CurProc < 0 then Exit;
+-  if OptLevel < 3 then Exit;
++  if not FloatResidencyOn then Exit;
+   if RcSuppressAssign then Exit;
+   if TargetArch <> TARGET_X86_64 then Exit;
+   for k := 0 to IRCount - 1 do
+diff --git a/compiler/ir_codegen_aarch64.inc b/compiler/ir_codegen_aarch64.inc
+index 219e26314f..67b0e57c97 100644
+--- a/compiler/ir_codegen_aarch64.inc
++++ b/compiler/ir_codegen_aarch64.inc
+@@ -963,7 +963,7 @@ end;
+ 
+ procedure UnifiedResidencyAssignA64;
+ var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
+-    islot, fslot, saveOff, reg: Integer;
++    islot, fslot, saveOff, reg, iMax: Integer;
+     Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+     LCounts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+     CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+@@ -981,7 +981,7 @@ begin
+   RcProcHasExc := False;
+   for k := 0 to IRCount - 1 do
+     if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
+-  if OptLevel < 3 then Exit;
++  if not FloatResidencyOn then Exit;
+   if CurProc < 0 then Exit;
+   if RcSuppressAssign then Exit;
+   if CurProcIsGenerator or CurProcIsStackless then Exit;
+@@ -1041,8 +1041,10 @@ begin
+   { Ranked selection, per-class budgets: int x19..x24 (slot i -> x(19+i)),
+     float d8..d13 (slot i -> d(8+i)). No regcall on aarch64, so the whole GPR
+     pool is free. }
++  { Below -O3 only the FLOAT half is on (PromoteFloatResidency): no GPR slots. }
++  if OptLevel < 3 then iMax := 0 else iMax := 6;
+   islot := 0; fslot := 0;
+-  while (islot < 6) or (fslot < FR_RESIDENT_MAX) do
++  while (islot < iMax) or (fslot < FR_RESIDENT_MAX) do
+   begin
+     best := -1; bestCnt := 0;
+     for k := 0 to nsyms - 1 do
+@@ -1058,7 +1060,7 @@ begin
+         end
+         else
+         begin
+-          if islot >= 6 then Continue;
++          if islot >= iMax then Continue;
+           { The table bound, stated rather than implied. islot < 6 already caps
+             the REGISTER pool (x19..x24), but the three RcResident* arrays are
+             indexed by RcResidentCount, and when they were sized 0..3 nothing
+@@ -1135,7 +1137,7 @@ begin
+   if TargetArch <> TARGET_AARCH64 then Exit;
+   FxSaveOn := False;
+   if CurProc < 0 then Exit;   { main body: no frame backing, nothing to protect — see FloatPoolBoundaryAssign }
+-  if OptLevel < 3 then Exit;
++  if not FloatResidencyOn then Exit;
+   if RcSuppressAssign then Exit;
+   for k := 0 to IRCount - 1 do
+     if IRKind[k] = IR_ASM then Exit;
+diff --git a/compiler/symtab.inc b/compiler/symtab.inc
+index 88d186e038..1a9dcd1ea8 100644
+--- a/compiler/symtab.inc
++++ b/compiler/symtab.inc
+@@ -7808,6 +7808,14 @@ end;
+   UnifiedResidencyAssign; the registers are callee-saved in the pxx internal
+   ABI (§5b) and the boundary wraps cover extern/indirect/coswitch/longjmp, so
+   the cache is never stale mid-body. }
++{ Is the float loop residency (and, on x86-64, the in-tree XMM fusion) on for
++  this compile? -O3 always; -O2 only when PromoteFloatResidency. Every gate of
++  those passes asks this, so the promotion is one switch. }
++function FloatResidencyOn: Boolean;
++begin
++  FloatResidencyOn := (OptLevel >= 3) or (PromoteFloatResidency and (OptLevel >= 2));
++end;
++
+ function FloatResidentXmmOf(idx: Integer): Integer;
+ var k: Integer;
+ begin
+@@ -8458,7 +8466,7 @@ end;
+ function FloatResidentSlotIsDead(idx: Integer): Boolean;
+ begin
+   FloatResidentSlotIsDead := False;
+-  if OptLevel < 3 then Exit;
++  if not FloatResidencyOn then Exit;
+   if RcProcHasExc then Exit;
+   if FloatResidentXmmOf(idx) = 0 then Exit;
+   if Syms[idx].TypeKind <> tyDouble then Exit;
