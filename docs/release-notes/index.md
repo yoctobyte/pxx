@@ -8,7 +8,7 @@ order: 95
 > **Draft. No release has been cut.** Where beta 0.1 will be published, what it
 > will be tagged, and whether it ships as source, as binaries or both are not
 > decided yet, so nothing below assumes any of them. Until a release exists,
-> the way to get PXX is a clone of the repository; see [Install](../install/).
+> the way to get PXX is a clone of the repository; see [Install](../install/index.md).
 
 This page describes **pin v425**: commit `4fbf33f69`, compiler binary sha256
 `426b2fbf3f08…`. That is the compiler `./pxx` runs in a checkout of that
@@ -100,7 +100,7 @@ profile on hardware.
   which needs a writable file system the test image does not mount. Measured
   with pin v425 (sha256 `426b2fbf3f08`) on 2026-09-25.
 - **Examples:** 15 programs in `examples/esp32/` run under QEMU with pin v425
-  and are listed in the [showcase](../examples/#esp32).
+  and are listed in the [showcase](../examples/index.md#esp32).
 - **On a board:** the ESP lane ran all 15 ESP32-S3 examples on one physical
   ESP32-S3 board (ESP-IDF v6.0.1), built with the v425 compiler, and all 15
   passed, as they did with v424. That includes the GPIO-edge and ADC programs, which QEMU cannot
