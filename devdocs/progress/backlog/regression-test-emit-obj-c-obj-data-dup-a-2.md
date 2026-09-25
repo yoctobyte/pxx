@@ -35,3 +35,6 @@ test-emit-obj: the fn-pointer census fixture FAILED to build for [--target=i386]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-25 — the borg watcher saw `test-emit-obj#src:test/c_obj_data_dup_a.c` GREEN at dcb660109dad (tier full) and did NOT close this: this is a repeat stub (`regression-test-emit-obj-c-obj-data-dup-a-2`, not `regression-test-emit-obj-c-obj-data-dup-a`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.

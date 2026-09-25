@@ -41,3 +41,6 @@ emit-obj-target-set: FAILED -- the refusal for wasm32 names no supported set:
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-25 — the borg watcher saw `test-emit-obj#src:test/c_threadsafe_object_offset_zero.c@2` GREEN at dcb660109dad (tier full) and did NOT close this: the job's class is `corpus`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
