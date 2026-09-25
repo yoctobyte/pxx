@@ -790,7 +790,12 @@ begin
   if p = nil then Exit;
   case pyvartag(v) of
     8: TkiIsCallable := True;               { {code, receiver} pair }
-    7: TkiIsCallable := pyclosure_is(p) or pyboundfn_is(p);
+    { 7 is the raw pointer box; 9 (VT_PYCLOSURE) and 10 (VT_BOUNDFN) are the
+      OWNING box pyvar_of_callable stamps -- what a lambda or bound-fn bound to
+      a name carries, and, since a lambda passed straight as an argument is
+      boxed the same way so it is released, what every such argument carries.
+      Accepting only 7 refused `f = obj.cb; configure(yscrollcommand=f)`. }
+    7, 9, 10: TkiIsCallable := pyclosure_is(p) or pyboundfn_is(p);
     { A plain compiled def arrives as tag 2 — its code ADDRESS boxed as an
       integer, which is exactly what pycall_value falls through to ("the value
       IS its code address"). MEASURED, not assumed: pylib's comment says a def

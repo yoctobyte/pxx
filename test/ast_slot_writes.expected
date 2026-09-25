@@ -121,6 +121,7 @@ AN_ARG Left arg1
 AN_ARG Left arg2
 AN_ARG Left arg3
 AN_ARG Left argA
+AN_ARG Left argAST
 AN_ARG Left argB
 AN_ARG Left argExpr
 AN_ARG Left argExpr[i]
@@ -171,6 +172,7 @@ AN_ARG Left excArgsTup
 AN_ARG Left excFoldStr
 AN_ARG Left exprNode
 AN_ARG Left faIdx
+AN_ARG Left fcBox
 AN_ARG Left fieldNode
 AN_ARG Left flNotNode
 AN_ARG Left fmtNode
@@ -721,6 +723,7 @@ AN_CALL Left elemNode
 AN_CALL Left enArg0
 AN_CALL Left eoArg
 AN_CALL Left excFoldA
+AN_CALL Left fcArg
 AN_CALL Left flArg1
 AN_CALL Left flArg2
 AN_CALL Left flUnboxArg

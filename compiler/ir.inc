@@ -5342,6 +5342,34 @@ begin
                                       ProcResultArgIdx[p]);
 end;
 
+{ Is `node` a call that builds a FRESH NilPy callable object (and, by proc,
+  is `pi` one of the calls that build one) -- a lambda's
+  pyclosure_src_new / pyboundfn_new, or one of the calls chained onto it? Each
+  returns the heap object as a raw Pointer that nothing owns yet. The one list
+  of those names: PyBoxCallableValue (a lambda bound to a name) and
+  IRLowerCallArg (a lambda passed straight as an argument) both ask it. }
+function PyFreshCallableProc(pi: Integer): Boolean;
+var nm: AnsiString;
+begin
+  Result := False;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  nm := LowerCase(Procs[pi].Name);
+  Result := (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
+            (nm = 'pyclosure_setarity') or
+            (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
+            (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
+            (nm = 'pyboundfn_setstar') or (nm = 'pyboundfn_setsig') or
+            (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
+            (nm = 'pyboundfn_bind_cell');
+end;
+
+function PyFreshCallableCtor(node: Integer): Boolean;
+begin
+  Result := (node >= 0) and (ASTKind[node] = AN_CALL) and
+            (IntToTypeKind(ASTTk[node]) = tyPointer) and
+            PyFreshCallableProc(ASTIVal[node]);
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -5362,8 +5390,51 @@ var argTk: TTypeKind;
   isComIntfArg: Boolean;
   pvSinkIsProcVar: Boolean;
   tempIsByValueCopy: Boolean;
+  fcBoxPi, fcObjPi, fcArg, fcBox: Integer;   { a fresh callable argument }
 begin
   if isRefArg then CheckVarArgWidth(cpi, pathIdx, argAST);
+  { A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS OWNED BY A HIDDEN VARIANT, as
+    it is when bound to a name first. The lambda's value is a fresh heap
+    object as a raw Pointer: a `key: Pointer` parameter (sorted, min, max,
+    map, filter) took it as-is and a Variant parameter boxed it as a plain
+    pointer, and neither owns it -- one closure object leaked per call, while
+    `f = lambda ...; sorted(xs, key=f)` was flat, because the name's box
+    (pyvar_of_callable) tags it as a managed callable. So box it the same way
+    here: the Variant argument path gives that box a temp the epilogue clears,
+    and a Pointer parameter gets the object back out of the box
+    (pyvarobj, no retain) -- borrowed for the call, which is all sorted/min/
+    max need, and pyiter_map/filter RETAIN the key they keep. }
+  { NOT when the callee is itself a link of the constructor chain (setown,
+    bind, ... take the raw object on purpose) or the box: boxing the box's own
+    argument recursed without end. }
+  if (cpi >= 0) and (cpi < ProcCount) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     (not Procs[cpi].Params[pathIdx].IsArray) and
+     (not PyFreshCallableProc(cpi)) and
+     (cpi <> FindProc('pyvar_of_callable')) and
+     ((Procs[cpi].Params[pathIdx].TypeKind = tyVariant) or
+      (Procs[cpi].Params[pathIdx].TypeKind = tyPointer)) and
+     PyFreshCallableCtor(argAST) then
+  begin
+    fcBoxPi := FindProc('pyvar_of_callable');
+    fcObjPi := FindProc('pyvarobj');
+    if (fcBoxPi >= 0) and (fcObjPi >= 0) then
+    begin
+      fcArg := AllocNode(AN_ARG); ASTLeft[fcArg] := argAST;
+      fcBox := AllocNode(AN_CALL);
+      ASTIVal[fcBox] := fcBoxPi; ASTLeft[fcBox] := fcArg;
+      ASTTk[fcBox] := Ord(tyVariant);
+      if Procs[cpi].Params[pathIdx].TypeKind = tyVariant then
+        argAST := fcBox
+      else
+      begin
+        fcArg := AllocNode(AN_ARG); ASTLeft[fcArg] := fcBox;
+        argAST := AllocNode(AN_CALL);
+        ASTIVal[argAST] := fcObjPi; ASTLeft[argAST] := fcArg;
+        ASTTk[argAST] := Ord(tyPointer);
+      end;
+    end;
+  end;
   { A SLICE THIS FUNCTION CANNOT BUILD IS REFUSED HERE, BY NAME, AND NOT LEFT TO
     FALL THROUGH. Measured 2026-09-06: with the string base merely declining to
     resolve, `Upper(g[4..7])` still COMPILED -- the argument fell past both

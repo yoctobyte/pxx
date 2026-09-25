@@ -548,6 +548,17 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_fresh_method_discard 300 $(TESTTMP)/test_nilpy_freshdisc26 fresh 5000
 	@if tools/assert_no_leak.sh nilpy_fresh_method_discard_control 300 $(TESTTMP)/test_nilpy_freshdisc26 keep 5000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_fresh_method_discard control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS RELEASED after the call --
+	# sorted/min key=, a method's Variant parameter. Nothing owned the fresh
+	# closure object (pin v438: ~6 live per iteration of this loop); `keep` is
+	# the positive control and must trip the bound. The HEAP_DEBUG run checks the
+	# escaping ones (stored into a field) still work, against CPython's total.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_lambda_argument_is_released.npy $(TESTTMP)/test_nilpy_lamarg26
+	tools/assert_no_leak.sh nilpy_lambda_argument 100 $(TESTTMP)/test_nilpy_lamarg26
+	@if tools/assert_no_leak.sh nilpy_lambda_argument_control 100 $(TESTTMP)/test_nilpy_lamarg26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_lambda_argument control (keep) did not trip the bound -- the census cannot see a closure object"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_lambda_argument_is_released.npy $(TESTTMP)/test_nilpy_lamarg_hd26
+	tools/expect_same.sh nilpy_lambda_argument_value "$$($(TESTTMP)/test_nilpy_lamarg_hd26)" "2037000"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_discarded_fresh_pascal_method_result_is_released.npy $(TESTTMP)/test_nilpy_freshdisc_hd26
 	tools/expect_same.sh nilpy_borrowed_method_discard "$$($(TESTTMP)/test_nilpy_freshdisc_hd26 borrowed 5000)" "borrowed done 50 True False"
 	# A stamp helper that hands back its argument is a borrow when the argument

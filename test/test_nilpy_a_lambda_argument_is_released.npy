@@ -1,0 +1,39 @@
+# A lambda passed STRAIGHT as an argument is released after the call.
+#
+# Its value is a fresh heap object handed over as a raw pointer. A `key: Pointer`
+# parameter (sorted, min, max) took it as-is and a Variant parameter boxed it as
+# a plain pointer, so nothing owned it: one closure object leaked per call (pin
+# v438: this loop left ~6 objects per iteration live). Bound to a name first
+# (`f = lambda ...`) it was always released, because that box tags it as a
+# managed callable; IRLowerCallArg now boxes argument positions the same way.
+#
+# Run as `keep` it is the POSITIVE CONTROL: the same lambdas are appended to a
+# list that stays alive, so the census must see thousands of live objects, or
+# it cannot see a closure at all. The printed total is CPython's.
+import sys
+
+class Box:
+    def __init__(self):
+        self.one = None
+    def set(self, f):
+        self.one = f
+    def use(self, f, v):
+        return f(v)
+
+kept = []
+
+def work(k, keep):
+    b = Box()
+    b.set(lambda x: x + k)
+    t = b.use(lambda x: x * 2, 4)
+    t += len(sorted([3, 1, 2], key=lambda v: v * k))
+    t += min([5, 7], key=lambda v: -v)
+    if keep:
+        kept.append(lambda x: x - k)
+    return b.one(1) + t
+
+keep = len(sys.argv) > 1 and sys.argv[1] == "keep"
+acc = 0
+for i in range(2000):
+    acc += work(i, keep)
+print(acc)

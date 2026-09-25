@@ -16243,28 +16243,18 @@ end;
   Both lambda lowerings hand back a heap OBJECT pointer (a pyeval closure, or a
   lifted bound-fn), and a pointer-typed local never reaches ParsePostfix's
   dynamic-call path, which keys on tyVariant — so `g(5)` compiled to nothing at
-  all. Returns the node unchanged for anything that is not one of those calls;
-  argument positions are deliberately untouched, since a callee's `const x:
-  Variant` parameter already boxes the pointer for them. }
+  all. Returns the node unchanged for anything that is not one of those calls.
+  Argument positions are boxed the same way, in IRLowerCallArg: this comment
+  used to say a `const x: Variant` parameter already boxed the pointer, but
+  that box took no ownership and a `key: Pointer` one took none at all, so a
+  lambda passed straight as an argument leaked itself on every call. }
 function PyBoxCallableValue(node: Integer): Integer;
-var pi, boxPi: Integer; nm: AnsiString;
+var pi, boxPi: Integer;
 begin
   PyBoxCallableValue := node;
-  if node < 0 then Exit;
-  if ASTKind[node] <> AN_CALL then Exit;
-  if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
-  pi := ASTIVal[node];
-  if pi < 0 then Exit;
-  nm := LowerCase(Procs[pi].Name);
-  if (nm <> 'pyclosure_src_new') and (nm <> 'pyclosure_src_cap') and
-     (nm <> 'pyclosure_setarity') and
-     (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
-     (nm <> 'pyboundfn_setown') and (nm <> 'pyboundfn_setdefaults') and
-     (nm <> 'pyboundfn_setstar') and (nm <> 'pyboundfn_setsig') and
-     (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') and
-     (nm <> 'pyboundfn_bind_cell') then Exit;
+  if not PyFreshCallableCtor(node) then Exit;
   if PxxDbgEnabled('n.bfn') then
-    WriteLn('PXXDBG n.bfn box via ', nm);
+    WriteLn('PXXDBG n.bfn box via ', LowerCase(Procs[ASTIVal[node]].Name));
   boxPi := FindProc('pyvar_of_callable');
   if boxPi < 0 then Exit;
   pi := AllocNode(AN_ARG);
