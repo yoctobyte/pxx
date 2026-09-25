@@ -228,8 +228,12 @@ type
     function append_self(const v: Variant): TPyList;
     { set-style insert: append only when the value is not already present.
       NilPy backs `set` with TPyList (see PyAnnTypeAt), and this is the whole
-      set contract the corpus uses — `s.add(x)` then `x in s`. }
-    function add(const v: Variant): TPyList;
+      set contract the corpus uses — `s.add(x)` then `x in s`.
+      Answers None like Python's (`r = s.add(1)` printed the set); add_self is
+      the chaining twin the compiler's set desugars call, as append /
+      append_self are for lists. }
+    function add(const v: Variant): Variant;
+    function add_self(const v: Variant): TPyList;
     { set.update / `s |= other` — add every element of `other` that is not
       already present, IN PLACE. In place, not a rebind, because CPython's `|=`
       mutates: an alias taken before the statement must see the new elements,
@@ -2255,6 +2259,15 @@ function pybitor_v(const a: Variant; const b: Variant): Variant;
 function pybitxor_v(const a: Variant; const b: Variant): Variant;
 function pyshl_v(const a: Variant; const b: Variant): Variant;
 function pyshr_v(const a: Variant; const b: Variant): Variant;
+{ The AUGMENTED bitwise forms `&= |= ^= <<= >>=` on a variant target: the
+  in-place dunder, an in-place set/dict update, else the binary helper. }
+function pyaugbitand_v(const a: Variant; const b: Variant): Variant;
+function pyaugbitor_v(const a: Variant; const b: Variant): Variant;
+function pyaugbitxor_v(const a: Variant; const b: Variant): Variant;
+function pyaugshl_v(const a: Variant; const b: Variant): Variant;
+function pyaugshr_v(const a: Variant; const b: Variant): Variant;
+function pymatmul_v(const a: Variant; const b: Variant): Variant;
+function pyaugmatmul_v(const a: Variant; const b: Variant): Variant;
 function pyinvert_v(const a: Variant): Variant;   { ~a }
 function pyneg_v(const a: Variant): Variant;      { -a }
 function pycmp_v(const a: Variant; const b: Variant): Int64;   { -1/0/1 }
@@ -6327,7 +6340,13 @@ begin
   end;
 end;
 
-function TPyList.add(const v: Variant): TPyList;
+function TPyList.add(const v: Variant): Variant;
+begin
+  if not pycontains(Self, v) then append(v);
+  Result := pynone;
+end;
+
+function TPyList.add_self(const v: Variant): TPyList;
 begin
   if not pycontains(Self, v) then append(v);
   Result := Self;
@@ -9737,6 +9756,18 @@ begin
   PyNotSubscriptable := 0;   { unreachable }
 end;
 
+{ A call that is STATICALLY invalid -- `s.init(m, baudrate=5)` where m already
+  filled baudrate. CPython raises TypeError when such a call RUNS, and only
+  then, so a driver that spells one in a branch it never takes (st7789's
+  `try: s.MASTER / else: s.init(m, ...)`) runs fine there. The frontend warns
+  and builds this in, carrying CPython's message. A FUNCTION for the same reason
+  as PyIndexTypeError: it rides inside the call's argument list. }
+function PyCallTypeError(const msg: AnsiString): Int64;
+begin
+  raise TypeError.Create(msg);
+  PyCallTypeError := 0;   { unreachable }
+end;
+
 function PyIndexTypeError(const seqKind: AnsiString;
                           const clsName: AnsiString): Int64;
 begin
@@ -11124,24 +11155,35 @@ end;
 
 function pyshl_v(const a: Variant; const b: Variant): Variant;
 begin
-  Result := pyvar_of_int(pyvar_to_int(a) shl pyvar_to_int(b));
+  { A USER class operand first, as pybitand_v does: its __lshift__, or the
+    reflected __rlshift__. Then the promo runtime the compiler's own inline
+    shift uses (op 9), which always answers: `1 << 70` stays exact and a
+    negative count raises Python's ValueError. The old body shifted an Int64,
+    so it wrapped past 2^63 and coerced an object to RunError 219. }
+  if PyVarUserArith(a, b, '__lshift__', '__rlshift__', Result) then Exit;
+  PXXPromoVarArithTry(@Result, @a, @b, 9);
 end;
 
 function pyshr_v(const a: Variant; const b: Variant): Variant;
-var av, n, rv: Int64;
 begin
-  { Python >> is ARITHMETIC (sign-propagating, floors toward -inf). Pascal shr
-    is logical, so synthesise the sign fill: -x>>n == ~(~x >> n). }
-  av := pyvar_to_int(a); n := pyvar_to_int(b);
-  if n >= 64 then
-  begin
-    if av < 0 then rv := -1 else rv := 0;
-  end
-  else if av < 0 then
-    rv := not ((not av) shr n)
-  else
-    rv := av shr n;
-  Result := pyvar_of_int(rv);
+  { ...and `>>`: arithmetic (floor) shift in the promo runtime, op 10. }
+  if PyVarUserArith(a, b, '__rshift__', '__rrshift__', Result) then Exit;
+  PXXPromoVarArithTry(@Result, @a, @b, 10);
+end;
+
+function pymatmul_v(const a: Variant; const b: Variant): Variant;
+begin
+  { `a @ b` with a variant operand: __matmul__, then the reflected
+    __rmatmul__. No builtin type implements `@`, so anything else is
+    CPython's TypeError. }
+  if PyVarUserArith(a, b, '__matmul__', '__rmatmul__', Result) then Exit;
+  PyUnsupportedOperandError;
+end;
+
+function pyaugmatmul_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__imatmul__', Result) then Exit;
+  Result := pymatmul_v(a, b);
 end;
 
 function pyinvert_v(const a: Variant): Variant;
@@ -11322,6 +11364,78 @@ end;
   wrong value, silent precisely because declaring both dunders is the normal
   way to write the class.
   bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+{ `s |= t` on a SET held in a variant mutates s -- an alias taken beforehand
+  sees the new members, as in CPython -- and so do `&=` and `^=`; a DICT's
+  `|=` is update(). op: 0 = |, 1 = &, 2 = ^. A frozenset, a list, a tuple or
+  a mixed pair answers False and the caller computes a NEW value, which is
+  what Python does for the immutable kinds. Without this a variant set target
+  reached the integer binop and came back EMPTY (`s = var({1, 2}); s |= {3}`
+  printed []), silently. }
+function PyVarSetAugInPlace(const a, b: Variant; op: Integer; var res: Variant): Boolean;
+var oa, ob: TObject;
+begin
+  Result := False;
+  if (pyvartag(a) <> 7) or (pyvartag(b) <> 7) then Exit;
+  oa := TObject(pyvarobj(a)); ob := TObject(pyvarobj(b));
+  if (oa = nil) or (ob = nil) then Exit;
+  if (oa is TPyList) and (TPyList(oa).FKind = PYSEQ_SET) and (ob is TPyList) then
+  begin
+    if op = 0 then TPyList(oa).setupdate(TPyList(ob))
+    else if op = 1 then TPyList(oa).setintersect(TPyList(ob))
+    else TPyList(oa).setsymdiff(TPyList(ob));
+    res := a;
+    Result := True;
+    Exit;
+  end;
+  if (op = 0) and (oa is TPyDict) and (ob is TPyDict) then
+  begin
+    TPyDict(oa).update(TPyDict(ob));
+    res := a;
+    Result := True;
+  end;
+end;
+
+{ The augmented bitwise family: the IN-PLACE dunder first (`c &= 0x0F` on a
+  user object calls __iand__ and keeps the same object), then the in-place
+  container update, then the binary helper -- which tries __and__/__rand__,
+  a new set, and the arbitrary-precision int, so every int row is unchanged.
+  Python's own order. Before, the marked binop had no variant arm for these
+  five and an object target was coerced to an int (AttributeError on the next
+  `.v`, or RunError 219 for a shift).
+  bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder }
+function pyaugbitand_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__iand__', Result) then Exit;
+  if PyVarSetAugInPlace(a, b, 1, Result) then Exit;
+  Result := pybitand_v(a, b);
+end;
+
+function pyaugbitor_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__ior__', Result) then Exit;
+  if PyVarSetAugInPlace(a, b, 0, Result) then Exit;
+  Result := pybitor_v(a, b);
+end;
+
+function pyaugbitxor_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__ixor__', Result) then Exit;
+  if PyVarSetAugInPlace(a, b, 2, Result) then Exit;
+  Result := pybitxor_v(a, b);
+end;
+
+function pyaugshl_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__ilshift__', Result) then Exit;
+  Result := pyshl_v(a, b);
+end;
+
+function pyaugshr_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__irshift__', Result) then Exit;
+  Result := pyshr_v(a, b);
+end;
+
 function pyaugsub_v(const a: Variant; const b: Variant): Variant;
 begin
   if PyVarUserAug(a, b, '__isub__', Result) then Exit;

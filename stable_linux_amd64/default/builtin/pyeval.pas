@@ -1067,15 +1067,21 @@ begin
     for p := 0 to n - 1 do
       if PyEqCI(PString(NativeInt(pk[arity + p + 1]))^, nm) then
       begin tgt := p; Break; end;
+    { CPython's TypeErrors, word for word, and CATCHABLE: a call like this is
+      only wrong when it runs, and a driver that spells one in a branch it never
+      takes must run (st7789's `s.init(m, baudrate=..)` behind `try: s.MASTER`).
+      This used to halt the process. The compiled-call twin is PyBindKwArgs. }
     if tgt < 0 then
     begin
       src.Free;
-      EvalError('host method ' + mname + ' has no parameter named ' + nm);
+      raise TypeError.Create(mname + '() got an unexpected keyword argument '''
+                             + nm + '''');
     end;
     if seen[tgt] then
     begin
       src.Free;
-      EvalError(mname + ' got multiple values for parameter ' + nm);
+      raise TypeError.Create(mname + '() got multiple values for argument '''
+                             + nm + '''');
     end;
     { `args` keeps its length through this whole permutation, so a target at or
       past it is precisely the GAP case — `put(chars=x)` on `put(index, chars)`
@@ -1210,7 +1216,11 @@ begin
   if mi = nil then begin writeln('pyeval: vm has no method ', name); Halt(1); end;
 
   n := Integer(mi^.Arity) - 1;   { drop Self }
-  PyBindHostKwArgs(args, kwNames, mi, n, name);
+  { `S.init`, as CPython names the callee in a call-shape TypeError }
+  if cls^.NamePtr <> nil then
+    PyBindHostKwArgs(args, kwNames, mi, n, cls^.NamePtr^ + '.' + name)
+  else
+    PyBindHostKwArgs(args, kwNames, mi, n, name);
   nargs := args.count;
   pk := PInt64(mi^.ParamKinds);
   rk := mi^.RetKind;
