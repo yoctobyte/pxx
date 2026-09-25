@@ -1,0 +1,192 @@
+diff --git a/Makefile b/Makefile
+index 97ca9a362e..4bd44922eb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1126,6 +1126,11 @@ test-nilpy: $(COMPILER)
+ 	# declarations case-insensitively, the dotted-call table, sys's members.
+ 	./$(COMPILER) test/test_nilpy_hasattr_on_a_module_asks_every_route_the_attribute_does.npy $(TESTTMP)/test_nilpy_hasattrmod26
+ 	$(TESTTMP)/test_nilpy_hasattrmod26 | diff -u test/test_nilpy_hasattr_on_a_module_asks_every_route_the_attribute_does.expected -
++	# A class body is a scope: an initialiser reads the attributes bound ABOVE
++	# it bare (ina219.py's __ADC_CONVERSION), shadowing a module global; a name
++	# bound later, and a method body, read the module's. CPython's .expected.
++	./$(COMPILER) test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.npy $(TESTTMP)/test_nilpy_clsbody26
++	$(TESTTMP)/test_nilpy_clsbody26 | diff -u test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.expected -
+ 	./$(COMPILER) test/test_nilpy_a_trailing_comma_after_a_keyword_argument.npy $(TESTTMP)/test_nilpy_trailkw26
+ 	$(TESTTMP)/test_nilpy_trailkw26 | diff -u test/test_nilpy_a_trailing_comma_after_a_keyword_argument.expected -
+ 	# micropython-lib logging.py's walls (ina219), CPython's .expected. TZ is a
+diff --git a/compiler/pyparser.inc b/compiler/pyparser.inc
+index 7a55d0698a..0e833b4f03 100644
+--- a/compiler/pyparser.inc
++++ b/compiler/pyparser.inc
+@@ -285,6 +285,11 @@ var
+     namespace is the current scope there and beats the module. -1 outside a
+     class's default-evaluation pass. }
+   PyDefaultClsCi: Integer;
++  { The class whose BODY is evaluating a class attribute's initialiser, and the
++    token that initialiser's `=` sits at: the class namespace is the current
++    scope there too, but only for the names bound ABOVE that line. -1 outside
++    PyEmitClassAttrExpr. See PyClsBodyBoundBefore. }
++  PyClsBodyCi, PyClsBodyUpTo: Integer;
+   { The class statement just parsed, and its body token span, so the statement
+     loop can evaluate METHOD defaults AFTER PyParseClass returns. Python
+     evaluates a method default when the CLASS BODY executes, so the class
+@@ -8222,8 +8227,52 @@ begin
+   if Result = tyString then Result := tyAnsiString;
+ end;
+ 
++{ Is `nm` bound by a statement of the class body that holds the token upTo, on a
++  line ABOVE upTo? Walks BACK from upTo at the body's own depth -- a dedent
++  stepped over from below opens a deeper block, an indent closes one, and the
++  indent that takes the depth negative is the body's own opening -- and
++  answers yes at the first line that starts `nm =` or `nm:`.
++
++  Why "above" and not "anywhere in the class": the class body EXECUTES, top to
++  bottom, so a name bound further down is not in the namespace yet and CPython
++  reads the module's binding instead. Here the later attribute's slot exists
++  from the pre-pass but has not been stored, so resolving it would read an
++  empty slot where CPython reads the global -- a silent wrong value, where the
++  default-argument door's same widening only accepts a program CPython
++  refuses. }
++function PyClsBodyBoundBefore(const nm: AnsiString; upTo: Integer): Boolean;
++var i, rel: Integer;
++begin
++  Result := False;
++  rel := 0;
++  { from the START of upTo's own line: `X = X + 1` reads the X bound before
++    it, not the one it is binding }
++  i := upTo - 1;
++  while (i > 0) and not (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do
++    Dec(i);
++  while i > 0 do
++  begin
++    if Tokens[i].Kind = tkDedent then Inc(rel)
++    else if Tokens[i].Kind = tkIndent then
++    begin
++      Dec(rel);
++      if rel < 0 then Exit;
++    end
++    else if (rel = 0) and (Tokens[i].Kind = tkIdent) and
++            (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent]) and
++            (i + 1 < TokCount) and (Tokens[i + 1].Kind in [tkAssign, tkColon]) and
++            (GetTokenStr(i) = nm) then
++    begin
++      Result := True;
++      Exit;
++    end;
++    Dec(i);
++  end;
++end;
++
+ procedure PyEmitClassAttrExpr(ci: Integer; eqAt: Integer);
+ var nm, gname: AnsiString; gsym, valNode, asgn, fi: Integer;
++    savedBodyCi, savedBodyUpTo: Integer;
+ begin
+   nm := CurTok.SVal;
+   { jump to the '=' rather than assuming it is the very next token — an
+@@ -8231,7 +8280,15 @@ begin
+   TokPos := eqAt;
+   Next;                            { CurTok = '=' }
+   Next;                            { onto the expression }
++  { the class body is the current scope for the initialiser: an attribute bound
++    above this line is readable bare (ina219.py's `{ADC_9BIT: "9-bit", ...}`) }
++  savedBodyCi := PyClsBodyCi;
++  savedBodyUpTo := PyClsBodyUpTo;
++  PyClsBodyCi := ci;
++  PyClsBodyUpTo := eqAt;
+   PyParseBoolExpr;
++  PyClsBodyCi := savedBodyCi;
++  PyClsBodyUpTo := savedBodyUpTo;
+   valNode := CurASTNode;
+   gname := PyClsAttrGlobalName(ci, nm);
+   { the member pre-pass already allocated this slot and registered it as a class
+@@ -50813,6 +50870,7 @@ begin
+   PyDefInitHead := -1;
+   PyDefaultClsName := '';
+   PyDefaultClsCi := -1;
++  PyClsBodyCi := -1;
+   PyClsEvalCi := -1;
+   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
+   PyPreScanImports;
+@@ -51305,6 +51363,7 @@ begin
+   PyDefaultEvalMode := False;
+   PyDefaultClsName := '';
+   PyDefaultClsCi := -1;
++  PyClsBodyCi := -1;
+   PyClsEvalCi := -1;
+   PySkipNewlines;
+   { A leading module docstring may precede the imports. RECORDED, then consumed:
+@@ -60700,6 +60759,20 @@ begin
+         clsScopeSym := FindSym(PyClsAttrGlobalName(PyDefaultClsCi, name));
+         if clsScopeSym >= 0 then idx := clsScopeSym;
+       end;
++      { The THIRD door into the same scope: a class attribute's own
++        initialiser, which runs in the class body too -- ina219.py builds
++        `__ADC_CONVERSION = {ADC_9BIT: "9-bit", ...}` from the constants above
++        it and was refused `undefined variable (ADC_9BIT)`. Same storage, same
++        no-parent-walk; unlike the default door it answers only for names bound
++        ABOVE the line (PyClsBodyBoundBefore says why), so a later one falls
++        through to the module's binding exactly as in CPython. A METHOD body
++        never sets PyClsBodyCi, so a bare class name stays unbound there. }
++      if (PyClsBodyCi >= 0) and (qUnit < 0) and
++         PyClsBodyBoundBefore(name, PyClsBodyUpTo) then
++      begin
++        clsScopeSym := FindSym(PyClsAttrGlobalName(PyClsBodyCi, name));
++        if clsScopeSym >= 0 then idx := clsScopeSym;
++      end;
+ 
+       { The EXPRESSION half of the own-field-beats-a-unit-name rule; the
+         statement half sits on the assignment path in ParseStatementAST. Skipped
+diff --git a/test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.expected b/test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.expected
+new file mode 100644
+index 0000000000..202c237e62
+--- /dev/null
++++ b/test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.expected
+@@ -0,0 +1,5 @@
++9-bit 10-bit 12-bit
++[3, 0, 1] 7
++7 14 100
++module LATER class LATER 11
++CLASS BODY SCOPE OK
+diff --git a/test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.npy b/test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.npy
+new file mode 100644
+index 0000000000..63de214c06
+--- /dev/null
++++ b/test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.npy
+@@ -0,0 +1,37 @@
++# A class body is a scope: an initialiser reads the attributes bound above it
++# bare (ina219.py's __ADC_CONVERSION dict), and such a name beats a module
++# global of the same spelling -- but only from the line that binds it onward.
++def const(x):
++    return x
++
++WIDTH = 100
++LATER = "module LATER"
++N = 1
++
++
++class Dev:
++    ADC_9BIT = const(0)
++    ADC_10BIT = const(1)
++    ADC_12BIT = 3
++    __CONV = {ADC_9BIT: "9-bit", ADC_10BIT: "10-bit", ADC_12BIT: "12-bit"}
++    ORDER = [ADC_12BIT, ADC_9BIT, ADC_10BIT]
++    MASK = (1 << ADC_12BIT) - 1
++    WIDTH = 7                     # shadows the module's WIDTH from here on
++    DOUBLE = WIDTH * 2            # the class's 7, not the module's 100
++    EARLY = LATER                 # LATER is not bound in the body yet: the module's
++    LATER = "class LATER"
++    N = N + 10                    # the right side reads the module N, then binds
++
++    def conv(self, adc):
++        return self.__CONV[adc]
++
++    def width(self):
++        return WIDTH              # a METHOD body skips the class scope: module
++
++
++d = Dev()
++print(d.conv(0), d.conv(1), d.conv(3))
++print(Dev.ORDER, Dev.MASK)
++print(Dev.WIDTH, Dev.DOUBLE, d.width())
++print(Dev.EARLY, Dev.LATER, Dev.N)
++print("CLASS BODY SCOPE OK")

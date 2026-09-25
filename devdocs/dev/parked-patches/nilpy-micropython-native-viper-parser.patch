@@ -1,0 +1,224 @@
+--- a/compiler/pyparser.inc
++++ b/compiler/pyparser.inc
+@@ -1671,6 +1671,22 @@
+     i := i + 2;
+   lo := LowerCase(GetTokenStr(i));
+   if lo = 'int' then begin Result := tyInt64; Inc(i); Exit; end;   { 64-bit cell }
++  { MicroPython viper's `uint` -- an unsigned machine word there, an int here
++    (pure-Python semantics; st7789py.py's own fallback says `uint = int`). A
++    class of that name still wins. }
++  if (lo = 'uint') and (FindUClass('uint') < 0) then
++  begin
++    Result := tyInt64; Inc(i); Exit;
++  end;
++  { A viper PARAMETER annotated ptr8/ptr16/ptr32 converts its argument into a
++    raw pointer at the call. The in-body form `p = ptr16(buf)` is implemented;
++    this one is not, and reading it as Any would index the buffer by BYTE
++    whatever the width said -- a silently wrong answer, so it is refused. }
++  if ((lo = 'ptr8') or (lo = 'ptr16') or (lo = 'ptr32')) and
++     (FindUClass(lo) < 0) then
++    Error('Nil Python: a parameter annotated ' + lo + ' (MicroPython viper) is '
++          + 'not implemented; annotate it as bytearray and write `p = ' + lo
++          + '(buf)` in the body instead');
+   if lo = 'float' then begin Result := tyDouble; Inc(i); Exit; end;
+   if lo = 'bool' then begin Result := tyBoolean; Inc(i); Exit; end;
+   if lo = 'str' then
+@@ -26869,6 +26885,68 @@
+   Result := True;
+ end;
+ 
++{ MicroPython's CODE-EMITTER decorators: `@micropython.native`,
++  `@micropython.viper`, `@micropython.bytecode`. They are compiler directives
++  there, not calls -- MicroPython reads them without `micropython` being bound,
++  which is why st7789py.py can write them after a fallback that defines a
++  `micropython` class only when `time.sleep_ms` is missing. Each one picks how
++  the def is compiled and none changes what it computes, so here they are no-
++  ops: the def is compiled the way every def is. The names viper code reads
++  (ptr8/ptr16/ptr32, `uint`) are answered where names are read, not here.
++
++  At k (the token after `@`): 1 for a no-op emitter, 2 for an inline-assembler
++  emitter (`asm_thumb`, `asm_xtensa`: the body is machine code in Python
++  syntax, which this frontend does not assemble), 0 for anything else. Only a
++  bare `micropython.<name>` line qualifies -- a call or a subscript after it is
++  some other decorator. }
++function PyCodeEmitterDecoratorAt(k: Integer): Integer;
++var nm: AnsiString;
++begin
++  Result := 0;
++  if (k < 0) or (k + 3 >= TokCount) then Exit;
++  if (Tokens[k].Kind <> tkIdent) or (GetTokenStr(k) <> 'micropython') or
++     (Tokens[k + 1].Kind <> tkDot) or (Tokens[k + 2].Kind <> tkIdent) or
++     (Tokens[k + 3].Kind <> tkNewline) then Exit;
++  nm := GetTokenStr(k + 2);
++  if (nm = 'native') or (nm = 'viper') or (nm = 'bytecode') then Result := 1
++  else if (nm = 'asm_thumb') or (nm = 'asm_xtensa') or (nm = 'asm_rv32') then
++    Result := 2;
++end;
++
++{ CurTok is the token after `@`. Consume a code-emitter decorator and answer
++  True, or consume nothing and answer False. An assembler emitter is refused by
++  name rather than falling into the caller's generic "unsupported decorator". }
++function PyEatCodeEmitterDecorator: Boolean;
++begin
++  Result := False;
++  case PyCodeEmitterDecoratorAt(TokPos - 1) of
++    1: begin Next; Next; Next; Result := True; end;
++    2: Error('Nil Python: @micropython.' + GetTokenStr(TokPos + 1) + ' marks a '
++             + 'function written in MicroPython''s inline assembler, and this '
++             + 'compiler does not assemble it; write the function in Python');
++  end;
++end;
++
++{ The last token of the decorator line nearest ABOVE the `def` at defIdx,
++  stepping over newlines and over every code-emitter line, or the token before
++  the def when it has no decorator. Every backward decorator test asks this, so
++  `@micropython.viper` stacked above OR below `@staticmethod` reads the same:
++  st7789py.py writes it above, and the lookbacks used to see only the nearest
++  line. }
++function PyDecoratorTailBefore(defIdx: Integer): Integer;
++begin
++  Result := defIdx - 1;
++  while (Result >= 0) and (Tokens[Result].Kind in [tkNewline, tkIndent, tkDedent]) do
++    Dec(Result);
++  while (Result >= 3) and (Tokens[Result - 3].Kind = tkAt) and
++        (PyCodeEmitterDecoratorAt(Result - 2) = 1) do
++  begin
++    Result := Result - 4;
++    while (Result >= 0) and (Tokens[Result].Kind in [tkNewline, tkIndent, tkDedent]) do
++      Dec(Result);
++  end;
++end;
++
+ procedure PySkipOverloadStubDef;
+ begin
+   Expect(tkFunction, 'def');
+@@ -38539,8 +38617,7 @@
+ var j: Integer;
+ begin
+   Result := False;
+-  j := i - 1;
+-  while (j >= 1) and (Tokens[j].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(j);
++  j := PyDecoratorTailBefore(i);
+   if (j < 1) or (Tokens[j].Kind <> tkIdent) then Exit;
+   if GetTokenStr(j) <> 'overload' then Exit;
+   Dec(j);
+@@ -39904,8 +39981,7 @@
+ var i: Integer;
+ begin
+   Result := '';
+-  i := defIdx - 1;
+-  while (i >= 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(i);
++  i := PyDecoratorTailBefore(defIdx);
+   if i < 1 then Exit;
+   if (Tokens[i - 1].Kind = tkAt) and (LowerCase(GetTokenStr(i)) = 'property') then
+   begin
+@@ -39933,8 +40009,7 @@
+ var i: Integer;
+ begin
+   Result := False;
+-  i := defIdx - 1;
+-  while (i >= 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(i);
++  i := PyDecoratorTailBefore(defIdx);
+   if i < 1 then Exit;
+   Result := (Tokens[i - 1].Kind = tkAt) and
+             (LowerCase(GetTokenStr(i)) = 'staticmethod');
+@@ -39954,8 +40029,7 @@
+ var i: Integer;
+ begin
+   Result := False;
+-  i := defIdx - 1;
+-  while (i >= 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(i);
++  i := PyDecoratorTailBefore(defIdx);
+   if i < 1 then Exit;
+   Result := (Tokens[i - 1].Kind = tkAt) and
+             (LowerCase(GetTokenStr(i)) = 'classmethod');
+@@ -48419,6 +48493,14 @@
+         PySkipOverloadStubDef;
+         Continue;
+       end;
++      { `@micropython.native` / `.viper`: a no-op here -- see
++        PyCodeEmitterDecoratorAt. The next line is the def or another
++        decorator, and the loop reads it as if this one were absent. }
++      if PyEatCodeEmitterDecorator then
++      begin
++        PySkipNewlines;
++        Continue;
++      end;
+       if CurTok.Kind <> tkIdent then
+         Error('Nil Python: unsupported decorator inside class (only @property, '
+               + '@<name>.setter and @staticmethod)');
+@@ -50766,6 +50848,14 @@
+         PySkipOverloadStubDef;
+         Continue;
+       end;
++      { `@micropython.native` / `.viper`: a no-op here -- see
++        PyCodeEmitterDecoratorAt. The next line is the def or another
++        decorator, and the loop reads it as if this one were absent. }
++      if PyEatCodeEmitterDecorator then
++      begin
++        PySkipNewlines;
++        Continue;
++      end;
+       if not PyIsIdent('dataclass') then
+         Error('Nil Python: unsupported decorator (only @dataclass and @overload)');
+       Next;
+@@ -51299,6 +51389,14 @@
+         PySkipOverloadStubDef;
+         Continue;
+       end;
++      { `@micropython.native` / `.viper`: a no-op here -- see
++        PyCodeEmitterDecoratorAt. The next line is the def or another
++        decorator, and the loop reads it as if this one were absent. }
++      if PyEatCodeEmitterDecorator then
++      begin
++        PySkipNewlines;
++        Continue;
++      end;
+       if not PyIsIdent('dataclass') then
+         Error('Nil Python: unsupported decorator (only @dataclass and @overload)');
+       Next;
+@@ -58919,6 +59017,44 @@
+         Expect(tkRParen, ')');
+         Exit;
+       end
++      else if ((name = 'ptr8') or (name = 'ptr16') or (name = 'ptr32')) and
++              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
++              (FindSym(name) < 0) and (FindUClass(name) < 0) then
++      begin
++        { MicroPython viper's pointer casts, BUILTINS there like const():
++          `bitmap = ptr16(buffer)` makes an indexable view whose element i is
++          the 2 bytes at 2*i, read and written native-endian (little-endian on
++          every target MicroPython and pxx share). pylib's TPyPtrView, over the
++          buffer object -- pure-Python semantics, no raw address, so a viper
++          body means here what it means on the board (st7789py.py _pack8).
++          Not gated on being inside a @micropython.viper def: outside one
++          CPython and MicroPython both say NameError, and answering is the
++          upward-compatible side. A pointer built from an INTEGER address is
++          refused at run time by pyptr_view. }
++        if name = 'ptr8' then mapConv := 1
++        else if name = 'ptr16' then mapConv := 2
++        else mapConv := 4;
++        Next; Expect(tkLParen, '(');
++        PyParseBoolExpr;
++        Expect(tkRParen, ')');
++        mapProc := FindProc('pyptr_view');
++        if mapProc < 0 then Error('Nil Python: pylib (pyptr_view) not loaded');
++        exprNode := AllocNode(AN_INT_LIT);
++        ASTIVal[exprNode] := mapConv;
++        ASTTk[exprNode] := Ord(tyInt64);
++        argSeq := AllocNode(AN_ARG);
++        ASTLeft[argSeq] := exprNode; ASTRight[argSeq] := -1;
++        exprNode := AllocNode(AN_ARG);
++        ASTLeft[exprNode] := CurASTNode; ASTRight[exprNode] := argSeq;
++        node := AllocNode(AN_CALL);
++        ASTIVal[node] := mapProc;
++        ASTTk[node] := Ord(tyClass);
++        ASTRight[node] := ProcRetRecId[mapProc];
++        ASTLeft[node] := exprNode;
++        CurASTNode := node;
++        LastExprTk := tyClass;
++        Exit;
++      end
+       else if (name = 'map') and (TokPos < TokCount) and
+               (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) then
+       begin
