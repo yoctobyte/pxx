@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: 0BSD
+# A SENSOR MONITOR in Python, compiled by pxx to xtensa machine code for the
+# ESP32-S3. No interpreter on the chip.
+#
+# What it does, once a second:
+#   - averages the samples the ADC streamed in the background,
+#   - keeps the last few averages in a list and a small dict of statistics,
+#   - counts presses of the BOOT button (GPIO 0), and
+#   - prints one report line, including the chip's own free heap.
+# After the last report it stops the ADC and main() returns. The program does
+# not exit: the BOOT button is still armed, so the runtime's hidden loop keeps
+# serving it, and every press still prints a line.
+#
+# HOW THE INTERRUPTS REACH PYTHON. The ADC's conversion-done interrupt and the
+# button's GPIO interrupt are handled in Pascal (espadc / espgpio), and those
+# handlers only record the event. The Python handlers below run later, in the
+# main task, at a blocking point (time.sleep here). So a handler may allocate,
+# print or take its time; it is ordinary code.
+#
+# The free heap is printed so you can watch it: after the first report or two
+# it must stay flat. A device that is meant to keep running dies of a leak,
+# and the heap figure is the only thing that shows one.
+
+import time
+import interrupts
+import 'espadc.pas' as adc
+import 'espgpio.pas' as gpio
+import 'espsys.pas' as sys
+
+ADC_CHANNEL = 0       # ADC1 channel 0 = GPIO 1 on the S3
+SAMPLE_HZ = 1000
+BUTTON = 0            # the BOOT button on most S3 devkits
+REPORTS = 240
+HISTORY = 5
+MAX_FRAMES = 32     # 64 samples each
+
+state = {"frames": 0, "presses": 0}
+
+
+def on_frame(ev):
+    state["frames"] += 1
+
+
+def on_button(ev):
+    state["presses"] += 1
+    print(f"button pressed ({state['presses']} so far)")
+
+
+def summarize(samples):
+    if len(samples) == 0:
+        return None
+    return {"n": len(samples), "min": min(samples), "max": max(samples),
+            "mean": sum(samples) // len(samples)}
+
+
+def collect():
+    # Take what is waiting, but at most MAX_FRAMES frames: at a high sample
+    # rate new frames arrive as fast as we read them, and "read until empty"
+    # would never end.
+    samples = []
+    for k in range(MAX_FRAMES):
+        frame = adc.read()
+        if len(frame) == 0:
+            break
+        samples.extend(frame)
+    return samples
+
+
+def main():
+    interrupts.on_event(interrupts.INT_SRC_ADC, on_frame)
+    interrupts.on_event(interrupts.INT_SRC_GPIO, on_button)
+    gpio.gpio_input(BUTTON)
+    gpio.on_falling(BUTTON)
+    print("adc start", adc.start(ADC_CHANNEL, SAMPLE_HZ))
+
+    history = []
+    heap0 = sys.free_heap()
+    for tick in range(1, REPORTS + 1):
+        time.sleep(1)
+        stats = summarize(collect())
+        if stats is None:
+            print(f"#{tick:3d} no samples yet")
+            continue
+        history.append(stats["mean"])
+        if len(history) > HISTORY:
+            history.pop(0)
+        trend = "flat"
+        if len(history) > 1 and history[-1] > history[0] + 50:
+            trend = "rising"
+        elif len(history) > 1 and history[-1] < history[0] - 50:
+            trend = "falling"
+        print(f"#{tick:3d} mean {stats['mean']:4d} range {stats['min']}..{stats['max']}"
+              f" trend {trend:7s} frames {state['frames']} free {sys.free_heap()}")
+
+    adc.stop()
+    print(f"done: history {history}, heap change {sys.free_heap() - heap0} bytes")
+    print("main() returned; press BOOT, the hidden loop is still serving it")
+
+
+main()

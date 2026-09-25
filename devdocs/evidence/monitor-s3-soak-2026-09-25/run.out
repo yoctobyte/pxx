@@ -1,0 +1,12 @@
+compiler 29956ba5beff tree 9c14efd7b
+reports: 193
+#  1 mean 3861 range 3796..3882 trend flat    frames 16 free 258084
+#  2 mean 3860 range 3836..3882 trend flat    frames 32 free 262068
+#  3 mean 3859 range 3837..3879 trend flat    frames 48 free 262060
+#  5 mean 3859 range 3839..3878 trend flat    frames 80 free 262068
+# 10 mean 3860 range 3839..3880 trend flat    frames 160 free 262060
+# 30 mean 3860 range 3839..3878 trend flat    frames 480 free 257960
+# 60 mean 3859 range 3839..3877 trend flat    frames 960 free 262064
+#120 mean 3860 range 3839..3878 trend flat    frames 1920 free 262052
+#180 mean 3860 range 3838..3877 trend flat    frames 2880 free 262060
+FLAG-SOAK-COMPLETE

@@ -1,0 +1,108 @@
+esp_flash: esp32s3 on /dev/ttyACM0 <- monitor-s3 (its own build.sh)
+esp_flash: building via /home/neo/frankH/examples/esp32/monitor-s3/build.sh ...
+note: time -> mimic_time (shim, subset)
+ok: main/main.o  [code=1257393B  data=115750B  bss=63864B  procs=2725  codeseg=1257393B]
+Executing action: all (aliases: build)
+Running ninja in directory /home/neo/frankH/examples/esp32/monitor-s3/build
+Executing "ninja all"...
+[0/1] Re-running CMake...
+-- Component directory /home/neo/esp/esp-idf/components/mqtt does not contain a CMakeLists.txt file. No component will be added
+-- Minimal build - OFF
+-- Building ESP-IDF components for target esp32s3
+-- ESP-TEE is currently supported only on the esp32c6;esp32h2;esp32c5;esp32c61 SoCs
+-- KCONFIG_REPORT_VERBOSITY not set, using default
+-- Project sdkconfig file /home/neo/frankH/examples/esp32/monitor-s3/sdkconfig
+NOTE: /home/neo/esp/esp-idf/components/bt/host/nimble/Kconfig.in:1421: BT_NIMBLE_MESH_PROVISIONER: 'default 0' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /home/neo/esp/esp-idf/components/fatfs/Kconfig:230: FATFS_PRINT_LLI: 'default 0' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /home/neo/esp/esp-idf/components/fatfs/Kconfig:235: FATFS_PRINT_FLOAT: 'default 0' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /home/neo/esp/esp-idf/components/bt/sdkconfig.rename.esp32s3:4: duplicate rename mapping for CONFIG_BT_NIMBLE_COEX_PHY_CODED_TX_RX_TLIM_EN: previous target CONFIG_BT_LE_COEX_PHY_CODED_TX_RX_TLIM_EN, new target CONFIG_BT_CTRL_COEX_PHY_CODED_TX_RX_TLIM_EN - last mapping is used
+NOTE: /home/neo/esp/esp-idf/components/bt/sdkconfig.rename.esp32s3:5: duplicate rename mapping for CONFIG_BT_NIMBLE_COEX_PHY_CODED_TX_RX_TLIM_DIS: previous target CONFIG_BT_LE_COEX_PHY_CODED_TX_RX_TLIM_DIS, new target CONFIG_BT_CTRL_COEX_PHY_CODED_TX_RX_TLIM_DIS - last mapping is used
+Loading defaults file /home/neo/frankH/examples/esp32/monitor-s3/sdkconfig.defaults...
+NOTE: Kconfig parser version: 1
+NOTE: Kconfig defaults policy: use sdkconfig
+NOTE: Status: Finished successfully
+-- Compiler supported targets: xtensa-esp-elf
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- App "pxx_monitor_s3" version: checkpoint-shortstring-p1-8226-
+-- Setting up mbedtls configuration
+-- Linkage type is PUBLIC
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_hal_wdt/esp32s3/rom.wdt.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_system/ld/esp32s3/memory.ld.in
+--   -> Preprocessing .in script: /home/neo/esp/esp-idf/components/esp_system/ld/esp32s3/memory.ld.in
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_system/ld/esp32s3/sections.ld.in
+--   -> Preprocessing .in script: /home/neo/esp/esp-idf/components/esp_system/ld/esp32s3/sections.ld.in
+--   -> Applying ldgen processing: /home/neo/frankH/examples/esp32/monitor-s3/build/esp-idf/esp_system/ld/sections.ld.in
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.api.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.bt_funcs.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.libgcc.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.version.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ble_master.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ble_50.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ble_smp.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ble_dtm.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ble_test.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.ble_scan.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/esp_rom/esp32s3/ld/esp32s3.rom.libc.ld
+-- Adding linker script /home/neo/esp/esp-idf/components/soc/esp32s3/ld/esp32s3.peripherals.ld
+-- Component idf::esp_trace will be linked with -Wl,--whole-archive
+-- Components: app_trace app_update bootloader bootloader_support bt cmock console cxx driver efuse esp-tls esp_adc esp_app_format esp_blockdev esp_blockdev_util esp_bootloader_format esp_coex esp_common esp_driver_ana_cmpr esp_driver_bitscrambler esp_driver_cam esp_driver_dac esp_driver_dma esp_driver_gpio esp_driver_gptimer esp_driver_i2c esp_driver_i2s esp_driver_i3c esp_driver_isp esp_driver_jpeg esp_driver_ledc esp_driver_mcpwm esp_driver_parlio esp_driver_pcnt esp_driver_ppa esp_driver_rmt esp_driver_sd_intf esp_driver_sdio esp_driver_sdm esp_driver_sdmmc esp_driver_sdspi esp_driver_spi esp_driver_touch_sens esp_driver_tsens esp_driver_twai esp_driver_uart esp_driver_usb_serial_jtag esp_eth esp_event esp_gdbstub esp_hal_ana_cmpr esp_hal_ana_conv esp_hal_cam esp_hal_clock esp_hal_dma esp_hal_gpio esp_hal_gpspi esp_hal_i2c esp_hal_i2s esp_hal_ieee802154 esp_hal_jpeg esp_hal_lcd esp_hal_ledc esp_hal_mcpwm esp_hal_mspi esp_hal_parlio esp_hal_pcnt esp_hal_pmu esp_hal_ppa esp_hal_rmt esp_hal_rtc_timer esp_hal_sd esp_hal_security esp_hal_timg esp_hal_touch_sens esp_hal_twai esp_hal_uart esp_hal_usb esp_hal_wdt esp_hid esp_http_client esp_http_server esp_https_ota esp_https_server esp_hw_support esp_lcd esp_libc esp_local_ctrl esp_mm esp_netif esp_netif_stack esp_partition esp_phy esp_pm esp_psram esp_ringbuf esp_rom esp_security esp_stdio esp_system esp_timer esp_trace esp_usb_cdc_rom_console esp_wifi espcoredump esptool_py fatfs freertos hal heap http_parser idf_test ieee802154 log lwip main mbedtls nvs_flash nvs_sec_provider openthread partition_table perfmon protobuf-c protocomm pthread rt sdmmc soc spi_flash spiffs tcp_transport ulp unity vfs wear_levelling wpa_supplicant xtensa
+-- Component paths: /home/neo/esp/esp-idf/components/app_trace /home/neo/esp/esp-idf/components/app_update /home/neo/esp/esp-idf/components/bootloader /home/neo/esp/esp-idf/components/bootloader_support /home/neo/esp/esp-idf/components/bt /home/neo/esp/esp-idf/components/cmock /home/neo/esp/esp-idf/components/console /home/neo/esp/esp-idf/components/cxx /home/neo/esp/esp-idf/components/driver /home/neo/esp/esp-idf/components/efuse /home/neo/esp/esp-idf/components/esp-tls /home/neo/esp/esp-idf/components/esp_adc /home/neo/esp/esp-idf/components/esp_app_format /home/neo/esp/esp-idf/components/esp_blockdev /home/neo/esp/esp-idf/components/esp_blockdev_util /home/neo/esp/esp-idf/components/esp_bootloader_format /home/neo/esp/esp-idf/components/esp_coex /home/neo/esp/esp-idf/components/esp_common /home/neo/esp/esp-idf/components/esp_driver_ana_cmpr /home/neo/esp/esp-idf/components/esp_driver_bitscrambler /home/neo/esp/esp-idf/components/esp_driver_cam /home/neo/esp/esp-idf/components/esp_driver_dac /home/neo/esp/esp-idf/components/esp_driver_dma /home/neo/esp/esp-idf/components/esp_driver_gpio /home/neo/esp/esp-idf/components/esp_driver_gptimer /home/neo/esp/esp-idf/components/esp_driver_i2c /home/neo/esp/esp-idf/components/esp_driver_i2s /home/neo/esp/esp-idf/components/esp_driver_i3c /home/neo/esp/esp-idf/components/esp_driver_isp /home/neo/esp/esp-idf/components/esp_driver_jpeg /home/neo/esp/esp-idf/components/esp_driver_ledc /home/neo/esp/esp-idf/components/esp_driver_mcpwm /home/neo/esp/esp-idf/components/esp_driver_parlio /home/neo/esp/esp-idf/components/esp_driver_pcnt /home/neo/esp/esp-idf/components/esp_driver_ppa /home/neo/esp/esp-idf/components/esp_driver_rmt /home/neo/esp/esp-idf/components/esp_driver_sd_intf /home/neo/esp/esp-idf/components/esp_driver_sdio /home/neo/esp/esp-idf/components/esp_driver_sdm /home/neo/esp/esp-idf/components/esp_driver_sdmmc /home/neo/esp/esp-idf/components/esp_driver_sdspi /home/neo/esp/esp-idf/components/esp_driver_spi /home/neo/esp/esp-idf/components/esp_driver_touch_sens /home/neo/esp/esp-idf/components/esp_driver_tsens /home/neo/esp/esp-idf/components/esp_driver_twai /home/neo/esp/esp-idf/components/esp_driver_uart /home/neo/esp/esp-idf/components/esp_driver_usb_serial_jtag /home/neo/esp/esp-idf/components/esp_eth /home/neo/esp/esp-idf/components/esp_event /home/neo/esp/esp-idf/components/esp_gdbstub /home/neo/esp/esp-idf/components/esp_hal_ana_cmpr /home/neo/esp/esp-idf/components/esp_hal_ana_conv /home/neo/esp/esp-idf/components/esp_hal_cam /home/neo/esp/esp-idf/components/esp_hal_clock /home/neo/esp/esp-idf/components/esp_hal_dma /home/neo/esp/esp-idf/components/esp_hal_gpio /home/neo/esp/esp-idf/components/esp_hal_gpspi /home/neo/esp/esp-idf/components/esp_hal_i2c /home/neo/esp/esp-idf/components/esp_hal_i2s /home/neo/esp/esp-idf/components/esp_hal_ieee802154 /home/neo/esp/esp-idf/components/esp_hal_jpeg /home/neo/esp/esp-idf/components/esp_hal_lcd /home/neo/esp/esp-idf/components/esp_hal_ledc /home/neo/esp/esp-idf/components/esp_hal_mcpwm /home/neo/esp/esp-idf/components/esp_hal_mspi /home/neo/esp/esp-idf/components/esp_hal_parlio /home/neo/esp/esp-idf/components/esp_hal_pcnt /home/neo/esp/esp-idf/components/esp_hal_pmu /home/neo/esp/esp-idf/components/esp_hal_ppa /home/neo/esp/esp-idf/components/esp_hal_rmt /home/neo/esp/esp-idf/components/esp_hal_rtc_timer /home/neo/esp/esp-idf/components/esp_hal_sd /home/neo/esp/esp-idf/components/esp_hal_security /home/neo/esp/esp-idf/components/esp_hal_timg /home/neo/esp/esp-idf/components/esp_hal_touch_sens /home/neo/esp/esp-idf/components/esp_hal_twai /home/neo/esp/esp-idf/components/esp_hal_uart /home/neo/esp/esp-idf/components/esp_hal_usb /home/neo/esp/esp-idf/components/esp_hal_wdt /home/neo/esp/esp-idf/components/esp_hid /home/neo/esp/esp-idf/components/esp_http_client /home/neo/esp/esp-idf/components/esp_http_server /home/neo/esp/esp-idf/components/esp_https_ota /home/neo/esp/esp-idf/components/esp_https_server /home/neo/esp/esp-idf/components/esp_hw_support /home/neo/esp/esp-idf/components/esp_lcd /home/neo/esp/esp-idf/components/esp_libc /home/neo/esp/esp-idf/components/esp_local_ctrl /home/neo/esp/esp-idf/components/esp_mm /home/neo/esp/esp-idf/components/esp_netif /home/neo/esp/esp-idf/components/esp_netif_stack /home/neo/esp/esp-idf/components/esp_partition /home/neo/esp/esp-idf/components/esp_phy /home/neo/esp/esp-idf/components/esp_pm /home/neo/esp/esp-idf/components/esp_psram /home/neo/esp/esp-idf/components/esp_ringbuf /home/neo/esp/esp-idf/components/esp_rom /home/neo/esp/esp-idf/components/esp_security /home/neo/esp/esp-idf/components/esp_stdio /home/neo/esp/esp-idf/components/esp_system /home/neo/esp/esp-idf/components/esp_timer /home/neo/esp/esp-idf/components/esp_trace /home/neo/esp/esp-idf/components/esp_usb_cdc_rom_console /home/neo/esp/esp-idf/components/esp_wifi /home/neo/esp/esp-idf/components/espcoredump /home/neo/esp/esp-idf/components/esptool_py /home/neo/esp/esp-idf/components/fatfs /home/neo/esp/esp-idf/components/freertos /home/neo/esp/esp-idf/components/hal /home/neo/esp/esp-idf/components/heap /home/neo/esp/esp-idf/components/http_parser /home/neo/esp/esp-idf/components/idf_test /home/neo/esp/esp-idf/components/ieee802154 /home/neo/esp/esp-idf/components/log /home/neo/esp/esp-idf/components/lwip /home/neo/frankH/examples/esp32/monitor-s3/main /home/neo/esp/esp-idf/components/mbedtls /home/neo/esp/esp-idf/components/nvs_flash /home/neo/esp/esp-idf/components/nvs_sec_provider /home/neo/esp/esp-idf/components/openthread /home/neo/esp/esp-idf/components/partition_table /home/neo/esp/esp-idf/components/perfmon /home/neo/esp/esp-idf/components/protobuf-c /home/neo/esp/esp-idf/components/protocomm /home/neo/esp/esp-idf/components/pthread /home/neo/esp/esp-idf/components/rt /home/neo/esp/esp-idf/components/sdmmc /home/neo/esp/esp-idf/components/soc /home/neo/esp/esp-idf/components/spi_flash /home/neo/esp/esp-idf/components/spiffs /home/neo/esp/esp-idf/components/tcp_transport /home/neo/esp/esp-idf/components/ulp /home/neo/esp/esp-idf/components/unity /home/neo/esp/esp-idf/components/vfs /home/neo/esp/esp-idf/components/wear_levelling /home/neo/esp/esp-idf/components/wpa_supplicant /home/neo/esp/esp-idf/components/xtensa
+-- Configuring done (22.1s)
+-- Generating done (2.2s)
+-- Build files have been written to: /home/neo/frankH/examples/esp32/monitor-s3/build
+[1/11] Building C object esp-idf/esp_app_format/CMakeFiles/__idf_esp_app_format.dir/esp_app_desc.c.obj
+[2/11] Linking C static library esp-idf/esp_app_format/libesp_app_format.a
+[3/11] Generating ../../partition_table/partition-table.bin
+Partition table binary generated. Contents:
+*******************************************************************************
+# ESP-IDF Partition Table
+# Name, Type, SubType, Offset, Size, Flags
+nvs,data,nvs,0x9000,24K,
+phy_init,data,phy,0xf000,4K,
+factory,app,factory,0x10000,3840K,
+*******************************************************************************
+[4/11] Performing build step for 'bootloader'
+[1/1] cd /home/neo/frankH/examples/esp32/monitor-s3/build/bootloader && /home/neo/.espressif/python_env/idf6.0_py3.14_env/bin/python /home/neo/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 /home/neo/frankH/examples/esp32/monitor-s3/build/bootloader/bootloader.bin
+Bootloader binary size 0x5240 bytes. 0x2dc0 bytes (36%) free.
+[5/11] No install step for 'bootloader'
+[6/11] Completed 'bootloader'
+[7/11] Generating esp-idf/esp_system/ld/sections.ld
+NOTE: /home/neo/esp/esp-idf/components/bt/host/nimble/Kconfig.in:1421: 
+BT_NIMBLE_MESH_PROVISIONER: 'default 0' is not a valid bool value (only 'y' and 
+'n' are allowed). Value is treated as 'n'.
+NOTE: /home/neo/esp/esp-idf/components/fatfs/Kconfig:230: FATFS_PRINT_LLI: 
+'default 0' is not a valid bool value (only 'y' and 'n' are allowed). Value is 
+treated as 'n'.
+NOTE: /home/neo/esp/esp-idf/components/fatfs/Kconfig:235: FATFS_PRINT_FLOAT: 
+'default 0' is not a valid bool value (only 'y' and 'n' are allowed). Value is 
+treated as 'n'.
+[8/11] Linking CXX executable pxx_monitor_s3.elf
+[9/11] Generating binary image from built executable
+esptool v5.3.1
+Creating ESP32-S3 image...
+Merged 3 ELF sections.
+Successfully created ESP32-S3 image.
+Generated /home/neo/frankH/examples/esp32/monitor-s3/build/pxx_monitor_s3.bin
+[10/11] cd /home/neo/frankH/examples/esp32/monitor-s3/build && /home/neo/.espressif/python_env/idf6.0_py3.14_env/bin/python /home/neo/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /home/neo/frankH/examples/esp32/monitor-s3/build/partition_table/partition-table.bin /home/neo/frankH/examples/esp32/monitor-s3/build/pxx_monitor_s3.bin
+pxx_monitor_s3.bin binary size 0x181310 bytes. Smallest app partition is 0x3c0000 bytes. 0x23ecf0 bytes (60%) free.
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32s3 -b 460800 --before default-reset --after hard-reset write-flash --flash-mode dio --flash-size 4MB --flash-freq 80m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/pxx_monitor_s3.bin
+or from the "/home/neo/frankH/examples/esp32/monitor-s3/build" directory
+ python -m esptool --chip esp32s3 -b 460800 --before default-reset --after hard-reset write-flash "@flash_args"
+app_main present in image map
+esp_flash: writing flash...
+adc start 0
+#  1 mean 3862 range 3767..3883 trend flat    frames 16 free 258084

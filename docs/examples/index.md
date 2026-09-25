@@ -311,6 +311,87 @@ project per program and chip. To build and flash one yourself, follow
 [Getting started on the ESP32](../getting-started/esp32.md); the units they use
 are documented in [ESP32 peripherals](../library/esp.md).
 
+### A Python sensor monitor on an ESP32-S3
+
+`examples/esp32/monitor-s3/main/main.npy` is a sensor monitor written in
+Python and compiled to Xtensa machine code: there is no interpreter on the
+chip. Once a second it:
+- averages the ADC samples streamed in the background;
+- keeps a short history in a list and its statistics in a dict;
+- counts presses of the BOOT button;
+- prints one line with the chip's own free heap.
+
+The ADC and button interrupts are handled in Pascal (`espadc`, `espgpio`),
+and the Python handlers run afterwards in the main task, so they are ordinary
+code.
+
+```python
+import time
+import interrupts
+import 'espadc.pas' as adc
+import 'espgpio.pas' as gpio
+import 'espsys.pas' as sys
+
+def on_button(ev):
+    state["presses"] += 1
+    print(f"button pressed ({state['presses']} so far)")
+
+def main():
+    interrupts.on_event(interrupts.INT_SRC_ADC, on_frame)
+    interrupts.on_event(interrupts.INT_SRC_GPIO, on_button)
+    gpio.gpio_input(BUTTON)
+    gpio.on_falling(BUTTON)
+    print("adc start", adc.start(ADC_CHANNEL, SAMPLE_HZ))
+    for tick in range(1, REPORTS + 1):
+        time.sleep(1)
+        stats = summarize(collect())
+        ...
+        print(f"#{tick:3d} mean {stats['mean']:4d} range {stats['min']}..{stats['max']}"
+              f" trend {trend:7s} frames {state['frames']} free {sys.free_heap()}")
+```
+
+Build and flash it with the ESP-IDF toolchain loaded
+([Getting started on the ESP32](../getting-started/esp32.md) has the setup):
+
+```sh
+tools/esp_flash.sh --project examples/esp32/monitor-s3 --port /dev/ttyACM0 --no-verify --seconds 15
+```
+
+**The soak on the board.** It was run with `REPORTS` raised from 10 to 240 and
+captured over serial for 262 seconds. It printed 193 reports, and the free heap
+stayed between 257,948 and 262,072 bytes the whole time. It only switches
+between those two values, depending on whether a buffer is in use at the
+moment of the reading, and never drifts. These are the first reports as
+captured, with nothing connected to the ADC pin, so the readings sit near the
+top of the 12-bit range:
+
+```text
+I (523) main_task: Calling app_main()
+adc start 0
+#  1 mean 3861 range 3796..3882 trend flat    frames 16 free 258084
+#  2 mean 3860 range 3836..3882 trend flat    frames 32 free 262068
+#  3 mean 3859 range 3837..3879 trend flat    frames 48 free 262060
+#  4 mean 3859 range 3838..3879 trend flat    frames 64 free 262068
+#  5 mean 3859 range 3839..3878 trend flat    frames 80 free 262068
+#  6 mean 3859 range 3839..3877 trend flat    frames 96 free 262072
+#  7 mean 3859 range 3839..3878 trend flat    frames 112 free 257976
+#  8 mean 3859 range 3837..3877 trend flat    frames 128 free 262056
+#  9 mean 3860 range 3837..3880 trend flat    frames 144 free 262060
+# 10 mean 3860 range 3839..3880 trend flat    frames 160 free 262060
+```
+
+The soak was measured on 2026-09-25 on an ESP32-S3 devkit (ESP-IDF v6.0.1,
+160 MHz), with a compiler built after pin v424 (sha256 `29956ba5beff…`, tree
+`9c14efd7b`). The checked-in example, with `REPORTS = 10`, also runs on the
+board with pin v424 itself. The raw capture and the exact program are kept in
+`devdocs/evidence/monitor-s3-soak-2026-09-25/`.
+
+Nil Python is python-ish: this program stays inside the core that behaves as
+CPython does, and outside it the language is known to have plenty of issues
+(see [Nil Python](../targets/nil-python.md)).
+
+### The other examples, under QEMU
+
 For this page, each one below was **built with pin v423 and booted under
 Espressif's QEMU**. Its console output was checked against the program's
 `main.expected` file or its own verdict line. They were not run on a physical
@@ -368,23 +449,25 @@ total 59 3
 
 ### On a real ESP32-S3
 
-Separately from the QEMU runs above, the ESP lane flashed eight examples to an
-ESP32-S3 board. That run used a development compiler (binary sha256
-`bb17d23beea5`, tree `54a8835dd`), not pin v423.
+The examples were also flashed to an ESP32-S3 devkit on 2026-09-24/25 with pin
+v424 itself (ESP-IDF v6.0.1), and all fifteen checks passed. The details are in
+[Getting started on the ESP32](../getting-started/esp32.md#verified-with).
 
 | Example | Language | Result on the board |
 | --- | --- | --- |
-| nilpy-s3, nilpy-hw-s3 | Python | output matches `main.expected` |
+| monitor-s3 | Python | the report lines above; free heap flat over 193 reports |
+| nilpy-s3, nilpy-hw-s3 | Python | output matches `main.expected` byte for byte |
 | gpio-edge-s3 | Pascal | output matches `main.expected`: real input edges, which QEMU cannot deliver |
 | adc-s3 | Pascal | output matches `main.expected`: real ADC readings |
-| hello-s3, timer-s3, rgb-s3 | Pascal | run as intended, checked by eye (no `main.expected`) |
+| hello-s3, timer-s3, rgb-s3, i2c-s3, pwm-s3, uart-s3, nvs-s3 | Pascal | each prints its own pass line |
 | wifi-ap-s3 | Pascal | starts the access point and reaches `HTTP server listening on port 80`; no client connected during the test |
 
-**These are single runs, not long ones.** The same examples looped for minutes
-showed the Python programs leaking memory on every run (`adc-s3` ran out of
-memory after about twelve runs). The causes are known and a fix is being
-landed. Until then, do not treat the Python examples as safe for long-running
-use. The Pascal `rgb-s3` stayed flat over the same test.
+**Long-running use.** Re-run in a loop with a compiler from before the leak
+fixes, `nilpy-s3`, `nilpy-hw-s3` and `gpio-edge-s3` lost about 44, 220 and 264
+bytes per pass. Pin v424 predates those fixes, so expect the same from it. With
+the fixes, which the next pin will carry, all three stay flat. `adc-s3` in a loop still loses about 17 KB per pass, because an
+`adc.read()` whose result is thrown away is not released. Assigning the
+result, as `monitor-s3` does, avoids it.
 
 Still unverified: `adc-c3` and `gpio-edge-c3`, because there was no C3 board
 and QEMU delivers no ADC readings or GPIO edges; and `hello-s2`, which builds
