@@ -61,6 +61,16 @@
 # usage: tools/busybox_diff.sh [--pinned] [--keep] [--targets "x86_64 aarch64"]
 #                              [--applets "cat echo"]
 #   --pinned    use stable_linux_amd64/default/pinned instead of compiler/pascal26
+#   --build-only  NO ORACLE: build the pxx unity, print its applet list, run one
+#               smoke applet, and copy the binary to --out DIR (default
+#               ./busybox-pxx, one busybox_<target> per target; default target
+#               x86_64 only). This is the release bundle's entry and it needs
+#               NO gcc -- ON A CONFIGURED TREE. Configuring is busybox's own
+#               `make' (kconfig + the link map the unity list is read from),
+#               which needs a host C compiler; a tree that is already
+#               configured for the requested applets skips it. The smoke is a
+#               sanity check, not a comparison: the full differential is this
+#               script without --build-only.
 #   --keep      leave the work directory in place and print it
 #   --targets   space-separated target list (default: x86_64 aarch64)
 #   --applets   space-separated applet list (default: cat echo -- rung 2).
@@ -212,18 +222,23 @@ FREESTANDING=0
 PXXLINK=0
 OBJFLAGS=""
 FSECT=0
+BUILDONLY=0
+BOOUT=""
+TARGETS_SET=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --pinned)  COMPILER="$ROOT/stable_linux_amd64/default/pinned"; shift ;;
     --keep)    KEEP=1; shift ;;
-    --targets) TARGETS="$2"; shift 2 ;;
+    --targets) TARGETS="$2"; TARGETS_SET=1; shift 2 ;;
     --applets) APPLETS="$2"; shift 2 ;;
     --separate) SEPARATE=1; shift ;;
     --freestanding) FREESTANDING=1; SEPARATE=1; shift ;;
     --pxx-link) PXXLINK=1; FREESTANDING=1; SEPARATE=1; shift ;;
     --dce)     OBJFLAGS="$OBJFLAGS --dce"; shift ;;
     --function-sections) OBJFLAGS="$OBJFLAGS --function-sections"; FSECT=1; shift ;;
+    --build-only) BUILDONLY=1; shift ;;
+    --out)     BOOUT="$2"; shift 2 ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -231,6 +246,11 @@ done
 die() { printf 'busybox-diff: %s\n' "$*" >&2; exit 1; }
 
 [ -x "$COMPILER" ] || die "no compiler at $COMPILER"
+if [ "$BUILDONLY" -eq 1 ]; then
+  [ "$SEPARATE" -eq 0 ] || die "--build-only builds the unity; --separate links through a host toolchain and is a measurement mode"
+  [ "$TARGETS_SET" -eq 1 ] || TARGETS="x86_64"
+  [ -n "$BOOUT" ] || BOOUT="$PWD/busybox-pxx"
+fi
 [ -f "$CATUNITY" ] || die "no unity preamble source at $CATUNITY"
 
 NAPPLETS=$(printf '%s\n' $APPLETS | wc -l)
@@ -540,6 +560,15 @@ if [ ! -f "$BB/include/applet_tables.h" ] \
   # warnings while the actual cause, "networking/tc.c:236: error: TCA_CBQ_MAX
   # undeclared", sat at line 491 of 769. A diagnostic that prints the wrong end
   # of the log is worse than none: it looks like an answer.
+  # CONFIGURING NEEDS A HOST C COMPILER, even under --build-only: it is
+  # busybox's own `make' (kconfig's conf, fixdep, the applet tables and the
+  # link map the unity list is read from), and that Makefile calls gcc. pxx
+  # compiles kconfig's conf itself since bf4caf68c9, but the rest of the step is
+  # a gcc build. So a tree is configured ONCE where a compiler exists, and every
+  # --build-only run after that needs none. Say so instead of dying in make.
+  if [ "$BUILDONLY" -eq 1 ] && ! command -v gcc >/dev/null 2>&1; then
+    die "the tree at $BB is not configured for applets [$APPLETS], and configuring needs a host C compiler (busybox's own make calls gcc). Run this once with a compiler on PATH; after that --build-only needs none."
+  fi
   configure_tree "$CFGLOG" || {
     if grep -qE '(error:|Error [0-9])' "$CFGLOG"; then
       printf 'first errors in the configure log:\n' >&2
@@ -1436,6 +1465,9 @@ make_one_wrapper() {
 # applets. This is not relaxing the oracle to let a subject pass -- pxx never
 # saw the file, and the fix is to compile the program the way the program says
 # it must be compiled.
+# --build-only skips BOTH oracle blocks: this one and the 32-bit/upstream block
+# below (bracketed by the same test, left unindented to keep the diff readable).
+if [ "$BUILDONLY" -eq 0 ]; then
 command -v gcc >/dev/null 2>&1 || die "gcc is the oracle and is not installed"
 
 if [ "$SEPARATE" -eq 1 ]; then
@@ -1474,6 +1506,7 @@ NCASES="$(count_cases "$WORK/oracle_gcc.out")"
 # is load-bearing, so it is asserted rather than merely printed.
 [ "$NCASES" -gt 0 ] || die "the oracle transcript holds no cases -- a byte-identical result over nothing is not a result"
 printf '  ORACLE  %s%d cases)\n' "$ORACLE_KIND" "$NCASES"
+fi   # BUILDONLY
 
 # ---- the ORACLE HAS A WIDTH, and until 2026-09-04 it was always 64 ----------
 # THE ORACLE ABOVE IS BUILT WITH PLAIN `gcc', SO IT IS AN x86-64 BINARY. Diffing
@@ -1514,6 +1547,7 @@ target_bits() {
 
 NOCMP=0        # targets that BUILT but were never compared to an oracle
 NCMP=0         # targets that were actually compared to an oracle (PASS or FAIL)
+if [ "$BUILDONLY" -eq 0 ]; then
 WANT32=0
 for t in $TARGETS; do
   [ "$(target_bits "$t")" = 32 ] && WANT32=1
@@ -1644,6 +1678,7 @@ if [ -n "$UPSTREAM" ]; then
 else
   printf '  note    no separately-linked busybox in the tree; gcc unity is the only oracle\n'
 fi
+fi   # BUILDONLY
 
 # ---- --separate: what this HOST can actually do, per target -------------------
 # THE OLD REFUSAL WAS ONE SENTENCE FOR THREE DIFFERENT FACTS -- "--emit-obj has
@@ -1782,6 +1817,40 @@ sep_probe() {
 }
 
 # ---- subjects ---------------------------------------------------------------
+# --build-only's per-target report. A smoke, not a comparison: the applet list
+# must name exactly the configured applets, and one applet must produce a known
+# output. It proves the binary RUNS and dispatches; it says nothing about the
+# 600-odd cases the differential runs.
+build_only_report() {   # $1 = target, $2 = runner, $3 = binary
+  local t="$1" runner="$2" bin="$3" got want smoke
+  mkdir -p "$BOOUT" || die "cannot create --out $BOOUT"
+  cp "$bin" "$BOOUT/busybox_$t" || die "cannot copy the binary to $BOOUT"
+  printf '  built   %-8s %s (%d bytes)\n' "$t" "$BOOUT/busybox_$t" "$(stat -c%s "$bin")"
+  if [ "$NAPPLETS" -gt 1 ]; then
+    got="$(run_one "$runner" "$WORK/p_$t/busybox" --list 2>&1 | LC_ALL=C sort -u)"
+    want="$(enabled_applets)"
+    if [ "$got" != "$want" ]; then
+      printf '  FAIL    %-8s `busybox --list` does not name the configured applets\n' "$t"
+      diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") | head -10
+      return 1
+    fi
+    printf '  applets %-8s %s\n' "$t" "$(printf '%s' "$got" | tr '\n' ' ')"
+  fi
+  if has_applet echo; then
+    smoke="$(run_one "$runner" "$WORK/p_$t/echo" pxx built busybox 2>&1)"; want="pxx built busybox"
+  elif has_applet cat; then
+    smoke="$(run_one "$runner" "$WORK/p_$t/cat" 2>&1)"; want="piped-stdin"
+  else
+    printf '  note    %-8s no echo or cat in the applet list, so no smoke applet was run\n' "$t"
+    return 0
+  fi
+  if [ "$smoke" != "$want" ]; then
+    printf '  FAIL    %-8s smoke applet printed [%s], expected [%s]\n' "$t" "$smoke" "$want"
+    return 1
+  fi
+  printf '  PASS    %-8s smoke applet printed [%s]\n' "$t" "$smoke"
+}
+
 for t in $TARGETS; do
   out="$WORK/pxx_$t"
   if [ "$t" = "x86_64" ]; then targflag=""; runner=""
@@ -1933,6 +2002,10 @@ for t in $TARGETS; do
   fi
 
   install_bin "$WORK/p_$t" "$out"
+  if [ "$BUILDONLY" -eq 1 ]; then
+    build_only_report "$t" "$runner" "$out" || RC=1
+    continue
+  fi
   # Per-case exit statuses are part of the compared OUTPUT (run_cases prints
   # them), so this call's own status carries no information and is ignored.
   run_cases "$runner" "$WORK/p_$t" > "$WORK/pxx_$t.out" 2>&1 || true
@@ -1989,6 +2062,12 @@ if [ "$RC" -eq 0 ] && [ "$NCMP" -eq 0 ] && [ "$NOCMP" -eq 0 ] && [ "$NSKIP" -gt 
   printf 'busybox-diff: NO RESULT -- all %d requested target(s) were skipped; nothing was built and nothing was compared (see the notes above)\n' "$NSKIP"
   printf 'BUSYBOX-DIFF-COMPLETE\n'
   exit 2
+fi
+if [ "$BUILDONLY" -eq 1 ]; then
+  if [ "$RC" -ne 0 ]; then printf 'busybox-diff: BUILD-ONLY RED\n'
+  else printf 'busybox-diff: BUILD-ONLY GREEN (no oracle ran; binaries in %s)\n' "$BOOUT"; fi
+  printf 'BUSYBOX-DIFF-COMPLETE\n'
+  exit "$RC"
 fi
 if [ "$RC" -ne 0 ]; then
   printf 'busybox-diff: RED\n'

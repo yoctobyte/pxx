@@ -163,6 +163,32 @@ mkdir -p "$HOME/.local/bin"
 ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 ```
 
+### Demo: build busybox with pxx
+
+pxx builds [busybox](https://busybox.net) as one translation unit and links it
+itself: a static binary, no libc. busybox is GPL-2.0 and is **not** in this
+repository or the tarball. Fetch it yourself; the version this is tested
+against is 1.36.1 (git commit `1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4`):
+
+```sh
+curl -LO https://busybox.net/downloads/busybox-1.36.1.tar.bz2   # sha256 b8cc24c9...de314
+tar xjf busybox-1.36.1.tar.bz2
+# or: git clone https://git.busybox.net/busybox && git -C busybox checkout 1a64f6a20aaf
+
+PXX_BUSYBOX_DIR=$PWD/busybox-1.36.1 tools/busybox_diff.sh --build-only \
+    --applets "cat echo ls wc" --out ./busybox-pxx
+./busybox-pxx/busybox_x86_64 echo hello
+```
+
+`--build-only` prints the applet list, runs one smoke applet, and leaves the
+binary in `--out`. **Configuring the tree needs gcc on the host.** That step is
+busybox's own `make`, which builds kconfig and the link map the unity's file
+list is read from, and busybox's Makefile calls gcc. It runs once per applet list; after
+that, `--build-only` needs no gcc at all. Without `--build-only` the script is
+the full differential test against a gcc build of the same source. In a git
+checkout, `tools/install_lib_candidates.sh busybox` fetches the pinned commit to
+the default location.
+
 ## Documentation
 
 - [Public documentation](docs/index.md) — install, getting started, language,
