@@ -104,6 +104,21 @@ type
     procedure Open;
   end;
 
+  { MicroPython ESP32's machine.RTC (ports/esp32/machine_rtc.c): the system
+    clock as a date. datetime() answers (year, month, day, weekday, hours,
+    minutes, seconds, microseconds), weekday 0 being Monday; datetime(t) sets
+    it from the same 8-tuple (the weekday in it is ignored, as MicroPython
+    ignores it). UTC, because MicroPython has no time zones. The clock starts
+    at 1970-01-01 on a fresh boot; nothing here keeps it across a reset
+    (a DS3231 is what a program uses for that). }
+  RTC = class
+  public
+    constructor Create(id: Integer = 0);
+    function datetime: TPyList; overload;
+    procedure datetime(t: TPyList); overload;
+    procedure init(t: TPyList);
+  end;
+
 implementation
 
 const
@@ -387,6 +402,93 @@ begin
   if write_buf.FLen = 0 then Exit;
   rc := SpiTransfer(NO_DEVICE_CS, PByte(write_buf.FData), PByte(read_buf.FData), write_buf.FLen);
   if rc <> 0 then RaiseEsp(rc);
+end;
+
+{ ---- RTC ------------------------------------------------------------------ }
+
+type
+  TRtcTimeval = record      { newlib's struct timeval: 64-bit time_t on IDF 5+ }
+    tv_sec: Int64;
+    tv_usec: LongInt;
+    pad: LongInt;
+  end;
+
+function gettimeofday(tv: Pointer; tz: Pointer): Integer; cdecl; external;
+function settimeofday(tv: Pointer; tz: Pointer): Integer; cdecl; external;
+
+{ Howard Hinnant's days_from_civil / civil_from_days: exact for every date,
+  no tables, no floating point. }
+function RtcDaysFromCivil(y, m, d: Int64): Int64;
+var era, yoe, doy, doe: Int64;
+begin
+  if m <= 2 then y := y - 1;
+  if y >= 0 then era := y div 400 else era := (y - 399) div 400;
+  yoe := y - era * 400;
+  if m > 2 then doy := (153 * (m - 3) + 2) div 5 + d - 1
+  else doy := (153 * (m + 9) + 2) div 5 + d - 1;
+  doe := yoe * 365 + yoe div 4 - yoe div 100 + doy;
+  RtcDaysFromCivil := era * 146097 + doe - 719468;
+end;
+
+procedure RtcCivilFromDays(z: Int64; var y, m, d: Int64);
+var era, doe, yoe, doy, mp: Int64;
+begin
+  z := z + 719468;
+  if z >= 0 then era := z div 146097 else era := (z - 146096) div 146097;
+  doe := z - era * 146097;
+  yoe := (doe - doe div 1460 + doe div 36524 - doe div 146096) div 365;
+  y := yoe + era * 400;
+  doy := doe - (365 * yoe + yoe div 4 - yoe div 100);
+  mp := (5 * doy + 2) div 153;
+  d := doy - (153 * mp + 2) div 5 + 1;
+  if mp < 10 then m := mp + 3 else m := mp - 9;
+  if m <= 2 then y := y + 1;
+end;
+
+constructor RTC.Create(id: Integer);
+begin
+  inherited Create;
+  if id <> 0 then raise ValueError.Create('RTC(' + IntToStr(id) + ') does not exist');
+end;
+
+function RTC.datetime: TPyList;
+var tv: TRtcTimeval; days, rem, y, m, d: Int64; l: TPyList; v: Variant;
+begin
+  tv.tv_sec := 0; tv.tv_usec := 0; tv.pad := 0;
+  gettimeofday(@tv, nil);
+  days := tv.tv_sec div 86400;
+  rem := tv.tv_sec - days * 86400;
+  if rem < 0 then begin rem := rem + 86400; days := days - 1; end;
+  RtcCivilFromDays(days, y, m, d);
+  l := TPyList.Create;
+  v := y;                       l.append(v);
+  v := m;                       l.append(v);
+  v := d;                       l.append(v);
+  v := ((days mod 7) + 10) mod 7;   { 1970-01-01 was a Thursday: 3 }
+                                l.append(v);
+  v := rem div 3600;            l.append(v);
+  v := (rem div 60) mod 60;     l.append(v);
+  v := rem mod 60;              l.append(v);
+  v := tv.tv_usec;              l.append(v);
+  datetime := pylist_mark_tuple(l);   { tuple(l) would COPY and strand l }
+end;
+
+procedure RTC.datetime(t: TPyList);
+var tv: TRtcTimeval; y, m, d, hh, mm, ss: Int64;
+begin
+  if t.count <> 8 then
+    raise ValueError.Create('requested length 8 but object has length ' + IntToStr(t.count));
+  y := t.at(0); m := t.at(1); d := t.at(2);
+  hh := t.at(4); mm := t.at(5); ss := t.at(6);
+  tv.tv_sec := RtcDaysFromCivil(y, m, d) * 86400 + hh * 3600 + mm * 60 + ss;
+  tv.tv_usec := t.at(7);
+  tv.pad := 0;
+  settimeofday(@tv, nil);
+end;
+
+procedure RTC.init(t: TPyList);
+begin
+  datetime(t);
 end;
 
 end.

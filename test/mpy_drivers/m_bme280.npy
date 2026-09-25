@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: robert-hh/BME280 (bme280_float), unchanged.
+from machine import Pin, I2C
+import bme280_float as bme280
+
+i2c = I2C(0, scl=Pin(9), sda=Pin(8))
+try:
+    bme = bme280.BME280(i2c=i2c)
+    print("bme280:", bme.values)
+except OSError as e:
+    print("bme280: no device:", e)

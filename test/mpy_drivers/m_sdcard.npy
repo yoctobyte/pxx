@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: micropython-lib's sdcard, unchanged.
+from machine import Pin, SPI
+import sdcard
+
+spi = SPI(1, baudrate=1000000, sck=Pin(12), mosi=Pin(11), miso=Pin(13))
+try:
+    sd = sdcard.SDCard(spi, Pin(10, Pin.OUT))
+    print("sdcard: sectors", sd.ioctl(4, 0))
+except OSError as e:
+    print("sdcard: no card:", e)

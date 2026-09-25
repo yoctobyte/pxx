@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: 0BSD
+# framebuf (lib/rtl/mimic_framebuf.py) against MicroPython's own: the same file
+# runs under the MicroPython unix port, and the expected output below was taken
+# from it (v1.26.1). Every row prints the raw buffer, because a display driver
+# sends that buffer to the panel byte for byte -- the packing is the interface.
+import framebuf
+
+
+def hexs(b):
+    out = ""
+    for v in b:
+        out = out + "%02x" % v
+    return out
+
+
+def scene(fb):
+    fb.fill(0)
+    fb.pixel(1, 1, 1)
+    fb.hline(0, 3, 9, 1)
+    fb.vline(6, 0, 7, 1)
+    fb.rect(2, 4, 5, 3, 1)
+    fb.line(0, 0, 11, 6, 1)
+    fb.line(10, 0, 3, 7, 1)
+    fb.fill_rect(-3, 5, 6, 9, 1)       # clipped on two sides
+    fb.hline(-5, 2, 3, 1)              # entirely off the buffer
+    fb.rect(8, 1, 4, 4, 1, True)
+
+
+for name, fmt, size in [("MONO_VLSB", framebuf.MONO_VLSB, 12 * 8 // 8),
+                        ("MONO_HLSB", framebuf.MONO_HLSB, 16 * 8 // 8),
+                        ("MONO_HMSB", framebuf.MONO_HMSB, 16 * 8 // 8),
+                        ("GS2_HMSB", framebuf.GS2_HMSB, 12 * 8 // 4),
+                        ("GS4_HMSB", framebuf.GS4_HMSB, 12 * 8 // 2),
+                        ("GS8", framebuf.GS8, 12 * 8),
+                        ("RGB565", framebuf.RGB565, 12 * 8 * 2)]:
+    buf = bytearray(size)
+    fb = framebuf.FrameBuffer(buf, 12, 8, fmt)
+    scene(fb)
+    print(name, hexs(buf))
+    print(name, "pixel", fb.pixel(1, 1), fb.pixel(0, 7), fb.pixel(5, 0), fb.pixel(12, 0), fb.pixel(-1, 2))
+    fb.scroll(2, 1)
+    print(name, "scroll +2 +1", hexs(buf))
+    fb.scroll(-3, -2)
+    print(name, "scroll -3 -2", hexs(buf))
+
+# colours wider than one bit
+buf = bytearray(8 * 4 * 2)
+fb = framebuf.FrameBuffer(buf, 8, 4, framebuf.RGB565)
+fb.fill(0x1234)
+fb.pixel(3, 2, 0xF800)
+fb.line(0, 3, 7, 0, 0x07E0)
+print("RGB565 colours", hexs(buf), hex(fb.pixel(3, 2)))
+buf = bytearray(8 * 4 // 2)
+fb = framebuf.FrameBuffer(buf, 8, 4, framebuf.GS4_HMSB)
+for x in range(8):
+    fb.vline(x, 0, 4, x * 2 + 1)
+print("GS4 ramp", hexs(buf), fb.pixel(5, 1))
+
+# blit, with a transparent key and with a palette
+src = bytearray(8 * 4 // 8)          # MONO_HLSB rounds the stride up to 8
+sfb = framebuf.FrameBuffer(src, 4, 4, framebuf.MONO_HLSB)
+sfb.fill(0)
+sfb.line(0, 0, 3, 3, 1)
+sfb.pixel(3, 0, 1)
+dst = bytearray(10 * 6)
+dfb = framebuf.FrameBuffer(dst, 10, 6, framebuf.GS8)
+dfb.fill(9)
+dfb.blit(sfb, 1, 1)
+dfb.blit(sfb, 6, 3, 0)                 # key 0: zeros are transparent
+dfb.blit(sfb, -2, -1)                  # clipped
+print("blit", hexs(dst))
+pal = bytearray(2)
+pfb = framebuf.FrameBuffer(pal, 2, 1, framebuf.GS8)
+pfb.pixel(0, 0, 40)
+pfb.pixel(1, 0, 200)
+dfb.fill(0)
+dfb.blit(sfb, 3, 1, -1, pfb)
+print("blit palette", hexs(dst))
+
+# too small a buffer is refused up front, as MicroPython does
+try:
+    framebuf.FrameBuffer(bytearray(11), 12, 8, framebuf.MONO_VLSB)
+    print("small buffer accepted")
+except ValueError:
+    print("small buffer: ValueError")
+
+# a buffer with an explicit stride, as a driver uses for a window into a panel
+buf = bytearray(4 * 16 // 8)
+fb = framebuf.FrameBuffer(buf, 10, 4, framebuf.MONO_HLSB, 16)
+fb.fill(0)
+fb.line(0, 0, 9, 3, 1)
+print("stride 16", hexs(buf))
+print("FRAMEBUF-DONE")

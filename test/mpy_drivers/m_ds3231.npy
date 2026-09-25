@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: peterhinch/micropython-samples DS3231/ds3231_port.py, unchanged.
+from machine import Pin, I2C
+from ds3231_port import DS3231
+
+i2c = I2C(0, scl=Pin(9), sda=Pin(8))
+try:
+    rtc = DS3231(i2c)
+    print("ds3231:", rtc.get_time())
+except OSError as e:
+    print("ds3231: no device:", e)

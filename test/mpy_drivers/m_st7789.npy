@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: russhughes/st7789py_mpy (lib/st7789py.py), unchanged.
+from machine import Pin, SPI
+import st7789py as st7789
+
+spi = SPI(1, baudrate=40000000, sck=Pin(12), mosi=Pin(11))
+tft = st7789.ST7789(spi, 240, 240, reset=Pin(4, Pin.OUT), dc=Pin(5, Pin.OUT),
+                    cs=Pin(10, Pin.OUT), rotation=0)
+tft.fill(st7789.BLUE)
+tft.fill_rect(10, 10, 50, 30, st7789.WHITE)
+tft.line(0, 0, 239, 239, st7789.RED)
+print("st7789: drawn")

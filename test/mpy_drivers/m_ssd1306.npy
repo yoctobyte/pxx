@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: micropython-lib's ssd1306, unchanged (tools/mpy_driver_census.sh).
+from machine import Pin, I2C
+import ssd1306
+
+i2c = I2C(0, scl=Pin(9), sda=Pin(8), freq=400000)
+try:
+    oled = ssd1306.SSD1306_I2C(128, 64, i2c)
+    oled.fill(0)
+    oled.rect(0, 0, 128, 64, 1)
+    oled.show()
+    print("ssd1306: drawn")
+except OSError as e:
+    print("ssd1306: no device:", e)

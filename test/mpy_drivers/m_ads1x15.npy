@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: robert-hh/ads1x15, unchanged.
+from machine import Pin, I2C
+from ads1x15 import ADS1115
+
+i2c = I2C(0, scl=Pin(9), sda=Pin(8))
+try:
+    adc = ADS1115(i2c, 0x48, 1)
+    raw = adc.read(4, 0)
+    print("ads1115: raw", raw, "volts", adc.raw_to_v(raw))
+except OSError as e:
+    print("ads1115: no device:", e)

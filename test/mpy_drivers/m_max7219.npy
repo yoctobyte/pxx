@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: 0BSD
+# Driver census: mcauser/micropython-max7219, unchanged. SPI is write-only
+# here, so with no device attached it cannot fail; it just draws.
+from machine import Pin, SPI
+import max7219
+
+spi = SPI(1, baudrate=10000000, polarity=0, phase=0, sck=Pin(12), mosi=Pin(11), miso=Pin(13))
+display = max7219.Matrix8x8(spi, Pin(10, Pin.OUT), 4)
+display.brightness(3)
+display.fill(0)
+display.hline(0, 3, 32, 1)
+display.pixel(5, 5, 1)
+display.show()
+print("max7219: drawn")
