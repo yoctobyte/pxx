@@ -256,8 +256,9 @@ Most of the shared-IR language surface works on the ESP targets: records,
 sets, 64-bit integers, dynamic arrays, proc-typed variables (indirect
 calls), `@proc`, and stackless generators. Classes (with virtual dispatch)
 work on both ESP targets. `try`/`except`/`finally` (including re-raise)
-works on the bare profile of both chips. With v425 an unhandled exception does
-not print a message; the next pin prints it. See [Known issues](../reference/known-issues.md#esp-an-uncaught-exception-does-not-report-itself). Generators on any non-x86-64 target must use the stackless
+works on the bare profile of both chips. An unhandled exception prints
+`Unhandled exception: <Class>: <Message>`, as on a desktop, and the program
+stops (the fix, `7eeb3d755`, is in the release pin v441; see [Known issues](../reference/known-issues.md#fixed-in-this-release)). Generators on any non-x86-64 target must use the stackless
 form:
 
 ```pascal
