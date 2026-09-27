@@ -43,6 +43,8 @@ BOUND="${UREQ_BOUND:-16}"
 # block's granularity -- so the long soak runs 10000, with a free-heap
 # checkpoint every N/10 (UREQ-HEAP ... delta=) to tell growth from a plateau.
 # Raise UREQ_TIMEOUT with it: ~3 min per 1000 on an idle box.
+# UREQ_INLINE=1: the census request is written inline at MODULE level with a
+# print("x" + str(i)) per iteration -- MicroPython's usual top-level main loop.
 NREQ="${UREQ_N:-1000}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
@@ -94,7 +96,7 @@ cp "$REPO_ROOT/tools/esp_qemu_net/qemueth.pas" main/
 printf '\nCONFIG_ETH_USE_OPENETH=y\nCONFIG_LWIP_TCP_MSL=500\nCONFIG_ESP_INT_WDT=n\nCONFIG_ESP_TASK_WDT_EN=n\n' >> sdkconfig.defaults
 sed -i -e 's/REQUIRES \([^)]*\))/REQUIRES \1 qemueth)/' main/CMakeLists.txt
 python3 - "$REPO_ROOT" "$PORT" "$NREQ" <<'PY'
-import sys
+import os, sys
 root, port = sys.argv[1], sys.argv[2]
 src = open(root + "/test/lib_mimic_urequests.npy").read().split("\n")
 # the transcript is everything from the first top-level request on
@@ -102,6 +104,12 @@ start = next(i for i, l in enumerate(src) if l.startswith('r = urequests.get(bas
 tmpl = open(root + "/tools/esp_qemu_net/urequests_client.npy").read()
 tmpl = tmpl.replace("@PORT@", port).replace("@TRANSCRIPT@", "\n".join(src[start:]).rstrip("\n"))
 tmpl = tmpl.replace("@N@", sys.argv[3])
+if os.environ.get("UREQ_INLINE") == "1":
+    tmpl = tmpl.replace("    total = total + one()  # @CENSUS-BODY@\n",
+        "    r = urequests.get(base + \"/hello\")\n"
+        "    total = total + r.status_code + len(r.text)\n"
+        "    r.close()\n"
+        "    print(\"x\" + str(i))\n")
 open("main/main.npy", "w").write(tmpl)
 PY
 sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" build.sh

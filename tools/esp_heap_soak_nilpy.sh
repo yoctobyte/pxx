@@ -116,6 +116,18 @@ fi
   [ "$CONTROL" = 1 ] && printf "import 'soakctl.pas' as _soak_ctl\n"
   printf '\n\ndef _soak_pass():\n    soak_body()\n'
   [ "$CONTROL" = 1 ] && printf '    _soak_ctl.leak64()\n'
+  # Every heap READ and every report line runs INSIDE a function. A string
+  # temporary built at module top level -- `print("..." + str(d))` -- is held by
+  # its statement site until that site runs again, so an unrolled top-level
+  # report line keeps one ~76 B string per checkpoint for the rest of the run.
+  # That was the whole of the "~0.6 B/pass NilPy drift" (0/68/144 B at
+  # 10/40/160, one step per checkpoint, identical on S3 and C3): the
+  # instrument's own print lines. Function locals are released on return.
+  printf '\n\ndef _soak_at(k):\n    d = _soak_h0 - _soak_board.free_heap()\n'
+  printf '    print("SOAK-AT passes=" + str(k) + " delta=" + str(d) + " bpp=" + str(d // k))\n'
+  printf '\n\ndef _soak_result(n):\n    d = _soak_h0 - _soak_board.free_heap()\n'
+  printf '    print("SOAK-RESULT delta=" + str(d) + " passes=" + str(n) + " bpp=" + str(d // n))\n'
+  printf '\n\ndef _soak_settled(s):\n    print("SOAK-SETTLED delta=" + str(_soak_h0 - _soak_board.free_heap()) + " after=" + str(s) + "s")\n'
   printf '\n\n_soak_pass()\n_soak_pass()\n'
   printf '_soak_h0 = _soak_board.free_heap()\n'
   if [ -n "$CHECKS" ]; then
@@ -123,18 +135,15 @@ fi
     printf '_soak_done = 0\n'
     for k in ${CHECKS//,/ }; do
       printf 'while _soak_done < %d:\n    _soak_pass()\n    _soak_done = _soak_done + 1\n' "$k"
-      printf '_soak_dk = _soak_h0 - _soak_board.free_heap()\n'
-      printf 'print("SOAK-AT passes=%d delta=" + str(_soak_dk) + " bpp=" + str(_soak_dk // %d))\n' "$k" "$k"
+      printf '_soak_at(%d)\n' "$k"
     done
   else
     printf 'for _soak_i in range(%d):\n    _soak_pass()\n' "$PASSES"
   fi
-  printf '_soak_h1 = _soak_board.free_heap()\n'
-  printf '_soak_d = _soak_h0 - _soak_h1\n'
-  printf 'print("SOAK-RESULT delta=" + str(_soak_d) + " passes=%d bpp=" + str(_soak_d // %d))\n' "$PASSES" "$PASSES"
+  printf '_soak_result(%d)\n' "$PASSES"
   if [ "$SETTLE" != 0 ]; then
     printf 'import time as _soak_time\n_soak_time.sleep_ms(%d)\n' "$((SETTLE * 1000))"
-    printf 'print("SOAK-SETTLED delta=" + str(_soak_h0 - _soak_board.free_heap()) + " after=%ds")\n' "$SETTLE"
+    printf '_soak_settled(%d)\n' "$SETTLE"
   fi
   printf 'print("SOAK-COMPLETE")\n'
 } >> main/main.npy

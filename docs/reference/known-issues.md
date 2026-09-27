@@ -79,6 +79,12 @@ workaround.
 Program-level global variables are not finalized when the program exits. This
 is a one-time cost at exit, not a leak that grows while the program runs.
 
+Nil Python: a string temporary built by a module-level statement, such as
+`print("n=" + str(n))` outside any function, is kept until that statement runs
+again. That is at most one string per source line, and a loop reuses it, so
+the cost is bounded by the program's length and does not grow while it runs.
+Inside a function, temporaries are released when the statement ends.
+
 ### ESP networking
 
 Networking was soaked under Espressif's QEMU with the v440 compiler (v441
@@ -92,11 +98,15 @@ memory or sockets growing:
 | 3,000 MQTT sessions with `umqtt.simple` (Nil Python) | ESP32-C3 | the same socket number every session; heap flat after the first 25 |
 | 320 TCP connections over loopback, server and client in Pascal | ESP32-S3 | 0 bytes over 40 passes |
 
-Each run was checked against a deliberate leak, which it caught. One reading
-is still undetermined: the Nil Python example programs, soaked on both chips
-with v438, kept 0, 68 and 144 bytes after 10, 40 and 160 passes. That is about
-0.6 bytes per pass, below what the soak can resolve (its deliberate leak reads
-76 bytes per pass), so it is not shown to be a leak or shown not to be one.
+Each run was checked against a deliberate leak, which it caught. An earlier
+reading of about 0.6 bytes per pass on the Nil Python example programs turned
+out to be the soak's own report lines, one kept string per checkpoint line (see
+the Nil Python paragraph above). With those lines moved into a function, the
+four Nil Python examples keep 0 bytes after 10, 160, 640 and 1,280 passes on
+both chips, with v441, beside a deliberate leak that reads 76 bytes per pass.
+A MicroPython-style main loop written at module level, making 1,000 requests
+with a `print` each time, holds about 1.6 KB once (the last response, still
+bound to its variable, as in CPython) and then stays level.
 
 **There is no TLS on ESP in this release.** There is no `ssl` module, and
 `urequests` refuses `https://` URLs with a `ValueError`, so a server that

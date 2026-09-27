@@ -10,6 +10,9 @@
 # Then the census: free heap across 1000 requests whose responses are
 # dropped, and a POSITIVE CONTROL that keeps 50 of them, which must read a
 # clearly nonzero cost per request, or the heap reading cannot see a leak.
+# UREQ_INLINE=1 swaps the census call for the request written INLINE at
+# module level plus a print("x" + str(i)) per iteration: MicroPython's usual
+# top-level main loop, whose string temporaries are statement-site temps.
 import urequests
 import 'espsys.pas' as board
 import 'qemueth.pas' as qemueth
@@ -42,7 +45,7 @@ for i in range(20):
 N = @N@
 h0 = board.free_heap()
 for i in range(N):
-    total = total + one()
+    total = total + one()  # @CENSUS-BODY@
     if i % (N // 10) == N // 10 - 1:
         print("UREQ-HEAP after=" + str(i + 1) + " free=" + str(board.free_heap()) + " delta=" + str(h0 - board.free_heap()))
 h1 = board.free_heap()
