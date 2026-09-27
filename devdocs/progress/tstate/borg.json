@@ -16231,23 +16231,17 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-27T18:40:19Z",
+  "date": "2026-09-27T19:22:17Z",
   "red": [
-   "test-core#src:test/c_sizeof_ptr_to_array_field.c",
    "test-core#src:test/c_crtl_wait.c",
-   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py",
-   "test-i386#src:test/c_sizeof_ptr_to_array_field.c",
-   "tools-devtest#00"
+   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py"
   ],
-  "sha": "e4203b5aeed98355595175e6d2fed5c765740952",
+  "sha": "ddbe28897f0ef8c24470a995b38a7e99b78332f4",
   "tier": "full",
-  "ver": "v444",
+  "ver": "v445",
   "verdict": "RED",
   "why": {
-   "test-core#src:test/c_sizeof_ptr_to_array_field.c": "@@ -1 +1,4 @@ | -FIELD PTRARR OK 16 32 7 24 | +FAIL ip size 8 vs stride 16 | +FAIL dp size 8 vs stride 32 | +FAIL cp size 8 vs stride 7 | +FAIL ip2 size 8 vs stride 24",
-   "test-i386#src:test/c_sizeof_ptr_to_array_field.c": "@@ -1 +1,4 @@ | -FIELD PTRARR OK 16 32 7 24 | +FAIL ip size 4 vs stride 16 | +FAIL dp size 4 vs stride 32 | +FAIL cp size 4 vs stride 7 | +FAIL ip2 size 4 vs stride 24",
-   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py": "PXXDBG p.fresh TA.Named TRUE arg=-1 | PXXDBG p.fresh TA.NamedSelf FALSE arg=0 | PXXDBG p.fresh TA.Mixed FALSE arg=0 | -PXXDBG p.fresh TA.ViaLocal FALSE arg=-1 | +PXXDBG p.fresh TA.ViaLocal TRUE arg=-1",
-   "tools-devtest#00": "Wire each into a rule, or add it to test/UNWIRED.txt with a reason. | check-test-wiring: 2 exemption(s) whose only reference is a tools/ script NAMING the path \u2014 a mention is not proof anything runs i"
+   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py": "PXXDBG p.fresh TA.Named TRUE arg=-1 | PXXDBG p.fresh TA.NamedSelf FALSE arg=0 | PXXDBG p.fresh TA.Mixed FALSE arg=0 | -PXXDBG p.fresh TA.ViaLocal FALSE arg=-1 | +PXXDBG p.fresh TA.ViaLocal TRUE arg=-1"
   }
  },
  "toolchain": {
