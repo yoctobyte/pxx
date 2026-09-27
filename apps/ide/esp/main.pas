@@ -125,6 +125,7 @@ type
     procedure OnTick(Sender: TObject);
     procedure OnFormResize(Sender: TControl; w, h: Integer);
     procedure OnMenuOpenFolder(Sender: TObject);
+    procedure OnMenuOpenFile(Sender: TObject);
     procedure OnMenuQuit(Sender: TObject);
     procedure OnMenuAbout(Sender: TObject);
     procedure BuildMenu;
@@ -648,17 +649,41 @@ end;
 { ---- the main menu ---- }
 
 procedure TEspForm.OnMenuOpenFolder(Sender: TObject);
-var d: AnsiString;
+var dlg: TSelectDirectoryDialog;
 begin
   { one dialog for a folder AND for a project: a project IS a folder here (one
     with a CMakeLists.txt and a build.sh), and the status line already says
     which of the two you picked. Two menu entries that open the same chooser
     and then differ in whether they complain would be a worse answer than one
     that opens what you chose and tells you what it is. }
-  d := SelectFolderDialog('Open a folder or an ESP-IDF project');
-  if d = '' then Exit;
-  RootEdit.Text := d;
-  OnOpen(nil);
+  dlg := TSelectDirectoryDialog.Create('Open a folder or an ESP-IDF project');
+  { start where you already are, not in the process's CWD -- which for a
+    launcher-started IDE is the repo root and for a desktop-started one is $HOME }
+  dlg.InitialDir := RootDir;
+  if dlg.Execute then
+  begin
+    RootEdit.Text := dlg.FileName;
+    OnOpen(nil);
+  end;
+  dlg.Free;
+end;
+
+procedure TEspForm.OnMenuOpenFile(Sender: TObject);
+var dlg: TOpenDialog;
+begin
+  dlg := TOpenDialog.Create('Open a source file');
+  dlg.InitialDir := RootDir;
+  dlg.Filter := 'Sources|*.pas;*.inc;*.c;*.h;*.py;*.npy|' +
+                'Project files|CMakeLists.txt;*.cmake;sdkconfig*;*.sh|' +
+                'All files|*';
+  if dlg.Execute then
+  begin
+    OpenFile(dlg.FileName);
+    { the tree is rooted elsewhere, so the file may be outside it -- SelectPath
+      still finds its project root, which is what Build + Flash acts on }
+    SelectPath(dlg.FileName);
+  end;
+  dlg.Free;
 end;
 
 procedure TEspForm.OnMenuQuit(Sender: TObject);
@@ -693,6 +718,10 @@ begin
   it := TMenuItem.Create(nil);
   it.Caption := '&Open Folder or Project...';
   it.OnClick := @EspForm.OnMenuOpenFolder;
+  fileM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := 'Open &File...';
+  it.OnClick := @EspForm.OnMenuOpenFile;
   fileM.Add(it);
   it := TMenuItem.Create(nil);
   it.Caption := '&Save';

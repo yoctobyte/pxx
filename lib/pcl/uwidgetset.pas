@@ -7,6 +7,12 @@ interface
 uses classes_lite;
 
 type
+  { What a file chooser is being asked for. Three modes rather than three
+    entry points, because a toolkit's chooser IS one widget with a mode
+    argument -- splitting it here would make a second widgetset implement the
+    same dialog three times. }
+  TChooserMode = (cmOpenFile, cmSaveFile, cmSelectFolder);
+
   TWidgetSet = class
   public
     procedure AppInit; virtual;
@@ -47,8 +53,20 @@ type
     procedure SetListIndex(AListBox: TComponent; AIndex: Integer); virtual;
     procedure ClearList(AListBox: TComponent); virtual;
     procedure DestroyWidget(AWidget: Pointer); virtual;
-    function SelectFolder(const ATitle: string): string; virtual;
-    
+    { A modal file chooser. Returns '' when the user cancels -- which is also
+      what a widgetset without one returns, so a caller that treats '' as "no
+      choice" is correct on every backend.
+
+      AFilter is Delphi-shaped: 'Pascal|*.pas;*.inc|All files|*', pairs of
+      description and semicolon-separated patterns. Empty means no filtering.
+      AInitialDir and AFileName are hints; a backend may ignore either.
+
+      Dismissal is DismissModal, shared with MessageBox, because a toolkit's
+      modal loop is one concept and two dismiss entries would be two names for
+      it. }
+    function ChooseFile(AMode: TChooserMode;
+                        const ATitle, AInitialDir, AFileName, AFilter: string): string; virtual;
+
     procedure AddComboItem(AComboBox: TComponent; const AText: string); virtual;
     function GetActiveIndex(AComboBox: TComponent): Integer; virtual;
     procedure SetActiveIndex(AComboBox: TComponent; AIndex: Integer); virtual;
@@ -119,9 +137,10 @@ type
     procedure NotebookSetPage(ANotebook: Pointer; AIndex: Integer); virtual;
 
     { A modal message box. Returns when it is dismissed — by the user, or by
-      DismissMessageBox from a timer in a test harness. }
+      DismissModal from a timer in a test harness. }
     procedure MessageBox(const AText: string); virtual;
-    procedure DismissMessageBox; virtual;
+    { Tear down whichever modal is up — message box or file chooser. }
+    procedure DismissModal; virtual;
 
   end;
 
@@ -191,7 +210,8 @@ function TWidgetSet.GetListIndex(AListBox: TComponent): Integer; begin GetListIn
 procedure TWidgetSet.SetListIndex(AListBox: TComponent; AIndex: Integer); begin end;
 procedure TWidgetSet.ClearList(AListBox: TComponent); begin end;
 procedure TWidgetSet.DestroyWidget(AWidget: Pointer); begin end;
-function TWidgetSet.SelectFolder(const ATitle: string): string; begin SelectFolder := ''; end;
+function TWidgetSet.ChooseFile(AMode: TChooserMode;
+  const ATitle, AInitialDir, AFileName, AFilter: string): string; begin ChooseFile := ''; end;
 
 procedure TWidgetSet.AddComboItem(AComboBox: TComponent; const AText: string); begin end;
   function TWidgetSet.GetActiveIndex(AComboBox: TComponent): Integer; begin GetActiveIndex := -1; end;
@@ -228,7 +248,7 @@ function TWidgetSet.NotebookGetPage(ANotebook: Pointer): Integer; begin Notebook
 procedure TWidgetSet.NotebookSetPage(ANotebook: Pointer; AIndex: Integer); begin end;
 
 procedure TWidgetSet.MessageBox(const AText: string); begin end;
-procedure TWidgetSet.DismissMessageBox; begin end;
+procedure TWidgetSet.DismissModal; begin end;
 
 
 function TGLBackend.CreateArea(AMajor, AMinor: Integer): Pointer; begin CreateArea := nil; end;

@@ -233,6 +233,16 @@ done'
 run_gui_expect test_pcl_showmessage 'before ShowMessage
 dismiss dialog
 after ShowMessage'
+# dialogs.T{Open,Save,SelectDirectory}Dialog. The rows that carry the weight are
+# the ACTION and the FILTERS, both read off the live GtkFileChooser -- `execute=
+# FALSE` and `name=keepme.pas` pass for a backend that opens nothing, which is
+# why they are not the assertion. Both controls verified 2026-09-27: gutting
+# ChooseFile turns all three into `saw=none`, and short-circuiting
+# AddOneChooserFilter turns filters=2 into filters=0.
+run_gui_expect test_pcl_dialog_chooser 'open: action=0 filters=2 [Pascal (*.pas;*.inc),All files (*)] execute=FALSE
+open: name=keepme.pas
+save: action=1 filters=0 execute=FALSE
+folder: action=2 filters=0 execute=FALSE'
 run_gui_expect test_pcl_helloworld 'Button1Click -> ShowMessage
 clicks=1'
 

@@ -47,7 +47,8 @@ type
     procedure SetListIndex(AListBox: TComponent; AIndex: Integer); override;
     procedure ClearList(AListBox: TComponent); override;
     procedure DestroyWidget(AWidget: Pointer); override;
-    function SelectFolder(const ATitle: string): string; override;
+    function ChooseFile(AMode: TChooserMode;
+                        const ATitle, AInitialDir, AFileName, AFilter: string): string; override;
     
     procedure AddComboItem(AComboBox: TComponent; const AText: string); override;
     function GetActiveIndex(AComboBox: TComponent): Integer; override;
@@ -82,7 +83,7 @@ type
     procedure NotebookSetPage(ANotebook: Pointer; AIndex: Integer); override;
 
     procedure MessageBox(const AText: string); override;
-    procedure DismissMessageBox; override;
+    procedure DismissModal; override;
 
 
   end;
@@ -1081,21 +1082,123 @@ begin
   end;
 end;
 
-function TGtk3WidgetSet.SelectFolder(const ATitle: string): string;
-var dlg, fname: Pointer; resp: Integer;
+{ One group of a Delphi-shaped filter: a description and its ';'-separated
+  patterns, e.g. ('Pascal', '*.pas;*.inc'). File-level and not nested, because
+  the pinned compiler has no nested routines. }
+procedure AddOneChooserFilter(dlg: Pointer; const ADesc, APatterns: string);
+var filt: Pointer; pat: string; j: Integer;
+begin
+  if APatterns = '' then Exit;
+  filt := gtk_file_filter_new;
+  gtk_file_filter_set_name(filt, PC(ADesc + ' (' + APatterns + ')'));
+  pat := '';
+  for j := 1 to Length(APatterns) + 1 do
+  begin
+    if (j > Length(APatterns)) or (APatterns[j] = ';') then
+    begin
+      if pat <> '' then gtk_file_filter_add_pattern(filt, PC(pat));
+      pat := '';
+    end
+    else
+      pat := pat + APatterns[j];
+  end;
+  gtk_file_chooser_add_filter(dlg, filt);
+end;
+
+{ 'Pascal|*.pas;*.inc|All files|*' -> two filters, in order.
+
+  A trailing description with no patterns is DROPPED, not refused. A modal the
+  caller has not opened yet cannot report an error anywhere the caller will
+  see it, and a chooser that is missing one filter is still a working chooser;
+  refusing would turn a typo in a literal into a dead File menu. }
+procedure AddChooserFilters(dlg: Pointer; const AFilter: string);
+var i, fieldIdx: Integer; cur, desc: string;
+begin
+  if AFilter = '' then Exit;
+  fieldIdx := 0;
+  cur := '';
+  desc := '';
+  for i := 1 to Length(AFilter) + 1 do
+  begin
+    if (i > Length(AFilter)) or (AFilter[i] = '|') then
+    begin
+      if (fieldIdx mod 2) = 0 then
+        desc := cur
+      else
+        AddOneChooserFilter(dlg, desc, cur);
+      fieldIdx := fieldIdx + 1;
+      cur := '';
+    end
+    else
+      cur := cur + AFilter[i];
+  end;
+end;
+
+function TGtk3WidgetSet.ChooseFile(AMode: TChooserMode;
+  const ATitle, AInitialDir, AFileName, AFilter: string): string;
+var dlg, fname: Pointer; resp, act: Integer; accept: string;
 begin
   Result := '';
-  dlg := gtk_file_chooser_dialog_new(PChar(ATitle), nil,
-    GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, nil);
-  gtk_dialog_add_button(dlg, PChar('Cancel'), GTK_RESPONSE_CANCEL);
-  gtk_dialog_add_button(dlg, PChar('Open'), GTK_RESPONSE_ACCEPT);
+  if AMode = cmSaveFile then
+  begin
+    act := GTK_FILE_CHOOSER_ACTION_SAVE;
+    accept := 'Save';
+  end
+  else if AMode = cmSelectFolder then
+  begin
+    act := GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
+    accept := 'Open';
+  end
+  else
+  begin
+    act := GTK_FILE_CHOOSER_ACTION_OPEN;
+    accept := 'Open';
+  end;
+
+  { gtk_file_chooser_dialog_new is VARIADIC and its button list is the tail,
+    which pxx's C import drops (bug-a-c-header-import-drops-the-variadic-tail)
+    -- so the buttons go on afterwards, one gtk_dialog_add_button each. }
+  dlg := gtk_file_chooser_dialog_new(PC(ATitle), nil, act, nil);
+  gtk_dialog_add_button(dlg, PC('Cancel'), GTK_RESPONSE_CANCEL);
+  gtk_dialog_add_button(dlg, PC(accept), GTK_RESPONSE_ACCEPT);
+
+  if AInitialDir <> '' then
+    gtk_file_chooser_set_current_folder(dlg, PC(AInitialDir));
+  if AFileName <> '' then
+  begin
+    { set_current_name fills the name BOX (a file that need not exist);
+      set_filename selects an existing one. Using the wrong one for the mode
+      silently does nothing, which is why the branch is here and not at the
+      call sites. }
+    if AMode = cmSaveFile then
+      gtk_file_chooser_set_current_name(dlg, PC(AFileName))
+    else
+      gtk_file_chooser_set_filename(dlg, PC(AFileName));
+  end;
+  if AMode = cmSaveFile then
+    gtk_file_chooser_set_do_overwrite_confirmation(dlg, 1);
+  AddChooserFilters(dlg, AFilter);
+
+  { The same slot MessageBox uses: one modal at a time, one DismissModal. }
+  ActiveDialogHandle := dlg;
   resp := gtk_dialog_run(dlg);
-  if resp = GTK_RESPONSE_ACCEPT then
+  { If a harness dismissed it from a timer the widget is already destroyed and
+    gtk_dialog_run returned GTK_RESPONSE_NONE, so the handle check is not
+    tidiness -- reading the filename off dlg there is a use-after-free. }
+  if (ActiveDialogHandle = dlg) and (resp = GTK_RESPONSE_ACCEPT) then
   begin
     fname := gtk_file_chooser_get_filename(dlg);
-    if fname <> nil then Result := PCharToStr(fname);
+    if fname <> nil then
+    begin
+      Result := PCharToStr(fname);
+      g_free(fname);   { newly-allocated; the old SelectFolder leaked it }
+    end;
   end;
-  gtk_widget_destroy(dlg);
+  if ActiveDialogHandle = dlg then
+  begin
+    gtk_widget_destroy(dlg);
+    ActiveDialogHandle := nil;
+  end;
 end;
 
 procedure TGtk3WidgetSet.ClearList(AListBox: TComponent);
@@ -1453,7 +1556,7 @@ begin
 end;
 
 { gtk_dialog_run spins its own nested main loop, so a test harness cannot click
-  OK — it dismisses from a g_timeout via DismissMessageBox, which returns
+  OK — it dismisses from a g_timeout via DismissModal, which returns
   control from the run exactly as a real click would. }
 procedure TGtk3WidgetSet.MessageBox(const AText: string);
 var dlg, esc: Pointer;
@@ -1483,7 +1586,7 @@ begin
   end;
 end;
 
-procedure TGtk3WidgetSet.DismissMessageBox;
+procedure TGtk3WidgetSet.DismissModal;
 begin
   if ActiveDialogHandle <> nil then
     gtk_widget_destroy(ActiveDialogHandle);

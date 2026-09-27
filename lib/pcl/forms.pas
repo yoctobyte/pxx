@@ -46,14 +46,16 @@ var
   Application: TApplication;
   RequireDerivedFormResource: Boolean;
 
-{ modal folder picker; returns the chosen path or '' if cancelled }
+{ modal folder picker; returns the chosen path or '' if cancelled.
+  Kept here for the callers that predate dialogs.pas' TSelectDirectoryDialog;
+  both reach the one seam entry, so there is still only one chooser. }
 function SelectFolderDialog(const ATitle: string): string;
 
 implementation
 
 function SelectFolderDialog(const ATitle: string): string;
 begin
-  SelectFolderDialog := WidgetSet.SelectFolder(ATitle);
+  SelectFolderDialog := WidgetSet.ChooseFile(cmSelectFolder, ATitle, '', '', '');
 end;
 
 procedure TForm.SetMenu(v: TMainMenu);
