@@ -129,17 +129,20 @@ the compiler after it (built at `b6226e1385`):
   old list and everything in it at once. This applies at module level too.
 - **`del name` and `name = None`.** Use `name = None`. With v445 neither frees
   a local before the function returns. After v445, `name = None` does. `del`
-  on a local, and `= None` on a list built by a comprehension, are fixed after
-  v445. The table's third and fourth rows are from before those fixes.
+  on a local, and `= None` on a list built by a comprehension, still free
+  nothing until the function returns, with v445 and after it (the table's
+  third and fourth rows). A fix is in progress. Until then, return from the
+  function to get that memory back.
 - **Module-level temporaries.** A string built by a module-level statement,
   such as `print("n=" + str(n))` outside any function, is kept until that
   statement runs again. That is at most one string per source line and does not
   grow in a loop. Inside a function, temporaries are released when the
   statement ends.
 - **A computed string on the left of `*`** (`str(i) * 2`, `"%d" % i * 2`,
-  `s.upper() * 2`) leaked one string per evaluation with v445: 90 left after a
-  90-pass loop. It is fixed after v445. On v445, name the string first
-  (`t = str(i)` then `t * 2`): after 30 passes that left 1 instead of 30.
+  `s.upper() * 2`) leaks one string per evaluation, with v445 and after it:
+  90 left after a 90-pass loop. A fix is in progress. Until then, name the
+  string first (`t = str(i)` then `t * 2`): after 30 passes that left 1
+  instead of 30.
 
 **Cycles are never freed.** Two objects that refer to each other
 (`a.other = b; b.other = a`) keep each other's count above zero, and with no
