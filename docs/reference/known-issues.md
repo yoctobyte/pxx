@@ -119,8 +119,8 @@ another line, `kept = None`, `kept = 5`), and calling a method on it
 the program ends. It does not add up in a loop, but a function that fills a
 list and then drops it keeps the contents until it returns. On an ESP32-C3
 with about 70 KB free, 34 kept HTTP responses (about 1.4 KB each) held that
-way ran the heap low enough that Wi-Fi stopped working. Fixed after v444: the
-container is released as soon as the last name lets go of it. **On v444 and
+way ran the heap low enough that Wi-Fi stopped working. Fixed after v445: the
+container is released as soon as the last name lets go of it. **On v445 and
 earlier:** return from the function, or let it end, to get the memory back.
 
 `del name` on a local variable does not release what the name refers to; the
