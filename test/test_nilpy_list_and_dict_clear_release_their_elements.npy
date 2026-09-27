@@ -1,0 +1,51 @@
+# list.clear() and dict.clear() release the elements they drop.
+#
+# TPyList.clear only set the length to 0. The list's finalizer and every later
+# store visit slots below the length, so the elements a clear dropped were
+# never released: a function that filled a list with 20 fresh strings and
+# cleared it left 20 strings live per call (pin v441: 60 live after 3 calls,
+# 0 without the clear). Refilling the same list overwrote, and so released,
+# the stale slots, which is why a buffer cleared and refilled in a loop looked
+# flat and the leak showed only once the list itself went away. dict.clear()
+# had the same shape: 40 live per call for 20 str->str entries.
+#
+# Run as `keep` it is the POSITIVE CONTROL: every list and dict stays alive in
+# a global, so the census must see tens of thousands of live strings,
+# or it cannot see these elements at all. The printed line is CPython's.
+import sys
+
+kept = []
+
+
+def work(k, keep):
+    buf = []
+    for i in range(20):
+        buf.append("s" + str(k) + "-" + str(i))
+    n = len(buf)
+    buf.clear()
+    n = n + len(buf)
+    for i in range(10):
+        buf.append("t" + str(i))
+    n = n + len(buf)
+    buf.clear()
+    d = {}
+    for i in range(10):
+        d["k" + str(i)] = "v" + str(k) + "-" + str(i)
+    n = n + len(d)
+    d.clear()
+    n = n + len(d)
+    if keep:
+        for i in range(10):
+            d["k" + str(i)] = "w" + str(k) + "-" + str(i)
+        kept.append(d)
+        for i in range(20):
+            buf.append("k" + str(k) + "-" + str(i))
+        kept.append(buf)
+    return n
+
+
+keep = len(sys.argv) > 1 and sys.argv[1] == "keep"
+total = 0
+for k in range(2000):
+    total = total + work(k, keep)
+print("total", total, "empty after clear", len([]) == 0)

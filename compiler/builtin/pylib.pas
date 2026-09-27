@@ -6532,8 +6532,17 @@ begin
   FLen := FLen + 1;
 end;
 
+{ Release every element before dropping the length. The finalizer and every
+  later store only visit slots below FLen, so a slot left populated beyond it
+  is orphaned: `FLen := 0` alone leaked every managed element the list held
+  once the list itself was freed (20 strings per call of a function that
+  filled a list with 20 and cleared it; measured with PXX_ALLOC_CENSUS,
+  2026-09-27). }
 procedure TPyList.clear;
+var i: Integer;
 begin
+  for i := 0 to FLen - 1 do
+    PyVarSlotClear(PPyVarRec(NativeInt(FItems) + i * 16));
   FLen := 0;
 end;
 
@@ -7868,9 +7877,19 @@ begin
 end;
 
 procedure TPyDict.clear;
+var k: Integer;
 begin
   { drop every entry; the storage arrays stay for reuse, which is what Python's
-    dict.clear() does too }
+    dict.clear() does too. Release each key and value first, the finalizer's
+    own loop: the finalizer visits only entries below FLen, so zeroing FLen
+    alone orphaned them (40 live per call of a function that filled a
+    20-entry str->str dict and cleared it; PXX_ALLOC_CENSUS, 2026-09-27).
+    TPyList.clear had the same shape. }
+  for k := 0 to Self.FLen - 1 do
+  begin
+    PyVarSlotClear(PPyVarRec(NativeInt(Self.FKeys) + k * 16));
+    PyVarSlotClear(PPyVarRec(NativeInt(Self.FVals) + k * 16));
+  end;
   Self.FLen := 0;
   PyDictRehash(Self, Self.FHashCap);
 end;

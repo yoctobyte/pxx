@@ -576,6 +576,15 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_int_str_fresh_released 50 $(TESTTMP)/test_nilpy_intstrfresh26 fresh 1000
 	@if tools/assert_no_leak.sh nilpy_int_str_fresh_control 50 $(TESTTMP)/test_nilpy_intstrfresh26 keep 1000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_int_str_fresh control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# list.clear() and dict.clear() release the elements they drop (both only
+	# zeroed the length, so the elements were orphaned once the container went
+	# away: pin v441 leaves ~75,000 live here). `keep` is the positive control.
+	# The value line is CPython's.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_list_and_dict_clear_release_their_elements.npy $(TESTTMP)/test_nilpy_listclear26
+	tools/expect_same.sh nilpy_list_clear_value "$$($(TESTTMP)/test_nilpy_listclear26 2>/dev/null)" "total 80000 empty after clear True"
+	tools/assert_no_leak.sh nilpy_list_clear_releases 300 $(TESTTMP)/test_nilpy_listclear26
+	@if tools/assert_no_leak.sh nilpy_list_clear_control 300 $(TESTTMP)/test_nilpy_listclear26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_list_clear control (keep) did not trip the bound -- the census cannot see these elements"; exit 1; fi
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
@@ -37937,8 +37946,9 @@ test-esp-idf: $(COMPILER)
 	  && echo "=== esp_board_hidden_loop builds [$$t]: OK ===" || exit 1; \
 	done
 	@# The station demo (network + socket + json + espadc from the hidden loop):
-	@# its run is on the S3 (examples/esp32/nilpy-station-s3, main.expected, and
-	@# the phone steps in main.npy's header), and no qemu models the Wi-Fi.
+	@# its run is on the S3 and the C3 (examples/esp32/nilpy-station-s3 and -c3,
+	@# whose main.npy differs only in comments and the page title; main.expected,
+	@# and the phone steps in main.npy's header), and no qemu models the Wi-Fi.
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    examples/esp32/nilpy-station-s3/main/main.npy $(TESTTMP)/nilpy_station.o >/dev/null \
