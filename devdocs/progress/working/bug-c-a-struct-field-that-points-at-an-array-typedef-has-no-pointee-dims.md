@@ -2,10 +2,10 @@
 track: C
 prio: 60
 type: bug
-status: open
+status: working
 found: 2026-09-27
 found-by: frankD
-owner:
+owner: frankD
 summary: "A struct FIELD whose type is a pointer to an array typedef is silently wrong, in both the scalar spelling (`mat4 *p;`) and the array-of-pointers one (`mat4 *m[3];`). Field pointee metadata is one flat length (UFldPtrElemArrLen) with no dims, so `sizeof *s.p` is 4 (gcc 64), `(*s.p)[2][2]` reads 0 (gcc 3), `sizeof *s.v` for `vec4 *v` is 4 (gcc 16), and `(*s.m[0])[1][1]` segfaults. Same answers on the v441 pin and after the fix for variables (bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying), which gave SYMBOLS the carrier and the one reader CPtrToArrShapeSym; fields need the twin of both. Found by varying that fix's shape."
 ---
 
