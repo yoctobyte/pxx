@@ -485,6 +485,14 @@ fields — it adds no storage to the type it extends. Inside a helper method,
 a record or scalar helper it is the value by reference, so a record helper's
 method can mutate its receiver.
 
+**Not yet: a `record helper` for a record type.** It is declared without
+complaint, but its methods are not found on a variable of the record: `p.Sum`
+is refused with `"Sum": no such member on this record/class` (measured with pin
+v445, in objfpc and in delphi mode; FPC accepts it). A helper for a string or
+a dynamic array works, and so does a class helper. A helper for a scalar such
+as `Integer` works in `{$mode delphi}`, or in objfpc with
+`{$modeswitch typehelpers}`, the same switch FPC asks for.
+
 ```pascal
 type
   TBox = class

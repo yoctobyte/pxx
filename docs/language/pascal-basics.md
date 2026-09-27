@@ -36,6 +36,7 @@ type
 
 var
   P: TPoint;
+  I: Integer;
 ```
 
 ## Control flow
@@ -51,8 +52,8 @@ else
 while P.X < 10 do
   Inc(P.X);
 
-for P.Y := 1 to 3 do
-  writeln(P.Y);
+for I := 1 to 3 do
+  writeln(I);
 ```
 
 `case` selects on an ordinal value. The default branch may be introduced with
