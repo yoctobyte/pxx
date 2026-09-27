@@ -38014,6 +38014,15 @@ test-esp-idf: $(COMPILER)
 	    test/esp_board_wifi_sta_join.npy $(TESTTMP)/esp_board_wifi_sta_join.o >/dev/null \
 	  && echo "=== esp_board_wifi_sta_join builds [$$t]: OK ===" || exit 1; \
 	done
+	@# The C3-joins-S3 heap census over plain HTTP (two boards; recipe in its
+	@# header), built for both ISAs though only the C3 runs it. Its HTTPS twin
+	@# is a template that does not build unfilled; its exemption and the reason
+	@# are in test/UNWIRED.txt (a path named here would count as wiring it).
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_c3_joins_s3.npy $(TESTTMP)/esp_board_c3_joins_s3.o >/dev/null \
+	  && echo "=== esp_board_c3_joins_s3 builds [$$t]: OK ===" || exit 1; \
+	done
 	@# NilPy files through IDF's VFS (board recipe in the test's header). The
 	@# filesystem is pxx_fs's OPTIONAL mount, reached by a `weakexternal`, so
 	@# the object must carry it WEAK UND -- GLOBAL (what every --emit-obj writer

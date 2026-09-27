@@ -740,10 +740,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 
-## backlog-esp (1)
+## backlog-esp (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-s-espide-auto-never-exits-after-build-flash | S | 40 | bug | espide --auto never terminates after a successful Build+Flash: it prints the monitor's opening line and then sits in D state with wchan=anon_pipe_read, ignoring AutoSecs. Measured on a live ESP32 (CP2102) with AutoSecs=8: still running 15 minutes later, killed by the harness timeout, rc=124. Detect and Build+Flash themselves work and the board runs the program, so this is the monitor phase only. NOT introduced by the Detect single-port fix (610c696fd7 onward) -- it is on the path the GUI Monitor button uses too. Five hypotheses refuted by measurement, listed below, so they need not be redone. | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | S3 ROWS MET ON SILICON 2026-09-24 (frankH, ESP32-S3 devkit on /dev/ttyACM0, compiler 58412e442c17 unless noted). C3 AND S2 ROWS STAY OPEN: no C3 or S2 board is on this box, so this ticket stays open until one is. Per row, S3: (1) UART boot == oracle: MET, test/test_esp_hw_validation.pas via `esp_flash.sh --chip esp32s3` matches the x86-64 oracle 7/7. (1b) Does the filter match silicon: MET for the four S3 NilPy demos (nilpy-s3 and nilpy-hw-s3 with the pinned compiler, gpio-edge-s3 and adc-s3 with HEAD). The raw reset-capture minus IDF log lines equals main.expected line for line, 0 lines stripped after app_main, one boot each. Silicon prints ONE routine W that qemu does not, BEFORE app_main: `spi_flash: Detected size(16384k) larger than the size in the binary image header(4096k)`. The E scan has fired on silicon for a real task-watchdog trigger (the first adc-s3 run, before time.sleep was fixed). (2) ISR fires: MET, isrctx (built for esp32s3 from isrctx-c3's main.pas with ISR dispatch on) prints `isr hits=5 ctx=1` against `task hits=5 ctx=0`, PAIR OK; also the GPIO-edge and ADC-frame ISRs of examples/esp32/gpio-edge-s3 and adc-s3. (2b) The contract, no allocation in the handler: MET for espgpio's and espadc's handlers. test/esp_board_isr_no_alloc.pas shows a free-heap delta of 0 over 9,997 GPIO and 625 ADC ISR entries, heap integrity OK, idle drift 0. Readout control (-dALLOC_IN_TASK, 1000 x 16 B) reads 28,000, so the zeros are real. The ISR-allocating control (-dALLOC_IN_ISR) aborts on the FIRST entry with `pxx: out of memory (ESP-IDF heap exhausted)`: loud, but the message misnames the cause. Timer step (esp_timer, task dispatch, NOT an ISR): runs on silicon inside nilpy-hw-s3. OPEN: every C3 row (test_esp_hw_validation, nilpy-c3, nilpy-hw-c3, isrctx-c3 itself, gpio-edge-c3, adc-c3; all build) and every S2 row (hello-s2 builds with --target=esp32s2; atomics are refused on the S2 by design until feature-a-esp32s2-atomics-by-interrupt-masking). | — |
 
 ## backlog-rust (0)
@@ -1551,6 +1552,7 @@ _none_
 - [p 40] [N] bug-nilpy-a-handler-binder-unwound-past-by-a-different-exception-still-leaks
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-bodiless-procedure-declaration-is-accepted-and-swallows-the-next-routine
+- [p 40] [S] bug-s-espide-auto-never-exits-after-build-flash
 - [p 40] [T] bug-t-a-restart-converts-owned-scratch-into-unowned-scratch-and-nothing-observes-it
 - [p 40] [T] bug-t-check-has-no-aperture-for-a-ticket-slug-cited-in-source-and-195-of-them-resolve-to-nothing
 - [p 40] [T] bug-t-pasmith-returns-only-integer-kinds-so-optfuzz-is-blind-to-the-return-type-axis
