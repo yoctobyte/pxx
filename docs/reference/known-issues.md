@@ -122,8 +122,11 @@ list and then drops it keeps the contents until it returns. On an ESP32-C3
 with about 70 KB free, 34 kept HTTP responses (about 1.4 KB each) held that
 way ran the heap low enough that Wi-Fi stopped working. Fixed after v445
 (`31d314dfa8`): the container is released as soon as the last name lets go of
-it. **On v445 and earlier:** return from the function, or let it end, to get
-the memory back.
+it. That fix does not cover a list built by a comprehension
+(`rows = [str(i) for i in range(n)]`): after `rows = None` it is still kept
+until the function returns, with v445 and with the compiler at `ae11f1ddb5`
+alike. **On v445 and earlier, and for a comprehension after it:** return from
+the function, or let it end, to get the memory back.
 
 `del name` on a local variable does not release what the name refers to; the
 object stays allocated until the function returns. This is still so after
@@ -133,6 +136,15 @@ the paragraph above): return from the function. (Measured with v445 and with
 the compiler at `ae11f1ddb5`: a local list of 5 strings, dropped before the
 function exits, stays live under `del` on both, and under `= None` on v445
 only.)
+
+**Nil Python: a reference cycle is never freed.** Nil Python frees an object
+when its last reference goes away; there is no garbage collector to find
+objects that only refer to each other. That is the design for this beta, and
+it differs from CPython and MicroPython, which both reclaim cycles. A function
+that makes two objects point at each other (`a.other = b; b.other = a`) keeps
+both after it returns: 2 objects kept after one call, 10 after five, measured
+with v445 and with the compiler at `ae11f1ddb5`. **Workaround:** break the
+cycle before letting go (`b.other = None`); measured, that keeps none.
 
 ### ESP networking
 
