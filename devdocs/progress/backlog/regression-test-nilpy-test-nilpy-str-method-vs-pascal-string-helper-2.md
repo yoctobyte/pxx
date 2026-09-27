@@ -37,3 +37,6 @@ pascal26:62: error: Nil Python: unsupported str method .Trim() (have: upper, low
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-27 — the borg watcher saw `test-nilpy#src:test/test_nilpy_str_method_vs_pascal_string_helper.npy` GREEN at 2088ffc3ab45 (tier full) and did NOT close this: this is a repeat stub (`regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper-2`, not `regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
