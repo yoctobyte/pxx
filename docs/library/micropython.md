@@ -17,6 +17,10 @@ To build and flash a Nil Python program for the ESP32, start with
 units underneath (`espgpio`, `espi2c`, `espspi` and the others) are described
 in [ESP32 peripherals](./esp.md).
 
+To move an existing MicroPython program over, and for what behaves differently
+(no REPL, no `gc` module, memory freed by reference counting), see
+[Coming from MicroPython](../getting-started/from-micropython.md).
+
 ## The approach in one paragraph
 
 **The language is CPython's; the names and platform assumptions are
