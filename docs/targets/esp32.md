@@ -30,19 +30,22 @@ image with `app_main` at `0x400d9854`, and the board prints its five
 `PXX hello from Pascal ESP32: i=N` lines and `PXX ESP32 sum 1..5 = 15`. No
 fault, no panic, first attempt.
 
-That first run was one program. It has since been widened on the same board, on
-tree `0db876e74b` with compiler sha256 `ccca045a848b` (the release pin v442's
-own binary — v441 plus the output-path fix in `a1859b8b69`, which does not touch
-code generation). Four programs, all on the classic part:
+That first run was one program. It has since been widened on the same board, all
+of it with compiler sha256 `ccca045a848b` (the release pin v442's own binary —
+v441 plus the output-path fix in `a1859b8b69`, which does not touch code
+generation). The tree moved during the work, so the compiler rather than a single
+tree sha is what these rows have in common; the tooling shas that matter are
+called out where they do. Five programs, all on the classic part:
 
 | Program | What it exercises | Verified against |
 | --- | --- | --- |
 | `examples/esp32/hello-esp32/main/main.pas` | `esp_rom_printf`, `gpio_*`, `vTaskDelay`, integer arithmetic | expected serial output |
 | `test/test_esp_idf_nested_try.pas` | two or more live exception frames at once, each row raising *through* the outer frame's saved `EXC_TOP` link, on the **windowed** Xtensa ABI | **the x86-64 oracle, 10 lines, byte-identical** |
 | `examples/esp32/timer-s3/main/main.pas` | `esp_timer` callbacks into Pascal | expected serial output |
+| `test/test_esp_string.pas` | managed `AnsiString`: literal via `PXXStrFromLit`, `Length` at handle−8, char index, a refcounted copy | **the x86-64 oracle, 3 lines, byte-identical** |
 | `examples/esp32/nilpy-esp32` (Nil Python) | a class with methods, a list of instances, a `for` loop, `print`, `//`, `len` | **`main/main.expected`, 4 lines, byte-identical — and that file is CPython's own output** |
 
-Two of the four are therefore a real byte comparison, which the first run could
+Three of the five are therefore a real byte comparison, which the first run could
 not claim. The other two are not: `esp_flash.sh` degrades to `--no-verify` by
 itself, and says so, when a program's externals do not exist on x86-64, so for
 those the evidence is the expected serial output. The NilPy program needs
@@ -57,7 +60,7 @@ same soak with `--control` read `delta=764 bpp=76` — 64 requested bytes plus t
 control matters more than the zero: it shows the instrument can see a leak of
 that size in that program, so the zero is a measurement and not a silence.
 
-The nested-exception row is the most useful of the four for this chip
+The nested-exception row is the most useful of the five for this chip
 specifically. It is the measured reproducer for the windowed-frame bug fixed in
 `XtensaExcFrameAddrW` (`compiler/ir_codegen_xtensa.inc`), where a pushed
 exception frame's spills overwrote the outer frame's saved `EXC_TOP` link and the
@@ -65,22 +68,41 @@ next raise that had to cross it faulted with `LoadProhibited`. The windowed ABI
 is the LX6 and LX7's shared inheritance, so a chip that runs this is exercising
 the register-window path and not just arithmetic and `printf`.
 
-What this still does **not** say. It is four programs, not the RTL: floating
-point, files, and most of the container surface are untouched on this chip. In
-particular **Pascal managed strings are not exercised on the LX6 by any of the
-four** — the nested-exception test only passes literal `string` arguments to
-`esp_rom_printf`, and the NilPy row's strings belong to the NilPy runtime, not to
-the Pascal RTL. A managed-string program is the obvious next row. And the reboot-loop guard in `tools/esp_flash.sh` was **inert for all four
-rows**: it counted the string `ESP-ROM`, which the classic ESP32's boot ROM never
-prints (it prints `ets Jul 29 2019` and `rst:0x1 (POWERON_RESET)`), so it read
-zero boots every time and could not fire. The output comparisons above stand on
-their own, but a program that panicked and restarted while reprinting its first
-lines would have passed them. A fix that counts `rst:` instead — the marker all
-three parts print — is in hand but not yet landed, so for now **treat these rows
-as silent about reboots rather than as evidence of none.** The same bug, with the
+**Every row above was re-run with a working reboot guard, and each saw exactly
+one boot.** That needs saying because for a while they were not. The guard in
+`tools/esp_flash.sh` counted the string `ESP-ROM`, which the classic ESP32's boot
+ROM never prints — it prints `ets Jul 29 2019` and `rst:0x1 (POWERON_RESET)` — so
+on `--chip esp32` it read zero boots every time and its `>= 2` test could not
+fire. It printed OK as silence rather than as evidence, which is the dangerous
+polarity: a program that panicked and restarted while reprinting its first lines
+would have passed a prefix comparison, and that is the exact case the guard
+exists to catch. It now counts `rst:`, which all three parts print (`d5c6f81e7e`),
+and the verdict lines carry `[rst: N]` so every row records what the guard saw
+(`c0fd4fa032`, confirmed on this board: `OK — board output matches the x86-64
+oracle (3 lines) [rst: 1]`, that confirmation run being on pin v443 rather than
+v442). Measured on this board, all five rows read `rst: = 1`, so esptool's own
+reset falls outside the capture window and the `>= 2` threshold keeps full
+resolution: 1 is one clean boot, 2 is a reboot. Before the fix the count was read
+out of the guard's own expanded test under `bash -x`, because it was deleted with
+the capture and only printed on a FAIL — a passing row carried no evidence at
+all, which is what `c0fd4fa032` corrects. The same bug, with the
 same inverted polarity, was fixed in `examples/esp32/nilpy-c3/build.sh` in
-`0db876e74b`, where it made the guard unsatisfiable: `nilpy-esp32`'s output
+`0db876e74b`, where it made the guard *unsatisfiable*: `nilpy-esp32`'s output
 matched `main.expected` byte for byte and the script still reported FAIL.
+
+What this still does **not** say. It is five programs, not the RTL: floating
+point, files, and most of the container surface are untouched on this chip.
+
+One observed flake, recorded at the weight of its evidence. Twice, an `esp_flash.sh`
+write to this board failed with `esptool could not write <port>. Hold BOOT while
+tapping RESET to force download mode, then retry.`, and both times the next
+attempt succeeded. Both failures were the first write after the board had been
+left running a program that ends in `while True do vTaskDelay`, which points at
+auto-reset timing into download mode rather than at anything in pxx. That is
+**n=2 and was not deliberately reproduced**, so it is a lead, not a diagnosis.
+Deliberately not worked around: a retry loop inside `esp_flash.sh` would also
+paper over a board that genuinely cannot be written, which is the case its
+current message correctly tells you how to fix.
 
 `--esp-profile=bare` is still refused by name for this chip, correctly: the
 bare image hardcodes the C3/S3 load address and a UART0 base of `$60000000`,
