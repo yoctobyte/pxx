@@ -103,7 +103,8 @@ profile on hardware.
   tests of c-testsuite, compiled for esp32s3 and run under Espressif's QEMU
   (`tools/run_c_conformance_esp.sh --chip esp32s3`). The skip is `00187.c`,
   which needs a writable file system the test image does not mount. Measured
-  with pin v425 (sha256 `426b2fbf3f08`) on 2026-09-25.
+  with v441 on 2026-09-27; the draft pin v425 gave the same result on
+  2026-09-25.
 - **Examples under QEMU:** with v441, all 13 QEMU runs in the
   [showcase](../examples/index.md#esp32) pass, each judged by its expected
   output or its own verdict line: `hello` on both chips and eleven example
