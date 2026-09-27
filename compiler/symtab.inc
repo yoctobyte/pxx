@@ -2806,6 +2806,7 @@ begin
   SetLength(UFldTk, n);         SetLength(UFldRec_, n);         SetLength(UFldAnonRec, n);
   SetLength(UFldPtrElemTk, n);  SetLength(UFldPtrElemRec, n);   SetLength(UFldPtrAlias, n);
   SetLength(UFldPtrElemArrLen, n);
+  SetLength(UFldPtrElemNDims, n);  SetLength(UFldPtrElemDimSpan, n * MAX_ARR_DIMS);
   SetLength(UFldPtrElemStrTk, n);
   SetLength(UFldPtrDepth, n);   SetLength(UFldPtrBaseTk, n);    SetLength(UFldPtrBaseRec, n);
   SetLength(UFldProcSig, n);    SetLength(UFldElemProcSig, n);  SetLength(UFldIsArray, n);
@@ -2864,6 +2865,7 @@ begin
       UFldPtrElemStrTk[dst+k] := UFldPtrElemStrTk[src];
       UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
       UFldPtrElemArrLen[dst+k] := UFldPtrElemArrLen[src];
+      UFldPtrElemNDims[dst+k] := UFldPtrElemNDims[src];
       UFldPtrDepth[dst+k] := UFldPtrDepth[src];
       UFldPtrBaseTk[dst+k] := UFldPtrBaseTk[src];
       UFldPtrBaseRec[dst+k] := UFldPtrBaseRec[src];
@@ -2888,6 +2890,7 @@ begin
       begin
         UFldArrDimLo[(dst+k) * MAX_ARR_DIMS + fi]   := UFldArrDimLo[src * MAX_ARR_DIMS + fi];
         UFldArrDimSpan[(dst+k) * MAX_ARR_DIMS + fi] := UFldArrDimSpan[src * MAX_ARR_DIMS + fi];
+        UFldPtrElemDimSpan[(dst+k) * MAX_ARR_DIMS + fi] := UFldPtrElemDimSpan[src * MAX_ARR_DIMS + fi];
       end;
     end;
     UClsFBase[ci] := dst;
@@ -2909,6 +2912,7 @@ begin
     UFldPtrElemStrTk[fi] := LastTypePointerStrElemTk;
     UFldPtrElemRec[fi] := LastTypePointerElemRec;
     UFldPtrElemArrLen[fi] := 0;   { array pointee extent: no Pascal carrier; the C struct builder stamps it post-AddUField }
+    UFldPtrElemNDims[fi] := 0;
     UFldPtrAlias[fi] := LastTypePointerAlias;
     UFldPtrDepth[fi] := LastTypePointerDepth;
     UFldPtrBaseTk[fi] := LastTypePointerBaseTk;
@@ -2920,6 +2924,7 @@ begin
     UFldPtrElemStrTk[fi] := 0;
     UFldPtrElemRec[fi] := REC_NONE;
     UFldPtrElemArrLen[fi] := 0;
+    UFldPtrElemNDims[fi] := 0;
     UFldPtrAlias[fi] := -1;
     UFldPtrDepth[fi] := 0;
     UFldPtrBaseTk[fi] := Ord(tyUnknown);
@@ -4027,6 +4032,31 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := UFldPtrElemArrLen[fi];
+  end;
+end;
+
+{ ...and that pointee's dim count (0 = one dim, the flat length is the whole
+  shape) and its span at dim k: the field twin of SymPtrElemNDims + spans.
+  bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
+function RecFieldPtrElemNDims(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldPtrElemNDims[fi];
+  end;
+end;
+
+function RecFieldPtrElemDimAt(rec: Integer; const field: AnsiString; k: Integer): Integer;
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if (rec >= REC_UCLASS_BASE) and (k >= 0) and (k < MAX_ARR_DIMS) then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldPtrElemDimSpan[fi * MAX_ARR_DIMS + k];
   end;
 end;
 

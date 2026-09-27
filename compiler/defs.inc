@@ -8223,6 +8223,15 @@ var
     smaller than the base does.
     bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size }
   UFldPtrElemArrLen : array of Integer;
+  { ...and that array pointee's per-dim shape, the field twin of a symbol's
+    SymPtrElemNDims + spans: `mat4 *p;` points at a float[4][4], and the flat 16
+    alone cannot say where the rows are. In their own arrays, not in
+    UFldArrDimSpan, because an ARRAY-of-pointers field (`mat4 *m[3];`) needs
+    both its own dims and its elements' pointee dims at once. 0 = one dim (the
+    flat length is the whole shape).
+    bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
+  UFldPtrElemNDims : array of Integer;
+  UFldPtrElemDimSpan : array of Integer;   { MAX_ARR_DIMS per field }
   { ...and the rest of a pointer FIELD's identity. The pointee alone cannot tell
     a `PChar` field from a `^PChar` field -- both point at something whose
     immediate kind is the same one step down -- so `r.F^` printed the address.
@@ -8666,6 +8675,17 @@ var
     row is invisible to the one spelling that names its owner explicitly.
     regression-test-core-test-record-nested-type-section }
   QualTypeOwnerCi : Integer;
+
+  { Scratch filled by CPtrToArrShape (ir.inc): what a C pointer-to-array VALUE
+    points at -- the element, the flat length, and the per-dim spans -- whether
+    the description lives on a symbol or on a struct field. Callers copy what
+    they need before parsing further, as with NDInfo* below.
+    bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
+  CPAElemTk  : TTypeKind;
+  CPAElemRec : Integer;
+  CPAArrLen  : Integer;
+  CPANDims   : Integer;
+  CPASpan    : array[0..MAX_ARR_DIMS-1] of Integer;
 
   { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
   NDInfoNDims : Integer;

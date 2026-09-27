@@ -3967,6 +3967,75 @@ begin
     Result := Syms[si].PtrElemRec;
 end;
 
+{ Fill CPA* from a symbol CPtrToArrShapeSym answered with. }
+procedure CPtrShapeFromSym(si: Integer);
+var k: Integer;
+begin
+  CPAElemTk := CPtrToArrElemTk(si);
+  CPAElemRec := CPtrToArrElemRec(si);
+  CPAArrLen := SymPtrElemArrLen[si];
+  CPANDims := SymPtrElemNDims[si];
+  for k := 0 to MAX_ARR_DIMS - 1 do CPASpan[k] := 0;
+  if CPANDims > 1 then
+    for k := 0 to CPANDims - 1 do CPASpan[k] := CPtrElemSpanAt(si, k);
+end;
+
+{ ...and from a struct field whose element (or whose own value) is a pointer
+  to an array: `mat4 *p;`, `mat4 *m[3];`. }
+procedure CPtrShapeFromField(rec: Integer; const fname: AnsiString);
+var k: Integer;
+begin
+  CPAElemTk := RecFieldPtrElemTk(rec, fname);
+  CPAElemRec := RecFieldPtrElemRec(rec, fname);
+  CPAArrLen := RecFieldPtrElemArrLen(rec, fname);
+  CPANDims := RecFieldPtrElemNDims(rec, fname);
+  for k := 0 to MAX_ARR_DIMS - 1 do CPASpan[k] := 0;
+  if CPANDims > 1 then
+    for k := 0 to CPANDims - 1 do CPASpan[k] := RecFieldPtrElemDimAt(rec, fname, k);
+end;
+
+{ THE ONE READER for "what does this C pointer-to-array VALUE point at",
+  whichever carrier holds the answer. True, with CPA* filled, for the symbol
+  spellings CPtrToArrShapeSym knows (`p`, `m[i]`, `pp[i]`, `*pp`) and for
+  their struct-field twins: a pointer field `s.p` / `ps->p` and an element
+  `s.m[i]` of an array-of-pointers field. Every consumer -- the `*x` decay, the
+  subscript flatten, the pointer stride -- asks here, so a field is not a
+  second copy of the rule. (The sizeof walk reads tokens, not nodes, and fills
+  its shape through CPtrShapeFromSym / CPtrShapeFromField.)
+  bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
+function CPtrToArrShape(node: Integer): Boolean;
+var si, f, rec: Integer; fname: AnsiString; wantArr: Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  si := CPtrToArrShapeSym(node);
+  if si >= 0 then
+  begin
+    CPtrShapeFromSym(si);
+    Result := True;
+    Exit;
+  end;
+  if ASTKind[node] = AN_FIELD then
+  begin
+    f := node; wantArr := False;
+  end
+  else if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_FIELD) then
+  begin
+    f := ASTLeft[node]; wantArr := True;
+  end
+  else
+    Exit;
+  rec := ResolveNodeRec(ASTLeft[f]);
+  if rec = REC_NONE then Exit;
+  fname := GetASTIdentName(f);
+  if RecFieldType(rec, fname) <> tyPointer then Exit;
+  if RecFieldIsArray(rec, fname) <> wantArr then Exit;
+  if RecFieldPtrElemArrLen(rec, fname) <= 0 then Exit;
+  CPtrShapeFromField(rec, fname);
+  Result := True;
+end;
+
 function IRPointerStride(node: Integer): Integer;
 var elemTk: TTypeKind; recId, aliasIdx: Integer; fieldName: AnsiString;
 begin
@@ -3975,19 +4044,19 @@ begin
   while (node >= 0) and (ASTKind[node] = AN_COMMA) do node := ASTRight[node];
   elemTk := tyUnknown;
   recId := REC_NONE;
-  { `m[i] + 1` on `vec4 *m[2]` (and `pp[i] + 1`, `*pp + 1` on `vec4 **pp`): a
-    pointer that points at an array steps by the whole pointee, as the pointer
-    arm below does for `vec4 *p` }
+  { `m[i] + 1` on `vec4 *m[2]` (and `pp[i] + 1`, `*pp + 1` on `vec4 **pp`,
+    `s.p + 1` on a `mat4 *p;` field): a pointer that points at an array steps
+    by the whole pointee, as the pointer arm below does for `vec4 *p` }
   if CProgramMode and (node >= 0) and
-     ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DEREF)) and
-     (CPtrToArrShapeSym(node) >= 0) then
+     ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DEREF) or
+      (ASTKind[node] = AN_FIELD)) and
+     CPtrToArrShape(node) then
   begin
-    aliasIdx := CPtrToArrShapeSym(node);
-    elemTk := CPtrToArrElemTk(aliasIdx);
-    if elemTk = tyRecord then Result := RecSize(CPtrToArrElemRec(aliasIdx))
+    elemTk := CPAElemTk;
+    if elemTk = tyRecord then Result := RecSize(CPAElemRec)
     else if elemTk = tyUnknown then Result := 1
     else Result := TypeSlotSize(elemTk);
-    Result := Result * SymPtrElemArrLen[aliasIdx];
+    Result := Result * CPAArrLen;
     Exit;
   end;
   if ASTKind[node] = AN_IDENT then

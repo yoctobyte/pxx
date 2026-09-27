@@ -17945,6 +17945,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_array_of_pointers_to_array_typedefs.c $(TESTTMP)/c_arrptrarr26
 	gcc -std=gnu99 -o $(TESTTMP)/c_arrptrarr_gcc test/c_array_of_pointers_to_array_typedefs.c
 	tools/expect_same.sh c_arrptrarr26 "$$($(TESTTMP)/c_arrptrarr26)" "$$($(TESTTMP)/c_arrptrarr_gcc)"
+	# A STRUCT MEMBER OF AN ARRAY-TYPEDEF TYPE IS AN ARRAY. `mat4 m;` as a
+	# member was one float (struct 12 bytes, gcc 88) and a write to it landed
+	# in the next member; `mat4 *p;` had no pointee shape. The first block reads
+	# each written member's NEIGHBOURS -- an overlap, not a size, is the failure
+	# users hit. Also cglm's union mat2x3s. Diffed against gcc's own output.
+	# bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims
+	./$(COMPILER) test/c_struct_member_of_array_typedef.c $(TESTTMP)/c_smemarrtd26
+	gcc -std=gnu99 -o $(TESTTMP)/c_smemarrtd_gcc test/c_struct_member_of_array_typedef.c
+	tools/expect_same.sh c_smemarrtd26 "$$($(TESTTMP)/c_smemarrtd26)" "$$($(TESTTMP)/c_smemarrtd_gcc)"
 	# THE PTY FAMILY, WHICH crtl DID NOT HAVE AT ALL. posix_openpt, grantpt,
 	# unlockpt, ptsname and ptsname_r were absent from include/ and src/ alike,
 	# and busybox calls ptsname_r WITHOUT a guard -- platform.h defines

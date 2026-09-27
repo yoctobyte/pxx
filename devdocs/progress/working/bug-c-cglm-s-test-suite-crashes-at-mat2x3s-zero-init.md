@@ -23,3 +23,11 @@ $P -Ilib/crtl/include -Ilib/crtl/src -I$L/cglm/include -I$L/cglm/test/include \
 rc=139 after `glmc_ivec4_abs`. The next entry in `test/tests.h` is
 `mat2x3s_zero_init` (test/src/test_struct.c:10). Reduce it against gcc before
 guessing the mechanism.
+
+## 2026-09-27 (frankD): the same bug as the struct-field ticket, fixed there
+
+`mat2x3s` is a union whose `raw` member is typed by the array typedef
+`mat2x3`; the struct builder laid it out as one float, so `.raw` passed on as
+a `mat2x3` read past it. Fixed with
+bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims.
+cglm's whole suite now runs: 1131 ran, 1131 passed, 0 failed, rc=0.

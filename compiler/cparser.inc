@@ -3384,8 +3384,12 @@ function CSizeofDescriptorWalkDeref(si, derefs: Integer; var sz: Integer): Boole
   not (`int (*p)[4]`). }
 var cArrLen, cRec, cPtrRec, cNDims, cDim, cSpanSym, recId, depth: Integer;
     cPtrDepth, cPtrBaseRec: Integer;   { pointer CHAIN, not one level of pointee }
-    cPtrArrSym: Integer;               { symbol whose pointee is an ARRAY, else -1 }
-    cSpanOff: Integer;                 { where cSpanSym's spans start (CPtrElemSpanOff) }
+    { A pointer whose pointee is an ARRAY carries that array's shape (from a
+      symbol or a struct field, CPtrShapeFromSym/Field) until a `*` or `[`
+      peels into it; the spans then come from cPeSpan (cUsePe). }
+    cPeOn, cUsePe: Boolean;
+    cPeLen, cPeNDims, cPeK: Integer;
+    cPeSpan: array[0..MAX_ARR_DIMS - 1] of Integer;
     cTk, cPtrTk, cPtrBaseTk: TTypeKind; cOK: Boolean;
     cFldRec: Integer; fieldName, cFldName: AnsiString;
 begin
@@ -3393,7 +3397,7 @@ begin
   cPtrTk := tyUnknown; cPtrRec := REC_NONE;
   cNDims := 0; cDim := 0; cSpanSym := si;
   cFldRec := REC_NONE; cFldName := '';
-  cPtrArrSym := -1; cSpanOff := 0;
+  cPeOn := False; cUsePe := False; cPeLen := 0; cPeNDims := 0;
   if Syms[si].IsArray then
   begin
     { ArrLen is the FLATTENED element count; a multidimensional array keeps
@@ -3415,7 +3419,9 @@ begin
     begin
       cPtrTk := Syms[si].PtrElemTk;
       cPtrRec := Syms[si].PtrElemRec;
-      cPtrArrSym := si;
+      CPtrShapeFromSym(si);
+      cPeOn := True; cPeLen := CPAArrLen; cPeNDims := CPANDims;
+      for cPeK := 0 to MAX_ARR_DIMS - 1 do cPeSpan[cPeK] := CPASpan[cPeK];
     end;
   end
   else
@@ -3437,7 +3443,11 @@ begin
       arm above, so `sizeof r[0]` is the row (16, not the float's 4) and
       `sizeof *r` unparenthesised is too (it sized the decayed expression, 8) }
     if (cTk = tyPointer) and (cPtrDepth <= 2) and (SymPtrElemArrLen[si] > 0) then
-      cPtrArrSym := si;
+    begin
+      CPtrShapeFromSym(si);
+      cPeOn := True; cPeLen := CPAArrLen; cPeNDims := CPANDims;
+      for cPeK := 0 to MAX_ARR_DIMS - 1 do cPeSpan[cPeK] := CPASpan[cPeK];
+    end;
   end;
   while cOK do
   begin
@@ -3445,10 +3455,10 @@ begin
        ((derefs > 0) and not ((CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent))) then
     begin
       { a `*` peels an array, or the element pointer of `vec4 *m[2]` whose
-        pointee array the walk carries (cPtrArrSym); any other pointer is the
+        pointee array the walk carries (cPeOn); any other pointer is the
         caller's }
       if (CurTok.Kind <> tkLBrack) and (cArrLen < 0) and
-         not ((cTk = tyPointer) and (cPtrArrSym >= 0)) then begin cOK := False; Break; end;
+         not ((cTk = tyPointer) and cPeOn) then begin cOK := False; Break; end;
       { one subscript peels one level: an element of the array, or the
         pointee of a pointer. The index expression is skipped balanced so
         `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
@@ -3465,9 +3475,14 @@ begin
             already existed: `sizeof s.m[0]` on `int m[3][4]` answered 8 for
             int, char and double alike, a row measured as a pointer.
             bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
-          if cSpanSym >= 0 then
+          if cUsePe and (cPeSpan[cDim] > 0) then
           begin
-            cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cSpanOff + cDim];
+            cArrLen := cArrLen div cPeSpan[cDim];
+            Inc(cDim);
+          end
+          else if cSpanSym >= 0 then
+          begin
+            cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cDim];
             Inc(cDim);
           end
           else if (cFldRec <> REC_NONE) and
@@ -3506,13 +3521,13 @@ begin
           cPtrDepth := 0;
           { the pointee is an ARRAY: continue as that array, whose dims the
             declaration parked in the symbol's (otherwise unused) spans }
-          if cPtrArrSym >= 0 then
+          if cPeOn then
           begin
-            cArrLen := SymPtrElemArrLen[cPtrArrSym];
-            cNDims := SymPtrElemNDims[cPtrArrSym];
-            cDim := 0; cSpanSym := cPtrArrSym;
-            cSpanOff := CPtrElemSpanOff(cPtrArrSym);
-            cPtrArrSym := -1;
+            cArrLen := cPeLen;
+            cNDims := cPeNDims;
+            cDim := 0; cSpanSym := -1; cFldRec := REC_NONE; cFldName := '';
+            cUsePe := True;
+            cPeOn := False;
           end;
         end;
       end
@@ -3550,12 +3565,27 @@ begin
       cPtrDepth := 0; cPtrBaseTk := tyUnknown; cPtrBaseRec := REC_NONE;
       cNDims := 0; cDim := 0; cSpanSym := -1;
       cFldRec := REC_NONE; cFldName := '';
+      cPeOn := False; cUsePe := False;
+      { a field that points at an array (`mat4 *p;`), or an array of such
+        pointers (`mat4 *m[3];`): carry the pointee, as a variable does.
+        bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
+      if (cTk = tyPointer) and (RecFieldPtrElemArrLen(recId, fieldName) > 0) then
+      begin
+        CPtrShapeFromField(recId, fieldName);
+        cPeOn := True; cPeLen := CPAArrLen; cPeNDims := CPANDims;
+        for cPeK := 0 to MAX_ARR_DIMS - 1 do cPeSpan[cPeK] := CPASpan[cPeK];
+      end;
       if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
       begin
         cArrLen := RecFieldArrLen(recId, fieldName);
         cNDims := RecFieldArrNDims(recId, fieldName);
         cFldRec := recId; cFldName := fieldName;   { for RecFieldArrDimSpanAt in the subscript arm }
-        if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName);
+        if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName)
+        else if cPeOn then
+        begin
+          cPtrTk := RecFieldPtrElemTk(recId, fieldName);
+          cPtrRec := RecFieldPtrElemRec(recId, fieldName);
+        end;
       end
       else
       begin
@@ -4511,7 +4541,7 @@ begin
             (ASTIVal[node] = Ord(tkPlus)) and (ASTSLen[node] > 0) and
             (ASTRight[node] >= 0) and (ASTKind[ASTRight[node]] = AN_INT_LIT) and
             (ASTIVal[ASTRight[node]] = 0) and
-            (CPtrToArrShapeSym(ASTLeft[node]) >= 0);
+            CPtrToArrShape(ASTLeft[node]);
 end;
 
 function CDerefDecayStride(node: Integer): Integer;
@@ -4564,10 +4594,9 @@ begin
     Result := suffNext;
     Exit;
   end;
-  { an element `m[i]` of `vec4 *m[2]` is the same pointer-to-array value as a
-    `vec4 *p`, and CPtrToArrShapeSym answers for both }
-  si := CPtrToArrShapeSym(base);
-  if si < 0 then Exit;
+  { an element `m[i]` of `vec4 *m[2]`, and a `mat4 *p;` field, are the same
+    pointer-to-array value as a `vec4 *p`, and CPtrToArrShape answers for all }
+  if not CPtrToArrShape(base) then Exit;
   { `int (*r)[4]` — the pointee is an array, so *r is a pointer to its first
     element (and one dimension further in for a multi-dim pointee). Arithmetic
     over the pointer stays at that level, exactly as it does for an array, so
@@ -4575,11 +4604,11 @@ begin
     through and the deref is then a real load. }
   if stamp = 0 then
   begin
-    Result := TypeSlotSize(CPtrToArrElemTk(si));
-    if CPtrToArrElemTk(si) = tyRecord then Result := RecSize(CPtrToArrElemRec(si));
-    for k := 1 to SymPtrElemNDims[si] - 1 do
-      if CPtrElemSpanAt(si, k) > 0 then
-        Result := Result * CPtrElemSpanAt(si, k);
+    Result := TypeSlotSize(CPAElemTk);
+    if CPAElemTk = tyRecord then Result := RecSize(CPAElemRec);
+    for k := 1 to CPANDims - 1 do
+      if CPASpan[k] > 0 then
+        Result := Result * CPASpan[k];
   end;
 end;
 
@@ -5241,6 +5270,8 @@ var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
     ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind, pendIdx: Integer;
+    shTk: TTypeKind; shRec, shLen: Integer;       { pointer-to-array shape, copied from CPA* }
+    shSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
     done: Boolean; fieldName: AnsiString;
 begin
@@ -5336,7 +5367,7 @@ begin
           node := inode;
         end;
       end
-      else if (CPtrToArrShapeSym(node) >= 0) or CIsDecayedDerefOfPtrToArr(node) then
+      else if CPtrToArrShape(node) or CIsDecayedDerefOfPtrToArr(node) then
       begin
         { Pointer to array `elem (*p)[A][B]..`. The pointee's dims come from
           SymArrDimSpan when it has more than one, else the one row length.
@@ -5354,8 +5385,9 @@ begin
             the byte address p + acc * sizeof(the remaining sub-array), with the
             ASTSLen stamp saying what that address steps by -- the same shape and
             the same stamp the array and field partial-index arms build.
-          The pointer may also be an element `m[i]` of `vec4 *m[2]`: that
-          AN_INDEX loads the pointer, and the shape is on m.
+          The pointer may also be an element `m[i]` of `vec4 *m[2]` (that
+          AN_INDEX loads the pointer, and the shape is on m), or a struct field
+          `s.p` / `s.m[i]` -- CPtrToArrShape answers for every carrier.
           bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
         { `(*p)[i]..` is `p[0][i]..`: the deref was built as a no-op decay
           (CDerefDecayStride), and only the first pointee subscript can be
@@ -5370,7 +5402,6 @@ begin
           pendIdx := idxExpr;
           idxExpr := AllocNode(AN_INT_LIT); ASTIVal[idxExpr] := 0; ASTTk[idxExpr] := Ord(tyInteger);
         end;
-        si := CPtrToArrShapeSym(node);
         { `*pp` of `mat4 **pp` is the pointer VALUE pp[0]. As an AN_DEREF base
           an AN_INDEX means Pascal's `p^[i]`, indexing the pointee in place,
           which read the pointer's own bytes as the matrix. }
@@ -5382,14 +5413,18 @@ begin
           ASTTk[dnode] := Ord(tyPointer);
           node := dnode;
         end;
-        if SymPtrElemNDims[si] > 1 then ndimsF := SymPtrElemNDims[si] else ndimsF := 1;
+        { the shape, copied out of CPA* before ParseCExpr can refill it }
+        if not CPtrToArrShape(node) then Error('internal: pointer-to-array shape lost');
+        shTk := CPAElemTk; shRec := CPAElemRec; shLen := CPAArrLen;
+        for ndi := 0 to MAX_ARR_DIMS - 1 do shSpan[ndi] := CPASpan[ndi];
+        if CPANDims > 1 then ndimsF := CPANDims else ndimsF := 1;
         flatNode := idxExpr;             { first subscript = the pointer index }
         ndi := 0;
         while ((pendIdx >= 0) or (CurTok.Kind = tkLBrack)) and (ndi < ndimsF) do
         begin
           if pendIdx < 0 then Next;      { '[' }
-          if ndimsF > 1 then spanD := CPtrElemSpanAt(si, ndi)
-          else spanD := SymPtrElemArrLen[si];
+          if ndimsF > 1 then spanD := shSpan[ndi]
+          else spanD := shLen;
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := spanD; ASTTk[strideLit] := Ord(tyInteger);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
@@ -5413,20 +5448,20 @@ begin
           inode := AllocNode(AN_INDEX);
           ASTLeft[inode] := node;
           ASTRight[inode] := flatNode;
-          ASTTk[inode] := Ord(CPtrToArrElemTk(si));
+          ASTTk[inode] := Ord(shTk);
           node := inode;
         end
         else
         begin
           { bytes of one element, then of the sub-array left after ndi pointee
             subscripts (dims ndi..n-1), and of ITS element (dims ndi+1..n-1) }
-          if CPtrToArrElemTk(si) = tyRecord then rowStride := RecSize(CPtrToArrElemRec(si))
-          else rowStride := TypeSlotSize(CPtrToArrElemTk(si));
+          if shTk = tyRecord then rowStride := RecSize(shRec)
+          else rowStride := TypeSlotSize(shTk);
           for ndi2 := ndimsF - 1 downto ndi + 1 do
-            if ndimsF > 1 then rowStride := rowStride * CPtrElemSpanAt(si, ndi2);
+            if ndimsF > 1 then rowStride := rowStride * shSpan[ndi2];
           spanD := rowStride;            { what the decayed address steps by }
-          if ndimsF > 1 then rowStride := rowStride * CPtrElemSpanAt(si, ndi)
-          else rowStride := rowStride * SymPtrElemArrLen[si];
+          if ndimsF > 1 then rowStride := rowStride * shSpan[ndi]
+          else rowStride := rowStride * shLen;
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
@@ -17191,7 +17226,14 @@ var
   bfAnonRec: array of Integer;   { REC_UCLASS_BASE+subci for a field flattened from an anon member, else REC_NONE }
   bfNDims: array of Integer;
   bfPtrElemArrLen: array of Integer;   { flattened extent of an ARRAY pointee, `int (*fp)[4]` -> 4; 0 otherwise }
+  bfPtrElemNDims: array of Integer;    { ...its dim count when it has more than one (`mat4 *p`) }
+  bfPtrElemDim: array of Integer;      { ...and those dims, MAX_ARR_DIMS per field }
   bfDimSpan: array of Integer;
+  { An ARRAY TYPEDEF's dims, captured when the member's type is parsed: an
+    array bound or bit width read later can re-enter ParseCDeclType
+    (`sizeof(T)`), which resets the globals. }
+  fldTdArrLen, fldTdNDims, fldTdK: Integer;
+  fldTdDims: array[0..MAX_ARR_DIMS - 1] of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
   bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
   bitPos: Integer;         { ABSOLUTE bit cursor within the struct -- gcc's model }
@@ -17247,6 +17289,7 @@ begin
   SetLength(bfBitShift, bfCap);  SetLength(bfBitBytes, bfCap);  SetLength(bfAnonRec, bfCap);
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
   SetLength(bfPtrElemArrLen, bfCap);
+  SetLength(bfPtrElemNDims, bfCap);  SetLength(bfPtrElemDim, bfCap * MAX_ARR_DIMS);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   bitPos := 0;
@@ -17332,7 +17375,20 @@ begin
                 bfBitWidth[bfCount] := UFldBitWidth[UClsFBase[subci] + k];
                 bfBitShift[bfCount] := UFldBitShift[UClsFBase[subci] + k];
                 bfBitBytes[bfCount] := UFldBitBytes[UClsFBase[subci] + k];
-                bfNDims[bfCount]   := 0;
+                { ...with its shape: a multi-dim or array-typedef member of an
+                  anonymous struct (cglm's mat2x3s has one) kept only its flat
+                  length here, and a pointer member lost its pointee's.
+                  bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
+                bfNDims[bfCount]   := UFldArrNDims[UClsFBase[subci] + k];
+                bfPtrElemArrLen[bfCount] := UFldPtrElemArrLen[UClsFBase[subci] + k];
+                bfPtrElemNDims[bfCount] := UFldPtrElemNDims[UClsFBase[subci] + k];
+                for ndi := 0 to MAX_ARR_DIMS - 1 do
+                begin
+                  bfDimSpan[bfCount * MAX_ARR_DIMS + ndi] :=
+                    UFldArrDimSpan[(UClsFBase[subci] + k) * MAX_ARR_DIMS + ndi];
+                  bfPtrElemDim[bfCount * MAX_ARR_DIMS + ndi] :=
+                    UFldPtrElemDimSpan[(UClsFBase[subci] + k) * MAX_ARR_DIMS + ndi];
+                end;
                 bfAnonRec[bfCount] := REC_UCLASS_BASE + subci;   { flattened from this anon member }
                 Inc(bfCount);
               end;
@@ -17419,6 +17475,14 @@ begin
     begin
       fieldStartIdx := TokPos - 1;
       fTk := ParseCDeclType;
+      fldTdArrLen := CTypeTypedefArrLen;
+      fldTdNDims := CTypeTypedefNDims;
+      for fldTdK := 0 to MAX_ARR_DIMS - 1 do fldTdDims[fldTdK] := CTypeTypedefDims[fldTdK];
+      if (fldTdNDims < 1) and (fldTdArrLen >= 1) then
+      begin
+        fldTdNDims := 1;         { a one-dim typedef may record only its length }
+        fldTdDims[0] := fldTdArrLen;
+      end;
       fldBaseIsEnum := CTypeBaseIsEnum;   { captured now: the declarator scan below re-enters
                                             ParseCDeclType (fn-ptr params) and resets the global }
       fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
@@ -17454,6 +17518,14 @@ begin
           begin
             bfElemTk[bfCount] := CTypeElemTk; bfElemRec[bfCount] := CTypeElemRec;
             bfPtrElemArrLen[bfCount] := CTypePtrElemArrLen;
+            { `float (*fp)[4][4];` -- the rows too, not only the flat 16 }
+            bfPtrElemNDims[bfCount] := 0;
+            if CTypePtrElemNDims > 1 then
+            begin
+              bfPtrElemNDims[bfCount] := CTypePtrElemNDims;
+              for ndi := 0 to CTypePtrElemNDims - 1 do
+                bfPtrElemDim[bfCount * MAX_ARR_DIMS + ndi] := CTypePtrElemDim[ndi];
+            end;
           end
           else
           begin
@@ -17624,6 +17696,25 @@ begin
             Inc(fldNDims);
           end;
         end;
+        { AN ARRAY-TYPEDEF MEMBER IS AN ARRAY. `mat4 m;` is `float m[4][4]` and
+          `vec4 r[2];` is `float r[2][4]` -- the typedef's dims follow the
+          bracket ones, as a local's do. Nothing here read them, so the member
+          was laid out as ONE element: `struct { int k; mat4 m; vec4 v; }` was
+          12 bytes where gcc says 84, and a write to m[1] landed in the next
+          member. With stars, the typedef describes the POINTEE instead
+          (`mat4 *p;`), recorded below. (Measured on v441 and v443.)
+          bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims }
+        if (declStars = 0) and (fldTdArrLen >= 1) then
+          for fldTdK := 0 to fldTdNDims - 1 do
+          begin
+            arrLen := arrLen * fldTdDims[fldTdK];
+            isArr := True;
+            if fldNDims < MAX_ARR_DIMS then
+            begin
+              bfDimSpan[bfCount * MAX_ARR_DIMS + fldNDims] := fldTdDims[fldTdK];
+              Inc(fldNDims);
+            end;
+          end;
 
         if declStars > 0 then
         begin
@@ -17773,7 +17864,21 @@ begin
           bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
           bfTk[bfCount] := declTk; bfRec[bfCount] := declRec;
           bfElemTk[bfCount] := declElemTk; bfElemRec[bfCount] := declElemRec;
-          bfPtrElemArrLen[bfCount] := 0;   { plain declarator: never a pointer-to-array }
+          { a plain declarator points at an array only through an array
+            typedef, `mat4 *p;` / `mat4 *m[3];` (one star: a depth-2 field has
+            no base-pointee carrier) }
+          bfPtrElemArrLen[bfCount] := 0;
+          bfPtrElemNDims[bfCount] := 0;
+          if (declStars = 1) and (fldTdArrLen >= 1) then
+          begin
+            bfPtrElemArrLen[bfCount] := 1;
+            for fldTdK := 0 to fldTdNDims - 1 do
+            begin
+              bfPtrElemArrLen[bfCount] := bfPtrElemArrLen[bfCount] * fldTdDims[fldTdK];
+              bfPtrElemDim[bfCount * MAX_ARR_DIMS + fldTdK] := fldTdDims[fldTdK];
+            end;
+            if fldTdNDims > 1 then bfPtrElemNDims[bfCount] := fldTdNDims;
+          end;
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
           bfNDims[bfCount] := fldNDims;
           if isBitField then
@@ -17876,6 +17981,9 @@ begin
     AddUField(ci, bfNOff[k], bfNLen[k], bfOff[k], bfTk[k], bfRec[k]);
     UFldAnonRec[UFldCount-1] := bfAnonRec[k];
     UFldPtrElemArrLen[UFldCount-1] := bfPtrElemArrLen[k];
+    UFldPtrElemNDims[UFldCount-1] := bfPtrElemNDims[k];
+    for ndi := 0 to MAX_ARR_DIMS - 1 do
+      UFldPtrElemDimSpan[(UFldCount-1) * MAX_ARR_DIMS + ndi] := bfPtrElemDim[k * MAX_ARR_DIMS + ndi];
     UFldIsArray[UFldCount-1] := bfIsArr[k];
     UFldArrLen[UFldCount-1] := bfArrLen[k];
     UFldBitWidth[UFldCount-1] := bfBitWidth[k];
