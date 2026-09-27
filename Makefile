@@ -9198,6 +9198,12 @@ test-core: $(COMPILER)
 	# $(COMPILER), not $(PXX_STABLE): the fix is a compiler change and is inert
 	# in the pin until one carries it.
 	sh test/pascal_ambient_unit_needs_heap.sh ./$(COMPILER) $(TESTTMP)
+	# THE OUTPUT MAY NOT BE AN INPUT: `pxx g.pas ./g.pas`, the absolute path,
+	# a/../g.pas, a symlink or hard link, a used unit or a C header named as the
+	# output wrote the ELF over it; only `pxx g.pas g.pas` was caught (by
+	# spelling). Now refused by identity, input intact. v445 fails 11 of 13.
+	# bug-a-the-output-can-overwrite-the-source-under-another-spelling
+	sh test/the_output_may_not_be_an_input.sh ./$(COMPILER) $(TESTTMP)
 	# An interface name in a DECLARATION initialiser means its GUID. All four
 	# cells were wrong and in opposite directions: var accepted and stored an
 	# AN_CLASSREF VMT address (silent, and interface identity is matched BY GUID

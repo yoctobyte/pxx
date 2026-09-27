@@ -4247,7 +4247,7 @@ begin
     machine. Same rule the C include-path defaults follow. }
   if TargetArch <> TARGET_X86_64 then Exit;
   pth := '/etc/ld.so.cache';
-  LoadFile(pth, LdCacheBody);
+  LoadInput(pth, LdCacheBody);
 end;
 
 function LdCacheStringAt(off: Integer; var out_: AnsiString): Boolean;
@@ -4927,19 +4927,19 @@ begin
   while (Length(content) = 0) and (k < CIncludeDirCount) do
   begin
     ConcatThree(CIncludeDirs[k], cName, '.h', path);
-    LoadFile(path, content);
+    LoadInput(path, content);
     Inc(k);
   end;
 {$endif}
   if Length(content) = 0 then
   begin
     ConcatThree('/usr/include/', cName, '.h', path);
-    LoadFile(path, content);
+    LoadInput(path, content);
   end;
   if Length(content) = 0 then
   begin
     ConcatThree(CGtkIncludeRoot + 'gtk/', cName, '.h', path);
-    LoadFile(path, content);
+    LoadInput(path, content);
   end;
   if Length(content) > 0 then begin isCUnit := True; isCHeader := True; end;
 end;
@@ -5177,7 +5177,7 @@ end;
 procedure LoadPySource(const path: AnsiString; var dst: AnsiString);
 var fd: Integer;
 begin
-  LoadFile(path, dst);
+  LoadInput(path, dst);
   if Length(dst) > 0 then Exit;
   fd := sysopen(path, 0);
   if fd >= 0 then
@@ -5265,13 +5265,13 @@ begin
   Result := False;
   if Length(root) = 0 then Exit;
   ConcatThree(root, 'mimic_', '', pfx);
-  ConcatThree(pfx, lo, '.pas', p); LoadFile(p, c);
+  ConcatThree(pfx, lo, '.pas', p); LoadInput(p, c);
   if Length(c) > 0 then begin Result := True; Exit; end;
-  ConcatThree(pfx, lo, '.pp', p);  LoadFile(p, c);
+  ConcatThree(pfx, lo, '.pp', p);  LoadInput(p, c);
   if Length(c) > 0 then begin Result := True; Exit; end;
-  ConcatThree(pfx, lo, '.py', p);  LoadFile(p, c);
+  ConcatThree(pfx, lo, '.py', p);  LoadInput(p, c);
   if Length(c) > 0 then begin Result := True; Exit; end;
-  ConcatThree(pfx, lo, '.npy', p); LoadFile(p, c);
+  ConcatThree(pfx, lo, '.npy', p); LoadInput(p, c);
   if Length(c) > 0 then begin Result := True; Exit; end;
 end;
 
@@ -5640,7 +5640,7 @@ begin
       end;
       path := basePath;
       if isCUnit then
-        LoadFile(path, UnitContent)
+        LoadInput(path, UnitContent)
       else
         LoadFileCI(path, UnitContent);
       { A RELATIVE `SDL2/SDL.h` THAT IS NOT BESIDE THE SOURCE FALLS BACK TO THE
@@ -5675,14 +5675,14 @@ begin
         while (Length(UnitContent) = 0) and (i < CIncludeDirCount) do
         begin
           ConcatThree(CIncludeDirs[i], name, '', path);
-          LoadFile(path, UnitContent);
+          LoadInput(path, UnitContent);
           Inc(i);
         end;
 {$endif}
         if Length(UnitContent) = 0 then
         begin
           ConcatThree('/usr/include/', name, '', path);
-          LoadFile(path, UnitContent);
+          LoadInput(path, UnitContent);
         end;
       end;
     end
@@ -5950,13 +5950,13 @@ begin
   if (Length(UnitContent) = 0) and (not isAmbientLoad) then
   begin
     ConcatThree(SourceFileDir, cName, '.c', path);
-    LoadFile(path, UnitContent);
+    LoadInput(path, UnitContent);
     if Length(UnitContent) > 0 then isCUnit := True;
   end;
   if (Length(UnitContent) = 0) and (not isAmbientLoad) then
   begin
     ConcatThree(SourceFileDir, cName, '.h', path);
-    LoadFile(path, UnitContent);
+    LoadInput(path, UnitContent);
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
 
@@ -6005,7 +6005,7 @@ begin
     if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(PasUnitDirs[i], cName, '.c', path);
-      LoadFile(path, deferredCContent);
+      LoadInput(path, deferredCContent);
       if Length(deferredCContent) > 0 then
       begin
         deferredCPath := path;
@@ -6015,7 +6015,7 @@ begin
     if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(PasUnitDirs[i], cName, '.h', path);
-      LoadFile(path, deferredCContent);
+      LoadInput(path, deferredCContent);
       if Length(deferredCContent) > 0 then
       begin
         deferredCPath := path;
@@ -6044,13 +6044,13 @@ begin
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(cdir, cName, '.c', path);
-      LoadFile(path, UnitContent);
+      LoadInput(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(cdir, cName, '.h', path);
-      LoadFile(path, UnitContent);
+      LoadInput(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
   end;
@@ -6088,7 +6088,7 @@ begin
     if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(rtldir, cName, '.h', path);
-      LoadFile(path, UnitContent);
+      LoadInput(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
   end;
@@ -6111,13 +6111,13 @@ begin
     if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(lcldir, cName, '.c', path);
-      LoadFile(path, UnitContent);
+      LoadInput(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
     if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(lcldir, cName, '.h', path);
-      LoadFile(path, UnitContent);
+      LoadInput(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
   end;
@@ -6154,14 +6154,14 @@ begin
     if Length(UnitContent) = 0 then begin ConcatThree('lib/asmcore/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
-      ConcatThree('lib/rtl/', cName, '.h', path); LoadFile(path, UnitContent);
-      if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', cName, '.h', path); LoadFile(path, UnitContent); end;
-      if Length(UnitContent) = 0 then begin ConcatThree('compiler/', cName, '.h', path); LoadFile(path, UnitContent); end;
+      ConcatThree('lib/rtl/', cName, '.h', path); LoadInput(path, UnitContent);
+      if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', cName, '.h', path); LoadInput(path, UnitContent); end;
+      if Length(UnitContent) = 0 then begin ConcatThree('compiler/', cName, '.h', path); LoadInput(path, UnitContent); end;
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
     if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
-      ConcatThree('compiler/', cName, '.c', path); LoadFile(path, UnitContent);
+      ConcatThree('compiler/', cName, '.c', path); LoadInput(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
   end;

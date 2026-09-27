@@ -48,7 +48,7 @@ begin
   for i := 0 to ResPendCount - 1 do
   begin
     ConcatThree(SourceFileDir, ResPendFile[i], '', path);
-    LoadFile(path, buf);
+    LoadInput(path, buf);
     len := Length(buf);
     if len = 0 then Error('resource file not found or empty: ' + ResPendFile[i]);
     while (DataLen mod 8) <> 0 do DataPutB(0);

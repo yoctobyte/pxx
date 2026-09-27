@@ -7007,7 +7007,9 @@ begin
     end;
     tkVar:
     begin
-      if not EnableLazyVar then Error('Lazy Variable Declarations are disabled; use --lazy-var to enable');
+      { The switch is OFF-only: `--no-lazy-var` is the option, and the old text
+        told the user to pass `--lazy-var`, which pxx rejects as unknown. }
+      if not EnableLazyVar then Error('inline `var` declarations are disabled by --no-lazy-var; drop that option to allow them');
       Next;
       node := ParseLazyVarDeclAST;
     end;

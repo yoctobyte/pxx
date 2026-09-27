@@ -2448,7 +2448,7 @@ procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer); forward
   that stays hidden exactly as long as the copies happen to agree. }
 procedure CPLoadInclude(depth: Integer);
 begin
-  LoadFile(CPrepPath, CPrepInclude[depth]);
+  LoadInput(CPrepPath, CPrepInclude[depth]);
 end;
 
 function CPIncludeLength(depth: Integer): Integer;

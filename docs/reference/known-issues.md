@@ -190,6 +190,13 @@ says. Each was checked against GCC's output on x86-64, and re-checked on
 2026-09-27: with v445 each row is still wrong exactly where it says "after
 v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
 
+- **The compiler could overwrite its own source file.** `pxx g.pas ./g.pas`,
+  the absolute path to `g.pas`, `a/../g.pas`, or a symlink to it as the
+  output wrote the program over `g.pas`. Naming a used unit or an included C
+  header as the output did the same. Only `pxx g.pas g.pas` was caught. Now
+  any output that is the same file as an input of the compile is refused, and
+  the input is left untouched. Wrong in v441 to v445.
+
 - **C: an initialised `__thread` variable read 0 in other threads.**
   `__thread int tl = 7;` read 7 in `main` and 0 in a thread started with
   `pthread_create`, and in that thread's own threads. Now every thread starts

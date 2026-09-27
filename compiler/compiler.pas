@@ -172,6 +172,7 @@ procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — c
 { Cross-frontend forward declarations the FPC seed needs, and the map of where
   the old parser.inc went. }
 {$include frontend_forwards.inc}
+{$include output_guard.inc}   { LoadInput: LoadFile plus the refusal of an input that IS the output -- after the LoadFile forward above, before every file that reads an input }
 { The slices of the old 37,249-line parser.inc, listed in their ORIGINAL order
   — each is a contiguous range re-included where it sat, which is what makes the
   carve-out provable by the self-host fixedpoint rather than by reading it.
@@ -2658,8 +2659,17 @@ begin
       Halt(1);
     end;
   end;
-  { Last-resort guard: refuse to write the binary over the source file. }
-  if outFile = inFile then outFile := inFile + '.out';
+  { A DEFAULTED output equal to the source (`pxx g`, no extension to strip)
+    gets `.out`: the user never named it. A NAMED output that is the source,
+    under ANY spelling -- `g.pas`, `./g.pas`, `/abs/g.pas`, `a/../g.pas`, a
+    symlink -- is refused by identity below, and so is one that is any other
+    input the compile reads (LoadInput, output_guard.inc). The old guard here
+    compared spellings only and renamed; every other spelling overwrote the
+    source. bug-a-the-output-can-overwrite-the-source-under-another-spelling }
+  if (ParamCount < i + 1) and (outFile = inFile) then outFile := inFile + '.out';
+  PxxNoteOutput(outFile);
+  if outFile = inFile then PxxRefuseOutputIs(inFile);   { without /proc too }
+  PxxRefuseInputAsOutput(inFile);
   { A .o output name implies object emission (same as --emit-obj). }
   n := Length(outFile);
   if (n >= 2) and (outFile[n] = 'o') and (outFile[n-1] = '.') then
@@ -2747,7 +2757,7 @@ begin
   end;
   sysclose(probeFd);
 
-  LoadFile(inFile, Source);
+  LoadInput(inFile, Source);
   DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);

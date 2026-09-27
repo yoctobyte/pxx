@@ -156,7 +156,7 @@ var i, j, nsec, symEnts: Integer;
     tcount: array[0..63] of Int64;
     ttotal: Int64;
 begin
-  LoadFile(path, ElfRdBuf);
+  LoadInput(path, ElfRdBuf);
   if Length(ElfRdBuf) = 0 then
   begin
     WriteLn('elfrd: cannot read ', path);
@@ -547,7 +547,7 @@ var i, j, n, nsec, symEnts, bind, k, obj, kind, base, tgt, slot: Integer;
     symG: array of Integer;   { per symbol index: its global, -1 for a local }
 begin
   ElfLnkAddObject := False;
-  LoadFile(path, ElfRdBuf);
+  LoadInput(path, ElfRdBuf);
   if Length(ElfRdBuf) = 0 then begin ElfRdErr := 'cannot read'; Exit; end;
   if not ElfRdCheckHeader then Exit;
   nsec := ElfRdShNum;
@@ -888,7 +888,7 @@ var lst, line: AnsiString;
     c: Char;
 begin
   ElfLnkLoadList := False;
-  LoadFile(listPath, lst);
+  LoadInput(listPath, lst);
   if Length(lst) = 0 then
   begin
     WriteLn(tag, ': cannot read list ', listPath);
@@ -1438,7 +1438,7 @@ begin
   cur := ElfLnkOutAddr[ELFLNK_K_TEXT];
   for o := 0 to ElfLnkObjCount - 1 do
   begin
-    LoadFile(ElfLnkObjPath[o], ElfRdBuf);
+    LoadInput(ElfLnkObjPath[o], ElfRdBuf);
     if Length(ElfRdBuf) = 0 then ElfRdErr := 'read back empty'
     else if ElfRdCheckHeader then ElfRdErr := '';
     if ElfRdErr <> '' then
@@ -1658,7 +1658,7 @@ begin
   nAll := 0; nKept := 0; bAll := 0; bKept := 0;
   for o := 0 to ElfLnkObjCount - 1 do
   begin
-    LoadFile(ElfLnkObjPath[o], ElfRdBuf);
+    LoadInput(ElfLnkObjPath[o], ElfRdBuf);
     if (Length(ElfRdBuf) = 0) or not ElfRdCheckHeader then
     begin
       WriteLn('elfgc: ', ElfLnkObjPath[o], ': cannot re-read the object');

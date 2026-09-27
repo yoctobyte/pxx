@@ -747,7 +747,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-s-espide-auto-never-exits-after-build-flash | S | 40 | bug | espide --auto never terminates after a successful Build+Flash: it prints the monitor's opening line and then sits in D state with wchan=anon_pipe_read, ignoring AutoSecs. Measured on a live ESP32 (CP2102) with AutoSecs=8: still running 15 minutes later, killed by the harness timeout, rc=124. Detect and Build+Flash themselves work and the board runs the program, so this is the monitor phase only. NOT introduced by the Detect single-port fix (610c696fd7 onward) -- it is on the path the GUI Monitor button uses too. Five hypotheses refuted by measurement, listed below, so they need not be redone. | — |
+| bug-s-espide-auto-never-exits-after-build-flash | S | 60 | bug | espide wedges in the monitor phase and never returns: measured 2h49m on a monitor asked for 8 s, and 2835 s on one asked for 6 s. The main thread sits in state D with wchan=anon_pipe_read, and the fd table (read from inside the process's own group -- setgid `sg dialout` clears dumpable, so an outside reader gets EPERM) contains exactly ONE pipe, fd 13, the read end of the monitor child's stdout; the `cat` child is alive in state S with the port idle, so that pipe is EMPTY. So espide blocks in read() on an empty pipe whose writer is alive. NOT YET EXPLAINED: espide's only reader is StreamPoll (runner.pas:133), it is called with timeoutMs=0 (main.pas:819), PalPoll is a ppoll with a {0,0} timespec that returns 0 on an empty pipe, and PalRead is a single raw read() that does not loop -- so by inspection StreamPoll cannot block, and the measurement says it does. Inspection has been wrong twice here; trust the measurement. Two REAL defects were found and fixed alongside, and NEITHER fixes this: (1) AddLog assigned the whole buffer to the GtkTextView and called CountLines per arriving chunk, O(LOG_CAP) against a 64 KB-per-tick drain cap -- a genuine performance defect, and the reason the stdout log froze too, because the `write` sat last behind the GTK work; (2) OnTick measured the monitor window by counting timer ticks rather than elapsed clock time. After both fixes the hang reproduces unchanged. | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | S3 ROWS MET ON SILICON 2026-09-24 (frankH, ESP32-S3 devkit on /dev/ttyACM0, compiler 58412e442c17 unless noted). C3 AND S2 ROWS STAY OPEN: no C3 or S2 board is on this box, so this ticket stays open until one is. Per row, S3: (1) UART boot == oracle: MET, test/test_esp_hw_validation.pas via `esp_flash.sh --chip esp32s3` matches the x86-64 oracle 7/7. (1b) Does the filter match silicon: MET for the four S3 NilPy demos (nilpy-s3 and nilpy-hw-s3 with the pinned compiler, gpio-edge-s3 and adc-s3 with HEAD). The raw reset-capture minus IDF log lines equals main.expected line for line, 0 lines stripped after app_main, one boot each. Silicon prints ONE routine W that qemu does not, BEFORE app_main: `spi_flash: Detected size(16384k) larger than the size in the binary image header(4096k)`. The E scan has fired on silicon for a real task-watchdog trigger (the first adc-s3 run, before time.sleep was fixed). (2) ISR fires: MET, isrctx (built for esp32s3 from isrctx-c3's main.pas with ISR dispatch on) prints `isr hits=5 ctx=1` against `task hits=5 ctx=0`, PAIR OK; also the GPIO-edge and ADC-frame ISRs of examples/esp32/gpio-edge-s3 and adc-s3. (2b) The contract, no allocation in the handler: MET for espgpio's and espadc's handlers. test/esp_board_isr_no_alloc.pas shows a free-heap delta of 0 over 9,997 GPIO and 625 ADC ISR entries, heap integrity OK, idle drift 0. Readout control (-dALLOC_IN_TASK, 1000 x 16 B) reads 28,000, so the zeros are real. The ISR-allocating control (-dALLOC_IN_ISR) aborts on the FIRST entry with `pxx: out of memory (ESP-IDF heap exhausted)`: loud, but the message misnames the cause. Timer step (esp_timer, task dispatch, NOT an ISR): runs on silicon inside nilpy-hw-s3. OPEN: every C3 row (test_esp_hw_validation, nilpy-c3, nilpy-hw-c3, isrctx-c3 itself, gpio-edge-c3, adc-c3; all build) and every S2 row (hello-s2 builds with --target=esp32s2; atomics are refused on the S2 by design until feature-a-esp32s2-atomics-by-interrupt-masking). | — |
 
 ## backlog-rust (0)
@@ -1126,9 +1126,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4006)
+## done (4007)
 
-4006 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4007 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1341,6 +1341,7 @@ _none_
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-n-two-same-named-defs-in-exclusive-branches-of-one-function-collapse-silently
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- [p 60] [S] bug-s-espide-auto-never-exits-after-build-flash
 - [p 60] [T] bug-t-a-one-target-test-recipe-truncates-silently-on-its-first-failure
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [T] bug-t-the-full-matrix-switches-itself-off-when-the-fleet-is-busy
@@ -1556,7 +1557,6 @@ _none_
 - [p 40] [N] bug-nilpy-a-handler-binder-unwound-past-by-a-different-exception-still-leaks
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-bodiless-procedure-declaration-is-accepted-and-swallows-the-next-routine
-- [p 40] [S] bug-s-espide-auto-never-exits-after-build-flash
 - [p 40] [T] bug-t-a-restart-converts-owned-scratch-into-unowned-scratch-and-nothing-observes-it
 - [p 40] [T] bug-t-check-has-no-aperture-for-a-ticket-slug-cited-in-source-and-195-of-them-resolve-to-nothing
 - [p 40] [T] bug-t-pasmith-returns-only-integer-kinds-so-optfuzz-is-blind-to-the-return-type-axis

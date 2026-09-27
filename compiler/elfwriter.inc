@@ -6963,11 +6963,11 @@ end;
 procedure LoadFileCI(const path: AnsiString; var dst: AnsiString);
 var realPath: AnsiString;
 begin
-  LoadFile(path, dst);
+  LoadInput(path, dst);
   if Length(dst) = 0 then
   begin
     if ResolveCaseInsensitivePath(path, realPath) then
-      LoadFile(realPath, dst);
+      LoadInput(realPath, dst);
   end;
 end;
 
