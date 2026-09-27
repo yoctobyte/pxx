@@ -98,6 +98,107 @@ release the class instances held in its local variables.
 - **It accepts some things CPython rejects**, such as the quoted import below.
   Nil Python is compatible with CPython in one direction only.
 
+## Memory in Nil Python
+
+**Reference counting, no collector.** Every object counts the names and
+containers that refer to it, and it is freed the moment that count reaches
+zero. There is no garbage collector running beside the program, so there are
+no pauses, and memory comes back at a predictable point. On an ESP32 that is
+what keeps a long-running program's heap flat.
+
+**When memory comes back.** The table gives what was still allocated
+(`live`) just before the function returned. The function filled a list with
+30 strings and then let go of it in the way shown. Measured on 2026-09-27 on
+x86-64 with `tools/census_at_exit.sh`, for pin v445 (`caf21ac399f1`) and for
+the compiler after it (built at `b6226e1385`):
+
+| how the list was dropped | v445 | after v445 |
+| --- | ---: | ---: |
+| kept (the control) | 32 | 32 |
+| `kept = None` | 32 | 1 |
+| `del kept` | 32 | 32 |
+| a comprehension, then `rows = None` | 32 | 32 |
+| at module level, `kept = None` | 32 | 1 |
+
+- **With v445, dropping a name frees nothing until the function returns.** A
+  list or dict that a statement creates is also held by a hidden temporary of
+  that statement, so `kept = None` removes only one of two references. At
+  module level it is held until the program ends.
+- **After v445, each statement releases its temporaries when it ends**
+  (`31d314dfa8`), so `kept = None`, `kept = 5` or a new `kept = []` frees the
+  old list and everything in it at once. This applies at module level too.
+- **`del name` and `name = None`.** Use `name = None`. With v445 neither frees
+  a local before the function returns. After v445, `name = None` does. `del`
+  on a local, and `= None` on a list built by a comprehension, are fixed after
+  v445. The table's third and fourth rows are from before those fixes.
+- **Module-level temporaries.** A string built by a module-level statement,
+  such as `print("n=" + str(n))` outside any function, is kept until that
+  statement runs again. That is at most one string per source line and does not
+  grow in a loop. Inside a function, temporaries are released when the
+  statement ends.
+- **A computed string on the left of `*`** (`str(i) * 2`, `"%d" % i * 2`,
+  `s.upper() * 2`) leaked one string per evaluation with v445: 90 left after a
+  90-pass loop. It is fixed after v445. On v445, name the string first
+  (`t = str(i)` then `t * 2`): after 30 passes that left 1 instead of 30.
+
+**Cycles are never freed.** Two objects that refer to each other
+(`a.other = b; b.other = a`) keep each other's count above zero, and with no
+collector nothing reclaims them. This is the design for this beta; CPython and
+MicroPython both collect cycles. Break the cycle before letting go:
+
+```python
+class Node:
+    def __init__(self):
+        self.other = None
+
+def pair():
+    a = Node()
+    b = Node()
+    a.other = b
+    b.other = a         # a cycle
+    a.other = None      # break it before letting go
+    a = None
+    b = None            # both are freed
+
+pair()
+```
+
+Measured with v445 and with the compiler after it: this program leaves
+nothing allocated, and without the `a.other = None` line it leaves both nodes
+(2 allocations).
+
+**There is no `gc` module.** `import gc` followed by `gc.collect()` does not
+compile (`no member collect came of the qualifier gc`), and there is nothing
+for it to do. Delete it. On an ESP32, `import 'espsys.pas' as sys` and
+`sys.free_heap()` report the free heap instead of `gc.mem_free()`.
+
+### Measuring it
+
+- **An exact count on the desktop.** Build with `-dPXX_ALLOC_CENSUS` and run
+  it under `tools/census_at_exit.sh`. It prints `live=` (allocations not yet
+  freed) at the moment the program exits. Call `sys.exit(0)` inside the
+  function to count before it returns. Compare the number for one pass and for
+  several: a leak grows with the passes, and a one-time cost does not.
+
+  ```sh
+  pxx -dPXX_ALLOC_CENSUS prog.npy prog
+  tools/census_at_exit.sh ./prog
+  ```
+
+- **A bound in a test.** `tools/assert_no_leak.sh <label> <max-live>
+  <command>` fails when a `-dPXX_ALLOC_CENSUS` program ends with more than
+  `max-live` allocations live. It refuses a program that allocates too little
+  to show anything (`too few to show anything`), so loop the code under test.
+  Pair it with a version that leaks on purpose, to show that the check can
+  fail.
+- **On the ESP32, under QEMU.**
+  `tools/esp_heap_soak_nilpy.sh --passes 20 nilpy-c3` runs an
+  `examples/esp32` program's main loop repeatedly and prints the change in
+  free heap per pass:
+  `SOAK nilpy-c3 esp32c3 delta=0 passes=20 bpp=0` with v445. `--control` adds
+  a deliberate 64-byte leak to each pass, to show that the soak sees one. Read
+  the `SOAK` line, not the exit status.
+
 ## ESP: math errors do not halt
 
 On ESP targets the rule is that a math error must not stop the device. In the
