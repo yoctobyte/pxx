@@ -18,7 +18,8 @@ units underneath (`espgpio`, `espi2c`, `espspi` and the others) are described
 in [ESP32 peripherals](./esp.md).
 
 To move an existing MicroPython program over, and for what behaves differently
-(no REPL, no `gc` module, memory freed by reference counting), see
+(no REPL, a `gc` module with nothing to collect, memory freed by reference
+counting), see
 [Coming from MicroPython](../getting-started/from-micropython.md).
 
 ## The approach in one paragraph

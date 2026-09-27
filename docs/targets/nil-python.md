@@ -139,10 +139,10 @@ the compiler after it (built at `b6226e1385`):
   grow in a loop. Inside a function, temporaries are released when the
   statement ends.
 - **A computed string on the left of `*`** (`str(i) * 2`, `"%d" % i * 2`,
-  `s.upper() * 2`) leaks one string per evaluation, with v445 and after it:
-  90 left after a 90-pass loop. A fix is in progress. Until then, name the
-  string first (`t = str(i)` then `t * 2`): after 30 passes that left 1
-  instead of 30.
+  `s.upper() * 2`) leaks one string per evaluation with v445: 90 left after a
+  90-pass loop. Fixed after v445 (`c64b304036`): with the compiler built there
+  (`ae3466a018d8`) each of the three leaves 1. On v445, name the string first
+  (`t = str(i)` then `t * 2`), which left 1 instead of 30.
 
 **Cycles are never freed.** Two objects that refer to each other
 (`a.other = b; b.other = a`) keep each other's count above zero, and with no
@@ -170,10 +170,17 @@ Measured with v445 and with the compiler after it: this program leaves
 nothing allocated, and without the `a.other = None` line it leaves both nodes
 (2 allocations).
 
-**There is no `gc` module.** `import gc` followed by `gc.collect()` does not
-compile (`no member collect came of the qualifier gc`), and there is nothing
-for it to do. Delete it. On an ESP32, `import 'espsys.pas' as sys` and
-`sys.free_heap()` report the free heap instead of `gc.mem_free()`.
+**`gc` has nothing to collect.** From commit `c64b304036`, `import gc` runs
+on the PC and compiles for the ESP32-C3 and the ESP32-S3; it has not been run
+on an ESP32 for this page. It is library code, so the v445 pin compiles it from
+such a tree. `gc.collect()` returns 0, and it does **not**
+collect cycles. `gc.mem_free()` and `gc.mem_alloc()` report the heap:
+ESP-IDF's byte-addressable heap on the ESP32, and PXX's own heap on a PC,
+where `mem_free()` can be 0 in a small program. `enable()`, `disable()` and
+`threshold()` change nothing, and `threshold()` returns -1. In a tree before
+that commit, `import gc` does not build (`no member collect came of the
+qualifier gc`); use `import 'espsys.pas' as sys` and `sys.free_heap()` on the
+ESP32. Don't name your own file `gc.py` or `gc.npy`: it shadows the module.
 
 ### Measuring it
 

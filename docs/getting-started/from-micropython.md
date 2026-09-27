@@ -106,9 +106,14 @@ PXX has none: an object is freed when the last reference to it goes away. That
 means no collection pauses, and a heap that shows exactly what the program
 still holds. It also changes four habits:
 
-- **There is no `gc` module.** `gc.collect()` does not build; delete the
-  calls, they have nothing to do. For the free heap, which is what
-  `gc.mem_free()` is usually used for, use `espsys`:
+- **`gc` is there, but there is nothing for it to collect.** From commit
+  `c64b304036` (library code, so the v445 pin compiles it from a tree that has
+  it), `import gc` works: `gc.collect()` returns 0, because reference counting
+  has already freed everything it could. `gc.mem_free()` and `gc.mem_alloc()`
+  report the heap: on the ESP32, ESP-IDF's byte-addressable heap; on a PC,
+  PXX's own heap, where `mem_free()` can be 0 in a small program.
+  `enable()`, `disable()` and `threshold()` change nothing. With an older tree,
+  `import gc` does not build; use `espsys` for the free heap instead:
 
   ```python
   import 'espsys.pas' as sys
@@ -246,7 +251,7 @@ meet them:
 
 | error | cause | what to do |
 | --- | --- | --- |
-| `no member collect came of the qualifier gc` | there is no `gc` module | delete `gc.collect()`; use `espsys.free_heap()` for `gc.mem_free()` |
+| `no member collect came of the qualifier gc` | a tree before `c64b304036` has no `gc` module, or a file named `gc.py`/`gc.npy` next to yours shadows it | update the tree, or rename your file; or use `espsys.free_heap()` for `gc.mem_free()` |
 | `Pin has no method irq` | no `Pin.irq()` | use `interrupts.on_event`, above |
 | `unsupported decorator` | `@micropython.native` or `viper` | remove the decorator |
 | `undefined variable (match)` | `match` statements are not supported | use `if`/`elif` |
