@@ -31,6 +31,23 @@ A fix in progress is parked in the repository as
 `devdocs/dev/parked-patches/tls-init-image-reaches-every-thread-wip.patch`.
 (Measured with v425.)
 
+### C: a struct member whose type is an array typedef is too small
+
+A struct or union member declared with an array **typedef** is not laid out as
+an array. With `typedef int arr3[3];`, `struct U { arr3 a; int after; }` is 8
+bytes where GCC gives 16, so the members overlap: writing `u.a[1]` overwrites
+`u.after`. With `typedef float vec4[4]; typedef vec4 mat4[4];`,
+`struct { int k; mat4 m; vec4 v; }` is 12 bytes against GCC's 84, and
+`sizeof t.m` is 4 against 64. Arrays of struct typedefs are affected the same
+way. This is silent memory corruption, not only a wrong size. cglm's
+`mat2x3s` union crashes on it.
+
+Not affected: a member written out as an array (`int a[3];`), and variables or
+parameters declared with the typedef. **Workaround:** spell the member's
+array type out in the struct (`float m[4][4];` in place of `mat4 m;`).
+(Measured against GCC with the v441 and v443 compilers, both wrong the same
+way.)
+
 ### C: a struct field that points at an array typedef
 
 With `typedef float vec4[4]; typedef vec4 mat4[4];`, a struct field declared
