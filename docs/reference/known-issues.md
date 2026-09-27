@@ -98,6 +98,12 @@ with v438, kept 0, 68 and 144 bytes after 10, 40 and 160 passes. That is about
 0.6 bytes per pass, below what the soak can resolve (its deliberate leak reads
 76 bytes per pass), so it is not shown to be a leak or shown not to be one.
 
+**There is no TLS on ESP in this release.** There is no `ssl` module, and
+`urequests` refuses `https://` URLs with a `ValueError`, so a server that
+requires HTTPS or MQTT over TLS cannot be reached. Plain HTTP, MQTT and TCP
+work. (`urequests` on a desktop has the same refusal; desktop Pascal programs
+have TLS through the `http` unit.)
+
 Two limits apply to these measurements:
 
 - **Wi-Fi on a real chip has not been measured.** All of the above ran over

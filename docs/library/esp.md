@@ -424,6 +424,10 @@ This follows MicroPython's ESP32 port:
   `config()`, such as `config('mac')`.
 - Nothing is stored in flash. The network name and password your program
   passes are kept in RAM only. MicroPython's ESP32 port does the same.
+- **There is no TLS yet: no `ssl` module, and `urequests` refuses `https://`
+  URLs** with `ValueError: urequests: https is not supported`. Plain HTTP,
+  MQTT and TCP work. A server that requires HTTPS or MQTT over TLS cannot be
+  reached from an ESP program in this release.
 
 ### Sockets, timeouts and errors
 
