@@ -26,8 +26,8 @@ actually does.
 
 ESP chip names are accepted as targets too. They imply the CPU and
 `--platform=esp`: `esp32`, `esp32s2` and `esp32s3` are xtensa; `esp32c2`,
-`esp32c3`, `esp32c6`, `esp32h2` and `esp32p4` are riscv32. v425 compiles an
-ESP-IDF object for every one of these names. The bare-metal profile supports
+`esp32c3`, `esp32c6`, `esp32h2` and `esp32p4` are riscv32. Pin v445 compiles
+an ESP-IDF object for every one of these names (re-checked 2026-09-27). The bare-metal profile supports
 only `esp32s3` and `esp32c3`, and says so for the others. It runs under QEMU
 only; on a real board use the ESP-IDF profile (see
 [known issues](../reference/known-issues.md)). The ESP32-S3 and the
@@ -53,10 +53,15 @@ For ESP32 targets, start with the board-specific examples under
 
 ## What each target supports
 
-Measured with **pin v425** (compiler sha256 `426b2fbf3f08…`) on 2026-09-25.
-Programs other than x86-64 ones were run under QEMU user mode, and wasm32 under
-wasmtime; none of the Linux cross targets was run on real hardware for this
-table.
+Measured with **pin v445** (compiler sha256 `caf21ac399f1…`) on 2026-09-27;
+every cell is the same as with v425. Programs other than x86-64 ones were run
+under QEMU user mode, and wasm32 under wasmtime; none of the Linux cross
+targets was run on real hardware for this table. The probes: a class with an
+exception caught and a line written; `writeln(SizeOf(Real))`;
+`test/lib_classes_tthread.pas` and `test/c_pthread_detach.c`; a `threadvar`
+set and read; `--emit-obj` on `test/c_obj_data_export.c`; `--shared` on
+`test/test_library_exports.pas`; a Nil Python `sum` of a list; and C's
+`sqrt(2.0)`.
 
 | | x86-64 | i386 | aarch64 | arm32 | riscv32 Linux | wasm32 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -69,16 +74,17 @@ table.
 | Nil Python | yes | yes | yes | yes | refused | yes |
 | C with `#include <math.h>` | yes | yes | yes | yes | yes | yes |
 
-Compared with the previous pin, v424, one cell changed: wasm32 C with
-`math.h` was refused there.
+Compared with v424, one cell changed: wasm32 C with `math.h` was refused
+there. **Pascal `threadvar` on i386 is refused with v445 and works after
+it**: commit `7dc976a8cc` gives each i386 thread its own block, and a compiler
+built at `b6226e1385` compiles and runs the `threadvar` probe under QEMU.
 
 Every **refused** cell is a compile-time error that names the reason; none
 produces a program that runs wrongly. Most messages say in plain words what is
 unsupported, for example `--threadsafe is available for x86-64, i386, aarch64
-and arm32 only; it is refused for riscv32.` One gives the wrong reason:
-`--shared` on wasm32 answers that an exported routine is not `cdecl`, even when
-it is; the real reason is that shared-library output is x86-64 only. `xtensa` also has an object writer; it is the
-ESP-IDF route.
+and arm32 only; it is refused for riscv32.` and, for every target but x86-64,
+`--shared: shared-library output is x86-64 only`. `xtensa` also has an object
+writer; it is the ESP-IDF route.
 
 ## Pages
 

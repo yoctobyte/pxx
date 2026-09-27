@@ -217,9 +217,9 @@ Notes for the bare profile:
   array); a program that does not allocate has no arena at all. When it is
   there, it is the largest thing in a bare image's SRAM. Size it with one of
   `-dPXX_ESP_HEAP_8K`, `-dPXX_ESP_HEAP_16K`, `-dPXX_ESP_HEAP_32K`,
-  `-dPXX_ESP_HEAP_128K`. Measured with v425 on a program that concatenates a
-  string and calls `GetMem`, total bss, the same on both chips and the same as
-  with v424:
+  `-dPXX_ESP_HEAP_128K`. Measured with v445 on 2026-09-27 on the concat and
+  `GetMem` program below, total bss, the same on both chips and the same as
+  with v425:
 
   | | 8K | 16K | 32K | 64K (default) | 128K |
   | --- | ---: | ---: | ---: | ---: | ---: |
@@ -232,13 +232,13 @@ Notes for the bare profile:
   arena that fits and is too small for your program is only found at runtime.
 - **`-uPXX_MANAGED_STRING` removes the managed-string runtime** from a
   program that does not need it. The saving is now small, because unused
-  runtime code is dropped anyway. Measured with v425 on the hello program
-  above, code bytes:
+  runtime code is dropped anyway. Measured with v445 on 2026-09-27 on the
+  hello program above, code bytes (v425 gave 12 bytes less on the esp32s3):
 
   | | esp32c3 | esp32s3 |
   | --- | ---: | ---: |
-  | default | 3,668 | 3,488 |
-  | `-uPXX_MANAGED_STRING` | 892 | 1,324 |
+  | default | 3,668 | 3,500 |
+  | `-uPXX_MANAGED_STRING` | 892 | 1,336 |
 
   With `ShortString` instead of `AnsiString` the program is already under
   1.4 KB and the flag changes nothing. **Getting it wrong is a compile error,
@@ -246,7 +246,7 @@ Notes for the bare profile:
   `frozen tyString concat unsupported` rather than miscompiling, so it is safe
   to try.
 - On the ESP32-S3, a bare program that declares a `Double` and uses managed
-  strings builds and runs under QEMU from pin v425. With v424 it could fail to
+  strings builds and runs under QEMU from pin v425 (re-run with v445). With v424 it could fail to
   build with `j displacement … is outside the encodable range
   -131072..131071`; on v424, keep floats out of such a program, or build it as
   an ESP-IDF component.
@@ -288,8 +288,8 @@ which the runtime is stuck with rather than choosing:
 
 ## Code size and memory footprint
 
-Measured with **pin v425** on 2026-09-25, `--esp-profile=bare`. The compiler
-prints the figures on its `ok:` line:
+Measured with **pin v445** (compiler sha256 `caf21ac399f1…`) on 2026-09-27,
+`--esp-profile=bare`. The compiler prints the figures on its `ok:` line:
 
 ```sh
 ./pxx --target=esp32c3 --esp-profile=bare prog.pas prog.elf
@@ -297,15 +297,28 @@ prints the figures on its `ok:` line:
 
 | Program | Chip | code | data | bss |
 | --- | --- | ---: | ---: | ---: |
-| empty (`begin end.`) | esp32c3 | 20 B | 336 B | 640 B |
-| empty | esp32s3 | 94 B | 336 B | 640 B |
-| hello, above (UART writes, `AnsiString`) | esp32c3 | 3,668 B | 528 B | 1,276 B |
-| a string concat and a `GetMem` | esp32c3 | 13,956 B | 560 B | 66,816 B |
-| a string concat and a `GetMem` | esp32s3 | 11,388 B | 560 B | 66,816 B |
+| empty (`begin end.`) | esp32c3 | 20 B | 344 B | 640 B |
+| empty | esp32s3 | 94 B | 344 B | 640 B |
+| hello, above (UART writes, `AnsiString`) | esp32c3 | 3,668 B | 536 B | 1,276 B |
+| hello, above | esp32s3 | 3,500 B | 536 B | 1,276 B |
+| a string concat and a `GetMem` | esp32c3 | 13,924 B | 568 B | 66,816 B |
+| a string concat and a `GetMem` | esp32s3 | 11,372 B | 568 B | 66,816 B |
 
-Compared with v424, every esp32c3 figure is the same. Every esp32s3 program is
-36 bytes larger, because the S3 entry stub now uses a long jump that reaches a
-main body at any distance (`e0db3791c`).
+The concat and `GetMem` program:
+
+```pascal
+program sc;
+var s: AnsiString; p: Pointer;
+begin
+  s := 'ab';
+  s := s + 'cd';
+  GetMem(p, 16);
+end.
+```
+
+Compared with v425, data is 8 bytes larger in every program; code for the
+empty and hello programs on the esp32c3 is unchanged. The v425 concat figures
+came from a program this page did not show, so they are not comparable.
 
 Unused runtime code is dropped, so a program pays for what it uses. The big
 step is the first allocation, which brings in the allocator and the 64 KiB heap
@@ -320,10 +333,22 @@ itself. `-dPXX_ESP_HEAP_16K` brings that down to under a tenth.
 
 The ESP cores are compiled without FPU codegen; float operations lower to
 integer soft-float kernels. They are linked in when a program uses a float and
-not otherwise, with no `uses` needed. Measured with v425 on bare images, a
-program that multiplies a `Double` and truncates it is 15,548 bytes of code on
-the esp32c3 and 14,024 on the esp32s3. The same program with `Int64` in place
-of the `Double` is under 500 bytes on both (448 and 487). 64-bit integer arithmetic (`Int64`/`UInt64`, including
+not otherwise, with no `uses` needed. Measured with v445 on bare images, this
+program is 16,232 bytes of code on the esp32c3 and 14,564 on the esp32s3:
+
+```pascal
+program fd;
+var d: Double; n: Integer;
+begin
+  d := 1.5;
+  d := d * 3.25;
+  n := Trunc(d);
+  if n = 4 then d := 0;
+end.
+```
+
+The same program with `Int64` in place of the `Double` (`d := 15; d := d * 3;
+n := d;`) is 312 and 331 bytes. 64-bit integer arithmetic (`Int64`/`UInt64`, including
 multiply, divide and shifts) is always available and validated against the
 x86-64 oracle.
 
@@ -350,7 +375,7 @@ calls), `@proc`, and stackless generators. Classes (with virtual dispatch)
 work on both ESP targets. `try`/`except`/`finally` (including re-raise)
 works on the bare profile of both chips. An unhandled exception prints
 `Unhandled exception: <Class>: <Message>`, as on a desktop, and the program
-stops (the fix, `7eeb3d755`, is in the release pin v441; see [Known issues](../reference/known-issues.md#fixed-in-this-release)). Generators on any non-x86-64 target must use the stackless
+stops (the fix, `7eeb3d755`, is in every pin from v441; see [Known issues](../reference/known-issues.md#fixed-in-this-release)). Generators on any non-x86-64 target must use the stackless
 form:
 
 ```pascal

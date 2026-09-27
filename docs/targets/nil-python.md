@@ -25,10 +25,11 @@ where CPython can run the same source, comparing the output with CPython 3.14.4.
 - **ESP32**: `examples/esp32/nilpy-*`, `adc-*`, `gpio-edge-*` and
   `monitor-s3`, for the ESP32-C3 (riscv32) and ESP32-S3 (xtensa). Each
   `main.npy` compiles to an object that ESP-IDF links; the chip runs that
-  machine code, with no interpreter. All nine compile with pin v425
-  (2026-09-25). `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3` and `adc-s3` ran on
+  machine code, with no interpreter. All thirteen `main.npy` projects under
+  `examples/esp32/` compile with pin v445 (2026-09-27), with the flags their
+  `build.sh` passes. `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3` and `adc-s3` ran on
   a physical ESP32-S3 board; `nilpy-c3` and `nilpy-hw-c3` ran under QEMU. The
-  other three have only been compiled. Each directory's `build.sh` is the recipe, and
+  other seven have no recorded run; they are known to compile. Each directory's `build.sh` is the recipe, and
   [ESP32 peripherals](../library/esp.md) documents the units they import.
 - **Linux cross targets**: i386, aarch64 and arm32 run Nil Python under QEMU,
   and wasm32 under wasmtime. riscv32 Linux refuses it at compile time.
@@ -106,7 +107,9 @@ halt."* Desktop builds are unaffected.
 
 On both ESP chips, `//` and `%` by zero give `0`, and `/` by zero gives an
 IEEE infinity or NaN, with no `ZeroDivisionError`. That was checked with pin
-v425 under QEMU on the ESP32-C3 and the ESP32-S3. On desktop targets `/` by
+v445 on 2026-09-27 under QEMU on the ESP32-C3 and the ESP32-S3: `print(a // b,
+a % b)` and `print(x / y, y / y)` with `b = 0` and `y = 0.0` printed `0 0` and
+`inf nan`, and the program carried on. On desktop targets `/` by
 zero raises `ZeroDivisionError`, as CPython does, and so do `//` and `%` in
 most shapes; some shapes stop with runtime error 200 instead (see
 [Known limits](#known-limits)). The full
