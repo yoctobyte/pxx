@@ -13692,6 +13692,13 @@ begin
         cpi := FindProc('pystr_repeat');
         if cpi < 0 then Error('Nil Python: pystr_repeat (pylib) not loaded');
         left := IRLowerCallArg(cpi, 0, argVal, Procs[cpi].Params[0].IsRef);
+        { A FRESH string operand -- `str(j) * 3`, `("%d" % j) * 3` -- needs an
+          owner: this arm builds the pylib call itself, so the general call
+          path's argIsManagedTemp binding never ran and the refcount-1 temporary
+          leaked, one per evaluation (live=9247 over 10000 on pin v443; `s * 3`
+          and `str(j) + "x"` were flat). Found by `gc.mem_alloc()` climbing in a
+          MicroPython-style loop. The same fix IRBindFreshStrArg made for int(). }
+        left := IRBindFreshStrArg(argVal, left, False);
         { `ASTTk[argVal]`, NOT `Procs[cpi].Params[0].TypeKind`, and this line
           has already nearly been "fixed" once. It looks wrong: the arg node is
           tagged with the ORIGINAL expression's type rather than the parameter

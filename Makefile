@@ -619,6 +619,19 @@ test-nilpy: $(COMPILER)
 	  echo "FAIL: nilpy_freshseam control (keep) did not trip the bound"; exit 1; fi
 	./$(COMPILER) -dPXX_HEAP_DEBUG -Futest/nilpy_freshseam test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.npy $(TESTTMP)/test_nilpy_freshseamhd26
 	$(TESTTMP)/test_nilpy_freshseamhd26 2>&1 | diff -u test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.expected -
+	# MicroPython's gc (lib/rtl/mimic_gc.pas): level mem_alloc/mem_free over a
+	# loop that builds and drops garbage, `keep` must break the level, and the
+	# same file builds for the C3 and S3 with IDF's heap_caps figures.
+	./$(COMPILER) test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc26
+	$(TESTTMP)/test_nilpy_gc26 | diff -u test/test_nilpy_gc_module_micropython_style.expected -
+	@$(TESTTMP)/test_nilpy_gc26 keep | grep -q 'alloc level False' || { echo "FAIL: nilpy gc control (keep) stayed level"; exit 1; }
+	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_c3.o >/dev/null
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp test/test_nilpy_gc_module_micropython_style.py $(TESTTMP)/test_nilpy_gc_s3.o >/dev/null
+	@for o in c3 s3; do nm $(TESTTMP)/test_nilpy_gc_$$o.o | grep -q ' U heap_caps_get_free_size' || { echo "FAIL: nilpy gc on $$o does not read IDF's heap"; exit 1; }; done
+	# `<computed string> * n` releases the computed string, one row per spelling.
+	./$(COMPILER) test/test_nilpy_a_computed_string_repeated_is_released.py $(TESTTMP)/test_nilpy_strrep26
+	$(TESTTMP)/test_nilpy_strrep26 | diff -u test/test_nilpy_a_computed_string_repeated_is_released.expected -
+	@$(TESTTMP)/test_nilpy_strrep26 keep | grep -q 'keep False' || { echo "FAIL: nilpy strrep control (keep) stayed flat"; exit 1; }
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links

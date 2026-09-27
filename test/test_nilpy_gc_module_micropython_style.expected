@@ -1,0 +1,3 @@
+isenabled True threshold -1 collect 0
+alloc level True free level True
+figures True True

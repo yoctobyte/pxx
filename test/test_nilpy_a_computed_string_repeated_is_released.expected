@@ -1,0 +1,11 @@
+str(i) * 2 True
+2 * str(i) True
+"%d" % i * 2 True
+"ab".upper() * 2 True
+f"{i}" * 2 True
+(str(i) + "x") * 2 True
+s[1:4] * 2 True
+t = str(i) * 3 True
+control "ab" * 2 True
+control str(i) + "x" True
+control t = str(i); t * 2 True
