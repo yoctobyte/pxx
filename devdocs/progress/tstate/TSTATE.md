@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `9bd5d47ef746` | 2026-09-27T19:49:59Z | RED (native) | 385.5s | `2954d103babe` RED |
+| borg | `9bd5d47ef746` | 2026-09-27T20:09:49Z | RED (full) | 1169.6s | `9bd5d47ef746` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `2954d103babe` on borg, 2026-09-27T19:42:38Z (7m ago).**
+**Newest full tier in the fleet: `9bd5d47ef746` on borg, 2026-09-27T20:09:49Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `2954d103babe` | RED | 7m | — (newest) |
+| borg | `9bd5d47ef746` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -29,4 +29,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 ## Open regressions
 - **test-core#src:test/test_nilpy_zero_argument_builtin_constructors.npy** — test/test_nilpy_zero_argument_builtin_constructors.npy test/test_nilpy_zero_argument_builtin_constructors.expected (borg): bad `d876977f4bb8`, last good `25ea38ef930d`, 2 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py** — test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected +2 (borg): bad `2954d103babe`, last good `f94424b44030`, 22 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_str_method_vs_pascal_string_helper.npy** — test/test_nilpy_str_method_vs_pascal_string_helper.npy test/test_nilpy_str_method_vs_pascal_string_helper.expected (borg): bad `9bd5d47ef746`, last good `2954d103babe`, 3 commit(s) in range
