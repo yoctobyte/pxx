@@ -350,7 +350,16 @@ printf '%s\n' "$OUT"
 # that need it. The bound here is >= 2 rather than == 1 because esptool's hard
 # reset races the reader, so a capture with NO banner is ordinary and expected
 # (the fallbacks above say so).
-ESP_BOOTS="$(grep -c 'ESP-ROM' "$SER" || true)"
+# Count `rst:`, not `ESP-ROM`: the classic ESP32's LX6 boot ROM prints
+# `ets Jul 29 2019 ...` / `rst:0x1 (POWERON_RESET),boot:...` and never
+# `ESP-ROM`, so on --chip esp32 the count was always 0 and this guard could
+# not fire -- it printed OK as silence, not evidence. Counts per clean QEMU
+# power-on (frankz-e5): esp32 rst:=1 ESP-ROM=0, esp32s3 1/1, esp32c3 1/1, so
+# the S3 and C3 counts are unchanged. NOT YET MEASURED ON CLASSIC SILICON:
+# esptool's own reset may add a second `rst:` line if the capture window opens
+# before it, which would make `-ge 2` fire on a healthy board. Settle the
+# threshold from a real esp32 row before trusting a FAIL here.
+ESP_BOOTS="$(grep -c 'rst:' "$SER" || true)"
 rm -f "$SER"
 
 if [ -n "$ESP_WARN_LINES" ]; then
@@ -365,7 +374,7 @@ if [ -n "$ESP_ERR_LINES" ]; then
 fi
 
 if [ "${ESP_BOOTS:-0}" -ge 2 ]; then
-  echo "esp_flash: FAIL -- the board rebooted during the capture (${ESP_BOOTS} boot banners). A panic loop reprints the program's first lines, which a prefix comparison matches. [compiler ${PXX_SHA:-UNREADABLE}]" >&2
+  echo "esp_flash: FAIL -- the board rebooted during the capture (${ESP_BOOTS} ROM reset lines). A panic loop reprints the program's first lines, which a prefix comparison matches. [compiler ${PXX_SHA:-UNREADABLE}]" >&2
   exit 1
 fi
 
