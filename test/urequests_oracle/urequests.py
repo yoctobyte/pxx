@@ -5,11 +5,19 @@
 # directory on PYTHONPATH and runs the SAME test file under python3, then
 # diffs the two transcripts. It skips when `requests` is not installed.
 import requests as _r
+import warnings as _w
+
+# https:// without verification, because MicroPython's urequests wraps with
+# ssl.wrap_socket(s, server_hostname=host), whose default is CERT_NONE.
+# urllib3 warns about exactly that on stderr, which the transcript captures.
+_w.filterwarnings("ignore", message="Unverified HTTPS request")
 
 
 def request(method, url, **kw):
     h = dict(kw.pop("headers", None) or {})
     h["Connection"] = "close"
+    if url.startswith("https://"):
+        kw.setdefault("verify", False)
     return _r.request(method, url, headers=h, allow_redirects=False, **kw)
 
 

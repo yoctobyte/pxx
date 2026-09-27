@@ -5,7 +5,15 @@
 # source (tools/install_lib_candidates.sh micropython-net), talking to
 # tools/esp_qemu_net/mpy_net_stub.py over QEMU's open_eth + slirp.
 #
-#   tools/esp_qemu_mpy_net.sh nilpy-hw-s3|nilpy-hw-c3
+#   tools/esp_qemu_mpy_net.sh nilpy-hw-s3|nilpy-hw-c3 [--tls]
+#
+# --tls: the chip's two MQTT sessions go through tools/esp_qemu_net/
+# tls_relay.py in front of the same broker (umqtt.simple with ssl=True,
+# umqtt.robust with ssl=ssl.SSLContext(...): both of umqtt's paths into ssl),
+# while the desktop row stays plain TCP -- so the chip row's diff says the
+# MQTT exchange over TLS is byte-for-byte the one without it. Adds a `relay`
+# row (the handshakes, with the version and cipher the chip negotiated). The
+# census stays plain TCP; the TLS heap soak is esp_qemu_urequests.sh --tls.
 #
 # The -hw- projects, not nilpy-s3/-c3: ntptime.settime imports machine, and
 # mimic_machine links the ESP I2C/RMT drivers, which only the -hw- projects
@@ -49,7 +57,9 @@
 # different interrupt controller model) has never shown it.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EX="${1:?usage: esp_qemu_mpy_net.sh nilpy-hw-s3|nilpy-hw-c3}"
+EX="${1:?usage: esp_qemu_mpy_net.sh nilpy-hw-s3|nilpy-hw-c3 [--tls]}"
+TLS=0
+case "${2:-}" in --tls) TLS=1 ;; "") ;; *) echo "mpynet: unknown option ${2}" >&2; exit 2 ;; esac
 case "$EX" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *) echo "mpynet: $EX is not -c3/-s3" >&2; exit 2 ;; esac
 SRC="$REPO_ROOT/examples/esp32/$EX"
 [ -f "$SRC/main/main.npy" ] || { echo "mpynet: $EX has no main/main.npy" >&2; exit 2; }
@@ -68,10 +78,11 @@ BOUND="${MPYNET_BOUND:-16}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/esp-qemu-mpynet.XXXXXX")"
-QPID=""; SPID=""
+QPID=""; SPID=""; RPID=""
 cleanup() {
   [ -n "$QPID" ] && kill "$QPID" 2>/dev/null
   [ -n "$SPID" ] && kill "$SPID" 2>/dev/null
+  [ -n "$RPID" ] && kill "$RPID" 2>/dev/null
   if [ -n "${MPYNET_KEEP:-}" ]; then echo "mpynet: stage kept at $W" >&2; else rm -rf "$W"; fi
 }
 trap cleanup EXIT
@@ -92,9 +103,13 @@ stage_ntp() {    # the port-123 edit, and nothing else
   grep -q "getaddrinfo(host, $NTP_PORT)" "$W/ntp/ntptime.py" \
     || fail_out stage "ntptime.py no longer has the getaddrinfo(host, 123) line this edits"
 }
-client() {       # $1 host, $2 preamble file or empty, $3 out, $4 "census" to append it
+client() {       # $1 host, $2 preamble file or empty, $3 out, $4 "census" to append it, $5 "tls"
+  if [ "${5:-}" = tls ]; then tport="$TLS_MQTT_PORT"; ssls=", ssl=True"; sslr=", ssl=_pxx_tls_ctx"
+  else tport="$MQTT_PORT"; ssls=""; sslr=""; fi
   { if [ -n "$2" ]; then cat "$2"; fi
-    sed -e "s/@HOST@/$1/g" -e "s/@MQTT_PORT@/$MQTT_PORT/g" -e '/^@PREAMBLE@$/d' \
+    if [ "${5:-}" = tls ]; then printf 'import ssl\n_pxx_tls_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)\n'; fi
+    sed -e "s/@HOST@/$1/g" -e "s/@MQTT_PORT@/$tport/g" -e '/^@PREAMBLE@$/d' \
+      -e "s/@SSL_SIMPLE@/$ssls/g" -e "s/@SSL_ROBUST@/$sslr/g" \
       "$REPO_ROOT/tools/esp_qemu_net/mpy_net_client.npy"
     if [ "${4:-}" = census ]; then
       printf '\n\n'
@@ -119,6 +134,15 @@ else fail_out desktop "$(tail -5 "$W/desktop.txt")"; fi
 # -- the chip: a fresh stub, so its log is the chip's alone
 start_stub "$W/stub.chip.log"
 stage_ntp
+if [ "$TLS" = 1 ]; then
+  bash "$REPO_ROOT/tools/esp_qemu_net/mkcerts.sh" "$W/certs" >/dev/null \
+    || fail_out certs "openssl could not make the test certificates"
+  python3 "$REPO_ROOT/tools/esp_qemu_net/tls_relay.py" "$W/certs/srv.pem" "$W/certs/srv.key" "$MQTT_PORT" >"$W/relay.log" 2>&1 &
+  RPID=$!
+  for i in $(seq 40); do grep -q '^ready ' "$W/relay.log" && break; sleep 0.25; done
+  TLS_MQTT_PORT="$(sed -n 's/^ready //p' "$W/relay.log" | head -n 1)"
+  [ -n "$TLS_MQTT_PORT" ] || fail_out relay "the TLS relay never came up" "$(cat "$W/relay.log")"
+fi
 mkdir -p "$W/$EX"
 tar -C "$SRC" -h --exclude=build --exclude=sdkconfig --exclude='*.o' --exclude='*.a' -cf - . \
   | tar -C "$W/$EX" -xf -
@@ -130,7 +154,11 @@ cp "$REPO_ROOT/tools/esp_qemu_net/qemueth.pas" main/
 printf '\nCONFIG_ETH_USE_OPENETH=y\nCONFIG_LWIP_TCP_MSL=500\nCONFIG_ESP_INT_WDT=n\nCONFIG_ESP_TASK_WDT_EN=n\n' >> sdkconfig.defaults
 sed -i -e 's/REQUIRES \([^)]*\))/REQUIRES \1 qemueth)/' main/CMakeLists.txt
 printf 'import %sqemueth.pas%s as qemueth\nrc = qemueth.up(30000)\nprint("MPYNET-ETH rc=" + str(rc))\n' "'" "'" > "$W/preamble.npy"
-client 10.0.2.2 "$W/preamble.npy" main/main.npy census
+if [ "$TLS" = 1 ]; then client 10.0.2.2 "$W/preamble.npy" main/main.npy census tls
+else client 10.0.2.2 "$W/preamble.npy" main/main.npy census; fi
+# the project names its in-tree components relative to examples/esp32/<dir>,
+# which the staged copy is not under
+sed -i -e "s|\${CMAKE_CURRENT_LIST_DIR}/../../..|$REPO_ROOT|" CMakeLists.txt
 sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" build.sh
 
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
@@ -183,6 +211,11 @@ sed '/^CONNECT client cen-/,$d' "$W/stub.chip.log" > "$W/stub.transcript.log"
 if [ "$(grep -c '^CONNECT client pxx-' "$W/stub.transcript.log")" = 2 ] && [ "$(grep -c '^DISCONNECT' "$W/stub.transcript.log")" = 2 ]; then
   echo "MPYNET-ROW broker OK (two sessions, $(grep -c '^PUBLISH' "$W/stub.transcript.log") publishes)"
 else echo "MPYNET-ROW broker FAIL"; sed 's/^/  | /' "$W/stub.transcript.log"; fi
+if [ "$TLS" = 1 ]; then
+  hs="$(grep -c '^TLS ' "$W/relay.log" || true)"
+  if [ "$hs" = 2 ]; then echo "MPYNET-ROW relay OK (2 handshakes: $(grep '^TLS ' "$W/relay.log" | awk '{print $3, $4}' | sort -u | tr '\n' ';'))"
+  else echo "MPYNET-ROW relay FAIL ($hs handshakes, want 2)"; sed 's/^/  | /' "$W/relay.log"; fi
+fi
 
 if [ "${MPYNET_CENSUS:-census}" = stall ]; then
   # The stall loop: its checkpoints ARE the result (fd flat = no socket kept;

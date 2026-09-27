@@ -2,6 +2,7 @@
 # test/lib_mimic_urllib_request_server.pas.
 #
 #   lib_mimic_urequests <port>              the oracle transcript
+#   lib_mimic_urequests <scheme://host:port> the same, against that base URL
 #   lib_mimic_urequests <port> soak <n>     n requests, each response dropped
 #   lib_mimic_urequests <port> keep <n>     POSITIVE CONTROL: every response kept
 #
@@ -19,6 +20,10 @@ import urequests
 
 port = sys.argv[1]
 base = "http://127.0.0.1:" + port
+# a whole base URL instead of a port: tools/esp_qemu_urequests.sh --tls runs
+# the oracle over https:// and a host NAME this way
+if "://" in port:
+    base = port
 
 if len(sys.argv) > 2:
     mode = sys.argv[2]

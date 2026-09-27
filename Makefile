@@ -2188,6 +2188,13 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$run" | grep -q "ModuleNotFoundError: No module named 'also_no_such_module_9f2a'" \
 	   && ! printf '%s\n' "$$run" | grep -q '^yes$$' \
 	  || { echo "test_nilpy_dead_path_control_guard_resolves_in_a_function: FAIL - run rc=$$rc (want nonzero with ModuleNotFoundError: the tail is live and its import must raise)"; printf '%s\n' "$$run"; exit 1; }
+	# A mimic_ shim whose own guarded import misses keeps the units it compiled
+	# (the shim arm read the inner miss as its own). Positive control MEASURED:
+	# pin v441 dies on `duplicate class name Exception` in sysutils.
+	./$(COMPILER) -Futest/nilpy_shimleak test/test_nilpy_a_shim_whose_guarded_import_misses_keeps_its_units.npy $(TESTTMP)/test_nilpy_shimleak26
+	tools/expect_same.sh test_nilpy_shimleak26 "$$($(TESTTMP)/test_nilpy_shimleak26)" "$$(printf 'shim ok False 2\n1')"
+	./$(COMPILER) -Futest/nilpy_ctorleak test/test_nilpy_an_object_from_a_named_constructor_is_freed.npy $(TESTTMP)/test_nilpy_ctorleak26
+	tools/expect_same.sh test_nilpy_ctorleak26 "$$($(TESTTMP)/test_nilpy_ctorleak26)" "$$(printf 'made 400\nalive at most 2 True')"
 	# A `try:` arm killed by a failed guarded import must not leave its unit
 	# ALIAS behind. The alias table is FIRST-WINS, so a surviving row from the
 	# dead arm beat the handler's binding of the same name: the handler ran,

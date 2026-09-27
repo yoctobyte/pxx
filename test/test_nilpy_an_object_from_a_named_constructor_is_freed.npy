@@ -1,0 +1,29 @@
+# An object a Pascal unit builds through a constructor NOT named Create
+# (`TSub.Adopt(1)`) must be freed when NilPy drops it -- held, reassigned, or
+# discarded -- whether the unit function returns the construction directly or
+# through a local that sets a field first.
+#
+# Two compiler defects, each measured alone against this file:
+#  * a NilPy compilation allocated such a construction (AN_METACLASS_NEW) with
+#    plain GetMem, so it had no refcount header, every release was a no-op and
+#    NOTHING built this way was ever freed;
+#  * ClassifyProcResultFresh read both return shapes as BORROWED, so a
+#    discarded call's result was never released even once the header was
+#    there.
+# Found as one SSLSocket leaked per ssl.wrap_socket (lib/rtl/platform/esp/
+# mimic_ssl.pas), 37 B per https request on an ESP32-S3.
+# Run with -Futest/nilpy_ctorleak.
+import 'ctorleak.pas' as cl
+
+s = cl.TBase()
+for i in range(100):
+    t = cl.ViaAdopt(s)
+for i in range(100):
+    t = cl.ViaLocal(s)
+for i in range(100):
+    cl.ViaAdopt(s)
+for i in range(100):
+    cl.ViaLocal(s)
+t = None
+print("made", cl.made())
+print("alive at most 2", cl.made() - cl.gone() <= 2)

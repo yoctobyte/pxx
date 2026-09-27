@@ -1,0 +1,12 @@
+# A mimic_ shim whose OWN guarded import misses must not make its importer
+# forget the units the shim compiled. SoftUnitMissed is a global; the shim
+# arm of ParseUsesUnit read the shim's inner miss as its own and rolled
+# CompiledUnitCount back past mimic_socket and sysutils, so the next import
+# compiled sysutils a second time and died on `duplicate class name
+# Exception`. Found when mimic_urequests grew `try: import ssl`.
+# Run with -Futest/nilpy_shimleak.
+import shimleakmod
+import socket
+
+print(shimleakmod.f())
+print(socket.SOCK_STREAM)

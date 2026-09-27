@@ -61,15 +61,28 @@ type
   gaierror = class(OSError) end;
 
   socket = class
-  private
+  protected
     FHandle: Integer;
     FTimeoutMs: Integer;   { -1 blocking (None), 0 non-blocking, else the timeout }
     FType: Integer;        { SOCK_STREAM or SOCK_DGRAM }
-    procedure Wait(events: Integer);
+    { The three stream primitives every stream method below is written over.
+      Virtual so that ssl's SSLSocket (lib/rtl/platform/esp/mimic_ssl.pas) is
+      this class with its bytes encrypted: recv, send, sendall, read, readinto,
+      readline and write all work over TLS without a second copy of any of
+      them. RawRecv/RawSend return the count or a -errno. }
+    procedure Wait(events: Integer); virtual;
+    function RawRecv(p: PByte; len: Integer): Int64; virtual;
+    function RawSend(p: PByte; len: Integer): Int64; virtual;
     function RecvFull(p: PByte; want: Integer): Integer;
   public
     constructor Create(family: Integer = AF_INET; type_: Integer = SOCK_STREAM;
       proto: Integer = 0);
+    { A socket object over an fd that is already open (ssl's SSLSocket takes
+      the wrapped socket's fd this way). Not a Python-visible spelling. }
+    constructor Adopt(handle, timeoutMs: Integer);
+    { CPython's socket.detach(): this object goes to the closed state and
+      the fd is returned, still open, for its new owner. }
+    function detach: Integer;
     procedure bind(const address: TPyList);
     procedure listen(backlog: Integer = 5);
     function accept: TPyList;
@@ -95,7 +108,7 @@ type
     function gettimeout: Variant;
     function getsockname: TPyList;
     procedure shutdown(how: Integer);
-    procedure close;
+    procedure close; virtual;
     function fileno: Integer;
     function __enter__: socket;
     procedure __exit__(const a, b, c: Variant);
@@ -109,6 +122,10 @@ type
   does not resolve raises gaierror, an OSError, as CPython does. }
 function getaddrinfo(const host: AnsiString; port: Integer; family: Integer = 0;
   type_: Integer = 0; proto: Integer = 0; flags: Integer = 0): TPyList;
+
+{ Raise what CPython raises for the -errno `rc` (below); exported for the ssl
+  unit, whose socket errors must read exactly as a plain socket's do. }
+procedure SocketFail(const what: AnsiString; rc: Int64);
 
 implementation
 
@@ -178,6 +195,11 @@ begin
     4: raise InterruptedError.Create(msg);
   end;
   raise OSError.Create(msg);
+end;
+
+procedure SocketFail(const what: AnsiString; rc: Int64);
+begin
+  Fail(what, rc);
 end;
 
 function IpText(a: LongWord): AnsiString;
@@ -286,6 +308,19 @@ end;
 
 { Timeout mode only: block up to the timeout for `events`, else raise
   TimeoutError('timed out'), CPython's own words (socket.timeout is it). }
+constructor socket.Adopt(handle, timeoutMs: Integer);
+begin
+  FHandle := handle;
+  FTimeoutMs := timeoutMs;
+  FType := SOCK_STREAM;
+end;
+
+function socket.detach: Integer;
+begin
+  detach := FHandle;
+  FHandle := -1;
+end;
+
 procedure socket.Wait(events: Integer);
 var rc: Integer;
 begin
@@ -293,6 +328,16 @@ begin
   rc := PalPoll(FHandle, events, FTimeoutMs);
   if rc < 0 then Fail('poll', rc);
   if rc = 0 then raise TimeoutError.Create('timed out');
+end;
+
+function socket.RawRecv(p: PByte; len: Integer): Int64;
+begin
+  RawRecv := PalRecv(FHandle, p, len);
+end;
+
+function socket.RawSend(p: PByte; len: Integer): Int64;
+begin
+  RawSend := PalSend(FHandle, p, len);
 end;
 
 function socket.accept: TPyList;
@@ -337,7 +382,7 @@ begin
   r := TPyBytes.Create(bufsize);
   got := 0;
   if bufsize > 0 then Wait(PAL_POLL_IN);
-  if bufsize > 0 then got := PalRecv(FHandle, r.FData, bufsize);
+  if bufsize > 0 then got := RawRecv(PByte(r.FData), bufsize);
   if got < 0 then Fail('recv', got);
   r.FLen := got;
   recv := r;
@@ -348,7 +393,7 @@ var sent: Int64;
 begin
   if data.FLen = 0 then begin send := 0; Exit; end;
   Wait(PAL_POLL_OUT);
-  sent := PalSend(FHandle, data.FData, data.FLen);
+  sent := RawSend(PByte(data.FData), data.FLen);
   if sent < 0 then Fail('send', sent);
   send := sent;
 end;
@@ -360,7 +405,7 @@ begin
   while done < data.FLen do
   begin
     Wait(PAL_POLL_OUT);
-    sent := PalSend(FHandle, PByte(data.FData) + done, data.FLen - done);
+    sent := RawSend(PByte(data.FData) + done, data.FLen - done);
     if sent < 0 then Fail('sendall', sent);
     done := done + sent;
   end;
@@ -401,7 +446,7 @@ begin
   while done < want do
   begin
     Wait(PAL_POLL_IN);
-    got := PalRecv(FHandle, p + done, want - done);
+    got := RawRecv(p + done, want - done);
     if got < 0 then Fail('read', got);
     if got = 0 then Break;
     done := done + got;
@@ -478,7 +523,7 @@ begin
   while done < len do
   begin
     Wait(PAL_POLL_OUT);
-    sent := PalSend(FHandle, p + off + done, len - done);
+    sent := RawSend(p + off + done, len - done);
     if sent < 0 then Fail('write', sent);
     done := done + sent;
   end;

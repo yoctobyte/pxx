@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: 0BSD
+# tools/esp_qemu_urequests.sh --tls stages this as main.npy, with the at-sign
+# placeholders filled in: the base URL (https://, through the host's TLS
+# relay, by NAME when the host can resolve 10.0.2.2.nip.io), the transcript,
+# the two CA certificates and the census size.
+#
+# THE TRANSCRIPT is test/lib_mimic_urequests.npy's own calls over https://,
+# diffed against CPython `requests` (verify=False, which is what MicroPython's
+# urequests does) against the same relay. It exercises ssl.wrap_socket with
+# its default, CERT_NONE, exactly as urequests calls it.
+#
+# THE VERIFY ROWS use ssl.SSLContext with CERT_REQUIRED directly:
+#   good       the CA that signed the relay's certificate, and its name: the
+#              handshake completes and the plain server answers through it
+#   wrongca    a CA that signed nothing: must be REFUSED (ValueError), or
+#              CERT_REQUIRED is not verifying anything
+#   wrongname  the right CA and a name the certificate does not carry: must
+#              be REFUSED, or the host name is not being checked
+#
+# THE CENSUS is free heap across N https requests whose responses are
+# dropped (each one a full handshake: an mbedTLS context of ~20 KB is made
+# and freed per request, so a leak of it cannot hide), and a POSITIVE
+# CONTROL that keeps KEEP responses and must read a clearly nonzero cost.
+import socket
+import ssl
+import urequests
+import 'espsys.pas' as board
+import 'qemueth.pas' as qemueth
+
+rc = qemueth.up(30000)
+print("UREQ-ETH rc=" + str(rc))
+base = "@BASE@"
+print("UREQ-BEGIN")
+@TRANSCRIPT@
+
+CA_GOOD = """@CA_GOOD@""".encode()
+CA_WRONG = """@CA_WRONG@""".encode()
+
+
+def verified_get(ca, name):
+    s = socket.socket()
+    s.connect(socket.getaddrinfo("@TLSHOST@", @TLSPORT@)[0][-1])
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    ctx.load_verify_locations(cadata=ca)
+    try:
+        t = ctx.wrap_socket(s, server_hostname=name)
+    except ValueError as e:
+        return "refused"
+    t.write(b"GET /hello HTTP/1.0\r\nHost: " + name.encode() + b"\r\nConnection: close\r\n\r\n")
+    line = t.readline()
+    t.close()
+    return line.decode().strip()
+
+
+print("UREQ-VERIFY good " + verified_get(CA_GOOD, "@TLSNAME@"))
+print("UREQ-VERIFY wrongca " + verified_get(CA_WRONG, "@TLSNAME@"))
+print("UREQ-VERIFY wrongname " + verified_get(CA_GOOD, "not-this-host.example"))
+
+
+def one():
+    r = urequests.get(base + "/hello")
+    n = r.status_code + len(r.text)
+    r.close()
+    return n
+
+
+def one_kept(kept):
+    r = urequests.get(base + "/hello")
+    n = r.status_code + len(r.text)
+    r.close()
+    kept.append(r)
+    return n
+
+
+total = 0
+for i in range(5):
+    total = total + one()
+N = @N@
+h0 = board.free_heap()
+for i in range(N):
+    total = total + one()
+    if i % (N // 10) == N // 10 - 1:
+        print("UREQ-HEAP after=" + str(i + 1) + " free=" + str(board.free_heap()) + " delta=" + str(h0 - board.free_heap()))
+h1 = board.free_heap()
+print("UREQ-CENSUS dropped n=" + str(N) + " delta=" + str(h0 - h1) + " bpr=" + str((h0 - h1) // N) + " total=" + str(total))
+kept = []
+h2 = board.free_heap()
+for i in range(@KEEP@):
+    total = total + one_kept(kept)
+h3 = board.free_heap()
+print("UREQ-CENSUS kept n=@KEEP@ delta=" + str(h2 - h3) + " bpr=" + str((h2 - h3) // @KEEP@) + " live=" + str(len(kept)))
+print("UREQ-COMPLETE")

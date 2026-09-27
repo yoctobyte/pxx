@@ -19057,13 +19057,33 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                   Ord(tkPlus), 0, Ord(tyPointer));
       mcSize := IRAppend(IR_LOAD_MEM, mcAddr, -1, -1, 0, Ord(tyInt64));
 
-      { inst := GetMem(size) — plain alloc (classIdx = -1: no VMT stamp here). }
+      { inst := GetMem(size) — plain alloc (classIdx = -1: no VMT stamp here).
+        EXCEPT IN A NilPy COMPILATION, where every instance must carry the
+        [inst-16] refcount header -- the AN_CALL construction arm says why
+        (feature-nilpy-object-reclamation) -- and so comes from PXXObjAlloc.
+        This arm used to allocate plain there too, and the parser builds it for
+        EVERY constructor not named Create (`TSock.Adopt(fd)`, UMthIsCtor): the
+        instance had no header, PXXObjPlausible refused it, every release was a
+        no-op and it was never freed -- one SSLSocket per ssl.wrap_socket
+        (lib/rtl/platform/esp/mimic_ssl.pas), 37 B/request on the S3.
+        IRNodeYieldsOwnedRef already reads this node as an owned rc=1, which is
+        now true; the conduit is marked the way the AN_CALL arm marks its own. }
       mcInstSym := AllocVar('', tyPointer);
-      IRAppend(IR_STORE_SYM, mcInstSym,
-               IRAppend(IR_CALL, -Ord(tkGetMem),
-                        IRAppend(IR_ARG, mcSize, -1, -1, 0, Ord(tyInteger)),
-                        -1, 0, Ord(tyPointer)),
-               -1, 0, Ord(tyPointer));
+      if isNilPy and (FindProc('PXXObjAlloc') >= 0) then
+      begin
+        SymIsCtorResultTemp[mcInstSym] := True;
+        IRAppend(IR_STORE_SYM, mcInstSym,
+                 IRAppendCall(FindProc('PXXObjAlloc'),
+                              IRAppend(IR_ARG, mcSize, -1, -1, 0, Ord(tyNativeInt)),
+                              -1, Ord(tyPointer)),
+                 -1, 0, Ord(tyPointer));
+      end
+      else
+        IRAppend(IR_STORE_SYM, mcInstSym,
+                 IRAppend(IR_CALL, -Ord(tkGetMem),
+                          IRAppend(IR_ARG, mcSize, -1, -1, 0, Ord(tyInteger)),
+                          -1, 0, Ord(tyPointer)),
+                 -1, 0, Ord(tyPointer));
 
       { [inst+0] := [cref+24] (stamp the dynamic class's VMT). }
       mcAddr := IRAppend(IR_BINOP,

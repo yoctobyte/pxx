@@ -129,6 +129,7 @@ memory or sockets growing:
 | 1,000 sessions each of `ntptime`, `umqtt.simple` and `umqtt.robust` (Nil Python) | ESP32-S3 | 0 bytes per session |
 | 3,000 MQTT sessions with `umqtt.simple` (Nil Python) | ESP32-C3 | the same socket number every session; heap flat after the first 25 |
 | 320 TCP connections over loopback, server and client in Pascal | ESP32-S3 | 0 bytes over 40 passes |
+| 300 HTTPS requests with `urequests` (Nil Python; needs a compiler newer than v441) | ESP32-S3 | 68 bytes in total over 300 requests |
 
 Each run was checked against a deliberate leak, which it caught. An earlier
 reading of about 0.6 bytes per pass on the Nil Python example programs turned
@@ -140,11 +141,14 @@ A MicroPython-style main loop written at module level, making 1,000 requests
 with a `print` each time, holds about 1.6 KB once (the last response, still
 bound to its variable, as in CPython) and then stays level.
 
-**There is no TLS on ESP in this release.** There is no `ssl` module, and
-`urequests` refuses `https://` URLs with a `ValueError`, so a server that
-requires HTTPS or MQTT over TLS cannot be reached. Plain HTTP, MQTT and TCP
-work. (`urequests` on a desktop has the same refusal; desktop Pascal programs
-have TLS through the `http` unit.)
+**TLS on ESP is client-only, and does not check certificates by default.**
+`ssl.wrap_socket` and `SSLContext` work, so `urequests.get("https://...")` and
+`MQTTClient(..., ssl=True)` do too, but, as in MicroPython, the server's
+certificate is only checked when the program asks for `CERT_REQUIRED` and
+passes the authority it trusts; there are none on the chip. See
+[TLS on ESP](../library/esp.md#tls). A Nil Python program on a desktop has no
+`ssl` module, so `urequests` there refuses `https://` URLs with a `ValueError`;
+desktop Pascal programs have TLS through the `http` unit.
 
 Two limits apply to these measurements:
 
@@ -164,7 +168,10 @@ Two limits apply to these measurements:
   program waits forever for data that has already arrived. This happens below
   the compiled program, in the emulator's network path, and has not been seen
   on the ESP32-S3. On a physical C3 over real Wi-Fi it did not happen: about
-  1,700 requests over three runs on 2026-09-27, with no stall.
+  1,700 requests over three runs on 2026-09-27, with no stall. Under QEMU it
+  comes much sooner over TLS: four of five HTTPS runs on the C3 stopped within
+  their first twenty requests, with a compiler from before the HTTPS leak fix
+  and one from after it alike, so no HTTPS memory figure for the C3 is given.
 
 ## Fixed in this release
 

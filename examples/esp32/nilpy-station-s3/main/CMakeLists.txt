@@ -3,10 +3,10 @@
 # runtime's (as in hello-c3); esp_adc and esp_driver_gpio are espadc's;
 # pxx_esp is `import network` and `import esp32`; pxx_fs is the filesystem
 # open() and os see.
-idf_component_register(REQUIRES esp_timer esp_driver_gpio esp_adc lwip esp_netif pxx_esp pxx_fs)
+idf_component_register(REQUIRES esp_timer esp_driver_gpio esp_adc lwip esp_netif pxx_esp pxx_fs pxx_tls)
 
 add_prebuilt_library(pxx_app "${CMAKE_CURRENT_LIST_DIR}/libpxx_app.a"
-                     REQUIRES esp_timer esp_driver_gpio esp_adc lwip esp_netif pxx_esp pxx_fs)
+                     REQUIRES esp_timer esp_driver_gpio esp_adc lwip esp_netif pxx_esp pxx_fs pxx_tls)
 target_link_libraries(${COMPONENT_LIB} INTERFACE pxx_app)
 # Nothing in this component references app_main, so force the linker to keep
 # pulling it from the archive (ESP-IDF's startup task calls it).

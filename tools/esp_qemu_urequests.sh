@@ -4,7 +4,7 @@
 # that stands in for the silicon one (S3 as a station, a server on the
 # desktop) until a board is available.
 #
-#   tools/esp_qemu_urequests.sh nilpy-s3|nilpy-c3
+#   tools/esp_qemu_urequests.sh nilpy-s3|nilpy-c3 [--tls]
 #
 # The PLAIN NilPy project is staged out of tree (the checkout stays clean), and
 # three things are added to it: tools/esp_qemu_net/qemueth (QEMU's open_eth MAC
@@ -23,11 +23,31 @@
 #               under BOUND bytes per request (default 16)...
 #   control     ...and keeping 50 responses costs over it, so the reading
 #               can see a leak at all.
+#
+# --tls: the same over https://. tools/esp_qemu_net/tls_relay.py puts TLS in
+# front of the same server (certificates from tools/esp_qemu_net/mkcerts.sh,
+# a throwaway CA per run), the chip program is esp_qemu_net/
+# urequests_tls_client.npy, and the base URL names the host BY NAME,
+# 10.0.2.2.nip.io, when the host can resolve it -- so the one row also proves
+# the chip's resolver (lwIP's, slirp's DNS at 10.0.2.3) end to end. With no
+# DNS on the host it falls back to the address and says so (UREQ-ROW name
+# SKIP). Rows added:
+#   verify:good/wrongca/wrongname  ssl.SSLContext with CERT_REQUIRED accepts
+#               the right CA and name, and REFUSES a wrong CA and a wrong name
+#               (the controls that prove verification is done at all)
+#   relay       the relay logged the handshakes, with the TLS version and
+#               cipher the chip negotiated
+# and the census and control run over https (UREQ_N default 100,
+# UREQ_KEPT 20: each request is a full handshake, several seconds under
+# emulation). UREQ_TLS_CLIENT=<file> stages another chip program in place of
+# urequests_tls_client.npy, with the same placeholders, for an experiment.
 # Last line: UREQ-QEMU-COMPLETE. Grep for that; the wrapper's status is not
 # the verdict. Built with the PINNED compiler unless PXX says otherwise.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EX="${1:?usage: esp_qemu_urequests.sh nilpy-s3|nilpy-c3}"
+EX="${1:?usage: esp_qemu_urequests.sh nilpy-s3|nilpy-c3 [--tls]}"
+TLS=0
+case "${2:-}" in --tls) TLS=1 ;; "") ;; *) echo "ureq: unknown option ${2}" >&2; exit 2 ;; esac
 case "$EX" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *) echo "ureq: $EX is not -c3/-s3" >&2; exit 2 ;; esac
 SRC="$REPO_ROOT/examples/esp32/$EX"
 [ -f "$SRC/main/main.npy" ] || { echo "ureq: $EX has no main/main.npy" >&2; exit 2; }
@@ -45,14 +65,16 @@ BOUND="${UREQ_BOUND:-16}"
 # Raise UREQ_TIMEOUT with it: ~3 min per 1000 on an idle box.
 # UREQ_INLINE=1: the census request is written inline at MODULE level with a
 # print("x" + str(i)) per iteration -- MicroPython's usual top-level main loop.
-NREQ="${UREQ_N:-1000}"
+if [ "$TLS" = 1 ]; then NREQ="${UREQ_N:-100}"; else NREQ="${UREQ_N:-1000}"; fi
+KEPT="${UREQ_KEPT:-20}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/esp-qemu-ureq.XXXXXX")"
-QPID=""; SPID=""
+QPID=""; SPID=""; RPID=""
 cleanup() {
   [ -n "$QPID" ] && kill "$QPID" 2>/dev/null
   [ -n "$SPID" ] && kill "$SPID" 2>/dev/null
+  [ -n "$RPID" ] && kill "$RPID" 2>/dev/null
   if [ -n "${UREQ_KEEP:-}" ]; then echo "ureq: stage kept at $W" >&2; else rm -rf "$W"; fi
 }
 trap cleanup EXIT
@@ -67,10 +89,28 @@ for i in $(seq 40); do grep -q '^ready ' "$W/srv.log" && break; sleep 0.25; done
 PORT="$(sed -n 's/^ready //p' "$W/srv.log" | head -n 1)"
 [ -n "$PORT" ] || fail_out server "the host test server never came up"
 
+# -- --tls: a TLS relay in front of the same server, and the names
+OBASE="$PORT"; CBASE="http://10.0.2.2:$PORT"
+if [ "$TLS" = 1 ]; then
+  bash "$REPO_ROOT/tools/esp_qemu_net/mkcerts.sh" "$W/certs" >/dev/null \
+    || fail_out certs "openssl could not make the test certificates"
+  python3 "$REPO_ROOT/tools/esp_qemu_net/tls_relay.py" "$W/certs/srv.pem" "$W/certs/srv.key" "$PORT" >"$W/relay.log" 2>&1 &
+  RPID=$!
+  for i in $(seq 40); do grep -q '^ready ' "$W/relay.log" && break; sleep 0.25; done
+  TPORT="$(sed -n 's/^ready //p' "$W/relay.log" | head -n 1)"
+  [ -n "$TPORT" ] || fail_out relay "the TLS relay never came up" "$(cat "$W/relay.log")"
+  if [ "$(python3 -c 'import socket; print(socket.gethostbyname("10.0.2.2.nip.io"))' 2>/dev/null)" = 10.0.2.2 ]; then
+    TLSHOST=10.0.2.2.nip.io; OHOST=127.0.0.1.nip.io
+  else
+    TLSHOST=10.0.2.2; OHOST=127.0.0.1
+  fi
+  OBASE="https://$OHOST:$TPORT"; CBASE="https://$TLSHOST:$TPORT"
+fi
+
 # -- the oracle: the same calls under CPython requests, against the same server
 ORACLE=1
 if python3 -c 'import requests' 2>/dev/null; then
-  PYTHONPATH="$REPO_ROOT/test/urequests_oracle" python3 "$REPO_ROOT/test/lib_mimic_urequests.npy" "$PORT" \
+  PYTHONPATH="$REPO_ROOT/test/urequests_oracle" python3 "$REPO_ROOT/test/lib_mimic_urequests.npy" "$OBASE" \
     >"$W/oracle.txt" 2>&1 || fail_out transcript "CPython oracle failed" "$(tail -3 "$W/oracle.txt")"
 else
   ORACLE=0
@@ -95,21 +135,32 @@ cp "$REPO_ROOT/tools/esp_qemu_net/qemueth.pas" main/
 # (vPortYield in lwIP's tcpip task), which is the emulator's clock, not ours.
 printf '\nCONFIG_ETH_USE_OPENETH=y\nCONFIG_LWIP_TCP_MSL=500\nCONFIG_ESP_INT_WDT=n\nCONFIG_ESP_TASK_WDT_EN=n\n' >> sdkconfig.defaults
 sed -i -e 's/REQUIRES \([^)]*\))/REQUIRES \1 qemueth)/' main/CMakeLists.txt
-python3 - "$REPO_ROOT" "$PORT" "$NREQ" <<'PY'
+# the project names its in-tree components relative to examples/esp32/<dir>,
+# which the staged copy is not under
+sed -i -e "s|\${CMAKE_CURRENT_LIST_DIR}/../../..|$REPO_ROOT|" CMakeLists.txt
+python3 - "$REPO_ROOT" "$PORT" "$NREQ" "$TLS" "$CBASE" "${TLSHOST:-}" "${TPORT:-}" "$W/certs" "$KEPT" "${UREQ_TLS_CLIENT:-$REPO_ROOT/tools/esp_qemu_net/urequests_tls_client.npy}" <<'PY'
 import os, sys
-root, port = sys.argv[1], sys.argv[2]
+root, port, n, tls, cbase, tlshost, tport, certs, keep, tlsclient = sys.argv[1:11]
 src = open(root + "/test/lib_mimic_urequests.npy").read().split("\n")
 # the transcript is everything from the first top-level request on
 start = next(i for i, l in enumerate(src) if l.startswith('r = urequests.get(base + "/hello")'))
-tmpl = open(root + "/tools/esp_qemu_net/urequests_client.npy").read()
-tmpl = tmpl.replace("@PORT@", port).replace("@TRANSCRIPT@", "\n".join(src[start:]).rstrip("\n"))
-tmpl = tmpl.replace("@N@", sys.argv[3])
-if os.environ.get("UREQ_INLINE") == "1":
-    tmpl = tmpl.replace("    total = total + one()  # @CENSUS-BODY@\n",
-        "    r = urequests.get(base + \"/hello\")\n"
-        "    total = total + r.status_code + len(r.text)\n"
-        "    r.close()\n"
-        "    print(\"x\" + str(i))\n")
+transcript = "\n".join(src[start:]).rstrip("\n")
+if tls == "1":
+    tmpl = open(tlsclient).read()
+    tmpl = tmpl.replace("@BASE@", cbase).replace("@TLSHOST@", tlshost).replace("@TLSNAME@", tlshost)
+    tmpl = tmpl.replace("@TLSPORT@", tport).replace("@KEEP@", keep).replace("@PORT@", port)
+    tmpl = tmpl.replace("@CA_GOOD@", open(certs + "/ca.pem").read().strip())
+    tmpl = tmpl.replace("@CA_WRONG@", open(certs + "/wrong-ca.pem").read().strip())
+else:
+    tmpl = open(root + "/tools/esp_qemu_net/urequests_client.npy").read()
+    tmpl = tmpl.replace("@PORT@", port)
+    if os.environ.get("UREQ_INLINE") == "1":
+        tmpl = tmpl.replace("    total = total + one()  # @CENSUS-BODY@\n",
+            "    r = urequests.get(base + \"/hello\")\n"
+            "    total = total + r.status_code + len(r.text)\n"
+            "    r.close()\n"
+            "    print(\"x\" + str(i))\n")
+tmpl = tmpl.replace("@TRANSCRIPT@", transcript).replace("@N@", n)
 open("main/main.npy", "w").write(tmpl)
 PY
 sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" build.sh
@@ -151,7 +202,7 @@ kill "$QPID" 2>/dev/null || true; QPID=""
 tr -d '\r' < "$W/serial.log" > "$W/serial.txt"
 grep -qa 'UREQ-COMPLETE' "$W/serial.txt" \
   || fail_out run "no UREQ-COMPLETE after ${t}s" "$(grep -a 'UREQ-\|assert\|Rebooting\|Guru' "$W/serial.txt" | head -5)" "$(tail -5 "$W/serial.txt")"
-echo "UREQ $EX $CHIP $(grep -a '^UREQ-ETH' "$W/serial.txt")"
+echo "UREQ $EX $CHIP $(grep -a '^UREQ-ETH' "$W/serial.txt") base=$CBASE"
 
 sed -n '/^UREQ-BEGIN$/,/^URequests OK$/p' "$W/serial.txt" | sed '1d' > "$W/chip.txt"
 if [ "$ORACLE" = 0 ]; then
@@ -160,6 +211,21 @@ elif diff "$W/oracle.txt" "$W/chip.txt" >"$W/transcript.diff"; then
   echo "UREQ-ROW transcript OK ($(wc -l < "$W/chip.txt") lines = CPython requests)"
 else
   echo "UREQ-ROW transcript FAIL"; sed 's/^/  | /' "$W/transcript.diff" | head -20
+fi
+if [ "$TLS" = 1 ]; then
+  if [ "$TLSHOST" = 10.0.2.2 ]; then echo "UREQ-ROW name SKIP (the host cannot resolve 10.0.2.2.nip.io; the address was used)"
+  else echo "UREQ-ROW name OK (the transcript reached $TLSHOST through the chip's resolver)"; fi
+  vrow() {   # $1 row, $2 the answer it must give
+    got="$(grep -a "^UREQ-VERIFY $1 " "$W/serial.txt" | sed "s/^UREQ-VERIFY $1 //" || true)"
+    if [ "$got" = "$2" ]; then echo "UREQ-ROW verify:$1 OK ($got)"
+    else echo "UREQ-ROW verify:$1 FAIL (got '${got:-nothing}', want '$2')"; fi
+  }
+  vrow good "HTTP/1.1 200 OK"
+  vrow wrongca refused
+  vrow wrongname refused
+  hs="$(grep -c '^TLS ' "$W/relay.log" || true)"
+  if [ "$hs" -gt 0 ]; then echo "UREQ-ROW relay OK ($hs handshakes: $(grep '^TLS ' "$W/relay.log" | awk '{print $3, $4}' | sort | uniq -c | tr -s ' ' | sed 's/^ //' | tr '\n' ';'))"
+  else echo "UREQ-ROW relay FAIL (no completed handshake logged)"; fi
 fi
 d="$(grep -a '^UREQ-CENSUS dropped' "$W/serial.txt" || true)"; k="$(grep -a '^UREQ-CENSUS kept' "$W/serial.txt" || true)"
 db="$(printf '%s' "$d" | sed -n 's/.* bpr=\(-\{0,1\}[0-9]*\).*/\1/p')"

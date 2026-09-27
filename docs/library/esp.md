@@ -440,10 +440,10 @@ This follows MicroPython's ESP32 port:
   `config()`, such as `config('mac')`.
 - Nothing is stored in flash. The network name and password your program
   passes are kept in RAM only. MicroPython's ESP32 port does the same.
-- **There is no TLS yet: no `ssl` module, and `urequests` refuses `https://`
-  URLs** with `ValueError: urequests: https is not supported`. Plain HTTP,
-  MQTT and TCP work. A server that requires HTTPS or MQTT over TLS cannot be
-  reached from an ESP program in this release.
+- `ssl` has the client side only: `ssl.wrap_socket()` and `SSLContext` with
+  `wrap_socket()`, `verify_mode` and `load_verify_locations(cadata=...)`.
+  There is no server side, no `load_cert_chain`, no `getpeercert` and no
+  bundled certificate authorities. See [TLS](#tls) below.
 
 ### Sockets, timeouts and errors
 
@@ -451,9 +451,9 @@ This follows MicroPython's ESP32 port:
 `recv`, `send`, `sendall`, `close`, `setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)`,
 `setblocking`, `settimeout`, `gettimeout`, `getsockname`, `fileno`, and
 `with`. A host is a dotted address such as `'192.168.4.1'`, `''` or
-`'0.0.0.0'` for any address, or `'localhost'`. It refuses other host names,
-because there is no name lookup, and it refuses any socket that is not
-`AF_INET`, `SOCK_STREAM`.
+`'0.0.0.0'` for any address, `'localhost'`, or a host name. Host names are
+looked up through the DNS server the network handed out. It refuses any
+socket that is not `AF_INET`, `SOCK_STREAM`.
 
 `settimeout()` works in CPython's three modes. `None` blocks, `0` never
 waits, and a number of seconds makes `connect`, `accept`, `recv` and `send`
@@ -499,6 +499,53 @@ The first line is an `accept()` on a non-blocking socket with nobody waiting,
 which raises `BlockingIOError`. The unreachable host is an address on the
 board's own network that nobody answers: the `connect()` ends at its timeout
 instead of hanging.
+
+### TLS
+
+`import ssl` gives a client TLS socket, with the same names as MicroPython's
+ESP32 port, so `urequests.get("https://...")` and
+`umqtt.simple.MQTTClient(..., ssl=True)` work unchanged.
+
+```python
+import socket, ssl
+
+s = socket.socket()
+s.connect(("example.org", 443))
+t = ssl.wrap_socket(s, server_hostname="example.org")
+t.write(b"GET / HTTP/1.0\r\nHost: example.org\r\n\r\n")
+print(t.read(64))
+t.close()
+```
+
+**By default the server's certificate is not checked.** This is MicroPython's
+default too: `ssl.wrap_socket()` and a new `SSLContext` both start at
+`CERT_NONE`. The connection is encrypted, but your program has no proof it is
+talking to the server it named. There are no certificate authorities on the
+chip, so to check the certificate you pass the one you trust:
+
+```python
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ctx.verify_mode = ssl.CERT_REQUIRED
+ctx.load_verify_locations(cadata=open("ca.pem").read())
+t = ctx.wrap_socket(s, server_hostname="example.org")
+```
+
+`cadata` takes PEM text or DER bytes. With `CERT_REQUIRED`, a certificate
+that does not chain to it, or that does not name `server_hostname`, raises
+`ValueError` with the reason, and `CERT_REQUIRED` without `server_hostname`
+raises `ValueError` before connecting, as in MicroPython. `urequests` always
+connects with the default, `CERT_NONE`.
+
+The TLS socket has `read`, `readinto`, `readline`, `write`, `recv`, `send`,
+`sendall`, `setblocking`, `settimeout` (inherited from the socket it wraps),
+`cipher` and `close`. The handshake happens inside `wrap_socket`. There is no
+server side, no `load_cert_chain` and no `getpeercert`.
+
+**Your project needs the `pxx_tls` component**, the C half of `ssl`, in
+`lib/rtl/platform/esp/idf/pxx_tls`. It uses ESP-IDF's mbedTLS, the library
+MicroPython's ESP32 port uses. The `nilpy-*` examples list it already. Without
+it, a program that imports `ssl` fails to link on the missing `pxx_tls_`
+functions.
 
 ### The example: `nilpy-station-s3`
 

@@ -2,10 +2,10 @@
 # into a static archive by build.sh. lwip/esp_netif/esp_timer are the NilPy
 # runtime's (as in hello-c3); pxx_esp is `import network` and `import esp32`;
 # pxx_fs is the filesystem open() and os see (/config.json, /log.csv).
-idf_component_register(REQUIRES esp_timer lwip esp_netif pxx_esp pxx_fs)
+idf_component_register(REQUIRES esp_timer lwip esp_netif pxx_esp pxx_fs pxx_tls)
 
 add_prebuilt_library(pxx_app "${CMAKE_CURRENT_LIST_DIR}/libpxx_app.a"
-                     REQUIRES esp_timer lwip esp_netif pxx_esp pxx_fs)
+                     REQUIRES esp_timer lwip esp_netif pxx_esp pxx_fs pxx_tls)
 target_link_libraries(${COMPONENT_LIB} INTERFACE pxx_app)
 # Nothing in this component references app_main, so force the linker to keep
 # pulling it from the archive (ESP-IDF's startup task calls it).

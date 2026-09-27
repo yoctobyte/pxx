@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: 0BSD
-# tools/esp_qemu_mpy_net.sh stages this as main.npy with @HOST@, @MQTT_PORT@
-# and @PREAMBLE@ filled in. The libraries are MicroPython's own, unchanged,
+# tools/esp_qemu_mpy_net.sh stages this as main.npy with @HOST@, @MQTT_PORT@,
+# @SSL_SIMPLE@, @SSL_ROBUST@ and @PREAMBLE@ filled in. With --tls the two
+# clients reach the broker through a TLS relay: umqtt.simple by ssl=True (its
+# legacy path, ssl.wrap_socket(sock, **ssl_params)) and umqtt.robust by
+# ssl=<SSLContext> (ctx.wrap_socket(sock, server_hostname=server)), so both
+# of umqtt's ways into ssl are exercised; without it both placeholders are
+# empty. The libraries are MicroPython's own, unchanged,
 # except ntptime's fixed port 123 (see the script). The same file, with
 # HOST=127.0.0.1 and no preamble, is the desktop row.
 @PREAMBLE@
@@ -18,7 +23,7 @@ def cb(topic, msg):
     got.append((topic, msg))
 
 
-c = MQTTClient("pxx-simple", "@HOST@", port=@MQTT_PORT@)
+c = MQTTClient("pxx-simple", "@HOST@", port=@MQTT_PORT@@SSL_SIMPLE@)
 c.set_callback(cb)
 c.connect()
 c.publish(b"pxx/t", b"hello")
@@ -28,7 +33,7 @@ c.wait_msg()
 c.ping()
 c.disconnect()
 print("umqtt.simple", got)
-r = RobustClient("pxx-robust", "@HOST@", port=@MQTT_PORT@)
+r = RobustClient("pxx-robust", "@HOST@", port=@MQTT_PORT@@SSL_ROBUST@)
 r.connect()
 r.publish(b"pxx/r", b"robust")
 r.disconnect()

@@ -26,11 +26,22 @@ until .content is read or close() is called, so a caller that only checks
 status_code leaks a socket per request. On an ESP32 that is one of about ten
 lwIP sockets, so it runs out quickly. close() is kept, and it is harmless.
 
+HTTPS, as MicroPython does it: ssl.wrap_socket(s, server_hostname=host),
+which sends SNI and DOES NOT VERIFY THE CERTIFICATE (ssl's default,
+CERT_NONE) -- the connection is encrypted, not authenticated. `ssl` exists
+where a TLS backend does, which is an ESP build (lib/rtl/platform/esp/
+mimic_ssl.pas, the chip's mbedTLS); on any other target https:// raises
+ValueError naming the missing module, at the call and not at compile time.
+MEASURED 2026-09-27 under QEMU, S3 and C3 (tools/esp_qemu_urequests.sh
+--tls): the transcript below over https:// equals CPython requests'.
+
+HOST NAMES resolve: the socket shim's connect and getaddrinfo go through
+dns.pas (lwIP's resolver on an ESP, whose nameserver comes by DHCP). MEASURED
+2026-09-27: `http://127.0.0.1.nip.io:<port>/` end to end on the desktop, and
+`https://10.0.2.2.nip.io:<port>/` on the S3 and C3 under QEMU slirp (its DNS
+at 10.0.2.3). A name that does not resolve raises socket.gaierror.
+
 WHAT IT REFUSES, LOUDLY:
-  * https:// raises ValueError. The TLS backends are http.pas's, a caller
-    picks one, and this module has no way to take that choice.
-  * a host name other than a dotted quad or 'localhost'. The socket shim has
-    no resolver and says so (OSError), so no guess is made here.
   * a redirect is NOT followed; the 3xx response comes back as it is, with its
     Location header. This matches MicroPython's urequests, not CPython
     requests.
@@ -63,12 +74,17 @@ class Response:
 
 
 def _split_url(url):
-    # -> (host, port, path). Only http:// is spoken.
+    # -> (host, port, path, tls)
+    tls = False
+    port = 80
     if url.startswith("https://"):
-        raise ValueError("urequests: https is not supported (no TLS backend in this client)")
-    if not url.startswith("http://"):
+        tls = True
+        port = 443
+        rest = url[8:]
+    elif url.startswith("http://"):
+        rest = url[7:]
+    else:
         raise ValueError("urequests: unsupported URL scheme: " + url)
-    rest = url[7:]
     cut = rest.find("/")
     if cut < 0:
         hostport = rest
@@ -76,14 +92,27 @@ def _split_url(url):
     else:
         hostport = rest[:cut]
         path = rest[cut:]
-    port = 80
     colon = hostport.find(":")
     if colon >= 0:
         host = hostport[:colon]
         port = int(hostport[colon + 1:])
     else:
         host = hostport
-    return host, port, path
+    return host, port, path, tls
+
+
+def _wrap_tls(s, host):
+    # MicroPython's urequests: ssl.wrap_socket(s, server_hostname=host), which
+    # sends SNI and does NOT verify the certificate (ssl's default,
+    # CERT_NONE). ssl exists only where a TLS backend does -- an ESP build,
+    # lib/rtl/platform/esp/mimic_ssl.pas -- so elsewhere https:// is refused
+    # here, by name, instead of failing the program's compile.
+    try:
+        import ssl
+    except ImportError:
+        s.close()
+        raise ValueError("urequests: https needs the ssl module, which this platform does not have")
+    return ssl.wrap_socket(s, server_hostname=host)
 
 
 def _read_head(s):
@@ -100,7 +129,7 @@ def _read_head(s):
 
 
 def request(method, url, data=None, json=None, headers=None, timeout=None):
-    host, port, path = _split_url(url)
+    host, port, path, tls = _split_url(url)
     body = b""
     ctype = ""
     if json is not None:
@@ -112,7 +141,7 @@ def request(method, url, data=None, json=None, headers=None, timeout=None):
         else:
             body = data
     req = method + " " + path + " HTTP/1.0\r\nHost: " + host
-    if port != 80:
+    if (port != 80 and not tls) or (port != 443 and tls):
         req = req + ":" + str(port)
     req = req + "\r\n"
     have_ctype = False
@@ -132,6 +161,8 @@ def request(method, url, data=None, json=None, headers=None, timeout=None):
         if timeout is not None:
             s.settimeout(timeout)
         s.connect((host, port))
+        if tls:
+            s = _wrap_tls(s, host)
         s.sendall(req.encode() + body)
         head, content = _read_head(s)
         lines = head.split("\r\n")

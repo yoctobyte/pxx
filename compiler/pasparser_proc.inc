@@ -909,11 +909,90 @@ begin
 end;
 
 { A routine's own locals. }
-{ Does this value hand the caller a reference it OWNS? A construction does,
-  and so does a call to a function already classified fresh. Everything else --
-  Self, a parameter, a field, an element, a local, a cast -- may be borrowed. }
-function ResultExprIsFresh(n: Integer): Boolean;
-var p: Integer;
+{ Does the local `sym` ESCAPE anywhere under `node`? Its uses must all be
+  harmless to the caller owning it: a store TO it, a field of it read or
+  written (`r.FTls := h`), and handing it back (`Result := r`, `Exit(r)`).
+  Anything else -- an argument, a method call on it (the method may keep Self),
+  a store of it somewhere, a cast -- is an escape, and so is running out of
+  budget. Conservative on purpose: an escape only keeps today's borrowed
+  verdict, whose cost is a leak; it can never free a live object. }
+function LocalUseEscapes(node, sym, retSym: Integer; var budget: Integer): Boolean;
+var l, r: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if budget <= 0 then begin Result := True; Exit; end;
+  Dec(budget);
+  if ASTKind[node] = AN_IDENT then
+  begin
+    Result := Integer(ASTIVal[node]) = sym;
+    Exit;
+  end;
+  l := ASTLeft[node];
+  r := ASTRight[node];
+  if ASTKind[node] = AN_ASSIGN then
+  begin
+    if (l >= 0) and (ASTKind[l] = AN_IDENT) and (Integer(ASTIVal[l]) = sym) then
+    begin
+      Result := LocalUseEscapes(r, sym, retSym, budget);   { `r := f(r)` escapes }
+      Exit;
+    end;
+    if (l >= 0) and (ASTKind[l] = AN_IDENT) and (Integer(ASTIVal[l]) = retSym) and
+       (r >= 0) and (ASTKind[r] = AN_IDENT) and (Integer(ASTIVal[r]) = sym) then
+      Exit;                                                  { Result := r }
+  end;
+  if (ASTKind[node] = AN_EXIT) and (l >= 0) and (ASTKind[l] = AN_IDENT) and
+     (Integer(ASTIVal[l]) = sym) then
+    Exit;                                                    { Exit(r) }
+  if (ASTKind[node] = AN_FIELD) and (l >= 0) and (ASTKind[l] = AN_IDENT) and
+     (Integer(ASTIVal[l]) = sym) then
+  begin
+    Result := LocalUseEscapes(ASTChildRight(node), sym, retSym, budget);
+    Exit;                                                    { r.F }
+  end;
+  Result := LocalUseEscapes(ASTChildLeft(node), sym, retSym, budget) or
+            LocalUseEscapes(ASTChildRight(node), sym, retSym, budget);
+end;
+
+function ResultExprIsFresh(n, bodyNode, retSym: Integer; allowLocal: Boolean): Boolean; forward;
+
+{ Every store to the local `sym` under `node` is fresh; `stores` counts them. }
+procedure ScanLocalStores(node, sym, bodyNode, retSym: Integer; var allFresh: Boolean;
+  var stores, budget: Integer);
+var l: Integer;
+begin
+  if node < 0 then Exit;
+  if budget <= 0 then begin allFresh := False; Exit; end;
+  Dec(budget);
+  l := ASTLeft[node];
+  if (ASTKind[node] = AN_ASSIGN) and (l >= 0) and (ASTKind[l] = AN_IDENT) and
+     (Integer(ASTIVal[l]) = sym) then
+  begin
+    Inc(stores);
+    if not ResultExprIsFresh(ASTRight[node], bodyNode, retSym, False) then allFresh := False;
+    Exit;
+  end;
+  ScanLocalStores(ASTChildLeft(node), sym, bodyNode, retSym, allFresh, stores, budget);
+  ScanLocalStores(ASTChildRight(node), sym, bodyNode, retSym, allFresh, stores, budget);
+end;
+
+{ Does this value hand the caller a reference it OWNS? A construction does --
+  `X.Create` lowered to an allocation, and a construction through any other
+  constructor (`X.Adopt(fd)`), which is an AN_METACLASS_NEW -- and so does a
+  call to a function already classified fresh, and a LOCAL that only ever
+  holds a fresh object and never escapes (`r := X.Create; r.F := 1;
+  Result := r`), which is how a routine that sets a field up before returning
+  it is written. Everything else -- Self, a parameter, a field, an element, a
+  cast, a local that escapes or is also stored from a borrowed value -- may be
+  borrowed.
+
+  Until 2026-09-27 the last two read as borrowed, so NilPy took a second
+  reference to every object such a routine returned and the object was never
+  freed: ssl.wrap_socket (lib/rtl/platform/esp/mimic_ssl.pas) does both, and
+  leaked one SSLSocket per https request, 37 B/request linear over 300 on the
+  S3 under QEMU. Reported to the leak sweep before the fix. }
+function ResultExprIsFresh(n, bodyNode, retSym: Integer; allowLocal: Boolean): Boolean;
+var p, sym, stores, budget: Integer; allFresh: Boolean;
 begin
   Result := False;
   if n < 0 then Exit;
@@ -921,6 +1000,21 @@ begin
   if (ASTKind[n] = AN_CALL) and (Integer(ASTIVal[n]) = -Ord(tkGetMem)) then
   begin
     Result := True;
+    Exit;
+  end;
+  if ASTKind[n] = AN_METACLASS_NEW then begin Result := True; Exit; end;
+  if allowLocal and (ASTKind[n] = AN_IDENT) then
+  begin
+    sym := Integer(ASTIVal[n]);
+    if (sym < 0) or (sym >= SymCount) or (Syms[sym].Kind <> skLocal) or
+       (Syms[sym].TypeKind <> tyClass) then Exit;
+    allFresh := True;
+    stores := 0;
+    budget := 200000;
+    ScanLocalStores(bodyNode, sym, bodyNode, retSym, allFresh, stores, budget);
+    if (not allFresh) or (stores = 0) then Exit;
+    budget := 200000;
+    Result := not LocalUseEscapes(bodyNode, sym, retSym, budget);
     Exit;
   end;
   p := NodeCallProcIdx(n);
@@ -973,7 +1067,7 @@ begin
   else if argIdx <> j then argIdx := -2;
 end;
 
-procedure ScanResultStores(procIdx, node, retSym: Integer; var allFresh: Boolean;
+procedure ScanResultStores(procIdx, node, retSym, bodyNode: Integer; var allFresh: Boolean;
   var argIdx, budget: Integer);
 begin
   if node < 0 then Exit;
@@ -982,18 +1076,18 @@ begin
   if (ASTKind[node] = AN_ASSIGN) and (ASTLeft[node] >= 0) and
      (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] = retSym) then
   begin
-    if not ResultExprIsFresh(ASTRight[node]) then allFresh := False;
+    if not ResultExprIsFresh(ASTRight[node], bodyNode, retSym, True) then allFresh := False;
     NoteResultArg(procIdx, ASTRight[node], argIdx);
     Exit;
   end;
   if (ASTKind[node] = AN_EXIT) and (ASTLeft[node] >= 0) then
   begin
-    if not ResultExprIsFresh(ASTLeft[node]) then allFresh := False;
+    if not ResultExprIsFresh(ASTLeft[node], bodyNode, retSym, True) then allFresh := False;
     NoteResultArg(procIdx, ASTLeft[node], argIdx);
     Exit;
   end;
-  ScanResultStores(procIdx, ASTChildLeft(node), retSym, allFresh, argIdx, budget);
-  ScanResultStores(procIdx, ASTChildRight(node), retSym, allFresh, argIdx, budget);
+  ScanResultStores(procIdx, ASTChildLeft(node), retSym, bodyNode, allFresh, argIdx, budget);
+  ScanResultStores(procIdx, ASTChildRight(node), retSym, bodyNode, allFresh, argIdx, budget);
 end;
 
 { OWNED OR BORROWED, read off the body rather than declared. A Pascal callee
@@ -1017,7 +1111,7 @@ begin
   allFresh := True;
   argIdx := -1;
   budget := 200000;
-  ScanResultStores(procIdx, bodyNode, Procs[procIdx].RetSymIdx, allFresh, argIdx, budget);
+  ScanResultStores(procIdx, bodyNode, Procs[procIdx].RetSymIdx, bodyNode, allFresh, argIdx, budget);
   if budget <= 0 then begin allFresh := False; argIdx := -2; end;
   ProcResultFresh[procIdx] := allFresh;
   ProcResultArgIdx[procIdx] := argIdx;
@@ -6606,7 +6700,7 @@ procedure ParseUsesUnitBody(const name: AnsiString;
   loader, wrong as output to a human.
   bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker }
 var
-  uReal: AnsiString; uI: Integer;
+  uReal: AnsiString; uI, shimCUC: Integer;
   lo, cName, path: AnsiString;
   startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;
   aliasEdgeIdx: Integer;
@@ -7000,7 +7094,12 @@ begin
       Exit;
     end;
 {$endif}
+    { OUR miss, not a leaked one: see the shim arm below }
+    shimCUC := CompiledUnitCount;
+    SoftUnitMissed := False;
     ParseUsesUnit(MicroPythonUAlias(lo));
+    if SoftUnitMissed and (CompiledUnitCount > shimCUC) then
+      SoftUnitMissed := False;
     if SoftUnitMissed then
       CompiledUnitCount := savedCUC
     else
@@ -7126,7 +7225,19 @@ begin
       Error('import threading requires --threadsafe: a Python thread allocates '
             + 'on its first statement and the default heap, ARC and console-I/O '
             + 'runtime are not thread-safe. Rebuild with --threadsafe.');
+    { A SHIM THAT COMPILED MAY HAVE SOFT-MISSED ON ITS OWN GUARDED IMPORTS, AND
+      SoftUnitMissed IS A GLOBAL. Read as ours, it rolled CompiledUnitCount
+      back past every unit the shim had pulled in, so the next import compiled
+      them a second time: a mimic_ .py with `import socket` and a guarded
+      `import ssl` died on `duplicate class name Exception` in sysutils. Our
+      own miss leaves the count where it was (the nested call takes its mark
+      back off); a unit that compiled raised it. The same shape as
+      PyParseImportUnitAs's fix, whose comment has the history. }
+    shimCUC := CompiledUnitCount;
+    SoftUnitMissed := False;
     ParseUsesUnit('mimic_' + lo);
+    if SoftUnitMissed and (CompiledUnitCount > shimCUC) then
+      SoftUnitMissed := False;
     if SoftUnitMissed then
       { the shim was not there either: this import is a soft miss too, and the
         name must go back to unresolved so the fallback branch can bind it }
