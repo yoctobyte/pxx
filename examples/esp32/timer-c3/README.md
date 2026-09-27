@@ -1,5 +1,7 @@
 # PXX → ESP-IDF esptimer demo (ESP32-C3)
 
+**Chip:** ESP32-C3 (RISC-V). **Language:** Pascal (`main/main.pas`).
+
 Slice 1 of the ESP peripheral callback API
 (`feature-esp-peripheral-callback-api`): a periodic timer callback through the
 `esptimer` unit's event surface — the app assigns `t.OnElapsed := @OnTick` and

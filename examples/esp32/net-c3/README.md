@@ -1,5 +1,7 @@
 # PXX → ESP-IDF lwIP socket smoke (ESP32-C3)
 
+**Chip:** ESP32-C3 (RISC-V). **Language:** Pascal (`main/main.pas`).
+
 Proves the PXX **PAL socket surface** runs on real ESP-IDF lwIP. `main/main.pas`
 is compiled (`--target=riscv32`) against the ESP PAL backend
 (`lib/rtl/platform/esp`) to a relocatable object, wrapped in a static archive,

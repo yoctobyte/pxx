@@ -550,6 +550,17 @@ Still unverified: `hello-s2`, which builds but has not been run.
 `tools/esp_flash.sh --project examples/esp32/<name>` builds, flashes and checks
 an example on a board.
 
+### On a classic ESP32, and one not yet run
+
+`hello-esp32` (Pascal) and `nilpy-esp32` (Nil Python, the same program as
+`nilpy-s3`) ran on an ESP32-D0WD-V3 board, the original dual-core LX6 part; the
+record, with the compilers used, is in
+[ESP32 / Microcontrollers](../targets/esp32.md).
+
+`nilpy-logger-s3` is a Wi-Fi data logger in the MicroPython style (a setup
+access point, a saved network, a CSV log on flash, served over HTTP). It is
+not in the tables above: no board run of it is recorded here.
+
 ## Real C programs
 
 PXX's C frontend compiles third-party C as released, together with PXX's own

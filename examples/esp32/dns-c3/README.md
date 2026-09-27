@@ -1,5 +1,7 @@
 # PXX → ESP-IDF lwIP resolver smoke (ESP32-C3)
 
+**Chip:** ESP32-C3 (RISC-V). **Language:** Pascal (`main/main.pas`).
+
 Proves that `dns_libc` binds **lwIP's `getaddrinfo`** on ESP-IDF
 (`feature-dns-esp-backend`). `main/main.pas` is compiled
 (`--target=riscv32 --platform=esp --no-signals`, no DNS define: `dns_libc` is

@@ -1,5 +1,7 @@
 # PXX → ESP-IDF PAL file-I/O baseline (ESP32-C3)
 
+**Chip:** ESP32-C3 (RISC-V). **Language:** Pascal (`main/main.pas`).
+
 The on-target baseline for [[feature-pal-esp-posix-fd-semantics]]: it mounts FAT
 on flash, drives the **real ESP PAL** file surface, and pins today's behaviour
 including the two gaps that ticket exists to close.

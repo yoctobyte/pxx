@@ -1,5 +1,7 @@
 # PXX → ESP-IDF GPIO probe (ESP32-C3)
 
+**Chip:** ESP32-C3 (RISC-V). **Language:** Pascal (`main/main.pas`).
+
 **This is a probe, not a demo.** It exists to answer one question that decides
 whether slice 2 of `feature-esp-peripheral-callback-api` (the GPIO edge-callback
 API) can be *witnessed* on this box: does Espressif's QEMU deliver GPIO edge
