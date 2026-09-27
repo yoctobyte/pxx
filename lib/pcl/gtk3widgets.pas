@@ -57,6 +57,10 @@ type
     function StartTimer(AInterval: Integer; ACallback: Pointer; AData: Pointer): LongWord; override;
     procedure StopTimer(AId: LongWord); override;
     function SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer; override;
+    procedure SetFormClient(AForm: TComponent; AControl: TComponent;
+                            AHeaderHeight: Integer); override;
+    procedure SetMenuItemEnabled(AItem: TComponent; AEnabled: Boolean); override;
+    procedure SetMenuItemVisible(AItem: TComponent; AVisible: Boolean); override;
 
     { ---- the sealed seam (feature-pcl-seam-seal) ---- }
     procedure ShowHandle(AWidget: Pointer); override;
@@ -611,6 +615,10 @@ var win, vbox, fixed: Pointer;
 begin
   win := gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size(win, 320, 240);
+  { GTK's own default, stated rather than assumed: a form that could not be
+    resized was diagnosed at this line twice before the cause turned out to be a
+    size request in SetBounds, so the explicit call is worth the byte. }
+  gtk_window_set_resizable(win, 1);
   vbox := gtk_box_new(1, 0);
   gtk_container_add(win, vbox);
   SetVBoxPtr(win, vbox);
@@ -677,7 +685,13 @@ begin
   else if IsSubclassOf(cls, 'TCheckBox') then
     gtk_button_set_label(h, p)
   else if IsSubclassOf(cls, 'TPanel') then
-    gtk_button_set_label(h, p);
+    { A TPanel's handle is a GtkFrame, not a button. This was
+      gtk_button_set_label, which GTK rejects with
+      `assertion 'GTK_IS_BUTTON (button)' failed` on stderr and no caption --
+      found 2026-09-27 by a test that constructs a panel and reads it back, not
+      by anyone looking at a panel. A GTK-CRITICAL is not a crash, so it had
+      survived in plain sight. }
+    gtk_frame_set_label(h, p);
 end;
 
 procedure TGtk3WidgetSet.Invalidate(AControl: TComponent);
@@ -702,10 +716,29 @@ begin
   ctl := TControl(AControl);
   ch := ctl.Handle;
   if ch = nil then Exit;
-  
+
+  { A FORM IS A WINDOW, AND A WINDOW'S SIZE IS NOT A SIZE REQUEST.
+    gtk_widget_set_size_request sets a MINIMUM, so `Form.SetBounds(0,0,1100,720)`
+    used to mean "this window may never be smaller than 1100x720" -- which is
+    what "the window cannot be freely resized" looks like from outside. The
+    window manager owns a toplevel's size; we state the size we want it to OPEN
+    at and leave the user free after that. gtk_window_resize in addition, and
+    only once realized, so an app that resizes a window already on screen still
+    works. }
+  if IsSubclassOf(GetClass(GetInstanceClassName(Pointer(ctl))), 'TForm') then
+  begin
+    if (AWidth > 0) and (AHeight > 0) then
+    begin
+      gtk_window_set_default_size(ch, AWidth, AHeight);
+      if gtk_widget_get_realized(ch) <> 0 then
+        gtk_window_resize(ch, AWidth, AHeight);
+    end;
+    Exit;
+  end;
+
   if (AWidth > 0) or (AHeight > 0) then
     gtk_widget_set_size_request(ch, AWidth, AHeight);
-    
+
   if ctl.Parent <> nil then
   begin
     pctl := ctl.Parent;
@@ -1144,10 +1177,22 @@ begin
   for i := 0 to parentItem.Count - 1 do
   begin
     item := parentItem.Item(i);
+    { A LONE HYPHEN IS A SEPARATOR -- the Delphi/Lazarus spelling, so it costs no
+      new type and a caller who already knows the convention gets it for free.
+      Checked before the mnemonic conversion, which would otherwise turn it into
+      a menu entry captioned '-' that you can click. }
+    if item.Caption = '-' then
+    begin
+      subWidget := gtk_separator_menu_item_new();
+      item.Handle := subWidget;
+      gtk_menu_shell_append(parentMenuWidget, subWidget);
+      gtk_widget_show(subWidget);
+      Continue;
+    end;
     subWidget := gtk_menu_item_new_with_mnemonic(PChar(ConvertAmpersand(item.Caption)));
     item.Handle := subWidget;
     gtk_menu_shell_append(parentMenuWidget, subWidget);
-    
+
     if item.Count > 0 then
     begin
       subMenu := gtk_menu_new();
@@ -1158,8 +1203,33 @@ begin
     begin
       SignalConnectData(subWidget, 'activate', @MenuItemActivateTramp, Pointer(item));
     end;
-    gtk_widget_show(subWidget);
+    { Enabled/Visible are applied HERE as well as from their setters, because
+      Realize rebuilds the menubar from scratch: an item disabled before the
+      window was shown would come back sensitive otherwise. }
+    gtk_widget_set_sensitive(subWidget, Ord(item.Enabled));
+    if item.Visible then gtk_widget_show(subWidget) else gtk_widget_hide(subWidget);
   end;
+end;
+
+{ A menu item's Enabled/Visible used to be stored and nothing else -- the field
+  changed, the menu did not, so a greyed-out entry was not expressible at all.
+  Both setters now reach the widget when there IS one; before the menubar is
+  built the field is all there is, and BuildSubMenu applies it on the way
+  through, because Realize rebuilds the menubar from scratch. }
+procedure TGtk3WidgetSet.SetMenuItemEnabled(AItem: TComponent; AEnabled: Boolean);
+var it: TMenuItem;
+begin
+  it := TMenuItem(AItem);
+  if (it = nil) or (it.Handle = nil) then Exit;
+  gtk_widget_set_sensitive(it.Handle, Ord(AEnabled));
+end;
+
+procedure TGtk3WidgetSet.SetMenuItemVisible(AItem: TComponent; AVisible: Boolean);
+var it: TMenuItem;
+begin
+  it := TMenuItem(AItem);
+  if (it = nil) or (it.Handle = nil) then Exit;
+  if AVisible then gtk_widget_show(it.Handle) else gtk_widget_hide(it.Handle);
 end;
 
 function TGtk3WidgetSet.SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer;
@@ -1214,6 +1284,70 @@ begin
   gtk_box_reorder_child(vbox, menubar, 0);
   gtk_widget_show(menubar);
   Result := 0;
+end;
+
+procedure TGtk3WidgetSet.SetFormClient(AForm: TComponent; AControl: TComponent;
+                                       AHeaderHeight: Integer);
+var
+  win, vbox, fixed, ch, oldParent: Pointer;
+  fctl, ctl: TControl;
+begin
+  fctl := TControl(AForm);
+  ctl := TControl(AControl);
+  if (fctl = nil) or (ctl = nil) then Exit;
+  win := fctl.GetHandle;
+  ch := ctl.GetHandle;
+  if (win = nil) or (ch = nil) then Exit;
+  vbox := GetVBoxPtr(win);
+  if vbox = nil then Exit;
+  fixed := GetFixedPtr(vbox);
+
+  { The header keeps its own height and STOPS EXPANDING. CreateForm packs the
+    fixed with expand=1 because, with nothing else in the vbox, it is the whole
+    content area; once there is a client it must not take a share of the growth,
+    or dragging the window taller grows the empty toolbar strip instead of the
+    editor. }
+  if fixed <> nil then
+  begin
+    if AHeaderHeight > 0 then
+      gtk_widget_set_size_request(fixed, -1, AHeaderHeight);
+    gtk_box_set_child_packing(vbox, fixed, 0, 0, 0, GTK_PACK_START);
+  end;
+
+  { Out of the absolute-coordinate container and into the box. Idempotent,
+    because TForm.Realize re-applies this every time: if it is already the
+    vbox's child there is nothing to move, and re-packing a widget GTK already
+    holds would be a warning and a lost widget. }
+  oldParent := gtk_widget_get_parent(ch);
+  if oldParent = vbox then
+  begin
+    gtk_widget_show(ch);
+    Exit;
+  end;
+  { REF ACROSS THE MOVE, OR THE MOVE IS A DESTROY. gtk_container_remove drops
+    the container's reference, and the container held the only one -- so without
+    this the widget is finalized here and every later call through its stale
+    Handle lands on freed memory. Measured 2026-09-27: it surfaced as
+    `gtk_paned_set_position: assertion 'GTK_IS_PANED (paned)' failed` from the
+    splitter seeding a moment later, and --gui-smoke still printed OK, because
+    what it asserts is the status line. }
+  if oldParent <> nil then
+  begin
+    g_object_ref(ch);
+    gtk_container_remove(oldParent, ch);
+    { NO SIZE REQUEST ON THE CLIENT, and this is the half that makes the window
+      shrinkable: a request here becomes the window's minimum. -1 clears one the
+      app may have set through SetBounds before handing the control over. }
+    gtk_widget_set_size_request(ch, -1, -1);
+    gtk_box_pack_start(vbox, ch, 1, 1, 0);
+    g_object_unref(ch);
+  end
+  else
+  begin
+    gtk_widget_set_size_request(ch, -1, -1);
+    gtk_box_pack_start(vbox, ch, 1, 1, 0);
+  end;
+  gtk_widget_show(ch);
 end;
 
 

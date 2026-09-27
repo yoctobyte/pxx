@@ -194,6 +194,31 @@ function EspLibCfgPxxFlags(const c: TEspLibCfg): TStrArray;
 { One line for the status bar: how many of each, or ''. }
 function EspLibCfgLine(const c: TEspLibCfg): AnsiString;
 
+{ ---- which compiler this checkout builds with ---- }
+
+type
+  TEspPin = record
+    Version: AnsiString;   { '441' }
+    Sha: AnsiString;       { the pinned binary's sha256, full }
+    Commit: AnsiString;    { the commit it was pinned from }
+  end;
+
+{ Parse stable_linux_amd64/default/pin.log. The LAST `pinned vN <sha> ...` line
+  wins, which is the pin in place.
+
+  FROM pin.log AND NOT FROM last.sha256, although that file is one line and
+  right next to it: last.sha256 names `latest`, and latest and pinned are
+  different symlinks that are equal today and are not the same claim. pin.log
+  says the word `pinned` in the row itself. }
+function EspPinFromLogText(const logText: AnsiString): TEspPin;
+
+{ EspPinFromLogText of <repoRoot>/stable_linux_amd64/default/pin.log, falling
+  back to the VERSION file beside it when the log cannot be read. }
+function EspPinInfo(const repoRoot: AnsiString): TEspPin;
+
+{ One line for About: 'pxx pin v441 (4ebfa2d047a2)'. }
+function EspPinLine(const p: TEspPin): AnsiString;
+
 implementation
 
 function ReadAll(const path: AnsiString): AnsiString;
@@ -939,6 +964,83 @@ begin
   for i := 0 to Length(c.UnitDirs) - 1 do
     AddStr(a, '-Fu' + c.UnitDirs[i]);
   EspLibCfgPxxFlags := a;
+end;
+
+function SplitWhite(const s: AnsiString): TStrArray;
+var a: TStrArray;
+    i, start: Integer;
+begin
+  SetLength(a, 0);
+  start := 0;
+  for i := 1 to Length(s) + 1 do
+    if (i > Length(s)) or (s[i] = ' ') or (s[i] = #9) then
+    begin
+      if start > 0 then AddStr(a, Copy(s, start, i - start));
+      start := 0;
+    end
+    else if start = 0 then start := i;
+  SplitWhite := a;
+end;
+
+function EspPinFromLogText(const logText: AnsiString): TEspPin;
+var p: TEspPin;
+    lines, f: TStrArray;
+    i, j: Integer;
+begin
+  p.Version := '';
+  p.Sha := '';
+  p.Commit := '';
+  lines := SplitChar(logText, #10);
+  for i := 0 to Length(lines) - 1 do
+  begin
+    f := SplitWhite(lines[i]);
+    { <iso-ts> pinned vN <sha> (was <old>) <commit> -- the LAST such row is the
+      pin in place, so keep overwriting rather than stopping at the first }
+    if (Length(f) >= 4) and (f[1] = 'pinned') and (Copy(f[2], 1, 1) = 'v') then
+    begin
+      p.Version := Copy(f[2], 2, Length(f[2]));
+      p.Sha := f[3];
+      j := Length(f) - 1;
+      if j >= 4 then p.Commit := f[j] else p.Commit := '';
+    end;
+  end;
+  EspPinFromLogText := p;
+end;
+
+function EspPinInfo(const repoRoot: AnsiString): TEspPin;
+var p: TEspPin;
+    base, v: AnsiString;
+    i: Integer;
+begin
+  base := JoinPath(StripSlash(repoRoot), 'stable_linux_amd64/default');
+  p := EspPinFromLogText(ReadAll(JoinPath(base, 'pin.log')));
+  if p.Version = '' then
+  begin
+    { a release tarball ships the pin without its history }
+    v := Trim(ReadAll(JoinPath(base, 'VERSION')));
+    for i := 1 to Length(v) do
+      if (v[i] < '0') or (v[i] > '9') then
+      begin
+        v := Copy(v, 1, i - 1);
+        Break;
+      end;
+    p.Version := v;
+  end;
+  EspPinInfo := p;
+end;
+
+function EspPinLine(const p: TEspPin): AnsiString;
+var s: AnsiString;
+begin
+  if p.Version = '' then
+  begin
+    EspPinLine := 'pxx pin: unknown';
+    Exit;
+  end;
+  s := 'pxx pin v' + p.Version;
+  if p.Sha <> '' then s := s + ' (' + Copy(p.Sha, 1, 12) + ')';
+  if p.Commit <> '' then s := s + ' from ' + Copy(p.Commit, 1, 10);
+  EspPinLine := s;
 end;
 
 function EspLibCfgLine(const c: TEspLibCfg): AnsiString;

@@ -30,7 +30,7 @@ program espide;
                                     print the log to stdout, exit 0 on a
                                     flashed board: the hardware check. }
 
-uses gtk3_c, gtk3, controls, stdctrls, extctrls, forms, sysutils,
+uses gtk3_c, gtk3, controls, stdctrls, extctrls, forms, menus, dialogs, sysutils,
      buffer, runner, project, espproj;
 
 const
@@ -62,6 +62,7 @@ type
     ChipBox: TComboBox;
     DetectBtn, SaveBtn, BuildBtn, MonBtn, StopBtn: TButton;
     Status: TLabel;
+    MainMenu: TMainMenu;
     Split, RightSplit: TPaned;
     Tree: TListBox;
     Editor: TMemo;
@@ -123,6 +124,10 @@ type
     procedure OnStop(Sender: TObject);
     procedure OnTick(Sender: TObject);
     procedure OnFormResize(Sender: TControl; w, h: Integer);
+    procedure OnMenuOpenFolder(Sender: TObject);
+    procedure OnMenuQuit(Sender: TObject);
+    procedure OnMenuAbout(Sender: TObject);
+    procedure BuildMenu;
   end;
 
 var
@@ -252,6 +257,10 @@ begin
   if t = 'ESP32-S3' then SelectorChip := 'esp32s3'
   else if t = 'ESP32-C3' then SelectorChip := 'esp32c3'
   else if t = 'ESP32-S2' then SelectorChip := 'esp32s2'
+  { the CLASSIC part. Last of the named arms because its label is a PREFIX of
+    the others' -- if this compared with Pos or a prefix test it would swallow
+    them, and as an equality test the order is merely documentation. }
+  else if t = 'ESP32' then SelectorChip := 'esp32'
   else SelectorChip := 'auto';
 end;
 
@@ -636,16 +645,133 @@ begin
   ShowState;
 end;
 
+{ ---- the main menu ---- }
+
+procedure TEspForm.OnMenuOpenFolder(Sender: TObject);
+var d: AnsiString;
+begin
+  { one dialog for a folder AND for a project: a project IS a folder here (one
+    with a CMakeLists.txt and a build.sh), and the status line already says
+    which of the two you picked. Two menu entries that open the same chooser
+    and then differ in whether they complain would be a worse answer than one
+    that opens what you chose and tells you what it is. }
+  d := SelectFolderDialog('Open a folder or an ESP-IDF project');
+  if d = '' then Exit;
+  RootEdit.Text := d;
+  OnOpen(nil);
+end;
+
+procedure TEspForm.OnMenuQuit(Sender: TObject);
+begin
+  StopChild;
+  gtk_main_quit;
+end;
+
+procedure TEspForm.OnMenuAbout(Sender: TObject);
+var s: AnsiString;
+    pin: TEspPin;
+    idf: TEspIdf;
+begin
+  pin := EspPinInfo(RepoRoot);
+  idf := EspDetectIdf;
+  s := 'PXX ESP32 IDE' + #10 + #10 +
+       EspPinLine(pin) + #10 +
+       EspIdfLine(idf) + #10;
+  if not idf.Found then s := s + idf.Advice + #10;
+  s := s + EspDialoutNote(EspDialoutState);
+  ShowMessage(s);
+end;
+
+procedure TEspForm.BuildMenu;
+var fileM, boardM, helpM, it: TMenuItem;
+begin
+  MainMenu := TMainMenu.Create(nil);
+
+  fileM := TMenuItem.Create(nil);
+  fileM.Caption := '&File';
+  MainMenu.Items.Add(fileM);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&Open Folder or Project...';
+  it.OnClick := @EspForm.OnMenuOpenFolder;
+  fileM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&Save';
+  it.OnClick := @EspForm.OnSave;
+  fileM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := '-';
+  fileM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&Quit';
+  it.OnClick := @EspForm.OnMenuQuit;
+  fileM.Add(it);
+
+  boardM := TMenuItem.Create(nil);
+  boardM.Caption := '&Board';
+  MainMenu.Items.Add(boardM);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&Detect';
+  it.OnClick := @EspForm.OnDetect;
+  boardM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&Build + Flash';
+  it.OnClick := @EspForm.OnBuild;
+  boardM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&Monitor';
+  it.OnClick := @EspForm.OnMonitor;
+  boardM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := '-';
+  boardM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := 'S&top';
+  it.OnClick := @EspForm.OnStop;
+  boardM.Add(it);
+
+  helpM := TMenuItem.Create(nil);
+  helpM.Caption := '&Help';
+  MainMenu.Items.Add(helpM);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&About';
+  it.OnClick := @EspForm.OnMenuAbout;
+  helpM.Add(it);
+
+  Self.Menu := MainMenu;
+end;
+
 procedure TEspForm.OnFormResize(Sender: TControl; w, h: Integer);
 begin
-  if w = lastW then Exit;
-  lastW := w;
-  Split.SetBounds(0, BAR_H, w, h - BAR_H);
-  Status.SetBounds(8, 36, w - 16, 22);
+  { THE PANES ARE NOT RESIZED HERE ANY MORE. Form.SetClient hands Split the
+    window's content area, so GTK sizes it -- which is what makes the window
+    freely resizable in BOTH directions and removes the reason this handler used
+    to bail out on `w = lastW`. That guard was against a feedback loop of its
+    own making: setting the pane's size grew the container's minimum, which fired
+    this handler with a bigger allocation, which grew the pane again. It also
+    meant a height-only drag re-laid out nothing.
+
+    What is left here is the two things that genuinely live in the header strip:
+    the status label's width (it is at absolute coordinates, like the toolbar),
+    and seeding the splitter positions ONCE. GtkPaned clamps a position set
+    before it has an allocation, so the seed has to wait for the first real one
+    -- and must not be repeated, or every window resize would drag the splitters
+    back to their starting places under the user's hands. }
+  if w <> lastW then
+  begin
+    lastW := w;
+    Status.SetBounds(8, 36, w - 16, 22);
+  end;
+  { h IS THE HEADER STRIP'S HEIGHT NOW, NOT THE WINDOW'S. This handler is fired
+    by the form's absolute-coordinate container, and SetClient pinned that to
+    BAR_H -- so the log pane's opening height comes from the design constants and
+    not from h, which would have silently seeded it at a few pixels. The window
+    manager may open the window at some other size, in which case this is a
+    slightly wrong starting position for a splitter the user can drag, which is
+    the cheap failure of the two. }
   if (not panedSeeded) and (w > 0) then
   begin
     Split.Position := W_TREE;
-    RightSplit.Position := h - BAR_H - H_LOG;
+    RightSplit.Position := H_WIN - BAR_H - H_LOG;
     panedSeeded := True;
   end;
 end;
@@ -707,6 +833,7 @@ begin
   f.ChipBox.Parent := f;
   f.ChipBox.SetBounds(410, 4, 120, 28);
   f.ChipBox.AddItem('auto');
+  f.ChipBox.AddItem('ESP32');
   f.ChipBox.AddItem('ESP32-S3');
   f.ChipBox.AddItem('ESP32-C3');
   f.ChipBox.AddItem('ESP32-S2');
@@ -731,8 +858,14 @@ begin
   f.Editor.Parent := f.RightSplit;
   f.Log := TMemo.Create(nil);
   f.Log.Parent := f.RightSplit;
+  f.BuildMenu;
   f.Split.Position := W_TREE;
   f.RightSplit.Position := H_WIN - BAR_H - H_LOG;
+  { The splitter pair IS the window's content: GTK sizes it, so the window
+    resizes freely in both directions and no OnResize arithmetic reflows it.
+    BAR_H is the strip above it that keeps absolute coordinates -- the toolbar
+    row and the status line. }
+  f.SetClient(f.Split, BAR_H);
 
   f.Ticker := TTimer.Create(nil);
   f.Ticker.Interval := TICK_MS;

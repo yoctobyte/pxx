@@ -10,13 +10,23 @@ type
   TForm = class(TWinControl)
   private
     FMenu: TMainMenu;
+    FClient: TControl;
+    FHeaderHeight: Integer;
     procedure SetMenu(v: TMainMenu);
   public
     constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     function ApplyCaption: Integer; override;
     function Realize: Integer; override;
+    { Let AControl fill the window below AHeaderHeight pixels of toolbar, and
+      RESIZE WITH IT. Without this a form's children sit at absolute
+      coordinates, which is fine for a toolbar and wrong for the thing the user
+      drags the window edge to make bigger; see WidgetSet.SetFormClient for why
+      an OnResize handler cannot do this job. Re-applied by Realize, because
+      Realize re-parents every child. }
+    procedure SetClient(AControl: TControl; AHeaderHeight: Integer);
     property Menu: TMainMenu read FMenu write SetMenu;
+    property Client: TControl read FClient;
   end;
 
   TFormClass = class of TForm;
@@ -75,6 +85,15 @@ begin
   Result := 0;
 end;
 
+procedure TForm.SetClient(AControl: TControl; AHeaderHeight: Integer);
+begin
+  FClient := AControl;
+  FHeaderHeight := AHeaderHeight;
+  { now if the handles exist, else Realize does it }
+  if (Self.Handle <> nil) and (AControl <> nil) and (AControl.Handle <> nil) then
+    WidgetSet.SetFormClient(Self, AControl, AHeaderHeight);
+end;
+
 function TForm.Realize: Integer;
 var dummy: Integer;
 begin
@@ -83,6 +102,12 @@ begin
   begin
     dummy := WidgetSet.SetFormMenu(Self, FMenu);
   end;
+  { AFTER inherited: Realize walks the children and re-parents each one into the
+    form's absolute-coordinate container, so a client set earlier would be put
+    back there. Re-applying is cheaper than making SetParent know about it, and
+    it is the same shape as the menu above. }
+  if FClient <> nil then
+    WidgetSet.SetFormClient(Self, FClient, FHeaderHeight);
   Result := 0;
 end;
 

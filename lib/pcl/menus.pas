@@ -4,7 +4,7 @@ unit menus;
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
-uses classes_lite, typinfo;
+uses classes_lite, typinfo, uwidgetset;
 
 type
   TMenuItem = class(TComponent)
@@ -71,11 +71,15 @@ end;
 procedure TMenuItem.SetEnabled(v: Boolean);
 begin
   FEnabled := v;
+  { the widget too, when the menubar has been built. Storing the field and
+    stopping was the whole of this before, so Enabled := False did nothing. }
+  if FHandle <> nil then WidgetSet.SetMenuItemEnabled(Self, v);
 end;
 
 procedure TMenuItem.SetVisible(v: Boolean);
 begin
   FVisible := v;
+  if FHandle <> nil then WidgetSet.SetMenuItemVisible(Self, v);
 end;
 
 function TMenuItem.GetCount: Integer;

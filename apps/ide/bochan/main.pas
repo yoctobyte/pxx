@@ -69,6 +69,7 @@ var
   idf: TEspIdf;
   cfg, cfg2: TEspLibCfg;
   cfgTxt: AnsiString;
+  pin: TEspPin;
 
 begin
   EduthInit(e);
@@ -680,6 +681,24 @@ begin
   CheckTrue(e, 'the line counts them', Pos('2 unit root(s)', EspLibCfgLine(cfg)) > 0);
   CheckStr(e, 'nothing to say when unconfigured',
     EspLibCfgLine(EspLibCfgParse('')), '');
+
+  { scenario: espproj -- which compiler this checkout builds with }
+  writeln('-- espproj: the pin --');
+  pin := EspPinFromLogText(
+    '2026-09-25T21:14:21Z  pinned v440  8bfa6543bc28878f9e5acf2258d5a84b  (was 234383049c6b)  0b6fffa0cbe4af32' + #10 +
+    '2026-09-25T22:05:28Z  pinned v441  4ebfa2d047a27eae32246a00f0ccb5cb  (was 8bfa6543bc28)  c50502d1a47b6f66' + #10);
+  { the LAST pinned row wins: v440 is in the same text and must not be the
+    answer, which a first-match parser would have made it }
+  CheckStr(e, 'the pin in place is the last row', pin.Version, '441');
+  CheckStr(e, 'its sha', pin.Sha, '4ebfa2d047a27eae32246a00f0ccb5cb');
+  CheckStr(e, 'its commit', pin.Commit, 'c50502d1a47b6f66');
+  CheckTrue(e, 'the line names the version and the sha',
+    (Pos('v441', EspPinLine(pin)) > 0) and (Pos('4ebfa2d047a2', EspPinLine(pin)) > 0));
+  CheckStr(e, 'an unreadable log says unknown',
+    EspPinLine(EspPinFromLogText('')), 'pxx pin: unknown');
+  { a log with rows that are not pins must not be read as one }
+  CheckStr(e, 'a non-pin row is not a pin',
+    EspPinFromLogText('2026-09-25T21:14:21Z  rolled back v439  deadbeef' + #10).Version, '');
 
   Halt(EduthReport(e));
 end.

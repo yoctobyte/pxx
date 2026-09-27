@@ -199,6 +199,11 @@ run_gui_test test_pcl_input
 run_gui_test test_pcl_paned
 run_gui_test test_pcl_stream_paned
 run_gui_test test_pcl_tabbar
+# TForm.SetClient: the window's MINIMUM size, which is what decides whether a
+# user can drag it smaller. Reverting the SetBounds arm it guards makes its row 1
+# fail with minimum 800x600 (verified 2026-09-27), and its row 2 is the control
+# that a child's size request still reaches the window.
+run_gui_test test_pcl_form_client
 
 # The six that nothing ran until 2026-08-30. check_test_wiring surfaced them
 # once it stopped blanket-crediting test/gui

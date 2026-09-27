@@ -58,6 +58,33 @@ type
     procedure StopTimer(AId: LongWord); virtual;
     function SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer; virtual;
 
+    { Hand AControl the form's CONTENT area so the window manager sizes it.
+
+      WHY THIS EXISTS RATHER THAN AN OnResize HANDLER. A form places children at
+      absolute coordinates, so the only way to make one follow the window was to
+      re-set its bounds from the form's OnResize -- and that is a FEEDBACK LOOP,
+      not merely tedious: a child's size request is what the container's minimum
+      size is computed from, so growing the child grows the container, which
+      fires OnResize with a bigger allocation, which grows the child again.
+      eliah and espide both carry an `if w = lastW then Exit` guard against it,
+      and the cost of that guard is the bug it was written for: it makes a
+      HEIGHT-only drag re-lay out nothing at all.
+
+      It also fixes the half nobody could work around. A child whose size
+      request is 1100x656 gives the window a minimum of about that, so the
+      window cannot be made SMALLER however the app reflows. After this call the
+      content carries no size request and the window shrinks freely.
+
+      AHeaderHeight is the height reserved above the content for the form's
+      absolutely-positioned widgets (a toolbar, a status line); pass 0 for none. }
+    procedure SetFormClient(AForm: TComponent; AControl: TComponent;
+                            AHeaderHeight: Integer); virtual;
+
+    { A menu item's Enabled/Visible, applied to the widget. Before these, both
+      properties stored a field and changed nothing on screen. }
+    procedure SetMenuItemEnabled(AItem: TComponent; AEnabled: Boolean); virtual;
+    procedure SetMenuItemVisible(AItem: TComponent; AVisible: Boolean); virtual;
+
     { ---- the seam, sealed (feature-pcl-seam-seal) ----
       extctrls, dialogs and glarea used to call GTK raw, which meant a second
       widgetset could only ever implement PART of PCL: the leaked widgets would
@@ -174,6 +201,9 @@ procedure TWidgetSet.ClearCombo(AComboBox: TComponent); begin end;
 function TWidgetSet.StartTimer(AInterval: Integer; ACallback: Pointer; AData: Pointer): LongWord; begin StartTimer := 0; end;
 procedure TWidgetSet.StopTimer(AId: LongWord); begin end;
 function TWidgetSet.SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer; begin SetFormMenu := 0; end;
+procedure TWidgetSet.SetFormClient(AForm: TComponent; AControl: TComponent; AHeaderHeight: Integer); begin end;
+procedure TWidgetSet.SetMenuItemEnabled(AItem: TComponent; AEnabled: Boolean); begin end;
+procedure TWidgetSet.SetMenuItemVisible(AItem: TComponent; AVisible: Boolean); begin end;
 
 
 { ---- the sealed seam: base no-ops ----
