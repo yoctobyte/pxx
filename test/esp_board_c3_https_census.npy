@@ -1,0 +1,124 @@
+# BOARD ONLY: an ESP32-C3 joins a Wi-Fi network the host is also on and soaks
+# `urequests.get("https://...")` against a TLS relay on the host
+# (tools/esp_qemu_net/tls_relay.py in front of
+# test/lib_mimic_urllib_request_server.pas), with a positive control. It is the
+# C3 half of tools/esp_qemu_urequests.sh --tls, which QEMU cannot give: the
+# emulated C3 network card stalls within ~20 TLS requests (known-issues.md).
+#
+# A TEMPLATE. The runner fills each placeholder -- the word in capitals
+# between at-signs: SSID and WIFIPASS (the network), HOST and PORT (the relay,
+# e.g. 192.168.1.30.nip.io), CA_GOOD (the CA that signed the relay's
+# certificate, PEM), CA_WRONG (a CA that signed nothing), N (dropped requests)
+# and KEPT (the control's kept responses) -- in a copy OUTSIDE the checkout.
+# The network name and password are never written into a tracked file, and
+# the staged build that holds them lives under $TMPDIR (tools/esp_stage.sh).
+# This header spells the names without their at-signs so the filler cannot
+# paste a certificate into a comment.
+#
+#   PXX_MAIN=<filled copy> tools/esp_flash.sh --project \
+#     examples/esp32/nilpy-station-c3 --port <C3> --no-verify --seconds 900
+#
+# The census is esp_board_c3_joins_s3.npy's: free heap over N requests whose
+# responses are dropped, read at checkpoints; then KEPT requests whose
+# responses are held, which must read a clearly nonzero cost each or the
+# reading could not see a leak; then reads after census() returns and after
+# 130 s, past lwIP's TIME_WAIT. KEPT is 8 over TLS, not plain HTTP's 20: the
+# C3 has ~65 KB free with Wi-Fi up and each handshake needs tens of KB on top
+# of the held responses. On 2026-09-27, with 20, the board went silent after
+# about 16 kept requests (the relay counted the handshakes); the plain-HTTP
+# census saw its Wi-Fi drop at 34.
+import network
+import socket
+import ssl
+import time
+import urequests
+import 'espsys.pas' as board
+
+N = @N@
+KEPT = @KEPT@
+STEP = N // 10
+base = "https://@HOST@:@PORT@"
+CA_GOOD = """@CA_GOOD@""".encode()
+CA_WRONG = """@CA_WRONG@""".encode()
+
+sta = network.WLAN(network.STA_IF)
+sta.active(True)
+sta.connect("@SSID@", "@WIFIPASS@")
+t0 = board.uptime_ms()
+while sta.status() == network.STAT_CONNECTING and board.uptime_ms() - t0 < 30000:
+    time.sleep(0.25)
+print("HTTPS-JOINED", sta.isconnected())
+
+
+def verified_get(ca, name):
+    s = socket.socket()
+    s.connect(("@HOST@", @PORT@))
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    ctx.load_verify_locations(cadata=ca)
+    try:
+        t = ctx.wrap_socket(s, server_hostname=name)
+    except ValueError as e:
+        return "refused"
+    t.write(b"GET /hello HTTP/1.0\r\nHost: " + name.encode() + b"\r\nConnection: close\r\n\r\n")
+    line = t.readline()
+    t.close()
+    return line.decode().strip()
+
+
+def one():
+    r = urequests.get(base + "/hello")
+    n = r.status_code + len(r.text)
+    r.close()
+    return n
+
+
+def one_kept(kept):
+    r = urequests.get(base + "/hello")
+    n = r.status_code + len(r.text)
+    r.close()
+    kept.append(r)
+    return n
+
+
+def report(tag, k, h0):
+    d = h0 - board.free_heap()
+    print("HTTPS-HEAP " + tag + " after=" + str(k) + " delta=" + str(d) + " bpr=" + str(d // k) + " free=" + str(board.free_heap()))
+
+
+def census():
+    total = 0
+    for i in range(10):
+        total = total + one()
+    h0 = board.free_heap()
+    t1 = board.uptime_ms()
+    for i in range(N):
+        total = total + one()
+        if (i + 1) % STEP == 0:
+            report("dropped", i + 1, h0)
+    print("HTTPS-MS-PER-REQUEST " + str((board.uptime_ms() - t1) // N))
+    kept = []
+    h2 = board.free_heap()
+    for i in range(KEPT):
+        total = total + one_kept(kept)
+    d = h2 - board.free_heap()
+    print("HTTPS-CENSUS kept n=" + str(KEPT) + " delta=" + str(d) + " bpr=" + str(d // KEPT) + " live=" + str(len(kept)))
+    print("HTTPS-TOTAL", total > 0)
+    return h0
+
+
+# The settled reads come AFTER census() returns: a list a statement creates
+# stays alive until that statement runs again or its function returns.
+if sta.isconnected():
+    r = urequests.get(base + "/hello")
+    print("HTTPS-GET", r.status_code, len(r.text))
+    r.close()
+    print("HTTPS-VERIFY good " + verified_get(CA_GOOD, "@HOST@"))
+    print("HTTPS-VERIFY wrongca " + verified_get(CA_WRONG, "@HOST@"))
+    print("HTTPS-VERIFY wrongname " + verified_get(CA_GOOD, "not-this-host.example"))
+    h0 = census()
+    report("returned", N, h0)
+    time.sleep(130)
+    report("settled-130s", N, h0)
+sta.disconnect()
+print("HTTPS-COMPLETE")

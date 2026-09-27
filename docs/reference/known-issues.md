@@ -146,7 +146,8 @@ memory or sockets growing:
 | 1,000 sessions each of `ntptime`, `umqtt.simple` and `umqtt.robust` (Nil Python) | ESP32-S3 | 0 bytes per session |
 | 3,000 MQTT sessions with `umqtt.simple` (Nil Python) | ESP32-C3 | the same socket number every session; heap flat after the first 25 |
 | 320 TCP connections over loopback, server and client in Pascal | ESP32-S3 | 0 bytes over 40 passes |
-| 300 HTTPS requests with `urequests` (Nil Python; needs a compiler newer than v441) | ESP32-S3 | 68 bytes in total over 300 requests |
+| 300 HTTPS requests with `urequests` (Nil Python; v442 or later) | ESP32-S3 (QEMU) | 68 bytes in total over 300 requests |
+| 300 HTTPS requests with `urequests` over Wi-Fi (Nil Python; v442) | ESP32-C3 board | no growth: free heap level at about 65 KB throughout |
 
 Each run was checked against a deliberate leak, which it caught. An earlier
 reading of about 0.6 bytes per pass on the Nil Python example programs turned
@@ -188,7 +189,8 @@ Two limits apply to these measurements:
   1,700 requests over three runs on 2026-09-27, with no stall. Under QEMU it
   comes much sooner over TLS: four of five HTTPS runs on the C3 stopped within
   their first twenty requests, with a compiler from before the HTTPS leak fix
-  and one from after it alike, so no HTTPS memory figure for the C3 is given.
+  and one from after it alike. The C3 HTTPS figure in the table above is from
+  the board, over Wi-Fi.
 
 ## Fixed in this release
 
