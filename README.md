@@ -119,6 +119,7 @@ git clone https://github.com/yoctobyte/pxx
 cd pxx
 TAG="$(git tag -l 'v*.*.*' | awk '!/-/' | sort -V | tail -n1)"   # newest stable tag
 if [ -n "$TAG" ]; then git checkout "$TAG"; else echo 'no stable tag yet — staying on master'; fi
+cp stable_linux_amd64/default/pinned compiler/pascal26   # seed: make refuses without it
 make
 make test
 ```
@@ -129,8 +130,14 @@ the checkout to track it:
 
 ```sh
 git clone https://github.com/yoctobyte/pxx && cd pxx
+cp stable_linux_amd64/default/pinned compiler/pascal26   # seed: make refuses without it
 make && make test
 ```
+
+A fresh clone has no `compiler/pascal26`; `make` stops with *"Self-hosted
+compiler seed missing"* until it is copied from the pin as above (or built by
+FPC with `make bootstrap`). Accept the build once `make` prints
+`converged after N round(s)`.
 
 Bootstrap from FPC (first build on a fresh machine, or recovery):
 
