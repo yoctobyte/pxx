@@ -966,6 +966,21 @@ begin
   OutputArtefactLanded := got > 0;
 end;
 
+{ Was the file CREATED at all, regardless of how much landed in it? This is the
+  one question that separates the two ways a write can come up short, and it
+  needs no path parsing: every genuine short write -- a file-size limit, a full
+  disk, a second writer -- has already opened the file, so it exists and can be
+  opened again. Only a failed open leaves nothing to open, and a failed open is
+  a missing or unwritable directory. Distinct from OutputArtefactLanded, which
+  answers about BYTES: a 0-byte file is created but has not landed. }
+function OutputPathWasCreated(const path: AnsiString): Boolean;
+var fd: Integer;
+begin
+  fd := sysopen(path, 0);            { O_RDONLY }
+  OutputPathWasCreated := fd >= 0;
+  if fd >= 0 then sysclose(fd);
+end;
+
 { Refuse in the writer's own voice: name the path, and say the one thing the
   caller cannot see -- that the compile itself was fine. Halt(1) so a harness
   reading rc gets the same answer as a harness reading the text. }
@@ -998,6 +1013,28 @@ begin
     observation. }
   if OutWriteShort then
   begin
+    { A MISSING OUTPUT DIRECTORY ARRIVES HERE, not at the artefact check below:
+      the open fails, so every write reports short and OutWriteShort is true.
+      None of the four causes under this is that one, so the reader was sent to
+      measure four healthy things -- measured 2026-09-27 on the incident that
+      produced this fix: df -h 90 G free, df -i 1 %, ulimit -f unlimited, no
+      second writer, and the directory simply gone (a reaped scratchpad).
+
+      REORDERING THE TWO BRANCHES WOULD BE WRONG, and that was this fix's first
+      draft. A genuine short write leaves the file on disk AND NON-EMPTY, so
+      OutputArtefactLanded answers True and the reordered form would Exit on a
+      truncated artefact -- reintroducing exactly what a5d4348b22 added the
+      short-write check for, which test_trunc26.1 pins verbatim. So the parent
+      is not tested instead of this branch; it is tested INSIDE it, and only to
+      redirect the message. }
+    if not OutputPathWasCreated(path) then
+    begin
+      writeln(StdErr, 'pascal26: error: could not create the output file: ', path);
+      writeln(StdErr, '  the compile itself succeeded. The file was never created, so this is');
+      writeln(StdErr, '  NOT a short write and the disk is not the suspect.');
+      writeln(StdErr, '  usual cause: a missing or unwritable directory in that path.');
+      Halt(1);
+    end;
     writeln(StdErr, 'pascal26: error: a write to the output file stored fewer bytes than asked: ', path);
     writeln(StdErr, '  check all four -- the first is the commonest and the last is the one that fools people:');
     writeln(StdErr, '    df -h <dir>   free BYTES');

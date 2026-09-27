@@ -8634,6 +8634,21 @@ test-threads: $(COMPILER)
 	@sz=$$(./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc_pre 2>/dev/null >/dev/null; stat -c%s $(TESTTMP)/test_trunc_pre); \
 	  [ "$$sz" -gt 512 ] || { echo "FAIL [test_trunc26.0]: hello.pas now compiles to $$sz bytes, which FITS in the 512-byte cap this guard sets -- the short-write path is unreachable and the row below can no longer fail. Lower the cap or pick a larger subject; do not just raise it."; exit 1; }
 	tools/expect_same.sh test_trunc26.1 "$$( (trap '' XFSZ; ulimit -f 1; ./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc26 2>&1 >/dev/null); echo "rc=$$?")" "$$(printf 'pascal26: error: a write to the output file stored fewer bytes than asked: $(TESTTMP)/test_trunc26\n  check all four -- the first is the commonest and the last is the one that fools people:\n    df -h <dir>   free BYTES\n    df -i <dir>   free INODES -- can hit 100%% while df -h reads 9%%\n    ulimit -f     a file-size limit truncates at a plausible size\n    another pascal26 writing THIS SAME PATH -- two writers interleave,\n      and the file can then end up the RIGHT size, so its size proves nothing.\nrc=1')"
+	# ...and the OTHER way a write comes up short, which took the row above's
+	# message for two years' worth of readers: a MISSING OUTPUT DIRECTORY. The
+	# open fails, so every write reports short and OutWriteShort is true -- and
+	# none of the four causes above is the real one, so the reader goes and
+	# measures four healthy things (measured: df -h 90 G free, df -i 1 %,
+	# ulimit -f unlimited, no second writer).
+	#
+	# THE PAIR IS THE POINT, which is why this row sits against 26.1 and not
+	# somewhere else. The fix is NOT a reorder -- a genuine short write leaves
+	# the file on disk and NON-EMPTY, so OutputArtefactLanded answers True and
+	# a reordered form would Exit on a truncated artefact, undoing a5d4348b22.
+	# 26.1 is this row's positive control: it must keep printing the checklist
+	# while this one must never print it. Break the discriminator either way
+	# and exactly one of the two goes red.
+	tools/expect_same.sh test_trunc26.2 "$$(./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc26_nodir/out 2>&1 >/dev/null; echo "rc=$$?")" "$$(printf 'pascal26: error: could not create the output file: $(TESTTMP)/test_trunc26_nodir/out\n  the compile itself succeeded. The file was never created, so this is\n  NOT a short write and the disk is not the suspect.\n  usual cause: a missing or unwritable directory in that path.\nrc=1')"
 	# CROSS ROWS, wired when bug-a-riscv32-and-xtensa-accept-a-shortstring-
 	# sysopen-path-and-open-nothing closed. riscv32 and xtensa COMPILED this and
 	# printed `short open  FALSE` for a file that exists: the generic arg
