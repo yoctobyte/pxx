@@ -185,6 +185,7 @@ const
   SYS_mprotect = 125;
   SYS_gettid   = 224;
   SYS_exit     = 1;
+  SYS_set_thread_area = 243;   { PxxPthreadStart's fs block install }
 {$else}
 {$ifdef CPUAARCH64}
   { aarch64 uses the asm-generic syscall table. Real mmap (222), byte offset. }
@@ -316,6 +317,7 @@ var
   h: PThreadHandle;
   blk, ignore, tlsBytes, altBytes, img, k: Int64;
   ss: array[0..2] of Int64;
+  desc: array[0..3] of LongWord;               { i386's struct user_desc }
   fn: TThreadEntry;
 begin
   h := PThreadHandle(a);
@@ -328,11 +330,18 @@ begin
     LOCALS AND NOT CONSTANTS only because the const-expression evaluator is a
     different path from ParseFactorCore and does not see these builtins; they
     fold to literals here, so it costs two register loads per thread. }
+  { blk is tested again after the body to unmap the block. Locals are NOT
+    zeroed, so on a target that installs nothing here it must still be set:
+    before 2026-09-27 aarch64 and arm32 (and i386) reached that munmap with
+    whatever the stack held. }
+  blk := 0;
+  tlsBytes := 0;
+  altBytes := 0;
 {$ifdef CPUX86_64}
-  { x86-64 ONLY: pxx's block lives on gs, which glibc does not use. On i386,
-    aarch64 and arm32 the one thread register is glibc's in the dynamic binary
-    this route implies, so there is nothing of pxx's to install (see the note
-    at the weak imports). }
+  { x86-64: pxx's block lives on gs, which glibc does not use. i386 has its
+    own arm below (fs). On aarch64 and arm32 the one thread register is
+    glibc's in the dynamic binary this route implies, so there is nothing of
+    pxx's to install (see the note at the weak imports). }
   tlsBytes := __pxxTlsBlockSize;
   altBytes := __pxxSigAltStackSize;
   { The CREATOR's init-image pointer, read while gs is still the creator's
@@ -367,6 +376,47 @@ begin
     ss[2] := altBytes;                         { ss_size }
     ignore := __pxxrawsyscall(SYS_sigaltstack, Int64(@ss[0]), 0, 0, 0, 0, 0);
   end;
+{$endif}
+{$ifdef CPUI386}
+{$ifdef PXX_HAS_TLS_FS_ENTRY}
+  { i386: pxx's block lives on fs, which glibc (on gs) does not use. This
+    thread starts with the CREATOR's fs selector and a copy of its GDT TLS
+    entries, so fs still reaches the creator's block: read the entry number
+    and the init image through it, then point that same entry at a block of
+    this thread's own. set_thread_area on the entry fs already selects makes
+    the kernel reload fs. No alt stack: the i386 clone leg registers none
+    either. The ordering rule above applies unchanged. }
+  tlsBytes := __pxxTlsBlockSize;
+  img := 0;
+  if __pxxTlsUserBytes > 0 then
+    img := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
+  k := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsFsEntrySlotOff)^;
+  blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes, PROT_RW, MAP_ANON_PRIV, -1, 0);
+  if blk > 0 then
+  begin
+    PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
+    PInt64(blk + __pxxTlsFsEntrySlotOff)^ := k;
+    if img <> 0 then
+    begin
+      ss[0] := 0;
+      while ss[0] < __pxxTlsUserBytes do
+      begin
+        PInt64(blk + __pxxTlsUserOff + ss[0])^ := PInt64(img + ss[0])^;
+        ss[0] := ss[0] + 8;
+      end;
+      PInt64(blk + __pxxTlsInitImageSlotOff)^ := img;
+    end;
+    desc[0] := LongWord(k);                    { entry_number }
+    desc[1] := LongWord(blk);                  { base_addr }
+    desc[2] := $FFFFF;                         { limit, in pages }
+    desc[3] := $51;                            { seg_32bit | limit_in_pages | useable }
+    ignore := __pxxrawsyscall(SYS_set_thread_area, Int64(PtrUInt(@desc[0])), 0, 0, 0, 0, 0);
+    { Reload fs. Linux already did, for a selector naming the entry it just
+      changed; qemu-user did not, and every pthread-made thread ran on its
+      creator's block until this line existed. }
+    ignore := Int64(PtrUInt(__pxxTlsFsReload));
+  end;
+{$endif}
 {$endif}
 
   { Publish identity, THEN wake the parent. PalThreadCreate blocks on this

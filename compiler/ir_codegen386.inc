@@ -1691,6 +1691,20 @@ begin
         EmitB($B8); EmitDataRef(Integer(IRIVal[node]));
       end;
 
+    IR_TLSBASE:
+      { __pxxTlsBase: the block's self-pointer at fs:[0], the convention the
+        x86-64 case reads through gs. fs selects the GDT TLS entry
+        EmitTlsMainInstall or the clone leg pointed at this thread's block. }
+      begin
+        if IRIVal[node] = 1 then
+        begin
+          { __pxxTlsFsReload: refresh fs's cached base first }
+          EmitB($8C); EmitB($E0);                      { mov eax, fs }
+          EmitB($8E); EmitB($E0);                      { mov fs, eax }
+        end;
+        EmitB($64); EmitB($A1); EmitI32(0);            { mov eax, fs:[0] }
+      end;
+
     IR_FRAME:
       { get_frame: ebp is the frame pointer (push ebp; mov ebp, esp). }
       begin

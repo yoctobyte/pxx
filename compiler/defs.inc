@@ -1270,7 +1270,15 @@ const
     0, so the copy also gives the zero start that the language requires.
     bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main }
   TLS_SLOT_INIT_IMAGE = 13;
-  TLS_SLOT_FIRST_FREE = 14;
+  { i386 ONLY: the GDT TLS entry number set_thread_area gave the main thread's
+    block, which `fs` selects ((entry shl 3) or 3). Every thread shares the
+    entry NUMBER and gets its own descriptor for it (the kernel keeps the TLS
+    entries per task), so a new thread re-points the entry it inherited at its
+    own block. The clone leg reads the number from `fs` itself; palthread's
+    PxxPthreadStart cannot read a segment register and reads it here
+    (__pxxTlsFsEntrySlotOff). 0 on every other target. }
+  TLS_SLOT_FS_ENTRY = 14;
+  TLS_SLOT_FIRST_FREE = 15;
   { ---- the per-thread heap magazine -------------------------------------
     A short free LIST per size class, held thread-locally so that a GetMem or
     FreeMem of a common size takes NO LOCK and makes NO CALL. Class i holds

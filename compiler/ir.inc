@@ -12461,7 +12461,9 @@ begin
         byte-wise add, the same one AN_FRAME's `frame - 8` above uses. One arm
         here, no casts in the frontend, and `__pxxTlsBase` itself is unchanged
         because its offset is zero. }
-      Result := IRAppend(IR_TLSBASE, -1, -1, -1, 0, Ord(tyPointer));
+      { IRIVal 1 = reload the thread register first (__pxxTlsFsReload, i386
+        only); every other producer leaves ASTSLen 0. }
+      Result := IRAppend(IR_TLSBASE, -1, -1, -1, ASTSLen[node], Ord(tyPointer));
       if ASTIVal[node] <> 0 then
         Result := IRAppend(IR_BINOP, Result,
                     IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], Ord(tyPointer)),

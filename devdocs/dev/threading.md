@@ -435,7 +435,10 @@ x86-64 only. The other targets have a readable thread register (aarch64
 `tpidr_el0`, arm32 `tpidruro`) but no path this runtime uses to
 *set* one — i386 in particular wants a `struct user_desc`, not a raw base — so
 `__pxxTlsBase` errors there at compile time rather than returning a plausible
-wrong pointer.
+wrong pointer. (Superseded: aarch64 and arm32 set their register since
+2026-09-24, in a static binary; i386 installs a `user_desc` in `fs` through
+`set_thread_area` since 2026-09-27, in any binary, because glibc's i386 TCB is
+on `gs`. See `TargetHasTlsBlock`.)
 
 The consumer work — the per-thread allocator magazine that motivated this — is
 [[feature-threadsafe-heap-optimize]]. A free win waits alongside it: the `--threadsafe` I/O lock does a `gettid`

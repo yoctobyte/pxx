@@ -7841,7 +7841,7 @@ test-threads: $(COMPILER)
 	# day: a compiler with the clone leg's install replaced by a nop prints
 	# zeroed-on-entry=0/4 and main-copy=103 on both targets. That is the
 	# plain-global answer, so these rows can see a child running on its parent's
-	# block. i386 has no install yet and still refuses (TargetHasTlsBlock).
+	# block. i386 rows follow the errno rows below.
 	# bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26_a64
 	tools/expect_same.sh aarch64/test_threadvar_pt26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_threadvar_pt26_a64)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
@@ -7870,6 +7870,24 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/c_errno_per_thread26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_errno_per_thread26_a64)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_arm32
 	tools/expect_same.sh arm32/c_errno_per_thread26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_errno_per_thread26_arm32)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
+	# The same fixtures on i386 (fs, through set_thread_area and a GDT TLS
+	# entry), which had no block until 2026-09-27: `threadvar` refused and
+	# `__thread` was one shared copy, measured on the prior build as
+	# kept=1/4 zeroed-on-entry=0/4 main-copy=103, grandchild-x=50 and
+	# errno-crosstalk=1. The -dPXX_TEST_LINK_LIBC row takes the pthread route
+	# (PxxPthreadStart), the other install path; under qemu-i386 it kept the
+	# creator's block (main-copy=103) until the trampoline reloaded fs.
+	# bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there
+	./$(COMPILER) --threadsafe --target=i386 test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26_i386
+	tools/expect_same.sh i386/test_threadvar_pt26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_threadvar_pt26_i386)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	./$(COMPILER) --threadsafe --target=i386 -dPXX_TEST_LINK_LIBC test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_libc26_i386
+	tools/expect_same.sh i386/test_threadvar_libc26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_threadvar_libc26_i386)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	./$(COMPILER) --threadsafe --target=i386 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26_i386
+	tools/expect_same.sh i386/c_thread_local26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_thread_local26_i386)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
+	./$(COMPILER) --threadsafe --target=i386 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26_i386
+	tools/expect_same.sh i386/c_tlinit26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_tlinit26_i386)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
+	./$(COMPILER) --threadsafe --target=i386 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_i386
+	tools/expect_same.sh i386/c_errno_per_thread26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_errno_per_thread26_i386)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	# pthread_join's retval is the start routine's return (crtl trampoline), on
 	# the cross targets too. Pre-fix every row printed "returned 0".
 	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_pthread_join_returns_value.c $(TESTTMP)/c_pjoin26_a64

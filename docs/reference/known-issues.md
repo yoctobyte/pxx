@@ -206,9 +206,14 @@ v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
 - **C: an initialised `__thread` variable read 0 in other threads.**
   `__thread int tl = 7;` read 7 in `main` and 0 in a thread started with
   `pthread_create`, and in that thread's own threads. Now every thread starts
-  at the initialiser, on x86-64, aarch64 and arm32 (checked against GCC; on
-  i386 and riscv32 `__thread` is still one shared copy, see below). Wrong in
-  v441 to v445.
+  at the initialiser, on x86-64, i386, aarch64 and arm32 (checked against
+  GCC; riscv32 has no threads). Wrong in v441 to v445.
+
+- **i386: `__thread` was one copy shared by every thread, and `threadvar` was
+  refused.** A C `__thread` variable, and `errno` through it, read and wrote
+  another thread's value (with a compile-time warning); Pascal `threadvar` did
+  not compile. i386 now gives each thread its own block, as x86-64 does, also
+  when libc is linked. Wrong in v441 to v445.
 
 - **C: an array typedef of structs was not modelled.** With `typedef struct {
   int a, b; } P; typedef P PA[2];`, a struct member `PA ps;` was laid out as
@@ -286,10 +291,8 @@ These were wrong in v424 and fixed in v425, and so are fixed here too:
 These do not compile, or compile with a warning. None of them produces a wrong
 answer silently. (Measured with v425.)
 
-- **Pascal `threadvar` on i386** is refused: only x86-64, aarch64 and arm32
-  provide per-thread storage.
-- **C `__thread` on i386 and riscv32** compiles with a warning that every thread
-  shares one copy. Single-threaded programs are unaffected.
+- **C `__thread` on riscv32** compiles with a warning that every thread
+  shares one copy. riscv32 has no threads, so no program is affected.
 - **C `setvbuf` with full or line buffering** returns nonzero: PXX's C streams
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused with

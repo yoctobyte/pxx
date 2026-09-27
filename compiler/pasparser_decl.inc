@@ -2784,7 +2784,7 @@ begin
   reason := TLSREFUSE_NONE;
   if not TargetHasTlsBlock then
   begin
-    why := spelling + ' needs a per-thread block, and only x86-64, aarch64 and '
+    why := spelling + ' needs a per-thread block, and only x86-64, i386, aarch64 and '
          + 'arm32 install one (see TargetHasTlsBlock). Answering with the parent '
          + 'thread''s block would be a plausible wrong address rather than a null '
          + 'anything could test for -- the same reason __pxxTlsBase refuses here.';

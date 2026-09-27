@@ -4410,7 +4410,7 @@ begin
 
       if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize')
          or CaseEqual(name, '__pxxTlsUserOff') or CaseEqual(name, '__pxxTlsUserBytes')
-         or CaseEqual(name, '__pxxTlsInitImageSlotOff') then
+         or CaseEqual(name, '__pxxTlsInitImageSlotOff') or CaseEqual(name, '__pxxTlsFsEntrySlotOff') then
       begin
         { The two sizes the clone stub carves off a child stack, as compile-time
           constants the RTL can READ instead of restating.
@@ -4432,6 +4432,7 @@ begin
         else if CaseEqual(name, '__pxxTlsUserOff') then i64v := TLS_USER_FIRST_OFF
         else if CaseEqual(name, '__pxxTlsUserBytes') then i64v := TlsUserBytes
         else if CaseEqual(name, '__pxxTlsInitImageSlotOff') then i64v := 8 * TLS_SLOT_INIT_IMAGE
+        else if CaseEqual(name, '__pxxTlsFsEntrySlotOff') then i64v := 8 * TLS_SLOT_FS_ENTRY
         else i64v := SIG_ALTSTACK_SIZE;
         Next;
         if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
@@ -4453,10 +4454,35 @@ begin
           feature-a-thread-local-storage-via-clone-settls). }
         Next; { consume '__pxxTlsBase' }
         if not TargetHasTlsBlock then
-          Error('__pxxTlsBase is not available on this target: x86-64, aarch64 and arm32 install a per-thread block, and this target has no equivalent yet. Answering with the parent thread''s block would be a plausible wrong pointer. See TargetHasTlsBlock.');
+          Error('__pxxTlsBase is not available on this target: x86-64, i386, aarch64 and arm32 install a per-thread block, and this target has no equivalent yet. Answering with the parent thread''s block would be a plausible wrong pointer. See TargetHasTlsBlock.');
         TlsStrictUsed := True;
         node := AllocNode(AN_TLSBASE);
         ASTTk[node] := Ord(tyPointer);
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        LastExprTk := tyPointer;
+        CurASTNode := node;
+        Exit;
+      end;
+
+      if CaseEqual(name, '__pxxTlsFsReload') then
+      begin
+        { i386 ONLY: reload fs, then answer __pxxTlsBase. palthread's
+          PxxPthreadStart re-points the GDT TLS entry fs selects with
+          set_thread_area, and fs caches the OLD base until something reloads
+          it. Linux reloads a selector that names the modified entry; qemu-user
+          does not, and there a pthread-made thread kept its creator's block.
+          Pascal cannot move a segment register, so the compiler does. }
+        Next;
+        if TargetArch <> TARGET_I386 then
+          Error('__pxxTlsFsReload is i386 only: fs is where the i386 block lives (see TargetHasTlsBlock)');
+        TlsStrictUsed := True;
+        node := AllocNode(AN_TLSBASE);
+        ASTTk[node] := Ord(tyPointer);
+        ASTSLen[node] := 1;   { reload fs first; see the IR_TLSBASE lowering }
         if CurTok.Kind = tkLParen then
         begin
           Next;

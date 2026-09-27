@@ -127,9 +127,9 @@ procedure EmitAcquireHeapLock;
   recording, since the first reading sends you looking for an accessor that is
   already here.
 
-  Slot budget, RE-READ from defs.inc rather than carried forward: 0..13 are
-  taken (the magazine's own busy flag is 12, the init image 13) and
-  TLS_SLOT_FIRST_FREE = 14, so TWO map slots are free. The magazine did not
+  Slot budget, RE-READ from defs.inc rather than carried forward: 0..14 are
+  taken (the magazine's own busy flag is 12, the init image 13, i386's fs
+  entry 14) and TLS_SLOT_FIRST_FREE = 15, so ONE map slot is free. The magazine did not
   need them -- it took
   a 64-slot TAIL past the map (TLS_SLOT_HEAP_MAG = 16) and the block grew to
   1152 to hold it, which is stack the thread already owns. Both numbers in
@@ -2060,6 +2060,53 @@ begin
       EmitI32($EF000000);                       { svc  0 }
       Patch32(pSkip, $1A000000 or ((((CodeLen - pSkip) div 4) - 2) and $00FFFFFF));
     end;
+    Exit;
+  end;
+  if TargetArch = TARGET_I386 then
+  begin
+    { i386: the block goes in FS, through a GDT TLS entry. glibc on i386 keeps
+      its TCB in gs, so fs is free and, as on x86-64, the block is installed in
+      a dynamic binary too. set_thread_area(entry_number = -1) picks a free
+      entry and writes its number back into the user_desc; fs then selects it
+      as (entry shl 3) or 3. The number goes in TLS_SLOT_FS_ENTRY for
+      PxxPthreadStart, which cannot read fs. user_desc: entry_number,
+      base_addr, limit = $FFFFF in pages (4 GiB), flags $51 = seg_32bit |
+      limit_in_pages | useable. If the syscall fails fs stays 0 and the first
+      thread-local read faults, rather than reading someone else's block.
+      ebx and ecx are saved: the entry code after this reads nothing from
+      them today, and this sequence should not be the reason it cannot. }
+    TlsMainInstalled := True;
+    EmitTlsInitImageAlloc;
+    BSSSize := (BSSSize + 15) and (not 15);
+    BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TlsBlockSize);
+    EmitB($53);                                         { push ebx }
+    EmitB($51);                                         { push ecx }
+    EmitB($B9); EmitGlobRef(BSS_TLS_MAIN);              { mov ecx, block }
+    EmitB($89); EmitB($09);                             { mov [ecx], ecx  (slot 0 = self) }
+    if BSS_TLS_IMAGE >= 0 then
+    begin
+      EmitB($C7); EmitB($81); EmitI32(8 * TLS_SLOT_INIT_IMAGE);
+        EmitGlobRef(BSS_TLS_IMAGE);                     { mov dword [ecx+8*slot], image }
+    end;
+    EmitB($83); EmitB($EC); EmitB($10);                 { sub esp, 16  (user_desc) }
+    EmitB($C7); EmitB($04); EmitB($24); EmitI32(-1);    { mov dword [esp], -1  (entry_number) }
+    EmitB($89); EmitB($4C); EmitB($24); EmitB($04);     { mov [esp+4], ecx     (base_addr) }
+    EmitB($C7); EmitB($44); EmitB($24); EmitB($08); EmitI32($FFFFF);  { limit }
+    EmitB($C7); EmitB($44); EmitB($24); EmitB($0C); EmitI32($51);     { flags }
+    EmitB($89); EmitB($E3);                             { mov ebx, esp }
+    EmitB($B8); EmitI32(243);                           { mov eax, 243 (set_thread_area) }
+    EmitB($CD); EmitB($80);                             { int 0x80 }
+    EmitB($85); EmitB($C0);                             { test eax, eax }
+    EmitB($75); pSkip := CodeLen; EmitB(0);             { jnz .skip }
+    EmitB($8B); EmitB($04); EmitB($24);                 { mov eax, [esp]  (the entry it chose) }
+    EmitB($89); EmitB($81); EmitI32(8 * TLS_SLOT_FS_ENTRY);  { mov [ecx+8*slot], eax }
+    EmitB($C1); EmitB($E0); EmitB($03);                 { shl eax, 3 }
+    EmitB($83); EmitB($C8); EmitB($03);                 { or eax, 3  (GDT, RPL 3) }
+    EmitB($8E); EmitB($E0);                             { mov fs, eax }
+    PatchRel8(pSkip);                                   { .skip: }
+    EmitB($83); EmitB($C4); EmitB($10);                 { add esp, 16 }
+    EmitB($59);                                         { pop ecx }
+    EmitB($5B);                                         { pop ebx }
     Exit;
   end;
   TlsMainInstalled := True;

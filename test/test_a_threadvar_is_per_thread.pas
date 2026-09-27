@@ -77,6 +77,13 @@ program test_a_threadvar_is_per_thread;
 
 uses palthread;
 
+{ -dPXX_TEST_LINK_LIBC links libc, so the threads go through palthread's
+  PTHREAD route (PxxPthreadStart) instead of the clone stub: a second install
+  path, and on i386 the one that has to re-point the fs entry itself. }
+{$ifdef PXX_TEST_LINK_LIBC}
+function c_getpid: Integer; cdecl; external 'libc.so.6' name 'getpid';
+{$endif}
+
 const
   NT = 4;
   CHURN = 200000;
@@ -112,6 +119,9 @@ var
   dup: Boolean;
 
 begin
+{$ifdef PXX_TEST_LINK_LIBC}
+  if c_getpid <= 0 then writeln('getpid failed');
+{$endif}
   mine := 7;
   shared := 7;
   for i := 0 to NT-1 do

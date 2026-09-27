@@ -1249,6 +1249,9 @@ begin
     until the next pin. Retire it once every pin in use has the builtins. }
   name := 'PXX_HAS_TLS_INIT_IMAGE';
   PasDefine(name);
+  { The same, for __pxxTlsFsEntrySlotOff (i386's block install, TLS_SLOT_FS_ENTRY). }
+  name := 'PXX_HAS_TLS_FS_ENTRY';
+  PasDefine(name);
 end;
 
 procedure PasApplyMimicDefines;
