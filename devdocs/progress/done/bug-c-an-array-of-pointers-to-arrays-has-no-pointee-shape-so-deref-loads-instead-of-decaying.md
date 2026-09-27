@@ -2,7 +2,7 @@
 prio: 70
 track: C
 summary: 'An ELEMENT that is a pointer to an array has no channel to record its pointee''s shape. The metadata that makes `float (*p)[4][4]` work (SymPtrElemArrLen/NDims/DimSpan) describes the SYMBOL''s own pointee, so it cannot describe an array of such pointers (`mat4 *ms[3]`) or a pointer to one (`mat4 **m`, which is what the parameter `mat4 *m[]` becomes). As a result `*ms[i]` LOADS from the matrix where C decays it to the matrix''s address, and `(*ms[i])[r][c]` strides by elements. Passing `*ms[i]` on as a `mat4` argument segfaults. `sizeof` of such an array is SILENTLY wrong as well when the element is a typedef of an array typedef (a count computed as `sizeof a / sizeof a[0]` comes out 1), which is the first thing cglm's own test suite hits once it builds. This is the body of cglm''s glm_mat4_mulN, whose own call site `(mat4 *[]){&a,&b,&c}` parses since this ticket was filed. The spelled-out form `float (*sp[2])[4][4]` is refused outright ("expected C expression"). Measured 2026-09-25: both the compiler built at 2ae5962be3 and the one after the fix segfault on the named-array spelling, so it is not a regression.'
-status: working
+status: done
 owner: frankD
 ---
 
@@ -47,8 +47,12 @@ mat4 a, b, c; mat4 *m[] = { &a, &b, &c }; mat4 *p = &a;
 printf("%d %d %d %d\n", (int)sizeof(m), (int)sizeof(m[0]), (int)sizeof(p), (int)(sizeof(m)/sizeof(m[0])));
 ```
 
-gcc `24 8 8 3`, pxx `128 128 8 1`. With `vec4 *m[]` (one level of array typedef)
-pxx agrees with gcc (`16 8 16 16` for `m`, `m[0]`, `vec4 *n[2]`, `float (*q[2])[4]`).
+gcc `24 8 8 3`, pxx `128 128 8 1`. ~~With `vec4 *m[]` (one level of array typedef)
+pxx agrees with gcc~~ **WRONG, corrected 2026-09-27:** those numbers were gcc's.
+The probe also contained `float (*q[2])[4]`, which pxx refuses, so pxx's half
+of `pxx ... && run; gcc ... && run` printed nothing and gcc's line was read as
+pxx's. Measured separately, `vec4 *m[2]` gives pxx `32 32 8` against gcc `16 8 16`:
+the one-level typedef was wrong the same way.
 cglm's own test suite (the v425 restamp kit's `drv/cglm_all.c`) now BUILDS on v441,
 where v425 refused it, and runs until `mat4_mulN`, which passes
 `sizeof(matrices) / sizeof(matrices[0])` = 1 and trips cglm's `len > 1` assertion
@@ -56,3 +60,50 @@ where v425 refused it, and runs until `mat4_mulN`, which passes
 the segfault in the repro above.
 
 Re-ranked 45 -> 70 on 2026-09-27 (frankuser, coordinator): a silent wrong value on real code (cglm) ranks above a refusal. docs/reference/known-issues.md carries a "Silently wrong" row for it until the fix lands; remove that row in the fixing commit. Note the size is not a simple multiple: `sizeof m` is 128 for three elements (neither 3x8 nor 3x64), so do not assume "pointee size per element" without printing it.
+
+## 2026-09-27 (frankD): fixed
+
+Causes, both in the declaration and neither in the metadata readers alone:
+1. The local path folded the typedef's dims into the ARRAY even when the
+   declarator had stars (`mat4 *m[3]` became float[3][4][4]). The global path
+   was already guarded, but stamped only the OUTER length of a multi-dim
+   typedef pointee (`mat4 *g`: `sizeof *g` 16, gcc 64).
+2. Nothing recorded an array ELEMENT's pointee, nor the base pointee of a
+   depth-2 pointer (`mat4 **pp`, and the parameter `mat4 *m[]`, whose stamp
+   the parameter path deliberately cleared).
+
+The carrier: the element's pointee shape is stamped on the array symbol
+(after the array's own spans when it is multi-dim, CPtrElemSpanOff), and a
+depth-2 pointer's stamp means its BASE pointee. The one reader is
+`CPtrToArrShapeSym` (ir.inc), for `p`, `m[i]`, `pp[i]` and `*pp`; its
+consumers are CDerefDecayStride, the pointer-to-array subscript arm (which
+now also unwraps `(*x)[i]..` into `x[0][i]..`), IRPointerStride and the
+sizeof descriptor walk.
+
+Found while varying the shape, fixed here because they are the same path:
+- unparenthesised `sizeof *r` / `sizeof r[0]` for a plain `vec4 *r` answered
+  8 / 4 (gcc 16 / 16);
+- `(*q)[1][2][3]` through a three-level typedef read 0;
+- a local with an unsized OUTER dimension (`vec4 v[] = {...}`,
+  `float a[][4] = {...}`) was allocated one row and overran the frame
+  (sizeof 16, gcc 48, a neighbouring local overwritten). cglm's perlin tests.
+
+Evidence, all x86-64 against gcc 15, compiler sha256 `691d7e9ae082`:
+- `test/c_array_of_pointers_to_array_typedefs.c`, 68 rows diffed against
+  gcc's output, wired into test-core; the v441 pin segfaults on it;
+- tools/run_c_conformance.sh: 220 pass, 0 fail, 0 skip (of 220);
+- cglm's suite (v425 kit drv/cglm_all.c): v441 passed 88 and stopped at the
+  mulN assertion; this build passes 1109, fails 0, and segfaults at
+  `mat2x3s_zero_init` (filed separately);
+- self-host fixedpoint verified; tools/gate.sh quick (see the commit).
+
+Filed, not fixed (backlog-cfront):
+- bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims
+  (silent; docs/reference/known-issues.md now carries this row instead);
+- bug-c-sizeof-of-a-parenthesised-deref-followed-by-a-subscript-is-refused;
+- bug-c-the-spelled-out-array-of-pointers-to-arrays-declarator-is-refused;
+- bug-c-an-array-designator-inside-a-multi-dimensional-initializer-is-refused;
+- bug-c-cglm-s-test-suite-crashes-at-mat2x3s-zero-init.
+
+## Log
+- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

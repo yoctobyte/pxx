@@ -3384,6 +3384,8 @@ function CSizeofDescriptorWalkDeref(si, derefs: Integer; var sz: Integer): Boole
   not (`int (*p)[4]`). }
 var cArrLen, cRec, cPtrRec, cNDims, cDim, cSpanSym, recId, depth: Integer;
     cPtrDepth, cPtrBaseRec: Integer;   { pointer CHAIN, not one level of pointee }
+    cPtrArrSym: Integer;               { symbol whose pointee is an ARRAY, else -1 }
+    cSpanOff: Integer;                 { where cSpanSym's spans start (CPtrElemSpanOff) }
     cTk, cPtrTk, cPtrBaseTk: TTypeKind; cOK: Boolean;
     cFldRec: Integer; fieldName, cFldName: AnsiString;
 begin
@@ -3391,6 +3393,7 @@ begin
   cPtrTk := tyUnknown; cPtrRec := REC_NONE;
   cNDims := 0; cDim := 0; cSpanSym := si;
   cFldRec := REC_NONE; cFldName := '';
+  cPtrArrSym := -1; cSpanOff := 0;
   if Syms[si].IsArray then
   begin
     { ArrLen is the FLATTENED element count; a multidimensional array keeps
@@ -3402,6 +3405,18 @@ begin
     cRec := Syms[si].ElemRecName;
     cNDims := SymArrNDims[si];
     cPtrDepth := 0; cPtrBaseTk := tyUnknown; cPtrBaseRec := REC_NONE;
+    { `vec4 *m[2]`: the element is a pointer to an array, and the declaration
+      stamped that pointee's shape on m. Carry the element's pointee so the
+      `*` after `m[0]` has something to peel into; the pointer arm below
+      turns it into the array. Without it `sizeof *m[0]` answered 8, the
+      pointer, where gcc says 16.
+      bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+    if (cTk = tyPointer) and (SymPtrElemArrLen[si] > 0) then
+    begin
+      cPtrTk := Syms[si].PtrElemTk;
+      cPtrRec := Syms[si].PtrElemRec;
+      cPtrArrSym := si;
+    end;
   end
   else
   begin
@@ -3418,13 +3433,22 @@ begin
     cPtrDepth := SymPtrDepth[si];
     cPtrBaseTk := IntToTypeKind(SymPtrBaseTk[si]);
     cPtrBaseRec := SymPtrBaseRec[si];
+    { `vec4 *r`, `float (*r)[4]`: the same pointee-array carry as the array
+      arm above, so `sizeof r[0]` is the row (16, not the float's 4) and
+      `sizeof *r` unparenthesised is too (it sized the decayed expression, 8) }
+    if (cTk = tyPointer) and (cPtrDepth <= 2) and (SymPtrElemArrLen[si] > 0) then
+      cPtrArrSym := si;
   end;
   while cOK do
   begin
     if (CurTok.Kind = tkLBrack) or
        ((derefs > 0) and not ((CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent))) then
     begin
-      if (CurTok.Kind <> tkLBrack) and (cArrLen < 0) then begin cOK := False; Break; end;
+      { a `*` peels an array, or the element pointer of `vec4 *m[2]` whose
+        pointee array the walk carries (cPtrArrSym); any other pointer is the
+        caller's }
+      if (CurTok.Kind <> tkLBrack) and (cArrLen < 0) and
+         not ((cTk = tyPointer) and (cPtrArrSym >= 0)) then begin cOK := False; Break; end;
       { one subscript peels one level: an element of the array, or the
         pointee of a pointer. The index expression is skipped balanced so
         `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
@@ -3443,7 +3467,7 @@ begin
             bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
           if cSpanSym >= 0 then
           begin
-            cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cDim];
+            cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cSpanOff + cDim];
             Inc(cDim);
           end
           else if (cFldRec <> REC_NONE) and
@@ -3480,6 +3504,16 @@ begin
           cTk := cPtrTk; cRec := cPtrRec;
           cPtrTk := tyUnknown; cPtrRec := REC_NONE;
           cPtrDepth := 0;
+          { the pointee is an ARRAY: continue as that array, whose dims the
+            declaration parked in the symbol's (otherwise unused) spans }
+          if cPtrArrSym >= 0 then
+          begin
+            cArrLen := SymPtrElemArrLen[cPtrArrSym];
+            cNDims := SymPtrElemNDims[cPtrArrSym];
+            cDim := 0; cSpanSym := cPtrArrSym;
+            cSpanOff := CPtrElemSpanOff(cPtrArrSym);
+            cPtrArrSym := -1;
+          end;
         end;
       end
       else cOK := False;
@@ -3862,7 +3896,8 @@ begin
             Pascal's SizeOf(p^) is correct on the identical construct, which is
             what says this is the C reader alone and not the metadata.
             bug-c-sizeof-of-a-dereferenced-pointer-to-array-answers-the-element-size }
-          if SymPtrElemArrLen[si] > 0 then sz := sz * SymPtrElemArrLen[si];
+          if (SymPtrElemArrLen[si] > 0) and (SymPtrDepth[si] <= 1) then
+            sz := sz * SymPtrElemArrLen[si];
         end;
       end;
     end
@@ -4464,6 +4499,21 @@ end;
   does. So a stamp anywhere in the chain means this really is a load, and the
   scan bails. That is what keeps `*(m[1]+1)` reading an int.
   bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying }
+function CDerefDecayStride(node: Integer): Integer; forward;
+
+{ The node the `*` arm builds for `*x` when x points at an array: the no-op
+  decay `x + 0`, stamped with what it steps by. The subscript arm unwraps it so
+  `(*x)[i][j]` indexes the pointee as `x[0][i][j]` does.
+  bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+function CIsDecayedDerefOfPtrToArr(node: Integer): Boolean;
+begin
+  Result := (node >= 0) and (ASTKind[node] = AN_BINOP) and
+            (ASTIVal[node] = Ord(tkPlus)) and (ASTSLen[node] > 0) and
+            (ASTRight[node] >= 0) and (ASTKind[ASTRight[node]] = AN_INT_LIT) and
+            (ASTIVal[ASTRight[node]] = 0) and
+            (CPtrToArrShapeSym(ASTLeft[node]) >= 0);
+end;
+
 function CDerefDecayStride(node: Integer): Integer;
 var base, si, k, lvl, stamp, elemSz, elemRec, suffK, suffNext, d, nd: Integer;
     elemTk: TTypeKind;
@@ -4514,21 +4564,22 @@ begin
     Result := suffNext;
     Exit;
   end;
-  if ASTKind[base] <> AN_IDENT then Exit;
-  si := ASTIVal[base];
+  { an element `m[i]` of `vec4 *m[2]` is the same pointer-to-array value as a
+    `vec4 *p`, and CPtrToArrShapeSym answers for both }
+  si := CPtrToArrShapeSym(base);
+  if si < 0 then Exit;
   { `int (*r)[4]` — the pointee is an array, so *r is a pointer to its first
     element (and one dimension further in for a multi-dim pointee). Arithmetic
     over the pointer stays at that level, exactly as it does for an array, so
     `*(r+2)` is the same answer; a STAMP means a dimension was already stepped
     through and the deref is then a real load. }
-  if (stamp = 0) and (Syms[si].TypeKind = tyPointer) and
-     (SymPtrElemArrLen[si] > 0) then
+  if stamp = 0 then
   begin
-    Result := TypeSlotSize(Syms[si].PtrElemTk);
-    if Syms[si].PtrElemTk = tyRecord then Result := RecSize(Syms[si].PtrElemRec);
+    Result := TypeSlotSize(CPtrToArrElemTk(si));
+    if CPtrToArrElemTk(si) = tyRecord then Result := RecSize(CPtrToArrElemRec(si));
     for k := 1 to SymPtrElemNDims[si] - 1 do
-      if SymArrDimSpan[si * MAX_ARR_DIMS + k] > 0 then
-        Result := Result * SymArrDimSpan[si * MAX_ARR_DIMS + k];
+      if CPtrElemSpanAt(si, k) > 0 then
+        Result := Result * CPtrElemSpanAt(si, k);
   end;
 end;
 
@@ -5189,7 +5240,7 @@ function ParseCPostfixTail(node: Integer): Integer;
 var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind: Integer;
+    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si, missKind, pendIdx: Integer;
     sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
     done: Boolean; fieldName: AnsiString;
 begin
@@ -5285,7 +5336,7 @@ begin
           node := inode;
         end;
       end
-      else if (ASTKind[node] = AN_IDENT) and (SymPtrElemArrLen[ASTIVal[node]] > 0) then
+      else if (CPtrToArrShapeSym(node) >= 0) or CIsDecayedDerefOfPtrToArr(node) then
       begin
         { Pointer to array `elem (*p)[A][B]..`. The pointee's dims come from
           SymArrDimSpan when it has more than one, else the one row length.
@@ -5302,21 +5353,56 @@ begin
             `glm_vec3_scale(axisn, v[0], m[0])` on a `mat4 m` param). Now it is
             the byte address p + acc * sizeof(the remaining sub-array), with the
             ASTSLen stamp saying what that address steps by -- the same shape and
-            the same stamp the array and field partial-index arms build. }
-        si := ASTIVal[node];
+            the same stamp the array and field partial-index arms build.
+          The pointer may also be an element `m[i]` of `vec4 *m[2]`: that
+          AN_INDEX loads the pointer, and the shape is on m.
+          bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+        { `(*p)[i]..` is `p[0][i]..`: the deref was built as a no-op decay
+          (CDerefDecayStride), and only the first pointee subscript can be
+          stepped through that stamp -- the generic subscript read the next
+          level as an element, so `(*q)[1][2][3]` on a three-level `box2 *q`
+          read 0. Unwrap it and take the subscript already parsed as the first
+          POINTEE subscript, with 0 as the pointer index. }
+        pendIdx := -1;
+        if CIsDecayedDerefOfPtrToArr(node) then
+        begin
+          node := ASTLeft[node];
+          pendIdx := idxExpr;
+          idxExpr := AllocNode(AN_INT_LIT); ASTIVal[idxExpr] := 0; ASTTk[idxExpr] := Ord(tyInteger);
+        end;
+        si := CPtrToArrShapeSym(node);
+        { `*pp` of `mat4 **pp` is the pointer VALUE pp[0]. As an AN_DEREF base
+          an AN_INDEX means Pascal's `p^[i]`, indexing the pointee in place,
+          which read the pointer's own bytes as the matrix. }
+        if ASTKind[node] = AN_DEREF then
+        begin
+          inode := AllocNode(AN_INT_LIT); ASTIVal[inode] := 0; ASTTk[inode] := Ord(tyInteger);
+          dnode := AllocNode(AN_INDEX);
+          ASTLeft[dnode] := ASTLeft[node]; ASTRight[dnode] := inode;
+          ASTTk[dnode] := Ord(tyPointer);
+          node := dnode;
+        end;
         if SymPtrElemNDims[si] > 1 then ndimsF := SymPtrElemNDims[si] else ndimsF := 1;
         flatNode := idxExpr;             { first subscript = the pointer index }
         ndi := 0;
-        while (CurTok.Kind = tkLBrack) and (ndi < ndimsF) do
+        while ((pendIdx >= 0) or (CurTok.Kind = tkLBrack)) and (ndi < ndimsF) do
         begin
-          Next;                          { '[' }
-          if ndimsF > 1 then spanD := SymArrDimSpan[si * MAX_ARR_DIMS + ndi]
+          if pendIdx < 0 then Next;      { '[' }
+          if ndimsF > 1 then spanD := CPtrElemSpanAt(si, ndi)
           else spanD := SymPtrElemArrLen[si];
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := spanD; ASTTk[strideLit] := Ord(tyInteger);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
-          idxExpr := ParseCExpr;
-          Expect(tkRBrack, ']');
+          if pendIdx >= 0 then
+          begin
+            idxExpr := pendIdx;
+            pendIdx := -1;
+          end
+          else
+          begin
+            idxExpr := ParseCExpr;
+            Expect(tkRBrack, ']');
+          end;
           inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
           ASTLeft[inode] := mulNode; ASTRight[inode] := idxExpr; ASTTk[inode] := Ord(tyInteger);
           flatNode := inode;
@@ -5327,19 +5413,19 @@ begin
           inode := AllocNode(AN_INDEX);
           ASTLeft[inode] := node;
           ASTRight[inode] := flatNode;
-          ASTTk[inode] := Ord(Syms[si].PtrElemTk);
+          ASTTk[inode] := Ord(CPtrToArrElemTk(si));
           node := inode;
         end
         else
         begin
           { bytes of one element, then of the sub-array left after ndi pointee
             subscripts (dims ndi..n-1), and of ITS element (dims ndi+1..n-1) }
-          if Syms[si].PtrElemTk = tyRecord then rowStride := RecSize(Syms[si].PtrElemRec)
-          else rowStride := TypeSlotSize(Syms[si].PtrElemTk);
+          if CPtrToArrElemTk(si) = tyRecord then rowStride := RecSize(CPtrToArrElemRec(si))
+          else rowStride := TypeSlotSize(CPtrToArrElemTk(si));
           for ndi2 := ndimsF - 1 downto ndi + 1 do
-            if ndimsF > 1 then rowStride := rowStride * SymArrDimSpan[si * MAX_ARR_DIMS + ndi2];
+            if ndimsF > 1 then rowStride := rowStride * CPtrElemSpanAt(si, ndi2);
           spanD := rowStride;            { what the decayed address steps by }
-          if ndimsF > 1 then rowStride := rowStride * SymArrDimSpan[si * MAX_ARR_DIMS + ndi]
+          if ndimsF > 1 then rowStride := rowStride * CPtrElemSpanAt(si, ndi)
           else rowStride := rowStride * SymPtrElemArrLen[si];
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
@@ -6948,6 +7034,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
     beFlat, beBelow: Integer;
     beStack: array[0..MAX_ARR_DIMS-1] of Integer;
+    unsizedOuter: Boolean;   { `T a[][N] = {...}`: rows come from the braces }
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
     tdNDimsL: Integer; tdDimsL: array[0..MAX_ARR_DIMS - 1] of Integer;
@@ -7321,8 +7408,15 @@ begin
         ALL of them, in order: this appended exactly one, so `typedef int T[2][3]'
         laid out an int[2] and every T object was under-allocated and indexed
         with the wrong row stride.
-        bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals }
-      if CTypeTypedefNDims >= 1 then
+        bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals
+        Only when the declarator has no stars: in `mat4 *m[2]` each element is a
+        POINTER to a mat4, so the typedef's dims describe the element's pointee
+        (stamped after allocation below), not the array. Folding them made m a
+        float[2][4][4] of 128 bytes where gcc has 16.
+        bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+      if declPtrDepth >= 1 then
+        { the typedef describes the pointee; nothing to fold }
+      else if CTypeTypedefNDims >= 1 then
         for tdDi := 0 to CTypeTypedefNDims - 1 do
         begin
           if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
@@ -7335,6 +7429,7 @@ begin
         dimSpan[dimCount] := tdArrLen;
         Inc(dimCount);
       end;
+      unsizedOuter := (dimCount >= 2) and (dimSpan[0] < 1);
       if dimCount = 1 then
         arrLen := dimSpan[0]
       else
@@ -7482,6 +7577,27 @@ begin
           arms it feeds are all dimCount<=1-guarded, so multi-dim sizing
           (flatLen from the declared dims) is unaffected }
         hadArrDesig := True;
+        { An unsized OUTER dimension, `float a[][4] = {...}` or `vec4 v[] =
+          {...}`, has as many rows as the braces reached. It was clamped to 1
+          above and never revisited, so the local was allocated one row (16
+          bytes where gcc says 48) while every row was still stored, over
+          whatever the frame kept next to it: cglm's perlin tests, which
+          declare `vec4 p1[] = {...}`, crashed on return. The walk leaves beFlat
+          at the end of the last row it closed; a trailing unbraced partial row
+          is counted by the highest index stored. File-scope arrays were right.
+          bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+        if unsizedOuter then
+        begin
+          beBelow := 1;
+          for di := 1 to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+          if beBelow < 1 then beBelow := 1;
+          for dk := 0 to nArrElems - 1 do
+            if CLIArrIdx[cliBase + dk] + 1 > beFlat then beFlat := CLIArrIdx[cliBase + dk] + 1;
+          dimSpan[0] := (beFlat + beBelow - 1) div beBelow;
+          if dimSpan[0] < 1 then dimSpan[0] := 1;
+          flatLen := dimSpan[0] * beBelow;
+          arrLen := flatLen;
+        end;
       end
       else if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) and (dimCount <= 1) then
@@ -7705,6 +7821,28 @@ begin
           a code address, corrupting the indexing (see the file-scope arm's
           note). bug-c-a-local-typedef-d-function-pointer-array-is-not-callable }
         if declProcSig >= 0 then SymElemProcSig[idx] := declProcSig;
+        { `vec4 *m[2]`, `mat4 *m[2]`: each ELEMENT points at the typedef's
+          array, so record that pointee shape on the array symbol, as the
+          scalar arm below does for `mat4 *p`. The per-dim spans share
+          SymArrDimSpan with the array's own dims, so on a multi-dim array
+          (`mat4 *m[2][3]`) they go after them (CPtrElemSpanOff), and a shape
+          whose two halves do not fit MAX_ARR_DIMS is not stamped.
+          bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+        if (tdArrLen >= 1) and (declPtrDepth = 1) and
+           (CPtrElemSpanOff(idx) + tdNDimsL <= MAX_ARR_DIMS) then
+        begin
+          SymPtrElemArrLen[idx] := tdArrLen;
+          if tdNDimsL > 1 then
+          begin
+            SymPtrElemArrLen[idx] := 1;
+            SymPtrElemNDims[idx] := tdNDimsL;
+            for di := 0 to tdNDimsL - 1 do
+            begin
+              SymArrDimSpan[idx * MAX_ARR_DIMS + CPtrElemSpanOff(idx) + di] := tdDimsL[di];
+              SymPtrElemArrLen[idx] := SymPtrElemArrLen[idx] * tdDimsL[di];
+            end;
+          end;
+        end;
         SymSyncTypeRef(idx);
       end;
       { C99 6.7.8p21: any brace initializer zero-fills the tail the list does
@@ -7821,11 +7959,16 @@ begin
           belongs HERE, on the pointee — the same slot, in the same order, that
           the parenthesised `elem (*name)[N]` arm writes, so the two spellings
           converge on one stamping instead of this one growing a private rule. }
-        if (tdArrLen >= 1) and (declPtrDepth >= 1) then
+        if (tdArrLen >= 1) and (declPtrDepth >= 1) and (declPtrDepth <= 2) then
           SymPtrElemArrLen[idx] := tdArrLen;
         { a MULTI-dim array typedef (`mat4 *m`, [4][4]) is a pointer to that
-          whole array: stamp every dim, as `float (*m)[4][4]` does }
-        if (tdArrLen >= 1) and (declPtrDepth = 1) and (tdNDimsL > 1) then
+          whole array: stamp every dim, as `float (*m)[4][4]` does. At depth 2
+          (`mat4 **pp`) the same stamp describes the BASE pointee, which is how
+          CPtrToArrShapeSym reads it; it had only the flat length there, and
+          every reader took it as pp's own pointee, so `pp + 1` stepped 64
+          bytes. bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+        if (tdArrLen >= 1) and (declPtrDepth >= 1) and (declPtrDepth <= 2) and
+           (tdNDimsL > 1) then
         begin
           SymPtrElemArrLen[idx] := 1;
           SymPtrElemNDims[idx] := tdNDimsL;
@@ -11066,6 +11209,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     ptrArrDeferTok, ptrArrDeferCnt, initStartTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
     gTdDi: Integer;  { walks an array typedef's inherent dims }
+    gTdNDims, gPtrD: Integer; gTdDims: array[0..MAX_ARR_DIMS - 1] of Integer;
     initStr: AnsiString;
     clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
     fnCurTgt, fnRangeHi, fnMaxTgt: Integer; fnHadDesig: Boolean;
@@ -11094,6 +11238,10 @@ begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
+  { ...and all of its dims, copied before an initializer's casts re-run
+    ParseCDeclType, for the pointee stamp of `mat4 *g` / `mat4 *g[2]` }
+  gTdNDims := CTypeTypedefNDims;
+  for gTdDi := 0 to MAX_ARR_DIMS - 1 do gTdDims[gTdDi] := CTypeTypedefDims[gTdDi];
   { POINTER-TO-ARRAY `elem (*name)[N]` at FILE SCOPE. Captured HERE, beside the
     other CType* reads, for the reason ParseCLocalDeclAST states at its own
     copy: an initializer can contain a cast, a cast re-runs ParseCDeclType, and
@@ -11778,8 +11926,30 @@ begin
       { The length the guard above declined to fold onto the variable belongs
         on the POINTEE — the same slot the `elem (*name)[N]` arm writes from
         gPaLen, so a typedef'd spelling and a parenthesised one land alike. }
-      if (tdArrLen >= 1) and ((gFirstDecl and (baseTk = tyPointer)) or (gStars > 0)) then
+      { A multi-dim typedef (`mat4 *g`) stamps every dim, and at depth 2
+        (`mat4 **g`) the stamp is the BASE pointee's, exactly as the local
+        path records them. It stamped only the outer length, so `sizeof *g`
+        was 16 where gcc says 64 and `(*g)[2][2]` read the wrong element. On
+        a multi-dim array the spans follow its own (CPtrElemSpanOff).
+        bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+      if gFirstDecl then gPtrD := CTypePtrDepth else gPtrD := gStars;
+      if (tdArrLen >= 1) and ((gFirstDecl and (baseTk = tyPointer)) or (gStars > 0)) and
+         (gPtrD >= 1) and (gPtrD <= 2) and
+         ((not wasArr) or (gPtrD = 1)) and
+         (CPtrElemSpanOff(idx) + gTdNDims <= MAX_ARR_DIMS) then
+      begin
         SymPtrElemArrLen[idx] := tdArrLen;
+        if gTdNDims > 1 then
+        begin
+          SymPtrElemArrLen[idx] := 1;
+          SymPtrElemNDims[idx] := gTdNDims;
+          for gTdDi := 0 to gTdNDims - 1 do
+          begin
+            SymArrDimSpan[idx * MAX_ARR_DIMS + CPtrElemSpanOff(idx) + gTdDi] := gTdDims[gTdDi];
+            SymPtrElemArrLen[idx] := SymPtrElemArrLen[idx] * gTdDims[gTdDi];
+          end;
+        end;
+      end;
       { `ft *gpf` global — pointee sig so `(*gpf)(args)` resolves. }
       if CTypePtrElemProcSig >= 0 then SymElemProcSig[idx] := CTypePtrElemProcSig;
       SymSyncTypeRef(idx);
@@ -14776,6 +14946,24 @@ begin
           if CTypePtrElemNDims > 1 then
             for pmi := 0 to CTypePtrElemNDims - 1 do
               pptrdims[nparams * MAX_ARR_DIMS + pmi] := CTypePtrElemDim[pmi];
+          { `mat4 **pp`: the BASE pointee's shape, as a depth-2 stamp means
+            (CPtrToArrShapeSym) -- the local `mat4 **pp` records the same }
+          if (CTypePtrDepth = 2) and (CTypeTypedefArrLen > 0) and
+             (pptrarrlen[nparams] = 0) then
+          begin
+            if CTypeTypedefNDims > 1 then
+            begin
+              pptrndims[nparams] := CTypeTypedefNDims;
+              pptrarrlen[nparams] := 1;
+              for pmi := 0 to CTypeTypedefNDims - 1 do
+              begin
+                pptrdims[nparams * MAX_ARR_DIMS + pmi] := CTypeTypedefDims[pmi];
+                pptrarrlen[nparams] := pptrarrlen[nparams] * CTypeTypedefDims[pmi];
+              end;
+            end
+            else
+              pptrarrlen[nparams] := CTypeTypedefArrLen;
+          end;
           if CTypeFnPtrName <> '' then
           begin
             { Inline function-pointer parameter `RET (*name)(params)` — ParseCDeclType
@@ -14904,9 +15092,16 @@ begin
               pelemtk[nparams] := Ord(tyPointer);   { `T *name[]` -> pointer-to-pointer }
               Inc(pdepths[nparams]);
               { ...so a pointee-array stamp from `mat4 *` describes the ELEMENT's
-                pointee, not this parameter's: `m[i]` steps one pointer. }
-              pptrarrlen[nparams] := 0;
-              pptrndims[nparams] := 0;
+                pointee, not this parameter's: `m[i]` steps one pointer. At
+                depth 2 it is kept as the BASE pointee's shape, the meaning a
+                depth-2 stamp has everywhere (CPtrToArrShapeSym), so `*m[i]`
+                in cglm's `glm_mat4_mulN(mat4 *matrices[], ...)` decays to the
+                matrix instead of loading a float as an address. Deeper, drop it. }
+              if pdepths[nparams] > 2 then
+              begin
+                pptrarrlen[nparams] := 0;
+                pptrndims[nparams] := 0;
+              end;
             end;
             ptypes[nparams] := tyPointer;
           end;

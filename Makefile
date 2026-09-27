@@ -17929,6 +17929,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_array_typedef_dims.c $(TESTTMP)/c_arrtypedims26
 	gcc -std=gnu99 -o $(TESTTMP)/c_arrtypedims_gcc test/c_array_typedef_dims.c
 	tools/expect_same.sh c_arrtypedims26 "$$($(TESTTMP)/c_arrtypedims26)" "$$($(TESTTMP)/c_arrtypedims_gcc)"
+	# AN ARRAY OF POINTERS TO ARRAYS knows what its elements point at. `mat4
+	# *m[3]` folded the typedef's dims into the array (sizeof 192, gcc 24, so
+	# cglm's `sizeof m / sizeof m[0]` count was 1), and `*m[i]` loaded where C
+	# decays. Varied across 1-3 level typedefs, local/static/global/parameter,
+	# `mat4 **pp`, strides as well as sizes; the last block brackets unsized
+	# `vec4 v[] = {...}` locals, which were allocated one row and overran the
+	# frame. Diffed against gcc's own output.
+	# bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying
+	./$(COMPILER) test/c_array_of_pointers_to_array_typedefs.c $(TESTTMP)/c_arrptrarr26
+	gcc -std=gnu99 -o $(TESTTMP)/c_arrptrarr_gcc test/c_array_of_pointers_to_array_typedefs.c
+	tools/expect_same.sh c_arrptrarr26 "$$($(TESTTMP)/c_arrptrarr26)" "$$($(TESTTMP)/c_arrptrarr_gcc)"
 	# THE PTY FAMILY, WHICH crtl DID NOT HAVE AT ALL. posix_openpt, grantpt,
 	# unlockpt, ptsname and ptsname_r were absent from include/ and src/ alike,
 	# and busybox calls ptsname_r WITHOUT a guard -- platform.h defines

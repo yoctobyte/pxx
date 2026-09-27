@@ -3893,6 +3893,80 @@ end;
 
 function IRArrayElemStride(node: Integer): Integer; forward;
 
+{ The symbol that carries the pointee shape of a C pointer-to-array VALUE, or
+  -1. Three spellings have one: a pointer `vec4 *p` (the shape is on p); an
+  element `m[i]` of a 1-D array of such pointers, `vec4 *m[2]` (the shape is
+  stamped on m by the declaration); and one level into a pointer to such
+  pointers, `pp[i]` / `*pp` of `vec4 **pp` or of the parameter `vec4 *pp[]`.
+  On a depth-2 pointer the stamp describes the BASE pointee, so pp itself is
+  not one: `pp + 1` steps one pointer. Every consumer that asks "what does this
+  pointer point at" for `*x`, `x[i][j]` and `x + 1` goes through here, so the
+  two spellings cannot drift apart.
+  bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying }
+function CPtrToArrShapeSym(node: Integer): Integer;
+var si: Integer;
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    si := ASTIVal[node];
+    if (not Syms[si].IsArray) and (SymPtrDepth[si] <= 1) and
+       (SymPtrElemArrLen[si] > 0) then Result := si;
+  end
+  else if ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DEREF)) and
+          (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
+  begin
+    si := ASTIVal[ASTLeft[node]];
+    if SymPtrElemArrLen[si] <= 0 then Exit;
+    if Syms[si].IsArray then
+    begin
+      { a FULL index: the multi-dim arm flattens `m[i][j]` to one AN_INDEX,
+        and a partial one is a decayed row (a BINOP), never this }
+      if (ASTKind[node] = AN_INDEX) and
+         (Syms[si].ElemType = tyPointer) and (SymPtrDepth[si] = 1) then
+        Result := si;
+    end
+    else if (Syms[si].TypeKind = tyPointer) and (SymPtrDepth[si] = 2) then
+      Result := si;
+  end;
+end;
+
+{ Where the pointee's per-dim spans start in SymArrDimSpan for a
+  CPtrToArrShapeSym symbol. A pointer, and a 1-D array (whose own spans are
+  unused), keep them at 0; a MULTI-dim array `mat4 *m[2][3]` keeps its own dims
+  first, so the pointee's follow them. The declaration refuses to stamp when
+  the two do not fit in MAX_ARR_DIMS. }
+function CPtrElemSpanOff(si: Integer): Integer;
+begin
+  Result := 0;
+  if Syms[si].IsArray and (SymArrNDims[si] >= 2) then Result := SymArrNDims[si];
+end;
+
+function CPtrElemSpanAt(si, k: Integer): Integer;
+begin
+  Result := SymArrDimSpan[si * MAX_ARR_DIMS + CPtrElemSpanOff(si) + k];
+end;
+
+{ The pointee array's ELEMENT for a CPtrToArrShapeSym symbol: PtrElemTk at
+  depth 1, but a depth-2 pointer's immediate pointee is a pointer, and the
+  array's element is its base (SymPtrBaseTk/Rec). }
+function CPtrToArrElemTk(si: Integer): TTypeKind;
+begin
+  if (not Syms[si].IsArray) and (SymPtrDepth[si] >= 2) then
+    Result := IntToTypeKind(SymPtrBaseTk[si])
+  else
+    Result := Syms[si].PtrElemTk;
+end;
+
+function CPtrToArrElemRec(si: Integer): Integer;
+begin
+  if (not Syms[si].IsArray) and (SymPtrDepth[si] >= 2) then
+    Result := SymPtrBaseRec[si]
+  else
+    Result := Syms[si].PtrElemRec;
+end;
+
 function IRPointerStride(node: Integer): Integer;
 var elemTk: TTypeKind; recId, aliasIdx: Integer; fieldName: AnsiString;
 begin
@@ -3901,6 +3975,21 @@ begin
   while (node >= 0) and (ASTKind[node] = AN_COMMA) do node := ASTRight[node];
   elemTk := tyUnknown;
   recId := REC_NONE;
+  { `m[i] + 1` on `vec4 *m[2]` (and `pp[i] + 1`, `*pp + 1` on `vec4 **pp`): a
+    pointer that points at an array steps by the whole pointee, as the pointer
+    arm below does for `vec4 *p` }
+  if CProgramMode and (node >= 0) and
+     ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DEREF)) and
+     (CPtrToArrShapeSym(node) >= 0) then
+  begin
+    aliasIdx := CPtrToArrShapeSym(node);
+    elemTk := CPtrToArrElemTk(aliasIdx);
+    if elemTk = tyRecord then Result := RecSize(CPtrToArrElemRec(aliasIdx))
+    else if elemTk = tyUnknown then Result := 1
+    else Result := TypeSlotSize(elemTk);
+    Result := Result * SymPtrElemArrLen[aliasIdx];
+    Exit;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen <> -1) then
@@ -3932,7 +4021,8 @@ begin
         one element, so `*(r+2)` read m[0][2]. `r[i][j]` is unaffected — that
         path flattens the subscripts itself and multiplies by the element size
         explicitly. bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying }
-      if CProgramMode and (SymPtrElemArrLen[ASTIVal[node]] > 0) then
+      if CProgramMode and (SymPtrElemArrLen[ASTIVal[node]] > 0) and
+         (SymPtrDepth[ASTIVal[node]] <= 1) then
       begin
         if elemTk = tyRecord then Result := RecSize(recId)
         else if elemTk = tyUnknown then Result := 1

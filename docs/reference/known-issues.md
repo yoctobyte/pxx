@@ -31,15 +31,15 @@ A fix in progress is parked in the repository as
 `devdocs/dev/parked-patches/tls-init-image-reaches-every-thread-wip.patch`.
 (Measured with v425.)
 
-### C: `sizeof` of an array of pointers to a two-level array typedef
+### C: a struct field that points at an array typedef
 
-With `typedef float vec4[4]; typedef vec4 mat4[4];`, an array such as
-`mat4 *m[] = { &a, &b, &c };` has the wrong size: `sizeof m` is 128 and
-`sizeof m[0]` is 128, where GCC gives 24 and 8. So the usual element count,
-`sizeof m / sizeof m[0]`, comes out 1 instead of 3. With a one-level typedef
-(`vec4 *m[]`) the sizes are right. The same shape also goes wrong when an
-element is dereferenced, `*m[i]`. cglm's own tests reach it in
-`glm_mat4_mulN`. (Measured with v441.)
+With `typedef float vec4[4]; typedef vec4 mat4[4];`, a struct field declared
+as `mat4 *p;` or `mat4 *m[3];` does not know the shape of what it points at:
+`sizeof *s.p` is 4 where GCC gives 64, `(*s.p)[2][2]` reads the wrong
+element, and `(*s.m[0])[1][1]` crashes. The same declarations as variables or
+parameters are right. **Workaround:** copy the field into a local of the same
+type first (`mat4 *p = s.p;`) and use that. (Measured with v441 and with the
+compiler that fixed the variable spellings.)
 
 ### ESP: bare-metal images do not run on a real chip
 

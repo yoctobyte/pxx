@@ -19320,7 +19320,9 @@ begin
   if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
   Result := ASTIVal[ASTLeft[node]];
   if (Result < 0) or (Result >= SymCount) then begin Result := -1; Exit; end;
-  if SymPtrElemArrLen[Result] <= 0 then Result := -1;
+  if SymPtrElemArrLen[Result] <= 0 then Result := -1
+  { a C `vec4 **pp` keeps the BASE pointee's shape; `*pp` is a pointer }
+  else if CProgramMode and (SymPtrDepth[Result] > 1) then Result := -1;
 end;
 
 { ...and the same symbol when the pointee is an ARRAY AT ALL -- a fixed extent
@@ -19454,7 +19456,9 @@ begin
     if (Result < 0) or (Result >= SymCount) then begin Result := -1; Exit; end;
   end;
   if (SymPtrElemArrLen[Result] <= 0) and (SymPtrElemDynDepth[Result] <= 0) then
-    Result := -1;
+    Result := -1
+  { a C `vec4 **pp` keeps the BASE pointee's shape; `*pp` is a pointer }
+  else if CProgramMode and (SymPtrDepth[Result] > 1) then Result := -1;
 end;
 
 { ---- the same question, for a pointer that is not a plain variable ----
