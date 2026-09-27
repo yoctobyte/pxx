@@ -80,19 +80,31 @@ type
   { TBox — a stacking container: children are packed in order along one
     axis (no absolute coords, no draggable handle — unlike TPaned, any number of
     children). Horizontal by default; set Vertical before adding children (the
-    handle is built lazily at CreateHandle). Each child packs with Expand=False,
-    Fill=False by default, so children keep their natural size — set Vertical /
-    Spacing before use; per-child expand is not yet exposed. }
+    handle is built lazily at CreateHandle).
+
+    ExpandRest is the header-then-content convention: the FIRST child keeps
+    its natural size and every later one expands to fill what is left, which
+    is what a header strip above a content area wants. Set it False for a row
+    of buttons or a stack of fields, where every child should keep its own
+    size — without it the last thing added is stretched across the rest of
+    the box.
+
+    This comment used to say "each child packs with Expand=False by default"
+    and the code has never done that: everything after the first expanded,
+    with no way to ask for anything else. The property is the fix; the
+    default keeps the two existing callers behaving as they do. }
   TBox = class(TWinControl)
   private
     FVertical: Boolean;
     FSpacing: Integer;
+    FExpandRest: Boolean;
   public
     constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
   published
     property Vertical: Boolean read FVertical write FVertical;
     property Spacing: Integer read FSpacing write FSpacing;
+    property ExpandRest: Boolean read FExpandRest write FExpandRest;
   end;
 
   { TTabBar — a Lazarus-style tabbed component bar: a notebook whose pages
@@ -238,6 +250,7 @@ begin
   inherited Create(AOwner);
   FVertical := False;
   FSpacing := 0;
+  FExpandRest := True;
 end;
 
 procedure TBox.CreateHandle;

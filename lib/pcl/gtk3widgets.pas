@@ -675,6 +675,11 @@ end;
 function TGtk3WidgetSet.CreateLabel(ALabel: TComponent): Pointer;
 begin
   Result := gtk_label_new(PChar(''));
+  { LEFT-ALIGNED, like Delphi's and Lazarus' TLabel. GTK centres a label in
+    whatever space it is given, which is invisible in a GtkFixed -- the label
+    gets exactly its natural size there -- and wrong the moment one is packed
+    in a box, where it drifts to the middle of the row. }
+  gtk_label_set_xalign(Result, 0.0);
 end;
 
 function TGtk3WidgetSet.CreateEdit(AEdit: TComponent): Pointer;
@@ -798,7 +803,9 @@ var
   ctl: TControl;
   pctl: TControl;
   cls: PClassRTTI;
+  prop: PPropInfo;
   n: LongWord;
+  expandRest: Integer;
 begin
   ctl := TControl(AControl);
   pctl := TControl(AParent);
@@ -823,18 +830,20 @@ begin
   end;
 
   { TBox: gtk_box, any number of children, packed in Add order along its axis.
-    Header-then-content convention: the first child packed keeps its natural
-    size (a fixed header row); every child packed after it expands/fills to
-    take the remaining space. Matches this box's only current use (a pane
-    header strip above its content) — revisit if a caller needs a different
-    split. }
+    Header-then-content when ExpandRest (the default): the first child keeps
+    its natural size and every later one expands to fill the rest, which is
+    what a header strip above a content area wants. ExpandRest=False packs
+    every child at its natural size -- a row of buttons, a stack of fields. }
   if IsSubclassOf(cls, 'TBox') then
   begin
     if gtk_widget_get_parent(ch) = ph then Exit;
     lst := gtk_container_get_children(ph);
     n := g_list_length(lst);
     if lst <> nil then g_list_free(lst);
-    if n = 0 then
+    expandRest := 1;
+    prop := GetPropInfo(cls, 'ExpandRest');
+    if (prop <> nil) and (GetOrdProp(Pointer(pctl), prop) = 0) then expandRest := 0;
+    if (n = 0) or (expandRest = 0) then
       gtk_box_pack_start(ph, ch, 0, 0, 0)
     else
       gtk_box_pack_start(ph, ch, 1, 1, 0);

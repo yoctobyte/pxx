@@ -576,6 +576,19 @@ begin
   CheckInt(e, 'a missing directory lists nothing',
     Length(EspListDir('apps/ide/bochan/fixtures/no-such-dir')), 0);
 
+  { EspBoardsFromPorts: the no-udev fallback. Bridge is '' because the bridge
+    came from the by-id name and there is none -- asserted, because a bridge
+    invented from a raw device name would be a guess presented as a reading. }
+  SetLength(ents, 2);
+  ents[0] := '/dev/ttyUSB0';
+  ents[1] := '/dev/ttyACM1';
+  boards := EspBoardsFromPorts(ents);
+  CheckInt(e, 'raw ports become boards', Length(boards), 2);
+  CheckStr(e, 'the port is the path', boards[0].Port, '/dev/ttyUSB0');
+  CheckStr(e, 'the name is its basename', boards[1].Name, 'ttyACM1');
+  CheckStr(e, 'no bridge is claimed without a by-id name', boards[0].Bridge, '');
+  CheckStr(e, 'and no chip before Detect', boards[1].Chip, '');
+
   { scenario: espproj — attached boards, read WITHOUT opening a port }
   writeln('-- espproj: boards from a by-id tree --');
   CheckStr(e, 'CP2102 named', EspBridgeFromByIdName(

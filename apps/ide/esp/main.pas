@@ -30,7 +30,8 @@ program espide;
                                     print the log to stdout, exit 0 on a
                                     flashed board: the hardware check. }
 
-uses gtk3_c, gtk3, controls, stdctrls, extctrls, comctrls, forms, menus, dialogs, sysutils,
+uses gtk3_c, gtk3, controls, stdctrls, extctrls, comctrls, forms, menus, dialogs,
+     uwidgetset, sysutils,
      buffer, runner, project, espproj;
 
 const
@@ -51,11 +52,6 @@ const
 type
   TMode = (mIdle, mDetect, mBuild, mMonitor);
 
-  TBoard = record
-    Port: AnsiString;
-    Chip: AnsiString;
-  end;
-
   TEspForm = class(TForm)
   public
     RootEdit: TEdit;
@@ -64,6 +60,7 @@ type
     ChipBox: TComboBox;
     DetectBtn, SaveBtn, BuildBtn, MonBtn, StopBtn: TButton;
     Status: TLabel;
+    BoardBar: TLabel;    { the attached boards, on their own line }
     MainMenu: TMainMenu;
     Bar: TToolBar;
     HeadBox: TBox;
@@ -79,13 +76,28 @@ type
     CurText: AnsiString;       { its text as loaded or last saved }
     CurProject: AnsiString;    { project the selection belongs to, or '' }
     Selected: AnsiString;      { the selected tree entry, absolute }
-    Boards: array of TBoard;
+    { espproj's record, not a local two-field one: it carries the by-id name
+      and the USB bridge, which the listing fills in WITHOUT opening the port,
+      and Chip/Mac/Revision, which only Detect can fill because asking resets
+      the board. }
+    Boards: TEspBoardArr;
     Detected: Boolean;         { Detect has run since the last change }
+    Idf: TEspIdf;              { where ESP-IDF is; read from files, once }
+    Dialout: TEspDialout;
+    UseSg: Boolean;            { run serial commands through `sg dialout -c` }
+    LibCfg: TEspLibCfg;        { the open project's extra libraries }
+    { The Settings > Libraries editor. A SECOND TForm, rebuilt on every open
+      rather than kept and re-shown: GTK's default delete-event destroys a
+      window, so a kept form whose title bar was closed would hand its stale
+      handle to the next Show. Rebuilding costs nothing and cannot dangle --
+      the old form's buttons are gone with its widgets, so its handlers can
+      never fire again. }
+    LibDlg: TForm;
+    LibUnits, LibComps, LibReqs: TMemo;
 
     Mode: TMode;
     Proc: TStreamProc;
     ProcOut: AnsiString;
-    DetectPorts: TStrArray;
     DetectIdx: Integer;
     BuildAfterDetect: Boolean;
     MonitorPort: AnsiString;
@@ -108,6 +120,7 @@ type
     function SelectorChip: AnsiString;
     function ProjectLine: AnsiString;
     procedure ShowState;
+    procedure RelistBoards;
     procedure StartDetect;
     procedure DetectNextPort;
     procedure FinishDetectPort;
@@ -131,11 +144,34 @@ type
     procedure OnMenuOpenFile(Sender: TObject);
     procedure OnMenuQuit(Sender: TObject);
     procedure OnMenuAbout(Sender: TObject);
+    procedure OnMenuLibraries(Sender: TObject);
+    procedure OnMenuIdf(Sender: TObject);
+    procedure OnLibSave(Sender: TObject);
+    procedure OnLibClose(Sender: TObject);
     procedure BuildMenu;
   end;
 
 var
   EspForm: TEspForm;
+
+{ One shell word list, space separated. The parts are paths and component
+  names the user typed, so a space inside one would split it -- the whole
+  string is single-quoted by EspShellQuote at the call site, which keeps it
+  one argument to `export` but not one word to the build.sh that re-splits
+  it. Documented rather than solved: a path with a space in it is not a
+  shape the IDF build tolerates either. }
+function JoinSpace(const a: TStrArray): AnsiString;
+var i: Integer;
+    r: AnsiString;
+begin
+  r := '';
+  for i := 0 to Length(a) - 1 do
+  begin
+    if i > 0 then r := r + ' ';
+    r := r + a[i];
+  end;
+  JoinSpace := r;
+end;
 
 function StripCR(const s: AnsiString): AnsiString;
 var i, n: Integer;
@@ -264,6 +300,10 @@ procedure TEspForm.SelectPath(const path: AnsiString);
 begin
   Selected := path;
   CurProject := EspFindProjectRoot(path, RootDir);
+  { the extra-libraries config travels WITH the project, so it is re-read
+    whenever the project changes rather than held from startup }
+  if CurProject <> '' then LibCfg := EspLibCfgLoad(CurProject)
+  else LibCfg := EspLibCfgParse('');
   ShowState;
 end;
 
@@ -305,22 +345,63 @@ begin
 end;
 
 procedure TEspForm.ShowState;
-var s: AnsiString;
+var s, note: AnsiString;
     i: Integer;
 begin
-  s := ProjectLine + '   |   ';
-  if not Detected then
-    s := s + 'Board: not detected yet (press Detect)'
-  else if Length(Boards) = 0 then
-    s := s + 'Board: none connected'
+  s := ProjectLine + '   |   ' + EspIdfLine(Idf);
+  if UseSg then s := s + '   |   serial via `sg dialout`';
+  note := EspDialoutNote(Dialout);
+  if (note <> '') and (not UseSg) then s := s + '   |   ' + note;
+  if not EspLibCfgEmpty(LibCfg) then s := s + '   |   ' + EspLibCfgLine(LibCfg);
+  if Mode = mMonitor then s := s + '   |   monitoring ' + MonitorPort;
+  SetStatus(s);
+
+  { THE BOARDS GET THEIR OWN LINE, and that is a measurement and not taste:
+    three attached boards render as ~200 characters of by-id name, which on
+    one line with the project and the IDF version ellipsized everything after
+    the first board away. The full text also goes to the LOG whenever the
+    list changes, because even one line ellipsizes on a narrow window and the
+    log is the place text can be long. }
+  s := '';
+  if Length(Boards) = 0 then
+    s := 'No board attached'
   else
     for i := 0 to Length(Boards) - 1 do
     begin
-      if i > 0 then s := s + ', ';
-      s := s + 'Board: ' + EspChipLabel(Boards[i].Chip) + ' on ' + Boards[i].Port;
+      if i > 0 then s := s + '   +   ';
+      s := s + EspBoardLine(Boards[i]);
     end;
-  if Mode = mMonitor then s := s + '   |   monitoring ' + MonitorPort;
-  SetStatus(s);
+  { THE LIST IS ALWAYS SHOWN, DETECTED OR NOT, and that is the point of issue
+    5: RelistBoards reads /dev/serial/by-id names only, so the port, the
+    identity and the USB bridge are on screen without anything having been
+    opened. Opening a port RESETS the board -- interrupting whatever it is
+    running -- so only Detect does that, and only Detect can fill in the
+    chip, the MAC and the revision. }
+  if (Length(Boards) > 0) and (not Detected) then
+    s := s + '      (Detect asks the chip -- it resets the board)';
+  BoardBar.Caption := s;
+end;
+
+{ Re-read the attached boards. OPENS NOTHING: by-id names and the bridge they
+  encode, which is udev's own rendering of the USB descriptors. Any chip/MAC
+  a previous Detect learned is dropped with the old list, because a replug can
+  put a different board on the same name. }
+procedure TEspForm.RelistBoards;
+var i: Integer;
+begin
+  Boards := EspListBoards;
+  if Length(Boards) = 0 then
+  begin
+    { no /dev/serial/by-id (no udev, or a container): fall back to the raw
+      device names, which still open nothing }
+    Boards := EspBoardsFromPorts(EspCandidatePorts);
+  end;
+  Detected := False;
+  if Length(Boards) = 0 then
+    AddLog('Boards: none attached.' + #10)
+  else
+    for i := 0 to Length(Boards) - 1 do
+      AddLog('Board: ' + EspBoardLine(Boards[i]) + #10);
 end;
 
 { ---- children: detect, build+flash, monitor ---- }
@@ -334,30 +415,33 @@ end;
 procedure TEspForm.StartDetect;
 begin
   StopChild;             { a monitor holding the port would answer "busy" }
-  SetLength(Boards, 0);
-  Detected := False;
-  DetectPorts := EspCandidatePorts;
+  RelistBoards;
   DetectIdx := 0;
-  if Length(DetectPorts) = 0 then
+  if Length(Boards) = 0 then
   begin
     Detected := True;
-    AddLog('Detect: no serial port (/dev/ttyACM*, /dev/ttyUSB*): no board is connected.' + #10);
+    AddLog('Detect: no serial port (/dev/serial/by-id, /dev/ttyACM*, /dev/ttyUSB*): no board is connected.' + #10);
     ShowState;
     if BuildAfterDetect then begin BuildAfterDetect := False; StartBuild; end;
     Exit;
   end;
+  ShowState;
   DetectNextPort;
 end;
 
 procedure TEspForm.DetectNextPort;
-var port: AnsiString;
+var port, cmd: AnsiString;
 begin
-  port := DetectPorts[DetectIdx];
+  port := Boards[DetectIdx].Port;
   AddLog('Detect: asking ' + port + ' (esptool chip-id; this resets the board)' + #10);
   ProcOut := '';
-  if StreamStart(Proc, '/bin/bash', ['-c',
-       '. "${ESP_IDF_DIR:-$HOME/esp/esp-idf}/export.sh" >/dev/null 2>&1; ' +
-       'exec esptool --port "$1" chip-id 2>&1', 'sh', port]) then
+  { The port is QUOTED INTO the command rather than passed as $1, because
+    `sg dialout -c` takes one string and forwards no arguments. Quoting is
+    EspShellQuote's job whether or not sg is in the way, so there is one
+    command shape and not two. }
+  cmd := EspWrapSg('. "${ESP_IDF_DIR:-$HOME/esp/esp-idf}/export.sh" >/dev/null 2>&1; ' +
+                   'exec esptool --port ' + EspShellQuote(port) + ' chip-id 2>&1', UseSg);
+  if StreamStart(Proc, '/bin/bash', ['-c', cmd, 'sh']) then
     Mode := mDetect
   else
   begin
@@ -368,15 +452,18 @@ end;
 
 procedure TEspForm.FinishDetectPort;
 var chip, why, port: AnsiString;
+    i, answered: Integer;
 begin
-  port := DetectPorts[DetectIdx];
+  port := Boards[DetectIdx].Port;
   chip := EspChipFromEsptool(ProcOut);
   if chip <> '' then
   begin
-    SetLength(Boards, Length(Boards) + 1);
-    Boards[Length(Boards) - 1].Port := port;
-    Boards[Length(Boards) - 1].Chip := chip;
-    AddLog('Detect: ' + port + ' is an ' + EspChipLabel(chip) + #10);
+    { fill the record IN PLACE -- the listing already knows this board's by-id
+      name and bridge, and rebuilding it here would throw that away }
+    Boards[DetectIdx].Chip := chip;
+    Boards[DetectIdx].Mac := EspMacFromEsptool(ProcOut);
+    Boards[DetectIdx].Revision := EspRevisionFromEsptool(ProcOut);
+    AddLog('Detect: ' + EspBoardLine(Boards[DetectIdx]) + #10);
   end
   else
   begin
@@ -385,14 +472,17 @@ begin
     AddLog('Detect: ' + port + ': ' + why + #10);
   end;
   Inc(DetectIdx);
-  if DetectIdx < Length(DetectPorts) then
+  if DetectIdx < Length(Boards) then
   begin
     DetectNextPort;
     Exit;
   end;
   Mode := mIdle;
   Detected := True;
-  if Length(Boards) = 0 then
+  answered := 0;
+  for i := 0 to Length(Boards) - 1 do
+    if Boards[i].Chip <> '' then answered := answered + 1;
+  if answered = 0 then
     AddLog('Detect: no board answered.' + #10);
   ShowState;
   if BuildAfterDetect then
@@ -404,7 +494,8 @@ end;
 
 procedure TEspForm.StartBuild;
 var sel, projChip, detChip, port, chip, why: AnsiString;
-    i, nMatch: Integer;
+    libFlags, libComps, libReqs: AnsiString;
+    i, nMatch, nAnswered, onlyAnswered: Integer;
 begin
   if CurProject = '' then
   begin
@@ -427,19 +518,32 @@ begin
   detChip := '';
   port := '';
   nMatch := 0;
+  { ONLY BOARDS THAT ANSWERED. Boards now holds every attached port, detected
+    or not, because the listing fills it without opening anything -- so an
+    undetected row has Chip = '' and must not be matched, and must not be
+    counted as "the only one connected" either. }
+  nAnswered := 0;
+  onlyAnswered := -1;
   for i := 0 to Length(Boards) - 1 do
-    if ((sel <> 'auto') and (Boards[i].Chip = sel)) or
-       ((sel = 'auto') and (projChip <> '') and (Boards[i].Chip = projChip)) then
+    if Boards[i].Chip <> '' then
+    begin
+      nAnswered := nAnswered + 1;
+      if nAnswered = 1 then onlyAnswered := i;
+    end;
+  for i := 0 to Length(Boards) - 1 do
+    if (Boards[i].Chip <> '') and
+       (((sel <> 'auto') and (Boards[i].Chip = sel)) or
+        ((sel = 'auto') and (projChip <> '') and (Boards[i].Chip = projChip))) then
     begin
       Inc(nMatch);
       if nMatch = 1 then begin detChip := Boards[i].Chip; port := Boards[i].Port; end;
     end;
-  if (nMatch = 0) and (Length(Boards) = 1) then
+  if (nMatch = 0) and (nAnswered = 1) then
   begin
-    detChip := Boards[0].Chip;
-    port := Boards[0].Port;
+    detChip := Boards[onlyAnswered].Chip;
+    port := Boards[onlyAnswered].Port;
   end
-  else if (nMatch = 0) and (Length(Boards) > 1) then
+  else if (nMatch = 0) and (nAnswered > 1) then
   begin
     why := 'Several boards are connected and none is the chip asked for: pick the chip.';
     AddLog(why + #10); SetStatus(why);
@@ -467,15 +571,39 @@ begin
     Exit;
   end;
   if (CurFile <> '') and (Editor.Text <> CurText) then OnSave(nil);
+  libFlags := JoinSpace(EspLibCfgPxxFlags(LibCfg));
+  libComps := JoinSpace(LibCfg.ComponentDirs);
+  libReqs := JoinSpace(LibCfg.Requires);
+  if not EspLibCfgEmpty(LibCfg) then
+    AddLog('Libraries: ' + EspLibCfgLine(LibCfg) + ' (from espide.cfg)' + #10);
   StopChild;           { the monitor must let go of the port before esptool }
   AddLog('Build+Flash: ' + ExtractFileName(CurProject) + ' for the ' +
          EspChipLabel(chip) + ' on ' + port + #10);
   ProcOut := '';
   MonitorPort := port;
+  { THE PROJECT'S EXTRA LIBRARIES REACH THE BUILD AS ENVIRONMENT, because the
+    build is delegated to the project's own build.sh -- espide holds no
+    compiler flags and adding a --fu switch to esp_flash.sh would put them
+    back in the IDE. A build.sh honours ESP_PXXFLAGS on its pxx line and
+    ESP_EXTRA_COMPONENT_DIRS / ESP_REQUIRES on its idf.py line;
+    examples/esp32/hello-esp32/build.sh is the worked example. A project that
+    reads neither is unaffected, which is why this is safe to always set. }
+  { AND IT GOES THROUGH `sg dialout` TOO, for the same reason Detect and
+    Monitor do: flashing WRITES to the tty, so a login that predates the group
+    grant fails here exactly as it fails there -- esp_flash.sh's own check
+    answers `$PORT is not writable`. Detect and Monitor were wrapped and this
+    was not, which would have given a host the confusing half-state of a board
+    that identifies itself and then refuses to be flashed. Every value is
+    EspShellQuote'd into the string rather than passed as $1..$4, because
+    `sg dialout -c` takes one command string and forwards no arguments. }
   if StreamStart(Proc, '/bin/bash', ['-c',
-       'cd "$1" || exit 2; ' +
-       'exec tools/esp_flash.sh --project "$2" --chip "$3" --port "$4" ' +
-       '--no-verify --seconds 4 2>&1', 'sh', RepoRoot, CurProject, chip, port]) then
+       EspWrapSg('cd ' + EspShellQuote(RepoRoot) + ' || exit 2; ' +
+       'export ESP_PXXFLAGS=' + EspShellQuote(libFlags) + '; ' +
+       'export ESP_EXTRA_COMPONENT_DIRS=' + EspShellQuote(libComps) + '; ' +
+       'export ESP_REQUIRES=' + EspShellQuote(libReqs) + '; ' +
+       'exec tools/esp_flash.sh --project ' + EspShellQuote(CurProject) +
+       ' --chip ' + EspShellQuote(chip) + ' --port ' + EspShellQuote(port) +
+       ' --no-verify --seconds 4 2>&1', UseSg), 'sh']) then
     Mode := mBuild
   else
   begin
@@ -490,8 +618,9 @@ begin
   MonitorPort := port;
   AddLog('--- serial ' + port + ' (115200) ---' + #10);
   if StreamStart(Proc, '/bin/bash', ['-c',
-       'stty -F "$1" 115200 cs8 -cstopb -parenb -echo raw || exit 2; exec cat "$1"',
-       'sh', port]) then
+       EspWrapSg('stty -F ' + EspShellQuote(port) +
+                 ' 115200 cs8 -cstopb -parenb -echo raw || exit 2; ' +
+                 'exec cat ' + EspShellQuote(port), UseSg), 'sh']) then
     Mode := mMonitor
   else
     AddLog('Monitor: could not start /bin/bash' + #10);
@@ -724,8 +853,171 @@ begin
   ShowMessage(s);
 end;
 
+{ One entry per line, blanks dropped. The editor is three memos rather than
+  three one-line fields because a project can have several of each, and a
+  line-per-entry text box is the cheapest editor that does not cap the count. }
+function LinesOf(const t: AnsiString): TStrArray;
+var a: TStrArray;
+    i, start: Integer;
+    ln: AnsiString;
+begin
+  SetLength(a, 0);
+  start := 1;
+  for i := 1 to Length(t) + 1 do
+    if (i > Length(t)) or (t[i] = #10) then
+    begin
+      ln := Trim(Copy(t, start, i - start));
+      if ln <> '' then
+      begin
+        SetLength(a, Length(a) + 1);
+        a[Length(a) - 1] := ln;
+      end;
+      start := i + 1;
+    end;
+  LinesOf := a;
+end;
+
+function JoinLines(const a: TStrArray): AnsiString;
+var i: Integer;
+    s: AnsiString;
+begin
+  s := '';
+  for i := 0 to Length(a) - 1 do
+    s := s + a[i] + #10;
+  JoinLines := s;
+end;
+
+procedure TEspForm.OnMenuIdf(Sender: TObject);
+var s: AnsiString;
+begin
+  s := EspIdfLine(Idf);
+  if Idf.Found then
+  begin
+    s := s + #10 + #10 + 'Path: ' + Idf.Path;
+    if Idf.PyEnv <> '' then s := s + #10 + 'Python env: ' + Idf.PyEnv;
+    if Idf.Version = '' then
+      s := s + #10 + #10 +
+           'The version header could not be read, so the version is unknown; ' +
+           'the checkout is there and builds will use it.';
+  end
+  else
+    s := s + #10 + #10 + Idf.Advice;
+  ShowMessage(s);
+end;
+
+procedure TEspForm.OnLibSave(Sender: TObject);
+var c: TEspLibCfg;
+begin
+  if CurProject = '' then Exit;
+  c.UnitDirs := LinesOf(LibUnits.Text);
+  c.ComponentDirs := LinesOf(LibComps.Text);
+  c.Requires := LinesOf(LibReqs.Text);
+  if EspLibCfgSave(CurProject, c) then
+  begin
+    LibCfg := c;
+    AddLog('saved ' + EspLibCfgPath(CurProject) + #10);
+    ShowState;
+    OnLibClose(nil);
+  end
+  else
+    AddLog('could not write ' + EspLibCfgPath(CurProject) + #10);
+end;
+
+procedure TEspForm.OnLibClose(Sender: TObject);
+begin
+  if LibDlg <> nil then
+  begin
+    WidgetSet.DestroyWidget(LibDlg.Handle);
+    LibDlg := nil;
+  end;
+end;
+
+procedure TEspForm.OnMenuLibraries(Sender: TObject);
+var box, btns: TBox;
+    lab: TLabel;
+    b: TButton;
+    c: TEspLibCfg;
+    d: Integer;
+begin
+  if CurProject = '' then
+  begin
+    ShowMessage('No project is open. Select a folder that holds a CMakeLists.txt ' +
+                'and a build.sh, then open Settings > Libraries again.');
+    Exit;
+  end;
+  OnLibClose(nil);
+  c := EspLibCfgLoad(CurProject);
+
+  LibDlg := TForm.Create(nil);
+  LibDlg.Caption := 'Libraries for ' + ExtractFileName(CurProject);
+  LibDlg.SetBounds(0, 0, 560, 460);
+
+  box := TBox.Create(nil);
+  box.Vertical := True;
+  box.Parent := LibDlg;
+
+  lab := TLabel.Create(nil);
+  lab.Caption := 'Extra unit search folders -- one per line. Each becomes a pxx -Fu.';
+  lab.Parent := box;
+  LibUnits := TMemo.Create(nil);
+  LibUnits.Parent := box;
+  LibUnits.Text := JoinLines(c.UnitDirs);
+
+  lab := TLabel.Create(nil);
+  { "OF components, not of projects" is a measured trap, not padding: IDF
+    treats every subdirectory of an EXTRA_COMPONENT_DIRS entry as a component,
+    so pointing it at a folder of IDF PROJECTS makes cmake read each project's
+    CMakeLists as a component, and it dies inside __component_get_requirements
+    with `define_property command is not scriptable` -- which names neither the
+    folder nor the project and reads like a broken IDF install.
+
+    TWO LINES in one label, not one long one: a label's minimum width is its
+    whole longest line, so putting the caveat on the same line would have made
+    this 113-character string the DIALOG's width floor -- the exact thing issue
+    1 removed from the main window, reintroduced by a comment. }
+  lab.Caption := 'Extra ESP-IDF component folders -- one per line (EXTRA_COMPONENT_DIRS).' +
+                 #10 + 'A folder OF components, not of projects.';
+  lab.Parent := box;
+  LibComps := TMemo.Create(nil);
+  LibComps.Parent := box;
+  LibComps.Text := JoinLines(c.ComponentDirs);
+
+  lab := TLabel.Create(nil);
+  lab.Caption := 'ESP-IDF components this project REQUIREs -- one per line.';
+  lab.Parent := box;
+  LibReqs := TMemo.Create(nil);
+  LibReqs.Parent := box;
+  LibReqs.Text := JoinLines(c.Requires);
+
+  lab := TLabel.Create(nil);
+  lab.Caption := 'Saved in ' + EspLibCfgPath(CurProject) +
+                 ', so it travels with the project.';
+  lab.Ellipsize := True;
+  lab.Parent := box;
+
+  btns := TBox.Create(nil);
+  { a row of buttons: each keeps its own size, or the last one is stretched
+    across the window }
+  btns.ExpandRest := False;
+  btns.Spacing := 8;
+  btns.Parent := box;
+  b := TButton.Create(nil);
+  b.Caption := 'Save';
+  b.Parent := btns;
+  b.OnClick := @EspForm.OnLibSave;
+  b := TButton.Create(nil);
+  b.Caption := 'Close';
+  b.Parent := btns;
+  b.OnClick := @EspForm.OnLibClose;
+
+  { the box IS the window's content, same as the main form's splitter }
+  LibDlg.SetClient(box, 0);
+  d := LibDlg.Realize;
+  LibDlg.Show;
+end;
+
 procedure TEspForm.BuildMenu;
-var fileM, boardM, helpM, it: TMenuItem;
+var fileM, boardM, setM, helpM, it: TMenuItem;
 begin
   MainMenu := TMainMenu.Create(nil);
 
@@ -774,6 +1066,18 @@ begin
   it.Caption := 'S&top';
   it.OnClick := @EspForm.OnStop;
   boardM.Add(it);
+
+  setM := TMenuItem.Create(nil);
+  setM.Caption := '&Settings';
+  MainMenu.Items.Add(setM);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&Libraries...';
+  it.OnClick := @EspForm.OnMenuLibraries;
+  setM.Add(it);
+  it := TMenuItem.Create(nil);
+  it.Caption := '&ESP-IDF';
+  it.OnClick := @EspForm.OnMenuIdf;
+  setM.Add(it);
 
   helpM := TMenuItem.Create(nil);
   helpM.Caption := '&Help';
@@ -918,6 +1222,10 @@ begin
   f.Status.Ellipsize := True;
   f.Status.Parent := f.HeadBox;
 
+  f.BoardBar := TLabel.Create(nil);
+  f.BoardBar.Ellipsize := True;
+  f.BoardBar.Parent := f.HeadBox;
+
   f.Split := TPaned.Create(nil);
   f.Split.Parent := f;
   f.Split.SetBounds(0, 0, W_WIN, H_WIN - BAR_H);
@@ -963,6 +1271,20 @@ begin
     else
       start := f.RepoRoot + '/' + start;
   end;
+  { ---- what the environment offers, read ONCE and from FILES ONLY ----
+    Neither of these starts a child process and neither opens a port, so both
+    are safe on the paint path and both are honest before anything is
+    detected: issue 5 (what is attached) and issue 6 (is ESP-IDF installed). }
+  f.Idf := EspDetectIdf;
+  f.Dialout := EspDialoutState;
+  { `sg dialout -c` is the owner's sanctioned route for a login that predates
+    the group grant -- no sudo. Only offered when the user IS in the group in
+    /etc/group (sg would fail otherwise) and sg is actually installed; a
+    missing sg must not turn every serial command into a shell error. }
+  f.UseSg := (f.Dialout = edMember) and
+             (FileExists('/usr/bin/sg') or FileExists('/bin/sg'));
+  f.RelistBoards;
+
   f.RootEdit.Text := start;
   f.OnOpen(nil);
   f.ChipBox.ItemIndex := 0;

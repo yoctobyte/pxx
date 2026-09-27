@@ -101,6 +101,11 @@ function EspListBoardsIn(const byIdDir: AnsiString): TEspBoardArr;
 { EspListBoardsIn('/dev/serial/by-id'). }
 function EspListBoards: TEspBoardArr;
 
+{ Wrap raw device paths as boards, for a host with no /dev/serial/by-id (no
+  udev, or a container). Bridge is '' because the by-id name is where that
+  came from; nothing here opens anything either. }
+function EspBoardsFromPorts(const ports: TStrArray): TEspBoardArr;
+
 { One line describing a board, for a status bar or a list: the bridge, the
   by-id name, and the chip/revision/MAC when Detect has filled them in. }
 function EspBoardLine(const b: TEspBoard): AnsiString;
@@ -677,6 +682,23 @@ end;
 function EspListBoards: TEspBoardArr;
 begin
   EspListBoards := EspListBoardsIn('/dev/serial/by-id');
+end;
+
+function EspBoardsFromPorts(const ports: TStrArray): TEspBoardArr;
+var a: TEspBoardArr;
+    i: Integer;
+begin
+  SetLength(a, Length(ports));
+  for i := 0 to Length(ports) - 1 do
+  begin
+    a[i].Port := ports[i];
+    a[i].Name := ExtractFileName(ports[i]);
+    a[i].Bridge := '';
+    a[i].Chip := '';
+    a[i].Mac := '';
+    a[i].Revision := '';
+  end;
+  EspBoardsFromPorts := a;
 end;
 
 function EspBoardLine(const b: TEspBoard): AnsiString;
