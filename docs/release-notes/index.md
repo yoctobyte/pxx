@@ -122,8 +122,11 @@ profile on hardware.
   - the Nil Python socket-error test.
 
   The v425 walk named 14 of these and reported them as 15. That list includes
-  the GPIO-edge and ADC programs, which QEMU cannot exercise. The ESP32-C3 has
-  been run only under QEMU, and the ESP32-S2 has only been built.
+  the GPIO-edge and ADC programs, which QEMU cannot exercise. After the
+  release, on 2026-09-27, the ESP32-C3 examples were run on a physical C3
+  board with the same v441 compiler, and all passed (see the
+  [showcase](../examples/index.md#on-a-real-esp32-c3)). The ESP32-S2 has only
+  been built.
 - **Peripheral units:** GPIO with edge events (`espgpio`, `interrupts`), UART
   (`espuart`), continuous ADC (`espadc`), PWM (`esppwm`), I2C (`espi2c`), SPI (`espspi`), stored
   settings (`espnvs`), timers (`esptimer`) and heap figures (`espsys`), each

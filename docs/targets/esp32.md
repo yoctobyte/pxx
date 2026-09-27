@@ -11,7 +11,7 @@ with no vendor compiler in the loop:
 | Chip | CPU | PXX target | How far it has been tested |
 | --- | --- | --- | --- |
 | ESP32-S3 | Xtensa LX7 | `--target=xtensa` or `--target=esp32s3` | examples run on a physical board |
-| ESP32-C3 | RISC-V (RV32IMC) | `--target=riscv32` or `--target=esp32c3` | examples run under Espressif's QEMU |
+| ESP32-C3 | RISC-V (RV32IMC) | `--target=riscv32` or `--target=esp32c3` | examples run on a physical board |
 | ESP32-S2 | Xtensa LX7 | `--target=esp32s2` | compiled only |
 | ESP32 (classic) | Xtensa **LX6** | `--target=esp32` | examples run on a physical board |
 

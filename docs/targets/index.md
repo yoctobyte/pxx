@@ -30,8 +30,8 @@ ESP chip names are accepted as targets too. They imply the CPU and
 ESP-IDF object for every one of these names. The bare-metal profile supports
 only `esp32s3` and `esp32c3`, and says so for the others. It runs under QEMU
 only; on a real board use the ESP-IDF profile (see
-[known issues](../reference/known-issues.md)). Only the ESP32-S3
-has been run on a physical board; the ESP32-C3 has been run under QEMU; the
+[known issues](../reference/known-issues.md)). The ESP32-S3 and the
+ESP32-C3 have been run on physical boards (with the ESP-IDF profile); the
 rest have only been compiled.
 
 Use `--target=ARCH` before the source file:

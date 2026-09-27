@@ -53,6 +53,6 @@ returning epilogue yet), so the FreeRTOS idle task keeps the watchdog fed.
   `const char*` (the 8-byte PXX length prefix is skipped at the call site).
 - RV32 varargs pass in registers like normal args; stick to 32-bit values
   with `esp_rom_printf`.
-- Real-hardware flashing should work with `idf.py flash monitor` but is
-  untested (no C3 board on hand); S2/S3 boards need the Xtensa windowed-ABI
-  ticket first.
+- Runs on a real ESP32-C3 board (2026-09-27, pin v441):
+  `tools/esp_flash.sh --project examples/esp32/hello-c3 --port <the board>`
+  prints the five lines and `sum 1..5 = 15`.

@@ -4,7 +4,7 @@
 # the NilPy counterpart of tools/esp_heap_soak.sh, which rewrites a Pascal main
 # and cannot take a Python one.
 #
-#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] [--settle S] [--as c3|s3] [--checkpoints 10,40,160] <example-dir-name>
+#   tools/esp_heap_soak_nilpy.sh [--control] [--passes N] [--settle S] [--as c3|s3|esp32] [--checkpoints 10,40,160] <example-dir-name>
 #
 # The example is staged OUT OF TREE (symlinks dereferenced; the checkout stays
 # byte-clean) and a footer is appended to its main.npy:
@@ -35,15 +35,22 @@
 # program that opens connections shows a per-pass cost that returns once they
 # expire; a leak does not return.
 #
-# --as c3|s3 stages the example under the OTHER chip's suffix (build.sh takes
-# the chip from the directory name), so one program is soaked on both chips:
-# e.g. the S3-only logger on the C3, to separate a chip-specific cost.
+# --as c3|s3|esp32 stages the example under ANOTHER chip's suffix (build.sh
+# takes the chip from the directory name), so one program is soaked on several
+# chips: e.g. the S3-only logger on the C3, to separate a chip-specific cost.
+# (esp32 is the classic LX6; the project's build.sh must accept that suffix.)
 #
 # --checkpoints K1,K2,... runs max(K) passes in ONE boot and prints the heap
 # delta after each Ki cumulative passes:
 #   SOAK <example> <chip> at passes=<Ki> delta=<bytes> bpp=<bytes per pass>
 # Growth from K1 to Kn at a steady slope is a leak; a delta that stops moving
 # is a plateau (a pool, TIME_WAIT). It replaces --passes.
+#
+# SOAK_PORT=<serial device> runs the soak ON A BOARD instead of under QEMU:
+# the same staged build is written with esptool and the console is read until
+# SOAK-COMPLETE. Run it with access to the port (on plexus:
+# sg dialout -c "SOAK_PORT=/dev/serial/by-id/... tools/<this script> ..."), and
+# name the board's stable by-id path: an esptool call resets whatever it opens.
 #
 # Built with the example's own build.sh (so its flags, partition table and
 # sdkconfig), with the PINNED compiler unless SOAK_PXX says otherwise.
@@ -86,7 +93,7 @@ mkdir -p "$W/$STAGE"
 tar -C "$SRC" -h --exclude=build --exclude=sdkconfig --exclude='*.o' --exclude='*.a' -cf - . \
   | tar -C "$W/$STAGE" -xf -
 cd "$W/$STAGE"
-case "$STAGE" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *) echo "soak: $EX is not -c3/-s3" >&2; exit 2 ;; esac
+case "$STAGE" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *-esp32) CHIP=esp32 ;; *) echo "soak: $EX is not -c3/-s3/-esp32" >&2; exit 2 ;; esac
 
 cat > main/soakctl.pas <<'PAS'
 { SPDX-License-Identifier: MPL-2.0 }
@@ -159,9 +166,25 @@ if ! PXX="$PXX" PXX_EXTRA_FLAGS="-Fu$W/$STAGE/main ${PXX_EXTRA_FLAGS:-}" bash bu
   echo "SOAK-COMPLETE"; exit 1
 fi
 
+if [ -n "${SOAK_PORT:-}" ]; then
+  # ON A BOARD: write the image and read the console until the program's own
+  # SOAK-COMPLETE (or SOAK_TIMEOUT). esptool leaves the chip alone afterwards;
+  # esp_serial_capture.py opens the port first and resets through it, so the
+  # capture starts at the boot ROM (the C3's USB-Serial/JTAG re-enumerates on
+  # a reset, which a late open would miss).
+  if ! ( cd build && python -m esptool --chip "$CHIP" -p "$SOAK_PORT" -b 460800 \
+           --before default-reset --after no-reset write-flash @flash_args ) >"$W/flash.log" 2>&1; then
+    echo "SOAK $CHIP FLASH-FAIL on $SOAK_PORT"; tail -5 "$W/flash.log" | sed 's/^/  | /'
+    echo "SOAK-COMPLETE"; exit 1
+  fi
+  SECONDS=0
+  python "$REPO_ROOT/tools/esp_serial_capture.py" "$SOAK_PORT" "$TIMEOUT" --until SOAK-COMPLETE \
+    >"$W/serial.log" 2>/dev/null || true
+  t=$SECONDS
+else
 case "$CHIP" in
-  esp32s3) QEMU="$(ls "$HOME"/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa | head -1)" ;;
-  *)       QEMU="$(ls "$HOME"/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 | head -1)" ;;
+  esp32s3|esp32s2|esp32) QEMU="$(ls "$HOME"/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa | head -1)" ;;
+  *)                     QEMU="$(ls "$HOME"/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 | head -1)" ;;
 esac
 ( cd build && python -m esptool --chip "$CHIP" merge-bin -o "$W/flash.bin" @flash_args --fill-flash-size 4MB >/dev/null 2>&1 )
 "$QEMU" -M "$CHIP" -drive file="$W/flash.bin",if=mtd,format=raw -nographic -serial mon:stdio -monitor none \
@@ -170,6 +193,7 @@ QPID=$!
 t=0
 while [ $t -lt "$TIMEOUT" ] && ! grep -qa 'SOAK-COMPLETE' "$W/serial.log"; do sleep 1; t=$((t + 1)); done
 kill "$QPID" 2>/dev/null || true; QPID=""
+fi
 tag="$STAGE $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
 r="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-RESULT' | head -1 || true)"
 if [ -n "$r" ]; then

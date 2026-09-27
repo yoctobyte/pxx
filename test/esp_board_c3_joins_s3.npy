@@ -1,0 +1,99 @@
+# BOARD ONLY, TWO BOARDS: an ESP32-C3 joins the access point of an ESP32-S3
+# running examples/esp32/nilpy-station-s3 ("PXX-NILPY", password "pascal26",
+# 192.168.4.1), fetches the status page and its /data, then soaks urequests
+# against /data with a positive control. Both ends are pxx-compiled NilPy.
+#
+#   tools/esp_flash.sh --project examples/esp32/nilpy-station-s3 --port <S3> --seconds 40
+#   PXX_MAIN=$PWD/test/esp_board_c3_joins_s3.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-station-c3 --port <C3> --no-verify --seconds 600
+#
+# Always name each board's port: an esptool call resets whatever it opens.
+# The station serves from its hidden loop, one waiting request per ADC frame
+# (about 16 a second), so each request here takes up to ~60 ms by design.
+#
+# The census: free heap over N requests whose responses are dropped, read at
+# checkpoints; then 20 requests whose responses are KEPT, which must read a
+# clearly nonzero cost each, or the heap reading could not see a leak (20, not
+# more: a kept response is ~1.4 KB and the C3 has ~70 KB free with Wi-Fi up;
+# 34 kept broke the link on 2026-09-27); then a read after 130 s, past lwIP's
+# TIME_WAIT (2 * TCP_MSL, 120 s on IDF), so memory that is only held for
+# closed connections has come back.
+import network
+import time
+import urequests
+import 'espsys.pas' as board
+
+N = 300
+STEP = 50
+
+sta = network.WLAN(network.STA_IF)
+sta.active(True)
+sta.connect("PXX-NILPY", "pascal26")
+t0 = board.uptime_ms()
+while sta.status() == network.STAT_CONNECTING and board.uptime_ms() - t0 < 30000:
+    time.sleep(0.25)
+print("joined PXX-NILPY", sta.isconnected())
+if sta.isconnected():
+    cfg = sta.ifconfig()
+    print("address in 192.168.4.x", cfg[0].startswith("192.168.4."), "gateway", cfg[2])
+
+
+def fetch(path):
+    r = urequests.get("http://192.168.4.1" + path)
+    st = r.status_code
+    body = r.text
+    r.close()
+    return st, body
+
+
+def one():
+    st, body = fetch("/data")
+    return st + len(body)
+
+
+def one_kept(kept):
+    r = urequests.get("http://192.168.4.1/data")
+    n = r.status_code + len(r.text)
+    r.close()
+    kept.append(r)
+    return n
+
+
+def report(tag, k, h0):
+    d = h0 - board.free_heap()
+    print("B2B-HEAP " + tag + " after=" + str(k) + " delta=" + str(d) + " bpr=" + str(d // k))
+
+
+def census():
+    total = 0
+    for i in range(10):
+        total = total + one()
+    h0 = board.free_heap()
+    for i in range(N):
+        total = total + one()
+        if (i + 1) % STEP == 0:
+            report("dropped", i + 1, h0)
+    kept = []
+    h2 = board.free_heap()
+    for i in range(20):
+        total = total + one_kept(kept)
+    d = h2 - board.free_heap()
+    print("B2B-CENSUS kept n=20 delta=" + str(d) + " bpr=" + str(d // 20) + " live=" + str(len(kept)))
+    print("B2B-TOTAL", total > 0)
+    return h0
+
+
+# The settled reads come AFTER census() returns: a list a statement creates
+# stays alive until that statement runs again or its function returns, so a
+# read inside census() would still see the kept responses.
+if sta.isconnected():
+    st, page = fetch("/")
+    print("GET / ->", st, "status page", "PXX station" in page)
+    st, data = fetch("/data")
+    print("GET /data ->", st, "has uptime", "uptime_s" in data, "has free_heap", "free_heap" in data)
+    h0 = census()
+    report("returned", N, h0)
+    time.sleep(130)
+    report("settled-130s", N, h0)
+sta.disconnect()
+print("B2B-COMPLETE")

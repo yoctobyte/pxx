@@ -52,5 +52,6 @@ gated so the smoke reflects the proven plumbing.
 - Uses the portable PAL directly, not `net.pas`: net.pas's by-value
   `TNetAddress` helpers hit a riscv32 record-result codegen gap
   (`feature-riscv32-record-function-results`).
-- Real-hardware flashing should work with `idf.py flash monitor` but is
-  untested (no C3 board on hand).
+- Runs on a real ESP32-C3 board (2026-09-27, pin v441):
+  `tools/esp_flash.sh --project examples/esp32/net-c3 --port <the board>`
+  prints `PXX-net-smoke status=0`.

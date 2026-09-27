@@ -121,8 +121,9 @@ devdocs/release-notes/v0.1.0-beta.1.md. The short version:
   `__thread` variable reads 0 outside the main thread (a fix in progress is in
   parked-patches/tls-init-image-reaches-every-thread-wip).
 - ESP bare-metal images run under QEMU only; on silicon use the ESP-IDF
-  profile. The ESP32-C3 has never run on a physical board. Long network runs
-  on the C3 stall under QEMU (an emulated NIC's lost rx interrupt, not a leak).
+  profile. The ESP32-C3 examples ran on one physical board on 2026-09-27
+  (pin v441, all passing). Long network runs on the C3 stall under QEMU (an
+  emulated NIC's lost rx interrupt, not a leak).
 - -O3 is experimental (two differential shards red at v439); -O2 is the default.
 - Nil Python is best effort. CPython compatibility was explicitly not a goal
   of this beta.

@@ -14,7 +14,8 @@ and shares Eliah's core. The name `esp` is a working name.
 
 Everything on this page was run from a checkout at `9fa9c55901` with pin v426
 (compiler sha256 `7b742af6f9df…`) on 2026-09-25. The board steps were run on
-an ESP32-S3 devkit (`/dev/ttyACM0`). No ESP32-C3 board has been tried; see
+an ESP32-S3 devkit (`/dev/ttyACM0`). These steps have not been repeated on
+an ESP32-C3 board, although the C3 examples have run on one; see
 [What is and is not proven](./esp32.md#what-is-and-is-not-proven).
 
 ## What you need

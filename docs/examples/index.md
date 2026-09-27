@@ -422,7 +422,9 @@ its own verdict line: `./build.sh qemu-assert` where the project has it, and
 check on 2026-09-25 ran timer-s3, timer-c3, fs-c3 and gpio-c3 through the
 interactive `./build.sh qemu`, which exited without a verdict, so **those four
 were first actually judged with v441**. The table shows `qemu-assert` for them.
-These QEMU runs are separate from the board runs below. The prerequisite is the ESP-IDF toolchain
+These QEMU runs are separate from the board runs below. The C3 ones have
+since run on a physical board too; see [On a real ESP32-C3](#on-a-real-esp32-c3).
+The prerequisite is the ESP-IDF toolchain
 (`. ~/esp/esp-idf/export.sh`).
 
 | Example | Chip | Language | Command | Result |
@@ -505,10 +507,48 @@ the first fixes (sha256 `29956ba5beff…`), the first three stay flat. With v425
 itself, `adc-s3` looped 60 times keeps its free heap at 271,232 bytes from the
 first pass to the last.
 
-Still unverified: `adc-c3` and `gpio-edge-c3`, because there was no C3 board
-and QEMU delivers no ADC readings or GPIO edges; and `hello-s2`, which builds
-but has not been run. `tools/esp_flash.sh --project examples/esp32/<name>`
-builds, flashes and checks an example on a board.
+### On a real ESP32-C3
+
+The C3 examples were flashed to one ESP32-C3 board on 2026-09-27 (chip
+revision v0.4, 4 MB embedded flash, console on the built-in USB-Serial/JTAG
+port, ESP-IDF v6.0.1), each with `tools/esp_flash.sh --project
+examples/esp32/<name> --port <the board>`. Every one was built with the release
+pin v441 (compiler sha256 `4ebfa2d047a2…`), from tree `5db85cc283`. Nothing was
+wired to the board.
+
+| Example | On the C3 board | Compiler | Tree |
+| --- | --- | --- | --- |
+| hello-c3 | its five lines and `sum 1..5 = 15` | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| nilpy-c3, nilpy-hw-c3 | output matches `main.expected` byte for byte | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| adc-c3 | output matches `main.expected`: real ADC frames, pull-up reads high and pull-down low | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| gpio-edge-c3 | output matches `main.expected`: 10 real edges, all accounted for | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| timer-c3 | five ticks, `status=0` | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| isrctx-c3 | task and interrupt context both witnessed, `status=0` | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| fs-c3 | `esp-pal-file-io-WORKS` | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| net-c3 | loopback socket smoke test, `status=0` | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| dns-c3 | resolver smoke test, `status=0` | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| gpio-c3 | reads follow writes, the pull-up reads 1, and all 10 edges arrive, none of which QEMU models; the probe's verdict line still names QEMU | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| nilpy-station-c3 | all 12 lines of `main.expected`; a PC's Wi-Fi scan saw its `PXX-NILPY` network | v441 `4ebfa2d047a2…` | `5db85cc283` |
+
+**Long-running use.** The heap soaks were also run on this board, with pin
+v441: `hello-c3` looped 100 times kept 0 bytes, and `nilpy-c3` kept 0 bytes
+after 10, 160, 640 and 1280 passes. The positive control, a deliberate 64-byte
+allocation per pass that is never freed, read 76 bytes per pass in both
+(`tools/esp_heap_soak.sh`, `tools/esp_heap_soak_nilpy.sh`, with
+`SOAK_PORT=<the board>`).
+
+**Wi-Fi.** The C3 joined a home Wi-Fi network (WPA3) as a station with
+`test/esp_board_wifi_sta_join.npy`, got an address in about 4 seconds, and
+answered three HTTP requests from a PC on the same network. Over that network,
+`urequests` fetched a page from the PC 1,000 times without the heap growing.
+With `test/esp_board_c3_joins_s3.npy` the C3 also joined the access point of
+an ESP32-S3 running `nilpy-station-s3`, read its status page and made 300 more
+requests, again with no growth: two boards, both running compiled Nil Python.
+The numbers are in [Wi-Fi and sockets](../library/esp.md).
+
+Still unverified: `hello-s2`, which builds but has not been run.
+`tools/esp_flash.sh --project examples/esp32/<name>` builds, flashes and checks
+an example on a board.
 
 ## Real C programs
 

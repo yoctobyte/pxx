@@ -72,22 +72,28 @@ with development compilers before v425 (timer, PWM and I2C with sha256
 and heap together, ran 193 reports over 3.5 minutes with free heap flat, with
 a development compiler between v424 and v425 (sha256 `29956ba5beff…`). With
 v441 it ran its checked-in 10 reports, ADC mean 3856 to 3858, free heap
-between 256,184 and 263,320 bytes. **The ESP32-C3 has
-been tested only under QEMU, and the ESP32-S2 has only been built.** QEMU
-models no GPIO input and no ADC, so the input half of `espgpio` and all of
-`espadc` can only be checked on a board.
+between 256,184 and 263,320 bytes. QEMU models no GPIO input and no ADC, so
+the input half of `espgpio` and all of `espadc` can only be checked on a
+board.
 
-| Unit | Example | On the ESP32-S3 board |
-| --- | --- | --- |
-| `espgpio` + `interrupts` | `gpio-edge-s3` (Python) | output matches `main.expected` (15 lines) |
-| `espuart` | `uart-s3` | 13 of 13 checks, with nothing wired |
-| `espadc` + `interrupts` | `adc-s3` (Python) | output matches `main.expected` (7 lines) |
-| `esppwm` | `pwm-s3` | 15 of 15 checks, with nothing wired |
-| `espi2c` | `i2c-s3` | 5 of 5 checks on an empty bus; **no device tested** |
-| `espspi` | `spi-s3` | 18 of 18 checks with nothing wired; **no device tested** |
-| `espnvs` | `nvs-s3` | 0 failures over four boots, the last after a hardware reset |
-| `esptimer` | `timer-s3`, `nilpy-hw-s3` | five ticks, `status=0`; `nilpy-hw-s3` matches `main.expected` |
-| `espsys` | `uart-s3` | used for the heap figures in the checks above |
+The C3 examples were run on **one ESP32-C3 board** (revision v0.4, 4 MB flash,
+ESP-IDF v6.0.1) on 2026-09-27, with the release pin v441 (compiler sha256
+`4ebfa2d047a2…`), tree `5db85cc283`, and all 12 passed with nothing wired. The
+table in the [examples showcase](../examples/index.md#on-a-real-esp32-c3) lists
+each one. There are no C3 examples for UART, PWM, I2C, SPI or NVS, so those
+units have run on the S3 only. **The ESP32-S2 has only been built.**
+
+| Unit | Example | On the ESP32-S3 board | On the ESP32-C3 board |
+| --- | --- | --- | --- |
+| `espgpio` + `interrupts` | `gpio-edge-s3` (Python) | output matches `main.expected` (15 lines) | output matches `main.expected` (`gpio-edge-c3`) |
+| `espuart` | `uart-s3` | 13 of 13 checks, with nothing wired | no C3 example |
+| `espadc` + `interrupts` | `adc-s3` (Python) | output matches `main.expected` (7 lines) | output matches `main.expected` (`adc-c3`) |
+| `esppwm` | `pwm-s3` | 15 of 15 checks, with nothing wired | no C3 example |
+| `espi2c` | `i2c-s3` | 5 of 5 checks on an empty bus; **no device tested** | no C3 example |
+| `espspi` | `spi-s3` | 18 of 18 checks with nothing wired; **no device tested** | no C3 example |
+| `espnvs` | `nvs-s3` | 0 failures over four boots, the last after a hardware reset | no C3 example |
+| `esptimer` | `timer-s3`, `nilpy-hw-s3` | five ticks, `status=0`; `nilpy-hw-s3` matches `main.expected` | `timer-c3` five ticks, `status=0`; `nilpy-hw-c3` matches `main.expected` |
+| `espsys` | `uart-s3` | used for the heap figures in the checks above | 0 bytes kept over 1280 `nilpy-c3` passes; the 64-byte control reads 76 per pass |
 
 The examples are in `examples/esp32/<name>/`. Each builds with `./build.sh`
 and flashes with `tools/esp_flash.sh --project examples/esp32/<name>`.
@@ -539,10 +545,18 @@ All of this was run on one ESP32-S3 board on 2026-09-25:
 | socket errors and timeouts (`test/esp_board_socket_errors.npy`) | every line matches what CPython prints for the same calls on Linux, and nothing hangs |
 | station (`test/esp_board_wifi_sta.npy`) | `active`, a `scan()` of the networks nearby with every record well formed, a `connect()` to a network that does not exist ending at `STAT_NO_AP_FOUND` within 30 seconds, and the access point and station together |
 
-**Joining a real network has not been checked yet.** It needs a board and a
-Wi-Fi network with its password. `test/esp_board_wifi_sta_join.npy` is the
-recipe for it, with placeholders for the credentials. Nothing has been run on
-an ESP32-C3.
+On one ESP32-C3 board on 2026-09-27, with the v441 compiler:
+
+| What | On the board |
+| --- | --- |
+| `nilpy-station-c3` | all 12 lines of `main.expected`; a PC's Wi-Fi scan saw the board's `PXX-NILPY` network |
+| joining a home network (`test/esp_board_wifi_sta_join.npy`) | joined over WPA3 and got an address in about 4 seconds; a PC on the same network fetched its page three times; it disconnected cleanly |
+| `urequests` over that network | 1,000 fetches from a PC: free heap within 400 bytes of the start, no upward trend. 300 more fetches: 20 bytes, and after 130 seconds, none. The positive control kept 20 responses at 1,434 bytes each |
+| the C3 as a station of an S3 running `nilpy-station-s3` (`test/esp_board_c3_joins_s3.npy`) | joined `PXX-NILPY`; `/` and `/data` answered 200; 300 fetches of `/data`: 0 bytes, and after 130 seconds, none. The positive control kept 20 responses at 1,400 bytes each |
+
+**On the S3, joining a real network has not been checked.**
+`test/esp_board_wifi_sta_join.npy` is the recipe, with placeholders for the
+credentials.
 
 The three snippets above compile for the ESP32-S3 with pin v426 (compiler
 sha256 `7b742af6f9df…`) against the tree at `6ee238bc47`. The station half
@@ -645,15 +659,16 @@ full; after the file is removed, writing works again.
   `FileNotFoundError` for every path, as described above.
 - **Not tested:** a read-only partition, or any storage but the internal
   flash. There is **no `os.mount()`**, so an SD card or a second partition
-  cannot be mounted from Python. Nothing has run on an ESP32-C3 board.
+  cannot be mounted from Python. `test/esp_board_files.npy` has not been run
+  on an ESP32-C3 board.
 
 Both snippets compile for the ESP32-S3 with pin v427 (compiler sha256
 `354cd45e6373…`), the first pin that carries the file support. The same
 compile refuses `os.mount("/sd", "/sd")`.
 
 For **Pascal** files on the ESP32, the C3 example `fs-c3` mounts FAT, writes,
-seeks and reads back, under QEMU. See the
-[examples showcase](../examples/index.md#esp32).
+seeks and reads back, under QEMU and on an ESP32-C3 board. See the
+[examples showcase](../examples/index.md#on-a-real-esp32-c3).
 
 ## Math errors do not stop the chip
 

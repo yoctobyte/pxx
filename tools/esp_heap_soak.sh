@@ -28,6 +28,12 @@
 # SOAK_SRC=<dir> soaks <dir>/<example> instead: a unit-level variant (set up
 # once behind a guard, exercise one RTL surface per pass) staged the same way.
 #
+# SOAK_PORT=<serial device> runs the soak ON A BOARD instead of under QEMU:
+# the same staged build is written with esptool and the console is read until
+# SOAK-COMPLETE. Run it with access to the port (on plexus:
+# sg dialout -c "SOAK_PORT=/dev/serial/by-id/... tools/<this script> ..."), and
+# name the board's stable by-id path: an esptool call resets whatever it opens.
+#
 # Built with THIS checkout's compiler/pascal26 (SOAK_PXX overrides), using the
 # example's own build.sh flags and sdkconfig.
 set -euo pipefail
@@ -63,7 +69,7 @@ cd "$W/$EX"
 # `set-target` often sits inside a conditional; the dir suffix is the fallback
 CHIP="$(grep -o 'set-target esp32[a-z0-9]*' build.sh | head -1 | sed 's/set-target //' || true)"
 if [ -z "$CHIP" ]; then
-  case "$EX" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *-s2) CHIP=esp32s2 ;; esac
+  case "$EX" in *-c3) CHIP=esp32c3 ;; *-s3) CHIP=esp32s3 ;; *-s2) CHIP=esp32s2 ;; *-esp32) CHIP=esp32 ;; esac
 fi
 [ -n "$CHIP" ] || { echo "soak: no set-target in $EX/build.sh" >&2; exit 2; }
 
@@ -117,6 +123,22 @@ if ! PXX="$PXX" bash build.sh >"$W/build.log" 2>&1; then
   echo "SOAK-COMPLETE"; exit 1
 fi
 
+if [ -n "${SOAK_PORT:-}" ]; then
+  # ON A BOARD: write the image and read the console until the program's own
+  # SOAK-COMPLETE (or SOAK_TIMEOUT). esptool leaves the chip alone afterwards;
+  # esp_serial_capture.py opens the port first and resets through it, so the
+  # capture starts at the boot ROM (the C3's USB-Serial/JTAG re-enumerates on
+  # a reset, which a late open would miss).
+  if ! ( cd build && python -m esptool --chip "$CHIP" -p "$SOAK_PORT" -b 460800 \
+           --before default-reset --after no-reset write-flash @flash_args ) >"$W/flash.log" 2>&1; then
+    echo "SOAK $CHIP FLASH-FAIL on $SOAK_PORT"; tail -5 "$W/flash.log" | sed 's/^/  | /'
+    echo "SOAK-COMPLETE"; exit 1
+  fi
+  SECONDS=0
+  python "$REPO_ROOT/tools/esp_serial_capture.py" "$SOAK_PORT" "$TIMEOUT" --until SOAK-COMPLETE \
+    >"$W/serial.log" 2>/dev/null || true
+  t=$SECONDS
+else
 case "$CHIP" in
   esp32s3|esp32s2|esp32) QEMU="$(ls "$HOME"/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa | head -1)" ;;
   *)                     QEMU="$(ls "$HOME"/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 | head -1)" ;;
@@ -128,6 +150,7 @@ QPID=$!
 t=0
 while [ $t -lt "$TIMEOUT" ] && ! grep -qa 'SOAK-COMPLETE' "$W/serial.log"; do sleep 1; t=$((t + 1)); done
 kill "$QPID" 2>/dev/null || true; QPID=""
+fi
 tag="$EX $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
 r="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-RESULT' | head -1 || true)"
 if [ -n "$r" ]; then

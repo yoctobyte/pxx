@@ -3,7 +3,7 @@
 """Reset an ESP32 through its serial port's RTS/DTR lines and capture what it
 prints, from the boot ROM on, for N seconds.
 
-    esp_serial_capture.py <port> <seconds> [--no-reset]
+    esp_serial_capture.py <port> <seconds> [--no-reset] [--until TOKEN]
 
 Why this exists: tools/esp_flash.sh used to let esptool hard-reset the chip and
 THEN open the tty with `cat`. On a chip whose console is the built-in
@@ -16,6 +16,14 @@ port is opened FIRST and the reset is issued through it, so nothing is missed.
 The reset sequence is esptool's classic one (RTS asserted = EN low, DTR held
 off so the chip boots from flash, not into download mode). If the port
 vanishes during the reset, it is reopened for the rest of the window.
+
+--no-reset skips that pulse, but it cannot stop a board whose USB-UART
+bridge resets the chip when the port is OPENED: measured 2026-09-27 on an
+ESP32-S3 devkit with a CH343, opening with --no-reset rebooted it once.
+
+--until TOKEN stops as soon as TOKEN has been printed (the line holding it is
+read to its end), with <seconds> as the upper bound: a soak ends on its own
+completion token, not on a guessed duration.
 
 Needs pyserial (in the ESP-IDF python env, which tools/esp_flash.sh exports).
 Raw bytes go to stdout.
@@ -39,7 +47,10 @@ def open_port(port):
 
 def main():
     port, seconds = sys.argv[1], float(sys.argv[2])
-    reset = "--no-reset" not in sys.argv[3:]
+    rest = sys.argv[3:]
+    reset = "--no-reset" not in rest
+    until = rest[rest.index("--until") + 1].encode() if "--until" in rest else None
+    seen = b""
     out = sys.stdout.buffer
     s = open_port(port)
     if reset:
@@ -68,6 +79,11 @@ def main():
         if data:
             out.write(data)
             out.flush()
+            if until is not None:
+                seen = (seen + data)[-(len(until) + 256):]
+                i = seen.find(until)
+                if i >= 0 and b"\n" in seen[i:]:
+                    break
     s.close()
 
 

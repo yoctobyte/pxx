@@ -66,9 +66,10 @@ to prove it could catch one:
   section) on x86-64, i386, aarch64 and arm32;
 - real programs: uforth, eleven Pascal examples, and Lua 5.4 scripts.
 
-**No open compiler-caused leak is known in v441.** The sweep found five, and
-all five are fixed in this release. If you are on an older pin, use the
-workaround.
+**No open compiler-caused leak was known when v441 was released.** The sweep
+found five, and all five are fixed in this release. If you are on an older pin,
+use the workaround. One more was found after the release; it is listed after
+these five.
 
 - **`Dispose(p)` did not finalize the thing `p` points at.** When `p` points at
   a record with a string, dynamic-array, interface or `Variant` field, or at a
@@ -86,6 +87,18 @@ workaround.
   `sorted(xs, key=lambda v: -v)`, kept one closure per call. **Older pins:** bind
   the lambda to a name first.
 
+Found after the release, on 2026-09-27, and **open in v441**:
+
+- **Nil Python: `list.clear()` and `dict.clear()` did not release what they
+  dropped.** The elements, or the keys and values, stayed allocated after the
+  list or dict itself was freed. A function that fills a list with 20 strings
+  and clears it lost 20 strings per call. A buffer cleared and refilled in a
+  loop does not grow, because refilling releases the old elements, but the
+  last contents are lost when the buffer goes away. Fixed after v441, in the
+  runtime that the compiler links into every Nil Python program. **On v441:**
+  assign a new empty container (`buf = []`, `d = {}`) instead of calling
+  `clear()`.
+
 Program-level global variables are not finalized when the program exits. This
 is a one-time cost at exit, not a leak that grows while the program runs.
 
@@ -94,6 +107,15 @@ Nil Python: a string temporary built by a module-level statement, such as
 again. That is at most one string per source line, and a loop reuses it, so
 the cost is bounded by the program's length and does not grow while it runs.
 Inside a function, temporaries are released when the statement ends.
+
+A list that a statement creates, such as `kept = []`, stays allocated until
+that same statement runs again or the function returns. That holds even after
+the name is bound to something else (`kept = []` a second time on another
+line, `kept = None`, `del kept`). It does not add up in a loop, but a function
+that fills a list and then drops it keeps the contents until it returns. On an
+ESP32-C3 with about 70 KB free, 34 kept HTTP responses (about 1.4 KB each) held
+that way ran the heap low enough that Wi-Fi stopped working. Return from the
+function, or let it end, to get the memory back.
 
 ### ESP networking
 
@@ -126,15 +148,23 @@ have TLS through the `http` unit.)
 
 Two limits apply to these measurements:
 
-- **Wi-Fi on a real chip has not been measured.** All of the above ran over
-  QEMU's emulated Ethernet.
+- **Over real Wi-Fi, only the ESP32-C3 has been measured**, and only with
+  `urequests`. The rows above ran over QEMU's emulated Ethernet. On
+  2026-09-27, one ESP32-C3 board with the v441 compiler, joined to a home
+  Wi-Fi network, fetched a page from a PC on that network 1,000 times. Free
+  heap stayed within 400 bytes of where it started, with no upward trend, and
+  ended 364 bytes higher. A second run of 300 fetches grew by 20 bytes, and after the
+  function holding the responses returned and 130 seconds passed, all of it
+  had come back. Its positive control kept 20 responses, which cost 1,434
+  bytes each.
 - **Long network runs on the ESP32-C3 stop under QEMU** after a few hundred to
   a few thousand requests: the program stops making progress, although memory
   and sockets are not exhausted. At the stall, the emulated network card holds
   received frames and has an interrupt pending that is never delivered, so the
   program waits forever for data that has already arrived. This happens below
   the compiled program, in the emulator's network path, and has not been seen
-  on the ESP32-S3. It has not been measured on a physical C3.
+  on the ESP32-S3. On a physical C3 over real Wi-Fi it did not happen: about
+  1,700 requests over three runs on 2026-09-27, with no stall.
 
 ## Fixed in this release
 

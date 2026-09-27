@@ -1,0 +1,12 @@
+wifi ap PXX-NILPY active True at 192.168.4.1
+http listening on port 80
+adc start 0
+temperature plausible True
+http 127.0.0.1 GET / HTTP/1.0
+self-fetch / -> HTTP/1.1 200 OK page True
+http 127.0.0.1 GET /data HTTP/1.0
+self-fetch /data -> HTTP/1.1 200 OK keys ['adc_pin', 'adc_raw', 'free_heap', 'requests', 'stations', 'temperature_c', 'uptime_s']
+self-fetch /data adc in range True heap > 0 True
+serving http://192.168.4.1/ from the hidden loop
+http 127.0.0.1 GET /data HTTP/1.0
+hidden loop: frame 16 self-fetch /data -> HTTP/1.1 200 OK requests 3
