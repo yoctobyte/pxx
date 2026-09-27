@@ -176,6 +176,19 @@ var
     the temp. Each statement-sequence builder flushes this before the statement
     it just parsed, so the setup runs first. }
   PyHoistHead: Integer;
+  { The hidden temps made while parsing the current statement that hold a
+    container (list/set/dict literals, PyNewContainerTemp, a method call's
+    receiver snapshot), and the CurProc each was made in. The temp is the
+    container's first owner; the statement's own store (`x = []`) retains it
+    again. Left alone, the temp kept its reference until the same statement
+    ran again or the function returned, so `x = []; ...; x = None` inside a
+    function freed nothing: the list and all it held stayed allocated
+    (34 kept HTTP responses, ~48 KB, on an ESP32-C3 with ~70 KB free,
+    2026-09-27). Each statement-list builder takes a mark before a statement
+    and PyReleaseTempsSince nils the temps made since, after the statement. }
+  PyStmtTempSym: array of Integer;
+  PyStmtTempProc: array of Integer;
+  PyStmtTempCount: Integer;
   { `from mod import NAME as ALIAS` — the alias's binding, queued rather than
     built where the import is parsed. The LEADING import run happens before the
     program's statement list exists and before ASTArenaFloor is set, so an AST
@@ -21397,6 +21410,22 @@ begin
   Result := PyClassLevelCarrier(nm, outMmi, anyInst) and (not anyInst);
 end;
 
+{ Record a hidden container temp as the current statement's, so the
+  statement-list builder nils it once the statement is done (see
+  PyStmtTempSym). Only for a temp whose container is reachable, after the
+  statement, solely through what the statement stored it into. }
+procedure PyNoteStmtTemp(tmpSym: Integer);
+begin
+  if PyStmtTempCount >= Length(PyStmtTempSym) then
+  begin
+    SetLength(PyStmtTempSym, 64 + PyStmtTempCount * 2);
+    SetLength(PyStmtTempProc, 64 + PyStmtTempCount * 2);
+  end;
+  PyStmtTempSym[PyStmtTempCount] := tmpSym;
+  PyStmtTempProc[PyStmtTempCount] := CurProc;
+  Inc(PyStmtTempCount);
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -22217,6 +22246,9 @@ begin
   ASTLeft[vtAsgn] := PyMakeIdent(vtTmpSym);
   ASTRight[vtAsgn] := baseNode;
   PyHoistStmt(vtAsgn);
+  { the copy holds a reference to the receiver; drop it after the statement,
+    or `xs.append(v)` pins xs until the function returns }
+  PyNoteStmtTemp(vtTmpSym);
   baseNode := PyMakeIdent(vtTmpSym);
 
   { The tag this receiver must carry. Normally VT_OBJECT, asserted by
@@ -23617,7 +23649,36 @@ begin
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
   PyHoistStmt(asgn);
+  PyNoteStmtTemp(tmpSym);
   Result := tmpSym;
+end;
+
+{ After a statement: nil every container temp made while parsing it, so the
+  container is freed as soon as nothing the program can see holds it. Only
+  temps of the scope being built: a lambda or nested def parsed inside the
+  statement made its temps in another CurProc, and its own builders release
+  them. A statement that returns never reaches the release, and the
+  function's finalizer frees the temp as before. }
+function PyReleaseTempsSince(seq, mark: Integer): Integer;
+var k, asgn, nilNode: Integer;
+begin
+  Result := seq;
+  for k := mark to PyStmtTempCount - 1 do
+    if PyStmtTempProc[k] = CurProc then
+    begin
+      { an INTEGER 0, not a tyPointer nil: ir.inc's `d = None` arm (a
+        scalar stored over a NilPy class binding) is what releases the old
+        object before the raw store; a pointer-typed 0 is stored raw and
+        drops nothing }
+      nilNode := AllocNode(AN_INT_LIT);
+      ASTIVal[nilNode] := 0;
+      ASTTk[nilNode] := Ord(tyInteger);
+      asgn := AllocNode(AN_ASSIGN);
+      ASTLeft[asgn] := PyMakeIdent(PyStmtTempSym[k]);
+      ASTRight[asgn] := nilNode;
+      Result := PySeqAppend(Result, asgn);
+    end;
+  if mark < PyStmtTempCount then PyStmtTempCount := mark;
 end;
 
 { One hoisted `tmp.<meth>(a [, b])` on a container temp. }
@@ -24726,6 +24787,7 @@ begin
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
   PyHoistStmt(asgn);
+  PyNoteStmtTemp(tmpSym);
   if dedup then
   begin
     mmi := FindUMeth(ci, 'add_self');
@@ -24862,6 +24924,7 @@ begin
   ASTLeft[asgn] := PyMakeIdent(tmpSym);
   ASTRight[asgn] := node;
   PyHoistStmt(asgn);
+  PyNoteStmtTemp(tmpSym);
   mmi := FindUMeth(ci, 'setitem');
   if mmi < 0 then Error('Nil Python: TPyDict.setitem not found');
   mpi := UMthProc_[mmi];
@@ -26518,7 +26581,7 @@ begin
 end;
 
 function PyParseSuite: Integer;
-var stmt, seq: Integer;
+var stmt, seq, tmark: Integer;
 begin
   if CurTok.Kind = tkNewline then
   begin
@@ -26530,9 +26593,11 @@ begin
   end;
   seq := -1;
   repeat
+    tmark := PyStmtTempCount;
     stmt := PyParseStatement;
     seq := PyFlushHoist(seq);
     seq := PySeqAppend(seq, stmt);
+    seq := PyReleaseTempsSince(seq, tmark);
   until not Eat(tkSemicolon);
   if CurTok.Kind = tkNewline then Next;
   Result := seq;
@@ -36198,15 +36263,17 @@ begin
 end;
 
 function PyParseBlock: Integer;
-var stmt: Integer;
+var stmt, tmark: Integer;
 begin
   Result := -1;
   PySkipNewlines;
   while not (CurTok.Kind in [tkDedent, tkEOF]) do
   begin
+    tmark := PyStmtTempCount;
     stmt := PyParseStatement;
     Result := PyFlushHoist(Result);
     Result := PySeqAppend(Result, stmt);
+    Result := PyReleaseTempsSince(Result, tmark);
     { `u = int(vm.pop()); addr = int(vm.pop())` — Python allows several simple
       statements on one line, separated by ';'. Consumed here so the newline
       check below still applies to the LAST one on the line. }
@@ -36214,9 +36281,11 @@ begin
     begin
       Next;
       if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then Break;  { trailing ';' }
+      tmark := PyStmtTempCount;
       stmt := PyParseStatement;
       Result := PyFlushHoist(Result);
       Result := PySeqAppend(Result, stmt);
+      Result := PyReleaseTempsSince(Result, tmark);
     end;
     if CurTok.Kind = tkNewline then PySkipNewlines
     else if (stmt >= 0) and (ASTKind[stmt] in [AN_IF, AN_WHILE, AN_FOR,
@@ -50813,7 +50882,7 @@ begin
 end;
 
 procedure ParsePyUnit(const uname: AnsiString);
-var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
+var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS, tmark: Integer;
     dbgI: Integer;
     savedScanLo, savedMainTok, savedNest, savedLam, savedHoist, savedFloor: Integer;
     savedSelf2, savedImpAlias: Integer;
@@ -50992,8 +51061,10 @@ begin
     end
     else
     begin
+      tmark := PyStmtTempCount;
       stmt := PyParseStatement;
       stmt := PySeqAppend(PyFlushHoist(-1), stmt);
+      stmt := PyReleaseTempsSince(stmt, tmark);
       if stmt >= 0 then
       begin
         if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
@@ -51208,7 +51279,7 @@ begin
 end;
 
 procedure ParsePyProgram;
-var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin: Boolean;
+var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx, tmark: Integer; needsBuiltin: Boolean;
     pyHasExceptions: Boolean;
     dummyNames: array[0..3] of AnsiString;
     dummyTypes: array[0..3] of TTypeKind;
@@ -51506,9 +51577,11 @@ begin
     end
     else
     begin
+      tmark := PyStmtTempCount;
       stmt := PyParseStatement;
       mainNode := PyFlushHoist(mainNode);
       mainNode := PySeqAppend(mainNode, stmt);
+      mainNode := PyReleaseTempsSince(mainNode, tmark);
       { the list just grew — everything it now holds must sit BELOW the floor,
         or the next unit compile hands those nodes out again }
       ASTArenaFloor := ASTNodeCount;
@@ -51517,9 +51590,11 @@ begin
       begin
         Next;
         if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then Break;
+        tmark := PyStmtTempCount;
         stmt := PyParseStatement;
         mainNode := PyFlushHoist(mainNode);
         mainNode := PySeqAppend(mainNode, stmt);
+        mainNode := PyReleaseTempsSince(mainNode, tmark);
         ASTArenaFloor := ASTNodeCount;
       end;
     end;

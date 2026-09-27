@@ -1,0 +1,72 @@
+# A container a statement creates is released when its last name lets go,
+# not when the statement runs again or the function returns.
+#
+# `a = []` built the list into a hidden per-site temp, and `x = tmp` retained
+# it again, so the temp's own reference lived on until that same statement
+# ran again or the scope ended. `a.append(v)` did the same to the receiver
+# through the method call's Variant snapshot. So `a = None`, `a = []` at
+# another site or `a = 5` dropped only one of two references: on pin v442 a
+# function that filled a 1000-string list and a 500-entry dict, then let both
+# names go, still held all of it until it returned. Bounded, but on an
+# ESP32-C3 with ~70 KB free, a board soak held enough of these to drop Wi-Fi.
+# The same held at module level, where "until the scope ends" is never.
+#
+# sys.exit(0) inside work() stops before the function returns, which is the
+# window the old temps held. The census has no exit hook: it reports on a
+# geometric allocation threshold (tools/assert_no_leak.sh reads the last
+# report), so the `churn` loop after the drop allocates and frees enough
+# short-lived strings to cross several more thresholds, and the last report is
+# taken with the containers already let go. `del a` on a local still emits
+# nothing (docs/reference/known-issues.md), so this test uses `a = None`.
+#
+# Run as `keep` it is the POSITIVE CONTROL: the same containers stay alive in
+# a global, so the census must see thousands of live objects, or it cannot see
+# these at all. The printed line is CPython's.
+import sys
+
+kept = []
+
+
+def pairs():
+    # temps that must outlive their statement: a returned literal, and a
+    # literal nested in another one
+    return [[1, 2], [3, 4, 5]]
+
+
+m = []
+for i in range(500):
+    m.append("m" + str(i))
+if len(sys.argv) > 1 and sys.argv[1] == "keep":
+    kept.append(m)
+mlen = len(m)
+m = None
+
+
+def work(keep):
+    a = []
+    for i in range(1000):
+        a.append("a" + str(i))
+    b = {}
+    for i in range(500):
+        b["k" + str(i)] = "v" + str(i)
+    c = [[str(i), str(i + 1)] for i in range(3)]
+    p = pairs()
+    alias = p[1]
+    n = len(a) + len(b) + len(c) + len(alias) + len(p[0])
+    if keep:
+        kept.append(a)
+        kept.append(b)
+    a = None
+    b = []
+    b.append(n)
+    c = 5
+    churn = 0
+    for i in range(20000):
+        t = "z" + str(i)
+        churn = churn + len(t)
+    print("churn", churn, "n", n, "m", mlen, "alias", alias, "b", b, "c", c)
+    sys.stdout.flush()
+    sys.exit(0)
+
+
+work(len(sys.argv) > 1 and sys.argv[1] == "keep")

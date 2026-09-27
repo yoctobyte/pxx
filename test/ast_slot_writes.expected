@@ -309,6 +309,7 @@ AN_ASSIGN Left CloneAST(valNode)
 AN_ASSIGN Left PyMakeCellPtr(si)
 AN_ASSIGN Left PyMakeIdent(Procs[procIdx].RetSymIdx)
 AN_ASSIGN Left PyMakeIdent(PyImpAliasSym[i])
+AN_ASSIGN Left PyMakeIdent(PyStmtTempSym[k])
 AN_ASSIGN Left PyMakeIdent(aSym)
 AN_ASSIGN Left PyMakeIdent(attrSym)
 AN_ASSIGN Left PyMakeIdent(baseSym)
@@ -500,6 +501,7 @@ AN_ASSIGN Right lit
 AN_ASSIGN Right litN
 AN_ASSIGN Right loNode
 AN_ASSIGN Right n
+AN_ASSIGN Right nilNode
 AN_ASSIGN Right node
 AN_ASSIGN Right one
 AN_ASSIGN Right oneN

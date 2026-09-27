@@ -585,6 +585,15 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_list_clear_releases 300 $(TESTTMP)/test_nilpy_listclear26
 	@if tools/assert_no_leak.sh nilpy_list_clear_control 300 $(TESTTMP)/test_nilpy_listclear26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_list_clear control (keep) did not trip the bound -- the census cannot see these elements"; exit 1; fi
+	# A list or dict a statement creates is released when its last name lets go
+	# (`a = None`, a rebind), not when the statement runs again or the function
+	# returns (pin v442: ~2,500 live at the sys.exit inside work()). `keep` is
+	# the positive control. The value line is CPython's.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_statement_temps_release_at_statement_end.npy $(TESTTMP)/test_nilpy_stmttemp26
+	tools/expect_same.sh nilpy_stmt_temp_value "$$($(TESTTMP)/test_nilpy_stmttemp26 2>/dev/null)" "churn 108890 n 1508 m 500 alias [3, 4, 5] b [1508] c 5"
+	tools/assert_no_leak.sh nilpy_stmt_temp_released 300 $(TESTTMP)/test_nilpy_stmttemp26
+	@if tools/assert_no_leak.sh nilpy_stmt_temp_control 300 $(TESTTMP)/test_nilpy_stmttemp26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_stmt_temp control (keep) did not trip the bound -- the census cannot see these containers"; exit 1; fi
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
