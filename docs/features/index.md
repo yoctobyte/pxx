@@ -24,8 +24,9 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Cross-language imports with no wrapper layer: frontends share one backend,
   symbol table, and import resolver. A Pascal `uses` can resolve a C header,
   and a Nil Python `import` can resolve a Pascal unit or a C header, through the
-  same chain, with no FFI blocks, IDL or generated bindings. Pascal does not
-  import Nil Python modules, and C imports only C headers. See [Cross languages](../targets/cross-languages.md).
+  same chain, with no FFI blocks, IDL or generated bindings. C can
+  `#include "unit.pas"` and call the unit's `cdecl` routines. Pascal does not
+  import Nil Python modules. See [Cross languages](../targets/cross-languages.md).
 - Byte-identical fixedpoint builds are part of the development gate: the
   compiler rebuilds itself and the two binaries must match to the byte, at the
   default optimisation level. This is the compiler reproducing **its own**
@@ -34,10 +35,10 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - DWARF debug info with `-g` on x86-64, i386, aarch64 and arm32 (not on
   riscv32 or wasm32).
 - It builds a bootable system: PXX compiles a 19-applet BusyBox userland,
-  including the `ash` shell, whose output matches a GCC build of the same
-  sources across a differential case list. That userland is linked with no C
-  library other than PXX's own, and `tools/mkminimal.sh` packages it, a stock
-  Linux kernel and the compiler itself into one BIOS+EFI ISO. See
+  including the `ash` shell, byte-identical to a GCC build of the same sources
+  over 132 differential cases (pin v445, 2026-09-28). PXX links it itself, with
+  no libc, and `tools/mkminimal.sh` packages it, a stock Linux kernel and the
+  compiler itself into one BIOS+EFI ISO. See
   [A minimal Linux system](../examples/minimal-linux-system.md).
 
 ## Language
@@ -60,8 +61,8 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
   should be treated as advanced or unstable surfaces.
 - Alternate high-level frontends: a [C frontend](../targets/c-frontend.md)
   (C99-class, passes all 220 programs of the c-testsuite conformance battery
-  with pin v425 on x86-64, and compiles real programs such as SQLite, Lua,
-  zlib, cJSON and QuickJS) and
+  with pin v445 on x86-64, and compiles real programs: SQLite, Lua, zlib,
+  cJSON and QuickJS each pass their test row, re-run on 2026-09-28) and
   [Nil Python](../targets/nil-python.md), a statically-typed Python-shaped
   dialect. Both are mainline, gated frontends, not experiments — see
   [compatibility status](../reference/status.md).

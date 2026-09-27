@@ -5,8 +5,10 @@ order: 5
 
 # Dive
 
-A single-page technical overview of PXX, verified against this checkout. The
-rest of the documentation, linked at the end, covers each topic in depth.
+A single-page technical overview of PXX. Every figure on it was re-measured on
+2026-09-27/28, with pin v445 (compiler sha256 `caf21ac399f1…`) unless it names
+another compiler. The rest of the documentation, linked at the end, covers each
+topic in depth.
 
 ## Overview
 
@@ -51,9 +53,9 @@ assembler, linker, or C compiler invoked during the build.
 - **Two string ABIs.** The default build uses managed, reference-counted
   strings. Compiling with `-uPXX_MANAGED_STRING` selects an older frozen-string
   ABI with no dynamic allocation for strings. On x86-64 it no longer changes
-  binary size, because unused runtime code is dropped anyway: measured with pin
-  v425, a one-`writeln` hello world is 4,520 bytes both ways, and a program
-  with a string concat is 25,048 bytes both ways. It still matters on ESP bare
+  binary size, because unused runtime code is dropped anyway: a one-`writeln`
+  hello world is 4,544 bytes both ways, and a program with a string concat is
+  25,048 bytes both ways. It still matters on ESP bare
   metal; see [ESP32](../targets/esp32.md). See also
   [Types](../language/types.md#strings).
 - **Seven code-generating targets, one compiler.** x86-64, i386, aarch64, and
@@ -66,24 +68,26 @@ assembler, linker, or C compiler invoked during the build.
   managed-string build, which the `cross-bootstrap` rule states is required for
   them; the native fixedpoint passes no build flags at all. Same property, two
   configurations, worth naming because "all four self-host" reads as one gate
-  and is two. `--target=` selects the backend, and
+  and is two. All three cross checks were re-run on 2026-09-28 with the
+  compiler built at `0381cb6e4d` (sha256 `848d33f2668a…`), and each was
+  byte-identical: i386 in 2 minutes, aarch64 in 14, arm32 in 16, under QEMU. `--target=` selects the backend, and
   [Targets](../targets/index.md) is the table that stays current.
 - **Multiple frontends.** The same backend also compiles a C frontend
-  (all 220 c-testsuite programs pass with pin v425, and it compiles real C
-  such as SQLite, Lua and QuickJS), a
+  (all 220 c-testsuite programs pass with pin v445, and it compiles real C:
+  the SQLite amalgamation, Lua, QuickJS, zlib and cJSON each pass their test
+  row with the compiler at `0381cb6e4d`), a
   statically-typed Python-like dialect (Nil Python, `.npy`), and an
   assembly-source frontend.
-- **It boots.** PXX compiles a 19-applet BusyBox userland, including the `ash`
-  shell, as separate translation units, matching a GCC build of the same sources
-  over a differential case list. It is linked with `ld` against PXX's own C
-  runtime and no other C library. `tools/mkminimal.sh` packages that shell, a
-  stock Linux kernel and the compiler itself into one BIOS+EFI ISO: a system
-  whose entire userland is PXX output, and on which the compiler compiles and
-  runs both Pascal and C — the latter against PXX's own C runtime, measured in
-  the guest. Two things that image is not — the kernel is not ours, and it
-  ships no compiler sources, so the self-host fixed point is proved in a
-  separate, larger VM image rather than on the ISO. See
-  [A minimal Linux system](../examples/minimal-linux-system.md).
+- **It boots.** PXX compiles a 19-applet BusyBox 1.36.1 userland, including
+  the `ash` shell, as 86 separate translation units. With pin v445 it is
+  byte-identical to a GCC build of the same sources over 132 differential
+  cases, and PXX links the 86 objects itself (`pascal26 --link`): no external
+  linker, no libc, no `PT_INTERP`. `tools/mkminimal.sh` packages such a shell,
+  a stock Linux kernel and the compiler itself into one BIOS+EFI ISO, a system
+  whose entire userland is PXX output. The kernel is not ours, and the ISO
+  ships no compiler sources. The ISO was not rebuilt for this page;
+  [A minimal Linux system](../examples/minimal-linux-system.md) records when
+  it was and what was measured in the guest.
 
 <details markdown="1">
 <summary>Compilation pipeline</summary>
@@ -120,8 +124,8 @@ See [Architecture](../reference/architecture.md) for the full pipeline.
 
 Established: the core Pascal language — classes, interfaces, generics,
 exceptions, managed strings, dynamic arrays — compiles on all four Linux
-self-host targets. A minimal class-based program was verified to build
-cleanly on x86-64, i386, aarch64, and arm32 while writing this page. The C
+self-host targets: a class with an exception, caught and printed, ran on
+x86-64, i386, aarch64 and arm32 (the last three under QEMU). The C
 and Nil Python frontends compile against real-world C headers and libraries.
 DWARF debug information (`-g`) is available on all four of those targets, and
 not on riscv32 or wasm32.
@@ -147,9 +151,12 @@ security-sensitive, safety-sensitive, financial, legal, or medical work.
 PXX is open source, licensed per directory: the compiler is MPL 2.0, the
 runtime and libraries (`compiler/builtin/`, `lib/rtl`, `lib/pcl`, `lib/crtl`
 and `lib/asmcore`) are zlib, examples are
-0BSD, and these docs are CC BY 4.0. Because the zlib-licensed runtime is what
-gets embedded into every binary, programs you compile with PXX carry no license
-obligations from the toolchain. See [Licensing](../reference/licensing.md) for
+0BSD, and these docs are CC BY 4.0. The runtime embedded into compiled
+programs is zlib-licensed, which asks nothing of a binary. Three runtime files
+carry other licences and are embedded only into programs that use them: two
+MIT files derived from MicroPython (`lib/rtl/platform/esp/espmpyport.pas` and
+`lib/rtl/mimic_framebuf_font.py`) and C's `fenv` (`lib/crtl/src/fenv.c`,
+MPL 2.0). See [Licensing](../reference/licensing.md) for
 the full table and rationale, or
 [`LICENSE.md`](https://github.com/yoctobyte/pxx/blob/master/LICENSE.md) for the
 binding terms.
