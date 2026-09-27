@@ -23,14 +23,6 @@ different size from GCC's: `struct { char c; long double y; }` is 16 bytes here
 and 32 under GCC. That matters as soon as such a struct crosses into
 GCC-compiled code or into a file format. (Measured with v425.)
 
-### C: an initialised `__thread` variable reads 0 in other threads
-
-`__thread int tl = 7;` reads 7 in `main` and 0 in a thread started with
-`pthread_create`. **Workaround:** assign the value at the start of each thread.
-A fix in progress is parked in the repository as
-`devdocs/dev/parked-patches/tls-init-image-reaches-every-thread-wip.patch`.
-(Measured with v425.)
-
 ### C: a function returning a pointer to an array steps it one element at a time
 
 With `typedef float vec4[4];`, a function declared `vec4 *f(void)` returns the
@@ -210,6 +202,13 @@ These are wrong in v441 and fixed in a later pin or after v445, as each row
 says. Each was checked against GCC's output on x86-64, and re-checked on
 2026-09-27: with v445 each row is still wrong exactly where it says "after
 v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
+
+- **C: an initialised `__thread` variable read 0 in other threads.**
+  `__thread int tl = 7;` read 7 in `main` and 0 in a thread started with
+  `pthread_create`, and in that thread's own threads. Now every thread starts
+  at the initialiser, on x86-64, aarch64 and arm32 (checked against GCC; on
+  i386 and riscv32 `__thread` is still one shared copy, see below). Wrong in
+  v441 to v445.
 
 - **C: an array typedef of structs was not modelled.** With `typedef struct {
   int a, b; } P; typedef P PA[2];`, a struct member `PA ps;` was laid out as

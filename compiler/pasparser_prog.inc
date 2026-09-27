@@ -789,6 +789,47 @@ begin
 
     CompileAST(assignNode);
     ASTNodeCount := ASTArenaFloor;
+
+    { A THREAD-LOCAL's initialiser reached only the MAIN thread's block above.
+      Copy the value just stored into the init image as well:
+      `(slot 13)^[offset] := sym`. Every new block starts as a copy of the
+      image (TLS_SLOT_INIT_IMAGE), so this is what hands the value to other
+      threads. Built from nodes the lowering already handles: AN_TLSBASE plus
+      an offset, AN_DEREF, and a byte-offset pointer AN_BINOP. The value side
+      is the symbol itself, which ThreadVarRewriteRange turns into a read of
+      the main block, so it is the value that was just stored, whatever its
+      initialiser kind.
+      bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main }
+    if (BSS_TLS_IMAGE >= 0) and (SymTlsOffset[PendingInitSym[i]] >= 0) then
+    begin
+      innerAddr := AllocNode(AN_TLSBASE);
+      ASTTk[innerAddr] := Ord(tyPointer);
+      ASTIVal[innerAddr] := 8 * TLS_SLOT_INIT_IMAGE;
+      valNode := AllocNode(AN_DEREF);
+      ASTLeft[valNode] := innerAddr;
+      ASTTk[valNode] := Ord(tyPointer);
+      ASTNilChk[valNode] := 0;
+      idxLit := AllocNode(AN_INT_LIT);
+      ASTIVal[idxLit] := SymTlsOffset[PendingInitSym[i]] - TLS_USER_FIRST_OFF;
+      ASTTk[idxLit] := Ord(tyInt64);
+      innerAddr := AllocNode(AN_BINOP);
+      ASTIVal[innerAddr] := Ord(tkPlus);
+      ASTLeft[innerAddr] := valNode;
+      ASTRight[innerAddr] := idxLit;
+      ASTTk[innerAddr] := Ord(tyPointer);
+      target := AllocNode(AN_DEREF);
+      ASTLeft[target] := innerAddr;
+      ASTTk[target] := Ord(Syms[PendingInitSym[i]].TypeKind);
+      ASTNilChk[target] := 0;
+      valNode := AllocNode(AN_IDENT);
+      ASTIVal[valNode] := PendingInitSym[i];
+      ASTTk[valNode] := Ord(Syms[PendingInitSym[i]].TypeKind);
+      assignNode := AllocNode(AN_ASSIGN);
+      ASTLeft[assignNode] := target;
+      ASTRight[assignNode] := valNode;
+      CompileAST(assignNode);
+      ASTNodeCount := ASTArenaFloor;
+    end;
   end;
 end;
 

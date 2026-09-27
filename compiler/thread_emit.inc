@@ -68,7 +68,7 @@ end;
 procedure EnsureCloneStub;
 var
   jmpOver: Integer;
-  pNoInst, pNoInst2: Integer;   { the child's skip-the-install branches (aarch64, arm32) }
+  pNoInst, pNoInst2, pCopy: Integer;   { the child's skip-the-install branches (aarch64, arm32) }
   pParent: Integer;   { the child/parent split, patched in ALL FOUR legs: rel8 on
                         x86-64/i386, a branch immediate on aarch64/arm32 }
 begin
@@ -157,7 +157,9 @@ begin
     { jnz .parent -- COMPUTED. It was 30 hand-counted bytes over ten
       instructions of child setup, and every one of them is a line someone may
       add to. }
-    EmitB($75); pParent := CodeLen; EmitB(0);         { jnz .parent }
+    { rel32, not rel8: the child sequence passed 127 bytes when it gained the
+      init-image copy (2026-09-24), and PatchRel8 refused it at build time. }
+    EmitB($0F); EmitB($85); pParent := CodeLen; EmitI32(0);   { jnz .parent }
     { ---- child: rsp = tlsBlock-16, [rsp]=entry [rsp+8]=arg ---- }
     { Install the TLS block FIRST, before anything Pascal runs. clone does not
       reset the thread pointer, so a child that skipped this would read the PARENT's block --
@@ -170,10 +172,36 @@ begin
       (feature-a-thread-local-storage-via-clone-settls). GS, not fs: fs belongs
       to libc, and a pxx program may link one. syscall clobbers rcx and r11;
       both are dead here (arg was staged on the stack above). }
+    { r12 = the PARENT's init-image pointer, read through gs BEFORE the
+      install replaces it. See TLS_SLOT_INIT_IMAGE. }
+    if TlsUserBytes > 0 then
+    begin
+      EmitB($65); EmitB($4C); EmitB($8B); EmitB($24); EmitB($25);
+        EmitI32(8 * TLS_SLOT_INIT_IMAGE);             { mov r12, gs:[8*slot] }
+    end;
     EmitB($BF); EmitI32($1001);                       { mov edi, ARCH_SET_GS }
     EmitB($48); EmitB($8D); EmitB($74); EmitB($24); EmitB($10); { lea rsi, [rsp+16] }
     EmitB($B8); EmitI32(158);                         { mov eax, 158 (arch_prctl) }
     EmitB($0F); EmitB($05);                           { syscall }
+    { ---- start the user area from the init image, when there is one ----
+      The block was zeroed above; the image holds every thread-local's
+      initial value (0 where it has no initialiser), so this is the start C
+      requires for `__thread int x = 5;`. The pointer is handed on in the
+      new block's own slot, so a thread this thread creates copies it too. }
+    if TlsUserBytes > 0 then
+    begin
+      EmitB($4D); EmitB($85); EmitB($E4);             { test r12, r12 }
+      EmitB($74); pNoInst := CodeLen; EmitB(0);       { jz .nocopy }
+      EmitB($4C); EmitB($89); EmitB($E6);             { mov rsi, r12 }
+      EmitB($48); EmitB($8D); EmitB($BC); EmitB($24);
+        EmitI32(16 + TLS_USER_FIRST_OFF);             { lea rdi, [rsp+16+user] }
+      EmitB($B9); EmitI32(TlsUserBytes);              { mov ecx, TlsUserBytes }
+      EmitB($FC);                                     { cld }
+      EmitB($F3); EmitB($A4);                         { rep movsb }
+      EmitB($4C); EmitB($89); EmitB($A4); EmitB($24);
+        EmitI32(16 + 8 * TLS_SLOT_INIT_IMAGE);        { mov [rsp+16+8*slot], r12 }
+      PatchRel8(pNoInst);                             { .nocopy: }
+    end;
     { ---- register the alt stack carved above, on THIS thread ---- }
     { The stack_t is built on the child's own stack rather than in BSS for the
       same reason the buffer is per-thread: a shared struct is a race between
@@ -210,7 +238,7 @@ begin
     EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60  (SYS_exit) }
     EmitB($0F); EmitB($05);                           { syscall  (thread exits here) }
     { ---- .parent: rax already = child tid ---- }
-    PatchRel8(pParent);
+    Patch32(pParent, CodeLen - (pParent + 4));
     EmitB($C3);                                       { ret }
     { patch the jump-over to land here, past the stub. }
     Patch32(jmpOver, CodeLen - (jmpOver + 4));
@@ -319,8 +347,25 @@ begin
     EmitI32($F940012A);                 { ldr  x10, [x9] }
     EmitI32($EB0A013F);                 { cmp  x9, x10 }
     pNoInst2 := CodeLen; EmitI32($54000001);  { b.ne .noinst (patched) }
+    { x11 = the parent's init-image pointer; see the x86-64 leg. }
+    EmitI32($F9400000 or (TLS_SLOT_INIT_IMAGE shl 10) or (9 shl 5) or 11);  { ldr x11, [x9, #8*slot] }
     EmitI32($910043E9);                 { add  x9, sp, #16        (the block) }
     EmitI32($D51BD049);                 { msr  tpidr_el0, x9 }
+    if TlsUserBytes > 0 then
+    begin
+      if (TLS_USER_FIRST_OFF > 4095) or (TlsUserBytes mod 8 <> 0) then
+        Error('compiler error: the aarch64 clone leg copies the init image with a 12-bit offset and 8-byte steps');
+      pCopy := CodeLen; EmitI32($B400000B);   { cbz  x11, .nocopy (patched) }
+      EmitI32($91000000 or (TLS_USER_FIRST_OFF shl 10) or (9 shl 5) or 12);  { add x12, x9, #user }
+      EmitLoadImmA64(13, TlsUserBytes);       { x13 = count }
+      EmitI32($AA0B03EE);                 { mov  x14, x11 }
+      EmitI32($F84085CF);                 { .c: ldr x15, [x14], #8 }
+      EmitI32($F800858F);                 { str  x15, [x12], #8 }
+      EmitI32($F10021AD);                 { subs x13, x13, #8 }
+      EmitI32($54FFFFA1);                 { b.ne .c }
+      EmitI32($F9000000 or (TLS_SLOT_INIT_IMAGE shl 10) or (9 shl 5) or 11);  { str x11, [x9, #8*slot] }
+      Patch32(pCopy, $B400000B or ((((CodeLen - pCopy) div 4) and $7FFFF) shl 5));
+    end;
     Patch32(pNoInst, $B4000009 or ((((CodeLen - pNoInst) div 4) and $7FFFF) shl 5));
     Patch32(pNoInst2, $54000001 or ((((CodeLen - pNoInst2) div 4) and $7FFFF) shl 5));
     EmitI32($F94003E1);                 { ldr  x1, [sp]           (entry) }
@@ -383,9 +428,30 @@ begin
     EmitI32($E599A000);                 { ldr r10, [r9] }
     EmitI32($E159000A);                 { cmp r9, r10 }
     pNoInst2 := CodeLen; EmitI32($1A000000);  { bne .noinst (patched) }
+    { r8 = the parent's init-image pointer; see the x86-64 leg. }
+    EmitI32($E5998000 or (8 * TLS_SLOT_INIT_IMAGE));   { ldr r8, [r9, #8*slot] }
     EmitI32($E28D0010);                 { add r0, sp, #16       (the block) }
     EmitLoadImmArm32(7, $F0005);        { r7 = __ARM_NR_set_tls }
     EmitI32($EF000000);                 { svc 0 }
+    if TlsUserBytes > 0 then
+    begin
+      if TlsUserBytes mod 4 <> 0 then
+        Error('compiler error: the arm32 clone leg copies the init image in 4-byte steps');
+      EmitI32($E3580000);                 { cmp r8, #0 }
+      pCopy := CodeLen; EmitI32($0A000000);   { beq .nocopy (patched) }
+      EmitI32($E28DA010);                 { add r10, sp, #16      (the block) }
+      EmitLoadImmArm32(12, TLS_USER_FIRST_OFF);
+      EmitI32($E08AA00C);                 { add r10, r10, r12     (its user area) }
+      EmitLoadImmArm32(9, TlsUserBytes);  { r9 = count }
+      EmitI32($E1A03008);                 { mov r3, r8 }
+      EmitI32($E4932004);                 { .c: ldr r2, [r3], #4 }
+      EmitI32($E48A2004);                 { str r2, [r10], #4 }
+      EmitI32($E2599004);                 { subs r9, r9, #4 }
+      EmitI32($1AFFFFFB);                 { bne .c }
+      EmitI32($E28DA010);                 { add r10, sp, #16 }
+      EmitI32($E58A8000 or (8 * TLS_SLOT_INIT_IMAGE));   { str r8, [r10, #8*slot] }
+      Patch32(pCopy, $0A000000 or ((((CodeLen - pCopy) div 4) - 2) and $00FFFFFF));
+    end;
     Patch32(pNoInst, $0A000000 or ((((CodeLen - pNoInst) div 4) - 2) and $00FFFFFF));
     Patch32(pNoInst2, $1A000000 or ((((CodeLen - pNoInst2) div 4) - 2) and $00FFFFFF));
     EmitI32($E59D1000);                 { ldr r1, [sp]          (entry) }

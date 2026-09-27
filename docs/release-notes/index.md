@@ -191,9 +191,8 @@ The full list, restamped to v441, is on its own page:
 [Known issues in beta 0.1](../reference/known-issues.md). In short:
 
 - A few programs compile and silently give a wrong answer. Examples: C
-  `long double` is 8 bytes, not GCC's 16; an initialised C `__thread` variable
-  reads 0 outside the main thread; a C function returning a pointer to an
-  array (`vec4 *f(void)`) steps and measures it as one element.
+  `long double` is 8 bytes, not GCC's 16; a C function returning a pointer to
+  an array (`vec4 *f(void)`) steps and measures it as one element.
 - Three items that were open in the draft pin v425 are fixed in v441: a C
   member access on a comma expression, `(x, p)->field`, read the wrong value;
   C compound literals of an array type were refused; and on ESP an uncaught

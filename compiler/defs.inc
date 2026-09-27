@@ -1261,7 +1261,16 @@ const
     in a handler, unwinding past it) strands this set, which costs that thread
     its fast path for the rest of its life and costs correctness nothing. }
   TLS_SLOT_HEAP_MAGBUSY = 12;
-  TLS_SLOT_FIRST_FREE = 13;
+  { The address of the thread-local INIT IMAGE, or 0 when no thread-local has an
+    initialiser. A C `__thread int x = 5;` is initialised by a store in main's
+    prologue, which reaches only the MAIN thread's block. So each such store also
+    writes a TlsUserBytes-sized image in BSS (CompilePendingGlobalInits), and every
+    new block copies the image into its user area: the clone legs and
+    palthread's PxxPthreadStart. The image of a variable with no initialiser is
+    0, so the copy also gives the zero start that the language requires.
+    bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main }
+  TLS_SLOT_INIT_IMAGE = 13;
+  TLS_SLOT_FIRST_FREE = 14;
   { ---- the per-thread heap magazine -------------------------------------
     A short free LIST per size class, held thread-locally so that a GetMem or
     FreeMem of a common size takes NO LOCK and makes NO CALL. Class i holds
@@ -7218,6 +7227,7 @@ var
   TlsBaseUsed     : Boolean;     { a non-x86-64 backend emitted IR_TLSBASE. Read by the ELF writer: in a DYNAMIC binary on those targets the one thread register belongs to the libc the loader brought in, so the read falls back to the main thread's block, one shared copy. See TargetHasTlsBlock. }
   TlsSharedWarned : Boolean;     { the dynamic-binary shared-copy warning was printed; ResolveSynthImportLibraries runs once per DT_NEEDED builder }
   TlsStrictUsed   : Boolean;     { a Pascal `threadvar` got a slot, or `__pxxTlsBase` was named. Neither has ever compiled with a shared copy, so the ELF writer REFUSES the dynamic fallback for these, where C's `__thread` only warns. }
+  BSS_TLS_IMAGE   : Integer;     { the thread-local init image (TlsUserBytes), or -1 when there is none (offset 0 is a real address); see TLS_SLOT_INIT_IMAGE }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
   TlsUserUsed     : Integer;     { bytes of TlsUserBytes handed out to `threadvar` declarations so far; the bump allocator's only state }
   TlsUserBytes    : Integer;     { the source-declared `threadvar` area, in bytes. TLS_USER_BYTES_DEFAULT unless -dPXX_TLS_USER_<rung> asked otherwise; set ONCE by ApplyTlsUserBytesOption before EmitTlsMainInstall and never touched again during a compile -- that invariant is the whole reason the fold of __pxxTlsBlockSize is sound. }

@@ -4408,7 +4408,9 @@ begin
         Exit;
       end;
 
-      if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize') then
+      if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize')
+         or CaseEqual(name, '__pxxTlsUserOff') or CaseEqual(name, '__pxxTlsUserBytes')
+         or CaseEqual(name, '__pxxTlsInitImageSlotOff') then
       begin
         { The two sizes the clone stub carves off a child stack, as compile-time
           constants the RTL can READ instead of restating.
@@ -4424,7 +4426,12 @@ begin
           Constants, not calls -- they fold to an AN_INT_LIT here, so a `const`
           in the RTL can be defined from them.
           bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state }
+        { The other three are what a trampoline needs to start a block from the
+          init image (TLS_SLOT_INIT_IMAGE), for the same no-restating reason. }
         if CaseEqual(name, '__pxxTlsBlockSize') then i64v := TlsBlockSize
+        else if CaseEqual(name, '__pxxTlsUserOff') then i64v := TLS_USER_FIRST_OFF
+        else if CaseEqual(name, '__pxxTlsUserBytes') then i64v := TlsUserBytes
+        else if CaseEqual(name, '__pxxTlsInitImageSlotOff') then i64v := 8 * TLS_SLOT_INIT_IMAGE
         else i64v := SIG_ALTSTACK_SIZE;
         Next;
         if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;

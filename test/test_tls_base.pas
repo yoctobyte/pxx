@@ -198,8 +198,11 @@ begin
     (tid, stack low, stack high), so asserting they are zero here is asserting
     the opposite of the contract -- which is how this loop failed the day the
     bounds landed, and it has earned its keep three more times since. }
+  { ...EXCEPT 13, which since 2026-09-24 is the init image's address
+    (TLS_SLOT_INIT_IMAGE), written by the same entry code whenever the program
+    has a thread-local user area. It is the compiler's, like 1..3. }
   for i := 12 to 15 do
-    if PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0 then Inc(errors);
+    if (i <> 13) and (PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0) then Inc(errors);
 
   { and the manual path still works, over the top of that block }
   { Installing our own block over the entry one leaves slots 1..3 zero, so every

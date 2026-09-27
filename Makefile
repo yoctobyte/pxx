@@ -7854,6 +7854,18 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/c_thread_local26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_thread_local26_a64)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26_arm32
 	tools/expect_same.sh arm32/c_thread_local26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_thread_local26_arm32)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
+	# An initialised thread-local starts at its initialiser in every thread,
+	# not only in main: each new block copies the init image
+	# (TLS_SLOT_INIT_IMAGE). Before, a child read 0 on every target. The rows
+	# discriminate a copy of the image from a copy of main's CURRENT block (main
+	# writes 6 first) and check a grandchild gets it too. Oracle: gcc.
+	# bug-c-an-initialised-thread-local-reads-zero-in-every-thread-but-main
+	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26
+	tools/expect_same.sh c_tlinit26 "$$($(TESTTMP)/c_tlinit26)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
+	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26_a64
+	tools/expect_same.sh aarch64/c_tlinit26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_tlinit26_a64)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
+	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_initialiser_reaches_every_thread.c $(TESTTMP)/c_tlinit26_arm32
+	tools/expect_same.sh arm32/c_tlinit26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_tlinit26_arm32)" "$$(cat test/c_thread_local_initialiser_reaches_every_thread.expected)"
 	./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_a64
 	tools/expect_same.sh aarch64/c_errno_per_thread26_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_errno_per_thread26_a64)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26_arm32

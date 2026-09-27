@@ -1243,6 +1243,12 @@ begin
     name := 'PXX_TS_HARDLOCK';
     PasDefine(name);
   end;
+  { A CAPABILITY define, for lib/rtl code that uses the init-image builtins
+    (__pxxTlsUserOff, __pxxTlsUserBytes, __pxxTlsInitImageSlotOff). Without it
+    the pinned compiler, which predates them, could not build live lib/rtl
+    until the next pin. Retire it once every pin in use has the builtins. }
+  name := 'PXX_HAS_TLS_INIT_IMAGE';
+  PasDefine(name);
 end;
 
 procedure PasApplyMimicDefines;

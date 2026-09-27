@@ -891,6 +891,7 @@ AN_DEREF Left callNode
 AN_DEREF Left fieldNode
 AN_DEREF Left identNode
 AN_DEREF Left inner
+AN_DEREF Left innerAddr
 AN_DEREF Left inode
 AN_DEREF Left node
 AN_DEREF Left operand

@@ -121,9 +121,9 @@ _none_
 | regression-test-nilpy-test-cpyext-errformat-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_errformat.npy at 523c10e42d90 in step 1/7, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_errformat.npy /tmp/test_cpyext_errformat26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-hello-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_hello.npy at 523c10e42d90 in step 1/4, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_hello.npy /tmp/test_cpyext_hello26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-markupsafe-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_markupsafe.npy at 523c10e42d90 in step 1/15, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_markupsafe.npy /tmp/test_cpyext_markupsaf…` (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-bitwise-and-shift-on-a-variant-operand | P | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py at 2954d103babe in step 3/3, `PXXDBG='p.fresh:*' ./compiler/pascal26 test/test_result_fresh_verdicts.pas /tmp/test_result_fresh_verdicts26 2>&1 \| gre…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-dotted-package-import-3 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1 at 523c10e42d90 in step 1/8, `./compiler/pascal26 test/test_nilpy_dotted_package_import.npy /tmp/test_nilpy_dottedimport26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-float-repr-roundtrip-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_float_repr_roundtrip.npy at 57ec17b34398 in step 1/4, `./compiler/pascal26 test/test_nilpy_float_repr_roundtrip.npy /tmp/test_nilpy_float_repr26` (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_method_vs_pascal_string_helper.npy at 9bd5d47ef746 in step 1/2, `./compiler/pascal26 test/test_nilpy_str_method_vs_pascal_string_helper.npy /tmp/test_nilpy_strmhelper26` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 at cc03b4a51933 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 3/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
@@ -1125,9 +1125,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3998)
+## done (3999)
 
-3998 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3999 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1291,9 +1291,9 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-cpyext-errformat-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-hello-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-markupsafe-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-nilpy-test-nilpy-bitwise-and-shift-on-a-variant-operand [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-dotted-package-import-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-float-repr-roundtrip-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-4
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5

@@ -1168,6 +1168,7 @@ begin
   LinkGcSections := True;
   TlsMainInstalled := False;
   TlsBaseUsed := False;
+  BSS_TLS_IMAGE := -1;
   TlsStrictUsed := False;
   TlsSharedWarned := False;
   EmitSharedMode := False;

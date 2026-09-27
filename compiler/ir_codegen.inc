@@ -127,9 +127,10 @@ procedure EmitAcquireHeapLock;
   recording, since the first reading sends you looking for an accessor that is
   already here.
 
-  Slot budget, RE-READ from defs.inc rather than carried forward: 0..12 are
-  taken (the magazine's own busy flag is 12) and TLS_SLOT_FIRST_FREE = 13, so
-  THREE map slots are free, not four. The magazine did not need them -- it took
+  Slot budget, RE-READ from defs.inc rather than carried forward: 0..13 are
+  taken (the magazine's own busy flag is 12, the init image 13) and
+  TLS_SLOT_FIRST_FREE = 14, so TWO map slots are free. The magazine did not
+  need them -- it took
   a 64-slot TAIL past the map (TLS_SLOT_HEAP_MAG = 16) and the block grew to
   1152 to hold it, which is stack the thread already owns. Both numbers in
   this paragraph were one lower when it was written; a slot count in prose is a
@@ -1950,6 +1951,19 @@ begin
   TlsBlockSize := TLS_USER_FIRST_OFF + TlsUserBytes;
 end;
 
+procedure EmitTlsInitImageAlloc;
+{ The thread-local INIT IMAGE: TlsUserBytes of BSS laid out like a block's user
+  area. Initialiser stores write it (CompilePendingGlobalInits) and every new
+  block copies it (the clone legs, PxxPthreadStart). See TLS_SLOT_INIT_IMAGE.
+  None when the user area is empty, and then slot 13 stays 0 and nothing
+  copies. Untouched BSS pages cost no memory. }
+begin
+  BSS_TLS_IMAGE := -1;   { -1, NOT 0: offset 0 is a real BSS address, and on x86-64 the image IS the first allocation }
+  if TlsUserBytes <= 0 then Exit;
+  BSSSize := (BSSSize + 15) and (not 15);
+  BSS_TLS_IMAGE := BSSSize; Inc(BSSSize, TlsUserBytes);
+end;
+
 procedure EmitTlsMainInstall;
 { The MAIN thread's TLS block. Cloned threads get theirs from the clone stub
   (thread_emit.inc); the main thread passes through no stub, and a static pxx
@@ -1998,8 +2012,22 @@ begin
     TlsMainInstalled := True;
     BSSSize := (BSSSize + 15) and (not 15);
     BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TlsBlockSize);
+    EmitTlsInitImageAlloc;
     if TargetArch = TARGET_AARCH64 then
     begin
+      { slot 13 = the init image, BEFORE the dynamic-binary skip: in a dynamic
+        binary this block is the fallback every thread-local read lands on,
+        and the initialiser stores reach the image through it. }
+      if BSS_TLS_IMAGE >= 0 then
+      begin
+        EmitI32($18000049);                     { ldr  w9, [pc+8] }
+        EmitI32($14000002);                     { b    [pc+8] }
+        EmitGlobRef(BSS_TLS_MAIN);
+        EmitI32($1800004A);                     { ldr  w10, [pc+8] }
+        EmitI32($14000002);                     { b    [pc+8] }
+        EmitGlobRef(BSS_TLS_IMAGE);
+        EmitI32($F9000000 or ((TLS_SLOT_INIT_IMAGE) shl 10) or (9 shl 5) or 10);  { str x10, [x9, #8*slot] }
+      end;
       EmitI32($D53BD049);                       { mrs  x9, tpidr_el0 }
       pSkip := CodeLen; EmitI32($B5000009);     { cbnz x9, .skip (patched) }
       EmitI32($18000049);                       { ldr  w9, [pc+8] }
@@ -2011,6 +2039,16 @@ begin
     end
     else
     begin
+      if BSS_TLS_IMAGE >= 0 then
+      begin
+        EmitI32($E59F0000);                     { ldr  r0, [pc] }
+        EmitI32($EA000000);                     { b    .+8 }
+        EmitGlobRef(BSS_TLS_MAIN);
+        EmitI32($E59F1000);                     { ldr  r1, [pc] }
+        EmitI32($EA000000);                     { b    .+8 }
+        EmitGlobRef(BSS_TLS_IMAGE);
+        EmitI32($E5801000 or (8 * TLS_SLOT_INIT_IMAGE));   { str  r1, [r0, #8*slot] }
+      end;
       EmitI32($EE1D9F70);                       { mrc  p15, 0, r9, c13, c0, 3  (TPIDRURO) }
       EmitI32($E3590000);                       { cmp  r9, #0 }
       pSkip := CodeLen; EmitI32($1A000000);     { bne  .skip (patched) }
@@ -2025,6 +2063,7 @@ begin
     Exit;
   end;
   TlsMainInstalled := True;
+  EmitTlsInitImageAlloc;
   { The block, plus 16 bytes past its end used ONCE, here, as the `struct
     rlimit` getrlimit writes into. Past the end rather than in a slot, because
     the slot map is an ABI other code reads and this scratch is not part of it. }
@@ -2070,6 +2109,12 @@ begin
     'mov eax, %', 158,                         { arch_prctl }
     'syscall'
   ]);
+  if BSS_TLS_IMAGE >= 0 then
+    EmitAsmX64([
+      'mov r9, @glob', BSS_TLS_MAIN,
+      'mov rax, @glob', BSS_TLS_IMAGE,
+      'mov [r9+%], rax', 8 * TLS_SLOT_INIT_IMAGE
+    ]);
 end;
 
 procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer);

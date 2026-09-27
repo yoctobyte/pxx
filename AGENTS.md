@@ -117,9 +117,9 @@ devdocs/release-notes/v0.1.0-beta.1.md. The short version:
   LEAK LIST in devdocs/progress/LOGBOOK.md. Not measured: Wi-Fi on real
   hardware. One undetermined reading: about 0.6 B/pass on the ESP Nil Python
   example soaks, below the soak's resolution.
-- Silently wrong: C `long double` is 8 bytes (GCC: 16); an initialised C
-  `__thread` variable reads 0 outside the main thread (a fix in progress is in
-  parked-patches/tls-init-image-reaches-every-thread-wip).
+- Silently wrong: C `long double` is 8 bytes (GCC: 16); a C function
+  returning a pointer to an array steps it one element at a time
+  (docs/reference/known-issues.md).
 - ESP bare-metal images run under QEMU only; on silicon use the ESP-IDF
   profile. The ESP32-C3 examples ran on one physical board on 2026-09-27
   (pin v441, all passing). Long network runs on the C3 stall under QEMU (an

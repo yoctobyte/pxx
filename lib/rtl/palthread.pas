@@ -298,7 +298,7 @@ function PxxPthreadStart(a: Pointer): Pointer; cdecl;
   all-zero magazine IS "every size class empty". }
 var
   h: PThreadHandle;
-  blk, ignore, tlsBytes, altBytes: Int64;
+  blk, ignore, tlsBytes, altBytes, img, k: Int64;
   ss: array[0..2] of Int64;
   fn: TThreadEntry;
 begin
@@ -314,11 +314,32 @@ begin
     fold to literals here, so it costs two register loads per thread. }
   tlsBytes := __pxxTlsBlockSize;
   altBytes := __pxxSigAltStackSize;
+  { The CREATOR's init-image pointer, read while gs is still the creator's
+    block. A raw pointer read, which the ordering rule above allows. The copy
+    below starts this block's thread-locals at their initial values rather than
+    at 0 (TLS_SLOT_INIT_IMAGE in the compiler). }
+  img := 0;
+{$ifdef PXX_HAS_TLS_INIT_IMAGE}
+  if __pxxTlsUserBytes > 0 then
+    img := PInt64(PtrUInt(__pxxTlsBase) + __pxxTlsInitImageSlotOff)^;
+{$endif}
   blk := __pxxrawsyscall(SYS_mmap, 0, tlsBytes + altBytes,
                          PROT_RW, MAP_ANON_PRIV, -1, 0);
   if blk > 0 then
   begin
     PInt64(blk)^ := blk;                       { slot 0 = the block's own address }
+{$ifdef PXX_HAS_TLS_INIT_IMAGE}
+    if img <> 0 then
+    begin
+      k := 0;
+      while k < __pxxTlsUserBytes do
+      begin
+        PInt64(blk + __pxxTlsUserOff + k)^ := PInt64(img + k)^;
+        k := k + 8;
+      end;
+      PInt64(blk + __pxxTlsInitImageSlotOff)^ := img;
+    end;
+{$endif}
     ignore := __pxxrawsyscall(SYS_arch_prctl, ARCH_SET_GS, blk, 0, 0, 0, 0);
     ss[0] := blk + tlsBytes;                   { ss_sp }
     ss[1] := 0;                                { ss_flags }
