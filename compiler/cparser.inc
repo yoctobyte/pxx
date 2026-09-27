@@ -5492,12 +5492,17 @@ begin
           flatNode := inode;
           Inc(ndi);
         end;
-        if (ndi >= ndimsF) and (ASTKind[node] = AN_BINOP) and CNodeIsDecayedRow(node) then
+        if (ndi >= ndimsF) and
+           (((ASTKind[node] = AN_BINOP) and CNodeIsDecayedRow(node)) or
+            (ASTKind[node] = AN_CALL)) then
         begin
           { the pointer is a ROW's address (`(*(&m[1]))[2][3]`), a computed
             value an AN_INDEX cannot take as its base: step it by the element
             and load, the shape `*m[1]` already lowers.
-            bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+            bug-c-the-address-of-an-array-has-no-pointer-to-array-type
+            A CALL's result (`fm()[0][2][3]` on `mat4 *fm(void)`) is the same
+            kind of computed pointer, and an AN_INDEX over it stepped by the
+            whole pointee. bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
           if shTk = tyRecord then rowStride := RecSize(shRec)
           else rowStride := TypeSlotSize(shTk);
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
@@ -6455,6 +6460,8 @@ var
   fpNParams, fpSig, fnRetNParams, pi: Integer;
   retSig: Integer;                 { returned-fnptr sig when the pointee returns a fn-pointer (00124) }
   pointeeRetFn: Boolean;           { declarator is `(* (*name)(...))(...)` — pointee returns a fn-pointer }
+  fnRetArr: Boolean;               { `ret (*name(params))[N]..` -- a function returning a pointer to an array }
+  fnRetArrK: Integer;
   paArrLen: Integer;               { pointer-to-array declarator `elem (*name)[N]` row length }
   fpRetElemTk, fpRetElemRec: Integer;   { fn-ptr return's pointed-at kind/record (struct*-returning callbacks) }
   fpRetRec: Integer;                    { fn-ptr return's OWN record, for a by-value struct result }
@@ -6834,7 +6841,7 @@ begin
       The trailing `(rP)` group is, per C declarator semantics, the RETURNED fn's
       signature — captured below as fpSig; we register it as retSig and thread it
       onto ProcRetProcSig[fpSig] so a chained call `(*(*p)(..))(..)` resolves. }
-    pointeeRetFn := (Tokens[TokPos+1].Kind = tkLParen) and
+    pointeeRetFn := (not fnRetArr) and (Tokens[TokPos+1].Kind = tkLParen) and
                     (Tokens[TokPos+2].Kind = tkStar);
     { `isVoid` describes the BASE type, and `void *` is not void. Line ~4850
       sets Result := tyInteger as a PLACEHOLDER whose own comment says "pointer
@@ -6954,6 +6961,31 @@ begin
       end;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
+    { `int (*f(void))[4]`: a function returning a POINTER TO AN ARRAY. What
+      follows the group is the pointee's dims, not a parameter list. Read as
+      one, it registered a zero-parameter signature and made f's result a
+      callable function pointer; the dims were skipped, so `sizeof *f()` was 4
+      and `(*f())[3]` read the wrong int.
+      bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
+    fnRetArr := fnRetIsFunc and (CurTok.Kind = tkLBrack);
+    if fnRetArr then
+    begin
+      CTypePtrElemNDims := 0;
+      paArrLen := 1;
+      while (CurTok.Kind = tkLBrack) and (CTypePtrElemNDims < MAX_ARR_DIMS) do
+      begin
+        Next;                          { '[' }
+        CTypePtrElemDim[CTypePtrElemNDims] := CEvalConstExpr;
+        Expect(tkRBrack, ']');
+        paArrLen := paArrLen * CTypePtrElemDim[CTypePtrElemNDims];
+        Inc(CTypePtrElemNDims);
+      end;
+      fpSig := -1;
+      fpNParams := 0;
+      fpVariadic := False;
+    end
+    else
+    begin
     { The parameter list, and the signature it registers, come from
       CParseFnSigGroup -- the same routine a function-TYPED parameter uses. Its
       outputs land in the CFnSig* globals; the pointee-returns-a-fn-pointer arm
@@ -6966,6 +6998,7 @@ begin
       fpPTypes[fpRi] := CFnSigPTypes[fpRi];
       fpPNames[fpRi] := CFnSigPNames[fpRi];
       fpPRecIds[fpRi] := CFnSigPRecIds[fpRi];
+    end;
     end;
     { Pointee returns a fn-pointer (`ret (* (*name)(pP))(rP)`, 00124): the trailing
       `(rP)`/fpRet group captured above IS the RETURNED fn's signature. Register a
@@ -7016,6 +7049,20 @@ begin
           CTypeFnRetPProcSig[pi] := fnRetPProcSig[pi];
         end;
       end;
+    end;
+    if fnRetArr then
+    begin
+      { the result: a pointer to fpRet[dims], the shape `elem (*p)[N]` gives a
+        variable, and no call signature }
+      CTypeProcSig := -1;
+      Result := tyPointer;
+      CTypeElemTk := Ord(fpRet);
+      CTypeElemRec := baseRec;
+      CTypePtrDepth := 1;
+      CTypePtrBaseTk := Ord(fpRet);
+      CTypePtrBaseRec := baseRec;
+      CTypePtrElemArrLen := paArrLen;
+      CTypeIsVoid := False;
     end;
   end;
 end;
@@ -14860,6 +14907,8 @@ var
   byValRec: Boolean;                        { step 2: register-classified struct param }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;
+  retPaLen, retPaNDims, retPaK: Integer;             { pointer-to-array result shape }
+  retPaDims: array[0..MAX_ARR_DIMS - 1] of Integer;
   ptypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   pnames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   pdepths: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -14943,6 +14992,18 @@ begin
     retPtrDepth := CTypePtrDepth;
     retPtrBaseTk := CTypePtrBaseTk;
     retPtrBaseRec := CTypePtrBaseRec;
+  end;
+  { ...and, for a pointer to an ARRAY (`vec4 *f(void)`, `int (*f(void))[4]`),
+    the pointee's shape, which the declarator left in CTypePtrElem* exactly as
+    it does for a variable. Captured now: the parameter list re-runs
+    ParseCDeclType. bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
+  retPaLen := 0; retPaNDims := 0;
+  for retPaK := 0 to MAX_ARR_DIMS - 1 do retPaDims[retPaK] := 0;
+  if (retType = tyPointer) and (CTypePtrDepth <= 1) and (CTypePtrElemArrLen > 0) then
+  begin
+    retPaLen := CTypePtrElemArrLen;
+    retPaNDims := CTypePtrElemNDims;
+    for retPaK := 0 to MAX_ARR_DIMS - 1 do retPaDims[retPaK] := CTypePtrElemDim[retPaK];
   end;
   { An aggregate return type (`struct S f(...)`) carries its record id in
     CTypeBaseRec; capture it before param parsing overwrites CTypeBaseRec, so the
@@ -15547,6 +15608,10 @@ begin
   ProcRetPtrDepth[procIdx] := retPtrDepth;
   ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
   ProcRetPtrBaseRec[procIdx] := retPtrBaseRec;
+  ProcRetPtrElemArrLen[procIdx] := retPaLen;
+  ProcRetPtrElemNDims[procIdx] := retPaNDims;
+  for retPaK := 0 to MAX_ARR_DIMS - 1 do
+    ProcRetPtrElemDims[procIdx * MAX_ARR_DIMS + retPaK] := retPaDims[retPaK];
   if retProcSig >= 0 then ProcRetProcSig[procIdx] := retProcSig;
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
 
@@ -18136,11 +18201,41 @@ begin
             (Tokens[j + 1].Kind = tkStar);
 end;
 
+{ The `[N][M]..` after a typedef name, into that typedef's dims, the way the
+  scalar arm of ParseCTypedef reads them. The two struct arms call it too:
+  `typedef struct P PA[3];` and `typedef struct {..} QA[3];` fell to their
+  tail-skip loop, which discarded the dims, so PA was ONE struct -- `PA x`
+  measured 8 bytes (gcc 24) and `PA *p` stepped one element. The non-keyword
+  spelling `typedef P PA[3];` was already modelled.
+  bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
+procedure CTypedefReadDims(const nm: AnsiString);
+var ci, tdNDim, tdDimV: Integer;
+begin
+  if (CurTok.Kind <> tkLBrack) or (Tokens[TokPos].Kind = tkRBrack) then Exit;
+  ci := FindCTypedef(nm);
+  tdNDim := 0;
+  while (CurTok.Kind = tkLBrack) and (Tokens[TokPos].Kind <> tkRBrack) do
+  begin
+    Next;                            { consume '[' }
+    tdDimV := CEvalConstExpr;
+    CCheckArrayExtent(tdDimV);
+    if tdNDim >= MAX_ARR_DIMS then Error('too many dimensions in an array typedef');
+    if ci >= 0 then CTypedefDims[ci * MAX_ARR_DIMS + tdNDim] := tdDimV;
+    Inc(tdNDim);
+    if CurTok.Kind = tkRBrack then Next;
+  end;
+  if ci >= 0 then
+  begin
+    CTypedefNDims[ci] := tdNDim;
+    if tdNDim > 0 then CTypedefArrLen[ci] := CTypedefDims[ci * MAX_ARR_DIMS];
+  end;
+end;
+
 procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
-    tdNDim, tdDimV: Integer;   { array typedef: how many dims and the one being read }
+    tdDimV: Integer;   { array typedef: the dim being read (CTypedefReadDims reads the rest) }
     tdElemNDims: Integer;      { dims the ELEMENT typedef carries (`typedef vec4 mat4[4]`) }
     tdElemDims: array[0..MAX_ARR_DIMS-1] of Integer;
     ftRet, ftPType: TTypeKind; ftNParams, ftSig: Integer;
@@ -18222,6 +18317,7 @@ begin
           UClsIndexInvalidate;   { the row's NAME changed / table reset: the name index must rebuild }
           UClsNLen[ci] := nmLen;
           AddCTypedefEx(nm, tyRecord, Ord(tyUnknown), REC_UCLASS_BASE + ci);
+          CTypedefReadDims(nm);
         end;
       end;
       while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
@@ -18250,7 +18346,10 @@ begin
           RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
         end
         else
+        begin
           AddCTypedefEx(nm, tyRecord, Ord(tyUnknown), REC_UCLASS_BASE + ci);
+          CTypedefReadDims(nm);
+        end;
       end
       else
         AddCTypedef(nm, tyPointer); { tagless opaque aggregate: pointer-only }
@@ -18434,23 +18533,7 @@ begin
         two int locals overwrote the one before it and read v[0][1] back as
         v[1][0]'s value -- silent, rc=0.
         bug-c-a-multi-dimensional-array-typedef-is-half-modelled-and-corrupts-neighbouring-locals }
-      ci := FindCTypedef(nm);
-      tdNDim := 0;
-      while (CurTok.Kind = tkLBrack) and (Tokens[TokPos].Kind <> tkRBrack) do
-      begin
-        Next;                            { consume '[' }
-        tdDimV := CEvalConstExpr;
-        CCheckArrayExtent(tdDimV);
-        if tdNDim >= MAX_ARR_DIMS then Error('too many dimensions in an array typedef');
-        if ci >= 0 then CTypedefDims[ci * MAX_ARR_DIMS + tdNDim] := tdDimV;
-        Inc(tdNDim);
-        if CurTok.Kind = tkRBrack then Next;
-      end;
-      if ci >= 0 then
-      begin
-        CTypedefNDims[ci] := tdNDim;
-        if tdNDim > 0 then CTypedefArrLen[ci] := CTypedefDims[ci * MAX_ARR_DIMS];
-      end;
+      CTypedefReadDims(nm);
     end;
     if tdElemNDims > 0 then
     begin

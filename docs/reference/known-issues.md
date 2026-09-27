@@ -23,19 +23,6 @@ different size from GCC's: `struct { char c; long double y; }` is 16 bytes here
 and 32 under GCC. That matters as soon as such a struct crosses into
 GCC-compiled code or into a file format. (Measured with v425.)
 
-### C: a function returning a pointer to an array steps it one element at a time
-
-With `typedef float vec4[4];`, a function declared `vec4 *f(void)` returns the
-right address, but the compiler does not know what it points at: `sizeof *f()`
-is 4 where GCC gives 16, and `f() + 1` steps 4 bytes instead of 16, so
-`f()[1][2]` reads the wrong element (4 where GCC reads 7). The first row,
-`(*f())[2]` and `f()[0][2]`, reads right. Spelled `int (*f(void))[4]`, even
-`(*f())[2]` is wrong (5 where GCC reads 3), and `f()[1][2]` reads garbage.
-`mat4 *` has the same problem (`sizeof *f()` 4, GCC 64). **Workaround:** store
-the result in a variable first (`vec4 *p = f();`); a variable, a struct member
-and an array element of that type are right. (Measured with v445 and with the
-compiler after it, at `ae11f1ddb5`.)
-
 ### ESP: bare-metal images do not run on a real chip
 
 Images built with `--esp-profile=bare` fault on the first byte access to a
@@ -208,6 +195,14 @@ v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
   `pthread_create`, and in that thread's own threads. Now every thread starts
   at the initialiser, on x86-64, i386, aarch64 and arm32 (checked against
   GCC; riscv32 has no threads). Wrong in v441 to v445.
+
+- **C: a function returning a pointer to an array stepped it one element at a
+  time.** For `vec4 *f(void)`, `mat4 *f(void)` or `int (*f(void))[4]`,
+  `sizeof *f()` was the element (4, GCC 16 or 64), `f() + 1` stepped one
+  element, and `(*f())[i]` and `f()[0][i][j]` read the wrong one. Now each
+  matches GCC. Found alongside it: `typedef struct P PA[3];` (the `struct`
+  keyword spelling) was one struct, not three (`sizeof(PA)` 8, GCC 24). Wrong
+  in v441 to v445.
 
 - **i386: `__thread` was one copy shared by every thread, and `threadvar` was
   refused.** A C `__thread` variable, and `errno` through it, read and wrote

@@ -18038,6 +18038,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_array_typedef_of_structs.c $(TESTTMP)/c_arrtdstruct26
 	gcc -std=gnu99 -o $(TESTTMP)/c_arrtdstruct_gcc test/c_array_typedef_of_structs.c
 	tools/expect_same.sh c_arrtdstruct26 "$$($(TESTTMP)/c_arrtdstruct26)" "$$($(TESTTMP)/c_arrtdstruct_gcc)"
+	# A FUNCTION RETURNING A POINTER TO AN ARRAY points at the whole array:
+	# `sizeof *f()`, `f() + 1`, `(*f())[i]`, `f()[0][i][j]` and `*f()`'s decay,
+	# for `vec4 *f`, `mat4 *f`, `PA *f` and `int (*f(void))[4]`, which was read as
+	# a function returning a FUNCTION pointer. Also `typedef struct P PA[3];`,
+	# which dropped its dims. v445 answers 41 of the 48 rows wrong. Diffed
+	# against gcc; i386 twin in test-i386.
+	# bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape
+	./$(COMPILER) test/c_function_returning_pointer_to_array.c $(TESTTMP)/c_fretpa26
+	gcc -std=gnu99 -o $(TESTTMP)/c_fretpa_gcc test/c_function_returning_pointer_to_array.c
+	tools/expect_same.sh c_fretpa26 "$$($(TESTTMP)/c_fretpa26)" "$$($(TESTTMP)/c_fretpa_gcc)"
 	# THE PTY FAMILY, WHICH crtl DID NOT HAVE AT ALL. posix_openpt, grantpt,
 	# unlockpt, ptsname and ptsname_r were absent from include/ and src/ alike,
 	# and busybox calls ptsname_r WITHOUT a guard -- platform.h defines
@@ -27947,6 +27957,13 @@ test-i386: $(COMPILER)
 	else \
 	  echo "=== i386/arrtdstruct: no gcc -m32, the ORACLE did not run (it still compiled and ran) ==="; \
 	  tools/run_target.sh i386 $(TESTTMP)/test_i386_arrtdstruct >/dev/null || { echo 'i386/arrtdstruct: run FAILED'; exit 1; }; \
+	fi
+	./$(COMPILER) --target=i386 test/c_function_returning_pointer_to_array.c $(TESTTMP)/test_i386_fretpa
+	@if gcc -m32 -std=gnu99 -o $(TESTTMP)/test_i386_fretpa_gcc test/c_function_returning_pointer_to_array.c 2>/dev/null; then \
+	  tools/expect_same.sh i386/fretpa "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fretpa)" "$$($(TESTTMP)/test_i386_fretpa_gcc)" || exit 1; \
+	else \
+	  echo "=== i386/fretpa: no gcc -m32, the ORACLE did not run (it still compiled and ran) ==="; \
+	  tools/run_target.sh i386 $(TESTTMP)/test_i386_fretpa >/dev/null || { echo 'i386/fretpa: run FAILED'; exit 1; }; \
 	fi
 	./$(COMPILER) --target=i386 test/c_sizeof_subscript_through_pointer_chain.c $(TESTTMP)/test_i386_szchain
 	tools/expect_same.sh i386/szchain "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_szchain)" "PTR CHAIN OK 44 4"

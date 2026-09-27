@@ -14460,6 +14460,8 @@ begin
   SetLength(ProcRetSemId, n);
   SetLength(ProcRetSetEnumId, n);  SetLength(ProcRetSetElemTk, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
+  SetLength(ProcRetPtrElemArrLen, n); SetLength(ProcRetPtrElemNDims, n);
+  SetLength(ProcRetPtrElemDims, n * MAX_ARR_DIMS);
   SetLength(ProcRetDynDepth, n);
   SetLength(CProcHasLocalDef, n);  SetLength(ProcRetPtrElemRec, n);  SetLength(PyCapCount, n);
   SetLength(PyDefTokOf, n);  SetLength(ProcPyStarIdx, n);  SetLength(ProcPyStarPascal, n);  SetLength(ProcPyKwIdx, n);
@@ -14545,6 +14547,8 @@ begin
   ProcRetPtrDepth[ProcCount]   := 0;
   ProcRetPtrBaseTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrBaseRec[ProcCount] := REC_NONE;
+  ProcRetPtrElemArrLen[ProcCount] := 0;
+  ProcRetPtrElemNDims[ProcCount] := 0;
   ProcRetPtrElemRec[ProcCount] := REC_NONE;
   ProcRetPtrAlias[ProcCount]   := -1;   { -1, not 0: zero is a VALID alias index }
   ProcRetProcSig[ProcCount]    := -1;

@@ -2,7 +2,7 @@
 track: C
 prio: 45
 type: bug
-status: open
+status: done
 found: 2026-09-27
 found-by: frankD
 owner:
@@ -30,3 +30,25 @@ pointee's length and dims per procedure at the declaration, and give ir.inc
 `CPtrToArrShape` an AN_CALL arm, which feeds the `*` decay, the subscript
 flatten, IRPointerStride and the sizeof fallback at once. Known-issues row:
 "C: a function returning a pointer to an array steps it one element at a time".
+
+## Resolution (2026-09-27)
+
+As proposed: a third carrier, `ProcRetPtrElemArrLen/NDims/Dims` per procedure,
+filled in `ParseCSubroutine` from the declarator's `CTypePtrElem*`, and an
+AN_CALL arm in ir.inc `CPtrToArrShape` (plus AN_CALL in `IRPointerStride`'s
+top arm). Two more pieces were needed:
+
+- a full subscript over a call base (`fm()[0][2][3]`) is lowered as the
+  decayed-row arm lowers a row, `*(f() + flat*elem)`: an AN_INDEX over the
+  call stepped by the whole pointee once the stride knew it;
+- `int (*f(void))[4]` was parsed as a function returning a FUNCTION pointer
+  (the `[4]` read as an empty parameter list); the fn-pointer declarator branch
+  now reads the dims when a `[` follows the `(*name(params))` group.
+
+Found on the way and fixed with it: `typedef struct P PA[3];` and
+`typedef struct {..} QA[3];` dropped their dims (the two struct arms of
+`ParseCTypedef` skipped them), so `sizeof(PA)` was 8 (gcc 24). The dims reader
+is now `CTypedefReadDims`, shared by all three arms.
+
+Fixture `test/c_function_returning_pointer_to_array.c` (48 rows, gcc-diffed,
+native and i386): v445 answers 41 of them wrong.

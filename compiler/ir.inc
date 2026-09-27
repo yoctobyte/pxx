@@ -4127,6 +4127,21 @@ begin
     Result := CProgramMode and CAddrOfArrayShape(ASTLeft[node]);
     Exit;
   end;
+  { `vec4 *f(void)`: the callee's row carries the result's pointee shape }
+  if (ASTKind[node] = AN_CALL) and CProgramMode then
+  begin
+    si := Integer(ASTIVal[node]);
+    if (si < 0) or (si >= ProcCount) or (ProcRetPtrElemArrLen[si] <= 0) then Exit;
+    CPAElemTk := IntToTypeKind(ProcRetPtrElemTk[si]);
+    CPAElemRec := ProcRetPtrElemRec[si];
+    CPAArrLen := ProcRetPtrElemArrLen[si];
+    CPANDims := ProcRetPtrElemNDims[si];
+    for f := 0 to MAX_ARR_DIMS - 1 do CPASpan[f] := 0;
+    if CPANDims > 1 then
+      for f := 0 to CPANDims - 1 do CPASpan[f] := ProcRetPtrElemDims[si * MAX_ARR_DIMS + f];
+    Result := True;
+    Exit;
+  end;
   if ASTKind[node] = AN_FIELD then
   begin
     f := node; wantArr := False;
@@ -4163,7 +4178,8 @@ begin
     by the whole pointee, as the pointer arm below does for `vec4 *p` }
   if CProgramMode and (node >= 0) and
      ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DEREF) or
-      (ASTKind[node] = AN_FIELD) or (ASTKind[node] = AN_ADDR)) and
+      (ASTKind[node] = AN_FIELD) or (ASTKind[node] = AN_ADDR) or
+      (ASTKind[node] = AN_CALL)) and
      CPtrToArrShape(node) then
   begin
     elemTk := CPAElemTk;

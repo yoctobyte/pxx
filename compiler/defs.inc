@@ -5242,6 +5242,18 @@ var
   ProcRetPtrDepth : array of Integer;
   ProcRetPtrBaseTk : array of Integer;
   ProcRetPtrBaseRec : array of Integer;
+  { A C function returning a POINTER TO AN ARRAY -- `vec4 *f(void)`,
+    `mat4 *f(void)`, `int (*f(void))[4]` -- and the pointee's shape: its total
+    element count (0 = not a pointer to an array), dim count, and per-dim spans
+    at [procIdx * MAX_ARR_DIMS + k]. The call-result twin of SymPtrElemArrLen /
+    SymPtrElemNDims and of the field carrier: a call node has no symbol to ask,
+    so the callee's row is the only place the shape can live. Read by ir.inc
+    CPtrToArrShape's AN_CALL arm, which feeds `sizeof *f()`, `f() + 1`, `*f()`
+    and `f()[i][j]` at once.
+    bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape }
+  ProcRetPtrElemArrLen : array of Integer;
+  ProcRetPtrElemNDims  : array of Integer;
+  ProcRetPtrElemDims   : array of Integer;
   ProcRetProcSig   : array of Integer;   { call signature when the result is itself a function pointer (`fty go(void)`), so `go()(args)` is an indirect call; -1 otherwise }
   CProcHasLocalDef : array of Boolean;   { a local (in-TU) function body for this proc was seen in pass 1; a later redundant prototype (guardless header re-included by several .c) must NOT re-mark it external — keeps the pass-2 forward call internal, not a dynamic import }
   ProcRetPtrElemRec : array of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
