@@ -2707,7 +2707,7 @@ function ClassHelperRecFor(recId: Integer; const memberName: AnsiString): Intege
   bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own.
   frankZ's framing, recorded here because a reader who finds the four-loop note
   will otherwise take the scope question for settled. }
-var ci, hci: Integer;
+var ci, hci, hm: Integer;
 begin
   Result := recId;
   if recId < REC_UCLASS_BASE then Exit;
@@ -2728,13 +2728,27 @@ begin
   while ci >= 0 do
   begin
     hci := FindHelperForType(tyClass, REC_UCLASS_BASE + ci);
-    if (hci >= 0) and (FindUMeth(hci, memberName) >= 0) then
+    { A helper PROPERTY claims the name as a method does: `c.Dbl` over
+      `property Dbl: Integer read Two` in the helper was "no such member",
+      because only methods were asked. bug-p-with-rec-do-a-helper-member-is-undefined }
+    if (hci >= 0) and ((FindUMeth(hci, memberName) >= 0) or
+                       (FindUProp(hci, memberName) >= 0)) then
     begin
       Result := REC_UCLASS_BASE + hci;
       Exit;
     end;
-    if (FindUMeth(ci, memberName) >= 0) or (FindUField(ci, memberName) >= 0) or
-       (FindUProp(ci, memberName) >= 0) then Exit;   { the class's own member wins }
+    { ...then the class's own member wins -- one THIS class DECLARES. The three
+      finders walk the parents, so asking them bare let TDerived "have" TBase's
+      Own and answered before TBase's helper was reached: `d.Own` called
+      TBase.Own where FPC calls the helper's. The walk up is this loop's job; a
+      hit counts here only when it lies in ci's own rows.
+      bug-p-with-rec-do-a-helper-member-is-undefined }
+    hm := FindUMeth(ci, memberName);
+    if (hm >= UClsMBase[ci]) and (hm < UClsMBase[ci] + UClsMCount[ci]) then Exit;
+    hm := FindUField(ci, memberName);
+    if (hm >= UClsFBase[ci]) and (hm < UClsFBase[ci] + UClsFCount[ci]) then Exit;
+    hm := FindUProp(ci, memberName);
+    if (hm >= UClsPBase[ci]) and (hm < UClsPBase[ci] + UClsPCount[ci]) then Exit;
     ci := UClsParent[ci];
   end;
 end;

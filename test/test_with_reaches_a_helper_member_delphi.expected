@@ -1,0 +1,20 @@
+class method   8
+after Bump     7 14
+shadows own    107 kept 5
+property       14
+prop write     21 20
+overloads      22 27
+in expression  126
+inherited      14 107
+dotted derived 107 5
+record method  7
+by reference   10 15 15
+outside        10
+array element  21
+outside        20
+through p^     35
+outside        30
+call operand   7
+advanced rec   7 12
+two operands   77
+nested         42 35

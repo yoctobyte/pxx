@@ -550,6 +550,34 @@ begin
   Result := ParseLValueAST(symOut, destTokIdx);
 end;
 
+{ The rec id of a helper of a with operand (`recId`) that declares `name`, or
+  -1: a class helper through ClassHelperRecFor (which answers recId itself when
+  no helper claims the name), a record helper -- plain or advanced record --
+  through FindHelperForType on the record. A member counts whether it is a
+  method or a property, as for the dotted spelling. }
+function WithHelperRecFor(recId: Integer; const name: AnsiString): Integer;
+var h, ci: Integer;
+begin
+  WithHelperRecFor := -1;
+  if recId = REC_NONE then Exit;
+  if recId >= REC_UCLASS_BASE then
+  begin
+    ci := recId - REC_UCLASS_BASE;
+    if (ci < 0) or (ci >= UClsCount) then Exit;
+    if UClsHelperTk[ci] >= 0 then Exit;   { a helper has no helper }
+    if not UClsIsRecord[ci] then
+    begin
+      h := ClassHelperRecFor(recId, name);
+      if h <> recId then WithHelperRecFor := h;
+      Exit;
+    end;
+  end;
+  h := FindHelperForType(tyRecord, recId);
+  if (h < 0) or (UClsHelperRec[h] <> recId) then Exit;
+  if (FindUMeth(h, name) >= 0) or (FindUProp(h, name) >= 0) then
+    WithHelperRecFor := REC_UCLASS_BASE + h;
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   mBrkArg: Integer;   { the shared bracket door's result -- see the delegation below }
@@ -580,6 +608,7 @@ var
   helperTk: TTypeKind; helperAi: Integer;   { TARGET-type-name receiver for a type helper — `UInt32.GetSignMask` }
   idxHelperNode: Integer;   { a type-helper call on an INDEXED receiver — `a[i].ToUpper` }
   w, withNode, recId: Integer;
+  whRec: Integer;   { the with operand's helper that declares the name -- WithHelperRecFor }
   propFOff, propFLen: Integer;
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
@@ -678,6 +707,29 @@ begin
     begin
       withNode := WithStack[w];
       recId := ResolveNodeRec(withNode);
+      { A HELPER of the with operand that declares the name, FIRST: FPC binds a
+        helper member before the operand's own (ClassHelperRecFor's rule), and
+        a bare `Two` inside `with c do` is `c.Two`. Every arm below looked only
+        at the operand's own fields, properties and methods, so any helper
+        member -- class helper, record helper, method or property -- was
+        `undefined variable`. The name is handed to the SAME walker `c.Two`
+        takes, entered at the name instead of at a dot, so Self (by reference
+        for a record helper), overloads, properties and any trailing selector
+        are the dotted spelling's, not a copy of it.
+        bug-p-with-rec-do-a-helper-member-is-undefined }
+      whRec := WithHelperRecFor(recId, fieldName);
+      if whRec >= 0 then
+      begin
+        TokPos := prevTok;
+        Next;                         { stand on the name, as after a `.` }
+        SelMemberTok := prevTok;
+        tk := IntToTypeKind(ASTTk[withNode]);
+        node := ParseClassRecordSelectors(withNode, whRec, tk);
+        SelMemberTok := -1;
+        LastExprTk := tk;
+        Result := node;
+        Exit;
+      end;
       if recId >= REC_UCLASS_BASE then
       begin
         selfClassCi := recId - REC_UCLASS_BASE;
@@ -5376,12 +5428,14 @@ begin
   { CurTok is Tokens[TokPos - 1], so that is the dot's own index. AtStopDotTok
     names the one dot this walk must leave in the stream -- see its declaration
     in defs.inc; it is -1 on every path but the `@a.b.Foo` arm. }
-  while (CurTok.Kind in [tkDot, tkLBrack]) and
+  while ((CurTok.Kind in [tkDot, tkLBrack]) or (TokPos - 1 = SelMemberTok)) and
         ((AtStopDotTok < 0) or (TokPos - 1 <> AtStopDotTok)) do
   begin
-    if CurTok.Kind = tkDot then
+    if (CurTok.Kind = tkDot) or (TokPos - 1 = SelMemberTok) then
     begin
-      Next;
+      { A dotless entry (SelMemberTok, the with-helper arm) stands ON the name
+        already -- the state a `.` and its Next leave. }
+      if TokPos - 1 = SelMemberTok then SelMemberTok := -1 else Next;
       if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
         Error('expected field name after .');
       prevTok := TokPos - 1;

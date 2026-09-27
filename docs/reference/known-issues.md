@@ -190,6 +190,18 @@ says. Each was checked against GCC's output on x86-64, and re-checked on
 2026-09-27: with v445 each row is still wrong exactly where it says "after
 v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
 
+- **Pascal: a helper's members were unreachable inside `with`.** In
+  `with c do WriteLn(Two)`, where `Two` is declared by a class helper or a
+  record helper for `c`'s type, `Two` was "undefined variable". Two related
+  errors also appeared without `with`:
+  - A class helper's property was "no such member".
+  - A helper for a base class lost to the base class's own method when called
+    on a derived object: `d.Own` called `TBase.Own`, where FPC calls the
+    helper's.
+
+  Now each matches FPC 3.2.2, in objfpc and delphi mode. Wrong in v441 to
+  v445.
+
 - **The compiler could overwrite its own source file.** `pxx g.pas ./g.pas`,
   the absolute path to `g.pas`, `a/../g.pas`, or a symlink to it as the
   output wrote the program over `g.pas`. Naming a used unit or an included C

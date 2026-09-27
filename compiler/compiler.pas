@@ -2841,6 +2841,7 @@ begin
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;
   AtStopDotTok := -1;   { no selector-walk stop; only the `@a.b.Foo` arm sets one }
+  SelMemberTok := -1;   { no dotless member entry; only the with-helper arm sets one }
   MainProgramTokCount := TOK_UNBOUNDED;   { = not set yet; the frontends overwrite it }
   BLabelCount := 0;
   BFixupCount := 0;

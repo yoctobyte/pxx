@@ -10492,6 +10492,17 @@ test-core: $(COMPILER)
 	# second. Every row is oracled against FPC 3.2.2 -Mobjfpc.
 	./$(COMPILER) test/test_class_helper_for_a_class.pas $(TESTTMP)/test_class_helper26
 	tools/expect_same.sh test_class_helper26 "$$($(TESTTMP)/test_class_helper26)" "$$(printf 'a 42\ne 63\nd 42\ni  22\ni2 7\nb helper\nf helper\nf2 helper\nh  derived\ng  shout:helper\nc T2')"
+	# A BARE NAME INSIDE `with x do` REACHES A HELPER OF x: class helper, record
+	# helper on a plain / advanced record, method, overload, property read and
+	# write, through a var, an array element, p^ and a call operand, nested and
+	# two-operand with. v445 refuses both files ("undefined variable"). Also
+	# pinned: `d.Own` on a TDerived reaches TBase's helper (v445 1, FPC 100), and
+	# a class-helper property resolves dotted. The .expected is FPC 3.2.2's.
+	# bug-p-with-rec-do-a-helper-member-is-undefined
+	./$(COMPILER) test/test_with_reaches_a_helper_member.pas $(TESTTMP)/test_with_helper26
+	tools/expect_same.sh test_with_helper26 "$$($(TESTTMP)/test_with_helper26)" "$$(cat test/test_with_reaches_a_helper_member.expected)"
+	./$(COMPILER) test/test_with_reaches_a_helper_member_delphi.pas $(TESTTMP)/test_with_helper_d26
+	tools/expect_same.sh test_with_helper_d26 "$$($(TESTTMP)/test_with_helper_d26)" "$$(cat test/test_with_reaches_a_helper_member_delphi.expected)"
 	# Class-helper dispatch on CLASS-LEVEL members through the type name. A class
 	# helper's class methods were never applied -- `TTest.CS` gave the class's own
 	# 1 against fpc's 2, non-static `CN` 10 against 20 -- while INSTANCE members

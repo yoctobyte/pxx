@@ -7565,6 +7565,14 @@ var
     and ParseLValueAST. It was read by only the first, which is why callers grew
     a second hand-written route for a symbol-rooted receiver. }
   AtStopDotTok : Integer;
+  { The token index of a member NAME that ParseClassRecordSelectors reads as if
+    a `.` had just been consumed before it -- the bare name inside `with x do`
+    that a helper of x declares. ParseLValueAST's with loop rewinds to the name
+    (`TokPos := idx; Next`), sets this and calls the walker, which clears it at
+    once. An absolute index for AtStopDotTok's reason above: a nested walk over
+    the call's arguments runs over other tokens and can never match it. -1
+    everywhere else. bug-p-with-rec-do-a-helper-member-is-undefined }
+  SelMemberTok : Integer;
 
   BLabelLineNums : array[0..255] of Int64;
   BLabelCodePoss : array[0..255] of Integer;
