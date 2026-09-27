@@ -247,6 +247,11 @@ The table on 2026-09-25, with **pin v437** and the source tree at revision
 | st7789 | no | the `@micropython.viper` decorator, and the `ptr8`/`ptr16` views it uses, are not supported |
 | ina219 (with the period `logging.py`) | no | inside the class body, a class attribute refers by its bare name to one defined a few lines earlier (`__ADC_CONVERSION = {ADC_9BIT: ...}`), which Python allows |
 
+**Re-run on 2026-09-27 with pin v445** (compiler sha256 `caf21ac399f1`) and
+with the compiler at `ae11f1ddb5`: 15 of 16 compile. ina219 now compiles
+(`cdb8162bfd` made the class body a scope for its own initialisers); st7789
+still stops at `@micropython.viper`.
+
 "Compiles" is not "works": the timing-critical functions ds18x20, neopixel,
 hcsr04 and dht rely on (`_onewire`, `machine.bitstream`,
 `machine.time_pulse_us` and `machine.dht_readinto`) are new and have not yet

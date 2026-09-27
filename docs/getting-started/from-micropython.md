@@ -26,8 +26,8 @@ general, start with [Getting started on the ESP32](./esp32.md).
   `micropython.const`, `framebuf`, `network`, `socket`, `urequests`, `ssl`, and
   the old `u`-prefixed aliases. The full list is in
   [MicroPython code on PXX](../library/micropython.md).
-- **Published drivers compile unchanged.** 14 of 16 widely used drivers
-  compiled without edits in the last census; you copy the driver's `.py` file
+- **Published drivers compile unchanged.** 15 of 16 widely used drivers
+  compiled without edits in the last census (pin v445, 2026-09-27); you copy the driver's `.py` file
   next to your program, as you would copy it to the board.
 
 ```python

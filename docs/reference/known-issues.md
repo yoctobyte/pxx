@@ -336,7 +336,8 @@ release, and it has a real backlog. Its measured list of limits is kept on the
 [Nil Python page](../targets/nil-python.md#known-limits), and the deliberate
 differences from CPython are recorded beside it. On ESP, the model is
 MicroPython's assumptions about a small device, such as math errors not halting
-the program. 14 of 16 common MicroPython drivers compile unchanged; see
+the program. 15 of 16 common MicroPython drivers compile unchanged (measured
+with v445); see
 [MicroPython](../library/micropython.md).
 
 ## Reporting a problem

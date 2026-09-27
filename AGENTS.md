@@ -29,9 +29,11 @@ Python-shaped language, compiled ahead of time).
     make bootstrap        # FPC builds the seed, then pxx rebuilds itself to a byte-identical fixedpoint
 
 A checkout also ships a working compiler at stable_linux_amd64/default/pinned,
-so plain `make` works without FPC:
+so you do not need FPC. A fresh checkout has no compiler/pascal26 yet, and make
+refuses until you seed it from the pin:
 
-    make compiler/pascal26   # ~12 s; this IS the self-host fixedpoint check
+    cp stable_linux_amd64/default/pinned compiler/pascal26
+    make compiler/pascal26   # this IS the self-host fixedpoint check (52 s on a busy box, 2026-09-27)
     ./compiler/pascal26 test/hello.pas /tmp/hello && /tmp/hello
 
 "converged after N round(s)" means it rebuilt and reproduced itself. "verified"
@@ -71,7 +73,8 @@ by a wrapper's exit status.
 - IDE: ./espide.sh [folder]. It detects the chip, builds and flashes with one button, and opens a folder as a project.
 - MicroPython compatibility: docs/library/micropython.md. The driver census
   (tools/mpy_driver_census.sh; drivers from tools/install_lib_candidates.sh
-  micropython-drivers) compiles 14 of 16 common drivers unchanged.
+  micropython-drivers) compiles 15 of 16 common drivers unchanged (pin v445,
+  2026-09-27; st7789 needs @micropython.viper).
 - Networking under QEMU: tools/esp_qemu_net/qemueth + tools/esp_qemu_urequests.sh
   (chip 10.0.2.15, host 10.0.2.2; CONFIG_ETH_USE_OPENETH=y,
   CONFIG_LWIP_TCP_MSL=500). Grep the UREQ-QEMU-COMPLETE token.
@@ -89,8 +92,9 @@ by a wrapper's exit status.
 - docs/ — public documentation (published at pxxc.org). devdocs/ — internal
   history: tickets, the logbook, the debugging playbook.
 - devdocs/dev/parked-patches/ — unfinished work, one .md note per patch saying
-  how far it got. Worth reviving first: nilpy-class-body-scope (complete;
-  only its full Nil Python run is missing) and nilpy-micropython-native-viper.
+  how far it got. Worth reviving first: nilpy-micropython-native-viper (the
+  one driver of the 16 that does not compile needs it). nilpy-class-body-scope
+  has landed (cdb8162bfd) and is no longer parked.
   Read the HANGS warning on hoist-inherited-nested-types before touching it.
 - devdocs/progress/ — tickets by folder (backlog-*, done, rejected ...).
   tools/progress.sh next shows a ranked entry point.
@@ -113,10 +117,16 @@ The release pin is v441 (commit 5c1696ca79, compiler sha256 4ebfa2d047a2).
 The maintained list is docs/reference/known-issues.md; the release notes are
 devdocs/release-notes/v0.1.0-beta.1.md. The short version:
 
-- No compiler-caused memory leak is known. The sweep's record is the BLAISE
-  LEAK LIST in devdocs/progress/LOGBOOK.md. Not measured: Wi-Fi on real
-  hardware. One undetermined reading: about 0.6 B/pass on the ESP Nil Python
-  example soaks, below the soak's resolution.
+- No compiler-caused memory leak is known that grows while a program runs,
+  with three Nil Python exceptions in docs/reference/known-issues.md: a
+  reference cycle is never freed (reference counting, no cycle collector, by
+  design for this beta); `del name` keeps the object until the function
+  returns; and a list built by a comprehension is kept until the function
+  returns even after `name = None`. The sweep's record is the BLAISE LEAK
+  LIST in devdocs/progress/LOGBOOK.md. Wi-Fi on real hardware was measured on
+  one ESP32-C3 only; the S3 over real Wi-Fi was not. The 0.6 B/pass reading on
+  the ESP Nil Python soaks was the soak's own report lines; with them moved
+  into a function the four examples keep 0 bytes.
 - Silently wrong: C `long double` is 8 bytes (GCC: 16); a C function
   returning a pointer to an array steps it one element at a time
   (docs/reference/known-issues.md).
