@@ -38,7 +38,7 @@ A file named by path has no unit name to qualify with, so `as` supplies it:
 
 ```pascal
 program cubes;
-uses './mymath.c' as cmath;   { C: double cube(double x) }
+uses './mymath.c' as cmath;   { C: cube(x) returns x*x*x + 1000, to tell them apart }
 
 function Cube(x: Double): Double;
 begin Cube := 27.0; end;
