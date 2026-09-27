@@ -2,6 +2,8 @@
 prio: 70
 track: C
 summary: 'An ELEMENT that is a pointer to an array has no channel to record its pointee''s shape. The metadata that makes `float (*p)[4][4]` work (SymPtrElemArrLen/NDims/DimSpan) describes the SYMBOL''s own pointee, so it cannot describe an array of such pointers (`mat4 *ms[3]`) or a pointer to one (`mat4 **m`, which is what the parameter `mat4 *m[]` becomes). As a result `*ms[i]` LOADS from the matrix where C decays it to the matrix''s address, and `(*ms[i])[r][c]` strides by elements. Passing `*ms[i]` on as a `mat4` argument segfaults. `sizeof` of such an array is SILENTLY wrong as well when the element is a typedef of an array typedef (a count computed as `sizeof a / sizeof a[0]` comes out 1), which is the first thing cglm's own test suite hits once it builds. This is the body of cglm''s glm_mat4_mulN, whose own call site `(mat4 *[]){&a,&b,&c}` parses since this ticket was filed. The spelled-out form `float (*sp[2])[4][4]` is refused outright ("expected C expression"). Measured 2026-09-25: both the compiler built at 2ae5962be3 and the one after the fix segfault on the named-array spelling, so it is not a regression.'
+status: working
+owner: frankD
 ---
 
 # An array of pointers to arrays has no pointee shape
