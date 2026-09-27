@@ -82,4 +82,4 @@ observation** — and note that a fix here makes that comment *more* true, not
 less, by ensuring the checklist only prints when a short write really happened.
 
 ## Log
-- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 46083e0d4d.
