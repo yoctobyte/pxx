@@ -33,14 +33,16 @@ A fix in progress is parked in the repository as
 
 ### C: a function returning a pointer to an array steps it one element at a time
 
-With `typedef float vec4[4];`, a function declared `vec4 *f(void)` (or
-`int (*f(void))[4]`) returns the right address, but the compiler does not know
-what it points at: `sizeof *f()` is 4 where GCC gives 16, `f() + 1` steps 4
-bytes instead of 16, and `(*f())[2]` or `f()[0][2]` read the wrong element. The
-same holds for `mat4 *` (GCC 64). **Workaround:** store the result in a
-variable first (`vec4 *p = f();`); a variable, a struct member and an array
-element of that type are right. (Measured with v445 and with the compiler after
-it.)
+With `typedef float vec4[4];`, a function declared `vec4 *f(void)` returns the
+right address, but the compiler does not know what it points at: `sizeof *f()`
+is 4 where GCC gives 16, and `f() + 1` steps 4 bytes instead of 16, so
+`f()[1][2]` reads the wrong element (4 where GCC reads 7). The first row,
+`(*f())[2]` and `f()[0][2]`, reads right. Spelled `int (*f(void))[4]`, even
+`(*f())[2]` is wrong (5 where GCC reads 3), and `f()[1][2]` reads garbage.
+`mat4 *` has the same problem (`sizeof *f()` 4, GCC 64). **Workaround:** store
+the result in a variable first (`vec4 *p = f();`); a variable, a struct member
+and an array element of that type are right. (Measured with v445 and with the
+compiler after it, at `ae11f1ddb5`.)
 
 ### ESP: bare-metal images do not run on a real chip
 
@@ -95,8 +97,9 @@ Found after the release, on 2026-09-27, and **open in v441**:
   list or dict itself was freed. A function that fills a list with 20 strings
   and clears it lost 20 strings per call. A buffer cleared and refilled in a
   loop does not grow, because refilling releases the old elements, but the
-  last contents are lost when the buffer goes away. Fixed after v441, in the
-  runtime that the compiler links into every Nil Python program. **On v441:**
+  last contents are lost when the buffer goes away. Fixed in v442
+  (`fbfdcd1ea8`), in the runtime that the compiler links into every Nil Python
+  program; measured fixed with v445. **On v441:**
   assign a new empty container (`buf = []`, `d = {}`) instead of calling
   `clear()`.
 
@@ -117,13 +120,19 @@ another line, `kept = None`, `kept = 5`), and calling a method on it
 the program ends. It does not add up in a loop, but a function that fills a
 list and then drops it keeps the contents until it returns. On an ESP32-C3
 with about 70 KB free, 34 kept HTTP responses (about 1.4 KB each) held that
-way ran the heap low enough that Wi-Fi stopped working. Fixed after v445: the
-container is released as soon as the last name lets go of it. **On v445 and
-earlier:** return from the function, or let it end, to get the memory back.
+way ran the heap low enough that Wi-Fi stopped working. Fixed after v445
+(`31d314dfa8`): the container is released as soon as the last name lets go of
+it. **On v445 and earlier:** return from the function, or let it end, to get
+the memory back.
 
 `del name` on a local variable does not release what the name refers to; the
-object stays allocated until the function returns. Assign `name = None`
-instead.
+object stays allocated until the function returns. This is still so after
+v445. With the compiler after v445, assign `name = None` instead, which does
+release it. On v445 and earlier `name = None` does not release it either (see
+the paragraph above): return from the function. (Measured with v445 and with
+the compiler at `ae11f1ddb5`: a local list of 5 strings, dropped before the
+function exits, stays live under `del` on both, and under `= None` on v445
+only.)
 
 ### ESP networking
 
@@ -185,32 +194,39 @@ Two limits apply to these measurements:
 
 ## Fixed since v441
 
-These are wrong in v441 (and v443, where noted) and fixed in the compiler
-after it. Each was checked against GCC's output on x86-64.
+These are wrong in v441 and fixed in a later pin or after v445, as each row
+says. Each was checked against GCC's output on x86-64, and re-checked on
+2026-09-27: with v445 each row is still wrong exactly where it says "after
+v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
 
 - **C: an array typedef of structs was not modelled.** With `typedef struct {
   int a, b; } P; typedef P PA[2];`, a struct member `PA ps;` was laid out as
   one `P` (`struct { char c; PA ps; int after; }` 16 bytes, GCC 24), and a
-  local `PA x;` was refused at `x[1].b`. Wrong in v441 to v445.
+  local `PA x;` was refused at `x[1].b`. Wrong in v441 to v445; fixed in
+  `47f3bbccd4`.
 - **C: the address of an array or of a row pointed at one element.** `&a + 1`
   stepped one byte for any `a` (GCC: `sizeof a`), `sizeof *&a` answered the
   element, `(&m[0])[1][1]` read the wrong element, and a file-scope
-  `int (*r)[3] = &g[1];` was left null. Wrong in v441 to v445.
+  `int (*r)[3] = &g[1];` was left null. Wrong in v441 to v445; fixed in
+  `47f3bbccd4`.
 - **C: `sizeof` of a parenthesised row or dereference** (`sizeof((m[0]))`,
   `sizeof(*(p))` for `int (*p)[4]`) answered the size of a pointer. The
-  dereference form is fixed in v445, the row form after it.
+  dereference form is fixed in v445 (`84b57aa495`), the row form after it
+  (`47f3bbccd4`).
 
 - **C: a struct or union member typed by an array typedef was too small.**
   `struct U { arr3 a; int after; }` with `typedef int arr3[3]` was 8 bytes
   (GCC 16), and writing `u.a[1]` overwrote `u.after`; `struct { int k; mat4 m;
-  vec4 v; }` was 12 bytes (GCC 84). Wrong in v441 and v443. cglm's `mat2x3s`
+  vec4 v; }` was 12 bytes (GCC 84). Wrong in v441 and v443; fixed in v444
+  (`f713506115`). cglm's `mat2x3s`
   union crashed on it; cglm's whole test suite now passes, 1131 of 1131.
 - **C: a struct member pointing at an array typedef** (`mat4 *p;`,
   `mat4 *m[3];`) did not know its pointee's shape: `sizeof *s.p` was 4 (GCC
-  64) and `(*s.m[0])[1][1]` crashed. Wrong in v441 and v443.
+  64) and `(*s.m[0])[1][1]` crashed. Wrong in v441 and v443; fixed in v444
+  (`f713506115`).
 - **C: an array of pointers to an array typedef** (`mat4 *m[] = {&a, &b,
   &c}`, cglm's `glm_mat4_mulN`) had the wrong size (`sizeof m` 128, GCC 24),
-  and `*m[i]` loaded where C decays. Fixed in v443.
+  and `*m[i]` loaded where C decays. Fixed in v443 (`c5ad9480c4`).
 - **C: a local with an unsized first dimension of rows** (`vec4 v[] =
   {...}`, `float a[][4] = {...}`) was allocated one row, and the rest of its
   initialiser overwrote neighbouring locals. Fixed in v443.
