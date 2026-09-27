@@ -5,17 +5,19 @@ order: 95
 
 # Beta 0.1 release notes — draft
 
-> **Draft. No release has been cut.** Where beta 0.1 will be published, what it
-> will be tagged, and whether it ships as source, as binaries or both are not
-> decided yet, so nothing below assumes any of them. Until a release exists,
-> the way to get PXX is a clone of the repository; see [Install](../install/index.md).
+> **Draft. The release has not been tagged or published yet.** Beta 0.1
+> "Blaise" is pin v441. Where it will be published and whether it ships as
+> source, as binaries or both are not decided yet, so nothing below assumes
+> either. Until then, the way to get PXX is a clone of the repository; see
+> [Install](../install/index.md).
 
-This page describes **pin v425**: commit `4fbf33f69`, compiler binary sha256
-`426b2fbf3f08…`. That is the compiler `./pxx` runs in a checkout of that
-commit. Figures were measured on an x86-64 Linux host on 2026-09-25, with v425
-unless a figure names another compiler. Some tables were measured with the
-previous pin, v424, and not re-run, and each says so. If you are reading this
-against a later pin, the figures describe v425, not yours.
+This page describes **pin v441**: commit `5c1696ca79`, compiler binary sha256
+`4ebfa2d047a2…`. That is the compiler `./pxx` runs in a checkout of that
+commit. Figures were measured with v441 on an x86-64 Linux host on 2026-09-26
+and 2026-09-27, unless a figure names another compiler; figures kept from
+the draft pin v425 (commit `4fbf33f69`, sha256 `426b2fbf3f08…`) or an
+earlier compiler say so. If you are reading this against a later pin, the
+figures describe v441, not yours.
 
 ## What PXX is
 
@@ -33,7 +35,7 @@ the Linux kernel. That holds for every frontend.
 
 The [examples showcase](../examples/index.md) is the best answer: every entry on it was
 compiled and run with pin v423, and its example programs were rebuilt with
-v424 and again with v425, where the batch programs printed identical output. It shows the
+v424, v425 and v441, where the batch programs printed identical output. It shows the
 output or a screenshot of each. The highlights:
 
 - **Pascal:** terminal and GTK applications, an IDE written in PXX, a chess
@@ -69,7 +71,7 @@ output or a screenshot of each. The highlights:
 ## Targets
 
 The same one-line program, `writeln(6*7)` or its equivalent in each language,
-compiled by pin v425 and run: natively on x86-64, under QEMU user mode for the
+compiled by pin v441 and run: natively on x86-64, under QEMU user mode for the
 other Linux targets (`tools/run_target.sh`), and under wasmtime for wasm32.
 
 | | x86-64 | i386 | aarch64 | arm32 | riscv32 | wasm32 |
@@ -81,7 +83,9 @@ other Linux targets (`tools/run_target.sh`), and under wasmtime for wasm32.
 | Zig | 42 | 42 | 42 | 42 | 42 | refuses |
 
 A **refusal** is a compile-time error that names the reason, for example
-*"a heap arena needs mmap"* for Nil Python on riscv32. It is not a crash.
+*"Nil Python is not supported on hosted riscv32 Linux yet; build it for the
+ESP32 instead"*. It is not a crash. The table is the same as with the draft
+pin v425.
 
 - x86-64 is the host and the most heavily tested target.
 - wasm32 is the least tested: its suites are run by hand, not continuously.
@@ -100,13 +104,24 @@ profile on hardware.
   (`tools/run_c_conformance_esp.sh --chip esp32s3`). The skip is `00187.c`,
   which needs a writable file system the test image does not mount. Measured
   with pin v425 (sha256 `426b2fbf3f08`) on 2026-09-25.
-- **Examples:** 15 programs in `examples/esp32/` run under QEMU with pin v425
-  and are listed in the [showcase](../examples/index.md#esp32).
-- **On a board:** the ESP lane ran all 15 ESP32-S3 examples on one physical
-  ESP32-S3 board (ESP-IDF v6.0.1), built with the v425 compiler, and all 15
-  passed, as they did with v424. That includes the GPIO-edge and ADC programs, which QEMU cannot
-  exercise, and two Nil Python programs. The ESP32-C3 has been run only under
-  QEMU, and the ESP32-S2 has only been built.
+- **Examples under QEMU:** with v441, all 13 QEMU runs in the
+  [showcase](../examples/index.md#esp32) pass, each judged by its expected
+  output or its own verdict line: `hello` on both chips and eleven example
+  projects on the S3 and the C3.
+- **On a board:** with v441, on one physical ESP32-S3 (rev v0.2, MAC
+  `50:78:7d:14:23:10`, ESP-IDF v6.0.1), all of the following passed:
+  - the 12 `-s3` examples of the v425 walk: `nilpy-s3`, `nilpy-hw-s3`,
+    `gpio-edge-s3` and `adc-s3` match their expected output; `hello-s3`,
+    `timer-s3`, `rgb-s3`, `i2c-s3`, `pwm-s3`, `uart-s3`, `nvs-s3` and
+    `wifi-ap-s3` print their own pass lines;
+  - the two short forms (a Pascal program and a C program), which match the
+    PC;
+  - `spi-s3`, `monitor-s3` and the Wi-Fi station page `nilpy-station-s3`;
+  - the Nil Python socket-error test.
+
+  The v425 walk named 14 of these and reported them as 15. That list includes
+  the GPIO-edge and ADC programs, which QEMU cannot exercise. The ESP32-C3 has
+  been run only under QEMU, and the ESP32-S2 has only been built.
 - **Peripheral units:** GPIO with edge events (`espgpio`, `interrupts`), UART
   (`espuart`), continuous ADC (`espadc`), PWM (`esppwm`), I2C (`espi2c`), SPI (`espspi`), stored
   settings (`espnvs`), timers (`esptimer`) and heap figures (`espsys`), each
@@ -123,8 +138,11 @@ profile on hardware.
   those three examples lose 0 bytes per pass, and the Nil Python monitor
   example, `monitor-s3`, ran 193 reports over a 3.5-minute soak with free heap
   flat. With v425 itself, `adc-s3` looped 60 times keeps its free heap at
-  271,232 bytes from the first pass to the last. The timer, PWM, I2C and UART
-  units lose 0 bytes over 300 open/use/close cycles each.
+  271,232 bytes from the first pass to the last. With development compilers
+  before v425, the timer, PWM, I2C and UART units lost 0 bytes over 300
+  open/use/close cycles each. These loops were not repeated with v441. The
+  leak sweep for this release covered ESP networking under QEMU; see
+  [Known issues](../reference/known-issues.md#esp-networking).
 
 ESP is not a Unix: FreeRTOS provides tasks, not processes. Calls with POSIX
 shapes that have no meaning there return an explicit "unsupported" error rather
@@ -134,9 +152,12 @@ ESP-IDF, then a first Pascal, C and Nil Python program.
 
 ## Fixed in v425
 
-These were wrong in the previous pin, v424, and are fixed in v425. Unless a row
-says otherwise, each was checked on 2026-09-25 by running the same program with
-v424 and with v425.
+These were wrong in pin v424 and are fixed in the draft pin v425, and so in
+v441, which descends from it. Unless a row says otherwise, each was checked on
+2026-09-25 by running the same program with v424 and with v425; the numbers
+below are from those two compilers. What was fixed between v425 and v441 is
+listed under
+[Fixed in this release](../reference/known-issues.md#fixed-in-this-release).
 
 | Fix | Commit | What changes |
 | --- | --- | --- |
@@ -161,17 +182,17 @@ v424 and with v425.
 
 ## Known issues
 
-The full list, with the Pascal and C rows re-run on v425, is on its own page:
+The full list, restamped to v441, is on its own page:
 [Known issues in beta 0.1](../reference/known-issues.md). In short:
 
 - A few programs compile and silently give a wrong answer. Examples: C
   `long double` is 8 bytes, not GCC's 16; an initialised C `__thread` variable
-  reads 0 outside the main thread; a C member access on a comma expression,
-  `(x, p)->field`, reads the wrong value; on ESP, an uncaught exception panics
-  or stops the chip without a message (fixed in the development tree, so the
-  next pin prints it).
-- C compound literals of an array type, such as `(float[4]){1, 2, 3, 4}`, are
-  refused.
+  reads 0 outside the main thread; `sizeof` of an array of pointers to a
+  two-level array typedef, such as cglm's `mat4 *m[]`, is wrong.
+- Three items that were open in the draft pin v425 are fixed in v441: a C
+  member access on a comma expression, `(x, p)->field`, read the wrong value;
+  C compound literals of an array type were refused; and on ESP an uncaught
+  exception stopped the chip without a message.
 - Integer division by zero gives 0 on ESP and stops the program on desktop.
   That is by design: an embedded device keeps running.
 - Nil Python is Python-ish at best and known to have plenty of issues; its

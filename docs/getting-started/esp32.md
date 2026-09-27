@@ -16,8 +16,10 @@ reference material (the bare-metal profile, code size, floating point) is in
 one window, see [The ESP32 IDE](./esp-ide.md).
 
 **What this page was verified on.** Every command below was run on an
-ESP32-S3 devkit (native USB, `/dev/ttyACM0`) with ESP-IDF v6.0.1 and the PXX
-compiler named at the bottom of the page. See
+ESP32-S3 board with ESP-IDF v6.0.1 and the PXX compilers named at the bottom
+of the page. The commands show `/dev/ttyACM0`, a native-USB port; a board
+behind a USB-to-serial bridge may appear as another `/dev/ttyACM*` or
+`/dev/ttyUSB*`, so pass yours to `--port`. See
 [What is and is not proven](#what-is-and-is-not-proven) before you plan
 around a chip other than the S3.
 
@@ -294,19 +296,36 @@ the examples with a `.expected` file, byte for byte.
 
 ## Verified with
 
-One ESP32-S3 devkit on `/dev/ttyACM0`, ESP-IDF v6.0.1, CPU at 160 MHz,
-2026-09-24/25.
+- **With the beta 0.1 compiler, pin v441** (binary sha256 `4ebfa2d047a2`,
+  repository at `ab1960b987`, which matches the pin's commit `5c1696ca79`
+  outside the documentation), on 2026-09-27. The board was an ESP32-S3 (QFN56)
+  rev v0.2 with 8 MB PSRAM, MAC `50:78:7d:14:23:10`, behind a CH343
+  USB-to-serial bridge, with ESP-IDF v6.0.1. Every item below passed, each
+  judged the same way as before:
+  - the 12 examples and the two short forms of the earlier walks;
+  - `spi-s3`, 18 of 18 checks;
+  - `nvs-s3` through all four phases, the last after a hardware reset;
+  - `nilpy-station-s3`, all 12 lines of its `main.expected`;
+  - the socket-error test `test/esp_board_socket_errors.npy`, all 9 lines of
+    its expected output;
+  - `monitor-s3` with `REPORTS = 10`: ADC mean 3856 to 3858, free heap between
+    256,184 and 263,320 bytes. The mean is 4 or 5 lower than on the earlier
+    board, which may not be the same board.
+
+The earlier walks below used one ESP32-S3 devkit on `/dev/ttyACM0` (its MAC
+was not recorded), ESP-IDF v6.0.1, CPU at 160 MHz, 2026-09-24/25.
 
 - **Every command and every example on this page** was run on the board with
   the compiler of pin v424 (binary sha256 `93a336a7ba85`, repository at
-  `cf8d0064f`). Fifteen of fifteen passed: `nilpy-s3`, `nilpy-hw-s3`,
+  `cf8d0064f`). The record names fourteen checks and counts them as fifteen;
+  all passed: `nilpy-s3`, `nilpy-hw-s3`,
   `gpio-edge-s3` and `adc-s3` match their expected output byte for byte;
   `hello-s3`, `timer-s3`, `rgb-s3`, `wifi-ap-s3` (up to "listening"),
   `i2c-s3`, `pwm-s3`, `uart-s3` and `nvs-s3` print their own pass lines; the
   `myprog.pas` and `hello.c` short forms match the PC. `monitor-s3` was run
   with that compiler too, and with the later one below.
 - **The same walk with pin v425** (binary sha256 `426b2fbf3f08`, repository at
-  `4fbf33f69`), on 2026-09-25: fifteen of fifteen passed again, each judged
+  `4fbf33f69`), on 2026-09-25: the same fourteen passed again, each judged
   the same way, and both short forms match the PC. `monitor-s3` with
   `REPORTS = 10` reads an ADC mean of 3861 to 3863 and free heap between
   257,976 and 262,088 bytes.

@@ -103,12 +103,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - `[p 70] [A+O]` feature-opt-rtti-emit-on-use (unblocks 1)
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
+- `[p 70] [C]` bug-c-an-array-of-pointers-to-arrays-has-no-pointee-shape-so-deref-loads-instead-of-decaying
 - `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 - `[p 70] [N]` bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
 - `[p 70] [N]` bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - `[p 70] [N]` bug-n-a-staticmethod-called-through-cls-raises-attributeerror
-- `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 
 _535 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

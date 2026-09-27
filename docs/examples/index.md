@@ -31,6 +31,14 @@ strength of a test that once passed or a claim in another document.
 > same size. The C and Pascal library rows, the ESP QEMU runs and the ESP32-S3
 > board walk were re-run with v425, and each says so. The screenshots were not
 > redone for v425.
+>
+> **Re-checked 2026-09-27 with pin v441**, the beta 0.1 compiler (commit
+> `5c1696ca79`, sha256 `4ebfa2d047a2…`), at checkout `ab1960b987`. The 20
+> batch and parallel programs printed output byte-identical to v425's, apart
+> from timing figures. Their binaries changed size, by −8 to +16,368 bytes. The
+> C library rows, the ESP QEMU runs and the ESP32-S3 board walk were re-run
+> with v441, and each says so. The Pascal library rows and the screenshots
+> were not redone for v441.
 
 ## Quick start
 
@@ -406,10 +414,15 @@ CPython does, and outside it the language is known to have plenty of issues
 
 ### The other examples, under QEMU
 
-For this page, each one below was **built with pin v425 and booted under
-Espressif's QEMU** on 2026-09-25, as it was with v423 before. Its console output was checked against the program's
-`main.expected` file or its own verdict line. They were not run on a physical
-board for this page. The prerequisite is the ESP-IDF toolchain
+For this page, each one below was **built with pin v441 and booted under
+Espressif's QEMU** on 2026-09-27; all 13 runs (hello on both chips and the 11
+projects) passed. Each was judged by the program's `main.expected` file or by
+its own verdict line: `./build.sh qemu-assert` where the project has it, and
+`./build.sh qemu` for dns-c3 and net-c3, whose `qemu` mode asserts. The v425
+check on 2026-09-25 ran timer-s3, timer-c3, fs-c3 and gpio-c3 through the
+interactive `./build.sh qemu`, which exited without a verdict, so **those four
+were first actually judged with v441**. The table shows `qemu-assert` for them.
+These QEMU runs are separate from the board runs below. The prerequisite is the ESP-IDF toolchain
 (`. ~/esp/esp-idf/export.sh`).
 
 | Example | Chip | Language | Command | Result |
@@ -418,11 +431,11 @@ board for this page. The prerequisite is the ESP-IDF toolchain
 | nilpy-s3, nilpy-c3 | S3, C3 | Python | `cd examples/esp32/nilpy-s3 && ./build.sh qemu-assert` | output identical to CPython's |
 | nilpy-hw-s3, nilpy-hw-c3 | S3, C3 | Python | `./build.sh qemu-assert` | GPIO and timer calls from Python match `main.expected` |
 | isrctx-c3 | C3 | Pascal | `./build.sh qemu-assert` | task context and interrupt context both witnessed |
-| timer-s3, timer-c3 | S3, C3 | Pascal | `./build.sh qemu` | five ticks, `status=0` |
-| fs-c3 | C3 | Pascal | `./build.sh qemu` | FAT mount, write, seek and read back: `esp-pal-file-io-WORKS` |
+| timer-s3, timer-c3 | S3, C3 | Pascal | `./build.sh qemu-assert` | five ticks, `status=0` |
+| fs-c3 | C3 | Pascal | `./build.sh qemu-assert` | FAT mount, write, seek and read back: `esp-pal-file-io-WORKS` |
 | dns-c3 | C3 | Pascal | `./build.sh qemu` | lwIP resolver smoke test, `status=0` |
 | net-c3 | C3 | Pascal | `./build.sh qemu` | network smoke test, `status=0` |
-| gpio-c3 | C3 | Pascal | `./build.sh qemu` | GPIO configuration runs. QEMU delivers no input edges, and the program reports exactly that |
+| gpio-c3 | C3 | Pascal | `./build.sh qemu-assert` | GPIO configuration runs. QEMU delivers no input edges, and the program reports exactly that |
 
 `tools/esp_run.sh` compiles with the in-tree compiler unless
 `ESP_RUN_PXX="$PWD/stable_linux_amd64/default/pinned"` is set; the path must be
@@ -463,20 +476,26 @@ total 59 3
 
 ### On a real ESP32-S3
 
-The examples were also flashed to an ESP32-S3 devkit on 2026-09-24/25 with pin
-v424, and again on 2026-09-25 with pin v425 (ESP-IDF v6.0.1). All fifteen
-checks passed both times. The details are in
+The examples were flashed to an ESP32-S3 board on 2026-09-27 with pin v441,
+the beta 0.1 compiler (ESP-IDF v6.0.1; the board is an ESP32-S3 rev v0.2, MAC
+`50:78:7d:14:23:10`). Every row below passed. Earlier, on 2026-09-24/25, the
+same examples had passed on an ESP32-S3 devkit with pin v424 and again with
+pin v425. That record names fourteen checks (the twelve `-s3` examples in
+the table other than `monitor-s3`, `spi-s3` and `nilpy-station-s3`, plus the
+two short-form programs) and counts
+them as fifteen. `spi-s3` had also run with v425, outside that list. The
+details are in
 [Getting started on the ESP32](../getting-started/esp32.md#verified-with).
 
 | Example | Language | Result on the board |
 | --- | --- | --- |
-| monitor-s3 | Python | the report lines above; free heap flat over 193 reports |
+| monitor-s3 | Python | with v441, its 10 reports: ADC mean 3856 to 3858, free heap 256,184 to 263,320 bytes; free heap flat over 193 reports with an earlier compiler (see above) |
 | nilpy-s3, nilpy-hw-s3 | Python | output matches `main.expected` byte for byte |
-| gpio-edge-s3 | Pascal | output matches `main.expected`: real input edges, which QEMU cannot deliver |
-| adc-s3 | Pascal | output matches `main.expected`: real ADC readings |
-| hello-s3, timer-s3, rgb-s3, i2c-s3, pwm-s3, uart-s3, nvs-s3 | Pascal | each prints its own pass line |
+| gpio-edge-s3 | Python | output matches `main.expected`: real input edges, which QEMU cannot deliver |
+| adc-s3 | Python | output matches `main.expected`: real ADC readings |
+| hello-s3, timer-s3, rgb-s3, i2c-s3, pwm-s3, uart-s3, spi-s3, nvs-s3 | Pascal | each prints its own pass line (`nvs-s3` over four boots, the last after a hardware reset) |
 | wifi-ap-s3 | Pascal | starts the access point and reaches `HTTP server listening on port 80`; no client connected during the test |
-| nilpy-station-s3 | Python | a Wi-Fi status page (`PXX-NILPY`, `http://192.168.4.1/`); all 12 lines of `main.expected`, including HTTP fetches of its own pages over `127.0.0.1`, on 2026-09-25. See [Wi-Fi and sockets](../library/esp.md) |
+| nilpy-station-s3 | Python | a Wi-Fi status page (`PXX-NILPY`, `http://192.168.4.1/`); all 12 lines of `main.expected`, including HTTP fetches of its own pages over `127.0.0.1`, on 2026-09-25 and again with v441. See [Wi-Fi and sockets](../library/esp.md) |
 
 **Long-running use.** Re-run in a loop with v424, `nilpy-s3`, `nilpy-hw-s3`
 and `gpio-edge-s3` lose about 44, 220 and 264 bytes per pass, and `adc-s3`
@@ -516,11 +535,14 @@ printed `hello`. Configuring BusyBox's tree needs GCC on the host; the build
 after that does not. The other libraries in the table have no archive route
 yet: use a checkout.
 
-Every row was re-run on 2026-09-25 with **pin v425** (commit `4fbf33f69`,
-compiler sha256 `426b2fbf3f08…`) at checkout `41a347978`. Each row says how
+Every row was re-run on 2026-09-27 with **pin v441** (commit `5c1696ca79`,
+compiler sha256 `4ebfa2d047a2…`), the beta 0.1 release, at checkout
+`ab1960b987`, and every row gave the same result as with the draft pin v425
+(commit `4fbf33f69`, sha256 `426b2fbf3f08…`) on 2026-09-25. Each row says how
 it was checked: against the recipe's expected output, against the same driver
 program built by GCC and linked with glibc, or both. The binary sizes are for
-builds without `-g`.
+builds without `-g`, with v441; where a size rounds differently from v425's,
+both are given.
 
 | Program | Version | How it was checked | Binary |
 | --- | --- | --- | --- |
@@ -528,7 +550,7 @@ builds without `-g`.
 | **BusyBox**, linked by PXX itself | same | `tools/busybox_diff.sh --pinned --pxx-link --targets x86_64 --applets "cat echo ls wc sort ash"`: 55 objects linked by `pascal26 --link` with no external linker; no `PT_INTERP`; byte-identical to GCC over 82 cases | 20 MB |
 | **SQLite** | 3.46.0 | amalgamation plus a ten-line `sqlite3_exec` driver; the SQL session below | 3.2 MB |
 | **zlib** | 1.3.1 | zlib's own `test/example.c`: output byte-identical to the same program built by GCC | 717 KB |
-| **Lua** | 5.4.7 | the six `test/lua/*.lua` programs: all match the expected output, and all six outputs are byte-identical to the GCC build; the stock `lua.c` interpreter also builds and runs | 968 KB |
+| **Lua** | 5.4.7 | the six `test/lua/*.lua` programs: all match the expected output, and all six outputs are byte-identical to the GCC build; the stock `lua.c` interpreter also builds and runs | 984 KB (v425: 968 KB) |
 | **cJSON** | 1.7.18 | the five `test/cjson/*.json` documents round-trip: all match the expected output and the GCC build | 149 KB |
 | **Duktape** | 2.7.0 | a JavaScript engine: `test/duktape/duk_smoke.c` runs a curated script, exits 42, and prints 29 lines byte-identical to the expected output and to the GCC build | 1.4 MB |
 | **QuickJS** (quickjs-ng) | 0.9.0 | `./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/quickjs test/quickjs/runner.c qjs` (about 11 s), then `./qjs "$(cat test/quickjs/smoke.js)"`: output byte-identical to `test/quickjs/smoke.expected`. | 4.9 MB |

@@ -55,28 +55,38 @@ after that, was compiled the same way from both languages the same day.
 
 ## How it was verified
 
-Every example below was run on **one ESP32-S3 board**
-(ESP-IDF v6.0.1, 160 MHz), with the v424 compiler and again with the v425
-compiler, and all 15 passed both times. `spi-s3` is newer and has run on
-the v425 compiler only. The
-units that open and close a peripheral (timer, PWM, I2C, UART) were also run
-through 300 open/use/close cycles each, and none of them leaked memory. The
-`monitor-s3` example, which reads the ADC, GPIO and heap together, ran 193
-reports over 3.5 minutes with free heap flat. **The ESP32-C3 has
+Every example below was run on **an ESP32-S3 board** with the beta 0.1
+compiler, pin v441 (sha256 `4ebfa2d047a2…`), on 2026-09-27, and each passed:
+an ESP32-S3 (QFN56) rev v0.2 with 8 MB PSRAM, MAC `50:78:7d:14:23:10`,
+connected through a CH343 USB-to-serial bridge, with ESP-IDF v6.0.1. The same
+examples had passed on one ESP32-S3 board (160 MHz) with the v424 and the
+v425 compilers; that board's MAC was not recorded, so it may be a different
+one. The v425 record names 14 checks (the 12 `-s3` examples listed under
+[Getting started](../getting-started/esp32.md#verified-with) plus two
+short-form programs), although it counted them as 15. `spi-s3` had run on
+v425 only before v441. Two figures come from earlier compilers and were not
+repeated with v441: the units that open and close a peripheral (timer, PWM,
+I2C, UART) were run through 300 open/use/close cycles each on 2026-09-24/25,
+with development compilers before v425 (timer, PWM and I2C with sha256
+`fa9cde1990fd…`), and none of them leaked memory; and the `monitor-s3` example, which reads the ADC, GPIO
+and heap together, ran 193 reports over 3.5 minutes with free heap flat, with
+a development compiler between v424 and v425 (sha256 `29956ba5beff…`). With
+v441 it ran its checked-in 10 reports, ADC mean 3856 to 3858, free heap
+between 256,184 and 263,320 bytes. **The ESP32-C3 has
 been tested only under QEMU, and the ESP32-S2 has only been built.** QEMU
 models no GPIO input and no ADC, so the input half of `espgpio` and all of
 `espadc` can only be checked on a board.
 
 | Unit | Example | On the ESP32-S3 board |
 | --- | --- | --- |
-| `espgpio` + `interrupts` | `gpio-edge-s3` (Python) | output matches `main.expected` |
+| `espgpio` + `interrupts` | `gpio-edge-s3` (Python) | output matches `main.expected` (15 lines) |
 | `espuart` | `uart-s3` | 13 of 13 checks, with nothing wired |
-| `espadc` + `interrupts` | `adc-s3` (Python) | output matches `main.expected` |
+| `espadc` + `interrupts` | `adc-s3` (Python) | output matches `main.expected` (7 lines) |
 | `esppwm` | `pwm-s3` | 15 of 15 checks, with nothing wired |
 | `espi2c` | `i2c-s3` | 5 of 5 checks on an empty bus; **no device tested** |
-| `espspi` | `spi-s3` | 18 of 18 checks with nothing wired, on v425; **no device tested** |
-| `espnvs` | `nvs-s3` | 0 failures over four boots |
-| `esptimer` | `timer-s3`, `nilpy-hw-s3` | runs as intended |
+| `espspi` | `spi-s3` | 18 of 18 checks with nothing wired; **no device tested** |
+| `espnvs` | `nvs-s3` | 0 failures over four boots, the last after a hardware reset |
+| `esptimer` | `timer-s3`, `nilpy-hw-s3` | five ticks, `status=0`; `nilpy-hw-s3` matches `main.expected` |
 | `espsys` | `uart-s3` | used for the heap figures in the checks above |
 
 The examples are in `examples/esp32/<name>/`. Each builds with `./build.sh`

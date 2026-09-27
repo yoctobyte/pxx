@@ -31,6 +31,16 @@ A fix in progress is parked in the repository as
 `devdocs/dev/parked-patches/tls-init-image-reaches-every-thread-wip.patch`.
 (Measured with v425.)
 
+### C: `sizeof` of an array of pointers to a two-level array typedef
+
+With `typedef float vec4[4]; typedef vec4 mat4[4];`, an array such as
+`mat4 *m[] = { &a, &b, &c };` has the wrong size: `sizeof m` is 128 and
+`sizeof m[0]` is 128, where GCC gives 24 and 8. So the usual element count,
+`sizeof m / sizeof m[0]`, comes out 1 instead of 3. With a one-level typedef
+(`vec4 *m[]`) the sizes are right. The same shape also goes wrong when an
+element is dereferenced, `*m[i]`. cglm's own tests reach it in
+`glm_mat4_mulN`. (Measured with v441.)
+
 ### ESP: bare-metal images do not run on a real chip
 
 Images built with `--esp-profile=bare` fault on the first byte access to a
