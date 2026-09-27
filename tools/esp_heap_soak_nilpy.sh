@@ -70,7 +70,26 @@ done
 EX="${1:?usage: esp_heap_soak_nilpy.sh [--control] [--passes N] <example>}"
 SRC="$REPO_ROOT/examples/esp32/$EX"
 [ -f "$SRC/main/main.npy" ] || { echo "soak: $EX has no main/main.npy" >&2; exit 2; }
-PXX="${SOAK_PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"
+# This script ALREADY defaulted to the pin (unlike esp_heap_soak.sh, which
+# defaulted to whatever compiler/pascal26 happened to be in the checkout), so
+# the default is unchanged. What was missing is the PROVENANCE: nothing printed
+# which compiler a soak was measured with, and a soak is read from a captured
+# log hours later, where a number without its compiler is not re-derivable.
+#
+# PXX_FROM_ENV is captured BEFORE the assignment: `PXX=...` and then testing
+# `${PXX:-}` reads the value just assigned, never the ambient one. Precedence
+# is SOAK_PXX, then an ambient PXX=, then the pin -- SOAK_PXX first because it
+# is this script's own override and must not be silently beaten by a PXX= left
+# in the environment by something else, which matters here in particular
+# because this script EXPORTS PXX onward to the project's build.sh.
+PXX_FROM_ENV="${PXX:-}"
+PXX="${SOAK_PXX:-${PXX_FROM_ENV:-$("$REPO_ROOT/tools/pxx_stable.sh")}}"
+if   [ -n "${SOAK_PXX:-}" ]; then PXX_HOW="from SOAK_PXX"
+elif [ -n "$PXX_FROM_ENV" ]; then PXX_HOW="from PXX="
+else                              PXX_HOW="the pin, tools/pxx_stable.sh"; fi
+PXX_SHA="$(sha256sum "$(readlink -f "$PXX")" 2>/dev/null | cut -c1-12)"
+PXX_TAG="compiler ${PXX_SHA:-UNREADABLE}"
+echo "soak: $PXX_TAG $PXX ($PXX_HOW)" >&2
 TIMEOUT="${SOAK_TIMEOUT:-240}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 BODY="${SOAK_BODY:-$REPO_ROOT/tools/esp_soak_nilpy/$EX.npy}"
@@ -161,7 +180,7 @@ sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" build.sh
 sed -i -e "s|\${CMAKE_CURRENT_LIST_DIR}/\.\./\.\./\.\.|$REPO_ROOT|g" CMakeLists.txt
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
 if ! PXX="$PXX" PXX_EXTRA_FLAGS="-Fu$W/$STAGE/main ${PXX_EXTRA_FLAGS:-}" bash build.sh >"$W/build.log" 2>&1; then
-  echo "SOAK $STAGE $CHIP BUILD-FAIL"; grep -a -m3 'error' "$W/build.log" | sed 's/^/  | /'
+  echo "SOAK $STAGE $CHIP BUILD-FAIL [$PXX_TAG]"; grep -a -m3 'error' "$W/build.log" | sed 's/^/  | /'
   tail -5 "$W/build.log" | sed 's/^/  | /'
   echo "SOAK-COMPLETE"; exit 1
 fi
@@ -174,7 +193,7 @@ if [ -n "${SOAK_PORT:-}" ]; then
   # a reset, which a late open would miss).
   if ! ( cd build && python -m esptool --chip "$CHIP" -p "$SOAK_PORT" -b 460800 \
            --before default-reset --after no-reset write-flash @flash_args ) >"$W/flash.log" 2>&1; then
-    echo "SOAK $CHIP FLASH-FAIL on $SOAK_PORT"; tail -5 "$W/flash.log" | sed 's/^/  | /'
+    echo "SOAK $CHIP FLASH-FAIL on $SOAK_PORT [$PXX_TAG]"; tail -5 "$W/flash.log" | sed 's/^/  | /'
     echo "SOAK-COMPLETE"; exit 1
   fi
   SECONDS=0
@@ -197,12 +216,12 @@ fi
 tag="$STAGE $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
 r="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-RESULT' | head -1 || true)"
 if [ -n "$r" ]; then
-  echo "SOAK $tag ${r#SOAK-RESULT }"
+  echo "SOAK $tag ${r#SOAK-RESULT } [$PXX_TAG]"
   tr -d '\r' < "$W/serial.log" | grep -a '^SOAK-AT ' | sed "s|^SOAK-AT |SOAK $tag at |" || true
   st="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-SETTLED' | head -1 || true)"
-  [ -n "$st" ] && echo "SOAK $tag settled ${st#SOAK-SETTLED }"
+  [ -n "$st" ] && echo "SOAK $tag settled ${st#SOAK-SETTLED } [$PXX_TAG]"
 else
-  echo "SOAK $tag NO-RESULT after ${t}s; last serial lines:"
+  echo "SOAK $tag NO-RESULT after ${t}s [$PXX_TAG]; last serial lines:"
   tr -d '\r' < "$W/serial.log" | tail -8 | sed 's/^/  | /'
 fi
 echo "SOAK-COMPLETE"

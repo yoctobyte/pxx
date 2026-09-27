@@ -34,8 +34,9 @@
 # sg dialout -c "SOAK_PORT=/dev/serial/by-id/... tools/<this script> ..."), and
 # name the board's stable by-id path: an esptool call resets whatever it opens.
 #
-# Built with THIS checkout's compiler/pascal26 (SOAK_PXX overrides), using the
-# example's own build.sh flags and sdkconfig.
+# Built with the PINNED compiler by default (SOAK_PXX, then an ambient PXX=,
+# override it), using the example's own build.sh flags and sdkconfig. Every
+# run and every verdict line carries the compiler's sha12.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONTROL=0; PASSES="${SOAK_N:-10}"
@@ -49,7 +50,36 @@ done
 EX="${1:?usage: esp_heap_soak.sh [--control] [--passes N] <example>}"
 SRC="${SOAK_SRC:-$REPO_ROOT/examples/esp32}/$EX"   # SOAK_SRC: a dir of example-shaped variants
 [ -f "$SRC/main/main.pas" ] || { echo "soak: $EX has no main/main.pas" >&2; exit 2; }
-PXX="${SOAK_PXX:-$REPO_ROOT/compiler/pascal26}"
+# THE PIN BY DEFAULT, not $REPO_ROOT/compiler/pascal26. That default was
+# whatever build happened to be sitting in the checkout -- stale, someone
+# else's, or a local experiment -- so a soak row could be measured with a
+# different compiler from every other row in the same table and nothing in the
+# output said which. Measured 2026-09-27: in this checkout compiler/pascal26
+# was a local build (789066bae0d2) while the pin was ccca045a848b. Same hazard
+# frankd-a3 fixed in tools/esp_flash.sh (672d2f3eaa).
+#
+# PRECEDENCE IS SOAK_PXX, THEN AMBIENT PXX, THEN THE PIN, and the order is the
+# point: SOAK_PXX is this script's own override and must not be silently beaten
+# by a PXX= left in the environment by something else. Ambient PXX is honoured
+# below it so a caller who exports one compiler for a whole session still gets
+# it, exactly as esp_flash.sh does.
+#
+# PXX_FROM_ENV is captured BEFORE the assignment below, and that is not
+# tidiness: `PXX=...` then testing `${PXX:-}` reads the value just assigned,
+# never the ambient one, so the reported provenance would say "from PXX=" for
+# every run including the ones that took the pin. A setup line that destroys
+# the condition under test.
+PXX_FROM_ENV="${PXX:-}"
+PXX="${SOAK_PXX:-${PXX_FROM_ENV:-$("$REPO_ROOT/tools/pxx_stable.sh")}}"
+if   [ -n "${SOAK_PXX:-}" ];   then PXX_HOW="from SOAK_PXX"
+elif [ -n "$PXX_FROM_ENV" ];   then PXX_HOW="from PXX="
+else                                PXX_HOW="the pin, tools/pxx_stable.sh"; fi
+PXX_SHA="$(sha256sum "$(readlink -f "$PXX")" 2>/dev/null | cut -c1-12)"
+PXX_TAG="compiler ${PXX_SHA:-UNREADABLE}"
+# Printed on EVERY run and repeated on the verdict lines below, because a soak
+# is read from a captured log hours later and a number without its compiler is
+# not re-derivable.
+echo "soak: $PXX_TAG $PXX ($PXX_HOW)" >&2
 TIMEOUT="${SOAK_TIMEOUT:-180}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
@@ -119,7 +149,7 @@ PY
 sed -i -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$REPO_ROOT\"|" -e "s|^ROOT=.*|ROOT=\"$REPO_ROOT\"|" build.sh
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
 if ! PXX="$PXX" bash build.sh >"$W/build.log" 2>&1; then
-  echo "SOAK $EX $CHIP BUILD-FAIL"; tail -15 "$W/build.log" | sed 's/^/  | /'
+  echo "SOAK $EX $CHIP BUILD-FAIL [$PXX_TAG]"; tail -15 "$W/build.log" | sed 's/^/  | /'
   echo "SOAK-COMPLETE"; exit 1
 fi
 
@@ -131,7 +161,7 @@ if [ -n "${SOAK_PORT:-}" ]; then
   # a reset, which a late open would miss).
   if ! ( cd build && python -m esptool --chip "$CHIP" -p "$SOAK_PORT" -b 460800 \
            --before default-reset --after no-reset write-flash @flash_args ) >"$W/flash.log" 2>&1; then
-    echo "SOAK $CHIP FLASH-FAIL on $SOAK_PORT"; tail -5 "$W/flash.log" | sed 's/^/  | /'
+    echo "SOAK $CHIP FLASH-FAIL on $SOAK_PORT [$PXX_TAG]"; tail -5 "$W/flash.log" | sed 's/^/  | /'
     echo "SOAK-COMPLETE"; exit 1
   fi
   SECONDS=0
@@ -154,9 +184,9 @@ fi
 tag="$EX $CHIP"; [ "$CONTROL" = 1 ] && tag="$tag control"
 r="$(tr -d '\r' < "$W/serial.log" | grep -a 'SOAK-RESULT' | head -1 || true)"
 if [ -n "$r" ]; then
-  echo "SOAK $tag ${r#SOAK-RESULT }"
+  echo "SOAK $tag ${r#SOAK-RESULT } [$PXX_TAG]"
 else
-  echo "SOAK $tag NO-RESULT after ${t}s; last serial lines:"
+  echo "SOAK $tag NO-RESULT after ${t}s [$PXX_TAG]; last serial lines:"
   tr -d '\r' < "$W/serial.log" | tail -8 | sed 's/^/  | /'
 fi
 echo "SOAK-COMPLETE"
