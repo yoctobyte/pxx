@@ -19519,10 +19519,11 @@ test-core: $(COMPILER)
 	grep -q 'not allowed in a class or record body' $(TESTTMP)/tv_6.err
 	# ...and the target refusal, which is the one that must NOT become a silent
 	# shared global -- that is the whole complaint in the C sibling ticket.
-	# i386, not aarch64: aarch64 and arm32 gained a per-thread block on
-	# 2026-09-24 and compile this now (TargetHasTlsBlock); i386 has none yet.
+	# riscv32: aarch64 and arm32 gained a per-thread block on 2026-09-24 and
+	# i386 on 2026-09-27 (fs), and all three compile this now
+	# (TargetHasTlsBlock). riscv32 has none.
 	printf 'program a; threadvar t: LongInt; begin t := 1; end.\n' > $(TESTTMP)/tv_arch.pas
-	! ./$(COMPILER) --target=i386 $(TESTTMP)/tv_arch.pas $(TESTTMP)/tv_7 >$(TESTTMP)/tv_7.err 2>&1
+	! ./$(COMPILER) --target=riscv32 $(TESTTMP)/tv_arch.pas $(TESTTMP)/tv_7 >$(TESTTMP)/tv_7.err 2>&1
 	grep -q 'threadvar needs a per-thread block' $(TESTTMP)/tv_7.err
 	# feature-p-a-pascal-library-unit-does-not-parse — the four `exports`
 	# refusals. ONE FILE PER DIAGNOSTIC: a single source carrying all four

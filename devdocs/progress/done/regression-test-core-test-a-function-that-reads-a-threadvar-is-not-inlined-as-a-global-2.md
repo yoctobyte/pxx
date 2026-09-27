@@ -34,3 +34,13 @@ ok: /tmp/testmgr-scratch-1202493/test_tvinline26  [code=23451B  data=7704B  bss=
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolution (2026-09-27, frankD)
+
+Caused by 7dc976a8cc, which gave i386 a per-thread block (fs), so
+`threadvar` on i386 compiles now, as intended. Step 47 asserted the OLD
+refusal on i386. The compiler is right; the row was stale. It now asserts the
+refusal on riscv32, which still has no block (checked: rc=1 with "threadvar
+needs a per-thread block"). The job is GREEN at HEAD after the change. A
+census of the Makefile for the other rows asserting the refusal or the
+shared-copy warning found only riscv32 and target-neutral rows.
