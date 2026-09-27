@@ -6,8 +6,10 @@ official sources; nothing else distributes PXX.
 
 PXX is a provisional name for a from-scratch, self-hosting Pascal compiler. It
 emits ELF executables directly — no assembler or linker step — for Linux x86-64
-(native) plus i386, aarch64, and arm32, with bare-metal ESP32 (xtensa/riscv32)
-cross targets. The executable is still `compiler/pascal26`; naming things is the
+(native) plus i386, aarch64, arm32 and riscv32. **Its flagship is the ESP32:
+Pascal and Python programs compiled to native code for the ESP32-S3, ESP32-C3
+and classic ESP32, through ESP-IDF** (see
+[Highlights](#highlights)). The executable is still `compiler/pascal26`; naming things is the
 one compiler problem not solved by recursion.
 
 The compiler is written in plain Pascal and currently supports a tested Object
@@ -60,10 +62,18 @@ choose to ignore this, you do so entirely at your own risk.
   and supported C headers can be imported directly.
 - **Wrapper-free Nil Python C calls:** `.npy` can import `sqlite3` directly and
   run SQLite CRUD without a Pascal wrapper.
-- **Embedded direction:** ESP32 codegen (Xtensa and RISC-V) compiles a growing
-  subset and emits relocatable `.o` files that link with the ESP-IDF
-  toolchains; full ESP-IDF integration is in progress. The plan remains using
-  vendor C SDKs directly while keeping generated programs native.
+- **ESP32, in Pascal and in Python:** PXX compiles Pascal, and Nil Python
+  (Python written the MicroPython way, compiled ahead of time with no
+  interpreter on the chip), to native code for the ESP32. The output is an
+  ESP-IDF component, so it builds against Espressif's own SDK. On silicon, the
+  examples have run on an ESP32-S3, an ESP32-C3 and a classic ESP32. Nil Python
+  gets MicroPython's module names (`machine`, `time.sleep_ms`, `network`,
+  `urequests`, `umqtt`, `ssl`); the C3 has joined Wi-Fi and made HTTPS requests
+  with a checked certificate. Memory stays level over long network soaks, each
+  checked against a deliberate leak. `./espide.sh` is a small IDE that detects
+  the chip, builds, flashes and monitors. Start at
+  [ESP32](docs/targets/esp32.md) and [MicroPython code on
+  PXX](docs/library/micropython.md).
 
 ## Quick Start
 

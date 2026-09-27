@@ -26,6 +26,16 @@ documentation first.
 
 ## Highlights
 
+- **Flagship: the ESP32, in Pascal and in Python.** Pascal and Nil Python
+  (Python written the MicroPython way, compiled ahead of time, with no
+  interpreter on the chip) compile to native code for the ESP32-S3, ESP32-C3
+  and classic ESP32, as an ESP-IDF component. The examples have run on all three
+  chips on physical boards. Nil Python gets MicroPython's module names
+  (`machine`, `network`, `urequests`, `umqtt`, `ssl`); an ESP32-C3 has joined
+  Wi-Fi and made HTTPS requests with a checked certificate, and memory stays
+  level over long network soaks. `./espide.sh` detects the chip, builds, flashes
+  and monitors. See [ESP32](./targets/esp32.md) and
+  [MicroPython code on PXX](./library/micropython.md).
 - **Self-hosting.** The compiler is written in its own dialect and reproduces
   itself byte-for-byte.
 - **Multiple targets.** x86-64 (native) plus i386, aarch64, arm32, riscv32 and
