@@ -285,6 +285,11 @@ var
     namespace is the current scope there and beats the module. -1 outside a
     class's default-evaluation pass. }
   PyDefaultClsCi: Integer;
+  { The class whose BODY is evaluating a class attribute's initialiser, and the
+    token that initialiser's `=` sits at: the class namespace is the current
+    scope there too, but only for the names bound ABOVE that line. -1 outside
+    PyEmitClassAttrExpr. See PyClsBodyBoundBefore. }
+  PyClsBodyCi, PyClsBodyUpTo: Integer;
   { The class statement just parsed, and its body token span, so the statement
     loop can evaluate METHOD defaults AFTER PyParseClass returns. Python
     evaluates a method default when the CLASS BODY executes, so the class
@@ -8222,8 +8227,52 @@ begin
   if Result = tyString then Result := tyAnsiString;
 end;
 
+{ Is `nm` bound by a statement of the class body that holds the token upTo, on a
+  line ABOVE upTo? Walks BACK from upTo at the body's own depth -- a dedent
+  stepped over from below opens a deeper block, an indent closes one, and the
+  indent that takes the depth negative is the body's own opening -- and
+  answers yes at the first line that starts `nm =` or `nm:`.
+
+  Why "above" and not "anywhere in the class": the class body EXECUTES, top to
+  bottom, so a name bound further down is not in the namespace yet and CPython
+  reads the module's binding instead. Here the later attribute's slot exists
+  from the pre-pass but has not been stored, so resolving it would read an
+  empty slot where CPython reads the global -- a silent wrong value, where the
+  default-argument door's same widening only accepts a program CPython
+  refuses. }
+function PyClsBodyBoundBefore(const nm: AnsiString; upTo: Integer): Boolean;
+var i, rel: Integer;
+begin
+  Result := False;
+  rel := 0;
+  { from the START of upTo's own line: `X = X + 1` reads the X bound before
+    it, not the one it is binding }
+  i := upTo - 1;
+  while (i > 0) and not (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do
+    Dec(i);
+  while i > 0 do
+  begin
+    if Tokens[i].Kind = tkDedent then Inc(rel)
+    else if Tokens[i].Kind = tkIndent then
+    begin
+      Dec(rel);
+      if rel < 0 then Exit;
+    end
+    else if (rel = 0) and (Tokens[i].Kind = tkIdent) and
+            (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent]) and
+            (i + 1 < TokCount) and (Tokens[i + 1].Kind in [tkAssign, tkColon]) and
+            (GetTokenStr(i) = nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Dec(i);
+  end;
+end;
+
 procedure PyEmitClassAttrExpr(ci: Integer; eqAt: Integer);
 var nm, gname: AnsiString; gsym, valNode, asgn, fi: Integer;
+    savedBodyCi, savedBodyUpTo: Integer;
 begin
   nm := CurTok.SVal;
   { jump to the '=' rather than assuming it is the very next token — an
@@ -8231,7 +8280,15 @@ begin
   TokPos := eqAt;
   Next;                            { CurTok = '=' }
   Next;                            { onto the expression }
+  { the class body is the current scope for the initialiser: an attribute bound
+    above this line is readable bare (ina219.py's `{ADC_9BIT: "9-bit", ...}`) }
+  savedBodyCi := PyClsBodyCi;
+  savedBodyUpTo := PyClsBodyUpTo;
+  PyClsBodyCi := ci;
+  PyClsBodyUpTo := eqAt;
   PyParseBoolExpr;
+  PyClsBodyCi := savedBodyCi;
+  PyClsBodyUpTo := savedBodyUpTo;
   valNode := CurASTNode;
   gname := PyClsAttrGlobalName(ci, nm);
   { the member pre-pass already allocated this slot and registered it as a class
@@ -50803,6 +50860,7 @@ begin
   PyDefInitHead := -1;
   PyDefaultClsName := '';
   PyDefaultClsCi := -1;
+  PyClsBodyCi := -1;
   PyClsEvalCi := -1;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
@@ -51295,6 +51353,7 @@ begin
   PyDefaultEvalMode := False;
   PyDefaultClsName := '';
   PyDefaultClsCi := -1;
+  PyClsBodyCi := -1;
   PyClsEvalCi := -1;
   PySkipNewlines;
   { A leading module docstring may precede the imports. RECORDED, then consumed:
@@ -60688,6 +60747,20 @@ begin
       if (PyDefaultEvalMode and (PyDefaultClsCi >= 0) and (qUnit < 0)) then
       begin
         clsScopeSym := FindSym(PyClsAttrGlobalName(PyDefaultClsCi, name));
+        if clsScopeSym >= 0 then idx := clsScopeSym;
+      end;
+      { The THIRD door into the same scope: a class attribute's own
+        initialiser, which runs in the class body too -- ina219.py builds
+        `__ADC_CONVERSION = {ADC_9BIT: "9-bit", ...}` from the constants above
+        it and was refused `undefined variable (ADC_9BIT)`. Same storage, same
+        no-parent-walk; unlike the default door it answers only for names bound
+        ABOVE the line (PyClsBodyBoundBefore says why), so a later one falls
+        through to the module's binding exactly as in CPython. A METHOD body
+        never sets PyClsBodyCi, so a bare class name stays unbound there. }
+      if (PyClsBodyCi >= 0) and (qUnit < 0) and
+         PyClsBodyBoundBefore(name, PyClsBodyUpTo) then
+      begin
+        clsScopeSym := FindSym(PyClsAttrGlobalName(PyClsBodyCi, name));
         if clsScopeSym >= 0 then idx := clsScopeSym;
       end;
 

@@ -1,0 +1,37 @@
+# A class body is a scope: an initialiser reads the attributes bound above it
+# bare (ina219.py's __ADC_CONVERSION dict), and such a name beats a module
+# global of the same spelling -- but only from the line that binds it onward.
+def const(x):
+    return x
+
+WIDTH = 100
+LATER = "module LATER"
+N = 1
+
+
+class Dev:
+    ADC_9BIT = const(0)
+    ADC_10BIT = const(1)
+    ADC_12BIT = 3
+    __CONV = {ADC_9BIT: "9-bit", ADC_10BIT: "10-bit", ADC_12BIT: "12-bit"}
+    ORDER = [ADC_12BIT, ADC_9BIT, ADC_10BIT]
+    MASK = (1 << ADC_12BIT) - 1
+    WIDTH = 7                     # shadows the module's WIDTH from here on
+    DOUBLE = WIDTH * 2            # the class's 7, not the module's 100
+    EARLY = LATER                 # LATER is not bound in the body yet: the module's
+    LATER = "class LATER"
+    N = N + 10                    # the right side reads the module N, then binds
+
+    def conv(self, adc):
+        return self.__CONV[adc]
+
+    def width(self):
+        return WIDTH              # a METHOD body skips the class scope: module
+
+
+d = Dev()
+print(d.conv(0), d.conv(1), d.conv(3))
+print(Dev.ORDER, Dev.MASK)
+print(Dev.WIDTH, Dev.DOUBLE, d.width())
+print(Dev.EARLY, Dev.LATER, Dev.N)
+print("CLASS BODY SCOPE OK")

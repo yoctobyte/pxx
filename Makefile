@@ -1146,6 +1146,11 @@ test-nilpy: $(COMPILER)
 	# declarations case-insensitively, the dotted-call table, sys's members.
 	./$(COMPILER) test/test_nilpy_hasattr_on_a_module_asks_every_route_the_attribute_does.npy $(TESTTMP)/test_nilpy_hasattrmod26
 	$(TESTTMP)/test_nilpy_hasattrmod26 | diff -u test/test_nilpy_hasattr_on_a_module_asks_every_route_the_attribute_does.expected -
+	# A class body is a scope: an initialiser reads the attributes bound ABOVE
+	# it bare (ina219.py's __ADC_CONVERSION), shadowing a module global; a name
+	# bound later, and a method body, read the module's. CPython's .expected.
+	./$(COMPILER) test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.npy $(TESTTMP)/test_nilpy_clsbody26
+	$(TESTTMP)/test_nilpy_clsbody26 | diff -u test/test_nilpy_a_class_body_reads_the_attributes_bound_above_it.expected -
 	./$(COMPILER) test/test_nilpy_a_trailing_comma_after_a_keyword_argument.npy $(TESTTMP)/test_nilpy_trailkw26
 	$(TESTTMP)/test_nilpy_trailkw26 | diff -u test/test_nilpy_a_trailing_comma_after_a_keyword_argument.expected -
 	# micropython-lib logging.py's walls (ina219), CPython's .expected. TZ is a
