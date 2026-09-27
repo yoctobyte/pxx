@@ -946,6 +946,7 @@ AN_FPUMASK Left CurASTNode
 AN_GOTO_INDIRECT Left ParseCUnary()
 AN_HALT Left AllocNode(AN_INT_LIT)
 AN_HALT Left BMkInt(1)
+AN_IF Left CCondOf(cond)
 AN_IF Left CMakeIsZero(cond)
 AN_IF Left PyMakeIdent(elseFlag)
 AN_IF Left PyMakeTruthy(CurASTNode)
@@ -1215,6 +1216,7 @@ AN_STR_FROM_CHAR Left node
 AN_STR_FROM_CHAR Right icRd
 AN_SWITCH Left CPromoteChar(selNode)
 AN_SWITCH Right bodyNode
+AN_TERNARY Left CCondOf(left)
 AN_TERNARY Left bfIsCall
 AN_TERNARY Left clsCondCall
 AN_TERNARY Left cnd
@@ -1265,11 +1267,11 @@ AN_VIRTUAL_CALL Right UMthVirSlot[dfMmi]
 AN_VIRTUAL_CALL Right UMthVirSlot[hitMmi]
 AN_VIRTUAL_CALL Right UMthVirSlot[mmi]
 AN_VIRTUAL_CALL Right UMthVirSlot[smmii]
+AN_WHILE Left CCondOf(cond)
 AN_WHILE Left RParseExpr
 AN_WHILE Left callNext
 AN_WHILE Left cmpNode
 AN_WHILE Left cnd
-AN_WHILE Left cond
 AN_WHILE Left condN
 AN_WHILE Left condNode
 AN_WHILE Left mnCall

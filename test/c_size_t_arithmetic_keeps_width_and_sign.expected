@@ -1,0 +1,16 @@
+-1 < sizeof(int) = 0
+sizeof(int) - sizeof(double) == SIZE_MAX - 3 = 1
+sizeof a4 - sizeof b8 > 0 = 1
+sizeof(char) - 2 == SIZE_MAX = 1
+i / sizeof(int) == (SIZE_MAX >> 2) - 1 = 1
+j % sizeof(int) == 1 = 1
+-sizeof(int) > 0 = 1
+-sizeof(int) == SIZE_MAX - 3 = 1
+((sizeof(int) - 5) >> (sizeof(size_t) * 8 - 1)) == 1 = 1
+u - sizeof(int) > 0 = 1
+sizeof(int) * -one == (size_t)-4 = 1
+(sizeof(int) - 8) / 2 == SIZE_MAX / 2 - 1 = 1
+sizeof(int) - sizeof(double) + 8 == 4 = 1
+sizeof(sizeof(int)) == sizeof(size_t) = 1
+sizeof(sizeof(int)) == sizeof(void *) = 1
+(-1LL < sizeof(int)) == (sizeof(size_t) < sizeof(long long)) = 1

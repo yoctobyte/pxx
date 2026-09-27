@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 /* C99 fenv — rounding-mode control only (no exception flags/traps).
    glibc x86 FE_* encoding; the compiler emits __pxx_fesetround/__pxx_fegetround
-   as machine stubs (x86-64 flips MXCSR RC bits — pxx doubles are all-SSE;
-   other targets accept-and-ignore, returning FE_TONEAREST). */
+   as machine stubs: x86-64 MXCSR, i386 MXCSR + x87, aarch64 FPCR, arm32
+   FPSCR. riscv32 is softfloat and refuses (nonzero) any mode but nearest;
+   xtensa still accepts-and-ignores. */
 #ifndef _PXX_FENV_H
 #define _PXX_FENV_H
 

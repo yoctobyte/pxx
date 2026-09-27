@@ -1,0 +1,26 @@
+nz ? 1 : 2 = 2
+pz ? 1 : 2 = 2
+half ? 1 : 2 = 1
+tiny ? 1 : 2 = 1
+nan ? 1 : 2 = 1
+nzf ? 1 : 2 = 2
+halff ? 1 : 2 = 1
+!nz = 1
+nz && 1 = 0
+nz || 0 = 0
+half && 1 = 1
+k = 0
+k = 1
+k = 0
+k = 0
+k = 1
+(t = pz) ? 1 : 2 = 2
+(u = halff) ? 1 : 2 = 1
+cnt_while(nz) = 0
+cnt_while(half) = 3
+cnt_for(nz) = 0
+cnt_for(half) = 3
+cnt_do(nz) = 1
+cnt_do(half) = 3
+cnt_forf(nzf) = 0
+cnt_forf(halff) = 3

@@ -3563,6 +3563,12 @@ begin
     too, or the macro becomes a name that is not the thing. }
   if TargetHasTlsBlock and not (EmitObjMode or EmitSharedMode) then
     CPAddLiteral('__pxx_thread_local__', '01');
+  { gcc's own spelling of "plain char is unsigned here" (aarch64, arm32, riscv,
+    or -funsigned-char), which limits.h reads for CHAR_MIN/CHAR_MAX. Without it
+    aarch64 said CHAR_MIN = -128 while its chars compared unsigned.
+    CPlainCharSigned is the single source. bug-c-char-min-and-char-max-ignore-the-targets-char-signedness }
+  if not CPlainCharSigned then
+    CPAddLiteral('__CHAR_UNSIGNED__', '01');
   { Data-model predefines (C 5.2.4.2): real code branches on these to size long
     (c-testsuite 00212). 64-bit targets are LP64 (long/pointer = 8), 32-bit are
     ILP32 (long/pointer = 4) — matches the native-`long` model (see the C

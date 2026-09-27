@@ -204,6 +204,22 @@ v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
   keyword spelling) was one struct, not three (`sizeof(PA)` 8, GCC 24). Wrong
   in v441 to v445.
 
+- **C on i386, aarch64, arm32 and riscv32: values that were right only on
+  x86-64.** Each was wrong in v441 to v445 and now matches GCC on all five
+  targets:
+  - `sizeof` arithmetic had the wrong type for the target. On 32-bit targets
+    `-1 < sizeof(int)` was 1 and `i / sizeof(int)` divided signed. On 64-bit
+    targets `sizeof a - sizeof b` wrapped at 2^32.
+  - A `double` or `float` used as a condition (`if`, `while`, `for`, `?:`)
+    tested its bits: `-0.0` was true, and on i386 and arm32 `0.5` was false.
+  - On arm32 and riscv32, `va_arg` in a function with many named parameters
+    read the named ones again.
+  - `CHAR_MIN` and `CHAR_MAX` were -128 and 127 where `char` is unsigned
+    (aarch64, arm32, riscv32). `-1 < UCHAR_MAX` was 0.
+  - `fesetround` reported success and changed nothing. Now it takes effect on
+    i386, aarch64 and arm32. On riscv32, whose doubles are software floating
+    point, it refuses any mode but round-to-nearest.
+
 - **i386: `__thread` was one copy shared by every thread, and `threadvar` was
   refused.** A C `__thread` variable, and `errno` through it, read and wrote
   another thread's value (with a compile-time warning); Pascal `threadvar` did

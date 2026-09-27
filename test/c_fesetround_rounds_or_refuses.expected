@@ -1,0 +1,6 @@
+mode 0: rounds-or-refuses
+mode 1: rounds-or-refuses
+mode 2: rounds-or-refuses
+mode 3: rounds-or-refuses
+get-agrees-with-set: 1
+restored: 1

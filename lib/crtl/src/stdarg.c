@@ -235,10 +235,15 @@ void *__pxx_va_arg_a64_fp(struct __pxx_va_elem *ap) {
 void __pxx_va_start_impl32(struct __pxx_va_elem *ap, void *save,
                                   unsigned int gpbytes, void *overflow,
                                   unsigned int regsize) {
-  ap->gp_offset = gpbytes;    /* reg-area bytes already consumed by named params */
-  ap->fp_offset = regsize;    /* total reg-area byte size (0/16/32) */
+  ap->gp_offset = gpbytes;    /* byte index of the first variadic word */
+  ap->fp_offset = regsize;    /* total reg-area byte size (0/16/24/32) */
   ap->reg_save_area = save;
   ap->overflow_arg_area = overflow;
+  /* overflow is the FIRST caller stack word. Named params that spilled past
+     the register area occupy the start of it, and the variadic tail follows
+     them. bug-c-a-variadic-tail-after-stack-passed-named-params-reads-the-named-words */
+  if (gpbytes > regsize)
+    ap->overflow_arg_area = (char *)overflow + (gpbytes - regsize);
 }
 void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size,
                            unsigned int align) {

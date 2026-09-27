@@ -503,6 +503,22 @@ begin
   Result := node;
 end;
 
+{ A C CONDITION (`if`, `while`, `for`, `?:`) of FLOATING type, as `e != 0`.
+  The statement nodes hand their condition to IR_JUMP_IF_FALSE raw, and every
+  backend's branch tests the value's integer BITS: -0.0 has its sign bit set
+  and read as TRUE on all five targets (C: false), and on i386 and arm32,
+  where a double is not in the integer register at all, even 0.5 read as
+  FALSE and `if ((t = f))` with f = 0.0 took the then-arm. `&&`, `||` and `!`
+  were right because they already go through CMakeTruthy / a compare.
+  Integers and pointers are left alone: their bits ARE their truth.
+  bug-c-a-floating-condition-branches-on-its-bits }
+function CCondOf(e: Integer): Integer;
+begin
+  Result := e;
+  if (e >= 0) and TypeIsFloat(IntToTypeKind(ASTTk[e])) then
+    Result := CMakeTruthy(e);
+end;
+
 { Is plain `char` signed on the selected target? Each psABI decides: signed on
   x86-64 and i386, unsigned on aarch64, arm32 and riscv — and gcc follows.
   `-fsigned-char` / `-funsigned-char` override it, as real projects expect.
@@ -2256,10 +2272,26 @@ begin
                   (Procs[CurProc].Params[vaK].TypeKind = tyUInt64) or
                   (Procs[CurProc].Params[vaK].TypeKind = tyDouble)) and
                  (not Syms[vaPIdx].IsRef) and (not Syms[vaPIdx].IsArray) then
-                Inc(vaGpBytes, 8)
+              begin
+                { AAPCS32 puts an 8-byte argument at an even word index, named
+                  or variadic, and the caller pads to it (see stdarg.c) }
+                if (TargetArch = TARGET_ARM32) and ((vaGpBytes and 7) <> 0) then
+                  Inc(vaGpBytes, 4);
+                Inc(vaGpBytes, 8);
+              end
               else Inc(vaGpBytes, 4);
             end;
-          if vaGpBytes > vaRegSz then vaGpBytes := vaRegSz;
+          { NOT capped at the register area where there is one. Named params
+            past it are on the caller's stack, and the prologue anchors
+            __va_overflow at the FIRST stack word, so the variadic tail begins
+            (gpbytes - regsize) bytes further in; __pxx_va_start_impl32 skips
+            them. Capped, the walk started ON the named stack words: arm32
+            `f(8 ints, n, ...)` summed 18 for 10+20+30, and riscv32 with named
+            doubles past a7 read its tail the same way.
+            bug-c-a-variadic-tail-after-stack-passed-named-params-reads-the-named-words
+            A target with NO register area (i386, wasm32) anchors past the named
+            params itself, so its seed stays 0. }
+          if vaRegSz = 0 then vaGpBytes := 0;
           ASTIVal[a3] := vaGpBytes;
         end
         else if TargetArch <> TARGET_X86_64 then
@@ -4241,8 +4273,27 @@ begin
     difference arm carries the note that ptrdiff_t must be pointer-width and
     NOT tyInt64 for exactly this variadic reason; `ptr - ptr` and `sizeof` are
     the two places C hands you a pointer-width integer, and they are only
-    correct together. }
-  ASTTk[node] := Ord(tyNativeUInt);
+    correct together.
+
+    AND POINTER-WIDTH MUST BE A KIND THE C RULES KNOW. tyNativeUInt had the
+    width right and the SIGNEDNESS lost again one step later: the
+    usual-arithmetic-conversion rule (CBinResultTk's integer arm) folds it
+    to tyUInt32 on EVERY target, and CCmpUnsigned32 does not list it at all.
+    Measured against gcc, 2026-09-27:
+
+        -1 < sizeof(int)             i386/arm32/riscv32  pxx 1, gcc 0
+        i / sizeof(int), i = -8      i386/arm32/riscv32  signed div (-2)
+        sizeof(a) - sizeof(b)        x86-64 and aarch64  4294967292, gcc 2^64-4
+        i / sizeof(int), i = -8      x86-64 and aarch64  32-bit unsigned div
+
+    So size_t is the concrete kind: tyUInt32 where a pointer is 4 bytes (it is
+    `unsigned int`, and every rule models that) and tyUInt64 where it is 8. The
+    width is still pointer-width, which is what the variadic push above needs.
+    bug-c-size-t-arithmetic-loses-its-width-or-its-signedness }
+  if TARGET_PTR_SIZE = 4 then
+    ASTTk[node] := Ord(tyUInt32)
+  else
+    ASTTk[node] := Ord(tyUInt64);
   Result := node;
 end;
 
@@ -5863,7 +5914,7 @@ begin
     ASTLeft[pair] := thenE;
     ASTRight[pair] := elseE;
     node := AllocNode(AN_TERNARY);
-    ASTLeft[node] := left;        { condition }
+    ASTLeft[node] := CCondOf(left);   { condition }
     ASTRight[node] := pair;
     ASTTk[node] := CTernaryResultTk(thenE, elseE);
     if CProgramMode and (CNodeDecaysToPointer(thenE) or CNodeDecaysToPointer(elseE)) then
@@ -8270,7 +8321,7 @@ begin
   elseS := -1;
   if CurTok.Kind = tkElse then begin Next; elseS := ParseCStatementAST; end;
   node := AllocNode(AN_IF);
-  ASTLeft[node] := cond;
+  ASTLeft[node] := CCondOf(cond);
   pair := AllocNode(AN_PAIR);
   ASTLeft[pair] := thenS;
   ASTRight[pair] := elseS;
@@ -8287,7 +8338,7 @@ begin
   Expect(tkRParen, ')');
   body := ParseCStatementAST;
   node := AllocNode(AN_WHILE);
-  ASTLeft[node] := cond;
+  ASTLeft[node] := CCondOf(cond);
   ASTRight[node] := body;
   Result := node;
 end;
@@ -8379,7 +8430,7 @@ begin
   begin
     { simple: while (cond) body }
     loop := AllocNode(AN_WHILE);
-    ASTLeft[loop] := cond;
+    ASTLeft[loop] := CCondOf(cond);
     ASTRight[loop] := body;
     CSeqAppend(loop, oHead, oTail);
   end
@@ -12809,8 +12860,13 @@ end;
   DOWNWARD=0x400, UPWARD=0x800, TOWARDZERO=0xC00 — crtl fenv.h). x86-64 flips
   the MXCSR RC bits [14:13] (= FE value << 3): pxx does ALL double arithmetic
   in SSE, so MXCSR is the only rounding state that matters (no x87 use).
-  quickjs's js_dtoa ties handling rides fesetround. Other targets: accepted
-  no-op returning 0 — hosted-x86-64 bring-up scope, same stance as alloca. }
+  quickjs's js_dtoa ties handling rides fesetround. i386 sets MXCSR and the
+  x87 word; aarch64 FPCR and arm32 FPSCR (RMode [23:22]). riscv32 and xtensa
+  do doubles in softfloat, which honours no mode: riscv32 refuses any mode but
+  nearest; xtensa is still the accept-and-ignore `return 0` (no oracle here).
+  Before, every non-x86-64 target answered 0 to fesetround(FE_TOWARDZERO) and
+  kept rounding to nearest -- a success report for a change never made.
+  bug-c-fesetround-reports-success-on-a-target-that-ignores-it }
 procedure EmitCReturnZeroStub;
 { Per-target `return 0` machine stub body (the non-x86-64 fenv fallback). }
 begin
@@ -12880,6 +12936,67 @@ begin
     EmitB($31); EmitB($C0);                                      { xor eax, eax }
     EmitB($C3);                                                  { ret }
   end
+  else if TargetArch = TARGET_I386 then
+  begin
+    { i386 does its double arithmetic in SSE but keeps x87 for the int64
+      conversions and Round, so BOTH control words take the mode, as glibc
+      does: x87 RC is bits [11:10] (the FE value itself), MXCSR RC [14:13]. }
+    EmitB($8B); EmitB($4C); EmitB($24); EmitB($04);              { mov ecx, [esp+4] }
+    EmitB($81); EmitB($E1); EmitB($00); EmitB($0C); EmitB($00); EmitB($00); { and ecx, 0xC00 }
+    EmitB($50);                                                  { push eax (a slot) }
+    EmitB($D9); EmitB($3C); EmitB($24);                          { fnstcw [esp] }
+    EmitB($8B); EmitB($04); EmitB($24);                          { mov eax, [esp] }
+    EmitB($25); EmitB($FF); EmitB($F3); EmitB($FF); EmitB($FF);  { and eax, ~0xC00 }
+    EmitB($09); EmitB($C8);                                      { or eax, ecx }
+    EmitB($89); EmitB($04); EmitB($24);                          { mov [esp], eax }
+    EmitB($D9); EmitB($2C); EmitB($24);                          { fldcw [esp] }
+    EmitB($0F); EmitB($AE); EmitB($1C); EmitB($24);              { stmxcsr [esp] }
+    EmitB($8B); EmitB($04); EmitB($24);                          { mov eax, [esp] }
+    EmitB($25); EmitB($FF); EmitB($9F); EmitB($FF); EmitB($FF);  { and eax, ~0x6000 }
+    EmitB($C1); EmitB($E1); EmitB($03);                          { shl ecx, 3 }
+    EmitB($09); EmitB($C8);                                      { or eax, ecx }
+    EmitB($89); EmitB($04); EmitB($24);                          { mov [esp], eax }
+    EmitB($0F); EmitB($AE); EmitB($14); EmitB($24);              { ldmxcsr [esp] }
+    EmitB($58);                                                  { pop eax }
+    EmitB($31); EmitB($C0);                                      { xor eax, eax }
+    EmitB($C3);                                                  { ret }
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    { FPCR RMode [23:22]: 0 nearest, 1 up, 2 down, 3 zero. FE>>10 is 0 nearest,
+      1 down, 2 up, 3 zero -- the same two bits SWAPPED, both ways. }
+    EmitI32($530A2C01);       { ubfx w1, w0, #10, #2 }
+    EmitI32($53010422);       { ubfx w2, w1, #1, #1 }
+    EmitI32($331F0022);       { bfi  w2, w1, #1, #1 }
+    EmitI32($D53B4403);       { mrs  x3, fpcr }
+    EmitI32($B36A0443);       { bfi  x3, x2, #22, #2 }
+    EmitI32($D51B4403);       { msr  fpcr, x3 }
+    EmitI32($52800000);       { mov  w0, #0 }
+    EmitI32($D65F03C0);       { ret }
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    { VFP FPSCR RMode [23:22], the aarch64 encoding. }
+    EmitI32($E7E11550);       { ubfx r1, r0, #10, #2 }
+    EmitI32($E7E020D1);       { ubfx r2, r1, #1, #1 }
+    EmitI32($E7C12091);       { bfi  r2, r1, #1, #1 }
+    EmitI32($EEF13A10);       { vmrs r3, fpscr }
+    EmitI32($E7D73B12);       { bfi  r3, r2, #22, #2 }
+    EmitI32($EEE13A10);       { vmsr fpscr, r3 }
+    EmitI32($E3A00000);       { mov  r0, #0 }
+    EmitI32($E12FFF1E);       { bx   lr }
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { Softfloat: nothing honours a mode, so only nearest is accepted and any
+      other is REFUSED (nonzero), as C99 lets fesetround do and as wasm32's
+      fenv.c does. Answering 0 told the caller the mode had changed.
+      bug-c-fesetround-reports-success-on-a-target-that-ignores-it }
+    EmitI32($00A55513);       { srli a0, a0, 10 }
+    EmitI32($00357513);       { andi a0, a0, 3 }
+    EmitI32($00A03533);       { snez a0, a0 }
+    EmitI32($00008067);       { ret }
+  end
   else
     EmitCReturnZeroStub;
   fgIdx := RegisterProc('__pxx_fegetround', True, tyInteger, 0, pn, pt);
@@ -12891,6 +13008,33 @@ begin
     EmitB($25); EmitB($00); EmitB($60); EmitB($00); EmitB($00);  { and eax, 0x6000 }
     EmitB($C1); EmitB($E8); EmitB($03);                          { shr eax, 3 }
     EmitB($C3);                                                  { ret }
+  end
+  else if TargetArch = TARGET_I386 then
+  begin
+    EmitB($50);                                                  { push eax (a slot) }
+    EmitB($0F); EmitB($AE); EmitB($1C); EmitB($24);              { stmxcsr [esp] }
+    EmitB($58);                                                  { pop eax }
+    EmitB($25); EmitB($00); EmitB($60); EmitB($00); EmitB($00);  { and eax, 0x6000 }
+    EmitB($C1); EmitB($E8); EmitB($03);                          { shr eax, 3 }
+    EmitB($C3);                                                  { ret }
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    EmitI32($D53B4401);       { mrs  x1, fpcr }
+    EmitI32($53165C21);       { ubfx w1, w1, #22, #2 }
+    EmitI32($53010420);       { ubfx w0, w1, #1, #1 }
+    EmitI32($331F0020);       { bfi  w0, w1, #1, #1 }
+    EmitI32($53165400);       { lsl  w0, w0, #10 }
+    EmitI32($D65F03C0);       { ret }
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    EmitI32($EEF11A10);       { vmrs r1, fpscr }
+    EmitI32($E7E11B51);       { ubfx r1, r1, #22, #2 }
+    EmitI32($E7E000D1);       { ubfx r0, r1, #1, #1 }
+    EmitI32($E7C10091);       { bfi  r0, r1, #1, #1 }
+    EmitI32($E1A00500);       { lsl  r0, r0, #10 }
+    EmitI32($E12FFF1E);       { bx   lr }
   end
   else
     EmitCReturnZeroStub;

@@ -18048,6 +18048,86 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_function_returning_pointer_to_array.c $(TESTTMP)/c_fretpa26
 	gcc -std=gnu99 -o $(TESTTMP)/c_fretpa_gcc test/c_function_returning_pointer_to_array.c
 	tools/expect_same.sh c_fretpa26 "$$($(TESTTMP)/c_fretpa26)" "$$($(TESTTMP)/c_fretpa_gcc)"
+	# SIZE_T ARITHMETIC KEEPS ITS WIDTH AND SIGN: sizeof produced the native
+	# unsigned kind, so on ILP32 `-1 < sizeof(int)` was 1 and `i / sizeof(int)`
+	# divided signed, and on LP64 `sizeof a - sizeof b` wrapped at 2^32. Rows are
+	# C truths written in SIZE_MAX, so one .expected serves all five targets
+	# (it is gcc's output); native also diffs gcc live. v445: 4-6 rows wrong.
+	# bug-c-size-t-arithmetic-loses-its-width-or-its-signedness
+	./$(COMPILER) -Ilib/crtl/include test/c_size_t_arithmetic_keeps_width_and_sign.c $(TESTTMP)/c_sizet26
+	gcc -w -std=gnu99 -o $(TESTTMP)/c_sizet_gcc test/c_size_t_arithmetic_keeps_width_and_sign.c -lm
+	tools/expect_same.sh c_sizet26 "$$($(TESTTMP)/c_sizet26)" "$$($(TESTTMP)/c_sizet_gcc)"
+	./$(COMPILER) --target=i386 -Ilib/crtl/include test/c_size_t_arithmetic_keeps_width_and_sign.c $(TESTTMP)/c_sizet26_i386
+	tools/expect_same.sh i386/c_sizet26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_sizet26_i386)" "$$(cat test/c_size_t_arithmetic_keeps_width_and_sign.expected)"
+	./$(COMPILER) --target=aarch64 -Ilib/crtl/include test/c_size_t_arithmetic_keeps_width_and_sign.c $(TESTTMP)/c_sizet26_aarch64
+	tools/expect_same.sh aarch64/c_sizet26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_sizet26_aarch64)" "$$(cat test/c_size_t_arithmetic_keeps_width_and_sign.expected)"
+	./$(COMPILER) --target=arm32 -Ilib/crtl/include test/c_size_t_arithmetic_keeps_width_and_sign.c $(TESTTMP)/c_sizet26_arm32
+	tools/expect_same.sh arm32/c_sizet26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_sizet26_arm32)" "$$(cat test/c_size_t_arithmetic_keeps_width_and_sign.expected)"
+	./$(COMPILER) --target=riscv32 -Ilib/crtl/include test/c_size_t_arithmetic_keeps_width_and_sign.c $(TESTTMP)/c_sizet26_riscv32
+	tools/expect_same.sh riscv32/c_sizet26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_sizet26_riscv32)" "$$(cat test/c_size_t_arithmetic_keeps_width_and_sign.expected)"
+	# A FLOATING CONDITION TESTS ITS VALUE: if/while/for/do/?: over a double or
+	# float branched on its bits, so -0.0 was true everywhere, and on i386 and
+	# arm32 0.5 read false. v445: 8-9 rows wrong on each target.
+	# bug-c-a-floating-condition-branches-on-its-bits
+	./$(COMPILER) -Ilib/crtl/include test/c_a_floating_condition_tests_its_value.c $(TESTTMP)/c_fcond26
+	gcc -w -std=gnu99 -o $(TESTTMP)/c_fcond_gcc test/c_a_floating_condition_tests_its_value.c -lm
+	tools/expect_same.sh c_fcond26 "$$($(TESTTMP)/c_fcond26)" "$$($(TESTTMP)/c_fcond_gcc)"
+	./$(COMPILER) --target=i386 -Ilib/crtl/include test/c_a_floating_condition_tests_its_value.c $(TESTTMP)/c_fcond26_i386
+	tools/expect_same.sh i386/c_fcond26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_fcond26_i386)" "$$(cat test/c_a_floating_condition_tests_its_value.expected)"
+	./$(COMPILER) --target=aarch64 -Ilib/crtl/include test/c_a_floating_condition_tests_its_value.c $(TESTTMP)/c_fcond26_aarch64
+	tools/expect_same.sh aarch64/c_fcond26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_fcond26_aarch64)" "$$(cat test/c_a_floating_condition_tests_its_value.expected)"
+	./$(COMPILER) --target=arm32 -Ilib/crtl/include test/c_a_floating_condition_tests_its_value.c $(TESTTMP)/c_fcond26_arm32
+	tools/expect_same.sh arm32/c_fcond26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_fcond26_arm32)" "$$(cat test/c_a_floating_condition_tests_its_value.expected)"
+	./$(COMPILER) --target=riscv32 -Ilib/crtl/include test/c_a_floating_condition_tests_its_value.c $(TESTTMP)/c_fcond26_riscv32
+	tools/expect_same.sh riscv32/c_fcond26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_fcond26_riscv32)" "$$(cat test/c_a_floating_condition_tests_its_value.expected)"
+	# A VARIADIC TAIL AFTER STACK-PASSED NAMED PARAMS: the 32-bit va_start seed
+	# capped the named bytes at the register area, so va_arg re-read the named
+	# words (arm32, riscv32); arm32 also skipped AAPCS's 8-byte pad. v445: arm32
+	# 5 rows wrong, riscv32 1.
+	# bug-c-a-variadic-tail-after-stack-passed-named-params-reads-the-named-words
+	./$(COMPILER) -Ilib/crtl/include test/c_a_variadic_tail_after_stack_passed_named_params.c $(TESTTMP)/c_vatail26
+	gcc -w -std=gnu99 -o $(TESTTMP)/c_vatail_gcc test/c_a_variadic_tail_after_stack_passed_named_params.c -lm
+	tools/expect_same.sh c_vatail26 "$$($(TESTTMP)/c_vatail26)" "$$($(TESTTMP)/c_vatail_gcc)"
+	./$(COMPILER) --target=i386 -Ilib/crtl/include test/c_a_variadic_tail_after_stack_passed_named_params.c $(TESTTMP)/c_vatail26_i386
+	tools/expect_same.sh i386/c_vatail26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_vatail26_i386)" "$$(cat test/c_a_variadic_tail_after_stack_passed_named_params.expected)"
+	./$(COMPILER) --target=aarch64 -Ilib/crtl/include test/c_a_variadic_tail_after_stack_passed_named_params.c $(TESTTMP)/c_vatail26_aarch64
+	tools/expect_same.sh aarch64/c_vatail26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_vatail26_aarch64)" "$$(cat test/c_a_variadic_tail_after_stack_passed_named_params.expected)"
+	./$(COMPILER) --target=arm32 -Ilib/crtl/include test/c_a_variadic_tail_after_stack_passed_named_params.c $(TESTTMP)/c_vatail26_arm32
+	tools/expect_same.sh arm32/c_vatail26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_vatail26_arm32)" "$$(cat test/c_a_variadic_tail_after_stack_passed_named_params.expected)"
+	./$(COMPILER) --target=riscv32 -Ilib/crtl/include test/c_a_variadic_tail_after_stack_passed_named_params.c $(TESTTMP)/c_vatail26_riscv32
+	tools/expect_same.sh riscv32/c_vatail26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_vatail26_riscv32)" "$$(cat test/c_a_variadic_tail_after_stack_passed_named_params.expected)"
+	# <limits.h> FOLLOWS THE TARGET'S char: CHAR_MIN/MAX were -128/127 where char
+	# is unsigned (aarch64, arm32, riscv32); __CHAR_UNSIGNED__ is now predefined
+	# there. Also UCHAR_MAX/USHRT_MAX/UINT8_MAX/UINT16_MAX lose a U suffix C
+	# does not give them (`-1 < UCHAR_MAX` was 0).
+	# bug-c-char-min-and-char-max-ignore-the-targets-char-signedness
+	./$(COMPILER) -Ilib/crtl/include test/c_limits_follow_the_targets_char.c $(TESTTMP)/c_limchar26
+	gcc -w -std=gnu99 -o $(TESTTMP)/c_limchar_gcc test/c_limits_follow_the_targets_char.c -lm
+	tools/expect_same.sh c_limchar26 "$$($(TESTTMP)/c_limchar26)" "$$($(TESTTMP)/c_limchar_gcc)"
+	./$(COMPILER) --target=i386 -Ilib/crtl/include test/c_limits_follow_the_targets_char.c $(TESTTMP)/c_limchar26_i386
+	tools/expect_same.sh i386/c_limchar26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_limchar26_i386)" "$$(cat test/c_limits_follow_the_targets_char.expected)"
+	./$(COMPILER) --target=aarch64 -Ilib/crtl/include test/c_limits_follow_the_targets_char.c $(TESTTMP)/c_limchar26_aarch64
+	tools/expect_same.sh aarch64/c_limchar26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_limchar26_aarch64)" "$$(cat test/c_limits_follow_the_targets_char.expected)"
+	./$(COMPILER) --target=arm32 -Ilib/crtl/include test/c_limits_follow_the_targets_char.c $(TESTTMP)/c_limchar26_arm32
+	tools/expect_same.sh arm32/c_limchar26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_limchar26_arm32)" "$$(cat test/c_limits_follow_the_targets_char.expected)"
+	./$(COMPILER) --target=riscv32 -Ilib/crtl/include test/c_limits_follow_the_targets_char.c $(TESTTMP)/c_limchar26_riscv32
+	tools/expect_same.sh riscv32/c_limchar26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_limchar26_riscv32)" "$$(cat test/c_limits_follow_the_targets_char.expected)"
+	# fesetround ROUNDS OR REFUSES: every non-x86-64 target returned 0 and kept
+	# rounding to nearest. i386 MXCSR+x87, aarch64 FPCR, arm32 FPSCR now take
+	# the mode; riscv32 (softfloat) refuses any mode but nearest. Each row is
+	# "in effect, or refused and nearest kept". v445: 3 rows wrong per target.
+	# bug-c-fesetround-reports-success-on-a-target-that-ignores-it
+	./$(COMPILER) -Ilib/crtl/include test/c_fesetround_rounds_or_refuses.c $(TESTTMP)/c_fesetrnd26
+	gcc -w -std=gnu99 -o $(TESTTMP)/c_fesetrnd_gcc test/c_fesetround_rounds_or_refuses.c -lm
+	tools/expect_same.sh c_fesetrnd26 "$$($(TESTTMP)/c_fesetrnd26)" "$$($(TESTTMP)/c_fesetrnd_gcc)"
+	./$(COMPILER) --target=i386 -Ilib/crtl/include test/c_fesetround_rounds_or_refuses.c $(TESTTMP)/c_fesetrnd26_i386
+	tools/expect_same.sh i386/c_fesetrnd26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_fesetrnd26_i386)" "$$(cat test/c_fesetround_rounds_or_refuses.expected)"
+	./$(COMPILER) --target=aarch64 -Ilib/crtl/include test/c_fesetround_rounds_or_refuses.c $(TESTTMP)/c_fesetrnd26_aarch64
+	tools/expect_same.sh aarch64/c_fesetrnd26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/c_fesetrnd26_aarch64)" "$$(cat test/c_fesetround_rounds_or_refuses.expected)"
+	./$(COMPILER) --target=arm32 -Ilib/crtl/include test/c_fesetround_rounds_or_refuses.c $(TESTTMP)/c_fesetrnd26_arm32
+	tools/expect_same.sh arm32/c_fesetrnd26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_fesetrnd26_arm32)" "$$(cat test/c_fesetround_rounds_or_refuses.expected)"
+	./$(COMPILER) --target=riscv32 -Ilib/crtl/include test/c_fesetround_rounds_or_refuses.c $(TESTTMP)/c_fesetrnd26_riscv32
+	tools/expect_same.sh riscv32/c_fesetrnd26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_fesetrnd26_riscv32)" "$$(cat test/c_fesetround_rounds_or_refuses.expected)"
 	# THE PTY FAMILY, WHICH crtl DID NOT HAVE AT ALL. posix_openpt, grantpt,
 	# unlockpt, ptsname and ptsname_r were absent from include/ and src/ alike,
 	# and busybox calls ptsname_r WITHOUT a guard -- platform.h defines

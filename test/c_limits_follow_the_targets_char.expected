@@ -1,0 +1,17 @@
+pp_signed == csigned = 1
+(CHAR_MIN < 0) == csigned = 1
+CHAR_MIN == (csigned ? SCHAR_MIN : 0) = 1
+CHAR_MAX == (csigned ? SCHAR_MAX : UCHAR_MAX) = 1
+(char)CHAR_MAX == CHAR_MAX = 1
+(char)(CHAR_MAX + 1) == CHAR_MIN = 1
+UCHAR_MAX == 255 = 1
+USHRT_MAX == 65535 = 1
+-1 < UCHAR_MAX = 1
+-1 < USHRT_MAX = 1
+-1 < UINT8_MAX = 1
+-1 < UINT16_MAX = 1
+sizeof(UCHAR_MAX) == sizeof(int) = 1
+sizeof(USHRT_MAX) == sizeof(int) = 1
+sizeof(UINT8_MAX) == sizeof(int) = 1
+sizeof(UINT16_MAX) == sizeof(int) = 1
+-1 < UINT_MAX = 0
