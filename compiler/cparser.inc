@@ -3688,6 +3688,29 @@ begin
   end;
 end;
 
+{ `sizeof *(x)` / `sizeof(*(p))` where x points at an ARRAY (or is a
+  multi-dim array): the `*` arm builds the no-op decay `x + 0` stamped with
+  what the RESULT steps by, and that node's type is a pointer. Sized by type it
+  answered 8. The object is the whole array x points at, which is exactly what
+  x itself steps by, and IRPointerStride already answers that for every
+  carrier (a symbol, a field, an element, a multi-dim array).
+  The field spelling `sizeof(*(s.ip))` of `int (*ip)[4];` exposed it: v443
+  answered 4 and also stepped `(s.ip)+1` by 4, so test
+  c_sizeof_ptr_to_array_field's size-vs-stride check agreed with itself;
+  f713506115 fixed the stride to 16 and the size read 8.
+  regression-test-core-c-sizeof-ptr-to-array-field }
+function CSizeofDecayedDeref(node: Integer; var sz: Integer): Boolean;
+begin
+  Result := False;
+  if (node < 0) or (ASTKind[node] <> AN_BINOP) then Exit;
+  if (ASTIVal[node] <> Ord(tkPlus)) or (ASTSLen[node] <= 0) then Exit;
+  if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_INT_LIT) or
+     (ASTIVal[ASTRight[node]] <> 0) then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  sz := IRPointerStride(ASTLeft[node]);
+  Result := sz > 0;
+end;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
     cNDims, cDim, cSpanSym, cRest, cD: Integer;
@@ -4051,6 +4074,8 @@ begin
       if (saRec <> REC_NONE) and
          CSizeofRecFieldBytes(saRec, GetASTIdentName(node), sz) then
         { sized as the FIELD OBJECT, above }
+      else if CSizeofDecayedDeref(node, sz) then
+        { `*(x)` of a pointer-to-array: the array, see CSizeofDecayedDeref }
       else
       begin
         tk := IntToTypeKind(ASTTk[node]);
@@ -4166,7 +4191,9 @@ begin
       TokPos := savedPos; Next;
       node := ParseCUnary;
       tk := IntToTypeKind(ASTTk[node]);
-      if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
+      if CSizeofDecayedDeref(node, sz) then
+        { `sizeof *(p)`: the array p points at }
+      else if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
       else if (tk = tyUnknown) or (tk = tyInteger) then sz := 4
       else sz := TypeSlotSize(tk);
     end;

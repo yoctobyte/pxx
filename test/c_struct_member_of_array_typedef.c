@@ -25,6 +25,13 @@
  * which the typedef table does not model at all (a local `PA x;` is refused;
  * pxx's own va_list has that shape). bug-c-an-array-typedef-of-structs-is-not-modelled
  *
+ * THE MX BLOCK puts the two spellings of "points at an array" side by side in
+ * one struct: `int (*p)[4]` (a declarator) next to `mat4 m;` and `mat4 *q;`
+ * (a typedef), each sized with and without parentheses and stepped. The
+ * parenthesised `sizeof(*(s.p))` answered 4 on v443 while `(s.p)+1` also
+ * stepped 4, so a size-equals-stride test passed on two wrongs; fixing the
+ * stride left the size at 8. regression-test-core-c-sizeof-ptr-to-array-field
+ *
  * Diffed against gcc's own output, so no expected value is transcribed here.
  */
 #include <stdio.h>
@@ -45,6 +52,7 @@ struct R { int k; vec4 rows[2]; int after; };
 struct W { char c; struct { vec3 a; mat2x3 b; }; int z; };
 typedef struct { float x, y, z; } vec3s;
 typedef union { mat2x3 raw; vec3s col[2]; struct { float m00, m01, m02, m10, m11, m12; }; } mat2x3s;
+struct MX { int k; int (*p)[4]; mat4 m; mat4 *q; int (*p2)[2][3]; vec4 *v; int tail; };
 struct PF { int k; mat4 *p; vec4 *v; mat4 *m[3]; mat4 *mm[2][2]; int tail; };
 
 static struct T gt = {7, {{1, 2, 3, 4}, {5, 6, 7, 8}}, {9, 10, 11, 12}, 42};
@@ -62,6 +70,10 @@ int main(void) {
   mat4 a = {{1}, {0, 2}, {0, 0, 3}};
   vec4 q = {1, 2, 3, 4};
   struct PF f, *pf = &f;
+  struct MX x, *px = &x;
+  int i4[4] = {1, 2, 3, 4};
+  int i23[2][3] = {{1, 2, 3}, {4, 5, 6}};
+  int (*sp)[4] = &i4;
 
   /* writes must not clobber their neighbours */
   u.after = 99; u.a[0] = 1; u.a[1] = 2; u.a[2] = 3;
@@ -94,5 +106,18 @@ int main(void) {
   P((char *)(f.p + 1) - (char *)f.p); P((char *)(pf->v + 1) - (char *)pf->v);
   P((char *)(f.m[0] + 1) - (char *)f.m[0]); P((char *)(f.mm[1][1] + 1) - (char *)f.mm[1][1]);
   P(f.k); P(f.tail);
+
+  /* both spellings in one struct, parenthesised and not */
+  memset(&x, 0, sizeof x); x.k = 1; x.tail = 2;
+  x.p = &i4; x.q = &a; x.p2 = &i23; x.v = &q; x.m[3][3] = 9;
+  P(sizeof(struct MX)); P(sizeof x.m); P(x.k); P(x.tail); F(x.m[3][3]);
+  P(sizeof *x.p); P(sizeof(*x.p)); P(sizeof(*(x.p))); P(sizeof(*((x.p)))); P(sizeof *(x.p));
+  P(sizeof *x.q); P(sizeof(*(x.q))); P(sizeof(*(px->q))); P(sizeof *(px->p));
+  P(sizeof(*(x.p2))); P(sizeof(*(x.v))); P(sizeof(*(x.m))); P(sizeof(*(x.m[1])));
+  P(sizeof(*(sp))); P(sizeof *(sp)); P(sizeof(*(sp + 1)));
+  P((char *)((x.p) + 1) - (char *)(x.p)); P((char *)((x.q) + 1) - (char *)(x.q));
+  P((char *)((px->p2) + 1) - (char *)(px->p2)); P((char *)((x.m) + 1) - (char *)(x.m));
+  P((*x.p)[3]); P((*(x.p))[2]); F((*(x.q))[2][2]); P((*(px->p2))[1][2]);
+  P(x.p2[0][1][2]); F(x.q[0][1][1]); F((*x.v)[3]);
   return 0;
 }
