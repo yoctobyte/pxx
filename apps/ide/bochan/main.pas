@@ -7,7 +7,8 @@ program bochan;
   that garin is render-agnostic. }
 
 uses buffer, eduth, docmodel, lfmload, builder, project, perspective, registry,
-  typinfo, selection, runner, espproj;
+  typinfo, selection, runner, espproj, platform;   { platform: the direct
+  non-blocking read below asserts a property of the fd, not of runner's API }
 
 type
   { Synthetic class hierarchy to exercise registry enumeration headlessly (no
@@ -69,6 +70,7 @@ var
   boards: TEspBoardArr;
   twoBoards: TEspBoardArr;   { a narrowing case the three-board host cannot show }
   dport, dwhy: AnsiString;   { EspChooseDetectPort's answer and its refusal }
+  eagainBuf: array[0..15] of Byte;   { target of the direct non-blocking read }
   idf: TEspIdf;
   cfg, cfg2: TEspLibCfg;
   cfgTxt: AnsiString;
@@ -520,6 +522,44 @@ begin
     an 8-second monitor. }
   CheckStr(e, 'poll with timeout 0 returns at once', StreamPoll(sp, 0), '');
   CheckTrue(e, 'still running after a zero poll', sp.Running);
+  { THE FD ITSELF MUST BE NON-BLOCKING, asserted by reading it directly rather
+    than through StreamPoll. StreamPoll asks poll first and so never reaches the
+    read on a quiet child, which means it cannot witness this property: I removed
+    the EAGAIN branch as a mutation and all 306 rows still passed. This row is
+    the one that fails if StreamStart's fcntl goes away -- a blocking fd answers
+    0 or hangs here, a non-blocking one answers EAGAIN. That property is what
+    makes a blocked read impossible in espide's monitor, independently of why
+    poll and read ever disagreed.
+    bug-s-espide-auto-never-exits-after-build-flash }
+  CheckInt(e, 'a live quiet child reads EAGAIN, not EOF and not a block',
+    Integer(PalRead(sp.Fd, @eagainBuf[0], 16)), PAL_NET_EAGAIN);
+  { SanitizeUtf8ForText: a GtkTextView rejects a whole insert whose bytes are not
+    valid UTF-8, so raw serial output silently lost the chunk and tripped
+    'g_utf8_validate' -- seen on a live classic ESP32. A board emits non-UTF-8 for
+    ordinary reasons (ROM bytes at another baud, a half frame), so these are the
+    normal cases, not corrupt ones. }
+  writeln('-- runner: SanitizeUtf8ForText --');
+  CheckStr(e, 'plain ascii is untouched',
+    SanitizeUtf8ForText('PXX hello i=1'), 'PXX hello i=1');
+  CheckStr(e, 'newline and tab survive',
+    SanitizeUtf8ForText('a' + #9 + 'b' + #10), 'a' + #9 + 'b' + #10);
+  CheckStr(e, 'valid two-byte utf-8 passes through',
+    SanitizeUtf8ForText('caf' + #$C3 + #$A9), 'caf' + #$C3 + #$A9);
+  CheckStr(e, 'valid three-byte utf-8 passes through',
+    SanitizeUtf8ForText(#$E2 + #$82 + #$AC), #$E2 + #$82 + #$AC);
+  { the actual shape a wrong baud delivers: high bytes with no continuation }
+  CheckStr(e, 'a lone high byte becomes one question mark',
+    SanitizeUtf8ForText('a' + #$FF + 'b'), 'a?b');
+  CheckStr(e, 'a truncated sequence becomes one mark per byte',
+    SanitizeUtf8ForText('a' + #$C3 + 'b'), 'a?b');
+  CheckStr(e, 'a lead byte at end of chunk is not read past',
+    SanitizeUtf8ForText('a' + #$E2), 'a?');
+  { NUL is a SEPARATE hazard from validity: the text reaches GTK as a C string,
+    so one #0 would truncate everything after it in the chunk. }
+  CheckStr(e, 'NUL is dropped, not kept and not turned into a mark',
+    SanitizeUtf8ForText('a' + #0 + 'b'), 'ab');
+  CheckInt(e, 'a run of invalid bytes keeps the length countable',
+    Length(SanitizeUtf8ForText(#$FF + #$FE + #$FD)), 3);
   CheckTrue(e, 'still running after a poll', sp.Running);
   StreamStop(sp);
   CheckTrue(e, 'stopped', not sp.Running);

@@ -31,6 +31,9 @@ type
 
 function StreamStart(var p: TStreamProc; const exe: AnsiString;
                      const args: array of AnsiString): Boolean;
+{ Make arbitrary child/serial bytes safe to put in a UTF-8 text widget:
+  invalid sequences and NUL become '?'/dropped. See the implementation. }
+function SanitizeUtf8ForText(const s: AnsiString): AnsiString;
 function StreamPoll(var p: TStreamProc; timeoutMs: Integer): AnsiString;
 procedure StreamStop(var p: TStreamProc);
 
@@ -108,8 +111,93 @@ begin
     Exit;
   end;
   p.Fd := outFd;
+  { O_NONBLOCK ON THE CHILD'S STDOUT, and this is design rather than defence.
+    StreamPoll's whole contract is that it never blocks longer than timeoutMs,
+    because a GUI event loop calls it from a timer tick: a read that waits is a
+    frozen window. Asking poll first and trusting the answer makes that contract
+    depend on poll and read agreeing about the fd, and espide has been observed
+    wedged in read() on this pipe with poll saying nothing was ready and the
+    pipe empty (bug-s-espide-auto-never-exits-after-build-flash). With the fd
+    non-blocking, read() answers EAGAIN instead of sleeping, so the contract
+    holds whether or not that disagreement is understood.
+    PalSetSocketNonBlocking is fcntl(F_SETFL, O_NONBLOCK) -- an fd operation,
+    not a socket one, despite the name. }
+  if p.Fd >= 0 then PalSetSocketNonBlocking(p.Fd, 1);
   p.Running := True;
   StreamStart := True;
+end;
+
+{ A SERIAL PORT DELIVERS BYTES, AND A GtkTextView DEMANDS UTF-8. Feeding it raw
+  serial output is a real defect, observed on a live classic ESP32:
+
+    Gtk-CRITICAL: gtk_text_buffer_emit_insert:
+                  assertion 'g_utf8_validate (text, len, NULL)' failed
+
+  A board emits non-UTF-8 for ordinary reasons -- the ROM's first bytes at a
+  different baud than the monitor, a half-received frame, a program printing
+  binary -- so this is the normal case, not a corrupt one. GTK rejects the whole
+  insert, so the pane silently loses the chunk, and an insert that fails its own
+  assertion leaves the buffer in a state nothing here should rely on.
+
+  NUL matters separately from validity: the text reaches GTK as a C string, so a
+  single #0 would truncate everything after it in that chunk.
+
+  Only the DISPLAYED text is sanitised. What goes to stdout stays raw (bar CR), because a
+  headless run's log is a capture of what the board actually said and must not be
+  quietly edited. }
+function SanitizeUtf8ForText(const s: AnsiString): AnsiString;
+var i, n, need, j: Integer;
+    r: AnsiString;
+    b: Byte;
+    ok: Boolean;
+begin
+  SetLength(r, Length(s));
+  n := 0;
+  i := 1;
+  while i <= Length(s) do
+  begin
+    b := Byte(s[i]);
+    if b = 0 then
+    begin
+      { drop it: it would truncate the C string GTK receives }
+      Inc(i);
+      Continue;
+    end;
+    if b < $80 then
+    begin
+      Inc(n); r[n] := s[i]; Inc(i);
+      Continue;
+    end;
+    { how many continuation bytes this lead byte promises }
+    if      (b and $E0) = $C0 then need := 1
+    else if (b and $F0) = $E0 then need := 2
+    else if (b and $F8) = $F0 then need := 3
+    else                           need := -1;
+    ok := need > 0;
+    if ok then
+      for j := 1 to need do
+        if (i + j > Length(s)) or ((Byte(s[i + j]) and $C0) <> $80) then
+        begin
+          ok := False;
+          Break;
+        end;
+    if ok then
+    begin
+      for j := 0 to need do
+      begin
+        Inc(n); r[n] := s[i + j];
+      end;
+      Inc(i, need + 1);
+    end
+    else
+    begin
+      { one '?' per offending byte: the pane stays byte-countable against the
+        raw log, which matters when comparing the two after a garbled boot }
+      Inc(n); r[n] := '?'; Inc(i);
+    end;
+  end;
+  SetLength(r, n);
+  SanitizeUtf8ForText := r;
 end;
 
 function StreamPoll(var p: TStreamProc; timeoutMs: Integer): AnsiString;
@@ -131,6 +219,12 @@ begin
     ev := PalPoll(p.Fd, POLL_IN, timeoutMs);
     if ev <= 0 then Break;                       { nothing ready (or error) }
     n := PalRead(p.Fd, @buf[0], 4096);
+    { EAGAIN IS NOT EOF, and the distinction is the whole point of the
+      non-blocking fd: n <= 0 below reaps the child, so treating "no data right
+      now" as "the child is done" would kill a live monitor on its first quiet
+      tick. Only a genuine 0 (writer closed) means EOF; any other negative is a
+      real error and also ends the stream. }
+    if n = PAL_NET_EAGAIN then Break;
     if n > 0 then
     begin
       { presize and fill: appending a Char at a time is quadratic in the

@@ -273,10 +273,10 @@ begin
   t := StripCR(s);
   if AutoRun then
   begin
-    write(t);
+    write(t);            { RAW (bar CR): the log is a capture, not a rendering }
     Flush(Output);
   end;
-  LogText := LogText + t;
+  LogText := LogText + SanitizeUtf8ForText(t);
   if Length(LogText) > LOG_CAP then
     LogText := Copy(LogText, Length(LogText) - LOG_CAP div 2, LOG_CAP);
   LogDirty := True;
