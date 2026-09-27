@@ -16213,14 +16213,20 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-25T22:35:59Z",
+  "date": "2026-09-27T17:15:08Z",
   "red": [
-   "test-core#src:test/c_crtl_wait.c"
+   "test-core#src:test/c_crtl_wait.c",
+   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py",
+   "tools-devtest#00"
   ],
-  "sha": "c50502d1a47b6f6693359406fe964aa908728af8",
+  "sha": "97af9cde4f2a46d88186ab34977c27e83590e9cb",
   "tier": "full",
-  "ver": "v441",
-  "verdict": "RED"
+  "ver": "v442",
+  "verdict": "RED",
+  "why": {
+   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py": "PXXDBG p.fresh TA.Named TRUE arg=-1 | PXXDBG p.fresh TA.NamedSelf FALSE arg=0 | PXXDBG p.fresh TA.Mixed FALSE arg=0 | -PXXDBG p.fresh TA.ViaLocal FALSE arg=-1 | +PXXDBG p.fresh TA.ViaLocal TRUE arg=-1",
+   "tools-devtest#00": "Wire each into a rule, or add it to test/UNWIRED.txt with a reason. | check-test-wiring: 2 exemption(s) whose only reference is a tools/ script NAMING the path \u2014 a mention is not proof anything runs i"
+  }
  },
  "toolchain": {
   "espqemu-riscv32": "9.2.2",
