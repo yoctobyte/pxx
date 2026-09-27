@@ -16194,6 +16194,7 @@
    "range": [
     "f713506115f4431eba1e2dbdf5c2fc42c1b5f380"
    ],
+   "range_non_causal": false,
    "src": "test/c_sizeof_ptr_to_array_field.c tools/expect_same.sh",
    "status": "fail"
   }
