@@ -39,12 +39,34 @@ idf.py --version          # ESP-IDF v6.0.1
 Your user needs to be allowed to open the board's serial port. On most Linux
 systems that means the `dialout` group.
 
-The scripts below find the PXX compiler through the `PXX` variable. Point it
-at the `pxx` you installed:
+The scripts below find the PXX compiler on their own: in a git checkout they
+use the pinned compiler, `stable_linux_amd64/default/pinned`, and in a release
+tarball `compiler/pxx-<arch>`. Set `PXX` only to use a different one, for
+example a compiler you built yourself:
 
 ```sh
-export PXX=/path/to/pxx
+export PXX=$PWD/compiler/pascal26     # optional
 ```
+
+**Building without a board.** Every project under `examples/esp32/` has its own
+`build.sh`, which compiles the program and runs the ESP-IDF build, and stops
+there. Nothing is written to a board. This is also the quickest check that
+your setup works:
+
+```sh
+examples/esp32/hello-s3/build.sh      # Pascal, ESP32-S3
+examples/esp32/hello-c3/build.sh      # Pascal, ESP32-C3
+examples/esp32/nilpy-s3/build.sh      # Nil Python, ESP32-S3
+examples/esp32/nilpy-c3/build.sh      # Nil Python, ESP32-C3
+```
+
+Each one ends with `Project build complete` and `app_main present in image
+map`, and leaves the image in the project's `build/` directory.
+
+**An ESP32-C3 instead of an S3.** The walk below uses the S3. For a C3, swap the
+suffix: `hello-c3` for `hello-s3`, `nilpy-c3` or `nilpy-hw-c3` for the Python
+examples, and `--chip esp32c3` in the short forms. The C3's own examples are
+listed in [What is and is not proven](#what-is-and-is-not-proven).
 
 ## 2. A Pascal program
 
@@ -290,13 +312,19 @@ exactly how much less:
 | **ESP32-S3** | **Run on the board.** `hello-s3`, `timer-s3`, `rgb-s3`, `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3`, `adc-s3`, `monitor-s3`, `pwm-s3`, `uart-s3`, `nvs-s3`, `i2c-s3` (empty bus only, see section 7), `spi-s3` (nothing wired, see [ESP32 peripherals](../library/esp.md)) and `nilpy-station-s3` (its HTTP self-fetches; see [Wi-Fi and sockets](../library/esp.md)). `wifi-ap-s3` brings its access point up, but no client has connected to it yet. The C conformance suite passes 219 of 220 under the S3's QEMU (`tools/run_c_conformance_esp.sh --chip esp32s3`; one test skipped). |
 | **ESP32-C3** | **Run on the board.** On one ESP32-C3 board (rev v0.4, 4 MB flash, USB-Serial/JTAG console), 2026-09-27, pin v441: `hello-c3`, `timer-c3`, `nilpy-c3`, `nilpy-hw-c3`, `isrctx-c3`, `fs-c3`, `gpio-c3`, `net-c3`, `dns-c3`, `adc-c3`, `gpio-edge-c3` and `nilpy-station-c3`, with nothing wired. `adc-c3` and `gpio-edge-c3`, which QEMU cannot drive, match their `main.expected`. The C3 also joined a home Wi-Fi network as a station and answered HTTP requests from a PC on it. See [the showcase](../examples/index.md#on-a-real-esp32-c3). |
 | **ESP32-S2** | **Builds only.** `hello-s2` compiles and links for it; it has not been run anywhere. |
-| **ESP32 (the original)** | **QEMU only, and by hand.** A Pascal program (integer division, `Int64`, `Double`, strings, a class) and a Python program match the PC's output under Espressif's QEMU (`qemu-system-xtensa -M esp32`), built with `--target=esp32` into a copy of an IDF project set to the esp32 target. There is no example project for this chip, `tools/esp_flash.sh` and `tools/esp_run_bare.sh` do not accept it, and it has not been run on a board. |
+| **ESP32 (the original)** | **Run on the board.** On one ESP32-D0WD-V3 board, 2026-09-27: `hello-esp32` (Pascal) and `nilpy-esp32` (Nil Python), plus three more programs. `tools/esp_flash.sh --chip esp32` drives it; the bare-metal profile does not support it. See [ESP32 / Microcontrollers](../targets/esp32.md). |
 
 "Runs" means the program's output matched what it is expected to print; for
 the examples with a `.expected` file, byte for byte.
 
 ## Verified with
 
+- **Built, not flashed, with pin v445** (binary sha256 `caf21ac399f1`,
+  repository at `957a857d7c`), on 2026-09-27, ESP-IDF v6.0.1: the four
+  `build.sh` commands in section 1 each ended in `Project build complete`
+  with `app_main` in the image map. Images: `hello-s3` 192,656 bytes,
+  `hello-c3` 178,240, `nilpy-s3` 1,188,048, `nilpy-c3` 1,240,752. Nothing was
+  run on a board with this compiler; the board runs are the ones below.
 - **With the beta 0.1 compiler, pin v441** (binary sha256 `4ebfa2d047a2`,
   repository at `ab1960b987`, which matches the pin's commit `5c1696ca79`
   outside the documentation), on 2026-09-27. The board was an ESP32-S3 (QFN56)

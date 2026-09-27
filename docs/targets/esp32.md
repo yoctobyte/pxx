@@ -31,7 +31,7 @@ image with `app_main` at `0x400d9854`, and the board prints its five
 fault, no panic, first attempt.
 
 That first run was one program. It has since been widened on the same board, all
-of it with compiler sha256 `ccca045a848b` (the release pin v442's own binary —
+of it with compiler sha256 `ccca045a848b` (pin v442's own binary —
 v441 plus the output-path fix in `a1859b8b69`, which does not touch code
 generation). The tree moved during the work, so the compiler rather than a single
 tree sha is what these rows have in common; the tooling shas that matter are
