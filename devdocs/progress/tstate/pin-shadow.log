@@ -1137,3 +1137,4 @@
 2026-09-27T16:13:08Z	borg	0d0ebebdda77eafb9f570f5ddf072b83de6bf5c4	AUTO-PIN DECLINED — HEAD is e83f067cf248, not the tested 0d0ebebdda77
 2026-09-27T16:39:51Z	borg	f94424b44030bd457a5e878d9d708db74aee3b70	WOULD PIN f94424b44030 — 3 red(s), none new, 3 inherited from the current pin, self-host clean, streak 12/2
 2026-09-27T16:39:51Z	borg	f94424b44030bd457a5e878d9d708db74aee3b70	AUTO-PIN DECLINED — HEAD is c6f2cc1bd49c, not the tested f94424b44030
+2026-09-27T19:42:38Z	borg	2954d103babe782994f7e93b6433edb8157702ab	would NOT pin 2954d103babe — 2 red(s) the current pin does not have, 3 inherited from the current pin: test-core#src:test/test_nilpy_zero_argument_builtin_constructors.npy, test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py
