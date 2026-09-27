@@ -51799,8 +51799,16 @@ begin
       CALLED that value: `TypeError: object is not callable` at run time (pin v443
       too). A named receiver, `r.name.upper()`, never came through this loop and
       was right, which is what pins it to this missing arm. The str-method chain
-      in the call arm below is the same dispatch; this is its twin at loop top. }
+      in the call arm below is the same dispatch; this is its twin at loop top.
+      NOT when the running record is a Pascal TYPE HELPER: the NilPy helper
+      dispatch enters this loop with the helper as recId and the str kind as tk,
+      and taking `.Trim(` here sent it to PyParseStrMethod, which refuses a name
+      Python does not have (test_nilpy_str_method_vs_pascal_string_helper, red
+      from d58437f7f6). Which spellings Python owns was decided before entry,
+      by PyStrMethodOwnsMember. }
     if PyIsStrBaseTk(tk) and (CurTok.Kind = tkDot) and
+       not ((recId >= REC_UCLASS_BASE) and (recId - REC_UCLASS_BASE < UClsCount) and
+            (UClsHelperTk[recId - REC_UCLASS_BASE] >= 0)) and
        (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
        (Tokens[TokPos + 1].Kind = tkLParen) then
     begin
