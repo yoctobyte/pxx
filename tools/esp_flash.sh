@@ -355,10 +355,13 @@ printf '%s\n' "$OUT"
 # `ESP-ROM`, so on --chip esp32 the count was always 0 and this guard could
 # not fire -- it printed OK as silence, not evidence. Counts per clean QEMU
 # power-on (frankz-e5): esp32 rst:=1 ESP-ROM=0, esp32s3 1/1, esp32c3 1/1, so
-# the S3 and C3 counts are unchanged. NOT YET MEASURED ON CLASSIC SILICON:
-# esptool's own reset may add a second `rst:` line if the capture window opens
-# before it, which would make `-ge 2` fire on a healthy board. Settle the
-# threshold from a real esp32 row before trusting a FAIL here.
+# the S3 and C3 counts are unchanged. On classic SILICON (frankz-e5,
+# 2026-09-27, d5c6f81e7e, counts read from this test line under bash -x):
+# nestedtry, timer, test_esp_string and nilpy each saw rst: = 1 -- esptool's
+# own reset lands BEFORE the capture window, so 1 is a clean boot and 2 is a
+# reboot. Keep `-ge 2`: raising it would hide a single real reboot.
+# The OK and MISMATCH lines print the count too, so a passing row records what
+# this guard saw instead of saying nothing.
 ESP_BOOTS="$(grep -c 'rst:' "$SER" || true)"
 rm -f "$SER"
 
@@ -390,10 +393,10 @@ if [ "$VERIFY" = 1 ]; then
   if [ -n "$PROJECT" ]; then WHAT="$(basename "$PROJ")/main/main.expected"
   else WHAT="the x86-64 oracle"; fi
   if printf '%s\n' "$OUT" | head -n "$ORACLE_LINES" | diff -u "$ORACLE" - >/dev/null; then
-    echo "esp_flash: OK — board output matches $WHAT ($ORACLE_LINES lines) [compiler ${PXX_SHA:-UNREADABLE}]" >&2
+    echo "esp_flash: OK — board output matches $WHAT ($ORACLE_LINES lines) [rst: ${ESP_BOOTS:-0}] [compiler ${PXX_SHA:-UNREADABLE}]" >&2
     rm -f "$ORACLE"
   else
-    echo "esp_flash: MISMATCH against $WHAT (a SHORT capture is what a hang looks like -- check the diff for where it stopped) [compiler ${PXX_SHA:-UNREADABLE}]:" >&2
+    echo "esp_flash: MISMATCH against $WHAT (a SHORT capture is what a hang looks like -- check the diff for where it stopped) [rst: ${ESP_BOOTS:-0}] [compiler ${PXX_SHA:-UNREADABLE}]:" >&2
     printf '%s\n' "$OUT" | head -n "$ORACLE_LINES" | diff -u "$ORACLE" - >&2
     rm -f "$ORACLE"
     exit 1
