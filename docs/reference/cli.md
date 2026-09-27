@@ -117,7 +117,8 @@ the optional rows; each `no` costs exactly the one capability its row names.
 
 | Option | Effect |
 | --- | --- |
-| `--target=ARCH` | Select `x86_64`, `i386`, `aarch64`, `arm32`, `riscv32`, or `xtensa`. |
+| `--target=ARCH` | Select `x86_64`, `i386`, `aarch64`, `arm32`, `riscv32`, `xtensa` or `wasm32`, or an ESP chip name (`esp32`, `esp32s2`, `esp32s3`, `esp32c2`, `esp32c3`, `esp32c6`, `esp32h2`, `esp32p4`), which implies its CPU and `--platform=esp`. `--list-targets` prints the list. |
+| `--platform=posix\|esp\|wasi` | Select the platform layer explicitly. A target or chip name normally implies it. |
 | `--xtensa-abi=call0\|windowed` | Select the Xtensa call ABI. |
 | `--xtensa-cpu=lx6` | Use the older ESP32 LX6 software divide/mod profile. |
 | `--xtensa-fpu` | Use Xtensa hardware single-precision float operations where supported. |
@@ -131,12 +132,15 @@ the optional rows; each `no` costs exactly the one capability its row names.
 | `--dump-rtti` | Print generated RTTI tables while still emitting output. |
 | `-dNAME` | Define a conditional compilation symbol. |
 | `-uNAME` | Undefine a conditional compilation symbol, except `PXX`. |
+| `-FiDIR` | Add a search root for `{$I}` include files. |
 | `-FuDIR` | Add a search root: a Pascal unit directory, and the directory a Nil Python `import` searches for a third-party package (point it at the package's **parent**). See [Nil Python](../targets/nil-python.md#finding-a-third-party-python-package-fu). |
 | `-IDIR` | Add a C include directory and a Pascal unit search root. |
-| `-Mobjfpc` | Accept the Object Pascal compatibility mode marker. |
+| `-include FILE` | C: preprocess `FILE` as if `#include "FILE"` were the first line of the source, without shifting its line numbers. |
+| `-fsigned-char` / `-funsigned-char` | C: make plain `char` signed or unsigned, overriding the target's default. |
+| `-M<mode>` | FPC's mode switch, for sources that carry no `{$MODE}` line. `-Mdelphi` (and `-Mdelphiunicode`) selects Delphi mode; every other name (`-Mobjfpc`, `-Mtp`, …) is accepted and leaves the default dialect. A `{$MODE}` in the source still wins. |
 | `--threadsafe` | Use atomic refcounts for managed strings and arrays. On x86-64, i386, aarch64, and arm32 only. |
 | `--no-auto-var` | Disable auto-typed variable declarations. |
-| `--no-lazy-var` | Disable inline/lazy variable declarations. |
+| `--no-lazy-var` | Disable inline/lazy variable declarations (`var x := 5;` inside a block). The error it gives suggests `--lazy-var`, but there is no such flag: leave `--no-lazy-var` off instead. |
 | `--system-libs` | Disable the Magic Link auto-pull mechanism and link C dependencies dynamically. |
 | `--system-libs=stems` | Granular opt-out: dynamically link listed comma-separated C libraries (e.g. `m,pthread`), keeping the rest magic-linked. |
 | `-nostdinc` / `--nostdinc` | Disable adding default C header search directories. |
@@ -157,18 +161,33 @@ effect where one exists.
 | `--strict-overload` | Require explicit `overload;` on overloaded routines. | `{$STRICT_OVERLOAD ON}` |
 | `--permissive-overload` | Relax the overload marker requirement (the default). | `{$STRICT_OVERLOAD OFF}` |
 | `--strict-overload-width` | Among integer overloads, pick the **narrowest that fits**, as FPC does, instead of the default dialect's widening. Changes which body a call binds to, so it is deliberately **not** in `--strict-fpc`; see [modes](./modes.md), which carries the value table. | — command line only |
-| `--strict-operator` | FPC-parity rejection of `=` / `<>` on class operands (lax default allows them). | `{$STRICT_OPERATOR ON}` |
+| `--strict-operator` | FPC-parity rejection of an `operator =` or `operator <>` *overload* for a class type (FPC predefines both as reference equality). The lax default allows the overload and uses it for value equality. Comparing two class variables with `=` is allowed either way. | `{$STRICT_OPERATOR ON}` |
 | `--strict-case` | FPC-parity `case`-label diagnostics: inverted ranges, duplicate/overlapping labels. | `{$STRICT_CASE ON}` |
 | `--strict-visibility` | Enforce `private` / `protected` / `strict` member access (lax default parses the markers but grants access anywhere). | `{$STRICT_VISIBILITY ON}` |
 | `--lax-decl-order` | Opt *out* of declare-before-use gating for forward-visible globals (strict/FPC-parity is the default). | `{$DECLORDER OFF}` |
 | `--auto-locals` | Assignment to an undeclared name declares a routine-local inferred-type var instead of erroring. Off by default (masks typos). | `{$IMPLICITVARS ON}` |
 | `--mimic-fpc` | FPC-compatibility preset: the curated FPC define set plus `--require-forward`, `{$I+}`, and `--strict-visibility`. See [FPC compatibility](../language/fpc-compatibility.md). | `{$MIMIC FPC}` |
+| `--mimic-fpc-compiler` | `--mimic-fpc` plus the build-time defines FPC's makefile passes when compiling FPC's own compiler sources. | — |
+| `--strict-python` | The CPython-parity umbrella for Nil Python. It is accepted and has no rules yet, so today it refuses nothing. | — |
+| `--strict-uses` / `--no-strict-uses` | Accepted and ignored. A unit's `uses` never leaks to its importers; there is no switch for it. | — |
 
 ## Runtime and codegen
 
 | Option | Effect |
 | --- | --- |
 | `-O0` … `-O3` | Optimization level. `-O2` is the proven default; `-O3` carries newer, still-promoting passes. `-g` implies `-O0` unless an `-O` level is given explicitly. |
+| `-OO` | Emit what the source says, 1:1, with no folding at all. A diagnostic reference, not a shipping mode: it keeps calls the program cannot reach. |
+| `--no-assertions` | Compile every `Assert` out, condition included, as if each file began with `{$ASSERTIONS OFF}`. A later `{$ASSERTIONS ON}` in a source still wins. |
+| `-Sa` | FPC's "assertions on". That is already the PXX default, so it changes nothing. |
+| `--fpc-mem-errors` | Emulate FPC's memory-fault behaviour: a nil read or write, a call through a nil procvar or a wild store prints `Runtime error 216 (...)` and exits 216, instead of dying on `SIGSEGV` (exit 139) with no message. |
+| `--rtl-libc` | Reach the kernel through libc's `syscall(3)` instead of the raw instruction, for hosts that forbid raw syscalls. x86-64 only; the program then needs `libc.so.6`. |
+| `--compact-classes` / `--no-compact-classes` | Reserve no VMT slots for `TObject`'s root virtuals, which saves about 24-32 bytes per class declared. Overriding `Equals`, `GetHashCode` or `ToString` is then a compile error naming the flag. Implied by `--platform=esp`; pass `--no-compact-classes` after it to opt back in. |
+| `--no-ro-data` | Keep all data in the one read-write segment, instead of putting literals in a read-only one. |
+| `--ro-rtti` / `--no-ro-rtti` | Class RTTI and VMTs go in the read-only segment by default; `--no-ro-rtti` puts them back in the writable one. |
+| `--function-sections` | With `--emit-obj` (x86-64): one `.text.<name>` section per routine, so a linker can drop what nothing reaches. |
+| `--link [-o OUT] OBJ... [OUT]` | Link x86-64 objects that `pxx --emit-obj` wrote into a static executable, with no external linker and no libc. It supplies `_start` unless an object defines one, and drops sections the entry cannot reach (`--no-gc-sections` keeps them). Objects from gcc or FPC, archives and shared objects are refused by design. |
+| `--dce` / `--no-dce`, `--dce-report`, `--dce-why[=NAME]`, `--dce-cost=`, `--dce-reach-from=` | Drop routine bodies nothing can reach, and report on that pass: `--dce-report` prints what it kept and dropped, and the others explain why a body is live. |
+| `--gtk=2\|3\|4` | Which GTK's headers the C resolver searches and which library it links. It does not port the GTK 3 widget layer in `lib/pcl`. |
 | `--no-default-rtl` | Do not pull the default standard-unit surface (textfile + builtin). Used by the compiler self-build. |
 | `--no-div-check` | Opt out of the integer div/mod pre-divide zero check (default on: divide by zero raises a clean runtime error rather than a raw `SIGFPE`). |
 | `--no-nil-check` | Opt out of **all** emitted nil checks, including those a source turned on with `{$NILCHECKS ON}`. Call sites are checked by default (a method on a nil instance, or a call through a nil procvar, method pointer or interface); bare `p^` derefs are not. A checked site raises a catchable `EAccessViolation` with `SysUtils`, else `Runtime error 216`. See [directives](./directives.md#nilchecks-is-tri-state). |
@@ -178,13 +197,16 @@ effect where one exists.
 | `--no-strict-ir` | Opt out of the self-host IR guard (the hard error on any unlowered IR node). For an in-development frontend only. |
 | `--strict-ir` | Accepted no-op: the IR guard is the default now. Kept so existing invocations keep working. |
 | `--map` / `--no-map` | Force the map file next to the output on or off. A map is written by default when an output path is given. |
-| `--no-shims` | Refuse every `mimic_<module>` substitution — an import must resolve to a real unit of that name or fail. Turns "compiled without compatibility shims" from a claim into a checked property. Nil Python only; see [shims](../targets/nil-python.md#shims-standing-in-for-a-python-package). |
+| `--no-shims` | Resolve a Nil Python import as if PXX shipped nothing of its own for that name: no `mimic_<module>` substitution, and no curated `lib/rtl` unit serving a Python module (`math`, `json`, `re`, `zlib`, …). A host C header is then reachable by its bare name. Turns "compiled without compatibility shims" from a claim into a checked property. Nil Python only; see [shims](../targets/nil-python.md#shims-standing-in-for-a-python-package). |
 | `--max-stack-frame=N` | Set the oversized-stack-frame warning threshold in bytes (`=0` disables it). |
 | `--werror` / `-Werror` | Promote any warning to a fatal error. |
 | `--xtensa-soft-divide` / `--xtensa-cpu=lx6` | Route div/mod through software helpers (ESP32 classic LX6, no hardware divide). |
+| `--xtensa-long-calls` | Reserve the long call form at every forward call, so a callee more than 512 KiB ahead is reachable. Off by default; the Nil Python example builds for the Xtensa chips pass it. |
+| `--xtensa-soft-mulhigh` | Replace the 32-bit multiply-high instruction with a software routine, for QEMU's Xtensa cores, which lack it. |
 
 `--experimental-ir-codegen` is accepted as a deprecated no-op (IR is the only
-backend).
+backend). `-fno-auto-var`, `-fno-lazy-var` and `-fno-unhandled-handler` are
+aliases of the `--no-…` flags above.
 
 ### Float errors are quiet by default
 
@@ -203,7 +225,7 @@ $ pxx --fpc-float-errors trap.pas trap && ./trap div
 Runtime error 208 (division by zero)          # exit status 208
 
 $ pxx trap.pas trap && ./trap div
-no trap, r= Inf                               # exit status 0
+no trap, r=  Inf                              # exit status 0
 ```
 
 Overflow (`1e308 * 10`) reports 205 and invalid (`0.0/0.0`) reports 207 under
@@ -216,18 +238,18 @@ unit, which take and return an FPC-compatible `TFPUExceptionMask`.
 
 ## Diagnostics and internal flags
 
-The `--warn-*` flags are opt-in diagnostics you can run against ordinary
-source; each is off by default and none changes what is compiled. The dump and
+The `--warn-*` flags are diagnostics you can run against ordinary source; none
+changes what is compiled. All but `--warn-self-result` are off by default. The dump and
 measure flags below them serve compiler development and self-inspection — use
 those only when directed.
 
 | Option | Effect |
 | --- | --- |
-| `--dump-cpp` | Dump the intermediate C++-ish form. |
+| `--dump-cpp` | C sources: print the preprocessed source (after `#include` and `#define`) and stop, writing no output. |
 | `--proc-map` | Dump the procedure map. |
 | `--measure-inline` / `--measure-regcall` | Emit inline / register-call instrumentation. |
 | `--warn-missed-fold` | Warn on constant-fold opportunities the optimizer missed. |
-| `--warn-self-result` | Warn when a parameterless function's bare own name is read as its `Result`. |
+| `--warn-self-result` / `--no-warn-self-result` | Warn when a parameterless function's bare own name is read as its `Result`. **On by default**, because that line means a recursive call in Delphi mode; `--no-warn-self-result` silences it. |
 | `--warn-uses-leak` | Warn whenever a name resolves through a unit not reachable by the non-transitive `uses` rule. Read-only measurement — resolution itself is unchanged. |
 | `--warn-ignored-directives` | Report a routine directive that is accepted but cannot be honored *here*, naming the reason (`cdecl`, `register`, `iram` off the ESP targets, `stackful`, `reintroduce`, and `inline` when the routine cannot be inlined). Diagnostic only — codegen is unchanged. See [routine directives](../language/dialect.md). |
 
@@ -267,13 +289,14 @@ of them, set or unset.
 | `PXX_HOME=<root>` | Install root. Its `lib/` and `compiler/builtin/` **replace** the roots guessed from the binary's own directory. |
 | `PXX_LIBPATH=a:b` | Extra Pascal unit roots, inserted after `-Fu` and before the defaults. |
 | `PXX_CONFIG=<file>` | Use this config file instead of searching for one. |
+| `PXXDBG=<topics>` | Compiler-internal probes, for compiler development; `PXXDBG=help` lists the form. |
 
 `PXX_HOME` is what makes an unpacked tarball work from any directory, and it is
 honoured **all-or-nothing**: the exe-dir guesses are not kept underneath it as a
 fallback. Point it at the wrong root and the RTL is simply not found —
 
 ```
-error: uses: unit source not found: platform_backend
+error: uses: unit source not found: builtinheap
 ```
 
 — which is `--where` territory, and every root will be marked `[MISSING]`.

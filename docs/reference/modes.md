@@ -30,7 +30,7 @@ model as a whole; the individual switches are listed on the
   | `--require-forward` | Routine defined/declared before its call site. | Whole-source pre-scan finds it anywhere. |
   | `--strict-overload` | Explicit `overload;` on overloaded routines. | Marker not required. |
   | `--strict-overload-width` | Narrowest integer overload that **fits**, as FPC picks. | An exact-width match wins; otherwise the widest candidate. |
-  | `--strict-operator` | Reject `=` / `<>` on class operands. | Value-equality operators allowed. |
+  | `--strict-operator` | Reject an `operator =` / `operator <>` overload for a class type. | The overload is allowed and gives value equality. |
   | `--strict-case` | Inverted-range and duplicate/overlapping `case` labels are errors. | First-match, no diagnostics. |
   | `--strict-visibility` | `private` / `protected` / `strict` access is enforced. | Markers parsed, access granted anywhere. |
   | `--lax-decl-order` | (opt-*out*) declare-before-use for forward-visible globals. | Enforced by default. |
