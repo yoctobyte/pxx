@@ -65,6 +65,10 @@ var
   spOut, why, chip: AnsiString;
   spTurns: Integer;
   tree: TStrArray;
+  boards: TEspBoardArr;
+  idf: TEspIdf;
+  cfg, cfg2: TEspLibCfg;
+  cfgTxt: AnsiString;
 
 begin
   EduthInit(e);
@@ -550,6 +554,132 @@ begin
   for spTurns := 0 to Length(tree) - 1 do
     if tree[spTurns] = 'main/main.pas' then ok := True;
   CheckTrue(e, 'tree recurses into main/', ok);
+
+  { scenario: espproj — attached boards, read WITHOUT opening a port }
+  writeln('-- espproj: boards from a by-id tree --');
+  CheckStr(e, 'CP2102 named', EspBridgeFromByIdName(
+    'usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0'), 'CP2102');
+  CheckStr(e, 'native USB-JTAG named', EspBridgeFromByIdName(
+    'usb-Espressif_USB_JTAG_serial_debug_unit_44:B1:76:05:2B:2C-if00'), 'native USB-JTAG');
+  CheckStr(e, 'CH34x family named', EspBridgeFromByIdName(
+    'usb-1a86_USB_Single_Serial_5A47013421-if00'), 'CH34x');
+  { a bridge we do not know answers '' and not a guess }
+  CheckStr(e, 'an unknown bridge is not guessed',
+    EspBridgeFromByIdName('usb-Some_Other_Thing_1234-if00'), '');
+  boards := EspListBoardsIn('apps/ide/bochan/fixtures/by-id');
+  { FOUR links are in the fixture and one of them DANGLES (usb-Unplugged_Board_
+    dead-if00 -> ../tty/ttyUSB404, which does not exist). Three is therefore the
+    positive control for the claim in EspListBoardsIn's own comment: a stale
+    by-id entry for an unplugged board must not be listed as attached. If this
+    ever reads 4, that sentence has become false. }
+  CheckInt(e, 'three boards, the dangling link dropped', Length(boards), 3);
+  CheckStr(e, 'sorted by name', boards[0].Name,
+    'usb-1a86_USB_Single_Serial_5A47013421-if00');
+  CheckStr(e, 'port is the by-id path', boards[0].Port,
+    'apps/ide/bochan/fixtures/by-id/usb-1a86_USB_Single_Serial_5A47013421-if00');
+  CheckStr(e, 'bridge filled from the name', boards[2].Bridge, 'CP2102');
+  CheckStr(e, 'chip blank before Detect', boards[2].Chip, '');
+  CheckTrue(e, 'a board line says nothing was asked',
+    Pos('not asked yet', EspBoardLine(boards[2])) > 0);
+  { NOT "an empty directory" -- git cannot store one, so this fixture holds a
+    single .keep, and the row says what it actually measures: a dotfile in a
+    by-id directory is not a board. It read 1 before the hidden-entry skip. }
+  CheckInt(e, 'a dir holding only a dotfile lists no boards',
+    Length(EspListBoardsIn('apps/ide/bochan/fixtures/fakeidf-empty')), 0);
+  CheckStr(e, 'MAC from esptool', EspMacFromEsptool(
+    'Crystal is 40MHz' + #10 + 'MAC: e0:8c:fe:57:bb:b8' + #10), 'e0:8c:fe:57:bb:b8');
+  { a truncated MAC is NOT half-reported }
+  CheckStr(e, 'a short MAC is refused', EspMacFromEsptool('MAC: e0:8c:fe' + #10), '');
+  CheckStr(e, 'no MAC line', EspMacFromEsptool('Connecting....' + #10), '');
+  CheckStr(e, 'revision from esptool', EspRevisionFromEsptool(
+    'Chip is ESP32-D0WD-V3 (revision v3.1)' + #10), 'v3.1');
+  CheckStr(e, 'no revision line', EspRevisionFromEsptool('Chip is ESP32' + #10), '');
+
+  { scenario: espproj — the dialout group and the sg route }
+  writeln('-- espproj: dialout --');
+  CheckTrue(e, 'a member is seen',
+    EspDialoutFromGroupText('cdrom:x:24:neo' + #10 + 'dialout:x:20:readsb,neo' + #10,
+                            'neo') = edMember);
+  CheckTrue(e, 'a non-member is seen',
+    EspDialoutFromGroupText('dialout:x:20:readsb' + #10, 'neo') = edNotMember);
+  { an EMPTY member list must not read as membership, and a substring must not
+    either: 'neopolitan' is not 'neo' }
+  CheckTrue(e, 'an empty dialout line is not membership',
+    EspDialoutFromGroupText('dialout:x:20:' + #10, 'neo') = edNotMember);
+  CheckTrue(e, 'a longer name is not a member',
+    EspDialoutFromGroupText('dialout:x:20:neopolitan' + #10, 'neo') = edNotMember);
+  CheckTrue(e, 'an unreadable group file says nothing',
+    EspDialoutFromGroupText('', 'neo') = edUnknown);
+  CheckTrue(e, 'the member note explains sg',
+    Pos('sg dialout', EspDialoutNote(edMember)) > 0);
+  CheckTrue(e, 'the non-member note says how to fix it',
+    Pos('usermod', EspDialoutNote(edNotMember)) > 0);
+  CheckStr(e, 'nothing to say when unknown', EspDialoutNote(edUnknown), '');
+  CheckStr(e, 'a plain path quotes plainly', EspShellQuote('/dev/ttyUSB0'),
+    '''/dev/ttyUSB0''');
+  { sg dialout -c takes ONE string and forwards no arguments, so the port has to
+    be quoted INTO the command -- which is the whole reason this exists }
+  CheckStr(e, 'a quote in a path cannot escape',
+    EspShellQuote('a''b'), '''a''\''''b''');
+  CheckTrue(e, 'sg wraps', Pos('sg dialout -c ', EspWrapSg('echo hi', True)) = 1);
+  CheckStr(e, 'no sg, no wrapper', EspWrapSg('echo hi', False), 'echo hi');
+
+  { scenario: espproj — is ESP-IDF installed }
+  writeln('-- espproj: ESP-IDF detection --');
+  idf := EspDetectIdfIn('apps/ide/bochan/fixtures/fakeidf',
+                        'apps/ide/bochan/fixtures/fakehome');
+  CheckTrue(e, 'the fake IDF is found', idf.Found);
+  { 5.4.2 and not 6.0.1: the fixture's numbers differ from the installed IDF on
+    purpose, so a pass cannot be the real ~/esp/esp-idf answering }
+  CheckStr(e, 'version from the header', idf.Version, '5.4.2');
+  CheckStr(e, 'path recorded', idf.Path, 'apps/ide/bochan/fixtures/fakeidf');
+  CheckStr(e, 'python env named', idf.PyEnv, 'idf5.4_py3.11_env');
+  CheckTrue(e, 'the line names the version', Pos('5.4.2', EspIdfLine(idf)) > 0);
+  { a directory that EXISTS but has no tools/idf.py is not an install: a failed
+    clone must not be reported as one }
+  idf := EspDetectIdfIn('apps/ide/bochan/fixtures/fakeidf-empty', '');
+  CheckTrue(e, 'an empty dir is not an install', not idf.Found);
+  CheckTrue(e, 'it says where to get IDF', Pos('espressif.com', idf.Advice) > 0);
+  CheckStr(e, 'the line says not found', EspIdfLine(idf), 'ESP-IDF: not found');
+  { $IDF_PATH wins over ~/esp/esp-idf }
+  idf := EspDetectIdfIn('apps/ide/bochan/fixtures/fakeidf', '/nonexistent-home');
+  CheckStr(e, 'env path wins', idf.Path, 'apps/ide/bochan/fixtures/fakeidf');
+
+  { scenario: espproj — per-project libraries }
+  writeln('-- espproj: libraries config --');
+  cfg := EspLibCfgParse(
+    '# a comment' + #10 +
+    'unit-dir = /home/u/mylib' + #10 +
+    'UNIT-DIR = /home/u/other' + #10 +          { key case does not matter }
+    'component-dir = /home/u/pxx_esp' + #10 +
+    'require = pxx_esp' + #10 +
+    'future-key = something a later IDE wrote' + #10 +
+    '' + #10 +
+    'unit-dir =' + #10);                        { an empty value adds nothing }
+  CheckInt(e, 'two unit roots', Length(cfg.UnitDirs), 2);
+  CheckStr(e, 'first unit root', cfg.UnitDirs[0], '/home/u/mylib');
+  CheckStr(e, 'key case ignored', cfg.UnitDirs[1], '/home/u/other');
+  CheckInt(e, 'one component root', Length(cfg.ComponentDirs), 1);
+  CheckInt(e, 'one require', Length(cfg.Requires), 1);
+  CheckTrue(e, 'a configured project is not empty', not EspLibCfgEmpty(cfg));
+  CheckTrue(e, 'an empty file is empty',
+    EspLibCfgEmpty(EspLibCfgParse('# nothing here' + #10)));
+  { round trip: what we write, we read back identically }
+  cfgTxt := EspLibCfgRender(cfg);
+  cfg2 := EspLibCfgParse(cfgTxt);
+  CheckInt(e, 'round trip unit roots', Length(cfg2.UnitDirs), Length(cfg.UnitDirs));
+  CheckStr(e, 'round trip first unit root', cfg2.UnitDirs[0], cfg.UnitDirs[0]);
+  CheckStr(e, 'round trip second unit root', cfg2.UnitDirs[1], cfg.UnitDirs[1]);
+  CheckStr(e, 'round trip component root', cfg2.ComponentDirs[0], cfg.ComponentDirs[0]);
+  CheckStr(e, 'round trip require', cfg2.Requires[0], cfg.Requires[0]);
+  args := EspLibCfgPxxFlags(cfg);
+  CheckInt(e, 'one -Fu per unit root', Length(args), 2);
+  CheckStr(e, '-Fu is spelled with no space', args[0], '-Fu/home/u/mylib');
+  CheckStr(e, 'the config path is in the project', EspLibCfgPath('/tmp/proj/'),
+    '/tmp/proj/espide.cfg');
+  CheckTrue(e, 'the line counts them', Pos('2 unit root(s)', EspLibCfgLine(cfg)) > 0);
+  CheckStr(e, 'nothing to say when unconfigured',
+    EspLibCfgLine(EspLibCfgParse('')), '');
 
   Halt(EduthReport(e));
 end.
