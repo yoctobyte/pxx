@@ -84,4 +84,4 @@ Evidence (x86-64, gcc 15):
   0 failed, rc=0 (was 1109 passes and a segfault at mat2x3s_zero_init).
 
 ## Log
-- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 84ea0d4fef.
