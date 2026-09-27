@@ -10,4 +10,9 @@ NamedSelf discard 0 rebind 0
 Mixed.self discard 0 rebind 0
 PassThrough discard 0 rebind 0
 OrNil.nil discard 0 rebind 0
-receivers 1 0 alive 2 gone <= made True
+Fld discard 0 rebind 0
+Element discard 0 rebind 0
+Cached discard 0 rebind 0
+re.compile discard 0 rebind 0
+borrowed 5 7 9
+receivers 1 0 alive 5 gone <= made True

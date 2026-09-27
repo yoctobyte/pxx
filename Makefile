@@ -618,7 +618,7 @@ test-nilpy: $(COMPILER)
 	@if tools/assert_no_leak.sh nilpy_freshseam_control 300 $(TESTTMP)/test_nilpy_freshseam26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_freshseam control (keep) did not trip the bound"; exit 1; fi
 	./$(COMPILER) -dPXX_HEAP_DEBUG -Futest/nilpy_freshseam test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.npy $(TESTTMP)/test_nilpy_freshseamhd26
-	$(TESTTMP)/test_nilpy_freshseamhd26 | diff -u test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.expected -
+	$(TESTTMP)/test_nilpy_freshseamhd26 2>&1 | diff -u test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.expected -
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links

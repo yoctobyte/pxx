@@ -11,6 +11,8 @@ type
   TA = class
   public
     v: Integer;
+    other: TA;
+    items: array[0..3] of TA;
     constructor Create(av: Integer);
     destructor Destroy; override;
     function Fresh: TA;
@@ -21,8 +23,12 @@ type
     function Mixed: TA;
     function ViaLocal: TA;
     function OrNil: TA;
+    function Fld: TA;
+    function Element(i: Integer): TA;
+    procedure Fill;
   end;
 function MakeA: TA;
+function Cached: TA;
 function MkLocal: TA;
 function PassThrough(a: TA): TA;
 function made: Integer;
@@ -82,6 +88,25 @@ function TA.OrNil: TA;
 begin
   if v > 0 then Exit(nil);
   Result := TA.Create(0);
+end;
+function TA.Fld: TA;
+begin
+  Result := other;
+end;
+function TA.Element(i: Integer): TA;
+begin
+  Result := items[i];
+end;
+procedure TA.Fill;
+begin
+  other := TA.Create(5);
+  items[2] := TA.Create(7);
+end;
+var GCache: TA;
+function Cached: TA;
+begin
+  if GCache = nil then GCache := TA.Create(9);
+  Result := GCache;
 end;
 function made: Integer; begin made := NMade; end;
 function gone: Integer; begin gone := NGone; end;

@@ -1022,7 +1022,10 @@ begin
 end;
 
 { Which parameter of procIdx this value is: its index, -2 for a parameter
-  with no identifiable slot, -1 for anything that is not a parameter. }
+  with no identifiable slot, -1 for anything that is not a parameter.
+  ProcResultArgIdx also takes -3 (NoteResultArg): no parameter, but a field or
+  global is returned -- a borrow of storage, not a pass-through of an argument,
+  and everything that reads a non--1 verdict as a borrow reads -3 the same. }
 function ResultExprParamIdx(procIdx, n: Integer): Integer;
 var j, sym, cp, a, k: Integer;
 begin
@@ -1034,6 +1037,7 @@ begin
   if cp >= 0 then
   begin
     if ProcResultArgIdx[cp] = -2 then begin Result := -2; Exit; end;
+    if ProcResultArgIdx[cp] = -3 then begin Result := -3; Exit; end;
     if ProcResultArgIdx[cp] < 0 then Exit;
     a := ASTLeft[n];
     k := 0;
@@ -1058,10 +1062,31 @@ begin
     end;
 end;
 
+{ Is this value a LOAD of storage the callee's caller does not own -- a field
+  (`Result := other`, `Result := FItems[i]`) or a class-typed global? Then the
+  result is a borrow even though no parameter is returned. }
+function ResultExprIsStoredLoad(n: Integer): Boolean;
+var sym: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if ASTKind[n] = AN_FIELD then begin Result := True; Exit; end;
+  if ASTKind[n] = AN_INDEX then
+  begin
+    Result := ResultExprIsStoredLoad(ASTLeft[n]);
+    Exit;
+  end;
+  if ASTKind[n] <> AN_IDENT then Exit;
+  sym := Integer(ASTIVal[n]);
+  Result := (sym >= 0) and (sym < SymCount) and (Syms[sym].Kind = skGlobal) and
+            (Syms[sym].TypeKind = tyClass);
+end;
+
 procedure NoteResultArg(procIdx, n: Integer; var argIdx: Integer);
 var j: Integer;
 begin
-  j := ResultExprParamIdx(procIdx, n);
+  if ResultExprIsStoredLoad(n) then j := -3
+  else j := ResultExprParamIdx(procIdx, n);
   if j = -1 then Exit;
   if argIdx = -1 then argIdx := j
   else if argIdx <> j then argIdx := -2;
