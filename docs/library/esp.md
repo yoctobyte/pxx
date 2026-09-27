@@ -47,11 +47,15 @@ The Python half of `interrupts`, `espadc`'s `read`, `espi2c`, `espspi` and
 compiled only into Nil Python programs. A Pascal program that uses these units
 does not carry the Python runtime.
 
-Everything on this page compiles with **pin v425** (compiler sha256
-`426b2fbf3f08…`) from both languages, for both the ESP32-S3 (xtensa) and the
-ESP32-C3 (riscv32): one Pascal program and one Nil Python program that use every
-unit were compiled for each chip on 2026-09-25, and `espspi`, which landed
-after that, was compiled the same way from both languages the same day.
+Every code example on this page builds with **pin v445** (compiler sha256
+`caf21ac399f1…`) for both the ESP32-C3 (riscv32) and the ESP32-S3 (xtensa).
+On 2026-09-28 each was built through ESP-IDF v6.0.1 into a full image for
+each chip; nothing was flashed. The Pascal fragment under *One unit, two
+languages* was built with a `program … begin … end.` around it, and the second
+TLS snippet with the first one's `socket` lines in front of it. Every function
+and constant the unit tables name is declared in its unit. Earlier, with pin
+v425 on 2026-09-25, one Pascal program and one Nil Python program that use
+every unit were compiled for each chip.
 
 ## How it was verified
 
@@ -605,10 +609,8 @@ On one ESP32-C3 board on 2026-09-27, with the v441 compiler:
 `test/esp_board_wifi_sta_join.npy` is the recipe, with placeholders for the
 credentials.
 
-The three snippets above compile for the ESP32-S3 with pin v426 (compiler
-sha256 `7b742af6f9df…`) against the tree at `6ee238bc47`. The station half
-of `network` landed after v426 was cut. It is library code only, so v426
-compiles it.
+The three snippets above build into full ESP-IDF images for the ESP32-C3 and
+the ESP32-S3 with pin v445 (2026-09-28).
 
 ## Files — `open()` and `os` on flash (Nil Python)
 
@@ -709,9 +711,9 @@ full; after the file is removed, writing works again.
   cannot be mounted from Python. `test/esp_board_files.npy` has not been run
   on an ESP32-C3 board.
 
-Both snippets compile for the ESP32-S3 with pin v427 (compiler sha256
-`354cd45e6373…`), the first pin that carries the file support. The same
-compile refuses `os.mount("/sd", "/sd")`.
+Both snippets build into full ESP-IDF images for the ESP32-C3 and the
+ESP32-S3 with pin v445 (2026-09-28); pin v427 was the first to carry the file
+support. The same compile refuses `os.mount("/sd", "/sd")`.
 
 For **Pascal** files on the ESP32, the C3 example `fs-c3` mounts FAT, writes,
 seeks and reads back, under QEMU and on an ESP32-C3 board. See the
