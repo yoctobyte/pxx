@@ -2,7 +2,7 @@
 track: C
 prio: 50
 type: bug
-status: open
+status: done
 found: 2026-09-27
 found-by: frankD
 owner:
@@ -31,3 +31,6 @@ guessing the mechanism.
 a `mat2x3` read past it. Fixed with
 bug-c-a-struct-field-that-points-at-an-array-typedef-has-no-pointee-dims.
 cglm's whole suite now runs: 1131 ran, 1131 passed, 0 failed, rc=0.
+
+## Log
+- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -31,32 +31,18 @@ A fix in progress is parked in the repository as
 `devdocs/dev/parked-patches/tls-init-image-reaches-every-thread-wip.patch`.
 (Measured with v425.)
 
-### C: a struct member whose type is an array typedef is too small
+### C: a struct member typed by an array typedef of structs is too small
 
-A struct or union member declared with an array **typedef** is not laid out as
-an array. With `typedef int arr3[3];`, `struct U { arr3 a; int after; }` is 8
-bytes where GCC gives 16, so the members overlap: writing `u.a[1]` overwrites
-`u.after`. With `typedef float vec4[4]; typedef vec4 mat4[4];`,
-`struct { int k; mat4 m; vec4 v; }` is 12 bytes against GCC's 84, and
-`sizeof t.m` is 4 against 64. Arrays of struct typedefs are affected the same
-way. This is silent memory corruption, not only a wrong size. cglm's
-`mat2x3s` union crashes on it.
-
-Not affected: a member written out as an array (`int a[3];`), and variables or
-parameters declared with the typedef. **Workaround:** spell the member's
-array type out in the struct (`float m[4][4];` in place of `mat4 m;`).
-(Measured against GCC with the v441 and v443 compilers, both wrong the same
-way.)
-
-### C: a struct field that points at an array typedef
-
-With `typedef float vec4[4]; typedef vec4 mat4[4];`, a struct field declared
-as `mat4 *p;` or `mat4 *m[3];` does not know the shape of what it points at:
-`sizeof *s.p` is 4 where GCC gives 64, `(*s.p)[2][2]` reads the wrong
-element, and `(*s.m[0])[1][1]` crashes. The same declarations as variables or
-parameters are right. **Workaround:** copy the field into a local of the same
-type first (`mat4 *p = s.p;`) and use that. (Measured with v441 and with the
-compiler that fixed the variable spellings.)
+With `typedef struct { int a, b; } P; typedef P PA[2];`, a struct member
+`PA ps;` is laid out as one `P`: `struct { char c; PA ps; int after; }` is 16
+bytes where GCC gives 24, and `sizeof q.ps` is 8 against 16, so `ps[1]` lies
+outside the space the struct reserves for it. A local
+`PA x;` is refused when it is used (`x[1].b`: "no member named 'b'"). Array
+typedefs of other element types (`typedef float vec4[4]`, `typedef vec4
+mat4[4]`, `typedef int arr3[3]`) are right as members, and so are pointers
+to them, since the compiler after v443 (see [Fixed since v441](#fixed-since-v441)).
+**Workaround:** spell the member out (`P ps[2];`). (Measured with v443 and
+with the compiler that fixed the other element types.)
 
 ### ESP: bare-metal images do not run on a real chip
 
@@ -191,6 +177,26 @@ Two limits apply to these measurements:
   their first twenty requests, with a compiler from before the HTTPS leak fix
   and one from after it alike. The C3 HTTPS figure in the table above is from
   the board, over Wi-Fi.
+
+## Fixed since v441
+
+These are wrong in v441 (and v443, where noted) and fixed in the compiler
+after it. Each was checked against GCC's output on x86-64.
+
+- **C: a struct or union member typed by an array typedef was too small.**
+  `struct U { arr3 a; int after; }` with `typedef int arr3[3]` was 8 bytes
+  (GCC 16), and writing `u.a[1]` overwrote `u.after`; `struct { int k; mat4 m;
+  vec4 v; }` was 12 bytes (GCC 84). Wrong in v441 and v443. cglm's `mat2x3s`
+  union crashed on it; cglm's whole test suite now passes, 1131 of 1131.
+- **C: a struct member pointing at an array typedef** (`mat4 *p;`,
+  `mat4 *m[3];`) did not know its pointee's shape: `sizeof *s.p` was 4 (GCC
+  64) and `(*s.m[0])[1][1]` crashed. Wrong in v441 and v443.
+- **C: an array of pointers to an array typedef** (`mat4 *m[] = {&a, &b,
+  &c}`, cglm's `glm_mat4_mulN`) had the wrong size (`sizeof m` 128, GCC 24),
+  and `*m[i]` loaded where C decays. Fixed in v443.
+- **C: a local with an unsized first dimension of rows** (`vec4 v[] =
+  {...}`, `float a[][4] = {...}`) was allocated one row, and the rest of its
+  initialiser overwrote neighbouring locals. Fixed in v443.
 
 ## Fixed in this release
 

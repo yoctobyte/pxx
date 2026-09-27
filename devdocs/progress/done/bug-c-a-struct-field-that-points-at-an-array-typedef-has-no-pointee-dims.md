@@ -2,7 +2,7 @@
 track: C
 prio: 60
 type: bug
-status: working
+status: done
 found: 2026-09-27
 found-by: frankD
 owner: frankD
@@ -82,3 +82,6 @@ Evidence (x86-64, gcc 15):
 - test/c_array_of_pointers_to_array_typedefs.c still 68/68 = gcc;
 - cglm's suite (v425 kit drv/cglm_all.c): 1131 tests ran, 1131 passed,
   0 failed, rc=0 (was 1109 passes and a segfault at mat2x3s_zero_init).
+
+## Log
+- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
