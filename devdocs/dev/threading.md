@@ -348,14 +348,14 @@ thread for free. Nobody opts in and nobody pays.
 | worker via `pthread_create` (control) | clean | clean |
 | `test_a_threadvar_is_per_thread` (libc-free, static, clone path) | clean | clean |
 
-**What is NOT fixed:** every target other than x86-64. `PthreadRouteAvailable`
-is `{$ifdef CPUX86_64}` and returns False elsewhere, so i386, aarch64, arm32
-and riscv32 still clone without `CLONE_SETTLS` and still carry the hazard.
-The compiler's whole-program warning (`WarnThreadsShareGlibcTls`) is therefore
-now **silent on x86-64 and unchanged everywhere else** — its firing condition,
-"links a shared library AND creates pxx threads", is precisely the condition
-under which the pthread route is available, so on x86-64 it would be warning
-about a hazard the same fact removes.
+**The other targets, 2026-09-27.** i386, aarch64 and arm32 carried the same
+hazard (the repro aborted 1/3, 2/3 and 3/3 under qemu) and now take the same
+route: `PXX_PTHREAD_ROUTE` is defined for all four thread targets. Only the
+trampoline's block install stays x86-64's, because on the other three the one
+thread register is glibc's in the dynamic binary the route implies, and pxx's
+thread-locals already fall back to the main block there. The compiler's
+`WarnThreadsShareGlibcTls` warning is retired: its condition is exactly the
+condition under which the route now applies on every target that has threads.
 
 That needs no compiler support at all — it is an ordinary syscall. Only the
 **read** side does, because the x86-64 segment base is not readable as a register

@@ -260,23 +260,39 @@ end;
   threads -- is exactly when these two imports resolve.
   --------------------------------------------------------------------- }
 
+{ EVERY TARGET WITH THREADS takes the route, not only x86-64. A thread made by
+  __pxxclone inherits glibc's thread pointer on i386 (gs), aarch64 (tpidr_el0)
+  and arm32 (TPIDRURO) exactly as on x86-64 (fs), and the two-thread malloc
+  repro (test/thread_glibc_malloc_two_threads.pas) aborted on all three under
+  qemu -- i386 1/3, aarch64 2/3, arm32 3/3 -- where x86-64 had been fixed on
+  2026-09-14. Only the trampoline's pxx-block install stays x86-64's: on the
+  other three the one thread register IS glibc's in a dynamic binary, and pxx's
+  thread-locals already fall back to the main block there (a compile warning).
+  bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state }
+{$ifdef CPUX86_64}{$define PXX_PTHREAD_ROUTE}{$endif}
+{$ifdef CPUI386}{$define PXX_PTHREAD_ROUTE}{$endif}
+{$ifdef CPUAARCH64}{$define PXX_PTHREAD_ROUTE}{$endif}
+{$ifdef CPUARM}{$define PXX_PTHREAD_ROUTE}{$endif}
+
 function c_pthread_create(th: Pointer; attr: Pointer; start: Pointer; arg: Pointer): Integer; cdecl;
   weakexternal 'libc.so.6' name 'pthread_create';
-function c_pthread_join(th: Int64; retval: Pointer): Integer; cdecl;
+{ pthread_t is an unsigned long: pointer-sized. An Int64 here passed two words
+  on a 32-bit target, and pthread_join then read the high half as `retval`. }
+function c_pthread_join(th: PtrUInt; retval: Pointer): Integer; cdecl;
   weakexternal 'libc.so.6' name 'pthread_join';
 
 function PthreadRouteAvailable: Boolean;
 { Both halves, not one: a program that could create but not join would leak a
   thread on every Join and never report it. }
 begin
-{$ifdef CPUX86_64}
+{$ifdef PXX_PTHREAD_ROUTE}
   Result := (@c_pthread_create <> nil) and (@c_pthread_join <> nil);
 {$else}
   Result := False;
 {$endif}
 end;
 
-{$ifdef CPUX86_64}
+{$ifdef PXX_PTHREAD_ROUTE}
 function PxxPthreadStart(a: Pointer): Pointer; cdecl;
 { The start routine glibc calls. Does for a pthread-made thread exactly what the
   clone stub's child leg does for a cloned one -- install pxx's `gs` block and
@@ -312,6 +328,11 @@ begin
     LOCALS AND NOT CONSTANTS only because the const-expression evaluator is a
     different path from ParseFactorCore and does not see these builtins; they
     fold to literals here, so it costs two register loads per thread. }
+{$ifdef CPUX86_64}
+  { x86-64 ONLY: pxx's block lives on gs, which glibc does not use. On i386,
+    aarch64 and arm32 the one thread register is glibc's in the dynamic binary
+    this route implies, so there is nothing of pxx's to install (see the note
+    at the weak imports). }
   tlsBytes := __pxxTlsBlockSize;
   altBytes := __pxxSigAltStackSize;
   { The CREATOR's init-image pointer, read while gs is still the creator's
@@ -346,6 +367,7 @@ begin
     ss[2] := altBytes;                         { ss_size }
     ignore := __pxxrawsyscall(SYS_sigaltstack, Int64(@ss[0]), 0, 0, 0, 0, 0);
   end;
+{$endif}
 
   { Publish identity, THEN wake the parent. PalThreadCreate blocks on this
     rather than returning Tid = 0: every existing consumer of the handle reads
@@ -590,7 +612,7 @@ begin
     the caller reads Tid = 0. }
   h.StartWord := 0;
 
-{$ifdef CPUX86_64}
+{$ifdef PXX_PTHREAD_ROUTE}
   { THE pthread ROUTE, taken exactly when the program already links libc. See
     the block comment above PxxPthreadStart for why it exists and why the weak
     import is what makes taking it free for everyone else. }
@@ -680,7 +702,7 @@ var
   t: Integer;
   base, size, ignore: Int64;
 begin
-{$ifdef CPUX86_64}
+{$ifdef PXX_PTHREAD_ROUTE}
   { pthread route: glibc owns the thread and its stack, and the futex handshake
     below cannot work here -- the kernel clears TidWord because of
     CLONE_CHILD_CLEARTID, a flag glibc's thread never had, so a wait on it would
@@ -688,7 +710,7 @@ begin
     ours to release. Idempotent the same way: PthreadId is zeroed after. }
   if h.PthreadId <> 0 then
   begin
-    ignore := c_pthread_join(h.PthreadId, nil);
+    ignore := c_pthread_join(PtrUInt(h.PthreadId), nil);
     h.PthreadId := 0;
     h.TidWord := 0;
     Exit;
@@ -717,7 +739,7 @@ var
   base, size, ignore: Int64;
 begin
   if h = nil then Exit;
-{$ifdef CPUX86_64}
+{$ifdef PXX_PTHREAD_ROUTE}
   if h^.PthreadId <> 0 then Exit;   { glibc's thread: see the interface note }
 {$endif}
   found := False;

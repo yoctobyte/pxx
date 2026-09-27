@@ -528,3 +528,13 @@ fixed in `b984ad07e`.
 about symbol NUMBERING, not about the declaration.** One `PXXDBG=a.ir:Body` diff
 said it outright — `load_sym [sym=arg]` had become `tlsbase` + `load_mem` — and
 it was reached only after several variants had been bisected the slow way.
+
+## The other targets (2026-09-27)
+
+The fix above was x86-64 only; i386, aarch64 and arm32 kept the raw clone and
+the compile-time warning. Measured live on the repro (libc linked, two threads
+churning malloc): aborted in 1/3 runs on i386, 2/3 on aarch64, 3/3 on arm32
+(qemu). The pthread route now covers all four (`PXX_PTHREAD_ROUTE` in
+`palthread.pas`; the x86-64-only pxx-block/sigaltstack setup stays gated), the
+warning is retired, and `test-threads` gains i386/aarch64/arm32 `test_tglibc2`
+rows. After: 5/5 clean on each of the four targets.

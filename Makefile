@@ -9007,6 +9007,17 @@ test-threads: $(COMPILER)
 	# rather than to the churn, so all three go in together or none do.
 	./$(COMPILER) --threadsafe test/thread_glibc_malloc_two_threads.pas $(TESTTMP)/test_tglibc226
 	tools/expect_same.sh test_tglibc226 "$$($(TESTTMP)/test_tglibc226 | tr '\n' '|')" "main churned 400000 worker churned 400000|survived: both threads churned glibc malloc concurrently|"
+	# ...and on the three other thread targets, under qemu, where the same
+	# repro aborted before the route reached them (i386 1/3, aarch64 2/3,
+	# arm32 3/3; 5/5 clean after). One run each: the abort is intermittent, so
+	# a green row here is evidence, not proof -- the 5x measurement is in the
+	# commit that widened the route.
+	./$(COMPILER) --threadsafe --target=i386 test/thread_glibc_malloc_two_threads.pas $(TESTTMP)/test_tglibc2_i386
+	tools/expect_same.sh i386/test_tglibc2 "$$(tools/run_target.sh i386 $(TESTTMP)/test_tglibc2_i386 | tr '\n' '|')" "main churned 400000 worker churned 400000|survived: both threads churned glibc malloc concurrently|"
+	./$(COMPILER) --threadsafe --target=aarch64 test/thread_glibc_malloc_two_threads.pas $(TESTTMP)/test_tglibc2_a64
+	tools/expect_same.sh aarch64/test_tglibc2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_tglibc2_a64 | tr '\n' '|')" "main churned 400000 worker churned 400000|survived: both threads churned glibc malloc concurrently|"
+	./$(COMPILER) --threadsafe --target=arm32 test/thread_glibc_malloc_two_threads.pas $(TESTTMP)/test_tglibc2_arm32
+	tools/expect_same.sh arm32/test_tglibc2 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_tglibc2_arm32 | tr '\n' '|')" "main churned 400000 worker churned 400000|survived: both threads churned glibc malloc concurrently|"
 	# CONTROL A -- same churn, twice the rounds, ONE thread. If this aborted the
 	# churn would be the defect and the thread incidental.
 	./$(COMPILER) test/thread_glibc_malloc_controls.pas $(TESTTMP)/test_tglibcc26
