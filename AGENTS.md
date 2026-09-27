@@ -17,7 +17,7 @@ Python-shaped language, compiled ahead of time).
 | Area | State at Blaise |
 | --- | --- |
 | Pascal | Mostly on par with FPC: classes, interfaces, generics, managed strings, dynamic arrays, exceptions, threads. The compiler compiles itself to a byte-identical binary. |
-| Targets | Linux x86-64 (native host), i386, aarch64, arm32, riscv32 (cross, run under qemu-user). ESP32-S3 (xtensa) and ESP32-C3 (riscv32) through ESP-IDF. |
+| Targets | Linux x86-64 (native host), i386, aarch64, arm32, riscv32 (cross, run under qemu-user). ESP32-S3 (xtensa LX7), ESP32 classic (xtensa LX6) and ESP32-C3 (riscv32) through ESP-IDF; the ESP32-S2 compiles but has not been run. |
 | C | A C99-class dialect with common GNU extensions; c-testsuite 220/220 on x86-64. |
 | Nil Python | Best effort, with a real backlog. Not CPython and not aiming at CPython parity now. |
 | Memory | Leaks are treated as release blockers. See "Known issues" and the BLAISE LEAK LIST in devdocs/progress/LOGBOOK.md. |
@@ -66,7 +66,8 @@ by a wrapper's exit status.
 
 ## ESP32
 
-- Examples: examples/esp32/* (S3 and C3; nilpy-* are Nil Python). docs/targets/esp32.md.
+- Examples: examples/esp32/* (S3, C3, and hello-esp32 for the classic LX6 part;
+  nilpy-* are Nil Python). docs/targets/esp32.md has the per-chip table.
 - IDE: ./espide.sh [folder]. It detects the chip, builds and flashes with one button, and opens a folder as a project.
 - MicroPython compatibility: docs/library/micropython.md. The driver census
   (tools/mpy_driver_census.sh; drivers from tools/install_lib_candidates.sh

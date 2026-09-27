@@ -13,22 +13,35 @@ with no vendor compiler in the loop:
 | ESP32-S3 | Xtensa LX7 | `--target=xtensa` or `--target=esp32s3` | examples run on a physical board |
 | ESP32-C3 | RISC-V (RV32IMC) | `--target=riscv32` or `--target=esp32c3` | examples run under Espressif's QEMU |
 | ESP32-S2 | Xtensa LX7 | `--target=esp32s2` | compiled only |
-| ESP32 (classic) | Xtensa **LX6** | `--target=esp32` | **links into a complete ESP-IDF image; never run.** See below |
+| ESP32 (classic) | Xtensa **LX6** | `--target=esp32` | examples run on a physical board |
 
 The other chip names (`esp32c2`, `esp32c6`, `esp32h2`, `esp32p4`) are
 accepted and compile to an ESP-IDF object, but nothing has been run on them.
 
-**The classic ESP32 row is the one to read carefully, because "links" and "runs"
-are different claims.** Measured 2026-09-27 on tree `479b8e495e` with compiler
-sha256 `4ebfa2d047a2` (the release pin v441's own binary): `--target=esp32`
-compiles `examples/esp32/hello-esp32/main/main.pas` to a relocatable object
+**The classic ESP32 now runs on silicon; the S2 is still compiled only.**
+Measured 2026-09-27 on tree `5b4e7381dc` with compiler sha256
+`4ebfa2d047a2` (the release pin v441's own binary), flashed to an
+**ESP32-D0WD-V3 rev v3.1** (dual-core LX6 at 240 MHz, MAC `e0:8c:fe:57:bb:b8`,
+CP2102 bridge): `--target=esp32` compiles
+`examples/esp32/hello-esp32/main/main.pas` to a relocatable object
 (`code=24579B data=4672B bss=1336B`, the same code size as the identical source
-for `--target=esp32s3`), and that object links into a 166,752-byte ESP-IDF v6.0.1
-image with `app_main` in the map. **No pxx code has been executed on an LX6, on
-silicon or under QEMU.** The open question is the ISA and configuration gap
-between LX6 and LX7; `devdocs/dev/parked-patches/esp32-classic-lx6-first-silicon-run.md`
-has the board, the one remaining command and what to suspect if it faults.
-`tools/esp_flash.sh --chip esp32` is wired for it.
+for `--target=esp32s3`), that object links into a 166,752-byte ESP-IDF v6.0.1
+image with `app_main` at `0x400d9854`, and the board prints its five
+`PXX hello from Pascal ESP32: i=N` lines and `PXX ESP32 sum 1..5 = 15`. No
+fault, no panic, first attempt.
+
+Two things that result does NOT say. It is **one program** — the hello, which
+is `hello-s3`'s source with the printed words changed and nothing else, so it
+exercises `esp_rom_printf`, `gpio_*`, `vTaskDelay` and integer arithmetic and
+no more; the LX6/LX7 gap is not proven closed for anything it does not touch.
+And it was run with `--no-verify`, because the program's externals do not exist
+on x86-64 and there is therefore **no native oracle to diff against** — the
+evidence is the expected serial output, not a byte comparison.
+
+`--esp-profile=bare` is still refused by name for this chip, correctly: the
+bare image hardcodes the C3/S3 load address and a UART0 base of `$60000000`,
+where the classic part's is `$3FF40000`. Use the IDF profile.
+`tools/esp_flash.sh --chip esp32` drives it.
 
 There are two integration modes.
 
