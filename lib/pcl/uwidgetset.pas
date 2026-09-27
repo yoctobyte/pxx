@@ -129,6 +129,30 @@ type
     function CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer; virtual;
     procedure BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer); virtual;
 
+    { ---- Tree — a collapsible hierarchy ----
+
+      A node is addressed by an OPAQUE STRING the widgetset mints and the
+      caller only ever passes back. '' is the invisible root, so
+      TreeAdd(tree, '', 'main') makes a top-level node. Opaque and not an
+      index because a tree has no single index: GTK's is a path like '0:2:1',
+      another toolkit's could be anything, and a caller that never reads it
+      cannot depend on either.
+
+      The string is valid until the next TreeClear, and only while the tree is
+      built by APPENDING -- which is all TTreeView does. Inserting before an
+      existing node would renumber GTK's paths and stale every string handed
+      out so far; if a future TTreeView grows an Insert, that is the line that
+      has to change with it. }
+    function CreateTreeView(ATree: TComponent): Pointer; virtual;
+    function TreeAdd(ATree: TComponent; const AParent, AText: string): string; virtual;
+    procedure TreeClear(ATree: TComponent); virtual;
+    procedure TreeExpand(ATree: TComponent; const ANode: string; ADeep: Boolean); virtual;
+    procedure TreeCollapse(ATree: TComponent; const ANode: string); virtual;
+    procedure TreeSetText(ATree: TComponent; const ANode, AText: string); virtual;
+    { '' when nothing is selected }
+    function TreeSelected(ATree: TComponent): string; virtual;
+    procedure TreeSelect(ATree: TComponent; const ANode: string); virtual;
+
     { Notebook — a tab strip. The page label is a STRING here: making the
       caller build a label widget would leak the toolkit again. }
     function CreateNotebook: Pointer; virtual;
@@ -241,6 +265,15 @@ function TWidgetSet.PanedChild(APaned: Pointer; APane: Integer): Pointer; begin 
 
 function TWidgetSet.CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer; begin CreateBox := nil; end;
 procedure TWidgetSet.BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer); begin end;
+
+function TWidgetSet.CreateTreeView(ATree: TComponent): Pointer; begin CreateTreeView := nil; end;
+function TWidgetSet.TreeAdd(ATree: TComponent; const AParent, AText: string): string; begin TreeAdd := ''; end;
+procedure TWidgetSet.TreeClear(ATree: TComponent); begin end;
+procedure TWidgetSet.TreeExpand(ATree: TComponent; const ANode: string; ADeep: Boolean); begin end;
+procedure TWidgetSet.TreeCollapse(ATree: TComponent; const ANode: string); begin end;
+procedure TWidgetSet.TreeSetText(ATree: TComponent; const ANode, AText: string); begin end;
+function TWidgetSet.TreeSelected(ATree: TComponent): string; begin TreeSelected := ''; end;
+procedure TWidgetSet.TreeSelect(ATree: TComponent; const ANode: string); begin end;
 
 function TWidgetSet.CreateNotebook: Pointer; begin CreateNotebook := nil; end;
 function TWidgetSet.NotebookAddPage(ANotebook: Pointer; const ACaption: string): Pointer; begin NotebookAddPage := nil; end;

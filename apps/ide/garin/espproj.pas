@@ -50,6 +50,15 @@ function EspDecideChip(const selector, detected, projChip: AnsiString;
   (folders end in '/'), skipping hidden entries and build output. }
 function EspListTree(const root: AnsiString; maxDepth: Integer): TStrArray;
 
+{ The entries of ONE directory: sub-directories first, then files, each group
+  sorted, hidden and generated names dropped. A directory carries a trailing
+  '/' so a caller can tell the two apart without asking the filesystem again.
+
+  This is the single place the tree's ORDER and FILTER live -- EspListTree is
+  this function applied recursively, so the flat listing and a collapsible
+  tree built one level at a time can never disagree about what is shown. }
+function EspListDir(const dir: AnsiString): TStrArray;
+
 { Display name of an IDF target: 'esp32s3' -> 'ESP32-S3'. }
 function EspChipLabel(const chip: AnsiString): AnsiString;
 
@@ -490,17 +499,15 @@ begin
                (name = 'managed_components');
 end;
 
-procedure WalkTree(const root, rel: AnsiString; depth, maxDepth: Integer;
-                   var outA: TStrArray);
+function EspListDir(const dir: AnsiString): TStrArray;
 var sr: TSearchRec;
-    dirs, files: TStrArray;
+    dirs, files, a: TStrArray;
     i: Integer;
-    full: AnsiString;
 begin
   SetLength(dirs, 0);
   SetLength(files, 0);
-  if rel = '' then full := root else full := JoinPath(root, rel);
-  if FindFirst(JoinPath(full, '*'), faDirectory, sr) = 0 then
+  SetLength(a, 0);
+  if FindFirst(JoinPath(StripSlash(dir), '*'), faDirectory, sr) = 0 then
   begin
     repeat
       if not SkipEntry(sr.Name) then
@@ -508,7 +515,7 @@ begin
         if (sr.Attr and faDirectory) <> 0 then
         begin
           SetLength(dirs, Length(dirs) + 1);
-          dirs[Length(dirs) - 1] := sr.Name;
+          dirs[Length(dirs) - 1] := sr.Name + '/';
         end
         else
         begin
@@ -523,15 +530,34 @@ begin
   SortStrs(files);
   for i := 0 to Length(dirs) - 1 do
   begin
-    SetLength(outA, Length(outA) + 1);
-    outA[Length(outA) - 1] := rel + dirs[i] + '/';
-    if depth < maxDepth then
-      WalkTree(root, rel + dirs[i] + '/', depth + 1, maxDepth, outA);
+    SetLength(a, Length(a) + 1);
+    a[Length(a) - 1] := dirs[i];
   end;
   for i := 0 to Length(files) - 1 do
   begin
+    SetLength(a, Length(a) + 1);
+    a[Length(a) - 1] := files[i];
+  end;
+  EspListDir := a;
+end;
+
+{ EspListDir applied recursively, depth-first, with each name prefixed by the
+  path it was found under. Directories keep their trailing '/'. }
+procedure WalkTree(const root, rel: AnsiString; depth, maxDepth: Integer;
+                   var outA: TStrArray);
+var ents: TStrArray;
+    i: Integer;
+    full, e: AnsiString;
+begin
+  if rel = '' then full := root else full := JoinPath(root, rel);
+  ents := EspListDir(full);
+  for i := 0 to Length(ents) - 1 do
+  begin
+    e := ents[i];
     SetLength(outA, Length(outA) + 1);
-    outA[Length(outA) - 1] := rel + files[i];
+    outA[Length(outA) - 1] := rel + e;
+    if (e[Length(e)] = '/') and (depth < maxDepth) then
+      WalkTree(root, rel + e, depth + 1, maxDepth, outA);
   end;
 end;
 

@@ -32,6 +32,17 @@ function SignalConnectData(obj: Pointer; signal: AnsiString; handler: Pointer; d
   bug-b-gtk3-pc-writes-past-its-buffer-on-a-long-string }
 function PC(const s: AnsiString): Pointer;
 
+const
+  { G_TYPE_STRING is G_TYPE_MAKE_FUNDAMENTAL(16) -- a MACRO, so the C header
+    import does not carry it and it has to be spelled here. 16 shl 2.
+
+    EXPORTED rather than kept private to gtk3widgets, so there is ONE
+    spelling: test_pcl_treeview asserts g_type_name of THIS constant is
+    'gchararray'. A private copy plus a literal 64 in the test is two
+    constants that agree until one is edited, and the test would keep saying
+    gchararray about GLib while the binding stored into the wrong type. }
+  G_TYPE_STRING = 64;
+
 implementation
 
 function PC(const s: AnsiString): Pointer;

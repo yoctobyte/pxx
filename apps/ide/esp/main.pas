@@ -30,7 +30,7 @@ program espide;
                                     print the log to stdout, exit 0 on a
                                     flashed board: the hardware check. }
 
-uses gtk3_c, gtk3, controls, stdctrls, extctrls, forms, menus, dialogs, sysutils,
+uses gtk3_c, gtk3, controls, stdctrls, extctrls, comctrls, forms, menus, dialogs, sysutils,
      buffer, runner, project, espproj;
 
 const
@@ -64,14 +64,13 @@ type
     Status: TLabel;
     MainMenu: TMainMenu;
     Split, RightSplit: TPaned;
-    Tree: TListBox;
+    Tree: TTreeView;
     Editor: TMemo;
     Log: TMemo;
     Ticker: TTimer;
 
     RepoRoot: AnsiString;
     RootDir: AnsiString;
-    TreePaths: TStrArray;
     CurFile: AnsiString;       { absolute path of the file in the editor }
     CurText: AnsiString;       { its text as loaded or last saved }
     CurProject: AnsiString;    { project the selection belongs to, or '' }
@@ -206,27 +205,40 @@ begin
   Status.Caption := s;
 end;
 
+{ One level of the tree under `node`, recursing into sub-directories.
+  File-level and not a method, because the pinned compiler has no nested
+  routines and a method would have to carry the depth anyway. }
+procedure FillTreeNode(node: TTreeNode; const dir: AnsiString; depth: Integer);
+var ents: TStrArray;
+    i: Integer;
+    e, full: AnsiString;
+    child: TTreeNode;
+begin
+  ents := EspListDir(dir);
+  for i := 0 to Length(ents) - 1 do
+  begin
+    e := ents[i];
+    if e[Length(e)] = '/' then
+    begin
+      full := dir + '/' + Copy(e, 1, Length(e) - 1);
+      child := node.AddChild(e, full);
+      if depth < TREE_DEPTH then FillTreeNode(child, full, depth + 1);
+    end
+    else
+      node.AddChild(e, dir + '/' + e);
+  end;
+end;
+
 procedure TEspForm.LoadTree;
-var i, depth, j: Integer;
-    p, name, pad: AnsiString;
+var root: TTreeNode;
 begin
   Tree.Clear;
-  TreePaths := EspListTree(RootDir, TREE_DEPTH);
-  Tree.AddItem(ExtractFileName(RootDir) + '/');
-  for i := 0 to Length(TreePaths) - 1 do
-  begin
-    p := TreePaths[i];
-    depth := 0;
-    for j := 1 to Length(p) - 1 do
-      if p[j] = '/' then Inc(depth);
-    name := p;
-    if name[Length(name)] = '/' then name := Copy(name, 1, Length(name) - 1);
-    name := ExtractFileName(name);
-    if p[Length(p)] = '/' then name := name + '/';
-    pad := '  ';
-    for j := 1 to depth do pad := pad + '  ';
-    Tree.AddItem(pad + name);
-  end;
+  root := Tree.AddRoot(ExtractFileName(RootDir) + '/', RootDir);
+  FillTreeNode(root, RootDir, 0);
+  { COLLAPSED by default -- the whole point of issue 4 -- except for the root
+    itself, so the window is not one closed line when it opens. Expand is
+    called after the children exist: GTK refuses to open a row with none. }
+  root.Expand(False);
 end;
 
 procedure TEspForm.OpenFile(const path: AnsiString);
@@ -574,16 +586,17 @@ begin
 end;
 
 procedure TEspForm.OnTreeChange(Sender: TObject);
-var i: Integer;
+var n: TTreeNode;
     p: AnsiString;
 begin
-  i := Tree.ItemIndex;
-  if i < 0 then Exit;
-  if i = 0 then begin SelectPath(RootDir); Exit; end;
-  if i - 1 >= Length(TreePaths) then Exit;
-  p := RootDir + '/' + TreePaths[i - 1];
-  if p[Length(p)] = '/' then
-    SelectPath(Copy(p, 1, Length(p) - 1))
+  n := Tree.Selected;
+  if n = nil then Exit;
+  p := n.Data;
+  if p = '' then Exit;
+  { a node whose caption ends in '/' is a directory: select it, do not try to
+    read it into the editor }
+  if n.Text[Length(n.Text)] = '/' then
+    SelectPath(p)
   else
   begin
     OpenFile(p);
@@ -878,7 +891,7 @@ begin
   f.Split := TPaned.Create(nil);
   f.Split.Parent := f;
   f.Split.SetBounds(0, BAR_H, W_WIN, H_WIN - BAR_H);
-  f.Tree := TListBox.Create(nil);
+  f.Tree := TTreeView.Create(nil);
   f.Tree.Parent := f.Split;
   f.RightSplit := TPaned.Create(nil);
   f.RightSplit.Vertical := True;

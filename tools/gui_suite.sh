@@ -245,6 +245,22 @@ save: action=1 filters=0 execute=FALSE
 folder: action=2 filters=0 execute=FALSE'
 run_gui_expect test_pcl_helloworld 'Button1Click -> ShowMessage
 clicks=1'
+# comctrls.TTreeView. Every row is read back out of the GtkTreeStore, not out
+# of the Pascal model that mirrors it, so a widgetset that recorded nothing
+# gives rows=0. It also pins the two struct layouts gtk3widgets declares BY HAND
+# (GtkTreeIter, GValue) because the C import gives them none -- SizeOf answers 4
+# for both, which is tyUnknown and not a size. Control verified 2026-09-27:
+# changing G_TYPE_STRING from 64 to 60 empties every text in `dump=` while
+# rows= stays 6, which is why the texts are in the expected output and not just
+# the count. The two `twin` siblings are deliberate: a key lookup that matched
+# on text would still satisfy sel= and sel2= with the wrong node.
+run_gui_expect test_pcl_treeview 'gtype=gchararray
+rows=6
+dump=project .main ..main.pas ..twin other .twin
+sel=dup2 data=/o/twin
+sel2=dup1 data=/p/main/twin
+after=project .renamed ..main.pas ..twin other .twin
+cleared=0'
 
 # Solitaire GUI demo (engine in examples/solitaire_gui): compile + headless
 # --smoke run (renders the board + a few engine moves, prints SMOKE OK).

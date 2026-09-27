@@ -65,6 +65,7 @@ var
   spOut, why, chip: AnsiString;
   spTurns: Integer;
   tree: TStrArray;
+  ents: TStrArray;
   boards: TEspBoardArr;
   idf: TEspIdf;
   cfg, cfg2: TEspLibCfg;
@@ -555,6 +556,25 @@ begin
   for spTurns := 0 to Length(tree) - 1 do
     if tree[spTurns] = 'main/main.pas' then ok := True;
   CheckTrue(e, 'tree recurses into main/', ok);
+
+  { EspListDir, the one place the tree's ORDER and FILTER live. The fixture is
+    arranged so the ordering claim cannot pass by accident: 'zeta/' sorts
+    AFTER both files alphabetically, so a listing that merely sorted names
+    would put it last, and a directories-first listing puts it second. }
+  ents := EspListDir('apps/ide/bochan/fixtures/faketree');
+  CheckInt(e, 'faketree lists four entries', Length(ents), 4);
+  CheckStr(e, 'dirs first, sorted (1)', ents[0], 'alpha/');
+  CheckStr(e, 'a dir sorting after every file still comes second', ents[1], 'zeta/');
+  CheckStr(e, 'then files, sorted (1)', ents[2], 'aaa.txt');
+  CheckStr(e, 'then files, sorted (2)', ents[3], 'bbb.txt');
+  { the filter: build/ and anything starting with a dot never appear }
+  ok := False;
+  for spTurns := 0 to Length(ents) - 1 do
+    if (ents[spTurns] = 'build/') or (ents[spTurns] = '.hidden/')
+       or (ents[spTurns] = '.dotfile') then ok := True;
+  CheckTrue(e, 'build/ and dot entries are filtered out', not ok);
+  CheckInt(e, 'a missing directory lists nothing',
+    Length(EspListDir('apps/ide/bochan/fixtures/no-such-dir')), 0);
 
   { scenario: espproj — attached boards, read WITHOUT opening a port }
   writeln('-- espproj: boards from a by-id tree --');

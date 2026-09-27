@@ -77,6 +77,15 @@ type
     function CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer; override;
     procedure BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer); override;
 
+    function CreateTreeView(ATree: TComponent): Pointer; override;
+    function TreeAdd(ATree: TComponent; const AParent, AText: string): string; override;
+    procedure TreeClear(ATree: TComponent); override;
+    procedure TreeExpand(ATree: TComponent; const ANode: string; ADeep: Boolean); override;
+    procedure TreeCollapse(ATree: TComponent; const ANode: string); override;
+    procedure TreeSetText(ATree: TComponent; const ANode, AText: string); override;
+    function TreeSelected(ATree: TComponent): string; override;
+    procedure TreeSelect(ATree: TComponent; const ANode: string); override;
+
     function CreateNotebook: Pointer; override;
     function NotebookAddPage(ANotebook: Pointer; const ACaption: string): Pointer; override;
     function NotebookGetPage(ANotebook: Pointer): Integer; override;
@@ -380,8 +389,30 @@ begin
     CallMethod(m.Code, m.Data, userdata);
 end;
 
-{ GtkListBox 'row-selected' passes (listbox, row, userdata). Fire OnClick when a
-  row is actually selected (row <> nil; a cleared selection passes nil). }
+{ Fire a published `procedure(Sender: TObject) of object` by NAME, if the
+  class has one and it is assigned. The by-name route is what lets a control
+  carry an event the seam knows nothing about. }
+procedure FireNamedEvent(userdata: Pointer; const AName: string);
+var m: TMethod; p: PPropInfo; cls: PClassRTTI;
+begin
+  cls := GetClass(GetInstanceClassName(userdata));
+  p := GetPropInfo(cls, AName);
+  if p = nil then Exit;
+  m := GetMethodProp(userdata, p);
+  if m.Code <> nil then
+    CallMethod(m.Code, m.Data, userdata);
+end;
+
+{ GtkListBox 'row-selected' passes (listbox, row, userdata). A cleared
+  selection passes nil and is not a pick.
+
+  BOTH OnClick and OnChange fire, and that is a FIX, not belt and braces.
+  TListBox published an OnChange that nothing ever called: eliah's .lfm binds
+  OnClick and works, espide bound OnChange and its tree was DEAD -- clicking a
+  file selected the row and never opened it (seen on a screenshot 2026-09-27,
+  the row highlighted and the editor empty). A published event that silently
+  does nothing is worse than an absent one, because the caller has no way to
+  find out. Assigning both is harmless: a caller sets one. }
 procedure ListBoxRowSelectedTramp(widget: Pointer; row: Pointer; userdata: Pointer); cdecl;
 var ctl: TControl; m: TMethod;
 begin
@@ -390,6 +421,7 @@ begin
   m := ctl.OnClick;
   if m.Code <> nil then
     CallMethod(m.Code, m.Data, userdata);
+  FireNamedEvent(userdata, 'OnChange');
 end;
 
 { Dispatch a method procedure(Sender; Button, X, Y: Integer) of object: SysV
@@ -1523,6 +1555,224 @@ begin
   if AExpand then e := 1 else e := 0;
   if AFill then f := 1 else f := 0;
   gtk_box_pack_start(ABox, AChild, e, f, APadding);
+end;
+
+{ ---- TTreeView over GtkTreeView + GtkTreeStore ----
+
+  LAYOUTS DECLARED HERE, NOT IMPORTED, AND THAT IS NOT A PREFERENCE. The C
+  import gives these two structs no layout at all: measured 2026-09-27,
+  SizeOf(GtkTreeIter) off gtk3_c answers 4 and so does SizeOf(GValue). 4 is
+  TypeStorageSize(tyUnknown) -- "nothing was recorded" -- and it is not an
+  error, it is a number. Passing a 4-byte iter to gtk_tree_store_append, which
+  writes 32, smashes the stack silently.
+
+  GtkTreeIter's layout is public and stable: { gint stamp; gpointer user_data,
+  user_data2, user_data3; }. GValue's is { GType g_type; union { ... }
+  data[2]; }, 8 + 2*8. pxx pads both exactly as C does -- verified, 32 and 24
+  with user_data at offset 8. }
+type
+  TTreeIterRec = record
+    stamp: LongInt;
+    d1, d2, d3: Pointer;
+  end;
+  TGValueRec = record
+    g_type: QWord;
+    d0, d1: Int64;
+  end;
+
+const
+  { G_TYPE_STRING lives in gtk3.pas, one spelling, and the tree test asserts
+    g_type_name of THAT constant is 'gchararray'. }
+  TREE_COL_TEXT = 0;
+
+{ The GtkTreeView inside the scrolled window that IS the handle (same shape as
+  CreateMemo: the scroller is what gets parented and sized). }
+function TreeInner(ATree: TComponent): Pointer;
+var ctl: TControl;
+begin
+  TreeInner := nil;
+  ctl := TControl(ATree);
+  if ctl.Handle = nil then Exit;
+  TreeInner := gtk_bin_get_child(ctl.Handle);
+end;
+
+function TreeModel(ATree: TComponent): Pointer;
+var tv: Pointer;
+begin
+  TreeModel := nil;
+  tv := TreeInner(ATree);
+  if tv <> nil then TreeModel := gtk_tree_view_get_model(tv);
+end;
+
+{ gtk_tree_store_set is variadic and pxx drops the tail, so the one non-
+  variadic sibling that can store a string is set_value + a GValue. }
+procedure TreeStoreSetText(store, iter: Pointer; const AText: string);
+var v: TGValueRec;
+begin
+  v.g_type := 0;   { g_value_init REQUIRES a zeroed GValue }
+  v.d0 := 0;
+  v.d1 := 0;
+  g_value_init(@v, G_TYPE_STRING);
+  g_value_set_string(@v, PC(AText));
+  gtk_tree_store_set_value(store, iter, TREE_COL_TEXT, @v);
+  g_value_unset(@v);
+end;
+
+{ Same two events as a list box, for the same reason: a caller coming from
+  Lazarus reaches for OnChange, one coming from this binding reaches for
+  OnClick, and neither should meet a dead property. }
+procedure TreeSelectionChangedTramp(sel: Pointer; userdata: Pointer); cdecl;
+var ctl: TControl; m: TMethod;
+begin
+  ctl := userdata;
+  m := ctl.OnClick;
+  if m.Code <> nil then
+    CallMethod(m.Code, m.Data, userdata);
+  FireNamedEvent(userdata, 'OnChange');
+end;
+
+function TGtk3WidgetSet.CreateTreeView(ATree: TComponent): Pointer;
+var scroll, tv, store, col, rend, sel: Pointer;
+    types: array[0..0] of QWord;
+begin
+  scroll := gtk_scrolled_window_new(nil, nil);
+  gtk_scrolled_window_set_policy(scroll, GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_shadow_type(scroll, 1);   { GTK_SHADOW_IN }
+
+  { gtk_tree_store_new is variadic; _newv takes the same types as an array. }
+  types[0] := G_TYPE_STRING;
+  store := gtk_tree_store_newv(1, @types[0]);
+  tv := gtk_tree_view_new_with_model(store);
+  g_object_unref(store);   { the view holds the only reference we need }
+
+  { gtk_tree_view_insert_column_with_attributes is variadic too: build the
+    column, pack a text renderer, bind column 0 to its 'text' property. }
+  col := gtk_tree_view_column_new;
+  rend := gtk_cell_renderer_text_new;
+  gtk_tree_view_column_pack_start(col, rend, 1);
+  gtk_tree_view_column_add_attribute(col, rend, PC('text'), TREE_COL_TEXT);
+  gtk_tree_view_append_column(tv, col);
+  { one nameless column, so no header row to waste a line on }
+  gtk_tree_view_set_headers_visible(tv, 0);
+
+  sel := gtk_tree_view_get_selection(tv);
+  SignalConnectData(sel, 'changed', @TreeSelectionChangedTramp, Pointer(ATree));
+
+  gtk_container_add(scroll, tv);
+  CreateTreeView := scroll;
+end;
+
+function TGtk3WidgetSet.TreeAdd(ATree: TComponent; const AParent, AText: string): string;
+var store, s: Pointer;
+    it, pit: TTreeIterRec;
+    pp: Pointer;
+begin
+  TreeAdd := '';
+  store := TreeModel(ATree);
+  if store = nil then Exit;
+  pp := nil;
+  if AParent <> '' then
+  begin
+    if gtk_tree_model_get_iter_from_string(store, @pit, PC(AParent)) = 0 then Exit;
+    pp := @pit;
+  end;
+  gtk_tree_store_append(store, @it, pp);
+  TreeStoreSetText(store, @it, AText);
+  s := gtk_tree_model_get_string_from_iter(store, @it);
+  if s <> nil then
+  begin
+    TreeAdd := PCharToStr(s);
+    g_free(s);
+  end;
+end;
+
+procedure TGtk3WidgetSet.TreeClear(ATree: TComponent);
+var store: Pointer;
+begin
+  store := TreeModel(ATree);
+  if store <> nil then gtk_tree_store_clear(store);
+end;
+
+procedure TGtk3WidgetSet.TreeExpand(ATree: TComponent; const ANode: string; ADeep: Boolean);
+var tv, path: Pointer; d: Integer;
+begin
+  tv := TreeInner(ATree);
+  if tv = nil then Exit;
+  if ANode = '' then
+  begin
+    gtk_tree_view_expand_all(tv);
+    Exit;
+  end;
+  path := gtk_tree_path_new_from_string(PC(ANode));
+  if path = nil then Exit;
+  if ADeep then d := 1 else d := 0;
+  gtk_tree_view_expand_row(tv, path, d);
+  gtk_tree_path_free(path);
+end;
+
+procedure TGtk3WidgetSet.TreeCollapse(ATree: TComponent; const ANode: string);
+var tv, path: Pointer;
+begin
+  tv := TreeInner(ATree);
+  if tv = nil then Exit;
+  if ANode = '' then
+  begin
+    gtk_tree_view_collapse_all(tv);
+    Exit;
+  end;
+  path := gtk_tree_path_new_from_string(PC(ANode));
+  if path = nil then Exit;
+  gtk_tree_view_collapse_row(tv, path);
+  gtk_tree_path_free(path);
+end;
+
+procedure TGtk3WidgetSet.TreeSetText(ATree: TComponent; const ANode, AText: string);
+var store: Pointer; it: TTreeIterRec;
+begin
+  store := TreeModel(ATree);
+  if store = nil then Exit;
+  if gtk_tree_model_get_iter_from_string(store, @it, PC(ANode)) = 0 then Exit;
+  TreeStoreSetText(store, @it, AText);
+end;
+
+function TGtk3WidgetSet.TreeSelected(ATree: TComponent): string;
+var tv, sel, s: Pointer;
+    it: TTreeIterRec;
+    model: Pointer;
+begin
+  TreeSelected := '';
+  tv := TreeInner(ATree);
+  if tv = nil then Exit;
+  sel := gtk_tree_view_get_selection(tv);
+  if sel = nil then Exit;
+  model := nil;
+  if gtk_tree_selection_get_selected(sel, @model, @it) = 0 then Exit;
+  s := gtk_tree_model_get_string_from_iter(model, @it);
+  if s <> nil then
+  begin
+    TreeSelected := PCharToStr(s);
+    g_free(s);
+  end;
+end;
+
+procedure TGtk3WidgetSet.TreeSelect(ATree: TComponent; const ANode: string);
+var tv, sel, path: Pointer;
+begin
+  tv := TreeInner(ATree);
+  if tv = nil then Exit;
+  sel := gtk_tree_view_get_selection(tv);
+  if sel = nil then Exit;
+  if ANode = '' then
+  begin
+    gtk_tree_selection_unselect_all(sel);
+    Exit;
+  end;
+  path := gtk_tree_path_new_from_string(PC(ANode));
+  if path = nil then Exit;
+  { a row inside a collapsed parent cannot be selected, so open the way to it }
+  gtk_tree_view_expand_to_path(tv, path);
+  gtk_tree_selection_select_path(sel, path);
+  gtk_tree_path_free(path);
 end;
 
 function TGtk3WidgetSet.CreateNotebook: Pointer;
