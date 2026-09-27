@@ -47,3 +47,4 @@ ok: /tmp/testmgr-scratch-119220/test_nilpy_zeroctor26  [code=479494B  data=10365
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-09-27 — fixed by frankB: `list()` wrapped its literal temp in pylist_mark_list, an identity marker whose result the store treats as owned and does not retain, so the temp held the list's only reference. 31d314dfa8 released that temp at the statement end, freeing the list `c = list()` had bound, and `return (5, len(c))` printed `()`. The stamp is now a hoisted statement and the value the bare temp (as the set comprehension does), so the store retains. A return's temps are also no longer released. Row: test/test_nilpy_a_returned_container_survives_the_statement_end_release.npy.

@@ -5381,7 +5381,29 @@ begin
       before this line existed. }
     PyParseListLiteralT(tkLParen, tkRParen, False);   { consumes the '(' ')' }
     if lo <> 'tuple' then
-      CurASTNode := PyMarkAsSeqKind(CurASTNode, 'pylist_mark_list');
+    begin
+      { The stamp is HOISTED AS A STATEMENT and the value stays the bare temp,
+        as the set comprehension does. Wrapping the value in the marker
+        (identity, a BORROWED alias the store treats as owned and does not
+        retain) left the temp's reference the list's only one: `c = list()`
+        into a parameter over-released under PXX_HEAP_DEBUG, and once
+        31d314dfa8 released the temp at the statement end, the list c had
+        just been bound to was freed and `return (5, len(c))` came back `()`. }
+      bPi := FindProc('pylist_mark_list');
+      if (bPi >= 0) and (ASTKind[CurASTNode] = AN_IDENT) then
+      begin
+        bArg := AllocNode(AN_ARG);
+        ASTLeft[bArg] := PyMakeIdent(ASTIVal[CurASTNode]);
+        ASTRight[bArg] := -1;
+        bCall := AllocNode(AN_CALL);
+        ASTIVal[bCall] := bPi;
+        ASTTk[bCall] := Ord(tyClass);
+        ASTLeft[bCall] := bArg;
+        PyHoistStmt(bCall);
+      end
+      else
+        CurASTNode := PyMarkAsSeqKind(CurASTNode, 'pylist_mark_list');
+    end;
     if (lo = 'bytes') or (lo = 'bytearray') then
     begin
       bPi := FindProc('pybytes_from_list');
@@ -8843,6 +8865,23 @@ function PyIsFrozenSetCall: Boolean;
 begin
   Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'frozenset');
 end;
+
+{ Record a hidden container temp as the current statement's, so the
+  statement-list builder nils it once the statement is done (see
+  PyStmtTempSym). Only for a temp whose container is reachable, after the
+  statement, solely through what the statement stored it into. }
+procedure PyNoteStmtTemp(tmpSym: Integer);
+begin
+  if PyStmtTempCount >= Length(PyStmtTempSym) then
+  begin
+    SetLength(PyStmtTempSym, 64 + PyStmtTempCount * 2);
+    SetLength(PyStmtTempProc, 64 + PyStmtTempCount * 2);
+  end;
+  PyStmtTempSym[PyStmtTempCount] := tmpSym;
+  PyStmtTempProc[PyStmtTempCount] := CurProc;
+  Inc(PyStmtTempCount);
+end;
+
 
 { Stamp a TPyList-producing node as a SET (pylib's pylist_mark_set). Every form
   that yields a Python set must go through this — `set()`, a `{a, b}` literal
@@ -21410,22 +21449,6 @@ begin
   Result := PyClassLevelCarrier(nm, outMmi, anyInst) and (not anyInst);
 end;
 
-{ Record a hidden container temp as the current statement's, so the
-  statement-list builder nils it once the statement is done (see
-  PyStmtTempSym). Only for a temp whose container is reachable, after the
-  statement, solely through what the statement stored it into. }
-procedure PyNoteStmtTemp(tmpSym: Integer);
-begin
-  if PyStmtTempCount >= Length(PyStmtTempSym) then
-  begin
-    SetLength(PyStmtTempSym, 64 + PyStmtTempCount * 2);
-    SetLength(PyStmtTempProc, 64 + PyStmtTempCount * 2);
-  end;
-  PyStmtTempSym[PyStmtTempCount] := tmpSym;
-  PyStmtTempProc[PyStmtTempCount] := CurProc;
-  Inc(PyStmtTempCount);
-end;
-
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -23659,10 +23682,24 @@ end;
   statement made its temps in another CurProc, and its own builders release
   them. A statement that returns never reaches the release, and the
   function's finalizer frees the temp as before. }
-function PyReleaseTempsSince(seq, mark: Integer): Integer;
+{ Whether a statement's container temps must NOT be released when it ends:
+  a `return` hands its value to the caller, and `return (a, b)` returns the
+  tuple's temp itself. Those temps are left to the function's finalizer, as
+  before. }
+function PyStmtKeepsTemps(n: Integer): Boolean;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if ASTKind[n] = AN_EXIT then begin Result := True; Exit; end;
+  if ASTKind[n] = AN_SEQ then
+    Result := PyStmtKeepsTemps(ASTLeft[n]) or PyStmtKeepsTemps(ASTRight[n]);
+end;
+
+function PyReleaseTempsSince(seq, mark, stmt: Integer): Integer;
 var k, asgn, nilNode: Integer;
 begin
   Result := seq;
+  if not PyStmtKeepsTemps(stmt) then
   for k := mark to PyStmtTempCount - 1 do
     if PyStmtTempProc[k] = CurProc then
     begin
@@ -26597,7 +26634,7 @@ begin
     stmt := PyParseStatement;
     seq := PyFlushHoist(seq);
     seq := PySeqAppend(seq, stmt);
-    seq := PyReleaseTempsSince(seq, tmark);
+    seq := PyReleaseTempsSince(seq, tmark, stmt);
   until not Eat(tkSemicolon);
   if CurTok.Kind = tkNewline then Next;
   Result := seq;
@@ -36273,7 +36310,7 @@ begin
     stmt := PyParseStatement;
     Result := PyFlushHoist(Result);
     Result := PySeqAppend(Result, stmt);
-    Result := PyReleaseTempsSince(Result, tmark);
+    Result := PyReleaseTempsSince(Result, tmark, stmt);
     { `u = int(vm.pop()); addr = int(vm.pop())` — Python allows several simple
       statements on one line, separated by ';'. Consumed here so the newline
       check below still applies to the LAST one on the line. }
@@ -36285,7 +36322,7 @@ begin
       stmt := PyParseStatement;
       Result := PyFlushHoist(Result);
       Result := PySeqAppend(Result, stmt);
-      Result := PyReleaseTempsSince(Result, tmark);
+      Result := PyReleaseTempsSince(Result, tmark, stmt);
     end;
     if CurTok.Kind = tkNewline then PySkipNewlines
     else if (stmt >= 0) and (ASTKind[stmt] in [AN_IF, AN_WHILE, AN_FOR,
@@ -51064,7 +51101,7 @@ begin
       tmark := PyStmtTempCount;
       stmt := PyParseStatement;
       stmt := PySeqAppend(PyFlushHoist(-1), stmt);
-      stmt := PyReleaseTempsSince(stmt, tmark);
+      stmt := PyReleaseTempsSince(stmt, tmark, -1);
       if stmt >= 0 then
       begin
         if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
@@ -51581,7 +51618,7 @@ begin
       stmt := PyParseStatement;
       mainNode := PyFlushHoist(mainNode);
       mainNode := PySeqAppend(mainNode, stmt);
-      mainNode := PyReleaseTempsSince(mainNode, tmark);
+      mainNode := PyReleaseTempsSince(mainNode, tmark, -1);
       { the list just grew — everything it now holds must sit BELOW the floor,
         or the next unit compile hands those nodes out again }
       ASTArenaFloor := ASTNodeCount;
@@ -51594,7 +51631,7 @@ begin
         stmt := PyParseStatement;
         mainNode := PyFlushHoist(mainNode);
         mainNode := PySeqAppend(mainNode, stmt);
-        mainNode := PyReleaseTempsSince(mainNode, tmark);
+        mainNode := PyReleaseTempsSince(mainNode, tmark, -1);
         ASTArenaFloor := ASTNodeCount;
       end;
     end;

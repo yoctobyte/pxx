@@ -600,6 +600,11 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_stmt_temp_released 300 $(TESTTMP)/test_nilpy_stmttemp26
 	@if tools/assert_no_leak.sh nilpy_stmt_temp_control 300 $(TESTTMP)/test_nilpy_stmttemp26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_stmt_temp control (keep) did not trip the bound -- the census cannot see these containers"; exit 1; fi
+	# ...and a container the statement hands on still has an owner: a returned
+	# literal, and `c = list()` (an identity marker, whose result the store does
+	# not retain). 31d314dfa8 freed that list, so `return (5, len(c))` was `()`.
+	./$(COMPILER) test/test_nilpy_a_returned_container_survives_the_statement_end_release.npy $(TESTTMP)/test_nilpy_retcont26
+	$(TESTTMP)/test_nilpy_retcont26 | diff -u test/test_nilpy_a_returned_container_survives_the_statement_end_release.expected -
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -

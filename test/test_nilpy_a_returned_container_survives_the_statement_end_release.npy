@@ -1,0 +1,98 @@
+# A container a statement builds and hands out survives the release that
+# 31d314dfa8 added at the end of each statement.
+#
+# 31d314dfa8 nils a statement's hidden container temps once the statement
+# is done. `list()` is an empty literal wrapped in pylist_mark_list, an
+# identity marker whose result the store treats as owned and does not retain,
+# so the temp's reference was the list's only one. `c = list()` then freed the
+# list c had just been bound to, the next allocation reused it, and
+# `return (5, len(c))` came back EMPTY: `()` (caught by
+# test_nilpy_zero_argument_builtin_constructors). A temp wrapped by a marker
+# is no longer released at the statement end; neither are a `return`'s temps.
+# Every line is CPython's. Under -dPXX_HEAP_DEBUG the one `c = list()` into a
+# PARAMETER still reports an over-release, and pin v445 (without 31d314dfa8)
+# reports the same one, so that is older and separate.
+
+
+def ret_tuple(c=None):
+    if c is None:
+        c = list()
+    c.append(1)
+    return (5, len(c))
+
+
+def ret_list():
+    x = [1]
+    return [x[0], 2, 3]
+
+
+def ret_dict():
+    d = {}
+    d["a"] = 1
+    return {"k": d["a"], "n": 2}
+
+
+def ret_named():
+    made = [1, 2]
+    made.append(3)
+    return made
+
+
+def ret_named_dict():
+    made = {"x": 1}
+    return made
+
+
+def ret_nested():
+    return [(1, 2), [3, {"z": 4}]]
+
+
+def ret_in_if(flag):
+    if flag:
+        return (1, [2])
+    return ([3], 4)
+
+
+def ret_in_loop(xs):
+    for x in xs:
+        if x > 1:
+            return [x, x * 2]
+    return []
+
+
+def ret_from_break():
+    got = []
+    for i in range(5):
+        row = [i, i * i]
+        if i == 3:
+            got = row
+            break
+    return got
+
+
+def ret_after_raise():
+    try:
+        tmp = [1, 2]
+        raise ValueError(str(len(tmp)))
+    except ValueError as e:
+        return (str(e), [9])
+
+
+def gen():
+    for i in range(3):
+        yield [i, i + 1]
+    yield (7, 8)
+
+
+def one_line(c=None):
+    if c is None: c = []
+    return (len(c), [c])
+
+
+print(ret_tuple(), ret_tuple([0]))
+print(ret_list(), ret_dict())
+print(ret_named(), ret_named_dict(), ret_nested())
+print(ret_in_if(True), ret_in_if(False))
+print(ret_in_loop([0, 1, 5]), ret_in_loop([]))
+print(ret_from_break(), ret_after_raise())
+print([g for g in gen()], one_line())
