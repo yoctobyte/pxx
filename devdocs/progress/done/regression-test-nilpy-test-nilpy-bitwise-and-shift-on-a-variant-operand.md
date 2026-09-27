@@ -47,3 +47,6 @@ ok: /tmp/testmgr-scratch-359195/test_nilpy_bitvar26  [code=565637B  data=107354B
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-27 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py` passes at 9bd5d47ef746 (tier full); it was red at 2954d103babe. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
