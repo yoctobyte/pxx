@@ -97,7 +97,13 @@ else
   PAS="$(cd "$(dirname "$PAS")" && pwd)/$(basename "$PAS")"
 fi
 
-PXX="$REPO_ROOT/compiler/pascal26"
+# PXX= in the environment picks the compiler for BOTH forms. Before 2026-09-27
+# this line assigned compiler/pascal26 unconditionally, which did two silent
+# things: the bare form ignored PXX= and built with whatever checkout build was
+# on disk, stale or not; and because the assignment keeps an inherited export,
+# a caller's `PXX=<pin>` reached a --project build.sh as compiler/pascal26.
+PXX_FROM_ENV="${PXX:-}"
+PXX="${PXX:-$REPO_ROOT/compiler/pascal26}"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
 case "$CHIP" in
@@ -127,7 +133,20 @@ esac
 # what the demo IS; export PXX to point it elsewhere.
 if [ -z "$PROJECT" ]; then
   [ -x "$PXX" ] || { echo "esp_flash: compiler not built ($PXX) — run make compiler/pascal26" >&2; exit 2; }
+  PXX_HOW="bare form; ${PXX_FROM_ENV:+from PXX=}${PXX_FROM_ENV:-the checkout build, override with PXX=}"
+else
+  # Hand build.sh exactly the caller's choice, or nothing, so its own default
+  # (`${PXX:-$(tools/pxx_stable.sh)}`, the pin, in every examples/esp32 project)
+  # applies. Resolve that default here only to NAME it.
+  if [ -n "$PXX_FROM_ENV" ]; then
+    export PXX="$PXX_FROM_ENV"; PXX_HOW="--project; from PXX="
+  else
+    unset PXX; PXX="$("$REPO_ROOT/tools/pxx_stable.sh" 2>/dev/null)"
+    PXX_HOW="--project; build.sh default, tools/pxx_stable.sh"
+  fi
 fi
+PXX_SHA="$(sha256sum "$(readlink -f "$PXX")" 2>/dev/null | cut -c1-12)"
+PXX_TAG="compiler ${PXX_SHA:-UNREADABLE} $PXX"
 [ -d "$PROJ" ] || { echo "esp_flash: IDF project $PROJ missing" >&2; exit 2; }
 [ -f "$ESP_IDF_DIR/export.sh" ] || { echo "esp_flash: ESP-IDF not at $ESP_IDF_DIR" >&2; exit 2; }
 
@@ -146,6 +165,7 @@ fi
 [ -w "$PORT" ] || { echo "esp_flash: $PORT is not writable (add yourself to the dialout group and re-login)" >&2; exit 2; }
 
 echo "esp_flash: $CHIP on $PORT <- ${PAS:+$(basename "$PAS")}${PROJECT:+$(basename "$PROJECT") (its own build.sh)}" >&2
+echo "esp_flash: $PXX_TAG ($PXX_HOW)" >&2
 
 # The x86-64 oracle, captured BEFORE the board runs: the same source compiled
 # natively. A program that talks to hardware only can pass --no-verify.
@@ -339,13 +359,13 @@ if [ -n "$ESP_WARN_LINES" ]; then
 fi
 
 if [ -n "$ESP_ERR_LINES" ]; then
-  echo "esp_flash: FAIL -- the board logged IDF ERRORS. They are stripped before the output comparison, so without this check the run reports OK:" >&2
+  echo "esp_flash: FAIL -- the board logged IDF ERRORS. They are stripped before the output comparison, so without this check the run reports OK [compiler ${PXX_SHA:-UNREADABLE}]:" >&2
   printf '%s\n' "$ESP_ERR_LINES" | sed 's/^/    /' >&2
   exit 1
 fi
 
 if [ "${ESP_BOOTS:-0}" -ge 2 ]; then
-  echo "esp_flash: FAIL -- the board rebooted during the capture (${ESP_BOOTS} boot banners). A panic loop reprints the program's first lines, which a prefix comparison matches." >&2
+  echo "esp_flash: FAIL -- the board rebooted during the capture (${ESP_BOOTS} boot banners). A panic loop reprints the program's first lines, which a prefix comparison matches. [compiler ${PXX_SHA:-UNREADABLE}]" >&2
   exit 1
 fi
 
@@ -361,10 +381,10 @@ if [ "$VERIFY" = 1 ]; then
   if [ -n "$PROJECT" ]; then WHAT="$(basename "$PROJ")/main/main.expected"
   else WHAT="the x86-64 oracle"; fi
   if printf '%s\n' "$OUT" | head -n "$ORACLE_LINES" | diff -u "$ORACLE" - >/dev/null; then
-    echo "esp_flash: OK — board output matches $WHAT ($ORACLE_LINES lines)" >&2
+    echo "esp_flash: OK — board output matches $WHAT ($ORACLE_LINES lines) [compiler ${PXX_SHA:-UNREADABLE}]" >&2
     rm -f "$ORACLE"
   else
-    echo "esp_flash: MISMATCH against $WHAT (a SHORT capture is what a hang looks like -- check the diff for where it stopped):" >&2
+    echo "esp_flash: MISMATCH against $WHAT (a SHORT capture is what a hang looks like -- check the diff for where it stopped) [compiler ${PXX_SHA:-UNREADABLE}]:" >&2
     printf '%s\n' "$OUT" | head -n "$ORACLE_LINES" | diff -u "$ORACLE" - >&2
     rm -f "$ORACLE"
     exit 1
