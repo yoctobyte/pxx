@@ -61,7 +61,22 @@ case "$(basename "$PWD")" in
     # feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
     ISA="--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"
     QEMU_GLOB="qemu-xtensa/*/qemu/bin/qemu-system-xtensa" ;;
-  *) echo "build.sh: the directory name must end in -c3 or -s3, not $(basename "$PWD")" >&2; exit 2 ;;
+  *-esp32)
+    CHIP=esp32
+    # The CLASSIC part, Xtensa LX6. The CHIP NAME and not --target=xtensa: the
+    # generic spelling answers the S3's memory map and instruction set, and the
+    # chip name also implies the windowed ABI on the IDF platform, which is
+    # what app_main is called with. Same reasoning as examples/esp32/
+    # hello-esp32 and the esp32 arm of tools/esp_flash.sh.
+    # --xtensa-long-calls for the same reason as the S3 above, and measured on
+    # this program: without it, pin v441 refuses with "the forward call to
+    # PyUtf8CpAt at code offset 501172 cannot reach its body at 1144424".
+    # THAT REFUSAL IS NOT LX6-SPECIFIC -- --target=esp32s3 gives the identical
+    # message for the identical source, which is what stops it being read as a
+    # classic-part defect.
+    ISA="--target=esp32 --xtensa-long-calls"
+    QEMU_GLOB="qemu-xtensa/*/qemu/bin/qemu-system-xtensa" ;;
+  *) echo "build.sh: the directory name must end in -c3, -s3 or -esp32, not $(basename "$PWD")" >&2; exit 2 ;;
 esac
 
 # PXX_EXTRA_FLAGS is for measuring a flag against this program without editing
@@ -171,7 +186,14 @@ PYEFUSE
       -global driver=nvram.esp32c3.efuse,property=drive,value=efuse \
       -serial "file:$ser" </dev/null >/dev/null 2>&1 || true
   else
-    timeout 40 "$QEMU_BIN" -nographic -machine esp32s3 \
+    # -machine "$CHIP", NOT a hardcoded esp32s3. This was an if/else over two
+    # chips, so the else arm meant "s3" -- and the moment a third xtensa chip
+    # exists (the classic esp32, below) that arm boots it on the WRONG MACHINE
+    # and says nothing. qemu-system-xtensa offers `esp32` and `esp32s3` and the
+    # CHIP values are spelled exactly that way, so the variable is the whole
+    # fix. The c3 keeps its own arm because it needs a default efuse blob too,
+    # not because of the machine name.
+    timeout 40 "$QEMU_BIN" -nographic -machine "$CHIP" \
       -drive file=build/qemu_flash.bin,if=mtd,format=raw \
       -serial "file:$ser" </dev/null >/dev/null 2>&1 || true
   fi
@@ -187,7 +209,24 @@ if [ "${1:-}" = "qemu-assert" ]; then
   # PXX_EXPECT pairs with PXX_MAIN: a swapped program brings its own expected
   # output, which is what makes qemu-assert honest for it (see PXX_MAIN above).
   want="$(cat "${PXX_EXPECT:-main/main.expected}")"
-  boots="$(grep -c 'ESP-ROM' "$ser" || true)"
+  # 'rst:' and NOT 'ESP-ROM'. The classic ESP32's ROM prints
+  #   ets Jul 29 2019 12:21:46
+  #   rst:0x1 (POWERON_RESET),boot:0x12 (SPI_FAST_FLASH_BOOT)
+  # and never the string ESP-ROM, which the S3 and C3 both do print
+  # (ESP-ROM:esp32s3-20210327). So on the classic part the old marker made
+  # this guard UNSATISFIABLE -- boots=0 for a boot that was entirely fine,
+  # with the program's output already equal to main.expected. A guard that
+  # cannot pass is not a guard, and this one failed in the direction that
+  # looks like a chip defect.
+  # 'rst:' is also the BETTER reboot-loop detector, which is what boots=1 is
+  # for: the ROM prints it on every reset before anything else, so it still
+  # counts the loop in the case the c3 arm above describes, where the
+  # bootloader rejects the image and never reaches the app.
+  # Measured 2026-09-27 on real QEMU captures, one per chip:
+  #   esp32    rst: 1   ESP-ROM 0
+  #   esp32s3  rst: 1   ESP-ROM 1
+  #   esp32c3  rst: 1   ESP-ROM 1
+  boots="$(grep -c 'rst:' "$ser" || true)"
   # THE FILTER ABOVE DROPS IDF'S *ERROR* LINES, so scan the raw capture for them
   # before comparing -- a watchdog trigger (a hung ISR) and a corrupt-heap report
   # (an allocation inside an interrupt handler) both arrive as `E (nnn) tag: ...`
