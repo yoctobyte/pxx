@@ -440,3 +440,4 @@
 2026-09-25T21:14:20Z  v440  8bfa6543bc28878f9e5acf2258d5a84bf42abcd1a559e70778767aae487db2ac  0b6fffa0cbe4af3241d4ca9bb383ab7a1b02b116  fix(N,A,B): a lambda passed straight as an argument is released after the call
 2026-09-25T22:05:28Z  v441  4ebfa2d047a27eae32246a00f0ccb5cb09ae7f92105aa3adfd5a51d484d2e2a2  c50502d1a47b6f6693359406fe964aa908728af8  fix(A,P): Dispose(F()) finalizes the pointee, and a designator with a call in it is no longer re-read
 2026-09-27T16:42:23Z  v442  ccca045a848b8f3df832aa7faec1fad88f16abddf40c82362a2e6ec37161638f  97af9cde4f2a46d88186ab34977c27e83590e9cb  feat(S,N): `import ssl` on ESP -- urequests https and umqtt ssl=True run unchanged
+2026-09-27T17:13:51Z  v443  f2b042c40f3bb389394d8db14fe102ebae65e9dfb7d379290e1077dced1a8caa  df948827f23cff4d0723034d3dface2cfee38d9d  docs(S): the classic ESP32 row records four programs, the soak, and one gap
