@@ -36,7 +36,9 @@ uses gtk3_c, gtk3, controls, stdctrls, extctrls, comctrls, forms, menus, dialogs
 const
   W_WIN    = 1100;
   H_WIN    = 720;
-  BAR_H    = 64;        { toolbar row + status row }
+  BAR_H    = 64;        { the header's rough height: only used to seed the
+                          log pane's opening split, since the toolbar and the
+                          status line are real widgets in a box now }
   W_TREE   = 260;
   H_LOG    = 260;
   TICK_MS  = 100;
@@ -63,6 +65,8 @@ type
     DetectBtn, SaveBtn, BuildBtn, MonBtn, StopBtn: TButton;
     Status: TLabel;
     MainMenu: TMainMenu;
+    Bar: TToolBar;
+    HeadBox: TBox;
     Split, RightSplit: TPaned;
     Tree: TTreeView;
     Editor: TMemo;
@@ -798,11 +802,10 @@ begin
     before it has an allocation, so the seed has to wait for the first real one
     -- and must not be repeated, or every window resize would drag the splitters
     back to their starting places under the user's hands. }
-  if w <> lastW then
-  begin
-    lastW := w;
-    Status.SetBounds(8, 36, w - 16, 22);
-  end;
+  { THE STATUS LABEL IS NOT RESIZED HERE ANY MORE. It lives in the header box
+    now, so GTK gives it the full width; setting one made the window's minimum
+    width follow the label. lastW is kept because the seed below reads w. }
+  if w <> lastW then lastW := w;
   { h IS THE HEADER STRIP'S HEIGHT NOW, NOT THE WINDOW'S. This handler is fired
     by the form's absolute-coordinate container, and SetClient pinned that to
     BAR_H -- so the log pane's opening height comes from the design constants and
@@ -824,13 +827,15 @@ begin
   GuiAutoQuit := 0;
 end;
 
-function MkButton(const cap: AnsiString; x, w: Integer): TButton;
+{ A toolbar button. NO SetBounds: a toolbar places its own items, and a size
+  request on one becomes a width the row -- and therefore the window -- cannot
+  go below, which is the floor this toolbar exists to remove. }
+function MkButton(const cap: AnsiString): TButton;
 var b: TButton;
 begin
   b := TButton.Create(nil);
   b.Caption := cap;
-  b.Parent := EspForm;
-  b.SetBounds(x, 4, w, 28);
+  b.Parent := EspForm.Bar;
   MkButton := b;
 end;
 
@@ -863,34 +868,59 @@ begin
   else if (arg <> '') and (arg <> '--gui-smoke') then
     start := arg;
 
+  { THE TOOLBAR IS A REAL GtkToolbar, and that is what unfloors the window.
+    These nine controls used to sit at absolute coordinates out to x=934, so
+    the form's container reported 936 as its MINIMUM width and the window
+    could not be dragged narrower than that however empty it looked. A
+    toolbar moves the items that no longer fit into its own arrow menu. }
+  { A vertical box holds the toolbar over the status line, and the box is the
+    form's header. The status LABEL is the reason for the box: on the
+    absolute-coordinate container it needed a width, and a width request is a
+    minimum -- it made the window's floor track the label instead of the
+    toolbar. In a vertical box it gets the full width for free and can say
+    anything without widening anything. }
+  f.HeadBox := TBox.Create(nil);
+  f.HeadBox.Vertical := True;
+  f.HeadBox.Parent := f;
+
+  f.Bar := TToolBar.Create(nil);
+  f.Bar.Parent := f.HeadBox;
+
   f.RootEdit := TEdit.Create(nil);
-  f.RootEdit.Parent := f;
-  f.RootEdit.SetBounds(8, 4, 280, 28);
-  f.OpenBtn := MkButton('Open', 292, 60);
+  f.RootEdit.Parent := f.Bar;
+  { the ONE size request left in the row, and it is the first item, so it is
+    the whole of the window's remaining width floor }
+  f.RootEdit.SetBounds(0, 0, 240, 28);
+  f.OpenBtn := MkButton('Open');
+  f.Bar.AddSeparator;
   f.ChipLbl := TLabel.Create(nil);
-  f.ChipLbl.Caption := 'Chip:';
-  f.ChipLbl.Parent := f;
-  f.ChipLbl.SetBounds(368, 9, 40, 20);
+  f.ChipLbl.Caption := ' Chip: ';
+  f.ChipLbl.Parent := f.Bar;
   f.ChipBox := TComboBox.Create(nil);
-  f.ChipBox.Parent := f;
-  f.ChipBox.SetBounds(410, 4, 120, 28);
+  f.ChipBox.Parent := f.Bar;
   f.ChipBox.AddItem('auto');
   f.ChipBox.AddItem('ESP32');
   f.ChipBox.AddItem('ESP32-S3');
   f.ChipBox.AddItem('ESP32-C3');
   f.ChipBox.AddItem('ESP32-S2');
-  f.DetectBtn := MkButton('Detect', 536, 70);
-  f.SaveBtn := MkButton('Save', 620, 60);
-  f.BuildBtn := MkButton('Build+Flash', 686, 100);
-  f.MonBtn := MkButton('Monitor', 792, 76);
-  f.StopBtn := MkButton('Stop', 874, 60);
+  f.DetectBtn := MkButton('Detect');
+  f.Bar.AddSeparator;
+  f.SaveBtn := MkButton('Save');
+  f.BuildBtn := MkButton('Build+Flash');
+  f.MonBtn := MkButton('Monitor');
+  f.StopBtn := MkButton('Stop');
+
   f.Status := TLabel.Create(nil);
-  f.Status.Parent := f;
-  f.Status.SetBounds(8, 36, W_WIN - 16, 22);
+  { '...' rather than widen: the status text is a sentence, and a label's
+    minimum width is its whole text, so without this the WINDOW's minimum
+    width tracked whatever the status line happened to say -- 505px, and a
+    different number for a different project. }
+  f.Status.Ellipsize := True;
+  f.Status.Parent := f.HeadBox;
 
   f.Split := TPaned.Create(nil);
   f.Split.Parent := f;
-  f.Split.SetBounds(0, BAR_H, W_WIN, H_WIN - BAR_H);
+  f.Split.SetBounds(0, 0, W_WIN, H_WIN - BAR_H);
   f.Tree := TTreeView.Create(nil);
   f.Tree.Parent := f.Split;
   f.RightSplit := TPaned.Create(nil);
@@ -907,7 +937,8 @@ begin
     resizes freely in both directions and no OnResize arithmetic reflows it.
     BAR_H is the strip above it that keeps absolute coordinates -- the toolbar
     row and the status line. }
-  f.SetClient(f.Split, BAR_H);
+  f.SetHeader(f.HeadBox);
+  f.SetClient(f.Split, 0);
 
   f.Ticker := TTimer.Create(nil);
   f.Ticker.Interval := TICK_MS;

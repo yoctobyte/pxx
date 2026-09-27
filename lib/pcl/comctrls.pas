@@ -64,6 +64,23 @@ type
     property Tag: Integer read FTag write FTag;
   end;
 
+  { A row of controls that OVERFLOWS rather than widening its container.
+
+    Children arrive the ordinary way -- set Parent to the toolbar -- and the
+    widgetset wraps each one for its toolbar; order follows the order Parent
+    was assigned. Do NOT give a child a Left/Top: a toolbar places its own
+    items, and a size request on one becomes a width the row cannot go below.
+
+    A toolbar has no Add method on purpose. Two ways to put a control in a
+    container is the shape that leaves one of them broken. }
+  TToolBar = class(TWinControl)
+  public
+    constructor Create(AOwner: TComponent); override;
+    procedure CreateHandle; override;
+    { a vertical rule between groups of items }
+    procedure AddSeparator;
+  end;
+
   TTreeView = class(TWinControl)
   private
     FRoots: array of TTreeNode;
@@ -153,6 +170,24 @@ end;
 procedure TTreeNode.Select;
 begin
   WidgetSet.TreeSelect(FTree, FKey);
+end;
+
+{ ---- TToolBar ---- }
+
+constructor TToolBar.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Self.HandleNeeded;
+end;
+
+procedure TToolBar.CreateHandle;
+begin
+  Self.Handle := WidgetSet.CreateToolBar(Self);
+end;
+
+procedure TToolBar.AddSeparator;
+begin
+  WidgetSet.ToolBarAddSeparator(Self);
 end;
 
 { ---- TTreeView ---- }

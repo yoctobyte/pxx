@@ -15,9 +15,19 @@ type
   end;
 
   TLabel = class(TControl)
+  private
+    FEllipsize: Boolean;
+    procedure SetEllipsize(v: Boolean);
   public
     constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
+  published
+    { Truncate with '...' rather than widen. A label's minimum width is its
+      whole text, so a status line inside a box sets its window's minimum
+      width -- and moves it every time the text changes. Off by default:
+      a label at absolute coordinates gets its natural size either way, and
+      silently shortening text nobody asked to shorten would be a surprise. }
+    property Ellipsize: Boolean read FEllipsize write SetEllipsize;
   end;
 
   TEdit = class(TWinControl)
@@ -148,6 +158,15 @@ end;
 procedure TLabel.CreateHandle;
 begin
   Self.Handle := WidgetSet.CreateLabel(Self);
+  { re-apply: a caller may have set Ellipsize before the handle existed }
+  if FEllipsize then WidgetSet.SetLabelEllipsis(Self, True);
+end;
+
+procedure TLabel.SetEllipsize(v: Boolean);
+begin
+  FEllipsize := v;
+  if Self.Handle <> nil then
+    WidgetSet.SetLabelEllipsis(Self, v);
 end;
 
 { TEdit }

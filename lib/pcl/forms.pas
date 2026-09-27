@@ -12,6 +12,7 @@ type
     FMenu: TMainMenu;
     FClient: TControl;
     FHeaderHeight: Integer;
+    FHeader: TControl;
     procedure SetMenu(v: TMainMenu);
   public
     constructor Create(AOwner: TComponent); override;
@@ -25,8 +26,14 @@ type
       an OnResize handler cannot do this job. Re-applied by Realize, because
       Realize re-parents every child. }
     procedure SetClient(AControl: TControl; AHeaderHeight: Integer);
+    { The other end of the same idea: AControl takes the full width of the
+      strip above the absolute-coordinate area and below the menu bar. A
+      TToolBar there is what stops the window's minimum width being the
+      extent of the rightmost button. Re-applied by Realize, same as Client. }
+    procedure SetHeader(AControl: TControl);
     property Menu: TMainMenu read FMenu write SetMenu;
     property Client: TControl read FClient;
+    property Header: TControl read FHeader;
   end;
 
   TFormClass = class of TForm;
@@ -87,6 +94,13 @@ begin
   Result := 0;
 end;
 
+procedure TForm.SetHeader(AControl: TControl);
+begin
+  FHeader := AControl;
+  if (Self.Handle <> nil) and (AControl <> nil) and (AControl.Handle <> nil) then
+    WidgetSet.SetFormHeader(Self, AControl);
+end;
+
 procedure TForm.SetClient(AControl: TControl; AHeaderHeight: Integer);
 begin
   FClient := AControl;
@@ -108,6 +122,11 @@ begin
     form's absolute-coordinate container, so a client set earlier would be put
     back there. Re-applying is cheaper than making SetParent know about it, and
     it is the same shape as the menu above. }
+  { header BEFORE client: SetFormHeader reorders to slot 0 or 1, and doing it
+    after the client would leave the client sitting between the menu and the
+    toolbar for one frame }
+  if FHeader <> nil then
+    WidgetSet.SetFormHeader(Self, FHeader);
   if FClient <> nil then
     WidgetSet.SetFormClient(Self, FClient, FHeaderHeight);
   Result := 0;

@@ -129,6 +129,35 @@ type
     function CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer; virtual;
     procedure BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer); virtual;
 
+    { ---- ToolBar — a row of controls that OVERFLOWS instead of widening ----
+
+      The point is the overflow. A row of controls at absolute coordinates
+      makes its container's minimum width the extent of the rightmost one, so
+      the WINDOW cannot be dragged narrower than the toolbar -- measured on
+      espide, a 936px floor from buttons ending at x=934. A toolkit toolbar
+      moves the items that no longer fit into its own arrow menu instead.
+
+      Children arrive the ordinary way, by setting Parent, so the widgetset's
+      SetParent grows a TToolBar arm exactly as it has a TPaned and a TBox
+      one; order follows the order Parent was assigned. }
+    function CreateToolBar(AToolBar: TComponent): Pointer; virtual;
+    procedure ToolBarAddSeparator(AToolBar: TComponent); virtual;
+
+    { End-ellipsize a label: '...' instead of widening its container.
+
+      A label's MINIMUM width is the width of its whole text, so a status line
+      in a box makes the window unshrinkable below whatever it happens to say.
+      Measured on espide 2026-09-27: a 505px floor from one sentence, which
+      MOVES as the text changes -- the same window has a different minimum
+      depending on which project is open. Ellipsizing drops the minimum to a
+      few pixels and the text truncates instead. }
+    procedure SetLabelEllipsis(ALabel: TComponent; AOn: Boolean); virtual;
+
+    { Put AControl in the form's header slot: full width, its own height, above
+      the absolute-coordinate area and below the menu bar. The counterpart of
+      SetFormClient, which takes the area below. }
+    procedure SetFormHeader(AForm: TComponent; AControl: TComponent); virtual;
+
     { ---- Tree — a collapsible hierarchy ----
 
       A node is addressed by an OPAQUE STRING the widgetset mints and the
@@ -265,6 +294,11 @@ function TWidgetSet.PanedChild(APaned: Pointer; APane: Integer): Pointer; begin 
 
 function TWidgetSet.CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer; begin CreateBox := nil; end;
 procedure TWidgetSet.BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer); begin end;
+
+function TWidgetSet.CreateToolBar(AToolBar: TComponent): Pointer; begin CreateToolBar := nil; end;
+procedure TWidgetSet.SetLabelEllipsis(ALabel: TComponent; AOn: Boolean); begin end;
+procedure TWidgetSet.ToolBarAddSeparator(AToolBar: TComponent); begin end;
+procedure TWidgetSet.SetFormHeader(AForm: TComponent; AControl: TComponent); begin end;
 
 function TWidgetSet.CreateTreeView(ATree: TComponent): Pointer; begin CreateTreeView := nil; end;
 function TWidgetSet.TreeAdd(ATree: TComponent; const AParent, AText: string): string; begin TreeAdd := ''; end;

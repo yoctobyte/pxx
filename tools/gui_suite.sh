@@ -204,6 +204,14 @@ run_gui_test test_pcl_tabbar
 # fail with minimum 800x600 (verified 2026-09-27), and its row 2 is the control
 # that a child's size request still reaches the window.
 run_gui_test test_pcl_form_client
+# TToolBar + TLabel.Ellipsize: the two things that decide a window's MINIMUM
+# width. Every row carries its own control in the same run, because the
+# absolute pixel numbers are theme-dependent. Controls verified 2026-09-27:
+# disabling the ellipsize turns three rows red (window_min 97 -> 493), and
+# disabling the overflow proxies drops proxied_items 7 -> 1 and reddens the
+# reachability row WITHOUT moving any width -- which is why reachability is a
+# row of its own and not folded into the width claim.
+run_gui_test test_pcl_toolbar
 
 # The six that nothing ran until 2026-08-30. check_test_wiring surfaced them
 # once it stopped blanket-crediting test/gui

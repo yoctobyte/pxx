@@ -77,6 +77,10 @@ type
     function CreateBox(AVertical: Boolean; ASpacing: Integer): Pointer; override;
     procedure BoxPack(ABox, AChild: Pointer; AExpand, AFill: Boolean; APadding: Integer); override;
 
+    function CreateToolBar(AToolBar: TComponent): Pointer; override;
+    procedure SetLabelEllipsis(ALabel: TComponent; AOn: Boolean); override;
+    procedure ToolBarAddSeparator(AToolBar: TComponent); override;
+    procedure SetFormHeader(AForm: TComponent; AControl: TComponent); override;
     function CreateTreeView(ATree: TComponent): Pointer; override;
     function TreeAdd(ATree: TComponent; const AParent, AText: string): string; override;
     procedure TreeClear(ATree: TComponent); override;
@@ -211,32 +215,31 @@ begin
   end;
 end;
 
-function GetMenuBarPtr(vbox: Pointer): Pointer;
-var
-  namePtr: Pointer;
-  s: string;
-begin
-  Result := nil;
-  namePtr := gtk_widget_get_name(vbox);
-  if namePtr <> nil then
-  begin
-    s := PCharToStr(namePtr);
-    if (Length(s) > 5) and (s[1] = 'M') and (s[2] = 'B') and (s[3] = 'A') and (s[4] = 'R') and (s[5] = '_') then
-      Result := StringToPointer(GetSubStr(s, 6));
-  end;
-end;
+{ GetMenuBarPtr/SetMenuBarPtr USED TO LIVE HERE AND COULD NEVER HAVE WORKED.
+  They stored the menubar pointer in the vbox's widget NAME -- the same single
+  slot GetFixedPtr/SetFixedPtr use for the fixed container, as SetFormMenu's
+  own comment says. Only one prefix can be in a name at a time, SetFixedPtr
+  wins (CreateForm calls it), and SetMenuBarPtr was never called by anything,
+  so GetMenuBarPtr answered nil for every form that has ever existed. Deleted
+  rather than left as a working-looking helper: verified 2026-09-27 that
+  SetMenuBarPtr had no callers at all and GetMenuBarPtr none either. Whoever
+  needs "is there a menu bar" should ask GTK -- HasMenuBarFirst below does.
+  bug-b-a-getter-whose-setter-is-never-called-answers-nil-forever }
 
-procedure SetMenuBarPtr(vbox: Pointer; menubar: Pointer);
-var
-  s: string;
+{ Is the vbox's first child a GtkMenuBar? Asked of GTK by TYPE, because the
+  answer has to survive a form that never set a menu and a form that did. }
+function HasMenuBarFirst(vbox: Pointer): Boolean;
+var lst, first: Pointer;
 begin
-  if menubar = nil then
-    gtk_widget_set_name(vbox, PChar(''))
-  else
-  begin
-    s := 'MBAR_' + PointerToString(menubar);
-    gtk_widget_set_name(vbox, PChar(s));
-  end;
+  HasMenuBarFirst := False;
+  if vbox = nil then Exit;
+  lst := gtk_container_get_children(vbox);
+  if lst = nil then Exit;
+  first := g_list_nth_data(lst, 0);
+  if (first <> nil)
+     and (g_type_check_instance_is_a(first, gtk_menu_bar_get_type) <> 0) then
+    HasMenuBarFirst := True;
+  g_list_free(lst);
 end;
 
 function GetFixedPtr(widget: Pointer): Pointer;
@@ -835,6 +838,21 @@ begin
       gtk_box_pack_start(ph, ch, 0, 0, 0)
     else
       gtk_box_pack_start(ph, ch, 1, 1, 0);
+    Exit;
+  end;
+
+  { TToolBar: a GtkToolbar takes GtkToolItems and nothing else, so an ordinary
+    widget is WRAPPED in one -- which is how a GtkEntry or a GtkComboBox gets
+    into a real toolbar too. The wrapper is what GTK moves into the overflow
+    menu when the row no longer fits, so it is not a formality. }
+  if IsSubclassOf(cls, 'TToolBar') then
+  begin
+    { the caption is the overflow menu's label, and only a BUTTON gets one --
+      see ToolBarWrapAndInsert for why the others must stay in the row }
+    if IsSubclassOf(GetClass(GetInstanceClassName(Pointer(ctl))), 'TButton') then
+      ToolBarWrapAndInsert(ph, ch, ctl.Caption)
+    else
+      ToolBarWrapAndInsert(ph, ch, '');
     Exit;
   end;
 
@@ -1555,6 +1573,134 @@ begin
   if AExpand then e := 1 else e := 0;
   if AFill then f := 1 else f := 0;
   gtk_box_pack_start(ABox, AChild, e, f, APadding);
+end;
+
+{ Put an ordinary widget into a GtkToolbar by wrapping it in a GtkToolItem.
+  Shared by SetParent and nothing else today, but it is the one place that
+  knows the wrapping rule. }
+{ The overflow menu's stand-in for a button that no longer fits. Clicking it
+  has to do what clicking the button does, so it emits the button's own
+  'clicked'; an overflow menu whose entries do nothing is worse than no
+  overflow at all. }
+procedure ToolProxyActivateTramp(item: Pointer; userdata: Pointer); cdecl;
+begin
+  if userdata <> nil then gtk_button_clicked(userdata);
+end;
+
+procedure ToolBarWrapAndInsert(tb, ch: Pointer; const ACaption: string);
+var item, old, proxy: Pointer;
+begin
+  if (tb = nil) or (ch = nil) then Exit;
+  { already wrapped and in this toolbar? Realize re-parents on every pass }
+  old := gtk_widget_get_parent(ch);
+  if (old <> nil) and (gtk_widget_get_parent(old) = tb) then Exit;
+  item := gtk_tool_item_new;
+  if old <> nil then
+  begin
+    { ref across the move, or gtk_container_remove drops the last reference
+      and finalizes the widget -- the same hazard SetFormClient documents }
+    g_object_ref(ch);
+    gtk_container_remove(old, ch);
+    gtk_container_add(item, ch);
+    g_object_unref(ch);
+  end
+  else
+    gtk_container_add(item, ch);
+
+  { AN ITEM WITH NO PROXY MENU ITEM IS UNREACHABLE ONCE IT NO LONGER FITS.
+    GTK will only put an item in the arrow menu if it has been given something
+    to show there; without a proxy the item is simply not displayed and the
+    button cannot be pressed at all.
+
+    IT IS NOT WHAT LETS THE TOOLBAR SHRINK, and this comment said it was for
+    twenty minutes. Measured 2026-09-27 with the proxies disabled: the
+    toolbar's minimum width is 7px either way. The 505px floor espide had at
+    that point was its STATUS LABEL, whose minimum is its whole text -- a
+    different subsystem entirely, found by measuring each widget instead of
+    believing the first plausible cause. So: proxies buy REACHABILITY,
+    TLabel.Ellipsize buys the width.
+
+    Only captioned controls get one. An entry or a combo box has no sensible
+    menu form, and hiding the one you are typing in would be worse. }
+  if ACaption <> '' then
+  begin
+    proxy := gtk_menu_item_new_with_label(PC(ACaption));
+    gtk_tool_item_set_proxy_menu_item(item, PC('pcl-' + ACaption), proxy);
+    SignalConnectData(proxy, 'activate', @ToolProxyActivateTramp, ch);
+  end;
+
+  gtk_toolbar_insert(tb, item, -1);
+  gtk_widget_show_all(item);
+end;
+
+procedure TGtk3WidgetSet.SetLabelEllipsis(ALabel: TComponent; AOn: Boolean);
+var h: Pointer;
+begin
+  h := TControl(ALabel).Handle;
+  if h = nil then Exit;
+  if AOn then
+  begin
+    gtk_label_set_ellipsize(h, 3);   { PANGO_ELLIPSIZE_END }
+    { left-aligned, or an ellipsized label centres its remains in the row }
+    gtk_label_set_xalign(h, 0.0);
+  end
+  else
+    gtk_label_set_ellipsize(h, 0);   { PANGO_ELLIPSIZE_NONE }
+end;
+
+function TGtk3WidgetSet.CreateToolBar(AToolBar: TComponent): Pointer;
+begin
+  CreateToolBar := gtk_toolbar_new;
+  { THE WHOLE POINT: with show-arrow set, a toolbar narrower than its items
+    puts the tail in its own menu instead of forcing its container wider. }
+  gtk_toolbar_set_show_arrow(CreateToolBar, 1);
+end;
+
+procedure TGtk3WidgetSet.ToolBarAddSeparator(AToolBar: TComponent);
+var tb, item: Pointer;
+begin
+  tb := TControl(AToolBar).Handle;
+  if tb = nil then Exit;
+  item := gtk_separator_tool_item_new;
+  gtk_toolbar_insert(tb, item, -1);
+  gtk_widget_show(item);
+end;
+
+procedure TGtk3WidgetSet.SetFormHeader(AForm: TComponent; AControl: TComponent);
+var win, vbox, ch, oldParent: Pointer;
+    fctl, ctl: TControl;
+    slot: Integer;
+begin
+  fctl := TControl(AForm);
+  ctl := TControl(AControl);
+  if (fctl = nil) or (ctl = nil) then Exit;
+  win := fctl.GetHandle;
+  ch := ctl.GetHandle;
+  if (win = nil) or (ch = nil) then Exit;
+  vbox := GetVBoxPtr(win);
+  if vbox = nil then Exit;
+
+  { below the menu bar when there is one, first otherwise }
+  if HasMenuBarFirst(vbox) then slot := 1 else slot := 0;
+
+  oldParent := gtk_widget_get_parent(ch);
+  if oldParent = vbox then
+  begin
+    gtk_box_reorder_child(vbox, ch, slot);
+    gtk_widget_show(ch);
+    Exit;
+  end;
+  if oldParent <> nil then
+  begin
+    g_object_ref(ch);
+    gtk_container_remove(oldParent, ch);
+    gtk_box_pack_start(vbox, ch, 0, 0, 0);
+    g_object_unref(ch);
+  end
+  else
+    gtk_box_pack_start(vbox, ch, 0, 0, 0);
+  gtk_box_reorder_child(vbox, ch, slot);
+  gtk_widget_show(ch);
 end;
 
 { ---- TTreeView over GtkTreeView + GtkTreeStore ----
