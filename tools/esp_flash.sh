@@ -227,7 +227,7 @@ if [ "$NO_FLASH" = 1 ]; then
 else
   echo "esp_flash: writing flash..." >&2
   if ! python -m esptool --chip "$CHIP" -p "$PORT" -b 460800 \
-       --before default-reset --after hard-reset write-flash "@flash_args" >/dev/null 2>&1; then
+       --before default-reset --after no-reset write-flash "@flash_args" >/dev/null 2>&1; then
     echo "esp_flash: esptool could not write $PORT. Hold BOOT while tapping RESET to force download mode, then retry." >&2
     exit 1
   fi
@@ -236,9 +236,17 @@ fi
 # Read the boot log straight off the tty. `idf.py monitor` is interactive and
 # would need a human to quit it; this just reads for N seconds and stops.
 # 115200 8N1 is the IDF default console.
-stty -F "$PORT" 115200 cs8 -cstopb -parenb -echo raw 2>/dev/null || true
+#
+# esptool above leaves the chip in the bootloader (--after no-reset), and
+# esp_serial_capture.py opens the port FIRST and then resets the chip through
+# it (RTS/DTR, esptool's own sequence), so the capture starts at the boot ROM.
+# It was esptool's hard-reset followed by `cat`, and on the ESP32-C3's built-in
+# USB-Serial/JTAG the reset re-enumerates the port: measured 2026-09-27 on the
+# first C3 board, hello-c3's i=1 and the whole boot banner were gone before the
+# tty reopened. The script reopens the port if it vanishes. --no-flash resets
+# the same way, so it re-runs the program from boot rather than joining it late.
 SER="$(mktemp)"
-timeout "$SECONDS_TO_READ" cat "$PORT" > "$SER" 2>/dev/null || true
+python "$REPO_ROOT/tools/esp_serial_capture.py" "$PORT" "$SECONDS_TO_READ" > "$SER" 2>/dev/null || true
 
 # Everything after "Calling app_main()" is the program's own output; the serial
 # console turns each '\n' into '\r\n', so strip the CR to match a Linux oracle.
