@@ -30,13 +30,57 @@ image with `app_main` at `0x400d9854`, and the board prints its five
 `PXX hello from Pascal ESP32: i=N` lines and `PXX ESP32 sum 1..5 = 15`. No
 fault, no panic, first attempt.
 
-Two things that result does NOT say. It is **one program** — the hello, which
-is `hello-s3`'s source with the printed words changed and nothing else, so it
-exercises `esp_rom_printf`, `gpio_*`, `vTaskDelay` and integer arithmetic and
-no more; the LX6/LX7 gap is not proven closed for anything it does not touch.
-And it was run with `--no-verify`, because the program's externals do not exist
-on x86-64 and there is therefore **no native oracle to diff against** — the
-evidence is the expected serial output, not a byte comparison.
+That first run was one program. It has since been widened on the same board, on
+tree `0db876e74b` with compiler sha256 `ccca045a848b` (the release pin v442's
+own binary — v441 plus the output-path fix in `a1859b8b69`, which does not touch
+code generation). Four programs, all on the classic part:
+
+| Program | What it exercises | Verified against |
+| --- | --- | --- |
+| `examples/esp32/hello-esp32/main/main.pas` | `esp_rom_printf`, `gpio_*`, `vTaskDelay`, integer arithmetic | expected serial output |
+| `test/test_esp_idf_nested_try.pas` | two or more live exception frames at once, each row raising *through* the outer frame's saved `EXC_TOP` link, on the **windowed** Xtensa ABI | **the x86-64 oracle, 10 lines, byte-identical** |
+| `examples/esp32/timer-s3/main/main.pas` | `esp_timer` callbacks into Pascal | expected serial output |
+| `examples/esp32/nilpy-esp32` (Nil Python) | a class with methods, a list of instances, a `for` loop, `print`, `//`, `len` | **`main/main.expected`, 4 lines, byte-identical — and that file is CPython's own output** |
+
+Two of the four are therefore a real byte comparison, which the first run could
+not claim. The other two are not: `esp_flash.sh` degrades to `--no-verify` by
+itself, and says so, when a program's externals do not exist on x86-64, so for
+those the evidence is the expected serial output. The NilPy program needs
+`--xtensa-long-calls`; without it `PyUtf8CpAt` overflows the CALL0/CALL8 ±512 KiB
+reach. That is not an LX6 defect — `--target=esp32s3` gives the identical
+message — it is the documented remedy for a large single unit.
+
+A heap soak ran on the same board and the same pin:
+`tools/esp_heap_soak.sh hello-esp32`, 10 passes, read `delta=0 bpp=0`, and the
+same soak with `--control` read `delta=764 bpp=76` — 64 requested bytes plus the
+12-byte allocator header, the figure already measured on the C3 and S3. The
+control matters more than the zero: it shows the instrument can see a leak of
+that size in that program, so the zero is a measurement and not a silence.
+
+The nested-exception row is the most useful of the four for this chip
+specifically. It is the measured reproducer for the windowed-frame bug fixed in
+`XtensaExcFrameAddrW` (`compiler/ir_codegen_xtensa.inc`), where a pushed
+exception frame's spills overwrote the outer frame's saved `EXC_TOP` link and the
+next raise that had to cross it faulted with `LoadProhibited`. The windowed ABI
+is the LX6 and LX7's shared inheritance, so a chip that runs this is exercising
+the register-window path and not just arithmetic and `printf`.
+
+What this still does **not** say. It is four programs, not the RTL: floating
+point, files, and most of the container surface are untouched on this chip. In
+particular **Pascal managed strings are not exercised on the LX6 by any of the
+four** — the nested-exception test only passes literal `string` arguments to
+`esp_rom_printf`, and the NilPy row's strings belong to the NilPy runtime, not to
+the Pascal RTL. A managed-string program is the obvious next row. And the reboot-loop guard in `tools/esp_flash.sh` was **inert for all four
+rows**: it counted the string `ESP-ROM`, which the classic ESP32's boot ROM never
+prints (it prints `ets Jul 29 2019` and `rst:0x1 (POWERON_RESET)`), so it read
+zero boots every time and could not fire. The output comparisons above stand on
+their own, but a program that panicked and restarted while reprinting its first
+lines would have passed them. A fix that counts `rst:` instead — the marker all
+three parts print — is in hand but not yet landed, so for now **treat these rows
+as silent about reboots rather than as evidence of none.** The same bug, with the
+same inverted polarity, was fixed in `examples/esp32/nilpy-c3/build.sh` in
+`0db876e74b`, where it made the guard unsatisfiable: `nilpy-esp32`'s output
+matched `main.expected` byte for byte and the script still reported FAIL.
 
 `--esp-profile=bare` is still refused by name for this chip, correctly: the
 bare image hardcodes the C3/S3 load address and a UART0 base of `$60000000`,
