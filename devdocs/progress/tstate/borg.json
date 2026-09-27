@@ -16226,15 +16226,15 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-27T17:15:08Z",
+  "date": "2026-09-27T18:04:32Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
    "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py",
    "tools-devtest#00"
   ],
-  "sha": "97af9cde4f2a46d88186ab34977c27e83590e9cb",
+  "sha": "df948827f23cff4d0723034d3dface2cfee38d9d",
   "tier": "full",
-  "ver": "v442",
+  "ver": "v443",
   "verdict": "RED",
   "why": {
    "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py": "PXXDBG p.fresh TA.Named TRUE arg=-1 | PXXDBG p.fresh TA.NamedSelf FALSE arg=0 | PXXDBG p.fresh TA.Mixed FALSE arg=0 | -PXXDBG p.fresh TA.ViaLocal FALSE arg=-1 | +PXXDBG p.fresh TA.ViaLocal TRUE arg=-1",
