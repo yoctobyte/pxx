@@ -186,6 +186,10 @@ gaps; [Nil Python's known limits](../targets/nil-python.md#known-limits) list wh
 support. A program that sticks to the shapes above (functions, lists, dicts,
 f-strings, `time.sleep`, and the ESP units) is on well-tested ground.
 
+Your own Pascal units import the same way as the ESP units, and a Pascal
+program can use a C file directly; [Mixing languages on the
+ESP32](./esp32-mixing-languages.md) builds one of each for the C3.
+
 ## 5. Talking to the hardware
 
 The ESP units live in `lib/rtl/platform/esp`. Each has a Pascal surface and a
