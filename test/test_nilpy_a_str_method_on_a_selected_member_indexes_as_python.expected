@@ -1,0 +1,10 @@
+ab ef cd:ef
+ab:cd ab:cd:ef AB
+AB:CD:EF cd 3
+ ab cd
+ ab ef
+A F B:
+ab-cd-ef ['cd', 'ef']
+b 3
+ab ab A
+F ef

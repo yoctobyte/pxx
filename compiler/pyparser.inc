@@ -51747,6 +51747,34 @@ begin
       Next;                       { consume the name; CurTok = '(' }
       node := PyParseVariantMethod(node, GetTokenStr(i));
       tk := IntToTypeKind(ASTTk[node]);
+      { recId FROM THE NODE, like tk: `r.prop.split(":")[0]` -- a property reads
+        as a variant, so `.split` lands here and answers a TPyList, and a stale
+        recId sent the `[0]` below past the default-property arm to a raw
+        AN_INDEX over the call (IR_UNSUPPORTED kind 67 / 8). }
+      if (tk = tyClass) or (tk = tyRecord) then recId := ResolveNodeRec(node)
+      else recId := REC_NONE;
+      Continue;
+    end;
+
+    { ...and the same for a member the chain has typed as a STR: `R().name.upper()`
+      with `self.name = "a:b"`. No arm claimed `.upper(` here, so it fell to the
+      field path below, which built `upper` as an AN_FIELD of the string and then
+      CALLED that value: `TypeError: object is not callable` at run time (pin v443
+      too). A named receiver, `r.name.upper()`, never came through this loop and
+      was right, which is what pins it to this missing arm. The str-method chain
+      in the call arm below is the same dispatch; this is its twin at loop top. }
+    if PyIsStrBaseTk(tk) and (CurTok.Kind = tkDot) and
+       (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+       (Tokens[TokPos + 1].Kind = tkLParen) then
+    begin
+      Next;                       { consume '.'; CurTok = the method name }
+      i := TokPos - 1;
+      Next;                       { consume the name; CurTok = '(' }
+      node := PyParseStrMethod(node, GetTokenStr(i));
+      tk := IntToTypeKind(ASTTk[node]);
+      if (tk = tyClass) or (tk = tyRecord) then recId := ResolveNodeRec(node)
+      else recId := REC_NONE;
+      outTk := tk;
       Continue;
     end;
 
@@ -52168,7 +52196,8 @@ begin
           Next;                          { consume the name; CurTok = '(' }
           node := PyParseStrMethod(node, GetTokenStr(prevTok));
           tk := IntToTypeKind(ASTTk[node]);
-          recId := REC_NONE;
+          if (tk = tyClass) or (tk = tyRecord) then recId := ResolveNodeRec(node)
+          else recId := REC_NONE;
         end;
         outTk := tk;
         Continue;
@@ -52562,6 +52591,17 @@ begin
         Continue;
       end;
 
+      { A str in the chain indexes as Python does: 0-based, negative from the
+        end. The raw AN_INDEX below is Pascal's, 1-BASED, so
+        `mk().meth().upper()[0]` read the byte before the text and printed
+        '\x00' where CPython prints 'A' (pin v443 too) -- silent. The same
+        helper the call-suffix walk uses for `f()[i]`. }
+      if PyIsStrBaseTk(tk) then
+      begin
+        PyStrCallResultSuffix(node, tk);
+        recId := REC_NONE;
+        Continue;
+      end;
       Next;
       sub := AllocNode(AN_INDEX);
       ASTLeft[sub] := node;

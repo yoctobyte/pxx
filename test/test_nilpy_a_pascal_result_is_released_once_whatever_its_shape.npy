@@ -1,0 +1,210 @@
+# Every return shape ClassifyProcResultFresh judges (the bodies of
+# test/test_result_fresh_verdicts.pas, in test/nilpy_freshseam/freshseam.pas),
+# called from NilPy, discarded and rebound N times each. A wrong verdict is a
+# leak (FRESH read as borrowed: alive grows by N) or a double free (BORROWED read
+# as fresh: the receiver dies, gone passes made). Each row prints how many of
+# the shape's objects are still alive afterwards -- 0 for every shape -- and the
+# last line checks both receivers survived their borrowed calls.
+#
+#   check  (default) the rows below; built -dPXX_ALLOC_CENSUS the Makefile also
+#          bounds live= with tools/assert_no_leak.sh
+#   keep   the positive control: holds every fresh result, so alive and the
+#          census must both grow
+# Run with -Futest/nilpy_freshseam. The same program runs on i386 under qemu.
+#
+# NOT HERE, AND WHY: TA.Mixed on its FRESH arm (`if v > 0 then Exit(Self);
+# Result := TA.Create`). Its verdict is correctly borrowed -- one path returns
+# Self -- so the caller never releases what the other path minted: 500 of 500
+# alive after N discards and after N rebinds (2026-09-27, pin v443 and HEAD, on
+# x86-64 and i386 alike). Deciding it needs a RUN-TIME test (owned exactly when
+# the result is not the argument passed), which no consumer does yet. No
+# function in lib/rtl or pylib has the shape (217 class-result verdicts, the
+# units json/re/urequests/socket/array/collections pull in), so it reaches only
+# a user's own Pascal unit. Mixed's BORROWED arm is here, as Mixed.self.
+import sys
+import 'freshseam.pas' as fs
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "check"
+N = 500
+p = fs.TA(1)
+z = fs.TA(0)
+
+
+def alive():
+    return fs.made() - fs.gone()
+
+
+def d_Fresh():
+    for i in range(N):
+        z.Fresh()
+
+
+def r_Fresh():
+    s = 0
+    for i in range(N):
+        t = z.Fresh()
+        s = s + (t.v)
+    return s
+
+def d_Via():
+    for i in range(N):
+        z.Via()
+
+
+def r_Via():
+    s = 0
+    for i in range(N):
+        t = z.Via()
+        s = s + (t.v)
+    return s
+
+def d_Named():
+    for i in range(N):
+        z.Named()
+
+
+def r_Named():
+    s = 0
+    for i in range(N):
+        t = z.Named()
+        s = s + (t.v)
+    return s
+
+def d_ViaLocal():
+    for i in range(N):
+        z.ViaLocal()
+
+
+def r_ViaLocal():
+    s = 0
+    for i in range(N):
+        t = z.ViaLocal()
+        s = s + (t.v)
+    return s
+
+def d_OrNil_fresh():
+    for i in range(N):
+        z.OrNil()
+
+
+def r_OrNil_fresh():
+    s = 0
+    for i in range(N):
+        t = z.OrNil()
+        s = s + (t.v)
+    return s
+
+def d_MakeA():
+    for i in range(N):
+        fs.MakeA()
+
+
+def r_MakeA():
+    s = 0
+    for i in range(N):
+        t = fs.MakeA()
+        s = s + (t.v)
+    return s
+
+def d_MkLocal():
+    for i in range(N):
+        fs.MkLocal()
+
+
+def r_MkLocal():
+    s = 0
+    for i in range(N):
+        t = fs.MkLocal()
+        s = s + (t.v)
+    return s
+
+def d_Me():
+    for i in range(N):
+        p.Me()
+
+
+def r_Me():
+    s = 0
+    for i in range(N):
+        t = p.Me()
+        s = s + (t.v)
+    return s
+
+def d_NamedSelf():
+    for i in range(N):
+        p.NamedSelf()
+
+
+def r_NamedSelf():
+    s = 0
+    for i in range(N):
+        t = p.NamedSelf()
+        s = s + (t.v)
+    return s
+
+def d_Mixed_self():
+    for i in range(N):
+        p.Mixed()
+
+
+def r_Mixed_self():
+    s = 0
+    for i in range(N):
+        t = p.Mixed()
+        s = s + (t.v)
+    return s
+
+def d_PassThrough():
+    for i in range(N):
+        fs.PassThrough(p)
+
+
+def r_PassThrough():
+    s = 0
+    for i in range(N):
+        t = fs.PassThrough(p)
+        s = s + (t.v)
+    return s
+
+def d_OrNil_nil():
+    for i in range(N):
+        p.OrNil()
+
+
+def r_OrNil_nil():
+    s = 0
+    for i in range(N):
+        t = p.OrNil()
+        s = s + (1 if t is None else 0)
+    return s
+
+
+def row(name, d, r):
+    a0 = alive()
+    d()
+    a1 = alive()
+    r()
+    a2 = alive()
+    print(name, "discard", a1 - a0, "rebind", a2 - a1)
+
+
+if mode == "keep":
+    kept = []
+    for i in range(N):
+        kept.append(z.ViaLocal())
+        kept.append(fs.MakeA())
+    print("keep alive", alive() - 2)
+else:
+    row("Fresh", d_Fresh, r_Fresh)
+    row("Via", d_Via, r_Via)
+    row("Named", d_Named, r_Named)
+    row("ViaLocal", d_ViaLocal, r_ViaLocal)
+    row("OrNil.fresh", d_OrNil_fresh, r_OrNil_fresh)
+    row("MakeA", d_MakeA, r_MakeA)
+    row("MkLocal", d_MkLocal, r_MkLocal)
+    row("Me", d_Me, r_Me)
+    row("NamedSelf", d_NamedSelf, r_NamedSelf)
+    row("Mixed.self", d_Mixed_self, r_Mixed_self)
+    row("PassThrough", d_PassThrough, r_PassThrough)
+    row("OrNil.nil", d_OrNil_nil, r_OrNil_nil)
+    print("receivers", p.v, z.v, "alive", alive(), "gone <= made", fs.gone() <= fs.made())

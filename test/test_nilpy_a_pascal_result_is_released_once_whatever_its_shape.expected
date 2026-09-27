@@ -1,0 +1,13 @@
+Fresh discard 0 rebind 0
+Via discard 0 rebind 0
+Named discard 0 rebind 0
+ViaLocal discard 0 rebind 0
+OrNil.fresh discard 0 rebind 0
+MakeA discard 0 rebind 0
+MkLocal discard 0 rebind 0
+Me discard 0 rebind 0
+NamedSelf discard 0 rebind 0
+Mixed.self discard 0 rebind 0
+PassThrough discard 0 rebind 0
+OrNil.nil discard 0 rebind 0
+receivers 1 0 alive 2 gone <= made True

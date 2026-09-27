@@ -529,6 +529,12 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_baretup26 "$$($(TESTTMP)/test_nilpy_baretup26)" "$$(printf "(26, 9, 25, 12, 30, 0, 2, 0) (1, 2) ('a', 2) ('a', 2) (7,) 1\nabcd b'abcd' abcd2 p 5")"
 	./$(COMPILER) test/test_nilpy_str_escapes_are_code_points_bytes_escapes_are_bytes.py $(TESTTMP)/test_nilpy_escapes26
 	$(TESTTMP)/test_nilpy_escapes26 | diff -u test/test_nilpy_str_escapes_are_code_points_bytes_escapes_are_bytes.expected -
+	# A str method on a member reached through a chain (property, attribute or
+	# method of a call result) and a subscript after it, diffed against CPython.
+	# Pin v443 refuses it (IR_UNSUPPORTED kind 67); the run-time rows were a
+	# TypeError and a 1-based index before that.
+	./$(COMPILER) test/test_nilpy_a_str_method_on_a_selected_member_indexes_as_python.py $(TESTTMP)/test_nilpy_strsel26
+	$(TESTTMP)/test_nilpy_strsel26 | diff -u test/test_nilpy_a_str_method_on_a_selected_member_indexes_as_python.expected -
 	! ./$(COMPILER) test/test_nilpy_named_unicode_escape_is_refused_fail.py $(TESTTMP)/test_nilpy_nescape26 > $(TESTTMP)/test_nilpy_nescape.log 2>&1
 	grep -q "escapes are not supported" $(TESTTMP)/test_nilpy_nescape.log
 	./$(COMPILER) test/test_nilpy_a_base_method_calls_a_method_only_a_subclass_defines.py $(TESTTMP)/test_nilpy_latebind26
@@ -597,6 +603,17 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
+	# Every one of those shapes called from NilPy: each is released exactly once
+	# (alive 0 after N discards and N rebinds), borrowed receivers survive, the
+	# census stays bounded, `keep` is the control, and heap-debug finds no
+	# double release. Mixed's fresh arm is excluded, a known leak (see the file).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS -Futest/nilpy_freshseam test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.npy $(TESTTMP)/test_nilpy_freshseam26
+	$(TESTTMP)/test_nilpy_freshseam26 2>/dev/null | diff -u test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.expected -
+	tools/assert_no_leak.sh nilpy_freshseam 300 $(TESTTMP)/test_nilpy_freshseam26
+	@if tools/assert_no_leak.sh nilpy_freshseam_control 300 $(TESTTMP)/test_nilpy_freshseam26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_freshseam control (keep) did not trip the bound"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG -Futest/nilpy_freshseam test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.npy $(TESTTMP)/test_nilpy_freshseamhd26
+	$(TESTTMP)/test_nilpy_freshseamhd26 | diff -u test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.expected -
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links
