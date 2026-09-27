@@ -25,10 +25,21 @@ ESP32-S3 devkit with a CH343, opening with --no-reset rebooted it once.
 read to its end), with <seconds> as the upper bound: a soak ends on its own
 completion token, not on a guessed duration.
 
+The port is held EXCLUSIVELY for the whole capture: TIOCEXCL on the tty, so
+any other non-root open() of it (esptool, a monitor, another capture) fails
+with EBUSY before its driver touches DTR/RTS, plus pyserial's exclusive=True
+flock for pyserial users that ask. 2026-09-27: a second seat's esptool-style
+connect on the C3's /dev/ttyACM0 reset the board into download mode in the
+middle of another seat's capture. A port that is already held makes this
+script exit 3 with "busy" on stderr. The lock goes with the fd, so a port
+that re-enumerates is locked again on the reopen.
+
 Needs pyserial (in the ESP-IDF python env, which tools/esp_flash.sh exports).
 Raw bytes go to stdout.
 """
+import fcntl
 import sys
+import termios
 import time
 
 import serial
@@ -41,7 +52,9 @@ def open_port(port):
     s.timeout = 0.1
     s.dtr = False
     s.rts = False
+    s.exclusive = True
     s.open()
+    fcntl.ioctl(s.fd, termios.TIOCEXCL)
     return s
 
 
@@ -52,7 +65,11 @@ def main():
     until = rest[rest.index("--until") + 1].encode() if "--until" in rest else None
     seen = b""
     out = sys.stdout.buffer
-    s = open_port(port)
+    try:
+        s = open_port(port)
+    except (serial.SerialException, OSError) as e:
+        sys.stderr.write("esp_serial_capture: %s is busy or unavailable: %s\n" % (port, e))
+        sys.exit(3)
     if reset:
         s.dtr = False
         s.rts = True    # EN low: hold the chip in reset

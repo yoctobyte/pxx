@@ -282,7 +282,16 @@ fi
 # tty reopened. The script reopens the port if it vanishes. --no-flash resets
 # the same way, so it re-runs the program from boot rather than joining it late.
 SER="$(mktemp)"
-python "$REPO_ROOT/tools/esp_serial_capture.py" "$PORT" "$SECONDS_TO_READ" > "$SER" 2>/dev/null || true
+# The capture holds the port exclusively (TIOCEXCL), so a second opener cannot
+# reset the board mid-read; exit 3 = another process already holds the port.
+crc=0
+python "$REPO_ROOT/tools/esp_serial_capture.py" "$PORT" "$SECONDS_TO_READ" > "$SER" 2>"$SER.err" || crc=$?
+if [ "$crc" -eq 3 ]; then
+  echo "esp_flash: $PORT is held by another process; nothing was read." >&2
+  cat "$SER.err" >&2
+  rm -f "$SER" "$SER.err"; exit 2
+fi
+rm -f "$SER.err"
 
 # Everything after "Calling app_main()" is the program's own output; the serial
 # console turns each '\n' into '\r\n', so strip the CR to match a Linux oracle.

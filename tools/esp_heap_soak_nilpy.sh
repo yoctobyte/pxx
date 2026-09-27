@@ -197,8 +197,15 @@ if [ -n "${SOAK_PORT:-}" ]; then
     echo "SOAK-COMPLETE"; exit 1
   fi
   SECONDS=0
+  # The capture holds the port exclusively (TIOCEXCL); exit 3 = another
+  # process holds it, which must not read as an empty, NO-RESULT run.
+  crc=0
   python "$REPO_ROOT/tools/esp_serial_capture.py" "$SOAK_PORT" "$TIMEOUT" --until SOAK-COMPLETE \
-    >"$W/serial.log" 2>/dev/null || true
+    >"$W/serial.log" 2>"$W/capture.err" || crc=$?
+  if [ "$crc" -eq 3 ]; then
+    echo "SOAK $CHIP PORT-BUSY on $SOAK_PORT [$PXX_TAG]"; sed 's/^/  | /' "$W/capture.err"
+    echo "SOAK-COMPLETE"; exit 1
+  fi
   t=$SECONDS
 else
 case "$CHIP" in
