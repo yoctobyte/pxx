@@ -13,9 +13,22 @@ with no vendor compiler in the loop:
 | ESP32-S3 | Xtensa LX7 | `--target=xtensa` or `--target=esp32s3` | examples run on a physical board |
 | ESP32-C3 | RISC-V (RV32IMC) | `--target=riscv32` or `--target=esp32c3` | examples run under Espressif's QEMU |
 | ESP32-S2 | Xtensa LX7 | `--target=esp32s2` | compiled only |
+| ESP32 (classic) | Xtensa **LX6** | `--target=esp32` | **links into a complete ESP-IDF image; never run.** See below |
 
-The other chip names (`esp32`, `esp32c2`, `esp32c6`, `esp32h2`, `esp32p4`) are
+The other chip names (`esp32c2`, `esp32c6`, `esp32h2`, `esp32p4`) are
 accepted and compile to an ESP-IDF object, but nothing has been run on them.
+
+**The classic ESP32 row is the one to read carefully, because "links" and "runs"
+are different claims.** Measured 2026-09-27 on tree `479b8e495e` with compiler
+sha256 `4ebfa2d047a2` (the release pin v441's own binary): `--target=esp32`
+compiles `examples/esp32/hello-esp32/main/main.pas` to a relocatable object
+(`code=24579B data=4672B bss=1336B`, the same code size as the identical source
+for `--target=esp32s3`), and that object links into a 166,752-byte ESP-IDF v6.0.1
+image with `app_main` in the map. **No pxx code has been executed on an LX6, on
+silicon or under QEMU.** The open question is the ISA and configuration gap
+between LX6 and LX7; `devdocs/dev/parked-patches/esp32-classic-lx6-first-silicon-run.md`
+has the board, the one remaining command and what to suspect if it faults.
+`tools/esp_flash.sh --chip esp32` is wired for it.
 
 There are two integration modes.
 

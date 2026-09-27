@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 # Flash a PXX program to a REAL ESP32 board over USB and print what it says.
 #
-#   tools/esp_flash.sh [--chip esp32s2|esp32s3|esp32c3] [--port /dev/ttyUSB0]
+#   tools/esp_flash.sh [--chip esp32|esp32s2|esp32s3|esp32c3] [--port /dev/ttyUSB0]
 #                      [--seconds N] [--no-verify] [--no-flash] <prog.pas>
 #   tools/esp_flash.sh --project examples/esp32/nilpy-hw-c3 [--port ...]
 #
@@ -30,9 +30,15 @@
 # default) does that diff for you: it runs the program natively, captures that
 # as the oracle, then compares the board's serial output against it.
 #
-# Chips. esp32s2 and esp32s3 are Xtensa (windowed ABI), esp32c3 is riscv32.
+# Chips. esp32 (the classic part, Xtensa LX6), esp32s2 and esp32s3 (LX7) are
+# Xtensa and use the windowed ABI; esp32c3 is riscv32.
 # There is NO qemu machine for the S2, so the S2 path exists only here — a
 # board is the only way to run it.
+#
+# `esp32` names the CLASSIC part and is passed as the chip name, never as
+# --target=xtensa: the generic spelling answers the S3's memory map and may hand
+# an LX6 an LX7 instruction. The chip name also selects the windowed ABI on the
+# IDF platform, which is what ESP-IDF's startup task calls app_main with.
 #
 # Prereqs:
 #   - ESP-IDF that exports idf.py + toolchains + esptool (default ~/esp/esp-idf,
@@ -57,7 +63,7 @@ while [ $# -gt 0 ]; do
     --no-verify)  VERIFY=0; shift ;;
     --project)    PROJECT="$2"; shift 2 ;;
     --no-flash)   NO_FLASH=1; shift ;;
-    -h|--help)    sed -n '2,45p' "$0"; exit 0 ;;
+    -h|--help)    sed -n '2,49p' "$0"; exit 0 ;;
     *)            break ;;
   esac
 done
@@ -77,13 +83,17 @@ if [ -n "$PROJECT" ]; then
       *-c3) CHIP=esp32c3 ;;
       *-s3) CHIP=esp32s3 ;;
       *-s2) CHIP=esp32s2 ;;
+      # BEFORE no other arm, because it is the only one whose suffix is not two
+      # characters: a directory named hello-esp32 must not fall through to the
+      # refusal, and no -c3/-s3/-s2 name can end in -esp32.
+      *-esp32) CHIP=esp32 ;;
       *) echo "esp_flash: cannot infer the chip from '$(basename "$PROJECT")' -- pass --chip" >&2; exit 2 ;;
     esac
   fi
   PAS=""
 else
   [ -n "$CHIP" ] || CHIP=esp32s3
-  PAS="${1:?usage: tools/esp_flash.sh [--chip esp32s2|esp32s3|esp32c3] [--port /dev/ttyUSB0] <prog.pas>   (or: --project <idf-project-dir>)}"
+  PAS="${1:?usage: tools/esp_flash.sh [--chip esp32|esp32s2|esp32s3|esp32c3] [--port /dev/ttyUSB0] <prog.pas>   (or: --project <idf-project-dir>)}"
   PAS="$(cd "$(dirname "$PAS")" && pwd)/$(basename "$PAS")"
 fi
 
@@ -91,6 +101,12 @@ PXX="$REPO_ROOT/compiler/pascal26"
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 
 case "$CHIP" in
+  esp32)   PROJ="$REPO_ROOT/examples/esp32/hello-esp32"
+           # The CLASSIC part, Xtensa LX6. The chip name and not --target=xtensa:
+           # the generic spelling answers the S3's map and instruction set. The
+           # chip name implies windowed on the IDF platform, which is what
+           # app_main is called with.
+           PXXFLAGS="--target=esp32" ;;
   esp32s2) PROJ="$REPO_ROOT/examples/esp32/hello-s2"
            # the chip name: --target=xtensa means the S3 and would hand the S2
            # an atomic instruction it lacks. Windowed on IDF is implied.
@@ -100,7 +116,7 @@ case "$CHIP" in
            PXXFLAGS="--target=esp32s3" ;;
   esp32c3) PROJ="$REPO_ROOT/examples/esp32/hello-c3"
            PXXFLAGS="--target=riscv32 --platform=esp" ;;
-  *) echo "esp_flash: unknown chip '$CHIP' (esp32s2|esp32s3|esp32c3)" >&2; exit 2 ;;
+  *) echo "esp_flash: unknown chip '$CHIP' (esp32|esp32s2|esp32s3|esp32c3)" >&2; exit 2 ;;
 esac
 # --project overrides the chip's default project AFTER the case, so an unknown
 # chip is still refused above rather than silently accepted.

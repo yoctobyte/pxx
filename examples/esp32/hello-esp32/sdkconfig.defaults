@@ -1,0 +1,7 @@
+# HEADROOM, not a workaround -- the same two lines hello-s3 carries, and for the
+# same reason: this project is the harness tools/esp_flash.sh and
+# tools/esp_run.sh link arbitrary programs into, so it should not be the thing
+# that fails when someone hands it a deeply recursive one. A project of your own
+# needs no such line.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_ESP_TIMER_TASK_STACK_SIZE=8192
