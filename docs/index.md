@@ -31,7 +31,7 @@ documentation first.
   interpreter on the chip) compile to native code for the ESP32-S3, ESP32-C3
   and classic ESP32, as an ESP-IDF component. The examples have run on all three
   chips on physical boards. Nil Python gets MicroPython's module names
-  (`machine`, `network`, `urequests`, `umqtt`, `ssl`); an ESP32-C3 has joined
+  (`machine`, `network`, `urequests`, `ssl`), and micropython-lib's own `umqtt` compiles unchanged; an ESP32-C3 has joined
   Wi-Fi and made HTTPS requests with a checked certificate, and memory stays
   level over long network soaks. `./espide.sh` detects the chip, builds, flashes
   and monitors. See [ESP32](./targets/esp32.md) and

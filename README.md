@@ -68,7 +68,7 @@ choose to ignore this, you do so entirely at your own risk.
   ESP-IDF component, so it builds against Espressif's own SDK. On silicon, the
   examples have run on an ESP32-S3, an ESP32-C3 and a classic ESP32. Nil Python
   gets MicroPython's module names (`machine`, `time.sleep_ms`, `network`,
-  `urequests`, `umqtt`, `ssl`); the C3 has joined Wi-Fi and made HTTPS requests
+  `urequests`, `ssl`), and micropython-lib's own `umqtt` compiles unchanged; the C3 has joined Wi-Fi and made HTTPS requests
   with a checked certificate. Memory stays level over long network soaks, each
   checked against a deliberate leak. `./espide.sh` is a small IDE that detects
   the chip, builds, flashes and monitors. Start at
