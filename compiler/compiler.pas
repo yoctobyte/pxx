@@ -1529,8 +1529,15 @@ begin
     end
     else if (option = '--xtensa-cpu=lx6') or (option = '--xtensa-soft-divide') then
     begin
-      { ESP32 classic (LX6): no hardware divide option. Route div/mod through
-        the software shift-subtract helpers. }
+      { MEASURED FALSE, 2026-09-28: the ESP32 classic LX6 DOES have the divide
+        option. Espressif's own xtensa-esp32-elf-gcc emits `quos`/`rems` for
+        a/b and a%b at -O2, and xtensa-esp32-elf-as assembles `quos` for esp32.
+        This flag's premise was wrong, and it is also a NO-OP in practice: with a
+        genuine runtime 32-bit div/mod, --target=esp32 gives a byte-identical
+        object with and without it and registers no __pxx_divsi3. Kept, and kept
+        harmless (software divide is correct everywhere), until the ticket says
+        whether to fix it or delete it.
+        bug-a-xtensa-cpu-lx6-is-a-no-op-and-its-premise-is-wrong }
       XtensaSoftDivide := True;
       Inc(i);
     end

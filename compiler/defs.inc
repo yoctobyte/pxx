@@ -6541,10 +6541,22 @@ var
     platform defaults to windowed only when it is False, so an explicit
     --xtensa-abi=call0 still means call0. }
   XtensaAbiExplicit : Boolean;
-  { Xtensa integer divide policy. Default False = native quos/rems (LX7 / ESP32
-    -S2/-S3 baseline). True (via --xtensa-cpu=lx6) routes div/mod through the
-    software shift-subtract helpers __pxx_divsi3/__pxx_modsi3 for ESP32 classic
-    (LX6), which has the multiply option but not the divide option. }
+  { Xtensa integer divide policy. Default False was documented as "native
+    quos/rems (LX7 / ESP32-S2/-S3 baseline)", True (via --xtensa-cpu=lx6) as
+    routing div/mod through __pxx_divsi3/__pxx_modsi3 "for ESP32 classic (LX6),
+    which has the multiply option but not the divide option".
+
+    BOTH HALVES OF THAT ARE WRONG, measured 2026-09-28. (a) The LX6 HAS the
+    divide option: Espressif's gcc emits quos/rems for esp32 at -O2 and its
+    assembler accepts quos for esp32. Note the contradiction that was already
+    sitting in this file -- the XtensaSoftMulHigh comment below says all eight
+    qemu-xtensa cores "DO have the divide option", which cannot be true of a
+    part that lacks it. (b) The "native quos/rems" default does not happen on
+    ANY xtensa target: pxx emits no quos/quou/rems/remu for esp32, esp32s2 or
+    esp32s3, with 32-bit operands and an unfoldable divisor, so the four
+    codegen sites that read this flag are never reached and the flag changes
+    nothing. Where div/mod ARE lowered is not yet identified.
+    bug-a-xtensa-cpu-lx6-is-a-no-op-and-its-premise-is-wrong }
   XtensaSoftDivide : Boolean;
   { Xtensa 32-bit multiply-high policy, and a SIBLING of XtensaSoftDivide
     rather than a facet of it — that pairing is the finding, not a filing

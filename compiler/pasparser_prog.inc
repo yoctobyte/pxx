@@ -1806,8 +1806,11 @@ begin
   i := RegisterProc('PXXStrEq', True, tyInt64, 4, dummyNames, dummyTypes);
 
   { Xtensa software integer-divide helpers: only when targeting an LX6 part
-    (--xtensa-cpu=lx6). Registered (hence emitted) only then so LX7 images
-    stay lean and keep their native quos/rems. }
+    (--xtensa-cpu=lx6). The stated reason -- "so LX7 images stay lean and keep
+    their native quos/rems" -- does not hold: no xtensa target emits quos/rems
+    at all, and this registration is not observable in the object even with the
+    flag set (measured 2026-09-28; the symbol is absent either way).
+    bug-a-xtensa-cpu-lx6-is-a-no-op-and-its-premise-is-wrong }
   if (TargetArch = TARGET_XTENSA) and XtensaSoftDivide then
   begin
     dummyNames[0] := 'n'; dummyTypes[0] := tyUInt32;
