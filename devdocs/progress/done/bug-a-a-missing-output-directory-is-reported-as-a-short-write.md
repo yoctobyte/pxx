@@ -4,7 +4,7 @@ prio: 30
 type: bug
 blocked-by: []
 summary: "An output path whose PARENT DIRECTORY does not exist takes the OutWriteShort branch in compiler.pas, which prints `a write to the output file stored fewer bytes than asked` and a four-cause checklist (free bytes, free inodes, ulimit -f, a concurrent writer) that does not contain the actual cause. The accurate message already exists forty lines further down -- `usual cause: a missing or unwritable directory in that path` -- and is unreachable for this input, because OutWriteShort is tested first and is true. So this is a BRANCH-ORDER defect, not a missing checklist item: the fix is to let the existing message win, not to add a fifth cause to a checklist that should not have printed."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -80,3 +80,6 @@ The compiler prints all four causes unconditionally and has checked none of
 them. **Keep the causes; do not let a fix phrase any of them as an
 observation** — and note that a fix here makes that comment *more* true, not
 less, by ensuring the checklist only prints when a short write really happened.
+
+## Log
+- 2026-09-27 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
