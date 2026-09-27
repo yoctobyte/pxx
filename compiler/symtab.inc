@@ -20169,6 +20169,12 @@ begin
     else if ASTKind[idxBase] = AN_ADDR then
       { `(&X)[i]` indexes a pointer to X, so the element record is X's own record. }
       Result := ResolveNodeRec(ASTLeft[idxBase])
+    else if (ASTKind[idxBase] = AN_COMPOUND_LITERAL) and
+            Syms[Integer(ASTIVal[idxBase])].IsArray then
+      { `((P[2]){{1,2},{3,4}})[1].b`: an ARRAY compound literal's element record
+        (CNodePtrElemRec's arm for the same base). No arm here was REC_NONE,
+        and `.b` read `.a`. bug-c-an-array-typedef-of-structs-is-not-modelled }
+      Result := Syms[Integer(ASTIVal[idxBase])].ElemRecName
     else if ASTKind[idxBase] = AN_PTR_CAST then
       { `((T *) x)[i]` — element record is the cast's pointee record (alias table).
         Without this the record id is lost and the subsequent `.field` type-tag

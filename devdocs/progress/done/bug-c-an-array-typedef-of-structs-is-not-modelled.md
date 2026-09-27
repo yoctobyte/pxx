@@ -2,7 +2,7 @@
 track: C
 prio: 45
 type: bug
-status: open
+status: done
 found: 2026-09-27
 found-by: frankD
 owner:
@@ -22,3 +22,24 @@ array-typedef members of non-record element type. The struct builder and the
 local declaration path already fold an array typedef's dims generically once
 the typedef table has them (CTypedefDims/NDims), so the change is expected to
 be at registration, and the risk is va_list (see summary).
+
+## Resolution
+
+Fixed 2026-09-27: the typedef registration records dims for a struct element
+too. Every declaration path already folded them generically, as expected; a
+48-row probe (members, locals, globals, designated and nested initializers,
+arrays of the typedef, pointers to it, params, struct copies, unions, compound
+literals) matched gcc except one row that is a different carrier, filed as
+bug-c-a-function-returning-a-pointer-to-an-array-has-no-pointee-shape.
+
+va_list: lib/crtl/include/stdarg.h now spells it `typedef struct
+__pxx_va_elem va_list;`. Its `[1]` was dead text, and its own comment already
+described the plain struct every target's ABI code is built around (abi.inc).
+Behaviour is byte-for-byte what it was; the real-array question is filed as
+bug-c-va-list-is-a-struct-not-an-array-of-one.
+
+The fixture's compound-literal row found one more, independent of the
+typedef: `((P[2]){{1,2},{3,4}})[1].b` read `.a` (also on v445), because
+ResolveNodeRec's AN_INDEX arm had no compound-literal base. Added.
+
+gcc-diffed in test/c_array_typedef_of_structs.c.

@@ -3698,16 +3698,16 @@ end;
   answered 4 and also stepped `(s.ip)+1` by 4, so test
   c_sizeof_ptr_to_array_field's size-vs-stride check agreed with itself;
   f713506115 fixed the stride to 16 and the size read 8.
-  regression-test-core-c-sizeof-ptr-to-array-field }
+  regression-test-core-c-sizeof-ptr-to-array-field
+  A partial index is the same node family and was sized the same way:
+  `sizeof((m[0]))` on `int m[2][3]` answered 8 (gcc 12), `sizeof((s.c[0]))`
+  on a `char c[2][5]` field 8 (gcc 5). CObjectBytes answers every decayed row.
+  bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
 function CSizeofDecayedDeref(node: Integer; var sz: Integer): Boolean;
 begin
   Result := False;
-  if (node < 0) or (ASTKind[node] <> AN_BINOP) then Exit;
-  if (ASTIVal[node] <> Ord(tkPlus)) or (ASTSLen[node] <= 0) then Exit;
-  if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_INT_LIT) or
-     (ASTIVal[ASTRight[node]] <> 0) then Exit;
-  if ASTLeft[node] < 0 then Exit;
-  sz := IRPointerStride(ASTLeft[node]);
+  if (node < 0) or (ASTKind[node] <> AN_BINOP) or (not CNodeIsDecayedRow(node)) then Exit;
+  sz := CObjectBytes(node);
   Result := sz > 0;
 end;
 
@@ -5047,6 +5047,20 @@ begin
       if (ASTKind[operand] = AN_BINOP) and
          (IntToTypeKind(ASTTk[operand]) = tyPointer) then
       begin
+        { ...but the SAME address is a different pointer: `m[1]` steps by an
+          element, `&m[1]` by the whole row, and `*&m[1]` is the row again. So
+          a decayed row keeps an AN_ADDR over it (lowered as the row's own
+          value) and CAddrOfArrayShape gives it the row's shape. Yielding the
+          row itself made `&m[1] + 1` step 4 bytes on `int m[2][3]` (gcc 12),
+          `(&m[0])[1][1]` read m[0][4], and `sizeof *&m3[1]` answer 16 (gcc 48).
+          bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+        if CNodeIsDecayedRow(operand) then
+        begin
+          Result := AllocNode(AN_ADDR);
+          ASTLeft[Result] := operand;
+          ASTTk[Result] := Ord(tyPointer);
+          Exit;
+        end;
         Result := operand;
         Exit;
       end;
@@ -5391,6 +5405,9 @@ begin
             ASTSLen[inode] := rowStride div NDInfoSpan[nIdx]
           else
             ASTSLen[inode] := rowStride;
+          { how many of the base's dims this row has spent, so `&m[1]` can
+            say what it points at (CAddrOfArrayShape) }
+          ASTNDRowSubs[inode] := nIdx;
           node := inode;
         end;
       end
@@ -5445,6 +5462,11 @@ begin
         shTk := CPAElemTk; shRec := CPAElemRec; shLen := CPAArrLen;
         for ndi := 0 to MAX_ARR_DIMS - 1 do shSpan[ndi] := CPASpan[ndi];
         if CPANDims > 1 then ndimsF := CPANDims else ndimsF := 1;
+        { `(&a)[0][j]`, `(*&a)[j]`: the pointer is the array's own address, so
+          index the array itself -- the flat AN_INDEX over an array is the
+          canonical form, and an AN_ADDR base read garbage.
+          bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+        if ASTKind[node] = AN_ADDR then node := ASTLeft[node];
         flatNode := idxExpr;             { first subscript = the pointer index }
         ndi := 0;
         while ((pendIdx >= 0) or (CurTok.Kind = tkLBrack)) and (ndi < ndimsF) do
@@ -5470,7 +5492,28 @@ begin
           flatNode := inode;
           Inc(ndi);
         end;
-        if ndi >= ndimsF then
+        if (ndi >= ndimsF) and (ASTKind[node] = AN_BINOP) and CNodeIsDecayedRow(node) then
+        begin
+          { the pointer is a ROW's address (`(*(&m[1]))[2][3]`), a computed
+            value an AN_INDEX cannot take as its base: step it by the element
+            and load, the shape `*m[1]` already lowers.
+            bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+          if shTk = tyRecord then rowStride := RecSize(shRec)
+          else rowStride := TypeSlotSize(shTk);
+          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
+          mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+          ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
+          inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
+          ASTLeft[inode] := node; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
+          ASTSLen[inode] := rowStride;
+          dnode := AllocNode(AN_DEREF);
+          ASTLeft[dnode] := inode;
+          ASTTk[dnode] := Ord(shTk);
+          { a synthesised record deref carries its record itself (ResolveNodeRec) }
+          if shTk = tyRecord then ASTIVal[dnode] := shRec;
+          node := dnode;
+        end
+        else if ndi >= ndimsF then
         begin
           inode := AllocNode(AN_INDEX);
           ASTLeft[inode] := node;
@@ -5495,6 +5538,7 @@ begin
           inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
           ASTLeft[inode] := node; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
           ASTSLen[inode] := spanD;
+          ASTNDRowSubs[inode] := ndi;    { pointee dims spent, see above }
           node := inode;
         end;
       end
@@ -5589,6 +5633,7 @@ begin
           spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi);
           if spanD > 0 then ASTSLen[inode] := rowStride div spanD
           else ASTSLen[inode] := rowStride;
+          ASTNDRowSubs[inode] := ndi;    { field dims spent, see the array arm }
           node := inode;
         end;
       end
@@ -11268,7 +11313,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     initDim, initIx, initSpan: Integer;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
-    ptrArrDeferTok, ptrArrDeferCnt, initStartTok: Integer;
+    ptrArrDeferTok, ptrArrDeferCnt, initStartTok, paDeferTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
     gTdDi: Integer;  { walks an array typedef's inherent dims }
     gTdNDims, gPtrD: Integer; gTdDims: array[0..MAX_ARR_DIMS - 1] of Integer;
@@ -11361,6 +11406,7 @@ begin
     procIdx := CTypeProcSig;             { the fn-ptr call signature }
     wasArr := (CTypeFnPtrArrLen >= -1);
     nArrElems := 0;
+    paDeferTok := -1;
     if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) then
     begin
       Next; Next;                        { consume assign and opening brace }
@@ -11465,6 +11511,7 @@ begin
         `int (*f)(int) = &fred;` must bind the address like the bare form (else
         the pointer stayed 0 and calling it SIGSEGV'd). }
       Next;
+      initStartTok := TokPos - 1;         { the expression, for paDeferTok below }
       if CurTok.Kind = tkAmp then Next;   { optional `&` before the function name }
       if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
       begin
@@ -11487,7 +11534,17 @@ begin
         CGIArrTgt[0] := 0; nArrElems := 1; Next;
       end
       else
+      begin
+        { ...and anything else a POINTER-TO-ARRAY is initialised with --
+          `int (*r)[3] = &g[1];`, `= g + 1`, `= &g[0]` -- is replayed at main
+          like every other scalar pointer initializer this file cannot fold
+          (CDeferScalarPtrInitSkip's table). It was skipped here, so the
+          pointer stayed nil and the first `(*r)[i]` read address 0. A function
+          pointer keeps the old skip: out of this ticket's scope.
+          bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+        if (not wasArr) and (gPaLen > 0) then paDeferTok := initStartTok;
         while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+      end;
     end;
     arrLen := CTypeFnPtrArrLen;
     { With `[k]=` / range designators the array is sized to the highest index
@@ -11583,6 +11640,14 @@ begin
           SymArrDimSpan[idx * MAX_ARR_DIMS + gmdi] := gPaDim[gmdi];
       SetSymPointerType(idx, IntToTypeKind(gElemTkOrd), gElemRec,
                         1, gPtrBaseTk, gPtrBaseRec);
+    end;
+    { the replay recorded above, now that the symbol exists }
+    if (paDeferTok >= 0) and (idx >= 0) then
+    begin
+      EnsureCScalInitCapacity(CScalInitCount);
+      CScalInitSym[CScalInitCount] := idx;
+      CScalInitTok[CScalInitCount] := paDeferTok;
+      Inc(CScalInitCount);
     end;
     for ei := 0 to nArrElems - 1 do
     begin
@@ -18345,7 +18410,7 @@ begin
       [4] the same way. Captured before the dims below are parsed, because
       CEvalConstExpr can run another type parse. }
     tdElemNDims := 0;
-    if (tk <> tyRecord) and (tk <> tyPointer) and (CTypePtrDepth = 0) then
+    if (tk <> tyPointer) and (CTypePtrDepth = 0) then
     begin
       tdElemNDims := CTypeTypedefNDims;
       for tdDimV := 0 to tdElemNDims - 1 do
@@ -18355,7 +18420,7 @@ begin
       so a decl `name v` / `name v[k]` folds it in (bug-c-typedef-array-element-init;
       cglm `typedef float vec4[4]`). Only a single constant `[N]` is modelled;
       a multi-dim or unsized typedef array leaves it scalar (unchanged behavior). }
-    if (tk <> tyRecord) and (tk <> tyPointer) and (CurTok.Kind = tkLBrack) and
+    if (tk <> tyPointer) and (CurTok.Kind = tkLBrack) and
        (Tokens[TokPos].Kind <> tkRBrack) then
     begin
       { EVERY dimension, not just the first. This used to consume one `[N]` and

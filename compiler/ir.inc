@@ -3994,6 +3994,113 @@ begin
     for k := 0 to CPANDims - 1 do CPASpan[k] := RecFieldPtrElemDimAt(rec, fname, k);
 end;
 
+function CPtrToArrShape(node: Integer): Boolean; forward;
+
+{ The array a DECAYED ROW designates -- `m[1]` of `int m[2][3]`, `s.m[1]`,
+  `p[1]` / `p[1][2]` of `int (*p)[2][3][4]`, and `*p` (the no-op decay `p + 0`)
+  -- as CPA*: the base's own dims (an array symbol's, an array field's, or the
+  pointee's of a pointer-to-array base) minus the ASTNDRowSubs leading ones its
+  builder spent. The no-op decay spends none, which is the unstamped 0. }
+function CRowShape(x: Integer): Boolean;
+var base, si, rec, k, nd, spent, n: Integer; fname: AnsiString;
+    dims: array[0..MAX_ARR_DIMS - 1] of Integer; eTk: TTypeKind; eRec: Integer;
+begin
+  Result := False;
+  base := ASTLeft[x];
+  if base < 0 then Exit;
+  spent := ASTNDRowSubs[x];
+  for k := 0 to MAX_ARR_DIMS - 1 do dims[k] := 0;
+  if (ASTKind[base] = AN_IDENT) and Syms[ASTIVal[base]].IsArray then
+  begin
+    si := ASTIVal[base];
+    eTk := Syms[si].ElemType; eRec := Syms[si].ElemRecName;
+    nd := SymArrNDims[si];
+    if (nd < 2) or (nd > MAX_ARR_DIMS) then Exit;
+    for k := 0 to nd - 1 do dims[k] := SymArrDimSpan[si * MAX_ARR_DIMS + k];
+  end
+  else if (ASTKind[base] = AN_FIELD) and
+          RecFieldIsArray(ResolveNodeRec(ASTLeft[base]), GetASTIdentName(base)) then
+  begin
+    rec := ResolveNodeRec(ASTLeft[base]);
+    fname := GetASTIdentName(base);
+    eTk := RecFieldType(rec, fname); eRec := RecFieldRecId(rec, fname);
+    nd := RecFieldArrNDims(rec, fname);
+    if (nd < 2) or (nd > MAX_ARR_DIMS) then Exit;
+    for k := 0 to nd - 1 do dims[k] := RecFieldArrDimSpanAt(rec, fname, k);
+  end
+  else if CPtrToArrShape(base) then
+  begin
+    eTk := CPAElemTk; eRec := CPAElemRec;
+    nd := CPANDims;
+    if nd <= 1 then
+    begin
+      nd := 1; dims[0] := CPAArrLen;
+    end
+    else
+      for k := 0 to nd - 1 do dims[k] := CPASpan[k];
+  end
+  else Exit;
+  if (spent < 0) or (spent >= nd) then Exit;
+  for k := 0 to MAX_ARR_DIMS - 1 do CPASpan[k] := 0;
+  CPAElemTk := eTk; CPAElemRec := eRec;
+  CPANDims := nd - spent;
+  n := 1;
+  for k := 0 to CPANDims - 1 do
+  begin
+    if dims[spent + k] <= 0 then Exit;
+    n := n * dims[spent + k];
+    if CPANDims > 1 then CPASpan[k] := dims[spent + k];
+  end;
+  CPAArrLen := n;
+  Result := True;
+end;
+
+{ `&x` where x is a WHOLE ARRAY -- a symbol `int a[4]`, `mat4 m`, or an array
+  field `s.arr`, `ps->m` -- is a pointer to that array, and the array's own
+  shape is the pointee. Fill CPA* from it. An array PARAMETER is not one: it
+  was adjusted to a pointer, so `&a` there is a pointer to a pointer, and the
+  symbol is not IsArray. An element or row (`&a[1]`, `&m[1]`) is not one either:
+  the partial index has already built its decayed row, and CObjectBytes sizes it.
+  bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+function CAddrOfArrayShape(x: Integer): Boolean;
+var si, k, rec: Integer; fname: AnsiString;
+begin
+  Result := False;
+  if x < 0 then Exit;
+  for k := 0 to MAX_ARR_DIMS - 1 do CPASpan[k] := 0;
+  if ASTKind[x] = AN_IDENT then
+  begin
+    si := ASTIVal[x];
+    if (not Syms[si].IsArray) or (Syms[si].ArrLen <= 0) then Exit;
+    CPAElemTk := Syms[si].ElemType;
+    CPAElemRec := Syms[si].ElemRecName;
+    CPAArrLen := Syms[si].ArrLen;
+    CPANDims := SymArrNDims[si];
+    if CPANDims > MAX_ARR_DIMS then Exit;
+    if CPANDims > 1 then
+      for k := 0 to CPANDims - 1 do CPASpan[k] := SymArrDimSpan[si * MAX_ARR_DIMS + k];
+    Result := True;
+  end
+  else if ASTKind[x] = AN_FIELD then
+  begin
+    rec := ResolveNodeRec(ASTLeft[x]);
+    if rec = REC_NONE then Exit;
+    fname := GetASTIdentName(x);
+    if (not RecFieldIsArray(rec, fname)) or (RecFieldDynDepth(rec, fname) <> 0) or
+       (RecFieldArrLen(rec, fname) <= 0) then Exit;
+    CPAElemTk := RecFieldType(rec, fname);
+    CPAElemRec := RecFieldRecId(rec, fname);
+    CPAArrLen := RecFieldArrLen(rec, fname);
+    CPANDims := RecFieldArrNDims(rec, fname);
+    if CPANDims > MAX_ARR_DIMS then Exit;
+    if CPANDims > 1 then
+      for k := 0 to CPANDims - 1 do CPASpan[k] := RecFieldArrDimSpanAt(rec, fname, k);
+    Result := True;
+  end
+  else if (ASTKind[x] = AN_BINOP) and CNodeIsDecayedRow(x) then
+    Result := CRowShape(x);
+end;
+
 { THE ONE READER for "what does this C pointer-to-array VALUE point at",
   whichever carrier holds the answer. True, with CPA* filled, for the symbol
   spellings CPtrToArrShapeSym knows (`p`, `m[i]`, `pp[i]`, `*pp`) and for
@@ -4013,6 +4120,11 @@ begin
   begin
     CPtrShapeFromSym(si);
     Result := True;
+    Exit;
+  end;
+  if ASTKind[node] = AN_ADDR then
+  begin
+    Result := CProgramMode and CAddrOfArrayShape(ASTLeft[node]);
     Exit;
   end;
   if ASTKind[node] = AN_FIELD then
@@ -4036,6 +4148,8 @@ begin
   Result := True;
 end;
 
+function CObjectBytes(node: Integer): Integer; forward;
+
 function IRPointerStride(node: Integer): Integer;
 var elemTk: TTypeKind; recId, aliasIdx: Integer; fieldName: AnsiString;
 begin
@@ -4049,7 +4163,7 @@ begin
     by the whole pointee, as the pointer arm below does for `vec4 *p` }
   if CProgramMode and (node >= 0) and
      ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DEREF) or
-      (ASTKind[node] = AN_FIELD)) and
+      (ASTKind[node] = AN_FIELD) or (ASTKind[node] = AN_ADDR)) and
      CPtrToArrShape(node) then
   begin
     elemTk := CPAElemTk;
@@ -4237,6 +4351,16 @@ begin
       Result := IRArrayElemStride(ASTLeft[ASTLeft[node]]);
       Exit;
     end;
+    { In C, `&x` points at x, so `&x + 1` steps sizeof x: 4 for an int, the
+      struct for a struct, a row for `&m[1]` on `int m[2][3]`. Every such form
+      stepped ONE BYTE here -- the size-1 default is Pascal's, where `@x` is an
+      untyped Pointer. A whole array is answered by the CPtrToArrShape arm at
+      the top. bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+    if CProgramMode then
+    begin
+      Result := CObjectBytes(ASTLeft[node]);
+      if Result > 0 then Exit;
+    end;
   end;
   if elemTk = tyRecord then
     Result := RecSize(recId)
@@ -4290,6 +4414,76 @@ begin
     end;
   end;
   Result := IRPointerStride(node);
+end;
+
+{ The size of the C OBJECT an lvalue node designates -- what `sizeof` answers
+  for it and what `&node + 1` steps by -- or -1 when this cannot say. An array
+  here is the WHOLE array (sizeof does not decay it), and a decayed row node is
+  the ROW it designates: its builders multiply the row index by exactly that
+  many bytes, so the stride literal is the answer; the no-op decay `x + 0` of
+  `*x` designates what x points at. bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+function CObjectBytes(node: Integer): Integer;
+var si, rec: Integer; tk: TTypeKind; fname: AnsiString; r: Integer;
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT:
+    begin
+      si := ASTIVal[node];
+      if Syms[si].IsArray then
+      begin
+        if Syms[si].ArrLen <= 0 then Exit;
+        tk := Syms[si].ElemType;
+        if tk = tyRecord then Result := RecSize(Syms[si].ElemRecName)
+        else if tk = tyUnknown then Exit
+        else Result := TypeSlotSize(tk);
+        Result := Result * Syms[si].ArrLen;
+        Exit;
+      end;
+      tk := Syms[si].TypeKind;
+      if tk = tyPointer then Result := TARGET_PTR_SIZE
+      else if tk = tyRecord then
+      begin
+        rec := ResolveNodeRec(node);
+        if rec <> REC_NONE then Result := RecSize(rec);
+      end
+      else if tk <> tyUnknown then Result := TypeSlotSize(tk);
+    end;
+    AN_FIELD:
+    begin
+      rec := ResolveNodeRec(ASTLeft[node]);
+      if rec = REC_NONE then Exit;
+      fname := GetASTIdentName(node);
+      tk := RecFieldType(rec, fname);
+      if RecFieldIsArray(rec, fname) then
+      begin
+        if (RecFieldDynDepth(rec, fname) <> 0) or (RecFieldArrLen(rec, fname) <= 0) then Exit;
+        if tk = tyRecord then Result := RecSize(RecFieldRecId(rec, fname))
+        else if tk = tyUnknown then Exit
+        else Result := TypeSlotSize(tk);
+        Result := Result * RecFieldArrLen(rec, fname);
+      end
+      else if tk = tyPointer then Result := TARGET_PTR_SIZE
+      else if tk = tyRecord then Result := RecSize(RecFieldRecId(rec, fname))
+      else if tk <> tyUnknown then Result := TypeSlotSize(tk);
+    end;
+    AN_INDEX:
+      Result := IRArrayElemStride(ASTLeft[node]);
+    AN_DEREF:
+      Result := IRPointerStride(ASTLeft[node]);
+    AN_BINOP:
+      if CNodeIsDecayedRow(node) and (ASTRight[node] >= 0) then
+      begin
+        r := ASTRight[node];
+        if (ASTKind[r] = AN_INT_LIT) and (ASTIVal[r] = 0) then
+          Result := IRPointerStride(ASTLeft[node])
+        else if (ASTKind[r] = AN_BINOP) and (ASTIVal[r] = Ord(tkStar)) and
+                (ASTRight[r] >= 0) and (ASTKind[ASTRight[r]] = AN_INT_LIT) then
+          Result := ASTIVal[ASTRight[r]];
+      end;
+  end;
+  if Result = 0 then Result := -1;
 end;
 
 { Is this node a class REFERENCE (metaclass) value? Both shapes that carry one
@@ -12427,6 +12621,14 @@ begin
 
     AN_ADDR:
     begin
+      { C `&m[1]` over a decayed row: the row IS its address, so `&` of it is
+        the same value (the parser keeps the AN_ADDR only to carry the
+        pointer-to-row type). bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+      if CProgramMode and (ASTLeft[node] >= 0) and CNodeIsDecayedRow(ASTLeft[node]) then
+      begin
+        Result := IRLowerAST(ASTLeft[node]);
+        Exit;
+      end;
       { `@s` where s is a scalar MANAGED STRING: the address of the VARIABLE, not of its data.
 
         IR_LEA on such a symbol deliberately LOADS the handle rather than taking the address --

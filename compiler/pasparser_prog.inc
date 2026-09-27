@@ -668,6 +668,13 @@ begin
         ASTLeft[innerAddr] := valNode;
         ASTRight[innerAddr] := idxLit;
         ASTTk[innerAddr] := Ord(tyPointer);
+        { the offset is already BYTES, so say so: in C `&g + 1` steps sizeof g,
+          and this add counted on the old one-byte step of every `&` -- once
+          `&g` pointed at the whole array, `int *q = &g[1][0];` at file scope
+          on `int g[2][3]` landed 12 * 24 bytes in. ASTSLen on a C pointer add
+          is the pre-scaled marker (CNodeIsDecayedRow); inert in Pascal.
+          bug-c-the-address-of-an-array-has-no-pointer-to-array-type }
+        ASTSLen[innerAddr] := 1;
         valNode := innerAddr;
       end;
       { re-point: assignment target is the pointer sym, value is the address }

@@ -31,18 +31,16 @@ A fix in progress is parked in the repository as
 `devdocs/dev/parked-patches/tls-init-image-reaches-every-thread-wip.patch`.
 (Measured with v425.)
 
-### C: a struct member typed by an array typedef of structs is too small
+### C: a function returning a pointer to an array steps it one element at a time
 
-With `typedef struct { int a, b; } P; typedef P PA[2];`, a struct member
-`PA ps;` is laid out as one `P`: `struct { char c; PA ps; int after; }` is 16
-bytes where GCC gives 24, and `sizeof q.ps` is 8 against 16, so `ps[1]` lies
-outside the space the struct reserves for it. A local
-`PA x;` is refused when it is used (`x[1].b`: "no member named 'b'"). Array
-typedefs of other element types (`typedef float vec4[4]`, `typedef vec4
-mat4[4]`, `typedef int arr3[3]`) are right as members, and so are pointers
-to them, since the compiler after v443 (see [Fixed since v441](#fixed-since-v441)).
-**Workaround:** spell the member out (`P ps[2];`). (Measured with v443 and
-with the compiler that fixed the other element types.)
+With `typedef float vec4[4];`, a function declared `vec4 *f(void)` (or
+`int (*f(void))[4]`) returns the right address, but the compiler does not know
+what it points at: `sizeof *f()` is 4 where GCC gives 16, `f() + 1` steps 4
+bytes instead of 16, and `(*f())[2]` or `f()[0][2]` read the wrong element. The
+same holds for `mat4 *` (GCC 64). **Workaround:** store the result in a
+variable first (`vec4 *p = f();`); a variable, a struct member and an array
+element of that type are right. (Measured with v445 and with the compiler after
+it.)
 
 ### ESP: bare-metal images do not run on a real chip
 
@@ -189,6 +187,18 @@ Two limits apply to these measurements:
 
 These are wrong in v441 (and v443, where noted) and fixed in the compiler
 after it. Each was checked against GCC's output on x86-64.
+
+- **C: an array typedef of structs was not modelled.** With `typedef struct {
+  int a, b; } P; typedef P PA[2];`, a struct member `PA ps;` was laid out as
+  one `P` (`struct { char c; PA ps; int after; }` 16 bytes, GCC 24), and a
+  local `PA x;` was refused at `x[1].b`. Wrong in v441 to v445.
+- **C: the address of an array or of a row pointed at one element.** `&a + 1`
+  stepped one byte for any `a` (GCC: `sizeof a`), `sizeof *&a` answered the
+  element, `(&m[0])[1][1]` read the wrong element, and a file-scope
+  `int (*r)[3] = &g[1];` was left null. Wrong in v441 to v445.
+- **C: `sizeof` of a parenthesised row or dereference** (`sizeof((m[0]))`,
+  `sizeof(*(p))` for `int (*p)[4]`) answered the size of a pointer. The
+  dereference form is fixed in v445, the row form after it.
 
 - **C: a struct or union member typed by an array typedef was too small.**
   `struct U { arr3 a; int after; }` with `typedef int arr3[3]` was 8 bytes

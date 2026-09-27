@@ -17980,6 +17980,23 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_struct_member_of_array_typedef.c $(TESTTMP)/c_smemarrtd26
 	gcc -std=gnu99 -o $(TESTTMP)/c_smemarrtd_gcc test/c_struct_member_of_array_typedef.c
 	tools/expect_same.sh c_smemarrtd26 "$$($(TESTTMP)/c_smemarrtd26)" "$$($(TESTTMP)/c_smemarrtd_gcc)"
+	# `&x` POINTS AT THE WHOLE OBJECT. `&x + 1` stepped one byte for every x,
+	# `&a` of an array had no pointer-to-array type (`sizeof *&a` the element),
+	# `&m[1]` of a row stepped an element, `sizeof((m[0]))` answered a pointer,
+	# and a file-scope `int (*r)[3] = &g[1];` stayed NULL. Each row reads the
+	# LAST element it walks. Diffed against gcc; the i386 twin is in test-i386.
+	# bug-c-the-address-of-an-array-has-no-pointer-to-array-type
+	./$(COMPILER) test/c_address_of_an_array.c $(TESTTMP)/c_addrofarr26
+	gcc -std=gnu99 -o $(TESTTMP)/c_addrofarr_gcc test/c_address_of_an_array.c
+	tools/expect_same.sh c_addrofarr26 "$$($(TESTTMP)/c_addrofarr26)" "$$($(TESTTMP)/c_addrofarr_gcc)"
+	# AN ARRAY TYPEDEF OF STRUCTS IS AN ARRAY: `typedef P PA[2];` was one P, so
+	# `struct { char c; PA ps; int after; }` was 16 bytes (gcc 24) and a local
+	# `PA x;` was refused at `x[1].b`. The first block writes each member's last
+	# element and reads its neighbours. Diffed against gcc; i386 twin in test-i386.
+	# bug-c-an-array-typedef-of-structs-is-not-modelled
+	./$(COMPILER) test/c_array_typedef_of_structs.c $(TESTTMP)/c_arrtdstruct26
+	gcc -std=gnu99 -o $(TESTTMP)/c_arrtdstruct_gcc test/c_array_typedef_of_structs.c
+	tools/expect_same.sh c_arrtdstruct26 "$$($(TESTTMP)/c_arrtdstruct26)" "$$($(TESTTMP)/c_arrtdstruct_gcc)"
 	# THE PTY FAMILY, WHICH crtl DID NOT HAVE AT ALL. posix_openpt, grantpt,
 	# unlockpt, ptsname and ptsname_r were absent from include/ and src/ alike,
 	# and busybox calls ptsname_r WITHOUT a guard -- platform.h defines
@@ -27873,6 +27890,23 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/fsptrarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fsptrarr)" "PTRARR OK stride=16"
 	./$(COMPILER) --target=i386 test/c_sizeof_ptr_to_array_field.c $(TESTTMP)/test_i386_szfldptrarr
 	tools/expect_same.sh i386/szfldptrarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_szfldptrarr)" "FIELD PTRARR OK 16 32 7 24"
+	# The 32-bit halves of c_address_of_an_array and c_array_typedef_of_structs:
+	# pointer and struct sizes differ here, so the oracle is gcc -m32; without
+	# multilib the row says so out loud and still runs the program.
+	./$(COMPILER) --target=i386 test/c_address_of_an_array.c $(TESTTMP)/test_i386_addrofarr
+	@if gcc -m32 -std=gnu99 -o $(TESTTMP)/test_i386_addrofarr_gcc test/c_address_of_an_array.c 2>/dev/null; then \
+	  tools/expect_same.sh i386/addrofarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_addrofarr)" "$$($(TESTTMP)/test_i386_addrofarr_gcc)" || exit 1; \
+	else \
+	  echo "=== i386/addrofarr: no gcc -m32, the ORACLE did not run (it still compiled and ran) ==="; \
+	  tools/run_target.sh i386 $(TESTTMP)/test_i386_addrofarr >/dev/null || { echo 'i386/addrofarr: run FAILED'; exit 1; }; \
+	fi
+	./$(COMPILER) --target=i386 test/c_array_typedef_of_structs.c $(TESTTMP)/test_i386_arrtdstruct
+	@if gcc -m32 -std=gnu99 -o $(TESTTMP)/test_i386_arrtdstruct_gcc test/c_array_typedef_of_structs.c 2>/dev/null; then \
+	  tools/expect_same.sh i386/arrtdstruct "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_arrtdstruct)" "$$($(TESTTMP)/test_i386_arrtdstruct_gcc)" || exit 1; \
+	else \
+	  echo "=== i386/arrtdstruct: no gcc -m32, the ORACLE did not run (it still compiled and ran) ==="; \
+	  tools/run_target.sh i386 $(TESTTMP)/test_i386_arrtdstruct >/dev/null || { echo 'i386/arrtdstruct: run FAILED'; exit 1; }; \
+	fi
 	./$(COMPILER) --target=i386 test/c_sizeof_subscript_through_pointer_chain.c $(TESTTMP)/test_i386_szchain
 	tools/expect_same.sh i386/szchain "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_szchain)" "PTR CHAIN OK 44 4"
 	./$(COMPILER) --target=i386 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_i386_cmsg

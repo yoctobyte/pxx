@@ -2,7 +2,7 @@
 track: C
 prio: 45
 type: bug
-status: open
+status: done
 found: 2026-09-27
 found-by: frankD
 owner:
@@ -30,3 +30,27 @@ The single reader for "what does this pointer value point at" is ir.inc
 none for an AN_ADDR of an array-typed operand. Adding that arm there would feed
 IRPointerStride, the decayed-deref sizeof (CSizeofDecayedDeref) and the
 subscript arm at once. Check the plain `&a[0]` and `&s.arr` spellings with it.
+
+## Resolution
+
+Fixed 2026-09-27, wider than filed. `&x + 1` stepped ONE BYTE for every C
+operand, not only arrays (`&i`, `&t`, `&s.f`, `&p`), because IRPointerStride's
+AN_ADDR arm kept Pascal's untyped-`@` default. Now, in C:
+
+- `&x` of a whole array (a symbol or an array field) is a pointer to that
+  array: a CPtrToArrShape arm (CAddrOfArrayShape), so `*&a` decays,
+  `(&a)[0][j]` indexes a (the subscript arm indexes the array in place of the
+  AN_ADDR base), and `&a + 1` steps the array.
+- `&m[1]` of a decayed row keeps an AN_ADDR over the row (lowered as the row's
+  value); the row builders stamp the dims they spent in ASTNDRowSubs and
+  CRowShape gives it the row's shape. `(*(&m[1]))[j][k]` derefs `row + flat*elem`.
+- Any other `&x` steps CObjectBytes(x): the size of the object an lvalue node
+  designates (ir.inc), which also sizes a parenthesised row in sizeof
+  (`sizeof((m[0]))` was 8, gcc 12).
+- The file-scope `int *q = &g[1][0];` initializer built `&g + byteOffset` and
+  relied on the one-byte step; that add is now stamped pre-scaled.
+- A file-scope pointer-to-array initialised with anything but a bare name
+  (`int (*r)[3] = &g[1];`, `= g + 1`) was skipped and stayed null; it is
+  replayed at main like every other unfoldable pointer initializer.
+
+gcc-diffed in test/c_address_of_an_array.c.
