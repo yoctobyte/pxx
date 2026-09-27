@@ -110,6 +110,40 @@ function EspBoardsFromPorts(const ports: TStrArray): TEspBoardArr;
   by-id name, and the chip/revision/MAC when Detect has filled them in. }
 function EspBoardLine(const b: TEspBoard): AnsiString;
 
+{ Could a board on this USB bridge be this IDF target?
+
+  IT ONLY EVER RULES OUT, NEVER CONFIRMS, and that asymmetry is the whole point:
+  it exists to narrow a list of attached boards to ONE candidate without opening
+  any of them, because opening one resets it. A True answer means "not excluded",
+  not "is". The confirmation still comes from Detect, on the single port this
+  picks.
+
+  The one firm exclusion is the Espressif native USB-Serial/JTAG descriptor: that
+  peripheral exists on the C3, S3, C6, H2 and P4 and NOT on the classic ESP32
+  (no USB at all) or the S2 (USB OTG, a different descriptor). An external bridge
+  -- CP210x, CH34x, FTDI -- can be wired to any chip, so it excludes nothing. }
+function EspBridgeCouldBeChip(const bridge, chip: AnsiString): Boolean;
+
+{ Which SINGLE port Detect may open, or False with `why` explaining the refusal.
+
+  Detect used to walk every attached port. On a host with three boards on it that
+  reset two boards belonging to other people, mid-run, and the code said so in
+  its own log line ("this resets the board") while the loop did it three times.
+  A listing must touch nothing and a probe must touch exactly what the user
+  pointed at; when that cannot be determined, REFUSING is correct, because the
+  alternative is discovering the answer by resetting hardware to see what it is.
+
+  selPort wins outright when set -- an explicit choice needs no inference. Then a
+  chip name (the selector's, else the project's) narrows by USB bridge, and is
+  used only if it leaves exactly one candidate. With no chip to go on, a single
+  attached board is probed: pressing Detect with one board attached is consent to
+  reset that board, and making the user choose from a list of one would be an IDE
+  being pedantic rather than careful. Every other case refuses and names the
+  ports, so the user picks. }
+function EspChooseDetectPort(const boards: TEspBoardArr;
+                             const selPort, chip: AnsiString;
+                             var port, why: AnsiString): Boolean;
+
 { The MAC in `esptool chip-id` output ('MAC: e0:8c:fe:57:bb:b8'), or ''. }
 function EspMacFromEsptool(const outp: AnsiString): AnsiString;
 
@@ -396,10 +430,22 @@ begin
     EspPortProblem := 'permission denied: your user needs the dialout group ' +
       '(add it, then log in again)'
   else if Pos('port is busy', outp) > 0 then
-    EspPortProblem := 'the port is busy: another program has it open'
+    EspPortProblem := 'the port is in use by another program' +
+      ' (the board may still have been reset)'
+  { pySerial's wording when a SECOND opener races an existing one. This used to
+    fall through to "no ESP chip answered", which reads as "nothing happened" --
+    and it is the opposite: esptool asserts the reset BEFORE it reads, so a board
+    whose read failed this way has been reset anyway. That misreading cost real
+    time: a probe of a port another session was capturing logged "no ESP chip
+    answered" while having knocked the chip into download mode. }
+  else if (Pos('readiness to read but returned no data', outp) > 0) or
+          (Pos('multiple access on port', outp) > 0) then
+    EspPortProblem := 'the port is in use by another program' +
+      ' (the board may still have been reset -- esptool resets before it reads)'
   else if (Pos('No serial data received', outp) > 0) or
           (Pos('Failed to connect', outp) > 0) then
-    EspPortProblem := 'no ESP chip answered on this port'
+    EspPortProblem := 'no ESP chip answered on this port' +
+      ' (it was still reset by the attempt)'
   else if (Pos('esptool: command not found', outp) > 0) or
           (Pos('esptool: not found', outp) > 0) then
     EspPortProblem := 'esptool was not found: is ESP-IDF installed ' +
@@ -717,6 +763,101 @@ begin
       failed question. Asking resets the board, which is why it is a button. }
     s := s + '  -- not asked yet (Detect)';
   EspBoardLine := s;
+end;
+
+function EspBridgeCouldBeChip(const bridge, chip: AnsiString): Boolean;
+begin
+  { The default is True: an external bridge is a wire, and a wire says nothing
+    about what is on the far end. Only the native descriptor excludes anything. }
+  EspBridgeCouldBeChip := True;
+  if bridge <> 'native USB-JTAG' then Exit;
+  { USB-Serial/JTAG is on the C3, S3, C6, H2 and P4. The classic ESP32 has no USB
+    at all and the S2's is USB OTG, which udev renders differently, so neither can
+    be behind this descriptor. }
+  if (chip = 'esp32') or (chip = 'esp32s2') then EspBridgeCouldBeChip := False;
+end;
+
+{ The ports, one per line, for a refusal that has to be actionable: a user who is
+  told to pick needs to see what there is to pick from. }
+function EspBoardMenu(const boards: TEspBoardArr): AnsiString;
+var i: Integer;
+begin
+  EspBoardMenu := '';
+  for i := 0 to Length(boards) - 1 do
+    EspBoardMenu := EspBoardMenu + #10 + '    ' + EspBoardLine(boards[i]);
+end;
+
+function EspChooseDetectPort(const boards: TEspBoardArr;
+                             const selPort, chip: AnsiString;
+                             var port, why: AnsiString): Boolean;
+var i, n, only: Integer;
+begin
+  EspChooseDetectPort := False;
+  port := '';
+  why := '';
+
+  if Length(boards) = 0 then
+  begin
+    why := 'no board is connected (/dev/serial/by-id, /dev/ttyACM*, /dev/ttyUSB*).';
+    Exit;
+  end;
+
+  { 1. An explicit port is an explicit choice. Nothing is inferred and nothing
+       else is touched -- but it must still BE attached, or we would hand
+       esptool a stale by-id name that now points at a different board. }
+  if selPort <> '' then
+  begin
+    for i := 0 to Length(boards) - 1 do
+      if boards[i].Port = selPort then
+      begin
+        port := selPort;
+        EspChooseDetectPort := True;
+        Exit;
+      end;
+    why := 'the selected port is not attached: ' + selPort + '.' +
+           ' Attached now:' + EspBoardMenu(boards);
+    Exit;
+  end;
+
+  { 2. A chip name narrows by USB descriptor, and is used ONLY if it leaves one
+       candidate. Never probe to break a tie: that is resetting boards to find
+       out which one the user meant. }
+  if (chip <> '') and (chip <> 'auto') then
+  begin
+    n := 0; only := -1;
+    for i := 0 to Length(boards) - 1 do
+      if EspBridgeCouldBeChip(boards[i].Bridge, chip) then
+      begin
+        Inc(n);
+        only := i;
+      end;
+    if n = 1 then
+    begin
+      port := boards[only].Port;
+      EspChooseDetectPort := True;
+      Exit;
+    end;
+    if n = 0 then
+      why := 'no attached board can be an ' + EspChipLabel(chip) +
+             ' by its USB descriptor. Attached:' + EspBoardMenu(boards)
+    else
+      why := 'several attached boards could be an ' + EspChipLabel(chip) +
+             ', and finding out which would reset them. Pick a port:' +
+             EspBoardMenu(boards);
+    Exit;
+  end;
+
+  { 3. Nothing to go on. One board is the ordinary single-board case and
+       pressing Detect is consent to reset THAT board; several is a refusal,
+       because the only way to tell them apart is to reset them. }
+  if Length(boards) = 1 then
+  begin
+    port := boards[0].Port;
+    EspChooseDetectPort := True;
+    Exit;
+  end;
+  why := 'several boards are attached and nothing says which one to ask' +
+         ' (Detect resets the board it asks). Pick a port:' + EspBoardMenu(boards);
 end;
 
 function IsHexOrColon(c: Char): Boolean;

@@ -67,6 +67,8 @@ var
   tree: TStrArray;
   ents: TStrArray;
   boards: TEspBoardArr;
+  twoBoards: TEspBoardArr;   { a narrowing case the three-board host cannot show }
+  dport, dwhy: AnsiString;   { EspChooseDetectPort's answer and its refusal }
   idf: TEspIdf;
   cfg, cfg2: TEspLibCfg;
   cfgTxt: AnsiString;
@@ -510,6 +512,14 @@ begin
   CheckTrue(e, 'long child starts',
     StreamStart(sp, '/bin/sh', ['-c', 'exec sleep 30']));
   CheckStr(e, 'poll returns without output', StreamPoll(sp, 50), '');
+  { TIMEOUT 0 SPECIFICALLY, because that is what the espide tick uses and a
+    monitor on a quiet serial port is a child with nothing to say. If a zero
+    timeout blocks instead of returning at once, the GUI's timer handler never
+    returns, no further tick fires, and the app hangs with its last log line
+    printed -- which is exactly what --auto did on a live board: 15 minutes for
+    an 8-second monitor. }
+  CheckStr(e, 'poll with timeout 0 returns at once', StreamPoll(sp, 0), '');
+  CheckTrue(e, 'still running after a zero poll', sp.Running);
   CheckTrue(e, 'still running after a poll', sp.Running);
   StreamStop(sp);
   CheckTrue(e, 'stopped', not sp.Running);
@@ -615,6 +625,100 @@ begin
   CheckStr(e, 'chip blank before Detect', boards[2].Chip, '');
   CheckTrue(e, 'a board line says nothing was asked',
     Pos('not asked yet', EspBoardLine(boards[2])) > 0);
+
+  { ---- which ONE port Detect may open ----
+    The fixture IS the host this bug was found on: a CH34x, a native USB-JTAG and
+    a CP2102. Detect used to walk all three and reset all three, two of them
+    belonging to other people. Every row below is about touching exactly one. }
+  writeln('-- espproj: one port, not all of them --');
+  { a bridge only ever RULES OUT. The native USB-Serial/JTAG descriptor is not on
+    the classic ESP32 (no USB) or the S2 (USB OTG, rendered differently). }
+  CheckTrue(e, 'native USB-JTAG cannot be a classic ESP32',
+    not EspBridgeCouldBeChip('native USB-JTAG', 'esp32'));
+  CheckTrue(e, 'native USB-JTAG cannot be an S2',
+    not EspBridgeCouldBeChip('native USB-JTAG', 'esp32s2'));
+  CheckTrue(e, 'native USB-JTAG can be a C3',
+    EspBridgeCouldBeChip('native USB-JTAG', 'esp32c3'));
+  { an external bridge is a wire and excludes NOTHING -- including for the chip
+    that has no USB of its own, which is exactly how it is usually attached }
+  CheckTrue(e, 'a CP2102 can be a classic ESP32',
+    EspBridgeCouldBeChip('CP2102', 'esp32'));
+  CheckTrue(e, 'an unknown bridge excludes nothing',
+    EspBridgeCouldBeChip('', 'esp32c3'));
+
+  { an explicit port is an explicit choice: nothing is inferred, nothing else
+    considered }
+  CheckTrue(e, 'an explicit port is honoured',
+    EspChooseDetectPort(boards, boards[2].Port, '', dport, dwhy));
+  CheckStr(e, 'and it is exactly that port', dport, boards[2].Port);
+  { a chip name must not override it either }
+  CheckTrue(e, 'an explicit port beats a chip hint',
+    EspChooseDetectPort(boards, boards[0].Port, 'esp32c3', dport, dwhy));
+  CheckStr(e, 'still that port', dport, boards[0].Port);
+  { a stale by-id name is refused BY NAME rather than falling back to probing }
+  CheckTrue(e, 'a port that is not attached is refused',
+    not EspChooseDetectPort(boards, '/dev/serial/by-id/usb-Gone-if00', '', dport, dwhy));
+  CheckStr(e, 'and no port is chosen', dport, '');
+  CheckTrue(e, 'and the refusal names it',
+    Pos('usb-Gone-if00', dwhy) > 0);
+
+  { THE REGRESSION ROW. auto, no chip, several boards: refuse. This is the exact
+    case that reset the other two boards; if it ever returns True again, Detect
+    is opening a port nobody pointed at. }
+  CheckTrue(e, 'auto with several boards REFUSES',
+    not EspChooseDetectPort(boards, '', '', dport, dwhy));
+  CheckStr(e, 'and chooses no port at all', dport, '');
+  CheckTrue(e, 'and tells the user to pick', Pos('Pick a port', dwhy) > 0);
+  CheckTrue(e, 'and lists the ports to pick from',
+    Pos('usb-Silicon_Labs_CP2102', dwhy) > 0);
+
+  { an ambiguous chip hint is ALSO a refusal, and on this three-board host every
+    chip is ambiguous: two external bridges could each be a classic ESP32, so the
+    hint narrows three to two and two is not one. Worth asserting rather than
+    assuming -- it is the honest limit of narrowing by USB descriptor. }
+  CheckTrue(e, 'a chip hint that leaves two candidates refuses',
+    not EspChooseDetectPort(boards, '', 'esp32', dport, dwhy));
+  CheckTrue(e, 'and says finding out would reset them',
+    Pos('would reset', dwhy) > 0);
+
+  { where narrowing DOES work: the native-USB board is excluded for a classic
+    ESP32, leaving one. Nothing is opened to learn that. }
+  SetLength(twoBoards, 2);
+  twoBoards[0] := boards[1];   { native USB-JTAG }
+  twoBoards[1] := boards[2];   { CP2102 }
+  CheckStr(e, 'fixture order holds: [1] is the JTAG one', twoBoards[0].Bridge,
+    'native USB-JTAG');
+  CheckTrue(e, 'a chip hint narrowing to one is used',
+    EspChooseDetectPort(twoBoards, '', 'esp32', dport, dwhy));
+  CheckStr(e, 'and it is the external bridge', dport, twoBoards[1].Port);
+
+  { one board and nothing to go on is the ordinary single-board case: pressing
+    Detect with one board attached is consent to reset THAT board }
+  SetLength(twoBoards, 1);
+  twoBoards[0] := boards[0];
+  CheckTrue(e, 'one board is probed without a hint',
+    EspChooseDetectPort(twoBoards, '', '', dport, dwhy));
+  CheckStr(e, 'and it is that board', dport, boards[0].Port);
+
+  SetLength(twoBoards, 0);
+  CheckTrue(e, 'no boards refuses',
+    not EspChooseDetectPort(twoBoards, '', '', dport, dwhy));
+  CheckTrue(e, 'and says nothing is connected',
+    Pos('no board is connected', dwhy) > 0);
+
+  { the port-busy wording. This read "no ESP chip answered" until a probe of a
+    port another session was capturing logged exactly that WHILE having knocked
+    the board into download mode: esptool resets before it reads, so this message
+    must not suggest the board was left alone. }
+  CheckTrue(e, 'a racing opener does not read as no-chip',
+    Pos('in use by another program', EspPortProblem(
+      'A serial exception error occurred: device reports readiness to read but' +
+      ' returned no data (device disconnected or multiple access on port?)')) > 0);
+  CheckTrue(e, 'and it warns the board may still have been reset',
+    Pos('may still have been reset', EspPortProblem(
+      'device reports readiness to read but returned no data')) > 0);
+  CheckTrue(e, 'a genuine no-answer still says it was reset',
+    Pos('still reset', EspPortProblem('Failed to connect to ESP32')) > 0);
   { NOT "an empty directory" -- git cannot store one, so this fixture holds a
     single .keep, and the row says what it actually measures: a dotfile in a
     by-id directory is not a board. It read 1 before the hidden-entry skip. }

@@ -58,6 +58,11 @@ type
     OpenBtn: TButton;
     ChipLbl: TLabel;
     ChipBox: TComboBox;
+    { A PORT selector beside the chip one, and it is the safety-relevant control:
+      a chip name has to be mapped to a board, and the only way to do that by
+      asking is to reset boards. A port IS the answer. }
+    PortLbl: TLabel;
+    PortBox: TComboBox;
     DetectBtn, SaveBtn, BuildBtn, MonBtn, StopBtn: TButton;
     Status: TLabel;
     BoardBar: TLabel;    { the attached boards, on their own line }
@@ -98,7 +103,8 @@ type
     Mode: TMode;
     Proc: TStreamProc;
     ProcOut: AnsiString;
-    DetectIdx: Integer;
+    DetectPort: AnsiString;    { the ONE port Detect chose; never a list }
+    AutoPort: AnsiString;      { --port on the command line, for --auto }
     BuildAfterDetect: Boolean;
     MonitorPort: AnsiString;
     LogText: AnsiString;
@@ -118,11 +124,14 @@ type
     procedure OpenFile(const path: AnsiString);
     procedure SelectPath(const path: AnsiString);
     function SelectorChip: AnsiString;
+    function SelectorPort: AnsiString;
+    function DetectChipHint: AnsiString;
+    procedure RefillPortBox;
     function ProjectLine: AnsiString;
     procedure ShowState;
     procedure RelistBoards;
     procedure StartDetect;
-    procedure DetectNextPort;
+    procedure DetectOnePort;
     procedure FinishDetectPort;
     procedure StartBuild;
     procedure StartMonitor(const port: AnsiString);
@@ -307,6 +316,17 @@ begin
   ShowState;
 end;
 
+{ The first line of a multi-line explanation. A refusal from EspChooseDetectPort
+  carries the port list on following lines: the log wants all of it, the one-line
+  status bar wants the sentence and would otherwise show a menu squeezed into a
+  label. }
+function FirstLineOf(const s: AnsiString): AnsiString;
+var p: Integer;
+begin
+  p := Pos(#10, s);
+  if p > 0 then FirstLineOf := Copy(s, 1, p - 1) else FirstLineOf := s;
+end;
+
 function TEspForm.SelectorChip: AnsiString;
 var t: AnsiString;
 begin
@@ -319,6 +339,61 @@ begin
     them, and as an equality test the order is merely documentation. }
   else if t = 'ESP32' then SelectorChip := 'esp32'
   else SelectorChip := 'auto';
+end;
+
+{ The chosen port, or '' for 'auto'. A command-line --port wins, so a headless
+  --auto run can name its own board and touch nothing else. The box holds by-id
+  names; the full path is looked up from the listing so a name the user is
+  reading is never string-built into a device path. }
+function TEspForm.SelectorPort: AnsiString;
+var t: AnsiString;
+    i: Integer;
+begin
+  SelectorPort := '';
+  if AutoPort <> '' then begin SelectorPort := AutoPort; Exit; end;
+  if PortBox = nil then Exit;
+  t := PortBox.Text;
+  if (t = '') or (t = 'auto') then Exit;
+  for i := 0 to Length(Boards) - 1 do
+    if (Boards[i].Name = t) or (Boards[i].Port = t) then
+    begin
+      SelectorPort := Boards[i].Port;
+      Exit;
+    end;
+  { not attached any more: hand it back as typed so EspChooseDetectPort can say
+    so by name, rather than silently falling back to 'auto' and probing }
+  SelectorPort := t;
+end;
+
+{ Which chip to narrow the port choice BY: the selector when it names one, else
+  what the project builds for. Not the detected chip -- that is what we are
+  trying to find out, and using it here would be circular. }
+function TEspForm.DetectChipHint: AnsiString;
+var s: AnsiString;
+begin
+  s := SelectorChip;
+  if (s <> '') and (s <> 'auto') then begin DetectChipHint := s; Exit; end;
+  DetectChipHint := EspProjectChip(CurProject);
+end;
+
+{ The port box holds 'auto' plus the by-id name of every attached board. Built
+  from the listing, which opens nothing. }
+procedure TEspForm.RefillPortBox;
+var i: Integer;
+    keep: AnsiString;
+begin
+  if PortBox = nil then Exit;
+  keep := PortBox.Text;
+  PortBox.Clear;
+  PortBox.AddItem('auto');
+  for i := 0 to Length(Boards) - 1 do PortBox.AddItem(Boards[i].Name);
+  PortBox.Text := 'auto';
+  { keep an explicit choice across a relist, so a user who picked their own board
+    does not silently return to 'auto' -- which is the setting that can refuse,
+    or on a single-board host probe }
+  if keep <> '' then
+    for i := 0 to Length(Boards) - 1 do
+      if Boards[i].Name = keep then PortBox.Text := keep;
 end;
 
 function TEspForm.ProjectLine: AnsiString;
@@ -402,6 +477,7 @@ begin
   else
     for i := 0 to Length(Boards) - 1 do
       AddLog('Board: ' + EspBoardLine(Boards[i]) + #10);
+  RefillPortBox;
 end;
 
 { ---- children: detect, build+flash, monitor ---- }
@@ -412,28 +488,53 @@ begin
   Mode := mIdle;
 end;
 
+{ ONE port, chosen before anything is opened, or a refusal.
+
+  This used to walk every attached port: `Inc(DetectIdx); if DetectIdx <
+  Length(Boards) then DetectNextPort`. On a host with three boards that reset two
+  belonging to other people, in one press, while logging "this resets the board"
+  each time. A probe must touch exactly what the user pointed at, and when that
+  cannot be determined from the listing alone the answer is to ask the user --
+  not to find out by resetting hardware to see what it is.
+
+  The rule lives in EspChooseDetectPort so it can be tested against a fixture
+  directory of three ports without a board or a display. }
 procedure TEspForm.StartDetect;
+var port, why: AnsiString;
 begin
   StopChild;             { a monitor holding the port would answer "busy" }
   RelistBoards;
-  DetectIdx := 0;
-  if Length(Boards) = 0 then
+  if not EspChooseDetectPort(Boards, SelectorPort, DetectChipHint, port, why) then
   begin
-    Detected := True;
-    AddLog('Detect: no serial port (/dev/serial/by-id, /dev/ttyACM*, /dev/ttyUSB*): no board is connected.' + #10);
+    Detected := True;    { asked and answered: the refusal IS the outcome }
+    AddLog('Detect: ' + why + #10);
+    SetStatus('Detect: ' + FirstLineOf(why));
     ShowState;
-    if BuildAfterDetect then begin BuildAfterDetect := False; StartBuild; end;
+    { a refusal must NOT fall through into a build that then picks a port
+      itself -- that would defeat the whole point of refusing }
+    if BuildAfterDetect then
+    begin
+      BuildAfterDetect := False;
+      AddLog('Build+Flash: stopped, because Detect could not tell which board to ask.' + #10);
+    end;
+    { and a headless --auto run must END on a refusal rather than sit there: the
+      first spy run of this fix exited 124, killed by its own timeout, because a
+      refusal reached no AutoFinish. A batch caller cannot tell that apart from a
+      hang, and "the harness timed out" is not a verdict. }
+    if AutoRun then AutoFinish(2);
     Exit;
   end;
+  DetectPort := port;
   ShowState;
-  DetectNextPort;
+  DetectOnePort;
 end;
 
-procedure TEspForm.DetectNextPort;
+procedure TEspForm.DetectOnePort;
 var port, cmd: AnsiString;
 begin
-  port := Boards[DetectIdx].Port;
-  AddLog('Detect: asking ' + port + ' (esptool chip-id; this resets the board)' + #10);
+  port := DetectPort;
+  AddLog('Detect: asking ' + port + ' (esptool chip-id; this resets THIS board' +
+         ' and no other)' + #10);
   ProcOut := '';
   { The port is QUOTED INTO the command rather than passed as $1, because
     `sg dialout -c` takes one string and forwards no arguments. Quoting is
@@ -451,39 +552,33 @@ begin
 end;
 
 procedure TEspForm.FinishDetectPort;
-var chip, why, port: AnsiString;
+var chip, why: AnsiString;
     i, answered: Integer;
 begin
-  port := Boards[DetectIdx].Port;
+  answered := -1;
+  for i := 0 to Length(Boards) - 1 do
+    if Boards[i].Port = DetectPort then answered := i;
   chip := EspChipFromEsptool(ProcOut);
-  if chip <> '' then
+  if (chip <> '') and (answered >= 0) then
   begin
     { fill the record IN PLACE -- the listing already knows this board's by-id
       name and bridge, and rebuilding it here would throw that away }
-    Boards[DetectIdx].Chip := chip;
-    Boards[DetectIdx].Mac := EspMacFromEsptool(ProcOut);
-    Boards[DetectIdx].Revision := EspRevisionFromEsptool(ProcOut);
-    AddLog('Detect: ' + EspBoardLine(Boards[DetectIdx]) + #10);
+    Boards[answered].Chip := chip;
+    Boards[answered].Mac := EspMacFromEsptool(ProcOut);
+    Boards[answered].Revision := EspRevisionFromEsptool(ProcOut);
+    AddLog('Detect: ' + EspBoardLine(Boards[answered]) + #10);
   end
   else
   begin
     why := EspPortProblem(ProcOut);
-    if why = '' then why := 'no ESP chip answered';
-    AddLog('Detect: ' + port + ': ' + why + #10);
+    if why = '' then why := 'no ESP chip answered (it was still reset by the attempt)';
+    AddLog('Detect: ' + DetectPort + ': ' + why + #10);
   end;
-  Inc(DetectIdx);
-  if DetectIdx < Length(Boards) then
-  begin
-    DetectNextPort;
-    Exit;
-  end;
+  { NO loop. One port was chosen, one port was asked, and that is the end of it.
+    The `Inc(DetectIdx); if DetectIdx < Length(Boards) then DetectNextPort` that
+    stood here is what reset other people's boards. }
   Mode := mIdle;
   Detected := True;
-  answered := 0;
-  for i := 0 to Length(Boards) - 1 do
-    if Boards[i].Chip <> '' then answered := answered + 1;
-  if answered = 0 then
-    AddLog('Detect: no board answered.' + #10);
   ShowState;
   if BuildAfterDetect then
   begin
@@ -1144,7 +1239,8 @@ begin
 end;
 
 var
-  arg, start: AnsiString;
+  arg, start, a: AnsiString;
+  ai, pos1: Integer;
   f: TEspForm;
 
 begin
@@ -1159,18 +1255,38 @@ begin
   f.Mode := mIdle;
   f.Proc.Running := False;
 
+  { Arguments are scanned rather than read by position, because --port has to be
+    passable to a headless --auto run: naming the board is how an automated run
+    avoids touching anyone else's. Positional arguments keep their old meaning
+    (project, then seconds) and --port is taken out of the sequence wherever it
+    appears. }
   arg := '';
   start := f.RepoRoot + '/examples/esp32';
-  if ParamCount >= 1 then arg := ParamStr(1);
-  if arg = '--auto' then
+  f.AutoSecs := 10;
+  ai := 1;
+  pos1 := 0;
+  while ai <= ParamCount do
   begin
-    f.AutoRun := True;
-    f.AutoSecs := 10;
-    if ParamCount >= 2 then start := ParamStr(2);
-    if ParamCount >= 3 then f.AutoSecs := StrToIntDef(ParamStr(3), 10);
-  end
-  else if (arg <> '') and (arg <> '--gui-smoke') then
-    start := arg;
+    a := ParamStr(ai);
+    if a = '--port' then
+    begin
+      if ai < ParamCount then begin f.AutoPort := ParamStr(ai + 1); Inc(ai); end
+      else writeln(StdErr, 'espide: --port needs a device path');
+    end
+    else if a = '--auto' then
+      f.AutoRun := True
+    else if a = '--gui-smoke' then
+      arg := a
+    else
+    begin
+      Inc(pos1);
+      if pos1 = 1 then start := a
+      else if pos1 = 2 then f.AutoSecs := StrToIntDef(a, 10);
+    end;
+    Inc(ai);
+  end;
+  if f.AutoPort <> '' then
+    writeln('espide: port fixed to ', f.AutoPort, ' -- no other port will be opened');
 
   { THE TOOLBAR IS A REAL GtkToolbar, and that is what unfloors the window.
     These nine controls used to sit at absolute coordinates out to x=934, so
@@ -1207,6 +1323,16 @@ begin
   f.ChipBox.AddItem('ESP32-S3');
   f.ChipBox.AddItem('ESP32-C3');
   f.ChipBox.AddItem('ESP32-S2');
+  { The port selector. It is filled by RelistBoards, from by-id names only, and
+    it is what makes Detect safe on a host with more than one board: a chip name
+    can be ambiguous between two boards, a port cannot. }
+  f.PortLbl := TLabel.Create(nil);
+  f.PortLbl.Caption := ' Port: ';
+  f.PortLbl.Parent := f.Bar;
+  f.PortBox := TComboBox.Create(nil);
+  f.PortBox.Parent := f.Bar;
+  f.PortBox.AddItem('auto');
+  f.PortBox.Text := 'auto';
   f.DetectBtn := MkButton('Detect');
   f.Bar.AddSeparator;
   f.SaveBtn := MkButton('Save');
