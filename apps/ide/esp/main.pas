@@ -43,6 +43,7 @@ const
   W_TREE   = 260;
   H_LOG    = 260;
   TICK_MS  = 100;
+  LOG_FLUSH_MS = 250;   { pane refresh rate; see AddLog }
   LOG_CAP  = 32000;     { the pane keeps a TAIL: setting a GtkTextView to the
                           whole of a 150 KB IDF build log on every chunk cost
                           more than the chunks arrived, so the window fell
@@ -112,6 +113,9 @@ type
     AutoRun: Boolean;
     AutoSecs: Integer;
     AutoTicks: Integer;
+    AutoMonT0: Int64;      { GetTickCount64 when the monitor opened }
+    LogDirty: Boolean;     { pane is behind LogText }
+    LogFlushT0: Int64;
     AutoRc: Integer;
     AutoDone: Boolean;
     InLoop: Boolean;       { Application.Run has started: quitting is legal }
@@ -119,6 +123,7 @@ type
     panedSeeded: Boolean;
 
     procedure AddLog(const s: AnsiString);
+    procedure FlushLog;
     procedure SetStatus(const s: AnsiString);
     procedure LoadTree;
     procedure OpenFile(const path: AnsiString);
@@ -239,14 +244,43 @@ begin
   FindRepoRoot := GetCurrentDir;
 end;
 
-procedure TEspForm.AddLog(const s: AnsiString);
+{ Push the accumulated text into the pane. THE EXPENSIVE HALF: setting a
+  GtkTextView's text re-lays out the whole buffer and CaretToLine scrolls it, so
+  this is O(LOG_CAP) and must not run once per arriving chunk. }
+procedure TEspForm.FlushLog;
 begin
-  LogText := LogText + StripCR(s);
-  if Length(LogText) > LOG_CAP then
-    LogText := Copy(LogText, Length(LogText) - LOG_CAP div 2, LOG_CAP);
+  if not LogDirty then Exit;
+  LogDirty := False;
+  LogFlushT0 := GetTickCount64;
   Log.Text := LogText;
   Log.CaretToLine(CountLines(LogText));
-  if AutoRun then write(StripCR(s));
+end;
+
+{ A serial monitor delivers up to 16 x 4096 = 64 KB per tick (StreamPoll's drain
+  cap), and this used to do the full pane rewrite plus a CountLines over the whole
+  tail FOR EVERY CHUNK. That is more work than a 100 ms tick has, so on a board
+  that streams -- one reboot-looping under cat's DTR/RTS, say -- the IDE never
+  catches up and wedges for as long as the board talks. Measured: 47 minutes on a
+  monitor asked for 6 seconds, log frozen, nothing deadlocked.
+
+  Two changes. The pane is now updated at most every LOG_FLUSH_MS, and stdout is
+  written FIRST: it used to come last, behind the GTK work, so when the pane fell
+  behind, the log file froze too and a live run was indistinguishable from a dead
+  one. The record a headless run leaves must not queue behind a widget. }
+procedure TEspForm.AddLog(const s: AnsiString);
+var t: AnsiString;
+begin
+  t := StripCR(s);
+  if AutoRun then
+  begin
+    write(t);
+    Flush(Output);
+  end;
+  LogText := LogText + t;
+  if Length(LogText) > LOG_CAP then
+    LogText := Copy(LogText, Length(LogText) - LOG_CAP div 2, LOG_CAP);
+  LogDirty := True;
+  if GetTickCount64 - LogFlushT0 >= LOG_FLUSH_MS then FlushLog;
 end;
 
 procedure TEspForm.SetStatus(const s: AnsiString);
@@ -716,7 +750,13 @@ begin
        EspWrapSg('stty -F ' + EspShellQuote(port) +
                  ' 115200 cs8 -cstopb -parenb -echo raw || exit 2; ' +
                  'exec cat ' + EspShellQuote(port), UseSg), 'sh']) then
-    Mode := mMonitor
+  begin
+    Mode := mMonitor;
+    { the clock --auto's monitor window is measured against, started here rather
+      than counted in ticks -- see OnTick }
+    AutoMonT0 := GetTickCount64;
+    AutoTicks := 0;
+  end
   else
     AddLog('Monitor: could not start /bin/bash' + #10);
   ShowState;
@@ -755,6 +795,9 @@ begin
         if AutoRun then AutoFinish(0);
       end;
   end;
+  { the child is gone, so no later chunk will arrive to trigger a flush; do not
+    leave the last lines of a finished run waiting on the next tick }
+  FlushLog;
   ShowState;
 end;
 
@@ -781,12 +824,26 @@ begin
     end;
     if not Proc.Running then ChildDone;
   end;
+  { ELAPSED CLOCK TIME, not a count of ticks. `AutoTicks * TICK_MS` assumed every
+    tick arrives on its 100 ms schedule, so it measured timer ticks and called
+    them seconds. A monitor on a talkative port breaks that assumption: each tick
+    drains up to 16 reads, the timer falls behind, and `--auto <n>` then runs
+    longer than n seconds. Wall time cannot drift that way.
+
+    This is a SECOND, independent defect from the wedge AddLog above describes,
+    and not the cause of it -- I briefly believed it was, on the strength of one
+    clean run, and the ticket records why that was wrong. Fixing only this one
+    would have left the IDE wedging with a more honest clock. }
+  { the pane still catches up when the child has gone quiet }
+  if LogDirty and (GetTickCount64 - LogFlushT0 >= LOG_FLUSH_MS) then FlushLog;
   if AutoRun and (Mode = mMonitor) then
   begin
-    Inc(AutoTicks);
-    if AutoTicks * TICK_MS >= AutoSecs * 1000 then
+    Inc(AutoTicks);   { kept for the log line below: how many ticks that took }
+    if GetTickCount64 - AutoMonT0 >= Int64(AutoSecs) * 1000 then
     begin
-      AddLog(#10 + '--- monitor stopped after ' + IntToStr(AutoSecs) + ' s ---' + #10);
+      AddLog(#10 + '--- monitor stopped after ' + IntToStr(AutoSecs) + ' s (' +
+             IntToStr(AutoTicks) + ' ticks; ' +
+             IntToStr(Integer(GetTickCount64 - AutoMonT0)) + ' ms elapsed) ---' + #10);
       AutoFinish(0);
     end;
   end;

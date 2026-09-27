@@ -429,9 +429,13 @@ begin
   if Pos('Permission denied', outp) > 0 then
     EspPortProblem := 'permission denied: your user needs the dialout group ' +
       '(add it, then log in again)'
+  { EBUSY is the OPEN being refused -- an exclusive open (tools/esp_serial_capture.py
+    takes TIOCEXCL) or another holder. No open means no DTR/RTS toggle, so unlike
+    the races below the board really was left alone, and saying so is the point:
+    the two cases differ in whether someone else's measurement just died. }
   else if Pos('port is busy', outp) > 0 then
-    EspPortProblem := 'the port is in use by another program' +
-      ' (the board may still have been reset)'
+    EspPortProblem := 'the port is locked by another program: the open was' +
+      ' refused, so this board was NOT reset'
   { pySerial's wording when a SECOND opener races an existing one. This used to
     fall through to "no ESP chip answered", which reads as "nothing happened" --
     and it is the opposite: esptool asserts the reset BEFORE it reads, so a board

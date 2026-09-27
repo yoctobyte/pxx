@@ -719,6 +719,16 @@ begin
       'device reports readiness to read but returned no data')) > 0);
   CheckTrue(e, 'a genuine no-answer still says it was reset',
     Pos('still reset', EspPortProblem('Failed to connect to ESP32')) > 0);
+  { EBUSY is the OPPOSITE case and must not borrow the same warning: a refused
+    open cannot have toggled DTR/RTS, so that board was left alone. The two are
+    a pair -- one says someone else's run may have just died, one says it did
+    not -- and conflating them makes both useless. }
+  CheckTrue(e, 'a locked port says the board was NOT reset',
+    Pos('NOT reset', EspPortProblem(
+      'serial.serialutil.SerialException: could not open port: port is busy')) > 0);
+  CheckTrue(e, 'and a locked port is not described as a reset risk',
+    Pos('may still have been reset', EspPortProblem(
+      'could not open port: port is busy')) = 0);
   { NOT "an empty directory" -- git cannot store one, so this fixture holds a
     single .keep, and the row says what it actually measures: a dotfile in a
     by-id directory is not a board. It read 1 before the hidden-entry skip. }
