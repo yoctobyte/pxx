@@ -529,6 +529,7 @@ wired to the board.
 | dns-c3 | resolver smoke test, `status=0` | v441 `4ebfa2d047a2…` | `5db85cc283` |
 | gpio-c3 | reads follow writes, the pull-up reads 1, and all 10 edges arrive, none of which QEMU models; the probe's verdict line still names QEMU | v441 `4ebfa2d047a2…` | `5db85cc283` |
 | nilpy-station-c3 | all 12 lines of `main.expected`; a PC's Wi-Fi scan saw its `PXX-NILPY` network | v441 `4ebfa2d047a2…` | `5db85cc283` |
+| wifi-ap-c3 | starts the access point `PXX-ESP32C3`; an ESP32-S3 joined it and loaded the page five times, all HTTP 200 (`test/esp_board_s3_visits_wifi_ap_c3.npy`) | HEAD `139494b2b863…` | `cdd6fd3c1f` |
 
 **Long-running use.** The heap soaks were also run on this board, with pin
 v441: `hello-c3` looped 100 times kept 0 bytes, and `nilpy-c3` kept 0 bytes

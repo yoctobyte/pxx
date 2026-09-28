@@ -1,0 +1,33 @@
+# BOARD ONLY, TWO BOARDS: an ESP32-S3 joins the access point of an ESP32-C3
+# running examples/esp32/wifi-ap-c3 (Pascal: "PXX-ESP32C3", password
+# "pascal26", 192.168.4.1) and loads its page -- the client that wifi-ap-s3's
+# README says was never observed. Pascal serves, NilPy fetches.
+#
+#   tools/esp_flash.sh --project examples/esp32/wifi-ap-c3 --port <C3> --no-verify --seconds 20
+#   PXX_MAIN=$PWD/test/esp_board_s3_visits_wifi_ap_c3.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-station-s3 --port <S3> --no-verify --seconds 90
+#
+# The C3's console must then log each request (`PXX wifi-ap: 192.168.4.x
+# "GET / HTTP/1.1"`); read it with tools/esp_serial_capture.py --no-reset.
+import network
+import time
+import urequests
+import 'espsys.pas' as board
+
+sta = network.WLAN(network.STA_IF)
+sta.active(True)
+sta.connect("PXX-ESP32C3", "pascal26")
+t0 = board.uptime_ms()
+while sta.status() == network.STAT_CONNECTING and board.uptime_ms() - t0 < 30000:
+    time.sleep(0.25)
+print("joined PXX-ESP32C3", sta.isconnected())
+ok = 0
+for i in range(5):
+    r = urequests.get("http://192.168.4.1/")
+    body = r.text
+    if r.status_code == 200 and "PXX on ESP32-C3" in body:
+        ok = ok + 1
+    r.close()
+    time.sleep(0.5)
+print("pages 200 with the C3 title", ok, "of 5")
+print("VISIT-DONE", ok == 5)

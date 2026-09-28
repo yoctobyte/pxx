@@ -13,7 +13,11 @@ call C, with no binding code in between. This page shows both on an ESP32-C3.
 2026-09-27, in a fresh clone at `025a005851`, with ESP-IDF v6.0.1: both
 programs below built through ESP-IDF to a C3 image, and both ran under
 Espressif's QEMU for the ESP32-C3 and printed exactly what the same source
-prints on a PC. They have not been run on a board.
+prints on a PC. On 2026-09-28 both also ran on a real ESP32-C3 board (rev
+v0.4), built exactly as below with the compiler of tree `cdd6fd3c1f` (sha256
+`139494b2b863`), through `tools/esp_flash.sh --project`. The Python program's
+five lines matched its `main.expected`, and the Pascal program printed
+`crc8("123456789") = 244`. The board booted once in each run.
 
 ## Nil Python calling a Pascal unit
 

@@ -172,8 +172,16 @@ desktop Pascal programs have TLS through the `http` unit.
 
 Two limits apply to these measurements:
 
-- **Over real Wi-Fi, only the ESP32-C3 has been measured**, and only with
-  `urequests`. The rows above ran over QEMU's emulated Ethernet. On
+- **Over real Wi-Fi, two boards and two libraries have been measured**; the
+  rows above ran over QEMU's emulated Ethernet. On 2026-09-28, with the
+  compiler after v445 (tree `cdd6fd3c1f`), a physical ESP32-S3 made 300
+  `urequests` fetches over a home Wi-Fi network and ended within 328 bytes
+  of where it started (216 bytes higher after 130 seconds); and both an
+  ESP32-C3 and an ESP32-S3 ran 300 `umqtt.simple` sessions against a
+  broker on that network. Each MQTT run held about 1.3 KB while connections
+  were closing and ended about 1.9 KB higher than it started once 130 seconds
+  had passed. Their positive controls kept 1,438 bytes per fetch and about
+  1,130 bytes per session. On
   2026-09-27, one ESP32-C3 board with the v441 compiler, joined to a home
   Wi-Fi network, fetched a page from a PC on that network 1,000 times. Free
   heap stayed within 400 bytes of where it started, with no upward trend, and
