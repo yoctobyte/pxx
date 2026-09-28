@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `9a245b91c409` | 2026-09-28T06:04:38Z | RED (native) | 400.1s | `7abbe26f4e96` RED |
+| borg | `b1f2b7d8812d` | 2026-09-28T06:12:18Z | RED (native) | 402.8s | `7abbe26f4e96` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `7abbe26f4e96` on borg, 2026-09-28T05:56:58Z (7m ago).**
+**Newest full tier in the fleet: `7abbe26f4e96` on borg, 2026-09-28T05:56:58Z (15m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `7abbe26f4e96` | RED | 7m | — (newest) |
+| borg | `7abbe26f4e96` | RED | 15m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -30,3 +30,11 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 ## Open regressions
 - **test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +14 (borg): bad `80e96e1c23cf`, last good `98facdd35ac7`, 1 commit(s) in range
 - **tools-devtest#00** (borg): bad `fcc48142526c`, last good `9df5de0690e8`, 2 commit(s) in range
+- **test-core#src:test/test_cdecl_bodied_narrow.pas@2** — test/test_cdecl_bodied_narrow.pas tools/expect_same.sh +1 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-core#src:test/test_cdecl_bodied_wide.pas@2** — test/test_cdecl_bodied_wide.pas tools/expect_same.sh +2 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-core#src:test/test_cdecl_fnptr_aggregate_result.pas** — test/test_cdecl_fnptr_aggregate_result.pas tools/expect_same.sh +3 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-threads#src:test/lib_signals_fpc.pas** — test/lib_signals_fpc.pas tools/expect_same.sh +2 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-threads#src:test/thread_glibc_malloc_two_threads.pas@1** — test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-threads#src:test/thread_glibc_malloc_two_threads.pas@2** — test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh +1 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-threads#src:test/thread_glibc_malloc_two_threads.pas@3** — test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh +1 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-threads#src:test/thread_glibc_malloc_two_threads.pas@4** — test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh +1 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
