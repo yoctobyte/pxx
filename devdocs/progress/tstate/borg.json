@@ -16740,7 +16740,7 @@
   },
   {
    "bad": "7d105ec21cfdd12bd25e46371464c65241189487",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "9a245b91c4093e51fb5bbdd7e9f4eb7f0ee27a51",
    "job": "test-core#src:test/test_cdecl_fnptr_aggregate_result.pas",
