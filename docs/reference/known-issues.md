@@ -1033,6 +1033,23 @@ three calls print what CPython prints (x86-64, `9ce84ba69527`). A scalar
 annotation such as `x: float` gives it a type by hand: it stops the
 truncation, but a string still raises `TypeError`.
 
+**Nil Python through `./pxx`: `import time` and `import string` find the C
+headers.** The `./pxx` wrapper that `install.sh` writes puts `lib/crtl/include`
+on the unit search path, and there Nil Python's `import time` and `import
+string` bind the C headers `time.h` and `string.h` instead of PXX's Python
+modules. `time.sleep`, `time.sleep_ms`, `time.ticks_ms` and
+`string.ascii_lowercase` then fail to compile with `no member sleep came of
+the qualifier time` (and the same for the others). `time.time()` still
+compiles, because C declares `time()`, and `import math` is not affected.
+The same programs compile and run when the compiler is called directly: a
+program that is only `import time` and `time.sleep(0.01)` builds that way but
+not through `./pxx`. Measured on 2026-09-29 on x86-64 with the pinned v450
+(`c19cc2d531e4`), through a checkout's `./pxx` (written by
+`tools/install.sh`, last changed on 2026-09-25) and directly. **Workaround:** call the compiler directly
+(`compiler/pxx-<arch>` in the release tarball, the pinned binary in a
+checkout) instead of `./pxx` for a Nil Python program that imports `time` or
+`string`.
+
 **Nil Python: `exec` publishes a def only when it is named `__body__`.**
 After `exec("def f():\n    return 42\n", {}, ns)`, `ns` is empty, and
 `ns["f"]` raises `KeyError: 'f'`. The message names your key, so it reads as
