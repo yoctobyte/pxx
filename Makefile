@@ -3511,7 +3511,7 @@ test-nilpy: $(COMPILER)
 	# stdout row above and leaves this expectation empty.
 	./$(COMPILER) test/test_nilpy_the_sys_streams.npy $(TESTTMP)/test_nilpy_streams26
 	$(TESTTMP)/test_nilpy_streams26 2>$(TESTTMP)/test_nilpy_streams.err | diff -u test/test_nilpy_the_sys_streams.expected -
-	diff -u test/test_nilpy_the_sys_streams.err.expected $(TESTTMP)/test_nilpy_streams.err
+	tools/expect_same.sh test_nilpy_the_sys_streams.err "$$(cat $(TESTTMP)/test_nilpy_streams.err)" "$$(cat test/test_nilpy_the_sys_streams.err.expected)"
 	# StdErr is fd 2 on every target, and stdout carries nothing of it: each
 	# stream is checked alone, against FPC (Pascal) and CPython (Nil Python).
 	# Only x86-64 honoured the fd one commit back, and it leaked formatted floats.
