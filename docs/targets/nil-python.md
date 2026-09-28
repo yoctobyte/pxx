@@ -108,31 +108,33 @@ what keeps a long-running program's heap flat.
 
 **When memory comes back.** The table gives what was still allocated
 (`live`) just before the function returned. The function filled a list with
-30 strings and then let go of it in the way shown. Measured on 2026-09-27 on
-x86-64 with `tools/census_at_exit.sh`, for pin v445 (`caf21ac399f1`) and for
-the compiler after it (built at `b6226e1385`):
+30 strings and then let go of it in the way shown. Measured on x86-64 with
+`tools/census_at_exit.sh`: pin v445 (`caf21ac399f1`) on 2026-09-27, and pin
+v446 (`ae3466a018d8`) and the compiler after it (built at `e072d579b0`,
+`ccd62c91f30e`) on 2026-09-28:
 
-| how the list was dropped | v445 | after v445 |
-| --- | ---: | ---: |
-| kept (the control) | 32 | 32 |
-| `kept = None` | 32 | 1 |
-| `del kept` | 32 | 32 |
-| a comprehension, then `rows = None` | 32 | 32 |
-| at module level, `kept = None` | 32 | 1 |
+| how the list was dropped | v445 | v446 | after v446 |
+| --- | ---: | ---: | ---: |
+| kept (the control) | 32 | 32 | 32 |
+| `kept = None` | 32 | 1 | 1 |
+| `del kept` | 32 | 32 | 32 |
+| a comprehension, then `rows = None` | 32 | 32 | 1 |
+| at module level, `kept = None` | 32 | 1 | 1 |
 
 - **With v445, dropping a name frees nothing until the function returns.** A
   list or dict that a statement creates is also held by a hidden temporary of
   that statement, so `kept = None` removes only one of two references. At
   module level it is held until the program ends.
-- **After v445, each statement releases its temporaries when it ends**
+- **From v446, each statement releases its temporaries when it ends**
   (`31d314dfa8`), so `kept = None`, `kept = 5` or a new `kept = []` frees the
   old list and everything in it at once. This applies at module level too.
 - **`del name` and `name = None`.** Use `name = None`. With v445 neither frees
-  a local before the function returns. After v445, `name = None` does. `del`
-  on a local, and `= None` on a list built by a comprehension, still free
-  nothing until the function returns, with v445 and after it (the table's
-  third and fourth rows). A fix is in progress. Until then, return from the
-  function to get that memory back.
+  a local before the function returns. From v446, `name = None` does, except
+  on a list built by a comprehension, which v446 still holds until the
+  function returns; that is fixed after v446 (`cdd6fd3c1f`, the table's fourth
+  row). `del` on a local still frees nothing until the function returns, in
+  v446 and after it (the third row). A fix is in progress. Until then, use
+  `= None`, or return from the function to get that memory back.
 - **Module-level temporaries.** A string built by a module-level statement,
   such as `print("n=" + str(n))` outside any function, is kept until that
   statement runs again. That is at most one string per source line and does not
@@ -140,8 +142,8 @@ the compiler after it (built at `b6226e1385`):
   statement ends.
 - **A computed string on the left of `*`** (`str(i) * 2`, `"%d" % i * 2`,
   `s.upper() * 2`) leaks one string per evaluation with v445: 90 left after a
-  90-pass loop. Fixed after v445 (`c64b304036`): with the compiler built there
-  (`ae3466a018d8`) each of the three leaves 1. On v445, name the string first
+  90-pass loop. Fixed in v446 (`c64b304036`): with v446 (`ae3466a018d8`) each
+  of the three leaves 1. On v445, name the string first
   (`t = str(i)` then `t * 2`), which left 1 instead of 30.
 
 **Cycles are never freed.** Two objects that refer to each other

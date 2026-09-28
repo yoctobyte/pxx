@@ -142,9 +142,10 @@ still holds. It also changes four habits:
 
 - **Dropping a name does not always free the object at once.** `del name` on
   a local keeps the object until the function returns. On v445,
-  `name = None` does not release a list or dict early either; the compiler
-  after v445 releases one built with `[]` and `append` at `name = None`, but
-  a list built by a comprehension is still kept until the function returns.
+  `name = None` does not release a list or dict early either. v446 releases
+  one built with `[]` and `append` at `name = None`, but keeps a list built by
+  a comprehension until the function returns; the compiler after v446
+  (`cdd6fd3c1f`) releases that one too.
   What always works: the memory comes back when the function returns. So keep
   large temporary data inside a function rather than at module level, where
   it lives until the program ends.

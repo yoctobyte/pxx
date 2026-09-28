@@ -81,6 +81,13 @@ Found after the release, on 2026-09-27, and **open in v441**:
   program; measured fixed with v445. **On v441:**
   assign a new empty container (`buf = []`, `d = {}`) instead of calling
   `clear()`.
+- **Nil Python: a computed string on the left of `*` leaked.** `str(i) * 2`,
+  `"%d" % i * 2` and `s.upper() * 2` each lost one string per evaluation.
+  Fixed in v446 (`c64b304036`). Measured on 2026-09-28 with
+  `tools/census_at_exit.sh`, a 30-pass loop over `str(i) * 2` inside a
+  function: 31 live with v445 (`caf21ac399f1`), 2 with v446
+  (`ae3466a018d8`). **On v445 and earlier:** name the string first
+  (`t = str(i)`, then `t * 2`).
 
 Program-level global variables are not finalized when the program exits. This
 is a one-time cost at exit, not a leak that grows while the program runs.
@@ -99,22 +106,25 @@ another line, `kept = None`, `kept = 5`), and calling a method on it
 the program ends. It does not add up in a loop, but a function that fills a
 list and then drops it keeps the contents until it returns. On an ESP32-C3
 with about 70 KB free, 34 kept HTTP responses (about 1.4 KB each) held that
-way ran the heap low enough that Wi-Fi stopped working. Fixed after v445
+way ran the heap low enough that Wi-Fi stopped working. Fixed in v446
 (`31d314dfa8`): the container is released as soon as the last name lets go of
-it. That fix does not cover a list built by a comprehension
+it. v446 does not cover a list built by a comprehension
 (`rows = [str(i) for i in range(n)]`): after `rows = None` it is still kept
-until the function returns, with v445 and with the compiler at `ae11f1ddb5`
-alike. **On v445 and earlier, and for a comprehension after it:** return from
-the function, or let it end, to get the memory back.
+until the function returns. That is fixed after v446 (`cdd6fd3c1f`).
+Measured on 2026-09-28 with `tools/census_at_exit.sh`, a function whose list
+of 30 strings is dropped before it exits: `kept = None` leaves 1 live with
+v446 (`ae3466a018d8`); a comprehension then `rows = None` leaves 32 with v446
+and 1 with the compiler at `e072d579b0` (`ccd62c91f30e`). **On v445 and
+earlier, and for a comprehension on v446:** return from the function, or let
+it end, to get the memory back.
 
 `del name` on a local variable does not release what the name refers to; the
-object stays allocated until the function returns. This is still so after
-v445. With the compiler after v445, assign `name = None` instead, which does
-release it. On v445 and earlier `name = None` does not release it either (see
-the paragraph above): return from the function. (Measured with v445 and with
-the compiler at `ae11f1ddb5`: a local list of 5 strings, dropped before the
-function exits, stays live under `del` on both, and under `= None` on v445
-only.)
+object stays allocated until the function returns. This is still so in v446
+and after it. From v446, assign `name = None` instead, which does release it.
+On v445 and earlier `name = None` does not release it either (see the
+paragraph above): return from the function. (Measured on 2026-09-28, the same
+list of 30 strings: under `del` 32 live with v446 and with the compiler at
+`e072d579b0`; under `= None` 1 with both, and 32 with v445.)
 
 **Nil Python: a reference cycle is never freed.** Nil Python frees an object
 when its last reference goes away; there is no garbage collector to find
@@ -185,10 +195,11 @@ Two limits apply to these measurements:
 
 ## Fixed since v441
 
-These are wrong in v441 and fixed in a later pin or after v445, as each row
-says. Each was checked against GCC's output on x86-64, and re-checked on
-2026-09-27: with v445 each row is still wrong exactly where it says "after
-v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
+These are wrong in v441 and fixed in a later pin or after the latest one, as
+each row says: "wrong in v441 to v446" means fixed after v446, and not yet in
+any pin. The C rows were checked against GCC's output and the Pascal rows
+against FPC 3.2.2. The Nil Python rows were checked against CPython 3 and say
+what they were measured with.
 
 - **Pascal: comparing a LongWord with a signed value on 32-bit targets.** On
   i386, arm32 and riscv32, `c > i` with `c: LongWord = 3000000000` and
@@ -326,6 +337,29 @@ v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
 - **C: a local with an unsized first dimension of rows** (`vec4 v[] =
   {...}`, `float a[][4] = {...}`) was allocated one row, and the rest of its
   initialiser overwrote neighbouring locals. Fixed in v443.
+
+- **Threads on i386, aarch64 and arm32 shared glibc's thread pointer.** A
+  thread started by PXX in a program that links libc used the main thread's
+  glibc state, so two threads using `malloc` at once could abort the program
+  (the fix's commit measured an abort in 1 of 3 runs on i386, 2 of 3 on
+  aarch64, 3 of 3 on arm32, under QEMU). The compiler warned about it. Each
+  thread now gets its own, as on x86-64. Wrong in v441 to v445; fixed in
+  v446 (`0ed2b7f6e1`).
+
+- **Pascal and Nil Python: a Pascal result borrowed from a field or global
+  was freed under its owner.** A Pascal function returning an object held in
+  a field, an array element or a global handed it over as if it were new, and
+  the caller's release freed it. In Nil Python, `p = re.compile("a+")` in a
+  function called three times answered `True`, then `False` (with
+  `-dPXX_HEAP_DEBUG`: "RELEASE of a FREED object") with v445, and `True`
+  three times with v446. Wrong in v441 to v445; fixed in v446
+  (`601abeecec`).
+
+- **Nil Python: a method called on an attribute or a call result.**
+  `r.text.split(":")[0]` and `r.text[0]` worked, but `R().name.upper()`
+  stopped with `TypeError: object is not callable` with v445. With v446 the
+  three print `ab XY a`, as CPython does. Wrong in v441 to v445; fixed in
+  v446 (`d58437f7f6`).
 
 ## Fixed in this release
 
