@@ -201,10 +201,15 @@ ESP32-C3 and ESP32-S3 and has not been run on a board.
   dropped, on purpose, to keep the interrupt landing inside the queue's reader.
   The same test against the queue before `0d5df89913` lost 2,503 edges.
   Neither of these two tests has been repeated with a pinned compiler.
-- `poll()` with no sleep anywhere before it has been checked only on a PC, by
-  the hosted tests. The board test that checks it, and checks that the 16-event
-  budget defers, `test/esp_board_gpio_poll_drain` (Pascal and Python, both
-  chips), builds and has not run on a board yet.
+- `poll()` as a drain point, and the 16-event budget,
+  `test/esp_board_gpio_poll_drain.pas` and `.npy`, on both boards with v450
+  (compiler sha256 `c19cc2d531e4…`, tree `3503825c2f`) on 2026-09-28; Pascal
+  and Python printed the same numbers on both chips. After 10 edges and no
+  sleep, 10 are pending and 0 delivered; one `poll()` delivers all 10. Then 40
+  edges leave 40 pending and drop none, one `poll()` delivers exactly 16 and
+  leaves 24 pending, and the queue is empty after three (16 + 16 + 8). Over the
+  whole run 53 edges were made and 53 delivered, 0 dropped. The measured output
+  is recorded in both files' headers.
 
 **A script can simply end.** If a program has registered a handler and still
 has an armed source, reaching the end of the program does not stop it: it keeps
@@ -820,11 +825,20 @@ in [Known issues](../reference/known-issues.md). Measured with v450 on
 2026-09-28 as ESP-IDF images under Espressif's QEMU on both chips, and as
 hosted riscv32 and Xtensa programs; not on a board.
 
-<!-- TODO(frankD): add "Exceptions other than math errors behave as on a
-desktop (int() and float() ValueError, IndexError, KeyError are raised and
-caught; atexit handlers and unit finalization run)", citing
-test_nilpy_catchable_runtime_errors on the C3 once frankz-e5's record of that
-run is on origin. Not before: no committed record backs it yet. -->
+**Other errors are unchanged.** Only math errors behave differently on ESP.
+A Nil Python `int('x')` or `float('x')` still raises `ValueError`, an index out
+of range still raises `IndexError` and a missing key still raises `KeyError`,
+and `try`/`except` catches each of them as on a desktop. At the end of a
+program, unit `finalization` sections run, and Nil Python's `atexit` handlers
+run with them (`lib/rtl/atexit.pas` registers them in one). The tests are
+`test/test_nilpy_catchable_runtime_errors.npy` against its ESP oracle
+`test_nilpy_catchable_runtime_errors.esp.expected` (the division rows of the
+desktop oracle are absent there, by the rule above), built into the
+`nilpy-c3` and `nilpy-s3` projects, and
+`test/test_esp_finalization_runs.pas`. Both matched on the ESP32-C3 and the
+ESP32-S3 as ESP-IDF images under Espressif's QEMU (finalization on
+2026-09-28, the Nil Python errors on 2026-09-29), with the
+compiler built at `fce510f98d` (`f545c8410b32`); not on a board.
 
 ## Next
 
