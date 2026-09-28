@@ -202,6 +202,11 @@ v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
   `4294967297 in [4294967297]` answered FALSE. They now answer as on x86-64.
   FPC rejects such items, and pxx warns about them. Wrong in v441 to v446.
 
+- **arm32: a Pascal callback called from C could crash the C caller.** A
+  routine passed to libc's `qsort` returned with the registers the ARM ABI
+  says it must preserve (r4 to r10) overwritten. Sorting 3 or more elements
+  segfaulted inside qsort. Wrong in v441 to v446.
+
 - **Pascal: `Int64(@r.f)` had a garbage high word on 32-bit targets.** For
   an Int64, QWord or Double field, `Int64(@r.i) - Int64(@r)` answered
   4294967297 instead of the field's offset on i386, arm32 and riscv32. It now

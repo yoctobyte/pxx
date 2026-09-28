@@ -15694,6 +15694,26 @@ begin
   begin
     EmitI32($E92D4800);  { push {fp, lr} }
     EmitI32($E1A0B00D);  { mov fp, sp }
+    { AAPCS: r4-r10 are CALLEE-saved (r11 is fp, pushed above). This backend
+      writes them freely -- r9 two lines below, r4-r6 in the copy helpers -- so
+      a routine called BACK from C (a qsort comparator) returned to libc with
+      its registers destroyed: qsort over 2 elements (one callback) was right
+      and over 3 segfaulted. The i386 twin of exactly this was fixed long ago;
+      arm32 never got it. Spill all seven into a slot reserved below the
+      current locals (the i386 shape), addressed through lr, which the push
+      above has already saved and nothing has loaded yet; EmitProcEpilog
+      reloads them on every return path.
+      bug-a-arm32-clobbers-r4-r10-across-a-callback-from-c }
+    FrameSize := AlignTo(FrameSize + 28, 4);
+    if I386CsSaveTop >= I386_CS_SAVE_MAX then
+      Error('compiler error: arm32 procedure nesting deeper than the callee-saved spill stack');
+    I386CsSaveOff[I386CsSaveTop] := -FrameSize;
+    Inc(I386CsSaveTop);
+    EmitI32($E59FE000);  { ldr lr, [pc]  (the literal below) }
+    EmitI32($EA000000);  { b .+8         (skip the literal) }
+    EmitI32(FrameSize);  { the save area's depth below fp }
+    EmitI32($E04BE00E);  { sub lr, fp, lr }
+    EmitI32($E88E07F0);  { stmia lr, {r4-r10} }
     { Frame size can exceed an ARM rotated-imm8, so load it from a literal
       into r9 (scratch, free at proc entry) and subtract. Patch the literal. }
     EmitI32($E59F9000);  { ldr r9, [pc]  (the literal below) }
@@ -15911,7 +15931,8 @@ begin
   { End of this routine's body: release its i386 callee-saved slot entry. This
     is the true per-routine terminator -- the epilogue is not, because an early
     Exit emits one mid-body. }
-  if (TargetArch = TARGET_I386) and (I386CsSaveTop > 0) then Dec(I386CsSaveTop);
+  if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) and
+     (I386CsSaveTop > 0) then Dec(I386CsSaveTop);
   aligned := ((size + 15) div 16) * 16;
   { Windowed xtensa keeps sp constant and runs its expression/argument stack in
     a reserved region below the locals. The frame is a patched 32-bit LITERAL
@@ -17090,6 +17111,17 @@ begin
           { ordinal / pointer / Single (4-byte bits in r0). }
           EmitLoadVarArm32(retSymIdx);
       end;
+    end;
+    { Reload r4-r10 from this routine's save area (top of the LIFO, as the
+      i386 epilogue above does). lr is free: `pop {fp, pc}` takes the return
+      address from the stack. r0/r1 hold the result and are untouched. }
+    if I386CsSaveTop > 0 then
+    begin
+      EmitI32($E59FE000);  { ldr lr, [pc] }
+      EmitI32($EA000000);  { b .+8 }
+      EmitI32(-I386CsSaveOff[I386CsSaveTop - 1]);
+      EmitI32($E04BE00E);  { sub lr, fp, lr }
+      EmitI32($E89E07F0);  { ldmia lr, {r4-r10} }
     end;
     EmitI32($E1A0D00B);  { mov sp, fp }
     EmitI32($E8BD8800);  { pop {fp, pc} }

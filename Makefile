@@ -19871,6 +19871,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_many_params26 "$$($(TESTTMP)/test_many_params26)" "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas $(TESTTMP)/test_procaddr26
 	tools/expect_same.sh test_procaddr26 "$$($(TESTTMP)/test_procaddr26)" "1 2 3 4 5 "
+	# ...and CROSS (riscv32 has no dynamic segment for libc's qsort): the arm32
+	# prologue saved none of AAPCS's callee-saved r4-r10, so the comparator
+	# returned to qsort with them destroyed -- 2 elements (one callback) right,
+	# 3 or more a SEGFAULT. v446 crashes arm32.
+	# bug-a-arm32-clobbers-r4-r10-across-a-callback-from-c
+	./$(COMPILER) --target=i386 test/test_procaddr.pas $(TESTTMP)/test_procaddr26_i386
+	tools/expect_same.sh i386/test_procaddr26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_procaddr26_i386)" "1 2 3 4 5 "
+	./$(COMPILER) --target=aarch64 test/test_procaddr.pas $(TESTTMP)/test_procaddr26_aarch64
+	tools/expect_same.sh aarch64/test_procaddr26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_procaddr26_aarch64)" "1 2 3 4 5 "
+	./$(COMPILER) --target=arm32 test/test_procaddr.pas $(TESTTMP)/test_procaddr26_arm32
+	tools/expect_same.sh arm32/test_procaddr26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_procaddr26_arm32)" "1 2 3 4 5 "
 	./$(COMPILER) test/test_proctype.pas $(TESTTMP)/test_proctype26
 	tools/expect_same.sh test_proctype26 "$$($(TESTTMP)/test_proctype26)" "$$(printf 'hello 1\nadd 7\nmul 30\nexpr ok\nhello 7\ngreet 99')"
 	./$(COMPILER) test/test_proc_const_record.pas $(TESTTMP)/test_proc_const_record26

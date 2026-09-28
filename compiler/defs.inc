@@ -5053,7 +5053,10 @@ var
     routine. A LIFO, not a scalar: prologue emission NESTS (measured depth 2 on
     test_zig_advanced.zig), so a single global would make an outer routine's
     epilogue reload an inner routine's slots.
-    bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function }
+    bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function
+    arm32 uses the SAME LIFO for its r4-r10 spill -- one concept, the psABI's
+    callee-saved set, and one stack of its per-routine save areas.
+    bug-a-arm32-clobbers-r4-r10-across-a-callback-from-c }
   I386CsSaveOff : array[0..I386_CS_SAVE_MAX - 1] of Integer;
   I386CsSaveTop : Integer;
   BlockParent: array[0..32767] of Integer;
