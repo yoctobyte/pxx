@@ -46043,6 +46043,19 @@ begin
       end;
       { str is managed here as everywhere else in NilPy }
       if mRet = tyString then mRet := tyAnsiString;
+      { A CONSTRUCTOR RETURNS NOTHING, so it must not carry a result type the
+        ABI routes through a hidden destination. It is registered as a
+        procedure (IsFunc False), but ABIRetViaHiddenDestProc reads RetType
+        alone, and an unannotated __init__ inferred a variant here. Direct
+        callers and the ctor's own prologue both honoured that, so they agreed
+        with each other; PyClassRefNew calls `create` through a plain
+        `procedure(self; const a: Variant)` and did not. Only windowed xtensa
+        passes the hidden destination as ARGUMENT ZERO (a2, every argument
+        shifted up), so only the S3 broke: `cls = P; cls(7)` inside a function
+        ran __init__ with a = None, and `cls()` then read its result off a
+        garbage object. Every other target carries it in its own register
+        (ecx, r12, t1, x8), which is why the C3 and x86-64 printed 7. }
+      if isCtor then mRet := tyInteger;
       if mRet <> tyClass then mRetRec := REC_NONE;
       { A method taken as a BOUND VALUE (`cb = self.on_key`) is called back
         through the function-object ABI, so it is normalised exactly as
