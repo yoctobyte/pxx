@@ -39111,6 +39111,11 @@ test-esp-idf: $(COMPILER)
 	      $$t $(TESTTMP)/esp_board_pd_c3_$$b.o >/dev/null \
 	    && echo "=== $$b builds [esp32c3]: OK ===" || exit 1; \
 	done
+	@# list.sort()'s ceiling on the C3: the board record of the limit (table and
+	@# recipe in its header). Build only; the measurement needs the board.
+	@./$(COMPILER) --target=esp32c3 --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_list_sort_ceiling.npy $(TESTTMP)/esp_board_list_sort_ceiling.o >/dev/null \
+	  && echo "=== esp_board_list_sort_ceiling builds [esp32c3]: OK ===" || exit 1
 	@# espspi's NilPy surface, the board half of which is
 	@# test/esp_board_spi_surface.npy (recipe in its header).
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \

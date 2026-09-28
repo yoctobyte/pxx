@@ -1,0 +1,108 @@
+# BOARD ONLY: how big a list can list.sort() take on an ESP32-C3, and how big
+# can the same list be built without sorting it?
+#
+# One size per boot. Set MODE and N below, then:
+#
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=$PWD/test/esp_board_list_sort_ceiling.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-c3 --no-verify --seconds 45
+#
+# esp_flash exits 1 on every size, because a long sort starves the IDLE task
+# and the task watchdog logs "E (...) task_wdt:", which esp_flash counts as an
+# IDF error. Ignore that and read the output: "built N" then "pxx: out of memory (ESP-IDF heap exhausted)"
+# means N does not fit. "built N" with no abort in the window means it fits.
+# The old O(n^2) insertion sort (v450 and earlier) cannot FINISH 2000 elements
+# in 45 s, so "fits" there means the sort started and never ran out of heap;
+# "sorted N ok" appears only when it completes. The data are shuffled by a
+# small LCG (kept under 2**31, so no big-int arithmetic slows the build).
+#
+# MEASURED 2026-09-28/29 by frankB on the ESP32-C3 board, examples/esp32/nilpy-c3
+# (heap_init: 145 KiB RAM + 113 KiB and 10 KiB retention RAM + 7 KiB RTC RAM,
+# the same on both compilers). Bisected in steps of 50, one boot per size:
+#
+#   MODE    compiler (sha256)  tree         last N that fits   first N out of memory
+#   ints    c19cc2d531e4 v450  3503825c2f   2031 (not finished) 2078
+#   ints    1634f6483109       aefc7ba4bd   2031 (sorted, ok)   2062
+#   objs    c19cc2d531e4 v450  3503825c2f   2037 (not finished) 2068
+#   objs    1634f6483109       aefc7ba4bd   2037 (not finished) 2068
+#   nosort  1634f6483109       aefc7ba4bd   4093 (built)        4125
+#
+# Rechecked with this file's own recipe: ints N=2031 printed "sorted 2031 ok"
+# on the board with compiler 9ce84ba69527 (tree ad81cbd31b + configparser).
+#
+# aefc7ba4bd carries the merge sort (dfe18dcce3, 71182cf4f7), whose extra
+# memory is 8n bytes of index scratch; v450 has the insertion sort. The ceiling
+# did not move between them, so the scratch is not what limits it. Building the
+# same list WITHOUT sorting it fits twice as many (4093, just under the 4096
+# capacity doubling), so the sort call itself needs about the list's size again.
+# The objects case (a class with an int field and __lt__) tops out at the same
+# N as ints. With __lt__ the merge sort finished 1100 and 1600 inside the
+# window but not 1850 and up.
+
+MODE = "ints"      # "ints", "objs" or "nosort"
+N = 2031
+
+
+class K:
+    def __init__(self, v: int):
+        self.v = v
+
+    def __lt__(self, o: "K") -> bool:
+        return self.v < o.v
+
+
+def ints(n: int) -> list[int]:
+    xs: list[int] = []
+    s = 12345
+    i = 0
+    while i < n:
+        s = (s * 75 + 74) % 65537
+        xs.append(s)
+        i += 1
+    return xs
+
+
+def objs(n: int) -> list[K]:
+    xs: list[K] = []
+    s = 12345
+    i = 0
+    while i < n:
+        s = (s * 75 + 74) % 65537
+        xs.append(K(s))
+        i += 1
+    return xs
+
+
+def probe_ints(n: int, sort: bool) -> None:
+    xs = ints(n)
+    print("built", n)
+    if not sort:
+        return
+    xs.sort()
+    i = 1
+    while i < n:
+        if xs[i] < xs[i - 1]:
+            print("UNSORTED at", i)
+            return
+        i += 1
+    print("sorted", n, "ok")
+
+
+def probe_objs(n: int) -> None:
+    xs = objs(n)
+    print("built", n)
+    xs.sort()
+    i = 1
+    while i < n:
+        if xs[i].v < xs[i - 1].v:
+            print("UNSORTED at", i)
+            return
+        i += 1
+    print("sorted", n, "ok")
+
+
+print("@@SORT-START", MODE, N)
+if MODE == "objs":
+    probe_objs(N)
+else:
+    probe_ints(N, MODE != "nosort")
+print("@@SORT-END")
