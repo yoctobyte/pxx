@@ -131,8 +131,9 @@ OpenSslTlsRegisterEx(True, '/path/to/ca.pem');   // system store + this CA, veri
 ```
 
 `caFile` is added on top of the system trust store. A `caFile` that cannot be
-read is ignored: `OpenSslTlsRegisterEx(True, '/nonexistent/ca.pem')` still
-returns `True`, and only the system store is used. Passing `verifyPeer = False`
+read is ignored up to pin v447: `OpenSslTlsRegisterEx(True,
+'/nonexistent/ca.pem')` still returns `True`, and only the system store is
+used. After v447 (`9df5de0690`) it returns `False`: check the result. Passing `verifyPeer = False`
 turns verification off entirely — only for development against throwaway
 endpoints; never in production. After a refused handshake,
 `OpenSslTlsLastVerifyResult` returns the OpenSSL `X509_V_*` code explaining why.
@@ -148,13 +149,18 @@ single process can both serve TLS and make TLS requests. (There is no high-level
 HTTPS *server* object yet — you wire `accept` + the seam yourself; the `http`
 unit itself is a client.)
 
-**Current limits of the OpenSSL backend:** x86-64 only. On x86-64 the examples
-on this page ran against example.com, and a self-signed certificate and a
-certificate for the wrong host were both refused (`OpenSslTlsLastVerifyResult`
-18 and 62). Measured on 2026-09-28 with v446 and with the compiler at
-`e072d579b0`, the other targets under QEMU user mode:
+**Current limits of the OpenSSL backend:** x86-64 only, and i386 after v447.
+On x86-64 the examples on this page ran against example.com, and a
+self-signed certificate and a certificate for the wrong host were both
+refused (`OpenSslTlsLastVerifyResult` 18 and 62). Measured on 2026-09-28 with
+v446 and with the compiler at `e072d579b0`, the other targets under QEMU user
+mode:
 
-- i386: `OpenSslTlsRegister` crashes the program (segmentation fault).
+- i386: `OpenSslTlsRegister` crashes the program (segmentation fault) with
+  v446 and v447. After v447 (`9df5de0690`) it works: with pin v447
+  (`fad87004e4e8`) and the library at `2f79422e6a`, under QEMU, the examples
+  ran against example.com and both bad certificates were refused, as on
+  x86-64.
 - aarch64 and arm32: `OpenSslTlsRegister` returns `False` (checked under QEMU,
   without a libssl for those targets installed).
 - riscv32: refused at compile time, because it has no dynamic loader.

@@ -489,6 +489,14 @@ them as fifteen. `spi-s3` had also run with v425, outside that list. The
 details are in
 [Getting started on the ESP32](../getting-started/esp32.md#verified-with).
 
+On 2026-09-28 every row passed again on an ESP32-S3 behind a CH343 bridge,
+with the compiler built from tree `cdd6fd3c1f` (sha256 `139494b2b863`; pin
+v447 contains that tree), together with the newer `nilpy-logger-s3`, the
+socket-error test and both short forms. Over a home Wi-Fi network the S3 also
+made 300 `urequests` fetches and ran 300 `umqtt.simple` sessions without the
+heap growing; the figures are in
+[ESP networking](../reference/known-issues.md#esp-networking).
+
 | Example | Language | Result on the board |
 | --- | --- | --- |
 | monitor-s3 | Python | with v441, its 10 reports: ADC mean 3856 to 3858, free heap 256,184 to 263,320 bytes; free heap flat over 193 reports with an earlier compiler (see above) |
@@ -497,6 +505,7 @@ details are in
 | adc-s3 | Python | output matches `main.expected`: real ADC readings |
 | hello-s3, timer-s3, rgb-s3, i2c-s3, pwm-s3, uart-s3, spi-s3, nvs-s3 | Pascal | each prints its own pass line (`nvs-s3` over four boots, the last after a hardware reset) |
 | wifi-ap-s3 | Pascal | starts the access point and reaches `HTTP server listening on port 80`; no client connected during the test |
+| nilpy-logger-s3 | Python | its pass line, with the compiler from tree `cdd6fd3c1f` only (2026-09-28) |
 | nilpy-station-s3 | Python | a Wi-Fi status page (`PXX-NILPY`, `http://192.168.4.1/`); all 12 lines of `main.expected`, including HTTP fetches of its own pages over `127.0.0.1`, on 2026-09-25 and again with v441. See [Wi-Fi and sockets](../library/esp.md) |
 
 **Long-running use.** Re-run in a loop with v424, `nilpy-s3`, `nilpy-hw-s3`
@@ -512,9 +521,12 @@ first pass to the last.
 The C3 examples were flashed to one ESP32-C3 board on 2026-09-27 (chip
 revision v0.4, 4 MB embedded flash, console on the built-in USB-Serial/JTAG
 port, ESP-IDF v6.0.1), each with `tools/esp_flash.sh --project
-examples/esp32/<name> --port <the board>`. Every one was built with the release
-pin v441 (compiler sha256 `4ebfa2d047a2…`), from tree `5db85cc283`. Nothing was
-wired to the board.
+examples/esp32/<name> --port <the board>`. Every one but `wifi-ap-c3` was
+built with the release pin v441 (compiler sha256 `4ebfa2d047a2…`), from tree
+`5db85cc283`. Nothing was wired to the board. On 2026-09-28 all of them
+passed again with the compiler built from tree `cdd6fd3c1f` (sha256
+`139494b2b863…`; pin v447 contains that tree), and `wifi-ap-c3`, new then,
+was run with that compiler only.
 
 | Example | On the C3 board | Compiler | Tree |
 | --- | --- | --- | --- |
@@ -529,7 +541,7 @@ wired to the board.
 | dns-c3 | resolver smoke test, `status=0` | v441 `4ebfa2d047a2…` | `5db85cc283` |
 | gpio-c3 | reads follow writes, the pull-up reads 1, and all 10 edges arrive, none of which QEMU models; the probe's verdict line still names QEMU | v441 `4ebfa2d047a2…` | `5db85cc283` |
 | nilpy-station-c3 | all 12 lines of `main.expected`; a PC's Wi-Fi scan saw its `PXX-NILPY` network | v441 `4ebfa2d047a2…` | `5db85cc283` |
-| wifi-ap-c3 | starts the access point `PXX-ESP32C3`; an ESP32-S3 joined it and loaded the page five times, all HTTP 200 (`test/esp_board_s3_visits_wifi_ap_c3.npy`) | HEAD `139494b2b863…` | `cdd6fd3c1f` |
+| wifi-ap-c3 | starts the access point `PXX-ESP32C3`; an ESP32-S3 joined it and loaded the page five times, all HTTP 200 (`test/esp_board_s3_visits_wifi_ap_c3.npy`) | after v446 `139494b2b863…` | `cdd6fd3c1f` |
 
 **Long-running use.** The heap soaks were also run on this board, with pin
 v441: `hello-c3` looped 100 times kept 0 bytes, and `nilpy-c3` kept 0 bytes

@@ -303,7 +303,7 @@ unit with a Pascal and a Python surface and a board check:
 
 | driver | estimate | note |
 | --- | --- | --- |
-| Wi-Fi from Pascal | a day | Nil Python already has it: MicroPython's `network` and CPython's `socket`, see [Wi-Fi and sockets](../library/esp.md). `examples/esp32/wifi-ap-s3` brings up an access point from Pascal, with the Wi-Fi bring-up in C |
+| Wi-Fi from Pascal | a day | Nil Python already has it: MicroPython's `network` and CPython's `socket`, see [Wi-Fi and sockets](../library/esp.md). `examples/esp32/wifi-ap-s3` and `wifi-ap-c3` bring up an access point and serve a page from Pascal, with the Wi-Fi bring-up in about 40 lines of C |
 
 ## What is and is not proven
 
@@ -313,8 +313,8 @@ exactly how much less:
 
 | chip | how far it is proven |
 | --- | --- |
-| **ESP32-S3** | **Run on the board.** `hello-s3`, `timer-s3`, `rgb-s3`, `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3`, `adc-s3`, `monitor-s3`, `pwm-s3`, `uart-s3`, `nvs-s3`, `i2c-s3` (empty bus only, see section 7), `spi-s3` (nothing wired, see [ESP32 peripherals](../library/esp.md)) and `nilpy-station-s3` (its HTTP self-fetches; see [Wi-Fi and sockets](../library/esp.md)). `wifi-ap-s3` brings its access point up, but no client has connected to it yet. The C conformance suite passes 219 of 220 under the S3's QEMU (`tools/run_c_conformance_esp.sh --chip esp32s3`; one test skipped). |
-| **ESP32-C3** | **Run on the board.** On one ESP32-C3 board (rev v0.4, 4 MB flash, USB-Serial/JTAG console), 2026-09-27, pin v441: `hello-c3`, `timer-c3`, `nilpy-c3`, `nilpy-hw-c3`, `isrctx-c3`, `fs-c3`, `gpio-c3`, `net-c3`, `dns-c3`, `adc-c3`, `gpio-edge-c3` and `nilpy-station-c3`, with nothing wired. `adc-c3` and `gpio-edge-c3`, which QEMU cannot drive, match their `main.expected`. The C3 also joined a home Wi-Fi network as a station and answered HTTP requests from a PC on it. See [the showcase](../examples/index.md#on-a-real-esp32-c3). |
+| **ESP32-S3** | **Run on the board.** `hello-s3`, `timer-s3`, `rgb-s3`, `nilpy-s3`, `nilpy-hw-s3`, `gpio-edge-s3`, `adc-s3`, `monitor-s3`, `nilpy-logger-s3`, `pwm-s3`, `uart-s3`, `nvs-s3`, `i2c-s3` (empty bus only, see section 7), `spi-s3` (nothing wired, see [ESP32 peripherals](../library/esp.md)) and `nilpy-station-s3` (its HTTP self-fetches; see [Wi-Fi and sockets](../library/esp.md)). `wifi-ap-s3` brings its access point up, but no client has connected to it yet. On 2026-09-28, with the compiler built from tree `cdd6fd3c1f` (sha256 `139494b2b863`; pin v447 contains that tree), all 16 S3 examples, the socket-error test, `nvs-s3` over a hardware reset and both short forms passed again, and the S3 was joined to a home Wi-Fi network for 300 `urequests` fetches and 300 `umqtt.simple` sessions (see [ESP networking](../reference/known-issues.md#esp-networking)). The C conformance suite passes 219 of 220 under the S3's QEMU The C conformance suite passes 219 of 220 under the S3's QEMU (`tools/run_c_conformance_esp.sh --chip esp32s3`; one test skipped). |
+| **ESP32-C3** | **Run on the board.** On one ESP32-C3 board (rev v0.4, 4 MB flash, USB-Serial/JTAG console), 2026-09-27, pin v441: `hello-c3`, `timer-c3`, `nilpy-c3`, `nilpy-hw-c3`, `isrctx-c3`, `fs-c3`, `gpio-c3`, `net-c3`, `dns-c3`, `adc-c3`, `gpio-edge-c3` and `nilpy-station-c3`, with nothing wired. `adc-c3` and `gpio-edge-c3`, which QEMU cannot drive, match their `main.expected`. The C3 also joined a home Wi-Fi network as a station and answered HTTP requests from a PC on it. On 2026-09-28, with the compiler built from tree `cdd6fd3c1f` (sha256 `139494b2b863`; pin v447 contains that tree), the same 12 examples and both short forms passed again; the new `wifi-ap-c3` served its page five times to an ESP32-S3 that joined its network, all HTTP 200; both programs of [Mixing languages](./esp32-mixing-languages.md) printed their expected output; and the C3 ran 300 `umqtt.simple` sessions over home Wi-Fi. See [the showcase](../examples/index.md#on-a-real-esp32-c3). |
 | **ESP32-S2** | **Builds only.** `hello-s2` compiles and links for it; it has not been run anywhere. |
 | **ESP32 (the original)** | **Run on the board.** On one ESP32-D0WD-V3 board, 2026-09-27: `hello-esp32` (Pascal) and `nilpy-esp32` (Nil Python), plus three more programs. `tools/esp_flash.sh --chip esp32` drives it; the bare-metal profile does not support it. See [ESP32 / Microcontrollers](../targets/esp32.md). |
 
@@ -323,6 +323,20 @@ the examples with a `.expected` file, byte for byte.
 
 ## Verified with
 
+- **On both boards, with the compiler built from tree `cdd6fd3c1f`**
+  (binary sha256 `139494b2b863`; its changes are in pin v447), on
+  2026-09-28, ESP-IDF v6.0.1, every run through `tools/esp_flash.sh`: an
+  ESP32-C3 (rev v0.4, USB-Serial/JTAG console) and an ESP32-S3 behind a CH343
+  USB-to-serial bridge. On the C3, the 12 examples, `wifi-ap-c3` and both
+  short forms passed; on the S3, all 16 examples, the socket-error test,
+  `nvs-s3` across a hardware reset and both short forms. v441 passed the same
+  set, less `wifi-ap-c3`, on 2026-09-27 (C3 12 of 12, S3 18 of 18).
+  `tools/esp_heap_soak_nilpy.sh --passes 40` kept 0 bytes on every Nil Python
+  example that does not use the network, on both chips, while its
+  `--control` run, which keeps memory on purpose, lost 3,040 to 3,120 bytes.
+  The networked ones hold about 1.1 to 1.5 KB while closed connections wait
+  out TCP's TIME_WAIT, and after 150 seconds end with more free heap than
+  they started with.
 - **Built, not flashed, with pin v445** (binary sha256 `caf21ac399f1`,
   repository at `957a857d7c`), on 2026-09-27, ESP-IDF v6.0.1: the four
   `build.sh` commands in section 1 each ended in `Project build complete`

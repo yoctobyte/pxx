@@ -174,14 +174,18 @@ Two limits apply to these measurements:
 
 - **Over real Wi-Fi, two boards and two libraries have been measured**; the
   rows above ran over QEMU's emulated Ethernet. On 2026-09-28, with the
-  compiler after v445 (tree `cdd6fd3c1f`), a physical ESP32-S3 made 300
-  `urequests` fetches over a home Wi-Fi network and ended within 328 bytes
-  of where it started (216 bytes higher after 130 seconds); and both an
-  ESP32-C3 and an ESP32-S3 ran 300 `umqtt.simple` sessions against a
-  broker on that network. Each MQTT run held about 1.3 KB while connections
-  were closing and ended about 1.9 KB higher than it started once 130 seconds
-  had passed. Their positive controls kept 1,438 bytes per fetch and about
-  1,130 bytes per session. On
+  compiler built from tree `cdd6fd3c1f` (sha256 `139494b2b863`; pin v447
+  contains that tree, v446 does not), a physical ESP32-S3 made 300
+  `urequests` fetches over a home Wi-Fi network. At every checkpoint its free
+  heap was between 12 bytes lower and 328 bytes higher than at the start, and
+  130 seconds after the last fetch it was 216 bytes higher. Both an ESP32-C3
+  and an ESP32-S3 ran 300 `umqtt.simple` sessions against a broker on that
+  network, 0 errors each. Each MQTT run was about 1.3 KB short while
+  connections were closing (the S3 briefly 4.7 KB at session 200, back to
+  1.3 KB by 300), and 130 seconds after the last session had about 1.9 KB
+  more free heap than at the start. The positive controls, which keep every
+  response or session on purpose, lost 1,438 bytes per fetch and 1,116 to
+  1,142 bytes per session, so the measurement would have seen a leak. On
   2026-09-27, one ESP32-C3 board with the v441 compiler, joined to a home
   Wi-Fi network, fetched a page from a PC on that network 1,000 times. Free
   heap stayed within 400 bytes of where it started, with no upward trend, and
