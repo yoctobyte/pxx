@@ -1002,23 +1002,28 @@ Found on 2026-09-28, and **open in v441 to v450** and after it:
   the compiler built at `52e61383a5` (`8d5d0f2653f0`), which behave the same.
   **Workaround:** test for `None` (`if x is None:`) before the arithmetic.
 
-**By design: a method reached from `exec` takes the type of its one compiled
-call.** When every compiled call of a method passes the same kind of value to a
-parameter with no annotation, the compiler gives that parameter the type
-(`def mi(self, x)` called only as `n.mi(3)` makes `x` an integer), which is
-what makes such calls fast. A call from source compiled at run time, such as
+**Nil Python: a method reached from `exec` takes the type of its one compiled
+call, and a float passed to an integer parameter is silently truncated.** When
+every compiled call of a method passes the same kind of value to a parameter
+with no annotation, the compiler gives that parameter the type (`def mi(self,
+x)` called only as `n.mi(3)` makes `x` an integer). That is deliberate and
+makes such calls fast. A call from source compiled at run time, such as
 `exec("def __body__():\n    n.mi(2.7)\n", env, ns)`, cannot be seen at
 compile time, so its argument is converted to that type rather than passed as
-is: a float into an integer parameter is truncated without a message
-(`n.mi(2.7)` gets `2`, CPython `2.7`), a string into it raises `TypeError`
-(CPython passes `'ab'`), and an integer into a float parameter arrives as
-`3.0` (CPython `3`). A parameter whose compiled calls pass different kinds of
-value keeps its dynamic type and behaves as in CPython. Measured on 2026-09-29
-with v450 (`c19cc2d531e4`) and the compiler built at `6dcfbbb0e0`
-(`9ce84ba69527`) on x86-64, and with the latter under QEMU user mode on i386,
-arm32, aarch64 and riscv32, which print the same. **Workaround:** annotate a
-parameter that `exec` code will call as `x: object` (or `Any`); with it, all
-three calls print what CPython prints (x86-64, `9ce84ba69527`).
+is. One of the three results is a wrong answer with no message: a float into
+an integer parameter is truncated (`n.mi(2.7)` gets `2`, CPython `2.7`). The
+other two are by design: a string into that parameter raises `TypeError`
+(CPython passes `'ab'`), and an integer into a float parameter arrives as `3.0`
+(CPython `3`), which loses nothing. A parameter whose compiled calls pass
+different kinds of value is not given a type, and behaves as in CPython.
+Measured on 2026-09-29 with v450 (`c19cc2d531e4`) and the compiler built at
+`6dcfbbb0e0` (`9ce84ba69527`) on x86-64, and with the latter under QEMU user
+mode on i386, arm32, aarch64 and riscv32, which print the same.
+**Workaround:** annotate a parameter that `exec` code will call as `x:
+object` (or `Any`). That keeps the compiler from giving it a type, so all
+three calls print what CPython prints (x86-64, `9ce84ba69527`). A scalar
+annotation such as `x: float` gives it a type by hand: it stops the
+truncation, but a string still raises `TypeError`.
 
 ## Reporting a problem
 
