@@ -540,6 +540,19 @@ that does not chain to it, or that does not name `server_hostname`, raises
 raises `ValueError` before connecting, as in MicroPython. `urequests` always
 connects with the default, `CERT_NONE`.
 
+A CA that does not load is an error, never an empty trust store. An empty
+`cadata` raises `ValueError`, a missing `cafile` raises `OSError` (errno 2),
+and data that is not a certificate raises `ValueError('invalid cert')` at
+`wrap_socket`. A `CERT_REQUIRED` context with no CA at all refuses the
+handshake with `OSError`. All of these were measured on a physical ESP32-C3
+and ESP32-S3 over Wi-Fi on 2026-09-28, against a real TLS server. The good CA
+was accepted. A wrong CA, a wrong hostname, a truncated or garbage CA, one
+with a damaged public key, an empty `cadata`, a missing `cafile` and no CA
+were all refused. The same wrong CA under `CERT_NONE` was accepted, which
+shows the refusals come from the certificate check. A CA with a damaged key
+is refused with a bare mbedTLS code, `OSError(-15104, 'UNKNOWN ERROR CODE
+(3B00)')`, rather than a message.
+
 The TLS socket has `read`, `readinto`, `readline`, `write`, `recv`, `send`,
 `sendall`, `setblocking`, `settimeout` (inherited from the socket it wraps),
 `cipher` and `close`. The handshake happens inside `wrap_socket`. There is no
