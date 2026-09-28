@@ -491,8 +491,8 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   pattern cache printed CPython's answers, and a 2,000-iteration heap soak
   stayed flat at 84 to 88 bytes against a control that kept 647 bytes per
   result (one boot; recorded in `devdocs/progress/LOGBOOK.md` by
-  `19f4728e10`). Wrong in v441 to v447 (`1c2fb47dd8`). The call0 ABI is
-  still refused; see [Refused, with a message](#refused-with-a-message).
+  `19f4728e10`). Wrong in v441 to v447 (`1c2fb47dd8`). The call0 ABI
+  builds after v448; see the call0 row below.
 
 - **Nil Python: `m.start()` and `m.end()` with no argument did not compile.**
   CPython reads them as group 0: `re.search("b+", "abbbc")` gives `1 4`.
@@ -527,6 +527,26 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   already holds an object gets the new one back with all three compilers:
   after `o = d.TB(1)` and `d.NewInto(o, 5)`, `o.v` is `5`. Measured as the
   row above. **On v448:** bind the name to an object first.
+
+- **Nil Python for Xtensa with the call0 ABI did not build.** Every Nil
+  Python program, even `x = 1` and `print(x)`, was refused when built with
+  `--xtensa-abi=call0`: `target xtensa: addi immediate displacement 128 is
+  outside the encodable range -128..127`, in the `builtin/pyeval.pas` that the
+  compiler appends. Hosted xtensa (`--platform=posix`, run under qemu-xtensa)
+  refused every Nil Python program on both ABIs, with `a heap arena needs
+  mmap`. Both are fixed after v448 (`8529eb30e8`, in no pin yet). Measured on
+  2026-09-28 with v448 (`b2b325036c3b`) and the compiler built at
+  `a5841bfb84` (`48b0ba0bb383`):
+
+  | build | v448 | after v448 |
+  | --- | --- | --- |
+  | ESP object, call0 (`--platform=esp --no-signals --xtensa-long-calls`) | refused (`addi`) | builds |
+  | ESP object, windowed, the same flags | builds | builds |
+  | hosted, call0 and windowed (`--platform=posix --xtensa-soft-mulhigh --xtensa-long-calls`) | refused (heap arena) | `x = 1; print(x)` prints `1`, and `test/test_nilpy_cross32_values.py` matches its `.expected`, as on x86-64 |
+
+  A Nil Python program on Xtensa needs `--xtensa-long-calls` on either ABI;
+  without it the compiler stops and says so. Refused in v441 to v448. **On
+  v448:** use the windowed ABI, as the ESP32-S3 examples do.
 
 - **TLS: a CA file that does not load was accepted.**
   `OpenSslTlsRegisterEx(True, '/nonexistent/ca.pem')` answered `True`, and
@@ -587,17 +607,6 @@ These were wrong in v424 and fixed in v425, and so are fixed here too:
   strings** failed to build.
 - **C `sizeof` of a multidimensional array, a typedef of array typedefs, and
   `sizeof (t)->key`** gave wrong sizes or were refused.
-
-- **Nil Python for Xtensa with the call0 ABI.** Every Nil Python program,
-  even `x = 1` and `print(x)`, was refused when built with
-  `--target=xtensa --xtensa-abi=call0`: `target xtensa: addi immediate
-  displacement 128 is outside the encodable range -128..127`, in the
-  `builtin/pyeval.pas` that the compiler appends. It now builds, and under
-  qemu-xtensa it prints the same output as x86-64 for the Nil Python
-  cross-target test, on call0 and on the windowed ABI. Measured on 2026-09-28
-  on the tree after pin v448. A large program also needs
-  `--xtensa-long-calls` on call0, as it already did on the windowed ABI; the
-  compiler says so when it does. Refused in v441 to v448 (`8529eb30e8`).
 
 ## Refused, with a message
 
