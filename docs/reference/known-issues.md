@@ -53,7 +53,9 @@ host arithmetic and keep subnormals. Measured on 2026-09-28 with v450
 (`wasmtime` for wasm32), with a subnormal built from its bit pattern at run
 time; the same on riscv32 with v441 (`4ebfa2d047a2`) and with the compiler
 built at `fce510f98d` (`f545c8410b32`). The ESP32-C3 and ESP32-S3 use these
-two backends; this was measured on hosted builds only. **If it matters:**
+two backends, and with v450 the same program gives the same answers as an
+ESP-IDF image under Espressif's QEMU on both chips (`tools/esp_run.sh`); it
+was not run on a board. **If it matters:**
 keep intermediate values above 2.2e-308, for example by working in scaled
 units. A value that is already subnormal cannot be scaled back up on these
 targets, because the scaling is itself arithmetic on it.

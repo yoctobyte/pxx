@@ -773,20 +773,46 @@ For **Pascal** files on the ESP32, the C3 example `fs-c3` mounts FAT, writes,
 seeks and reads back, under QEMU and on an ESP32-C3 board. See the
 [examples showcase](../examples/index.md#on-a-real-esp32-c3).
 
-## Math errors do not stop the chip
+## Numbers on ESP
 
 An embedded device should keep running when a sensor produces a value that
-causes a math error, so on the ESP32 family:
+causes a math error, so the ESP32 family differs from a desktop in a few
+places, on purpose. Everything else about numbers is the same.
 
-- integer `div` and `mod` by zero give 0 (Pascal and C), and `//` and `%` by
-  zero give 0 (Nil Python);
-- a float division by zero gives Inf or NaN;
-- nothing halts the program.
+**Division by zero does not stop the program.**
 
-On a desktop target the same integer division stops the program with runtime
-error 200. [Known issues](../reference/known-issues.md#by-design-math-errors)
-has the full table as measured on v425. If a zero divisor must stop your ESP
-program, test the divisor yourself.
+| | ESP32-C3 and ESP32-S3 | Desktop Linux |
+| --- | --- | --- |
+| Pascal and C: integer `div` / `mod` (C `/` and `%`) by zero | gives 0, the program continues | runtime error 200, the program stops |
+| Nil Python: `//` and `%` by zero | gives 0, the program continues | `ZeroDivisionError`, as in CPython |
+| float division by zero | Inf or NaN, as IEEE 754 says | Pascal and C: Inf or NaN; Nil Python: `ZeroDivisionError` |
+
+The Pascal and C rows are `test/test_esp_div_by_zero_yields_zero.pas` and
+`test/c_esp_div_by_zero_yields_zero.c`, which cover every integer width and
+signedness; with pin v450 (compiler sha256 `c19cc2d531e4…`) both match their
+`.expected` on the ESP32-C3 and the ESP32-S3 as ESP-IDF images under
+Espressif's QEMU (`tools/esp_run.sh`), on 2026-09-28. The desktop runtime
+error is `test/test_div_zero_re200.pas`, and with v450 on x86-64 a Nil Python
+`7 // b` and `1.0 / b` with `b` zero raise `ZeroDivisionError`. The Nil Python
+ESP rows were measured on v425 under QEMU on both chips, and on an ESP32-S3
+board (see [Known issues](../reference/known-issues.md#by-design-math-errors)
+and [Getting started on the ESP32](../getting-started/esp32.md)). If a zero
+divisor must stop your ESP program, test the divisor yourself.
+
+**Very small doubles become zero in arithmetic.** Both chips do double
+arithmetic in software, which flushes subnormal numbers (below about
+2.2e-308) to zero: any operation on one gives 0, and so does a result that
+would be one. Comparing, copying and storing them are exact. That is the
+documented behaviour of that software arithmetic, not a crash; the details are
+in [Known issues](../reference/known-issues.md). Measured with v450 on
+2026-09-28 as ESP-IDF images under Espressif's QEMU on both chips, and as
+hosted riscv32 and Xtensa programs; not on a board.
+
+<!-- TODO(frankD): add "Exceptions other than math errors behave as on a
+desktop (int() and float() ValueError, IndexError, KeyError are raised and
+caught; atexit handlers and unit finalization run)", citing
+test_nilpy_catchable_runtime_errors on the C3 once frankz-e5's record of that
+run is on origin. Not before: no committed record backs it yet. -->
 
 ## Next
 
