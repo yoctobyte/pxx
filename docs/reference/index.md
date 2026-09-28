@@ -16,6 +16,7 @@ Reference pages collect exact command-line and operational details.
 - [Compiler directives](./directives.md)
 - [Compiler architecture](./architecture.md)
 - [Representation contract](./representation.md)
+- [FPC RTL coverage](./fpc-rtl-coverage.md)
 - [Current limits](./limits.md)
 - [Known issues in beta 0.1](./known-issues.md)
 - [Licensing](./licensing.md)
