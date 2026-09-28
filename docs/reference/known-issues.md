@@ -52,35 +52,6 @@ Python; both reach standard error on all seven targets. On x86-64, format a
 real into a string first (`Str(x:0:1, s)`), and write the empty line as
 `WriteLn(StdErr, '')`.
 
-### Nil Python: `None` tests go wrong on every backend but x86-64
-
-On i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), `x == None` is `True`
-when `x` is `0`, `0.0` or `False`, and `x != None` is `False`: a plain
-variable, a list element, and a value that may be `None`
-(`v if c else None`) alike. CPython, and PXX on x86-64, say `False` and
-`True`. An empty string compares correctly.
-
-On the same backends, `is None` is wrong in one shape: a function declared to
-return a class (`-> Optional[Word]`) returns `None`, and its result goes
-through a conditional expression, as in
-`w = vm.lookup(name) if isinstance(name, str) else None`. Then `w is None` is
-`False` and `w is not None` is `True`, so an `if w is not None:` guard is
-entered with no object. The same call assigned directly (`w = vm.lookup(name)`)
-is right, and so is `is None` in every other shape measured (an untyped
-function, an early `return None`, `dict.get`, a default argument, a list
-element). The fix for this, `bd6edb9f08`, went into the x86-64 backend only.
-The test is `test/test_nilpy_conditional_expression_none.npy`: with v450 it
-matches its `.expected` on x86-64 and differs on lines 1, 2 and 9 on the six
-others, and on i386 v441, v448 and v449 print the same wrong lines.
-
-Both are **open in v441 to v450**; a fix is in progress. Measured on
-2026-09-28 with v450 (`c19cc2d531e4`) on x86-64 and under QEMU user mode for
-the others, against CPython, and on i386 with v441 (`4ebfa2d047a2`), v448
-and v449, which give the same wrong answers. The ESP32-C3 and ESP32-S3 use the riscv32 and Xtensa backends; this was not
-run on a board. **Workaround:** test for `None` with `is None` or
-`is not None`, never with `==` or `!=`; and assign an `Optional` class result
-directly, then test it, rather than inside a conditional expression.
-
 ## Memory leaks
 
 Memory leaks were treated as release blockers for this beta. Before the release
@@ -304,12 +275,35 @@ any pin. The C rows were checked against GCC's output and the Pascal rows
 against FPC 3.2.2. The Nil Python rows were checked against CPython 3 and say
 what they were measured with.
 
-Pin v448's own binary (`b2b325036c3b`) was graded on borg's native test tier
+Pin v448's own binary (`b2b325036c3b`) was graded on the native test tier
 on 2026-09-28 at `7abbe26f4e`, with no skipped or flaky rows. One row is
 still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
 `wait4`'s rusage untouched
 (`devdocs/progress/tstate/reports/20260928T053636Z-7abbe26-borg.md`).
 `-O3` was not part of that run.
+
+- **Nil Python: `None` tests on every backend but x86-64.** On i386, arm32,
+  aarch64, riscv32 and Xtensa (both ABIs), `x == None` was `True` and `x !=
+  None` `False` when `x` was `0`, `0.0` or `False`, whether a plain variable,
+  a list element or a value that may be `None`; an empty string compared
+  correctly. On the same backends, a function declared to return a class (`->
+  Optional[Word]`) that returned `None`, with its result passed through a
+  conditional expression (`w = vm.lookup(name) if isinstance(name, str) else
+  None`), gave `w is None` `False`, so an `if w is not None:` guard was
+  entered with no object; `bd6edb9f08` had fixed that on x86-64 only. Assigned
+  directly, and in every other shape measured, `is None` was right. Wrong in
+  v441 to v450. Fixed after v450 (`24038529ba`, in no pin yet). Measured on
+  2026-09-28 on x86-64 and under QEMU user mode for the others, with v450
+  (`c19cc2d531e4`) and the compiler built at `52e61383a5` (`8d5d0f2653f0`):
+  `test/test_nilpy_conditional_expression_none.npy` and
+  `test/test_nilpy_none_is_none_on_every_backend.npy` match their `.expected`
+  on all seven with that compiler, and differ on the six non-x86-64 targets
+  with v450, as does a probe of `== None` on `0`, `0.0` and `False` against
+  CPython; v441, v448 and v449 gave the same wrong answers on i386. The
+  ESP32-C3 and ESP32-S3 use the riscv32 and Xtensa backends; not run on a
+  board. **On v450 and earlier:** test for `None` with `is None` or `is not
+  None`, never with `==` or `!=`, and assign an `Optional` class result
+  directly before testing it.
 
 - **Pascal: comparing a LongWord with a signed value on 32-bit targets.** On
   i386, arm32 and riscv32, `c > i` with `c: LongWord = 3000000000` and
