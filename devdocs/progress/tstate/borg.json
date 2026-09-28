@@ -16593,14 +16593,14 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-28T00:11:12Z",
+  "date": "2026-09-28T03:31:12Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
    "test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh"
   ],
-  "sha": "0448eaf40e3e88681d8a20e90548146832519674",
+  "sha": "9f9d78b443d1f26c819e2d794d071458f788e952",
   "tier": "full",
-  "ver": "v446",
+  "ver": "v447",
   "verdict": "RED"
  },
  "toolchain": {
