@@ -18,7 +18,13 @@ var
   f: Text;
   s: AnsiString;
   w: Integer;
+  { Named after the binary, not a fixed name: every target's row runs this
+    test, testmgr runs those rows in parallel jobs from one working directory,
+    and a shared name let one row's Rewrite/Erase land between another's write
+    and read-back (test-xtensa flaked once). Each row's binary path is its own. }
+  tmpName: AnsiString;
 begin
+  tmpName := ParamStr(0) + '.tmp';
   d := 2.25; z := 0.0; big := 1.5e300; tiny := -3.25e-300; sub := 5e-324;
   carry := 9.99999999999999999; sg := 1.5; p := 'pchar'; pn := nil; w := 14;
 
@@ -39,11 +45,11 @@ begin
 
   WriteLn(StdErr, '[', d, '][', p, '][', sg, ']');
 
-  Assign(f, 'test_text_write_float_and_pchar.tmp');
+  Assign(f, tmpName);
   Rewrite(f);
   WriteLn(f, '[', d, '][', d:12, '][', sg, '][', p, '][', p:7, ']');
   Close(f);
-  Assign(f, 'test_text_write_float_and_pchar.tmp');
+  Assign(f, tmpName);
   Reset(f);
   ReadLn(f, s);
   Close(f);
