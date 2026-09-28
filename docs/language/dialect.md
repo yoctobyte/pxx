@@ -293,11 +293,15 @@ pascal26:7: warning: directive 'inline' ignored here: the inliner takes at most 
 
 There is no `cdecl` line: on x86-64, `cdecl` on `P` selects the System V
 prologue, so it is not ignored. Built with `--target=i386`, the same program
-also warns that `cdecl` is ignored (pin v447). v449 prints that warning on
-i386, aarch64 and arm32 too, including for a routine stored in a `cdecl`
-procedural type. There the warning is wrong: without the `cdecl`, the
+also warns that `cdecl` is ignored (pin v447). v449 and v450 print that
+warning on i386, aarch64 and arm32 too, including for a routine stored in a
+`cdecl` procedural type. There the warning is wrong: without the `cdecl`, the
 program in [Calling conventions](#calling-conventions) is refused by v449,
-and on i386 v448 printed `0.0` instead of `42.0`. Keep the `cdecl`.
+and on i386 v448 printed `0.0` instead of `42.0`. Keep the `cdecl`. After
+v450 (`6b92d83493`, in no pin yet) the warning is gone on those three
+targets and still given on riscv32, where `cdecl` selects nothing. Measured
+on 2026-09-28 with v450 (`c19cc2d531e4`) and the compiler built at
+`947170c4cb` (`1634f6483109`).
 
 It covers `cdecl` off x86-64, `register`, `iram` off the ESP targets, `stackful`,
 `reintroduce`, and `inline` when the routine cannot be inlined. **Default
