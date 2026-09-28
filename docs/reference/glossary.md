@@ -93,7 +93,7 @@ agree, and this is the one to read first if either is new.
 ## Eliah IDE terms
 
 `apps/ide/` names its components with a Hebrew scheme; see
-[Examples → Apps](../examples/index.md#apps) for the full table.
+[Examples → The Eliah IDE](../examples/index.md#the-eliah-ide) for the full table.
 
 | Term | Meaning |
 | --- | --- |
