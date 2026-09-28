@@ -39,10 +39,10 @@ strength of a test that once passed or a claim in another document.
 ./demos.sh all          # build every demo, run the batch ones
 ```
 
-On the verification host `./demos.sh all` reported
-`27 built, 0 failed (12 batch ran; tty/gui built-only)`. `make demos` builds
-the complete set of 36 programs under `examples/` (esp32 excluded), and all 36
-built.
+With pin v450 `./demos.sh all` reported
+`27 built, 0 failed (16 batch ran; tty/gui built-only)`. The launcher's menu
+is a curated 27. `make demos` builds the complete set of 36 programs under
+`examples/` (esp32 excluded), and all 36 built with v449 and with v450.
 
 To build one program yourself:
 
