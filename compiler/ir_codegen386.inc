@@ -6011,7 +6011,14 @@ begin
           EmitB($81); EmitB($C4); EmitI32(8);                       { add esp, 8 }
         end
         else
-          begin EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); end; { mov dword [ebp+off], 0 }
+          { Exactly the slot's width, both directions -- see the riscv32
+            walker (a one-byte Boolean temp, a 16-byte promo temp). The
+            narrow half is latent here, as i386 parameters sit above ebp. }
+          if Syms[i].IsArray or
+             (TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) > 16) then
+            begin EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); end { mov dword [ebp+off], 0 }
+          else
+            EmitZeroLocalSlotForTarget(i, TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId));
       end;
 
   for i := 0 to IRCount - 1 do

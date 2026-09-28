@@ -5164,6 +5164,14 @@ begin
           procIdx := FindHeapHelperOrRefuse('PXXMemZero', 'arm32');
           EmitCallProc(procIdx);
         end
+        else if (not Syms[i].IsArray) and
+                (TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) > 4) and
+                (TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) <= 16) then
+          { WIDER than a register: a 16-byte promo temp {tag, payload} is
+            zero only through this prologue store (the negative wide literal
+            `-2**70` lowers to `0 - x` over a FRESH temp), and one register's
+            store left the payload as stack garbage. See the riscv32 walker. }
+          EmitZeroLocalSlotForTarget(i, TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId))
         else
         begin
           EmitI32($E3A00000);    { mov r0, #0 }

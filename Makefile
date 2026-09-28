@@ -8324,6 +8324,24 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_boolparm "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_boolparm_arm32)" "$$(cat test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.npy $(TESTTMP)/test_nilpy_boolparm_i386
 	tools/expect_same.sh i386/test_nilpy_boolparm "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_boolparm_i386)" "$$(cat test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected)"
+	# The same prologue walkers, the other direction: a 16-byte promo temp got
+	# ONE register's zero, so `-L` (lowered to `0 - L` over a fresh temp) read
+	# the payload the previous call left. Red before on x86-64 and aarch64
+	# (deterministic) and on the ESP32-C3 (run-varying); every target runs it.
+	./$(COMPILER) test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide26
+	$(TESTTMP)/test_nilpy_negwide26 | diff -u test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected -
+	./$(COMPILER) --target=aarch64 test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide_aarch64
+	tools/expect_same.sh aarch64/test_nilpy_negwide "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_nilpy_negwide_aarch64)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_negwide "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_negwide_riscv32)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide_xtensa_windowed
+	tools/expect_same.sh xtensa-windowed/test_nilpy_negwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_negwide_xtensa_windowed)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide_xtensa_call0
+	tools/expect_same.sh xtensa-call0/test_nilpy_negwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_negwide_xtensa_call0)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide_arm32
+	tools/expect_same.sh arm32/test_nilpy_negwide "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_negwide_arm32)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide_i386
+	tools/expect_same.sh i386/test_nilpy_negwide "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_negwide_i386)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
 	# os.stat / os.path.getsize / f.tell() / os.rename off x86-64. stat had no
 	# layout except on x86-64 and answered a zeroed result with NO error
 	# (statx now, one layout everywhere); riscv32's syscall 62 is _llseek, not

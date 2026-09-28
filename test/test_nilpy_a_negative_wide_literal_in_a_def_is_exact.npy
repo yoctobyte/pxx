@@ -1,0 +1,26 @@
+# A negative literal past 64 bits, inside a def. `-L` lowers to `0 - L` over a
+# FRESH 16-byte promo temp {tag, payload} that is zero only through the
+# prologue's hidden-temp store, and every walker stored one register into it:
+# the tag was zeroed, the payload kept whatever the previous call left there.
+# hex/oct/bin of a big value leave exactly that behind, so the first str(-L)
+# after them printed -1180591620717406710264 on x86-64 and aarch64, and a
+# run-varying value on the ESP32-C3. At module level the temp is a zeroed
+# global, which is why the same lines were right there.
+def noise() -> None:
+    L = 1180591620717411303424
+    print(hex(L))
+    print(oct(L))
+    print(bin(L))
+
+def f() -> None:
+    print(str(-1180591620717411303424))
+    print(-18446744073709551617)
+
+def g() -> None:
+    noise()
+    f()
+
+g()
+noise()
+f()
+print(str(-1180591620717411303424))

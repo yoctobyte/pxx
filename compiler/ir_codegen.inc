@@ -2181,7 +2181,14 @@ procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer);
   up to 8 would have been worse than emitting nothing: it would zero a
   neighbour. Both 64-bit arms now finish with a 4-byte store when one is due.
   refactor-a-the-missing-layer-between-frontends-and-backends,
-  bug-c-main-without-return-exits-with-stack-garbage }
+  bug-c-main-without-return-exits-with-stack-garbage
+
+  EXACT ON i386, riscv32 AND xtensa, sub-word tail included: their prologue
+  hidden-temp walkers zero every temp through here, and a word store over a
+  one-byte Boolean temp wiped the bool parameter right above it (every bool
+  argument printed False on the C3; xtensa's s32i on the odd slot SIGBUSed).
+  The same walkers used to store ONE word into a 16-byte promo temp too,
+  leaving its payload as stack garbage. }
 var k, off: Integer;
 begin
   if nbytes <= 0 then Exit;
@@ -2189,7 +2196,15 @@ begin
   if TargetArch = TARGET_I386 then
   begin
     for k := 0 to (nbytes div 4) - 1 do
-      begin EmitB($C7); EmitB($85); EmitI32(off + k * 4); EmitI32(0); end
+      begin EmitB($C7); EmitB($85); EmitI32(off + k * 4); EmitI32(0); end;
+    k := (nbytes div 4) * 4;
+    if (nbytes mod 4) >= 2 then
+    begin
+      EmitB($66); EmitB($C7); EmitB($85); EmitI32(off + k); EmitB(0); EmitB(0);  { mov word [ebp+off], 0 }
+      k := k + 2;
+    end;
+    if (nbytes mod 2) = 1 then
+      begin EmitB($C6); EmitB($85); EmitI32(off + k); EmitB(0); end;          { mov byte [ebp+off], 0 }
   end
   else if TargetArch = TARGET_ARM32 then
   begin
@@ -2214,6 +2229,11 @@ begin
     EmitSlotAddrRISCV32(reg_t0, symIdx);
     for k := 0 to (nbytes div 4) - 1 do
       rv32_sw(reg_zero, reg_t0, k * 4);
+    k := (nbytes div 4) * 4;
+    if (nbytes mod 4) >= 2 then
+      begin rv32_sh(reg_zero, reg_t0, k); k := k + 2; end;
+    if (nbytes mod 2) = 1 then
+      rv32_sb(reg_zero, reg_t0, k);
   end
   else if TargetArch = TARGET_XTENSA then
   begin
@@ -2232,6 +2252,11 @@ begin
     EmitLoadConstXtensa(reg_xtensa_a9, 0);
     for k := 0 to (nbytes div 4) - 1 do
       xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    k := (nbytes div 4) * 4;
+    if (nbytes mod 4) >= 2 then
+      begin xtensa_s16i(reg_xtensa_a9, reg_xtensa_a8, k); k := k + 2; end;
+    if (nbytes mod 2) = 1 then
+      xtensa_s8i(reg_xtensa_a9, reg_xtensa_a8, k);
   end
   else
   begin
@@ -13830,6 +13855,19 @@ begin
           if PxxDbgEnabled('a.htemp') then
             WriteLn('PXXDBG a.htemp STORE sym=', i, ' off=', Syms[i].Offset,
                     ' form=narrow');
+        end
+        else if (not Syms[i].IsArray) and
+                (TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) > 8) and
+                (TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) <= 16) then
+          { WIDER than a register: a 16-byte promo temp {tag, payload} is
+            zero only through this prologue store (the negative wide literal
+            `-2**70` lowers to `0 - x` over a FRESH temp), and one register's
+            store left the payload as stack garbage. See the riscv32 walker. }
+        begin
+          EmitZeroLocalSlotForTarget(i, TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId));
+          if PxxDbgEnabled('a.htemp') then
+            WriteLn('PXXDBG a.htemp STORE sym=', i, ' off=', Syms[i].Offset,
+                    ' form=wide');
         end
         else
         begin
