@@ -801,6 +801,8 @@ function WasmEmitSysCallFam(node, p: Integer; isStmt: Boolean): Boolean; forward
 function WasmEmitLoadFile(node: Integer): Boolean; forward;
 function WasmEmitPathArg(valNode: Integer): Boolean; forward;
 function WasmWriteHelper(const nm: AnsiString): Integer; forward;
+{ WasmDivZeroGuard calls the division-by-zero handler by its slot. }
+function WasmSlotForProc(p: Integer): Integer; forward;
 procedure WasmEmitDynStore(dstIsSym: Boolean; dstRef, valNode, descIdx: Integer); forward;
 { The proc cleanup pad releases this body's managed locals, and the release pass
   is defined with the epilogue that is its other caller -- well below the
@@ -1115,8 +1117,39 @@ end;
   shr_u unconditionally and shr_s is never emitted. Pascal has no arithmetic
   right-shift operator to emit it for. }
 
+{ Integer `div`/`mod` by a run-time zero. wasm's div/rem instructions TRAP on a
+  zero divisor -- "wasm trap: integer divide by zero", exit 134 -- which no
+  `try ... except on EDivByZero` can catch, where every native backend calls
+  DivZeroCheckProc's handler first (RE 200, or EDivByZero once SysUtils
+  installed its hook). Operands [a, b] are on the stack: b is parked in a
+  scratch local, and if it is zero the handler runs and b becomes 1 so the
+  instruction cannot trap on the way to the post-call exception check, which
+  then unwinds exactly as after any other call. Without a handler (no
+  builtinheap, or --no-div-check) nothing is emitted, as on the other targets.
+  bug-a-wasm32-div-by-a-run-time-zero-traps-instead-of-raising }
+procedure WasmDivZeroGuard(wide: Boolean);
+var dz, tmp: Integer;
+begin
+  if DivZeroCheckProc < 0 then Exit;
+  dz := WasmWriteHelper(Procs[DivZeroCheckProc].Name);
+  if dz < 0 then Exit;
+  if wide then tmp := WasmAddLocal(WT_I64, 'divisor')
+  else tmp := WasmAddLocal(WT_I32, 'divisor');
+  WasmLocalSet(tmp);
+  WasmLocalGet(tmp);
+  if wide then WasmOp($50, 'i64.eqz') else WasmOp($45, 'i32.eqz');
+  WasmIf(WT_VOID);
+    WasmCall(WasmSlotForProc(dz), Procs[dz].Name);
+    if wide then WasmI64Const(1) else WasmI32Const(1);
+    WasmLocalSet(tmp);
+  WasmEnd;
+  WasmEmitExcCheck;
+  WasmLocalGet(tmp);
+end;
+
 procedure WasmIntBinop(op: TTokenKind; wide, sgn: Boolean; const what: AnsiString);
 begin
+  if (op = tkDiv) or (op = tkMod) then WasmDivZeroGuard(wide);
   if wide then
   begin
     if op = tkPlus then WasmOp($7C, 'i64.add')
