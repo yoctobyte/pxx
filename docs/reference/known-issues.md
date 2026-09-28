@@ -36,8 +36,9 @@ ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
 ## Memory leaks
 
 Memory leaks were treated as release blockers for this beta. Before the release
-every leak test in the tree was re-run, and each ran beside a deliberate leak
-to prove it could catch one:
+every leak test in the tree was re-run. The Nil Python checks each ran beside a
+deliberate leak, to prove they could catch one; the Pascal and C checks had no
+such control at the time (one is being added):
 
 - all 164 automated leak checks in the test suite;
 - 49 Pascal shapes on seven targets (x86-64, i386, aarch64, arm32, riscv32,
@@ -342,7 +343,9 @@ what they were measured with.
   thread started by PXX in a program that links libc used the main thread's
   glibc state, so two threads using `malloc` at once could abort the program
   (the fix's commit measured an abort in 1 of 3 runs on i386, 2 of 3 on
-  aarch64, 3 of 3 on arm32, under QEMU). The compiler warned about it. Each
+  aarch64, 3 of 3 on arm32, under QEMU). The compiler warned about it. It is
+  intermittent: on 2026-09-28, three runs of the same test built with v445
+  survived on each of those targets. Each
   thread now gets its own, as on x86-64. Wrong in v441 to v445; fixed in
   v446 (`0ed2b7f6e1`).
 

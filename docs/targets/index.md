@@ -68,16 +68,19 @@ set and read; `--emit-obj` on `test/c_obj_data_export.c`; `--shared` on
 | Pascal classes, exceptions, console I/O | yes | yes | yes | yes | yes | yes |
 | `SizeOf(Real)` | 8 | 8 | 8 | 8 | 4 | 8 |
 | Threads (`TThread`, C `pthread_create`) with `--threadsafe` | yes | yes | yes | yes | refused | refused |
-| Pascal `threadvar` | yes | refused | yes | yes | refused | refused |
+| Pascal `threadvar` | yes | yes (from v446) | yes | yes | refused | refused |
 | `--emit-obj` (relocatable object) | yes | yes | yes | yes | yes | refused |
 | `--shared` (shared library) | yes | refused | refused | refused | refused | refused |
 | Nil Python | yes | yes | yes | yes | refused | yes |
 | C with `#include <math.h>` | yes | yes | yes | yes | yes | yes |
 
 Compared with v424, one cell changed: wasm32 C with `math.h` was refused
-there. **Pascal `threadvar` on i386 is refused with v445 and works after
-it**: commit `7dc976a8cc` gives each i386 thread its own block, and a compiler
-built at `b6226e1385` compiles and runs the `threadvar` probe under QEMU.
+there. **Pascal `threadvar` on i386 is refused with v445 and works from
+v446** (`7dc976a8cc`, which also gives each i386 thread its own C `__thread`
+copies). On 2026-09-28, the two thread rows were measured again with pin v446
+(`ae3466a018d8`) and with the compiler at `e072d579b0`, under QEMU: each
+thread kept its own `threadvar` and `__thread` values on x86-64, i386,
+aarch64 and arm32. See [Threads & parallelism](../library/concurrency.md#targets).
 
 Every **refused** cell is a compile-time error that names the reason; none
 produces a program that runs wrongly. Most messages say in plain words what is

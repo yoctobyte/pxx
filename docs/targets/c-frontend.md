@@ -123,7 +123,10 @@ than a `.c` file. `wchar.h` and `wctype.h` are partly implemented: `wcslen`,
 `pthread.h` is a genuine subset, not a glibc-ABI-compatible implementation:
 mutexes, `pthread_self`/`pthread_equal`, create/join, `pthread_once`, and
 condition variables — no TLS keys, no thread cancellation, no scheduler
-attributes. Threaded C code needs `--threadsafe`.
+attributes. Threaded C code needs `--threadsafe`. A `__thread` variable has
+one copy per thread, starting at its initialiser, on x86-64, i386, aarch64 and
+arm32 from v446 (measured under QEMU; before v446, i386 shared one copy and
+the other targets started a thread's copy at 0).
 
 ---
 
