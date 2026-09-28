@@ -168,6 +168,41 @@ begin
   CallResultIsNotProcedural := True;
 end;
 
+{ Does `@F` (an AN_PROCADDR) bind a routine whose CALLING CONVENTION differs
+  from the procedural type it is stored into? `type TF = function(x: Double):
+  Double; cdecl;` with `f := @Twice` (no cdecl) compiled, and the indirect cdecl
+  call marshalled the argument into xmm0 while Twice's internal-convention
+  prologue read an integer register: 0.0 on x86-64, Nan on i386. FPC 3.2.2
+  refuses it ("Incompatible types ... Register ... CDecl"), and so does this,
+  in both directions.
+
+  An EXTERNAL routine is left alone: its convention is the library's, not its
+  declaration's, and the dlsym'd-C path binds those deliberately (see the
+  bodied-cdecl wall below). Fails OPEN on anything it cannot name.
+  bug-p-a-routine-assigned-to-a-procedural-type-of-another-calling-convention-is-accepted }
+function ProcAddrConventionMismatch(sig, rhs: Integer): Boolean;
+var pi: Integer;
+begin
+  ProcAddrConventionMismatch := False;
+  if (sig < 0) or (sig >= ProcCount) or (rhs < 0) then Exit;
+  if ASTKind[rhs] <> AN_PROCADDR then Exit;
+  pi := Integer(ASTIVal[rhs]);
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if ProcExternal[pi] then Exit;
+  ProcAddrConventionMismatch := ProcCdecl[sig] <> CProcUsesCAbi(pi);
+end;
+
+function ProcAddrConventionMessage(sig, rhs: Integer): AnsiString;
+var cs, cr: AnsiString;
+begin
+  if ProcCdecl[sig] then cs := 'cdecl' else cs := 'the Pascal convention';
+  if CProcUsesCAbi(Integer(ASTIVal[rhs])) then cr := 'cdecl'
+  else cr := 'the Pascal convention';
+  ProcAddrConventionMessage := 'incompatible types: @' + Procs[ASTIVal[rhs]].Name
+    + ' uses ' + cr + ' but the procedural type uses ' + cs
+    + ' -- declare both the same way';
+end;
+
 { The routine name to put in the diagnostic, so it names the fix rather than
   the shape -- `write @G`, not `a call result is not a procedural value`. }
 function CallResultProcName(node: Integer): AnsiString;
@@ -6104,6 +6139,14 @@ begin
       'incompatible types: a procedural parameter cannot take the RESULT of a call'
       + ' -- write @' + CallResultProcName(argAST)
       + ' to pass the routine itself');
+  { ...and the calling-convention twin, at the argument sink for the same
+    reason: there is no node an argument and an assignment both pass through. }
+  if (not isRefArg) and (not CProgramMode) and (not PyProgramMode) and
+     (cpi >= 0) and (cpi < ProcCount) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     ProcAddrConventionMismatch(ProcParamProcSig[cpi * MAX_PROC_PARAMS + pathIdx], argAST) then
+    ErrorAtRecoverTok(ASTLine[argAST], ASTTok[argAST],
+      ProcAddrConventionMessage(ProcParamProcSig[cpi * MAX_PROC_PARAMS + pathIdx], argAST));
   argAST := IRProcVarAutoCall(argAST, pvSinkIsProcVar);
 
   { A WideChar VALUE passed to a string parameter converts to its UTF-8
@@ -15086,6 +15129,10 @@ begin
           'incompatible types: a procedural slot cannot take the RESULT of a call'
           + ' -- write @' + CallResultProcName(ASTRight[node])
           + ' to store the routine itself');
+      if (not CProgramMode) and (not PyProgramMode) and
+         ProcAddrConventionMismatch(NodeProcSlotSig(ASTLeft[node]), ASTRight[node]) then
+        ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
+          ProcAddrConventionMessage(NodeProcSlotSig(ASTLeft[node]), ASTRight[node]));
 
       { @BodiedPascalProc into a `cdecl` proc-type var: the indirect cdecl call
         arm marshals the TRUE C convention (floats in xmm0..7 / d0..d7, int and

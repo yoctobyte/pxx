@@ -14000,6 +14000,16 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_assign_incompatible_types_fail.pas $(TESTTMP)/test_asgbad26 > $(TESTTMP)/test_asgbad.log 2>&1
 	tools/expect_same.sh test_asgbad.log "$$(grep -c 'incompatible types' $(TESTTMP)/test_asgbad.log)" "13"
 	grep -q "cannot assign Integer to AnsiString" $(TESTTMP)/test_asgbad.log
+	# A routine stored into a procedural type of another CALLING CONVENTION is
+	# refused, as FPC 3.2.2 refuses it: it compiled and returned garbage (0.0 on
+	# x86-64, Nan on i386 for `f := @Twice; f(21.0)`). Four shapes, both
+	# directions; the check recovers, so the count is the assertion. The match
+	# row is the accepted half and FPC prints the same.
+	# bug-p-a-routine-assigned-to-a-procedural-type-of-another-calling-convention-is-accepted
+	! ./$(COMPILER) test/test_procvar_calling_convention_mismatch_fail.pas $(TESTTMP)/test_pvcc26 > $(TESTTMP)/test_pvcc.log 2>&1
+	tools/expect_same.sh test_pvcc.log "$$(grep -c 'incompatible types: @' $(TESTTMP)/test_pvcc.log)" "4"
+	./$(COMPILER) test/test_procvar_calling_convention_match.pas $(TESTTMP)/test_pvccok26
+	tools/expect_same.sh test_pvccok26 "$$($(TESTTMP)/test_pvccok26)" "$$(cat test/test_procvar_calling_convention_match.expected)"
 	grep -q "cannot assign UCS4Char to AnsiString" $(TESTTMP)/test_asgbad.log
 	# ...and the other half: everything the check must NOT start refusing. It
 	# RUNS, because "accepted" and "correct" are different claims.
@@ -29428,6 +29438,13 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_pyeval_host_arity_and_returns "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_pyeval_host_arity_and_returns_i386)" "$$(cat test/test_nilpy_pyeval_host_arity_and_returns.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_container_element_repr.npy $(TESTTMP)/test_nilpy_container_element_repr_i386
 	tools/expect_same.sh i386/test_nilpy_container_element_repr "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_container_element_repr_i386)" "$$(cat test/test_nilpy_container_element_repr.expected)"
+	# The calling-convention refusal on i386 (where the mismatch printed Nan) and
+	# the accepted half running there.
+	# bug-p-a-routine-assigned-to-a-procedural-type-of-another-calling-convention-is-accepted
+	! ./$(COMPILER) --target=i386 test/test_procvar_calling_convention_mismatch_fail.pas $(TESTTMP)/test_pvcc_i386 > $(TESTTMP)/test_pvcc_i386.log 2>&1
+	tools/expect_same.sh i386/test_pvcc.log "$$(grep -c 'incompatible types: @' $(TESTTMP)/test_pvcc_i386.log)" "4"
+	./$(COMPILER) --target=i386 test/test_procvar_calling_convention_match.pas $(TESTTMP)/test_pvccok_i386
+	tools/expect_same.sh i386/test_procvar_calling_convention_match "$$(tools/run_target.sh i386 $(TESTTMP)/test_pvccok_i386)" "$$(cat test/test_procvar_calling_convention_match.expected)"
 
 test-aarch64: $(COMPILER)
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
