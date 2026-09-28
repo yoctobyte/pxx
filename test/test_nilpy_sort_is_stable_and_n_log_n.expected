@@ -1,0 +1,15 @@
+sorted objs 0a 0f 0k 0p 0u 0z 0e 0j 1d 1i 1n 1s 1x 1c 1h 1m 2b 2g 2l 2q 2v 2a 2f 2k 3e 3j 3o 3t 3y 3d 3i 3n 4c 4h 4m 4r 4w 4b 4g 4l
+sorted objs rev 4c 4h 4m 4r 4w 4b 4g 4l 3e 3j 3o 3t 3y 3d 3i 3n 2b 2g 2l 2q 2v 2a 2f 2k 1d 1i 1n 1s 1x 1c 1h 1m 0a 0f 0k 0p 0u 0z 0e 0j
+sort objs 0a 0f 0k 0p 0u 0z 0e 0j 1d 1i 1n 1s 1x 1c 1h 1m 2b 2g 2l 2q 2v 2a 2f 2k 3e 3j 3o 3t 3y 3d 3i 3n 4c 4h 4m 4r 4w 4b 4g 4l
+sort objs rev 4c 4h 4m 4r 4w 4b 4g 4l 3e 3j 3o 3t 3y 3d 3i 3n 2b 2g 2l 2q 2v 2a 2f 2k 1d 1i 1n 1s 1x 1c 1h 1m 0a 0f 0k 0p 0u 0z 0e 0j
+key len ['b', 'cc', 'fig', 'pear', 'kiwi', 'date', 'plum', 'lime', 'apple']
+key len rev ['apple', 'pear', 'kiwi', 'date', 'plum', 'lime', 'fig', 'cc', 'b']
+sort key last ['b', 'cc', 'apple', 'date', 'lime', 'fig', 'kiwi', 'plum', 'pear']
+mixed [-2, 0, 1, 1.5, 2.25, 3, 7]
+strs ['', 'A', 'B', 'a', 'ab', 'b']
+empty [] one [5]
+big True 0 1008 504678
+big rev 1008 0 505
+typeerror ok
+count sorted under 12000 True 0 1008
+count sort under 12000 True 1008 0

@@ -1,0 +1,79 @@
+# list.sort() and sorted() ran an INSERTION sort: O(n^2) comparisons and a
+# variant swap per step. Sorting 64 objects with __lt__ took 4.3 ms (CPython
+# 36 us), and test_nilpy_a_builtin_over_a_variant_list_releases_its_copy spent
+# 8.5 of its 12.4 s there -- minutes under ESP QEMU, and a timeout on arm32.
+# Both now share one stable bottom-up merge order (PySortOrder, pylib.pas).
+# The COUNT row is the complexity assertion: it counts dunder calls, so it is
+# exact and not a timing. Every other line is CPython's own output, including
+# stability with equal keys, with reverse=True (which is NOT a reversed
+# ascending sort), and with a key function.
+class P:
+    def __init__(self, v, tag):
+        self.v = v
+        self.tag = tag
+    def __lt__(self, o):
+        return self.v < o.v
+    def __gt__(self, o):
+        return self.v > o.v
+
+def tags(xs):
+    out = []
+    for x in xs:
+        out.append(str(x.v) + x.tag)
+    return " ".join(out)
+
+ps = []
+for i in range(40):
+    ps.append(P(i * 7 % 5, chr(97 + i % 26)))
+print("sorted objs", tags(sorted(ps)))
+print("sorted objs rev", tags(sorted(ps, reverse=True)))
+q = list(ps)
+q.sort()
+print("sort objs", tags(q))
+q = list(ps)
+q.sort(reverse=True)
+print("sort objs rev", tags(q))
+words = ["pear", "fig", "apple", "kiwi", "date", "plum", "lime", "b", "cc"]
+print("key len", sorted(words, key=len))
+print("key len rev", sorted(words, key=len, reverse=True))
+w2 = list(words)
+w2.sort(key=lambda s: s[-1])
+print("sort key last", w2)
+print("mixed", sorted([3, 1.5, -2, 7, 0, 2.25, 1]))
+print("strs", sorted(["b", "A", "a", "B", "ab", ""]))
+print("empty", sorted([]), "one", sorted([5]))
+big = []
+for i in range(1000):
+    big.append((i * 7919) % 1009)
+sb = sorted(big)
+ok = True
+for i in range(1, len(sb)):
+    if sb[i - 1] > sb[i]:
+        ok = False
+print("big", ok, sb[0], sb[-1], sum(sb))
+big.sort(reverse=True)
+print("big rev", big[0], big[-1], big[500])
+try:
+    sorted([1, "a", 2])
+except TypeError:
+    print("typeerror ok")
+
+calls = [0]
+class C:
+    def __init__(self, v):
+        self.v = v
+    def __lt__(self, o):
+        calls[0] += 1
+        return self.v < o.v
+    def __gt__(self, o):
+        calls[0] += 1
+        return self.v > o.v
+cs = []
+for i in range(1000):
+    cs.append(C((i * 7919) % 1009))
+calls[0] = 0
+r = sorted(cs)
+print("count sorted under 12000", calls[0] < 12000, r[0].v, r[-1].v)
+calls[0] = 0
+cs.sort(reverse=True)
+print("count sort under 12000", calls[0] < 12000, cs[0].v, cs[-1].v)

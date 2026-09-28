@@ -2609,6 +2609,12 @@ function pyvar_gt(const a: Variant; const b: Variant): Boolean;
   means "a is less than b" uses this rather than pyvar_gt with the arguments
   swapped, so an unorderable pair is refused with CPython's wording. }
 function pyvar_lt(const a: Variant; const b: Variant): Boolean;
+{ The stable ORDER of `keys`, as an index permutation written to `idx` (n
+  LongInts the caller owns): idx[k] is the position of the k-th element in
+  sorted order. Shared by list.sort() and sorted(), which apply it to their
+  elements. A bottom-up merge sort -- O(n log n) compares, where the insertion
+  sort both used to run was O(n^2) compares AND a variant swap per step. }
+procedure PySortOrder(keys: TPyList; reverse: Boolean; idx: Pointer; n: Integer);
 procedure PyOrdCheck(const a: Variant; const b: Variant; const op: AnsiString);
 { `next(it)` / `next(it, default)` over a materialised sequence. NOT named
   `next`: itertools' counter already owns that name for its own argument type,
@@ -6640,48 +6646,97 @@ end;
   way, so equal elements must retain input order in both directions. Flipping
   which operand `pyvar_gt` gets keeps the comparison STRICT, so equal elements
   still do not swap and stability is preserved. }
-function TPyList.sort(key: Pointer; reverse: Boolean): Variant;
-var i, j: Integer; v, kv: Variant; swapped: Boolean; keys: TPyList;
+procedure PySortOrder(keys: TPyList; reverse: Boolean; idx: Pointer; n: Integer);
+{ Stable: the right run's head is taken only when it sorts strictly BEFORE the
+  left run's head, so equal keys keep their input order -- in reverse too, as
+  CPython's reverse=True does (it is not a reversed ascending sort). }
+var tmp, src, dst, sw: Pointer; width, lo, mid, hi, a, b, k: Integer;
+    takeB: Boolean;
 begin
-  { The keys are computed ONCE, up front, and moved in lockstep with the
-    elements below — Python calls key() exactly once per element, and a key
-    with a side effect (or an expensive one) would otherwise be re-entered
-    O(n^2) times by the insertion sort. Same shape as sorted(). }
-  keys := TPyList.Create;
-  for i := 0 to Self.count - 1 do
-  begin
-    if key <> nil then
+  for k := 0 to n - 1 do PInteger(NativeInt(idx) + k * 4)^ := k;
+  if n < 2 then Exit;
+  GetMem(tmp, n * 4);
+  try
+    src := idx; dst := tmp;
+    width := 1;
+    while width < n do
     begin
-      if PyIterCallHook = nil then
-        raise TypeError.Create('list.sort(): callable dispatch is unavailable');
-      keys.append(PyIterCallHook(key, Self.at(i)));
-    end
-    else
-      keys.append(Self.at(i));
-  end;
-  for i := 1 to Self.count - 1 do
-  begin
-    j := i;
-    swapped := True;
-    while (j > 0) and swapped do
-    begin
-      if reverse then
-        swapped := pyvar_gt(keys.at(j), keys.at(j - 1))
-      else
-        swapped := pyvar_lt(keys.at(j), keys.at(j - 1));
-      if swapped then
+      lo := 0;
+      while lo < n do
       begin
-        v := Self.at(j);
-        Self.put(j, Self.at(j - 1));
-        Self.put(j - 1, v);
-        kv := keys.at(j);
-        keys.put(j, keys.at(j - 1));
-        keys.put(j - 1, kv);
-        Dec(j);
+        mid := lo + width; if mid > n then mid := n;
+        hi := lo + 2 * width; if hi > n then hi := n;
+        a := lo; b := mid; k := lo;
+        while k < hi do
+        begin
+          if a >= mid then takeB := True
+          else if b >= hi then takeB := False
+          else if reverse then
+            takeB := pyvar_gt(keys.at(PInteger(NativeInt(src) + b * 4)^),
+                              keys.at(PInteger(NativeInt(src) + a * 4)^))
+          else
+            takeB := pyvar_lt(keys.at(PInteger(NativeInt(src) + b * 4)^),
+                              keys.at(PInteger(NativeInt(src) + a * 4)^));
+          if takeB then
+          begin
+            PInteger(NativeInt(dst) + k * 4)^ := PInteger(NativeInt(src) + b * 4)^;
+            Inc(b);
+          end
+          else
+          begin
+            PInteger(NativeInt(dst) + k * 4)^ := PInteger(NativeInt(src) + a * 4)^;
+            Inc(a);
+          end;
+          Inc(k);
+        end;
+        lo := hi;
       end;
+      sw := src; src := dst; dst := sw;
+      width := width * 2;
     end;
+    { the last pass wrote into `src` (swapped above); make sure idx has it }
+    if src <> idx then
+      for k := 0 to n - 1 do
+        PInteger(NativeInt(idx) + k * 4)^ := PInteger(NativeInt(src) + k * 4)^;
+  finally
+    FreeMem(tmp);
   end;
-  keys.Free;
+end;
+
+function TPyList.sort(key: Pointer; reverse: Boolean): Variant;
+var i, n: Integer; keys, vals: TPyList; idx: Pointer;
+begin
+  { The keys are computed ONCE, up front — Python calls key() exactly once per
+    element, and a key with a side effect (or an expensive one) must not be
+    re-entered per comparison. Same shape as sorted(). }
+  keys := TPyList.Create;
+  vals := nil;
+  idx := nil;
+  try
+    for i := 0 to Self.count - 1 do
+    begin
+      if key <> nil then
+      begin
+        if PyIterCallHook = nil then
+          raise TypeError.Create('list.sort(): callable dispatch is unavailable');
+        keys.append(PyIterCallHook(key, Self.at(i)));
+      end
+      else
+        keys.append(Self.at(i));
+    end;
+    n := Self.count;
+    GetMem(idx, n * 4 + 4);
+    PySortOrder(keys, reverse, idx, n);
+    vals := TPyList.Create;
+    for i := 0 to n - 1 do
+      vals.append(Self.at(PInteger(NativeInt(idx) + i * 4)^));
+    for i := 0 to n - 1 do
+      Self.put(i, vals.at(i));
+  finally
+    if idx <> nil then FreeMem(idx);
+    vals.Free;
+    keys.Free;
+  end;
   Result := pynone;   { Python returns None }
 end;
 

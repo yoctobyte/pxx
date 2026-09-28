@@ -3622,6 +3622,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_clsattrlam26 | diff -u test/test_nilpy_class_attribute_and_a_lambda_in_a_method.expected -
 	./$(COMPILER) test/test_nilpy_a_captured_float_travels_by_its_bits.npy $(TESTTMP)/test_nilpy_capfloat26
 	$(TESTTMP)/test_nilpy_capfloat26 | diff -u test/test_nilpy_a_captured_float_travels_by_its_bits.expected -
+	./$(COMPILER) test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/test_nilpy_sortnlogn26
+	$(TESTTMP)/test_nilpy_sortnlogn26 | diff -u test/test_nilpy_sort_is_stable_and_n_log_n.expected -
 	@# The None ARM of a conditional expression must survive the def's inferred
 	@# RETURN TYPE. PyInferExprType had no arm for the None literal, so it
 	@# answered tyUnknown — the join's IDENTITY ELEMENT — and the other arm stood
@@ -29535,6 +29537,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_lifted_closure_slots "$$(tools/run_target.sh i386 $(TESTTMP)/lclslots_i386)" "$$(cat test/test_nilpy_lifted_closure_slots_on_32bit.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_a_captured_float_travels_by_its_bits.npy $(TESTTMP)/capfloat_i386
 	tools/expect_same.sh i386/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh i386 $(TESTTMP)/capfloat_i386)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_i386
+	tools/expect_same.sh i386/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh i386 $(TESTTMP)/sortnlogn_i386)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
 	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
 	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
 	@# it -- its reference is borrowed from the in-flight exception and becomes
@@ -32757,6 +32761,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-call0/test_nilpy_class_attr_return_type "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_clsattr_c0)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/xt_shadow_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_shadow_w)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/xt_sortnlogn_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sortnlogn_w)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double_x64
 	tools/expect_same.sh xtensa/test_u64_to_double "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_u64_to_double)" "$$($(TESTTMP)/test_xtensa_test_u64_to_double_x64)"
@@ -34830,6 +34836,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_lifted_closure_slots "$$(tools/run_target.sh arm32 $(TESTTMP)/lclslots_a32)" "$$(cat test/test_nilpy_lifted_closure_slots_on_32bit.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_a_captured_float_travels_by_its_bits.npy $(TESTTMP)/capfloat_a32
 	tools/expect_same.sh arm32/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh arm32 $(TESTTMP)/capfloat_a32)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_a32
+	tools/expect_same.sh arm32/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh arm32 $(TESTTMP)/sortnlogn_a32)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
