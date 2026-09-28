@@ -31,8 +31,10 @@ where CPython can run the same source, comparing the output with CPython 3.14.4.
   a physical ESP32-S3 board; `nilpy-c3` and `nilpy-hw-c3` ran under QEMU. The
   other seven have no recorded run; they are known to compile. Each directory's `build.sh` is the recipe, and
   [ESP32 peripherals](../library/esp.md) documents the units they import.
-- **Linux cross targets**: i386, aarch64 and arm32 run Nil Python under QEMU,
-  and wasm32 under wasmtime. riscv32 Linux refuses it at compile time.
+- **Linux cross targets**: i386, aarch64, arm32 and riscv32 run Nil Python
+  under QEMU, and wasm32 under wasmtime. riscv32 Linux refused it at compile
+  time up to v449; v450 builds it (`d07cbfbb40`, see
+  [Known issues](../reference/known-issues.md)).
 
 ## The core that works
 
