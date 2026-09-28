@@ -5453,3 +5453,26 @@ Real network (the owner's home network, services on plexus 192.168.1.30, board b
 2026-09-28 | frankS | compiler/ir.inc (IRStrUniqueForByRefElem), test/test_string_element_passed_by_ref_is_made_unique.pas (new) | CRASH, pre-existing (pin v443): `s := 'abc'; SetC(s[2])` with `var c: char` segfaulted (FPC: ayc) -- the callee wrote into the literal's read-only bytes; a refcount-2 string edited its alias; Move/FillChar into a string element the same. The string is now made unique (PXXStrUnique on its slot) before a string element is passed to a var/out param, which covers Move/FillChar's untyped var dest. 15 rows = fpc 3.2.2 on x86-64, i386, arm32, aarch64, riscv32, wasm32; census flat. `@s[i]` deliberately unchanged: FPC does not unique there either (shared rc2 writes both, a literal is RTE 216). Seen, not fixed: a UnicodeString element to `var c: WideChar` is refused by CheckVarArgWidth as a 1-byte Char.
 2026-09-28 | frankS | compiler/pasparser_expr.inc (UpCase/Pos/Space arms), compiler/pasparser_prog.inc, compiler/builtin/builtin.pas, lib/rtl/sysutils.pas, lib/rtl/math.pas | FPC RTL GAPS vs fpc 3.2.2: Copy(s, i) failed with `uses sysutils` in scope (its 3-arg Copy shadowed the intrinsic); Pos(sub, s, offset) was a parse error; UpCase(string) did not exist; Space was undefined; Power(Integer, Integer) returned an Integer (Power(2, -1) = 0; FPC's is float-only, 0.5). All added/fixed, bare and with SysUtils. Power's Integer overload is removed: `i := Power(2, 3)` into an Integer still compiles (measured: prints 8), where FPC refuses float->Integer; that implicit conversion is a separate, older divergence. Bare `WriteLn(Power(2, 8))` still prints fewer digits than FPC, whose Power returns Extended on x86-64.
 2026-09-28 | frankS | compiler/pyparser.inc (PyRegisterClassMembers: a ctor's mRet) | WRONG VALUE, ESP32-S3 only (windowed xtensa; 527b033ad7ca, 349268700ff0 and v448 all printed 0): `cls = P; return cls(self.a)` inside a method or def gave `.a` = None/0 and a dict field "not subscriptable"; `cls()` then segfaulted reading the result. Cause: an unannotated __init__ inferred a VARIANT RetType, and ABIRetViaHiddenDestProc reads RetType even for a procedure, so direct callers and the ctor prologue both used a hidden result destination. Windowed xtensa passes that destination as argument zero (a2; Self in a3, arg in a4), and pyeval's PyClassRefNew calls `create` through a plain `procedure(self; const a: Variant)`, so every argument arrived one register off. Other targets carry the destination in its own register (ecx/r12/t1/x8), which is why C3 and x86-64 printed 7; module level passed because it folds to a direct P(9). Fix: a ctor's RetType is scalar. Measured on hosted windowed xtensa with frankd-a3's uncommitted arena patch (11 variants incl. 0/1/3-arg ctors, and test_nilpy_attribute_off_a_virtual_call_result, all equal to x86-64). No xtensa row yet: hosted NilPy on xtensa needs that patch.
+
+## 2026-09-28 — the espide monitor hang was a splicing child, not a runner bug
+
+`espide --auto` hung for anything from 45 s to 4h36m on an 8 s monitor. Cause:
+`/bin/cat` on plexus is uutils coreutils 0.8.0, which moves tty -> pipe with
+`splice()`, and splice into a pipe holds `pipe->mutex` while it waits for source
+bytes. `pipe_read()` takes that mutex **before** it checks `O_NONBLOCK`, so the
+reader slept in state `D` — unkillable, zero CPU — until the board next spoke.
+The hang lasted exactly as long as the board stayed quiet. Fix: the monitor child
+is `dd if=<port> bs=512 status=none`; dd never splices. Board: `--auto` now exits
+on its own, `monitor stopped after 8 s (81 ticks; 8005 ms elapsed)`, rc=0.
+
+Two things worth carrying forward. **Read `dmesg` before building an instrument:**
+the kernel had already printed "task espide is blocked on a mutex likely owned by
+task cat", on two separate days, and it was reached for sixth after objdump,
+`strace -f`, `gdb -p`, gdb-as-parent and `wchan` had all failed. And **`wchan`
+names a frame, not a reason** — `anon_pipe_read` on a provably `O_NONBLOCK` fd
+produced three wrong hypotheses before the flags refuted them.
+
+Caveats: one clean board run so far (roughly half of all runs never reach the
+monitor because the flash fails, which is separate); the deterministic evidence is
+the board-free pty A/B, where `cat` gives 0 ticks in 12 s and state D while `dd`
+gives 60 ticks and state S.

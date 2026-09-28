@@ -114,14 +114,18 @@ begin
   { O_NONBLOCK ON THE CHILD'S STDOUT, and this is design rather than defence.
     StreamPoll's whole contract is that it never blocks longer than timeoutMs,
     because a GUI event loop calls it from a timer tick: a read that waits is a
-    frozen window. Asking poll first and trusting the answer makes that contract
-    depend on poll and read agreeing about the fd, and espide has been observed
-    wedged in read() on this pipe with poll saying nothing was ready and the
-    pipe empty (bug-s-espide-auto-never-exits-after-build-flash). With the fd
-    non-blocking, read() answers EAGAIN instead of sleeping, so the contract
-    holds whether or not that disagreement is understood.
+    frozen window. With the fd non-blocking, read() answers EAGAIN instead of
+    sleeping, so the contract does not rest on poll and read agreeing about how
+    much is ready.
     PalSetSocketNonBlocking is fcntl(F_SETFL, O_NONBLOCK) -- an fd operation,
-    not a socket one, despite the name. }
+    not a socket one, despite the name.
+    WHAT O_NONBLOCK DOES NOT BUY, because this cost days: pipe_read() takes
+    pipe->mutex BEFORE it checks O_NONBLOCK, so a child that holds that mutex
+    across a wait blocks us here no matter what these flags say -- in state D,
+    where no signal reaches us. Re-asserting the flag per call was tried and
+    measured to change nothing. The only cure is to not run such a child; see
+    StartMonitor in apps/ide/esp/main.pas and
+    bug-s-espide-auto-never-exits-after-build-flash. }
   if p.Fd >= 0 then PalSetSocketNonBlocking(p.Fd, 1);
   p.Running := True;
   StreamStart := True;
@@ -279,7 +283,11 @@ end;
 procedure StreamStop(var p: TStreamProc);
 begin
   if not p.Running then Exit;
-  PalKill(p.Pid, SIG_TERM);
+  { GUARD THE PID: kill(0, SIGTERM) does not mean "no one", it signals our whole
+    process group -- the face, its shell and any sibling the caller never meant
+    to touch. StreamReap leaves Pid at 0, so a second StreamStop on a reaped
+    record used to be a self-inflicted SIGTERM. }
+  if p.Pid > 0 then PalKill(p.Pid, SIG_TERM);
   StreamReap(p);
 end;
 

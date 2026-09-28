@@ -3,157 +3,159 @@ slug: bug-s-espide-auto-never-exits-after-build-flash
 track: S
 type: bug
 prio: 60
-status: open
+status: fixed
 owner: frankZ
 created: 2026-09-27
-summary: "espide's monitor never returns: reproduced repeatedly, 45 s to 4h36m on a monitor asked for 8 s. MEASURED, 2026-09-28, on the wedged process: main thread state D, utime frozen at 827 and stime at 42 across 20 s (so it is NOT spinning), syscr frozen at 435119 across 5 s (so no syscall is completing -- it is blocked inside one), wchan=anon_pipe_read, exactly ONE pipe in the fd table (fd 17, inode matching the `cat` child's fd 1), and that fd's live flags are 02004000 = O_CLOEXEC|O_NONBLOCK -- so O_NONBLOCK IS SET and a read cannot sleep waiting for data. The GLib timerfd reads it_value (0,0) it_interval (0,0) ticks 0, which is what the loop looks like while stuck INSIDE a dispatch rather than waiting for the next tick. So: blocked inside an OnTick dispatch, in the pipe read path, on a non-blocking fd, consuming no CPU. The only mechanism left that fits every number is contention on the pipe's own mutex rather than on data (a non-blocking reader still sleeps for pipe->mutex, in D, inside anon_pipe_read, burning nothing); NOT established. Four real defects were found and fixed on this path and NONE of them is the cause: the per-chunk GtkTextView rewrite, the stdout write sitting last behind it, the monitor window counted in ticks instead of clock time, and raw serial bytes fed to a UTF-8 widget. IMPORTANT for whoever continues: wchan=anon_pipe_read is NOT evidence of a blocking read here, and three of my hypotheses were built on reading it that way."
+summary: "SOLVED 2026-09-28, root cause proven and fixed. espide's monitor ran `cat <port>`; /bin/cat on plexus is uutils coreutils 0.8.0, which moves tty -> pipe with splice(tty, NULL, pipe, NULL, 1MB, 0). splice() into a pipe takes pipe->mutex and HOLDS IT while waiting for source bytes, so a quiet board parks cat inside splice holding the lock. pipe_read() takes that same mutex BEFORE it checks O_NONBLOCK, so espide's non-blocking fd bought nothing: it slept in state D (uninterruptible -- SIGTERM and SIGKILL do not end it) with zero CPU until the board next emitted a byte, which is why an 8 s monitor was observed hanging 45 s, 223 s, 2835 s and 4h36m. The kernel said so independently in dmesg: 'INFO: task espide is blocked on a mutex likely owned by task cat'. FIX: the monitor child is now `dd if=<port> bs=512 status=none`, which uses read/write and never splices (measured: 0 splice calls on both the uutils and GNU flavours). Proven by a 15-second board-free A/B on a pty: with cat, 0 ticks of progress in 12 s and state D, unreapable by SIGKILL; with dd, 60 ticks and state S. THE INVARIANT for whoever edits StartMonitor next: the monitor child must not splice into our pipe. There is no defence on the reader's side -- a D-state read cannot be interrupted from userspace -- so it has to be avoided in the child."
 ---
 
-# espide's monitor wedges: blocked in the pipe read path on a NON-BLOCKING fd
+# espide's monitor wedged: a child holding pipe->mutex across a splice() wait
 
 - **Type:** bug — Track S
-- **Status:** OPEN. Four contributing defects fixed; the hang itself unexplained.
-- **Priority:** 60. The GUI Monitor button feeds the same path and the owner will
-  press it.
+- **Status:** FIXED. Root cause proven; fix verified board-free and on the board.
+- **Priority:** 60. The GUI Monitor button feeds the same path.
 
-> **I have been wrong about this four times, and the pattern matters more than
-> any single wrong answer: each time I promoted a mechanism I had confirmed to
-> EXIST into the cause, without testing that removing it removed the hang.**
->
-> 1. Filed as "--auto never exits", on three rc=124 runs.
-> 2. "It does exit; the window is counted in ticks." Wrong — from one clean run
->    and a diagnostic that found the process alive. Finding a process alive is
->    not finding it making progress.
-> 3. "AddLog's per-chunk pane rewrite is the cause." A real defect, real
->    measurements, not the cause: the hang reproduced with it fixed.
-> 4. "It blocks in read() because poll and read disagree." Built on
->    `wchan=anon_pipe_read`. The fd is O_NONBLOCK, measured live, so that read
->    cannot be waiting for data at all.
->
-> The cheapest missing discipline each time: re-run the failing case before
-> writing "fixed".
+## The cause, in one paragraph
 
-## Reproduction
+`StartMonitor` spawned `cat <port>` and read its stdout pipe from the GTK tick.
+`/bin/cat` on plexus is **uutils coreutils 0.8.0** (`/usr/lib/cargo/bin/coreutils/cat`),
+not GNU, and it moves tty→pipe with `splice(3, NULL, 1, NULL, 1048576, 0)`.
+`splice()` into a pipe acquires `pipe->mutex` and **holds it while it waits for
+bytes from the source**. So whenever the board went quiet, `cat` sat inside
+`splice` holding the lock (state `S`, wchan `wait_woken` — the `n_tty_read`
+wait). Meanwhile `pipe_read()` acquires that same mutex **before** it looks at
+`O_NONBLOCK`, so espide's carefully non-blocking fd bought nothing: `poll`
+reported `POLLIN` for bytes an earlier splice had already delivered, and the
+following `read()` slept in **state D** — uninterruptible, so neither SIGTERM
+nor SIGKILL ended it — with zero CPU, until the board next said something.
 
-`espide --auto --port <by-id> examples/esp32/hello-esp32 8` on a live classic
-ESP32 over the CP2102. Detect answers `ESP32 rev v3.1`, Build+Flash completes,
-`StartMonitor` logs `--- serial <port> (115200) ---`, and espide never returns.
-Observed durations for an 8 s monitor: 45 s (cut short by the probe), 223 s,
-2835 s, 4h36m. It survives SIGTERM; `kill -9` is needed.
+That last detail is the whole distribution of symptoms: **the hang lasts exactly
+as long as the board stays quiet.** Hence an 8 s monitor observed at 45 s, 223 s,
+2835 s and 4h36m, the 4h36m being a board sitting in a panic loop that had gone
+silent.
 
-Reproduces about half the time — not because the bug is intermittent, but
-because the flash fails on roughly half the runs and the monitor is then never
-reached. That flash failure is a separate matter: since 2026-09-28
-`tools/esp_flash.sh` prints esptool's own reason on a failing write, which it
-previously discarded.
+## The fix
 
-## The measurements that matter
+`apps/ide/esp/main.pas`, `StartMonitor`: the child is now
 
-All taken on the wedged process. espide runs under setgid `sg dialout`, which
-clears the dumpable flag, so `/proc/<pid>/fd` and `/proc/<pid>/fdinfo` give
-**EPERM to an outside reader** — take them with `sg dialout -c`.
+    dd if=<port> bs=512 status=none
 
-| what | value | what it rules out |
-|---|---|---|
-| main thread state | `D` | — |
-| `utime`/`stime` over 20 s | frozen at 827 / 42 | **not spinning** |
-| `syscr` over 5 s | frozen at 435119 | **no syscall completing**; blocked inside one |
-| `wchan` | `anon_pipe_read` | — (see the warning below) |
-| pipes in the fd table | exactly one, fd 17 | no second, hidden pipe |
-| fd 17 inode vs `cat` fd 1 | identical (`316545205`) | it IS the monitor child's pipe |
-| **fd 17 live flags** | **`02004000` = O_CLOEXEC\|O_NONBLOCK** | **a read cannot wait for data** |
-| GLib timerfd (fd 21) | `it_value (0,0)`, `it_interval (0,0)`, `ticks 0` | not waiting for a tick — stuck inside a dispatch |
-| `cat` child | alive, state `S`, `wait_woken` | writer alive, pipe empty |
-| other threads | `futex_do_wait`, `poll_schedule_timeout`, `ep_poll` | ordinary |
+`dd` uses `read`/`write` and never splices — measured, 0 `splice` calls, on both
+the uutils and the GNU flavour — so it holds `pipe->mutex` only across a memcpy.
 
-### The warning, because it cost me three hypotheses
+Also fixed in `apps/ide/garin/runner.pas`: `StreamStop` called
+`PalKill(p.Pid, SIG_TERM)` unguarded, and `StreamReap` leaves `Pid` at 0, so a
+second `StreamStop` on a reaped record sent SIGTERM to **pid 0 — our own process
+group**. Now guarded by `if p.Pid > 0`.
 
-**`wchan=anon_pipe_read` is not evidence of a read blocking for data.** With
-`O_NONBLOCK` confirmed on the live fd, the only way to sleep in that function
-consuming no CPU is to wait for something other than data — the pipe's own
-mutex being the obvious candidate. Do not re-derive "poll and read disagree"
-from this wchan; that was hypothesis 4 and the flags refute it.
+**The invariant, for whoever edits `StartMonitor` next: the monitor child must
+not splice into our pipe.** There is no defence available on the reader's side.
+A `read()` blocked on `pipe->mutex` is in `D`; no signal reaches it, no timeout
+applies, and `O_NONBLOCK` is checked too late to matter. It has to be avoided in
+the choice of child.
 
-## What the fix has to satisfy
+## Proof, and it needs no board
 
-Zero CPU, no syscall completing, one non-blocking pipe, and a GLib loop stuck
-mid-dispatch. Whatever the mechanism, espide must not be able to reach a state
-where a timer-driven callback does not return.
+15 seconds, no board, no GTK, no ESP-IDF: open a pty, run the espide reader shape
+(`poll` then `read` on the child's pipe from a 200 ms tick), have the child read
+the pty, send **one** burst, then stay quiet. Bytes must be left in the pipe when
+the source goes quiet — that is what makes `poll` say `POLLIN` while the child is
+already back inside `splice`.
 
-## Next instrument, and why the obvious ones failed
+| child | progress in 12 s | state | reapable |
+|---|---|---|---|
+| `exec cat <pty>` | **0 ticks** | **D** | no — survives SIGKILL |
+| `exec dd if=<pty> bs=512 status=none` | 60 ticks | `S` | yes |
 
-A stack is the one thing missing. Every attempt so far failed for a reason worth
-recording rather than repeating:
+An earlier two-burst version of the same run caught the mechanism in miniature
+rather than permanently: `worstTickMs=500` with `cat` against `0` with `dd` —
+the stall ended the instant the pty spoke again, which is the same clock the
+board wedges ran on.
 
-- **`gdb -p <pid>`**: refused. `ptrace_scope=1` on plexus allows attaching only
-  to a direct child, and a probe script's gdb is not espide's parent
-  (`ptrace: Inappropriate ioctl for device`).
-- **`strace -f`**: useless. It follows the whole cmake/ninja tree that
-  Build+Flash spawns, and the monitor phase is never reached inside the wait.
-  Plain `strace` (no `-f`) is cheap and did work — it showed `PalPoll` returning
-  revents correctly during the build phase (`ppoll([{fd=17,events=POLLIN}],
-  {0,0}) = 1 ([{fd=17,revents=POLLIN}])` → `read = 99` → `= 0 (Timeout)` →
-  break), which is how hypothesis 4's premise was first weakened.
-- **`/proc/<pid>/syscall`**: EPERM even inside the group, so the blocked
-  syscall's own arguments are not available this way.
+The reader used was a ~90-line program over `garin/runner`'s real `StreamStart`
+/`StreamPoll`, so it exercised the shipped code path, not a model of it.
 
-So: **run espide as gdb's own child** — `gdb -batch -ex run -ex 'thread apply
-all bt' --args ./apps/ide/esp/espide --auto ...` with a `timeout -s INT` long
-enough to land past the ~115 s build (`run` returns when SIGINT stops the
-inferior, then the next `-ex` prints the stack). Note pxx emits executables with
-**no section header**, so symbolisation may need `apps/ide/esp/espide.map`.
+## How it was finally localised, after five instruments failed
 
-## Hypotheses and their standing
+Every **external** instrument failed, each for a reason worth not repeating:
 
-1. Harness timeout too short — REFUTED (unbounded 4h36m run).
-2. `StreamPoll(Proc, 0)` blocks on a silent child — bochan proves it returns at
-   once for a live silent child; narrowed, not the shape that wedges.
-3. `ChildDone` clears `Mode` after the `case` — REFUTED, it is before.
-4. `Ticker` enabled too late — REFUTED, before `StartBuild`.
-5. `StreamPoll` reads an fd `poll` did not report readable — **REFUTED by the
-   fd flags**, after I wrongly refuted it by argument, then wrongly reopened it.
-6. `RunCapture`'s read-to-EOF loop — REFUTED, re-verified: eliah-only
-   (`apps/ide/eliah/main.pas:447,475`). `espproj` has no capture at all and
-   `OnTick` calls nothing else, so there is no other pipe reader on the path.
-7. Carrier-detect stall — REFUTED (`clocal` set; a bare `timeout 3 cat <port>`
-   returns 0 bytes rather than blocking in `open`).
-8. SIGTERM discarding a flushed tail — REFUTED (sampled with `stdbuf -o0`).
-9. `AddLog`'s per-chunk pane rewrite — real, fixed, NOT the cause.
-10. Raw serial bytes tripping `g_utf8_validate` — real, fixed, NOT the cause:
-    with the sanitiser in, Gtk-CRITICALs are zero and the hang is unchanged.
-11. The stop/drain path killing the wrong pid and draining to EOF — REFUTED for
-    this wedge: fd 17 is **still open**, and `StreamReap` closes it before
-    `PalWait4`, so the stop path was never entered. (It remains worth a look as
-    a separate question: `StreamStop` signals `p.Pid`, the `bash -c` wrapper,
-    while `sg dialout` sits between it and `cat`. Here `cat` was a direct child,
-    so the execs did collapse.)
-12. **Pipe-mutex contention** — the only mechanism left that fits every number.
-    NOT established.
+- `objdump -d` — nothing: pxx emits executables with **no section header**.
+- `strace -f` — never reaches the monitor; it follows the whole cmake/ninja tree
+  that Build+Flash spawns. Plain `strace` (no `-f`) does work.
+- `gdb -p <pid>` — refused: `ptrace_scope=1` allows only a direct child.
+- gdb as espide's own **parent** — attaches, symbolises nothing (`?? ()` every
+  frame), and did not reach the monitor inside 260 s.
+- `/proc/<pid>/syscall` and `/stack` — EPERM even inside the group (they need
+  PTRACE_MODE_ATTACH). Note `sg` is setgid, which clears the dumpable flag, so
+  `/proc/<pid>/fd` and `/fdinfo` also need reading **via** `sg dialout -c`.
+- `wchan` — said `anon_pipe_read` for a fd that is provably `O_NONBLOCK`, which
+  sent three hypotheses down the wrong path. It is the *frame*, not the reason.
 
-## The four defects fixed under this ticket
+So the subject was made to report its own position: `PXX_IDE_TRACE=1`
+(`garin/runner`, commit `45f56ed278`) writes one token per `StreamPoll` step to
+stderr, flushed per token, so the **last token before a freeze is the step that
+did not return**. It printed, on the board and later on a bare pty:
 
-Landed here rather than under a new slug because this investigation found them,
-and recorded as fixes rather than cures so the shas do not read as a cure.
-`0cc5b6c12f`, `e3818c0112`.
+    [poll fd=17 t=0][ev=0]   x many   <- nothing ready, break, correct
+    [poll fd=17 t=0][ev=1]            <- poll reports POLLIN: data IS available
+    [read]                            <- entered PalRead, never returned
 
-1. `AddLog` set `Log.Text` (full GtkTextView rewrite, `LOG_CAP` 32 KB) and
+**The instrument that should have been reached for first, and cost nothing:
+`dmesg`.** A task in `D` for 120 s trips the kernel's hung-task detector, and it
+had already written the answer, on two separate days and under two binaries:
+
+    INFO: task espide:1805908 blocked for more than 122 seconds.
+    INFO: task espide:1805908 is blocked on a mutex likely owned by task cat:1821590.
+
+## Wrong turns, kept because the pattern repeated
+
+Four times a mechanism confirmed to **exist** was promoted to the cause without
+re-running the failing case:
+
+1. "--auto never exits" — filed on three rc=124 runs.
+2. "It does exit; the window is counted in ticks." Finding a process alive is not
+   finding it making progress.
+3. "`AddLog`'s per-chunk pane rewrite is the cause." Real defect, real
+   measurements, not the cause — the hang reproduced with it fixed.
+4. "poll and read disagree." Built on `wchan=anon_pipe_read`, refuted by the fd
+   flags.
+
+Two measured dead ends from the final stretch, recorded so they are not retried:
+
+- **Re-asserting `O_NONBLOCK` immediately before the read changed nothing** —
+  as it must not, since the mutex is taken first. Reverted rather than kept.
+- **A full pipe is not the trigger.** `yes` and `dd bs=1M` writers with a reader
+  stalled 3 s per tick drain cleanly (worst tick 5 ms). Nor are `sg dialout` in
+  the chain, a pty source, or prior children on the same record; all four were
+  tested board-free and none wedges. Only a *splicing* child does.
+- One instrument lied again and was caught by a positive control:
+  `PalNanosleep(0, 3000*1000000)` does not sleep — `nsec` must be < 1e9, so it
+  returned EINVAL and eight "3 s" ticks took 6 ms total. Split into sec+nsec, a
+  2-tick 1000 ms run measured `elapsed=2002`, and only then were the results
+  trusted.
+
+## Four real defects fixed along the way, none of them the cause
+
+`0cc5b6c12f`, `e3818c0112`. Kept under this slug because this hunt found them.
+
+1. `AddLog` set `Log.Text` (a full GtkTextView rewrite, `LOG_CAP` 32 KB) plus
    `CountLines` over the same buffer per arriving chunk, against a 64 KB-per-tick
-   drain cap. `LOG_CAP`'s own comment already recorded this wedge on the S3 and
+   drain cap. `LOG_CAP`'s own comment already recorded this wedging the S3 and
    mitigated it by capping — which cut the constant and left the cost O(cap) per
    chunk. Now coalesced behind `FlushLog` on a 250 ms gate.
-2. The stdout `write` was the LAST statement in `AddLog`, behind the GTK work, so
-   a headless run's log froze in lockstep with the pane and a live process looked
-   dead. Now first, with `Flush(Output)`.
-3. `OnTick` measured the window as `AutoTicks * TICK_MS`. Now elapsed
+2. The stdout `write` was the **last** statement in `AddLog`, behind the GTK
+   work, so a headless run's log froze in lockstep with the pane and a live
+   process looked dead. Now first, with `Flush(Output)`.
+3. `OnTick` measured the monitor window as `AutoTicks * TICK_MS`. Now elapsed
    `GetTickCount64`, and the stop line prints `N s (M ticks; K ms elapsed)`.
 4. The pane was fed raw serial bytes; GTK rejected whole chunks with
    `gtk_text_buffer_emit_insert: assertion 'g_utf8_validate' failed`, and a NUL
-   truncated the C string. `SanitizeUtf8ForText` lives in `garin/runner` so
+   truncated the C string. `SanitizeUtf8ForText` moved into `garin/runner` so
    bochan can test it (9 rows).
 
-Also on this path: `O_NONBLOCK` on the child's stdout with `EAGAIN` handled
-separately from EOF (`n <= 0` reaps the child, so "no data yet" must not read as
-"child finished"). The guard is a **direct** read, because `StreamPoll` asks poll
+`O_NONBLOCK` on the child's stdout with `EAGAIN` handled separately from EOF also
+landed here (`n <= 0` reaps the child, so "no data yet" must not read as "child
+finished"). Its bochan guard is a **direct** read, because `StreamPoll` asks poll
 first and so never reaches the read on a quiet child — it cannot witness the
 property. Removing the `EAGAIN` branch as a mutation left all 306 rows passing;
 removing the `fcntl` fails the new row with `got=0`.
@@ -163,6 +165,31 @@ removing the `fcntl` fails the new row with `got=0`.
 - The Detect single-port fix found alongside this landed first and separately
   (`80847982ad`): until it was in, Detect reset boards the user had not chosen.
 - `runner.pas` documents that `StreamPoll` "never blocks longer than timeoutMs".
-  Something on this path violates that. The interface also lacks any bound on how
-  much one call may return; 64 KB per 100 ms tick is more than a GTK-driven
-  caller can absorb.
+  That promise cannot be kept against a splicing child, and the unit now says so
+  where the `fcntl` is set.
+- espide's line 752 was the **only** `cat <port>` in the tree;
+  `tools/esp_serial_capture.py` opens the port with pyserial and is unaffected,
+  so the fleet's long soaks were never exposed to this.
+- Roughly half of all runs never reach the monitor at all because the flash
+  fails; that is separate, and since 2026-09-28 `tools/esp_flash.sh` prints
+  esptool's own reason on a failing write instead of discarding it.
+
+## Closing note: reach for dmesg first
+
+The cause was written in the kernel log, in plain words, on two separate days and
+under two different binaries, before any of this investigation happened:
+
+    INFO: task espide:1805908 is blocked on a mutex likely owned by task cat:1821590.
+
+Any task stuck in `D` for 120 s trips the hung-task detector, and a hang that
+"survives SIGTERM" is exactly that case. `dmesg` costs one command and needs no
+privilege, no ptrace and no rebuild. It was reached for **sixth**, after
+`objdump`, `strace -f`, `gdb -p`, gdb-as-parent and `wchan` — five instruments
+that between them cost days and produced three wrong hypotheses, one of them
+built on `wchan` naming a frame and being read as naming a reason.
+
+**So: when a process is wedged and unkillable, read `dmesg` before building an
+instrument.** The corollary held too — the subject's own trace
+(`PXX_IDE_TRACE=1`) beat every external debugger on this target, because pxx
+executables carry no section header and `ptrace_scope=1` blocks attaching to
+anything that is not your own child.

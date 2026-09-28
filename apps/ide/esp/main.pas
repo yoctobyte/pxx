@@ -746,10 +746,27 @@ begin
   StopChild;
   MonitorPort := port;
   AddLog('--- serial ' + port + ' (115200) ---' + #10);
+  { dd, NOT cat, AND THE REASON IS A DEADLOCK RATHER THAN A PREFERENCE.
+    `cat <port>` wedged this monitor for anything from 45 s to 4h36m
+    (bug-s-espide-auto-never-exits-after-build-flash). /bin/cat on plexus is
+    uutils coreutils 0.8.0, which moves tty -> pipe with
+    splice(tty, NULL, pipe, NULL, 1MB, 0). splice() into a pipe takes
+    pipe->mutex and HOLDS IT while it waits for bytes from the source, so a
+    quiet board parks cat inside splice holding the lock. pipe_read() takes the
+    same mutex BEFORE it looks at O_NONBLOCK -- so our non-blocking fd buys
+    nothing -- and espide slept in state D (uninterruptible: SIGTERM will not
+    end it) with zero CPU until the board next said something. The kernel says
+    it plainly: "INFO: task espide is blocked on a mutex likely owned by task
+    cat". dd uses read/write and never splices (measured: 0 splice calls on both
+    the uutils and GNU flavours), so the lock is only ever held across a memcpy.
+    THE INVARIANT, for whoever edits this line next: the monitor child must not
+    splice into our pipe. There is no defence on the reader's side -- a D-state
+    read cannot be interrupted from userspace -- so it has to be avoided here. }
   if StreamStart(Proc, '/bin/bash', ['-c',
        EspWrapSg('stty -F ' + EspShellQuote(port) +
                  ' 115200 cs8 -cstopb -parenb -echo raw || exit 2; ' +
-                 'exec cat ' + EspShellQuote(port), UseSg), 'sh']) then
+                 'exec dd if=' + EspShellQuote(port) +
+                 ' bs=512 status=none', UseSg), 'sh']) then
   begin
     Mode := mMonitor;
     { the clock --auto's monitor window is measured against, started here rather
