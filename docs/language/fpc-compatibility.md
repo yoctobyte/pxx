@@ -123,5 +123,7 @@ Prefer these changes when moving small FPC examples to PXX:
 
 ## Next
 
+- [Coming from Free Pascal](../getting-started/from-fpc.md): a worked
+  introduction, with every difference shown against FPC 3.2.2's output
 - [PXX dialect](./dialect.md)
 - [Reference](../reference/index.md)
