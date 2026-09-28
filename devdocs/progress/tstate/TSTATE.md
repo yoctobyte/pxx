@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `844ccea7a0f2` | 2026-09-28T20:48:57Z | RED (native) | 435.5s | `ff6694727a23` RED |
+| borg | `844ccea7a0f2` | 2026-09-28T21:11:58Z | RED (full) | 1358.5s | `844ccea7a0f2` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `ff6694727a23` on borg, 2026-09-28T20:40:27Z (8m ago).**
+**Newest full tier in the fleet: `844ccea7a0f2` on borg, 2026-09-28T21:11:58Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `ff6694727a23` | RED | 8m | — (newest) |
+| borg | `844ccea7a0f2` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -28,4 +28,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
 Two hosts with different fingerprints did not measure the same thing, and a job that disagrees between them may be disagreeing about the EMULATOR rather than about the tree. Check this before filing a cross-target red against the compiler: `bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain` is the incident that cost an afternoon for want of this row.
 
 ## Open regressions
-- none
+- **test-nilpy#src:test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy** — test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy test/test_nilpy_getattr_with_a_literal_name_names_a_method.expected (borg): bad `844ccea7a0f2`, last good `ff6694727a23`, 2 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_import_does_not_publish_names.npy** — test/test_nilpy_import_does_not_publish_names.npy test/test_nilpy_import_does_not_publish_names.expected (borg): bad `844ccea7a0f2`, last good `ff6694727a23`, 2 commit(s) in range
+- **tools-devtest#00** (borg): bad `844ccea7a0f2`, last good `ff6694727a23`, 2 commit(s) in range
