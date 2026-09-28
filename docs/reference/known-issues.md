@@ -924,6 +924,22 @@ answer silently. (Measured with v425.)
   with the `dynarr` unit of `test/nilpy_dynarr/`.
 
 
+## Stops at run time
+
+- **wasm32: `WriteLn(Output, ...)` and `WriteLn(StdErr, ...)` stop with
+  Runtime error 9 when the program declares a `Text` variable.** With a `var
+  f: Text` anywhere in the program, a write to `Output` or `StdErr` exits 9
+  with `Runtime error 9 (I/O error)` and prints nothing, whether the value is
+  a string or a number. Writing to a file through that variable
+  (`Assign`, `Rewrite`, `WriteLn(f, ...)`, `Close`) works and reads back, and
+  so does a plain `WriteLn(...)`. Without a `Text` variable, `WriteLn(StdErr,
+  ...)` works. Measured on 2026-09-29 under wasmtime 48.0.1 with v441
+  (`4ebfa2d047a2`), v450 (`c19cc2d531e4`) and the compiler built at
+  `6dcfbbb0e0` (`9ce84ba69527`), which all behave the same. On x86-64 the
+  same programs exit 0 with that last compiler. **Workaround:** on wasm32, write to standard output with a
+  plain `WriteLn(...)`, not `WriteLn(Output, ...)`.
+
+
 ## Optimisation levels
 
 `-O2` is the default and the level the compiler proves on itself. `-O3` is
