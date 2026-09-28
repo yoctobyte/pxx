@@ -78,9 +78,12 @@ type
 - **`function LowerCase(const s: AnsiString): AnsiString;`**
   Converts an ASCII string to lowercase.
 - **`function UpCase(c: Char): Char;`**
-  Converts a single ASCII character to uppercase.
+  Converts a single ASCII character to uppercase. Since pin v449 `UpCase`
+  also takes a string and returns it uppercased, as in FPC.
 - **`function Pos(const substr, s: AnsiString): Integer;`**
   Returns the 1-based index of the first occurrence of `substr` in `s`, or `0` if not found.
+  Since pin v449 a third argument, `offset`, starts the search there, as in
+  FPC; an offset below 1 or past the end gives `0`.
 - **`function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;`**
   Replaces occurrences of `OldPattern` in `S` with `NewPattern`. `Flags` is a set containing:
   - `rfReplaceAll`: Replace all occurrences (default is first occurrence only).

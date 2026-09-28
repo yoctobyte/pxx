@@ -20,7 +20,7 @@ Of the 150:
 | present, different: compiles, but prints or exits differently | 5 | 4 |
 
 The "after v448" column counts five rows as closed by commit `6b34caaf23`,
-which is in no pin yet: `Copy(s, index)`, `Pos(sub, s, offset)`,
+which v449 carries: `Copy(s, index)`, `Pos(sub, s, offset)`,
 `UpCase(string)`, `Space` and `Power`. Those five were re-measured on
 2026-09-28 with the probe below: with pin v448 (compiler sha256
 `b2b325036c3b`) each still failed as its row says, and with the compiler built
@@ -69,8 +69,8 @@ it was split into smaller probes, one call each, to find the form that fails.
 
 | Rank | Name | Unit | Files | What is missing |
 |---|---|---|---|---|
-| 14 | `Copy` | System | 390 | `Copy(s, index)` (two arguments) is refused: "no overload of Copy matches". The three-argument form works. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Copy(s, 3)` of `'abcdef'` prints `cdef`, as in FPC. |
-| 18 | `Pos` | System | 352 | `Pos(sub, s, offset)` (three arguments) is refused. The two-argument form works. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Pos('b', 'abcabc', 3)` is `5`, and an offset of 0 or past the end gives `0`, as in FPC. |
+| 14 | `Copy` | System | 390 | `Copy(s, index)` (two arguments) is refused: "no overload of Copy matches". The three-argument form works. **Fixed after v448** (`6b34caaf23`, in v449). `Copy(s, 3)` of `'abcdef'` prints `cdef`, as in FPC. |
+| 18 | `Pos` | System | 352 | `Pos(sub, s, offset)` (three arguments) is refused. The two-argument form works. **Fixed after v448** (`6b34caaf23`, in v449). `Pos('b', 'abcabc', 3)` is `5`, and an offset of 0 or past the end gives `0`, as in FPC. |
 | 39 | `Rect` | Classes | 197 | `TRect` is an unknown type, so `Rect` cannot be used. |
 | 42 | `Ptr` | System | 184 | Undefined. FPC keeps it for 16-bit code: `Ptr(seg, ofs)`. |
 | 50 | `Point` | Classes | 150 | `TPoint` is an unknown type. |
@@ -79,11 +79,11 @@ it was split into smaller probes, one call each, to find the form that fails.
 | 67 | `TGuid` | System | 97 | The `TGuid` record works; `GUIDToString` is undefined. |
 | 68 | `TList` | Classes | 97 | `Add`, `Count` and `Items` work; `Pack` is not a member. |
 | 73 | `TypeInfo` | System | 89 | `TypeInfo(Integer)` works; `PTypeInfo(...)^.Name` is not a member. |
-| 81 | `UpCase` | System | 80 | `UpCase(char)` works; `UpCase(string)` is refused. **Fixed after v448** (`6b34caaf23`, in no pin yet). |
+| 81 | `UpCase` | System | 80 | `UpCase(char)` works; `UpCase(string)` is refused. **Fixed after v448** (`6b34caaf23`, in v449). |
 | 85 | `Align` | System | 73 | Undefined. |
 | 86 | `Random` | System | 72 | `Random(n)` works; `Random` with no argument (a Double in [0,1)) is undefined. |
 | 91 | `TCollection` | Classes | 69 | Unknown type. |
-| 93 | `Space` | System | 67 | Undefined. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Length(Space(258))` is `2`, as in FPC, whose parameter is a `Byte`. |
+| 93 | `Space` | System | 67 | Undefined. **Fixed after v448** (`6b34caaf23`, in v449). `Length(Space(258))` is `2`, as in FPC, whose parameter is a `Byte`. |
 | 102 | `TCollectionItem` | Classes | 55 | Unknown type (with `TCollection`). |
 | 116 | `NewStr` | SysUtils | 42 | `PString` is an unknown type, so `NewStr` cannot be used. |
 | 134 | `DisposeStr` | SysUtils | 28 | `PString` is an unknown type. |
@@ -103,7 +103,7 @@ They are covered in [Coming from Free Pascal](../getting-started/from-fpc.md).
 | 112 | `TInterfacedObject` | System | 47 | Works as a class and through a declared interface or `IUnknown`. Assigning it to `IInterface` is refused: "class does not implement the interface". Without `SysUtils` it is undefined; FPC has it in `System`. |
 | 120 | `UTF8Decode` | System | 35 | `UTF8Decode('h'#$C3#$A9)` has length 3, not 2: the bytes are not decoded. ASCII input is the same. This is by design: `UnicodeString` is the byte string in the default build. With `{$define PXX_WIDE_PAYLOAD}` the length is 2, as in FPC (measured with pin v447). |
 | 136 | `RunError` | System | 27 | Exit code 204 as in FPC, but "Runtime error 204" goes to standard output; FPC writes it to standard error. |
-| 139 | `Power` | Math | 26 | `Power(2, 10)` gives an integer: with v448, `Power(2, 10):0:1` prints `1024` where FPC prints `1024.0`, and `Power(2, -1)` prints `1` where FPC prints `0.50`. `Power(2.0, 10.0)` prints `1024.0` in both. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Power` is float-only, as in FPC. |
+| 139 | `Power` | Math | 26 | `Power(2, 10)` gives an integer: with v448, `Power(2, 10):0:1` prints `1024` where FPC prints `1024.0`, and `Power(2, -1)` prints `1` where FPC prints `0.50`. `Power(2.0, 10.0)` prints `1024.0` in both. **Fixed after v448** (`6b34caaf23`, in v449). `Power` is float-only, as in FPC. |
 
 ## A compiler gap found along the way
 
@@ -125,7 +125,7 @@ end.
 Assigning `s[2] := 'y'` directly works, and so does calling `UniqueString(s)`
 first. `Move(src[1], dst[2], 3)` into such a string crashes the same way.
 
-**Fixed after v448** (`cbbb1e6418`, in no pin yet). Measured on 2026-09-28 on
+**Fixed after v448** (`cbbb1e6418`, in v449). Measured on 2026-09-28 on
 x86-64: with pin v448 both programs still stop with a segmentation fault
 (exit 139); with the compiler built at `a2614fcb8b` they print `ayc` and
 `axyze`, as FPC does.

@@ -151,8 +151,7 @@ after it (built at `a2614fcb8b`, `5dea028059af`) later that day:
   on a list built by a comprehension, which v446 still holds until the
   function returns; that is fixed after v446 (`cdd6fd3c1f`, the table's fourth
   row). `del` on a local frees nothing until the function returns in v446 to
-  v448 (the third row); that is fixed after v448 (`c4f5dcf929`, in no pin
-  yet). On v448 and earlier, use `= None`, or return from the function to get
+  v448 (the third row); that is fixed after v448 (`c4f5dcf929`, in v449). On v448 and earlier, use `= None`, or return from the function to get
   that memory back.
 - **Module-level temporaries.** A string built by a module-level statement,
   such as `print("n=" + str(n))` outside any function, is kept until that

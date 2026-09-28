@@ -39,7 +39,7 @@ Memory leaks were treated as release blockers for this beta. Before the release
 every leak test in the tree was re-run. The Nil Python checks each ran beside a
 deliberate leak, to prove they could catch one; the Pascal and C checks had no
 such control at the time. The Pascal checks got one after v448 (`cfcfc49263`,
-in no pin yet): the same census, run with a string and an array kept on
+in v449): the same census, run with a string and an array kept on
 purpose on each of 400 trips, must trip the bound. Measured on 2026-09-28 with
 the compiler built at `a2614fcb8b`: 4 blocks live, and 1,080 with the
 deliberate leak, on x86-64; 5 and 1,186 on i386 and arm32 (QEMU user mode).
@@ -103,7 +103,7 @@ Found on 2026-09-28, and **open in v441 to v448**:
   was lost. That held for `on E: ... do`, a bare `except`, a `raise` caught
   one level further out, and a `try`/`finally` inside the `try`. An exception
   class that owns a `TStringList` lost the list on every raise. FPC 3.2.2 runs
-  `Destroy` once in each case. Fixed after v448 (`846a574b00`), in no pin yet.
+  `Destroy` once in each case. Fixed after v448 (`846a574b00`), in v449.
   Measured on 2026-09-28 with
   `test/test_a_handled_exception_runs_its_destructor_once.pas`: every shape
   counted 0 `Destroy` calls with v441 (`4ebfa2d047a2`) and v448
@@ -145,7 +145,7 @@ it end, to get the memory back.
 
 `del name` on a local variable does not release what the name refers to; the
 object stays allocated until the function returns. This is so from v446 to
-v448, and fixed after v448 (`c4f5dcf929`, in no pin yet). On v446 to v448,
+v448, and fixed after v448 (`c4f5dcf929`, in v449). On v446 to v448,
 assign `name = None` instead, which does release it. On v445 and earlier
 `name = None` does not release it either (see the paragraph above): return
 from the function. (Measured on 2026-09-28, the same list of 30 strings:
@@ -498,7 +498,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   CPython reads them as group 0: `re.search("b+", "abbbc")` gives `1 4`.
   pxx stopped with `start() requires 1 argument(s), none given`. Measured on
   2026-09-28 with pin v448 on x86-64. Wrong in v441 to v448; fixed after
-  v448 (`19f4728e10`), in no pin yet. **On v448:** write `m.start(0)` and
+  v448 (`19f4728e10`), in v449. **On v448:** write `m.start(0)` and
   `m.end(0)`.
 
 - **Nil Python: a Pascal `array of T` result bound to a name read the wrong
@@ -506,7 +506,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   `0, 10, 20, 30` as an `array of Integer`, `a = d.MakeArr(4)` then
   `print(a[3])` printed `0`, `for x in d.MakeArr(3):` stopped with
   `TypeError: expected a str, a list or a dict, got int`, and `len()` of it
-  did not compile. After v448 (`9bd7f662e5`, in no pin yet) binding it to a
+  did not compile. After v448 (`9bd7f662e5`, in v449) binding it to a
   name, `len()` and `for` are refused at compile time, and the message says to
   index the call directly. `d.MakeArr(4)[3]` prints `30` with every compiler
   measured. One shape that worked is now refused too: `a = d.MakeArr(4)` then
@@ -534,7 +534,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   outside the encodable range -128..127`, in the `builtin/pyeval.pas` that the
   compiler appends. Hosted xtensa (`--platform=posix`, run under qemu-xtensa)
   refused every Nil Python program on both ABIs, with `a heap arena needs
-  mmap`. Both are fixed after v448 (`8529eb30e8`, in no pin yet). Measured on
+  mmap`. Both are fixed after v448 (`8529eb30e8`, in v449). Measured on
   2026-09-28 with v448 (`b2b325036c3b`) and the compiler built at
   `a5841bfb84` (`48b0ba0bb383`):
 
@@ -558,63 +558,72 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
 
 - **Nil Python: a float captured by a lambda or a nested def arrived as the
   wrong number.** `def bare(x): g = lambda: x; return g()` gave `0.0` for
-  `bare(1.0)` on i386 and arm32; x86-64 and aarch64 were right. Fixed after
-  v448 (`dbd60352fd`, in no pin yet). Measured on 2026-09-28 with
+  `bare(1.0)` on i386 and arm32; x86-64 and aarch64 were right. Fixed in v449
+  (`dbd60352fd`). Measured on 2026-09-28 with
   `test/test_nilpy_a_captured_float_travels_by_its_bits.npy`, 13 rows compared
   with CPython: with v448 (`b2b325036c3b`), 5 rows wrong on i386 (for example
-  `param 0.0` for `1.0` and `method 3.0` for `1.5`), the same on arm32 before it
-  stopped (see the next row), and all 13 right on x86-64 and aarch64. With
-  the compiler built at `4cb8b66216` (`0ded1e5d04c8`), all 13 match on x86-64, i386, arm32, aarch64, and hosted Xtensa with
-  both ABIs, under QEMU user mode. The ESP value, `4.6071824188000174e+18` for
-  `1.0`, is as reported in `devdocs/progress/LOGBOOK.md`; on ESP silicon the
-  fix is measured hosted only. **On v448:** call the nested def directly
-  instead of taking it as a value; the fixture's `def direct` row is right
-  with v448 on every target above.
+  `param 0.0` for `1.0` and `method 3.0` for `1.5`), the same on arm32 before
+  it stopped (see the next row), and all 13 right on x86-64 and aarch64. With
+  v449 (`0ded1e5d04c8`), all 13 match on x86-64, i386, arm32, aarch64, and
+  hosted Xtensa with both ABIs, under QEMU user mode. The ESP value,
+  `4.6071824188000174e+18` for `1.0`, is as reported in
+  `devdocs/progress/LOGBOOK.md`; on ESP silicon the fix was reported by
+  frankb-12 on 2026-09-28 and not yet in the LOGBOOK: v449 (`0ded1e5d04c8`,
+  tree `5ea9d5ef07`) on a real ESP32-C3 and ESP32-S3, one image and one boot
+  per chip, where the fixture's rows and `bare(1.0)` match CPython. **On
+  v448:** call the nested def directly instead of taking it as a value; the
+  fixture's `def direct` row is right with v448 on every target above.
 
-- **Nil Python on arm32: a float default could stop the program with
-  SIGBUS.** A default slot was not 8-byte aligned, and storing a float
-  default into it faulted on arm32 once the layout shifted. Fixed after v448
-  (`4a9cf4c07c`, in no pin yet). Measured on 2026-09-28 with the same test
-  file under QEMU user mode on arm32: with v448 it stops with `Bus error`
-  (exit 135) at the `def default` row; with the compiler built at `4cb8b66216` (`0ded1e5d04c8`) all 13 rows print.
+- **Nil Python on arm32: a float default could stop the program with SIGBUS.**
+  A default slot was not 8-byte aligned, and storing a float default into it
+  faulted on arm32 once the layout shifted. Fixed in v449 (`4a9cf4c07c`).
+  Measured on 2026-09-28 with the same test file under QEMU user mode on
+  arm32: with v448 it stops with `Bus error` (exit 135) at the `def default`
+  row; with v449 (`0ded1e5d04c8`) all 13 rows print.
 
 - **Nil Python on the ESP32-S3: `cls(x)` inside a def or method lost its
-  arguments.** With `cls = P`, `return cls(self.a)` gave an object whose
-  `.a` was `0` or `None`, and `cls()` with no arguments then segfaulted. The
+  arguments.** With `cls = P`, `return cls(self.a)` gave an object whose `.a`
+  was `0` or `None`, and `cls()` with no arguments then segfaulted. The
   ESP32-C3 and x86-64 were right. Module-level code was not affected. On the
   S3, v448 printed `0` (as reported in `devdocs/progress/LOGBOOK.md`). Fixed
-  after v448 (`76d35e065f`, in no pin yet). Measured on 2026-09-28 hosted only:
-  v448 cannot run Nil Python on hosted Xtensa (see the call0 row above), and
-  with the compiler built at `4cb8b66216` (`0ded1e5d04c8`) a probe of `Q().mk().a` and a def-level `cls(3)` prints `7` and `3`
-  on hosted Xtensa with both ABIs, as on x86-64. **On v448:** call the class
-  by its name, `P(self.a)`, which is a direct call like the module-level form
-  that was right; this was not measured on the S3.
+  in v449 (`76d35e065f`). On silicon it was reported by frankb-12 on
+  2026-09-28 and not yet in the LOGBOOK: v449 (`0ded1e5d04c8`, tree
+  `5ea9d5ef07`) on a real ESP32-C3 and ESP32-S3, one image and one boot per
+  chip, where the class-value row and `cls()` match CPython. Measured by
+  frankD on 2026-09-28 hosted only: v448 cannot run Nil Python on hosted
+  Xtensa (see the call0 row above), and with v449 (`0ded1e5d04c8`) a probe of
+  `Q().mk().a` and a def-level `cls(3)` prints `7` and `3` on hosted Xtensa
+  with both ABIs, as on x86-64. **On v448:** call the class by its name,
+  `P(self.a)`, which is a direct call like the module-level form that was
+  right; this was not measured on the S3.
 
 - **Pascal: a string element passed to a `var` parameter wrote into shared
   memory.** `s := 'abc'; SetC(s[2])`, with `procedure SetC(var c: char)`,
   crashed with a segmentation fault, because the callee wrote into the
   literal's read-only bytes. With `u := t` sharing one buffer, it changed
   both. `Move` and `FillChar` into a string element did the same. FPC 3.2.2
-  prints `ayc` and leaves the other copy alone. Fixed after v448
-  (`cbbb1e6418`, in no pin yet). Measured on 2026-09-28 with
+  prints `ayc` and leaves the other copy alone. Fixed in v449 (`cbbb1e6418`).
+  Measured on 2026-09-28 with
   `test/test_string_element_passed_by_ref_is_made_unique.pas`, 15 rows: with
   v448 it stops with a segmentation fault on x86-64, i386, arm32 and aarch64,
   and on riscv32 it runs and prints wrong values silently (`rc2 yefg yefg`,
-  the alias changed too, where FPC prints `rc2 defg yefg`). With the compiler built at `4cb8b66216` (`0ded1e5d04c8`) all 15
-  rows match FPC on those five targets. **On v448:** call `UniqueString(s)`
-  before passing `s[i]` to a `var` parameter, `Move` or `FillChar`.
+  the alias changed too, where FPC prints `rc2 defg yefg`). With v449
+  (`0ded1e5d04c8`) all 15 rows match FPC on those five targets. **On v448:**
+  call `UniqueString(s)` before passing `s[i]` to a `var` parameter, `Move` or
+  `FillChar`.
 
-- **Pascal: a 33rd parameter crashed the compiler.** A routine, a method
-  (32 parameters plus `Self`) or a procedural type with more than 32
-  parameters stopped the compiler with a segmentation fault and no message.
-  It is now refused with `too many parameters (33, max 32, counting Self for
-  a method)`; the limit itself is unchanged. Fixed after v448 (`f619f705dd`,
-  in no pin yet). Measured on 2026-09-28: `test_param_cap_routine_fail.pas`,
+- **Pascal: a 33rd parameter crashed the compiler.** A routine, a method (32
+  parameters plus `Self`) or a procedural type with more than 32 parameters
+  stopped the compiler with a segmentation fault and no message. It is now
+  refused with `too many parameters (33, max 32, counting Self for a method)`;
+  the limit itself is unchanged. Fixed in v449 (`f619f705dd`). Measured on
+  2026-09-28: `test_param_cap_routine_fail.pas`,
   `test_param_cap_method_fail.pas` and `test_param_cap_proctype_fail.pas`
-  crash v448 (exit 139) and are refused with that message by the compiler built at `4cb8b66216` (`0ded1e5d04c8`). 32
-  parameters, and 31 plus `Self`, compile and print what FPC 3.2.2 prints
-  with both, on x86-64 and i386 (`test_param_cap_at_the_limit.pas`). **On
-  v448:** keep to 32 parameters, counting `Self`; pass a record for more.
+  crash v448 (exit 139) and are refused with that message by v449
+  (`0ded1e5d04c8`). 32 parameters, and 31 plus `Self`, compile and print what
+  FPC 3.2.2 prints with both, on x86-64 and i386
+  (`test_param_cap_at_the_limit.pas`). **On v448:** keep to 32 parameters,
+  counting `Self`; pass a record for more.
 
 - **TLS: a CA file that does not load was accepted.**
   `OpenSslTlsRegisterEx(True, '/nonexistent/ca.pem')` answered `True`, and

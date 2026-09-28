@@ -37,6 +37,13 @@ before treating a successful compile as a production-ready result.
   compile-switch states are still accepted only as inert markers. See
   [directives](./directives.md).
 - The FPC package ecosystem is not bundled.
+- A routine, a procedural type or a method takes at most 32 parameters, and
+  a method's `Self` counts as one. A 33rd is refused with `too many
+  parameters (33, max 32, counting Self for a method)`. FPC has no such
+  limit; pass a record instead. Pin v448 and earlier crashed the compiler
+  with no message here. Measured 2026-09-28 with v449 (sha256
+  `0ded1e5d04c8`): 32 parameters compile and run as in FPC 3.2.2, 33 are
+  refused.
 
 ## Targets
 

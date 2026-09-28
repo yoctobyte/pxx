@@ -70,7 +70,9 @@ A calling convention in PXX is mostly a property of the **target**, not of a
 routine. PXX's own routines use an internal convention, and calls into C use
 the target's C ABI. There is one per-routine choice, `cdecl`, and only two
 places where it changes anything: on a procedural type (see below), and on a
-routine with a body on x86-64.
+routine with a body whose address goes into a `cdecl` procedural type. On
+x86-64 it gives that routine a System V prologue, and since pin v449 the
+routine and the type must agree on x86-64, i386, aarch64 and arm32.
 
 On an `external`, a convention directive is **decoration**. These compile to
 the same code:
@@ -89,7 +91,7 @@ one combination means anything:
 
 | directive | on an `external` | on a routine with a body | on a procedural type | on a method declaration |
 | --- | --- | --- | --- | --- |
-| `cdecl` | accepted | **meaningful on x86-64**: the routine gets a System V prologue, so C, or a `cdecl` procedural type, can call it. Accepted elsewhere | **meaningful — see below** | accepted |
+| `cdecl` | accepted | **meaningful on x86-64**: the routine gets a System V prologue, so C, or a `cdecl` procedural type, can call it. Accepted elsewhere. Since v449 it must match the procedural type the routine is stored in, on x86-64, i386, aarch64 and arm32 | **meaningful — see below** | accepted |
 | `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | accepted | accepted | accepted | accepted |
 
 Note that `register` on a procedural type is *not* the exception `cdecl` is:
@@ -97,8 +99,9 @@ Note that `register` on a procedural type is *not* the exception `cdecl` is:
 would be marking it the wrong way.
 
 FPC also *type-checks* the pairing: it refuses to assign a `register` routine
-to a `stdcall` procedural variable. PXX does not, and for `cdecl` that is a
-trap. Here `Twice` lacks the `cdecl` its procedural type has:
+to a `stdcall` procedural variable. Since pin v449 PXX checks the `cdecl`
+pairing. Here `Twice` lacks the `cdecl` its procedural type
+has:
 
 ```pascal
 program cd2;
@@ -108,14 +111,31 @@ var f: TF;
 begin f := @Twice; WriteLn(f(21.0):0:1); end.
 ```
 
-FPC refuses the assignment ("Incompatible types"). PXX compiles it, and the
-call gives a wrong answer: `0.0` on x86-64 and `Nan` on i386, where FPC's
-fixed version prints `42.0`. With `cdecl` on `Twice` too, PXX prints `42.0`
-on both. Measured 2026-09-28 with pin v447 (sha256 `fad87004e4e8…`).
-**Write `cdecl` on the routine whenever you take its address for a `cdecl`
-type.** For the other conventions, code FPC accepts compiles here, and code
-PXX accepts may need the conventions matched up before FPC will take it
-back.
+FPC refuses the assignment ("Incompatible types"), and so does PXX v449 on
+x86-64, i386, aarch64 and arm32:
+
+```text
+pascal26:5: error: incompatible types: @Twice uses the Pascal convention but the procedural type uses cdecl -- declare both the same way
+```
+
+The commit that added the check (`7d105ec21c`) says it runs wherever a
+routine's address meets a procedural type (an assignment to a variable, a
+field or an element, and an argument), in both directions, and that
+`external` routines are exempt, because their convention is the library's;
+this page measured only the assignment above. On riscv32 `cdecl` on a bodied routine selects
+nothing, so there is nothing to mismatch and the program compiles. On xtensa
+and wasm32 this example is refused for a different reason: a Pascal routine
+with a by-value float parameter cannot be called through a `cdecl` pointer
+there yet.
+
+Before v449 PXX compiled the program, and on some targets the call gave a
+wrong answer. With v448 (sha256 `b2b325036c3b`) it printed `0.0` on x86-64
+and i386, and `42.0` on aarch64, arm32 and riscv32. With `cdecl` on `Twice`
+too, v448 and v449 print `42.0` on all five. Measured 2026-09-28 under QEMU
+user mode, v449 sha256 `0ded1e5d04c8`. **Write `cdecl` on the routine
+whenever you take its address for a `cdecl` type.** For the other
+conventions, code FPC accepts compiles here, and code PXX accepts may need
+the conventions matched up before FPC will take it back.
 
 ### The exception: `cdecl` on a procedural type
 
@@ -137,8 +157,9 @@ the register the C function reads — while `TCdecl` yields the correct `42.0`.
 
 The rule of thumb: **if you are writing a type for a pointer to a C function,
 write `cdecl` on it, and on every Pascal routine you store in it.** On an
-`external` routine, and on a bodied routine on any target but x86-64, the
-marker is documentation.
+`external` routine the marker is documentation. On a bodied routine, leaving
+it off while storing the routine in a `cdecl` type is refused on x86-64,
+i386, aarch64 and arm32 since v449.
 
 ## Routine directives
 
@@ -172,7 +193,7 @@ nothing.
 
 | directive | why it is inert |
 | --- | --- |
-| `cdecl`, `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | the calling convention is the target's — see above. `cdecl` on a *procedural type*, and on a bodied routine on x86-64, are the exceptions |
+| `cdecl`, `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | the calling convention is the target's — see above. `cdecl` on a *procedural type*, and on a bodied routine stored in one, are the exceptions |
 | `inline` | the optimizer decides. At `-O2` it inlines any routine that qualifies (a function, scalar result, at most six scalar by-value parameters, not external or a generator) whether or not you wrote `inline`, and never inlines one that does not qualify because you did |
 | `stackful` | the default async strategy; accepted so it can be stated explicitly |
 | `static`, `reintroduce` | on a plain routine (`static` *is* meaningful on a class method) |
@@ -272,7 +293,11 @@ pascal26:7: warning: directive 'inline' ignored here: the inliner takes at most 
 
 There is no `cdecl` line: on x86-64, `cdecl` on `P` selects the System V
 prologue, so it is not ignored. Built with `--target=i386`, the same program
-also warns that `cdecl` is ignored (pin v447).
+also warns that `cdecl` is ignored (pin v447). v449 prints that warning on
+i386, aarch64 and arm32 too, including for a routine stored in a `cdecl`
+procedural type. There the warning is wrong: without the `cdecl`, the
+program in [Calling conventions](#calling-conventions) is refused by v449,
+and on i386 v448 printed `0.0` instead of `42.0`. Keep the `cdecl`.
 
 It covers `cdecl` off x86-64, `register`, `iram` off the ESP targets, `stackful`,
 `reintroduce`, and `inline` when the routine cannot be inlined. **Default

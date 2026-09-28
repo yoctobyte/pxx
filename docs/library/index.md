@@ -35,6 +35,16 @@ including `Move`, `FillChar`, `CompareByte`, `UpCase`, `Pos`, `Copy`, `Insert`,
 `HexStr`, `Lo`, `Hi`, `Swap`, `RunError`, and `UniqueString`. A declaration of
 the same name in your program shadows the built-in version.
 
+Since pin v449 these also take FPC's other forms: `Copy(s, index)` (to the
+end of the string, also with `SysUtils` in scope), `Pos(sub, s, offset)`,
+`UpCase` of a string, and `Space(n)`. Measured 2026-09-28 with v449 (sha256
+`0ded1e5d04c8`), with and without `uses SysUtils`: `Copy('abcdef', 3)` is
+`cdef`, `Pos('b', 'abcabc', 3)` is `5` (an offset below 1 or past the end
+gives `0`), `UpCase('mixed Case')` is `MIXED CASE`, and `Length(Space(258))`
+is `2`, because FPC's parameter is a `Byte`. FPC 3.2.2 prints the same. With
+v448 and `uses SysUtils`, `Copy(s, index)` and `Pos(sub, s, offset)` are
+refused.
+
 ## Data and formats
 
 | Unit | Area |
