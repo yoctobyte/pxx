@@ -36,3 +36,6 @@ pascal26:64: error: incompatible types: @WorkerEntry uses cdecl but the procedur
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-28 — the borg watcher saw `test-threads#src:test/thread_glibc_malloc_two_threads.pas@1` GREEN at 5c047cebce14 (tier native) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
