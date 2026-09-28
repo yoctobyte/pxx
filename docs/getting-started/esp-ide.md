@@ -199,16 +199,35 @@ prints the log to standard output and is meant to end with
 the build or the flash failed, and 2 when the IDE refused, for any of the
 reasons above.
 
-**Currently, after a successful flash `--auto` does not end.** It opens the
-monitor, prints `--- serial <port> (115200) ---`, and then waits forever: the
-monitor time is ignored and `ESPIDE-AUTO-COMPLETE` is never printed. A refusal
-(`rc=2`) and a failed build (`rc=1`) do end. Until this is fixed, run `--auto`
-under `timeout` and judge the flash by the `Build+Flash: done` line in its
-output. The fix is in progress.
+**Before 2026-09-28, after a successful flash `--auto` did not end on time.**
+It opened the monitor, printed `--- serial <port> (115200) ---`, and then
+could wait from 45 seconds to over four hours on an 8-second monitor, for as
+long as the board stayed quiet. The monitor's child process was `cat`, and
+the `cat` on the machine where this was found splices from the port into the
+IDE's pipe, which holds the pipe's lock while it waits for the board. The
+IDE's read then blocks where no signal or timeout can end it. The monitor now
+reads the port with `dd`, which does not splice. Fixed in `88c4f9a789`, after
+pin v448. `./espide.sh` rebuilds the IDE from the checkout's source when it
+starts, so every checkout at or after that commit has the fix.
+
+What was measured, as recorded with that commit by the developer who fixed it
+(`devdocs/progress/LOGBOOK.md`): one clean run on a board, where `--auto`
+ended by itself with `monitor stopped after 8 s` and `rc=0`, and a board-free
+test on a pseudo-terminal that sends one burst of output and then stays quiet.
+There, with `cat` as the child the reader made no progress in 12 seconds and
+could not be killed, and with `dd` it made 60 steps. That is one board run
+only. The same record says roughly half of all the runs failed at the flash
+and never reached the monitor. That is a separate problem;
+`tools/esp_flash.sh` now prints esptool's own reason for a failed write. On an
+older checkout, run `--auto` under `timeout` and judge the flash by the
+`Build+Flash: done` line in its output.
 
 The decisions behind the refusals live in `apps/ide/garin/espproj.pas`, and
 `apps/ide/test.sh` tests them without opening a window, including which port
-Detect may ask. With pin v445 it reports `304 passed, 0 failed`.
+Detect may ask. With pin v448 (sha256 `b2b325036c3b`), at `c0477f7c36` on
+2026-09-28, it reports `316 passed, 0 failed`, and
+`xvfb-run -a ./espide.sh --gui-smoke` built the IDE and printed
+`GUI SMOKE OK`.
 
 ## Next
 
