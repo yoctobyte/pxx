@@ -485,10 +485,14 @@ fields — it adds no storage to the type it extends. Inside a helper method,
 a record or scalar helper it is the value by reference, so a record helper's
 method can mutate its receiver.
 
-**Not yet: a `record helper` for a record type.** It is declared without
-complaint, but its methods are not found on a variable of the record: `p.Sum`
-is refused with `"Sum": no such member on this record/class` (measured with pin
-v445, in objfpc and in delphi mode; FPC accepts it). A helper for a string or
+**A `record helper` for a record type works after v446** (`cc9ea7228a`): its
+methods are found on the record, fields can be used bare inside the helper, a
+procedure can change `Self`, and it works on an array element and inside
+`with`, in objfpc and in delphi mode, as FPC does. Measured on 2026-09-28 with
+the compiler built at `cc9ea7228a` (sha256 `bcf2481a33ec…`), and against FPC.
+**With v446 and earlier it does not work:** v446 refuses the helper's body
+(`undefined variable (X)` for a bare field), and v445 refused the call
+(`"Sum": no such member on this record/class`). A helper for a string or
 a dynamic array works, and so does a class helper. A helper for a scalar such
 as `Integer` works in `{$mode delphi}`, or in objfpc with
 `{$modeswitch typehelpers}`, the same switch FPC asks for.
