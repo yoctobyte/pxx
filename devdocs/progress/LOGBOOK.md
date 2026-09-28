@@ -5703,59 +5703,44 @@ should not halt", so frankuser has put it to him. It does not block the math
 decision: on ESP a math error no longer raises at all, so a bad sensor value
 never reaches the halt path. The tension is about exceptions generally.
 
-## 2026-09-28 — CORRECTION to my own entry above: the gate's two-fixedpoints red is NOT explained, and I said it was
+## 2026-09-28 — the gate's two-fixedpoints red, settled with evidence: a stale BINARY, and the hint that should catch it is blind to the common case
 
-Earlier today I recorded that the self-host gate's loud red — "two distinct
-fixedpoints ... local seed contamination, or a self-perpetuating miscompile" —
-means your checkout is behind on compiler/, with the remedy "rebase first, then
-recompute". **That was one sample promoted to a cause, and the second sample
-refutes it.** The entry is rewritten here rather than left standing, because a
-confidently wrong note about an alarming signal is worse than no note: it tells
-the next seat to stop looking.
+Third and final pass on this, replacing two earlier entries of mine today: one
+that named a cause from a single sample, and one that retracted it and floated a
+race. Both are superseded by evidence rather than by more reasoning. Keeping the
+history of my own two wrong passes out of the file would make the conclusion look
+cheaper than it was.
 
-WHAT IS ACTUALLY MEASURED, both occurrences, same day:
+### The race hypothesis is refuted, not merely weak
 
-- **Occurrence 1.** Checkout 8 commits behind origin, three of them touching
-  compiler/ (`13f122a0ef`, `a49f6f12c6`, `b1b51f5a0d`). RED at byte 153. Rebase,
-  then `make compiler/pascal26` (which rebuilt: the binary changed), then
-  re-gate: GREEN. Consistent with "stale sources", which is why I believed it.
+I had proposed that a concurrent compile races the gate's fixedpoint staging,
+since only `tools/gate.sh` takes `/home/neo/.cache/pxx-gate.lock`. Read
+`tools/selfhost_fixedpoint.sh`. It has exactly ONE path outside the checkout:
 
-- **Occurrence 2.** RED at byte 98. Checkout 3 commits behind, **none of them
-  touching compiler/ or lib/** (two tstate commits and a docs commit), so the
-  compiler sources were already current — `24ba9baf8e`, the one post-v450
-  compiler change (`compiler/rparser.inc`), was already in HEAD. I rebased and
-  recomputed anyway: **the recompute produced the same binary it started with,
-  `1634f6483109`, unchanged.** Re-gate with an unchanged binary and unchanged
-  compiler sources: GREEN.
+```sh
+T="${TESTMGR_TMP:-/tmp}/selfhost-fp-$$"     # PID-suffixed, trap 'rm -rf' EXIT
+```
 
-So in occurrence 2 the red cleared with **no material input change**. Same
-binary, same compiler sources, red then green. Whatever that red was, being
-behind on compiler/ does not explain it, and neither does anything my rebase did.
+Every other path it touches — `ROOT`, `SRC=compiler/compiler.pas`,
+`BUILT=compiler/pascal26`, `PINNED=$ROOT/stable_linux_amd64/default/pinned` — is
+inside the checkout, and each seat has its own. **So there is no shared path for a
+seat in another checkout to race through.** Cross-seat contention cannot produce
+this red.
 
-WHAT I CAN STATE, and nothing more:
+For a concurrent build in the SAME clone, the script already defends twice, and
+both defences are explicit about it:
 
-1. The red is **not always reproducible**, so a single red is not yet evidence of
-   contamination or a miscompile. Re-gate before escalating.
-2. `make compiler/pascal26` printing "verified — N round(s) (stamp read back;
-   sources match it)" tells you the stamp is consistent with your sources. It
-   does **not** tell you your binary equals the fixedpoint the gate reaches from
-   the PIN, which is what this check compares. Those are different questions and
-   the verb does not distinguish them.
-3. A legitimate divergence exists whenever a compiler/ commit lands after the
-   current pin — `24ba9baf8e` did, after v450 (`3503825c2f`, binary
-   `c19cc2d531e4`) — so pinned-binary and current-sources fixedpoints are
-   *expected* to differ then. That is not by itself the failure this check
-   reports, but it is a confounder when reading it.
-4. Do not delete the stamp. That warning from the mtime note still holds.
+- it snapshots `compiler/pascal26` with a copy-and-verify loop (hash, copy, hash,
+  retry three times) so a torn half-written read cannot be compared;
+- before declaring FAIL it re-hashes the live binary, and if it moved it prints
+  "compiler/pascal26 changed DURING this check — a concurrent build replaced it …
+  This is NOT a self-host failure" and **exits 0**.
 
-A LIKELY MECHANISM, EXPLICITLY NOT ESTABLISHED: the fleet rule is that only
-`tools/gate.sh` takes `/home/neo/.cache/pxx-gate.lock`, and a single compile from
-a seat may run outside it. If another seat compiles while the gate is staging its
-fixedpoint comparison, a race is available. I have not tested this and I am not
-going to assert it — it is written down as the next thing to check, not as the
-answer. The way to test it is to reproduce the red with the machine otherwise
-idle; if it cannot be reproduced idle, the concurrency hypothesis gets its first
-real evidence.
+**Across every gate run on this box, neither of those notes has fired once** (0
+occurrences of each, grepped over all `/tmp/pxx-gate-*/fixedpoint.log`). An
+instrument built to detect this exact race has run many times and never seen it.
+That is much stronger than "the hypothesis is weak", and it is the kind of check
+I should have run before writing the hypothesis down.
 
 WHY THIS IS RECORDED AS A CORRECTION RATHER THAN AN EDIT: this tree keeps
 catching the same failure, including from people who had just written the rule
@@ -5765,3 +5750,126 @@ next seat wasting time on an alarming message. The instrument that caught me was
 boring: checking whether the thing I claimed had changed actually had.
 2026-09-28 | frankH | compiler/builtin/pylib.pas (PySortOrder, TPyList.sort), compiler/builtin/pyeval.pas (sorted), test/test_nilpy_sort_is_stable_and_n_log_n.{npy,expected} (new), Makefile | SLOW: list.sort() and sorted() were insertion sorts -- O(n^2) compares plus a variant swap per step. sorted() of 64 objects with __lt__ cost 4.3 ms (CPython 36 us); test_nilpy_a_builtin_over_a_variant_list_releases_its_copy spent 8.5 of its 12.4 s there, timed out at 600 s on arm32 qemu, and ran minutes on the C3 under ESP QEMU before an interrupt-WDT panic (frankb-12; whether the panic is duration-driven is not yet established). Both now share one stable bottom-up merge order. 1000 objects: dunder calls under 12000 (the old sort: False on that row, the negative control); the row 12.4 -> 7.2 s native. Output equals CPython on x86-64, i386, arm32, xtensa-windowed (stability incl. reverse=True and key=); 8 existing sort fixtures and the census row (live 75) unchanged. The 32-bit leak sweep that found it: 26 rows on i386/arm32, no divergence that scales with N.
 2026-09-28 | frankH | compiler/builtin/pyeval.pas (sorted), compiler/builtin/pylib.pas (TPyList.sort), test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy (new), test/test_nilpy_sort_is_stable_and_n_log_n.{npy,expected}, Makefile | LEAK: a sort whose __lt__ or key raises leaked -- sorted() its result list on every raising call (300 -> 600 calls: live 301 -> 625), and origin's insertion sort its key list too (fixture, 300 rounds: origin live 9118, fixed 32; `keep` control trips). list.sort() now applies the order IN PLACE by cycles, so it adds only the 8n-byte index scratch over the old sort (no second list), leaves the list untouched when a comparison raises, and raises CPython's "list modified during sort" if the list changed size. New rows against CPython: already/reverse sorted, tuples, __lt__-only with reverse=True, key= ties with reverse, raising __lt__/key. Same output and census (live 32-33) on x86-64, i386, arm32, hosted riscv32 and hosted xtensa (windowed). ESP: an exhausted heap aborts (no allocation can fail softly), so the 8n scratch is the whole memory cost -- not yet measured on C3 silicon.
+### What the red actually is
+
+Five fixedpoint FAILs on this box. **Three carry gate.sh's own
+`stale_binary_hint`**, naming a specific compiler/ commit newer than the binary
+(`dbd60352fd`, `ec8e1ed786`, …). So the cause is the boring one the gate already
+names: **the binary on disk was built from older sources than the tree.** Not
+seed contamination, not a miscompile.
+
+The invariant is BINARY vs SOURCES, not checkout vs origin — which is where my
+first entry was imprecise and my second over-corrected. In my second occurrence my
+checkout was behind origin only on docs and tstate commits, while my *binary*
+predated compiler/ changes already in my tree. Same red, and "behind origin" does
+not describe it.
+
+### THE FINDING WORTH KEEPING: the hint is blind exactly when parallel seats make it matter
+
+Two of the five FAILs carry NO hint, including mine. The hint is:
+
+```sh
+newest=$(git log -1 --format=%ct -- compiler/)   # COMMIT time
+binmt=$(stat -c %Y compiler/pascal26)            # file mtime
+if [ "$binmt" -lt "$newest" ]; then ... fi
+```
+
+It compares your binary's mtime to a COMMIT TIMESTAMP. So it stays silent
+whenever a sibling's compiler/ commit was **committed before you built** but
+**merged into your tree after you built** — you rebase forward, your sources gain
+their change, your binary is older in content while newer in mtime, and
+`binmt > newest` holds. The check is satisfied and says nothing.
+
+That is not an edge case; it is the ordinary shape of several seats rebasing onto
+a moving master, which is exactly the condition under which the alarming message
+("seed contamination, or a self-perpetuating miscompile") is most likely to be
+read by someone under time pressure. The gate's own comment already says the
+comparison "SAYS NOTHING ABOUT CONTENT"; what nobody had written down is that it
+also misses a whole class of genuinely stale binaries, in the direction that
+matters.
+
+### Remedy, unchanged in substance and now explained
+
+`make compiler/pascal26`, then re-gate; rebase first if you are behind. Do not
+delete the stamp. And read the verb carefully, because this is the trap: "verified
+— N round(s) (stamp read back; sources match it)" says the STAMP matches your
+sources. It does NOT say your binary equals the fixedpoint reached from the PIN,
+which is what the failing check compares — and it will print "verified" having
+rebuilt nothing when the same gate run's testmgr step already rebuilt the binary
+underneath it, which is why the re-gate then passes with no action of yours.
+
+A cheap improvement exists and is NOT taken here (no code changes were asked for):
+the hint could compare the binary against the SHA of the sources it was built
+from, which the self-host stamp already records, instead of against a commit
+timestamp. That would make it exact and would have caught both unhinted FAILs.
+Left as a note rather than a ticket, per the month's rule.
+
+## 2026-09-28 — two claims of mine corrected by frankd-90, both the same error, and I had just written that error up
+
+Both were negatives I asserted from absence in one place without checking the
+obvious other place. Recorded because they were relayed to three seats and could
+have reached the release notes, and because I published an entry about this exact
+failure mode earlier the same day and then produced two instances of it.
+
+### 1. "The two board tests have only ever been compiled." FALSE.
+
+I reported that test/esp_board_gpio_ring_stress.pas and
+test/esp_board_isr_no_alloc.pas had never been run on a board, reasoning from the
+Makefile: rows 38751 and 38754 assert only that they BUILD, and I could find no
+runner. Both have in fact run, and frankd-90's citations check out:
+
+- ring stress, S3, 2026-09-24, compiler 5cb3fdf5896b: ~672k edges, exact
+  (misplaced=0 on two runs), and the OLDRING positive control lost 2,503 edges.
+- isr_no_alloc, S3 2026-09-24 (58412e442c17) and C3 2026-09-28 (139494b2b863,
+  producer on core 0): heap delta 0 both times.
+
+**The evidence is in a MEASURED block in each test's own header — including in the
+header text I quoted in the same message where I called it unrun.** It is at
+esp_board_gpio_ring_stress.pas:32. Also in
+backlog-esp/feature-esp-hardware-flash-validation.md, summary and row 2b.
+
+What went wrong is not that I looked in a weak place; it is that I concluded from
+one place. "Nothing in the Makefile runs it" is true and says nothing about
+whether it has been run, because a board test is run BY HAND from a recipe in its
+header — which is why the header is where the result is recorded. I had the right
+file open and read it for its invocation while not reading it for its results.
+
+### 2. "Python cannot reach the drain budget or the in-drain flag." FALSE.
+
+I reported a gap in interrupts' Python surface, because its lowercase surface is
+only events/poll/pending/dropped/delivered/on_event. NilPy calls the Pascal names
+directly; there are simply no lowercase aliases. Measured here on x86-64 hosted
+before accepting the correction:
+
+```text
+interrupts.IntSetDrainBudget(4); interrupts.IntDrainBudget()  -> budget 4
+10 pushed, pending 10, one poll()                             -> poll 4 left 6
+interrupts.IntInDrain() inside a handler                      -> True
+```
+
+frankd-90 measured the same on x86-64, i386, arm32 and riscv32 under qemu with
+v450 (eb24d2974e). A listing of a module's Python wrappers is not the set of what
+a Python program can call, and I read it as if it were. One four-line probe
+settles it, and I wrote a paragraph instead.
+
+test/esp_board_gpio_poll_drain.npy is corrected: its header records the
+measurement, its BUDGET row now asserts `poll() == IntDrainBudget()` read at run
+time exactly as the Pascal twin does, and its NESTED row now also confirms
+IntInDrain() inside the handler. So the two twins assert the same four claims at
+the same strength, which is what I had wrongly said was impossible. Rebuilt for
+both chips.
+
+### What is still true, so the correction does not swing too far
+
+poll() on SILICON remains unverified, and the poll-drain pair is still the
+genuinely new coverage: the runs above exercise IntPoll on a board inside the ring
+stress, but no board row asserts the four claims poll_drain makes, and no board row
+covers the Python side of the drain at all. The v450 runs of ring_stress and
+isr_no_alloc are therefore CONFIRMATION of an existing result, not first runs, and
+my request to frankb-12 has been corrected to say so.
+
+The transferable bit: "I could not find a runner" is a statement about my search,
+and I reported it as a statement about the world. The cheap guard is to ask what
+a positive instance would look like and whether my method could see it — a
+by-hand board run's only trace is a line in the file's own header, which my method
+(grep the build system) structurally cannot find.

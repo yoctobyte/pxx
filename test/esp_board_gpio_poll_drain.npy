@@ -13,18 +13,22 @@
 # written for untested on silicon. examples/esp32/gpio-edge-{c3,s3} drain with
 # time.sleep(); poll() was hosted-only until this row.
 #
-# TWO CHECKS ARE WEAKER HERE THAN IN THE PASCAL TWIN, and the reason is a gap in
-# the Python surface rather than a choice. lib/rtl/interrupts.pas exports
-# IntDrainBudget and IntInDrain to Pascal, but the Python surface offers only
-# events, poll, pending, dropped, delivered and on_event -- no budget accessor
-# and no in-drain accessor. So:
-#   - the BUDGET row asserts the PROPERTY without naming the number: one poll
-#     takes some but not all, the remainder stays pending, and nothing is
-#     dropped. Hardcoding 16 here would pass for the wrong reason the day the
-#     default changes.
-#   - the NESTED row can only assert that a poll inside a handler returns 0; it
-#     cannot also confirm the in-drain flag the way the Pascal twin does.
-# Both are reported as a finding rather than papered over.
+# THIS ASSERTS THE SAME FOUR CLAIMS AT THE SAME STRENGTH AS THE PASCAL TWIN.
+# An earlier version of this header claimed the Python surface could not reach
+# the drain budget or the in-drain flag, because interrupts' lowercase surface is
+# only events/poll/pending/dropped/delivered/on_event. That was WRONG, and it was
+# a limitation inferred from a listing instead of measured: NilPy calls the
+# Pascal names directly. Measured on x86-64 hosted, and by frankd-90 on x86-64,
+# i386, arm32 and riscv32 under qemu:
+#
+#   interrupts.IntSetDrainBudget(4); interrupts.IntDrainBudget()  -> 4
+#   10 pushed, one poll()                                         -> 4, 6 left
+#   interrupts.IntInDrain() inside a handler                      -> True
+#
+# There are simply no lowercase aliases for those three. So the BUDGET row below
+# asserts against IntDrainBudget() read at run time, exactly as the Pascal twin
+# does, rather than against a hardcoded 16 -- which would pass for the wrong
+# reason the day the default moves.
 #
 # NO WIRING NEEDED: the pin is INPUT_OUTPUT and the pad drives its own input.
 # Under QEMU there are NO edges (no GPIO input path modelled), and a run with
@@ -39,7 +43,7 @@ N_SMALL = 10
 N_OVER = 40
 
 seen = [0, 0]          # count, wrong-id count
-nested = [-1, 0]       # poll rc from inside a handler, probe-armed flag
+nested = [-1, 0, 0]    # poll rc inside a handler, probe-armed, in-drain seen
 fails = [0]
 
 
@@ -53,6 +57,8 @@ def on_edge(ev):
     if ev.id != PIN:
         seen[1] = seen[1] + 1
     if nested[1] == 1:
+        if interrupts.IntInDrain():
+            nested[2] = 1
         nested[0] = interrupts.poll()
         nested[1] = 0
 
@@ -87,6 +93,9 @@ def main():
     gpio.gpio_write(PIN, 0)
     interrupts.on_event(interrupts.INT_SRC_GPIO, on_edge)
     print("armed", gpio.on_rising(PIN))
+    budget = interrupts.IntDrainBudget()
+    print("budget", budget)
+    check(budget > 0)
 
     # ORDERING: edges, no sleep, no poll -> nothing delivered.
     pulses(N_SMALL)
@@ -119,14 +128,14 @@ def main():
     pend = interrupts.pending()
     print("over-budget isr-added", gpio.gpio_edges() - isr1,
           "pending", pend, "dropped", interrupts.dropped())
-    check(pend > 1)
+    check(pend > budget)
     check(interrupts.dropped() == dropped_before)   # fits the ring: no drops
 
     n2 = interrupts.poll()
     left = interrupts.pending()
-    print("poll2 returned", n2, "pending-left", left)
-    check(n2 > 0)
-    check(n2 < pend)          # bounded: it did NOT take everything
+    print("poll2 returned", n2, "budget", budget, "pending-left", left)
+    # EXACTLY the budget, against the value read at run time.
+    check(n2 == budget)
     check(left == pend - n2)  # the rest is PENDING, i.e. deferred
     check(left > 0)
     check(interrupts.dropped() == dropped_before)   # deferred, NOT dropped
@@ -144,8 +153,9 @@ def main():
     pulses(3)
     interrupts.poll()
     drain_all(100)
-    print("nested rc", nested[0])
+    print("nested rc", nested[0], "in-drain", nested[2])
     check(nested[0] == 0)
+    check(nested[2] == 1)
 
     print("off", gpio.edge_off(PIN))
     print("final isr", gpio.gpio_edges(), "delivered", interrupts.delivered(),
