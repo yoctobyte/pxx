@@ -15304,13 +15304,16 @@ end;
 function pyos_stat(const path: AnsiString): TPyStat;
 var cs: AnsiString; r, mode, size: Int64;
 begin
-  { Real stat where pypal knows the layout -- x86-64 and ESP-IDF (uforth
-    FILE-STATUS: a missing file must raise a catchable OSError like CPython).
-    Other targets keep the zeroed stub: no gated caller observes the value. }
+  { Real stat on every Linux target (plain stat on x86-64, statx elsewhere --
+    see PyPalStatModeSize) and on ESP-IDF (uforth FILE-STATUS: a missing file
+    must raise a catchable OSError like CPython). A target with no syscalls at
+    all (hosted xtensa, wasm32) answers ENOSYS, and that RAISES too: it used to
+    return a zeroed stat, so a missing file raised nothing and every size read
+    0, and "no gated caller observes the value" stopped being true the moment
+    os.path.getsize existed. }
   Result := TPyStat.Create;
   cs := path + #0;
   r := PyPalStatModeSize(@cs[1], mode, size);
-  if r = -38 then Exit;
   if r < 0 then
     pyos_raise_ioerror(r, path, '');
   Result.st_mode := mode;

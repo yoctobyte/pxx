@@ -8294,6 +8294,34 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_fbig "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_fbig_arm32)" "$$(cat test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_a_float_against_a_bignum_compares_exactly.npy $(TESTTMP)/test_nilpy_fbig_riscv32
 	tools/expect_same.sh riscv32/test_nilpy_fbig "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_fbig_riscv32)" "$$(cat test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected)"
+	# os.stat / os.path.getsize / f.tell() / os.rename off x86-64. stat had no
+	# layout except on x86-64 and answered a zeroed result with NO error
+	# (statx now, one layout everywhere); riscv32's syscall 62 is _llseek, not
+	# lseek (tell() was -14, EFAULT), and it has renameat2, not renameat.
+	./$(COMPILER) --target=riscv32 test/test_nilpy_oserror_class_and_message.npy $(TESTTMP)/test_nilpy_oserr_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_oserr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_oserr_riscv32)" "$$(cat test/test_nilpy_oserror_class_and_message.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_oserror_class_and_message.npy $(TESTTMP)/test_nilpy_oserr_arm32
+	tools/expect_same.sh arm32/test_nilpy_oserr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_oserr_arm32)" "$$(cat test/test_nilpy_oserror_class_and_message.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_oserror_class_and_message.npy $(TESTTMP)/test_nilpy_oserr_i386
+	tools/expect_same.sh i386/test_nilpy_oserr "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_oserr_i386)" "$$(cat test/test_nilpy_oserror_class_and_message.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_ospathmore "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_ospathmore_riscv32)" "$$(cat test/test_nilpy_os_path_more.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore_arm32
+	tools/expect_same.sh arm32/test_nilpy_ospathmore "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_ospathmore_arm32)" "$$(cat test/test_nilpy_os_path_more.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore_i386
+	tools/expect_same.sh i386/test_nilpy_ospathmore "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_ospathmore_i386)" "$$(cat test/test_nilpy_os_path_more.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy $(TESTTMP)/test_nilpy_mmapro_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_mmapro "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_mmapro_riscv32)" "$$(cat test/test_nilpy_mmap_read_only_and_struct_unpack_from.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy $(TESTTMP)/test_nilpy_mmapro_arm32
+	tools/expect_same.sh arm32/test_nilpy_mmapro "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_mmapro_arm32)" "$$(cat test/test_nilpy_mmap_read_only_and_struct_unpack_from.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy $(TESTTMP)/test_nilpy_mmapro_i386
+	tools/expect_same.sh i386/test_nilpy_mmapro "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_mmapro_i386)" "$$(cat test/test_nilpy_mmap_read_only_and_struct_unpack_from.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_tempfile_mkdtemp.npy $(TESTTMP)/test_nilpy_mkdtemp_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_mkdtemp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_mkdtemp_riscv32)" "$$(cat test/test_nilpy_tempfile_mkdtemp.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_tempfile_mkdtemp.npy $(TESTTMP)/test_nilpy_mkdtemp_arm32
+	tools/expect_same.sh arm32/test_nilpy_mkdtemp "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_mkdtemp_arm32)" "$$(cat test/test_nilpy_tempfile_mkdtemp.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_tempfile_mkdtemp.npy $(TESTTMP)/test_nilpy_mkdtemp_i386
+	tools/expect_same.sh i386/test_nilpy_mkdtemp "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_mkdtemp_i386)" "$$(cat test/test_nilpy_tempfile_mkdtemp.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize_rv32
 	tools/expect_same.sh riscv32/test_npy_maxsize_rv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_npy_maxsize_rv32)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected32)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_cross32_values.py $(TESTTMP)/test_npy_cross32_rv32
