@@ -33,7 +33,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-core#src:test/test_cdecl_bodied_narrow.pas@2** — test/test_cdecl_bodied_narrow.pas tools/expect_same.sh +1 (borg): bad `7d105ec21cfd`, last good `9a245b91c409`, 1 commit(s) in range
 - **test-core#src:test/test_cdecl_bodied_wide.pas@2** — test/test_cdecl_bodied_wide.pas tools/expect_same.sh +2 (borg): bad `7d105ec21cfd`, last good `9a245b91c409`, 1 commit(s) in range
 - **test-core#src:test/test_cdecl_fnptr_aggregate_result.pas** — test/test_cdecl_fnptr_aggregate_result.pas tools/expect_same.sh +3 (borg): bad `7d105ec21cfd`, last good `9a245b91c409`, 1 commit(s) in range
-- **test-threads#src:test/lib_signals_fpc.pas** — test/lib_signals_fpc.pas tools/expect_same.sh +2 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
+- **test-threads#src:test/lib_signals_fpc.pas** — test/lib_signals_fpc.pas tools/expect_same.sh +2 (borg): bad `7d105ec21cfd`, last good `9a245b91c409`, 1 commit(s) in range
 - **test-threads#src:test/thread_glibc_malloc_two_threads.pas@1** — test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
 - **test-threads#src:test/thread_glibc_malloc_two_threads.pas@2** — test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh +1 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
 - **test-threads#src:test/thread_glibc_malloc_two_threads.pas@3** — test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh +1 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
