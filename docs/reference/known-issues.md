@@ -1052,6 +1052,22 @@ the compiler built at `1763b6232b` (`70e57d59b777`), which behave the same.
 **Workaround:** test the condition in the executed code with an `if` and
 return a value the caller checks (such as `-1`), instead of raising.
 
+**Nil Python on the ESP32-C3: `list.sort()` runs out of heap at about half
+the list length that can be built.** On a C3 board, in the `nilpy-c3` example
+project, a shuffled list of integers can be built up to 4,093 elements (4,125
+runs out of memory), but sorting it fits only up to 2,031 (2,062 runs out,
+2,078 with v450, whose insertion sort did not finish 2,031 elements within
+the 45-second run, but did not run out of memory either). A list of objects with `__lt__` sorts up to 2,037 (2,068
+runs out) with both compilers. The limit is the same with v450's insertion
+sort and with the merge sort that replaced it, so the sort's own index
+scratch space is not what sets it; sorting needs about as much free heap
+again as the list itself. The program fails with `pxx: out of memory
+(ESP-IDF heap exhausted)`. Measured on 2026-09-28 and 2026-09-29 by booting
+one size at a time, with v450 (`c19cc2d531e4`) and the compiler built at
+`aefc7ba4bd` (`1634f6483109`); the 4,093 is for the second only. The program,
+its recipe and the table are in `test/esp_board_list_sort_ceiling.npy`.
+**Workaround:** on a C3, keep a list you sort under about 2,000 elements.
+
 ## Reporting a problem
 
 Open an issue at <https://github.com/yoctobyte/pxx/issues> with the smallest
