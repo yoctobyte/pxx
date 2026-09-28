@@ -1860,6 +1860,7 @@ begin
     i := RegisterProc('PXXObjRetain', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXObjRelease', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXWriteVariant', False, tyPointer, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXWriteVariantPy', False, tyPointer, 1, dummyNames, dummyTypes);
 
     dummyNames[0] := 'p';         dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXWriteFloatNat', False, tyPointer, 1, dummyNames, dummyTypes);

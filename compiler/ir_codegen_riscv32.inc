@@ -3798,8 +3798,8 @@ begin
                 as on arm32/i386.
                 bug-a-riscv32-codegen-has-no-variant-support }
               EmitLoadVariantAddrRISCV32(valNode);      { a0 = slot addr }
-              procIdx := FindProc('PXXWriteVariant');
-              if procIdx < 0 then Error('compiler error: PXXWriteVariant not found');
+              procIdx := FindProc(WriteVariantHelperName);
+              if procIdx < 0 then Error('compiler error: ' + WriteVariantHelperName + ' not found');
               EmitCallProc(procIdx);
             end
             else if TypeIsFloat(tk) then

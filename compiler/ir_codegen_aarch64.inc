@@ -4957,8 +4957,8 @@ begin
         if IntToTypeKind(IRTk[node]) = tyVariant then
         begin
           IREmitNodeAarch64(valNode);              { x0 = slot addr }
-          procIdx := FindProc('PXXWriteVariant');
-          if procIdx < 0 then Error('compiler error: PXXWriteVariant not found');
+          procIdx := FindProc(WriteVariantHelperName);
+          if procIdx < 0 then Error('compiler error: ' + WriteVariantHelperName + ' not found');
           EmitCallProc(procIdx);
         end
         else if TypeIsFloat(IntToTypeKind(IRTk[node])) then

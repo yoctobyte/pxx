@@ -4277,7 +4277,7 @@ begin
                 recorded as having no counterpart on xtensa; the hosted profile
                 is what gives it one. }
               EmitLoadVariantAddrXtensa(valNode);
-              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteVariant'), 1);
+              EmitXtensaHelperCall(XtensaHelperProc(WriteVariantHelperName), 1);
             end
             else if TypeIsFloat(tk) then
             begin

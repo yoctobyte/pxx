@@ -4738,8 +4738,8 @@ begin
           else if tk = tyVariant then
           begin
             EmitLoadVariantAddrArm32(valNode);    { r0 = slot addr }
-            procIdx := FindProc('PXXWriteVariant');
-            if procIdx < 0 then Error('compiler error: PXXWriteVariant not found');
+            procIdx := FindProc(WriteVariantHelperName);
+            if procIdx < 0 then Error('compiler error: ' + WriteVariantHelperName + ' not found');
             EmitCallProc(procIdx);
           end
           else if TypeIsFloat(tk) then

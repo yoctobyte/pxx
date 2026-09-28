@@ -617,6 +617,7 @@ procedure PXXVarSetIntf(v: Pointer; inst: Pointer);
 procedure PXXIntfFromVariant(dest: Pointer; v: Pointer);
 procedure PXXPromoRetainOne(p: Pointer);
 procedure PXXWriteVariant(v: Pointer);
+procedure PXXWriteVariantPy(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
   Exposed so builtin.pas's `Str(F, S)` shares the ONE correct implementation
   rather than carrying its own normalise loop (which disagreed with writeln's
@@ -7138,14 +7139,16 @@ procedure PXXWriteVariant(v: Pointer);
   x86-64's inline EmitWriteVariant: bool as True/False, int/int64 as a signed
   integer, double natural, char raw, string payload bytes.
 
-  Two arms x86-64 has and this does not, deliberately: it spells an EMPTY slot
-  `None` and an OBJECT slot `<object>`, both Python renderings. FPC prints
-  nothing for a cleared Variant and RAISES for Null, so copying those spellings
-  here would propagate a contested rendering to three more targets — that
-  question is [[bug-a-a-null-variant-renders-as-none-in-pascal]] and settles in
-  one place for all targets once it is answered. Measured 2026-08-24 across
-  bool / int / negative int / double / char / string: after the bool arm below,
-  Boolean was the ONLY tag the two renderers disagreed about. }
+  The two arms that were once x86-64's alone now match it, since
+  bug-a-a-null-variant-renders-as-none-in-pascal settled the question there:
+  an OBJECT slot prints `<object>` in either language (a blank is worse than a
+  visible placeholder), and an EMPTY slot prints nothing here -- FPC's answer
+  -- and `None` through PXXWriteVariantPy, which the backends call instead
+  when the main program is Nil Python (the runtime cannot see PyProgramMode;
+  the caller makes the split, as with PXXVarBinOpPas). Until then every other
+  target printed both as nothing, so a tuple passed to a Pascal `const v:
+  Variant` parameter and written from there vanished on the ESP chips:
+  bug-n-an-object-or-none-variant-writes-as-nothing-off-x86-64. }
 var tag, iv, len, i, s: Int64; ch: Char;
 begin
   tag := PMachineWord(v)^;
@@ -7183,6 +7186,8 @@ begin
     ch := Chr(PByte(Int64(v) + 8)^);
     PXXPutC(ch);
   end
+  else if tag = 7 then  { VT_OBJECT -- x86-64's EmitWriteVariant spells it the same }
+    PXXPutLit('<object>')
   else if (tag = 6) or ((tag >= 8192) and (tag <= 8199)) then
   { VT_STRING, or any tag in the promotable-int block: a promo too large for
     the inline tier rides in a variant as a managed AnsiString of its exact
@@ -7202,6 +7207,15 @@ begin
       end;
     end;
   end;
+end;
+
+{ PXXWriteVariant with Python's spelling of an EMPTY slot, `None`; the
+  backends call this one when the main program is Nil Python (x86-64 makes the
+  same split inline on PyProgramMode). }
+procedure PXXWriteVariantPy(v: Pointer);
+begin
+  if PMachineWord(v)^ = 0 then PXXPutLit('None')
+  else PXXWriteVariant(v);
 end;
 {$endif}
 

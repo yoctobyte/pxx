@@ -5464,8 +5464,8 @@ begin
           begin
             EmitLoadVariantAddr386(valNode);             { eax = slot addr }
             EmitB($50);                                  { push eax (arg0 = v) }
-            procIdx := FindProc('PXXWriteVariant');
-            if procIdx < 0 then Error('compiler error: PXXWriteVariant not found');
+            procIdx := FindProc(WriteVariantHelperName);
+            if procIdx < 0 then Error('compiler error: ' + WriteVariantHelperName + ' not found');
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(4);          { add esp, 4 }
           end

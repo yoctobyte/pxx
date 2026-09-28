@@ -18960,6 +18960,16 @@ begin
     EmitXtensaLongJump(target);
 end;
 
+{ The runtime Variant writer every backend but x86-64 calls. Under a Nil Python
+  main an EMPTY slot is spelled `None` (PXXWriteVariantPy), as x86-64's inline
+  writer spells it on PyProgramMode; a Pascal main prints nothing, FPC's
+  answer. One function so the six call sites cannot drift apart. }
+function WriteVariantHelperName: AnsiString;
+begin
+  if PyProgramMode then Result := 'PXXWriteVariantPy'
+  else Result := 'PXXWriteVariant';
+end;
+
 procedure EmitCallProc(procIdx: Integer);
 var extIdx, rvHi, rvLo, litPos, anchorPc: Integer;
 begin

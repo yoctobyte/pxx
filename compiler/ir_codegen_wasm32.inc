@@ -5241,11 +5241,11 @@ begin
       one call taking the slot ADDRESS and no width form -- as on i386, arm32
       and riscv32. It refused here for exactly as long as this backend had no
       variant at all; the address is what WasmVariantAddr answers. }
-    hp := WasmWriteHelper('PXXWriteVariant');
+    hp := WasmWriteHelper(WriteVariantHelperName);
     if hp < 0 then Exit;
     WasmVariantAddr(valNode);
     if WasmBodyBroken then Exit;
-    WasmCall(WasmSlotForProc(hp), 'PXXWriteVariant');
+    WasmCall(WasmSlotForProc(hp), WriteVariantHelperName);
     Exit;
   end;
 
