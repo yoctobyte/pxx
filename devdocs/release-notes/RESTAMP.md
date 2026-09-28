@@ -70,11 +70,20 @@ Then, by hand:
 
 ## 5. Before committing
 
-Run the credential check the coordinator gives every seat; it must print
-nothing. Then:
+The credential check. The pattern lives in a file outside the repository,
+so the word itself is never written anywhere; each of the three commands must
+print nothing:
 
 ```sh
-git diff                             # read all of it
+git add -A -n . >/dev/null
+git grep -n --untracked -f /home/neo/.config/pxx-secret/patterns
+git diff --cached | grep -f /home/neo/.config/pxx-secret/patterns
+```
+
+Then read the whole diff:
+
+```sh
+git diff
 ```
 
 The restamp was tested on 2026-09-28 against v447, in a scratch branch that
