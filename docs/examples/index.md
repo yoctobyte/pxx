@@ -390,7 +390,7 @@ are kept as reproducers (see [On a classic ESP32](#on-a-classic-esp32)).
 | hello-s2 | S2 | Pascal | The same, for the S2 | – (no S2 machine) | not run: builds only |
 | nilpy-s3 | S3 | Python | A class, a list, a loop, `print`; output equals CPython's | pass | S3, 2026-09-28 |
 | nilpy-c3 | C3 | Python | The same source | pass | C3, 2026-09-28 |
-| nilpy-esp32 | classic | Python | The same source | – | classic, 2026-09-27 |
+| nilpy-esp32 | classic | Python | The same source | – | classic, 2026-09-27, and again with pin v448 |
 | nilpy-hw-s3 | S3 | Python | Drives a GPIO pin; an ESP-IDF timer calls back into Python | pass | S3, 2026-09-28 |
 | nilpy-hw-c3 | C3 | Python | The same source | pass | C3, 2026-09-28 |
 | nilpy-hw-esp32 | classic | Python | The same source | – | classic, pin v448: **fails**, a watchdog reboot loop before its first line. A reproducer |
@@ -690,9 +690,12 @@ classic ESP32, not working examples.** Both READMEs say so. Both programs
 pass on real S3 and C3 silicon: the `nilpy-hw` source was run there with pin
 v449 by the session that owns those boards, as recorded in
 `devdocs/progress/LOGBOOK.md`. Both failures stop inside `_xt_context_save`
-(the Xtensa windowed context save), so they appear to be one fault. What
-triggers it, GPIO specifically or any callback from C into Nil Python, is not
-established yet. The Wi-Fi station example was not ported.
+(the Xtensa windowed context save), so they appear to be one fault. On the
+same board with the same v448 compiler, `nilpy-esp32` (Nil Python with no
+hardware and no callback) passes, and so does `timer-esp32` (a callback into
+Pascal). So Nil Python runs on this chip and callbacks run on it. The failures
+need both together. What triggers it, GPIO specifically or any callback from C
+into Nil Python, is not established yet. The Wi-Fi station example was not ported.
 
 `nilpy-logger-s3` is a Wi-Fi data logger in the MicroPython style (a setup
 access point, a saved network, a CSV log on flash, served over HTTP). Its board
