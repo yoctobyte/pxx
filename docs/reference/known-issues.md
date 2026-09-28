@@ -190,6 +190,13 @@ says. Each was checked against GCC's output on x86-64, and re-checked on
 2026-09-27: with v445 each row is still wrong exactly where it says "after
 v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
 
+- **Pascal: `^[i]` on a property's result read the wrong element.** For
+  `property L: PIntArray read GetL`, `c.L^[1]` stepped 8 bytes per element
+  whatever the element type. It read element 2 of an Integer array, 0 from a
+  Word array, and wrote the wrong element too. TList's `list.List^[i]` was
+  wrong the same way on i386, arm32 and riscv32. Now each matches FPC 3.2.2 on
+  all five targets. Wrong in v441 to v445.
+
 - **Pascal: a helper's members were unreachable inside `with`.** In
   `with c do WriteLn(Two)`, where `Two` is declared by a class helper or a
   record helper for `c`'s type, `Two` was "undefined variable". Two related

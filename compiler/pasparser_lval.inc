@@ -3265,15 +3265,32 @@ begin
             mcallNode := MakeAccessorCall(mci, mmi, mpi, node, margIdx);
 
             node := mcallNode;
-            { trailing ^ on the getter result — T(FList.Items[i]^) in fgl's
-              enumerator: deref the returned (untyped) pointer; read as Int64,
-              an outer ordinal cast narrows }
+            tk := Procs[mpi].RetType;
+            recName := ProcRetRecId[mpi];
+            if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+            { trailing ^ on the getter result. A TYPED pointee is stamped by the
+              shared StampDerefFromShape, as every other postfix walk's caret is:
+              this loop tagged EVERY deref Int64 with no shape, so `c.L^[1]` over
+              `property L: PIA read GetL` (PIA = ^array of Integer) indexed in
+              8-byte steps and read element 2 -- 50 where FPC reads 30, on every
+              target; a Word array read 0. TList's `list.List^[i]` is the same
+              shape: right on 64-bit by the coincidence that a Pointer is 8
+              bytes, wrong on i386/arm32/riscv32. The UNTYPED case keeps the old
+              tag -- `T(FList.Items[i]^)` in fgl's enumerator: read as Int64, an
+              outer ordinal cast narrows.
+              bug-p-a-caret-on-a-property-getter-result-indexes-in-8-byte-steps }
             while CurTok.Kind = tkCaret do
             begin
               Next;
               mselfArg := AllocNode(AN_DEREF);
               ASTLeft[mselfArg] := node;
-              ASTTk[mselfArg] := Ord(tyInt64);
+              if tk = tyPointer then StampDerefFromShape(mselfArg, node, tk, recName);
+              if (node <> mselfArg) or (tk = tyUnknown) then   { not stamped, or no pointee known }
+              begin
+                ASTTk[mselfArg] := Ord(tyInt64);
+                tk := tyInt64;
+                recName := REC_NONE;
+              end;
               node := mselfArg;
             end;
 
@@ -3283,9 +3300,6 @@ begin
               tolerated (the statement ended there anyway) but an argument list did not
               ("expected comma or close parenthesis"). That asymmetry is why it survived: the
               obvious way to write it, `x := obj.Items[i].Method`, happened to work. }
-            tk := Procs[mpi].RetType;
-            recName := ProcRetRecId[mpi];
-            if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
             if (CurTok.Kind = tkDot) or (CurTok.Kind = tkLBrack) then
               node := ParseClassRecordSelectors(node, recName, tk);
 

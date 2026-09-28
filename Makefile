@@ -9222,6 +9222,22 @@ test-core: $(COMPILER)
 	# spelling). Now refused by identity, input intact. v445 fails 11 of 13.
 	# bug-a-the-output-can-overwrite-the-source-under-another-spelling
 	sh test/the_output_may_not_be_an_input.sh ./$(COMPILER) $(TESTTMP)
+	# A CARET ON A PROPERTY GETTER'S RESULT KEEPS THE POINTEE: `c.L^[1]` over a
+	# getter returning ^array of Integer stepped 8 bytes (the arm tagged every
+	# deref Int64), reading and WRITING the wrong element on every target; TList's
+	# `list.List^[i]` read the wrong slot on the 32-bit ones. .expected is FPC's.
+	# v445: 5 rows wrong on x86-64, 7 on i386.
+	# bug-p-a-caret-on-a-property-getter-result-indexes-in-8-byte-steps
+	./$(COMPILER) test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.pas $(TESTTMP)/caretprop26
+	tools/expect_same.sh caretprop26 "$$($(TESTTMP)/caretprop26)" "$$(cat test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.expected)"
+	./$(COMPILER) --target=i386 test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.pas $(TESTTMP)/caretprop26_i386
+	tools/expect_same.sh i386/caretprop26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/caretprop26_i386)" "$$(cat test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.expected)"
+	./$(COMPILER) --target=aarch64 test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.pas $(TESTTMP)/caretprop26_aarch64
+	tools/expect_same.sh aarch64/caretprop26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/caretprop26_aarch64)" "$$(cat test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.expected)"
+	./$(COMPILER) --target=arm32 test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.pas $(TESTTMP)/caretprop26_arm32
+	tools/expect_same.sh arm32/caretprop26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/caretprop26_arm32)" "$$(cat test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.expected)"
+	./$(COMPILER) --target=riscv32 test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.pas $(TESTTMP)/caretprop26_riscv32
+	tools/expect_same.sh riscv32/caretprop26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/caretprop26_riscv32)" "$$(cat test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.expected)"
 	# An interface name in a DECLARATION initialiser means its GUID. All four
 	# cells were wrong and in opposite directions: var accepted and stored an
 	# AN_CLASSREF VMT address (silent, and interface identity is matched BY GUID

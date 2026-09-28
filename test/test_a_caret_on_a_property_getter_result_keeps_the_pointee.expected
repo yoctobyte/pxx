@@ -1,0 +1,12 @@
+Integer 11 15
+Word    21 25
+Byte    31 35
+Int64   41 45
+Double  1.50 5.50
+Pointer 51 55
+record  61 71 75
+var idx 13 23 73
+written 1234 4321 777 13 23
+rec ptr 1 2
+ptr ptr 99
+untyped 99
