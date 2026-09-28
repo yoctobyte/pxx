@@ -1025,6 +1025,33 @@ three calls print what CPython prints (x86-64, `9ce84ba69527`). A scalar
 annotation such as `x: float` gives it a type by hand: it stops the
 truncation, but a string still raises `TypeError`.
 
+**Nil Python: `exec` publishes a def only when it is named `__body__`.**
+After `exec("def f():\n    return 42\n", {}, ns)`, `ns` is empty, and
+`ns["f"]` raises `KeyError: 'f'`. The message names your key, so it reads as
+a wrong lookup, while the cause is that `exec` did not store the def. Only a
+def named `__body__` lands in `ns`; `helper`, `f` and `__b__` do not. A
+variable assigned at the top of the executed source is stored:
+`exec("def helper(x):\n    return x + 1\nresult = helper(41)\n", {}, ns)`
+gives `ns["result"] == 42`. **Workaround:** name the def `__body__`, or
+assign the value you need to a variable in the executed source. Measured on
+2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
+`1763b6232b` (`70e57d59b777`), which behave the same.
+
+**Nil Python: `raise` inside `exec`'d code stops the program, while a
+builtin's error there can be caught.** `raise ValueError('bad')` in source run
+by `exec` prints `pyeval: ValueError: bad` on standard output and exits with
+status 1; an `except ValueError` around the call never runs. That `raise` is
+not yet catchable there is by design for now: making it catchable is a later
+step, as the comment on the `raise` handler in `compiler/builtin/pyeval.pas`
+says. A `try` inside the executed source is not accepted either (`pyeval:
+unexpected token in expression: ":"`). An error that a builtin raises is an
+ordinary exception, and the caller's `except` catches it: `int('ab')` gives
+`ValueError` in a `__body__` and in a def nested in it, and `[1][5]` gives
+`IndexError` in a `__body__`. Measured on 2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and
+the compiler built at `1763b6232b` (`70e57d59b777`), which behave the same.
+**Workaround:** test the condition in the executed code with an `if` and
+return a value the caller checks (such as `-1`), instead of raising.
+
 ## Reporting a problem
 
 Open an issue at <https://github.com/yoctobyte/pxx/issues> with the smallest
