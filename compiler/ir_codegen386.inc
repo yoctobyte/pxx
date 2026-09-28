@@ -657,7 +657,7 @@ begin
   { write(1, edi, ecx): eax=4, ebx=1, ecx=buf, edx=len }
   EmitB($89); EmitB($CA);                          { mov edx, ecx }
   EmitB($89); EmitB($F9);                          { mov ecx, edi }
-  EmitB($BB); EmitI32(STDOUT);                     { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);                     { mov ebx, fd }
   EmitB($B8); EmitI32(4);                          { mov eax, 4 }
   EmitB($CD); EmitB($80);                          { int 0x80 }
 end;
@@ -668,7 +668,7 @@ begin
   EmitB($BF); EmitDataRef(INTBUF_OFFSET);            { mov edi, INTBUF_OFFSET }
   EmitB($88); EmitB($07);                            { mov [edi], al }
   EmitB($B8); EmitI32(4);                            { mov eax, 4 (write) }
-  EmitB($BB); EmitI32(STDOUT);                       { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);                       { mov ebx, fd }
   EmitB($B9); EmitDataRef(INTBUF_OFFSET);            { mov ecx, INTBUF_OFFSET }
   EmitB($BA); EmitI32(1);                            { mov edx, 1 }
   EmitB($CD); EmitB($80);                            { int 0x80 }
@@ -689,7 +689,7 @@ begin
   { done: }
   EmitB($89); EmitB($CA);                 { mov edx, ecx (count) }
   EmitB($89); EmitB($F1);                 { mov ecx, esi (buf) }
-  EmitB($BB); EmitI32(STDOUT);            { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);            { mov ebx, fd }
   EmitB($B8); EmitI32(4);                 { mov eax, 4 (write) }
   EmitB($CD); EmitB($80);                 { int 0x80 }
 end;
@@ -712,7 +712,7 @@ begin
   EmitB($75); EmitRel8(loopStart);    { jnz loop }
   EmitB($89); EmitB($CA);                                { mov edx, ecx }
   EmitB($89); EmitB($F9);                                { mov ecx, edi }
-  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
   EmitB($B8); EmitI32(4);                                { mov eax, 4 }
   EmitB($CD); EmitB($80);                                { int 0x80 }
 end;
@@ -748,7 +748,7 @@ begin
   EnsureSpaces;
   EmitB($50);                                            { push eax }
   EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
   EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
   EmitB($5A);                                            { pop edx }
   EmitB($CD); EmitB($80);                                { int 0x80 }
@@ -759,7 +759,7 @@ begin
   PatchRel8(jzOff);
   EmitB($5A);                                            { pop edx }
   EmitB($59);                                            { pop ecx }
-  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
   EmitB($B8); EmitI32(4);                                { mov eax, 4 }
   EmitB($CD); EmitB($80);                                { int 0x80 }
 end;
@@ -788,14 +788,14 @@ begin
   EnsureSpaces;
   EmitB($50);                                            { push eax }
   EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
   EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
   EmitB($5A);                                            { pop edx }
   EmitB($CD); EmitB($80);                                { int 0x80 }
   PatchRel8(jleOff);
   EmitB($5A);                                            { pop edx }
   EmitB($59);                                            { pop ecx }
-  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($BB); EmitI32(CurWriteFd);                           { mov ebx, fd }
   EmitB($B8); EmitI32(4);                                { mov eax, 4 }
   EmitB($CD); EmitB($80);                                { int 0x80 }
 end;
@@ -1140,7 +1140,7 @@ begin
     'mov edx, @data', INTBUF_OFFSET + INTBUF_SIZE,
     'sub edx, edi',
     'mov ecx, edi',
-    'mov ebx, %', STDOUT,
+    'mov ebx, %', CurWriteFd,
     'mov eax, 4',
     'int 0x80'
   ]);
@@ -1642,6 +1642,21 @@ var
   sgn, savedLValueWrite: Boolean;
   pNilLhs, pLoopLhs, pNilRhs, pLoopRhs, pCap, nextJmp, nextJmp2, falseJmp: Integer;
 begin
+  { A write to StdErr: point the runtime writers at fd 2 for this ONE node
+    (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
+    the node as usual, then restore both. A stdout write never gets here, so its
+    code is unchanged. bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+  if (not WriteFdWrapped) and IRWriteNodeToStdErr(node) then
+  begin
+    WriteFdWrapped := True;
+    CurWriteFd := 2;
+    if FindProc('PXXOutToStdErr') >= 0 then EmitCallProc(FindProc('PXXOutToStdErr'));
+    IREmitNode386(node);
+    if FindProc('PXXOutToStdOut') >= 0 then EmitCallProc(FindProc('PXXOutToStdOut'));
+    CurWriteFd := STDOUT;
+    WriteFdWrapped := False;
+    Exit;
+  end;
   if node = -1 then Exit;
   case IRKind[node] of
     IR_NOP, IR_BLOCK: ;
@@ -5428,7 +5443,7 @@ begin
           begin
             EnsureSpaces;
             EmitB($B8); EmitI32(4);
-            EmitB($BB); EmitI32(STDOUT);
+            EmitB($BB); EmitI32(CurWriteFd);
             EmitB($B9); EmitDataRef(SpacesOffset);
             EmitB($BA); EmitI32(wid - Strs[si].Len);
             EmitB($CD); EmitB($80);
@@ -5474,7 +5489,7 @@ begin
               EnsureSpaces;
               EmitB($50);
               EmitB($B8); EmitI32(4);
-              EmitB($BB); EmitI32(STDOUT);
+              EmitB($BB); EmitI32(CurWriteFd);
               EmitB($B9); EmitDataRef(SpacesOffset);
               EmitB($BA); EmitI32(wid - 1);
               EmitB($CD); EmitB($80);
@@ -5571,7 +5586,7 @@ begin
               EmitB($50);                                  { push eax (preserve) }
               EmitB($8B); EmitB($50); EmitB($F8);          { mov edx, [eax-8] (len) }
               EmitB($89); EmitB($C1);                      { mov ecx, eax (buf) }
-              EmitB($BB); EmitI32(STDOUT);                 { mov ebx, 1 }
+              EmitB($BB); EmitI32(CurWriteFd);                 { mov ebx, fd }
               EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
               EmitB($CD); EmitB($80);                      { int 0x80 }
               EmitB($58);                                  { pop eax (handle) }
@@ -5635,7 +5650,7 @@ begin
               EmitB($89); EmitB($C1);                      { mov ecx, eax }
               EmitLeaStrData386(1, IRStrTkOf(valNode));    { ecx = chars }
               EmitLoadStrLen386(2, 0, IRStrTkOf(valNode)); { edx = len }
-              EmitB($BB); EmitI32(STDOUT);                 { mov ebx, STDOUT }
+              EmitB($BB); EmitI32(CurWriteFd);                 { mov ebx, fd }
               EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
               EmitB($CD); EmitB($80);                      { int 0x80 }
             end;

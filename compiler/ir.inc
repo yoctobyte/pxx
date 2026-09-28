@@ -552,6 +552,18 @@ begin
   Inc(IRCount);
 end;
 
+function IRWriteNodeToStdErr(node: Integer): Boolean;
+{ Is this an IR_WRITE / IR_WRITELN aimed at StdErr? Every producer of the two
+  kinds carries the target fd in IRIVal (0 = the default, stdout). Asked by
+  each backend's node emitter before anything else, so that ONE rule decides
+  which writes are wrapped -- the per-backend copies of "which fd" are how five
+  backends came to ignore it. }
+begin
+  Result := (node >= 0) and
+            ((IRKind[node] = IR_WRITE) or (IRKind[node] = IR_WRITELN)) and
+            (IRIVal[node] = 2);
+end;
+
 function IROpName(kind: Integer): AnsiString;
 begin
   case kind of

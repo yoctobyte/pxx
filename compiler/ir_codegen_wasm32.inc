@@ -5127,6 +5127,21 @@ var
   sVal: AnsiString;
   tk: TTypeKind;
 begin
+  { A write to StdErr: every writer here is a builtinheap helper, so pointing
+    PXXOutFd at fd 2 for this one node is the whole fix (WASI's fd 2 is
+    stderr). The register backends do the same in their node emitters.
+    bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+  if (not WriteFdWrapped) and IRWriteNodeToStdErr(node) then
+  begin
+    WriteFdWrapped := True;
+    hp := WasmWriteHelper('PXXOutToStdErr');
+    if hp >= 0 then WasmCall(WasmSlotForProc(hp), 'PXXOutToStdErr');
+    WasmEmitWrite(node);
+    hp := WasmWriteHelper('PXXOutToStdOut');
+    if hp >= 0 then WasmCall(WasmSlotForProc(hp), 'PXXOutToStdOut');
+    WriteFdWrapped := False;
+    Exit;
+  end;
   if IRKind[node] = IR_WRITELN then
   begin
     hp := WasmWriteHelper('PXXWriteNL');

@@ -15374,9 +15374,14 @@ begin
 end;
 
 function pystderr_write(const s: AnsiString): Integer;
+var r: Int64;
 begin
+  { Straight to fd 2, the fd print(file=sys.stderr) now writes to as well, so
+    the two stay in order. `write(StdErr, s)` here named the Text-file RTL's
+    StdErr (this unit pulls it), and on wasm32 that died with "Runtime error 9
+    (I/O error)". bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
   Result := Length(s);
-  if Length(s) > 0 then write(StdErr, s);
+  if Length(s) > 0 then r := PXXSysWrite(2, NativeInt(@s[1]), Length(s));
 end;
 
 { NOTHING TO DO, and that is a measured fact about this writer rather than a

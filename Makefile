@@ -3512,6 +3512,16 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_the_sys_streams.npy $(TESTTMP)/test_nilpy_streams26
 	$(TESTTMP)/test_nilpy_streams26 2>$(TESTTMP)/test_nilpy_streams.err | diff -u test/test_nilpy_the_sys_streams.expected -
 	diff -u test/test_nilpy_the_sys_streams.err.expected $(TESTTMP)/test_nilpy_streams.err
+	# StdErr is fd 2 on every target, and stdout carries nothing of it: each
+	# stream is checked alone, against FPC (Pascal) and CPython (Nil Python).
+	# Only x86-64 honoured the fd one commit back, and it leaked formatted floats.
+	# bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64
+	./$(COMPILER) test/test_stderr_separation.pas $(TESTTMP)/stderrsep26
+	tools/expect_same.sh test_stderr_separation.out "$$($(TESTTMP)/stderrsep26 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh test_stderr_separation.err "$$($(TESTTMP)/stderrsep26 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr26
+	tools/expect_same.sh test_nilpy_print_to_stderr.out "$$($(TESTTMP)/npystderr26 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh test_nilpy_print_to_stderr.err "$$($(TESTTMP)/npystderr26 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
 	# os.altsep / os.makedirs / os.replace -- the three os members lekkerzeilen
 	# reaches that we did not have. The directory is handed in through the
 	# ENVIRONMENT and freshly made each run, because "the leaf already exists" is
@@ -8291,6 +8301,25 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_shadow_rv32)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	./$(COMPILER) --target=riscv32 test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/test_cdecl_warn_rv32run
 	tools/expect_same.sh riscv32/test_cdecl_warning_only_where_ignored "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cdecl_warn_rv32run)" "$$(cat test/test_cdecl_warning_only_where_ignored.expected)"
+	# StdErr is fd 2 on every target, and stdout carries nothing of it: each
+	# stream is checked alone, against FPC (Pascal) and CPython (Nil Python).
+	# Only x86-64 honoured the fd one commit back, and it leaked formatted floats.
+	# bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64
+	./$(COMPILER) --target=riscv32 test/test_stderr_separation.pas $(TESTTMP)/stderrsep_rv32
+	tools/expect_same.sh riscv32/test_stderr_separation.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/stderrsep_rv32 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh riscv32/test_stderr_separation.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/stderrsep_rv32 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_rv32
+	tools/expect_same.sh riscv32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/npystderr_rv32 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh riscv32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/npystderr_rv32 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_the_sys_streams.npy $(TESTTMP)/sysstreams_rv32
+	tools/expect_same.sh riscv32/test_nilpy_the_sys_streams.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/sysstreams_rv32 2>/dev/null)" "$$(cat test/test_nilpy_the_sys_streams.expected)"
+	tools/expect_same.sh riscv32/test_nilpy_the_sys_streams.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/sysstreams_rv32 2>&1 >/dev/null)" "$$(cat test/test_nilpy_the_sys_streams.err.expected)"
+	./$(COMPILER) --target=arm32 test/test_stderr_separation.pas $(TESTTMP)/stderrsep_arm32
+	tools/expect_same.sh arm32/test_stderr_separation.out "$$(tools/run_target.sh arm32 $(TESTTMP)/stderrsep_arm32 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh arm32/test_stderr_separation.err "$$(tools/run_target.sh arm32 $(TESTTMP)/stderrsep_arm32 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_arm32
+	tools/expect_same.sh arm32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh arm32 $(TESTTMP)/npystderr_arm32 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh arm32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh arm32 $(TESTTMP)/npystderr_arm32 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_class_attr_return_type.py $(TESTTMP)/test_nilpy_clsattr_ret_arm32
 	tools/expect_same.sh arm32/test_nilpy_class_attr_return_type "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_clsattr_ret_arm32)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow_arm32
@@ -18578,6 +18607,12 @@ test-core: $(COMPILER)
 	gcc -std=gnu99 -o $(TESTTMP)/c_wasm32_math_gcc test/c_wasm32_math_h.c -lm
 	./$(COMPILER) --target=wasm32 test/c_wasm32_math_h.c $(TESTTMP)/c_wasm32_math.wasm
 	@tools/expect_same.sh c_wasm32_math_h "$$(tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_math.wasm)" "$$($(TESTTMP)/c_wasm32_math_gcc)"
+	./$(COMPILER) --target=wasm32 test/test_stderr_separation.pas $(TESTTMP)/stderrsep.wasm
+	tools/expect_same.sh wasm32/test_stderr_separation.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/stderrsep.wasm 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh wasm32/test_stderr_separation.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/stderrsep.wasm 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) --target=wasm32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr.wasm
+	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
 	# WHICH OPERATIONS ARE SIGNED, on all seven targets, against gcc. A rule
 	# that is wrong in either direction gives a plausible wrong NUMBER and no
 	# crash, and the two directions hide each other -- so the subject carries
@@ -29629,6 +29664,12 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh i386 $(TESTTMP)/shadow_i386)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	./$(COMPILER) --target=i386 test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/cdecl_warn_i386run
 	tools/expect_same.sh i386/test_cdecl_warning_only_where_ignored "$$(tools/run_target.sh i386 $(TESTTMP)/cdecl_warn_i386run)" "$$(cat test/test_cdecl_warning_only_where_ignored.expected)"
+	./$(COMPILER) --target=i386 test/test_stderr_separation.pas $(TESTTMP)/stderrsep_i386
+	tools/expect_same.sh i386/test_stderr_separation.out "$$(tools/run_target.sh i386 $(TESTTMP)/stderrsep_i386 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh i386/test_stderr_separation.err "$$(tools/run_target.sh i386 $(TESTTMP)/stderrsep_i386 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_i386
+	tools/expect_same.sh i386/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh i386/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
 	# Stackless float parameter/local/element (bit pattern or garbage one commit
 	# back) and a generator called after a later one (`1 3 0`, every target).
 	./$(COMPILER) --target=i386 test/test_stackless_float_param_and_element.pas $(TESTTMP)/slfloat_i386
@@ -30102,6 +30143,12 @@ test-aarch64: $(COMPILER)
 	# only its str-literal generator block ever failed (rc=139 one commit back).
 	./$(COMPILER) --target=aarch64 test/test_nilpy_cross32_values.py $(TESTTMP)/cross32v_a64
 	tools/expect_same.sh aarch64/test_nilpy_cross32_values "$$(tools/run_target.sh aarch64 $(TESTTMP)/cross32v_a64)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	./$(COMPILER) --target=aarch64 test/test_stderr_separation.pas $(TESTTMP)/stderrsep_a64
+	tools/expect_same.sh aarch64/test_stderr_separation.out "$$(tools/run_target.sh aarch64 $(TESTTMP)/stderrsep_a64 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh aarch64/test_stderr_separation.err "$$(tools/run_target.sh aarch64 $(TESTTMP)/stderrsep_a64 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) --target=aarch64 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_a64
+	tools/expect_same.sh aarch64/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh aarch64 $(TESTTMP)/npystderr_a64 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh aarch64/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh aarch64 $(TESTTMP)/npystderr_a64 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
 	# Stackless float parameter/local/element (bit pattern or garbage one commit
 	# back) and a generator called after a later one (`1 3 0`, every target).
 	./$(COMPILER) --target=aarch64 test/test_stackless_float_param_and_element.pas $(TESTTMP)/slfloat_a64
@@ -32807,6 +32854,21 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-call0/test_nilpy_class_attr_return_type "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_clsattr_c0)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/xt_shadow_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_shadow_w)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_stderr_separation.pas $(TESTTMP)/xt_stderrsep_w
+	tools/expect_same.sh xtensa-windowed/test_stderr_separation.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_w 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh xtensa-windowed/test_stderr_separation.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_w 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_print_to_stderr.py $(TESTTMP)/xt_npystderr_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_w 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh xtensa-windowed/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_w 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_the_sys_streams.npy $(TESTTMP)/xt_sysstreams_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_the_sys_streams.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sysstreams_w 2>/dev/null)" "$$(cat test/test_nilpy_the_sys_streams.expected)"
+	tools/expect_same.sh xtensa-windowed/test_nilpy_the_sys_streams.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sysstreams_w 2>&1 >/dev/null)" "$$(cat test/test_nilpy_the_sys_streams.err.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_stderr_separation.pas $(TESTTMP)/xt_stderrsep_c0
+	tools/expect_same.sh xtensa-call0/test_stderr_separation.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
+	tools/expect_same.sh xtensa-call0/test_stderr_separation.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_print_to_stderr.py $(TESTTMP)/xt_npystderr_c0
+	tools/expect_same.sh xtensa-call0/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_c0 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
+	tools/expect_same.sh xtensa-call0/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_c0 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/xt_sortnlogn_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sortnlogn_w)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/xt_nonenone_w

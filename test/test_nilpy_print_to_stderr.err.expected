@@ -1,0 +1,12 @@
+err str
+err int -42 7
+err float 2.25 2.5 1e+20
+err bool True False None
+err list [1, 2.5, 'x'] (1, 2)
+err dict {'a': 1}
+err obj Named(3)
+err fstr 21 2.50
+err-sep
+err no newline|
+err write
+err after write

@@ -1501,7 +1501,7 @@ end;
 procedure EmitwriteSyscallA64(dataOff, len: Integer);
 begin
   EmitI32($D2800808);  { movz x8, #64 }
-  EmitI32($D2800020);  { movz x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { movz x0, #fd }
   EmitI32($58000041);  { ldr x1, [pc+8] }
   EmitI32($14000003);  { b [pc+12] }
   EmitDataRef(dataOff);
@@ -2070,7 +2070,7 @@ begin
   EmitI32($39000020);
   { Make syscall: write(1, x1, 1) }
   EmitI32($D2800808);  { movz x8, #64 }
-  EmitI32($D2800020);  { movz x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { movz x0, #fd }
   EmitI32($D2800022);  { movz x2, #1 }
   EmitI32($D4000001);  { svc #0 }
 end;
@@ -2132,7 +2132,7 @@ begin
   { Write syscall: write(1, x3, x1) }
   EmitI32($AA0103E2);  { mov x2, x1 }
   EmitI32($AA0303E1);  { mov x1, x3 }
-  EmitI32($D2800020);  { mov x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
   EmitI32($D4000001);  { svc #0 }
 end;
@@ -2164,7 +2164,7 @@ begin
   { Write syscall: write(1, x3, x1) }
   EmitI32($AA0103E2);  { mov x2, x1 }
   EmitI32($AA0303E1);  { mov x1, x3 }
-  EmitI32($D2800020);  { mov x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
   EmitI32($D4000001);  { svc #0 }
 end;
@@ -2246,7 +2246,7 @@ begin
   EmitI32($58000041);  { ldr x1, [pc+8] }
   EmitI32($14000003);  { b [pc+12] }
   EmitDataRef(SpacesOffset);
-  EmitI32($D2800020);  { mov x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
   EmitI32($D4000001);  { svc #0 }
   
@@ -2266,7 +2266,7 @@ begin
   EmitI32($58000041);  { ldr x1, [pc+8] }
   EmitI32($14000003);  { b [pc+12] }
   EmitDataRef(MINUS_OFFSET);
-  EmitI32($D2800020);  { mov x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
   EmitI32($D4000001);  { svc #0 }
   
@@ -2278,7 +2278,7 @@ begin
   EmitI32($A8C20FE1);
   EmitI32($AA0103E2);  { mov x2, x1 }
   EmitI32($AA0303E1);  { mov x1, x3 }
-  EmitI32($D2800020);  { mov x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
   EmitI32($D4000001);  { svc #0 }
 end;
@@ -2325,7 +2325,7 @@ begin
   EmitI32($58000041);  { ldr x1, [pc+8] }
   EmitI32($14000003);  { b [pc+12] }
   EmitDataRef(SpacesOffset);
-  EmitI32($D2800020);  { mov x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
   EmitI32($D4000001);  { svc #0 }
   
@@ -2337,7 +2337,7 @@ begin
   EmitI32($A8C20FE1);
   EmitI32($AA0103E2);  { mov x2, x1 }
   EmitI32($AA0303E1);  { mov x1, x3 }
-  EmitI32($D2800020);  { mov x0, #1 }
+  EmitI32($D2800000 + (CurWriteFd shl 5));  { mov x0, #fd }
   EmitI32($D2800808);  { mov x8, #64 }
   EmitI32($D4000001);  { svc #0 }
 end;
@@ -2357,7 +2357,7 @@ end;
 procedure EmitwriteSyscallArm32(dataOff, len: Integer);
 begin
   EmitI32($E3A07004);  { mov r7, #4 }
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E59F1000);  { ldr r1, [pc] }
   EmitI32($EA000000);  { b .+8 }
   EmitDataRef(dataOff);
@@ -2375,7 +2375,7 @@ begin
   EmitI32($E5C10000);
   { Make syscall: write(1, r1, 1) }
   EmitI32($E3A07004);  { mov r7, #4 }
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A02001);  { mov r2, #1 }
   EmitI32($EF000000);  { svc #0 }
 end;
@@ -2426,7 +2426,7 @@ begin
   { Write syscall: write(1, r3, r1) }
   EmitI32($E1A02001);  { mov r2, r1 }
   EmitI32($E1A01003);  { mov r1, r3 }
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A07004);  { mov r7, #4 }
   EmitI32($EF000000);  { svc #0 }
 end;
@@ -2459,7 +2459,7 @@ begin
   { Write syscall: write(1, r3, r1) }
   EmitI32($E1A02001);  { mov r2, r1 }
   EmitI32($E1A01003);  { mov r1, r3 }
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A07004);  { mov r7, #4 }
   EmitI32($EF000000);  { svc #0 }
 end;
@@ -2527,7 +2527,7 @@ begin
   EmitI32($E59F1000);  { ldr r1, [pc] }
   EmitI32($EA000000);  { b .+8 }
   EmitDataRef(SpacesOffset);
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A07004);  { mov r7, #4 }
   EmitI32($EF000000);  { svc #0 }
   
@@ -2553,7 +2553,7 @@ begin
   { Write digits: write(1, r3, r1) }
   EmitI32($E1A02001);  { mov r2, r1 }
   EmitI32($E1A01003);  { mov r1, r3 }
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A07004);  { mov r7, #4 }
   EmitI32($EF000000);  { svc #0 }
 end;
@@ -2600,7 +2600,7 @@ begin
   EmitI32($E59F1000);  { ldr r1, [pc] }
   EmitI32($EA000000);  { b .+8 }
   EmitDataRef(SpacesOffset);
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A07004);  { mov r7, #4 }
   EmitI32($EF000000);  { svc #0 }
   
@@ -2613,7 +2613,7 @@ begin
   { Write digits: write(1, r3, r1) }
   EmitI32($E1A02001);  { mov r2, r1 }
   EmitI32($E1A01003);  { mov r1, r3 }
-  EmitI32($E3A00001);  { mov r0, #1 }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A07004);  { mov r7, #4 }
   EmitI32($EF000000);  { svc #0 }
 end;

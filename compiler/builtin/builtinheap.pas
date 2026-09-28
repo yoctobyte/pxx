@@ -3194,13 +3194,43 @@ end;
   (which would lower right back to the backend paths being implemented).
   Any backend could adopt them; see bug-riscv32-hosted-writeln-hello-hangs. }
 
+{ The fd these helpers write to. 0 means stdout, so the zeroed BSS is already
+  right on every target and nothing has to initialise it. Codegen sets it for
+  ONE write statement that targets StdErr (PXXOutToStdErr before, PXXOutToStdOut
+  after) and never touches it otherwise, so a stdout write costs nothing.
+  Under --threadsafe the statement is inside the I/O lock (x86-64, i386,
+  aarch64 and arm32 emit it), so no other thread can see the swapped value.
+
+  Every helper here wrote fd 1 literally. Only x86-64 inlined its own
+  syscalls with the statement's fd, so on i386, arm32, aarch64, riscv32 and
+  xtensa every StdErr write reached stdout, and on x86-64 so did every
+  formatted float, whose writer is a shim onto this file.
+  bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+var
+  PXXOutFd: NativeInt;
+
+function PXXOutFdNow: NativeInt;
+begin
+  if PXXOutFd = 0 then Result := 1 else Result := PXXOutFd;
+end;
+
+procedure PXXOutToStdErr;
+begin
+  PXXOutFd := 2;
+end;
+
+procedure PXXOutToStdOut;
+begin
+  PXXOutFd := 0;
+end;
+
 procedure PXXWritePad(n: NativeInt);
 var sp: Byte; r: Int64;
 begin
   sp := 32;
   while n > 0 do
   begin
-    r := PXXSysWrite(1, Int64(@sp), 1);
+    r := PXXSysWrite(PXXOutFdNow, Int64(@sp), 1);
     n := n - 1;
   end;
 end;
@@ -3210,14 +3240,14 @@ var b: Byte; r: Int64;
 begin
   if wid > 1 then PXXWritePad(wid - 1);
   b := Byte(c);
-  r := PXXSysWrite(1, Int64(@b), 1);
+  r := PXXSysWrite(PXXOutFdNow, Int64(@b), 1);
 end;
 
 procedure PXXWriteNL;
 var b: Byte; r: Int64;
 begin
   b := 10;
-  r := PXXSysWrite(1, Int64(@b), 1);
+  r := PXXSysWrite(PXXOutFdNow, Int64(@b), 1);
 end;
 
 { [-]decimal of v (uns<>0: treat the 64-bit pattern as unsigned), right-aligned
@@ -3251,7 +3281,7 @@ begin
   end;
   n := 24 - i;
   if wid > n then PXXWritePad(wid - n);
-  r := PXXSysWrite(1, Int64(@buf[i]), n);
+  r := PXXSysWrite(PXXOutFdNow, Int64(@buf[i]), n);
 end;
 
 { TRUE/FALSE (FPC console form), right-aligned to wid. }
@@ -3269,7 +3299,7 @@ begin
     n := 5;
   end;
   if wid > n then PXXWritePad(wid - n);
-  r := PXXSysWrite(1, Int64(@buf[0]), n);
+  r := PXXSysWrite(PXXOutFdNow, Int64(@buf[0]), n);
 end;
 
 { Managed AnsiString handle (nil = empty), right-aligned to wid. }
@@ -3279,7 +3309,7 @@ begin
   len := 0;
   if p <> nil then len := PMachineWord(Int64(p) - 8)^;
   if wid > len then PXXWritePad(wid - len);
-  if len > 0 then r := PXXSysWrite(1, Int64(p), len);
+  if len > 0 then r := PXXSysWrite(PXXOutFdNow, Int64(p), len);
 end;
 
 { PXXWriteStrMW for a handle the WRITE owns -- a concat or a fresh call result,
@@ -3321,7 +3351,7 @@ var len: Int64; r: Int64;
 begin
   len := PMachineWord(p)^;
   if wid > len then PXXWritePad(wid - len);
-  if len > 0 then r := PXXSysWrite(1, Int64(p) + 8, len);
+  if len > 0 then r := PXXSysWrite(PXXOutFdNow, Int64(p) + 8, len);
 end;
 
 { The same, for a frozen string with a ONE-BYTE length prefix (tyShortString).
@@ -3341,7 +3371,7 @@ var len: Int64; r: Int64;
 begin
   len := PByte(p)^;
   if wid > len then PXXWritePad(wid - len);
-  if len > 0 then r := PXXSysWrite(1, Int64(p) + 1, len);
+  if len > 0 then r := PXXSysWrite(PXXOutFdNow, Int64(p) + 1, len);
 end;
 
 { NUL-terminated C string (PChar), nil-safe. }
@@ -3351,11 +3381,31 @@ begin
   if p = nil then Exit;
   len := 0;
   while PByte(Int64(p) + len)^ <> 0 do len := len + 1;
-  if len > 0 then r := PXXSysWrite(1, Int64(p), len);
+  if len > 0 then r := PXXSysWrite(PXXOutFdNow, Int64(p), len);
 end;
 
 
 {$endif}
+
+{ A single char / a literal through the helpers above, so the text follows
+  PXXOutFd. The float writers below printed their digits with `write(...)`
+  statements, which compile once with fd 1 and so ignored StdErr on every
+  target, x86-64 included. Outside the ifndef so the float writers still build
+  on the bare ESP profile, where they do nothing, as `write` did there.
+  bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+procedure PXXPutC(c: Char);
+begin
+{$ifndef PXX_ESP_BARE}
+  PXXWriteCharW(Ord(c), 0);
+{$endif}
+end;
+
+procedure PXXPutLit(p: PChar);
+begin
+{$ifndef PXX_ESP_BARE}
+  PXXWriteCStr(p);
+{$endif}
+end;
 
 {$ifndef PXX_ESP}
 { Per-target syscall wrappers for the file-load helper. AArch64 has no plain
@@ -6472,7 +6522,7 @@ begin
   begin
     d := Trunc(v / p);
     ch := Chr(48 + d);
-    write(ch);
+    PXXPutC(ch);
     v := v - d * p;
     p := p / 10;
   end;
@@ -6490,7 +6540,7 @@ begin
   x := PDouble(p)^;
   if PByte(Int64(p) + 7)^ >= 128 then  { sign bit (handles -0.0 too) }
   begin
-    write('-');
+    PXXPutLit('-');
     x := -x;
   end;
   { ip := trunc(x): round-even, then correct down }
@@ -6513,14 +6563,14 @@ begin
     ip := ip + 1;
   end;
   PXXWriteUIntD(@ip);
-  write('.');
+  PXXPutLit('.');
   dv := scale15 / 10;  { 10^14 }
   for i := 0 to 14 do
   begin
     d := Trunc(m / dv);
     m := m - d * dv;
     ch := Chr(48 + d);
-    write(ch);
+    PXXPutC(ch);
     if (i < 14) and (m = 0) then Exit;
     dv := dv / 10;
   end;
@@ -6551,17 +6601,17 @@ begin
   x := PDouble(p)^;
   if x <> x then
   begin
-    write(' Nan');
+    PXXPutLit(' Nan');
     Exit;
   end;
   if x > 1.7976931348623157e308 then
   begin
-    write(' Inf');
+    PXXPutLit(' Inf');
     Exit;
   end;
   if x < -1.7976931348623157e308 then
   begin
-    write('-Inf');
+    PXXPutLit('-Inf');
     Exit;
   end;
   two52 := 1;
@@ -6611,14 +6661,14 @@ begin
     if decimals > 0 then total := total + 1 + decimals;
     while total < width do
     begin
-      write(' ');
+      PXXPutLit(' ');
       total := total + 1;
     end;
   end;
-  if neg then write('-');
+  if neg then PXXPutLit('-');
   PXXWriteUIntD(@ip);
   if decimals <= 0 then Exit;
-  write('.');
+  PXXPutLit('.');
   ndig := PxxFracDigits(@x, decimals, 1);
 end;
 
@@ -6839,7 +6889,7 @@ begin
       for k := 1 to (idx mod 9) do scale := scale * 10;
       d := Integer((buf[idx div 9] div scale) mod 10);
       ch := Chr(48 + d);
-      write(ch);
+      PXXPutC(ch);
       dpos := dpos + 1;
     end;
   end;
@@ -6883,7 +6933,7 @@ begin
   begin
     { an integral (or zero) value: the fraction is all zeros, exactly }
     if emit <> 0 then
-      for i := 1 to decimals do write('0');
+      for i := 1 to decimals do PXXPutLit('0');
     Exit;
   end;
   k := -exp2;                        { value = mant / 2^k = mant*5^k / 10^k }
@@ -6951,9 +7001,9 @@ begin
     for j := 1 to keep do
     begin
       ch := Chr(48 + dig[j]);
-      write(ch);
+      PXXPutC(ch);
     end;
-    for j := keep + 1 to decimals do write('0');   { the value really does end }
+    for j := keep + 1 to decimals do PXXPutLit('0');   { the value really does end }
   end;
 end;
 
@@ -7000,32 +7050,32 @@ begin
     (bug-a-writeln-of-a-non-finite-double-hangs). }
   if x <> x then
   begin
-    write(' Nan');
+    PXXPutLit(' Nan');
     Exit;
   end;
   if x > 1.7976931348623157e308 then
   begin
-    write(' Inf');
+    PXXPutLit(' Inf');
     Exit;
   end;
   if x < -1.7976931348623157e308 then
   begin
-    write('-Inf');
+    PXXPutLit('-Inf');
     Exit;
   end;
   if PByte(Int64(p) + 7)^ >= 128 then
   begin
-    write('-');
+    PXXPutLit('-');
     x := -x;
   end
   else
-    write(' ');
+    PXXPutLit(' ');
   if x = 0 then
   begin
-    write('0.');
-    for k := 1 to fracdigits do write('0');
-    write('E+');
-    for k := 1 to expdigits do write('0');
+    PXXPutLit('0.');
+    for k := 1 to fracdigits do PXXPutLit('0');
+    PXXPutLit('E+');
+    for k := 1 to expdigits do PXXPutLit('0');
     Exit;
   end;
   { EXACT digits — see PxxSciDigits17. The normalise-by-repeated-division loop
@@ -7062,23 +7112,23 @@ begin
     divisor := 1;
     for d := 1 to k do divisor := divisor * 10;
     ch := Chr(48 + ((m div divisor) mod 10));
-    write(ch);
-    if k = keep - 1 then write('.');
+    PXXPutC(ch);
+    if k = keep - 1 then PXXPutLit('.');
   end;
-  write('E');
+  PXXPutLit('E');
   if e < 0 then
   begin
-    write('-');
+    PXXPutLit('-');
     e := -e;
   end
   else
-    write('+');
+    PXXPutLit('+');
   divisor := 1;
   for d := 1 to expdigits - 1 do divisor := divisor * 10;
   while divisor > 0 do
   begin
     ch := Chr(48 + ((e div divisor) mod 10));
-    write(ch);
+    PXXPutC(ch);
     divisor := divisor div 10;
   end;
 end;
@@ -7108,7 +7158,7 @@ begin
       serves both frontends.
       bug-a-a-boolean-variant-writes-as-1-or-0-off-x86-64 }
     iv := PMachineWord(Int64(v) + 8)^;
-    if iv <> 0 then write('True') else write('False');
+    if iv <> 0 then PXXPutLit('True') else PXXPutLit('False');
   end
   else if (tag = 1) or (tag = 2) then          { VT_INT / VT_INT64 }
   begin
@@ -7124,14 +7174,14 @@ begin
       string HANDLE really are machine words.
       bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
     iv := PInt64(Int64(v) + 8)^;
-    write(iv);
+    PXXWriteDecW(iv, 0, 0);
   end
   else if tag = 3 then  { VT_DOUBLE }
     PXXWriteFloatNat(Pointer(Int64(v) + 8))
   else if tag = 5 then  { VT_CHAR }
   begin
     ch := Chr(PByte(Int64(v) + 8)^);
-    write(ch);
+    PXXPutC(ch);
   end
   else if (tag = 6) or ((tag >= 8192) and (tag <= 8199)) then
   { VT_STRING, or any tag in the promotable-int block: a promo too large for
@@ -7147,7 +7197,7 @@ begin
       while i < len do
       begin
         ch := Chr(PByte(s + i)^);
-        write(ch);
+        PXXPutC(ch);
         i := i + 1;
       end;
     end;

@@ -694,7 +694,7 @@ begin
   EmitI32($91000442);   { add x2, x2, #1 }
   EmitI32($17FFFFFC);   { b scan (-4 instr) }
   { done: }
-  EmitI32($D2800020);   { mov x0, #1 (stdout) }
+  EmitI32($D2800000 + (CurWriteFd shl 5));   { mov x0, #fd }
   EmitI32($D2800808);   { mov x8, #64 (sys_write) }
   EmitI32($D4000001);   { svc #0 }
 end;
@@ -2081,6 +2081,21 @@ var
   w1CmpLA64, w1CmpRA64: Integer;   { -O3 W1 slices 5+7 (aarch64): 0 = the normal x0/x1 contract, else x19..x24 read in place }
   sgn, isComp, savedLValueWrite: Boolean;
 begin
+  { A write to StdErr: point the runtime writers at fd 2 for this ONE node
+    (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
+    the node as usual, then restore both. A stdout write never gets here, so its
+    code is unchanged. bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+  if (not WriteFdWrapped) and IRWriteNodeToStdErr(node) then
+  begin
+    WriteFdWrapped := True;
+    CurWriteFd := 2;
+    if FindProc('PXXOutToStdErr') >= 0 then EmitCallProc(FindProc('PXXOutToStdErr'));
+    IREmitNodeAarch64(node);
+    if FindProc('PXXOutToStdOut') >= 0 then EmitCallProc(FindProc('PXXOutToStdOut'));
+    CurWriteFd := STDOUT;
+    WriteFdWrapped := False;
+    Exit;
+  end;
   if node = -1 then Exit;
   case IRKind[node] of
     IR_NOP, IR_BLOCK: ;
@@ -5044,7 +5059,7 @@ begin
               IREmitNodeAarch64(valNode);            { x0 = struct addr }
               EmitLoadStrLenA64(2, 0, IRStrTkOf(valNode));   { x2 = len }
               EmitLeaStrDataA64(1, 0, IRStrTkOf(valNode));   { x1 = chars }
-              EmitI32($D2800020);                    { movz x0, #1 (fd) }
+              EmitI32($D2800000 + (CurWriteFd shl 5));                    { movz x0, #fd }
               EmitI32($D2800808);                    { movz x8, #64 (write) }
               EmitI32($D4000001);                    { svc #0 }
             end;
@@ -5075,7 +5090,7 @@ begin
               EmitI32($F81F0FE0);                    { str x0, [sp, #-16]! (preserve) }
               EmitI32($F85F8002);                    { ldur x2, [x0, #-8] (len) }
               EmitI32($AA0003E1);                    { mov x1, x0 (buf) }
-              EmitI32($D2800020);                    { movz x0, #1 (fd) }
+              EmitI32($D2800000 + (CurWriteFd shl 5));                    { movz x0, #fd }
               EmitI32($D2800808);                    { movz x8, #64 (write) }
               EmitI32($D4000001);                    { svc #0 }
               EmitI32($F84107E0);                    { ldr x0, [sp], #16 (handle) }

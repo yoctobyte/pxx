@@ -991,7 +991,7 @@ begin
   EmitI32($1A000000 or ((((digitLoop - CodeLen) div 4) - 2) and $00ffffff));  { bne .digitLoop }
   EmitI32($E1A02008);  { mov r2, r8 (len) }
   EmitI32($E1A01005);  { mov r1, r5 (buf) }
-  EmitI32($E3A00001);  { mov r0, #1 (stdout) }
+  EmitI32($E3A00000 + CurWriteFd);  { mov r0, #fd }
   EmitI32($E3A07004);  { mov r7, #4 (write) }
   EmitI32($EF000000);  { svc #0 }
 end;
@@ -1161,7 +1161,7 @@ begin
   EmitI32($E2822001);   { add r2, r2, #1 }
   EmitI32($EAFFFFF9);   { b scan }
   { done: }
-  EmitI32($E3A00001);   { mov r0, #1 (stdout) }
+  EmitI32($E3A00000 + CurWriteFd);   { mov r0, #fd }
   EmitI32($E3A07004);   { mov r7, #4 (sys_write) }
   EmitI32($EF000000);   { svc #0 }
 end;
@@ -1474,6 +1474,21 @@ var
   tk: TTypeKind;
   sgn, savedLValueWrite: Boolean;
 begin
+  { A write to StdErr: point the runtime writers at fd 2 for this ONE node
+    (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
+    the node as usual, then restore both. A stdout write never gets here, so its
+    code is unchanged. bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+  if (not WriteFdWrapped) and IRWriteNodeToStdErr(node) then
+  begin
+    WriteFdWrapped := True;
+    CurWriteFd := 2;
+    if FindProc('PXXOutToStdErr') >= 0 then EmitCallProc(FindProc('PXXOutToStdErr'));
+    IREmitNodeArm32(node);
+    if FindProc('PXXOutToStdOut') >= 0 then EmitCallProc(FindProc('PXXOutToStdOut'));
+    CurWriteFd := STDOUT;
+    WriteFdWrapped := False;
+    Exit;
+  end;
   if node = -1 then Exit;
   case IRKind[node] of
     IR_NOP, IR_BLOCK: ;
@@ -4827,7 +4842,7 @@ begin
               EmitI32($E92D0001);                  { push {r0} }
               EmitI32($E5102008);                  { ldr r2, [r0, #-8] }
               EmitI32($E1A01000);                  { mov r1, r0 }
-              EmitI32($E3A00001);                  { mov r0, #1 }
+              EmitI32($E3A00000 + CurWriteFd);                  { mov r0, #fd }
               EmitI32($E3A07004);                  { mov r7, #4 }
               EmitI32($EF000000);                  { svc #0 }
               EmitI32($E8BD0001);                  { pop {r0} handle }
@@ -4859,7 +4874,7 @@ begin
               IREmitNodeArm32(valNode);            { r0 = [len][data] }
               EmitLoadStrLenArm32(2, 0, IRStrTkOf(valNode));   { r2 = len }
               EmitLeaStrDataArm32(1, 0, IRStrTkOf(valNode));   { r1 = chars }
-              EmitI32($E3A00001);                  { mov r0, #1 }
+              EmitI32($E3A00000 + CurWriteFd);                  { mov r0, #fd }
               EmitI32($E3A07004);                  { mov r7, #4 }
               EmitI32($EF000000);                  { svc #0 }
             end;

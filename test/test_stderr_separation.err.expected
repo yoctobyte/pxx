@@ -1,0 +1,11 @@
+E const
+E int -42    -42|
+E i64 1234567890123
+E bool TRUE    TRUE|
+E char Q  Q|
+E float 2.3    2.250|
+E sci  2.2500000000000000E+000
+E str ansi    ansi|short    short|
+E const width    ab|
+E part1 7
+

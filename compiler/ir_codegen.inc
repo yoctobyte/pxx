@@ -7811,6 +7811,21 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil, rx, sx: Integer;
     apR0, apR1: Integer;
     apMem, apS0, apS1, apAgg: Boolean;
 begin
+  { A write to StdErr: point the runtime writers at fd 2 for this ONE node
+    (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
+    the node as usual, then restore both. A stdout write never gets here, so its
+    code is unchanged. bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+  if (not WriteFdWrapped) and IRWriteNodeToStdErr(node) then
+  begin
+    WriteFdWrapped := True;
+    CurWriteFd := 2;
+    if FindProc('PXXOutToStdErr') >= 0 then EmitCallProc(FindProc('PXXOutToStdErr'));
+    IREmitNode(node);
+    if FindProc('PXXOutToStdOut') >= 0 then EmitCallProc(FindProc('PXXOutToStdOut'));
+    CurWriteFd := STDOUT;
+    WriteFdWrapped := False;
+    Exit;
+  end;
   if node = -1 then Exit;
   
   case IRKind[node] of

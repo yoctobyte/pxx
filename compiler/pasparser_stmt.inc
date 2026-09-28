@@ -4974,10 +4974,19 @@ begin
       vidx := FindSym(CurTok.SVal);
       if (vidx >= 0) and (Syms[vidx].Kind = skConst) and (Syms[vidx].TypeKind = tyInteger) and (Syms[vidx].Name = 'StdErr') then
       begin
-        Next; Eat(tkComma);
+        Next;
         { Route this write to fd 2. ASTIVal on the WRITE node carries the target
           fd (0/absent = stdout); codegen threads it to the write syscalls. }
         ASTIVal[node] := Syms[vidx].ConstVal;
+        { `WriteLn(StdErr)` alone is the newline to stderr, as in FPC. It was
+          refused with "expected expression", because the argument loop below
+          always parses at least one. }
+        if not Eat(tkComma) then
+        begin
+          Expect(tkRParen, ')');
+          Result := node;
+          Exit;
+        end;
       end;
     end;
     repeat

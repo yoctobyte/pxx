@@ -2101,6 +2101,21 @@ var
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
 begin
+  { A write to StdErr: point the runtime writers at fd 2 for this ONE node
+    (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
+    the node as usual, then restore both. A stdout write never gets here, so its
+    code is unchanged. bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+  if (not WriteFdWrapped) and IRWriteNodeToStdErr(node) then
+  begin
+    WriteFdWrapped := True;
+    CurWriteFd := 2;
+    if FindProc('PXXOutToStdErr') >= 0 then EmitXtensaHelperCall(XtensaHelperProc('PXXOutToStdErr'), 0);
+    IREmitNodeXtensa(node);
+    if FindProc('PXXOutToStdOut') >= 0 then EmitXtensaHelperCall(XtensaHelperProc('PXXOutToStdOut'), 0);
+    CurWriteFd := STDOUT;
+    WriteFdWrapped := False;
+    Exit;
+  end;
   case IRKind[node] of
     IR_CONST_INT:
       { The riscv32 case, on the target that matters most: a float constant's
@@ -4223,7 +4238,7 @@ begin
             end;
             if Strs[si].Len > 0 then
             begin
-              { write(1, data+8, len) -- inline syscall, no helper needed.
+              { write(fd, data+8, len) -- inline syscall, no helper needed.
                 13 is __NR_write in XTENSA'S table (measured under
                 qemu-xtensa); riscv32's arm uses 64, from the generic table.
                 a2 = nr, a6 = arg0, a3 = arg1, a4 = arg2 -- NOT a2..a7 in
@@ -4234,12 +4249,12 @@ begin
               begin
                 { no kernel under IDF: the same three arguments, in a2..a4,
                   go to PXXSysWrite }
-                xtensa_movi(reg_xtensa_a2, 1);            { fd 1 }
+                xtensa_movi(reg_xtensa_a2, CurWriteFd);   { fd }
                 EmitXtensaHelperCall(XtensaHelperProc('PXXSysWrite'), 3);
               end
               else
               begin
-                xtensa_movi(reg_xtensa_a6, 1);            { fd 1 }
+                xtensa_movi(reg_xtensa_a6, CurWriteFd);   { fd }
                 xtensa_movi(reg_xtensa_a2, 13);           { __NR_write }
                 xtensa_syscall;
               end;

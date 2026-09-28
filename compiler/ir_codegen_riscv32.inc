@@ -1598,6 +1598,21 @@ var
   vaByVal: Boolean;
   sVal: AnsiString;
 begin
+  { A write to StdErr: point the runtime writers at fd 2 for this ONE node
+    (PXXOutFd, builtinheap.pas), let the inline syscalls read CurWriteFd, emit
+    the node as usual, then restore both. A stdout write never gets here, so its
+    code is unchanged. bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
+  if (not WriteFdWrapped) and IRWriteNodeToStdErr(node) then
+  begin
+    WriteFdWrapped := True;
+    CurWriteFd := 2;
+    if FindProc('PXXOutToStdErr') >= 0 then EmitCallProc(FindProc('PXXOutToStdErr'));
+    IREmitNodeRISCV32(node);
+    if FindProc('PXXOutToStdOut') >= 0 then EmitCallProc(FindProc('PXXOutToStdOut'));
+    CurWriteFd := STDOUT;
+    WriteFdWrapped := False;
+    Exit;
+  end;
   case IRKind[node] of
     IR_CONST_INT:
       { A float constant's IVal is the DOUBLE bit pattern whatever its tk says
@@ -3746,10 +3761,10 @@ begin
             end;
             if Strs[si].Len > 0 then
             begin
-              { write(1, data+8, len) — inline syscall, no helper needed;
+              { write(fd, data+8, len) — inline syscall, no helper needed;
                 under IDF there is no kernel, so the same three arguments go
                 to PXXSysWrite, whose IDF arm calls newlib's write. }
-              EmitLoadImmRISCV32(reg_a0, 1);
+              EmitLoadImmRISCV32(reg_a0, CurWriteFd);
               EmitLoadDataRefRISCV32(reg_a1, Strs[si].Offset + 8);
               EmitLoadImmRISCV32(reg_a2, Strs[si].Len);
               if TargetPlatform = PLATFORM_ESP then
