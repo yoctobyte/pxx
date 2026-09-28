@@ -16777,7 +16777,7 @@
    "status": "fail"
   },
   {
-   "bad": "b1f2b7d8812dce14468da84ec8e1e0e867f3c412",
+   "bad": "7d105ec21cfdd12bd25e46371464c65241189487",
    "bad_untestable": true,
    "first_seen": false,
    "good": "9a245b91c4093e51fb5bbdd7e9f4eb7f0ee27a51",
@@ -16789,8 +16789,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "7d105ec21cfdd12bd25e46371464c65241189487",
-    "49cda4fb28c51e592b9f808523725a627663c446"
+    "7d105ec21cfdd12bd25e46371464c65241189487"
    ],
    "range_non_causal": false,
    "src": "test/thread_glibc_malloc_two_threads.pas tools/expect_same.sh",
