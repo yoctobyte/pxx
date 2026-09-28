@@ -1,0 +1,13 @@
+param 1.0
+local 2.5
+own+cap 2.5
+int 42
+str hi!
+def direct 1.0
+def value 1.0
+default 1.5
+default overridden 2.5
+def default 1.5
+nonlocal 3.0
+int+float 2.5
+method 1.5

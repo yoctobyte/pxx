@@ -5796,7 +5796,7 @@ begin
             (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
             (nm = 'pyboundfn_setstar') or (nm = 'pyboundfn_setsig') or
             (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
-            (nm = 'pyboundfn_bind_cell');
+            (nm = 'pyboundfn_bind_cell') or (nm = 'pyboundfn_bind_dbl');
 end;
 
 function PyFreshCallableCtor(node: Integer): Boolean;
@@ -9047,7 +9047,7 @@ begin
     (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
     (nm = 'pyboundfn_setstar') or (nm = 'pyboundfn_setsig') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
-    (nm = 'pyboundfn_bind_cell');
+    (nm = 'pyboundfn_bind_cell') or (nm = 'pyboundfn_bind_dbl');
 end;
 
 function IRNodeIsPyStr(n: Integer): Boolean;

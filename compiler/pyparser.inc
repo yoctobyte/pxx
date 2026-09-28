@@ -11675,7 +11675,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     lamTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     lamSyms: array[0..MAX_PROC_PARAMS-1] of Integer;
     lamRecs: array[0..MAX_PROC_PARAMS-1] of Integer;
-    newPi, bindPi, varBindPi: Integer;
+    newPi, bindPi, varBindPi, dblBindPi: Integer;
     lamManagedCap: Boolean;   { a capture the lifter cannot take -> do not lift }
     lamStarIdx, starPend, starCi, starPi: Integer;   { `lambda *a:` }
     sigPi: Integer;                  { pyboundfn_setsig — the parameter NAMES }
@@ -11805,6 +11805,7 @@ begin
   newPi := FindProc('pyboundfn_new');
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
+  dblBindPi := FindProc('pyboundfn_bind_dbl');
   { …up to THREE own parameters, not one. The old gate was `nParams <= 1`
     because the bridge was assumed to pass a single argument — but
     pyboundfn_callvn takes a0/a1/a2 and places `NOwn` of them before the bound
@@ -12124,6 +12125,7 @@ begin
         ASTRight[argB] := argC;
         node := AllocNode(AN_CALL);
         if lamTypes[j] = tyVariant then ASTIVal[node] := varBindPi
+        else if (lamTypes[j] = tyDouble) and (dblBindPi >= 0) then ASTIVal[node] := dblBindPi
         else ASTIVal[node] := bindPi;
         ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
       end;
@@ -12272,13 +12274,14 @@ end;
   when a capture cannot travel as a register word (variant/unresolved), so the
   caller falls back to the plain address. }
 function PyMakeBoundFnValue(procIdx: Integer): Integer;
-var j, symIdx, node, argA, argB, argC, pi, bindPi, varBindPi, vNode: Integer;
+var j, symIdx, node, argA, argB, argC, pi, bindPi, varBindPi, dblBindPi, vNode: Integer;
     nm: AnsiString;
 begin
   Result := -1;
   pi := FindProc('pyboundfn_new');
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
+  dblBindPi := FindProc('pyboundfn_bind_dbl');
   if (pi < 0) or (bindPi < 0) or (varBindPi < 0) then Exit;
   if PyCapCount[procIdx] > 12 then Exit;
   for j := 0 to PyCapCount[procIdx] - 1 do
@@ -12327,6 +12330,9 @@ begin
     node := AllocNode(AN_CALL);
     if (Syms[symIdx].TypeKind = tyVariant) and (SymCellPtr[symIdx] < 0) then
       ASTIVal[node] := varBindPi
+    else if (Syms[symIdx].TypeKind = tyDouble) and (SymCellPtr[symIdx] < 0) and
+            (dblBindPi >= 0) then
+      ASTIVal[node] := dblBindPi
     else
       ASTIVal[node] := bindPi;
     ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
@@ -12355,7 +12361,7 @@ var defTok, i, j, k, depth: Integer;
     pDefS, pDefE: array[0..15] of Integer;
     nP, nDef, nOwn, bindIdx, savedTok, ownPi: Integer;
     starPi: Integer;
-    node, argA, argB, argC, argD, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
+    node, argA, argB, argC, argD, vNode, newPi, bindPi, varBindPi, dblBindPi, symIdx: Integer;
     objBindPi, cellBindPi, defPi, varMask: Integer;
     sigPi: Integer;                  { pyboundfn_setsig — the parameter NAMES }
     nm: AnsiString;
@@ -12383,6 +12389,20 @@ var defTok, i, j, k, depth: Integer;
     the address of a cell, not a value. Same nOwn + bi indexing as
     BoundParamIsVariant, and for the same reason — the captures sit after the
     def's own parameters. }
+  { A by-value DOUBLE parameter reads its word as a bit pattern — bind it with
+    pyboundfn_bind_dbl, or the value is converted to an integer on the way in.
+    NOT a by-ref one: a `nonlocal` float binds its shared cell's ADDRESS, and
+    sending that through the Double binder converted the pointer to a float
+    (the escaped counter segfaulted on x86-64 and i386). }
+  function BoundParamIsDouble(bi: Integer): Boolean;
+  var pidx: Integer;
+  begin
+    pidx := nOwn + bi;
+    BoundParamIsDouble := (pidx < Procs[procIdx].ParamCount) and
+                          (Procs[procIdx].Params[pidx].TypeKind = tyDouble) and
+                          not Procs[procIdx].Params[pidx].IsRef;
+  end;
+
   function BoundParamIsRef(bi: Integer): Boolean;
   var pidx: Integer;
   begin
@@ -12427,6 +12447,7 @@ var defTok, i, j, k, depth: Integer;
     if isObj and (objBindPi >= 0) then ASTIVal[node] := objBindPi
     else if isVar then ASTIVal[node] := varBindPi
     else if isCell and (cellBindPi >= 0) then ASTIVal[node] := cellBindPi
+    else if BoundParamIsDouble(bindIdx) and (dblBindPi >= 0) then ASTIVal[node] := dblBindPi
     else ASTIVal[node] := bindPi;
     ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
     Inc(bindIdx);
@@ -12447,6 +12468,7 @@ begin
   newPi := FindProc('pyboundfn_new');
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
+  dblBindPi := FindProc('pyboundfn_bind_dbl');
   objBindPi := FindProc('pyboundfn_bind_obj');
   cellBindPi := FindProc('pyboundfn_bind_cell');
   if (newPi < 0) or (bindPi < 0) or (varBindPi < 0) then Exit;
@@ -23597,7 +23619,7 @@ begin
     (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
     (nm = 'pyboundfn_setstar') or (nm = 'pyboundfn_setsig') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
-    (nm = 'pyboundfn_bind_cell');
+    (nm = 'pyboundfn_bind_cell') or (nm = 'pyboundfn_bind_dbl');
 end;
 
 function PyBareNoneHere: Boolean;
@@ -39488,6 +39510,22 @@ begin
         node := AllocNode(AN_DEREF);
         ASTLeft[node] := GenMakeIdent(idx, tyPointer);
         ASTTk[node] := Ord(Procs[realProcIdx].Params[i].TypeKind);
+        wCastNode := node;
+      end
+      else if Procs[realProcIdx].Params[i].TypeKind = tyDouble then
+      begin
+        { a DOUBLE's word is its BIT PATTERN (pyboundfn_bind_dbl), so read the
+          word's own storage as a Double. The value cast converted it: the
+          bits of 1.0 as an integer came back 4.6071824188000174e+18. }
+        idx := AllocVar('', tyPointer);
+        SetSymPointerTo(idx, tyDouble, REC_NONE);
+        node := AllocNode(AN_ADDR);
+        ASTLeft[node] := wIdentNode;
+        ASTTk[node] := Ord(tyPointer);
+        PyHoistStmt(PyMakeAssignNode(GenMakeIdent(idx, tyPointer), node));
+        node := AllocNode(AN_DEREF);
+        ASTLeft[node] := GenMakeIdent(idx, tyPointer);
+        ASTTk[node] := Ord(tyDouble);
         wCastNode := node;
       end
       else

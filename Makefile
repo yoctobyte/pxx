@@ -3601,6 +3601,8 @@ test-nilpy: $(COMPILER)
 	# the row pass on a broken compiler. Read the file's own header before editing.
 	./$(COMPILER) test/test_nilpy_class_attribute_and_a_lambda_in_a_method.npy $(TESTTMP)/test_nilpy_clsattrlam26
 	$(TESTTMP)/test_nilpy_clsattrlam26 | diff -u test/test_nilpy_class_attribute_and_a_lambda_in_a_method.expected -
+	./$(COMPILER) test/test_nilpy_a_captured_float_travels_by_its_bits.npy $(TESTTMP)/test_nilpy_capfloat26
+	$(TESTTMP)/test_nilpy_capfloat26 | diff -u test/test_nilpy_a_captured_float_travels_by_its_bits.expected -
 	@# The None ARM of a conditional expression must survive the def's inferred
 	@# RETURN TYPE. PyInferExprType had no arm for the None literal, so it
 	@# answered tyUnknown — the join's IDENTITY ELEMENT — and the other arm stood
@@ -29463,6 +29465,8 @@ test-i386: $(COMPILER)
 	@# target enters through a word thunk (PyBoundFnEntry). x86-64 cannot see it.
 	./$(COMPILER) --target=i386 test/test_nilpy_lifted_closure_slots_on_32bit.npy $(TESTTMP)/lclslots_i386
 	tools/expect_same.sh i386/test_nilpy_lifted_closure_slots "$$(tools/run_target.sh i386 $(TESTTMP)/lclslots_i386)" "$$(cat test/test_nilpy_lifted_closure_slots_on_32bit.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_a_captured_float_travels_by_its_bits.npy $(TESTTMP)/capfloat_i386
+	tools/expect_same.sh i386/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh i386 $(TESTTMP)/capfloat_i386)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
 	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
 	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
 	@# it -- its reference is borrowed from the in-flight exception and becomes
@@ -34744,6 +34748,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_callable_field_wide_arity "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_callable_field_wide_arity_a32)" "$$(cat test/test_nilpy_callable_field_wide_arity.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_lifted_closure_slots_on_32bit.npy $(TESTTMP)/lclslots_a32
 	tools/expect_same.sh arm32/test_nilpy_lifted_closure_slots "$$(tools/run_target.sh arm32 $(TESTTMP)/lclslots_a32)" "$$(cat test/test_nilpy_lifted_closure_slots_on_32bit.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_a_captured_float_travels_by_its_bits.npy $(TESTTMP)/capfloat_a32
+	tools/expect_same.sh arm32/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh arm32 $(TESTTMP)/capfloat_a32)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

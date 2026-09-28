@@ -16,6 +16,7 @@ AN_ADDR Left node
 AN_ADDR Left operand
 AN_ADDR Left policyNode
 AN_ADDR Left valNode
+AN_ADDR Left wIdentNode
 AN_ALLOCA Left ASTLeft[argHead]
 AN_ALLOCA Left idn
 AN_ARG Left ASTLeft[ASTLeft[callNode]]

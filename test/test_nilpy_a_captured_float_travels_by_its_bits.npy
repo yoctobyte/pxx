@@ -1,0 +1,94 @@
+# RUN ON A 32-bit TARGET (test-i386, test-arm32) as well as x86-64. The
+# ESP32-S3 and C3 are the same shape and need a board: hosted riscv32 and
+# xtensa refuse Nil Python, and the bare-metal profile does not build it.
+#
+# A lifted closure receives each bound capture as one 64-bit word. A FLOAT
+# capture went through the Int64 binder, which CONVERTED it (1.0 -> 1), and the
+# 32-bit word thunk then converted the word back as an integer. `bare(1.0)`
+# printed 0.0 on i386 and arm32 and 4.6071824188000174e+18 on the ESP. Ints,
+# strs and a directly called nested def were right, which is why only the
+# float rows moved. A float now binds by its bit pattern (pyboundfn_bind_dbl),
+# and the thunk reads it back the same way.
+# Every expected line is CPython's own output.
+
+def bare(x):
+    g = lambda: x
+    return g()
+
+def loc(v):
+    y = v * 2.0
+    g = lambda: y
+    return g()
+
+def withp(x):
+    g = lambda k: x + k
+    return g(0.5)
+
+def ints(n):
+    g = lambda: n + 1
+    return g()
+
+def strs(s):
+    g = lambda: s + "!"
+    return g()
+
+def nd_direct(x):
+    def g():
+        return x
+    return g()
+
+def nd_value(x):
+    def g():
+        return x
+    h = g
+    return h()
+
+def dflt(d):
+    f = lambda k=d: k
+    return f()
+
+def dover(d):
+    f = lambda k=d: k
+    return f(2.5)
+
+def nd_def(d):
+    def g(k=d):
+        return k * 2.0
+    h = g
+    return h()
+
+# a nonlocal float binds its shared cell's ADDRESS, never the bits
+def nl(x):
+    y = x
+    def g():
+        nonlocal y
+        y = y + 1.0
+        return y
+    h = g
+    h()
+    return h()
+
+def mixed(a, b):
+    f = lambda: a + b
+    return f()
+
+class C:
+    def __init__(self):
+        self.s = 3.0
+    def m(self, t):
+        f = lambda: self.s * t
+        return f()
+
+print("param", bare(1.0))
+print("local", loc(1.25))
+print("own+cap", withp(2.0))
+print("int", ints(41))
+print("str", strs("hi"))
+print("def direct", nd_direct(1.0))
+print("def value", nd_value(1.0))
+print("default", dflt(1.5))
+print("default overridden", dover(1.5))
+print("def default", nd_def(0.75))
+print("nonlocal", nl(1.0))
+print("int+float", mixed(2, 0.5))
+print("method", C().m(0.5))

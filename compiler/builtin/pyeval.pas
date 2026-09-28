@@ -204,6 +204,12 @@ function pyclosure_setarity(obj: Pointer; req, tot: Int64): Pointer;
   The body runs NATIVELY — no pyeval subset limits. }
 function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
 function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
+{ Bind a FLOAT capture by its BIT PATTERN. Handed to pyboundfn_bind, a Double
+  met an Int64 parameter and was CONVERTED (1.0 -> 1), and the body's Double
+  parameter then read the integer's bits: 0.0 on i386 and arm32, 4.6e18 on the
+  ESP. The bridge passes the word through untouched, so storing the bits is what
+  makes the callee read the value. }
+function pyboundfn_bind_dbl(obj: Pointer; idx: Int64; v: Double): Pointer;
 { Declare how many OWN parameters the compiled body takes before its captures.
   Without it the bridge assumes one — see the NOwn note on TBoundFnObj. }
 function pyboundfn_setown(obj: Pointer; nown: Int64): Pointer;
@@ -3088,6 +3094,15 @@ begin
     to every other closure over it. Freeing it here would dangle the siblings. }
   PyBFSetKind(o, idx, BK_PLAIN);
   pyboundfn_bind := obj;
+end;
+
+function pyboundfn_bind_dbl(obj: Pointer; idx: Int64; v: Double): Pointer;
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.Bound[idx] := PInt64(@v)^;
+  PyBFSetKind(o, idx, BK_PLAIN);
+  pyboundfn_bind_dbl := obj;
 end;
 
 function pyboundfn_is(p: Pointer): Boolean;
