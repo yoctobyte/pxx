@@ -170,9 +170,14 @@ dropped, plus the events still pending. Separately, one run handles at most 16
 events and leaves the rest in the queue for the next run; those are deferred,
 not dropped. A sleep or a `poll()` is therefore a bounded amount of work, not a
 promise of an empty queue. A handler that blocks does not start a second run
-inside itself. Pascal can change the 16 with `IntSetDrainBudget(n)`, read it
-with `IntDrainBudget`, and ask `IntInDrain` whether a run is in progress.
-**Python has none of these three**, which is a known limitation.
+inside itself. `IntSetDrainBudget(n)` changes the 16, `IntDrainBudget` reads
+it, and `IntInDrain` says whether a run is in progress. Python calls them by
+the same names (`interrupts.IntSetDrainBudget(4)`); there are no lowercase
+spellings. With v450 (sha256 `c19cc2d531e4…`) on 2026-09-28, a Python program
+that sets the budget to 4 and pushes 10 events sees one `poll()` deliver 4 and
+leave 6 pending, and `IntInDrain()` answers `True` inside the handler, on
+x86-64, and on i386, arm32 and riscv32 under QEMU user mode. It builds for the
+ESP32-C3 and ESP32-S3 and has not been run on a board.
 
 **What was checked on a board.**
 
