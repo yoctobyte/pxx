@@ -6,10 +6,14 @@
 #   per-target SHA256 manifest, runs the full gate + selfcheck, assembles dist/,
 #   and reports what *would* be tagged/published. Creates NO tag, cuts NO release.
 #
-#   --publish        actually cut the release: create the annotated tag + push it
-#                    (fires .github/workflows/release.yml). Only side-effecting path.
+#   --publish        actually cut the release: create the annotated tag + push it.
+#                    Only side-effecting path. The tag push publishes NOTHING:
+#                    .github/workflows/release.yml has no tag trigger and runs
+#                    only when dispatched. With `gh` this script dispatches it;
+#                    without `gh` it says so, and a person must press
+#                    Actions -> release -> Run workflow (tag=<the tag>).
 #   --local          with --publish: `gh release create` from the locally-built
-#                    dist/ assets instead of tag-driven CI.
+#                    dist/ assets instead of the dispatched workflow.
 #   --no-seatbelt    skip the human-state confirmations (for scripted/CI use).
 #   --selftest       run the version-bump unit tests only (pure, no repo state) + exit.
 #   -h | --help      this help.
@@ -207,7 +211,7 @@ choose_version() {
 }
 
 # ---- main ---------------------------------------------------------------------
-usage() { sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 main() {
   local args=("$@") i

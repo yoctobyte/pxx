@@ -17,8 +17,8 @@ Names used below:
 - **REL**: the commit that will be tagged. It is SRC plus documentation
   commits only.
 
-The order is: freeze, pin, restamp, check the freeze again, dry run on
-seven, walk the tarball, owner's yes.
+The order is: freeze, pin, restamp, check the freeze again, dry run on the
+release host, walk the tarball, owner's yes.
 
 ## 1. The freeze
 
@@ -60,7 +60,7 @@ change its binary was not built from; the check above catches that too.
 
 ## 2. The final pin (the coordinator does these)
 
-On plexus, in the coordinator's checkout, under the owner's lock:
+On the development box, in the coordinator's checkout, under the owner's lock:
 
 ```sh
 PXX_ALLOW_FULL_SUITE=1 make stabilize
@@ -135,13 +135,13 @@ itself, on a push webhook and a 5-minute timer
 (`~/pxx-website/deploy/README.md`). Once the restamp is pushed, the pages
 without the draft banner reach the site on their own, before the tag exists.
 
-## 4. The dry run on seven
+## 4. The dry run on the release host
 
-seven is the owner's release box. Its checkout is `~/pxx`. The owner's cap
-there is 19 cores.
+The release host is a spare 24-thread box; cap it with `taskset -c 0-18`
+(19 cores, the owner's cap there). The coordinator has the route to it. Its
+checkout is `~/pxx`.
 
 ```sh
-ssh -o HostKeyAlias=seven seven@seven.local
 cd ~/pxx
 git status --short                               # must print nothing
 git pull -q --ff-only origin master
@@ -149,7 +149,7 @@ git log --oneline -1                             # must be REL
 tail -1 stable_linux_amd64/default/pin.log       # must name vNNN
 ```
 
-Checked read-only on 2026-09-28: seven has 24 cores and fpc 3.2.2 (the gate
+Checked read-only on 2026-09-28: the host has 24 threads and fpc 3.2.2 (the gate
 runs `make test-fpc`), `~/pxx` had no local changes, at `149a4354b8`, and its pinned binary was
 v448's `b2b325036c3b`. `gh` is not installed there, and `taskset` is. Its load was 18.9 at the
 time, so check `uptime` before starting.
@@ -172,8 +172,8 @@ tag on origin (checked on 2026-09-28: only `archive/` and `checkpoint-` tags)
 it computes `v0.1.0-beta.1`. Without `--publish` it is a dry run: it creates
 no tag and pushes nothing.
 
-**How long.** The v446 dry run took 7,075 s (just under 2 hours) on plexus,
-not on seven. seven has not run it yet. A red gate row stops the run: the
+**How long.** The v446 dry run took 7,075 s (just under 2 hours) on the
+development box, not on the release host, which has not run it yet. A red gate row stops the run: the
 first v446 attempt ended at `RC 2` after 2,352 s on a red `test-core` row.
 Demo failures listed in `tools/release-xfail.txt` are tolerated; nothing else
 is.
@@ -230,7 +230,7 @@ printed `Hello, World!`, and `selfcheck.sh` took 199 s and printed
 
 None of these has been done, and nobody but the owner starts them.
 
-1. **The tag and the GitHub release.** On seven, in the same checkout, with
+1. **The tag and the GitHub release.** On the release host, in the same checkout, with
    the same environment: `tools/release.sh --publish`. It refuses unless the
    release binary is the pin and the checkout is clean and in sync with
    origin. It asks three seatbelt questions and for the tag to be typed. It
@@ -239,16 +239,17 @@ None of these has been done, and nobody but the owner starts them.
    pushes it. **Pushing the tag publishes nothing:**
    `.github/workflows/release.yml` has no tag trigger and runs only when it
    is dispatched. `release.sh` dispatches it with `gh`, but `gh` is not
-   installed on seven, so there it prints `gh not found — finish the release
+   installed on the release host, so there it prints `gh not found — finish the release
    by hand:` and `Actions -> release -> Run workflow -> tag=v0.1.0-beta.1`.
    That button is the step that publishes: the workflow rebuilds on GitHub's
    runner, runs the gate and the reproduction selfcheck for the tag, and then
-   creates the release. (`--local` would publish from seven's `dist/` with
+   creates the release. (`--local` would publish from the host's `dist/` with
    `gh`, using `devdocs/release-notes/v0.1.0-beta.1.md` as the body, and also
    needs `gh`.) This is read from `release.sh` and `release.yml`; none of it
    has been run.
-2. **Codeberg.** No Codeberg remote is configured: on 2026-09-28 plexus's
-   checkout had only `origin`, GitHub, and seven's `origin` is GitHub too. Whether and how
+2. **Codeberg.** No Codeberg remote is configured: on 2026-09-28 the
+   development checkout had only `origin`, GitHub, and the release host's
+   `origin` is GitHub too. Whether and how
    to mirror is the owner's call.
 3. **The website.** Content follows GitHub by itself (step 3). Deploying the
    site's code is separate and manual, on the host, per
