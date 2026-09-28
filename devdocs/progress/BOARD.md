@@ -753,11 +753,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 
-## backlog-esp (2)
+## backlog-esp (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-s-espide-auto-never-exits-after-build-flash | S | 60 | bug | SOLVED 2026-09-28, root cause proven and fixed. espide's monitor ran `cat <port>`; /bin/cat on plexus is uutils coreutils 0.8.0, which moves tty -> pipe with splice(tty, NULL, pipe, NULL, 1MB, 0). splice() into a pipe takes pipe->mutex and HOLDS IT while waiting for source bytes, so a quiet board parks cat inside splice holding the lock. pipe_read() takes that same mutex BEFORE it checks O_NONBLOCK, so espide's non-blocking fd bought nothing: it slept in state D (uninterruptible -- SIGTERM and SIGKILL do not end it) with zero CPU until the board next emitted a byte, which is why an 8 s monitor was observed hanging 45 s, 223 s, 2835 s and 4h36m. The kernel said so independently in dmesg: 'INFO: task espide is blocked on a mutex likely owned by task cat'. FIX: the monitor child is now `dd if=<port> bs=512 status=none`, which uses read/write and never splices (measured: 0 splice calls on both the uutils and GNU flavours). Proven by a 15-second board-free A/B on a pty: with cat, 0 ticks of progress in 12 s and state D, unreapable by SIGKILL; with dd, 60 ticks and state S. THE INVARIANT for whoever edits StartMonitor next: the monitor child must not splice into our pipe. There is no defence on the reader's side -- a D-state read cannot be interrupted from userspace -- so it has to be avoided in the child. | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | S3 ROWS MET ON SILICON 2026-09-24 (frankH, ESP32-S3 devkit on /dev/ttyACM0, compiler 58412e442c17 unless noted). C3 ROWS MET ON SILICON 2026-09-28 (frankB, ESP32-C3 USB-JTAG board, tree cdd6fd3c1f, compiler 139494b2b863): test_esp_hw_validation == x86-64 oracle 7/7 rst 1; nilpy-c3, nilpy-hw-c3, isrctx-c3, gpio-edge-c3, adc-c3 all match main.expected, one boot each (LOGBOOK 2026-09-28 sweep); isr_no_alloc (a scratchpad copy with the producer pinned to core 0, the C3 has one core) reads gpio 10000 ISRs heap-delta 0, adc 625 ISRs heap-delta 0, integrity 1, with the -dALLOC_IN_TASK readout at 28000. ONLY THE S2 ROWS STAY OPEN: no S2 board is on this box. Per row, S3: (1) UART boot == oracle: MET, test/test_esp_hw_validation.pas via `esp_flash.sh --chip esp32s3` matches the x86-64 oracle 7/7. (1b) Does the filter match silicon: MET for the four S3 NilPy demos (nilpy-s3 and nilpy-hw-s3 with the pinned compiler, gpio-edge-s3 and adc-s3 with HEAD). The raw reset-capture minus IDF log lines equals main.expected line for line, 0 lines stripped after app_main, one boot each. Silicon prints ONE routine W that qemu does not, BEFORE app_main: `spi_flash: Detected size(16384k) larger than the size in the binary image header(4096k)`. The E scan has fired on silicon for a real task-watchdog trigger (the first adc-s3 run, before time.sleep was fixed). (2) ISR fires: MET, isrctx (built for esp32s3 from isrctx-c3's main.pas with ISR dispatch on) prints `isr hits=5 ctx=1` against `task hits=5 ctx=0`, PAIR OK; also the GPIO-edge and ADC-frame ISRs of examples/esp32/gpio-edge-s3 and adc-s3. (2b) The contract, no allocation in the handler: MET for espgpio's and espadc's handlers. test/esp_board_isr_no_alloc.pas shows a free-heap delta of 0 over 9,997 GPIO and 625 ADC ISR entries, heap integrity OK, idle drift 0. Readout control (-dALLOC_IN_TASK, 1000 x 16 B) reads 28,000, so the zeros are real. The ISR-allocating control (-dALLOC_IN_ISR) aborts on the FIRST entry with `pxx: out of memory (ESP-IDF heap exhausted)`: loud, but the message misnames the cause. Timer step (esp_timer, task dispatch, NOT an ISR): runs on silicon inside nilpy-hw-s3. OPEN: every S2 row (hello-s2 builds with --target=esp32s2; atomics are refused on the S2 by design until feature-a-esp32s2-atomics-by-interrupt-masking). | — |
 
 ## backlog-rust (0)
@@ -1136,9 +1135,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4038)
+## done (4039)
 
-4038 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4039 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1356,7 +1355,6 @@ _none_
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-n-two-same-named-defs-in-exclusive-branches-of-one-function-collapse-silently
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- [p 60] [S] bug-s-espide-auto-never-exits-after-build-flash
 - [p 60] [T] bug-t-a-one-target-test-recipe-truncates-silently-on-its-first-failure
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [T] bug-t-the-full-matrix-switches-itself-off-when-the-fleet-is-busy

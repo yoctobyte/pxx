@@ -3,7 +3,7 @@ slug: bug-s-espide-auto-never-exits-after-build-flash
 track: S
 type: bug
 prio: 60
-status: fixed
+status: done
 owner: frankZ
 created: 2026-09-27
 summary: "SOLVED 2026-09-28, root cause proven and fixed. espide's monitor ran `cat <port>`; /bin/cat on plexus is uutils coreutils 0.8.0, which moves tty -> pipe with splice(tty, NULL, pipe, NULL, 1MB, 0). splice() into a pipe takes pipe->mutex and HOLDS IT while waiting for source bytes, so a quiet board parks cat inside splice holding the lock. pipe_read() takes that same mutex BEFORE it checks O_NONBLOCK, so espide's non-blocking fd bought nothing: it slept in state D (uninterruptible -- SIGTERM and SIGKILL do not end it) with zero CPU until the board next emitted a byte, which is why an 8 s monitor was observed hanging 45 s, 223 s, 2835 s and 4h36m. The kernel said so independently in dmesg: 'INFO: task espide is blocked on a mutex likely owned by task cat'. FIX: the monitor child is now `dd if=<port> bs=512 status=none`, which uses read/write and never splices (measured: 0 splice calls on both the uutils and GNU flavours). Proven by a 15-second board-free A/B on a pty: with cat, 0 ticks of progress in 12 s and state D, unreapable by SIGKILL; with dd, 60 ticks and state S. THE INVARIANT for whoever edits StartMonitor next: the monitor child must not splice into our pipe. There is no defence on the reader's side -- a D-state read cannot be interrupted from userspace -- so it has to be avoided in the child."
@@ -12,7 +12,7 @@ summary: "SOLVED 2026-09-28, root cause proven and fixed. espide's monitor ran `
 # espide's monitor wedged: a child holding pipe->mutex across a splice() wait
 
 - **Type:** bug — Track S
-- **Status:** FIXED. Root cause proven; fix verified board-free and on the board.
+- **Status:** done
 - **Priority:** 60. The GUI Monitor button feeds the same path.
 
 ## The cause, in one paragraph
@@ -121,7 +121,7 @@ Every **external** instrument failed, each for a reason worth not repeating:
   sent three hypotheses down the wrong path. It is the *frame*, not the reason.
 
 So the subject was made to report its own position: `PXX_IDE_TRACE=1`
-(`garin/runner`, commit `45f56ed278`) writes one token per `StreamPoll` step to
+(`garin/runner`, commit `a1ba7875f7`) writes one token per `StreamPoll` step to
 stderr, flushed per token, so the **last token before a freeze is the step that
 did not return**. It printed, on the board and later on a bare pty:
 
@@ -165,7 +165,7 @@ Two measured dead ends from the final stretch, recorded so they are not retried:
 
 ## Four real defects fixed along the way, none of them the cause
 
-`0cc5b6c12f`, `e3818c0112`. Kept under this slug because this hunt found them.
+`0cc5b6c12f`, `76804f7cb3`. Kept under this slug because this hunt found them.
 
 1. `AddLog` set `Log.Text` (a full GtkTextView rewrite, `LOG_CAP` 32 KB) plus
    `CountLines` over the same buffer per arriving chunk, against a 64 KB-per-tick
@@ -222,3 +222,6 @@ instrument.** The corollary held too — the subject's own trace
 (`PXX_IDE_TRACE=1`) beat every external debugger on this target, because pxx
 executables carry no section header and `ptrace_scope=1` blocks attaching to
 anything that is not your own child.
+
+## Log
+- 2026-09-28 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

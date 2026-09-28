@@ -31,6 +31,8 @@ program espide;
                                     and assert control came back: the GUI half
                                     of the hardware check, which --gui-smoke
                                     cannot do because it starts no child
+    espide --gui-libs-smoke <folder> open Settings > Libraries, check it is
+                                    populated, close it, check it let go
     espide --auto <project> [secs]  detect, build+flash, monitor secs (10),
                                     print the log to stdout, exit 0 on a
                                     flashed board: the hardware check. }
@@ -1313,6 +1315,33 @@ begin
   GuiSmokePressStop := 0;
 end;
 
+{ --gui-libs-smoke drives Settings > Libraries, the IDE's SECOND TForm.
+
+  What is worth checking is not the config parsing -- bochan already covers
+  EspLibCfg round-trips headlessly -- but that the dialog CONSTRUCTS, gets
+  populated from the project's espide.cfg, and CLOSES cleanly. The close path is
+  the interesting half: GTK's default delete-event destroys a window, so a kept
+  form whose title bar was closed would hand a stale handle to the next Show,
+  which is why OnMenuLibraries rebuilds and OnLibClose nils the field. This
+  asserts the field really is nil afterwards. }
+var
+  libsOpened: Boolean = False;
+  libsCaption: AnsiString = '';
+
+function GuiSmokePressLibs(data: Pointer): Integer; cdecl;
+begin
+  EspForm.OnMenuLibraries(nil);
+  libsOpened := EspForm.LibDlg <> nil;
+  if libsOpened then libsCaption := EspForm.LibDlg.Caption;
+  GuiSmokePressLibs := 0;
+end;
+
+function GuiSmokeCloseLibs(data: Pointer): Integer; cdecl;
+begin
+  EspForm.OnLibClose(nil);
+  GuiSmokeCloseLibs := 0;
+end;
+
 { A toolbar button. NO SetBounds: a toolbar places its own items, and a size
   request on one becomes a width the row -- and therefore the window -- cannot
   go below, which is the floor this toolbar exists to remove. }
@@ -1362,7 +1391,8 @@ begin
     end
     else if a = '--auto' then
       f.AutoRun := True
-    else if (a = '--gui-smoke') or (a = '--gui-monitor-smoke') then
+    else if (a = '--gui-smoke') or (a = '--gui-monitor-smoke')
+         or (a = '--gui-libs-smoke') then
       arg := a
     else
     begin
@@ -1553,6 +1583,44 @@ begin
       writeln('GUI MONITOR SMOKE OK: pressed Monitor, held it ', f.AutoSecs,
               ' s, pressed Stop, control came back (log ',
               Length(f.LogText), ' bytes)');
+    Halt(smokeRc);
+  end
+  else if arg = '--gui-libs-smoke' then
+  begin
+    { DO NOT press it with no project open. OnMenuLibraries answers that case
+      with ShowMessage, which is MODAL, and a modal dialog under Xvfb with nobody
+      to click it is indistinguishable from a hang. Refuse here instead, where the
+      reason can be printed. }
+    if f.CurProject = '' then
+    begin
+      writeln('GUI LIBS SMOKE FAIL: no project open in ', start,
+              ' -- pass a folder holding a CMakeLists.txt and a build.sh');
+      Halt(1);
+    end;
+    g_timeout_add(600, @GuiSmokePressLibs, nil);
+    g_timeout_add(1800, @GuiSmokeCloseLibs, nil);
+    g_timeout_add(2600, @GuiAutoQuit, nil);
+    Application.Run;
+    smokeRc := 0;
+    if not libsOpened then
+    begin
+      writeln('GUI LIBS SMOKE FAIL: the Libraries dialog did not open');
+      smokeRc := 1;
+    end;
+    if Pos('Libraries for ', libsCaption) <> 1 then
+    begin
+      writeln('GUI LIBS SMOKE FAIL: caption does not name the project: ', libsCaption);
+      smokeRc := 1;
+    end;
+    if f.LibDlg <> nil then
+    begin
+      writeln('GUI LIBS SMOKE FAIL: closing left the form behind, so the next ' +
+              'open would reuse a destroyed handle');
+      smokeRc := 1;
+    end;
+    if smokeRc = 0 then
+      writeln('GUI LIBS SMOKE OK: opened "', libsCaption,
+              '", populated it from espide.cfg, closed it, field cleared');
     Halt(smokeRc);
   end
   else if f.AutoRun then
