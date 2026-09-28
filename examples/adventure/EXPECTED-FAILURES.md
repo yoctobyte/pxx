@@ -1,5 +1,13 @@
 # Expected compiler failures — adventure demo
 
+> **Historical (2026-06-18), superseded.** The demo now builds and runs.
+> Re-checked 2026-09-29 with pin v450 (compiler sha256 `c19cc2d531e4`) from
+> the v0.1.0-beta.1 release archive: `./pxx adventure.pas` builds, and run
+> from `examples/adventure/` it draws its title screen and exits 0 after
+> `look` and `quit`. Its screenshot in
+> [Examples](../../docs/examples/index.md) was taken with v450. The
+> predictions below are kept as the record of what it took.
+
 This demo is **platonic code**: written to be idiomatic and feature-rich, NOT
 yet compiled. Per project policy, where it does not yet compile the fix is to
 implement the feature, not to dumb down the game. This file logs **exactly where

@@ -13,14 +13,17 @@ under `examples/` in the checkout.
 **Every entry on this page was compiled and run.** Nothing is listed on the
 strength of a test that once passed or a claim in another document.
 
-> **Last checked 2026-09-28 with pin v449** (`stable_linux_amd64/default/pinned`,
-> sha256 `0ded1e5d04c8…`) on an x86-64 Linux host, at checkout `0eeccbef42`.
-> `make demos` built all 36 Pascal programs under `examples/`, the 12 Nil
-> Python programs under `examples/shell/` and `examples/tk/` built, and every
-> batch, parallel and Nil Python program below ran and gave the result in its
-> row.
-> The binary sizes in the tables are from that run. The ESP32 QEMU runs were
-> redone with v449 too. Rows that were measured on an earlier pin say which:
+> **Last checked 2026-09-29 with pin v450** (sha256 `c19cc2d531e4…`) on an
+> x86-64 Linux host, from the v0.1.0-beta.1 release archive after
+> `./install.sh --yes`, each program built with the `./pxx` command shown on
+> this page. Every batch and parallel program below ran and gave the result in
+> its row, the maze, chess, kiosk and `nilsh` output matches what is quoted,
+> and the 12 Nil Python programs under `examples/shell/` and `examples/tk/`
+> built. The binary sizes in the batch table are from that run, and each
+> rounds to the same figure as with v449. `make demos` built all 36 Pascal
+> programs under `examples/` with v449 and with v450.
+> The ESP32 QEMU runs were redone with v449; eight of them again with v450
+> (see [All 36 ESP32 examples](#all-36-esp32-examples)). Rows that were measured on an earlier pin say which:
 > the C and Pascal library rows and the ESP32 board runs. The terminal and GTK
 > screenshots, and the Eliah IDE's, were retaken on 2026-09-28 with pin v450
 > (sha256 `c19cc2d531e4…`), from programs built by `make demos` with that pin.
@@ -136,15 +139,15 @@ work distribution. Build these with `--threadsafe`.
 | mandelbrot_parallel | `examples/mandelbrot/mandelbrot_parallel.pas` | The Mandelbrot set rendered row by row on every core, then serially; the two checksums must match (`CHECKSUM MATCH`). `--ppm FILE` also writes the image |
 
 Each program checks that every distribution produces the same answer as the
-serial loop. With v449 all five printed their `ALL AGREE` or `CHECKSUM MATCH`
-line:
+serial loop. With v449, and again with v450 on 2026-09-29, all five printed
+their `ALL AGREE` or `CHECKSUM MATCH` line. primecount with v450:
 
 ```text
 Prime count over 2..2000000   workers=12
 primes     = 148933   max gap = 132
-serial     : 2951987 us
-pdChunked  : 653334 us   speedup 451 /100x
-pdOnDemand : 592328 us   speedup 498 /100x
+serial     : 4568576 us
+pdChunked  : 1483192 us   speedup 308 /100x
+pdOnDemand : 1522016 us   speedup 300 /100x
 (even load: pdChunked ~= pdOnDemand here, unlike collatz)
 ALL AGREE — count matches pi(LIMIT), reductions identical across distributions
 ```
@@ -176,6 +179,16 @@ for the start position, and its opening choice. It then takes commands
 (`print`, `fen`, `perft <n>`, `go <depth>`, `quit`):
 
 ```text
+PXX chess demo
+
+8  r n b q k b n r
+7  p p p p p p p p
+6  . . . . . . . .
+5  . . . . . . . .
+4  . . . . . . . .
+3  . . . . . . . .
+2  P P P P P P P P
+1  R N B Q K B N R
    a b c d e f g h
 White to move
 
@@ -185,7 +198,7 @@ perft(3) = 8902
 perft(4) = 197281
 
 bestmove e2e4  score 10  nodes 40793
-chess>
+chess> 
 ```
 
 `examples/kiosk.pas` is the small program that runs inside the
@@ -255,7 +268,8 @@ frontend and has known gaps.
 
 `examples/shell/nilsh.npy` is a single binary whose commands are built-in
 applet functions, with no fork and no exec. The same source is meant to run as
-a Linux process or as an ESP32 task set. It plays a scripted session:
+a Linux process or as an ESP32 task set. It plays a scripted session; the
+block below is part of it, in order (the full session runs 15 commands):
 
 ```sh
 ./pxx examples/shell/nilsh.npy /tmp/nilsh && /tmp/nilsh
