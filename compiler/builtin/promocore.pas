@@ -1887,12 +1887,20 @@ end;
   2 when d is NaN (every ordering is False then). d's integer part is rebuilt
   as a promo bit for bit: a double >= 2^62 is an even integer, so halving it is
   exact, and the halvings come back as doublings of the promo. }
+{ THE LOCALS ARE PREFIXED ON PURPOSE. This routine first shipped (cafc739cbf)
+  with a promo slot named `pi`, and that local changed UNRELATED NilPy programs:
+  `max(1.5, 2)` printed 2.0 for 2, `min(-0.0, 0.0)` printed 0.0, and `e =
+  getattr(r, "key_at", None); e(1, 1)` stopped compiling ("no overload of e
+  ... candidates: e()"). Renaming only that local fixed all three, measured one
+  name at a time. A routine-local name in a builtin unit should not be visible
+  to a user program at all; until that compiler defect is fixed, keep builtin
+  locals away from Python builtin and math names (pi, e, ...). }
 function PromoCmpDbl(p: Pointer; d: Double): Integer;
-var q, frac: Double;
-    k, i: Integer;
-    ip: Int64;
-    pi, t, z: array[0..1] of NativeInt;
-    c: Integer;
+var cdQ, cdFrac: Double;
+    cdK, cdI: Integer;
+    cdIp: Int64;
+    cdInt, cdTmp, cdZero: array[0..1] of NativeInt;
+    cdC: Integer;
 begin
   if d <> d then begin PromoCmpDbl := 2; Exit; end;
   if (d - d) <> 0 then
@@ -1900,28 +1908,28 @@ begin
     if d > 0 then PromoCmpDbl := -1 else PromoCmpDbl := 1;
     Exit;
   end;
-  if d < 0 then q := -d else q := d;
-  k := 0;
-  while q >= 4611686018427387904.0 do begin q := q / 2; Inc(k); end;
-  ip := Trunc(q);
-  frac := q - ip;
-  PXXPromoInit(@pi); PXXPromoInit(@t);
-  PXXPromoFromInt(@pi, ip);
-  for i := 1 to k do begin PXXPromoMulInt(@t, @pi, 2); PXXPromoCopy(@pi, @t); end;
+  if d < 0 then cdQ := -d else cdQ := d;
+  cdK := 0;
+  while cdQ >= 4611686018427387904.0 do begin cdQ := cdQ / 2; Inc(cdK); end;
+  cdIp := Trunc(cdQ);
+  cdFrac := cdQ - cdIp;
+  PXXPromoInit(@cdInt); PXXPromoInit(@cdTmp);
+  PXXPromoFromInt(@cdInt, cdIp);
+  for cdI := 1 to cdK do begin PXXPromoMulInt(@cdTmp, @cdInt, 2); PXXPromoCopy(@cdInt, @cdTmp); end;
   if d < 0 then
   begin
-    PXXPromoInit(@z); PXXPromoFromInt(@z, 0);
-    PXXPromoSub(@t, @z, @pi); PXXPromoCopy(@pi, @t);
-    PXXPromoClear(@z);
+    PXXPromoInit(@cdZero); PXXPromoFromInt(@cdZero, 0);
+    PXXPromoSub(@cdTmp, @cdZero, @cdInt); PXXPromoCopy(@cdInt, @cdTmp);
+    PXXPromoClear(@cdZero);
   end;
-  c := PXXPromoCmp(p, @pi);
-  if (c = 0) and (frac > 0) then
+  cdC := PXXPromoCmp(p, @cdInt);
+  if (cdC = 0) and (cdFrac > 0) then
   begin
-    { equal integer parts: the fraction decides. |d| = |ip| + frac }
-    if d < 0 then c := 1 else c := -1;
+    { equal integer parts: the fraction decides. |d| = |cdIp| + cdFrac }
+    if d < 0 then cdC := 1 else cdC := -1;
   end;
-  PXXPromoClear(@pi); PXXPromoClear(@t);
-  PromoCmpDbl := c;
+  PXXPromoClear(@cdInt); PXXPromoClear(@cdTmp);
+  PromoCmpDbl := cdC;
 end;
 
 function PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
