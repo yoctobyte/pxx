@@ -1,0 +1,9 @@
+# A Pascal var/out object parameter needs a name that already holds an
+# object. Given `o = None` the call compiled, wrote into a hidden temp and
+# printed nothing: the object never reached `o`. Refused at compile time.
+import 'varobj.pas' as vo
+def f():
+    o = None
+    vo.NewInto(o, 5)
+    print(o)
+f()

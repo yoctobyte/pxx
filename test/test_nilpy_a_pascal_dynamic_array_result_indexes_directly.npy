@@ -1,0 +1,19 @@
+# A Pascal `array of T` result indexed straight off the call is right for every
+# element type. BINDING one to a name read garbage until 2026-09-28 (Integer
+# elements read 8 bytes wide, strings as pointers, doubles as raw bits; len()
+# and `for` raised TypeError), and is now refused at compile time -- see
+# test_nilpy_binding_a_pascal_dynamic_array_result_is_refused_fail.npy.
+# Run with -Futest/nilpy_dynarr.
+import 'dynarr.pas' as d
+
+
+def f():
+    print(d.MakeArr(4)[3], d.MkStrs(3)[2], d.MkBytes(3)[2], d.MkDbl(3)[2])
+    t = 0
+    for i in range(4):
+        t = t + d.MakeArr(4)[i]
+    print(t)
+
+
+f()
+print(d.MakeArr(5)[0], d.MkStrs(2)[0])

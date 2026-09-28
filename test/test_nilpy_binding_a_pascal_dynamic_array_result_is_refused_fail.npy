@@ -1,0 +1,6 @@
+# Binding a Pascal `array of T` result to a name must be REFUSED at compile
+# time: nothing converts it to a list, and bound it read garbage (see
+# test_nilpy_a_pascal_dynamic_array_result_indexes_directly.npy).
+import 'dynarr.pas' as d
+a = d.MakeArr(4)
+print(a[3])

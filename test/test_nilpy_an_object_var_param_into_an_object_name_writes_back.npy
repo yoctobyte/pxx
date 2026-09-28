@@ -1,0 +1,11 @@
+# The accepted spelling beside the refusal in
+# test_nilpy_an_object_var_param_into_a_none_name_is_refused_fail.npy: a name
+# already bound to an object gets the callee's object back.
+import 'varobj.pas' as vo
+def f():
+    o = vo.TB(1)
+    vo.NewInto(o, 5)
+    print(o.v)
+    vo.NewOut(o, 7)
+    print(o.v)
+f()

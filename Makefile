@@ -648,6 +648,16 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_a_computed_string_repeated_is_released.py $(TESTTMP)/test_nilpy_strrep26
 	$(TESTTMP)/test_nilpy_strrep26 | diff -u test/test_nilpy_a_computed_string_repeated_is_released.expected -
 	@$(TESTTMP)/test_nilpy_strrep26 keep | grep -q 'keep False' || { echo "FAIL: nilpy strrep control (keep) stayed flat"; exit 1; }
+	# A Pascal dynamic-array result: indexed directly it is right for every
+	# element type; bound to a name it read garbage and is now refused.
+	./$(COMPILER) -Futest/nilpy_dynarr test/test_nilpy_a_pascal_dynamic_array_result_indexes_directly.npy $(TESTTMP)/test_nilpy_dynarr26
+	$(TESTTMP)/test_nilpy_dynarr26 | diff -u test/test_nilpy_a_pascal_dynamic_array_result_indexes_directly.expected -
+	@! ./$(COMPILER) -Futest/nilpy_dynarr test/test_nilpy_binding_a_pascal_dynamic_array_result_is_refused_fail.npy $(TESTTMP)/test_nilpy_dynarr_fail26 > $(TESTTMP)/test_nilpy_dynarr_fail.log 2>&1 || { echo "FAIL: binding a Pascal dynamic array was not refused"; exit 1; }
+	@grep -q 'returns a Pascal dynamic array' $(TESTTMP)/test_nilpy_dynarr_fail.log || { echo "FAIL: dynarr refusal message"; cat $(TESTTMP)/test_nilpy_dynarr_fail.log; exit 1; }
+	./$(COMPILER) -Futest/nilpy_varobj test/test_nilpy_an_object_var_param_into_an_object_name_writes_back.npy $(TESTTMP)/test_nilpy_varobj26
+	$(TESTTMP)/test_nilpy_varobj26 | diff -u test/test_nilpy_an_object_var_param_into_an_object_name_writes_back.expected -
+	@! ./$(COMPILER) -Futest/nilpy_varobj test/test_nilpy_an_object_var_param_into_a_none_name_is_refused_fail.npy $(TESTTMP)/test_nilpy_varobj_fail26 > $(TESTTMP)/test_nilpy_varobj_fail.log 2>&1 || { echo "FAIL: var/out object into a None name was not refused"; exit 1; }
+	@grep -q 'writes an object into its var/out parameter' $(TESTTMP)/test_nilpy_varobj_fail.log || { echo "FAIL: var/out object refusal message"; cat $(TESTTMP)/test_nilpy_varobj_fail.log; exit 1; }
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
 	tools/expect_same.sh test_nil_python_core26.1 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# What this proves is that `import sqlite3` resolves the C header, links

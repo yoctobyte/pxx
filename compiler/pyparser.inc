@@ -56333,6 +56333,29 @@ begin
   Result := False;
 end;
 
+{ A Pascal `array of T` call result is a raw heap handle to NilPy -- nothing
+  converts it to a list -- so BOUND to a name it read garbage: Integer elements
+  8 bytes wide (`a = MakeArr(4); a[3]` printed 0), strings as pointers,
+  doubles as raw bits, and len() / `for` raised TypeError; only Int64 read
+  right, by accident of width. Until the conversion exists it is refused
+  everywhere except the two uses that are right: indexing the call directly
+  (`MakeArr(4)[3]`, ApplyCallResultPtrSuffix) and handing it whole to a
+  Pascal by-value ARRAY parameter (PyArrayArgSlot; a const or var one refuses
+  a call argument on its own, "by-reference argument must be a variable").
+  REFUSED THAT USED TO WORK: `a = MakeArr(4); SumArr(a)` -- binding it and
+  handing the name back to Pascal was right, and is refused with the rest.
+  Measured 2026-09-28, pin v447. }
+procedure PyRefuseDynArrayResult(procIdx: Integer);
+begin
+  if (procIdx < 0) or (procIdx >= ProcCount) or (not ProcRetIsDynArray[procIdx]) then Exit;
+  if (ProcUnitIdx[procIdx] < 0) or UnitIsPyModule(ProcUnitIdx[procIdx]) then Exit;
+  if CurTok.Kind = tkLBrack then Exit;
+  if PyArrayArgSlot and ((CurTok.Kind = tkComma) or (CurTok.Kind = tkRParen)) then Exit;
+  Error('"' + Procs[procIdx].Name + '" returns a Pascal dynamic array, which NilPy ' +
+        'cannot use as a Python value yet: index the call directly (' +
+        Procs[procIdx].Name + '(...)[i]), or have the Pascal side return a list');
+end;
+
 procedure PyParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     qcSegs, qcUnitIdx, qcI: Integer;         { the qualified-construction arm }
@@ -63379,8 +63402,14 @@ begin
             CurASTNode := PyParseCompExprValue(False)
           else
           begin
-            node := TryDelphiBareProcArg;
-            if node >= 0 then CurASTNode := node else ParseArgExpr;
+            { an ARRAY parameter may take a Pascal dynamic-array call result
+              whole: PyRefuseDynArrayResult reads this }
+            node := Ord(PyArrayArgSlot);
+            PyArrayArgSlot := (slotIdx >= 0) and (slotIdx < Procs[procIdx].ParamCount) and
+                              Procs[procIdx].Params[slotIdx].IsArray;
+            argSeq := TryDelphiBareProcArg;
+            if argSeq >= 0 then CurASTNode := argSeq else ParseArgExpr;
+            PyArrayArgSlot := node <> 0;
           end;
           SetLitCheckArg(CurASTNode, procIdx, slotIdx);
           argSeq := AllocNode(AN_ARG);
@@ -63749,6 +63778,19 @@ begin
   Error('by-reference argument must be a variable');
             end;
           end;
+          { A `var`/`out` OBJECT parameter needs a name that is object-typed.
+            `o = None; NewInto(o, 5)` passed a hidden temp for the untyped name,
+            the callee wrote into the temp, and `o` stayed None -- `print(o)`
+            printed nothing at all (2026-09-28, pin v447). }
+          if Procs[procIdx].Params[i].IsRef and
+             ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] and
+             (not ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i]) and
+             (Procs[procIdx].Params[i].TypeKind = tyClass) and
+             (ASTKind[exprNode] = AN_IDENT) and
+             (IntToTypeKind(ASTTk[exprNode]) <> tyClass) then
+            Error('"' + Procs[procIdx].Name + '" writes an object into its var/out ' +
+                  'parameter, and NilPy can only write it back to a name that already ' +
+                  'holds an object: bind the name to one first (o = SomeClass(...))');
           currArg := ASTRight[currArg];
         end;
 
@@ -63779,6 +63821,7 @@ begin
         end
         else
         begin
+          PyRefuseDynArrayResult(procIdx);
           ApplyCallResultPtrSuffix(node, procIdx);  { f(...)^ / ^.field / [i] }
           if isLiftedCall then
           begin
@@ -63819,6 +63862,7 @@ begin
           mode's @-optional retry can tell this from a written `F(2)`. }
         ASTCallParenless[node] := True;
         ASTTk[node] := Ord(Procs[procIdx].RetType);
+        PyRefuseDynArrayResult(procIdx);
         ApplyCallResultPtrSuffix(node, procIdx);  { f()^ / ^.field / [i] }
         Exit;
       end
