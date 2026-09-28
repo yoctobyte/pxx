@@ -20,9 +20,15 @@ through plain `external` declarations.
 
 ## Run under Espressif QEMU
 
-Interactive: `./build.sh qemu` (uses `idf.py qemu monitor`).
+Interactive: `./build.sh qemu` (uses `idf.py qemu monitor`, so it needs a
+terminal: without one it stops with "Monitor requires standard input to be
+attached to TTY").
 
-Headless (export.sh does not PATH qemu-system-riscv32 — use the full path):
+Both need Espressif's QEMU, which ESP-IDF installs only on request: see
+"Running without a board" in [ESP32 / Microcontrollers](../../../docs/targets/esp32.md).
+
+Headless, after `./build.sh` (the full path below works whether or not
+`export.sh` has put QEMU on PATH; it runs until you press Ctrl-A, then X):
 
 ```bash
 cd build

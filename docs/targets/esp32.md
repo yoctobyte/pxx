@@ -22,6 +22,28 @@ All 36 example projects, with the chip and language of each and where each
 last ran (QEMU or a board), are listed in
 [Examples: all 36 ESP32 examples](../examples/index.md#all-36-esp32-examples).
 
+**Running without a board.** The S3 and C3 examples run under Espressif's QEMU,
+which ESP-IDF does not install by default (v6.0.1 marks it "on request"). The
+install line is from Espressif's
+[QEMU guide](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/tools/qemu.html),
+which also lists the system libraries it needs; after it, `export.sh` puts
+`qemu-system-xtensa` and `qemu-system-riscv32` on PATH:
+
+```sh
+. ~/esp/esp-idf/export.sh
+python $IDF_PATH/tools/idf_tools.py install qemu-xtensa qemu-riscv32
+. ~/esp/esp-idf/export.sh        # again, so the QEMU binaries are on PATH
+tools/esp_run.sh --chip esp32c3 examples/esp32/hello-c3/main/main.pas
+```
+
+`tools/esp_run.sh` builds the program into the chip's `hello-*` project, boots
+it under QEMU, and prints the program's output. With pin v450, from a fresh
+v0.1.0-beta.1 tarball and ESP-IDF v6.0.1, that printed the six lines quoted in
+`hello-c3`'s README, and the same with `--chip esp32s3` and `hello-s3`
+(2026-09-29). Each example's README gives its own QEMU commands. A QEMU started
+by hand with `-serial mon:stdio` keeps running after the program ends; press
+Ctrl-A, then X, to stop it.
+
 **The classic ESP32 now runs on silicon; the S2 is still compiled only.**
 Measured 2026-09-27 on tree `5b4e7381dc` with compiler sha256
 `4ebfa2d047a2` (the release pin v441's own binary), flashed to an
