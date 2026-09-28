@@ -34,6 +34,18 @@ middle of another seat's capture. A port that is already held makes this
 script exit 3 with "busy" on stderr. The lock goes with the fd, so a port
 that re-enumerates is locked again on the reopen.
 
+KILLING A RUN THAT USES THIS SCRIPT: kill it by PID, from
+`pgrep -f esp_serial_capture`. `pkill -x cat` does NOT match it -- the process
+is `python .../esp_serial_capture.py` -- so cleaning up a wedged run by that
+name leaves the capture alive and STILL HOLDING the port, and the next writer
+then fails with EBUSY. Because the lock exists, a leftover is no longer the
+harmless double-open it used to be: measured 2026-09-28 by two seats
+independently, once on the C3 (a killed run's capture held the port and the
+next write failed) and once chasing an espide Build+Flash that failed on 2 of 4
+runs. Until 2026-09-28 tools/esp_flash.sh discarded esptool's stderr on a
+failing write, so both looked like the generic "Hold BOOT while tapping RESET"
+rather than the EBUSY they were; it now prints esptool's own last lines.
+
 Needs pyserial (in the ESP-IDF python env, which tools/esp_flash.sh exports).
 Raw bytes go to stdout.
 """

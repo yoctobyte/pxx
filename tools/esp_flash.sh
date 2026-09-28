@@ -262,9 +262,24 @@ if [ "$NO_FLASH" = 1 ]; then
   echo "esp_flash: --no-flash -- reading $PORT without rewriting the board" >&2
 else
   echo "esp_flash: writing flash..." >&2
-  if ! python -m esptool --chip "$CHIP" -p "$PORT" -b 460800 \
-       --before default-reset --after no-reset write-flash "@flash_args" >/dev/null 2>&1; then
+  # KEEP esptool's OWN WORDS WHEN THE WRITE FAILS. This was >/dev/null 2>&1, so a
+  # failure printed only the generic "hold BOOT" line below and the reason was
+  # discarded -- and the reasons are not one failure but several with different
+  # fixes: "could not open port: port is busy" means another process holds the tty
+  # (since f056f63d3f a capture holds it with TIOCEXCL, so an overlap is now an
+  # error rather than a silent double-open), "Failed to connect"/"No serial data"
+  # means the DTR/RTS entry into download mode did not take, which is the board's
+  # auto-reset circuit and is what "hold BOOT" actually addresses, and a
+  # "Permission denied" is the dialout group. Measured 2026-09-28: espide's
+  # Build+Flash failed here on 2 of 4 runs on a classic ESP32 and NOT ONE of the
+  # three logs said which of those it was.
+  # Success still prints nothing, so a passing run's log is unchanged.
+  esptool_out=""
+  if ! esptool_out="$(python -m esptool --chip "$CHIP" -p "$PORT" -b 460800 \
+       --before default-reset --after no-reset write-flash "@flash_args" 2>&1)"; then
     echo "esp_flash: esptool could not write $PORT. Hold BOOT while tapping RESET to force download mode, then retry." >&2
+    echo "esp_flash: esptool's own last lines follow -- the reason is here, not in the line above:" >&2
+    printf '%s\n' "$esptool_out" | tail -15 | sed 's/^/esp_flash:   /' >&2
     exit 1
   fi
 fi
