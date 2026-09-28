@@ -38,7 +38,12 @@ ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
 Memory leaks were treated as release blockers for this beta. Before the release
 every leak test in the tree was re-run. The Nil Python checks each ran beside a
 deliberate leak, to prove they could catch one; the Pascal and C checks had no
-such control at the time (one is being added):
+such control at the time. The Pascal checks got one after v448 (`cfcfc49263`,
+in no pin yet): the same census, run with a string and an array kept on
+purpose on each of 400 trips, must trip the bound. Measured on 2026-09-28 with
+the compiler built at `a2614fcb8b`: 4 blocks live, and 1,080 with the
+deliberate leak, on x86-64; 5 and 1,186 on i386 and arm32 (QEMU user mode).
+The C checks still have no control. The re-run covered:
 
 - all 164 automated leak checks in the test suite;
 - 49 Pascal shapes on seven targets (x86-64, i386, aarch64, arm32, riscv32,
@@ -90,6 +95,25 @@ Found after the release, on 2026-09-27, and **open in v441**:
   (`ae3466a018d8`). **On v445 and earlier:** name the string first
   (`t = str(i)`, then `t * 2`).
 
+Found on 2026-09-28, and **open in v441 to v448**:
+
+- **Pascal: a handled exception object was freed without running its
+  destructor.** When an `except` block finished with the exception, its memory
+  was released but its `Destroy` never ran, so anything the destructor frees
+  was lost. That held for `on E: ... do`, a bare `except`, a `raise` caught
+  one level further out, and a `try`/`finally` inside the `try`. An exception
+  class that owns a `TStringList` lost the list on every raise. FPC 3.2.2 runs
+  `Destroy` once in each case. Fixed after v448 (`846a574b00`), in no pin yet.
+  Measured on 2026-09-28 with
+  `test/test_a_handled_exception_runs_its_destructor_once.pas`: every shape
+  counted 0 `Destroy` calls with v441 (`4ebfa2d047a2`) and v448
+  (`b2b325036c3b`), and 1, as FPC 3.2.2 does, with the compiler built at
+  `a2614fcb8b` (`5dea028059af`) on x86-64, i386 and arm32 (QEMU user mode).
+  Its 500 raises of the owning class left 1,892 blocks live with v448 and 4
+  with that compiler. **On v448 and earlier:** an exception class with no
+  fields of its own that need freeing loses nothing, since the object's own
+  memory is released.
+
 Program-level global variables are not finalized when the program exits. This
 is a one-time cost at exit, not a leak that grows while the program runs.
 
@@ -120,12 +144,17 @@ earlier, and for a comprehension on v446:** return from the function, or let
 it end, to get the memory back.
 
 `del name` on a local variable does not release what the name refers to; the
-object stays allocated until the function returns. This is still so in v446
-and after it. From v446, assign `name = None` instead, which does release it.
-On v445 and earlier `name = None` does not release it either (see the
-paragraph above): return from the function. (Measured on 2026-09-28, the same
-list of 30 strings: under `del` 32 live with v446 and with the compiler at
-`e072d579b0`; under `= None` 1 with both, and 32 with v445.)
+object stays allocated until the function returns. This is so from v446 to
+v448, and fixed after v448 (`c4f5dcf929`, in no pin yet). On v446 to v448,
+assign `name = None` instead, which does release it. On v445 and earlier
+`name = None` does not release it either (see the paragraph above): return
+from the function. (Measured on 2026-09-28, the same list of 30 strings:
+under `del` 32 live with v446 and with the compiler at `e072d579b0`; under
+`= None` 1 with both, and 32 with v445. Measured again with
+`tools/census_at_exit.sh`, the census taken inside the function: under `del`
+32 live with v448 (`b2b325036c3b`) and 1 with the compiler built at
+`a2614fcb8b` (`5dea028059af`), under `= None` 1 with both, and 32 with both
+when the list is kept.)
 
 **Nil Python: a reference cycle is never freed.** Nil Python frees an object
 when its last reference goes away; there is no garbage collector to find
@@ -471,6 +500,33 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   2026-09-28 with pin v448 on x86-64. Wrong in v441 to v448; fixed after
   v448 (`19f4728e10`), in no pin yet. **On v448:** write `m.start(0)` and
   `m.end(0)`.
+
+- **Nil Python: a Pascal `array of T` result bound to a name read the wrong
+  values.** With a Pascal unit imported as `d` whose `MakeArr(4)` returns
+  `0, 10, 20, 30` as an `array of Integer`, `a = d.MakeArr(4)` then
+  `print(a[3])` printed `0`, `for x in d.MakeArr(3):` stopped with
+  `TypeError: expected a str, a list or a dict, got int`, and `len()` of it
+  did not compile. After v448 (`9bd7f662e5`, in no pin yet) binding it to a
+  name, `len()` and `for` are refused at compile time, and the message says to
+  index the call directly. `d.MakeArr(4)[3]` prints `30` with every compiler
+  measured. One shape that worked is now refused too: `a = d.MakeArr(4)` then
+  `d.SumArr(a)`, a Pascal routine taking the array, printed `60`. Passing the
+  call straight in, `d.SumArr(d.MakeArr(4))`, compiles with none of them
+  (`by-reference argument must be a variable`), whether the parameter is
+  `const`, by value, `var` or an open array. Measured on 2026-09-28 on x86-64
+  with v441 (`4ebfa2d047a2`), v448 (`b2b325036c3b`) and the compiler built at
+  `a2614fcb8b` (`5dea028059af`); `d.MakeArr(4)[3]` also prints `30` on i386
+  with that compiler. **On v448:** index the call directly, and leave work on
+  the whole array to Pascal.
+
+- **Nil Python: a Pascal `var` or `out` object parameter lost the object when
+  the name held `None`.** `o = None`, then `d.NewInto(o, 5)`, a Pascal
+  procedure that creates an object into its `var` parameter, then `print(o)`
+  printed an empty line with v441 and v448: the object never reached `o`.
+  After v448 (`9bd7f662e5`) the call is refused at compile time. A name that
+  already holds an object gets the new one back with all three compilers:
+  after `o = d.TB(1)` and `d.NewInto(o, 5)`, `o.v` is `5`. Measured as the
+  row above. **On v448:** bind the name to an object first.
 
 - **TLS: a CA file that does not load was accepted.**
   `OpenSslTlsRegisterEx(True, '/nonexistent/ca.pem')` answered `True`, and

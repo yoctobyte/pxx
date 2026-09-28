@@ -141,7 +141,8 @@ still holds. It also changes four habits:
   ```
 
 - **Dropping a name does not always free the object at once.** `del name` on
-  a local keeps the object until the function returns. On v445,
+  a local keeps the object until the function returns, up to v448; the
+  compiler after v448 (`c4f5dcf929`) frees it at once. On v445,
   `name = None` does not release a list or dict early either. v446 releases
   one built with `[]` and `append` at `name = None`, but keeps a list built by
   a comprehension until the function returns; the compiler after v446

@@ -89,6 +89,14 @@ CPython 3.14.4: each row behaves as written, and the three targets print the sam
 A generator abandoned before it is exhausted, for example by `break`, does not
 release the class instances held in its local variables.
 
+A Pascal `array of T` that a Pascal routine returns can only be indexed
+straight off the call (`d.MakeArr(4)[3]`). After v448, binding it to a name,
+`len()` of it and `for` over it are refused at compile time; with v448 and
+earlier they compile and read wrong values. A Pascal `var` or `out` object
+parameter needs a name that already holds an object. See
+[Known issues](../reference/known-issues.md#fixed-since-v441) for what was
+measured.
+
 ## Where it differs on purpose
 
 - **It is compiled.** Imports are resolved at compile time, so
@@ -120,15 +128,16 @@ what keeps a long-running program's heap flat.
 30 strings and then let go of it in the way shown. Measured on x86-64 with
 `tools/census_at_exit.sh`: pin v445 (`caf21ac399f1`) on 2026-09-27, and pin
 v446 (`ae3466a018d8`) and the compiler after it (built at `e072d579b0`,
-`ccd62c91f30e`) on 2026-09-28:
+`ccd62c91f30e`) on 2026-09-28, and pin v448 (`b2b325036c3b`) and the compiler
+after it (built at `a2614fcb8b`, `5dea028059af`) later that day:
 
-| how the list was dropped | v445 | v446 | after v446 |
-| --- | ---: | ---: | ---: |
-| kept (the control) | 32 | 32 | 32 |
-| `kept = None` | 32 | 1 | 1 |
-| `del kept` | 32 | 32 | 32 |
-| a comprehension, then `rows = None` | 32 | 32 | 1 |
-| at module level, `kept = None` | 32 | 1 | 1 |
+| how the list was dropped | v445 | v446 | after v446 | v448 | after v448 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| kept (the control) | 32 | 32 | 32 | 32 | 32 |
+| `kept = None` | 32 | 1 | 1 | 1 | 1 |
+| `del kept` | 32 | 32 | 32 | 32 | 1 |
+| a comprehension, then `rows = None` | 32 | 32 | 1 | 1 | 1 |
+| at module level, `kept = None` | 32 | 1 | 1 | 1 | 1 |
 
 - **With v445, dropping a name frees nothing until the function returns.** A
   list or dict that a statement creates is also held by a hidden temporary of
@@ -141,9 +150,10 @@ v446 (`ae3466a018d8`) and the compiler after it (built at `e072d579b0`,
   a local before the function returns. From v446, `name = None` does, except
   on a list built by a comprehension, which v446 still holds until the
   function returns; that is fixed after v446 (`cdd6fd3c1f`, the table's fourth
-  row). `del` on a local still frees nothing until the function returns, in
-  v446 and after it (the third row). A fix is in progress. Until then, use
-  `= None`, or return from the function to get that memory back.
+  row). `del` on a local frees nothing until the function returns in v446 to
+  v448 (the third row); that is fixed after v448 (`c4f5dcf929`, in no pin
+  yet). On v448 and earlier, use `= None`, or return from the function to get
+  that memory back.
 - **Module-level temporaries.** A string built by a module-level statement,
   such as `print("n=" + str(n))` outside any function, is kept until that
   statement runs again. That is at most one string per source line and does not
