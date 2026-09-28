@@ -200,7 +200,10 @@ ESP32-C3 and ESP32-S3 and has not been run on a board.
   development compiler `5cb3fdf5896b…`). About half were
   dropped, on purpose, to keep the interrupt landing inside the queue's reader.
   The same test against the queue before `0d5df89913` lost 2,503 edges.
-  Neither of these two tests has been repeated with a pinned compiler.
+  Repeated with v450 (compiler sha256 `c19cc2d531e4…`) on 2026-09-28: about
+  670,000 edges, every one delivered or dropped with none out of sequence,
+  and the old queue lost 2,484. The no-allocation test has not been repeated
+  with a pinned compiler.
 - `poll()` as a drain point, and the 16-event budget,
   `test/esp_board_gpio_poll_drain.pas` and `.npy`, on both boards with v450
   (compiler sha256 `c19cc2d531e4…`, tree `3503825c2f`) on 2026-09-28; Pascal
