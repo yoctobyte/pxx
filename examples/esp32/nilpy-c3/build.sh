@@ -42,10 +42,15 @@ cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 PXX="${PXX:-$("$REPO_ROOT/tools/pxx_stable.sh")}"  # the pin in a checkout, compiler/pxx-<arch> in a release
 
-# The chip comes from the directory's SUFFIX and the IDF project name from the
-# whole directory name, so a new demo is a new directory plus two symlinks --
-# `nilpy-c3`, `nilpy-s3`, `nilpy-hw-c3`, `nilpy-hw-s3` all run this one script.
-NAME="pxx_$(basename "$PWD" | tr - _)"
+# The chip comes from the directory's SUFFIX, so a new demo is a new directory
+# plus two symlinks -- `nilpy-c3`, `nilpy-s3`, `nilpy-hw-c3`, `nilpy-hw-s3` all
+# run this one script. The IDF project name, which names build/<name>.map, is
+# the project() in CMakeLists.txt, NOT the directory: a reader's first copy
+# (`cp -rL nilpy-c3 xpy-c3`) keeps project(pxx_nilpy_c3), and deriving it from
+# the directory looked for build/pxx_xpy_c3.map, printed a grep error and still
+# exited 0.
+NAME="$(sed -n 's/^project(\([A-Za-z0-9_]*\)).*/\1/p' CMakeLists.txt)"
+[ -n "$NAME" ] || { echo "FAIL build -- no project(<name>) in $PWD/CMakeLists.txt" >&2; exit 1; }
 case "$(basename "$PWD")" in
   *-c3)
     CHIP=esp32c3
@@ -140,7 +145,10 @@ fi
 rm -f build/*.elf build/*.bin
 idf.py build
 
-grep -q " app_main" "build/$NAME.map" && echo "app_main present in image map"
+# A missing map or a missing app_main is a failed build, not a quiet exit 0.
+grep -q " app_main" "build/$NAME.map" \
+  || { echo "FAIL build -- app_main not found in build/$NAME.map" >&2; exit 1; }
+echo "app_main present in image map"
 
 # Non-interactive acceptance, the fs-c3 recipe: serial to a FILE, let the
 # timeout fire, assert on what was captured.

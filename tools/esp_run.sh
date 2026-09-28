@@ -41,6 +41,18 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # control compared HEAD with itself (measured 2026-09-19, on a fix whose pinned
 # control then "passed"). A distinct name cannot be inherited by accident.
 PXX="${ESP_RUN_PXX:-$REPO_ROOT/compiler/pascal26}"
+# The compile runs from inside the staged project (cd "$STAGED" below), so a
+# relative path such as the docs' `stable_linux_amd64/default/pinned` used to
+# fail there as "No such file or directory", blamed on -Fu. Resolve it against
+# the caller's directory now; a bare name without a slash is left to PATH.
+case "$PXX" in
+  /*) ;;
+  */*) PXX="$PWD/$PXX" ;;
+esac
+if [ "${PXX#*/}" != "$PXX" ] && [ ! -x "$PXX" ]; then
+  echo "esp_run: compiler $PXX not found or not executable (ESP_RUN_PXX, or build compiler/pascal26)" >&2
+  exit 2
+fi
 echo "esp_run: compiler $PXX" >&2
 
 case "$CHIP" in

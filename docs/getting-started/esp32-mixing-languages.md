@@ -152,10 +152,12 @@ ESP_RUN_PXX=$PWD/stable_linux_amd64/default/pinned tools/esp_run.sh --chip esp32
 ```
 
 `tools/esp_run.sh` compiles with `compiler/pascal26` unless `ESP_RUN_PXX`
-names another compiler (not `PXX`), and prints which one it used. The path
-must be absolute, because the script compiles from inside a staged ESP-IDF
-project: with a relative one it stops with `No such file or directory` and
-`compiling ... failed`.
+names another compiler (not `PXX`), and prints which one it used. The script
+compiles from inside a staged ESP-IDF project. Since 2026-09-28 it resolves a
+relative `ESP_RUN_PXX` against the directory you run it from, and stops with
+`esp_run: compiler ... not found or not executable` if nothing is there. An
+older copy of the script needs the absolute path, as above: given a relative
+one, it stops with `No such file or directory` and `compiling ... failed`.
 
 ## What this does not cover
 
