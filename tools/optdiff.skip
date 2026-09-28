@@ -89,3 +89,8 @@ test_parallel_writeln_atomic*
 # cannot express a question about a program whose exit code is a coin flip.
 # The BUG stays open and owned at p70; this skips the INSTRUMENT, not the bug.
 test_foreign_thread_exception_chain*
+# relocation probes: they PRINT ADDRESSES (%p of a global, a const array and a
+# rodata string) on purpose -- tools/reloc_resolve_check.py parses them -- and
+# -O1+ shrinks the code, so every data address moves (42 0x47e8c0... at -O0,
+# 42 0x4618c0... at -O1). The value column agrees at every level.
+reloc_*_probe.c
