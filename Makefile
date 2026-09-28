@@ -13640,6 +13640,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_variant_member_leaks.pas $(TESTTMP)/test_rvm26
 	tools/expect_same.sh test_rvm26 "$$($(TESTTMP)/test_rvm26 | tail -1)" "record-variant-member 4000/4000"
 	tools/assert_no_leak.sh record_variant_member 50 $(TESTTMP)/test_rvm26
+	# The positive control for this recipe's Pascal leak rows: the same
+	# census on the same target leaks 2 blocks per trip on purpose with `keep`
+	# and must trip the bound (measured 2026-09-28: ~5 live, ~1186 with keep).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_pascal_leak_census_control.pas $(TESTTMP)/test_plcc26
+	tools/assert_no_leak.sh pascal_leak_census 50 $(TESTTMP)/test_plcc26
+	@if tools/assert_no_leak.sh pascal_leak_census_control 50 $(TESTTMP)/test_plcc26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_promo_member_leaks.pas $(TESTTMP)/test_rpm26
 	tools/expect_same.sh test_rpm26 "$$($(TESTTMP)/test_rpm26 | tail -1)" "record-promo-member 4000/4000"
 	tools/assert_no_leak.sh record_promo_member 50 $(TESTTMP)/test_rpm26
@@ -28157,6 +28164,13 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/bvparam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_bvparam)" "$$(cat test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.expected)"
 	./$(COMPILER) --target=i386 -Fulib/rtl -dPXX_ALLOC_CENSUS test/test_a_by_value_string_param_the_callee_writes_leaves_the_caller_alone.pas $(TESTTMP)/test_i386_bvparamc
 	tools/assert_no_leak.sh i386/by_value_param_owned 200 tools/run_target.sh i386 $(TESTTMP)/test_i386_bvparamc 3000
+	# The positive control for this recipe's Pascal leak rows: the same
+	# census on the same target leaks 2 blocks per trip on purpose with `keep`
+	# and must trip the bound (measured 2026-09-28: ~5 live, ~1186 with keep).
+	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_pascal_leak_census_control.pas $(TESTTMP)/plcc_i386
+	tools/assert_no_leak.sh i386/pascal_leak_census 50 tools/run_target.sh i386 $(TESTTMP)/plcc_i386
+	@if tools/assert_no_leak.sh i386/pascal_leak_census_control 50 tools/run_target.sh i386 $(TESTTMP)/plcc_i386 keep >/dev/null 2>&1; then \
+	  echo "FAIL: i386/pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
 	# A 64-bit counter crossing 2^32: Inc/Dec and a counted `for` both moved
 	# only the low word on 32-bit targets. Nine of eleven rows are wrong under
 	# pin af40370a8a91; no x86-64 row can see it.
@@ -29735,6 +29749,13 @@ test-aarch64: $(COMPILER)
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
 	./$(COMPILER) --target=aarch64 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_a64_frozen_argpaths_lk
 	tools/assert_no_leak.sh aarch64/frozen_arg_no_leak 200 tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_lk
+	# The positive control for this recipe's Pascal leak rows: the same
+	# census on the same target leaks 2 blocks per trip on purpose with `keep`
+	# and must trip the bound (measured 2026-09-28: ~5 live, ~1186 with keep).
+	./$(COMPILER) --target=aarch64 -dPXX_ALLOC_CENSUS test/test_pascal_leak_census_control.pas $(TESTTMP)/plcc_a64
+	tools/assert_no_leak.sh aarch64/pascal_leak_census 50 tools/run_target.sh aarch64 $(TESTTMP)/plcc_a64
+	@if tools/assert_no_leak.sh aarch64/pascal_leak_census_control 50 tools/run_target.sh aarch64 $(TESTTMP)/plcc_a64 keep >/dev/null 2>&1; then \
+	  echo "FAIL: aarch64/pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=aarch64 test/test_shortstring_trunc.pas $(TESTTMP)/test_aarch64_sstrunc
@@ -30595,6 +30616,13 @@ test-riscv32: $(COMPILER)
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
 	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_rv32_frozen_argpaths_lk
 	tools/assert_no_leak.sh riscv32/frozen_arg_no_leak 200 tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_lk
+	# The positive control for this recipe's Pascal leak rows: the same
+	# census on the same target leaks 2 blocks per trip on purpose with `keep`
+	# and must trip the bound (measured 2026-09-28: ~5 live, ~1186 with keep).
+	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_pascal_leak_census_control.pas $(TESTTMP)/plcc_rv32
+	tools/assert_no_leak.sh riscv32/pascal_leak_census 50 tools/run_target.sh riscv32 $(TESTTMP)/plcc_rv32
+	@if tools/assert_no_leak.sh riscv32/pascal_leak_census_control 50 tools/run_target.sh riscv32 $(TESTTMP)/plcc_rv32 keep >/dev/null 2>&1; then \
+	  echo "FAIL: riscv32/pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
 	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
 	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
 	./$(COMPILER) --target=riscv32 test/test_u64_to_double.pas $(TESTTMP)/test_riscv32_u64d
@@ -33001,6 +33029,13 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_xt_x64
 	tools/expect_same.sh xtensa/test_dynarray_ownership_leaks "$$(tools/run_target.sh xtensa $(TESTTMP)/dao_xt; echo "exit=$$?")" "$$($(TESTTMP)/dao_xt_x64; echo "exit=$$?")"
 	tools/assert_no_leak.sh xtensa/test_dynarray_ownership_leaks 200 tools/run_target.sh xtensa $(TESTTMP)/dao_xt
+	# The positive control for this recipe's Pascal leak rows: the same
+	# census on the same target leaks 2 blocks per trip on purpose with `keep`
+	# and must trip the bound (measured 2026-09-28: ~5 live, ~1186 with keep).
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_ALLOC_CENSUS test/test_pascal_leak_census_control.pas $(TESTTMP)/plcc_xt
+	tools/assert_no_leak.sh xtensa/pascal_leak_census 50 tools/run_target.sh xtensa $(TESTTMP)/plcc_xt
+	@if tools/assert_no_leak.sh xtensa/pascal_leak_census_control 50 tools/run_target.sh xtensa $(TESTTMP)/plcc_xt keep >/dev/null 2>&1; then \
+	  echo "FAIL: xtensa/pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
 	# THE EPILOGUE CALL EVERY EXIT PATH MAKES, deliberately WITHOUT
 	# --xtensa-long-calls. EmitProgramEpilogue emits the __pxx_run_finalizers
 	# body last while every exit path forward-calls it, so its displacement is
@@ -33911,6 +33946,13 @@ test-arm32: $(COMPILER)
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
 	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_a32_frozen_argpaths_lk
 	tools/assert_no_leak.sh arm32/frozen_arg_no_leak 200 tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_lk
+	# The positive control for this recipe's Pascal leak rows: the same
+	# census on the same target leaks 2 blocks per trip on purpose with `keep`
+	# and must trip the bound (measured 2026-09-28: ~5 live, ~1186 with keep).
+	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_pascal_leak_census_control.pas $(TESTTMP)/plcc_a32
+	tools/assert_no_leak.sh arm32/pascal_leak_census 50 tools/run_target.sh arm32 $(TESTTMP)/plcc_a32
+	@if tools/assert_no_leak.sh arm32/pascal_leak_census_control 50 tools/run_target.sh arm32 $(TESTTMP)/plcc_a32 keep >/dev/null 2>&1; then \
+	  echo "FAIL: arm32/pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	# `Write(s:w)` on a string VARIABLE: this target dropped the field width
