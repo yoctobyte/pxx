@@ -532,6 +532,17 @@ These were wrong in v424 and fixed in v425, and so are fixed here too:
 - **C `sizeof` of a multidimensional array, a typedef of array typedefs, and
   `sizeof (t)->key`** gave wrong sizes or were refused.
 
+- **Nil Python for Xtensa with the call0 ABI.** Every Nil Python program,
+  even `x = 1` and `print(x)`, was refused when built with
+  `--target=xtensa --xtensa-abi=call0`: `target xtensa: addi immediate
+  displacement 128 is outside the encodable range -128..127`, in the
+  `builtin/pyeval.pas` that the compiler appends. It now builds, and under
+  qemu-xtensa it prints the same output as x86-64 for the Nil Python
+  cross-target test, on call0 and on the windowed ABI. Measured on 2026-09-28
+  on the tree after pin v448. A large program also needs
+  `--xtensa-long-calls` on call0, as it already did on the windowed ABI; the
+  compiler says so when it does. Refused in v441 to v448.
+
 ## Refused, with a message
 
 These do not compile, or compile with a warning. None of them produces a wrong
@@ -543,14 +554,6 @@ answer silently. (Measured with v425.)
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused with
   `shared-library output is x86-64 only`, as on i386.
-- **Nil Python for Xtensa with the call0 ABI.** Every Nil Python program,
-  even `x = 1` and `print(x)`, is refused when built with
-  `--target=xtensa --xtensa-abi=call0`: `target xtensa: addi immediate
-  displacement 128 is outside the encodable range -128..127`, in the
-  `builtin/pyeval.pas` that the compiler appends. Measured on 2026-09-28 with
-  pins v447 and v448. The ESP32-S3 and classic ESP32 builds use the windowed
-  ABI and are not affected. **Workaround:** build with
-  `--xtensa-abi=windowed`, as the S3 demos do.
 
 ## Optimisation levels
 

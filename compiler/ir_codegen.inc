@@ -3581,14 +3581,16 @@ begin
     { PLATFORM_ESP excluded too: under IDF the heap IS IDF's heap (calloc/free),
       so there is no arena to reserve AND no mmap to want. It used to reserve
       one purely to keep this message quiet, which cost 64 KiB of SRAM that
-      nothing read. HOSTED riscv32/xtensa is what is still genuinely refused. }
-    if withHeapArena and (not EspBareBoot) and
-       (TargetPlatform <> PLATFORM_ESP) and (BSS_HEAP_ARENA = 0) then
-      Error('target xtensa (hosted): a heap arena needs mmap and EmitMmapArena '
-            + 'has no xtensa arm. Bare metal (--esp-profile=bare) reserves the '
-            + 'arena in BSS; ESP-IDF (--platform=esp) needs no arena at all, '
-            + 'because there PXXAlloc IS calloc '
-            + '(bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+      nothing read. HOSTED riscv32 is still refused, in its own arm below. }
+    { HOSTED xtensa needs no arena either, and this refused it until
+      2026-09-28. Nothing on xtensa reads BSS_HEAP_PTR/BSS_HEAP_END (the only
+      reader is the x86-64 inline allocator in symtab.inc): xtensa allocates
+      through builtinheap's HeapMmap, whose xtensa arm (mmap2 = 80, flags $802)
+      was measured under qemu-xtensa. Measured, not reasoned: an arena whose
+      mmap FAILED (base = -ENOMEM, seen in qemu -strace) ran every Nil Python
+      row correctly, which it could not have if anything touched the arena.
+      So the refusal kept hosted Nil Python off xtensa for nothing, and a
+      mapping here would be 256 MiB that nothing reads. }
     { Bare-metal (Call0 only): no kernel set up a stack, so establish sp at the
       top of SRAM before entering main. EmitLoadConstXtensa drops a literal
       island for the 32-bit address. Must run before any call. }
@@ -3793,7 +3795,7 @@ begin
     { PLATFORM_ESP excluded too: under IDF the heap IS IDF's heap (calloc/free),
       so there is no arena to reserve AND no mmap to want. It used to reserve
       one purely to keep this message quiet, which cost 64 KiB of SRAM that
-      nothing read. HOSTED riscv32/xtensa is what is still genuinely refused. }
+      nothing read. HOSTED riscv32 is what is still refused, just below. }
     if withHeapArena and (not EspBareBoot) and
        (TargetPlatform <> PLATFORM_ESP) and (BSS_HEAP_ARENA = 0) then
       { The cause, for whoever lifts this: a heap arena needs mmap and

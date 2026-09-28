@@ -24,6 +24,30 @@ begin
     EmitB(0);
 end;
 
+procedure XtensaAddSp(delta: Integer);
+{ sp := sp + delta for a delta the CALLER computed -- an argument block, a
+  spill count. addi encodes -128..127 and nothing checked that before emitting
+  `addi sp, sp, nArgs*4`: a 32-word call (pyeval's closure bridge, appended to
+  every Nil Python program) is 128 bytes, one past the range, so Nil Python
+  could not build for Call0 at all. Split into in-range steps rather than
+  going through a scratch register: every site runs right after a call, where
+  a2/a3 hold the result, so no register is free by construction. Steps are
+  multiples of 16, so sp stays 16-aligned between them. }
+begin
+  while delta > 127 do
+  begin
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 112);
+    Dec(delta, 112);
+  end;
+  while delta < -128 do
+  begin
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -128);
+    Inc(delta, 128);
+  end;
+  if delta <> 0 then
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, delta);
+end;
+
 procedure EmitLoadConstXtensa(rd: Integer; v: Int32);
 begin
   if (v >= -2048) and (v <= 2047) then
@@ -453,7 +477,7 @@ begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
     XtSpillDepth := argBase
   else if nLive > 0 then
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4 * nLive);
+    XtensaAddSp(4 * nLive);
 end;
 
 function XtensaArgRegN(n: Integer): Integer;
@@ -1651,7 +1675,7 @@ begin
   begin
     for i := 0 to nArgs - 1 do
       xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+    XtensaAddSp(nArgs * 4);
   end;
 
   if isDouble then nm := '__pxx_d' else nm := '__pxx_s';
@@ -3340,7 +3364,7 @@ begin
             XtensaLoadArgRegsCall0(nArgs);
             EmitCallProc(j);
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, (nArgs - 1) * 4);  { Self }
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+            XtensaAddSp(nArgs * 4);
           end;
           Exit;
         end;
@@ -4144,14 +4168,14 @@ begin
           if nArgs <= 6 then
           begin
             if argFree > 0 then
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, argFree);
+              XtensaAddSp(argFree);
             argFree := 0;
           end;
         end;
 
         EmitCallProc(procIdx);
         if argFree > 0 then
-          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, argFree);
+          XtensaAddSp(argFree);
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
           XtensaCallDoneWindowed;
@@ -5293,16 +5317,16 @@ begin
           begin
             xtensa_callx0(reg_xtensa_a9);
             if IRCallDest[node] >= 0 then
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 2) * 4)
+              XtensaAddSp((nArgs + 2) * 4)
             else
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+              XtensaAddSp((nArgs + 1) * 4);
           end
           else
           begin
             if IRCallDest[node] >= 0 then
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 2) * 4)
+              XtensaAddSp((nArgs + 2) * 4)
             else
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+              XtensaAddSp((nArgs + 1) * 4);
             xtensa_callx0(reg_xtensa_a9);
           end;
         end;
@@ -5377,9 +5401,9 @@ begin
           if nArgs <= 6 then
           begin
             if IRCallDest[node] >= 0 then
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4)
+              XtensaAddSp((nArgs + 1) * 4)
             else
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+              XtensaAddSp(nArgs * 4);
           end;
           xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 0);               { VMT ptr from [Self] }
           xtensa_l32i(reg_xtensa_a9, reg_xtensa_a9, Integer(IRIVal[node]) * 8);
@@ -5388,9 +5412,9 @@ begin
           if nArgs > 6 then
           begin
             if IRCallDest[node] >= 0 then
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4)
+              XtensaAddSp((nArgs + 1) * 4)
             else
-              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+              XtensaAddSp(nArgs * 4);
           end;
         end;
       end;

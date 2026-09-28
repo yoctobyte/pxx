@@ -32629,11 +32629,26 @@ test-xtensa: $(COMPILER)
 	# The real shape: regex.pas's ReRunAt returns a ~170 B TReMatch.
 	./$(COMPILER) -Fulib/rtl --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_windowed_regex_search.pas $(TESTTMP)/xt_regex_w
 	tools/expect_same.sh xtensa/test_xtensa_windowed_regex_search "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_regex_w)" "$$(cat test/test_xtensa_windowed_regex_search.expected)"
-	# ...and the flagship's build: a Nil Python `import re` for the S3 (hosted
-	# Nil Python on xtensa has no arena, so this is build-only; the Pascal row
-	# above runs the same unit). Same flags as examples/esp32/nilpy-s3/build.sh.
+	# ...and the flagship's build: a Nil Python `import re` for the S3, built
+	# with the same flags as examples/esp32/nilpy-s3/build.sh. It is build-only
+	# because it targets IDF; the hosted Nil Python rows below RUN on xtensa.
 	printf 'import re\nprint(re.findall(r"[a-z]+", "ab 12 cd"))\n' > $(TESTTMP)/xt_s3_usere.py
 	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp $(TESTTMP)/xt_s3_usere.py $(TESTTMP)/xt_s3_usere.o
+	# HOSTED NIL PYTHON ON XTENSA, both ABIs, compared with the corpus .expected.
+	# Hosted xtensa used to refuse every Nil Python program ("a heap arena
+	# needs mmap"), although nothing on xtensa reads that arena: builtinheap's
+	# HeapMmap allocates. On Call0 it also failed to BUILD, because pyeval's
+	# 32-argument closure bridge popped its 128-byte argument block with one
+	# `addi sp` (range -128..127). The wide-block row is the Pascal form of that
+	# second wall, checked against FPC's output; on the pinned compiler it fails
+	# to build with "addi immediate displacement 128".
+	# bug-a-nil-python-does-not-build-for-xtensa-call0
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_xtensa_call0_wide_argument_block.pas $(TESTTMP)/xt_wide_c0
+	tools/expect_same.sh xtensa/test_xtensa_call0_wide_argument_block "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wide_c0)" "$$(cat test/test_xtensa_call0_wide_argument_block.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_c0
+	tools/expect_same.sh xtensa-call0/test_nilpy_cross32_values "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_np_c0)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_cross32_values "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_np_w)" "$$(cat test/test_nilpy_cross32_values.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double_x64
 	tools/expect_same.sh xtensa/test_u64_to_double "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_u64_to_double)" "$$($(TESTTMP)/test_xtensa_test_u64_to_double_x64)"

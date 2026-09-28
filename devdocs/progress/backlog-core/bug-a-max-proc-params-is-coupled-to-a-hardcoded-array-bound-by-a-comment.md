@@ -144,3 +144,28 @@ pxx-owned `immintrin.h` that declares nothing and fails by NAME — honest, sinc
 pxx implements no AVX-512 intrinsics either way. **Measure which wall comes
 next before choosing.** The 33-param crash above is worth fixing regardless: it
 is a segfault on ordinary Pascal, independent of intrinsics.
+
+## 2026-09-28: at the SHIPPED cap of 32, 33 also segfaults, on three shapes
+
+Everything above was measured with the cap raised to 64. With
+`MAX_PROC_PARAMS = 32` as shipped (compiler 43313873f70c), ordinary Pascal
+still crashes the compiler, rc=139, with no diagnostic:
+
+| program | result |
+| --- | --- |
+| `function F(a0..a31: Integer)`, called | compiles, runs, correct |
+| `function F(a0..a32: Integer)` (33) | **SIGSEGV** |
+| class method with 31 params (+ Self = 32), called | compiles, runs, correct |
+| class method with 32 params (+ Self = 33) | **SIGSEGV** |
+| `type TF = function(a0..a32: Integer): Integer` | **SIGSEGV** |
+
+Only the nested-routine capture path has a guard (pasparser_proc.inc, "too
+many params after capture (N, max 32)"). The ordinary name loop in
+ParseProcDecl writes `pnames[nparams]` with no check, and so does the Self
+shift. A one-line guard there turns the first row into
+`error: too many parameters (33, max 32)`; I measured that and backed it out.
+The class-body method staging (pasparser_decl.inc `mPNames`, two copies), the
+procedural-type staging (`pn`), four cparser.inc arrays and pyparser's
+`lamNames` are the same unguarded shape. Guarding one copy would leave the
+family looking handled, so the fix should enumerate all of them: grep
+`array[0..MAX_PROC_PARAMS-1]` and follow each array's writer, not its callers.
