@@ -10,10 +10,13 @@ program httpdemo;
     2. GET /me        → the client sends the cookie back; the server greets it
     3. GET /data.gz   → a gzip-compressed body the client decodes transparently
 
-  Run:  pxx -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/httpdemo && /tmp/httpdemo }
+  Run:  pxx -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/httpdemo && /tmp/httpdemo
+
+  It listens on 127.0.0.1:28844. An optional first argument picks another
+  port, so several copies can run at once (the test rows do): /tmp/httpdemo 28901 }
 uses scheduler, asyncnet, http;
 
-const PORT = 28844;
+var PORT: Integer = 28844;
 
 function GzipHelloWorld: AnsiString;
 { gzip member for 'hello world' (Python gzip, mtime=0). }
@@ -80,7 +83,13 @@ begin
   writeln('done');
 end;
 
+var p, code: Integer;
 begin
+  if ParamCount >= 1 then
+  begin
+    Val(ParamStr(1), p, code);
+    if code = 0 then PORT := p;
+  end;
   Spawn(@ServerCo, nil);
   Spawn(@ClientCo, nil);
   RunUntilDone;

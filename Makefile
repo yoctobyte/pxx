@@ -31216,9 +31216,12 @@ test-riscv32: $(COMPILER)
 	# initial frame and the A-extension atomics all existed
 	# (feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross).
 	# Compared against the x86-64 ORACLE, not a transcript: the point is agreement.
+	# Each httpdemo run takes its own loopback port as its first argument
+	# (28851-28856 here and in the xtensa rows; the demo row keeps the default
+	# 28844), so rows that run in parallel in a full tier never share a port.
 	./$(COMPILER) --target=riscv32 --platform=posix examples/net/httpdemo.pas $(TESTTMP)/test_riscv32_httpdemo
 	./$(COMPILER) examples/net/httpdemo.pas $(TESTTMP)/test_riscv32_httpdemo_x64
-	tools/expect_same.sh riscv32/test_riscv32_httpdemo "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_httpdemo)" "$$($(TESTTMP)/test_riscv32_httpdemo_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_httpdemo "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_httpdemo 28851)" "$$($(TESTTMP)/test_riscv32_httpdemo_x64 28852)"
 	# ...and the atomics underneath it, which riscv32 refused in user mode until
 	# the A extension was emitted (the ESP arm masks interrupts, which needs
 	# machine mode). palatomic against the same oracle.
@@ -34152,9 +34155,9 @@ test-xtensa: $(COMPILER)
 	# forward-call reach (the compiler says so by name without it).
 	./$(COMPILER) examples/net/httpdemo.pas $(TESTTMP)/test_xt_httpdemo_x64
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls examples/net/httpdemo.pas $(TESTTMP)/test_xt_httpdemo
-	tools/expect_same.sh xtensa/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo)" "$$($(TESTTMP)/test_xt_httpdemo_x64)"
+	tools/expect_same.sh xtensa/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo 28853)" "$$($(TESTTMP)/test_xt_httpdemo_x64 28854)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --xtensa-abi=windowed examples/net/httpdemo.pas $(TESTTMP)/test_xt_httpdemo_w
-	tools/expect_same.sh xtensa-win/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo_w)" "$$($(TESTTMP)/test_xt_httpdemo_x64)"
+	tools/expect_same.sh xtensa-win/httpdemo "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_httpdemo_w 28855)" "$$($(TESTTMP)/test_xt_httpdemo_x64 28856)"
 	# THE SCHEDULER MUST FIT AN ESP32. On --platform=esp its reactor table is
 	# ONE slot (every task reads tid -ENOSYS) and CO_STK is 32 KB; with 64 slots
 	# the table alone was ~150 KB of bss and three plain Spawns ran an S3 out of
