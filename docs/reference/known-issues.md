@@ -33,6 +33,41 @@ the bare profile is for. esptool cannot convert a bare ELF either, since it has
 no section headers. **Workaround:** on hardware, build the program as an
 ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
 
+### Standard error goes to standard output on the 32-bit and non-x86 targets
+
+On i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), everything written
+with Pascal's `WriteLn(StdErr, ...)` or `Write(StdErr, ...)`, or with Nil
+Python's `print(..., file=sys.stderr)`, goes to standard output, so
+`prog 2>/dev/null` still shows it and a pipe receives it mixed with the real
+output. On x86-64 those calls go to standard error, except a formatted real:
+`WriteLn(StdErr, 1.5:0:1)` writes `1.5` to standard output and only the line
+end to standard error. `WriteLn(StdErr)` with no other argument is refused on
+every target with `expected expression`; FPC 3.2.2 accepts it. **Open in v441
+to v450**; a fix is in progress. Measured on 2026-09-28 with v450
+(`c19cc2d531e4`), on x86-64 and under QEMU user mode for the others, and on
+i386 with v441 (`4ebfa2d047a2`), v448 and v449, which behave the same.
+**Workaround:** open standard error as a file (`Assign(f, '/dev/stderr');
+Rewrite(f); WriteLn(f, ...)`) in Pascal, or use `sys.stderr.write(...)` in Nil
+Python; both reach standard error on all seven targets. On x86-64, format a
+real into a string first (`Str(x:0:1, s)`), and write the empty line as
+`WriteLn(StdErr, '')`.
+
+### Nil Python: zero equals `None` on every backend but x86-64
+
+On i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), `x == None` is `True`
+when `x` is `0`, `0.0` or `False`, and `x != None` is `False`: a plain
+variable, a list element, and a value that may be `None`
+(`v if c else None`) alike. CPython, and PXX on x86-64, say `False` and
+`True`. An empty string compares correctly, and so does `is None` and
+`is not None` in every shape measured (a conditional, an early `return None`,
+`dict.get`, a default argument, a list element). **Open in v441 to v450**; a
+fix is in progress. Measured on 2026-09-28 with v450 (`c19cc2d531e4`) on
+x86-64 and under QEMU user mode for the others, against CPython, and on i386
+with v441 (`4ebfa2d047a2`), v448 and v449, which give the same wrong answer.
+The ESP32-C3 and ESP32-S3 use the riscv32 and Xtensa backends; this was not
+run on a board. **Workaround:** test for `None` with `is None` or
+`is not None`, never with `==` or `!=`.
+
 ## Memory leaks
 
 Memory leaks were treated as release blockers for this beta. Before the release
