@@ -3070,8 +3070,13 @@ begin
       it is the extended class here, not the helper row. A helper's own sibling
       member still resolves through the qualified `Self.X`, which the class
       helper redirect (ClassHelperRecFor) sends back to the helper. }
-    if (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] = Ord(tyClass)) and
-       (not UMthIsStatic[mmi]) then
+    { The same holds for a `record helper for` a USER RECORD: bare `X` inside
+      TPointHelper.MoveBy is TPoint's X, and without this it answered
+      "undefined variable (X)" while `Self.X` compiled. }
+    if (methOwnerCi >= 0) and (not UMthIsStatic[mmi]) and
+       ((UClsHelperTk[methOwnerCi] = Ord(tyClass)) or
+        ((UClsHelperTk[methOwnerCi] = Ord(tyRecord)) and
+         (UClsHelperRec[methOwnerCi] >= REC_UCLASS_BASE))) then
       CurSelfClass := UClsHelperRec[methOwnerCi];
 
     if UMthVirSlot[mmi] >= 0 then

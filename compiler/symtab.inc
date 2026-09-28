@@ -2713,9 +2713,25 @@ begin
   if recId < REC_UCLASS_BASE then Exit;
   ci := recId - REC_UCLASS_BASE;
   if ci >= UClsCount then Exit;
-  { A helper does not itself get a helper, and neither records nor interfaces
-    take the CLASS flavour: `record helper for` has its own dispatch. }
-  if (UClsHelperTk[ci] >= 0) or UClsIsRecord[ci] or UClsIsInterface[ci] then Exit;
+  { A helper does not itself get a helper, and interfaces take none. }
+  if (UClsHelperTk[ci] >= 0) or UClsIsInterface[ci] then Exit;
+  { A USER RECORD takes a `record helper for` it, with no parents to walk and
+    the record's own member first. This said "`record helper for` has its own
+    dispatch", and for a user record there was none: the dispatch that exists
+    (ParseLValueAST, TYPE-HELPER) is for a SCALAR or array receiver, and a
+    record receiver fell through to RequireRecMember -- `p.Bump` answered
+    '"Bump": no such member on this record/class' where FPC runs it, in objfpc
+    and delphi mode alike. }
+  if UClsIsRecord[ci] then
+  begin
+    if (FindUMeth(ci, memberName) >= 0) or (FindUField(ci, memberName) >= 0) or
+       (FindUProp(ci, memberName) >= 0) then Exit;
+    hci := FindHelperForType(tyRecord, recId);
+    if (hci >= 0) and ((FindUMeth(hci, memberName) >= 0) or
+                       (FindUProp(hci, memberName) >= 0)) then
+      Result := REC_UCLASS_BASE + hci;
+    Exit;
+  end;
   { The walk is FPC's rule, and it INTERLEAVES: at each class from the static
     type upward, a helper for THAT class is consulted before that class's own
     members, and the first answer wins. So with `TDerived = class(TBase)`
@@ -2772,7 +2788,8 @@ begin
   if (CurMethClass >= REC_UCLASS_BASE) and (CurMethClass <> CurSelfClass) then
   begin
     hci := CurMethClass - REC_UCLASS_BASE;
-    if (hci < UClsCount) and (UClsHelperTk[hci] = Ord(tyClass)) and
+    if (hci < UClsCount) and
+       ((UClsHelperTk[hci] = Ord(tyClass)) or (UClsHelperTk[hci] = Ord(tyRecord))) and
        ((FindUMeth(hci, memberName) >= 0) or (FindUProp(hci, memberName) >= 0)) then
       Result := hci;
   end;

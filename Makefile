@@ -10578,6 +10578,11 @@ test-core: $(COMPILER)
 	# bug-p-self-in-a-record-helper-for-a-dynamic-array-types-as-integer
 	./$(COMPILER) test/test_record_helper_for_an_array.pas $(TESTTMP)/test_rec_helper_arr26
 	tools/expect_same.sh test_rec_helper_arr26 "$$($(TESTTMP)/test_rec_helper_arr26)" "$$(printf 'dyn=3\nfixed=4\nstr=4\nsum=15')"
+	# A record helper for a USER record, objfpc and delphi; .expected is FPC's.
+	./$(COMPILER) test/test_record_helper_for_a_user_record.pas $(TESTTMP)/test_rec_helper_urec26
+	$(TESTTMP)/test_rec_helper_urec26 | diff -u test/test_record_helper_for_a_user_record.expected -
+	./$(COMPILER) test/test_record_helper_for_a_user_record_delphi.pas $(TESTTMP)/test_rec_helper_urecd26
+	$(TESTTMP)/test_rec_helper_urecd26 | diff -u test/test_record_helper_for_a_user_record_delphi.expected -
 	# TA and TB are both `array of LongInt`: identical element type, identical
 	# dynamic-ness, identical depth. A symbol records an array's SHAPE and not its
 	# IDENTITY, so matching a helper by element kind and depth COMPILES this file.
