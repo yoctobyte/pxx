@@ -204,6 +204,12 @@ function pyclosure_setarity(obj: Pointer; req, tot: Int64): Pointer;
   The body runs NATIVELY — no pyeval subset limits. }
 function pyboundfn_new(code: Pointer; n: Int64; a0var: Int64): Pointer;
 function pyboundfn_bind(obj: Pointer; idx: Int64; v: Int64): Pointer;
+{ Bind a FLOAT capture by its BIT PATTERN. Handed to pyboundfn_bind, a Double
+  met an Int64 parameter and was CONVERTED (1.0 -> 1), and the body's Double
+  parameter then read the integer's bits: 0.0 on i386 and arm32, 4.6e18 on the
+  ESP. The bridge passes the word through untouched, so storing the bits is what
+  makes the callee read the value. }
+function pyboundfn_bind_dbl(obj: Pointer; idx: Int64; v: Double): Pointer;
 { Declare how many OWN parameters the compiled body takes before its captures.
   Without it the bridge assumes one — see the NOwn note on TBoundFnObj. }
 function pyboundfn_setown(obj: Pointer; nown: Int64): Pointer;
@@ -678,6 +684,18 @@ begin
   { slot takes its own +1 (magic-guarded; see the borrow-everywhere note in
     feature-nilpy-object-reclamation slice 2) }
   PXXObjRetain(p);
+end;
+
+{ box an object this routine just CREATED: the construction's +1 becomes the
+  slot's, so no retain. PyBoxObj's extra +1 on a fresh object was a reference
+  nobody held and nobody dropped -- every list, dict, tuple or instance an
+  exec'd body built outlived its last binding (uforth's TYPE kept ~20 blocks
+  per call). Only for a pointer whose creation is visible at the call site. }
+function PyBoxObjNew(p: Pointer): Variant;
+var r: PPyRec;
+begin
+  r := PPyRec(@Result);
+  r^.VType := 7; r^.Payload := Int64(p);
 end;
 
 { ---- promotable-int (bignum) integer layer --------------------------------
@@ -3078,6 +3096,15 @@ begin
   pyboundfn_bind := obj;
 end;
 
+function pyboundfn_bind_dbl(obj: Pointer; idx: Int64; v: Double): Pointer;
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.Bound[idx] := PInt64(@v)^;
+  PyBFSetKind(o, idx, BK_PLAIN);
+  pyboundfn_bind_dbl := obj;
+end;
+
 function pyboundfn_is(p: Pointer): Boolean;
 begin
   pyboundfn_is := (p <> nil) and (PBoundFnObj(p)^.Magic = @PyBoundFnMagicMarker);
@@ -3609,7 +3636,7 @@ begin
   if cls = nil then Exit;
   inst := PXXObjAlloc(NativeInt(cls^.InstanceSize));
   PPointer(inst)^ := cls^.VMTPtr;
-  Result := PyBoxObj(inst);
+  Result := PyBoxObjNew(inst);
 end;
 
 procedure PyClassRefNew(const cb: Variant; nargs: Integer;
@@ -3715,13 +3742,10 @@ begin
         4: begin vp4 := TVPr4(mi^.Code); vp4(inst, av[0], av[1], av[2], av[3]); end;
       end;
   end;
-  { create(rc=1) then the slot's own +1, and no release of the alloc's — the
-    convention every other object-producing site in this unit uses (the list and
-    dict literal arms below). Being consistent matters more than being tight:
-    reclamation is one open design (feature-nilpy-object-reclamation), and an
-    extra release HERE against a convention that keeps the +1 elsewhere is a
-    use-after-free, not a saving. }
-  res := PyBoxObj(inst);
+  { create(rc=1) and the slot ADOPTS it, the same as every other fresh-object
+    site in this unit (the literal arms below): a second +1 here was never
+    dropped, which is how an exec'd body's objects outlived their bindings. }
+  res := PyBoxObjNew(inst);
 end;
 
 
@@ -3851,7 +3875,7 @@ begin
     end;
     ExpectOp(']');
     PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
-    PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
+    { the construction's +1 is the slot's -- see PyBoxObjNew }
   end
   else if IsOp('{') then
   begin
@@ -3863,7 +3887,7 @@ begin
       Advance;
       dd := TPyDict.Create;
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
-      PXXObjRetain(Pointer(dd));   { slot owns +1 (magic-guarded) }
+      { the construction's +1 is the slot's -- see PyBoxObjNew }
     end
     else
     begin
@@ -3882,7 +3906,7 @@ begin
         end;
         ExpectOp('}');
         PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(dd));
-        PXXObjRetain(Pointer(dd));   { slot owns +1 (magic-guarded) }
+        { the construction's +1 is the slot's -- see PyBoxObjNew }
       end
       else
       begin
@@ -3896,7 +3920,7 @@ begin
         end;
         ExpectOp('}');
         PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
-        PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
+        { the construction's +1 is the slot's -- see PyBoxObjNew }
       end;
     end;
   end
@@ -3939,7 +3963,7 @@ begin
         route (bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list). }
       li.FKind := PYSEQ_TUPLE;
       PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(li));
-      PXXObjRetain(Pointer(li));   { slot owns +1 (magic-guarded) }
+      { the construction's +1 is the slot's -- see PyBoxObjNew }
     end;
     ExpectOp(')');
   end
@@ -4323,7 +4347,7 @@ begin
   else if step < 0 then
   begin i := lo; while i > hi do begin r.append(pyvar_of_int(i)); i := i + step; end; end;
   ro := PPyRec(@Result); ro^.VType := 7; ro^.Payload := Int64(Pointer(r));
-  PXXObjRetain(Pointer(r));   { slot owns +1 (magic-guarded) }
+  { the construction's +1 is the slot's -- see PyBoxObjNew }
 end;
 
 procedure CallBuiltin(const name: AnsiString; args: TPyList;
@@ -4484,7 +4508,7 @@ begin
       else
         EvalError('list(): unsupported argument');
     end;
-    res := PyBoxObj(Pointer(li));
+    res := PyBoxObjNew(Pointer(li));
     Exit;
   end;
   if name = 'reversed' then
@@ -4509,7 +4533,7 @@ begin
       else
         EvalError('reversed(): unsupported argument');
     end;
-    res := PyBoxObj(Pointer(li));
+    res := PyBoxObjNew(Pointer(li));
     Exit;
   end;
   if name = 'range' then
@@ -4721,7 +4745,7 @@ begin
         Cur := endPos;
         PPyRec(@v)^.VType := 7;
         PPyRec(@v)^.Payload := Int64(NativeInt(Pointer(gres)));
-        PXXObjRetain(Pointer(gres));   { slot owns +1 (magic-guarded) }
+        { the construction's +1 is the slot's -- see PyBoxObjNew }
       end;
       args.append(v);
     end;
@@ -4748,137 +4772,144 @@ var
 begin
   args := TPyList.Create;
   kwNames := TPyList.Create;
-  ParseArgs(args, kwNames, signedKw);
-  { trailing positionals get their '' markers here — see the pad in ParseArgs }
-  while kwNames.count < args.count do kwNames.append(MakeStr(''));
-  if not Executing then begin res := MakeNone; kwNames.Free; Exit; end;
-  rvt := PPyRec(@recv)^.VType;
+  { BOTH lists are this call's and die with it, on every exit: `args` was never
+    freed and `kwNames` only on two of the paths, so each method call from exec'd
+    code (uforth: every `out.append(..)` in a PYTHON word) left them behind. }
+  try
+    ParseArgs(args, kwNames, signedKw);
+    { trailing positionals get their '' markers here — see the pad in ParseArgs }
+    while kwNames.count < args.count do kwNames.append(MakeStr(''));
+    if not Executing then begin res := MakeNone; Exit; end;
+    rvt := PPyRec(@recv)^.VType;
 
-  { int.to_bytes(length, byteorder, *, signed=…) -> bytes }
-  if (rvt = 1) or (rvt = 2) or (rvt = 4) then
-  begin
-    if mname = 'to_bytes' then
+    { int.to_bytes(length, byteorder, *, signed=…) -> bytes }
+    if (rvt = 1) or (rvt = 2) or (rvt = 4) then
     begin
-      by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
-      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(by));
-      PXXObjRetain(Pointer(by));   { slot owns +1 (magic-guarded) }
-      Exit;
-    end;
-    EvalError('int method not supported: ' + mname);
-  end;
-
-  { int.from_bytes(bytes, byteorder, *, signed=…) — a static method on the int
-    type object (a PY_TYPETAG sentinel). }
-  if rvt = PY_TYPETAG then
-  begin
-    if (PPyRec(@recv)^.Payload = 2) and (mname = 'from_bytes') then
-    begin
-      res := pyvar_of_int(pyint_from_bytes(TPyBytes(pyvarobj(args.at(0))), signedKw));
-      Exit;
-    end;
-    EvalError('type method not supported: ' + mname);
-  end;
-
-  { string methods }
-  if rvt = 6 then
-  begin
-    s := PAnsiString(@PPyRec(@recv)^.Payload)^;
-    if mname = 'upper' then res := MakeStr(pystr_upper(s))
-    else if mname = 'lower' then res := MakeStr(pystr_lower(s))
-    else if mname = 'strip' then
-    begin
-      if args.count = 0 then res := MakeStr(pystr_strip(s))
-      else res := MakeStr(pystr_strip_chars(s, pystr_of(args.at(0))));
-    end
-    else if mname = 'join' then
-      res := MakeStr(pystr_join(s, TPyList(pyvarobj(args.at(0)))))
-    else if mname = 'startswith' then
-      res := pyvar_of_bool(pystr_startswith(s, pystr_of(args.at(0))))
-    else if mname = 'endswith' then
-      res := pyvar_of_bool(pystr_endswith(s, pystr_of(args.at(0))))
-    else if mname = 'rjust' then
-    begin
-      if args.count >= 2 then
-        res := MakeStr(pystr_rjust_c(s, pyvar_to_int(args.at(0)), pystr_of(args.at(1))))
-      else
-        res := MakeStr(pystr_rjust(s, pyvar_to_int(args.at(0))));
-    end
-    else if mname = 'find' then
-      res := pyvar_of_int(pystr_find(s, pystr_of(args.at(0))))
-    else if mname = 'index' then
-    begin
-      { str.index: find, but a MISS is a ValueError instead of -1 }
-      i := pystr_find(s, pystr_of(args.at(0)));
-      if i < 0 then EvalError('ValueError: substring not found');
-      res := pyvar_of_int(i);
-    end
-    else if mname = 'encode' then
-    begin
-      b2 := pystr_encode(s);
-      PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(b2));
-      PXXObjRetain(Pointer(b2));   { slot owns +1 (magic-guarded) }
-    end
-    else
-      EvalError('str method not supported: ' + mname);
-    Exit;
-  end;
-
-  if PPyRec(@recv)^.VType = 7 then
-  begin
-    o := TObject(Pointer(PPyRec(@recv)^.Payload));
-    if o is TPyList then
-    begin
-      li := TPyList(o);
-      if mname = 'append' then begin li.append(args.at(0)); res := MakeNone; end
-      else if mname = 'insert' then
-        begin li.insert(pyvar_to_int(args.at(0)), args.at(1)); res := MakeNone; end
-      else if mname = 'pop' then
+      if mname = 'to_bytes' then
       begin
-        if args.count = 0 then res := li.pop
-        else res := li.pop(pyvar_to_int(args.at(0)));
-      end
-      else if mname = 'clear' then begin li.clear; res := MakeNone; end
-      else if mname = 'extend' then
-        begin li.extend(TPyList(pyvarobj(args.at(0)))); res := MakeNone; end
-      else
-        EvalError('list method not supported: ' + mname);
-      Exit;
-    end;
-    if o is TPyBytes then
-    begin
-      by := TPyBytes(o);
-      if mname = 'append' then begin by.append(pyvar_to_int(args.at(0))); res := MakeNone; end
-      else if mname = 'decode' then
-      begin
-        if args.count = 0 then res := MakeStr(by.decode('utf-8'))
-        else res := MakeStr(by.decode(pystr_of(args.at(0))));
-      end
-      else if mname = 'extend' then
-        begin by.extend(TPyBytes(pyvarobj(args.at(0)))); res := MakeNone; end
-      else
-        EvalError('bytes method not supported: ' + mname);
-      Exit;
-    end;
-    { otherwise: a reflected host object (vm) — dispatch through the trampoline }
-    try
-      PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
-    except
-      on E: Exception do
-      begin
-        Write(StdErr, 'PROBE hostcall ', mname, ' recv=',
-              PyVarTypeNameOf(recv), ' args:');
-        if args <> nil then
-          for i := 0 to args.count - 1 do
-            Write(StdErr, ' ', PyVarTypeNameOf(args.at(i)));
-        WriteLn(StdErr, ' || ', E.Message);
-        raise;
+        by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
+        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(by));
+        PXXObjRetain(Pointer(by));   { slot owns +1 (magic-guarded) }
+        Exit;
       end;
+      EvalError('int method not supported: ' + mname);
     end;
-    kwNames.Free;
-    Exit;
-  end;
 
-  EvalError('cannot call method ' + mname + ' on this value');
+    { int.from_bytes(bytes, byteorder, *, signed=…) — a static method on the int
+      type object (a PY_TYPETAG sentinel). }
+    if rvt = PY_TYPETAG then
+    begin
+      if (PPyRec(@recv)^.Payload = 2) and (mname = 'from_bytes') then
+      begin
+        res := pyvar_of_int(pyint_from_bytes(TPyBytes(pyvarobj(args.at(0))), signedKw));
+        Exit;
+      end;
+      EvalError('type method not supported: ' + mname);
+    end;
+
+    { string methods }
+    if rvt = 6 then
+    begin
+      s := PAnsiString(@PPyRec(@recv)^.Payload)^;
+      if mname = 'upper' then res := MakeStr(pystr_upper(s))
+      else if mname = 'lower' then res := MakeStr(pystr_lower(s))
+      else if mname = 'strip' then
+      begin
+        if args.count = 0 then res := MakeStr(pystr_strip(s))
+        else res := MakeStr(pystr_strip_chars(s, pystr_of(args.at(0))));
+      end
+      else if mname = 'join' then
+        res := MakeStr(pystr_join(s, TPyList(pyvarobj(args.at(0)))))
+      else if mname = 'startswith' then
+        res := pyvar_of_bool(pystr_startswith(s, pystr_of(args.at(0))))
+      else if mname = 'endswith' then
+        res := pyvar_of_bool(pystr_endswith(s, pystr_of(args.at(0))))
+      else if mname = 'rjust' then
+      begin
+        if args.count >= 2 then
+          res := MakeStr(pystr_rjust_c(s, pyvar_to_int(args.at(0)), pystr_of(args.at(1))))
+        else
+          res := MakeStr(pystr_rjust(s, pyvar_to_int(args.at(0))));
+      end
+      else if mname = 'find' then
+        res := pyvar_of_int(pystr_find(s, pystr_of(args.at(0))))
+      else if mname = 'index' then
+      begin
+        { str.index: find, but a MISS is a ValueError instead of -1 }
+        i := pystr_find(s, pystr_of(args.at(0)));
+        if i < 0 then EvalError('ValueError: substring not found');
+        res := pyvar_of_int(i);
+      end
+      else if mname = 'encode' then
+      begin
+        b2 := pystr_encode(s);
+        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(b2));
+        PXXObjRetain(Pointer(b2));   { slot owns +1 (magic-guarded) }
+      end
+      else
+        EvalError('str method not supported: ' + mname);
+      Exit;
+    end;
+
+    if PPyRec(@recv)^.VType = 7 then
+    begin
+      o := TObject(Pointer(PPyRec(@recv)^.Payload));
+      if o is TPyList then
+      begin
+        li := TPyList(o);
+        if mname = 'append' then begin li.append(args.at(0)); res := MakeNone; end
+        else if mname = 'insert' then
+          begin li.insert(pyvar_to_int(args.at(0)), args.at(1)); res := MakeNone; end
+        else if mname = 'pop' then
+        begin
+          if args.count = 0 then res := li.pop
+          else res := li.pop(pyvar_to_int(args.at(0)));
+        end
+        else if mname = 'clear' then begin li.clear; res := MakeNone; end
+        else if mname = 'extend' then
+          begin li.extend(TPyList(pyvarobj(args.at(0)))); res := MakeNone; end
+        else
+          EvalError('list method not supported: ' + mname);
+        Exit;
+      end;
+      if o is TPyBytes then
+      begin
+        by := TPyBytes(o);
+        if mname = 'append' then begin by.append(pyvar_to_int(args.at(0))); res := MakeNone; end
+        else if mname = 'decode' then
+        begin
+          if args.count = 0 then res := MakeStr(by.decode('utf-8'))
+          else res := MakeStr(by.decode(pystr_of(args.at(0))));
+        end
+        else if mname = 'extend' then
+          begin by.extend(TPyBytes(pyvarobj(args.at(0)))); res := MakeNone; end
+        else
+          EvalError('bytes method not supported: ' + mname);
+        Exit;
+      end;
+      { otherwise: a reflected host object (vm) — dispatch through the trampoline }
+      try
+        PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
+      except
+        on E: Exception do
+        begin
+          Write(StdErr, 'PROBE hostcall ', mname, ' recv=',
+                PyVarTypeNameOf(recv), ' args:');
+          if args <> nil then
+            for i := 0 to args.count - 1 do
+              Write(StdErr, ' ', PyVarTypeNameOf(args.at(i)));
+          WriteLn(StdErr, ' || ', E.Message);
+          raise;
+        end;
+      end;
+      Exit;
+    end;
+
+    EvalError('cannot call method ' + mname + ' on this value');
+  finally
+    args.Free;
+    kwNames.Free;
+  end;
 end;
 
 { ---- statements ---- }
