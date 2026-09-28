@@ -6898,6 +6898,18 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr; node := CurASTNode;
         Expect(tkRParen, ')');
+        { UpCase(s) on a STRING is System's too (FPC 3.2.2 astrings.inc): ASCII
+          a..z only, a new string. Picked by the argument's type. }
+        if IntToTypeKind(ASTTk[node]) in [tyString, tyAnsiString, tyFixedString] then
+        begin
+          helperPi := FindProc('__pxxUpCaseStr');
+          if helperPi < 0 then Error('UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+          CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyAnsiString);
+          LastExprTk := tyAnsiString;
+          Exit;
+        end;
         helperPi := FindProc('__pxxUpCase');
         if helperPi < 0 then Error('UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
@@ -6931,26 +6943,52 @@ begin
         Exit;
       end;
 
-      { Pos(sub, s): System substring search -> __pxxPos helper (1-based, 0 if not
-        found). A `uses sysutils` Pos or any user routine shadows (procIdx>=0). }
+      { Pos(sub, s[, offset]): System substring search -> __pxxPos helper
+        (1-based, 0 if not found). The optional third argument is FPC's Offset:
+        the search starts there, and an offset < 1 or past the end finds nothing
+        (__pxxPosFrom). A `uses sysutils` Pos or any user routine shadows
+        (procIdx>=0). }
       if CaseEqual(name, 'Pos') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr; node := CurASTNode;
         Expect(tkComma, ',');
         ParseExpr; op := CurASTNode;
+        argSeq2 := -1;
+        if Eat(tkComma) then begin ParseExpr; argSeq2 := CurASTNode; end;
         Expect(tkRParen, ')');
-        helperPi := FindProc('__pxxPos');
+        if argSeq2 >= 0 then helperPi := FindProc('__pxxPosFrom')
+        else helperPi := FindProc('__pxxPos');
         if helperPi < 0 then Error('Pos: builtin helper unavailable (needs the builtin unit; not on ESP)');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
         left := AllocNode(AN_ARG); ASTLeft[left] := op; ASTRight[argSeq] := left;
+        if argSeq2 >= 0 then
+        begin
+          lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := argSeq2;
+          ASTRight[left] := lastArg;
+        end;
         CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
         ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyInteger);
         LastExprTk := tyInteger;
         Exit;
       end;
 
-
+      { Space(n): System's n blanks -> __pxxSpace. FPC's parameter is a Byte,
+        so the count wraps mod 256 exactly as it does there. A user routine or
+        a unit's Space shadows (procIdx>=0). }
+      if CaseEqual(name, 'Space') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('__pxxSpace');
+        if helperPi < 0 then Error('Space: builtin helper unavailable (needs the builtin unit; not on ESP)');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyAnsiString);
+        LastExprTk := tyAnsiString;
+        Exit;
+      end;
 
       { Abs(e)/Sqr(e): System intrinsics lowered to builtin helpers (eval-once;
         int and float variants by the argument type). No `uses`; user routine of

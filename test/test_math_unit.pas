@@ -13,7 +13,7 @@ begin
   { Test pure Pascal math functions }
   writeln(Min(10, 20));
   writeln(Max(10, 20));
-  writeln(Power(2, 8));
+  writeln(Power(2, 8):0:0);   { float-only, as in FPC }
   writeln(Gcd(48, 18));
   writeln(Lcm(48, 18));
 end.

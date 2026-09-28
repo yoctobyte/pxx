@@ -8,7 +8,9 @@ function Abs(x: Integer): Integer;
 function Abs(x: Int64): Int64;
 function Min(a, b: Integer): Integer;
 function Max(a, b: Integer): Integer;
-function Power(base, exponent: Integer): Integer;
+{ No Power(Integer, Integer): FPC's Power is float-only, so `Power(2, -1)` is
+  0.5 and `WriteLn(Power(2, 8))` prints 2.56E+0002. An Integer overload here
+  answered 0 and 256. IntPower and the float overloads below are what FPC has. }
 function Gcd(a, b: Integer): Integer;
 function Lcm(a, b: Integer): Integer;
 
@@ -3015,15 +3017,6 @@ begin
   if d <= delta then Result := 0
   else if a < b then Result := -1
   else Result := 1;
-end;
-
-function Power(base, exponent: Integer): Integer;
-var i, res: Integer;
-begin
-  res := 1;
-  for i := 1 to exponent do
-    res := res * base;
-  Result := res;
 end;
 
 function Gcd(a, b: Integer): Integer;

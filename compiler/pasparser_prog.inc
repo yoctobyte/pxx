@@ -502,7 +502,8 @@ begin
          CaseEqual(name, 'Str') or CaseEqual(name, 'Val') or
          CaseEqual(name, 'StringOfChar') or CaseEqual(name, 'SetString') or
          CaseEqual(name, 'IntToStr') or CaseEqual(name, 'FloatToStr') or
-         CaseEqual(name, 'Format') or CaseEqual(name, 'Trim') then
+         CaseEqual(name, 'Format') or CaseEqual(name, 'Trim') or
+         CaseEqual(name, 'Space') then
         needsAnsiRuntime := True;
       if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
           (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and

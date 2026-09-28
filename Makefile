@@ -10707,6 +10707,12 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_string_element_passed_by_ref_is_made_unique.pas $(TESTTMP)/test_str_elem_byref26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_str_elem_byref26_i386 | diff -u test/test_string_element_passed_by_ref_is_made_unique.expected -; \
 	else echo "=== test_string_element_passed_by_ref: qemu-i386 absent, i386 NOT verified ==="; fi
+	@# FPC System string gaps (Copy 2-arg, Pos offset, UpCase(string), Space)
+	@# and float-only Power, bare and with SysUtils in scope; fpc 3.2.2 output
+	./$(COMPILER) test/test_fpc_system_string_gaps.pas $(TESTTMP)/test_fpc_strgaps26
+	$(TESTTMP)/test_fpc_strgaps26 | diff -u test/test_fpc_system_string_gaps.expected -
+	./$(COMPILER) test/test_fpc_system_string_gaps_with_sysutils.pas $(TESTTMP)/test_fpc_strgaps_su26
+	$(TESTTMP)/test_fpc_strgaps_su26 | diff -u test/test_fpc_system_string_gaps_with_sysutils.expected -
 	# TA and TB are both `array of LongInt`: identical element type, identical
 	# dynamic-ness, identical depth. A symbol records an array's SHAPE and not its
 	# IDENTITY, so matching a helper by element kind and depth COMPILES this file.

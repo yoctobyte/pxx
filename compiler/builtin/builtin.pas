@@ -259,6 +259,11 @@ function __pxxSqrDbl(d: Double): Double;
   shadows them at the call site. }
 function __pxxUpCase(c: Char): Char;
 function __pxxPos(const sub, s: AnsiString): Integer;
+{ `UpCase(s)`, `Pos(sub, s, offset)` and `Space(n)`: the rest of that System
+  family (FPC 3.2.2 astrings.inc / sstrings.inc). }
+function __pxxUpCaseStr(const s: AnsiString): AnsiString;
+function __pxxPosFrom(const sub, s: AnsiString; offset: Integer): Integer;
+function __pxxSpace(n: Integer): AnsiString;
 
 { Case-insensitive whole-string equality, on __pxxUpCase. Declared here because
   VariantToBool needs it and is implemented far above the body. }
@@ -2416,13 +2421,38 @@ begin
   if (c >= 'a') and (c <= 'z') then Result := Chr(Ord(c) - 32) else Result := c;
 end;
 
+function __pxxUpCaseStr(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := s;
+  for i := 1 to Length(Result) do
+    if (Result[i] >= 'a') and (Result[i] <= 'z') then
+      Result[i] := Chr(Ord(Result[i]) - 32);
+end;
+
+{ FPC's parameter is a Byte: Space(-2) is 254 blanks there, so wrap the same. }
+function __pxxSpace(n: Integer): AnsiString;
+var i: Integer;
+begin
+  n := n and 255;
+  SetLength(Result, n);
+  for i := 1 to n do Result[i] := ' ';
+end;
+
 function __pxxPos(const sub, s: AnsiString): Integer;
+begin
+  Result := __pxxPosFrom(sub, s, 1);
+end;
+
+{ FPC's Offset: the search starts AT it, and an offset below 1 or past the end
+  finds nothing -- Pos('o', s, 0) is 0 there, not a search from 1. }
+function __pxxPosFrom(const sub, s: AnsiString; offset: Integer): Integer;
 var i, j, n, m: Integer; ok: Boolean;
 begin
   Result := 0;
   n := Length(s); m := Length(sub);
-  if (m = 0) or (m > n) then Exit;
-  for i := 1 to n - m + 1 do
+  if (m = 0) or (offset < 1) or (offset > n) or (m > n) then Exit;
+  for i := offset to n - m + 1 do
   begin
     ok := True;
     for j := 1 to m do

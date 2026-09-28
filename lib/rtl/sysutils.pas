@@ -511,6 +511,8 @@ function StringOfChar(ch: Char; count: Integer): AnsiString;
 
 { 1-based substring; count clamped to the end; out-of-range index -> ''. }
 function Copy(const s: AnsiString; index, count: Integer): AnsiString;
+{ Copy(s, index): the rest of s from index, FPC's two-argument form. }
+function Copy(const s: AnsiString; index: Integer): AnsiString;
 
 { FPC's `Ch in CSet`, spelled as a function. TSysCharSet has been declared above
   for a while and its own comment already named this as "the parameter type of
@@ -675,6 +677,7 @@ function LastDelimiter(const Delimiters, S: AnsiString): Integer;
 
 { ASCII case conversion. }
 function UpCase(c: Char): Char;
+function UpCase(const s: AnsiString): AnsiString;
 function UpperCase(const s: AnsiString): AnsiString;
 function LowerCase(const s: AnsiString): AnsiString;
 { FPC Ansi* variants: locale-aware there, plain ASCII here (this RTL is
@@ -814,8 +817,10 @@ function CurrToStr(C: Currency): AnsiString;
 function StrToCurr(const s: AnsiString): Currency;
 function StrToCurrDef(const s: AnsiString; def: Currency): Currency;
 
-{ Return the position of substr in s, 1-based; 0 if not found. }
+{ Return the position of substr in s, 1-based; 0 if not found. The offset
+  form starts the search there; below 1 or past the end finds nothing (FPC). }
 function Pos(const substr, s: AnsiString): Integer;
+function Pos(const substr, s: AnsiString; offset: Integer): Integer;
 
 { Null-terminated PChar routines (FPC's `strings` unit, re-exported by SysUtils).
   StrLCopy copies at most MaxLen chars from Source up to its #0, always #0-
@@ -1837,6 +1842,11 @@ begin
   Move(s[index], Result[1], len);
 end;
 
+function Copy(const s: AnsiString; index: Integer): AnsiString;
+begin
+  Result := Copy(s, index, Length(s));
+end;
+
 function CharInSet(Ch: AnsiChar; const CSet: TSysCharSet): Boolean;
 begin
   CharInSet := Ch in CSet;
@@ -1978,6 +1988,14 @@ begin
         Exit;
       end;
   Result := 0;
+end;
+
+function UpCase(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Result := s;
+  for i := 1 to Length(Result) do
+    Result[i] := UpCase(Result[i]);
 end;
 
 function UpCase(c: Char): Char;
@@ -2195,6 +2213,22 @@ begin
     c := s[i];
     if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
     Result[i] := c;
+  end;
+end;
+
+function Pos(const substr, s: AnsiString; offset: Integer): Integer;
+var i, j, m, n: Integer; match: Boolean;
+begin
+  Result := 0;
+  m := Length(substr);
+  n := Length(s);
+  if (m = 0) or (offset < 1) or (offset > n) then Exit;
+  for i := offset to n - m + 1 do
+  begin
+    match := True;
+    for j := 1 to m do
+      if s[i + j - 1] <> substr[j] then begin match := False; Break; end;
+    if match then begin Result := i; Exit; end;
   end;
 end;
 
