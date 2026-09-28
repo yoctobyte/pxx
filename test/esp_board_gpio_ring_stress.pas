@@ -24,10 +24,24 @@ program EspBoardGpioRingStress;
                it was filled, shows up here as a Seq out of step.
   The ISR entry count is kept by espgpio's ISR, not by the ring.
 
-  -dOLDRING builds against the pre-0d5df8991 ring as a POSITIVE CONTROL
-  (PXX_EXTRA_FLAGS="-dOLDRING -Fu<dir>", where <dir> holds that interrupts.pas
-  with `INT_RING_OLD = 1;` added to its interface). The reference to
-  INT_RING_OLD below fails the build if the new copy was picked instead.
+  -dOLDRING builds against a broken ring as a POSITIVE CONTROL. Make it from
+  the CURRENT lib/rtl/interrupts.pas, not from an old commit: 0d5df89913's
+  parent predates IntSourceOpen/IntSourceClose and does not build against
+  today's espgpio. Copy the file to <dir> and, in the copy:
+    - add `INT_RING_OLD = 1;` to an interface const block OUTSIDE the
+      {$ifdef PXX_NILPY} (this program does not define PXX_NILPY);
+    - variant (3), the lost update: in IntPush replace
+      `InterLockedIncrement(RingCount);` with `RingCount := RingCount + 1;`,
+      and in IntNext `InterLockedDecrement(RingCount);` with
+      `RingCount := RingCount - 1;`. RingTail stays.
+  (The full historical revert also drops RingTail and pushes to slot
+  (RingHead + RingCount) mod INT_RING_CAPACITY, the wrong-slot half.) Then
+    PXX_EXTRA_FLAGS="-dOLDRING -Fu<dir>" plus the invocation above.
+  The reference to INT_RING_OLD below fails the build if the unmodified copy
+  was picked instead. Variant (3) alone is enough to fail: a lost decrement
+  leaves RingCount above the true fill while RingTail keeps moving, so edges
+  go missing (delivered + dropped < isr) AND the consumer reads slots out of
+  step (misplaced > 0).
 
   MEASURED 2026-09-24, ESP32-S3 board, 20 s, compiler 5cb3fdf5896b:
     NEW  isr=671997 delivered=347861 dropped=324136  misplaced=0     exact
@@ -35,7 +49,15 @@ program EspBoardGpioRingStress;
     OLD  isr=671997 delivered=354922 dropped=314572  misplaced=3667  BROKEN
   In OLD, 2,503 edges are neither delivered nor dropped. About half of all
   edges are dropped in every run, which is what keeps the consumer inside
-  IntNext while the ISR fires. }
+  IntNext while the ISR fires. (That OLD was a hand-made copy, both halves.)
+
+  MEASURED 2026-09-28, ESP32-S3 board, 20 s, compiler c19cc2d531e4 (v450):
+    NEW     isr=669996 delivered=342988 dropped=327008  misplaced=0     exact
+    OLD(3)  isr=669997 delivered=349909 dropped=317604  misplaced=2460  BROKEN
+  In OLD(3), 2,484 edges are neither delivered nor dropped. Toggles were
+  670000 in both: the ISR count is a few short because edges that land while
+  the GPIO status bit is still set coalesce, so compare delivered + dropped
+  with isr, never with toggles. }
 
 uses interrupts, espgpio;
 
