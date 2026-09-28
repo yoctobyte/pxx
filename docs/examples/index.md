@@ -21,11 +21,11 @@ strength of a test that once passed or a claim in another document.
 > row.
 > The binary sizes in the tables are from that run. The ESP32 QEMU runs were
 > redone with v449 too. Rows that were measured on an earlier pin say which:
-> the C and Pascal library rows, the ESP32 board runs, and the terminal and GTK
-> screenshots (taken 2026-09-24 with pin v423). With v449 the five GTK programs
-> were opened again on Xvfb, and each drew the same window as its screenshot,
-> compared by eye. A later pin may behave differently in either direction;
-> re-run a command to check.
+> the C and Pascal library rows and the ESP32 board runs. The terminal and GTK
+> screenshots, and the Eliah IDE's, were retaken on 2026-09-28 with pin v450
+> (sha256 `c19cc2d531e4…`), from programs built by `make demos` with that pin.
+> A later pin may behave differently in either direction; re-run a command to
+> check.
 >
 > Earlier passes: v423 (2026-09-24), v424 and v425 (2026-09-25), and v441, the
 > beta 0.1 compiler (2026-09-27). On each, the batch and parallel programs
@@ -167,7 +167,7 @@ C library. The screenshots were captured from each program running in an
 | Menu widgets | `examples/tui/menudemo.pas` | ![TUI menu](../assets/showcase/menudemo.png) |
 | File browser | `examples/fm/fm.pas` (`fm --interactive [path]`; with no flag it renders once and exits) | ![Terminal file browser](../assets/showcase/fm.png) |
 | Mandelbrot zoom | `examples/mandelbrot/mandelzoom.pas`: animated truecolor zoom using integer asm kernels on all cores (build with `--threadsafe`) | ![Mandelbrot zoom in a terminal](../assets/showcase/mandelzoom.png) |
-| Video player | `examples/player/player.pas`: `player <video>`, decodes through an `ffmpeg` child process and draws in truecolor blocks | ![Terminal video player](../assets/showcase/player.png) |
+| Video player | `examples/player/player.pas`: `player <video>`, decodes through an `ffmpeg` child process and draws in truecolor blocks. Shown playing FFmpeg's `testsrc2` test pattern | ![Terminal video player](../assets/showcase/player.png) |
 
 The chess engine (`examples/chess/chess.pas`) and the kiosk are
 line-oriented, so they are shown as text. At start-up the engine prints the
@@ -221,8 +221,8 @@ frame rates shown inside them are not representative of a real GPU.
 Lazarus- and Delphi-inspired but deliberately stripped down, with everything
 tiled into one window. It is early work and the layout still shows it. It also
 doubles as a real-world stress test for the compiler. It builds in about nine
-seconds, and its headless core test reports `202 passed, 0 failed` with pin
-v426. A second face for ESP32 boards, [the ESP32 IDE](../getting-started/esp-ide.md),
+seconds, and its headless core test reports `323 passed, 0 failed` with pin
+v450. A second face for ESP32 boards, [the ESP32 IDE](../getting-started/esp-ide.md),
 shares the same core.
 
 ```sh
