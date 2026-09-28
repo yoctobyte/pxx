@@ -948,7 +948,7 @@ the two behave differently on purpose:
 | --- | --- | --- |
 | Pascal and C: integer `div` / `mod` by zero | runtime error 200, the program stops | gives 0, the program continues |
 | Pascal and C: float division by zero | Inf or NaN | Inf or NaN |
-| Nil Python: `//` and `%` by zero | `ZeroDivisionError`, except in some shapes that stop with runtime error 200 (see the [Nil Python limits](../targets/nil-python.md#known-limits)) | gives 0, the program continues |
+| Nil Python: `//` and `%` by zero | runtime error 200, which `except` cannot catch, when the divisor is only known at run time; `ZeroDivisionError` when the compiler can see it is zero or the def is typed (measured with v450; which is intended is waiting for the owner's decision, see [ESP32 peripherals](../library/esp.md)) | gives 0, the program continues |
 | Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
 
 Each cell was measured on v425. The desktop column was run on x86-64, i386,

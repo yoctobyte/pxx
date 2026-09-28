@@ -784,16 +784,28 @@ places, on purpose. Everything else about numbers is the same.
 | | ESP32-C3 and ESP32-S3 | Desktop Linux |
 | --- | --- | --- |
 | Pascal and C: integer `div` / `mod` (C `/` and `%`) by zero | gives 0, the program continues | runtime error 200, the program stops |
-| Nil Python: `//` and `%` by zero | gives 0, the program continues | `ZeroDivisionError`, as in CPython |
-| float division by zero | Inf or NaN, as IEEE 754 says | Pascal and C: Inf or NaN; Nil Python: `ZeroDivisionError` |
+| Nil Python: `//` and `%` by zero | gives 0, the program continues | usually runtime error 200, which `except` cannot catch; see below |
+| float division by zero | Inf or NaN, as IEEE 754 says | Pascal and C: Inf or NaN; Nil Python `/`: `ZeroDivisionError`, as in CPython |
 
 The Pascal and C rows are `test/test_esp_div_by_zero_yields_zero.pas` and
 `test/c_esp_div_by_zero_yields_zero.c`, which cover every integer width and
 signedness; with pin v450 (compiler sha256 `c19cc2d531e4…`) both match their
 `.expected` on the ESP32-C3 and the ESP32-S3 as ESP-IDF images under
 Espressif's QEMU (`tools/esp_run.sh`), on 2026-09-28. The desktop runtime
-error is `test/test_div_zero_re200.pas`, and with v450 on x86-64 a Nil Python
-`7 // b` and `1.0 / b` with `b` zero raise `ZeroDivisionError`. The Nil Python
+error is `test/test_div_zero_re200.pas`.
+
+On a desktop, Nil Python's `//` and `%` by zero do not match CPython for a
+divisor that is only known at run time. With `b = int(input())` and `0` typed,
+`7 // b` and `7 % b` stop the program with runtime error 200, and a
+`try`/`except ZeroDivisionError` around them does not run; the same holds
+inside a def and for a list element. `ZeroDivisionError` is raised, as in
+CPython, for `/` (`7 / b`, `1.0 / b`), for a divisor the compiler can see is
+zero (`7 // 0`, or a function that returns `0`), and inside a def with typed
+parameters. Measured on 2026-09-28 with v450 and with the compiler built at
+`fce510f98d` (`f545c8410b32`), on x86-64 and on i386 under QEMU user mode.
+Which of the two is intended for Nil Python on a desktop **is waiting for the
+owner's decision**; until then, test an integer divisor before `//` or `%`
+if the program must not stop. The Nil Python
 ESP rows were measured on v425 under QEMU on both chips, and on an ESP32-S3
 board (see [Known issues](../reference/known-issues.md#by-design-math-errors)
 and [Getting started on the ESP32](../getting-started/esp32.md)). If a zero
