@@ -1,0 +1,43 @@
+import sys
+
+# Objects an exec'd body builds -- literals, range(), list(), a genexp, a
+# method call's argument list -- die with their last binding, the same as in
+# compiled code. uforth runs every PYTHON word this way, and its TYPE kept ~20
+# heap blocks per call. With `keep` every list is retained on the host side
+# instead: the positive control.
+keep = len(sys.argv) > 1
+
+BODY = """
+out = []
+for i in range(3):
+    out.append(chr(65 + i))
+d = {1: 2}
+t = (1, 2)
+s = {3}
+r = list(range(3))
+g = "".join(str(x) for x in r)
+push("".join(out) + str(len(g) + len(d) + len(t) + len(s)))
+if keep:
+    vm.hold(out)
+"""
+
+class VM:
+    def __init__(self):
+        self.last = ""
+        self.kept = []
+    def push(self, v):
+        self.last = v
+    def hold(self, v):
+        self.kept.append(v)
+    def run(self, src):
+        env = {"vm": self, "push": self.push, "hold": self.hold, "keep": keep}
+        wrapper = "def __body__():\n" + "\n".join("    " + l for l in src.splitlines())
+        ns = {}
+        exec(wrapper, env, ns)
+        ns["__body__"]()
+
+vm = VM()
+for k in range(400):
+    vm.run(BODY)
+print(vm.last, len(vm.kept) > 0)
+sys.exit(0)

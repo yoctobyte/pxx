@@ -613,6 +613,14 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_del_print_released 12 $(TESTTMP)/test_nilpy_delprint26
 	@if tools/assert_no_leak.sh nilpy_del_print_control 12 $(TESTTMP)/test_nilpy_delprint26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_del_print control (keep) did not trip the bound -- the census cannot see these objects"; exit 1; fi
+	# Objects an exec'd body builds die with their last binding: pyeval retained a
+	# fresh object twice and never freed a method call's argument list (before:
+	# live=23407; uforth's TYPE kept ~20 blocks per call). `keep` is the control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_exec_body_objects_release.npy $(TESTTMP)/test_nilpy_execobj26
+	tools/expect_same.sh nilpy_exec_obj_value "$$($(TESTTMP)/test_nilpy_execobj26 2>/dev/null)" "ABC7 False"
+	tools/assert_no_leak.sh nilpy_exec_obj_released 400 $(TESTTMP)/test_nilpy_execobj26
+	@if tools/assert_no_leak.sh nilpy_exec_obj_control 400 $(TESTTMP)/test_nilpy_execobj26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_exec_obj control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
