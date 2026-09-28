@@ -600,7 +600,7 @@ var
     here because a chunk balances its own $sp — it allocates a frame, does its
     work and frees it — so there is nothing to carry across the seam. }
   WasmMainChunk     : array[0..MAX_WASM_MAIN_CHUNKS-1] of Integer;
-  WasmMainChunkCount: Integer;
+  { WasmMainChunkCount is in defs.inc: the Pascal driver reads it too }
 
   { A proc's index in the function table, or -1 if its address has never been
     taken. Memoised because BOTH consumers must agree: the IR_PROCADDR arm,
@@ -8273,7 +8273,7 @@ begin
 end;
 
 procedure WasmEmitMainWrapper;
-var i, slot, si, iov, fdw: Integer;
+var i, j, slot, si, iov, fdw: Integer;
 begin
   if WasmMainChunkCount = 0 then Exit;
   slot := WasmAddFunc('main', WasmAddType([], []));
@@ -8290,8 +8290,12 @@ begin
     fdw := WasmHostImport('wasi_snapshot_preview1', 'fd_write',
                           [WT_I32, WT_I32, WT_I32, WT_I32], [WT_I32]);
   end;
-  for i := 0 to WasmMainChunkCount - 1 do
+  for i := 0 to WasmMainChunkCount do
   begin
+    if WasmUnitInitSet and (i = WasmUnitInitAt) then
+      for j := 0 to InitProcCount - 1 do
+        WasmCall(WasmSlotForProc(InitProcs[j]), Procs[InitProcs[j]].Name);
+    if i = WasmMainChunkCount then break;
     WasmCall(WasmMainChunk[i],
              'main$' + WasmIntStr(i));
     { AN UNHANDLED EXCEPTION MUST NOT LOOK LIKE SUCCESS. Every body propagates

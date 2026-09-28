@@ -2791,6 +2791,14 @@ begin
     unit creates Application. }
   for i := 0 to InitProcCount - 1 do
     EmitCallProc(InitProcs[i]);
+  { wasm32 drops those bytes: its `main` calls the body's chunks, so it is told
+    WHERE the calls belong -- after the global initialisers' chunks, before the
+    first statement's -- and WasmEmitMainWrapper makes them there. }
+  if TargetArch = TARGET_WASM32 then
+  begin
+    WasmUnitInitSet := True;
+    WasmUnitInitAt := WasmMainChunkCount;
+  end;
 
   { A LIBRARY'S STATEMENT PART IS OPTIONAL, AND A PROGRAM'S IS NOT. Measured
     against fpc 3.2.2, not assumed from symmetry: `library l; ... exports F;

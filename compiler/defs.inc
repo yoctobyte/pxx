@@ -6387,6 +6387,14 @@ var
     Called at program entry before the main body so unit globals get set up. }
   InitProcs : array[0..255] of Integer;
   InitProcCount : Integer;
+  { wasm32 only: the program-body chunk before which the InitProcs run. The
+    driver's EmitCallProc loop emits machine code, and a wasm32 `main` is
+    synthesised from its chunks instead, so without this no unit's
+    initialization section ran on wasm32 at all (textfile's Output.Handle
+    stayed 0, and every Text write was EBADF on stdin: Runtime error 9). }
+  WasmUnitInitSet : Boolean;
+  WasmUnitInitAt : Integer;
+  WasmMainChunkCount : Integer;   { ir_codegen_wasm32.inc's WasmMainChunk count }
   { Synthesized unit `finalization` procs, in registration (dependency) order;
     run in REVERSE at program exit — normal main-body fall-off AND Halt —
     mirroring FPC (bug-unit-finalization-not-executed). FiniRunnerProc is the
