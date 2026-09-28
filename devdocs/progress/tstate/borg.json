@@ -16838,15 +16838,14 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-28T17:38:07Z",
+  "date": "2026-09-28T19:40:20Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
-   "test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh",
-   "tools-devtest#00"
+   "test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh"
   ],
-  "sha": "5ea9d5ef076a71cba4414527532fe4f44855521d",
+  "sha": "70f62b5544d85fa0968f8b92866332b1cf557274",
   "tier": "full",
-  "ver": "v449",
+  "ver": "v450",
   "verdict": "RED"
  },
  "toolchain": {
