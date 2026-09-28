@@ -4835,6 +4835,43 @@ begin
   end;
 end;
 
+{ Does the top-level `fn main(...)` return unit, i.e. is there no `->` after
+  its parameter list? The driver asks BEFORE any signature is registered,
+  because the exit sequence is emitted before the parse, so this is the same
+  depth-0 walk RRegisterFnSignatures does, reading only main's tail.
+
+  A unit fn is registered tyInteger with a Result slot nothing writes (see
+  RRegisterFnSignatureAt), so its return register holds whatever the body left
+  there. x86-64 happened to leave 0. i386 left 81, and test_rust_option.rs and
+  test_rust_result.rs exited 81 there while printing the right output. }
+function RMainReturnsUnit: Boolean;
+var i, depth, par: Integer;
+begin
+  Result := False;
+  depth := 0; i := 0;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkFn) and
+            (Tokens[i + 1].Kind = tkIdent) and (GetTokenStr(i + 1) = 'main') and
+            (Tokens[i + 2].Kind = tkLParen) then
+    begin
+      i := i + 3; par := 1;
+      while (i < MainProgramTokCount) and (par > 0) do
+      begin
+        if Tokens[i].Kind = tkLParen then Inc(par)
+        else if Tokens[i].Kind = tkRParen then Dec(par);
+        Inc(i);
+      end;
+      Result := not ((i + 1 < MainProgramTokCount) and
+                     (Tokens[i].Kind = tkMinus) and (Tokens[i + 1].Kind = tkGt));
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 { `trait Name { fn sig(&self, ...) -> RetType; ... }` — signature-only
   methods (no bodies, no nested braces), so a flat scan to the matching
   closing brace is enough. Only the trait's NAME is recorded (RTraits): bound-checking is
@@ -5830,7 +5867,10 @@ begin
     because a refusal made them unreachable.
     bug-a-three-frontend-drivers-hand-write-an-x86-64-program-tail-and-a-target-refusal-is-what-hides-it }
   EmitEntryStubCall(callPatch, callAnchor);   { call main }
-  EmitExitReg;                               { exit_group(main's return value) }
+  { A unit `fn main()` exits a CONSTANT zero, as Zig's `fn main() void` does:
+    its return register is garbage (RMainReturnsUnit). }
+  if RMainReturnsUnit then EmitExit(0)
+  else EmitExitReg;                          { exit_group(main's return value) }
 
   { The string runtime's SHIMS are emitted machine code (above, inside the
     prologue); their BODIES ship in builtinheap, and StrInt -- the int->text
