@@ -7,7 +7,8 @@ order: 33
 
 PXX compiles Pascal, C and Nil Python with one compiler into one program, so
 on the ESP32 a Python program can call a Pascal unit, and a Pascal program can
-call C, with no binding code in between. This page shows both on an ESP32-C3.
+call C, with no binding code in between. This page shows both on an ESP32-C3;
+the Python example also runs on an emulated ESP32-S3.
 
 **What was checked.** With pin v445 (compiler sha256 `caf21ac399f1`) on
 2026-09-27, in a fresh clone at `025a005851`, with ESP-IDF v6.0.1: both
@@ -86,6 +87,11 @@ xpy-c3/build.sh               # build only; the image was 1,421,184 bytes (v448)
 With the program's expected output saved as `xpy-c3/main/main.expected`,
 `xpy-c3/build.sh qemu-assert` boots it under QEMU and compares. It printed
 `OK xpy-c3 -- ... output == main/main.expected, one boot`.
+
+For an ESP32-S3, copy `nilpy-s3` instead of `nilpy-c3` (to `xpy-s3`) and use
+the same files. With pin v450 on 2026-09-29 it built (the image was 1,342,912
+bytes) and `xpy-s3/build.sh qemu-assert` printed `OK xpy-s3 -- ... output ==
+main/main.expected, one boot` with the output shown above.
 
 The ESP units themselves work the same way: `import 'espgpio.pas' as gpio` in
 [Getting started on the ESP32](./esp32.md#4-a-python-program) is a Pascal unit
