@@ -32500,6 +32500,23 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_stackless_gen.pas $(TESTTMP)/test_xtensa_test_stackless_gen
 	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_xtensa_test_stackless_gen_x64
 	tools/expect_same.sh xtensa/test_stackless_gen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_stackless_gen)" "$$($(TESTTMP)/test_xtensa_test_stackless_gen_x64)"
+	# A record result deeper than 128 B into the frame: the windowed ABI's
+	# hidden-result store was addi-only and REFUSED past imm8. 120 B, 1 KB and
+	# 8 KB (the last past movi, so the literal pool); both ABIs; x86-64's output
+	# is the .expected. On the compiler one commit back the windowed build fails.
+	# bug-a-xtensa-windowed-an-aggregate-result-past-128-bytes-of-frame-does-not-compile
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_windowed_large_aggregate_result.pas $(TESTTMP)/xt_aggr_w
+	tools/expect_same.sh xtensa/test_xtensa_windowed_large_aggregate_result "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_aggr_w)" "$$(cat test/test_xtensa_windowed_large_aggregate_result.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_xtensa_windowed_large_aggregate_result.pas $(TESTTMP)/xt_aggr_c0
+	tools/expect_same.sh xtensa/test_xtensa_windowed_large_aggregate_result_call0 "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_aggr_c0)" "$$(cat test/test_xtensa_windowed_large_aggregate_result.expected)"
+	# The real shape: regex.pas's ReRunAt returns a ~170 B TReMatch.
+	./$(COMPILER) -Fulib/rtl --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_windowed_regex_search.pas $(TESTTMP)/xt_regex_w
+	tools/expect_same.sh xtensa/test_xtensa_windowed_regex_search "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_regex_w)" "$$(cat test/test_xtensa_windowed_regex_search.expected)"
+	# ...and the flagship's build: a Nil Python `import re` for the S3 (hosted
+	# Nil Python on xtensa has no arena, so this is build-only; the Pascal row
+	# above runs the same unit). Same flags as examples/esp32/nilpy-s3/build.sh.
+	printf 'import re\nprint(re.findall(r"[a-z]+", "ab 12 cd"))\n' > $(TESTTMP)/xt_s3_usere.py
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed --xtensa-long-calls --platform=esp --no-signals -Fulib/rtl -Fulib/rtl/platform/esp $(TESTTMP)/xt_s3_usere.py $(TESTTMP)/xt_s3_usere.o
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double_x64
 	tools/expect_same.sh xtensa/test_u64_to_double "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_u64_to_double)" "$$($(TESTTMP)/test_xtensa_test_u64_to_double_x64)"

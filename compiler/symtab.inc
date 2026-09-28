@@ -16803,10 +16803,20 @@ begin
         >16-byte struct return; every declared parameter shifts up one word
         (the param-copy loop starts at pw=1). a15 is the frame base here: a7 is
         not the frame pointer yet (it still holds incoming argument word 5). }
+      { Past addi's imm8 the offset is MATERIALISED, as EmitFrameAddrXtensa
+        does -- that helper cannot be used here because it bases on a7. The
+        error this replaces fired for any result local deeper than 128 bytes:
+        a 120 B record result, and regex.pas's ReRunAt (so every Nil Python
+        `import re` for the S3). EmitLoadConstXtensa writes only a9; a2 (the
+        destination) is intact.
+        bug-a-xtensa-windowed-an-aggregate-result-past-128-bytes-of-frame-does-not-compile }
       if (Syms[idx].Offset >= -128) and (Syms[idx].Offset <= 127) then
         xtensa_addi(reg_xtensa_a9, reg_xtensa_a15, Syms[idx].Offset)
       else
-        Error('target xtensa windowed: aggregate-result frame offset out of range');
+      begin
+        EmitLoadConstXtensa(reg_xtensa_a9, Syms[idx].Offset);
+        xtensa_add(reg_xtensa_a9, reg_xtensa_a15, reg_xtensa_a9);
+      end;
       xtensa_s32i(reg_xtensa_a2, reg_xtensa_a9, 0);
     end;
   end
