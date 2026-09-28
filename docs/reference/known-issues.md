@@ -90,30 +90,6 @@ Found after the release, on 2026-09-27, and **open in v441**:
   (`ae3466a018d8`). **On v445 and earlier:** name the string first
   (`t = str(i)`, then `t * 2`).
 
-Found on 2026-09-28, and **open in v446**, on **wasm32 only**:
-
-- **Pascal on wasm32: temporaries of two shapes leak on every trip of a
-  loop.** The shapes are those of two tests in the tree:
-  `test/test_interface_result_temp_leaks.pas` (an interface returned by a
-  function and used without being assigned, as in `TakeI(MkIntf(k))`) and
-  `test/test_case_arm_temp_finalize.pas` (a managed record or interface
-  temporary built in a `case` arm). Built with `--target=wasm32
-  -dPXX_ALLOC_CENSUS` and run under wasmtime (`tools/run_target.sh wasm32`),
-  the program's own census reports, with the tests' trip count `N` raised 4
-  times:
-  - interface result: 393 live at N=500, 1797 at N=2000 (about 0.9 per trip);
-  - `case` arm: 488 live at N=1000, 1925 at N=4000 (about 0.5 per trip).
-
-  These are the same with pin v446 (`ae3466a018d8`) and the compiler at
-  `e072d579b0` (`ccd62c91f30e`), measured on 2026-09-28. The census a program
-  prints is approximate (to about 12.5%), but the growth with `N` is not. The
-  same programs built for x86-64 at `-O2` leave 1 and 3 live at exit, whatever
-  `N` is (`tools/census_at_exit.sh`). frankh-95 measured the same two numbers
-  on wasm32 at `-O0` to `-O3`, found the other leak checks clean at `-O2` and
-  `-O3` on x86-64, i386, aarch64, arm32, riscv32 and Xtensa, and found four
-  more checks over their bound on wasm32 without measuring whether they grow.
-  A fix is in progress. No workaround has been measured.
-
 Program-level global variables are not finalized when the program exits. This
 is a one-time cost at exit, not a leak that grows while the program runs.
 
@@ -237,6 +213,21 @@ what they were measured with.
   On i386, arm32 and riscv32, `1 in [4294967297]` answered TRUE and
   `4294967297 in [4294967297]` answered FALSE. They now answer as on x86-64.
   FPC rejects such items, and pxx warns about them. Wrong in v441 to v446.
+
+- **wasm32: Pascal memory leaks that grew with every call.** A function
+  returning a record with managed fields (strings, interfaces) leaked the old
+  value of the variable it was assigned to, so the loops in
+  `test/test_interface_result_temp_leaks.pas` and
+  `test/test_case_arm_temp_finalize.pas` grew by 0.5 to 0.9 blocks per trip.
+  `Copy` of a string literal or of a shared string leaked one block per call.
+  Every string constant was copied to the heap, so a program using `pylib`
+  kept about 250 blocks alive at exit. Measured with pin v446 (wasmtime,
+  `-dPXX_ALLOC_CENSUS`). Wrong in v446.
+
+- **wasm32: `Move(s[i], ...)` on a shared `const` string could change another
+  variable.** It unshared the string by mistake, and a later write to one
+  copy showed in the other. `Copy` does this internally. Matches FPC 3.2.2
+  now. Wrong in v446.
 
 - **riscv32: assigning to a `var s: string[N]` parameter did not reach the
   caller.** The caller kept its old value. Wrong in v441 to v446.
