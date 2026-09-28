@@ -36,10 +36,12 @@ end;
 var
   port, caFile: AnsiString;
   r: THttpResponse;
-  rejectOk, acceptOk, asyncOk: Boolean;
+  rejectOk, acceptOk, asyncOk, missingOk, garbageOk, wrongOk: Boolean;
+  wrongCa: AnsiString;
 begin
   if ParamCount >= 1 then port := ParamStr(1) else port := '28770';
   if ParamCount >= 2 then caFile := ParamStr(2) else caFile := '';
+  if ParamCount >= 3 then wrongCa := ParamStr(3) else wrongCa := '';
   gUrl := 'https://localhost:' + port + '/';
 
   { 1. REJECT: verify on, do NOT trust the test CA. }
@@ -69,5 +71,30 @@ begin
 
   OpenSslTlsUnregister;
 
-  if rejectOk and acceptOk and asyncOk then writeln('ALL OK') else writeln('FAIL');
+  { 4. A CA file that does not load is an ERROR, not a quiet "installed".
+    OpenSslTlsRegisterEx ignored SSL_CTX_load_verify_locations' result and
+    answered True for a missing path (frankd-90, 2026-09-28). }
+  missingOk := not OpenSslTlsRegisterEx(True, '/nonexistent/pxx-no-such-ca.pem');
+  writeln('missing-ca: register=', not missingOk);
+  SayBool('missing-ca-refused', missingOk);
+  OpenSslTlsUnregister;
+  { ...the same for a file that exists and is not PEM (this program). }
+  garbageOk := not OpenSslTlsRegisterEx(True, ParamStr(0));
+  SayBool('garbage-ca-refused', garbageOk);
+  OpenSslTlsUnregister;
+
+  { 5. REJECT: verify on, a CA that loads but did not sign the server's cert. }
+  wrongOk := False;
+  if (wrongCa <> '') and OpenSslTlsRegisterEx(True, wrongCa) then
+  begin
+    r := HttpGet(gUrl);
+    wrongOk := not r.Ok;
+    writeln('wrong-ca: ok=', r.Ok, ' verify_result=', OpenSslTlsLastVerifyResult);
+  end;
+  SayBool('reject-wrong-ca', wrongOk);
+  OpenSslTlsUnregister;
+
+  if rejectOk and acceptOk and asyncOk and missingOk and garbageOk and wrongOk then
+    writeln('ALL OK')
+  else writeln('FAIL');
 end.

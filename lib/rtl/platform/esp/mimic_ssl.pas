@@ -265,15 +265,29 @@ begin
   FCa := '';
 end;
 
+{ A CA that does not load is an ERROR here, never an empty trust store: a
+  missing cafile raises OSError (errno 2, as CPython's FileNotFoundError), and
+  a file or cadata with nothing in it raises ValueError. Data that is present
+  but not a certificate raises ValueError('invalid cert') at wrap_socket,
+  where mbedTLS parses it (pxx_tls_connect), whatever verify_mode is. And a
+  CERT_REQUIRED context with NO CA refuses the handshake: mbedTLS answers
+  MBEDTLS_ERR_SSL_CA_CHAIN_REQUIRED, surfaced as OSError. (frankuser,
+  2026-09-28, after frankd-90 found the OpenSSL backend ignoring the load.) }
 procedure SSLContext.load_verify_locations(const cafile: Variant; const cadata: Variant);
-var f: TextFile; line, all: AnsiString;
+var f: TextFile; line, all, fn: AnsiString;
 begin
   if not IsNone(cadata) then
-    FCa := BytesOf(cadata)
+  begin
+    FCa := BytesOf(cadata);
+    if Length(FCa) = 0 then raise ValueError.Create('invalid cert: cadata is empty');
+  end
   else if not IsNone(cafile) then
   begin
     all := '';
-    AssignFile(f, pystr_of(cafile));
+    fn := pystr_of(cafile);
+    if not FileExists(fn) then
+      raise OSError.Create('(2, ''No such file or directory: ' + fn + ''')');
+    AssignFile(f, fn);
     Reset(f);
     while not Eof(f) do
     begin
@@ -281,6 +295,7 @@ begin
       all := all + line + #10;
     end;
     CloseFile(f);
+    if Length(all) = 0 then raise ValueError.Create('invalid cert: ' + fn + ' is empty');
     FCa := all;
   end;
 end;

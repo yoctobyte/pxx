@@ -15,6 +15,8 @@ PORT=28771
 PORT2=28772
 CERT=/tmp/pxx_tls_devtest_cert.pem
 KEY=/tmp/pxx_tls_devtest_key.pem
+WCERT=/tmp/pxx_tls_devtest_wrongca.pem
+WKEY=/tmp/pxx_tls_devtest_wrongca_key.pem
 SLOG=/tmp/pxx_tls_devtest_sserver.log
 CLIENT=/tmp/pxx_devtest_tls_openssl
 INTEROP=/tmp/pxx_devtest_tls_interop
@@ -24,7 +26,7 @@ say() { printf '%s\n' "$*"; }
 
 cleanup() {
   [ -n "$SRV_PID" ] && kill "$SRV_PID" 2>/dev/null
-  rm -f "$CERT" "$KEY"
+  rm -f "$CERT" "$KEY" "$WCERT" "$WKEY"
 }
 trap cleanup EXIT INT TERM
 
@@ -53,6 +55,9 @@ if ! openssl req -x509 -newkey rsa:2048 -keyout "$KEY" -out "$CERT" \
       -addext "subjectAltName=DNS:localhost" >/dev/null 2>&1; then
   say "SKIP: cert generation failed"; exit 0
 fi
+# a second, unrelated self-signed CA: loads fine, signed nothing we serve
+openssl req -x509 -newkey rsa:2048 -keyout "$WKEY" -out "$WCERT" \
+      -days 1 -nodes -subj "/CN=pxx-wrong-ca" >/dev/null 2>&1 || { say "SKIP: cert generation failed"; exit 0; }
 openssl s_server -accept "$PORT" -cert "$CERT" -key "$KEY" -www -quiet >"$SLOG" 2>&1 &
 SRV_PID=$!
 
@@ -65,7 +70,7 @@ done
 
 # ---- test 1: our client vs openssl s_server (verify reject/accept + async) ----
 say "--- client vs openssl s_server ---"
-OUT=$(timeout 30 "$CLIENT" "$PORT" "$CERT" 2>&1)
+OUT=$(timeout 30 "$CLIENT" "$PORT" "$CERT" "$WCERT" 2>&1)
 RC=$?
 say "$OUT"
 if [ $RC -ne 0 ] || ! printf '%s' "$OUT" | grep -q '^ALL OK$'; then

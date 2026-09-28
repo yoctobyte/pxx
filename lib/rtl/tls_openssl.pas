@@ -29,7 +29,8 @@ uses tls;
 
   OpenSslTlsRegister is the secure default: verify the peer certificate against
   the system trust store and match the connection hostname (CN/SAN). Use
-  OpenSslTlsRegisterEx to add a private/test CA or to turn verification off. }
+  OpenSslTlsRegisterEx to add a private/test CA or to turn verification off;
+  it answers False when a non-empty caFile does not load. }
 function OpenSslTlsRegister: Boolean;
 function OpenSslTlsRegisterEx(verifyPeer: Boolean; const caFile: string): Boolean;
 
@@ -61,26 +62,28 @@ const
   SSL_FILETYPE_PEM = 1;
 
 type
-  { OpenSSL function pointers. Plain (non-cdecl) proc vars: on x86-64 the default
-    call ABI matches the System V cdecl used by libssl for these pointer/int
-    signatures (same as dynlibs' strlen smoke). }
-  TMethodFn   = function: Pointer;
-  TCtxNewFn   = function(method: Pointer): Pointer;
-  TCtxFreeFn  = procedure(ctx: Pointer);
-  TSslNewFn   = function(ctx: Pointer): Pointer;
-  TSslFreeFn  = procedure(ssl: Pointer);
-  TSetFdFn    = function(ssl: Pointer; fd: Integer): Integer;
-  TConnectFn  = function(ssl: Pointer): Integer;
-  TRwFn       = function(ssl: Pointer; buf: Pointer; num: Integer): Integer;
-  TGetErrFn   = function(ssl: Pointer; ret: Integer): Integer;
-  TShutdownFn = function(ssl: Pointer): Integer;
-  TCtrlFn     = function(ssl: Pointer; cmd: Integer; larg: Int64; parg: Pointer): Int64;
-  TSetVerifyFn = procedure(ctx: Pointer; mode: Integer; cb: Pointer);
-  TDefPathsFn  = function(ctx: Pointer): Integer;
-  TLoadVerifyFn = function(ctx: Pointer; CAfile: PChar; CApath: PChar): Integer;
-  TSet1HostFn  = function(ssl: Pointer; name: PChar): Integer;
-  TVerifyResFn = function(ssl: Pointer): Int64;
-  TUseFileFn   = function(ctx: Pointer; fname: PChar; ftype: Integer): Integer;
+  { OpenSSL function pointers, cdecl, and C `long` as NativeInt. They were plain
+    proc vars with `long` as Int64, which is right on x86-64 only -- the default
+    call ABI is System V there and `long` is 64-bit. On i386 the default is the
+    register convention and `long` is 32-bit, so OpenSslTlsRegister segfaulted
+    in the first libssl call under qemu-i386 (frankd-90, 2026-09-28). }
+  TMethodFn   = function: Pointer; cdecl;
+  TCtxNewFn   = function(method: Pointer): Pointer; cdecl;
+  TCtxFreeFn  = procedure(ctx: Pointer); cdecl;
+  TSslNewFn   = function(ctx: Pointer): Pointer; cdecl;
+  TSslFreeFn  = procedure(ssl: Pointer); cdecl;
+  TSetFdFn    = function(ssl: Pointer; fd: Integer): Integer; cdecl;
+  TConnectFn  = function(ssl: Pointer): Integer; cdecl;
+  TRwFn       = function(ssl: Pointer; buf: Pointer; num: Integer): Integer; cdecl;
+  TGetErrFn   = function(ssl: Pointer; ret: Integer): Integer; cdecl;
+  TShutdownFn = function(ssl: Pointer): Integer; cdecl;
+  TCtrlFn     = function(ssl: Pointer; cmd: Integer; larg: NativeInt; parg: Pointer): NativeInt; cdecl;
+  TSetVerifyFn = procedure(ctx: Pointer; mode: Integer; cb: Pointer); cdecl;
+  TDefPathsFn  = function(ctx: Pointer): Integer; cdecl;
+  TLoadVerifyFn = function(ctx: Pointer; CAfile: PChar; CApath: PChar): Integer; cdecl;
+  TSet1HostFn  = function(ssl: Pointer; name: PChar): Integer; cdecl;
+  TVerifyResFn = function(ssl: Pointer): NativeInt; cdecl;
+  TUseFileFn   = function(ctx: Pointer; fname: PChar; ftype: Integer): Integer; cdecl;
 
   TSslConn = record ssl: Pointer; fd: Integer; isServer: Boolean; end;
   PSslConn = ^TSslConn;
@@ -272,14 +275,21 @@ begin
   if gClientCtx = nil then gClientCtx := pCtxNew(pTlsClientMethod());
   if gClientCtx = nil then Exit;
 
-  { trust store: the system default CA bundle, plus an optional extra CA file
-    (a private/test CA). Verification mode is per the caller. }
-  pDefPaths(gClientCtx);
-  if caFile <> '' then pLoadVerify(gClientCtx, PChar(caFile), nil);
+  { Verification mode FIRST, per the caller, so the early exit below can never
+    leave a context at OpenSSL's default SSL_VERIFY_NONE for a caller that
+    ignores our False and connects anyway. }
   if verifyPeer then pSetVerify(gClientCtx, SSL_VERIFY_PEER, nil)
   else pSetVerify(gClientCtx, SSL_VERIFY_NONE, nil);
   gVerify := verifyPeer;
   gLastVerifyResult := X509_V_OK;
+  { trust store: the system default CA bundle, plus an optional extra CA file
+    (a private/test CA). A caFile that does not load -- missing, unreadable,
+    not PEM -- is an ERROR. SSL_CTX_load_verify_locations' result used to be
+    ignored and this answered True, so a typo in the CA path read as "private
+    CA installed" (found by frankd-90). With verification on, a peer the store
+    cannot vouch for is refused in the handshake either way. }
+  pDefPaths(gClientCtx);
+  if (caFile <> '') and (pLoadVerify(gClientCtx, PChar(caFile), nil) <> 1) then Exit;
   Result := True;
 end;
 
