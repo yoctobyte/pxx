@@ -442,6 +442,7 @@ AN_ASSIGN Right PyMakeIdent(cntSym)
 AN_ASSIGN Right PyMakeIdent(gsym)
 AN_ASSIGN Right PyMakeIdent(iSym)
 AN_ASSIGN Right PyMakeIdent(keyN)
+AN_ASSIGN Right PyMakeNone
 AN_ASSIGN Right PyPairItem(PyMakeIdent(host), PyNestRecIdx[r])
 AN_ASSIGN Right PyStarOperandAsList(ASTLeft[n], rbListCi)
 AN_ASSIGN Right PyStarOperandAsList(CurASTNode, listCi)
@@ -495,6 +496,7 @@ AN_ASSIGN Right incN
 AN_ASSIGN Right incNode
 AN_ASSIGN Right initExpr
 AN_ASSIGN Right initNode
+AN_ASSIGN Right j
 AN_ASSIGN Right left
 AN_ASSIGN Right leftExpr
 AN_ASSIGN Right lenNode

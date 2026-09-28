@@ -1,0 +1,267 @@
+import sys
+
+# `del x` releases the object the way `x = None` does, and a module-level
+# print() argument temp is released when its statement ends instead of
+# being held (one per print line) until exit. With `keep` every object and
+# every printed string is retained instead: the positive control.
+keep = len(sys.argv) > 1
+held = []
+
+class Node:
+    def __init__(self, v):
+        self.v = v
+
+def work(n):
+    t = 0
+    for i in range(n):
+        x = Node(i)
+        t += x.v
+        if keep:
+            held.append(x)
+        del x
+    return t
+
+total = work(400)
+y0 = Node(0)
+if keep:
+    held.append(y0)
+del y0
+y1 = Node(1)
+if keep:
+    held.append(y1)
+del y1
+y2 = Node(2)
+if keep:
+    held.append(y2)
+del y2
+y3 = Node(3)
+if keep:
+    held.append(y3)
+del y3
+y4 = Node(4)
+if keep:
+    held.append(y4)
+del y4
+y5 = Node(5)
+if keep:
+    held.append(y5)
+del y5
+y6 = Node(6)
+if keep:
+    held.append(y6)
+del y6
+y7 = Node(7)
+if keep:
+    held.append(y7)
+del y7
+y8 = Node(8)
+if keep:
+    held.append(y8)
+del y8
+y9 = Node(9)
+if keep:
+    held.append(y9)
+del y9
+y10 = Node(10)
+if keep:
+    held.append(y10)
+del y10
+y11 = Node(11)
+if keep:
+    held.append(y11)
+del y11
+y12 = Node(12)
+if keep:
+    held.append(y12)
+del y12
+y13 = Node(13)
+if keep:
+    held.append(y13)
+del y13
+y14 = Node(14)
+if keep:
+    held.append(y14)
+del y14
+y15 = Node(15)
+if keep:
+    held.append(y15)
+del y15
+y16 = Node(16)
+if keep:
+    held.append(y16)
+del y16
+y17 = Node(17)
+if keep:
+    held.append(y17)
+del y17
+y18 = Node(18)
+if keep:
+    held.append(y18)
+del y18
+y19 = Node(19)
+if keep:
+    held.append(y19)
+del y19
+n = 0
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+n = n + 1
+print("line " + str(n))
+if keep:
+    held.append("k" + str(n))
+print("total", total, "held", len(held) > 0)
+sys.exit(0)

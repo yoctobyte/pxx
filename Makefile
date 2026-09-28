@@ -605,6 +605,14 @@ test-nilpy: $(COMPILER)
 	# not retain). 31d314dfa8 freed that list, so `return (5, len(c))` was `()`.
 	./$(COMPILER) test/test_nilpy_a_returned_container_survives_the_statement_end_release.npy $(TESTTMP)/test_nilpy_retcont26
 	$(TESTTMP)/test_nilpy_retcont26 | diff -u test/test_nilpy_a_returned_container_survives_the_statement_end_release.expected -
+	# `del x` releases like `x = None`, and a module-level print() argument temp
+	# is released when its statement ends (HEAD before: live=57, one string per
+	# print line plus every deleted object). `keep` is the positive control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_del_and_print_temps_release.npy $(TESTTMP)/test_nilpy_delprint26
+	tools/expect_same.sh nilpy_del_print_value "$$($(TESTTMP)/test_nilpy_delprint26 2>/dev/null | tail -1)" "total 79800 held False"
+	tools/assert_no_leak.sh nilpy_del_print_released 12 $(TESTTMP)/test_nilpy_delprint26
+	@if tools/assert_no_leak.sh nilpy_del_print_control 12 $(TESTTMP)/test_nilpy_delprint26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_del_print control (keep) did not trip the bound -- the census cannot see these objects"; exit 1; fi
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -

@@ -23703,13 +23703,24 @@ begin
   for k := mark to PyStmtTempCount - 1 do
     if PyStmtTempProc[k] = CurProc then
     begin
-      { an INTEGER 0, not a tyPointer nil: ir.inc's `d = None` arm (a
-        scalar stored over a NilPy class binding) is what releases the old
-        object before the raw store; a pointer-typed 0 is stored raw and
-        drops nothing }
-      nilNode := AllocNode(AN_INT_LIT);
-      ASTIVal[nilNode] := 0;
-      ASTTk[nilNode] := Ord(tyInteger);
+      if Syms[PyStmtTempSym[k]].TypeKind = tyAnsiString then
+      begin
+        { a managed STRING temp: storing '' releases the old handle }
+        nilNode := AllocNode(AN_STR_LIT);
+        ASTSOffset[nilNode] := StoredName('');
+        ASTSLen[nilNode] := 0;
+        ASTTk[nilNode] := Ord(tyString);
+      end
+      else
+      begin
+        { an INTEGER 0, not a tyPointer nil: ir.inc's `d = None` arm (a
+          scalar stored over a NilPy class binding) is what releases the old
+          object before the raw store; a pointer-typed 0 is stored raw and
+          drops nothing }
+        nilNode := AllocNode(AN_INT_LIT);
+        ASTIVal[nilNode] := 0;
+        ASTTk[nilNode] := Ord(tyInteger);
+      end;
       asgn := AllocNode(AN_ASSIGN);
       ASTLeft[asgn] := PyMakeIdent(PyStmtTempSym[k]);
       ASTRight[asgn] := nilNode;
@@ -26448,6 +26459,9 @@ begin
         Every managed pargTk has this shape; promo is where it was caught.
         bug-a-the-nilpy-print-promo-argument-temp-is-never-zero-initialised }
       SymIsHiddenArgTemp[pargTmp] := True;
+      { printed and dead: release the string when the statement ends, not
+        at exit -- one temp per print line otherwise held its last text }
+      if pargTk = tyAnsiString then PyNoteStmtTemp(pargTmp);
       if pargTk = tyClass then
       begin
         Syms[pargTmp].RecName := ResolveNodeRec(CurASTNode);
@@ -35123,8 +35137,38 @@ begin
        ((FindSym(CurTok.SVal) >= 0) or
         (FindUnitOrAlias(LowerCase(CurTok.SVal)) >= 0)) then
     begin
-      Next;
+      { `del x` on a LOCAL or a module variable holding an object RELEASES it
+        now, as `x = None` does: the reference is the name's own, and keeping
+        it to the end of the function held whatever it pointed at (a list and
+        everything in it) for no reason. A PARAMETER is left alone -- its
+        reference may be the caller's (the censused `del unused_param` idiom),
+        and so is a unit name. Scalars have nothing to release. }
+      symIdx := FindSym(CurTok.SVal);
       Result := -1;
+      if (symIdx >= 0) and (Syms[symIdx].Kind in [skLocal, skGlobal]) and
+         (not Syms[symIdx].IsRef) then
+      begin
+        if Syms[symIdx].TypeKind = tyVariant then
+        begin
+          Result := AllocNode(AN_ASSIGN);
+          ASTLeft[Result] := PyMakeIdent(symIdx);
+          ASTRight[Result] := PyMakeNone;
+        end
+        else if PyClassSymArcEligible(symIdx) then
+        begin
+          { the SAME store PyReleaseTempsSince emits: an INTEGER 0 takes ir.inc's
+            `d = None` arm, which releases the old object first; a pointer-typed
+            0 would be stored raw and release nothing }
+          Result := AllocNode(AN_INT_LIT);
+          ASTIVal[Result] := 0;
+          ASTTk[Result] := Ord(tyInteger);
+          j := Result;
+          Result := AllocNode(AN_ASSIGN);
+          ASTLeft[Result] := PyMakeIdent(symIdx);
+          ASTRight[Result] := j;
+        end;
+      end;
+      Next;
       Exit;
     end;
     { Parse the whole `d[k]` normally — it lowers to TPyDict.fetch(d, k) via
