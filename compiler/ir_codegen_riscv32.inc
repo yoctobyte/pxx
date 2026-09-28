@@ -4836,8 +4836,19 @@ begin
         end
         else
         begin
+          { EXACTLY the slot's width, as the x86-64 walker learned: a Boolean
+            temp (`show(2 > 1)` into `def show(b: bool)` hoists one) is ONE
+            byte with the incoming parameter right above it, and a word store
+            zeroed the parameter before the body read it -- every bool
+            argument printed False. xtensa's s32i on the same odd slot is a
+            SIGBUS. }
           EmitSlotAddrRISCV32(reg_t0, i);
-          rv32_sw(reg_zero, reg_t0, 0);
+          case TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) of
+            1: rv32_sb(reg_zero, reg_t0, 0);
+            2: rv32_sh(reg_zero, reg_t0, 0);
+          else
+            rv32_sw(reg_zero, reg_t0, 0);
+          end;
         end;
       end;
   { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }

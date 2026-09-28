@@ -6134,9 +6134,15 @@ begin
         end
         else
         begin
+          { Exactly the slot's width -- see the riscv32 walker. }
           EmitSlotAddrXtensa(reg_xtensa_a8, i);
           xtensa_movi(reg_xtensa_a9, 0);
-          xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
+          case TypeStorageSize(Syms[i].TypeKind, SymTR[i].RecId) of
+            1: xtensa_s8i(reg_xtensa_a9, reg_xtensa_a8, 0);
+            2: xtensa_s16i(reg_xtensa_a9, reg_xtensa_a8, 0);
+          else
+            xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
+          end;
         end;
       end;
   { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }

@@ -1,0 +1,30 @@
+# A computed bool passed to a `bool` parameter arrives as the value passed.
+# On riscv32 and xtensa the callee's hoisted one-byte print temp sat right
+# below the parameter and was zeroed with a WORD store, which wiped the
+# parameter before the body read it: every call below printed False on the
+# C3 and hosted riscv32, and xtensa's 4-byte store to an odd slot SIGBUSed.
+def show(b: bool) -> None:
+    print(b)
+
+def show_twice(b: bool) -> None:
+    print(b)
+    print(b)
+
+def show_after(n: int, b: bool) -> None:
+    print(n, b)
+
+d = {"a": 1}
+xs = [1, 2]
+ys = [1, 2]
+show(1 > 2 or 2 > 1)
+show("a" in d)
+show(not (1 > 2))
+show(xs == ys)
+show(1 > 2 and 2 > 1)
+show(True)
+show(False)
+t = 2 > 1
+show(t)
+show_twice(t)
+show_after(7, t)
+print(1 > 2 or 2 > 1)

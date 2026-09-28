@@ -8307,6 +8307,23 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_fbig "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_fbig_arm32)" "$$(cat test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_a_float_against_a_bignum_compares_exactly.npy $(TESTTMP)/test_nilpy_fbig_riscv32
 	tools/expect_same.sh riscv32/test_nilpy_fbig "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_fbig_riscv32)" "$$(cat test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected)"
+	# A computed bool into a `bool` parameter. The callee's hoisted one-byte
+	# print temp sits right below the parameter, and the riscv32 and xtensa
+	# walkers zeroed it with a WORD store, wiping the parameter: every call
+	# printed False on the C3 and hosted riscv32, and xtensa SIGBUSed on the
+	# odd-address s32i. arm32 and i386 are the controls that always passed.
+	./$(COMPILER) test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.npy $(TESTTMP)/test_nilpy_boolparm26
+	$(TESTTMP)/test_nilpy_boolparm26 | diff -u test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected -
+	./$(COMPILER) --target=riscv32 test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.npy $(TESTTMP)/test_nilpy_boolparm_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_boolparm "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_boolparm_riscv32)" "$$(cat test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.npy $(TESTTMP)/test_nilpy_boolparm_xtensa_windowed
+	tools/expect_same.sh xtensa-windowed/test_nilpy_boolparm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_boolparm_xtensa_windowed)" "$$(cat test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.npy $(TESTTMP)/test_nilpy_boolparm_xtensa_call0
+	tools/expect_same.sh xtensa-call0/test_nilpy_boolparm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_boolparm_xtensa_call0)" "$$(cat test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.npy $(TESTTMP)/test_nilpy_boolparm_arm32
+	tools/expect_same.sh arm32/test_nilpy_boolparm "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_boolparm_arm32)" "$$(cat test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.npy $(TESTTMP)/test_nilpy_boolparm_i386
+	tools/expect_same.sh i386/test_nilpy_boolparm "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_boolparm_i386)" "$$(cat test/test_nilpy_a_bool_argument_reaches_a_bool_parameter.expected)"
 	# os.stat / os.path.getsize / f.tell() / os.rename off x86-64. stat had no
 	# layout except on x86-64 and answered a zeroed result with NO error
 	# (statx now, one layout everywhere); riscv32's syscall 62 is _llseek, not
