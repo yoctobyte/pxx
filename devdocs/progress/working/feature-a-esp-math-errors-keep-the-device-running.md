@@ -2,6 +2,8 @@
 prio: 60
 track: A
 summary: "ON ESP (TargetPlatform = PLATFORM_ESP, esp32c3/esp32s3, IDF and bare), NO MATH ERROR HALTS BY DEFAULT. The owner, 2026-09-24: an embedded device 'should (try) to keep running, even if whatever unexpected input (sensor etc) produces a math error. we should not halt.' Floats give NaN or Inf; ints give 0 or a saturated value. DONE for Pascal/C integer div/mod (0) and for NilPy: `//` and `%` give 0 (including bignums); `/`, math domain errors and range errors give IEEE inf/nan. The NilPy half is frankuser's reading of the principle. OPEN: the census residue in LOGBOOK (Trunc of an out-of-range float into a 32-bit int wraps; an uncaught exception on a c3 IDF build panics via ecall). Opt-in {$R+}/{$Q+} keep trapping. Desktop is untouched."
+status: working
+owner: frankz-e5
 ---
 
 # ESP: math errors keep the device running
