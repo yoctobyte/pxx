@@ -531,6 +531,13 @@ begin
     for pi := 0 to ProcCount - 1 do
       WriteLn('PXXDBG n.procs pi=', pi, ' name=', Procs[pi].Name,
               ' nparams=', Procs[pi].ParamCount, ' unit=', ProcUnitIdx[pi]);
+  { 8-aligned, here and before every record below: the default slots are
+    VARIANTS, and a def-time store of a float default writes the Double at +8
+    with vstr, which faults on arm32 at an address that is not a word multiple.
+    The parameter-name strings written after each record left the next one at
+    whatever length the names summed to (`def g(k=d)` over a float died with
+    SIGBUS once a print label moved the layout). }
+  while (DataLen mod 8) <> 0 do DataPutB(0);
   PyDfltScratchOff := DataLen;
   DataPutZeros(48);
   for pi := 0 to ProcCount - 1 do
@@ -595,6 +602,7 @@ begin
     for k := firstUser to lastDecl - 1 do
       if not ProcParamHasDefault[pi * MAX_PROC_PARAMS + k] then Inc(reqN);
 
+    while (DataLen mod 8) <> 0 do DataPutB(0);
     ProcSigOff[pi] := DataLen;
     if PxxDbgEnabled('n.sig') then
       WriteLn('PXXDBG n.sig pi=', pi, ' name=', Procs[pi].Name,

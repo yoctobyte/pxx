@@ -5476,3 +5476,4 @@ Caveats: one clean board run so far (roughly half of all runs never reach the
 monitor because the flash fails, which is separate); the deterministic evidence is
 the board-free pty A/B, where `cat` gives 0 ticks in 12 s and state D while `dd`
 gives 60 ticks and state S.
+2026-09-28 | frankH | compiler/rtti_emit.inc (NilPy signature records) | SIGBUS on arm32: the NilPy signature/default-slot records in .data were laid out at whatever length the previous record's parameter-name strings left, so a default slot (a VARIANT) could sit off a word boundary and a def-time store of a float default (`def g(k=d)`, d a float) faulted on the vstr at +8. Each record and the scratch slot are now 8-aligned. Found by the captured-float fixture's arm32 row once a print label moved the layout; that row is the regression test (compiler 537d51cab646).
