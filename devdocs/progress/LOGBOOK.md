@@ -5480,3 +5480,138 @@ gives 60 ticks and state S.
 2026-09-28 | frankH | compiler/pyparser.inc (lambda/nested-def binds, word thunk), compiler/builtin/pyeval.pas (pyboundfn_bind_dbl), compiler/ir.inc (callable-ctor name lists), test/test_nilpy_a_captured_float_travels_by_its_bits.{npy,expected} (new), Makefile | WRONG VALUE: a float captured by a lambda or a nested def taken as a value went through the Int64 binder, which converted it (1.0 -> 1), and the 32-bit word thunk converted the word back as an integer: `bare(1.0)` gave 0.0 on i386 and arm32 (compiler 09aa7e7373a9), 4.6071824188000174e+18 on the ESP. Floats now bind by bit pattern (pyboundfn_bind_dbl) and the thunk reads a Double param through its word's storage; by-ref (nonlocal cell) params keep the plain binder -- binding the cell address as a float segfaulted, caught by the fixture's nonlocal row. 13 rows (param, local, own+capture, int, str, default, overridden default, nonlocal, method) equal CPython on x86-64, i386, arm32, aarch64. Hosted riscv32/xtensa refuse NilPy and the bare-metal profile does not build it, so the ESP rows need a board (frankb-12); IDF objects build for C3 and S3.
 2026-09-28 | frankH | test/test_exception_typed.pas | RED since 846a574b00 (borg, 83095f2): the test raised B a second time after the handler for its first raise had freed it -- a dangling pointer. It passed while handled exceptions were freed without their destructor (pxx freed B twice, silently); with Destroy dispatched first it read the freed block's VMT word and segfaulted after 43. fpc frees B there too (a writeln'ing Destroy prints once) and survives only because its heap leaves the dead VMT in place. Case 3 now raises a fresh TBetaError, keeping its subject (an unmatched `on` propagates to the outer handler). 41..45 on x86-64, i386, arm32.
 2026-09-28 | frankS | compiler/pyparser.inc (the by-ref lvalue check), test/nilpy_dynarr/dynarr.pas, test/test_nilpy_a_dynamic_array_result_passed_to_pascal_is_released.npy (new) | NILPY -> PASCAL DYN ARRAY, regression from 9bd7f662e5 (frankd-90): `SumArr(MakeArr(4))` was refused ("by-reference argument must be a variable") on v441/v448/HEAD, and my refusal of the bound form left no route back to Pascal at all. The call result is now admitted for a by-value, open or const ARRAY parameter (var/out still needs a variable), as the Pascal frontend already does; IRLowerCallArg's existing temp owns it. Values = FPC (60/60/100/40) on x86-64 and i386; 2000 trips live=3 (bound 50), control with a kept list climbs to live=1815. Still open: the bound form `a = MakeArr(4); SumArr(a)` -- it compiled before but read wrong (a[3] = 0), and a NilPy list in a NAME is not accepted by an array parameter either (`SumO(x)`: no overload), so it needs a typed dyn-array local or a list conversion both ways.
+
+## 2026-09-28 — LX6 example ports: esptimer passes with an oracle, the NilPy hardware one is a WDT loop
+
+Ported to the classic ESP32 (Xtensa LX6), sources identical to their S3 twins bar
+the program name, all with compiler `b2b325036c3b` (pin v448):
+
+- **`timer-esp32` (Pascal): PASSES on silicon.** `esp_flash: OK — board output
+  matches timer-esp32/main/main.expected (7 lines) [rst: 1]`. This is an upgrade
+  rather than a new row: `docs/targets/esp32.md` already recorded the timer
+  program on this chip, but it was run from `timer-s3`'s source with "expected
+  serial output" as the oracle — eyeballed. It is now a project with a
+  checked-in `main.expected`, so the verdict is a byte comparison.
+- **`nilpy-hw-esp32` (Python): DOES NOT RUN. Watchdog reboot loop.**
+  `rst:0x8 (TG1WDT_SYS_RESET)`, three reset cycles inside a 30 s capture, both
+  CPUs stopped at `PC=0x4008b13c`, and the program's first line never appears.
+  That PC resolves in the image map to inside **`_xt_context_save`** — the Xtensa
+  exception/interrupt context-save path — so it faults while saving context, on
+  the **windowed** register-window path. Same area as the windowed-frame bug
+  already fixed in `XtensaExcFrameAddrW`. No ticket filed: LX6 is outside the
+  settled S3/C3 scope and the month's rule is no new tickets unless
+  release-blocking. The project folder is kept because it is the only reproducer,
+  and its README carries the capture.
+
+Ruled out for that failure, each with its measurement rather than by argument:
+partition overflow (both NilPy projects share `factory = 0x3C0000` ≈ 3.9 MB
+against a 1,286,160-byte image, and IDF's own `check_sizes.py` passed — this was
+the most attractive hypothesis and it is wrong); a short capture (30 s shows
+three full cycles); and NilPy-on-LX6 as such, by an isolating control on the same
+board in the same session — the simple `nilpy-esp32` matched its 4-line oracle,
+one boot, rc=0.
+
+Not separated at the time of that run: the hardware variant adds five IDF
+components (`esp_driver_gpio/spi/i2c/rmt`, `pxx_tls`) **and** takes a timer
+callback into Pascal while driving a pin. Note `timer-esp32` takes an `esp_timer`
+callback into Pascal on this same chip and passes, so that mechanism is not broken
+in general. **A discriminator run later the same day halved this list — see the
+`gpio-edge-esp32` entry below.**
+
+**LX6-only, and measured rather than inferred.** The same program matched
+`main.expected` in full (8 lines, `timer 1` included — the `esp_timer` callback
+landing in compiled code) on real ESP32-S3 silicon AND real ESP32-C3 silicon on
+pin v449 (`0ded1e5d04c8`), one boot each, no watchdog. Those runs were taken by
+the seat that owns those boards; this seat owns only the LX6, so the cross-chip
+claim rests on their measurement rather than on a docs record.
+
+## 2026-09-28 — `uart-esp32` on LX6 silicon: 10 of 13, and the control row is one of the failures
+
+`examples/esp32/uart-esp32`, the Pascal UART1 check ported from `uart-s3` with an
+identical source bar the program name. On an ESP32-D0WD-V3 over the CP2102,
+compiler `b2b325036c3b`, one boot: `UART-CHECK-DONE passed=10 failed=3`.
+`uart-s3` records 13 of 13 on the S3, so this is a chip difference rather than a
+port mistake.
+
+The per-row detail is `Length(s)`, the bytes that came back, which makes the
+three failures legible. `MSG` is 11 bytes; the fast row expects 17.
+
+| row | wanted | got |
+|---|---|---|
+| `loopback echo` | 11 | **12** — one extra byte |
+| `fast echo` | 17 | **18** — one extra byte, at 1,000,000 baud too |
+| `pad control` | **0** | 2 — bytes that should not exist |
+
+Nothing is missing; one byte too many arrives on the internal-loopback path.
+
+**The most important consequence is about a row that PASSED.** `pad echo` passed
+with 11 correct bytes, but `pad control` — which repeats it with TX routed to
+another pin and passes only when nothing returns — returned 2 bytes. A passing
+row whose control fails is not evidence, so on the LX6 `pad echo` does **not**
+establish that the bytes travelled through GPIO17; only that 11 correct bytes
+arrived by some path. The S3's 13-of-13 does establish it, because there the
+control is green.
+
+A hypothesis, recorded as a hypothesis: all three are consistent with stale bytes
+left in the RX FIFO between rows, cascading down a sequence that shares one port
+— a drain/flush difference on this chip rather than three faults. **Untested.**
+The cheap discriminator is to drain explicitly before each echo row, or run them
+in isolation, and see whether the extra byte survives. Not done; LX6 is outside
+the settled S3/C3 scope.
+
+Also recorded while porting: `examples/esp32/gpio-c3` is **not** portable as a
+hardware example, and that is a finding rather than an obstacle. Its own header
+says "PROBE, not a deliverable" — it characterises Espressif QEMU's GPIO model,
+and its verdict line reads `qemu-delivers-NO-gpio-edges`, a sentence that is
+nonsense on silicon. The GPIO hardware coverage in this tree is the Python
+`gpio-edge-*` pair, which is what was ported instead.
+
+## 2026-09-28 — the `gpio-edge-esp32` discriminator answers: the four extra components are exonerated, and two reproducers converge on `_xt_context_save`
+
+`examples/esp32/gpio-edge-esp32` was ported to be a discriminator, not coverage.
+It is the other NilPy hardware example, and it needs only `esp_timer
+esp_driver_gpio lwip esp_netif` — **none** of the `esp_driver_spi`,
+`esp_driver_i2c`, `esp_driver_rmt` or `pxx_tls` that `nilpy-hw-esp32` adds. So
+whichever way it went, it would halve a list that read "both are open".
+
+It loops too. Same board, compiler `b2b325036c3b`: `esp_flash: FAIL -- the board
+rebooted during the capture (15 ROM reset lines)`, `GPIOEDGE-RC=1`, with the
+bootloader printing the same PRO CPU PC every cycle. Resolved against each
+project's own map:
+
+| program | PRO CPU PC | resolves to |
+|---|---|---|
+| `gpio-edge-esp32` | `0x4008ae38` | inside **`_xt_context_save`** (starts `0x4008ad98`) |
+| `nilpy-hw-esp32` | `0x4008b13c` | inside **`_xt_context_save`** (starts `0x4008b09c`) |
+
+Two different images, two different addresses, **the same function**. The APP CPU
+sits at `_UserExceptionVector` (`0x40080340`) and `xt_debugexception`
+(`0x40082b88`), so it is taking exceptions as well. The addresses differing while
+the symbol matches is the point: it rules out a coincidence at one address and
+implicates the path.
+
+**So the four extra components are out.** The fault is in what the two programs
+share, not in the SPI/I2C/RMT drivers or `pxx_tls` — which is where the
+attractive hypothesis pointed.
+
+What the four LX6 results now bound, all one board, one compiler:
+
+| program | shape | LX6 |
+|---|---|---|
+| `nilpy-esp32` | NilPy, no hardware, no callback | **PASS** (4-line oracle) |
+| `timer-esp32` | **Pascal**, `esp_timer` callback | **PASS** (7-line oracle) |
+| `gpio-edge-esp32` | NilPy, `espgpio` + a callback | **loops in `_xt_context_save`** |
+| `nilpy-hw-esp32` | NilPy, `espgpio` + a callback | **loops in `_xt_context_save`** |
+
+The common factor in the failures is a **NilPy** program taking a callback from C
+into compiled code while using `espgpio`. Plain NilPy is fine on this chip and a
+callback into **Pascal** is fine on this chip, so neither NilPy nor callbacks
+alone explain it, and the windowed context-save path stays the place to look
+(`XtensaExcFrameAddrW`, `compiler/ir_codegen_xtensa.inc`).
+
+Still NOT separated, and I am not going to imply otherwise: whether the trigger
+is `espgpio` specifically, or any C-to-NilPy callback. The next cheap experiment
+is a NilPy program taking an `esp_timer` callback with **no** GPIO at all — one
+new `main.npy`, no new tooling. Nobody has run it. No ticket filed: LX6 is outside
+the settled S3/C3 scope and the month's rule is no new tickets unless
+release-blocking, so both reproducer folders carry the capture instead.
