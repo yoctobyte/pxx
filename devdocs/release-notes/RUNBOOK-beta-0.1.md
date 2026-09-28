@@ -126,9 +126,14 @@ then removed: `markers: latest pin v450; 0 changed`; `identity: v450, commit
 files, 9 lines (`CLAUDE.md`, the two release-notes pages,
 `docs/reference/known-issues.md`); `check against v450: 58 items`.
 
-**Known false positive in `check`:** `docs/release-notes/index.md:87` is
-listed as draft wording, because it says "The table is the same as with the
-draft pin v425". That sentence is history, not a draft marker. Leave it.
+`check` prints nothing until it is done, and it is slow: 108 s at a load
+of about 30, and 138 s at a load of 43, on 2026-09-28. Do not stop it
+early. Its count grows as the tree moves: 64 items against v450 on
+2026-09-28 at `cafc739cbf`, every "(next pin)" line counted as one ("is not
+in v450; drop its line"), which is right until the next pin contains them.
+The sentence in `docs/release-notes/index.md` that mentions "the draft pin
+v425" was listed as draft wording while it wrapped across the phrase that
+`check` skips; it no longer wraps there, and it is no longer listed.
 
 Work through the rest of the `check` list as RESTAMP.md step 4 says: drop
 "(next pin)" lines the pin does not carry, move "Fixed since v441" rows that

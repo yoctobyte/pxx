@@ -84,8 +84,8 @@ other Linux targets (`tools/run_target.sh`), and under wasmtime for wasm32.
 
 A **refusal** is a compile-time error that names the reason, for example
 *"Nil Python is not supported on hosted riscv32 Linux yet; build it for the
-ESP32 instead"*. It is not a crash. The table is the same as with the draft
-pin v425.
+ESP32 instead"*. It is not a crash.
+The table is the same as with the draft pin v425.
 
 - x86-64 is the host and the most heavily tested target.
 - wasm32 is the least tested: its suites are run by hand, not continuously.
