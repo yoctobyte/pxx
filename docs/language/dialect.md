@@ -59,14 +59,14 @@ These features can be disabled by passing `--no-auto-var` and `--no-lazy-var` (o
 
 ## Calling conventions
 
-A calling convention in PXX is a property of the **target**, not of a routine.
-Each platform has exactly one, and the compiler uses it: the System V AMD64 ABI
-on 64-bit Linux, the target's own C ABI when cross-compiling. There is no
-per-routine choice to make.
+A calling convention in PXX is mostly a property of the **target**, not of a
+routine. PXX's own routines use an internal convention, and calls into C use
+the target's C ABI. There is one per-routine choice, `cdecl`, and only two
+places where it changes anything: on a procedural type (see below), and on a
+routine with a body on x86-64.
 
-So on a routine — a definition, a forward declaration, an `external`, or a
-method — a convention directive is **decoration**. These compile to the same
-code:
+On an `external`, a convention directive is **decoration**. These compile to
+the same code:
 
 ```pascal
 function sq(x: Double): Double; external 'libm.so.6' name 'sqrt';
@@ -80,20 +80,35 @@ routine is `external`, not because `cdecl` is written.
 Every spelling is accepted in every position that can carry one, and exactly
 one combination means anything:
 
-| directive | on a routine or `external` | on a procedural type | on a method declaration |
-| --- | --- | --- | --- |
-| `cdecl` | accepted | **meaningful — see below** | accepted |
-| `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | accepted | accepted | accepted |
+| directive | on an `external` | on a routine with a body | on a procedural type | on a method declaration |
+| --- | --- | --- | --- | --- |
+| `cdecl` | accepted | **meaningful on x86-64**: the routine gets a System V prologue, so C, or a `cdecl` procedural type, can call it. Accepted elsewhere | **meaningful — see below** | accepted |
+| `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | accepted | accepted | accepted | accepted |
 
 Note that `register` on a procedural type is *not* the exception `cdecl` is:
 `register` is FPC's own convention, not C's, so marking a signature with it
 would be marking it the wrong way.
 
-FPC also *type-checks* the pairing — it refuses to assign a `register` routine
-to a `stdcall` procedural variable. PXX does not, because a convention it does
-not model cannot make two signatures incompatible. Code FPC accepts compiles
-here; code PXX accepts may need the conventions matched up before FPC will take
-it back.
+FPC also *type-checks* the pairing: it refuses to assign a `register` routine
+to a `stdcall` procedural variable. PXX does not, and for `cdecl` that is a
+trap. Here `Twice` lacks the `cdecl` its procedural type has:
+
+```pascal
+program cd2;
+type TF = function(x: Double): Double; cdecl;
+function Twice(x: Double): Double; begin Twice := 2 * x; end;
+var f: TF;
+begin f := @Twice; WriteLn(f(21.0):0:1); end.
+```
+
+FPC refuses the assignment ("Incompatible types"). PXX compiles it, and the
+call gives a wrong answer: `0.0` on x86-64 and `Nan` on i386, where FPC's
+fixed version prints `42.0`. With `cdecl` on `Twice` too, PXX prints `42.0`
+on both. Measured 2026-09-28 with pin v447 (sha256 `fad87004e4e8…`).
+**Write `cdecl` on the routine whenever you take its address for a `cdecl`
+type.** For the other conventions, code FPC accepts compiles here, and code
+PXX accepts may need the conventions matched up before FPC will take it
+back.
 
 ### The exception: `cdecl` on a procedural type
 
@@ -114,7 +129,9 @@ Given a `dlsym`'d pointer to a C `double dtwice(double)`, calling it through
 the register the C function reads — while `TCdecl` yields the correct `42.0`.
 
 The rule of thumb: **if you are writing a type for a pointer to a C function,
-write `cdecl` on it.** Everywhere else the marker is documentation.
+write `cdecl` on it, and on every Pascal routine you store in it.** On an
+`external` routine, and on a bodied routine on any target but x86-64, the
+marker is documentation.
 
 ## Routine directives
 
@@ -148,7 +165,7 @@ nothing.
 
 | directive | why it is inert |
 | --- | --- |
-| `cdecl`, `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | the calling convention is the target's — see above. `cdecl` on a *procedural type* is the exception |
+| `cdecl`, `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | the calling convention is the target's — see above. `cdecl` on a *procedural type*, and on a bodied routine on x86-64, are the exceptions |
 | `inline` | the optimizer decides. At `-O2` it inlines any routine that qualifies (a function, scalar result, at most six scalar by-value parameters, not external or a generator) whether or not you wrote `inline`, and never inlines one that does not qualify because you did |
 | `stackful` | the default async strategy; accepted so it can be stated explicitly |
 | `static`, `reintroduce` | on a plain routine (`static` *is* meaningful on a class method) |
@@ -242,12 +259,15 @@ begin P; R; WriteLn(Big(1,2,3,4,5,6,7)); end.
 
 ```
 $ pxx -O2 --warn-ignored-directives x.pas x
-pascal26:3: warning: directive 'cdecl' ignored here: the calling convention is the target's and is not selectable per routine, so P already uses it; the marker is documentation only
 pascal26:5: warning: directive 'iram' ignored here: IRAM placement exists on the ESP targets (xtensa, riscv32) only; this target has no separate instruction RAM to place R in
 pascal26:7: warning: directive 'inline' ignored here: the inliner takes at most six by-value scalar parameters and Big has 7
 ```
 
-It covers `cdecl`, `register`, `iram` off the ESP targets, `stackful`,
+There is no `cdecl` line: on x86-64, `cdecl` on `P` selects the System V
+prologue, so it is not ignored. Built with `--target=i386`, the same program
+also warns that `cdecl` is ignored (pin v447).
+
+It covers `cdecl` off x86-64, `register`, `iram` off the ESP targets, `stackful`,
 `reintroduce`, and `inline` when the routine cannot be inlined. **Default
 behaviour is unchanged and silent** — this reports, it never changes what is
 compiled.

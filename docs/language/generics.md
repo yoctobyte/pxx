@@ -16,6 +16,9 @@ arguments are always written out, never inferred from the call's arguments
 
 Specialization is supported in three forms:
 1. **Top-level form**: Specializing a generic function or class in the global scope using `specialize Name<Type> as SpecializedName`.
+   This form is PXX's own: FPC 3.2.2 refuses it ("BEGIN expected but
+   identifier SPECIALIZE found"). In code that must also build with FPC, use
+   the inline form.
 2. **Type-section form**: Specializing a generic class inside a `type` declaration block.
 3. **Inline form**: Specializing a generic *routine* at the call site,
    `specialize Name<Type>(Args)`, in expression or statement position. This is

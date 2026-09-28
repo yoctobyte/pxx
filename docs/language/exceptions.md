@@ -126,7 +126,7 @@ begin
     on E: TValidationException do
     begin
       writeln('Validation failed: ', E.Reason);
-      E.Free; { free the exception instance }
+      { no E.Free: the handler frees the exception when it ends }
     end;
   end;
 end;
@@ -142,3 +142,8 @@ Output:
 Validating age...
 Validation failed: Age is out of realistic range
 ```
+
+Do not `Free` the exception in its handler. The handler frees it when it
+ends, so freeing it yourself frees it twice. With the `E.Free` line, FPC
+stops with runtime error 216 after the output above. In PXX, running the
+same raise and handler five times in a loop segfaults (pin v447).

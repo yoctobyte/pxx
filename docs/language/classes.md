@@ -227,16 +227,18 @@ program interfaces_com_demo;
 
 type
   IReadable = interface
+    ['{6D2C1A40-6F0B-4B8E-9A31-2B7E5C1D9F01}']
     function ReadStr: string;
   end;
 
   // Interface inheritance
   IDocument = interface(IReadable)
+    ['{6D2C1A40-6F0B-4B8E-9A31-2B7E5C1D9F02}']
     function GetTitle: string;
   end;
 
   // TInterfacedObject supplies QueryInterface / _AddRef / _Release
-  TDocument = class(TInterfacedObject, IDocument)
+  TDocument = class(TInterfacedObject, IReadable, IDocument)
   private
     FTitle: string;
   public
@@ -287,7 +289,15 @@ Output:
 PXX Manual: body
 implements IReadable
 document released
+done
 ```
+
+The class lists `IReadable` as well as `IDocument`, and each interface has a
+GUID, so FPC builds and runs it too, with the same output. PXX would also find
+`IReadable` through `IDocument` alone. FPC does not: its `is`, `as` and
+`Supports` see only the interfaces a class lists, so without `IReadable` in
+the list FPC skips the `implements IReadable` line. Without the GUIDs, FPC
+refuses the `is` test ("Interface type IReadable has no valid GUID").
 
 Note that no `Free` call is needed — assigning `nil` (or the variable going out
 of scope) drops the reference count to zero and destroys the object.
@@ -425,7 +435,8 @@ circle
 
 A `class var` field is shared by all instances (one storage slot per class, not
 per object). A `class property` exposes it through the class name. Accessors may
-be `class` methods or the `class var` itself.
+be `class` methods or the `class var` itself. An accessor method must be
+`static` for FPC; PXX accepts it with or without.
 
 ```pascal
 program class_property_demo;
@@ -434,13 +445,13 @@ type
   TCounter = class
   private
     class var FTotal: Integer;
-    class function GetTotal: Integer;
+    class function GetTotal: Integer; static;
   public
     class property Total: Integer read GetTotal;
     constructor Create;
   end;
 
-class function TCounter.GetTotal: Integer;
+class function TCounter.GetTotal: Integer; static;
 begin
   Result := FTotal;
 end;
@@ -551,13 +562,16 @@ reflection surface is available as methods on any instance:
 
 ```pascal
 program rtti_demo;
+{$M+}   { FPC allows a published section only under {$M+} }
 
 type
   TAnimal = class
+  published
     procedure Speak; virtual;
   end;
 
   TDog = class(TAnimal)
+  published
     procedure Speak; override;
   end;
 

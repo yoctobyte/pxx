@@ -131,6 +131,7 @@ not Delphi's named form (`class operator Add`):
 
 ```pascal
 program advanced_record_demo;
+{$modeswitch advancedrecords}   { FPC needs it; PXX accepts it }
 
 type
   TVec = record
