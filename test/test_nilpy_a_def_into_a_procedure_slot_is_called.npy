@@ -1,0 +1,52 @@
+# A NilPy def handed to a Pascal procedural slot, one row per result shape.
+# Two silent wrongs until 2026-09-28 (pin v450):
+# - a PROCEDURE slot (`TPrI = procedure(a: Integer)`) got a thunk whose body
+#   never called the def: `CallPr(pr, 5)` printed nothing and returned 0;
+# - a def named like a global of a unit imported `as c` (`acc` vs cbproc's
+#   `var Acc`) read that Pascal global in value position, so `CallPr(acc, 5)`
+#   passed an Integer as a code address (nil reference) and `x = acc; x(4)`
+#   raised "not callable". A qualified import binds only `c`.
+# Every value below is plain arithmetic: 10+12, (3+4)*2, 5+10, 1.5+0.25,
+# "s1|s2", 7+7, and the odd numbers 1..7. Run with -Futest/nilpy_cbproc.
+import 'cbproc.pas' as c
+
+
+def tw(a):
+    return a * 2
+
+
+def add(a, b):
+    return a + b
+
+
+def pr(a):
+    print("got", a)
+
+
+def acc(a):
+    c.Acc = c.Acc + a
+
+
+def hf(a):
+    return a / 2
+
+
+def st(a):
+    return "s" + str(a)
+
+
+def seven():
+    return 7
+
+
+def odd(a):
+    return a % 2 == 1
+
+
+print(c.CallI(tw, 5), c.CallI2(add, 3, 4))
+print(c.CallPr(pr, 5))
+print(c.CallPr(acc, 5))
+x = acc
+x(4)
+print(c.Acc)
+print(c.CallD(hf, 3.0), c.CallS(st, 1), c.Call0(seven), c.CountIf(odd, 7))

@@ -39662,6 +39662,17 @@ begin
     result symbol this proc does not have. }
   if bStart = -2 then
     node := CurASTNode
+  else if (bStart = -1) and (not Procs[procIdx].IsFunc) and
+          (Procs[procIdx].RetType <> tyVariant) then
+    { A PROCEDURE-SHAPED CALLBACK THUNK ($pycbthunk_ for a Pascal `procedure(a:
+      Integer)` slot): the same reasoning as the clone thunk above. Wrapped in
+      AN_EXIT, the call was never evaluated at all -- an Exit in a procedure
+      has no result to compute -- so `CallPr(pr, 5)` from NilPy returned
+      without ever running `pr`: no output where CPython-shaped code prints,
+      and a nil reference when the def wrote a unit global (measured on
+      x86-64). Evaluated as a statement, the def's Variant result is dropped
+      the way any discarded call's is. }
+    node := CurASTNode
   else if (bStart <> -1) and (bStart <> -3) and
      (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
      not PyLambdaResultIsOwnedTemp(CurASTNode, procIdx) then
@@ -57881,9 +57892,15 @@ begin
         LastExprTk := tyVariant;
         Exit;
       end;
+      { PyProgSym, not FindSym, for the generator arm's reason: FindSym walks
+        every unit's globals case-insensitively, so `def acc(a)` beside
+        `import 'cbu.pas' as c` (which declares `var Acc`) read the Pascal
+        global -- `x = acc; x(4)` raised "not callable", and `CallPr(acc, 5)`
+        passed the Integer as a code address (nil reference). A qualified
+        import binds `c`, never `Acc`; the direct call `acc(2)` was right. }
       if (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
-         ((FindSym(name) < 0) or PyNestedDefOutranksSym(name)) and
+         ((PyProgSym(name) < 0) or PyNestedDefOutranksSym(name)) and
          (FindProcExactCase(PyQualifyNested(name)) >= 0) then
       begin
         { EXACT case, as in PyMakeFuncValue's twin arm: a Python name is

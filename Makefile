@@ -1333,6 +1333,15 @@ test-nilpy: $(COMPILER)
 	@# callable; a pre-filled slot would pass either way.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_def_into_a_native_callback_slot.npy $(TESTTMP)/test_nilpy_cbthunk
 	$(TESTTMP)/test_nilpy_cbthunk | diff - test/test_nilpy_def_into_a_native_callback_slot.expected
+	@# A def into a PROCEDURE slot is called (the thunk's body used to drop the
+	@# call), and a def named like a global of a unit imported `as c` is still
+	@# the def in value position (it used to read the Pascal global).
+	./$(COMPILER) -Futest/nilpy_cbproc test/test_nilpy_a_def_into_a_procedure_slot_is_called.npy $(TESTTMP)/test_nilpy_cbproc26
+	$(TESTTMP)/test_nilpy_cbproc26 | diff -u test/test_nilpy_a_def_into_a_procedure_slot_is_called.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 -Futest/nilpy_cbproc test/test_nilpy_a_def_into_a_procedure_slot_is_called.npy $(TESTTMP)/test_nilpy_cbproc26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_cbproc26_i386 | diff -u test/test_nilpy_a_def_into_a_procedure_slot_is_called.expected -; \
+	else echo "=== test_nilpy_cbproc: qemu-i386 absent, i386 NOT verified ==="; fi
 	# THE LAST SILENT MEMBER of that same family: a CAPTURING nested def handed
 	# to a procedural slot. Every sibling above either works or refuses by name;
 	# this one compiled with no diagnostic at all and left a SIGSEGV behind.
