@@ -1,8 +1,9 @@
 # A Pascal `array of T` result indexed straight off the call is right for every
-# element type. BINDING one to a name read garbage until 2026-09-28 (Integer
-# elements read 8 bytes wide, strings as pointers, doubles as raw bits; len()
-# and `for` raised TypeError), and is now refused at compile time -- see
-# test_nilpy_binding_a_pascal_dynamic_array_result_is_refused_fail.npy.
+# element type. A name BOUND to one read garbage (Integer elements read 8 bytes
+# wide, strings as pointers, doubles as raw bits; len() and `for` raised
+# TypeError), so such a name may now only be passed whole to a Pascal array
+# parameter -- see test_nilpy_a_bound_pascal_dynamic_array_passes_to_pascal_array_params.npy
+# and test_nilpy_binding_a_pascal_dynamic_array_result_is_refused_fail.npy.
 # Passed straight to a Pascal array parameter (by value, open, const) it is
 # right too: that was refused ("by-reference argument must be a variable")
 # until 2026-09-28, and FPC gives the same sums.

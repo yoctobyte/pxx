@@ -1,0 +1,22 @@
+# A Pascal `array of T` result BOUND to a name, `a = MakeArr(4)`, and then only
+# handed whole to Pascal array parameters (by value, open, const) is right, and
+# FPC gives the same sums: v448 compiled it, v449 refused it (9bd7f662e5), and
+# it compiles again. Every other read of the name -- a[i], len(a), `for x in a`,
+# print(a), `b = a` -- is still refused: see
+# test_nilpy_binding_a_pascal_dynamic_array_result_is_refused_fail.npy and its
+# _len_ / _for_ siblings. Run with -Futest/nilpy_dynarr.
+import 'dynarr.pas' as d
+
+
+def f():
+    a = d.MakeArr(4)
+    print(d.SumV(a), d.SumO(a), d.SumC(a))
+    b = d.MakeArr(5)
+    print(d.SumV(b))
+
+
+f()
+a = d.MakeArr(4)
+print(d.SumV(a), d.SumO(a), d.SumC(a))
+a = d.MakeArr(3)
+print(d.SumV(a))

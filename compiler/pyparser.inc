@@ -56385,29 +56385,90 @@ begin
 end;
 
 { A Pascal `array of T` call result is a raw heap handle to NilPy -- nothing
-  converts it to a list -- so BOUND to a name it read garbage: Integer elements
-  8 bytes wide (`a = MakeArr(4); a[3]` printed 0), strings as pointers,
-  doubles as raw bits, and len() / `for` raised TypeError; only Int64 read
-  right, by accident of width. Until the conversion exists it is refused
-  everywhere except the two uses that are right: indexing the call directly
-  (`MakeArr(4)[3]`, ApplyCallResultPtrSuffix) and handing it whole to a
-  Pascal ARRAY parameter, by value, open or const (PyArrayArgSlot; the by-ref
-  lvalue check in the call parser admits the call result for it, and a
-  var/out one still needs a real variable).
-  REFUSED THAT USED TO COMPILE: `a = MakeArr(4); SumArr(a)`. It compiled and
-  was wrong anyway (frankd-90: `a[3]` printed 0 for 30 on v441/v448), and a
-  NilPy list in a name is not accepted by an array parameter either, so the
-  bound form needs a typed dyn-array local or a list conversion -- not built.
-  Measured 2026-09-28, pin v447; the pass-through corrected the same day. }
+  converts it to a list. It is right in exactly three uses, and refused in
+  every other:
+  - indexing the call directly, `MakeArr(4)[3]` (ApplyCallResultPtrSuffix);
+  - handing the call whole to a Pascal ARRAY parameter, by value, open or const
+    (PyArrayArgSlot; the by-ref lvalue check in the call parser admits the call
+    result for it, and a var/out one still needs a real variable);
+  - BINDING it to a name, `a = MakeArr(4)`, as the whole right-hand side, when
+    that name is then only handed whole to a Pascal array parameter
+    (`SumV(a)`). v448 compiled this and FPC gives the same sums; the name
+    holds the handle as a Python int and the handle is released like the
+    call-result one (census, 2026-09-28). Every other read of the name --
+    `a[3]`, len(a), `for x in a`, print(a), `b = a` -- read garbage or raised
+    TypeError (Integer elements 8 bytes wide, strings as pointers, doubles as
+    raw bits), and is refused by PyCheckDynArrBoundRead.
+  A name stays marked for the rest of its scope: rebinding it to a Python
+  value later still refuses its reads (conservative, never wrong).
+  Measured 2026-09-28, pin v447 (v448's bound shapes via a side build). }
+function PyDynArrBindAhead: Boolean;
+{ CurTok follows the call's `)`. Is the statement exactly `NAME = a.b.F(...)`? }
+var k, s, d: Integer;
+begin
+  Result := False;
+  if not (CurTok.Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon]) then Exit;
+  k := TokPos - 2;                                  { the call's `)` }
+  if (k < 3) or (Tokens[k].Kind <> tkRParen) then Exit;
+  d := 0;
+  while k >= 0 do                                   { back to its `(` }
+  begin
+    if Tokens[k].Kind = tkRParen then Inc(d)
+    else if Tokens[k].Kind = tkLParen then begin Dec(d); if d = 0 then Break; end;
+    Dec(k);
+  end;
+  if k < 1 then Exit;
+  Dec(k);                                           { the callee's last name }
+  while (k >= 2) and (Tokens[k].Kind = tkIdent) and (Tokens[k - 1].Kind = tkDot) do Dec(k, 2);
+  if (k < 2) or (Tokens[k].Kind <> tkIdent) or (Tokens[k - 1].Kind <> tkAssign) or
+     (Tokens[k - 2].Kind <> tkIdent) then Exit;
+  s := k - 2;
+  if (s > 0) and not (Tokens[s - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) then Exit;
+  if PyDynArrBoundCount >= Length(PyDynArrBoundName) then
+  begin
+    SetLength(PyDynArrBoundName, PyDynArrBoundCount * 2 + 16);
+    SetLength(PyDynArrBoundProc, PyDynArrBoundCount * 2 + 16);
+  end;
+  PyDynArrBoundName[PyDynArrBoundCount] := PyRawName(Tokens[s].SOffset, Tokens[s].SLen);
+  PyDynArrBoundProc[PyDynArrBoundCount] := CurProc;
+  Inc(PyDynArrBoundCount);
+  Result := True;
+end;
+
 procedure PyRefuseDynArrayResult(procIdx: Integer);
 begin
   if (procIdx < 0) or (procIdx >= ProcCount) or (not ProcRetIsDynArray[procIdx]) then Exit;
   if (ProcUnitIdx[procIdx] < 0) or UnitIsPyModule(ProcUnitIdx[procIdx]) then Exit;
   if CurTok.Kind = tkLBrack then Exit;
   if PyArrayArgSlot and ((CurTok.Kind = tkComma) or (CurTok.Kind = tkRParen)) then Exit;
+  if PyDynArrBindAhead then Exit;
   Error('"' + Procs[procIdx].Name + '" returns a Pascal dynamic array, which NilPy ' +
         'cannot use as a Python value yet: index the call directly (' +
         Procs[procIdx].Name + '(...)[i]), or have the Pascal side return a list');
+end;
+
+{ CurTok is a NAME being read. If it was bound to a Pascal dynamic-array call
+  result in this scope (or at module level, read as that global), the read is
+  right only as the whole argument to a Pascal array parameter. }
+procedure PyCheckDynArrBoundRead(const name: AnsiString);
+var i, sym: Integer;
+begin
+  for i := 0 to PyDynArrBoundCount - 1 do
+    if PyDynArrBoundName[i] = name then
+    begin
+      if PyDynArrBoundProc[i] <> CurProc then
+      begin
+        if PyDynArrBoundProc[i] >= 0 then Continue;
+        sym := PyProgSym(name);                     { a def reading the module name }
+        if (sym < 0) or (Syms[sym].Kind <> skGlobal) then Continue;
+      end;
+      if PyArrayArgSlot and (PyArrayArgTok = TokPos - 1) and
+         (Tokens[TokPos].Kind in [tkComma, tkRParen]) then Exit;
+      Error('"' + name + '" holds a Pascal dynamic array, which NilPy cannot use as ' +
+            'a Python value yet: it can only be passed whole to a Pascal array ' +
+            'parameter -- index the call directly instead, or have the Pascal ' +
+            'side return a list');
+    end;
 end;
 
 procedure PyParseFactorCore;
@@ -57668,6 +57729,7 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      if isNilPy and (PyDynArrBoundCount > 0) then PyCheckDynArrBoundRead(name);
       { `str()` / `int()` / `float()` / `bool()` — the ZERO-ARGUMENT form of a
         builtin type constructor, which Python defines as that type's zero
         value and which idiomatic code uses to spell a default (`x = x or
@@ -63459,11 +63521,15 @@ begin
             { an ARRAY parameter may take a Pascal dynamic-array call result
               whole: PyRefuseDynArrayResult reads this }
             node := Ord(PyArrayArgSlot);
+            argSeq := PyArrayArgTok;
             PyArrayArgSlot := (slotIdx >= 0) and (slotIdx < Procs[procIdx].ParamCount) and
                               Procs[procIdx].Params[slotIdx].IsArray;
+            PyArrayArgTok := TokPos - 1;
+            node := node or (argSeq shl 1);
             argSeq := TryDelphiBareProcArg;
             if argSeq >= 0 then CurASTNode := argSeq else ParseArgExpr;
-            PyArrayArgSlot := node <> 0;
+            PyArrayArgSlot := (node and 1) <> 0;
+            PyArrayArgTok := node shr 1;
           end;
           SetLitCheckArg(CurASTNode, procIdx, slotIdx);
           argSeq := AllocNode(AN_ARG);

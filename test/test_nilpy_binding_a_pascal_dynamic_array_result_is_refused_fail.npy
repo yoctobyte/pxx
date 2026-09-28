@@ -1,6 +1,9 @@
-# Binding a Pascal `array of T` result to a name must be REFUSED at compile
-# time: nothing converts it to a list, and bound it read garbage (see
-# test_nilpy_a_pascal_dynamic_array_result_indexes_directly.npy).
+# A name bound to a Pascal `array of T` result may only be passed whole to a
+# Pascal array parameter; INDEXING it must be REFUSED at compile time: nothing
+# converts it to a list, and it read garbage (Integer elements 8 bytes wide --
+# `a[3]` printed 0 for 30 on v441/v448). See
+# test_nilpy_a_bound_pascal_dynamic_array_passes_to_pascal_array_params.npy.
 import 'dynarr.pas' as d
 a = d.MakeArr(4)
+print(d.SumV(a))
 print(a[3])

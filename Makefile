@@ -649,18 +649,30 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_strrep26 | diff -u test/test_nilpy_a_computed_string_repeated_is_released.expected -
 	@$(TESTTMP)/test_nilpy_strrep26 keep | grep -q 'keep False' || { echo "FAIL: nilpy strrep control (keep) stayed flat"; exit 1; }
 	# A Pascal dynamic-array result: indexed directly it is right for every
-	# element type; bound to a name it read garbage and is now refused.
+	# element type; bound to a name it may only be passed whole to a Pascal
+	# array parameter (index, len and for on the name are refused).
 	./$(COMPILER) -Futest/nilpy_dynarr test/test_nilpy_a_pascal_dynamic_array_result_indexes_directly.npy $(TESTTMP)/test_nilpy_dynarr26
 	$(TESTTMP)/test_nilpy_dynarr26 | diff -u test/test_nilpy_a_pascal_dynamic_array_result_indexes_directly.expected -
 	@! ./$(COMPILER) -Futest/nilpy_dynarr test/test_nilpy_binding_a_pascal_dynamic_array_result_is_refused_fail.npy $(TESTTMP)/test_nilpy_dynarr_fail26 > $(TESTTMP)/test_nilpy_dynarr_fail.log 2>&1 || { echo "FAIL: binding a Pascal dynamic array was not refused"; exit 1; }
-	@grep -q 'returns a Pascal dynamic array' $(TESTTMP)/test_nilpy_dynarr_fail.log || { echo "FAIL: dynarr refusal message"; cat $(TESTTMP)/test_nilpy_dynarr_fail.log; exit 1; }
+	@grep -q 'holds a Pascal dynamic array' $(TESTTMP)/test_nilpy_dynarr_fail.log || { echo "FAIL: dynarr refusal message"; cat $(TESTTMP)/test_nilpy_dynarr_fail.log; exit 1; }
+	@! ./$(COMPILER) -Futest/nilpy_dynarr test/test_nilpy_len_of_a_bound_pascal_dynamic_array_is_refused_fail.npy $(TESTTMP)/test_nilpy_dynarr_lenfail26 > $(TESTTMP)/test_nilpy_dynarr_lenfail.log 2>&1 || { echo "FAIL: len() of a bound Pascal dynamic array was not refused"; exit 1; }
+	@grep -q 'holds a Pascal dynamic array' $(TESTTMP)/test_nilpy_dynarr_lenfail.log || { echo "FAIL: dynarr len refusal message"; cat $(TESTTMP)/test_nilpy_dynarr_lenfail.log; exit 1; }
+	@! ./$(COMPILER) -Futest/nilpy_dynarr test/test_nilpy_for_over_a_bound_pascal_dynamic_array_is_refused_fail.npy $(TESTTMP)/test_nilpy_dynarr_forfail26 > $(TESTTMP)/test_nilpy_dynarr_forfail.log 2>&1 || { echo "FAIL: for over a bound Pascal dynamic array was not refused"; exit 1; }
+	@grep -q 'holds a Pascal dynamic array' $(TESTTMP)/test_nilpy_dynarr_forfail.log || { echo "FAIL: dynarr for refusal message"; cat $(TESTTMP)/test_nilpy_dynarr_forfail.log; exit 1; }
+	./$(COMPILER) -Futest/nilpy_dynarr test/test_nilpy_a_bound_pascal_dynamic_array_passes_to_pascal_array_params.npy $(TESTTMP)/test_nilpy_dynarr_bound26
+	$(TESTTMP)/test_nilpy_dynarr_bound26 | diff -u test/test_nilpy_a_bound_pascal_dynamic_array_passes_to_pascal_array_params.expected -
 	@if command -v qemu-i386 >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=i386 -Futest/nilpy_dynarr test/test_nilpy_a_pascal_dynamic_array_result_indexes_directly.npy $(TESTTMP)/test_nilpy_dynarr26_i386 && \
-	  qemu-i386 $(TESTTMP)/test_nilpy_dynarr26_i386 | diff -u test/test_nilpy_a_pascal_dynamic_array_result_indexes_directly.expected -; \
+	  qemu-i386 $(TESTTMP)/test_nilpy_dynarr26_i386 | diff -u test/test_nilpy_a_pascal_dynamic_array_result_indexes_directly.expected - && \
+	  ./$(COMPILER) --target=i386 -Futest/nilpy_dynarr test/test_nilpy_a_bound_pascal_dynamic_array_passes_to_pascal_array_params.npy $(TESTTMP)/test_nilpy_dynarr_bound26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_dynarr_bound26_i386 | diff -u test/test_nilpy_a_bound_pascal_dynamic_array_passes_to_pascal_array_params.expected -; \
 	else echo "=== test_nilpy_dynarr: qemu-i386 absent, i386 NOT verified ==="; fi
 	./$(COMPILER) -dPXX_ALLOC_CENSUS -Futest/nilpy_dynarr test/test_nilpy_a_dynamic_array_result_passed_to_pascal_is_released.npy $(TESTTMP)/test_nilpy_dynarr_rel26
 	tools/expect_same.sh test_nilpy_dynarr_rel26 "$$($(TESTTMP)/test_nilpy_dynarr_rel26 2>/dev/null)" "180000"
 	tools/assert_no_leak.sh nilpy_dynarr_passed_to_pascal 50 $(TESTTMP)/test_nilpy_dynarr_rel26
+	./$(COMPILER) -dPXX_ALLOC_CENSUS -Futest/nilpy_dynarr test/test_nilpy_a_bound_dynamic_array_result_is_released.npy $(TESTTMP)/test_nilpy_dynarr_brel26
+	tools/expect_same.sh test_nilpy_dynarr_brel26 "$$($(TESTTMP)/test_nilpy_dynarr_brel26 2>/dev/null)" "360000"
+	tools/assert_no_leak.sh nilpy_dynarr_bound_released 50 $(TESTTMP)/test_nilpy_dynarr_brel26
 	./$(COMPILER) -Futest/nilpy_varobj test/test_nilpy_an_object_var_param_into_an_object_name_writes_back.npy $(TESTTMP)/test_nilpy_varobj26
 	$(TESTTMP)/test_nilpy_varobj26 | diff -u test/test_nilpy_an_object_var_param_into_an_object_name_writes_back.expected -
 	@! ./$(COMPILER) -Futest/nilpy_varobj test/test_nilpy_an_object_var_param_into_a_none_name_is_refused_fail.npy $(TESTTMP)/test_nilpy_varobj_fail26 > $(TESTTMP)/test_nilpy_varobj_fail.log 2>&1 || { echo "FAIL: var/out object into a None name was not refused"; exit 1; }

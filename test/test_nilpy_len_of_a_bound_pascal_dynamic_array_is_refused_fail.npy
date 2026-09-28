@@ -1,0 +1,13 @@
+# len() of a name bound to a Pascal `array of T` result must be REFUSED at
+# compile time (it raised TypeError at run time on v448) -- inside a def here.
+import 'dynarr.pas' as d
+
+
+def f():
+    a = d.MakeArr(4)
+    print(d.SumO(a))
+    n = len(a)
+    print(n)
+
+
+f()

@@ -1,0 +1,15 @@
+# A Pascal `array of T` result bound to a name, rebound every trip and passed
+# to Pascal array parameters, is released: run under -dPXX_ALLOC_CENSUS with
+# assert_no_leak.sh (the Makefile row). 2000 trips of 60*3.
+import 'dynarr.pas' as d
+
+
+def run(n):
+    t = 0
+    for i in range(n):
+        a = d.MakeArr(4)
+        t = t + d.SumV(a) + d.SumO(a) + d.SumC(a)
+    return t
+
+
+print(run(2000))
