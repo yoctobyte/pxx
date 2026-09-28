@@ -130,6 +130,7 @@ function CompareDWord(const buf1, buf2; len: SizeInt): SizeInt;
 function FloatToStr(v: Double): AnsiString;
 function FloatToExpStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
+function StrFloatSciW(v: Double; width: Integer; isSingle: Integer): AnsiString;
 procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
@@ -1879,6 +1880,101 @@ begin
     if rem = 0 then break;                             { trailing zeros trimmed }
   end;
   Result := Result + digits;
+end;
+
+function StrFloatSciW(v: Double; width: Integer; isSingle: Integer): AnsiString;
+{ write(x) / write(x:width) for a float with NO decimals, as text: FPC's
+  scientific form, the mantissa narrowed to the field, right-justified in it.
+  The Text-file path (and Str, and a variable-width console write) rendered
+  these through StrFloat's natural form, so `WriteLn(f, 2.25)` wrote `2.25`
+  where FPC writes ` 2.2500000000000000E+000`, and a Single lost its own
+  ` 1.500000000E+00` form. The console path was always right.
+
+  The digit rule is SciFormatFor's (symtab.inc) and the rounding is
+  PXXWriteFloatSci's (builtinheap.pas): PxxSciDigits17's exact 17 digits,
+  rounded half-up on the INTEGER mantissa. Same text as the console writer,
+  measured against FPC 3.2.2.
+  bug-a-a-text-write-prints-a-bare-float-in-natural-form-and-a-pchar-as-its-address }
+var fracdigits, expdigits, e, d, keep, drop, k: Integer;
+    m, divisor, rem, limit: Int64;
+    x: Double;
+begin
+  if isSingle <> 0 then expdigits := 2 else expdigits := 3;
+  if width > 0 then
+  begin
+    fracdigits := width - 5 - expdigits;
+    if fracdigits < 1 then fracdigits := 1;
+    if fracdigits > 16 then fracdigits := 16;
+  end
+  else if isSingle <> 0 then
+    fracdigits := 9
+  else
+    fracdigits := 16;
+  x := v;
+  if x <> x then Result := ' Nan'
+  else if x > 1.7976931348623157e308 then Result := ' Inf'
+  else if x < -1.7976931348623157e308 then Result := '-Inf'
+  else
+  begin
+    if PByte(@x)[7] >= 128 then
+    begin
+      Result := '-';
+      x := -x;
+    end
+    else
+      Result := ' ';
+    if x = 0 then
+    begin
+      Result := Result + '0.';
+      for k := 1 to fracdigits do Result := Result + '0';
+      Result := Result + 'E+';
+      for k := 1 to expdigits do Result := Result + '0';
+    end
+    else
+    begin
+      PxxSciDigits17(x, m, e);
+      keep := fracdigits + 1;
+      drop := 17 - keep;
+      if drop > 0 then
+      begin
+        divisor := 1;
+        for d := 1 to drop do divisor := divisor * 10;
+        rem := m mod divisor;
+        m := m div divisor;
+        if rem >= (divisor div 2) then m := m + 1;
+        limit := 1;
+        for d := 1 to keep do limit := limit * 10;
+        if m >= limit then
+        begin
+          m := m div 10;
+          e := e + 1;
+        end;
+      end;
+      for k := keep - 1 downto 0 do
+      begin
+        divisor := 1;
+        for d := 1 to k do divisor := divisor * 10;
+        Result := Result + Chr(48 + ((m div divisor) mod 10));
+        if k = keep - 1 then Result := Result + '.';
+      end;
+      Result := Result + 'E';
+      if e < 0 then
+      begin
+        Result := Result + '-';
+        e := -e;
+      end
+      else
+        Result := Result + '+';
+      divisor := 1;
+      for d := 1 to expdigits - 1 do divisor := divisor * 10;
+      while divisor > 0 do
+      begin
+        Result := Result + Chr(48 + ((e div divisor) mod 10));
+        divisor := divisor div 10;
+      end;
+    end;
+  end;
+  while Length(Result) < width do Result := ' ' + Result;
 end;
 
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;

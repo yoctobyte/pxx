@@ -378,6 +378,7 @@ const
   NR_READLINKAT= 267;
   NR_CLOCK_GETTIME = 228;
   NR_GETDENTS64 = 217;
+  NR_STATX     = 332;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPUAARCH64}
@@ -399,6 +400,7 @@ const
   NR_READLINKAT= 78;
   NR_CLOCK_GETTIME = 113;
   NR_GETDENTS64 = 61;
+  NR_STATX     = 291;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_I386}
@@ -420,6 +422,7 @@ const
   NR_READLINKAT= 305;
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 220;
+  NR_STATX     = 383;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_ARM32}
@@ -441,6 +444,7 @@ const
   NR_READLINKAT= 332;
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 217;
+  NR_STATX     = 397;
   PYPAL_HAVE   = True;
 {$endif}
 { no table for this target — every entry point fails softly }
@@ -476,6 +480,7 @@ const
   NR_READLINKAT= -1;
   NR_CLOCK_GETTIME = -1;
   NR_GETDENTS64 = -1;
+  NR_STATX     = -1;
   PYPAL_HAVE   = False;
 {$endif}{$endif}{$endif}{$endif}{$endif}
 
@@ -487,7 +492,7 @@ const
   NR_LSEEK     = 62;
   NR_FTRUNCATE = 46;
   NR_UNLINKAT  = 35;
-  NR_RENAMEAT  = 38;
+  NR_RENAMEAT  = 276;   { renameat2: the rv32 generic table has no renameat; flags 0 is the same call }
   NR_MKDIRAT   = 34;
   NR_IOCTL     = 29;
   NR_GETCWD    = 17;
@@ -498,6 +503,7 @@ const
   NR_READLINKAT= 78;
   NR_CLOCK_GETTIME = 403;
   NR_GETDENTS64 = 61;
+  NR_STATX     = 291;
   PYPAL_HAVE   = True;
 {$endif}
 
@@ -658,6 +664,9 @@ begin
 end;
 
 function PyPalLseek(fd, offset, whence: Int64): Int64;
+{$ifdef CPU_RISCV32}
+var res, r: Int64;
+{$endif}
 begin
 {$ifdef PXX_ESP_IDF}
   PyPalLseek := EspRet(EspLseek(fd, offset, whence));
@@ -665,6 +674,17 @@ begin
 {$endif}
   PyPalLseek := -1;
   if NR_LSEEK < 0 then Exit;
+{$ifdef CPU_RISCV32}
+  { rv32's generic table has no lseek: 62 is _llseek(fd, offset_high,
+    offset_low, loff_t *result, whence). Issued as lseek it took whence for the
+    result POINTER and failed with EFAULT, so f.tell() answered -14 (frankd-a3's
+    sweep: mmap_read_only_and_struct_unpack_from printed "88 -14"). }
+  res := 0;
+  r := PyPalSys(NR_LSEEK, fd, (offset shr 32) and $FFFFFFFF, offset and $FFFFFFFF,
+                Int64(@res), whence, 0);
+  if r < 0 then PyPalLseek := r else PyPalLseek := res;
+  Exit;
+{$endif}
   PyPalLseek := PyPalSys(NR_LSEEK, fd, offset, whence, 0, 0, 0);
 end;
 
@@ -850,6 +870,7 @@ end;
 
 function PyPalStatModeSize(path: Pointer; var mode: Int64; var size: Int64): Int64;
 var buf: array[0..143] of Byte; r: Int64;
+    sx: array[0..255] of Byte;
 {$ifdef PXX_ESP_IDF}
     p: AnsiString;
 {$endif}
@@ -880,7 +901,19 @@ begin
   size := PInt64(@buf[48])^;
   PyPalStatModeSize := 0;
 {$else}
-  PyPalStatModeSize := -38;   { ENOSYS: no stat layout known for this target }
+  { statx, because its struct is the SAME on every Linux architecture, where
+    stat/fstatat's differs per arch and per word size. Without it every target
+    but x86-64 answered ENOSYS, which pyos_stat turns into a zeroed result:
+    os.stat of a missing file raised nothing and os.path.getsize was 0 for
+    every file, on i386, arm32, aarch64 and riscv32 alike (frankd-a3's riscv32
+    sweep). Mask STATX_BASIC_STATS; stx_mode is a u16 at 28, stx_size a u64 at
+    40. The buffer is the struct's full 256 bytes: the kernel writes it all. }
+  if NR_STATX < 0 then begin PyPalStatModeSize := -38; Exit; end;
+  r := PyPalSys(NR_STATX, PYPAL_AT_FDCWD, Int64(path), 0, $7FF, Int64(@sx[0]), 0);
+  if r < 0 then begin PyPalStatModeSize := r; Exit; end;
+  mode := PWord(@sx[28])^;
+  size := PInt64(@sx[40])^;
+  PyPalStatModeSize := 0;
 {$endif}
 {$endif}
 end;

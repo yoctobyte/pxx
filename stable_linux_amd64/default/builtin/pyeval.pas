@@ -89,8 +89,8 @@ function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 function pyclosure_call1(objptr: Pointer; const a0: Variant): Variant;
 { Python's `sorted(xs, key=..., reverse=...)`. Lives here rather than in pylib
   because the key is a CLOSURE and only this unit can invoke one. Stable
-  insertion sort: n is small in every censused use (a dict's items), and
-  stability is part of sorted()'s contract — equal keys keep their input order.
+  merge order (PySortOrder, shared with list.sort): stability is part of
+  sorted()'s contract — equal keys keep their input order.
   key = nil means sort by the elements themselves. }
 function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False): TPyList;
 { sorted(d, key=..., reverse=...) over a DICT — Python sorts its KEYS. The
@@ -6546,37 +6546,38 @@ begin
 end;
 
 function sorted(l: TPyList; key: Pointer; reverse: Boolean): TPyList;
-var r, keys: TPyList; i, j: Integer; kv, ev: Variant; swapped: Boolean;
+var r, keys: TPyList; i, n: Integer; ev: Variant; idx: Pointer;
 begin
   r := TPyList.Create;
   Result := r;
   if l = nil then Exit;
   keys := TPyList.Create;
-  for i := 0 to l.count - 1 do
-  begin
-    ev := l.at(i);
-    r.append(ev);
-    if key <> nil then keys.append(PyCallKey1(key, ev))
-    else keys.append(ev);
-  end;
-  { insertion sort, moving the key list in lockstep so a key is computed once }
-  for i := 1 to r.count - 1 do
-  begin
-    j := i;
-    swapped := True;
-    while (j > 0) and swapped do
-    begin
-      if reverse then swapped := pyvar_gt(keys.at(j), keys.at(j - 1))
-      else swapped := pyvar_lt(keys.at(j), keys.at(j - 1));
-      if swapped then
+  idx := nil;
+  try
+    try
+      for i := 0 to l.count - 1 do
       begin
-        ev := r.at(j); r.put(j, r.at(j - 1)); r.put(j - 1, ev);
-        kv := keys.at(j); keys.put(j, keys.at(j - 1)); keys.put(j - 1, kv);
-        Dec(j);
+        ev := l.at(i);
+        if key <> nil then keys.append(PyCallKey1(key, ev))
+        else keys.append(ev);
       end;
+      { a stable merge order over the keys (PySortOrder), each key computed once }
+      n := l.count;
+      GetMem(idx, n * 4 + 4);
+      PySortOrder(keys, reverse, idx, n);
+      for i := 0 to n - 1 do
+        r.append(l.at(PInteger(NativeInt(idx) + i * 4)^));
+    except
+      { A key or __lt__ that raises never hands `r` to the caller, so nobody
+        else can free it: one list leaked per failed sorted() call (measured,
+        300 -> 600 raising calls: live 301 -> 625). }
+      r.Free;
+      raise;
     end;
+  finally
+    if idx <> nil then FreeMem(idx);
+    keys.Free;
   end;
-  keys.Free;
 end;
 
 { `map(f, xs)` over an arbitrary callable VALUE -- the general form beside

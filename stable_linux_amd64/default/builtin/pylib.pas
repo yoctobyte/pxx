@@ -2609,6 +2609,12 @@ function pyvar_gt(const a: Variant; const b: Variant): Boolean;
   means "a is less than b" uses this rather than pyvar_gt with the arguments
   swapped, so an unorderable pair is refused with CPython's wording. }
 function pyvar_lt(const a: Variant; const b: Variant): Boolean;
+{ The stable ORDER of `keys`, as an index permutation written to `idx` (n
+  LongInts the caller owns): idx[k] is the position of the k-th element in
+  sorted order. Shared by list.sort() and sorted(), which apply it to their
+  elements. A bottom-up merge sort -- O(n log n) compares, where the insertion
+  sort both used to run was O(n^2) compares AND a variant swap per step. }
+procedure PySortOrder(keys: TPyList; reverse: Boolean; idx: Pointer; n: Integer);
 procedure PyOrdCheck(const a: Variant; const b: Variant; const op: AnsiString);
 { `next(it)` / `next(it, default)` over a materialised sequence. NOT named
   `next`: itertools' counter already owns that name for its own argument type,
@@ -6640,48 +6646,117 @@ end;
   way, so equal elements must retain input order in both directions. Flipping
   which operand `pyvar_gt` gets keeps the comparison STRICT, so equal elements
   still do not swap and stability is preserved. }
-function TPyList.sort(key: Pointer; reverse: Boolean): Variant;
-var i, j: Integer; v, kv: Variant; swapped: Boolean; keys: TPyList;
+procedure PySortOrder(keys: TPyList; reverse: Boolean; idx: Pointer; n: Integer);
+{ Stable: the right run's head is taken only when it sorts strictly BEFORE the
+  left run's head, so equal keys keep their input order -- in reverse too, as
+  CPython's reverse=True does (it is not a reversed ascending sort). }
+var tmp, src, dst, sw: Pointer; width, lo, mid, hi, a, b, k: Integer;
+    takeB: Boolean;
 begin
-  { The keys are computed ONCE, up front, and moved in lockstep with the
-    elements below — Python calls key() exactly once per element, and a key
-    with a side effect (or an expensive one) would otherwise be re-entered
-    O(n^2) times by the insertion sort. Same shape as sorted(). }
-  keys := TPyList.Create;
-  for i := 0 to Self.count - 1 do
-  begin
-    if key <> nil then
+  for k := 0 to n - 1 do PInteger(NativeInt(idx) + k * 4)^ := k;
+  if n < 2 then Exit;
+  GetMem(tmp, n * 4);
+  try
+    src := idx; dst := tmp;
+    width := 1;
+    while width < n do
     begin
-      if PyIterCallHook = nil then
-        raise TypeError.Create('list.sort(): callable dispatch is unavailable');
-      keys.append(PyIterCallHook(key, Self.at(i)));
-    end
-    else
-      keys.append(Self.at(i));
-  end;
-  for i := 1 to Self.count - 1 do
-  begin
-    j := i;
-    swapped := True;
-    while (j > 0) and swapped do
-    begin
-      if reverse then
-        swapped := pyvar_gt(keys.at(j), keys.at(j - 1))
-      else
-        swapped := pyvar_lt(keys.at(j), keys.at(j - 1));
-      if swapped then
+      lo := 0;
+      while lo < n do
       begin
-        v := Self.at(j);
-        Self.put(j, Self.at(j - 1));
-        Self.put(j - 1, v);
-        kv := keys.at(j);
-        keys.put(j, keys.at(j - 1));
-        keys.put(j - 1, kv);
-        Dec(j);
+        mid := lo + width; if mid > n then mid := n;
+        hi := lo + 2 * width; if hi > n then hi := n;
+        a := lo; b := mid; k := lo;
+        while k < hi do
+        begin
+          if a >= mid then takeB := True
+          else if b >= hi then takeB := False
+          else if reverse then
+            takeB := pyvar_gt(keys.at(PInteger(NativeInt(src) + b * 4)^),
+                              keys.at(PInteger(NativeInt(src) + a * 4)^))
+          else
+            takeB := pyvar_lt(keys.at(PInteger(NativeInt(src) + b * 4)^),
+                              keys.at(PInteger(NativeInt(src) + a * 4)^));
+          if takeB then
+          begin
+            PInteger(NativeInt(dst) + k * 4)^ := PInteger(NativeInt(src) + b * 4)^;
+            Inc(b);
+          end
+          else
+          begin
+            PInteger(NativeInt(dst) + k * 4)^ := PInteger(NativeInt(src) + a * 4)^;
+            Inc(a);
+          end;
+          Inc(k);
+        end;
+        lo := hi;
+      end;
+      sw := src; src := dst; dst := sw;
+      width := width * 2;
+    end;
+    { the last pass wrote into `src` (swapped above); make sure idx has it }
+    if src <> idx then
+      for k := 0 to n - 1 do
+        PInteger(NativeInt(idx) + k * 4)^ := PInteger(NativeInt(src) + k * 4)^;
+  finally
+    FreeMem(tmp);
+  end;
+end;
+
+function TPyList.sort(key: Pointer; reverse: Boolean): Variant;
+var i, j, k, n: Integer; keys: TPyList; idx: Pointer; saved: Variant;
+begin
+  { The keys are computed ONCE, up front — Python calls key() exactly once per
+    element, and a key with a side effect (or an expensive one) must not be
+    re-entered per comparison. Same shape as sorted(). }
+  keys := TPyList.Create;
+  idx := nil;
+  try
+    for i := 0 to Self.count - 1 do
+    begin
+      if key <> nil then
+      begin
+        if PyIterCallHook = nil then
+          raise TypeError.Create('list.sort(): callable dispatch is unavailable');
+        keys.append(PyIterCallHook(key, Self.at(i)));
+      end
+      else
+        keys.append(Self.at(i));
+    end;
+    n := Self.count;
+    GetMem(idx, n * 4 + 4);
+    { The list is not touched until the order is final, so a key or __lt__
+      that raises leaves it exactly as it was. }
+    PySortOrder(keys, reverse, idx, n);
+    if Self.count <> n then
+      raise ValueError.Create('list modified during sort');
+    { Apply new[i] = old[idx[i]] IN PLACE, one cycle at a time, marking each
+      visited slot -1. No second list: the scratch this sort adds over the
+      insertion sort it replaced is the index vector alone (4n bytes here,
+      another 4n inside PySortOrder) -- it matters on an ESP heap, where an
+      exhausted heap aborts rather than failing an allocation. }
+    for i := 0 to n - 1 do
+    begin
+      if PInteger(NativeInt(idx) + i * 4)^ < 0 then Continue;
+      saved := Self.at(i);
+      j := i;
+      while True do
+      begin
+        k := PInteger(NativeInt(idx) + j * 4)^;
+        PInteger(NativeInt(idx) + j * 4)^ := -1;
+        if k = i then
+        begin
+          Self.put(j, saved);
+          Break;
+        end;
+        Self.put(j, Self.at(k));
+        j := k;
       end;
     end;
+  finally
+    if idx <> nil then FreeMem(idx);
+    keys.Free;
   end;
-  keys.Free;
   Result := pynone;   { Python returns None }
 end;
 
@@ -8230,6 +8305,11 @@ begin
   begin
     raise TypeError.Create('comparison of a string with a number');
   end;
+  { the exact numeric try FIRST, for the float arm's sake: a float against a
+    bignum or an int beyond 2^53 compares exactly, and a NaN is unordered
+    (`max(2.0**70, 2**70 + 1)` answered the float). Declines for the rest. }
+  pg := PXXPromoVarCmpTry(@a, @b, 5);
+  if pg <> 0 then begin pyvar_gt := pg = 2; Exit; end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
     pyvar_gt := pyvar_to_float(a) > pyvar_to_float(b)
   else
@@ -11402,6 +11482,18 @@ begin
     else Result := 0;
     Exit;
   end;
+  { EXACT for a float against a bignum or an int beyond 2^53, as CPython is:
+    the float arm below converts the int to double. Declines (0) for every
+    other pair. A NaN answers "greater" here, which is arbitrary; the ordering
+    operators do not come through this three-way answer for it (pylt_v). }
+  pc := PXXPromoVarCmpTry(@a, @b, 3);
+  if pc <> 0 then
+  begin
+    if pc = 2 then Result := -1
+    else if PXXPromoVarCmpTry(@a, @b, 1) = 2 then Result := 0
+    else Result := 1;
+    Exit;
+  end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
     fa := pyvar_to_float(a); fb := pyvar_to_float(b);
@@ -11576,27 +11668,45 @@ begin
   Result := pytruediv_v(a, b);
 end;
 
+{ The four ORDERING operators ask PXXPromoVarCmpTry first, with their own
+  operator: a float against a NaN, a bignum or an int beyond 2^53 has an answer
+  pycmp_v's -1/0/1 cannot carry. A NaN is unordered, so `x <= nan` and
+  `x >= nan` are both False, where pycmp_v's 0 ("equal") made them True; and
+  CPython compares an int with a float EXACTLY. The try declines (0) for every
+  other pair, which keeps pycmp_v's answer. }
 function pylt_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '<');
+  pc := PXXPromoVarCmpTry(@a, @b, 3);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) < 0;
 end;
 
 function pyle_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '<=');
+  pc := PXXPromoVarCmpTry(@a, @b, 4);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) <= 0;
 end;
 
 function pygt_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '>');
+  pc := PXXPromoVarCmpTry(@a, @b, 5);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) > 0;
 end;
 
 function pyge_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '>=');
+  pc := PXXPromoVarCmpTry(@a, @b, 6);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) >= 0;
 end;
 
@@ -13418,11 +13528,21 @@ end;
   is purely a speed matter: the search costs one exact expansion per step, and
   seeding turns a 63-step search over the whole bit range into a handful of
   steps around the right answer. Powers of ten are applied by binary splitting
-  (at most nine multiplies) rather than one per decade. }
-function PyExDecEstimate(const ds: AnsiString; nd, expo: Integer): Double;
+  (at most nine multiplies) rather than one per decade.
+
+  It returns the estimate's BIT PATTERN, clamped to 0..maxbits, and a negative
+  power is applied to the value scaled up by 2^600, with the 600 taken off the
+  exponent field afterwards. Soft-float riscv32 and Xtensa flush a denormal
+  result to zero, so estimating near 2.2e-308 in plain doubles gave 0 there,
+  and the search started from bit pattern 0: correct, but a doubling climb and
+  a full bisection of exact expansions, 17 times per repr. That was 47 s for
+  repr(2.2250738585072014e-308) on hosted riscv32 and the watchdog on a C3.
+  Scaled, every intermediate is a normal double on every target. }
+function PyExDecEstimateBits(const ds: AnsiString; nd, expo: Integer;
+                             maxbits: Int64): Int64;
 var
-  sig: Int64;
-  i, k, e: Integer;
+  sig, bits, m: Int64;
+  i, k, e, be: Integer;
   w: Double;
   p10: array[0..8] of Double;
 begin
@@ -13447,13 +13567,36 @@ begin
   end
   else if e < 0 then
   begin
+    { sig < 2^57, so sig * 2^600 is far below DBL_MAX. The divisions only
+      shrink it, so an intermediate is a denormal only if D * 2^600 is, i.e.
+      D < 5e-489 -- far below the smallest double, where 0 is the right seed }
+    w := w * PyExDecBitsToDouble(Int64(1023 + 600) shl 52);
     k := -e;
     { divide rather than multiply by a negative power: keeps the intermediate
       from overflowing on the way down }
     for i := 0 to 8 do
       if (k and (1 shl i)) <> 0 then w := w / p10[i];
   end;
-  Result := w;
+  if (w <> w) or (w >= 1.7976931348623157e308) then begin Result := maxbits; Exit; end;
+  if w <= 0.0 then begin Result := 0; Exit; end;
+  bits := PyExDecDoubleToBits(w);
+  if e < 0 then
+  begin
+    be := Integer((bits shr 52) and $7FF) - 600;
+    if be >= 1 then
+      bits := (Int64(be) shl 52) or (bits and ((Int64(1) shl 52) - 1))
+    else if be > -53 then
+    begin
+      { a denormal: the significand with its hidden bit, shifted into place }
+      m := (bits and ((Int64(1) shl 52) - 1)) or (Int64(1) shl 52);
+      bits := m shr (1 - be);
+    end
+    else
+      bits := 0;
+  end;
+  if bits < 0 then bits := 0;
+  if bits > maxbits then bits := maxbits;
+  Result := bits;
 end;
 
 { The double nearest to the positive decimal (ds, decExp), correctly rounded,
@@ -13483,7 +13626,7 @@ var
   exp2, cmp: Integer;
   cds, mds: AnsiString;
   cexp, mexp: Integer;
-  c, est: Double;
+  c: Double;
 
   { sign of exact(bits) - D }
   function CmpBits(b: Int64): Integer;
@@ -13503,15 +13646,7 @@ begin
     bracket provably straddles D. The estimate's error is never assumed —
     if it is wildly wrong the doubling simply runs until it reaches the ends,
     which is the unseeded search and still correct. }
-  est := PyExDecEstimate(ds, nd, expo);
-  if (est <> est) or (est >= 1.7976931348623157e308) then eb := maxbits
-  else if est <= 0.0 then eb := 0
-  else
-  begin
-    eb := PyExDecDoubleToBits(est);
-    if eb < 0 then eb := 0;
-    if eb > maxbits then eb := maxbits;
-  end;
+  eb := PyExDecEstimateBits(ds, nd, expo, maxbits);
 
   lo := eb;
   step := 1;
@@ -15194,13 +15329,16 @@ end;
 function pyos_stat(const path: AnsiString): TPyStat;
 var cs: AnsiString; r, mode, size: Int64;
 begin
-  { Real stat where pypal knows the layout -- x86-64 and ESP-IDF (uforth
-    FILE-STATUS: a missing file must raise a catchable OSError like CPython).
-    Other targets keep the zeroed stub: no gated caller observes the value. }
+  { Real stat on every Linux target (plain stat on x86-64, statx elsewhere --
+    see PyPalStatModeSize) and on ESP-IDF (uforth FILE-STATUS: a missing file
+    must raise a catchable OSError like CPython). A target with no syscalls at
+    all (hosted xtensa, wasm32) answers ENOSYS, and that RAISES too: it used to
+    return a zeroed stat, so a missing file raised nothing and every size read
+    0, and "no gated caller observes the value" stopped being true the moment
+    os.path.getsize existed. }
   Result := TPyStat.Create;
   cs := path + #0;
   r := PyPalStatModeSize(@cs[1], mode, size);
-  if r = -38 then Exit;
   if r < 0 then
     pyos_raise_ioerror(r, path, '');
   Result.st_mode := mode;
@@ -15264,9 +15402,14 @@ begin
 end;
 
 function pystderr_write(const s: AnsiString): Integer;
+var r: Int64;
 begin
+  { Straight to fd 2, the fd print(file=sys.stderr) now writes to as well, so
+    the two stay in order. `write(StdErr, s)` here named the Text-file RTL's
+    StdErr (this unit pulls it), and on wasm32 that died with "Runtime error 9
+    (I/O error)". bug-a-stderr-writes-reach-stdout-on-every-target-but-x86-64 }
   Result := Length(s);
-  if Length(s) > 0 then write(StdErr, s);
+  if Length(s) > 0 then r := PXXSysWrite(2, NativeInt(@s[1]), Length(s));
 end;
 
 { NOTHING TO DO, and that is a measured fact about this writer rather than a
@@ -19339,24 +19482,52 @@ end;
   means, makes -0.0 and NaN fall out correctly instead of needing special cases,
   and is immune to an extended-precision register ever appearing in this path.
 
+  The parse is the proof, but it is too dear to be the SEARCH: each one is an
+  exact bracket search of ~750-digit expansions, and 17 of them took 4 s for
+  repr(2.2250738585072014e-308) on hosted riscv32. So a precision is first
+  filtered by the parser's own rule -- a decimal reads back as av exactly when
+  it lies strictly between av's two rounding midpoints, or on one of them with
+  av's mantissa even -- which costs three expansions for the whole loop, and
+  only a candidate that passes is parsed.
+
   `av` must be finite, positive and nonzero; the caller handles the rest.
   Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
 function PyFloatRepr(av: Double): AnsiString;
-var sig, tail, decExp: Integer; ds, cand: AnsiString;
+var sig, tail, decExp, de0, loE, hiE, cLo, cHi: Integer;
+    ds, ds0, loS, hiS, cand: AnsiString; mant: Int64; exp2: Integer;
+    even: Boolean;
 begin
   Result := '';
+  PyExDecSplit(av, mant, exp2);
+  PyExDecOfMant(mant, exp2, ds0, de0);
+  { the midpoint with the next double up; and with the next one down, which
+    at a power of two above the denormals has half the spacing }
+  PyExDecOfMant(2 * mant + 1, exp2 - 1, hiS, hiE);
+  if (mant = (Int64(1) shl 52)) and (exp2 > -1074) then
+    PyExDecOfMant(4 * mant - 1, exp2 - 2, loS, loE)
+  else
+    PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
+  even := (mant and 1) = 0;
   for sig := 1 to 17 do
   begin
-    PyExDecDigits(av, ds, decExp);
+    ds := ds0;
+    decExp := de0;
     PyExDecRound(ds, decExp, sig);
     tail := Length(ds);
     while (tail > 1) and (ds[tail] = '0') do tail := tail - 1;
-    cand := PyFloatLayout(Copy(ds, 1, tail), decExp);
-    if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
-       PyExDecDoubleToBits(av) then
+    ds := Copy(ds, 1, tail);
+    cLo := PyExDecCmp(ds, decExp, loS, loE);
+    cHi := PyExDecCmp(ds, decExp, hiS, hiE);
+    if ((cLo > 0) or ((cLo = 0) and even)) and
+       ((cHi < 0) or ((cHi = 0) and even)) then
     begin
-      Result := cand;
-      Exit;
+      cand := PyFloatLayout(ds, decExp);
+      if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
+         PyExDecDoubleToBits(av) then
+      begin
+        Result := cand;
+        Exit;
+      end;
     end;
   end;
 end;
