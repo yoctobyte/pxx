@@ -103,8 +103,12 @@ Found on 2026-09-28, and **open in v441 to v448**:
   was lost. That held for `on E: ... do`, a bare `except`, a `raise` caught
   one level further out, and a `try`/`finally` inside the `try`. An exception
   class that owns a `TStringList` lost the list on every raise. FPC 3.2.2 runs
-  `Destroy` once in each case. Fixed after v448 (`846a574b00`), in v449.
-  Measured on 2026-09-28 with
+  `Destroy` once in each case. Fixed in v449 (`846a574b00`). Measured again on
+  2026-09-28 with the pinned binaries, each in its own tree: v448
+  (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`): the same
+  test counts 0 in every shape with v448, and matches its `.expected` with
+  v449 and v450, on x86-64, i386 and arm32 (QEMU user mode). First measured on
+  2026-09-28 with
   `test/test_a_handled_exception_runs_its_destructor_once.pas`: every shape
   counted 0 `Destroy` calls with v441 (`4ebfa2d047a2`) and v448
   (`b2b325036c3b`), and 1, as FPC 3.2.2 does, with the compiler built at
@@ -145,12 +149,16 @@ it end, to get the memory back.
 
 `del name` on a local variable does not release what the name refers to; the
 object stays allocated until the function returns. This is so from v446 to
-v448, and fixed after v448 (`c4f5dcf929`, in v449). On v446 to v448,
-assign `name = None` instead, which does release it. On v445 and earlier
-`name = None` does not release it either (see the paragraph above): return
-from the function. (Measured on 2026-09-28, the same list of 30 strings:
-under `del` 32 live with v446 and with the compiler at `e072d579b0`; under
-`= None` 1 with both, and 32 with v445. Measured again with
+v448, and fixed in v449 (`c4f5dcf929`). Measured again on 2026-09-28 with the
+pinned binaries, each in its own tree: v448 (`b2b325036c3b`), v449
+(`0ded1e5d04c8`) and v450 (`c19cc2d531e4`), a function that builds a list of
+30 strings and exits inside the function: under `del`, 32 live with v448 and 1
+with v449 and v450; under `= None`, 1 with all three; kept, 32 with all three.
+On v446 to v448, assign `name = None` instead, which does release it. On v445
+and earlier `name = None` does not release it either (see the paragraph
+above): return from the function. (Measured on 2026-09-28, the same list of 30
+strings: under `del` 32 live with v446 and with the compiler at `e072d579b0`;
+under `= None` 1 with both, and 32 with v445. Measured again with
 `tools/census_at_exit.sh`, the census taken inside the function: under `del`
 32 live with v448 (`b2b325036c3b`) and 1 with the compiler built at
 `a2614fcb8b` (`5dea028059af`), under `= None` 1 with both, and 32 with both
@@ -523,8 +531,12 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   Pascal array parameter.** `d.SumV(d.MakeArr(4))`, where `SumV` takes the
   array by value, was refused with `by-reference argument must be a variable`,
   and so were a `const` parameter (`SumC`) and an open array (`SumO`). Fixed
-  after v449 (`63c957f093`, in v450). Measured on 2026-09-28 with v449
-  (`0ded1e5d04c8`) and with the compiler built at `f53fd89ef0`
+  in v450 (`63c957f093`). Measured again on 2026-09-28 with the pinned
+  binaries, each in its own tree: v449 (`0ded1e5d04c8`) and v450
+  (`c19cc2d531e4`), on x86-64 and i386 with the current `dynarr` unit: v449
+  refuses `d.SumV(d.MakeArr(4))` with that message, and v450 prints `60` for
+  all three, at module level and inside a def. First measured on 2026-09-28 with
+  v449 (`0ded1e5d04c8`) and with the compiler built at `f53fd89ef0`
   (`2dd7329329c8`), on x86-64 and on i386 under QEMU user mode, with the
   `dynarr` unit of `test/nilpy_dynarr/`: v449 refuses all three, at module
   level and inside a def; with that compiler `print(d.SumV(d.MakeArr(4)),
@@ -577,14 +589,17 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   after `o = d.TB(1)` and `d.NewInto(o, 5)`, `o.v` is `5`. Measured as the
   row above. **On v448:** bind the name to an object first.
 
-- **Nil Python for Xtensa with the call0 ABI did not build.** Every Nil
-  Python program, even `x = 1` and `print(x)`, was refused when built with
+- **Nil Python for Xtensa with the call0 ABI did not build.** Every Nil Python
+  program, even `x = 1` and `print(x)`, was refused when built with
   `--xtensa-abi=call0`: `target xtensa: addi immediate displacement 128 is
   outside the encodable range -128..127`, in the `builtin/pyeval.pas` that the
   compiler appends. Hosted xtensa (`--platform=posix`, run under qemu-xtensa)
   refused every Nil Python program on both ABIs, with `a heap arena needs
-  mmap`. Both are fixed after v448 (`8529eb30e8`, in v449). Measured on
-  2026-09-28 with v448 (`b2b325036c3b`) and the compiler built at
+  mmap`. Both are fixed in v449 (`8529eb30e8`). Measured again on 2026-09-28
+  with the pinned binaries, each in its own tree: v448 (`b2b325036c3b`), v449
+  (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`): v448 refuses `x = 1; print(x)`
+  as a call0 ESP object (`addi`) and hosted on both ABIs (heap arena); v449
+  and v450 build all four, and the hosted ones print `1` under qemu-xtensa. First measured on 2026-09-28 with v448 (`b2b325036c3b`) and the compiler built at
   `a5841bfb84` (`48b0ba0bb383`):
 
   | build | v448 | after v448 |
