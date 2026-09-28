@@ -21,7 +21,9 @@ GCC's `long double` is 16 bytes on x86-64; PXX's is 8, the same as `double`. A
 single program is consistent with itself, but a struct that contains one has a
 different size from GCC's: `struct { char c; long double y; }` is 16 bytes here
 and 32 under GCC. That matters as soon as such a struct crosses into
-GCC-compiled code or into a file format. (Measured with v425.)
+GCC-compiled code or into a file format. (Measured with v425, and again on
+2026-09-28 with v450 (`c19cc2d531e4`) and the compiler built at `fce510f98d`:
+8 and 16 bytes, against GCC's 16 and 32.)
 
 ### ESP: bare-metal images do not run on a real chip
 
@@ -98,7 +100,7 @@ these five.
   `sorted(xs, key=lambda v: -v)`, kept one closure per call. **Older pins:** bind
   the lambda to a name first.
 
-Found after the release, on 2026-09-27, and **open in v441**:
+Found after the release, on 2026-09-27, in v441, and fixed since:
 
 - **Nil Python: `list.clear()` and `dict.clear()` did not release what they
   dropped.** The elements, or the keys and values, stayed allocated after the
@@ -118,7 +120,7 @@ Found after the release, on 2026-09-27, and **open in v441**:
   (`ae3466a018d8`). **On v445 and earlier:** name the string first
   (`t = str(i)`, then `t * 2`).
 
-Found on 2026-09-28, and **open in v441 to v448**:
+Found on 2026-09-28, wrong in v441 to v448, and fixed in v449:
 
 - **Pascal: a handled exception object was freed without running its
   destructor.** When an `except` block finished with the exception, its memory
@@ -162,7 +164,7 @@ way ran the heap low enough that Wi-Fi stopped working. Fixed in v446
 (`31d314dfa8`): the container is released as soon as the last name lets go of
 it. v446 does not cover a list built by a comprehension
 (`rows = [str(i) for i in range(n)]`): after `rows = None` it is still kept
-until the function returns. That is fixed after v446 (`cdd6fd3c1f`).
+until the function returns. That is fixed after v446 (`cdd6fd3c1f`, in v447).
 Measured on 2026-09-28 with `tools/census_at_exit.sh`, a function whose list
 of 30 strings is dropped before it exits: `kept = None` leaves 1 live with
 v446 (`ae3466a018d8`); a comprehension then `rows = None` leaves 32 with v446
@@ -609,14 +611,16 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   stayed flat at 84 to 88 bytes against a control that kept 647 bytes per
   result (one boot; recorded in `devdocs/progress/LOGBOOK.md` by
   `19f4728e10`). Wrong in v441 to v447 (`1c2fb47dd8`). The call0 ABI
-  builds after v448; see the call0 row below.
+  builds since v449; see the call0 row below.
 
 - **Nil Python: `m.start()` and `m.end()` with no argument did not compile.**
   CPython reads them as group 0: `re.search("b+", "abbbc")` gives `1 4`.
   pxx stopped with `start() requires 1 argument(s), none given`. Measured on
-  2026-09-28 with pin v448 on x86-64. Wrong in v441 to v448; fixed after
-  v448 (`19f4728e10`), in v449. **On v448:** write `m.start(0)` and
-  `m.end(0)`.
+  2026-09-28 with pin v448 on x86-64. Wrong in v441 to v448. Fixed in v449
+  (`19f4728e10`): measured again on 2026-09-28 on x86-64, v448
+  (`b2b325036c3b`) refuses it and v449 (`0ded1e5d04c8`) and v450
+  (`c19cc2d531e4`) print `1 4`, as CPython does. **On v448:** write
+  `m.start(0)` and `m.end(0)`.
 
 - **Nil Python: a Pascal `array of T` result bound to a name read the wrong
   values.** With a Pascal unit imported as `d` whose `MakeArr(4)` returns `0,
