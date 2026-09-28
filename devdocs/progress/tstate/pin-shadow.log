@@ -1156,3 +1156,4 @@
 2026-09-28T03:58:45Z	borg	fcc48142526c362a5bf221a2f1ef1cbabe325e7a	would NOT pin fcc48142526c — 1 red(s) the current pin does not have, 4 inherited from the current pin: tools-devtest#00
 2026-09-28T04:26:10Z	borg	1e9a461b037cda08908c19a0530fdf6914c15849	would NOT pin 1e9a461b037c — 1 red(s) the current pin does not have, 4 inherited from the current pin: tools-devtest#00
 2026-09-28T05:56:58Z	borg	7abbe26f4e961d10dcbb1ed25426d3893da1479e	would-pin PENDING 7abbe26f4e96 — qualifies, streak 1/2
+2026-09-28T07:02:07Z	borg	b8a18120508b4ff54e0b64ce2b4d0e1a0276e5c3	would NOT pin b8a18120508b — 8 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_cdecl_bodied_narrow.pas@2, test-core#src:test/test_cdecl_bodied_wide.pas@2, test-core#src:test/test_cdecl_fnptr_aggregate_result.pas, test-threads#src:test/lib_signals_fpc.pas, test-threads#src:test/thread_glibc_malloc_two_threads.pas@1
