@@ -71,14 +71,18 @@ Then, by hand:
 ## 5. Before committing
 
 The credential check. The pattern lives in a file outside the repository,
-so the word itself is never written anywhere; each of the three commands must
-print nothing:
+so the word itself is never written anywhere, and the check prints counts,
+never matching lines, so a hit cannot write the secret into a log. Both
+counts must be 0:
 
 ```sh
 git add -A -n . >/dev/null
-git grep -n --untracked -f /home/neo/.config/pxx-secret/patterns
-git diff --cached | grep -f /home/neo/.config/pxx-secret/patterns
+git grep -n --untracked -f /home/neo/.config/pxx-secret/patterns | wc -l
+git diff --cached | grep -c -f /home/neo/.config/pxx-secret/patterns
 ```
+
+To find a hit, print only its place, never its content:
+`git grep -n --untracked -f /home/neo/.config/pxx-secret/patterns | cut -d: -f1,2`.
 
 Then read the whole diff:
 
