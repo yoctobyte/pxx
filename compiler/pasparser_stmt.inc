@@ -4305,6 +4305,17 @@ var tk: TTypeKind; pi: Integer;
 begin
   tk := IntToTypeKind(ASTTk[exprNode]);
   if widthNode < 0 then widthNode := GenMakeIntLit(0);
+  { A PChar is its TEXT, as on the console path (IR_WRITE's -3 sentinel). It
+    fell into the ordinal arm below as an unsigned pointer, so `WriteLn(f, p)`
+    and, with the Text unit pulled, `WriteLn(StdErr, p)` printed its ADDRESS.
+    bug-a-a-text-write-prints-a-bare-float-in-natural-form-and-a-pchar-as-its-address }
+  if IsNodePChar(exprNode) then
+  begin
+    pi := FindProc('PCharToString');
+    if pi < 0 then Error(ctx + ': PCharToString not loaded');
+    exprNode := GenMakeCall6(pi, Procs[pi].RetType, exprNode, -1, -1, -1, -1, -1);
+    tk := tyAnsiString;
+  end;
   if TypeIsFrozenString(tk) or (tk = tyAnsiString) then
   begin
     { A field width on a STRING used to be dropped here — silently, and for a
@@ -4327,11 +4338,22 @@ begin
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, -1, -1, -1, -1);
   end
+  else if TypeIsFloat(tk) and (decNode < 0) then
+  begin
+    { No decimals: FPC's SCIENTIFIC form, narrowed to the width, in the
+      value's own precision (a Single has 9 fractional digits and a 2-digit
+      exponent). This passed decimals -1 to StrFloat, whose natural form
+      (`2.25`) no FPC write produces; the console path has always been right.
+      bug-a-a-text-write-prints-a-bare-float-in-natural-form-and-a-pchar-as-its-address }
+    pi := FindProc('StrFloatSciW');
+    if pi < 0 then Error(ctx + ': StrFloatSciW not loaded');
+    Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode, widthNode,
+                GenMakeIntLit(Ord(tk = tySingle)), -1, -1, -1);
+  end
   else if TypeIsFloat(tk) then
   begin
     pi := FindProc('StrFloat');
     if pi < 0 then Error(ctx + ': StrFloat not loaded');
-    if decNode < 0 then decNode := GenMakeIntLit(-1);
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, decNode, -1, -1, -1);
   end
