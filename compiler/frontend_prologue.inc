@@ -152,10 +152,19 @@ procedure PullSoftFloatBeforeBuiltinHeap;
   file's PullTargetRuntimeUnits and the NilPy driver, which pulls the unit
   itself. The NilPy copy never had the softfloat half, so every NilPy program
   for ESP-IDF died on that message once the arena wall in front of it was gone
-  (bug-a-nilpy-on-cross-targets-four-remaining-walls, 2026-09-19). }
+  (bug-a-nilpy-on-cross-targets-four-remaining-walls, 2026-09-19).
+
+  arm32 too, for the narrower reason ParseProgram's own condition gives: it has
+  hardware VFP, but vcvt.s32.f64 is 32-bit, so a 64-bit Trunc/Round goes to
+  __pxx_d2i64 -- and when that kernel is not linked the backend falls back to
+  the 32-bit convert WITHOUT a word. ParseProgram pulled it for arm32 and this
+  routine did not, so on arm32 a Nil Python `int(4107542400.0)` answered
+  2147483647, and time.gmtime of any date past 2038 or before 1901 was clamped
+  there. i386 and aarch64 were right: they convert in 64 bits inline.
+  bug-a-arm32-nilpy-float-to-int-saturates-at-32-bits }
 begin
-  if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
-     (not EspBareBoot) then
+  if ((((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+       (not EspBareBoot)) or (TargetArch = TARGET_ARM32)) then
     ParseUsesUnitAmbient('softfloat');
 end;
 

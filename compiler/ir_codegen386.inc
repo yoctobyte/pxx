@@ -4007,6 +4007,22 @@ begin
           if vaNvw > 127 then Error('target i386: too many call arguments');
           vaOrder[vaNvw] := argNode; Inc(vaNvw); argNode := IRB[argNode];
         end;
+        { A STACKLESS STEP FUNCTION takes the instance pointer and nothing else.
+          Its declared parameters live in the instance's slots, and the step
+          restores them from there. The `for` desugar still passes one pad per
+          declared parameter, because the register targets pop ParamCount
+          argument registers. A cursor (a generator stored in a variable, handed
+          to list()/next()) calls the same step through a pointer with ONE
+          argument. On a register target both agree; on this stack convention
+          they did not, because the instance is pushed first and so sits deepest
+          -- the callee read `__genself` from a pad or from the caller's frame.
+          So only the instance is pushed here, and the callee reads it at
+          [ebp+8] (EmitParamSpillsForTarget). The pads are side-effect free (a
+          zero literal or the instance variable), so dropping them evaluates
+          nothing less.
+          bug-a-i386-a-stackless-generator-called-through-a-cursor-reads-its-instance-from-the-wrong-slot }
+        if (procIdx >= 0) and ProcIsStackless[procIdx] and (vaNvw > 1) then
+          vaNvw := 1;
         vaFwd := (procIdx >= 0) and ProcVariadic[procIdx];
         if vaFwd then
         begin
@@ -4219,7 +4235,8 @@ begin
           caller cleans `argBytes` (which counts them all), so a variadic call
           with more args than declared params marshals correctly — only strict
           equality blocked it. }
-        if (vaNvw <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
+        if (vaNvw <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] and
+           not ProcIsStackless[procIdx] then
           Error('target i386: call argument count mismatch (defaults not supported yet)');
         if ABIRetViaHiddenDestProc(procIdx) then
         begin

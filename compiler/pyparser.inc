@@ -31036,10 +31036,20 @@ begin
       { a variant parameter is by-ref, so its slot holds a heap cell that
         outlives the call — the same cell the `for` desugar builds }
       if PyGenArgNeedsCell(gpi, nargs + 1) then
-        argNode := PyGenValueArgCell(argNode);
-      slotOff := SL_OFF_SLOTS + 8 * nargs;
-      PyHoistStmt(GenMakeCall6(FindProc('SlSet'), tyInt64,
-        GenMakeIdent(gIdx, tyPointer), GenMakeIntLit(slotOff), argNode, -1, -1, -1));
+        argNode := PyGenValueArgCell(argNode)
+      else if PasGenArgNeedsStrTemp(gpi, nargs + 1) then
+      begin
+        { an AnsiString parameter (inferred from a str literal) needs a
+          materialised handle, as in the `for` desugar -- see
+          PasGenArgNeedsStrTemp }
+        k := AllocVar('', tyAnsiString);
+        PyHoistStmt(PyMakeAssignNode(GenMakeIdent(k, tyAnsiString), argNode));
+        argNode := GenMakeIdent(k, tyAnsiString);
+      end;
+      slotOff := GenArgSlotOff(gpi, nargs + 1);   { the `for` desugar's offset, recorded per proc }
+      { GenSeedArg: a FLOAT parameter is seeded bitwise, the way the step
+        restores it (bug-a-a-float-parameter-of-a-stackless-generator-arrives-as-its-bit-pattern) }
+      PyHoistStmt(GenSeedArg(gIdx, slotOff, ParamStoredKind(gpi, nargs + 1), argNode));
       Inc(nargs);
     until not Eat(tkComma);
   Expect(tkRParen, ')');

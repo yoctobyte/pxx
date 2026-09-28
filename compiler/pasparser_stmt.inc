@@ -138,6 +138,11 @@ procedure ParseBlock; forward;
 function WrapMainBodyManagementOps(bodyNode: Integer): Integer; forward;  { class operator Initialize/Finalize on globals }
 function WrapEspUnhandledReport(bodyNode: Integer): Integer; forward;  { ESP: print an uncaught exception before the park }
 function SLHasYield(node: Integer): Boolean; forward;  { the generator for-in desugar needs it ~1300 lines before SLCheckEligible defines it }
+{ GenSeedArg and the for-in's float-element arm build literals and slot
+  addresses above where these are defined (the Int64 overload of GenMakeIntLit;
+  the Integer one sits with the stackless transform). }
+function GenMakeIntLit(v: Int64): Integer; forward;
+function GenMakeSlotAddr(i: Integer): Integer; forward;
 
 function ParseIfStatementAST: Integer;
 var condNode, thenNode, elseNode, pairNode, node: Integer;
@@ -266,6 +271,45 @@ begin
     GenMakeIdent(gIdx, tyPointer), offLit, valNode, -1, -1, -1);
 end;
 
+{ The byte width a FLOAT slot is checkpointed at, 0 for every other kind.
+
+  A float cannot ride SlSet/SlGet: those move an Int64, and the conversion at
+  each end is NUMERIC, not a bit copy. So a Double parameter of 2.5 went in as
+  its bit pattern and came back as that pattern read as an integer --
+  4612811918334230528.0 -- on every target, Pascal and Nil Python alike, and a
+  Double LOCAL that lived across a yield was truncated to an integer. A float
+  slot is therefore copied bitwise (SlBlob/SlUnblob) at its own width, the way
+  a variant or a promotable int already is.
+  bug-a-a-float-parameter-of-a-stackless-generator-arrives-as-its-bit-pattern }
+function SLFloatSlotBytes(tk: TTypeKind): Integer;
+begin
+  Result := 0;
+  if tk = tySingle then Result := 4
+  else if TypeIsFloat(tk) then Result := 8;
+end;
+
+{ Seed generator argument `valNode` into the instance slot at `off`, for a
+  parameter stored as `ptk`. A float goes through a temp of the parameter's own
+  kind (which also converts an integer argument, as the ordinary call path
+  would) and is copied bitwise; everything else is the one-word SlSet. The temp
+  is a local of the routine containing the call, like the variant and string
+  temps above. }
+function GenSeedArg(gIdx, off: Integer; ptk: TTypeKind; valNode: Integer): Integer;
+var ft, nb: Integer;
+begin
+  nb := SLFloatSlotBytes(ptk);
+  if nb = 0 then
+  begin
+    Result := GenSlSetStmt2(gIdx, off, valNode);
+    Exit;
+  end;
+  ft := AllocVar('', ptk);
+  Result := GenMakeSeq(GenMakeAssign(GenMakeIdent(ft, ptk), valNode),
+              GenMakeSeq(GenMakeCall6(FindProc('SlBlob'), tyInt64,
+                GenMakeIdent(gIdx, tyPointer), GenMakeIntLit(off),
+                GenMakeSlotAddr(ft), GenMakeIntLit(nb), -1, -1), -1));
+end;
+
 { A generator's declared parameter is stored into its persistent instance slot
   by the for-in desugar, as ONE machine word. A Nil Python variant parameter is
   by-REF, so the word must be an ADDRESS — and it must outlive the loop, which a
@@ -387,10 +431,17 @@ begin
   Result := GenMakeIdent(st, tyAnsiString);
 end;
 
-{ Does argument `k` of this generator need the managed-string treatment? }
+{ Does argument `k` of this generator need the managed-string treatment?
+
+  Nil Python too, despite the name: a Nil Python parameter is usually a
+  variant (and takes the cell), but one every call site passes a str literal
+  is inferred AnsiString, and its literal went into the slot raw exactly as
+  the Pascal one above used to -- `for x in gen("hi")` and `next(gen("hi"))`
+  segfaulted on every target, while `gen(t)` (a variant parameter) worked.
+  bug-nilpy-a-generator-called-with-a-str-literal-segfaults }
 function PasGenArgNeedsStrTemp(gpi, k: Integer): Boolean;
 begin
-  Result := (not PyExprMode) and (k < Procs[gpi].ParamCount) and
+  Result := (k < Procs[gpi].ParamCount) and
             (not Procs[gpi].Params[k].IsRef) and
             (ParamStoredKind(gpi, k) = tyAnsiString);
 end;
@@ -437,6 +488,19 @@ var ps: Integer;
 begin
   Result := SL_OFF_SLOTS + 8 * (k - 1);
   if k >= Procs[gpi].ParamCount then Exit;
+  { The offset AssignStacklessSlots RECORDED for this proc, not SymGenSlot of
+    the parameter's symbol: the call can come after the generator's scope has
+    closed and a LATER routine has reused those symbol indices, which reset
+    SymGenSlot to -1 or set it to the later routine's own slot. Any stackless
+    generator declared after G then made every `for .. in G(..)` seed the wrong
+    slots -- a string parameter crashed, an ordinal one read its neighbour --
+    on every target.
+    bug-a-a-stackless-generator-called-after-a-later-generator-seeds-the-wrong-slots }
+  if (k <= SL_MAX_PARAMS) and (ProcGenArgOff[gpi * (SL_MAX_PARAMS + 1) + k] > 0) then
+  begin
+    Result := ProcGenArgOff[gpi * (SL_MAX_PARAMS + 1) + k] - 1;
+    Exit;
+  end;
   ps := Procs[gpi].Params[k].SymIdx;
   if (ps >= 0) and (SymGenSlot[ps] >= 0) then
     Result := SL_OFF_SLOTS + 8 * SymGenSlot[ps];
@@ -523,7 +587,7 @@ var
   assignG, assignX, whileNode, innerSeq, instLit: Integer;
   sa1, sa2, sa3, sa4, sa5, sa6: Integer;
   paCoAlloc, paCoNext, paCoCurrent, paCoFree: Integer;
-  curDeref: Integer;
+  curDeref, elemT: Integer;
 begin
   if Syms[varIdx].TypeKind = tyAuto then
     Error('for var .. in <generator>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
@@ -665,7 +729,7 @@ begin
       else if PasGenArgNeedsTemp(gpi, 1) then a0 := GenMakeVariantArgTemp(a0, assignG)
       else if PasGenArgNeedsAddr(gpi, 1) then a0 := GenMakeAddrOf(a0)
       else if PasGenArgNeedsStrTemp(gpi, 1) then a0 := GenMakeStrArgTemp(a0, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 1), a0), -1));
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSeedArg(gIdx, GenArgSlotOff(gpi, 1), ParamStoredKind(gpi, 1), a0), -1));
     end;
     if nargs >= 2 then
     begin
@@ -673,7 +737,7 @@ begin
       else if PasGenArgNeedsTemp(gpi, 2) then a1 := GenMakeVariantArgTemp(a1, assignG)
       else if PasGenArgNeedsAddr(gpi, 2) then a1 := GenMakeAddrOf(a1)
       else if PasGenArgNeedsStrTemp(gpi, 2) then a1 := GenMakeStrArgTemp(a1, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 2), a1), -1));
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSeedArg(gIdx, GenArgSlotOff(gpi, 2), ParamStoredKind(gpi, 2), a1), -1));
     end;
     if nargs >= 3 then
     begin
@@ -681,7 +745,7 @@ begin
       else if PasGenArgNeedsTemp(gpi, 3) then a2 := GenMakeVariantArgTemp(a2, assignG)
       else if PasGenArgNeedsAddr(gpi, 3) then a2 := GenMakeAddrOf(a2)
       else if PasGenArgNeedsStrTemp(gpi, 3) then a2 := GenMakeStrArgTemp(a2, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 3), a2), -1));
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSeedArg(gIdx, GenArgSlotOff(gpi, 3), ParamStoredKind(gpi, 3), a2), -1));
     end;
     if nargs >= 4 then
     begin
@@ -689,7 +753,7 @@ begin
       else if PasGenArgNeedsTemp(gpi, 4) then a3 := GenMakeVariantArgTemp(a3, assignG)
       else if PasGenArgNeedsAddr(gpi, 4) then a3 := GenMakeAddrOf(a3)
       else if PasGenArgNeedsStrTemp(gpi, 4) then a3 := GenMakeStrArgTemp(a3, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 4), a3), -1));
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSeedArg(gIdx, GenArgSlotOff(gpi, 4), ParamStoredKind(gpi, 4), a3), -1));
     end;
     if nargs >= 5 then
     begin
@@ -697,7 +761,7 @@ begin
       else if PasGenArgNeedsTemp(gpi, 5) then a4 := GenMakeVariantArgTemp(a4, assignG)
       else if PasGenArgNeedsAddr(gpi, 5) then a4 := GenMakeAddrOf(a4)
       else if PasGenArgNeedsStrTemp(gpi, 5) then a4 := GenMakeStrArgTemp(a4, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 5), a4), -1));
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSeedArg(gIdx, GenArgSlotOff(gpi, 5), ParamStoredKind(gpi, 5), a4), -1));
     end;
     if nargs >= 6 then
     begin
@@ -705,7 +769,7 @@ begin
       else if PasGenArgNeedsTemp(gpi, 6) then a5 := GenMakeVariantArgTemp(a5, assignG)
       else if PasGenArgNeedsAddr(gpi, 6) then a5 := GenMakeAddrOf(a5)
       else if PasGenArgNeedsStrTemp(gpi, 6) then a5 := GenMakeStrArgTemp(a5, assignG);
-      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, GenArgSlotOff(gpi, 6), a5), -1));
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSeedArg(gIdx, GenArgSlotOff(gpi, 6), ParamStoredKind(gpi, 6), a5), -1));
     end;
 
     { advance = a direct call to the step function with the instance pointer.
@@ -760,6 +824,20 @@ begin
       ASTLeft[curDeref] := callCur;
       ASTTk[curDeref] := Ord(tyVariant);
       assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curDeref);
+    end
+    else if SLFloatSlotBytes(ProcGenElemTk[gpi]) > 0 then
+    begin
+      { FLOAT element: the step blobbed its bits into the CURRENT word (see
+        SLLowerYield); unblob them into a temp of the element kind and assign
+        from that, so a Single element still converts into a Double loop
+        variable the ordinary way. }
+      elemT := AllocVar('', ProcGenElemTk[gpi]);
+      assignX := GenMakeSeq(GenMakeCall6(FindProc('SlUnblob'), tyInt64,
+                   GenMakeIdent(gIdx, tyPointer), GenMakeIntLit(SL_OFF_CURRENT),
+                   GenMakeSlotAddr(elemT),
+                   GenMakeIntLit(SLFloatSlotBytes(ProcGenElemTk[gpi])), -1, -1),
+                 GenMakeSeq(GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind),
+                   GenMakeIdent(elemT, ProcGenElemTk[gpi])), -1));
     end
     else
       assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
@@ -2645,6 +2723,13 @@ begin
                   GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
                   GenMakeSlotAddr(i),
                   GenMakeIntLit(RecSize(Syms[i].RecName)), -1, -1)
+      else if SLFloatSlotBytes(Syms[i].TypeKind) > 0 then
+        { bitwise, at the float's own width -- see SLFloatSlotBytes }
+        stmt := GenMakeCall6(FindProc('SlBlob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(SLFloatSlotBytes(Syms[i].TypeKind)), -1, -1)
       else
         stmt := GenSlSetStmt(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i],
                              GenMakeIdent(i, Syms[i].TypeKind));
@@ -2688,6 +2773,12 @@ begin
                   GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
                   GenMakeSlotAddr(i),
                   GenMakeIntLit(RecSize(Syms[i].RecName)), -1, -1)
+      else if SLFloatSlotBytes(Syms[i].TypeKind) > 0 then
+        stmt := GenMakeCall6(FindProc('SlUnblob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(SLFloatSlotBytes(Syms[i].TypeKind)), -1, -1)
       else
         stmt := GenMakeAssign(GenMakeIdent(i, Syms[i].TypeKind),
                               GenSlGet(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i]));
@@ -2749,7 +2840,7 @@ function SLLower(node, selfSym, retSym: Integer): Integer; forward;
   blob-copy its bytes into the instance CURRENT region and publish the region's
   address in the CURRENT word. }
 function SLLowerYield(node, selfSym, retSym: Integer): Integer;
-var k, resumeLbl, setCur, setState, saveSeq, setRes, exitNode: Integer;
+var k, resumeLbl, setCur, setState, saveSeq, setRes, exitNode, elemT: Integer;
 begin
   k := CurGenStateCtr; Inc(CurGenStateCtr);
   if k >= MAX_GEN_STATES then Error('stackless generator: too many yields');
@@ -2779,6 +2870,20 @@ begin
                 GenMakeArith(Ord(tkPlus),
                   GenMakeIdent(selfSym, tyPointer),
                   GenMakeIntLit(CurGenElemOff))), -1));
+  end
+  else if CurGenElemFloatBytes > 0 then
+  begin
+    { A FLOAT element rides the CURRENT word bitwise, for the reason
+      SLFloatSlotBytes gives: SlSet's Int64 conversion is numeric, so `yield d`
+      of 2.5 reached the loop variable as 4612811918334230528.0. The temp both
+      converts the yielded expression to the element kind and gives the blob an
+      address. The for-in consumer unblobs it (ParseForInGeneratorAST). }
+    elemT := AllocVar('', CurGenElemFloatTk);
+    setCur := GenMakeSeq(GenMakeAssign(GenMakeIdent(elemT, CurGenElemFloatTk), ASTLeft[node]),
+              GenMakeSeq(GenMakeCall6(FindProc('SlBlob'), tyInt64,
+                GenMakeIdent(selfSym, tyPointer), GenMakeIntLit(SL_OFF_CURRENT),
+                GenMakeSlotAddr(elemT),
+                GenMakeIntLit(CurGenElemFloatBytes), -1, -1), -1));
   end
   else
     setCur := GenSlSetStmt(selfSym, SL_OFF_CURRENT, ASTLeft[node]);
@@ -3118,6 +3223,8 @@ begin
   CurGenElemOff := -1;
   CurGenElemRecId := REC_NONE;
   CurGenElemIsVariant := False;
+  CurGenElemFloatTk := ProcGenElemTk[procIdx];
+  CurGenElemFloatBytes := SLFloatSlotBytes(CurGenElemFloatTk);
   if ProcGenElemTk[procIdx] = tyRecord then
   begin
     CurGenElemRecId := ProcGenElemRec[procIdx];
@@ -3135,7 +3242,8 @@ begin
     Inc(CurGenSlotNext, 2);
   end;
   { Record locals / record element need the blob helpers (older slgen lacks them). }
-  if ((CurGenElemOff >= 0) and not CurGenElemIsVariant) or SLHasRecordSlot then
+  if ((CurGenElemOff >= 0) and not CurGenElemIsVariant) or SLHasRecordSlot or
+     (CurGenElemFloatBytes > 0) then
     if (FindProc('SlBlob') < 0) or (FindProc('SlUnblob') < 0) then
       Error('stackless generator: record support needs slgen SlBlob/SlUnblob (update lib/rtl/slgen.pas in scope)');
 
@@ -3327,6 +3435,13 @@ begin
     SymGenSlot[i] := CurGenSlotNext;
     Inc(CurGenSlotNext);
   end;
+  { Record where each declared parameter landed, for callers compiled after
+    this scope's symbols are gone (GenArgSlotOff). }
+  for i := 1 to Procs[procIdx].ParamCount - 1 do
+    if (i <= SL_MAX_PARAMS) and (Procs[procIdx].Params[i].SymIdx >= 0) and
+       (SymGenSlot[Procs[procIdx].Params[i].SymIdx] >= 0) then
+      ProcGenArgOff[procIdx * (SL_MAX_PARAMS + 1) + i] :=
+        SL_OFF_SLOTS + 8 * SymGenSlot[Procs[procIdx].Params[i].SymIdx] + 1;
 end;
 
 { `for c in <a string VALUE>` — materialise the string into a hidden local and

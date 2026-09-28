@@ -19847,6 +19847,22 @@ test-core: $(COMPILER)
 	# generator must agree on.
 	./$(COMPILER) test/test_stackless_gen_string_param.pas $(TESTTMP)/test_slg_sparam26
 	tools/expect_same.sh test_slg_sparam26 "$$($(TESTTMP)/test_slg_sparam26)" "$$(printf '4 8 \n4 8 \n4 8 \n1 10 4 40 5 ')"
+	# A float parameter, local and element of a stackless generator ride their
+	# slots BITWISE: SlSet/SlGet convert numerically, so 2.5 arrived as
+	# 4612811918334230528.00 and a yielded Double came out as its bit pattern.
+	# bug-a-a-float-parameter-of-a-stackless-generator-arrives-as-its-bit-pattern
+	./$(COMPILER) test/test_stackless_float_param_and_element.pas $(TESTTMP)/test_slg_float26
+	tools/expect_same.sh test_slg_float26 "$$($(TESTTMP)/test_slg_float26)" "$$(cat test/test_stackless_float_param_and_element.expected)"
+	# The call site read each argument slot through the parameter SYMBOL, which a
+	# later generator had reused: `1 3 0` for `1 2 3`, silently.
+	# bug-a-a-stackless-generator-called-after-a-later-generator-seeds-the-wrong-slots
+	./$(COMPILER) test/test_stackless_generator_called_after_a_later_generator.pas $(TESTTMP)/test_slg_later26
+	tools/expect_same.sh test_slg_later26 "$$($(TESTTMP)/test_slg_later26)" "$$(cat test/test_stackless_generator_called_after_a_later_generator.expected)"
+	# Host leg of the Nil Python cross-target fixture: its str-literal generator
+	# block segfaulted here too (the parameter is inferred AnsiString and the
+	# literal went into the slot raw). bug-nilpy-a-generator-called-with-a-str-literal-segfaults
+	./$(COMPILER) test/test_nilpy_cross32_values.py $(TESTTMP)/test_cross32v26
+	tools/expect_same.sh test_cross32v26 "$$($(TESTTMP)/test_cross32v26)" "$$(cat test/test_nilpy_cross32_values.expected)"
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_scheduler26
 	tools/expect_same.sh test_scheduler26 "$$($(TESTTMP)/test_scheduler26)" "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_scheduler_exc26
@@ -29359,6 +29375,37 @@ test-i386: $(COMPILER)
 	# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
 	./$(COMPILER) --target=i386 test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/genpromo_i386
 	tools/expect_same.sh i386/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh i386 $(TESTTMP)/genpromo_i386)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
+	# The 2026-09-28 Nil Python cross-target differential: the values that
+	# differed from x86-64/CPython on the 32-bit targets, one block per ticket
+	# (named in the file). On the compiler one commit back this row raises on
+	# i386 and saturates int(float) at 2^31 on arm32.
+	./$(COMPILER) --target=i386 test/test_nilpy_cross32_values.py $(TESTTMP)/cross32v_i386
+	tools/expect_same.sh i386/test_nilpy_cross32_values "$$(tools/run_target.sh i386 $(TESTTMP)/cross32v_i386)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	# Stackless float parameter/local/element (bit pattern or garbage one commit
+	# back) and a generator called after a later one (`1 3 0`, every target).
+	./$(COMPILER) --target=i386 test/test_stackless_float_param_and_element.pas $(TESTTMP)/slfloat_i386
+	tools/expect_same.sh i386/test_stackless_float_param_and_element "$$(tools/run_target.sh i386 $(TESTTMP)/slfloat_i386)" "$$(cat test/test_stackless_float_param_and_element.expected)"
+	./$(COMPILER) --target=i386 test/test_stackless_generator_called_after_a_later_generator.pas $(TESTTMP)/sllater_i386
+	tools/expect_same.sh i386/test_stackless_generator_called_after_a_later_generator "$$(tools/run_target.sh i386 $(TESTTMP)/sllater_i386)" "$$(cat test/test_stackless_generator_called_after_a_later_generator.expected)"
+	# Corpus tests the 2026-09-28 differential found wrong on 32-bit targets:
+	# an Int64 thunk result read past the callee's width (open-world dispatch,
+	# pyeval host returns, len of a shim), round/trunc of a 32-bit int with a
+	# garbage high word on arm32, and a top-bit object address printed negative.
+	# bug-a-a-host-method-result-is-read-past-its-width-on-32-bit-targets
+	# bug-a-arm32-round-or-trunc-of-a-32-bit-int-leaves-the-high-word-garbage
+	# bug-nilpy-a-32-bit-object-repr-prints-a-negative-address
+	./$(COMPILER) --target=i386 test/test_nilpy_round_keeps_intness.npy $(TESTTMP)/test_nilpy_round_keeps_intness_i386
+	tools/expect_same.sh i386/test_nilpy_round_keeps_intness "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_round_keeps_intness_i386)" "$$(cat test/test_nilpy_round_keeps_intness.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_round_ndigits_keeps_int.npy $(TESTTMP)/test_nilpy_round_ndigits_keeps_int_i386
+	tools/expect_same.sh i386/test_nilpy_round_ndigits_keeps_int "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_round_ndigits_keeps_int_i386)" "$$(cat test/test_nilpy_round_ndigits_keeps_int.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_len_of_a_variant_shim_object.npy $(TESTTMP)/test_nilpy_len_of_a_variant_shim_object_i386
+	tools/expect_same.sh i386/test_nilpy_len_of_a_variant_shim_object "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_len_of_a_variant_shim_object_i386)" "$$(cat test/test_nilpy_len_of_a_variant_shim_object.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_open_world_method_dispatch.npy $(TESTTMP)/test_nilpy_open_world_method_dispatch_i386
+	tools/expect_same.sh i386/test_nilpy_open_world_method_dispatch "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_open_world_method_dispatch_i386)" "$$(cat test/test_nilpy_open_world_method_dispatch.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_pyeval_host_arity_and_returns.npy $(TESTTMP)/test_nilpy_pyeval_host_arity_and_returns_i386
+	tools/expect_same.sh i386/test_nilpy_pyeval_host_arity_and_returns "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_pyeval_host_arity_and_returns_i386)" "$$(cat test/test_nilpy_pyeval_host_arity_and_returns.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_container_element_repr.npy $(TESTTMP)/test_nilpy_container_element_repr_i386
+	tools/expect_same.sh i386/test_nilpy_container_element_repr "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_container_element_repr_i386)" "$$(cat test/test_nilpy_container_element_repr.expected)"
 
 test-aarch64: $(COMPILER)
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
@@ -29789,6 +29836,16 @@ test-aarch64: $(COMPILER)
 	# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
 	./$(COMPILER) --target=aarch64 test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/genpromo_a64
 	tools/expect_same.sh aarch64/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh aarch64 $(TESTTMP)/genpromo_a64)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
+	# The 2026-09-28 Nil Python cross-target differential fixture; on aarch64
+	# only its str-literal generator block ever failed (rc=139 one commit back).
+	./$(COMPILER) --target=aarch64 test/test_nilpy_cross32_values.py $(TESTTMP)/cross32v_a64
+	tools/expect_same.sh aarch64/test_nilpy_cross32_values "$$(tools/run_target.sh aarch64 $(TESTTMP)/cross32v_a64)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	# Stackless float parameter/local/element (bit pattern or garbage one commit
+	# back) and a generator called after a later one (`1 3 0`, every target).
+	./$(COMPILER) --target=aarch64 test/test_stackless_float_param_and_element.pas $(TESTTMP)/slfloat_a64
+	tools/expect_same.sh aarch64/test_stackless_float_param_and_element "$$(tools/run_target.sh aarch64 $(TESTTMP)/slfloat_a64)" "$$(cat test/test_stackless_float_param_and_element.expected)"
+	./$(COMPILER) --target=aarch64 test/test_stackless_generator_called_after_a_later_generator.pas $(TESTTMP)/sllater_a64
+	tools/expect_same.sh aarch64/test_stackless_generator_called_after_a_later_generator "$$(tools/run_target.sh aarch64 $(TESTTMP)/sllater_a64)" "$$(cat test/test_stackless_generator_called_after_a_later_generator.expected)"
 	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2_x64
 	tools/expect_same.sh aarch64/test_aarch64_conf2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" "$$($(TESTTMP)/test_aarch64_conf2_x64)"
@@ -34449,6 +34506,46 @@ test-arm32: $(COMPILER)
 	# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
 	./$(COMPILER) --target=arm32 test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/genpromo_a32
 	tools/expect_same.sh arm32/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh arm32 $(TESTTMP)/genpromo_a32)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
+	# The 2026-09-28 Nil Python cross-target differential: the values that
+	# differed from x86-64/CPython on the 32-bit targets, one block per ticket
+	# (named in the file). On the compiler one commit back this row raises on
+	# i386 and saturates int(float) at 2^31 on arm32.
+	./$(COMPILER) --target=arm32 test/test_nilpy_cross32_values.py $(TESTTMP)/cross32v_a32
+	tools/expect_same.sh arm32/test_nilpy_cross32_values "$$(tools/run_target.sh arm32 $(TESTTMP)/cross32v_a32)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	# Stackless float parameter/local/element (bit pattern or garbage one commit
+	# back) and a generator called after a later one (`1 3 0`, every target).
+	./$(COMPILER) --target=arm32 test/test_stackless_float_param_and_element.pas $(TESTTMP)/slfloat_a32
+	tools/expect_same.sh arm32/test_stackless_float_param_and_element "$$(tools/run_target.sh arm32 $(TESTTMP)/slfloat_a32)" "$$(cat test/test_stackless_float_param_and_element.expected)"
+	./$(COMPILER) --target=arm32 test/test_stackless_generator_called_after_a_later_generator.pas $(TESTTMP)/sllater_a32
+	tools/expect_same.sh arm32/test_stackless_generator_called_after_a_later_generator "$$(tools/run_target.sh arm32 $(TESTTMP)/sllater_a32)" "$$(cat test/test_stackless_generator_called_after_a_later_generator.expected)"
+	# Corpus tests the 2026-09-28 differential found wrong on 32-bit targets:
+	# an Int64 thunk result read past the callee's width (open-world dispatch,
+	# pyeval host returns, len of a shim), round/trunc of a 32-bit int with a
+	# garbage high word on arm32, and a top-bit object address printed negative.
+	# bug-a-a-host-method-result-is-read-past-its-width-on-32-bit-targets
+	# bug-a-arm32-round-or-trunc-of-a-32-bit-int-leaves-the-high-word-garbage
+	# bug-nilpy-a-32-bit-object-repr-prints-a-negative-address
+	./$(COMPILER) --target=arm32 test/test_nilpy_round_keeps_intness.npy $(TESTTMP)/test_nilpy_round_keeps_intness_a32
+	tools/expect_same.sh arm32/test_nilpy_round_keeps_intness "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_round_keeps_intness_a32)" "$$(cat test/test_nilpy_round_keeps_intness.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_round_ndigits_keeps_int.npy $(TESTTMP)/test_nilpy_round_ndigits_keeps_int_a32
+	tools/expect_same.sh arm32/test_nilpy_round_ndigits_keeps_int "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_round_ndigits_keeps_int_a32)" "$$(cat test/test_nilpy_round_ndigits_keeps_int.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_len_of_a_variant_shim_object.npy $(TESTTMP)/test_nilpy_len_of_a_variant_shim_object_a32
+	tools/expect_same.sh arm32/test_nilpy_len_of_a_variant_shim_object "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_len_of_a_variant_shim_object_a32)" "$$(cat test/test_nilpy_len_of_a_variant_shim_object.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_open_world_method_dispatch.npy $(TESTTMP)/test_nilpy_open_world_method_dispatch_a32
+	tools/expect_same.sh arm32/test_nilpy_open_world_method_dispatch "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_open_world_method_dispatch_a32)" "$$(cat test/test_nilpy_open_world_method_dispatch.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_pyeval_host_arity_and_returns.npy $(TESTTMP)/test_nilpy_pyeval_host_arity_and_returns_a32
+	tools/expect_same.sh arm32/test_nilpy_pyeval_host_arity_and_returns "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_pyeval_host_arity_and_returns_a32)" "$$(cat test/test_nilpy_pyeval_host_arity_and_returns.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_container_element_repr.npy $(TESTTMP)/test_nilpy_container_element_repr_a32
+	tools/expect_same.sh arm32/test_nilpy_container_element_repr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_container_element_repr_a32)" "$$(cat test/test_nilpy_container_element_repr.expected)"
+	# A def stored into a Variant field was tagged int on arm32 (the IR_VAR_STORE
+	# and IR_VAR_BOX arms never asked IRSrcIsCallable), so calling it back failed.
+	# bug-a-arm32-a-def-stored-into-a-variant-field-is-tagged-int
+	./$(COMPILER) --target=arm32 test/test_nilpy_callable_field_all_shapes.npy $(TESTTMP)/test_nilpy_callable_field_all_shapes_a32
+	tools/expect_same.sh arm32/test_nilpy_callable_field_all_shapes "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_callable_field_all_shapes_a32)" "$$(cat test/test_nilpy_callable_field_all_shapes.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_callable_field_call_returns.npy $(TESTTMP)/test_nilpy_callable_field_call_returns_a32
+	tools/expect_same.sh arm32/test_nilpy_callable_field_call_returns "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_callable_field_call_returns_a32)" "$$(cat test/test_nilpy_callable_field_call_returns.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_callable_field_wide_arity.npy $(TESTTMP)/test_nilpy_callable_field_wide_arity_a32
+	tools/expect_same.sh arm32/test_nilpy_callable_field_wide_arity "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_callable_field_wide_arity_a32)" "$$(cat test/test_nilpy_callable_field_wide_arity.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_lifted_closure_slots_on_32bit.npy $(TESTTMP)/lclslots_a32
 	tools/expect_same.sh arm32/test_nilpy_lifted_closure_slots "$$(tools/run_target.sh arm32 $(TESTTMP)/lclslots_a32)" "$$(cat test/test_nilpy_lifted_closure_slots_on_32bit.expected)"
 

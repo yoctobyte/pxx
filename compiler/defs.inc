@@ -5218,6 +5218,7 @@ var
   ProcGenElemRec  : array of Integer;   { stackless: record id when the element type is a record (REC_NONE otherwise); CURRENT then holds a POINTER to a record region at the instance tail }
   ProcGenParamCnt : array of Integer;   { stackless: declared param count (the ABI param is the single hidden instance ptr) }
   ProcGenInstSize : array of Integer;   { stackless: instance byte size (header + persistent slots) }
+  ProcGenArgOff   : array of Integer;   { stackless: [proc*(SL_MAX_PARAMS+1) + k] = instance offset of declared param k, PLUS ONE (0 = not recorded); see GenArgSlotOff }
   ProcRetElemTk : array of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array of Integer;     { element record id of a dyn-array result }
   ProcRetStrElemTk : array of Integer; { managed-string RESULT: the element width as a TTypeKind ord -- Ord(tyChar) for a byte string, Ord(tyWideChar) for a wide one; 0 = not a managed string. The return half of the fifth carrier (see ProcParamStrElemTk); a call node has no symbol and no field to ask, so the callee's row is the only place the width can live -- the same argument ProcRetSemId makes for an enum-typed result. Read by ASTStrElemTkOf's AN_CALL arm. Normalised on the way in, so 0 means "not a managed string" and never doubles as "narrow". feature-unicodestring-model }
@@ -7385,6 +7386,8 @@ var
   CurGenElemOff   : Integer;  { record element: byte offset of the CURRENT record region in the instance (-1 = scalar element) }
   CurGenElemRecId : Integer;  { record element: record id of the yielded record type }
   CurGenElemIsVariant : Boolean; { variant element: the CURRENT region holds a 16-byte variant, stored by ARC-correct assignment (Nil Python's values are variants) }
+  CurGenElemFloatBytes : Integer;  { float element: 4/8, the width its bits ride the CURRENT word at (SLFloatSlotBytes); 0 otherwise }
+  CurGenElemFloatTk : TTypeKind;   { the element kind, for the yield's conversion temp }
   GenStateLabelIdx : array[0..MAX_GEN_STATES-1] of Integer; { resume label (GotoLabel slot) per state }
   SigRestorerAddr : Integer;  { code offset of the SA_RESTORER stub (rt_sigreturn) — x86-64 requires a userspace restorer }
   SigDispatchAddr : Integer;  { code offset of the shared signal dispatch handler (hook table -> call, else redefault + re-raise) }

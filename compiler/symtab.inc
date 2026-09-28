@@ -14495,7 +14495,7 @@ begin
   SetLength(ProcIsAsync, n);  SetLength(ProcIsGenerator, n);  SetLength(ProcIsStackless, n);
   SetLength(ProcIram, n);  SetLength(ProcIsInterrupt, n);  SetLength(ProcBodyEnd, n);
   SetLength(ProcDbgMain, n);  SetLength(ProcGenElemTk, n);  SetLength(ProcGenElemRec, n);
-  SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
+  SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcGenArgOff, n * (SL_MAX_PARAMS + 1));  SetLength(ProcRetElemTk, n);
   SetLength(ProcRetStrElemTk, n);  SetLength(ProcRetStrCap, n);
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);  SetLength(ProcRetPtrAlias, n);
   SetLength(ProcRetPtrElemStrTk, n);

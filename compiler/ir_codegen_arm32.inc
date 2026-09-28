@@ -2866,8 +2866,21 @@ begin
                   (bug-c-int64-to-double-cast-truncates-on-32bit). Pass the real
                   source type; EmitIntToD0Arm32Tk already routes 64-bit through
                   __pxx_l2d / __pxx_ul2d and unsigned-32 through vcvt.f64.u32. }
-                EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[valNode]));
-              { 203/204: r0 already holds the value }
+                EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[valNode]))
+              { 203/204: r0 already holds the value -- but the RESULT is 64-bit
+                and a 32-bit source never set r1, so `round(7)` printed
+                582096337806295047 (7 under a garbage high word). Widen by the
+                SOURCE's signedness, as i386 does with cdq; a 64-bit source
+                already fills r0:r1.
+                bug-a-arm32-round-or-trunc-of-a-32-bit-int-leaves-the-high-word-garbage }
+              else if Is64BitArm32(IntToTypeKind(IRTk[node])) and
+                      (not Is64BitArm32(IntToTypeKind(IRTk[valNode]))) then
+              begin
+                if TypeSigned(IntToTypeKind(IRTk[valNode])) then
+                  EmitI32($E1A01FC0)                { mov r1, r0, asr #31 }
+                else
+                  EmitI32($E3A01000);               { mov r1, #0 }
+              end;
             end;
             Exit;
           end
@@ -4906,6 +4919,13 @@ begin
         else
         begin
           j := VariantTagForTk(tk, 'Variant :=');
+          { A CODE ADDRESS overrides the type-kind answer -- defs.inc's
+            VT_CALLABLE_TAG; the x86-64 arm carries the full note. arm32 was
+            the one backend without this line, so `w.native = bump` into a
+            variant field stored the address as an INT: `callable(w.native)`
+            was False and calling it raised "object is not callable".
+            bug-a-arm32-a-def-stored-into-a-variant-field-is-tagged-int }
+          if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
           if (tk = tyString) or (tk = tyAnsiString) then
           begin
             if tk = tyString then
@@ -4974,6 +4994,8 @@ begin
         { Box a scalar into a temp variant (IRA = temp addr); addr -> r0. }
         tk := IntToTypeKind(IRC[node]);
         j := VariantTagForTk(tk, 'Variant operand');
+        { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
+        if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
         if (tk = tyString) or (tk = tyAnsiString) then
         begin
           if tk = tyString then

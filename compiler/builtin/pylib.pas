@@ -3248,6 +3248,8 @@ function PySigFindParam(sig: Pointer; const nm: AnsiString): Integer;
 function PyClsAttrSlotOf(cls: Pointer; const name: AnsiString;
                          var kind: Int64): Pointer;
 
+function PyNarrowRet(v: Int64; rk: Integer): Int64;
+
 implementation
 
 { Python's whitespace set for the argument-less strip()/isspace():
@@ -3256,6 +3258,41 @@ function PyIsSpaceCh(c: Char): Boolean;
 begin
   PyIsSpaceCh := (c = ' ') or (c = Chr(9)) or (c = Chr(10)) or
                  (c = Chr(11)) or (c = Chr(12)) or (c = Chr(13));
+end;
+
+{ Narrow a result read through an Int64-returning thunk to the kind the callee
+  actually returns. The callee defines only its own width: a Boolean sets the
+  low byte, an Integer the low word, and on a 32-bit target NOTHING sets the
+  high word of the Int64 pair (r1 on arm32, edx on i386) -- so `pret <> 0` read
+  whatever the callee's last computation left there. `canopy.hot(1.5)` on a
+  method that computed False came back True on arm32 once the float compare
+  happened to leave r1 non-zero, and `contains` did the same on i386; `len`
+  of an `array.array` read 68719476739 for 3 through PyUserObjNoArgMeth.
+  Used by pyeval's host-call bridge and by the user-object dunder thunks here.
+  bug-a-a-host-method-result-is-read-past-its-width-on-32-bit-targets }
+function PyNarrowRet(v: Int64; rk: Integer): Int64;
+begin
+  Result := v;
+  case rk of
+    2, 3, 8: Result := v and $FF;
+    7:  begin Result := v and $FF; if Result >= $80 then Result := Result - $100; end;
+    10: Result := v and $FFFF;
+    9:  begin Result := v and $FFFF; if Result >= $8000 then Result := Result - $10000; end;
+    12: Result := v and $FFFFFFFF;
+    1, 11:
+      begin
+        Result := v and $FFFFFFFF;
+        if Result >= $80000000 then Result := Result - $100000000;
+      end;
+{$ifdef CPU32}
+    15:
+      begin
+        Result := v and $FFFFFFFF;
+        if Result >= $80000000 then Result := Result - $100000000;
+      end;
+    6, 16, 17: Result := v and $FFFFFFFF;
+{$endif}
+  end;
 end;
 
 { Case mapping for ONE code point, the simple (1:1) part of Unicode's rules.
@@ -16663,10 +16700,12 @@ begin
 end;
 
 function pyiter_repr(it: TPyIter): AnsiString;
-var a: NativeInt; d: Integer; hx: AnsiString;
+var a: Int64; d: Integer; hx: AnsiString;
 begin
   if it = nil then begin Result := 'None'; Exit; end;
-  a := NativeInt(Pointer(it));
+  { zero-extended: a top-bit address on a 32-bit target was negative and the
+    loop below printed no digits at all (see the default object repr) }
+  a := Int64(NativeUInt(Pointer(it)));
   hx := '';
   if a = 0 then hx := '0';
   while a > 0 do
@@ -16866,13 +16905,30 @@ type
             filled, which is a compiler bug and not a value.
       Names TotN pointers to NUL-terminated parameter names -- what a KEYWORD
             argument through a callable value matches against. }
+  { EVERY FIELD IS AN 8-BYTE WORD, on every target: the compiler lays the
+    record down at fixed offsets 0/8/16/24/32/40 (PYSIG_OFF_* in defs.inc),
+    whatever the pointer size. A bare `Pointer` is 4 bytes on a 32-bit target,
+    so without the pads i386 (Int64 aligned to 4) read ReqN at 4 and every
+    field after it shifted -- `f = q; f(1)` over `def q(a, i=7)` printed
+    `(, 1)` and a star-args one segfaulted -- and arm32 (Int64 aligned to 8)
+    read Names at 36, one word short.
+    bug-a-a-callable-values-signature-record-is-misread-on-32-bit-targets }
   TPySigRec = record
     Code: Pointer;
+{$ifdef CPU32}
+    CodePad: LongWord;
+{$endif}
     ReqN, TotN, Star: Int64;
     Dflts: Pointer;
+{$ifdef CPU32}
+    DfltsPad: LongWord;
+{$endif}
     { TotN pointers to NUL-terminated parameter names. nil when unknown, which
       the dispatcher treats exactly as it did before names existed. }
     Names: Pointer;
+{$ifdef CPU32}
+    NamesPad: LongWord;
+{$endif}
   end;
   PPySigRec = ^TPySigRec;
   PPointer = ^Pointer;
@@ -18620,11 +18676,46 @@ end;
   DIGIT-PRODUCING step differs, and for a bignum only base 10 can be produced
   here — pylib does not see promocore, so a base conversion is not available and
   is REFUSED rather than answered with a wrapped machine int. }
+{ Does this exact decimal fit an Int64, and if so what is it? On a 32-bit
+  target a promotable int past 32 bits is ALREADY arbitrary-precision, so a
+  value x86-64 formats as a machine int -- `"%x" % -2**63` -- reached the
+  format spec as a decimal string and was refused for every base but 10. An
+  Int64-sized value takes the machine path on every target this way, and only
+  a genuinely wider one is refused, as on x86-64.
+  bug-nilpy-a-32-bit-target-refuses-x-and-o-on-an-int64-range-value }
+function PyDecFitsInt64(const s: AnsiString; var v: Int64): Boolean;
+var k, d: Integer; neg: Boolean; u, lim: UInt64;
+begin
+  Result := False;
+  k := 1;
+  neg := (Length(s) > 0) and (s[1] = '-');
+  if neg then k := 2;
+  if k > Length(s) then Exit;
+  if neg then lim := UInt64(9223372036854775807) + 1
+  else lim := UInt64(9223372036854775807);
+  u := 0;
+  while k <= Length(s) do
+  begin
+    if (s[k] < '0') or (s[k] > '9') then Exit;
+    d := Ord(s[k]) - Ord('0');
+    if u > (lim - UInt64(d)) div 10 then Exit;
+    u := u * 10 + UInt64(d);
+    Inc(k);
+  end;
+  if neg then v := Int64(UInt64(0) - u) else v := Int64(u);
+  Result := True;
+end;
+
 function PyFormatIntEx(i: Int64; const bigDec: AnsiString; const spec: AnsiString): AnsiString;
 var p, width, need, zi: Integer; zero, leftAlign, grouped, alt: Boolean;
     kind, fillCh, align, signCh, groupCh: Char;
     body, altPre, lead, zeros: AnsiString;
 begin
+  if (bigDec <> '') and PyDecFitsInt64(bigDec, i) then
+  begin
+    Result := PyFormatIntEx(i, '', spec);
+    Exit;
+  end;
   p := 1;
   zero := False;
   leftAlign := False;
@@ -21888,7 +21979,7 @@ begin
     if mi^.RetKind = 22 then begin vv := TVarArgV(mi^.Code); res := vv(Pointer(o), nv); end
     else if mi^.RetKind = 6 then begin vo := TVarArgO(mi^.Code); res := TObject(vo(Pointer(o), nv)); end
     else if (mi^.RetKind = 13) or (mi^.RetKind = 1) or (mi^.RetKind = 15) or
-            (mi^.RetKind = 11) then begin vi := TVarArgI(mi^.Code); res := vi(Pointer(o), nv); end
+            (mi^.RetKind = 11) then begin vi := TVarArgI(mi^.Code); res := PyNarrowRet(vi(Pointer(o), nv), mi^.RetKind); end
     else if mi^.RetKind = 23 then begin vs := TVarArgS(mi^.Code); res := vs(Pointer(o), nv); end
     else if mi^.RetKind = 2 then begin vb := TVarArgB(mi^.Code); res := vb(Pointer(o), nv); end
     else if mi^.RetKind = 19 then begin vd := TVarArgD(mi^.Code); res := vd(Pointer(o), nv); end
@@ -21901,7 +21992,7 @@ begin
     if mi^.RetKind = 22 then begin gv := TStrArgV(mi^.Code); res := gv(Pointer(o), name); end
     else if mi^.RetKind = 6 then begin go := TStrArgO(mi^.Code); res := TObject(go(Pointer(o), name)); end
     else if (mi^.RetKind = 13) or (mi^.RetKind = 1) or (mi^.RetKind = 15) or
-            (mi^.RetKind = 11) then begin gi := TStrArgI(mi^.Code); res := gi(Pointer(o), name); end
+            (mi^.RetKind = 11) then begin gi := TStrArgI(mi^.Code); res := PyNarrowRet(gi(Pointer(o), name), mi^.RetKind); end
     else if mi^.RetKind = 23 then begin gs := TStrArgS(mi^.Code); res := gs(Pointer(o), name); end
     else if mi^.RetKind = 2 then begin gb := TStrArgB(mi^.Code); res := gb(Pointer(o), name); end
     else if mi^.RetKind = 19 then begin gd := TStrArgD(mi^.Code); res := gd(Pointer(o), name); end
@@ -21984,7 +22075,7 @@ begin
      (mi^.RetKind = 11) then
   begin
     fi := TNoArgI(mi^.Code);
-    res := fi(Pointer(o));
+    res := PyNarrowRet(fi(Pointer(o)), mi^.RetKind);   { the callee set only its own width }
     PyUserObjNoArgMeth := True;
     Exit;
   end;
@@ -22540,7 +22631,10 @@ begin
       render — an object silently vanishing out of a printed container is the
       failure this ticket is about. }
     outS := '<__main__.' + TObject(o).ClassName
-             + ' object at ' + hex(Int64(NativeInt(Pointer(o)))) + '>';
+             { NativeUINT: on a 32-bit target a heap address with the top bit
+               set sign-extended into the Int64 and printed as `-0x358f3fa8`.
+               bug-nilpy-a-32-bit-object-repr-prints-a-negative-address }
+             + ' object at ' + hex(Int64(NativeUInt(Pointer(o)))) + '>';
     PyUserObjStr := True;
     Exit;
   end;

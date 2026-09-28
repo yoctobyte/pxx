@@ -1502,6 +1502,7 @@ begin
       end;
       if mixedInt then
       begin
+        pret := PyNarrowRet(pret, rk);
         if (rk = 6) or (rk = 17) then
         begin
           PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
@@ -1550,6 +1551,7 @@ begin
       4: begin pf4 := TPFn4(code); pret := pf4(vmobj, pa[0], pa[1], pa[2], pa[3]); end;
       5: begin pf5 := TPFn5(code); pret := pf5(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4]); end;
     end;
+    pret := PyNarrowRet(pret, rk);   { the callee set only its own width }
     { box the result by its kind: class/pointer -> VT_OBJECT; ordinal -> int;
       void (rk=0) -> None. }
     if (rk = 6) or (rk = 17) then
@@ -1666,15 +1668,16 @@ begin
   if (rk = 13) or (rk = 1) or (rk = 2) or (rk = 3) then
   begin
     case n of
-      0: begin if0 := TIFn0(code); res := pyvar_of_int(if0(vmobj)); end;
-      1: begin if1 := TIFn1(code); res := pyvar_of_int(if1(vmobj, a0)); end;
-      2: begin if2 := TIFn2(code); res := pyvar_of_int(if2(vmobj, a0, a1)); end;
-      3: begin if3 := TIFn3(code); res := pyvar_of_int(if3(vmobj, a0, a1, a2)); end;
-      4: begin if4 := TIFn4(code); res := pyvar_of_int(if4(vmobj, a0, a1, a2, a3)); end;
-      5: begin if5 := TIFn5(code); res := pyvar_of_int(if5(vmobj, a0, a1, a2, a3, a4)); end;
+      0: begin if0 := TIFn0(code); res := pyvar_of_int(PyNarrowRet(if0(vmobj), rk)); end;
+      1: begin if1 := TIFn1(code); res := pyvar_of_int(PyNarrowRet(if1(vmobj, a0), rk)); end;
+      2: begin if2 := TIFn2(code); res := pyvar_of_int(PyNarrowRet(if2(vmobj, a0, a1), rk)); end;
+      3: begin if3 := TIFn3(code); res := pyvar_of_int(PyNarrowRet(if3(vmobj, a0, a1, a2), rk)); end;
+      4: begin if4 := TIFn4(code); res := pyvar_of_int(PyNarrowRet(if4(vmobj, a0, a1, a2, a3), rk)); end;
+      5: begin if5 := TIFn5(code); res := pyvar_of_int(PyNarrowRet(if5(vmobj, a0, a1, a2, a3, a4), rk)); end;
     else
       begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
+    { (PyNarrowRet: the callee set only its own width -- see pylib.) }
     { A BOOLEAN return shares this family's ABI but not its Python type: boxed
       as an int it printed `1` where CPython prints `True`. Re-boxed by the
       declared kind after the call, so the one register-shaped family still

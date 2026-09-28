@@ -2288,6 +2288,12 @@ begin
       right (leftmost ends up deepest), so param i of n sits at
       [ebp + 8 + (n-1-i)*4]. Copy each into its frame slot; the caller cleans
       the arg area after the call. Ordinal by-value params only for now. }
+    { A stackless step function is called with the instance pointer ONLY, at
+      [ebp+8] (see the IR_CALL arm in ir_codegen386.inc); its declared params
+      are restored from the instance, so there is nothing else on the stack to
+      spill and nothing to count past `__genself`.
+      bug-a-i386-a-stackless-generator-called-through-a-cursor-reads-its-instance-from-the-wrong-slot }
+    if ProcIsStackless[procIdx] and (nparams > 1) then nparams := 1;
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
