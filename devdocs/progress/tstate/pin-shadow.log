@@ -1161,3 +1161,5 @@
 2026-09-28T16:08:51Z	borg	5c047cebce145e5f747ac971a499ed1edc2ea645	would NOT pin 5c047cebce14 — 5 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_cdecl_bodied_narrow.pas@2, test-core#src:test/test_cdecl_bodied_wide.pas@2, test-core#src:test/test_cdecl_fnptr_aggregate_result.pas, test-core#src:test/test_exception_typed.pas, test-threads#src:test/lib_signals_fpc.pas
 2026-09-28T16:54:09Z	borg	ddaa07ad7135ebde2e392bc9a4d5552adad899e7	would NOT pin ddaa07ad7135 — 1 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_exception_typed.pas
 2026-09-28T18:07:37Z	borg	f5b9079226fbe6f4912f1810191eb2cf575430c8	would-pin PENDING f5b9079226fb — qualifies, streak 1/2
+2026-09-28T18:43:12Z	borg	bda9991c249b971bf60432ff61ce3300a926df98	WOULD PIN bda9991c249b — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 2/2
+2026-09-28T18:43:12Z	borg	bda9991c249b971bf60432ff61ce3300a926df98	AUTO-PIN DECLINED — HEAD is b427e54ccff6, not the tested bda9991c249b
