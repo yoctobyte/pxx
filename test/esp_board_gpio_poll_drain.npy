@@ -30,6 +30,22 @@
 # does, rather than against a hardcoded 16 -- which would pass for the wrong
 # reason the day the default moves.
 #
+# MEASURED 2026-09-28 by frankb-12 on real silicon, v450 (tree 3503825c2f,
+# compiler binary c19cc2d531e4). ESP32-C3 and ESP32-S3 identical, rc=0:
+#
+#   inout 0 / armed 0 / budget 16
+#   after-edges isr 10 pending 10 delivered 0 seen 0
+#   poll1 returned 10 seen 10 pending 0
+#   over-budget isr-added 40 pending 40 dropped 0
+#   poll2 returned 16 budget 16 pending-left 24
+#   drained polls 3 pending 0
+#   nested rc 0 in-drain 1
+#   off 0 / final isr 53 delivered 53 dropped 0 seen 53
+#   POLL-DRAIN-PY-DONE failures 0
+#
+# Numerically IDENTICAL to the Pascal twin on both chips, which is the point of
+# having two: the Python drain is not a weaker path, it is the same path.
+#
 # NO WIRING NEEDED: the pin is INPUT_OUTPUT and the pad drives its own input.
 # Under QEMU there are NO edges (no GPIO input path modelled), and a run with
 # zero edges satisfies every invariant below trivially -- so it fails loudly

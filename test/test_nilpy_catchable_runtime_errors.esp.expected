@@ -1,0 +1,4 @@
+caught int() ValueError
+caught float() ValueError
+caught IndexError
+caught KeyError

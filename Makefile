@@ -23743,6 +23743,77 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_sfdouble26 "$$($(TESTTMP)/sweep_sfdouble26 | tail -6)" "$$(printf 'add fails : 0\nsub fails : 0\nmul fails : 0\ndiv fails : 0\ncmp fails : 0\nRESULT: PASS')"
 	./$(COMPILER) test/test_softfloat_single.pas $(TESTTMP)/sweep_sfsingle26
 	tools/expect_same.sh sweep_sfsingle26 "$$($(TESTTMP)/sweep_sfsingle26 | tail -7)" "$$(printf 'add fails : 0\nsub fails : 0\nmul fails : 0\ndiv fails : 0   (1-ulp tolerated: 0)\ncmp fails : 0\nsubnormal flushes (tolerated): 0\nRESULT: PASS')"
+	# WHAT EACH TARGET DOES WITH SUBNORMAL DOUBLES, pinned per target. The two
+	# rows above check the soft-float KERNELS against x86-64 hardware; this is the
+	# same subject from the other end -- what a Pascal program's `*`, `+`, `-` and
+	# `/` actually return on each backend.
+	#
+	# riscv32 and xtensa FLUSH: every operation with a subnormal operand, and
+	# every result underflowing into the subnormal range, returns zero. That is
+	# not news to compiler/builtin/softfloat.pas, whose header has said
+	# "subnormals flush to zero (documented follow-up)" since the unit was
+	# written, and those two are exactly the targets that lower double arithmetic
+	# onto it. It was news to everything OUTSIDE that file, and the reason is
+	# directly above: BOTH sweeps tolerate the flush by construction (dFlushOK,
+	# FlushOK), and the double one does not even count it -- so `RESULT: PASS`
+	# there was never evidence that subnormals work, and the single row's
+	# `subnormal flushes (tolerated): 0` could not catch it either, because its
+	# grid holds no subnormal operand and only a RESULT can land in the range.
+	#
+	# It surfaced as math.frexp(5e-324) giving (0.5, -1086) instead of
+	# (0.5, -1073). pymath_frexp is CORRECT: it normalises by multiplying by
+	# 2**64, and on these two targets that multiply returns zero.
+	#
+	# THE POPULATION IS NOT "32-BIT TARGETS" -- wasm32 is 32-bit and is IEEE
+	# correct, which is why it is in the list below rather than assumed.
+	#
+	# THE EXPECTED MODE IS PINNED PER TARGET, and that is what makes a green row
+	# worth having: a softfloat target that starts preserving subnormals turns red
+	# until someone writes down that it now does, and a hardware target that
+	# starts flushing turns red at once. The test is green under either mode BY
+	# DESIGN -- it decides the mode from one probe and then requires all nine
+	# operations to agree -- so what it catches is a HALF-implemented subnormal
+	# path, which is what a partial fix looks like. Storage and comparison are
+	# asserted mode-independently and are correct on every target today.
+	#
+	# Whether softfloat should gain gradual underflow is the owner's call and not
+	# this row's; see docs/reference/known-issues.md. If it does, the fix is the
+	# word `flush` below, not the test.
+	# Measured 2026-09-28 at tree 3109649ec4, compiler binary 8d5d0f2653f0 (the
+	# fixedpoint that tree reproduces): seven targets, rc=0. First measured on
+	# 1634f6483109 and re-measured byte-identically -- that earlier binary is the
+	# fixedpoint of an EARLIER tip (947170c4cb), so it labelled a real build but not
+	# the tree this landed on, and a block naming it could not be reproduced here.
+	#
+	# RE-CONFIRMED at tree a7cbacc6c6, binary f545c8410b32, 7/7 and the same mode
+	# per target -- and that re-run was not a formality: the commits in between
+	# touch ir_codegen_riscv32.inc, ir_codegen_xtensa.inc and ir_codegen_wasm32.inc,
+	# which are three of this row's seven backends, one of them in a float fix
+	# (cafc739cbf). Independently re-measured by frankd-90 on EIGHT targets for
+	# docs/reference/known-issues.md, adding Xtensa WINDOWED, which this row does
+	# not cover: the hosted xtensa arm here is call0, as every hosted xtensa row is.
+	@ok=0; \
+	for t in native i386 arm32 aarch64 riscv32 xtensa wasm32; do \
+	  case $$t in \
+	    native)  want=gradual; \
+	             ./$(COMPILER) test/test_subnormal_double_arithmetic.pas $(TESTTMP)/subnorm26 >/dev/null || { echo "subnormal native compile FAIL"; exit 1; }; \
+	             bin=$(TESTTMP)/subnorm26; run="";; \
+	    wasm32)  want=gradual; \
+	             ./$(COMPILER) --target=wasm32 test/test_subnormal_double_arithmetic.pas $(TESTTMP)/subnorm.wasm >/dev/null || { echo "subnormal wasm32 compile FAIL"; exit 1; }; \
+	             bin=$(TESTTMP)/subnorm.wasm; run="tools/run_target.sh wasm32";; \
+	    xtensa)  want=flush; \
+	             command -v qemu-xtensa >/dev/null 2>&1 || { echo "  subnormal: qemu-xtensa absent, xtensa NOT verified"; continue; }; \
+	             ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_subnormal_double_arithmetic.pas $(TESTTMP)/subnorm_xt >/dev/null || { echo "subnormal xtensa compile FAIL"; exit 1; }; \
+	             bin=$(TESTTMP)/subnorm_xt; run="tools/run_target.sh xtensa";; \
+	    *)       case $$t in i386) q=qemu-i386; want=gradual;; arm32) q=qemu-arm; want=gradual;; aarch64) q=qemu-aarch64; want=gradual;; riscv32) q=qemu-riscv32; want=flush;; esac; \
+	             command -v $$q >/dev/null 2>&1 || { echo "  subnormal: $$q absent, $$t NOT verified"; continue; }; \
+	             ./$(COMPILER) --target=$$t --platform=posix test/test_subnormal_double_arithmetic.pas $(TESTTMP)/subnorm_$$t >/dev/null || { echo "subnormal $$t compile FAIL"; exit 1; }; \
+	             bin=$(TESTTMP)/subnorm_$$t; run="tools/run_target.sh $$t";; \
+	  esac; \
+	  tools/expect_same.sh subnormal/$$t "$$($$run $$bin)" "$$(printf 'SUBNORMAL-MODE %s\nSUBNORMAL-CHECK failures=0' $$want)" || exit 1; \
+	  ok=$$((ok+1)); \
+	done; \
+	echo "  subnormal doubles: $$ok target(s) measured, mode pinned per target"
 	# The three -O3 residency probes. Each header states the same contract --
 	# "run at -O0/-O1/-O2/-O3, all four must agree" -- so the cross-O rows are
 	# the files' own assertion, and the value row is what stops a differential
@@ -38815,6 +38886,41 @@ test-esp-idf: $(COMPILER)
 	    bash -c ". \"\$$HOME/esp/esp-idf/export.sh\" >/dev/null 2>&1 && tools/esp_project_build.sh examples/esp32/nilpy-$$c qemu-assert" \
 	    > $(TESTTMP)/nilpy_esp_math.$$c.log 2>&1; then echo "nilpy-$$c math errors keep running ok"; \
 	  else tail -n 30 $(TESTTMP)/nilpy_esp_math.$$c.log; echo "nilpy-$$c math errors MISMATCH"; exit 1; fi; \
+	done
+	@# UNIT FINALIZATION RUNS ON THE ESP PROFILE. Cheap, and it underwrites more
+	@# than it looks: NilPy's atexit handlers ARE a finalization section
+	@# (lib/rtl/atexit.pas), so this is the row that separates "atexit is broken
+	@# on ESP" from "the exit chain never runs on ESP". A sweep reported the
+	@# former on 2026-09-28; the truth was neither -- its capture stopped at the
+	@# end of the top level and lost output that finalization had printed.
+	@# THE LAST LINE IS THE ASSERTION. Anything that truncates at the end of the
+	@# main body passes the first three lines and loses the only one under test.
+	@for chip in esp32c3 esp32s3; do \
+	  echo "--- $$chip unit finalization runs"; \
+	  ESP_RUN_TIMEOUT=25 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp -Fu$(CURDIR)/test" \
+	    tools/esp_run.sh --chip $$chip test/test_esp_finalization_runs.pas 2>/dev/null | grep -v 'main_task' \
+	    > $(TESTTMP)/esp_finalization.$$chip || true; \
+	  if diff -u test/test_esp_finalization_runs.expected $(TESTTMP)/esp_finalization.$$chip; then \
+	    echo "$$chip unit finalization runs ok"; \
+	  else echo "$$chip unit finalization MISMATCH"; exit 1; fi; \
+	done
+	@# THE SAME NilPy PROGRAM AS THE DESKTOP ROW, AGAINST AN ESP ORACLE. On ESP a
+	@# math error does not raise (int div/mod by 0 gives 0, floats follow IEEE),
+	@# so the three division rows of test_nilpy_catchable_runtime_errors CANNOT
+	@# fire there and their absence is the owner's rule working, not a defect.
+	@# WHAT THIS ROW IS ACTUALLY FOR is the other four lines: ValueError,
+	@# IndexError and KeyError still raise and are still catchable on ESP, so the
+	@# math rule has NOT leaked into exception handling generally. Nothing else
+	@# asserted that, and "no math error halts" invites exactly that misreading.
+	@# Same .npy as test-nilpy deliberately -- one source, two oracles, so the
+	@# platforms cannot drift apart in the source.
+	@for c in c3 s3; do \
+	  if PXX=$(CURDIR)/$(COMPILER) \
+	    PXX_MAIN=$(CURDIR)/test/test_nilpy_catchable_runtime_errors.npy \
+	    PXX_EXPECT=$(CURDIR)/test/test_nilpy_catchable_runtime_errors.esp.expected \
+	    bash -c ". \"\$$HOME/esp/esp-idf/export.sh\" >/dev/null 2>&1 && tools/esp_project_build.sh examples/esp32/nilpy-$$c qemu-assert" \
+	    > $(TESTTMP)/nilpy_esp_catchable.$$c.log 2>&1; then echo "nilpy-$$c non-math errors still catchable ok"; \
+	  else tail -n 30 $(TESTTMP)/nilpy_esp_catchable.$$c.log; echo "nilpy-$$c catchable MISMATCH"; exit 1; fi; \
 	done
 	@# A NILPY __init__ FILLS THE OBJECT THE CALLER GETS BACK, on the S3 too.
 	@# Windowed xtensa passes the hidden result pointer as argument word 0; the

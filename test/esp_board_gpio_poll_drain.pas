@@ -57,8 +57,28 @@ program EspBoardGpioPollDrain;
   vacuously, because a run that sees zero edges satisfies every invariant above
   trivially and would otherwise be the purest possible guard that cannot fail.
 
-  NOT MEASURED YET. No board run has happened; there is no measured block here
-  on purpose. Fill one in when it runs, as the ring stress does. }
+  MEASURED 2026-09-28 by frankb-12 on real silicon, v450 (tree 3503825c2f,
+  compiler binary c19cc2d531e4 as esp_flash stamps it). ESP32-C3 and ESP32-S3
+  gave IDENTICAL output, rc=0:
+
+    POLL-DRAIN setup rc=0
+    POLL-DRAIN budget=16
+    POLL-DRAIN after-edges isr=10 pending=10 delivered=0 seen=0
+    POLL-DRAIN poll1 returned=10 seen=10 pending=0
+    POLL-DRAIN over-budget isr-added=40 pending=40 dropped=0
+    POLL-DRAIN poll2 returned=16 budget=16 pending-left=24
+    POLL-DRAIN drained-total=40 polls=3 pending=0
+    POLL-DRAIN nested rc=0 in-drain=1
+    POLL-DRAIN final isr=53 delivered=53 dropped=0 seen=53
+    POLL-DRAIN-DONE failures=0
+
+  Read three things out of that. 40 edges into the 64-slot ring DROPPED NOTHING,
+  and one poll took exactly the budget and left 24 PENDING: deferred, not lost,
+  which is a different bound from the ring's overflow and the one people
+  conflate. 10 + 40 + 3 = 53 edges made, and isr = delivered = seen = 53 with
+  dropped 0, so the accounting closes. And the drain took 3 polls
+  (16 + 16 + 8 = 40), not one, which is what "a drain point is a bounded amount
+  of work" means in practice. }
 
 uses interrupts, espgpio;
 

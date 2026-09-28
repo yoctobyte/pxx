@@ -5804,6 +5804,41 @@ from, which the self-host stamp already records, instead of against a commit
 timestamp. That would make it exact and would have caught both unhinted FAILs.
 Left as a note rather than a ticket, per the month's rule.
 
+### Landed later the same night (3109649ec461), and then it bit me for real
+
+The improvement above was asked for and landed, print-only: three exact outcomes
+from the stamp (binary ≠ stamp sha256 / stamp srchash ≠ tree srchash / both match,
+so staleness is RULED OUT), with the mtime heuristic kept as a labelled fallback
+when no stamp is readable. Both directions proved against an mktemp git fixture
+whose binary mtime sits 300 s AFTER the commit, so the old check is provably silent
+where the new one speaks.
+
+**And within the hour it caught a live instance in my own work, which is the part
+worth recording.** I had measured and labelled several blocks with compiler binary
+`1634f6483109` — honestly, in the sense that it was the binary on disk. It is a
+real fixedpoint, but of an EARLIER tip: `947170c4cb`, per docs/language/dialect.md:304
+and three of tonight's tstate borg reports. My tree is `3109649ec4`, whose fixedpoint
+is `8d5d0f2653f0`. My binary predated a rebase.
+
+So the label named a build nobody could reproduce from the tree the rows were about
+to be committed to — and **the failure mode is not a wrong number, it is a number
+that cannot be checked.** Nothing was red. `sha256sum` of the binary on disk is
+always self-consistent; what it cannot tell you is which sources produced it. The
+tell was the gate reporting a different fixedpoint than the sha I had been quoting.
+
+Re-measured everything on `8d5d0f2653f0` rather than reasoning about whether it
+could matter: the seven-target subnormal sweep is byte-identical, and the ESP
+finalization row passes on both chips. That was not pedantry — there are two
+compiler commits between those tips (`24038529ba`, `956cba6006`), both NilPy, and
+one of the blocks is a NilPy row, so "it surely cannot have changed" was an
+assumption available for free and not worth taking.
+
+Generalisation, and it is the reason a measured block exists at all: **a measured
+block's sha must name a build reachable from the tree it is committed to, or the
+block is a claim rather than a measurement.** Recording the tree alongside the
+binary is what makes that checkable by the next reader, and every block of mine
+now carries both.
+
 ## 2026-09-28 — two claims of mine corrected by frankd-90, both the same error, and I had just written that error up
 
 Both were negatives I asserted from absence in one place without checking the
@@ -5876,3 +5911,246 @@ by-hand board run's only trace is a line in the file's own header, which my meth
 2026-09-28 | frankS | compiler/pyparser.inc (PyCompileLambdaBody's thunk body, the def-name value arm), test/nilpy_cbproc/ (new), test/test_nilpy_a_def_into_a_procedure_slot_is_called.npy (new) | PROCVAR SWEEP, TWO SILENT WRONGS FOUND (pin v450; frankuser's call-site sweep). (1) A NilPy def handed to a Pascal PROCEDURE slot (`procedure(a: Integer)`) was never called. Its $pycbthunk_ body wrapped `realdef(a0)` in AN_EXIT, and an Exit in a procedure never evaluates the value, so `CallPr(pr, 5)` printed nothing. It is now evaluated as a statement, as the clone thunk already did. (2) A def named like a global of a unit imported `as c` (`acc` vs `var Acc`) read that Pascal global in value position, case-insensitively: `CallPr(acc, 5)` raised a nil reference and `x = acc; x(4)` "not callable". The arm now asks PyProgSym, not FindSym, as the generator arm beside it already does. Both FPC/CPython-arithmetic-equal on x86-64, i386, arm32 and windowed xtensa. Sweep otherwise clean: 2 probes, 34 rows (bound methods, __call__, __getattr__, properties, static/classmethods, generators, closures, map/filter/sorted/max keys, dunders, typed -> str/-> float, defaults/*args/**kw, methods in dicts and lists, super()) match CPython on the same four targets. Seen, not fixed, all loud: `p = c.TPt()` for a Pascal record from NilPy is "internal: data offset -1 outside the data image" (HEAD too); `list(a.gen(3))` (a generator METHOD in value position) is refused ("expected ','"); user decorators are refused ("only @dataclass and @overload").
 2026-09-28 | frankH | compiler/builtin/builtinheap.pas (PXXVarNilObjIsNone new, PXXVarBinOp None arm), compiler/ir_codegen{386,_arm32,_riscv32,_xtensa,_aarch64,_wasm32}.inc (variant fill), test/test_nilpy_none_is_none_on_every_backend.{npy,expected} (new), Makefile | WRONG: off x86-64 None was not None. An Optional[W] returning None boxed as a nil OBJECT (`is None` False, str() segfaulted), and `None == 0`, `0.0 == None`, `False == None` were True. x86-64 does both inline (nil class -> VT_EMPTY in the fill; a tag compare in EmitVarBinOp); the shared fill routines and PXXVarBinOp never got them. Fix: every other backend's fill retags a nil class payload VT_EMPTY, and PXXVarBinOp compares tags for ==/!= when either side is None. Rows on x86-64, i386, arm32, aarch64, riscv32, xtensa-windowed vs CPython; before the fix the fixture failed on i386, arm32, aarch64 and riscv32 (20-21 diff lines; xtensa not run pre-fix), and x86-64's output is byte-identical before and after (the control), as is a 14-value x 9-operator matrix. Also closes frankd-a3's test_nilpy_str_of_an_instance_and_a_class_typed_none (i386/riscv32 segfault) and test_nilpy_none_value_semantics (riscv32/xtensa). wasm32 checked by hand, not wired.
 2026-09-28 | frankS | compiler/builtin/promocore.pas (PromoCmpDbl, PXXPromoVarCmpTry/ArithTry float arms), compiler/builtin/pylib.pas (pylt_v/pyle_v/pygt_v/pyge_v, pycmp_v, pyvar_gt), test/test_nilpy_a_float_against_a_bignum_compares_exactly.npy (new) | NILPY FLOAT vs BIG INT (frankh-95's value matrix, via frankuser; pin v450): `0.0 == 2**64` died with Runtime error 219 on every target, x86-64 and wasm32 included (wasm32's odd exit status was the same 219, which WASI cannot carry). The bignum runtime had no float arm. PRECISION CHOICE, CPython's own: arithmetic (+ - *) converts the int to float, so precision past 2^53 is lost as in CPython; comparison is EXACT, rebuilding the float's integer part as a bignum, so `2**53 + 1 == 2.0**53` is False and `2**70 + 1 > 2.0**70`. Two more silent wrongs on the same paths: a NaN held in a variant made `x <= nan` and `x >= nan` True (pycmp_v's three-way answer called it "equal"), and an Int64 beyond 2^53 against a float compared through double. The four ordering operators, pycmp_v (sort/min) and pyvar_gt (max) now ask the exact try first; typed floats were already right. Pascal Variants are untouched, since promocore is linked only for NilPy/PromoInt programs. Rows match CPython on x86-64, i386, arm32 and hosted riscv32 (Makefile), and on aarch64 and wasm32 by hand; frankh-95's full matrix now differs only in the None rows (known issue) and in `str - 2**64`, which gives a number where CPython raises TypeError (seen, not fixed: promo arithmetic parses a string operand the Pascal Variant way). Census: 15000 mixed compare/arith rounds, live=16 (bound 50), kept-list control live=2751. 24 existing bignum/sort/compare rows pass.
+
+## 2026-09-28 — math.frexp of a subnormal was not a frexp bug: riscv32 and xtensa have NO subnormal arithmetic
+
+Routed to me as "frexp(5e-324) returns (0.5, -1086), want (0.5, -1073); the
+subnormal path isn't normalising, so the exponent comes out 13 too low"
+(frankd-a3's sweep, hosted xtensa-windowed and riscv32). The exponent is 13 too
+low, the frexp code is correct, and fixing frexp would have buried a much larger
+defect. **Do not fix frexp.**
+
+### How the 13 gives the cause away
+
+`pymath_frexp` normalises a subnormal by scaling: `v := v * 2**64` with
+`adj := -64`. For 5e-324 = 2**-1074 that should land on 2**-1010, biased exponent
+13, so `expn = 13 - 1022 - 64 = -1073`. Getting -1086 means `e` read back as **0**
+— the scaling multiply produced zero. It does. Probe built at run time from the
+bit pattern, so nothing can be constant-folded by the host:
+
+```text
+in  bits hi=0 lo=1                 (2**-1074, the minimum positive subnormal)
+x86-64   out biased exponent = 13  -> frexp exponent -1073   correct
+riscv32  out bits hi=0 lo=0        -> frexp exponent -1086   the multiply gave ZERO
+```
+
+### The actual defect, measured
+
+Every arithmetic operation involving a subnormal double returns zero on riscv32
+and xtensa, and so does a result that underflows into the subnormal range — there
+is no gradual underflow at all:
+
+| operation | x86-64, i386, arm32, aarch64, wasm32 | riscv32, xtensa, esp32c3 |
+|---|---|---|
+| the value itself | subnormal, mantissa 1 | subnormal, mantissa 1 (storage is FINE) |
+| `v * 1.0` | subnormal | **zero** |
+| `v * 2.0` | subnormal, mantissa 2 | **zero** |
+| `v + 0.0` | subnormal | **zero** |
+| `v + v` | subnormal, mantissa 2 | **zero** |
+| `v / 1.0` | subnormal | **zero** |
+| `v - 0.0` | subnormal | **zero** |
+| `2**-1019 * 0.5` eight times | subnormal | **zero** (no subnormal operand at all) |
+
+**Comparisons are correct on both**: `v = 0.0` is false and `v > 0.0` is true. A
+subnormal loads, stores and compares properly and only arithmetic loses it, which
+is the worst available shape: `if x > 0.0 then y := x * 1.0` yields a zero `y`
+from an `x` the same program agrees is non-zero.
+
+Confirmed on the ESP profile: `--platform=esp` on esp32c3 QEMU reproduces all nine
+rows byte-identically to hosted riscv32.
+
+**THE POPULATION IS NOT "32-BIT TARGETS", AND I HAD WRITTEN THAT.** frankuser
+caught it before it reached the docs and it was a guess dressed as a category.
+Measured across every target the compiler accepts:
+
+| flushes subnormals to zero | preserves them (correct) |
+|---|---|
+| `riscv32`, `xtensa` | `x86_64`, `i386`, `arm32`, `aarch64`, `wasm32` |
+
+**`wasm32` is the counterexample that kills the bit-width theory**: 32-bit and
+fully correct, as are `i386` and `arm32`. The population is the two targets that
+use pxx's own softfloat double kernels rather than hardware or runtime floats.
+`--target=riscv64` is not accepted by the compiler at all ("unknown option"),
+though `tools/run_target.sh` lists riscv64 as an arch.
+
+Naming a population by the property you assume causes it, rather than by
+measurement, is how a docs row acquires four targets it was never true of.
+
+### Why it stayed invisible, which is the reusable part
+
+The wrong answer's MANTISSA is correct by accident. frexp rebuilds the mantissa by
+forcing the exponent field to 1022, and doing that to an all-zero pattern gives
+exactly 0.5. So the failure printed `(0.5, -1086)` — a plausible pair with one
+right component — instead of anything resembling a zero. Anyone spot-checking the
+mantissa would have concluded the split was nearly right and gone looking for an
+off-by-13 in the exponent arithmetic, which is exactly how it was routed.
+
+Second reason: there was **no float-determinism test in test/**. A whole IEEE
+feature had no row that could notice its absence, and the one test that did notice
+is about `math.frexp` being exact, where the subnormal case is one line of
+twenty-odd. There is one now — see the correction below.
+
+### CORRECTION, found while wiring the test: softfloat DOCUMENTS this, and I called it a defect
+
+I wrote "the actual defect" above and I should not have. `compiler/builtin/softfloat.pas`
+states it in its own header, in the list of the unit's properties, and has since
+the unit was written:
+
+> subnormals flush to zero (documented follow-up — mul/div *rounding* of normal
+> results is still correct, which is what decimal output depends on)
+
+So this is a **deferral its author wrote down**, not something nobody knew. The two
+flushing targets are exactly the two that lower double arithmetic onto that unit,
+which is also why `wasm32` is correct — the population I measured is the population
+that file describes, and I could have predicted it from line 21 instead of
+discovering it over seven targets.
+
+What was genuinely missing is narrower and worth stating exactly, because it is
+the part that is now fixed: **no statement of it outside that one file, and no test
+that would notice a change in either direction.** And the reason the tests could
+not notice is specific — `test/test_softfloat_double.pas` and
+`test/test_softfloat_single.pas` check the kernels against x86-64 hardware and
+**tolerate the flush by construction** (`dFlushOK`, `FlushOK`). The single one at
+least counts flushes and the Makefile asserts the count is 0; the double one does
+not count them at all. And the single row's `0` is not the reassurance it looks
+like: its grid holds no subnormal *operand*, so only an underflowing *result* can
+reach the tolerance at all.
+
+That is the reusable shape, and it is not the one I first wrote: **the tests for
+this code were built to pass under exactly this behaviour**, so `RESULT: PASS`
+carried no information about subnormals in either direction. A guard that tolerates
+the thing you are looking for is indistinguishable from a guard that checks it,
+until someone asks which.
+
+### Now wired: test/test_subnormal_double_arithmetic.pas
+
+Green on all seven targets, mode **pinned per target** in `test-core` (gradual:
+`x86_64`, `i386`, `arm32`, `aarch64`, `wasm32`; flush: `riscv32`, `xtensa`).
+
+It is green under either mode by design — it decides the mode from one probe, then
+requires all nine operations to agree with it — so it is not a recording of
+today's behaviour. What it can catch: a **half-implemented** subnormal path (some
+operations flushing and not others, which is what a partial fix looks like and is
+worse than either mode); a target whose mode changes without anyone writing it
+down, because the Makefile pins the expected word; and storage or comparison
+breaking, which is asserted mode-independently.
+
+Verified in both directions rather than assumed: the recipe extracted verbatim runs
+7/7, and flipping `riscv32`'s pinned word to `gradual` fails the row naming the
+target. Note that `test-core` is in testmgr's **limited** tier, not `quick`, so
+`gate.sh quick` does not exercise this row — the extraction above is the evidence
+for it, not a gate run.
+
+If the owner rules that softfloat should gain gradual underflow, the fix is the
+word `flush` in two Makefile branches, not the test.
+
+**Re-confirmed after rebasing onto 21 new commits**: 7/7, same mode per target, at
+tree `a7cbacc6c6` / binary `f545c8410b32`. That re-run was not ceremony — the
+commits in between touch `ir_codegen_riscv32.inc`, `ir_codegen_xtensa.inc` and
+`ir_codegen_wasm32.inc`, three of this row's seven backends, one of them inside a
+float fix (`cafc739cbf`, a float against a big int). Rebasing without re-measuring
+would have pushed a block whose numbers predate changes to the very backends it
+describes.
+
+**And frankd-90 landed the known-issues row independently** (`d36d531fb4`),
+re-measuring on EIGHT targets and reaching the same population, framed as
+softfloat's documented flush rather than a bug. Two things of theirs are worth
+keeping: they covered Xtensa **windowed** as well as call0 — this row's hosted
+xtensa arm is call0, as every hosted xtensa row is, so windowed is documented but
+not pinned by a test — and their workaround names the trap honestly, that a value
+which is already subnormal cannot be scaled back up, because the scaling is itself
+arithmetic on it.
+
+### Not fixed here, deliberately
+
+The fix belongs in softfloat — normalise subnormal operands on entry, and round
+results into the subnormal range instead of flushing them. That is a shared path
+under `riscv32` and `xtensa` (**not** "every 32-bit target" — see above; that
+phrasing was the same wrong population a second time, in this very entry) and it
+changes numerical output rather than a message, so it is not something to land
+unattended during a pin cycle. The owner's standing 09-23 rule is "screw
+insignificant bits", and "document it, keep it" is a legitimate answer here:
+flush-to-zero is a normal embedded float mode and the unit already says it chose it.
+
+No ticket filed (the month's rule); docs mention neither subnormals nor denormals
+anywhere and claim no IEEE parity across targets, so it contradicts no published
+promise and is a known-issues row rather than a release blocker. The cheap first
+step is done — the test above carries the nine rows, so whichever way the owner
+rules, the change has an oracle and the decision has a place to be recorded.
+
+## 2026-09-28 — two reported ESP NilPy divergences, neither a bug, both now wired so they cannot be re-reported
+
+From frankb-12's C3 sweep. Recorded with the numbers because the .expected file
+for one of them cannot carry a comment, and because both were reported as runtime
+gaps and are not.
+
+Compiler for every row below: tree `3109649ec4`, binary `8d5d0f2653f0` — the
+fixedpoint this tree reproduces, and NOT v450's own pin `c19cc2d531e4`. Both chips,
+QEMU, `--platform=esp`. (First measured on `1634f6483109`, which turned out to be
+the fixedpoint of an earlier tip; both rows were re-measured on `8d5d0f2653f0`
+rather than assumed to be unaffected, since the two intervening commits are both
+NilPy. See the stale-binary entry above.) **Re-confirmed again** at tree
+`a7cbacc6c6` / binary `f545c8410b32` after rebasing over 21 commits — both rows,
+both chips — because one of those commits is `cafc739cbf`, a NilPy float-versus-big-int
+fix, and the catchable row asserts a `float()` ValueError.
+
+### test_nilpy_catchable_runtime_errors: the owner's ESP math rule, correctly scoped
+
+Raw esp-c3 output had FOUR lines where the desktop oracle has seven:
+
+```text
+caught int() ValueError
+caught float() ValueError
+caught IndexError
+caught KeyError
+```
+
+so the three missing ones are exactly the division rows — `caught div (bare)`,
+`caught floordiv ZeroDivisionError`, `caught truediv ZeroDivisionError`. On ESP
+`1 // 0` gives 0 and `1 / 0` gives inf, neither raises, so a `try/except` around
+them cannot fire. My own corroboration rather than an inference: tonight's green
+`test_nilpy_esp_math_errors_keep_running` printed `idiv 0 imod 0` and `tdiv inf`
+on both chips.
+
+**The valuable half is the four lines that DID print.** ValueError, IndexError and
+KeyError still raise and are still catchable on ESP, so "no math error halts" has
+not leaked into exception handling generally. Nothing asserted that before, and
+the one-line summary of the rule invites exactly that misreading. Hence an
+ESP-specific oracle of those four lines (`.esp.expected`, same `.npy` as the
+desktop row — one source, two oracles) rather than a skip, which would have
+thrown the useful half away. PASS on c3 and s3.
+
+Worth noting how close this came to being read wrong: the relayed description said
+output "resumes at caught KeyError", which would have meant six missing lines and
+a real bug. The file says it resumes at `caught int() ValueError`. Reading the raw
+output instead of the summary is the whole difference between "rule working" and
+"exception handling broken on ESP".
+
+### test_nilpy_atexit_io: a harness artefact, not an ESP gap
+
+Reported as "the second atexit handler doesn't run on ESP", then refined by
+frankb-12 to "NEITHER handler ran", with their own warning that their batch driver
+prints `@@BATCH-END` as its last top-level statement and the capture stops at that
+token — so anything atexit prints, which is by definition after the top level, was
+cut off. They asked me to build it standalone before calling it a runtime gap.
+
+Built standalone through the nilpy-c3 project against the FULL host output
+including both handlers: `OK -- output == expected, one boot`, rc=0. Both handlers
+run on the C3, last-registered-first, exactly as on the host. No defect.
+
+### The discriminator that made that result mean something
+
+NilPy's atexit handlers ARE a unit finalization section (`lib/rtl/atexit.pas`
+says so: finalization is what gives CPython's last-registered-first order for
+free). So "atexit does not run on ESP" and "unit finalization does not run on ESP"
+are one claim, and the second is far broader — every `finalization` in lib/rtl
+rests on it. A two-file probe (`test/esp_finalization_unit.pas` +
+`test/test_esp_finalization_runs.pas`) settles it in one 20 s run, and it is now a
+wired ESP row on both chips: finalization runs, output identical to desktop.
+
+Had that row existed, the atexit report would have been resolved immediately
+instead of costing a full NilPy image build to disprove. The general form: when a
+feature is implemented ON TOP of a more basic one, the cheap row belongs on the
+basic one, because it is the row that tells you which of the two you are looking
+at.
+

@@ -1,0 +1,4 @@
+FIN-PROBE init
+touch
+FIN-PROBE main done
+FIN-PROBE finalization ran
