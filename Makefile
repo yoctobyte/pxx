@@ -13647,6 +13647,15 @@ test-core: $(COMPILER)
 	tools/assert_no_leak.sh pascal_leak_census 50 $(TESTTMP)/test_plcc26
 	@if tools/assert_no_leak.sh pascal_leak_census_control 50 $(TESTTMP)/test_plcc26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
+	# A handled exception runs its DESTRUCTOR exactly once in every shape (on E,
+	# bare except, bare re-raise, nested finally) -- fpc 3.2.2's output -- and a
+	# destructor that frees an owned TStringList leaves the census flat. Pre-fix
+	# (pin v448): every count 0, live=1892. `keep` skips that Free: the control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS -Fulib/rtl test/test_a_handled_exception_runs_its_destructor_once.pas $(TESTTMP)/test_excdes26
+	$(TESTTMP)/test_excdes26 2>/dev/null | diff -u test/test_a_handled_exception_runs_its_destructor_once.expected -
+	tools/assert_no_leak.sh exc_destroy_once 50 $(TESTTMP)/test_excdes26
+	@if tools/assert_no_leak.sh exc_destroy_once_control 50 $(TESTTMP)/test_excdes26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: exc_destroy_once control (keep) did not trip the bound"; exit 1; fi
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_promo_member_leaks.pas $(TESTTMP)/test_rpm26
 	tools/expect_same.sh test_rpm26 "$$($(TESTTMP)/test_rpm26 | tail -1)" "record-promo-member 4000/4000"
 	tools/assert_no_leak.sh record_promo_member 50 $(TESTTMP)/test_rpm26
@@ -28171,6 +28180,15 @@ test-i386: $(COMPILER)
 	tools/assert_no_leak.sh i386/pascal_leak_census 50 tools/run_target.sh i386 $(TESTTMP)/plcc_i386
 	@if tools/assert_no_leak.sh i386/pascal_leak_census_control 50 tools/run_target.sh i386 $(TESTTMP)/plcc_i386 keep >/dev/null 2>&1; then \
 	  echo "FAIL: i386/pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
+	# A handled exception runs its DESTRUCTOR exactly once in every shape (on E,
+	# bare except, bare re-raise, nested finally) -- fpc 3.2.2's output -- and a
+	# destructor that frees an owned TStringList leaves the census flat. Pre-fix
+	# (pin v448): every count 0, live=1892. `keep` skips that Free: the control.
+	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS -Fulib/rtl test/test_a_handled_exception_runs_its_destructor_once.pas $(TESTTMP)/excdes_i386
+	tools/run_target.sh i386 $(TESTTMP)/excdes_i386 2>/dev/null | diff -u test/test_a_handled_exception_runs_its_destructor_once.expected -
+	tools/assert_no_leak.sh i386/exc_destroy_once 50 tools/run_target.sh i386 $(TESTTMP)/excdes_i386
+	@if tools/assert_no_leak.sh i386/exc_destroy_once_control 50 tools/run_target.sh i386 $(TESTTMP)/excdes_i386 keep >/dev/null 2>&1; then \
+	  echo "FAIL: i386/exc_destroy_once control (keep) did not trip the bound"; exit 1; fi
 	# A 64-bit counter crossing 2^32: Inc/Dec and a counted `for` both moved
 	# only the low word on 32-bit targets. Nine of eleven rows are wrong under
 	# pin af40370a8a91; no x86-64 row can see it.
@@ -33953,6 +33971,15 @@ test-arm32: $(COMPILER)
 	tools/assert_no_leak.sh arm32/pascal_leak_census 50 tools/run_target.sh arm32 $(TESTTMP)/plcc_a32
 	@if tools/assert_no_leak.sh arm32/pascal_leak_census_control 50 tools/run_target.sh arm32 $(TESTTMP)/plcc_a32 keep >/dev/null 2>&1; then \
 	  echo "FAIL: arm32/pascal_leak_census control (keep) did not trip the bound -- this target's census cannot see a Pascal leak"; exit 1; fi
+	# A handled exception runs its DESTRUCTOR exactly once in every shape (on E,
+	# bare except, bare re-raise, nested finally) -- fpc 3.2.2's output -- and a
+	# destructor that frees an owned TStringList leaves the census flat. Pre-fix
+	# (pin v448): every count 0, live=1892. `keep` skips that Free: the control.
+	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS -Fulib/rtl test/test_a_handled_exception_runs_its_destructor_once.pas $(TESTTMP)/excdes_a32
+	tools/run_target.sh arm32 $(TESTTMP)/excdes_a32 2>/dev/null | diff -u test/test_a_handled_exception_runs_its_destructor_once.expected -
+	tools/assert_no_leak.sh arm32/exc_destroy_once 50 tools/run_target.sh arm32 $(TESTTMP)/excdes_a32
+	@if tools/assert_no_leak.sh arm32/exc_destroy_once_control 50 tools/run_target.sh arm32 $(TESTTMP)/excdes_a32 keep >/dev/null 2>&1; then \
+	  echo "FAIL: arm32/exc_destroy_once control (keep) did not trip the bound"; exit 1; fi
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	# `Write(s:w)` on a string VARIABLE: this target dropped the field width

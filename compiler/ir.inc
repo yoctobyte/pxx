@@ -10401,7 +10401,7 @@ end;
   and the magazine fast path. Calling PXXObjFree instead would free with no
   lock at all -- bug-a-two-threads-raising-object-exceptions-corrupt-the-heap. }
 procedure IREmitCaughtExcFree(ownTmp, clsTmp: Integer; onUnwind: Boolean);
-var skipLabel, cfPi, cfCall, last, curTmp, excReleaseProc: Integer;
+var skipLabel, cfPi, cfCall, last, curTmp, excReleaseProc, dsPi, dsArg: Integer;
 begin
   if (ownTmp < 0) or (clsTmp < 0) then Exit;
   excReleaseProc := FindProc('PXXObjFree');
@@ -10440,6 +10440,26 @@ begin
   end
   else
   begin
+    { The object's DESTRUCTOR first, dispatched through the VMT like
+      `TObject(E).Free` -- the handler knows only the pointer, and the raised
+      class may be any descendant of the one it matched. It used to go straight
+      to finalize-and-free, so the memory came back while anything the
+      destructor owned (an owned TStringList, a handle) leaked on every handled
+      exception; fpc calls Destroy here. A bare re-raise never reaches this
+      point (the unwind guard above skips an object still in flight), so each
+      object is destroyed exactly once, by whichever handler finally frees it.
+      Root slot ROOT_VMT_DESTROY exists only when the program minted
+      TObject.Destroy, and the empty root body stands in for a class that
+      declares none. }
+    dsPi := FindProc('__pxxTObjectDestroy');
+    if (dsPi >= 0) and (RootVMTSlotCount > ROOT_VMT_DESTROY) then
+    begin
+      dsArg := IRAppend(IR_ARG,
+                 IRAppend(IR_LOAD_SYM, ownTmp, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+      IRMarkStatementNode(IRAppend(IR_VIRTUAL_CALL, dsArg, dsArg, dsPi,
+                                   ROOT_VMT_DESTROY, Ord(tyUnknown)));
+    end;
     cfPi := FindProc('PXXClassFinalize');
     if cfPi >= 0 then
     begin
