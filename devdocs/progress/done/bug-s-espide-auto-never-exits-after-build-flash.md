@@ -224,4 +224,4 @@ executables carry no section header and `ptrace_scope=1` blocks attaching to
 anything that is not your own child.
 
 ## Log
-- 2026-09-28 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-28 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b80d5ea39c.
