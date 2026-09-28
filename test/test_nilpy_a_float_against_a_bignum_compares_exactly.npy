@@ -1,0 +1,71 @@
+# A float against a big int, every pair of these values crossed with
+# == != < <= > >= and + - * (frankh-95's value-matrix script, numeric values
+# only). Until 2026-09-28 `0.0 == 2**64` died with "Runtime error 219" on every
+# target: the bignum runtime had no float arm. Now, as CPython does it:
+# - arithmetic converts the int to float (precision past 2^53 is lost, the
+#   same as CPython's);
+# - comparison is EXACT: `2**53 + 1 == 2.0**53` is False, and `2**70 + 1`
+#   is greater than `2.0**70`;
+# - a NaN is unordered: only != holds, so `x <= nan` and `x >= nan` are False
+#   (they were True for any variant x, a list element for instance).
+# The .expected is CPython 3.14's output for this file.
+vals = [0, -3, True, 0.0, 2.5, -0.5, 7.0, 2 ** 64, -(2 ** 64), 2 ** 53 + 1, 2.0 ** 53, 2.0 ** 64, 1e30, float("inf"), float("-inf"), float("nan"), 2 ** 70 + 1]
+names = ["0", "-3", "True", "0.0", "2.5", "-0.5", "7.0", "2**64", "-2**64", "2**53+1", "2.0**53", "2.0**64", "1e30", "inf", "-inf", "nan", "2**70+1"]
+
+def cmp_all(a, b):
+    out = []
+    try:
+        out.append("T" if a == b else "F")
+    except TypeError:
+        out.append("E")
+    try:
+        out.append("T" if a != b else "F")
+    except TypeError:
+        out.append("E")
+    try:
+        out.append("T" if a < b else "F")
+    except TypeError:
+        out.append("E")
+    try:
+        out.append("T" if a <= b else "F")
+    except TypeError:
+        out.append("E")
+    try:
+        out.append("T" if a > b else "F")
+    except TypeError:
+        out.append("E")
+    try:
+        out.append("T" if a >= b else "F")
+    except TypeError:
+        out.append("E")
+    return "".join(out)
+
+def arith(a, b):
+    out = []
+    try:
+        out.append(repr(a + b))
+    except TypeError:
+        out.append("E")
+    try:
+        out.append(repr(a - b))
+    except TypeError:
+        out.append("E")
+    if isinstance(a, str) or isinstance(b, str):
+        out.append("-")
+    else:
+        try:
+            out.append(repr(a * b))
+        except TypeError:
+            out.append("E")
+    return " ".join(out)
+
+for i in range(len(vals)):
+    for j in range(len(vals)):
+        print(names[i], names[j], cmp_all(vals[i], vals[j]), arith(vals[i], vals[j]))
+
+
+n = float("nan")
+xs = [1.0, n, 2 ** 70 + 1, 2.0 ** 70]
+print(xs[0] <= xs[1], xs[0] >= xs[1], xs[1] <= xs[1], xs[1] != xs[1])
+print(xs[2] > xs[3], xs[3] < xs[2], xs[2] == xs[3], xs[2] >= xs[3])
+print(sorted([2 ** 70 + 1, 2.0 ** 70, 1.5, 2 ** 64])[0:2], max(2.0 ** 70, 2 ** 70 + 1))

@@ -64,6 +64,7 @@ type
     variant through PPromoWord worked on x86-64 by coincidence and read the
     wrong halves on i386. }
   PVarWord = ^Int64;
+  PVarDbl = ^Double;
 
 procedure PXXPromoFromInt(dst: Pointer; v: Int64);
 procedure PXXPromoFromStr(dst: Pointer; const s: AnsiString);
@@ -1851,9 +1852,82 @@ begin
   DecToI64Wrap := r;
 end;
 
+{ ---- a bignum MIXED WITH A FLOAT ------------------------------------------
+  CPython's two rules, and they differ on purpose:
+  - ARITHMETIC converts the int to float (`2**64 + 0.5` is a float, with the
+    int's precision lost past 2^53 as CPython loses it);
+  - COMPARISON is EXACT: `2**53 + 1 == 2.0**53` is False, although the int
+    converted to float would compare equal.
+  Both used to reach PXXPromoFromVariant, which has no float arm and halted
+  with Runtime error 219: `0.0 == 2**64` died on every target (frankh-95's
+  value matrix). }
+const VT_DOUBLE_TAG = 3;
+
+function VarIsDbl(v: Pointer): Boolean;
+begin
+  VarIsDbl := VarTag(v) = VT_DOUBLE_TAG;
+end;
+
+function VarDblOf(v: Pointer): Double;
+begin
+  VarDblOf := PVarDbl(VarPayloadAddr(v))^;
+end;
+
+{ a promo or inline-int variant as a double }
+function VarIntAsDbl(v: Pointer): Double;
+var p: array[0..1] of NativeInt;
+begin
+  PXXPromoInit(@p);
+  PXXPromoFromVariant(@p, v);
+  VarIntAsDbl := PXXPromoToDouble(@p);
+  PXXPromoClear(@p);
+end;
+
+{ compare the integer in promo slot p with the double d EXACTLY: -1, 0, 1, or
+  2 when d is NaN (every ordering is False then). d's integer part is rebuilt
+  as a promo bit for bit: a double >= 2^62 is an even integer, so halving it is
+  exact, and the halvings come back as doublings of the promo. }
+function PromoCmpDbl(p: Pointer; d: Double): Integer;
+var q, frac: Double;
+    k, i: Integer;
+    ip: Int64;
+    pi, t, z: array[0..1] of NativeInt;
+    c: Integer;
+begin
+  if d <> d then begin PromoCmpDbl := 2; Exit; end;
+  if (d - d) <> 0 then
+  begin
+    if d > 0 then PromoCmpDbl := -1 else PromoCmpDbl := 1;
+    Exit;
+  end;
+  if d < 0 then q := -d else q := d;
+  k := 0;
+  while q >= 4611686018427387904.0 do begin q := q / 2; Inc(k); end;
+  ip := Trunc(q);
+  frac := q - ip;
+  PXXPromoInit(@pi); PXXPromoInit(@t);
+  PXXPromoFromInt(@pi, ip);
+  for i := 1 to k do begin PXXPromoMulInt(@t, @pi, 2); PXXPromoCopy(@pi, @t); end;
+  if d < 0 then
+  begin
+    PXXPromoInit(@z); PXXPromoFromInt(@z, 0);
+    PXXPromoSub(@t, @z, @pi); PXXPromoCopy(@pi, @t);
+    PXXPromoClear(@z);
+  end;
+  c := PXXPromoCmp(p, @pi);
+  if (c = 0) and (frac > 0) then
+  begin
+    { equal integer parts: the fraction decides. |d| = |ip| + frac }
+    if d < 0 then c := 1 else c := -1;
+  end;
+  PXXPromoClear(@pi); PXXPromoClear(@t);
+  PromoCmpDbl := c;
+end;
+
 function PXXPromoVarArithTry(dst, a, b: Pointer; op: Integer): Integer;
 var pa, pb, pr: array[0..1] of NativeInt;   { three promo slots }
     sp: PPromoStr; dsp: PPromoStr; tagW: PVarWord; t: AnsiString;
+    x, y: Double;
 begin
   PXXPromoVarArithTry := 0;
   { FAST PATH: `v & 0xFFFFFFFFFFFFFFFF` — the DO/LOOP boundary/push idiom —
@@ -1920,6 +1994,23 @@ begin
     other operators keep the promo-tag gate so ordinary variant semantics stay
     in the per-backend codegen. }
   if (op < 9) and not EitherPromoTagged(a, b) then Exit;
+  if EitherPromoTagged(a, b) and (VarIsDbl(a) or VarIsDbl(b)) then
+  begin
+    { + - * as CPython does them: the int side becomes a float. Every other
+      operator is left to the ordinary variant path, as before. }
+    if (op < 1) or (op > 3) then Exit;
+    if VarIsDbl(a) then x := VarDblOf(a) else x := VarIntAsDbl(a);
+    if VarIsDbl(b) then y := VarDblOf(b) else y := VarIntAsDbl(b);
+    if op = 1 then x := x + y
+    else if op = 2 then x := x - y
+    else x := x * y;
+    ClearVariantSlot(dst);
+    tagW := PVarWord(dst);
+    tagW^ := VT_DOUBLE_TAG;
+    PVarDbl(VarPayloadAddr(dst))^ := x;
+    PXXPromoVarArithTry := 1;
+    Exit;
+  end;
   PXXPromoInit(@pa); PXXPromoInit(@pb); PXXPromoInit(@pr);
   PXXPromoFromVariant(@pa, a);
   PXXPromoFromVariant(@pb, b);
@@ -1962,8 +2053,51 @@ var pa, pb: array[0..1] of NativeInt;
     c: Integer;
     res: Boolean;
     va, vb: Int64;
+    dv, ov: Pointer;
 begin
   PXXPromoVarCmpTry := 0;
+  if VarIsDbl(a) or VarIsDbl(b) then
+  begin
+    { A FLOAT AGAINST A NUMBER, where the ordinary variant compare is wrong:
+      - a NaN on either side: only != holds. The fallback answered True for
+        `x <= nan` and `x >= nan` on every x (a list element, not a typed
+        float, which was right);
+      - an int beyond 2^53, or any bignum: CPython compares EXACTLY, and the
+        fallback converts the int to double, so `2**53 + 1 == 2.0**53` was
+        True. Below 2^53 that conversion is exact and the fallback is kept.
+      A float against a string (or anything else) is not ours: 0 = not
+      handled. }
+    if VarIsDbl(a) then begin dv := a; ov := b; end else begin dv := b; ov := a; end;
+    if not (VarIsDbl(ov) or VarIsInlineInt(ov) or
+            (VarTag(ov) = VT_PROMO_INT64_TAG)) then Exit;
+    if (op < 1) or (op > 6) then Exit;
+    if (VarDblOf(dv) <> VarDblOf(dv)) or
+       (VarIsDbl(ov) and (VarDblOf(ov) <> VarDblOf(ov))) then
+      c := 2
+    else
+    begin
+      if VarIsDbl(ov) then Exit;
+      if VarIsInlineInt(ov) then
+      begin
+        va := PVarWord(VarPayloadAddr(ov))^;
+        if (va <= 9007199254740992) and (va >= -9007199254740992) then Exit;
+      end;
+      PXXPromoInit(@pa);
+      PXXPromoFromVariant(@pa, ov);
+      c := PromoCmpDbl(@pa, VarDblOf(dv));
+      PXXPromoClear(@pa);
+      if dv = a then c := -c;          { PromoCmpDbl answered int-vs-float }
+    end;
+    if c = 2 then res := op = 2
+    else if op = 1 then res := c = 0
+    else if op = 2 then res := c <> 0
+    else if op = 3 then res := c < 0
+    else if op = 4 then res := c <= 0
+    else if op = 5 then res := c > 0
+    else res := c >= 0;
+    if res then PXXPromoVarCmpTry := 2 else PXXPromoVarCmpTry := 1;
+    Exit;
+  end;
   if not EitherPromoTagged(a, b) then Exit;
   { FAST PATH: heap promos in variants are canonical positive decimals, so the
     DO/LOOP `u_old > u_new` compares run without unpacking a bignum. A heap

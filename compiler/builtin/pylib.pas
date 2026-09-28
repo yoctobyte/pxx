@@ -8305,6 +8305,11 @@ begin
   begin
     raise TypeError.Create('comparison of a string with a number');
   end;
+  { the exact numeric try FIRST, for the float arm's sake: a float against a
+    bignum or an int beyond 2^53 compares exactly, and a NaN is unordered
+    (`max(2.0**70, 2**70 + 1)` answered the float). Declines for the rest. }
+  pg := PXXPromoVarCmpTry(@a, @b, 5);
+  if pg <> 0 then begin pyvar_gt := pg = 2; Exit; end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
     pyvar_gt := pyvar_to_float(a) > pyvar_to_float(b)
   else
@@ -11477,6 +11482,18 @@ begin
     else Result := 0;
     Exit;
   end;
+  { EXACT for a float against a bignum or an int beyond 2^53, as CPython is:
+    the float arm below converts the int to double. Declines (0) for every
+    other pair. A NaN answers "greater" here, which is arbitrary; the ordering
+    operators do not come through this three-way answer for it (pylt_v). }
+  pc := PXXPromoVarCmpTry(@a, @b, 3);
+  if pc <> 0 then
+  begin
+    if pc = 2 then Result := -1
+    else if PXXPromoVarCmpTry(@a, @b, 1) = 2 then Result := 0
+    else Result := 1;
+    Exit;
+  end;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
   begin
     fa := pyvar_to_float(a); fb := pyvar_to_float(b);
@@ -11651,27 +11668,45 @@ begin
   Result := pytruediv_v(a, b);
 end;
 
+{ The four ORDERING operators ask PXXPromoVarCmpTry first, with their own
+  operator: a float against a NaN, a bignum or an int beyond 2^53 has an answer
+  pycmp_v's -1/0/1 cannot carry. A NaN is unordered, so `x <= nan` and
+  `x >= nan` are both False, where pycmp_v's 0 ("equal") made them True; and
+  CPython compares an int with a float EXACTLY. The try declines (0) for every
+  other pair, which keeps pycmp_v's answer. }
 function pylt_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '<');
+  pc := PXXPromoVarCmpTry(@a, @b, 3);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) < 0;
 end;
 
 function pyle_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '<=');
+  pc := PXXPromoVarCmpTry(@a, @b, 4);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) <= 0;
 end;
 
 function pygt_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '>');
+  pc := PXXPromoVarCmpTry(@a, @b, 5);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) > 0;
 end;
 
 function pyge_v(const a: Variant; const b: Variant): Boolean;
+var pc: Integer;
 begin
   PyOrdCheck(a, b, '>=');
+  pc := PXXPromoVarCmpTry(@a, @b, 6);
+  if pc <> 0 then begin Result := pc = 2; Exit; end;
   Result := pycmp_v(a, b) >= 0;
 end;
 

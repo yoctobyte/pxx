@@ -8265,6 +8265,18 @@ test-threads: $(COMPILER)
 	# since builtinheap's HeapMmap allocates. The same file now runs, and it
 	# must agree with the other 32-bit targets.
 	# bug-a-hosted-riscv32-refuses-nil-python-for-an-arena-nothing-reads
+	# A float against a big int: exact comparisons, float arithmetic, NaN
+	# unordered, as CPython does them (it died with Runtime error 219 on every
+	# target). Four targets, because the exact compare rebuilds the float's
+	# integer part as a bignum and 32-bit targets split the Int64 halves.
+	./$(COMPILER) test/test_nilpy_a_float_against_a_bignum_compares_exactly.npy $(TESTTMP)/test_nilpy_fbig26
+	$(TESTTMP)/test_nilpy_fbig26 | diff -u test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected -
+	./$(COMPILER) --target=i386 test/test_nilpy_a_float_against_a_bignum_compares_exactly.npy $(TESTTMP)/test_nilpy_fbig_i386
+	tools/expect_same.sh i386/test_nilpy_fbig "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_fbig_i386)" "$$(cat test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_a_float_against_a_bignum_compares_exactly.npy $(TESTTMP)/test_nilpy_fbig_arm32
+	tools/expect_same.sh arm32/test_nilpy_fbig "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_fbig_arm32)" "$$(cat test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_a_float_against_a_bignum_compares_exactly.npy $(TESTTMP)/test_nilpy_fbig_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_fbig "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_fbig_riscv32)" "$$(cat test/test_nilpy_a_float_against_a_bignum_compares_exactly.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize_rv32
 	tools/expect_same.sh riscv32/test_npy_maxsize_rv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_npy_maxsize_rv32)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected32)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_cross32_values.py $(TESTTMP)/test_npy_cross32_rv32
