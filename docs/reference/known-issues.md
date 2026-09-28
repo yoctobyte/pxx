@@ -185,7 +185,12 @@ Two limits apply to these measurements:
   1.3 KB by 300), and 130 seconds after the last session had about 1.9 KB
   more free heap than at the start. The positive controls, which keep every
   response or session on purpose, lost 1,438 bytes per fetch and 1,116 to
-  1,142 bytes per session, so the measurement would have seen a leak. On
+  1,142 bytes per session, so the measurement would have seen a leak.
+  Longer runs the same day, with the compiler of tree `577e7acf0e`: 10,000
+  `urequests` fetches on the ESP32-C3 ended using 120 bytes more heap
+  than at the start, and were never more than 320 bytes away; 3,000
+  `umqtt.simple` sessions on the ESP32-S3 ended with 2,056 bytes more free. Both
+  runs had no errors and never rebooted. On
   2026-09-27, one ESP32-C3 board with the v441 compiler, joined to a home
   Wi-Fi network, fetched a page from a PC on that network 1,000 times. Free
   heap stayed within 400 bytes of where it started, with no upward trend, and
