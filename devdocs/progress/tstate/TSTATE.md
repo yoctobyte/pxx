@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `b8a18120508b` on borg, 2026-09-28T07:02:07Z (37m ago).**
+**Newest full tier in the fleet: `b8a18120508b` on borg, 2026-09-28T07:02:07Z (42m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `b8a18120508b` | RED | 37m | — (newest) |
+| borg | `b8a18120508b` | RED | 42m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -29,7 +29,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 ## Open regressions
 - **test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +14 (borg): bad `80e96e1c23cf`, last good `98facdd35ac7`, 1 commit(s) in range
-- **tools-devtest#00** (borg): bad `fcc48142526c`, last good `9df5de0690e8`, 2 commit(s) in range
+- **tools-devtest#00** (borg): bad `fcc48142526c`, last good `180411ab1e50`, 1 commit(s) in range
 - **test-core#src:test/test_cdecl_bodied_narrow.pas@2** — test/test_cdecl_bodied_narrow.pas tools/expect_same.sh +1 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
 - **test-core#src:test/test_cdecl_bodied_wide.pas@2** — test/test_cdecl_bodied_wide.pas tools/expect_same.sh +2 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
 - **test-core#src:test/test_cdecl_fnptr_aggregate_result.pas** — test/test_cdecl_fnptr_aggregate_result.pas tools/expect_same.sh +3 (borg): bad `b1f2b7d8812d`, last good `9a245b91c409`, 2 commit(s) in range
