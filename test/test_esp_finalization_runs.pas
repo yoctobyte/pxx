@@ -15,7 +15,9 @@ program test_esp_finalization_runs;
   MEASURED 2026-09-28 (frankz-e5), esp32c3 AND esp32s3 under QEMU, at tree
   3109649ec4, compiler binary 8d5d0f2653f0 -- the fixedpoint this tree
   reproduces, and NOT v450's own pin c19cc2d531e4. Re-confirmed on both chips at
-  tree a7cbacc6c6, binary f545c8410b32, after a rebase over 21 commits. Both
+  e4c44532a2, binary f545c8410b32, after a rebase over 21 commits -- the run was
+  on that commit's local-only pre-rebase twin, which touches no compiler source,
+  so the binary and therefore the measurement are the same. Both
   chips printed all four lines and matched this file exactly:
 
     FIN-PROBE init

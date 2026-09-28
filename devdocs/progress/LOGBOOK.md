@@ -5839,6 +5839,30 @@ block is a claim rather than a measurement.** Recording the tree alongside the
 binary is what makes that checkable by the next reader, and every block of mine
 now carries both.
 
+### And then it happened a third time, inside this very correction (2026-09-29)
+
+Every block above carries a tree sha, and four of them named `a7cbacc6c6`, which
+is **local only**: the pre-rebase twin of what landed as `e4c44532a2`. So the
+paragraph that says a measured block must name a reachable build was committed
+alongside four blocks that do not. frankd-90 found it the way a reader would —
+`git cat-file` said "Not a valid object name" — and lost a lookup to it.
+
+Why the rule did not catch it: I wrote it as a rule about the *content* of a
+block and then satisfied it by copying the sha of the tree I had measured on. A
+rebase rewrites that sha, and nothing in the workflow re-reads the blocks
+afterwards. **`git rebase` invalidates every measured block in the commits it
+moves, and re-measuring is not enough — the label has to be rewritten too.** I
+did re-measure, diligently, and then wrote the old sha down next to the new
+numbers.
+
+The binary sha was right all along (`f545c8410b32`) and is the half that actually
+identifies a build, because neither commit touches `compiler/`. Which suggests the
+cheap fix: a measured block needs the binary sha, and the tree sha is a
+convenience that goes stale. Pushing first and labelling from `git rev-parse
+origin/master` afterwards would also have worked. The check is one command —
+`git merge-base --is-ancestor <sha> origin/master` — and it belongs in whatever I
+run before a push, not in my judgement.
+
 ## 2026-09-28 — two claims of mine corrected by frankd-90, both the same error, and I had just written that error up
 
 Both were negatives I asserted from absence in one place without checking the
@@ -6045,7 +6069,7 @@ If the owner rules that softfloat should gain gradual underflow, the fix is the
 word `flush` in two Makefile branches, not the test.
 
 **Re-confirmed after rebasing onto 21 new commits**: 7/7, same mode per target, at
-tree `a7cbacc6c6` / binary `f545c8410b32`. That re-run was not ceremony — the
+`e4c44532a2` / binary `f545c8410b32`. That re-run was not ceremony — the
 commits in between touch `ir_codegen_riscv32.inc`, `ir_codegen_xtensa.inc` and
 `ir_codegen_wasm32.inc`, three of this row's seven backends, one of them inside a
 float fix (`cafc739cbf`, a float against a big int). Rebasing without re-measuring
@@ -6089,8 +6113,8 @@ fixedpoint this tree reproduces, and NOT v450's own pin `c19cc2d531e4`. Both chi
 QEMU, `--platform=esp`. (First measured on `1634f6483109`, which turned out to be
 the fixedpoint of an earlier tip; both rows were re-measured on `8d5d0f2653f0`
 rather than assumed to be unaffected, since the two intervening commits are both
-NilPy. See the stale-binary entry above.) **Re-confirmed again** at tree
-`a7cbacc6c6` / binary `f545c8410b32` after rebasing over 21 commits — both rows,
+NilPy. See the stale-binary entry above.) **Re-confirmed again** at
+`e4c44532a2` / binary `f545c8410b32` after rebasing over 21 commits — both rows,
 both chips — because one of those commits is `cafc739cbf`, a NilPy float-versus-big-int
 fix, and the catchable row asserts a `float()` ValueError.
 

@@ -23892,8 +23892,13 @@ test-core: $(COMPILER)
 	# fixedpoint of an EARLIER tip (947170c4cb), so it labelled a real build but not
 	# the tree this landed on, and a block naming it could not be reproduced here.
 	#
-	# RE-CONFIRMED at tree a7cbacc6c6, binary f545c8410b32, 7/7 and the same mode
-	# per target -- and that re-run was not a formality: the commits in between
+	# RE-CONFIRMED at e4c44532a2, binary f545c8410b32, 7/7 and the same mode
+	# per target. (The run itself happened on that commit's PRE-REBASE twin,
+	# a7cbacc6c6, which is local-only and which you cannot fetch -- I named it here
+	# first and frankd-90 lost a lookup to it. Neither commit touches compiler/, so
+	# the binary is identical and e4c44532a2 reproduces the block. Third instance of
+	# the stale-label mistake, and this one was inside the correction for it.)
+	# That re-run was not a formality: the commits in between
 	# touch ir_codegen_riscv32.inc, ir_codegen_xtensa.inc and ir_codegen_wasm32.inc,
 	# which are three of this row's seven backends, one of them in a float fix
 	# (cafc739cbf). Independently re-measured by frankd-90 on EIGHT targets for
