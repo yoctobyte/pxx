@@ -16421,18 +16421,15 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-27T19:22:17Z",
+  "date": "2026-09-28T00:11:12Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
-   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py"
+   "test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh"
   ],
-  "sha": "ddbe28897f0ef8c24470a995b38a7e99b78332f4",
+  "sha": "0448eaf40e3e88681d8a20e90548146832519674",
   "tier": "full",
-  "ver": "v445",
-  "verdict": "RED",
-  "why": {
-   "test-nilpy#src:test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py": "PXXDBG p.fresh TA.Named TRUE arg=-1 | PXXDBG p.fresh TA.NamedSelf FALSE arg=0 | PXXDBG p.fresh TA.Mixed FALSE arg=0 | -PXXDBG p.fresh TA.ViaLocal FALSE arg=-1 | +PXXDBG p.fresh TA.ViaLocal TRUE arg=-1"
-  }
+  "ver": "v446",
+  "verdict": "RED"
  },
  "toolchain": {
   "espqemu-riscv32": "9.2.2",
