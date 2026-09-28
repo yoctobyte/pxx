@@ -13528,11 +13528,21 @@ end;
   is purely a speed matter: the search costs one exact expansion per step, and
   seeding turns a 63-step search over the whole bit range into a handful of
   steps around the right answer. Powers of ten are applied by binary splitting
-  (at most nine multiplies) rather than one per decade. }
-function PyExDecEstimate(const ds: AnsiString; nd, expo: Integer): Double;
+  (at most nine multiplies) rather than one per decade.
+
+  It returns the estimate's BIT PATTERN, clamped to 0..maxbits, and a negative
+  power is applied to the value scaled up by 2^600, with the 600 taken off the
+  exponent field afterwards. Soft-float riscv32 and Xtensa flush a denormal
+  result to zero, so estimating near 2.2e-308 in plain doubles gave 0 there,
+  and the search started from bit pattern 0: correct, but a doubling climb and
+  a full bisection of exact expansions, 17 times per repr. That was 47 s for
+  repr(2.2250738585072014e-308) on hosted riscv32 and the watchdog on a C3.
+  Scaled, every intermediate is a normal double on every target. }
+function PyExDecEstimateBits(const ds: AnsiString; nd, expo: Integer;
+                             maxbits: Int64): Int64;
 var
-  sig: Int64;
-  i, k, e: Integer;
+  sig, bits, m: Int64;
+  i, k, e, be: Integer;
   w: Double;
   p10: array[0..8] of Double;
 begin
@@ -13557,13 +13567,36 @@ begin
   end
   else if e < 0 then
   begin
+    { sig < 2^57, so sig * 2^600 is far below DBL_MAX. The divisions only
+      shrink it, so an intermediate is a denormal only if D * 2^600 is, i.e.
+      D < 5e-489 -- far below the smallest double, where 0 is the right seed }
+    w := w * PyExDecBitsToDouble(Int64(1023 + 600) shl 52);
     k := -e;
     { divide rather than multiply by a negative power: keeps the intermediate
       from overflowing on the way down }
     for i := 0 to 8 do
       if (k and (1 shl i)) <> 0 then w := w / p10[i];
   end;
-  Result := w;
+  if (w <> w) or (w >= 1.7976931348623157e308) then begin Result := maxbits; Exit; end;
+  if w <= 0.0 then begin Result := 0; Exit; end;
+  bits := PyExDecDoubleToBits(w);
+  if e < 0 then
+  begin
+    be := Integer((bits shr 52) and $7FF) - 600;
+    if be >= 1 then
+      bits := (Int64(be) shl 52) or (bits and ((Int64(1) shl 52) - 1))
+    else if be > -53 then
+    begin
+      { a denormal: the significand with its hidden bit, shifted into place }
+      m := (bits and ((Int64(1) shl 52) - 1)) or (Int64(1) shl 52);
+      bits := m shr (1 - be);
+    end
+    else
+      bits := 0;
+  end;
+  if bits < 0 then bits := 0;
+  if bits > maxbits then bits := maxbits;
+  Result := bits;
 end;
 
 { The double nearest to the positive decimal (ds, decExp), correctly rounded,
@@ -13593,7 +13626,7 @@ var
   exp2, cmp: Integer;
   cds, mds: AnsiString;
   cexp, mexp: Integer;
-  c, est: Double;
+  c: Double;
 
   { sign of exact(bits) - D }
   function CmpBits(b: Int64): Integer;
@@ -13613,15 +13646,7 @@ begin
     bracket provably straddles D. The estimate's error is never assumed —
     if it is wildly wrong the doubling simply runs until it reaches the ends,
     which is the unseeded search and still correct. }
-  est := PyExDecEstimate(ds, nd, expo);
-  if (est <> est) or (est >= 1.7976931348623157e308) then eb := maxbits
-  else if est <= 0.0 then eb := 0
-  else
-  begin
-    eb := PyExDecDoubleToBits(est);
-    if eb < 0 then eb := 0;
-    if eb > maxbits then eb := maxbits;
-  end;
+  eb := PyExDecEstimateBits(ds, nd, expo, maxbits);
 
   lo := eb;
   step := 1;
@@ -19457,24 +19482,52 @@ end;
   means, makes -0.0 and NaN fall out correctly instead of needing special cases,
   and is immune to an extended-precision register ever appearing in this path.
 
+  The parse is the proof, but it is too dear to be the SEARCH: each one is an
+  exact bracket search of ~750-digit expansions, and 17 of them took 4 s for
+  repr(2.2250738585072014e-308) on hosted riscv32. So a precision is first
+  filtered by the parser's own rule -- a decimal reads back as av exactly when
+  it lies strictly between av's two rounding midpoints, or on one of them with
+  av's mantissa even -- which costs three expansions for the whole loop, and
+  only a candidate that passes is parsed.
+
   `av` must be finite, positive and nonzero; the caller handles the rest.
   Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
 function PyFloatRepr(av: Double): AnsiString;
-var sig, tail, decExp: Integer; ds, cand: AnsiString;
+var sig, tail, decExp, de0, loE, hiE, cLo, cHi: Integer;
+    ds, ds0, loS, hiS, cand: AnsiString; mant: Int64; exp2: Integer;
+    even: Boolean;
 begin
   Result := '';
+  PyExDecSplit(av, mant, exp2);
+  PyExDecOfMant(mant, exp2, ds0, de0);
+  { the midpoint with the next double up; and with the next one down, which
+    at a power of two above the denormals has half the spacing }
+  PyExDecOfMant(2 * mant + 1, exp2 - 1, hiS, hiE);
+  if (mant = (Int64(1) shl 52)) and (exp2 > -1074) then
+    PyExDecOfMant(4 * mant - 1, exp2 - 2, loS, loE)
+  else
+    PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
+  even := (mant and 1) = 0;
   for sig := 1 to 17 do
   begin
-    PyExDecDigits(av, ds, decExp);
+    ds := ds0;
+    decExp := de0;
     PyExDecRound(ds, decExp, sig);
     tail := Length(ds);
     while (tail > 1) and (ds[tail] = '0') do tail := tail - 1;
-    cand := PyFloatLayout(Copy(ds, 1, tail), decExp);
-    if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
-       PyExDecDoubleToBits(av) then
+    ds := Copy(ds, 1, tail);
+    cLo := PyExDecCmp(ds, decExp, loS, loE);
+    cHi := PyExDecCmp(ds, decExp, hiS, hiE);
+    if ((cLo > 0) or ((cLo = 0) and even)) and
+       ((cHi < 0) or ((cHi = 0) and even)) then
     begin
-      Result := cand;
-      Exit;
+      cand := PyFloatLayout(ds, decExp);
+      if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
+         PyExDecDoubleToBits(av) then
+      begin
+        Result := cand;
+        Exit;
+      end;
     end;
   end;
 end;

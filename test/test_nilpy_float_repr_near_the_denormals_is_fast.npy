@@ -1,0 +1,37 @@
+# repr of doubles at and below the smallest normal, on every target, in time.
+#
+# The exact decimal->double parser seeds its search from a float estimate. On
+# soft-float riscv32 and Xtensa that estimate flushed to zero near 2.2e-308, so
+# every candidate repr tried was an unseeded search over ~750-digit expansions:
+# these 24 values took 244 s on hosted riscv32 (a C3 hit its watchdog on one).
+# The cross-target rows run this under `timeout 120`; with the fix it is ~7 s.
+# None of these is a power of two above the denormals (that case has its own
+# test). Expected output is CPython's.
+xs = [
+    5e-324,
+    1e-323,
+    1.5e-323,
+    6.09957e-318,
+    2.225073858507201e-308,
+    2.2250738585072004e-308,
+    1.1125369292597e-308,
+    2.225073858507202e-308,
+    2.225073858507203e-308,
+    2.2250743464732714e-308,
+    4.450147717014408e-308,
+    8.900295434028958e-308,
+    1e-310,
+    2.225073858507201e-308,
+    6.675221575521604e-308,
+    1e-320,
+    3.14e-315,
+    6.02e-308,
+    9.99e-307,
+    1.5e-305,
+    7.3e-300,
+    2.5e-322,
+    8.9e-318,
+    2.2250738585072014e-308,
+]
+for x in xs:
+    print(x)
