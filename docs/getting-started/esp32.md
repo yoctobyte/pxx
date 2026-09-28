@@ -60,6 +60,10 @@ examples/esp32/nilpy-s3/build.sh      # Nil Python, ESP32-S3
 examples/esp32/nilpy-c3/build.sh      # Nil Python, ESP32-C3
 ```
 
+To run a built example with no board, under Espressif's QEMU, see "Running
+without a board" in [ESP32](../targets/esp32.md). QEMU is not part of a
+default ESP-IDF install, and that page has the line that adds it.
+
 Each one ends with `Project build complete` and `app_main present in image
 map`, and leaves the image in the project's `build/` directory.
 

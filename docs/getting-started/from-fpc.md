@@ -165,6 +165,9 @@ APPLE 2 pe
 caught EEmptyStack: pop from an empty stack
 ```
 
+The `9 4 1` line ends with a space, because the loop writes one after each
+number (`Write(st.Pop, ' ')`). FPC 3.2.2 prints the same bytes.
+
 On a larger scale, PXX runs a curated 550 programs of FPC 3.2.2's own test
 suite (`tools/run_pascal_conformance.sh`). With pin v441, 427 pass and 0
 fail; 50 do not apply here, and 73 are skipped, each with a written reason
