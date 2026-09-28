@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:35 unfinished:19 blocked:9 backlog:46 backlog-umbrella:14 backlog-core:168 backlog-nilpy:183 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4047 rejected:89`
+`working:34 unfinished:19 blocked:9 backlog:46 backlog-umbrella:14 backlog-core:168 backlog-nilpy:183 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4048 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 
@@ -23,7 +23,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
-- `feature-a-esp-math-errors-keep-the-device-running` [A+S] — owner: frankz-e5
 - `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A] — owner: frankA
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
 - `feature-a-unreferenced-class-rtti-keeps-every-method-alive` [A] — owner: frankb-8e
