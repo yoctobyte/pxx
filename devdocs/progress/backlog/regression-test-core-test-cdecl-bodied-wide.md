@@ -39,3 +39,6 @@ pascal26:73: error: incompatible types: @Cb10 uses the Pascal convention but the
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-28 — the borg watcher saw `test-core#src:test/test_cdecl_bodied_wide.pas@2` GREEN at a8e99254ed4b (tier native) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
