@@ -541,7 +541,7 @@ These were wrong in v424 and fixed in v425, and so are fixed here too:
   cross-target test, on call0 and on the windowed ABI. Measured on 2026-09-28
   on the tree after pin v448. A large program also needs
   `--xtensa-long-calls` on call0, as it already did on the windowed ABI; the
-  compiler says so when it does. Refused in v441 to v448.
+  compiler says so when it does. Refused in v441 to v448 (`8529eb30e8`).
 
 ## Refused, with a message
 

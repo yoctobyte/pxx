@@ -2754,6 +2754,16 @@ test-nilpy: $(COMPILER)
 	# a selector after a VIRTUAL call (the receiver's class has a subclass)
 	./$(COMPILER) test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall26
 	$(TESTTMP)/test_nilpy_virtcall26 | diff -u test/test_nilpy_attribute_off_a_virtual_call_result.expected -
+	# The same program on hosted xtensa, both ABIs. On the ESP32-S3 (windowed)
+	# `P(7).mk().a` printed 0: an unannotated __init__ inferred a Variant result,
+	# so the constructor expected a hidden result pointer in a2, and
+	# PyClassRefNew's `cls(x)` call arrived one register off (fix 76d35e065f).
+	# Hosted xtensa could not run Nil Python before 8529eb30e8, so this row
+	# needed a board.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall_xtw
+	tools/expect_same.sh xtensa-windowed/test_nilpy_attribute_off_a_virtual_call_result "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_virtcall_xtw)" "$$(cat test/test_nilpy_attribute_off_a_virtual_call_result.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall_xtc0
+	tools/expect_same.sh xtensa-call0/test_nilpy_attribute_off_a_virtual_call_result "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_virtcall_xtc0)" "$$(cat test/test_nilpy_attribute_off_a_virtual_call_result.expected)"
 	# a member lookup through a qualifier that supplies nothing must name the
 	# QUALIFIER, not just the member — and a bare name must keep the short form
 	# The expected LINE is derived from the fixture, not pinned: the subject of this
