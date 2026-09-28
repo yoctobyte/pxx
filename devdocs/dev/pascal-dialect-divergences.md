@@ -298,21 +298,33 @@ what stopped `VarType(v) = varString` from being false for `'x'`.
 Verified against FPC 3.2.2: `test/lib_variants_vartype_codes.pas` asserts every
 row above, and marks the divergent one in place next to the row that agrees.
 
-## `{ }` comments: pxx nests, FPC does not
+## `{ }` comments: nesting depends on the mode, and only `{$mode tp}` diverges
 
-FPC ends a `{ }` comment at the **first** `}`, so a `}` written inside one — the
-everyday case is a doc comment mentioning a record like `{Code,Data}` — closes
-the comment and the remaining prose is parsed as code. pxx keeps reading to a
-later `}`.
+> Corrected 2026-09-28 (frankD). This section said "FPC ends a `{ }` comment at
+> the first `}`" in every mode. Measured with FPC 3.2.2 and pin v447
+> (fad87004e4e8) on `{ a record like {Code, Data} in a comment }` followed by a
+> `begin WriteLn(1) end.`, per mode line:
 
-Direction: **we accept a form FPC rejects**, which is the "not a defect" row of
-CLAUDE.md's compat table, and it cannot silently miscompile valid FPC source —
-any FPC program with this shape fails to compile there, so no working program
-depends on the early close.
+| mode | FPC 3.2.2 | pxx v447 |
+| --- | --- | --- |
+| none (FPC's `fpc` mode) | nests, with `Warning: Comment level 2 found` | nests |
+| `{$mode objfpc}` | nests, with the same warning | nests |
+| `{$mode delphi}` | does not nest: `Fatal: Syntax error, "BEGIN" expected but "in" found` | does not nest: `error: unexpected character` |
+| `{$mode tp}` | does not nest: the same syntax error | **nests** |
 
-Recorded anyway because it is a live trap **for test authors**: a `.pas` in
-`test/` whose header comment contains a `}` compiles under pxx and is rejected
-by FPC, so the FPC oracle silently disappears and the expectation ends up
+So the one divergence is `{$mode tp}`: pxx treats it as its default dialect
+(`tp` is an inert marker, see docs/reference/modes.md), so it nests there and
+FPC does not.
+
+Direction there: **we accept a form FPC rejects**, which is the "not a defect"
+row of CLAUDE.md's compat table, and it cannot silently miscompile valid FPC
+source — any FPC program with this shape fails to compile under FPC's `tp`
+mode, so no working program depends on the early close.
+
+Recorded anyway because it was a live trap **for test authors**. It was met in
+a `{$MODE DELPHI}` test; pxx v447 refuses that shape in delphi mode too, so the
+trap that remains is `{$mode tp}`: a `.pas` in `test/` whose header comment contains a `}` compiles
+under pxx and is rejected by FPC, so the FPC oracle silently disappears and the expectation ends up
 unverified against anything. Met on 2026-08-28 writing
 `test/test_class_method_to_method_pointer.pas`; the giveaway is FPC reporting a
 syntax error at a line and column inside what looks like a comment.
