@@ -3581,7 +3581,7 @@ begin
     { PLATFORM_ESP excluded too: under IDF the heap IS IDF's heap (calloc/free),
       so there is no arena to reserve AND no mmap to want. It used to reserve
       one purely to keep this message quiet, which cost 64 KiB of SRAM that
-      nothing read. HOSTED riscv32 is still refused, in its own arm below. }
+      nothing read. Hosted riscv32 needs none either; see its arm below. }
     { HOSTED xtensa needs no arena either, and this refused it until
       2026-09-28. Nothing on xtensa reads BSS_HEAP_PTR/BSS_HEAP_END (the only
       reader is the x86-64 inline allocator in symtab.inc): xtensa allocates
@@ -3790,23 +3790,17 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    { Same split as xtensa above: bare metal uses the BSS arena; the HOSTED
-      riscv32 Linux profile is what still has no mmap encoding. }
-    { PLATFORM_ESP excluded too: under IDF the heap IS IDF's heap (calloc/free),
-      so there is no arena to reserve AND no mmap to want. It used to reserve
-      one purely to keep this message quiet, which cost 64 KiB of SRAM that
-      nothing read. HOSTED riscv32 is what is still refused, just below. }
-    if withHeapArena and (not EspBareBoot) and
-       (TargetPlatform <> PLATFORM_ESP) and (BSS_HEAP_ARENA = 0) then
-      { The cause, for whoever lifts this: a heap arena needs mmap and
-        EmitMmapArena has no riscv32 arm. Bare metal reserves the arena in BSS,
-        and under ESP-IDF PXXAlloc IS calloc, so neither needs one
-        (bug-a-nilpy-on-cross-targets-four-remaining-walls). Only the Nil
-        Python frontend asks for an arena (pyparser.inc's EmitProgramPrologue
-        is the one call passing True), which is why the message names it. }
-      Error('Nil Python is not supported on hosted riscv32 Linux yet; '
-            + 'build it for the ESP32 instead (--platform=esp or '
-            + '--esp-profile=bare)');
+    { PLATFORM_ESP needs no arena: under IDF the heap IS IDF's heap
+      (calloc/free). It used to reserve one purely to keep a refusal quiet,
+      which cost 64 KiB of SRAM that nothing read.
+
+      HOSTED riscv32 needs none either. It refused every Nil Python program
+      ("not supported on hosted riscv32 Linux yet") until 2026-09-28, for the
+      reason the xtensa arm above gives: nothing on riscv32 reads
+      BSS_HEAP_PTR/BSS_HEAP_END (the only reader is the x86-64 inline allocator
+      in symtab.inc). riscv32 allocates through builtinheap's HeapMmap, whose
+      riscv32 arm is the generic mmap (222). Bare metal still publishes its BSS
+      arena below. }
     { ESP-IDF: publish the BSS arena reserved in frontend_prologue.inc. t0/t1
       are caller-saved and nothing has run yet, same as the bare arm below. }
     if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA > 0) then

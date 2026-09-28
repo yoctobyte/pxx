@@ -548,6 +548,14 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   without it the compiler stops and says so. Refused in v441 to v448. **On
   v448:** use the windowed ABI, as the ESP32-S3 examples do.
 
+- **Nil Python on hosted riscv32 Linux.** Every Nil Python program was
+  refused with `Nil Python is not supported on hosted riscv32 Linux yet`,
+  so a Nil Python bug on the ESP32-C3's architecture could only be looked at
+  on a board or in the ESP QEMU. It now builds and runs under qemu-riscv32,
+  and the Nil Python cross-target test and the class-value test print the
+  same output as x86-64. Measured on 2026-09-28 on the tree after pin v448.
+  Refused in v441 to v448.
+
 - **TLS: a CA file that does not load was accepted.**
   `OpenSslTlsRegisterEx(True, '/nonexistent/ca.pem')` answered `True`, and
   so did a file that is not a certificate, so a mistyped private-CA path
@@ -648,7 +656,7 @@ the two behave differently on purpose:
 | Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
 
 Each cell was measured on v425. The desktop column was run on x86-64, i386,
-aarch64, arm32 and riscv32 Linux (Nil Python has no hosted riscv32). The ESP
+aarch64, arm32 and riscv32 Linux (Nil Python had no hosted riscv32 then). The ESP
 column was measured under Espressif's QEMU on both chips, for Pascal, C and
 Nil Python. This is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
 test the divisor yourself.

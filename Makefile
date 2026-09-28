@@ -8213,9 +8213,18 @@ test-threads: $(COMPILER)
 	# ...in one user sentence: the allocator reasoning that used to BE this
 	# message lives in a comment beside the check in compiler.pas now.
 	! grep -q "PXXHeapSpin" $(TESTTMP)/test_threadsafe_riscv32_guard.log
-	# Nil Python on HOSTED riscv32 is refused by name, not by an internal routine.
-	! ./$(COMPILER) --target=riscv32 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_rv_refused26 > $(TESTTMP)/test_npy_rv_refused.log 2>&1
-	grep -q "Nil Python is not supported on hosted riscv32 Linux" $(TESTTMP)/test_npy_rv_refused.log
+	# Nil Python on HOSTED riscv32 RUNS. It was refused by name ("not supported
+	# on hosted riscv32 Linux yet") until 2026-09-28, and this row asserted
+	# that refusal. The refusal guarded a heap arena nothing on riscv32 reads,
+	# since builtinheap's HeapMmap allocates. The same file now runs, and it
+	# must agree with the other 32-bit targets.
+	# bug-a-hosted-riscv32-refuses-nil-python-for-an-arena-nothing-reads
+	./$(COMPILER) --target=riscv32 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize_rv32
+	tools/expect_same.sh riscv32/test_npy_maxsize_rv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_npy_maxsize_rv32)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected32)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_cross32_values.py $(TESTTMP)/test_npy_cross32_rv32
+	tools/expect_same.sh riscv32/test_nilpy_cross32_values "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_npy_cross32_rv32)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall_rv32
+	tools/expect_same.sh riscv32/test_nilpy_attribute_off_a_virtual_call_result "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_virtcall_rv32)" "$$(cat test/test_nilpy_attribute_off_a_virtual_call_result.expected)"
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas $(TESTTMP)/test_critsec_once26
 	tools/expect_same.sh test_critsec_once26 "$$($(TESTTMP)/test_critsec_once26)" "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	# data-parallel loop runtime (palparallel PXXParallelFor): exact partition (each index once), values, edge ranges. worker count is host-dependent, so gate on the deterministic tail.
