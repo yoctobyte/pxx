@@ -596,7 +596,7 @@ test-nilpy: $(COMPILER)
 	# returns (pin v442: ~2,500 live at the sys.exit inside work()). `keep` is
 	# the positive control. The value line is CPython's.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_statement_temps_release_at_statement_end.npy $(TESTTMP)/test_nilpy_stmttemp26
-	tools/expect_same.sh nilpy_stmt_temp_value "$$($(TESTTMP)/test_nilpy_stmttemp26 2>/dev/null)" "churn 108890 n 1508 m 500 alias [3, 4, 5] b [1508] c 5"
+	tools/expect_same.sh nilpy_stmt_temp_value "$$($(TESTTMP)/test_nilpy_stmttemp26 2>/dev/null)" "churn 108890 last r299 v199 g99 n 2408 m 500 alias [3, 4, 5] b [1508] c 5"
 	tools/assert_no_leak.sh nilpy_stmt_temp_released 300 $(TESTTMP)/test_nilpy_stmttemp26
 	@if tools/assert_no_leak.sh nilpy_stmt_temp_control 300 $(TESTTMP)/test_nilpy_stmttemp26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_stmt_temp control (keep) did not trip the bound -- the census cannot see these containers"; exit 1; fi

@@ -89,6 +89,26 @@ def one_line(c=None):
     return (len(c), [c])
 
 
+# comprehensions build into hidden lists that are released the same way
+def ret_comp(n):
+    return [str(i) + "c" for i in range(n)]
+
+
+def comp_arg(n):
+    return len([i for i in range(n)]) + sum(i for i in range(n))
+
+
+def comp_nested(n):
+    grid = [[i * j for j in range(3)] for i in range(n)]
+    keys = {str(i): [i] for i in range(n)}
+    return (grid[-1], keys[str(n - 1)], sorted({i % 3 for i in range(n)}))
+
+
+def comp_param(xs=None):
+    xs = [x * 2 for x in (xs or [1, 2])]
+    return list(x + 1 for x in xs)
+
+
 print(ret_tuple(), ret_tuple([0]))
 print(ret_list(), ret_dict())
 print(ret_named(), ret_named_dict(), ret_nested())
@@ -96,3 +116,4 @@ print(ret_in_if(True), ret_in_if(False))
 print(ret_in_loop([0, 1, 5]), ret_in_loop([]))
 print(ret_from_break(), ret_after_raise())
 print([g for g in gen()], one_line())
+print(ret_comp(3), comp_arg(4), comp_nested(4), comp_param(), comp_param([5]))

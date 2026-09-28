@@ -30429,6 +30429,10 @@ begin
   buildSym := AllocVar(PyHiddenName('comp'), tyClass);
   Syms[buildSym].RecName := REC_UCLASS_BASE + listCiN;
   SymSyncTypeRef(buildSym);
+  { the build list owns its construction ref and `target = build` retains
+    again: drop it after the statement, or `rows = [...]; rows = None` holds
+    the rows until the function returns }
+  PyNoteStmtTemp(buildSym);
   node := AllocNode(AN_ASSIGN);
   ASTLeft[node] := PyMakeIdent(buildSym);
   ASTRight[node] := createNode;
@@ -30501,6 +30505,7 @@ begin
   PyScanToCompFor;
   if not PyIsIdent('for') then Error('Nil Python: malformed comprehension');
   seq := PyBuildComp(tmpSym, exprStart);
+  PyNoteStmtTemp(tmpSym);
   PyCompIsDict := savedDict;
   if bracketed then Expect(tkRBrack, ']');
   { each build statement runs before the current one }
@@ -30528,6 +30533,7 @@ begin
   PyScanToCompFor;
   if not PyIsIdent('for') then Error('Nil Python: malformed set comprehension');
   seq := PyBuildComp(tmpSym, exprStart);
+  PyNoteStmtTemp(tmpSym);
   PyCompIsDict := savedDict; PyCompIsSet := savedSet;
   Expect(tkEnd, 'close brace');
   while seq >= 0 do
@@ -36094,6 +36100,7 @@ begin
         Syms[cmpTmp].RecName := REC_UCLASS_BASE + FindUClass('TPyList');
         SymSyncTypeRef(cmpTmp);
         cmpSeq := PyParseListComp(cmpTmp);
+        PyNoteStmtTemp(cmpTmp);
         cmpAsgn := AllocNode(AN_ASSIGN);
         ASTLeft[cmpAsgn] := PyMakeIdent(symIdx);
         ASTRight[cmpAsgn] := PyMakeIdent(cmpTmp);

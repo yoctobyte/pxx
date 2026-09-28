@@ -60,11 +60,28 @@ def work(keep):
     b = []
     b.append(n)
     c = 5
+    # comprehensions build into a hidden list of their own: the same hold,
+    # the same release (census 3 -> 7 on v445 for one small list comp)
+    r = ["r" + str(i) for i in range(300)]
+    dd = {"k" + str(i): "v" + str(i) for i in range(200)}
+    ss = {"s" + str(i) for i in range(200)}
+    gl = sorted("g" + str(i) for i in range(200))
+    last = r[-1] + " " + dd["k199"] + " " + gl[-1]
+    n = n + len(r) + len(dd) + len(ss) + len(gl)
+    if keep:
+        kept.append(r)
+        kept.append(dd)
+        kept.append(ss)
+        kept.append(gl)
+    r = None
+    dd = None
+    ss = None
+    gl = None
     churn = 0
     for i in range(20000):
         t = "z" + str(i)
         churn = churn + len(t)
-    print("churn", churn, "n", n, "m", mlen, "alias", alias, "b", b, "c", c)
+    print("churn", churn, "last", last, "n", n, "m", mlen, "alias", alias, "b", b, "c", c)
     sys.stdout.flush()
     sys.exit(0)
 
