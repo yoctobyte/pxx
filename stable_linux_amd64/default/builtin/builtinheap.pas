@@ -446,6 +446,10 @@ function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
 function PXXObjAllocRaw2(size: NativeInt): Pointer;
 procedure PXXObjRetain(p: Pointer);
+{ The result of a Pascal call that returns EITHER one of its arguments OR a
+  fresh object (ProcResultFreshOrArg): retain it when it IS that argument, so
+  the caller owns exactly one reference either way. }
+function PXXObjRetainIfSame(r, a: Pointer): Pointer;
 procedure PXXObjRelease(p: Pointer);
 procedure PXXObjFree(p: Pointer);
 { Run the Pascal DESTRUCTOR of a class instance whose last NilPy reference just
@@ -546,9 +550,13 @@ procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
 {$ifdef CPU_XTENSA}
-{ Xtensa software integer divide for ESP32 classic (LX6), which lacks the
-  hardware divide option (it has multiply). Selected by --xtensa-cpu=lx6; the
-  codegen routes div/mod here instead of quos/rems. Built from shift/sub/add/
+{ Xtensa software integer divide, written for ESP32 classic (LX6) on the
+  belief that it "lacks the hardware divide option". It does NOT lack it --
+  Espressif's gcc emits quos/rems for esp32 and its assembler accepts them
+  (measured 2026-09-28) -- and nothing currently reaches these routines: the
+  flag that selects them is a no-op. Correct, unused, and kept pending the
+  ticket. bug-a-xtensa-cpu-lx6-is-a-no-op-and-its-premise-is-wrong
+  Built from shift/sub/add/
   branch (+ mull for the modulo fixup) — none use the div/mod operators, so they
   cannot recurse into themselves. }
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;
@@ -3742,6 +3750,12 @@ begin
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1, size);
 {$endif}
+end;
+
+function PXXObjRetainIfSame(r, a: Pointer): Pointer;
+begin
+  if (r <> nil) and (r = a) then PXXObjRetain(r);
+  Result := r;
 end;
 
 procedure PXXObjRetain(p: Pointer);
