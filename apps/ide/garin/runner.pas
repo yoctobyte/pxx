@@ -200,6 +200,32 @@ begin
   SanitizeUtf8ForText := r;
 end;
 
+{ PXX_IDE_TRACE=1 makes StreamPoll narrate itself to stderr, one token per step.
+  It exists because every EXTERNAL instrument failed on the espide monitor hang:
+  objdump shows nothing (pxx executables carry no section header), xtensa .o
+  disassembly desyncs on literal pools, `strace -f` never reaches the monitor
+  because it follows the whole cmake/ninja tree, `gdb -p` is refused by
+  ptrace_scope=1 for a non-child, gdb-as-parent symbolises nothing (`?? ()` for
+  every frame), and /proc wchan said "anon_pipe_read" for a fd that is provably
+  O_NONBLOCK. When the outside cannot see in, the subject has to say where it is.
+  Unbuffered and flushed per token, so the LAST token before a freeze is the step
+  that did not return. bug-s-espide-auto-never-exits-after-build-flash }
+var
+  traceInit: Boolean = False;
+  traceOn: Boolean = False;
+
+procedure Tr(const s: AnsiString);
+begin
+  if not traceInit then
+  begin
+    traceInit := True;
+    traceOn := GetEnvironmentVariable('PXX_IDE_TRACE') = '1';
+  end;
+  if not traceOn then Exit;
+  write(StdErr, s);
+  Flush(StdErr);
+end;
+
 function StreamPoll(var p: TStreamProc; timeoutMs: Integer): AnsiString;
 var
   buf: array of Byte;
@@ -216,9 +242,13 @@ begin
     starve the face's event loop. }
   while reads < 16 do
   begin
+    Tr('[poll fd=' + IntToStr(p.Fd) + ' t=' + IntToStr(timeoutMs) + ']');
     ev := PalPoll(p.Fd, POLL_IN, timeoutMs);
+    Tr('[ev=' + IntToStr(ev) + ']');
     if ev <= 0 then Break;                       { nothing ready (or error) }
+    Tr('[read]');
     n := PalRead(p.Fd, @buf[0], 4096);
+    Tr('[n=' + IntToStr(Integer(n)) + ']');
     { EAGAIN IS NOT EOF, and the distinction is the whole point of the
       non-blocking fd: n <= 0 below reaps the child, so treating "no data right
       now" as "the child is done" would kill a live monitor on its first quiet
