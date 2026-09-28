@@ -41,21 +41,24 @@ interface
   call in the tkinter façade). }
 uses pylib;
 
-const
-  CP_MAX_SECTIONS = 64;
-  CP_MAX_OPTIONS  = 256;   { per section }
-
 type
+  { Sections and options GROW on demand (doubling from a few). They were fixed
+    arrays of 64 sections x 256 options x key+value, so every ConfigParser()
+    cost 64*512 string slots up front -- 131 KB on a 32-bit target, 262 KB on
+    x86-64 -- and an ESP32-C3 (about 258 KB of heap in two regions) died with
+    "out of memory" on the constructor before a single set(). The caps also
+    dropped a 65th section or a 257th option without a word; CPython has
+    neither limit. }
   TCpSection = record
     name: AnsiString;
-    keys: array[0..CP_MAX_OPTIONS - 1] of AnsiString;
-    vals: array[0..CP_MAX_OPTIONS - 1] of AnsiString;
+    keys: array of AnsiString;
+    vals: array of AnsiString;
     count: Integer;
   end;
 
   ConfigParser = class
   public
-    sects: array[0..CP_MAX_SECTIONS - 1] of TCpSection;
+    sects: array of TCpSection;
     nsect: Integer;
     constructor Create;
 
@@ -142,7 +145,8 @@ end;
 procedure ConfigParser.add_section(const section: AnsiString);
 begin
   if has_section(section) then exit;
-  if nsect >= CP_MAX_SECTIONS then exit;
+  if nsect >= Length(sects) then
+    if Length(sects) = 0 then SetLength(sects, 4) else SetLength(sects, 2 * Length(sects));
   sects[nsect].name := section;
   sects[nsect].count := 0;
   nsect := nsect + 1;
@@ -192,7 +196,12 @@ begin
       done := True;
     end;
   if done then exit;
-  if sects[si].count >= CP_MAX_OPTIONS then exit;
+  if sects[si].count >= Length(sects[si].keys) then
+  begin
+    if Length(sects[si].keys) = 0 then j := 8 else j := 2 * Length(sects[si].keys);
+    SetLength(sects[si].keys, j);
+    SetLength(sects[si].vals, j);
+  end;
   sects[si].keys[sects[si].count] := key;
   sects[si].vals[sects[si].count] := value;
   sects[si].count := sects[si].count + 1;

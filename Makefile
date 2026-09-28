@@ -1307,6 +1307,12 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_star_args26.1 "$$($(TESTTMP)/test_nilpy_star_args26)" "$$(printf '%b' '0\n\n4\na 1 2.5 True\n2\n[1, 2] {\047k\047: 1}\np:\np: x 9\n7 0\n7 2\nalpha a\nbeta 2\n1 0 0\n\n1 2 1\n2 3\n[2, 3]\n[]')"
 	./$(COMPILER) test/test_nilpy_configparser.npy $(TESTTMP)/test_nilpy_cfgparse26
 	tools/expect_same.sh test_nilpy_cfgparse26.1 "$$($(TESTTMP)/test_nilpy_cfgparse26)" "$$(printf 'sections: 2\nhas UI: True has nope: False\nget: 1280x800\ndefault lowercases: True\noption: fontsize = 13\nsubclass keeps case: True\nand rejects folded: False')"
+	@# configparser grows its sections and options on demand: the fixed 64 x 256
+	@# arrays cost 131 KB per ConfigParser() on a 32-bit target (an ESP32-C3 ran out
+	@# of heap in the constructor) and silently dropped the 65th section and 257th
+	@# option. This row crosses both old caps; the old unit fails it (IndexError).
+	./$(COMPILER) test/test_nilpy_configparser_grows_past_the_old_caps.npy $(TESTTMP)/test_nilpy_cfgcap26
+	$(TESTTMP)/test_nilpy_cfgcap26 | diff -u test/test_nilpy_configparser_grows_past_the_old_caps.expected -
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy $(TESTTMP)/test_nilpy_subbase26
 	tools/expect_same.sh test_nilpy_subbase26.1 "$$($(TESTTMP)/test_nilpy_subbase26)" "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26

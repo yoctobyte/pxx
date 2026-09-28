@@ -1,0 +1,39 @@
+# configparser stored sections and options in FIXED arrays: 64 sections x 256
+# options per section, key and value each. Every ConfigParser() therefore cost
+# 64*512 string slots up front -- 131 KB on a 32-bit target -- so on an
+# ESP32-C3 the constructor alone exhausted the heap ("pxx: out of memory"
+# before the first set(); test_nilpy_qualified_ctor died there). And the 65th
+# section or the 257th option was dropped without a word. The storage now
+# grows on demand; this row crosses both old caps and checks nothing was lost.
+# Every expectation is CPython's own output.
+import configparser
+
+cfg = configparser.ConfigParser()
+
+# 70 sections: the 65th..70th used to vanish
+for i in range(70):
+    cfg.add_section("s" + str(i))
+names = cfg.sections()
+print(len(names), names[0], names[63], names[64], names[69])
+print(cfg.has_section("s64"), cfg.has_section("s69"), cfg.has_section("s70"))
+
+# 300 options in one section: the 257th..300th used to vanish
+for i in range(300):
+    cfg.set("s0", "k" + str(i), "v" + str(i * 7))
+print(len(cfg.options("s0")), cfg.get("s0", "k255"), cfg.get("s0", "k256"), cfg.get("s0", "k299"))
+print(cfg.has_option("s0", "k299"), cfg.has_option("s0", "k300"))
+
+# an overwrite past the old cap updates in place and does not append
+cfg.set("s0", "k280", "changed")
+print(len(cfg.options("s0")), cfg.get("s0", "k280"))
+
+# options added to a late section, and insertion order kept
+cfg.set("s69", "b", "2")
+cfg.set("s69", "a", "1")
+print(cfg.options("s69"), cfg.get("s69", "a"), cfg.get("s69", "b"))
+
+# a small parser, the common case, still works
+small = configparser.ConfigParser()
+small.add_section("UI")
+small.set("UI", "size", "1280x800")
+print(small.get("UI", "size"), small.sections())
