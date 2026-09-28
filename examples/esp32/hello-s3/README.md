@@ -40,6 +40,8 @@ PXX hello from Pascal S3: i=5
 PXX S3 sum 1..5 = 15
 ```
 
+Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU, not on a board: `tools/esp_run.sh --chip esp32s3 examples/esp32/hello-s3/main/main.pas` printed exactly these six lines.
+
 The program then blinks GPIO 2 and parks through `vTaskDelay`, so FreeRTOS
 idle continues to run. GPIO 2 is only a simple smoke default; use the board's
 actual LED GPIO for hardware demos if needed.

@@ -71,7 +71,12 @@ link group, so its `lwip_*` / `esp_netif_init` refs go unresolved).
 ./build.sh qemu
 ```
 
-Measured 2026-08-30 against pin v393 (`1d69760deabe2865`):
+Measured 2026-08-30 against pin v393 (`1d69760deabe2865`), and again on
+2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU
+with the same eight lines. `./build.sh qemu` prints only the last two; the
+`diag` lines are in the serial output it captures, and show when the image is
+booted directly (`qemu-system-riscv32 -M esp32c3 -drive
+file=<merged flash>,if=mtd,format=raw -nographic`). The serial output:
 
 ```
 PXX-dns diag v4-rc=0

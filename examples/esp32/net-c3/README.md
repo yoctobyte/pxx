@@ -38,6 +38,8 @@ PXX-net-smoke status=0
 esp32c3 lwIP loopback socket smoke: PASS
 ```
 
+Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU, not on a board: `./build.sh qemu` printed these two lines.
+
 `status=0` means the core path passed: socket / bind / sendto / poll /
 recvfrom + loopback delivery. The address **read-back** diagnostics
 (`bound-port` / `peer-port`) currently print `0` — lwIP returns an unfilled

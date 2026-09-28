@@ -18,6 +18,8 @@ PAL: open-EXCL=-38 (today: -38 unsupported)
 PAL: open-missing=-1 (today: -1, errno collapsed)
 ```
 
+Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU, not on a board: `./build.sh qemu-assert` passed. It compares these nine lines, plus a final `PAL: VERDICT esp-pal-file-io-WORKS`, exactly.
+
 So **ESP-IDF VFS file I/O works under QEMU**, and so does the PAL's IDF path on
 top of it. That had to be measured, not assumed: on the same emulator the GPIO
 input path is entirely unmodelled and the first ADC call hangs, so "the ESP

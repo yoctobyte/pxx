@@ -9,7 +9,19 @@ pxx -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/httpdemo && /tmp/ht
 ```
 
 It exercises, over a single keep-alive connection: a routing server handler
-(`HttpServeConn`), a cookie round-trip, and transparent gzip decoding.
+(`HttpServeConn`), a cookie round-trip, and transparent gzip decoding. It
+prints:
+
+```text
+GET /        -> 200 OK
+  body:   Welcome to frank2 net
+  cookie: sid=demo123
+GET /me      -> 200 OK  (cookie sent back)
+  body:   hello sid=demo123
+GET /data.gz -> 200 OK  (gzip, decoded transparently)
+  body:   hello world
+done
+```
 
 ## The library at a glance
 
@@ -68,6 +80,8 @@ v.FreeTree;
 
 ## Portability
 
-The source is portable: it builds on `amd64` (primary) and `aarch64`. `i386` and
-`arm32` are currently blocked on backend gaps — see the Track A ticket
-`feature-net-lib-cross-target`.
+The source is portable. With pin v450 (compiler sha256 `c19cc2d531e4`),
+measured 2026-09-28, `httpdemo` builds for x86-64, i386, aarch64, arm32 and
+riscv32 (`./pxx --target=<arch> -Fulib/rtl/platform/posix ...`), and each
+cross build, run with `tools/run_target.sh <arch>` under QEMU user mode,
+prints output byte-identical to the x86-64 run above.

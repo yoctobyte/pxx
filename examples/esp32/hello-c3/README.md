@@ -43,6 +43,8 @@ PXX hello from Pascal: i=5
 PXX sum 1..5 = 15
 ```
 
+Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU, not on a board: `tools/esp_run.sh --chip esp32c3 examples/esp32/hello-c3/main/main.pas` printed exactly these six lines.
+
 The program then parks in a `vTaskDelay` loop (PXX's `app_main` has no
 returning epilogue yet), so the FreeRTOS idle task keeps the watchdog fed.
 

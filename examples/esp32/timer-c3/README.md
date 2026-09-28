@@ -48,6 +48,8 @@ PXX timer: tick=5
 PXX timer: done ticks=5 status=0
 ```
 
+Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU, not on a board: `./build.sh qemu-assert` passed. It compares the seven `PXX timer:` lines exactly; the `I (…)` line is ESP-IDF's and its timestamp varies.
+
 `status` is a bitmask the app builds itself -- 1 = start failed, 2 = fewer than
 five ticks arrived, 4 = stop failed -- so `status=0` cannot be printed by a
 timer that never fired; a dead callback prints `status=2`.

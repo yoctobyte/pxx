@@ -22,6 +22,8 @@ PXX timer: tick=5
 PXX timer: done ticks=5 status=0
 ```
 
+Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU, not on a board: `./build.sh qemu-assert` passed. It compares the seven `PXX timer:` lines exactly.
+
 It does — verified under qemu on 2026-08-02, and this is the first time the
 xtensa half ever has. It did not until that afternoon: a 64-bit argument to a C
 function was passed with only its low word, so `esp_timer_start_periodic`'s

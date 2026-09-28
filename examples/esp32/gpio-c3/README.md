@@ -21,6 +21,8 @@ PROBE: edges=0
 PROBE: VERDICT qemu-delivers-NO-gpio-edges
 ```
 
+Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espressif QEMU, not on a board: `./build.sh qemu-assert` passed. It compares every `PROBE:` line exactly, including all five toggle pairs abbreviated above.
+
 **All three SDK calls return `rc=0`.** `gpio_config`, `gpio_install_isr_service`
 and `gpio_isr_handler_add` all report success, and nothing whatsoever happens. A
 probe that checked only return codes would have concluded GPIO works and gone on
