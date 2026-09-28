@@ -20,14 +20,18 @@ through plain `external` declarations.
 
 ## Run under Espressif QEMU
 
-Interactive: `./build.sh qemu` (uses `idf.py qemu monitor`, so it needs a
-terminal: without one it stops with "Monitor requires standard input to be
-attached to TTY").
+One line, headless: `./build.sh qemu` runs `tools/esp_run.sh --chip esp32c3`
+on this program with the script's own compiler, prints the program's output
+and exits.
 
-Both need Espressif's QEMU, which ESP-IDF installs only on request: see
+Interactive: `./build.sh qemu-monitor` (uses `idf.py qemu monitor`, so it needs
+a terminal: without one it stops with "Monitor requires standard input to be
+attached to TTY"). Any other argument is refused with a usage line (exit 2).
+
+All of these need Espressif's QEMU, which ESP-IDF installs only on request: see
 "Running without a board" in [ESP32 / Microcontrollers](../../../docs/targets/esp32.md).
 
-Headless, after `./build.sh` (the full path below works whether or not
+By hand, after `./build.sh` (the full path below works whether or not
 `export.sh` has put QEMU on PATH; it runs until you press Ctrl-A, then X):
 
 ```bash

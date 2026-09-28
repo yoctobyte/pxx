@@ -19,12 +19,14 @@ The Pascal code hand-declares ESP-IDF/ROM externals (`esp_rom_printf`,
 `gpio_set_direction`, `gpio_set_level`, `vTaskDelay`) and calls them
 directly. No C wrapper is used.
 
-QEMU smoke, after `./build.sh`. It needs Espressif's QEMU, which ESP-IDF
-installs only on request (see
-"Running without a board" in [ESP32 / Microcontrollers](../../../docs/targets/esp32.md)),
-and it runs until you press Ctrl-A, then X. This project's `build.sh` has no
-`qemu` mode; `tools/esp_run.sh --chip esp32s3 examples/esp32/hello-s3/main/main.pas`
-from the repo root is the one-line alternative:
+QEMU smoke, one line and headless: `./build.sh qemu` runs
+`tools/esp_run.sh --chip esp32s3` on this program with the script's own
+compiler, prints the program's output and exits. Any other argument is refused
+with a usage line (exit 2). It needs Espressif's QEMU, which ESP-IDF installs
+only on request (see
+"Running without a board" in [ESP32 / Microcontrollers](../../../docs/targets/esp32.md)).
+
+By hand, after `./build.sh` (it runs until you press Ctrl-A, then X):
 
 ```sh
 cd build
