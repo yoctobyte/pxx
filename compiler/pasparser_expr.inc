@@ -6906,8 +6906,10 @@ begin
           if helperPi < 0 then Error('UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)');
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
           CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyAnsiString);
-          LastExprTk := tyAnsiString;
+          { the helper's own result kind -- frozen under -uPXX_MANAGED_STRING;
+            see the Copy arm }
+          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(Procs[helperPi].RetType);
+          LastExprTk := Procs[helperPi].RetType;
           Exit;
         end;
         helperPi := FindProc('__pxxUpCase');
@@ -6985,8 +6987,10 @@ begin
         if helperPi < 0 then Error('Space: builtin helper unavailable (needs the builtin unit; not on ESP)');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
         CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyAnsiString);
-        LastExprTk := tyAnsiString;
+        { the helper's own result kind -- frozen under -uPXX_MANAGED_STRING;
+          see the Copy arm }
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(Procs[helperPi].RetType);
+        LastExprTk := Procs[helperPi].RetType;
         Exit;
       end;
 
@@ -7252,7 +7256,12 @@ begin
           end;
           argSeq := AllocNode(AN_CALL);
           ASTIVal[argSeq] := ci;
-          ASTTk[argSeq] := Ord(tyAnsiString);
+          { The helper's OWN result kind, not a hardcoded AnsiString: under
+            -uPXX_MANAGED_STRING the builtin is compiled frozen and
+            __pxxStrCopy returns a frozen [len8][chars] string through a hidden
+            destination. Tagged AnsiString, the store read that buffer as a
+            managed handle -- `s := Copy('abcdef', 1, 3)` gave 0 and []. }
+          ASTTk[argSeq] := Ord(Procs[ci].RetType);
           lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := exprNode;       { s }
           ASTLeft[argSeq] := lastArg;
           ci := AllocNode(AN_ARG); ASTLeft[ci] := node;                     { index }
@@ -7272,7 +7281,7 @@ begin
             Exit;
           end;
           CurASTNode := argSeq;
-          LastExprTk := tyAnsiString;
+          LastExprTk := Procs[cpyPi].RetType;
           Exit;
         end;
         Error('Copy: dynamic-array Copy needs a dynamic-array first argument ' +

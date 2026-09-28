@@ -10741,6 +10741,16 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_fpc_strgaps26 | diff -u test/test_fpc_system_string_gaps.expected -
 	./$(COMPILER) test/test_fpc_system_string_gaps_with_sysutils.pas $(TESTTMP)/test_fpc_strgaps_su26
 	$(TESTTMP)/test_fpc_strgaps_su26 | diff -u test/test_fpc_system_string_gaps_with_sysutils.expected -
+	@# the same System string routines under -uPXX_MANAGED_STRING (frozen), the
+	@# mode docs/targets/esp32.md recommends; one fpc .expected for both modes
+	./$(COMPILER) test/test_string_rtl_in_frozen_mode.pas $(TESTTMP)/test_strrtl_managed26
+	$(TESTTMP)/test_strrtl_managed26 | diff -u test/test_string_rtl_in_frozen_mode.expected -
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_string_rtl_in_frozen_mode.pas $(TESTTMP)/test_strrtl_frozen26
+	$(TESTTMP)/test_strrtl_frozen26 | diff -u test/test_string_rtl_in_frozen_mode.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 -uPXX_MANAGED_STRING test/test_string_rtl_in_frozen_mode.pas $(TESTTMP)/test_strrtl_frozen26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_strrtl_frozen26_i386 | diff -u test/test_string_rtl_in_frozen_mode.expected -; \
+	else echo "=== test_string_rtl_in_frozen_mode: qemu-i386 absent, i386 NOT verified ==="; fi
 	# TA and TB are both `array of LongInt`: identical element type, identical
 	# dynamic-ness, identical depth. A symbol records an array's SHAPE and not its
 	# IDENTITY, so matching a helper by element kind and depth COMPILES this file.

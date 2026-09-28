@@ -3515,11 +3515,13 @@ function BuildFrozenStrVarArgRMW(destNode, tmpSym, callNode: Integer): Integer;
 var seqCall, seqStore: Integer;
 begin
   Result := AllocNode(AN_SEQ);
-  ASTLeft[Result] := GenMakeAssign(GenMakeIdent(tmpSym, tyAnsiString), CloneAST(destNode));
+  { the temp's OWN kind -- the helper's parameter kind, which is frozen
+    tyString under -uPXX_MANAGED_STRING (see the call sites) }
+  ASTLeft[Result] := GenMakeAssign(GenMakeIdent(tmpSym, Syms[tmpSym].TypeKind), CloneAST(destNode));
   seqCall := AllocNode(AN_SEQ);
   ASTLeft[seqCall] := callNode;
   seqStore := AllocNode(AN_SEQ);
-  ASTLeft[seqStore] := GenMakeAssign(destNode, GenMakeIdent(tmpSym, tyAnsiString));
+  ASTLeft[seqStore] := GenMakeAssign(destNode, GenMakeIdent(tmpSym, Syms[tmpSym].TypeKind));
   ASTRight[seqStore] := -1;
   ASTRight[seqCall] := seqStore;
   ASTRight[Result] := seqCall;
@@ -8124,10 +8126,14 @@ begin
         if i < 0 then Error('Delete: string helper unavailable (needs the builtin unit; not on ESP)');
         { see BuildFrozenStrVarArgRMW: the helper takes `var s: AnsiString` }
         frozenDest := -1;
+        { The temp takes the helper's OWN parameter kind: under
+          -uPXX_MANAGED_STRING the builtin is compiled frozen, its `var s:
+          AnsiString` is a frozen tyString, and a managed temp handed to it was
+          never written -- `Delete(u, 1, 2)` left u unchanged. }
         if TypeIsFrozenString(IntToTypeKind(ASTTk[valNode])) then
         begin
           frozenDest := valNode;
-          valNode := GenMakeIdent(AllocVar('', tyAnsiString), tyAnsiString);
+          valNode := GenMakeIdent(AllocVar('', Procs[i].Params[0].TypeKind), Procs[i].Params[0].TypeKind);
         end;
         node := AllocNode(AN_CALL); ASTIVal[node] := i; ASTTk[node] := Ord(tyUnknown);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
@@ -8300,8 +8306,8 @@ begin
         frozenDest := -1;
         if TypeIsFrozenString(IntToTypeKind(ASTTk[valNode])) then
         begin
-          frozenDest := valNode;
-          valNode := GenMakeIdent(AllocVar('', tyAnsiString), tyAnsiString);
+          frozenDest := valNode;   { the helper's own kind; see Delete }
+          valNode := GenMakeIdent(AllocVar('', Procs[i].Params[1].TypeKind), Procs[i].Params[1].TypeKind);
         end;
         node := AllocNode(AN_CALL); ASTIVal[node] := i; ASTTk[node] := Ord(tyUnknown);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
