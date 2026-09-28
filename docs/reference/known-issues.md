@@ -311,6 +311,17 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   `sys.stderr.write(...)` in Nil Python; both reach standard error on all
   seven targets with v450.
 
+- **wasm32: no unit's initialization section ran, so `WriteLn(Output, ...)`
+  stopped with Runtime error 9.** On wasm32 a program ran its main body but
+  skipped every unit's `initialization`. With a `Text` variable declared,
+  `WriteLn(Output, ...)` and `WriteLn(StdErr, ...)` stopped with `Runtime
+  error 9 (I/O error)` and printed nothing, and SysUtils' `LongMonthNames[1]`
+  was empty. Wrong in v441 to v450. Fixed after v450 (`9de858f83d`, in no pin
+  yet). Measured on 2026-09-29 under wasmtime 48.0.1: with v441
+  (`4ebfa2d047a2`) and v450 (`c19cc2d531e4`) those writes exit 9, and v450
+  prints an empty month name; with the compiler built at `dadc02de44`
+  (`d9b7226769cc`) they print, and the month name is `January`.
+
 - **Nil Python: a float against a large integer.** `0.0 == 2 ** 64`, `2 ** 64
   == 1.5` and `2 ** 64 != 1.5` stopped the program with `Runtime error 219`;
   `<`, `<=`, `>` and `>=` were right. On the same paths, two answers were
@@ -926,19 +937,16 @@ answer silently. (Measured with v425.)
 
 ## Stops at run time
 
-- **wasm32: `WriteLn(Output, ...)` and `WriteLn(StdErr, ...)` stop with
-  Runtime error 9 when the program declares a `Text` variable.** With a `var
-  f: Text` anywhere in the program, a write to `Output` or `StdErr` exits 9
-  with `Runtime error 9 (I/O error)` and prints nothing, whether the value is
-  a string or a number. Writing to a file through that variable
-  (`Assign`, `Rewrite`, `WriteLn(f, ...)`, `Close`) works and reads back, and
-  so does a plain `WriteLn(...)`. Without a `Text` variable, `WriteLn(StdErr,
-  ...)` works. Measured on 2026-09-29 under wasmtime 48.0.1 with v441
-  (`4ebfa2d047a2`), v450 (`c19cc2d531e4`) and the compiler built at
-  `6dcfbbb0e0` (`9ce84ba69527`), which all behave the same. On x86-64 the
-  same programs exit 0 with that last compiler. **Workaround:** on wasm32, write to standard output with a
-  plain `WriteLn(...)`, not `WriteLn(Output, ...)`.
-
+- **wasm32: integer division or `mod` by zero stops the module instead of
+  raising `EDivByZero`.** `a div b` or `a mod b` with `b` zero at run time
+  ends the program with wasmtime's `wasm trap: integer divide by zero` (exit
+  134), so an `except on E: EDivByZero` around it never runs and no Runtime
+  error 200 is printed. On x86-64 the same program prints `caught
+  EDivByZero`, as FPC 3.2.2 does, and without the `try` it stops with
+  `Runtime error 200 (division by zero)`. Measured on 2026-09-29 under
+  wasmtime 48.0.1 with v450 (`c19cc2d531e4`) and the compiler built at
+  `dadc02de44` (`d9b7226769cc`), which behave the same. **Workaround:** on
+  wasm32, test the divisor for zero before dividing.
 
 ## Optimisation levels
 
