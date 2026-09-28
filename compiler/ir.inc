@@ -189,6 +189,9 @@ begin
   pi := Integer(ASTIVal[rhs]);
   if (pi < 0) or (pi >= ProcCount) then Exit;
   if ProcExternal[pi] then Exit;
+  { Only where the directive selects a convention: elsewhere a routine's
+    ProcCdecl is never set, so every cdecl type would read as a mismatch. }
+  if not TargetSelectsCdecl then Exit;
   ProcAddrConventionMismatch := ProcCdecl[sig] <> CProcUsesCAbi(pi);
 end;
 

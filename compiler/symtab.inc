@@ -16863,6 +16863,20 @@ end;
   `CUnitOfPascalProgram` is deliberately still SET and still live in defs.inc:
   removing it is a separate change from removing its use here, and this is the
   only site that read it. }
+function TargetSelectsCdecl: Boolean;
+{ Does `cdecl` on a Pascal routine SELECT anything on this target? Only where a
+  C-convention prologue arm exists: x86-64, aarch64, arm32, i386. Elsewhere the
+  directive is accepted and records nothing (pasparser_proc.inc explains why
+  riscv32 needs no arm and xtensa has none), so ProcCdecl of a ROUTINE is False
+  there while ProcCdecl of a procedural TYPE still says cdecl. One owner for the
+  list, because the convention-mismatch refusal in ir.inc must ask the same
+  question: asking ProcCdecl alone refused every correct cdecl callback on
+  riscv32 (the C3), xtensa, riscv64 and wasm32. }
+begin
+  TargetSelectsCdecl := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) or
+                        (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_I386);
+end;
+
 function CProcUsesCAbi(procIdx: Integer): Boolean;
 begin
   Result := (procIdx >= 0) and ProcCdecl[procIdx];
