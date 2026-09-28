@@ -297,7 +297,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   1.5:0:1)` wrote `1.5` to standard output and only the line end to standard
   error. `WriteLn(StdErr)` alone was refused on every target with `expected
   expression`; FPC 3.2.2 accepts it. Wrong in v441 to v450. Fixed after v450
-  (`f3343ccecc`, in no pin yet). Measured on 2026-09-28 on x86-64 and under
+  (`f3343ccecc`, in v451). Measured on 2026-09-28 on x86-64 and under
   QEMU user mode on i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), with
   v450 (`c19cc2d531e4`) and the compiler built at `fce510f98d`
   (`f545c8410b32`): `test/test_stderr_separation.pas` and
@@ -316,8 +316,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   skipped every unit's `initialization`. With a `Text` variable declared,
   `WriteLn(Output, ...)` and `WriteLn(StdErr, ...)` stopped with `Runtime
   error 9 (I/O error)` and printed nothing, and SysUtils' `LongMonthNames[1]`
-  was empty. Wrong in v441 to v450. Fixed after v450 (`9de858f83d`, in no pin
-  yet). Measured on 2026-09-29 under wasmtime 48.0.1: with v441
+  was empty. Wrong in v441 to v450. Fixed in v451 (`9de858f83d`). Measured on 2026-09-29 under wasmtime 48.0.1: with v441
   (`4ebfa2d047a2`) and v450 (`c19cc2d531e4`) those writes exit 9, and v450
   prints an empty month name; with the compiler built at `dadc02de44`
   (`d9b7226769cc`) they print, and the month name is `January`.
@@ -329,7 +328,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   value that may be another type (CPython: `False`), and an integer beyond
   2^53 was compared with a float through a double, so `2 ** 53 + 1 == 2.0 **
   53` was `True`. Wrong in v450 and earlier (the Runtime error also with v441,
-  on x86-64). Fixed after v450 (`cafc739cbf`, in no pin yet). Measured on
+  on x86-64). Fixed after v450 (`cafc739cbf`, in v451). Measured on
   2026-09-28 against CPython, on x86-64 and under QEMU user mode on i386,
   arm32, aarch64, riscv32 and Xtensa (both ABIs), with v450 (`c19cc2d531e4`)
   and the compiler built at `cafc739cbf` (`8d5d0f2653f0`): v450 stops or gives
@@ -342,7 +341,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   `c.CallPr(show, 5)` ran without calling `show` at all: nothing printed, and
   the call returned as if the procedure had done nothing. A def passed to a
   `function` type was called. Wrong in v441 to v450. Fixed after v450
-  (`956cba6006`, in no pin yet). Measured on 2026-09-28 on x86-64 and under
+  (`956cba6006`, in v451). Measured on 2026-09-28 on x86-64 and under
   QEMU user mode on i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), with
   v450 (`c19cc2d531e4`) and the compiler built at `52e61383a5`
   (`8d5d0f2653f0`), and on x86-64 with v441 (`4ebfa2d047a2`), v448 and v449: a
@@ -356,7 +355,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   imports a unit declaring `var Acc` (`import 'cbproc.pas' as c`) read the
   unit's variable wherever the def was used as a value: `c.CallI(acc, 5)` and
   `x = acc` then `x(4)` stopped with `Runtime error 216 (nil reference)`.
-  Wrong in v441 to v450. Fixed after v450 (`956cba6006`, in no pin yet).
+  Wrong in v441 to v450. Fixed after v450 (`956cba6006`, in v451).
   Measured on 2026-09-28 on x86-64 and under QEMU user mode on i386, arm32,
   aarch64, riscv32 and Xtensa (both ABIs), with v450 (`c19cc2d531e4`) and the
   compiler built at `52e61383a5` (`8d5d0f2653f0`), and on x86-64 with v441
@@ -374,7 +373,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   None`), gave `w is None` `False`, so an `if w is not None:` guard was
   entered with no object; `bd6edb9f08` had fixed that on x86-64 only. Assigned
   directly, and in every other shape measured, `is None` was right. Wrong in
-  v441 to v450. Fixed after v450 (`24038529ba`, in no pin yet). Measured on
+  v441 to v450. Fixed after v450 (`24038529ba`, in v451). Measured on
   2026-09-28 on x86-64 and under QEMU user mode for the others, with v450
   (`c19cc2d531e4`) and the compiler built at `52e61383a5` (`8d5d0f2653f0`):
   `test/test_nilpy_conditional_expression_none.npy` and
