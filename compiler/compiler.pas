@@ -3286,6 +3286,23 @@ begin
     aggregates or died before layout, and those are different answers that both
     print as silence. A FAILING compile never reaches here at all, so an absent
     TOTAL means the file did not compile — it is not a zero. }
+  { PXXDBG a.procretabi — every PROCEDURE (IsFunc False) whose RetType still
+    routes through a hidden result destination. Callers that pick a call shape
+    from IsFunc (pyeval's TVPr*, pylib's TPyCb*P) and the ABI, which reads
+    RetType, disagree on exactly these; on windowed xtensa the destination is
+    argument zero, so every argument shifts. A NilPy ctor was one (76d35e065f). }
+  if PxxDbgEnabled('a.procretabi') then
+  begin
+    rlRecs := 0;
+    for rlCi := 0 to ProcCount - 1 do
+      if (not Procs[rlCi].IsFunc) and ABIRetViaHiddenDestProc(rlCi) then
+      begin
+        writeln(StdErr, 'pxxdbg a.procretabi: ', Procs[rlCi].Name, ' tk=',
+                Ord(Procs[rlCi].RetType));
+        Inc(rlRecs);
+      end;
+    writeln(StdErr, 'pxxdbg a.procretabi: TOTAL ', rlRecs);
+  end;
   if PxxDbgEnabled('a.reclayout') then
   begin
     rlRecs := 0;
