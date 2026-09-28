@@ -158,7 +158,20 @@ def main():
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(html_out)
 
-    print(f"built {len(pages)} pages into {OUT}", file=sys.stderr)
+    # Everything that is not a page (the screenshots under docs/assets/, for a
+    # start) is copied through at the same relative path, so an image a page
+    # links as ../assets/showcase/x.png is there on the site too.
+    copied = 0
+    for src in sorted(DOCS.rglob("*")):
+        if src.is_file() and src.suffix != ".md":
+            dest = OUT / src.relative_to(DOCS)
+            if dest.exists():
+                sys.exit(f"build_docs_site: {src} would overwrite a generated file")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            copied += 1
+
+    print(f"built {len(pages)} pages and copied {copied} other files into {OUT}", file=sys.stderr)
 
 
 if __name__ == "__main__":

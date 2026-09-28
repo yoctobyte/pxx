@@ -18,6 +18,10 @@ with no vendor compiler in the loop:
 The other chip names (`esp32c2`, `esp32c6`, `esp32h2`, `esp32p4`) are
 accepted and compile to an ESP-IDF object, but nothing has been run on them.
 
+All 36 example projects, with the chip and language of each and where each
+last ran (QEMU or a board), are listed in
+[Examples: all 36 ESP32 examples](../examples/index.md#all-36-esp32-examples).
+
 **The classic ESP32 now runs on silicon; the S2 is still compiled only.**
 Measured 2026-09-27 on tree `5b4e7381dc` with compiler sha256
 `4ebfa2d047a2` (the release pin v441's own binary), flashed to an
@@ -92,6 +96,18 @@ matched `main.expected` byte for byte and the script still reported FAIL.
 
 What this still does **not** say. It is five programs, not the RTL: floating
 point, files, and most of the container surface are untouched on this chip.
+
+**Four ports on pin v448, two of them failing.** On 2026-09-28 the same board
+ran `examples/esp32/timer-esp32`, `uart-esp32`, `nilpy-hw-esp32` and
+`gpio-edge-esp32` (compiler sha256 `b2b325036c3b`), each with the same source
+as its S3 or C3 original. `timer-esp32` matches its `main.expected` byte for
+byte, which replaces the by-eye check of the timer row above. `uart-esp32`
+passes 10 of its 13 checks, and one of the failures is the control that
+the pad-echo check depends on. The two Nil Python programs reset in a `TG1WDT`
+watchdog loop before printing anything, both inside `_xt_context_save`, while
+the same programs pass on the S3 and the C3. They are kept as reproducers. The
+details are in
+[Examples: on a classic ESP32](../examples/index.md#on-a-classic-esp32).
 
 One observed flake, recorded at the weight of its evidence. Twice, an `esp_flash.sh`
 write to this board failed with `esptool could not write <port>. Hold BOOT while
@@ -244,7 +260,10 @@ Notes for the bare profile:
   1.4 KB and the flag changes nothing. **Getting it wrong is a compile error,
   never a bad binary**: a program that does need the runtime fails with
   `frozen tyString concat unsupported` rather than miscompiling, so it is safe
-  to try.
+  to try. One exception on pin v449: in this mode `Copy` returns an empty
+  string (`Copy('abcdef', 1, 3)` has length 0, where the default mode and FPC
+  give `abc`). It is fixed on master after v449, in `13f122a0ef`. Measured on x86-64 on 2026-09-28: `0` and empty with v449,
+  `3` and `abc` with a compiler built from `a49f6f12c6`.
 - On the ESP32-S3, a bare program that declares a `Double` and uses managed
   strings builds and runs under QEMU from pin v425 (re-run with v445). With v424 it could fail to
   build with `j displacement … is outside the encodable range

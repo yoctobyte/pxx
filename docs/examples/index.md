@@ -13,32 +13,23 @@ under `examples/` in the checkout.
 **Every entry on this page was compiled and run.** Nothing is listed on the
 strength of a test that once passed or a claim in another document.
 
-> **Verified 2026-09-24** on an x86-64 Linux host, with the pinned compiler
-> **v423** (`stable_linux_amd64/default/pinned`, sha256 `113a515bbdc9…`), at
-> checkout `02bd18fa0`. Where a row was measured differently, it says so. A
-> later pin may behave differently in either direction; re-run a command to
-> check.
+> **Last checked 2026-09-28 with pin v449** (`stable_linux_amd64/default/pinned`,
+> sha256 `0ded1e5d04c8…`) on an x86-64 Linux host, at checkout `0eeccbef42`.
+> `make demos` built all 36 Pascal programs under `examples/`, the 12 Nil
+> Python programs under `examples/shell/` and `examples/tk/` built, and every
+> batch, parallel and Nil Python program below ran and gave the result in its
+> row.
+> The binary sizes in the tables are from that run. The ESP32 QEMU runs were
+> redone with v449 too. Rows that were measured on an earlier pin say which:
+> the C and Pascal library rows, the ESP32 board runs, and the terminal and GTK
+> screenshots (taken 2026-09-24 with pin v423). With v449 the five GTK programs
+> were opened again on Xvfb, and each drew the same window as its screenshot,
+> compared by eye. A later pin may behave differently in either direction;
+> re-run a command to check.
 >
-> **Re-checked 2026-09-25 with pin v424** (commit `0a3a7b5b4`, sha256
-> `93a336a7ba85…`). All 36 example programs built. The batch and parallel
-> programs printed output byte-identical to v423's, apart from timing figures,
-> and every binary is the same size as under v423. The screenshots, the ESP
-> runs and the C-library rows were not redone for v424.
->
-> **Re-checked 2026-09-25 with pin v425** (commit `4fbf33f69`, sha256
-> `426b2fbf3f08…`). The 20 batch and parallel programs printed output
-> byte-identical to v424's, apart from timing figures, and each binary is the
-> same size. The C and Pascal library rows, the ESP QEMU runs and the ESP32-S3
-> board walk were re-run with v425, and each says so. The screenshots were not
-> redone for v425.
->
-> **Re-checked 2026-09-27 with pin v441**, the beta 0.1 compiler (commit
-> `5c1696ca79`, sha256 `4ebfa2d047a2…`), at checkout `ab1960b987`. The 20
-> batch and parallel programs printed output byte-identical to v425's, apart
-> from timing figures. Their binaries changed size, by −8 to +16,368 bytes. The
-> C library rows, the ESP QEMU runs and the ESP32-S3 board walk were re-run
-> with v441, and each says so. The Pascal library rows and the screenshots
-> were not redone for v441.
+> Earlier passes: v423 (2026-09-24), v424 and v425 (2026-09-25), and v441, the
+> beta 0.1 compiler (2026-09-27). On each, the batch and parallel programs
+> printed the same output as on v423, apart from timing figures.
 
 ## Quick start
 
@@ -69,7 +60,7 @@ them without it:
 
 PXX writes its own ELF executables and needs no external linker. Programs that
 don't use a system GUI library come out as a single static file with no
-dynamic loader, and the hello-world is **4,544 bytes**. The GTK, OpenGL and
+dynamic loader, and the hello-world is **4,536 bytes**. The GTK, OpenGL and
 SDL2 programs below link those system libraries dynamically.
 
 ## Pascal: batch programs
@@ -82,18 +73,18 @@ Each of these runs to completion and checks its own result. The ones marked
 | hello | `examples/hello/hello.pas` | The smallest program | `Greetings from PXX` | 4.4 KB |
 | primes | `examples/primes/sieve.pas` | Bit-packed sieve of Eratosthenes | 78,498 primes ≤ 1,000,000 | 103 KB |
 | sudoku | `examples/sudoku/sudoku.pas` | Backtracking solver | three puzzles solved | 29 KB |
-| factorial | `examples/bignum/factorial.pas` | Big-integer factorial | 1000! has 2,568 digits | 107 KB |
-| bigmath | `examples/bignum/bigmath.pas` | Arbitrary-precision arithmetic, modular power | ALL OK | 136 KB |
-| json | `examples/json/jsondemo.pas` | JSON parse and emit, escapes, Unicode | ALL OK | 502 KB |
+| factorial | `examples/bignum/factorial.pas` | Big-integer factorial | 1000! has 2,568 digits | 111 KB |
+| bigmath | `examples/bignum/bigmath.pas` | Arbitrary-precision arithmetic, modular power | ALL OK | 140 KB |
+| json | `examples/json/jsondemo.pas` | JSON parse and emit, escapes, Unicode | ALL OK | 518 KB |
 | sat | `examples/sat/satdemo.pas` | DPLL SAT solver, including pigeonhole UNSAT | ALL OK | 117 KB |
 | mathf | `examples/mathf/mathdemo.pas` | Floating-point math library | every check `ok` | 187 KB |
-| maze | `examples/maze/maze.pas` | Maze generation and solving | seeded maze with solved path | 106 KB |
-| mandelbrot | `examples/mandelbrot/mandelbrot.pas` | ASCII Mandelbrot set | ALL OK (checksum) | 136 KB |
-| raytracer | `examples/raytracer/raytracer.pas` | Ray tracer, headless | ALL OK (checksum) | 545 KB |
-| vm | `examples/vm/vmdemo.pas` | Tiny bytecode VM and assembler | ALL OK | 123 KB |
-| calc | `examples/calc/calcdemo.pas` | Expression evaluator, including rejects | ALL OK | 109 KB |
+| maze | `examples/maze/maze.pas` | Maze generation and solving | seeded maze with solved path | 107 KB |
+| mandelbrot | `examples/mandelbrot/mandelbrot.pas` | ASCII Mandelbrot set | ALL OK (checksum) | 141 KB |
+| raytracer | `examples/raytracer/raytracer.pas` | Ray tracer, headless | ALL OK (checksum) | 561 KB |
+| vm | `examples/vm/vmdemo.pas` | Tiny bytecode VM and assembler | ALL OK | 128 KB |
+| calc | `examples/calc/calcdemo.pas` | Expression evaluator, including rejects | ALL OK | 110 KB |
 | lisp | `examples/lisp/lispdemo.pas` | Lisp with closures and a cell arena | ALL OK | 122 KB |
-| httpdemo | `examples/net/httpdemo.pas` | HTTP server and client on one coroutine reactor (loopback, no network needed) | three requests, cookie and gzip | 593 KB |
+| httpdemo | `examples/net/httpdemo.pas` | HTTP server and client on one coroutine reactor (loopback, no network needed) | three requests, cookie and gzip | 608 KB |
 
 The maze demo draws its own solution:
 
@@ -142,9 +133,11 @@ work distribution. Build these with `--threadsafe`.
 | collatz | `examples/parallel/collatz.pas` | Very uneven load, where on-demand distribution pays off |
 | pow | `examples/parallel/pow.pas` | Compute-bound hashing, near-linear scaling |
 | membw | `examples/parallel/membw.pas` | Memory-bound against compute-bound reduction |
+| mandelbrot_parallel | `examples/mandelbrot/mandelbrot_parallel.pas` | The Mandelbrot set rendered row by row on every core, then serially; the two checksums must match (`CHECKSUM MATCH`). `--ppm FILE` also writes the image |
 
 Each program checks that every distribution produces the same answer as the
-serial loop:
+serial loop. With v449 all five printed their `ALL AGREE` or `CHECKSUM MATCH`
+line:
 
 ```text
 Prime count over 2..2000000   workers=12
@@ -281,6 +274,52 @@ $ echo alpha beta | cat | upper
 ALPHA BETA
 ```
 
+`examples/shell/shell0.npy` is the first phase of the same shell, kept as a
+smaller example: tokenize, dispatch, applet, over a canned script.
+
+### tkinter: GUI programs in Python
+
+`examples/tk/` holds ten Nil Python programs written against PXX's `tkinter`
+module (`lib/pcl/tkinter.pas`). It binds the system Tcl/Tk 8.6 directly, so it
+needs `libtk8.6` at run time but no development headers. Widgets are objects
+that take keyword options, as in CPython's tkinter. Underneath, each call is
+one Tcl command. `examples/tk/hello.npy` and `widgets.npy` use the thinner
+`tk.pas` layer directly.
+
+```sh
+./pxx examples/tk/widgets.npy /tmp/widgets && /tmp/widgets
+```
+
+| Program | What it shows |
+| --- | --- |
+| `hello.npy` | A window and a label through `tk.pas` |
+| `widgets.npy` | ttk label, entry, text and button; reads each back |
+| `tkinter_facade.npy` | Widget objects with keyword options, a `StringVar` |
+| `callbacks.npy` | A bound method, a plain function and a lambda as commands; a variable trace |
+| `kwargs.npy` | Keyword arguments bind by name, including `set`, `file`, `index` |
+| `field_class_identity.npy` | A widget stored in a field keeps its class |
+| `facade_and_paths.npy` | `tk.END`, a `Text` widget, `pathlib`-style paths |
+| `import_in_body.npy` | `import` inside a function body |
+| `shadow_format_except.npy` | A method calling the module function it shadows, `str.format`, a qualified `except` |
+| `htmlview.npy` | `tkhtmlview`: HTML rendered into a Tk text widget, checked by reading the text back |
+
+With pin v449 all ten built and ran under Xvfb. The three that ship a
+`.expected` file (`callbacks`, `field_class_identity`, `tkinter_facade`)
+matched it exactly, and the others printed their `ok` line. The programs close
+their own windows within half a second, so a headless run ends by itself.
+The folder's one Pascal file, `uses_tkinter_and_configparser.pas`, is a
+regression program rather than a demo. It checks that the Tk `Text` widget
+does not capture the RTL's `Text` file record, and prints `both ok`.
+
+![widgets.npy: ttk widgets from Nil Python](../assets/showcase/tk_widgets.png)
+
+![htmlview.npy: HTML rendered by tkhtmlview from Nil Python](../assets/showcase/tk_htmlview.png)
+
+For these two screenshots the programs were held open longer. `widgets.npy`
+closed after 5 seconds instead of 0.4. In `htmlview.npy` a `mainloop()` with a
+5-second close timer replaced its read-back checks. Taken 2026-09-28 with pin
+v449 on Xvfb, with no window manager, so the windows have no title bar.
+
 ### lekkerzeilen: a 3D sailing simulator
 
 lekkerzeilen is a separate project: a boat simulator on the real Dutch rivers,
@@ -323,13 +362,73 @@ and runs.
 
 ## ESP32
 
-PXX cross-compiles to the ESP32-S3 (Xtensa) and the ESP32-C3 (RISC-V). A
-program becomes a relocatable object that the normal ESP-IDF build links as
-`app_main`. That includes a Python program, which becomes machine code on the
-chip with no interpreter. The examples live in `examples/esp32/`, one ESP-IDF
-project per program and chip. To build and flash one yourself, follow
+PXX cross-compiles to the ESP32-S3 (Xtensa LX7), the ESP32-C3 (RISC-V) and
+the classic ESP32 (Xtensa LX6). The ESP32-S2 compiles, but nothing has run on
+it. A program becomes a relocatable object that the normal ESP-IDF build links
+as `app_main`. That includes a Python program, which becomes machine code on
+the chip with no interpreter. The examples live in `examples/esp32/`, one
+ESP-IDF project per program and chip, each with a `README.md` naming its chip
+and language. To build and flash one yourself, follow
 [Getting started on the ESP32](../getting-started/esp32.md); the units they use
-are documented in [ESP32 peripherals](../library/esp.md).
+are documented in [ESP32 peripherals](../library/esp.md). The per-chip
+compiler details are in [ESP32 / Microcontrollers](../targets/esp32.md).
+
+### All 36 ESP32 examples
+
+"Board" is the most recent run on real silicon recorded on this page, and its
+section below gives the compiler. "QEMU" is Espressif's emulator: it has no
+ESP32-S2 machine, delivers no GPIO input edges, samples no real ADC and has no
+Wi-Fi radio, so the rows that need those have no QEMU run. The four newest
+classic-ESP32 ports ran on a board with pin v448; two of them fail there and
+are kept as reproducers (see [On a classic ESP32](#on-a-classic-esp32)).
+
+| Example | Chip | Language | What it does | QEMU, pin v449 | Board |
+| --- | --- | --- | --- | --- | --- |
+| hello-s3 | S3 | Pascal | Prints five lines and a sum | pass | S3, 2026-09-28 |
+| hello-c3 | C3 | Pascal | The same, on RISC-V | pass | C3, 2026-09-28 |
+| hello-esp32 | classic | Pascal | The same, on the LX6 | – | classic, 2026-09-27 |
+| hello-s2 | S2 | Pascal | The same, for the S2 | – (no S2 machine) | not run: builds only |
+| nilpy-s3 | S3 | Python | A class, a list, a loop, `print`; output equals CPython's | pass | S3, 2026-09-28 |
+| nilpy-c3 | C3 | Python | The same source | pass | C3, 2026-09-28 |
+| nilpy-esp32 | classic | Python | The same source | – | classic, 2026-09-27 |
+| nilpy-hw-s3 | S3 | Python | Drives a GPIO pin; an ESP-IDF timer calls back into Python | pass | S3, 2026-09-28 |
+| nilpy-hw-c3 | C3 | Python | The same source | pass | C3, 2026-09-28 |
+| nilpy-hw-esp32 | classic | Python | The same source | – | classic, pin v448: **fails**, a watchdog reboot loop before its first line. A reproducer |
+| timer-s3 | S3 | Pascal | A periodic `esptimer` callback, five ticks | pass | S3, 2026-09-28 |
+| timer-c3 | C3 | Pascal | The same source | pass | C3, 2026-09-28 |
+| timer-esp32 | classic | Pascal | The same source | – | classic, pin v448: matches `main.expected` |
+| isrctx-c3 | C3 | Pascal | Interrupt context versus task context | pass | C3, 2026-09-28 |
+| fs-c3 | C3 | Pascal | FAT on flash: write, seek, read back | pass | C3, 2026-09-28 |
+| dns-c3 | C3 | Pascal | lwIP's resolver through `dns_libc` | pass | C3, 2026-09-28 |
+| net-c3 | C3 | Pascal | Sockets on lwIP, over loopback | pass | C3, 2026-09-28 |
+| gpio-c3 | C3 | Pascal | A probe: reads follow writes, pull-up, edges | pass | C3, 2026-09-28 |
+| gpio-edge-s3 | S3 | Python | GPIO edge interrupts handled in Python | – (no input edges) | S3, 2026-09-28 |
+| gpio-edge-c3 | C3 | Python | The same source | – (no input edges) | C3, 2026-09-28 |
+| gpio-edge-esp32 | classic | Python | The same source | – (no input edges) | classic, pin v448: **fails**, the same reboot loop. A reproducer |
+| adc-s3 | S3 | Python | Continuous ADC sampling, frames handled in Python | – (no ADC) | S3, 2026-09-28 |
+| adc-c3 | C3 | Python | The same, plus pull-up and pull-down reads | – (no ADC) | C3, 2026-09-28 |
+| monitor-s3 | S3 | Python | Sensor monitor: ADC, BOOT button, free heap | – (no ADC) | S3, 2026-09-28 |
+| rgb-s3 | S3 | Pascal | Rainbow fade on the devkit's WS2812 LED, through RMT | – | S3, 2026-09-28 |
+| pwm-s3 | S3 | Pascal | PWM, read back by the same chip | – | S3, 2026-09-28 |
+| uart-s3 | S3 | Pascal | UART1 to its own receiver | – | S3, 2026-09-28 |
+| uart-esp32 | classic | Pascal | The same source | – | classic, pin v448: **10 of 13 checks**; see below |
+| i2c-s3 | S3 | Pascal | I2C with the second controller as the device | – | S3, 2026-09-28 (empty bus only) |
+| spi-s3 | S3 | Pascal | SPI master, no device | – | S3, 2026-09-28 |
+| nvs-s3 | S3 | Pascal | Settings that survive a reboot, over four boots | – (needs a reset) | S3, 2026-09-28 |
+| wifi-ap-s3 | S3 | Pascal | Wi-Fi access point and a Pascal web server | – (no radio) | S3, 2026-09-28 (no client joined) |
+| wifi-ap-c3 | C3 | Pascal | The same | – (no radio) | C3, 2026-09-28: an S3 joined and loaded the page |
+| nilpy-station-s3 | S3 | Python | Access point and a status page, in Python | – (no radio) | S3, 2026-09-28 |
+| nilpy-station-c3 | C3 | Python | The same source | – (no radio) | C3, 2026-09-28 |
+| nilpy-logger-s3 | S3 | Python | MicroPython-style Wi-Fi data logger: setup AP, CSV on flash, HTTP | – (no radio) | S3, 2026-09-28 |
+
+The same folder opens in [the ESP32 IDE](../getting-started/esp-ide.md)
+(`./espide.sh`), which detects the chip and builds and flashes with one button:
+
+![The ESP32 IDE with nilpy-s3 open](../assets/showcase/espide.png)
+
+The IDE was built with pin v449 and captured on Xvfb on 2026-09-28. The rows
+under the toolbar that name the host's ESP-IDF path and the serial numbers of
+the attached boards were blanked in the image.
 
 ### A Python sensor monitor on an ESP32-S3
 
@@ -567,16 +666,37 @@ Still unverified: `hello-s2`, which builds but has not been run.
 `tools/esp_flash.sh --project examples/esp32/<name>` builds, flashes and checks
 an example on a board.
 
-### On a classic ESP32, and one not yet run
+### On a classic ESP32
 
 `hello-esp32` (Pascal) and `nilpy-esp32` (Nil Python, the same program as
 `nilpy-s3`) ran on an ESP32-D0WD-V3 board, the original dual-core LX6 part; the
 record, with the compilers used, is in
 [ESP32 / Microcontrollers](../targets/esp32.md).
 
+On 2026-09-28 four more S3 and C3 examples were ported to the classic part,
+each with the same source as its S3 or C3 original, and run on the same board
+(no PSRAM, CP2102 bridge) with pin v448 (compiler sha256 `b2b325036c3b…`), one
+boot each:
+
+| Example | Language | On the classic ESP32 |
+| --- | --- | --- |
+| timer-esp32 | Pascal | Output matches `main.expected` byte for byte, 7 lines. The earlier classic timer run used `timer-s3`'s source and was checked against expected serial output by eye |
+| uart-esp32 | Pascal | `passed=10 failed=3`. Loopback echo gives 12 bytes where 11 are expected and fast echo 18 where 17 are expected. Pad control gives 2 bytes where it requires 0. Pad control exists to show that pad echo's bytes crossed the GPIO matrix, so on this chip the pad-echo pass shows nothing. `uart-s3`, the same source, passes 13 of 13 on the S3 |
+| nilpy-hw-esp32 | Python | **Fails.** The program never prints its first line; the chip resets in a `TG1WDT` watchdog loop |
+| gpio-edge-esp32 | Python | **Fails** the same way |
+
+**`nilpy-hw-esp32` and `gpio-edge-esp32` are reproducers of a known gap on the
+classic ESP32, not working examples.** Both READMEs say so. Both programs
+pass on real S3 and C3 silicon: the `nilpy-hw` source was run there with pin
+v449 by the session that owns those boards, as recorded in
+`devdocs/progress/LOGBOOK.md`. Both failures stop inside `_xt_context_save`
+(the Xtensa windowed context save), so they appear to be one fault. What
+triggers it, GPIO specifically or any callback from C into Nil Python, is not
+established yet. The Wi-Fi station example was not ported.
+
 `nilpy-logger-s3` is a Wi-Fi data logger in the MicroPython style (a setup
-access point, a saved network, a CSV log on flash, served over HTTP). It is
-not in the tables above: no board run of it is recorded here.
+access point, a saved network, a CSV log on flash, served over HTTP). Its board
+run is the ESP32-S3 row above (2026-09-28).
 
 ## Real C programs
 
