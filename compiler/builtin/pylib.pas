@@ -6704,13 +6704,12 @@ begin
 end;
 
 function TPyList.sort(key: Pointer; reverse: Boolean): Variant;
-var i, n: Integer; keys, vals: TPyList; idx: Pointer;
+var i, j, k, n: Integer; keys: TPyList; idx: Pointer; saved: Variant;
 begin
   { The keys are computed ONCE, up front — Python calls key() exactly once per
     element, and a key with a side effect (or an expensive one) must not be
     re-entered per comparison. Same shape as sorted(). }
   keys := TPyList.Create;
-  vals := nil;
   idx := nil;
   try
     for i := 0 to Self.count - 1 do
@@ -6726,15 +6725,36 @@ begin
     end;
     n := Self.count;
     GetMem(idx, n * 4 + 4);
+    { The list is not touched until the order is final, so a key or __lt__
+      that raises leaves it exactly as it was. }
     PySortOrder(keys, reverse, idx, n);
-    vals := TPyList.Create;
+    if Self.count <> n then
+      raise ValueError.Create('list modified during sort');
+    { Apply new[i] = old[idx[i]] IN PLACE, one cycle at a time, marking each
+      visited slot -1. No second list: the scratch this sort adds over the
+      insertion sort it replaced is the index vector alone (4n bytes here,
+      another 4n inside PySortOrder) -- it matters on an ESP heap, where an
+      exhausted heap aborts rather than failing an allocation. }
     for i := 0 to n - 1 do
-      vals.append(Self.at(PInteger(NativeInt(idx) + i * 4)^));
-    for i := 0 to n - 1 do
-      Self.put(i, vals.at(i));
+    begin
+      if PInteger(NativeInt(idx) + i * 4)^ < 0 then Continue;
+      saved := Self.at(i);
+      j := i;
+      while True do
+      begin
+        k := PInteger(NativeInt(idx) + j * 4)^;
+        PInteger(NativeInt(idx) + j * 4)^ := -1;
+        if k = i then
+        begin
+          Self.put(j, saved);
+          Break;
+        end;
+        Self.put(j, Self.at(k));
+        j := k;
+      end;
+    end;
   finally
     if idx <> nil then FreeMem(idx);
-    vals.Free;
     keys.Free;
   end;
   Result := pynone;   { Python returns None }

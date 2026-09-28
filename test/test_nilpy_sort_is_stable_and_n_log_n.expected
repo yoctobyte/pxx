@@ -13,3 +13,16 @@ big rev 1008 0 505
 typeerror ok
 count sorted under 12000 True 0 1008
 count sort under 12000 True 1008 0
+asc [1, 2, 2, 3, 5, 8, 13] [13, 8, 5, 3, 2, 2, 1]
+desc [1, 2, 2, 3, 5, 8, 13] [13, 8, 5, 3, 2, 2, 1]
+desc sort [1, 2, 2, 3, 5, 8, 13]
+tuples [(0, 'q'), (1, 'a'), (1, 'z'), (2, 'a'), (2, 'b')]
+tuples rev [(2, 'b'), (2, 'a'), (1, 'z'), (1, 'a')]
+lt only 0d 1b 1e 2a 2c
+lt only rev 2a 2c 1b 1e 0d
+lt only sort rev 2a 2c 1b 1e 0d
+key ties ['b1', 'c1', 'a1', 'a2', 'b2', 'c2']
+key ties rev ['a2', 'b2', 'c2', 'b1', 'c1', 'a1']
+lt raise no threes 4 [1, 3, 4, 5]
+key raise [3, 7, 1]
+sorted raise no threes

@@ -77,3 +77,70 @@ print("count sorted under 12000", calls[0] < 12000, r[0].v, r[-1].v)
 calls[0] = 0
 cs.sort(reverse=True)
 print("count sort under 12000", calls[0] < 12000, cs[0].v, cs[-1].v)
+
+# already sorted, reverse sorted, and reversed input with ties
+asc = [1, 2, 2, 3, 5, 8, 13]
+desc = [13, 8, 5, 3, 2, 2, 1]
+print("asc", sorted(asc), sorted(asc, reverse=True))
+print("desc", sorted(desc), sorted(desc, reverse=True))
+d2 = list(desc)
+d2.sort()
+print("desc sort", d2)
+
+# tuples compare lexicographically
+print("tuples", sorted([(2, "b"), (1, "z"), (2, "a"), (1, "a"), (0, "q")]))
+print("tuples rev", sorted([(2, "b"), (1, "z"), (2, "a"), (1, "a")], reverse=True))
+
+# a class with __lt__ ONLY: reverse=True has to reach it through the reflection
+class L:
+    def __init__(self, v, tag):
+        self.v = v
+        self.tag = tag
+    def __lt__(self, o):
+        return self.v < o.v
+ls = [L(2, "a"), L(1, "b"), L(2, "c"), L(0, "d"), L(1, "e")]
+print("lt only", tags(sorted(ls)))
+print("lt only rev", tags(sorted(ls, reverse=True)))
+l2 = list(ls)
+l2.sort(reverse=True)
+print("lt only sort rev", tags(l2))
+
+# key= with ties keeps input order, reversed too
+pairs = ["b1", "a2", "c1", "a1", "b2", "c2"]
+print("key ties", sorted(pairs, key=lambda s: s[1]))
+print("key ties rev", sorted(pairs, key=lambda s: s[1], reverse=True))
+
+# an exception inside __lt__ or key propagates, and the list stays a valid
+# permutation of its elements (CPython may leave it partly reordered, so the
+# row prints its sorted contents, which both agree on)
+class Bad:
+    def __init__(self, v):
+        self.v = v
+    def __lt__(self, o):
+        if self.v == 3 or o.v == 3:
+            raise ValueError("no threes")
+        return self.v < o.v
+bs = [Bad(5), Bad(1), Bad(3), Bad(4)]
+try:
+    bs.sort()
+    print("lt raise: no exception")
+except ValueError as e:
+    vs = []
+    for b in bs:
+        vs.append(b.v)
+    print("lt raise", e, len(bs), sorted(vs))
+def badkey(x):
+    if x == 7:
+        raise KeyError("seven")
+    return -x
+ks = [3, 7, 1]
+try:
+    ks.sort(key=badkey)
+    print("key raise: no exception")
+except KeyError:
+    print("key raise", ks)
+try:
+    sorted([Bad(1), Bad(3)])
+    print("sorted raise: no exception")
+except ValueError as e:
+    print("sorted raise", e)

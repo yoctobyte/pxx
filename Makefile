@@ -621,6 +621,13 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_exec_obj_released 400 $(TESTTMP)/test_nilpy_execobj26
 	@if tools/assert_no_leak.sh nilpy_exec_obj_control 400 $(TESTTMP)/test_nilpy_execobj26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_exec_obj control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
+	# A sort whose __lt__ or key raises releases what it built: sorted() leaked its
+	# result list per raising call, and the old insertion sort its keys too
+	# (origin: live 9118 over 300 rounds). `keep` is the control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_x64
+	tools/assert_no_leak.sh nilpy_sort_raises_releases 200 $(TESTTMP)/sortraise_x64
+	@if tools/assert_no_leak.sh nilpy_sort_raises_control 200 $(TESTTMP)/sortraise_x64 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_sort_raises control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
 	./$(COMPILER) test/test_nilpy_bitwise_and_shift_on_a_variant_operand.py $(TESTTMP)/test_nilpy_bitvar26
 	$(TESTTMP)/test_nilpy_bitvar26 | diff -u test/test_nilpy_bitwise_and_shift_on_a_variant_operand.expected -
 	PXXDBG='p.fresh:*' ./$(COMPILER) test/test_result_fresh_verdicts.pas $(TESTTMP)/test_result_fresh_verdicts26 2>&1 | grep -E '^PXXDBG p.fresh (TA\.|MakeA|PassThrough)' | diff -u test/test_result_fresh_verdicts.expected -
@@ -8263,6 +8270,12 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_class_attr_return_type "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_clsattr_ret_arm32)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow_arm32
 	tools/expect_same.sh arm32/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_shadow_arm32)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_rv32
+	tools/expect_same.sh riscv32/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh riscv32 $(TESTTMP)/sortnlogn_rv32)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_rv32
+	tools/assert_no_leak.sh riscv32/nilpy_sort_raises_releases 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32
+	@if tools/assert_no_leak.sh riscv32/nilpy_sort_raises_control 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32 keep >/dev/null 2>&1; then \
+	  echo "FAIL: riscv32/nilpy_sort_raises control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas $(TESTTMP)/test_critsec_once26
 	tools/expect_same.sh test_critsec_once26 "$$($(TESTTMP)/test_critsec_once26)" "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	# data-parallel loop runtime (palparallel PXXParallelFor): exact partition (each index once), values, edge ranges. worker count is host-dependent, so gate on the deterministic tail.
@@ -29539,6 +29552,10 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh i386 $(TESTTMP)/capfloat_i386)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_i386
 	tools/expect_same.sh i386/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh i386 $(TESTTMP)/sortnlogn_i386)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_i386
+	tools/assert_no_leak.sh i386/nilpy_sort_raises_releases 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386
+	@if tools/assert_no_leak.sh i386/nilpy_sort_raises_control 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386 keep >/dev/null 2>&1; then \
+	  echo "FAIL: i386/nilpy_sort_raises control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
 	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
 	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
 	@# it -- its reference is borrowed from the in-flight exception and becomes
@@ -32763,6 +32780,10 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_shadow_w)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/xt_sortnlogn_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sortnlogn_w)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_xtw
+	tools/assert_no_leak.sh xtensa/nilpy_sort_raises_releases 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw
+	@if tools/assert_no_leak.sh xtensa/nilpy_sort_raises_control 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw keep >/dev/null 2>&1; then \
+	  echo "FAIL: xtensa/nilpy_sort_raises control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double_x64
 	tools/expect_same.sh xtensa/test_u64_to_double "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_u64_to_double)" "$$($(TESTTMP)/test_xtensa_test_u64_to_double_x64)"
@@ -34838,6 +34859,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh arm32 $(TESTTMP)/capfloat_a32)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_a32
 	tools/expect_same.sh arm32/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh arm32 $(TESTTMP)/sortnlogn_a32)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_a32
+	tools/assert_no_leak.sh arm32/nilpy_sort_raises_releases 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32
+	@if tools/assert_no_leak.sh arm32/nilpy_sort_raises_control 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32 keep >/dev/null 2>&1; then \
+	  echo "FAIL: arm32/nilpy_sort_raises control (keep) did not trip the bound -- the census cannot see these lists"; exit 1; fi
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

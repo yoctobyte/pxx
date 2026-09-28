@@ -1,0 +1,47 @@
+# A sort whose __lt__ or key raises must release everything it built on the
+# way: the key list, the merge scratch, the Variant copies of the elements.
+# Run -dPXX_ALLOC_CENSUS under tools/assert_no_leak.sh; `keep` holds every
+# list on purpose and must trip the bound (the deliberate-leak control).
+import sys
+
+keep = len(sys.argv) > 1
+held = []
+
+class Bad:
+    def __init__(self, v):
+        self.v = v
+    def __lt__(self, o):
+        if self.v == 13 or o.v == 13:
+            raise ValueError("thirteen")
+        return self.v < o.v
+
+def badkey(x):
+    if x.v == 17:
+        raise KeyError("seventeen")
+    return x.v
+
+def one(i):
+    xs = []
+    for k in range(24):
+        xs.append(Bad((k * 7 + i) % 24))
+    n = 0
+    try:
+        xs.sort()
+    except ValueError:
+        n += 1
+    try:
+        ys = sorted(xs, key=badkey)
+    except KeyError:
+        n += 1
+    try:
+        zs = sorted(xs, reverse=True)
+    except ValueError:
+        n += 1
+    if keep:
+        held.append(xs)
+    return n
+
+t = 0
+for i in range(300):
+    t += one(i)
+print(t)

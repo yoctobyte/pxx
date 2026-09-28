@@ -6554,18 +6554,26 @@ begin
   keys := TPyList.Create;
   idx := nil;
   try
-    for i := 0 to l.count - 1 do
-    begin
-      ev := l.at(i);
-      if key <> nil then keys.append(PyCallKey1(key, ev))
-      else keys.append(ev);
+    try
+      for i := 0 to l.count - 1 do
+      begin
+        ev := l.at(i);
+        if key <> nil then keys.append(PyCallKey1(key, ev))
+        else keys.append(ev);
+      end;
+      { a stable merge order over the keys (PySortOrder), each key computed once }
+      n := l.count;
+      GetMem(idx, n * 4 + 4);
+      PySortOrder(keys, reverse, idx, n);
+      for i := 0 to n - 1 do
+        r.append(l.at(PInteger(NativeInt(idx) + i * 4)^));
+    except
+      { A key or __lt__ that raises never hands `r` to the caller, so nobody
+        else can free it: one list leaked per failed sorted() call (measured,
+        300 -> 600 raising calls: live 301 -> 625). }
+      r.Free;
+      raise;
     end;
-    { a stable merge order over the keys (PySortOrder), each key computed once }
-    n := l.count;
-    GetMem(idx, n * 4 + 4);
-    PySortOrder(keys, reverse, idx, n);
-    for i := 0 to n - 1 do
-      r.append(l.at(PInteger(NativeInt(idx) + i * 4)^));
   finally
     if idx <> nil then FreeMem(idx);
     keys.Free;
