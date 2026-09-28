@@ -38744,15 +38744,30 @@ test-esp-idf: $(COMPILER)
 	    examples/esp32/$$ex/main/main.pas $(TESTTMP)/esp_periph_$$ex.o >/dev/null \
 	  && echo "=== $$ex builds [esp32s3, no long calls]: OK ===" || exit 1; \
 	done
-	@# The two BOARD-ONLY tests, build only here -- their runs need silicon and
-	@# their recipes are in their headers. The ring stress is S3-only: it pins a
-	@# task to core 1, and the C3 has one core.
+	@# The BOARD-ONLY tests, build only here -- their runs need silicon and their
+	@# recipes are in their headers. The ring stress is S3-only: it pins a task to
+	@# core 1, and the C3 has one core. The poll-drain pair runs on BOTH chips: it
+	@# makes its own edges from the one task, so one core is enough.
 	@./$(COMPILER) --target=esp32s3 --xtensa-long-calls --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_gpio_ring_stress.pas $(TESTTMP)/esp_board_ring.o >/dev/null \
 	  && echo "=== esp_board_gpio_ring_stress builds [esp32s3]: OK ===" || exit 1
 	@./$(COMPILER) --target=esp32s3 --xtensa-long-calls --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_isr_no_alloc.pas $(TESTTMP)/esp_board_isr_no_alloc.o >/dev/null \
 	  && echo "=== esp_board_isr_no_alloc builds [esp32s3]: OK ===" || exit 1
+	@# The poll() drain point, both languages and both chips. Pascal and NilPy
+	@# assert the same four claims; the NilPy one is weaker on two of them because
+	@# the Python surface exports no budget or in-drain accessor (see its header).
+	@# --xtensa-long-calls is an xtensa flag: passed for the S3, and omitted for
+	@# the C3, where it is a no-op (measured -- identical object size either way).
+	@for t in test/esp_board_gpio_poll_drain.pas test/esp_board_gpio_poll_drain.npy; do \
+	  b=$$(basename $$t); \
+	  ./$(COMPILER) --target=esp32s3 --xtensa-long-calls --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	      $$t $(TESTTMP)/esp_board_pd_s3_$$b.o >/dev/null \
+	    && echo "=== $$b builds [esp32s3]: OK ===" || exit 1; \
+	  ./$(COMPILER) --target=esp32c3 --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	      $$t $(TESTTMP)/esp_board_pd_c3_$$b.o >/dev/null \
+	    && echo "=== $$b builds [esp32c3]: OK ===" || exit 1; \
+	done
 	@# espspi's NilPy surface, the board half of which is
 	@# test/esp_board_spi_surface.npy (recipe in its header).
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \

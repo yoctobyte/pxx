@@ -5703,41 +5703,63 @@ should not halt", so frankuser has put it to him. It does not block the math
 decision: on ESP a math error no longer raises at all, so a bad sensor value
 never reaches the halt path. The tension is about exceptions generally.
 
-## 2026-09-28 — the self-host gate's LOUD red (two distinct fixedpoints) can just mean your checkout is behind
+## 2026-09-28 — CORRECTION to my own entry above: the gate's two-fixedpoints red is NOT explained, and I said it was
 
-Recorded because the gate prints excellent guidance for its OTHER failure mode
-and none for this one, and this one reads like a disaster.
+Earlier today I recorded that the self-host gate's loud red — "two distinct
+fixedpoints ... local seed contamination, or a self-perpetuating miscompile" —
+means your checkout is behind on compiler/, with the remedy "rebase first, then
+recompute". **That was one sample promoted to a cause, and the second sample
+refutes it.** The entry is rewritten here rather than left standing, because a
+confidently wrong note about an alarming signal is worse than no note: it tells
+the next seat to stop looking.
 
-The familiar red is the mtime NOTE: "compiler/pascal26 is OLDER than the last
-commit touching compiler/", which says in its own text that it is an mtime
-comparison, that a comment-only commit trips it while the binary is correct, and
-that the remedy is `make compiler/pascal26` then re-gate. Fine.
+WHAT IS ACTUALLY MEASURED, both occurrences, same day:
 
-The one with no guidance is:
+- **Occurrence 1.** Checkout 8 commits behind origin, three of them touching
+  compiler/ (`13f122a0ef`, `a49f6f12c6`, `b1b51f5a0d`). RED at byte 153. Rebase,
+  then `make compiler/pascal26` (which rebuilt: the binary changed), then
+  re-gate: GREEN. Consistent with "stale sources", which is why I believed it.
 
-```text
-(both may self-reproduce -- that is exactly the point: two distinct
- fixedpoints means the binary we test with is not the one these sources define.
- Local seed contamination, or a self-perpetuating miscompile.)
-/tmp/selfhost-fp-NNN/stage_1a /tmp/selfhost-fp-NNN/tested differ: byte 153, line 1
-```
+- **Occurrence 2.** RED at byte 98. Checkout 3 commits behind, **none of them
+  touching compiler/ or lib/** (two tstate commits and a docs commit), so the
+  compiler sources were already current — `24ba9baf8e`, the one post-v450
+  compiler change (`compiler/rparser.inc`), was already in HEAD. I rebased and
+  recomputed anyway: **the recompute produced the same binary it started with,
+  `1634f6483109`, unchanged.** Re-gate with an unchanged binary and unchanged
+  compiler sources: GREEN.
 
-Measured cause today, on a docs-only change that touched no code at all: the
-checkout was **8 commits behind origin with three compiler/ changes among them**
-(`13f122a0ef`, `a49f6f12c6`, `b1b51f5a0d`). The binary had been rebuilt from the
-older sources, so it genuinely was "not the one these sources define" — the
-message is accurate and its two suggested causes are both wrong for this case.
+So in occurrence 2 the red cleared with **no material input change**. Same
+binary, same compiler sources, red then green. Whatever that red was, being
+behind on compiler/ does not explain it, and neither does anything my rebase did.
 
-Remedy, in this order: **rebase onto origin/master FIRST, then `make
-compiler/pascal26`, then re-gate.** Recomputing before rebasing just rebuilds the
-stale tree and the red returns. After the rebase it printed "converged after 1
-round(s)" and the re-gate was GREEN. Do not delete the stamp — the mtime note's
-warning against that applies here too.
+WHAT I CAN STATE, and nothing more:
 
-Why it is worth a LOGBOOK row rather than nothing: the two reds want opposite
-reactions. The mtime one is usually benign and self-explaining. This one names
-seed contamination and a self-perpetuating miscompile, which during a pin is
-exactly the sentence that makes a seat stop and escalate — and a seat sitting on
-a moving master is the most likely way to see it, so the alarming text and the
-boring cause coincide. That is the shape this tree already calls "the signal
-fires, it is just not about what you think".
+1. The red is **not always reproducible**, so a single red is not yet evidence of
+   contamination or a miscompile. Re-gate before escalating.
+2. `make compiler/pascal26` printing "verified — N round(s) (stamp read back;
+   sources match it)" tells you the stamp is consistent with your sources. It
+   does **not** tell you your binary equals the fixedpoint the gate reaches from
+   the PIN, which is what this check compares. Those are different questions and
+   the verb does not distinguish them.
+3. A legitimate divergence exists whenever a compiler/ commit lands after the
+   current pin — `24ba9baf8e` did, after v450 (`3503825c2f`, binary
+   `c19cc2d531e4`) — so pinned-binary and current-sources fixedpoints are
+   *expected* to differ then. That is not by itself the failure this check
+   reports, but it is a confounder when reading it.
+4. Do not delete the stamp. That warning from the mtime note still holds.
+
+A LIKELY MECHANISM, EXPLICITLY NOT ESTABLISHED: the fleet rule is that only
+`tools/gate.sh` takes `/home/neo/.cache/pxx-gate.lock`, and a single compile from
+a seat may run outside it. If another seat compiles while the gate is staging its
+fixedpoint comparison, a race is available. I have not tested this and I am not
+going to assert it — it is written down as the next thing to check, not as the
+answer. The way to test it is to reproduce the red with the machine otherwise
+idle; if it cannot be reproduced idle, the concurrency hypothesis gets its first
+real evidence.
+
+WHY THIS IS RECORDED AS A CORRECTION RATHER THAN AN EDIT: this tree keeps
+catching the same failure, including from people who had just written the rule
+down — a confirmed mechanism promoted to "the cause" without re-running the
+failing case. I did it again here, in a note whose whole purpose was to stop the
+next seat wasting time on an alarming message. The instrument that caught me was
+boring: checking whether the thing I claimed had changed actually had.

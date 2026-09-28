@@ -1,0 +1,159 @@
+# SPDX-License-Identifier: 0BSD
+# BOARD ONLY: interrupts.poll() is a drain point for PYTHON too, and the budget
+# defers rather than drops.
+#
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=$PWD/test/esp_board_gpio_poll_drain.npy \
+#     tools/esp_flash.sh --project examples/esp32/gpio-edge-s3 --no-verify --seconds 25
+#
+# (For the C3, --project examples/esp32/gpio-edge-c3.)
+#
+# The Pascal twin is test/esp_board_gpio_poll_drain.pas and carries the full
+# reasoning. This file exists because the owner's settled model is about PYTHON
+# draining the event, and a Pascal-only proof leaves the language the model is
+# written for untested on silicon. examples/esp32/gpio-edge-{c3,s3} drain with
+# time.sleep(); poll() was hosted-only until this row.
+#
+# TWO CHECKS ARE WEAKER HERE THAN IN THE PASCAL TWIN, and the reason is a gap in
+# the Python surface rather than a choice. lib/rtl/interrupts.pas exports
+# IntDrainBudget and IntInDrain to Pascal, but the Python surface offers only
+# events, poll, pending, dropped, delivered and on_event -- no budget accessor
+# and no in-drain accessor. So:
+#   - the BUDGET row asserts the PROPERTY without naming the number: one poll
+#     takes some but not all, the remainder stays pending, and nothing is
+#     dropped. Hardcoding 16 here would pass for the wrong reason the day the
+#     default changes.
+#   - the NESTED row can only assert that a poll inside a handler returns 0; it
+#     cannot also confirm the in-drain flag the way the Pascal twin does.
+# Both are reported as a finding rather than papered over.
+#
+# NO WIRING NEEDED: the pin is INPUT_OUTPUT and the pad drives its own input.
+# Under QEMU there are NO edges (no GPIO input path modelled), and a run with
+# zero edges satisfies every invariant below trivially -- so it fails loudly
+# instead of passing vacuously.
+
+import interrupts
+import 'espgpio.pas' as gpio
+
+PIN = 5
+N_SMALL = 10
+N_OVER = 40
+
+seen = [0, 0]          # count, wrong-id count
+nested = [-1, 0]       # poll rc from inside a handler, probe-armed flag
+fails = [0]
+
+
+def check(ok):
+    if not ok:
+        fails[0] = fails[0] + 1
+
+
+def on_edge(ev):
+    seen[0] = seen[0] + 1
+    if ev.id != PIN:
+        seen[1] = seen[1] + 1
+    if nested[1] == 1:
+        nested[0] = interrupts.poll()
+        nested[1] = 0
+
+
+def settle():
+    # Busy, and deliberately NOT time.sleep: a sleep here would make this a
+    # test of the sleep drain, which gpio-edge already covers. The GPIO status
+    # bit is a latch, so the ISR must run between edges.
+    k = 0
+    while k < 400:
+        k = k + 1
+
+
+def pulses(n):
+    for i in range(n):
+        gpio.gpio_write(PIN, 0)
+        settle()
+        gpio.gpio_write(PIN, 1)
+        settle()
+
+
+def drain_all(limit):
+    polls = 0
+    while interrupts.pending() > 0 and polls < limit:
+        interrupts.poll()
+        polls = polls + 1
+    return polls
+
+
+def main():
+    print("inout", gpio.gpio_inout(PIN))
+    gpio.gpio_write(PIN, 0)
+    interrupts.on_event(interrupts.INT_SRC_GPIO, on_edge)
+    print("armed", gpio.on_rising(PIN))
+
+    # ORDERING: edges, no sleep, no poll -> nothing delivered.
+    pulses(N_SMALL)
+    isr0 = gpio.gpio_edges()
+    print("after-edges isr", isr0, "pending", interrupts.pending(),
+          "delivered", interrupts.delivered(), "seen", seen[0])
+
+    if isr0 == 0:
+        print("POLL-DRAIN-NO-EDGES isr", isr0)
+        print("POLL-DRAIN-PY-DONE failures", 1)
+        return
+
+    check(seen[0] == 0)
+    check(interrupts.delivered() == 0)
+    check(interrupts.pending() > 0)
+
+    # POLL: one call, no sleep anywhere before it.
+    n1 = interrupts.poll()
+    print("poll1 returned", n1, "seen", seen[0], "pending", interrupts.pending())
+    check(n1 > 0)
+    check(seen[0] == n1)
+    check(interrupts.pending() == 0)
+    check(seen[1] == 0)
+    check(gpio.gpio_edges() == interrupts.delivered() + interrupts.dropped())
+
+    # BUDGET: more pending than one poll takes. The property, not the number.
+    isr1 = gpio.gpio_edges()
+    dropped_before = interrupts.dropped()
+    pulses(N_OVER)
+    pend = interrupts.pending()
+    print("over-budget isr-added", gpio.gpio_edges() - isr1,
+          "pending", pend, "dropped", interrupts.dropped())
+    check(pend > 1)
+    check(interrupts.dropped() == dropped_before)   # fits the ring: no drops
+
+    n2 = interrupts.poll()
+    left = interrupts.pending()
+    print("poll2 returned", n2, "pending-left", left)
+    check(n2 > 0)
+    check(n2 < pend)          # bounded: it did NOT take everything
+    check(left == pend - n2)  # the rest is PENDING, i.e. deferred
+    check(left > 0)
+    check(interrupts.dropped() == dropped_before)   # deferred, NOT dropped
+
+    polls = drain_all(100)
+    print("drained polls", polls + 1, "pending", interrupts.pending())
+    check(interrupts.pending() == 0)
+    check(polls < 100)
+    check(seen[0] == interrupts.delivered())
+    check(gpio.gpio_edges() == interrupts.delivered() + interrupts.dropped())
+
+    # NESTED: a poll from inside a handler is refused.
+    nested[0] = -1
+    nested[1] = 1
+    pulses(3)
+    interrupts.poll()
+    drain_all(100)
+    print("nested rc", nested[0])
+    check(nested[0] == 0)
+
+    print("off", gpio.edge_off(PIN))
+    print("final isr", gpio.gpio_edges(), "delivered", interrupts.delivered(),
+          "dropped", interrupts.dropped(), "seen", seen[0])
+    check(gpio.gpio_edges() == interrupts.delivered() + interrupts.dropped())
+    check(seen[0] == interrupts.delivered())
+
+    print("POLL-DRAIN-PY-DONE failures", fails[0])
+
+
+main()
