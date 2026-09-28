@@ -5391,6 +5391,8 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_recache26 "$$($(TESTTMP)/test_nilpy_recache26 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_a_module_level_regex_call_caches_its_pattern.expected)"
 	./$(COMPILER) test/test_nilpy_re_findall_past_the_old_4096_cap.npy $(TESTTMP)/test_nilpy_recap26
 	$(TESTTMP)/test_nilpy_recap26 | diff -u test/test_nilpy_re_findall_past_the_old_4096_cap.expected -
+	./$(COMPILER) test/test_nilpy_re_match_start_end_default_to_group_0.npy $(TESTTMP)/test_nilpy_restart26
+	$(TESTTMP)/test_nilpy_restart26 | diff -u test/test_nilpy_re_match_start_end_default_to_group_0.expected -
 	tools/assert_no_leak.sh nilpy_regex_pattern_cache 400 $(TESTTMP)/test_nilpy_recache26
 	./$(COMPILER) test/test_nilpy_break_continue.npy $(TESTTMP)/test_nilpy_brkcont26
 	$(TESTTMP)/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -

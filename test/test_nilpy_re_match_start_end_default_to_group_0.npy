@@ -1,0 +1,8 @@
+# m.start() / m.end() with no argument mean group 0, as in CPython (they
+# needed the group number, so a CPython program calling them did not compile).
+import re
+
+m = re.search(r"(b+)", "aabbbcc")
+print(m.start(), m.end(), m.start(0), m.end(0), m.start(1), m.end(1), m.group())
+m = re.search(r"\d+", "no digits here 42")
+print(m.start(), m.end(), m.group())

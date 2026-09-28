@@ -56,8 +56,11 @@ type
     function group(n: Integer): AnsiString;
     function group: AnsiString; overload;      { group() == group(0) }
     function start(n: Integer): Integer;
+    function start: Integer; overload;         { start() == start(0), as in CPython }
     function stop(n: Integer): Integer;        { CPython's m.end(n) }
+    function stop: Integer; overload;
     function &end(n: Integer): Integer;        { CPython's own spelling of it }
+    function &end: Integer; overload;
     function groupCount: Integer;
   end;
 
@@ -190,6 +193,21 @@ end;
 function TMatch.&end(n: Integer): Integer;
 begin
   &end := m.stops[n] - 1;
+end;
+
+function TMatch.start: Integer;
+begin
+  start := m.starts[0] - 1;
+end;
+
+function TMatch.stop: Integer;
+begin
+  stop := m.stops[0] - 1;
+end;
+
+function TMatch.&end: Integer;
+begin
+  &end := m.stops[0] - 1;
 end;
 
 function TMatch.groupCount: Integer;
