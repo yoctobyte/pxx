@@ -70,8 +70,10 @@ Then, by hand:
 
 ## 5. Before committing
 
+Run the credential check the coordinator gives every seat; it must print
+nothing. Then:
+
 ```sh
-git grep -n wififive                 # must print nothing
 git diff                             # read all of it
 ```
 
