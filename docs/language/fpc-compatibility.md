@@ -77,9 +77,12 @@ Use this pattern for compiler-specific code:
 - The CLI is PXX-specific; it does not emulate the full FPC command line.
 - Unit/object/package binary compatibility with FPC is not provided.
 - Some FPC directives are accepted only as comments or compatibility markers.
-- Overflow (`{$Q+}`), range (`{$R+}`), and IO (`{$I+}`) checking are implemented
-  but opt-in per region and off in the lax default; several other compile-switch
-  states are still inert markers.
+- Overflow (`{$Q+}`) and range (`{$R+}`) checking are implemented but opt-in
+  per region, and off by default, as in FPC. I/O checking is **on** by default,
+  as in FPC: a failed `Reset` stops the program with `Runtime error 2 (I/O
+  error)` unless `{$I-}` is in force, and then `IOResult` answers 2 (measured
+  with pin v447 and FPC 3.2.2). Several other compile-switch states are still
+  inert markers.
 - On the ESP targets (xtensa, riscv32) `Real` means `Single`, not `Double` —
   it is the target's native float depth, deliberately. FPC makes `Real` a
   `Double` everywhere. See [Types](types.md#real-is-the-targets-native-float).

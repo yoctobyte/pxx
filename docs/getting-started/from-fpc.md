@@ -327,6 +327,22 @@ not nest them in `delphi` and `tp` mode. PXX nests them in every mode but
 `delphi`, so `{ a {b} c }` compiles under PXX in `tp` mode and is a syntax
 error under FPC there.
 
+**`Random` gives a different sequence for the same seed.** PXX has its own
+random-number generator, not FPC's Mersenne Twister, so a program that relies
+on the numbers a seed produces under FPC gets others:
+
+```pascal
+program rnd;
+var i: Integer;
+begin
+  RandSeed := 42;
+  for i := 1 to 5 do Write(Random(100), ' ');
+  WriteLn;
+end.
+```
+
+FPC prints `37 79 95 18 73`, and PXX prints `20 80 2 66 15`.
+
 **On the ESP32, `Real` is `Single`.** FPC makes `Real` a `Double` everywhere;
 PXX uses the target's native float width. See
 [Types](../language/types.md#real-is-the-targets-native-float).

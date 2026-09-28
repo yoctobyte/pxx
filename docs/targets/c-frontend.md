@@ -132,6 +132,11 @@ the other targets started a thread's copy at 0).
 
 ## Known Limitations
 
+- **Some GNU C extensions are missing.** Checked against GCC with pin v447
+  (2026-09-28): statement expressions (`({ int t = 3; t * 2; })`) and
+  `__attribute__((packed))` work and match GCC, but `typeof` and
+  `__typeof__` are read as calls to an undeclared function, and a case range
+  (`case 1 ... 9:`) is a syntax error (`expected ':'`).
 - **A C call to an undeclared/extern function binds case-insensitively across
   the C *and* Pascal namespace**, with no arity check. This is deliberate and
   is how a C corpus gets a math library at all (`sqrt`/`sin`/`cos` bind to the

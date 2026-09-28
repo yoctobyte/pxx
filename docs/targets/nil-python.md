@@ -93,10 +93,13 @@ release the class instances held in its local variables.
 - **`__file__` names the executable**, not a source file, and so does
   `sys.executable`. Keep data files next to the binary and find them with
   `os.path.dirname(os.path.abspath(__file__))`.
-- **`exec` and `eval` run a subset of Python** through a tree-walker, and only
-  with an explicit namespace: `exec(src, d, d)`, `eval(src, g, l)`.
-  `exec(src)` with no namespace is a compile error, because compiled locals
-  have no run-time name table to bind into. The subset has no `import`, no
+- **`exec` and `eval` run a subset of Python** through a tree-walker, with an
+  explicit namespace: `exec(src, d, d)`, `eval(src, g, l)`. `exec(src)` with
+  no namespace is a compile error, because compiled locals have no run-time
+  name table to bind into. `eval(src)` with no namespace compiles, but sees
+  none of the program's names: with pin v447, `n = len(sys.argv)` then
+  `eval("n + 1")` stops with `pyeval: name not defined: n`, where CPython
+  prints 2. The subset has no `import`, no
   `class`, and no nested `exec`.
 - **It accepts some things CPython rejects**, such as the quoted import below.
   Nil Python is compatible with CPython in one direction only.
