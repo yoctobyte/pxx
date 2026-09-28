@@ -1717,6 +1717,7 @@ begin
       doneParam := False;
       while IsDeclNameTok and not doneParam do
       begin
+        CheckParamCap(nparams);
         pnames[nparams] := CurTok.SVal; Inc(nparams); Next;
         if not Eat(tkComma) then doneParam := True;
         if CurTok.Kind = tkColon then doneParam := True;
@@ -2332,6 +2333,7 @@ begin
     ClassName / InheritsFrom / passing it to a TClass param all work on it unchanged. }
   if (methOwnerCi >= 0) and (not implNoSelf) then
   begin
+    CheckParamCap(nparams);   { Self takes a slot }
     for i := nparams downto 1 do
     begin
       pnames[i] := pnames[i-1];

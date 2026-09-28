@@ -162,10 +162,9 @@ still crashes the compiler, rc=139, with no diagnostic:
 Only the nested-routine capture path has a guard (pasparser_proc.inc, "too
 many params after capture (N, max 32)"). The ordinary name loop in
 ParseProcDecl writes `pnames[nparams]` with no check, and so does the Self
-shift. A one-line guard there turns the first row into
-`error: too many parameters (33, max 32)`; I measured that and backed it out.
-The class-body method staging (pasparser_decl.inc `mPNames`, two copies), the
-procedural-type staging (`pn`), four cparser.inc arrays and pyparser's
-`lamNames` are the same unguarded shape. Guarding one copy would leave the
-family looking handled, so the fix should enumerate all of them: grep
-`array[0..MAX_PROC_PARAMS-1]` and follow each array's writer, not its callers.
+shift. **Since fixed as a refusal, at every Pascal
+site at once:** bug-a-the-33rd-parameter-crashes-the-compiler (CheckParamCap).
+Pyparser's def and lambda were already refused. What is still open on this
+ticket's side, besides raising the cap: cparser.inc's function-POINTER
+staging (6420, 6969, 18557) silently drops parameters past 32 instead of
+refusing them.

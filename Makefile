@@ -14068,6 +14068,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pvcc.log "$$(grep -c 'incompatible types: @' $(TESTTMP)/test_pvcc.log)" "4"
 	./$(COMPILER) test/test_procvar_calling_convention_match.pas $(TESTTMP)/test_pvccok26
 	tools/expect_same.sh test_pvccok26 "$$($(TESTTMP)/test_pvccok26)" "$$(cat test/test_procvar_calling_convention_match.expected)"
+	# THE 33RD PARAMETER IS REFUSED, NAMING THE CAP: it crashed the compiler
+	# (SIGSEGV, no message) on a routine, a method (32 plus Self) and a
+	# procedural type. Exactly one message each, so a second cascade error or a
+	# silent pass both fail. The at-the-limit file is the accepted half, and
+	# FPC 3.2.2 prints the same.
+	# bug-a-the-33rd-parameter-crashes-the-compiler
+	! ./$(COMPILER) test/test_param_cap_routine_fail.pas $(TESTTMP)/test_pcap_routine > $(TESTTMP)/test_pcap_routine.log 2>&1
+	tools/expect_same.sh test_param_cap_routine "$$(grep -c 'too many parameters (33, max 32' $(TESTTMP)/test_pcap_routine.log)" "1"
+	! ./$(COMPILER) test/test_param_cap_method_fail.pas $(TESTTMP)/test_pcap_method > $(TESTTMP)/test_pcap_method.log 2>&1
+	tools/expect_same.sh test_param_cap_method "$$(grep -c 'too many parameters (33, max 32' $(TESTTMP)/test_pcap_method.log)" "1"
+	! ./$(COMPILER) test/test_param_cap_proctype_fail.pas $(TESTTMP)/test_pcap_proctype > $(TESTTMP)/test_pcap_proctype.log 2>&1
+	tools/expect_same.sh test_param_cap_proctype "$$(grep -c 'too many parameters (33, max 32' $(TESTTMP)/test_pcap_proctype.log)" "1"
+	./$(COMPILER) test/test_param_cap_at_the_limit.pas $(TESTTMP)/test_pcap_ok26
+	tools/expect_same.sh test_pcap_ok26 "$$($(TESTTMP)/test_pcap_ok26)" "$$(cat test/test_param_cap_at_the_limit.expected)"
 	grep -q "cannot assign UCS4Char to AnsiString" $(TESTTMP)/test_asgbad.log
 	# ...and the other half: everything the check must NOT start refusing. It
 	# RUNS, because "accepted" and "correct" are different claims.

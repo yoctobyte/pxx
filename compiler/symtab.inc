@@ -16863,6 +16863,22 @@ end;
   `CUnitOfPascalProgram` is deliberately still SET and still live in defs.inc:
   removing it is a separate change from removing its use here, and this is the
   only site that read it. }
+procedure CheckParamCap(have: Integer);
+{ Refuse a parameter list about to take slot `have` when every slot is used.
+  Called BEFORE each append, and before the implicit Self shift, at every
+  declaration parser that stages parameters: a routine, a procedural type, a
+  class/interface/record method, a C function or function pointer, a Nil
+  Python def or lambda. The 33rd parameter was written past a 32-slot staging
+  array and the compiler died with SIGSEGV on ordinary source. The message
+  names the cap and the count, as the nested-routine guard's does, so a wrong
+  cap reads as a contradiction rather than an instruction. Raising the cap is
+  a separate problem: bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment. }
+begin
+  if have >= MAX_PROC_PARAMS then
+    Error('too many parameters (' + AIntToStr(have + 1) + ', max '
+          + AIntToStr(MAX_PROC_PARAMS) + ', counting Self for a method)');
+end;
+
 function TargetSelectsCdecl: Boolean;
 { Does `cdecl` on a Pascal routine SELECT anything on this target? Only where a
   C-convention prologue arm exists: x86-64, aarch64, arm32, i386. Elsewhere the

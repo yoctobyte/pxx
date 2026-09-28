@@ -5669,7 +5669,7 @@ begin
       startIdx := nP;
       while IsDeclNameTok do
       begin
-        if nP >= MAX_PROC_PARAMS then Error('record method: too many parameters');
+        CheckParamCap(nP);
         pn[nP] := CurTok.SVal; Inc(nP); Next;
         if not Eat(tkComma) then break;
       end;
@@ -7114,6 +7114,7 @@ begin
           mDoneParam := False;
           while IsDeclNameTok and not mDoneParam do
           begin
+            CheckParamCap(mNParams);
             mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
             if not Eat(tkComma) then mDoneParam := True;
             if CurTok.Kind = tkColon then mDoneParam := True;
@@ -8058,6 +8059,7 @@ begin
               mStartIdx := mNParams; mDoneParam := False;
               while IsDeclNameTok and not mDoneParam do
               begin
+                CheckParamCap(mNParams);
                 mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
                 if not Eat(tkComma) then mDoneParam := True;
                 if CurTok.Kind = tkColon then mDoneParam := True;
@@ -8158,6 +8160,7 @@ begin
           if mEnumRole = 2 then
             Error('enumerator Current: expected on a property, not a method');
           { inject implicit Self (the instance) at param 0, like a class method }
+          CheckParamCap(mNParams);   { Self takes a slot }
           for i := mNParams downto 1 do
           begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPStrElemTk[i] := mPStrElemTk[i-1]; mPStrCap[i] := mPStrCap[i-1]; mPPtrElemTk[i] := mPPtrElemTk[i-1]; mPArr[i] := mPArr[i-1]; mPDynA[i] := mPDynA[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPUntyped[i] := mPUntyped[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
           mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPStrElemTk[0] := 0; mPStrCap[0] := 0; mPPtrElemTk[0] := tyUnknown; mPArr[0] := False; mPDynA[0] := 0; mPByRef[0] := False; mPConst[0] := False; mPUntyped[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
@@ -8908,6 +8911,7 @@ begin
                 mDoneParam := False;
                 while IsDeclNameTok and not mDoneParam do
                 begin
+                  CheckParamCap(mNParams);
                   mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
                   if not Eat(tkComma) then mDoneParam := True;
                   if CurTok.Kind = tkColon then mDoneParam := True;
@@ -9041,6 +9045,7 @@ begin
               impl never binds to its declaration ("unresolved forward"). }
             if not mNoSelf then
             begin
+              CheckParamCap(mNParams);   { Self takes a slot }
               for i := mNParams downto 1 do
               begin
                 mPNames[i] := mPNames[i-1];
