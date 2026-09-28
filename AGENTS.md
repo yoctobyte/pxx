@@ -20,28 +20,32 @@ Python-shaped language, compiled ahead of time).
 | Targets | Linux x86-64 (native host), i386, aarch64, arm32, riscv32 (cross, run under qemu-user). ESP32-S3 (xtensa LX7), ESP32 classic (xtensa LX6) and ESP32-C3 (riscv32) through ESP-IDF; the ESP32-S2 compiles but has not been run. |
 | C | A C99-class dialect with common GNU extensions; c-testsuite 220/220 on x86-64. |
 | Nil Python | Best effort, with a real backlog. Not CPython and not aiming at CPython parity now. |
-| Memory | Leaks are treated as release blockers. See "Known issues" and the BLAISE LEAK LIST in devdocs/progress/LOGBOOK.md. |
+| Memory | Leaks are treated as release blockers. See docs/reference/known-issues.md ("Memory leaks") and the BLAISE LEAK LIST in devdocs/progress/LOGBOOK.md. |
 
 ## Build from nothing
 
     sudo apt install fpc make
     git clone https://github.com/yoctobyte/pxx && cd pxx
     make bootstrap        # FPC builds the seed, then pxx rebuilds itself to a byte-identical fixedpoint
+                          # (126 s with FPC 3.2.2 on 2026-09-28; the same binary as the route below)
 
 A checkout also ships a working compiler at stable_linux_amd64/default/pinned,
 so you do not need FPC. A fresh checkout has no compiler/pascal26 yet, and make
 refuses until you seed it from the pin:
 
     cp stable_linux_amd64/default/pinned compiler/pascal26
-    make compiler/pascal26   # this IS the self-host fixedpoint check (52 s on a busy box, 2026-09-27)
+    make compiler/pascal26   # this IS the self-host fixedpoint check (103 s from the v450 seed, 2026-09-28)
     ./compiler/pascal26 test/hello.pas /tmp/hello && /tmp/hello
+
+The pin in a checkout is the last line of stable_linux_amd64/default/pin.log:
+its name, the binary's sha256, and the source commit it was built from.
 
 "converged after N round(s)" means it rebuilt and reproduced itself. "verified"
 means nothing was rebuilt.
 
 ## Test
 
-    tools/gate.sh quick   # ~30 s: the fixedpoint plus a quick tier. Run it before every push.
+    tools/gate.sh quick   # the fixedpoint (55 s) plus a quick tier (23 s), 2026-09-28. Run it before every push.
     make test             # the Pascal/core suite
     make test-c           # C
     make test-nilpy       # Nil Python, differential against python3
@@ -52,7 +56,8 @@ The repository's Claude Code hooks refuse the full suites by default (a speed
 guard). Prefix PXX_ALLOW_FULL_SUITE=1 when you mean it.
 
 Check verdicts by the job's own printed line (for example "gate: GREEN"), not
-by a wrapper's exit status.
+by a wrapper's exit status. One failing job alone:
+tools/testmgr.py --tier full --job '<name>' (the name from --list).
 
 ## Leaks — how to check
 
@@ -77,9 +82,15 @@ by a wrapper's exit status.
   2026-09-27; st7789 needs @micropython.viper).
 - Networking under QEMU: tools/esp_qemu_net/qemueth + tools/esp_qemu_urequests.sh
   (chip 10.0.2.15, host 10.0.2.2; CONFIG_ETH_USE_OPENETH=y,
-  CONFIG_LWIP_TCP_MSL=500). Grep the UREQ-QEMU-COMPLETE token.
+  CONFIG_LWIP_TCP_MSL=500). Grep the UREQ-QEMU-COMPLETE token; each
+  UREQ-ROW line (transcript, census, control) must say OK.
+  `tools/esp_qemu_urequests.sh nilpy-c3` took 199 s on 2026-09-28.
 - Heap soaks: SOAK_BODY=<file.npy> tools/esp_heap_soak_nilpy.sh --passes 40
-  --settle 150 nilpy-logger-s3 [--as c3] [--control]; read SOAK-SETTLED.
+  --settle 150 nilpy-logger-s3 [--as c3] [--control]; read the
+  `SOAK <example> <chip> settled delta=<bytes>` line (bytes still gone after
+  the settle), then SOAK-COMPLETE. With
+  SOAK_BODY=tools/esp_soak_nilpy/leak-mixed-sizes.npy it took 335 s under
+  QEMU on 2026-09-28 and used the pin by default.
 - If only the S3 leaks and the C3 doesn't, suspect the xtensa codegen
   (compiler/ir_codegen_xtensa.inc, the per-target epilogues in compiler/symtab.inc).
 
@@ -111,31 +122,29 @@ follow. The parts worth keeping:
 - Every guard needs a positive control.
 - Say which compiler (sha256) and which tree a number was measured on.
 
-## Known issues at Blaise
+## Known issues and the release
 
-The release pin is v441 (commit 5c1696ca79, compiler sha256 4ebfa2d047a2).
-The maintained list is docs/reference/known-issues.md; the release notes are
-devdocs/release-notes/v0.1.0-beta.1.md. The short version:
+Do not trust a pin number or a list of bugs written here; they go stale.
+The sources of truth are:
 
-- No compiler-caused memory leak is known that grows while a program runs,
-  with three Nil Python exceptions in docs/reference/known-issues.md: a
-  reference cycle is never freed (reference counting, no cycle collector, by
-  design for this beta); `del name` keeps the object until the function
-  returns; and a list built by a comprehension is kept until the function
-  returns even after `name = None`. The sweep's record is the BLAISE LEAK
-  LIST in devdocs/progress/LOGBOOK.md. Wi-Fi on real hardware was measured on
-  one ESP32-C3 only; the S3 over real Wi-Fi was not. The 0.6 B/pass reading on
-  the ESP Nil Python soaks was the soak's own report lines; with them moved
-  into a function the four examples keep 0 bytes.
-- Silently wrong: C `long double` is 8 bytes (GCC: 16); a C function
-  returning a pointer to an array steps it one element at a time
-  (docs/reference/known-issues.md).
-- ESP bare-metal images run under QEMU only; on silicon use the ESP-IDF
-  profile. The ESP32-C3 examples ran on one physical board on 2026-09-27
-  (pin v441, all passing). Long network runs on the C3 stall under QEMU (an
-  emulated NIC's lost rx interrupt, not a leak).
-- -O3 is experimental (two differential shards red at v439); -O2 is the default.
-- Nil Python is best effort. CPython compatibility was explicitly not a goal
-  of this beta.
+- docs/reference/known-issues.md: what is wrong, since which pin, what to do
+  instead, and what was fixed and when. Each row names the compiler (sha256)
+  it was measured with.
+- devdocs/release-notes/v0.1.0-beta.1.md: the beta release notes. Its header
+  comment and its "This release is" line name the release pin, and its
+  "Since v441" list marks each fix with the first pin that carries it
+  ("(next pin)" when none does yet). docs/release-notes/index.md is the
+  public version.
+- stable_linux_amd64/default/pin.log: the pins, newest last.
+
+What changes slowly, as of the beta:
+
+- Nil Python is best effort, and CPython compatibility was not a goal of the
+  beta. A reference cycle is never freed: there is no cycle collector.
+- C `long double` is 8 bytes (GCC: 16).
+- ESP bare-metal images run under QEMU only; on a chip, use the ESP-IDF
+  profile (the default).
+- -O2 is the default and the level the compiler proves on itself; -O3 is
+  experimental.
 - Open work is ranked in devdocs/progress (tools/progress.sh ready). The
   owner's stated goals at the end are in devdocs/dev/the-goal-cross-cross.md.

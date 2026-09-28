@@ -34,10 +34,10 @@ marker it changed. It can be run on any day.
 
 ```sh
 python3 devdocs/release-notes/restamp.py identity --pin vNNN
-git diff --stat      # expect AGENTS.md, CLAUDE.md, the two release-notes pages, known-issues.md
+git diff --stat      # expect CLAUDE.md, the two release-notes pages, known-issues.md (AGENTS.md names no pin)
 ```
 
-It applies seven patterns, ten lines in all. If one of them was reworded since this script
+It applies six patterns, nine lines in all (seven and ten until AGENTS.md stopped naming a pin, 2026-09-28). If one of them was reworded since this script
 was written, it stops, prints the pattern that failed, and leaves that file
 alone; edit that line by hand and update the pattern in `restamp.py`.
 

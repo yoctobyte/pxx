@@ -119,6 +119,13 @@ that was then removed:
   `docs/release-notes/index.md`.
 - `check against v448: 46 items`.
 
+Rehearsed again on 2026-09-28 against v450, after AGENTS.md stopped naming
+a pin (so `identity` no longer touches it), in a throwaway worktree that was
+then removed: `markers: latest pin v450; 0 changed`; `identity: v450, commit
+3503825c2f, sha256 c19cc2d531e4, source 70f62b5544`; `git diff --stat`: 4
+files, 9 lines (`CLAUDE.md`, the two release-notes pages,
+`docs/reference/known-issues.md`); `check against v450: 58 items`.
+
 **Known false positive in `check`:** `docs/release-notes/index.md:87` is
 listed as draft wording, because it says "The table is the same as with the
 draft pin v425". That sentence is history, not a draft marker. Leave it.

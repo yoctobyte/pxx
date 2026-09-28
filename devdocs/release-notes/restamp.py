@@ -15,7 +15,7 @@ markers   Recomputes every "`<sha>` (vNNN)" and "`<sha>` (next pin)" marker in
           ancestor. The pin commit ("chore(stable): pin vNNN") is not the
           source commit and is not used for this.
 identity  Rewrites the lines that say which pin IS the release, and nothing
-          else: AGENTS.md, CLAUDE.md, the release notes' header comment and
+          else: CLAUDE.md, the release notes' header comment and
           "This release is" line, known-issues.md's opening, and
           docs/release-notes/index.md's opening. Each pattern must match
           exactly once, so a reworded line stops the script instead of being
@@ -111,9 +111,8 @@ def identity(n):
     _, h256, src = pl[n]
     V, H, C, T = 'v%d' % n, h256[:12], pin_commit(n), src[:10]
     edits = [
-        ('AGENTS.md',
-         r'The release pin is v\d+ \(commit [0-9a-f]+, compiler sha256 [0-9a-f]+\)\.',
-         'The release pin is %s (commit %s, compiler sha256 %s).' % (V, C, H)),
+        # AGENTS.md names no pin since 2026-09-28: it points at the release
+        # notes and pin.log instead, so there is nothing there to go stale.
         ('CLAUDE.md',
          r'beta 0\.1 "Blaise" \(pin v\d+\)',
          'beta 0.1 "Blaise" (pin %s)' % V),
