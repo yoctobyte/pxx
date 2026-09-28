@@ -10699,6 +10699,14 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_rec_helper_urec26 | diff -u test/test_record_helper_for_a_user_record.expected -
 	./$(COMPILER) test/test_record_helper_for_a_user_record_delphi.pas $(TESTTMP)/test_rec_helper_urecd26
 	$(TESTTMP)/test_rec_helper_urecd26 | diff -u test/test_record_helper_for_a_user_record_delphi.expected -
+	@# a string element passed to var/out or as a Move/FillChar destination is
+	@# made unique first (literal-shared segfaulted; a shared alias was edited)
+	./$(COMPILER) test/test_string_element_passed_by_ref_is_made_unique.pas $(TESTTMP)/test_str_elem_byref26
+	$(TESTTMP)/test_str_elem_byref26 | diff -u test/test_string_element_passed_by_ref_is_made_unique.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_string_element_passed_by_ref_is_made_unique.pas $(TESTTMP)/test_str_elem_byref26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_str_elem_byref26_i386 | diff -u test/test_string_element_passed_by_ref_is_made_unique.expected -; \
+	else echo "=== test_string_element_passed_by_ref: qemu-i386 absent, i386 NOT verified ==="; fi
 	# TA and TB are both `array of LongInt`: identical element type, identical
 	# dynamic-ness, identical depth. A symbol records an array's SHAPE and not its
 	# IDENTITY, so matching a helper by element kind and depth COMPILES this file.

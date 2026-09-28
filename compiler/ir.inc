@@ -5803,6 +5803,46 @@ begin
             PyFreshCallableProc(ASTIVal[node]);
 end;
 
+{ A STRING ELEMENT HANDED TO A var/out PARAMETER IS MADE UNIQUE FIRST, as
+  `s[i] := c` is. The callee writes through a bare address, so without this
+  `s := 'abc'; SetC(s[2])` wrote into the literal's read-only bytes and
+  segfaulted (FPC prints ayc), and with `t := s` shared it edited t as well.
+  Move/FillChar reach here too: their destination is an untyped `var`.
+  FPC makes the string unique on exactly these; `const` and value params only
+  read, and `@s[i]` is left alone (FPC leaves it too).
+
+  PXXStrUnique takes the SLOT address: IR_SLOTADDR for a local or global, the
+  slot a var-string parameter points at, or the IR_FIELD / IR_INDEX address a
+  field or element base lowers to. Other bases are not handled here. }
+procedure IRStrUniqueForByRefElem(cpi, pathIdx, argAST: Integer);
+var base, sym, slot, pi, arg: Integer;
+begin
+  if (argAST < 0) or (ASTKind[argAST] <> AN_INDEX) then Exit;
+  if (cpi < 0) or (cpi >= ProcCount) or (pathIdx < 0) or
+     (pathIdx >= Procs[cpi].ParamCount) then Exit;
+  if not ProcParamExplicitByRef[cpi * MAX_PROC_PARAMS + pathIdx] then Exit;
+  if ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx] then Exit;
+  base := ASTLeft[argAST];
+  if (base < 0) or (IntToTypeKind(ASTTk[base]) <> tyAnsiString) then Exit;
+  pi := FindProc('PXXStrUnique');
+  if pi < 0 then Exit;
+  slot := -1;
+  if ASTKind[base] = AN_IDENT then
+  begin
+    sym := ASTIVal[base];
+    if (sym < 0) or Syms[sym].IsArray or (Syms[sym].TypeKind <> tyAnsiString) then Exit;
+    slot := IRAppend(IR_SLOTADDR, sym, -1, -1, 0, Ord(tyPointer));
+    if (Syms[sym].Kind = skParam) and Syms[sym].IsRef then
+      slot := IRAppend(IR_LOAD_MEM, slot, -1, -1, 0, Ord(tyPointer));
+  end
+  else if (ASTKind[base] = AN_FIELD) or (ASTKind[base] = AN_INDEX) then
+    slot := IRLowerAddress(base)
+  else
+    Exit;
+  arg := IRAppend(IR_ARG, slot, -1, -1, 0, Ord(tyPointer));
+  IRMarkStatementNode(IRAppendCall(pi, arg, -1, Ord(tyPointer)));
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -5826,6 +5866,7 @@ var argTk: TTypeKind;
   fcBoxPi, fcObjPi, fcArg, fcBox: Integer;   { a fresh callable argument }
 begin
   if isRefArg then CheckVarArgWidth(cpi, pathIdx, argAST);
+  if isRefArg then IRStrUniqueForByRefElem(cpi, pathIdx, argAST);
   { A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS OWNED BY A HIDDEN VARIANT, as
     it is when bound to a name first. The lambda's value is a fresh heap
     object as a raw Pointer: a `key: Pointer` parameter (sorted, min, max,
