@@ -80,6 +80,11 @@ begin
 end;
 ```
 
+PXX accepts `Result` in every mode it supports. FPC accepts it only in `{$mode objfpc}`
+or `{$mode delphi}`; under FPC's default mode it is "Identifier not found",
+and the function's own name is the spelling that works in both
+(`Twice := N * 2`).
+
 Parameters can be passed by value, `const`, `var`, or `out`, depending on the
 routine contract.
 

@@ -28,8 +28,8 @@ Some features are project-specific or still early:
 - `PXX` is predefined when compiling Pascal input.
 - `-dNAME` and `-uNAME` define and undefine conditional symbols.
 - `--threadsafe` enables atomic reference counts for managed strings and arrays.
-- `--no-auto-var` and `--no-lazy-var` disable PXX's auto-typed/inline variable
-  declarations.
+- `--no-lazy-var` disables PXX's inline variable declarations, and
+  `--no-auto-var` the `auto` keyword and inline loop variables.
 - `--target=ARCH` selects the output CPU target.
 - `.c` and `.npy` inputs route to the C and Nil Python frontends, which are
   mainline and gated alongside Pascal; `.bas` and `.rs` route to the
@@ -55,7 +55,14 @@ begin
 end;
 ```
 
-These features can be disabled by passing `--no-auto-var` and `--no-lazy-var` (or `-fno-auto-var` and `-fno-lazy-var`) to the compiler.
+`--no-lazy-var` (or `-fno-lazy-var`) turns off inline `var` declarations,
+including the inferred `var i := 0`. `--no-auto-var` (or `-fno-auto-var`)
+turns off the `auto` keyword and inline loop variables (`for var i := …`); a
+plain `var i := 0` in a block still compiles under it (pin v447).
+
+FPC 3.2.2 has neither feature. It stops at the first inline `var` with
+"Illegal expression", so code that must also build with FPC declares its
+variables in a `var` section.
 
 ## Calling conventions
 

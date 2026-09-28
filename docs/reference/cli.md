@@ -139,8 +139,8 @@ the optional rows; each `no` costs exactly the one capability its row names.
 | `-fsigned-char` / `-funsigned-char` | C: make plain `char` signed or unsigned, overriding the target's default. |
 | `-M<mode>` | FPC's mode switch, for sources that carry no `{$MODE}` line. `-Mdelphi` (and `-Mdelphiunicode`) selects Delphi mode; every other name (`-Mobjfpc`, `-Mtp`, …) is accepted and leaves the default dialect. A `{$MODE}` in the source still wins. |
 | `--threadsafe` | Use atomic refcounts for managed strings and arrays. On x86-64, i386, aarch64, and arm32 only. |
-| `--no-auto-var` | Disable auto-typed variable declarations. |
-| `--no-lazy-var` | Disable inline/lazy variable declarations (`var x := 5;` inside a block). The error it gives suggests `--lazy-var`, but there is no such flag: leave `--no-lazy-var` off instead. |
+| `--no-auto-var` | Disable the `auto` type keyword (`var n: auto := 'x';`) and inline loop variables (`for var i := …`, `for var x in …`). `var x := 5;` inside a block still infers its type; `--no-lazy-var` is what turns that off. |
+| `--no-lazy-var` | Disable inline/lazy variable declarations (`var x := 5;` inside a block). The error says so: "inline `var` declarations are disabled by --no-lazy-var; drop that option to allow them". |
 | `--system-libs` | Disable the Magic Link auto-pull mechanism and link C dependencies dynamically. |
 | `--system-libs=stems` | Granular opt-out: dynamically link listed comma-separated C libraries (e.g. `m,pthread`), keeping the rest magic-linked. |
 | `-nostdinc` / `--nostdinc` | Disable adding default C header search directories. |
