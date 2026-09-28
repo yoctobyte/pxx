@@ -8151,6 +8151,18 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh i386/test_npy_maxsize_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_npy_maxsize_i386)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected32)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize_arm32
 	tools/expect_same.sh arm32/test_npy_maxsize_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_maxsize_arm32)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected32)"
+	# `parallel for`'s worker count comes from sched_getaffinity, whose number
+	# was setaffinity's on aarch64/arm32 -- a fixed 4 there. Every target must
+	# agree with x86-64 on this box. The row cannot fail on a 4-CPU box; on
+	# the compiler one commit back it prints 4 on aarch64/arm32 on this 12-CPU one.
+	# bug-a-parallel-for-uses-4-workers-on-aarch64-and-arm32-because-it-asks-setaffinity
+	./$(COMPILER) --threadsafe -Fulib/rtl test/test_parallel_for_worker_count_follows_the_cpu_affinity.pas $(TESTTMP)/parwk_x64
+	./$(COMPILER) --threadsafe -Fulib/rtl --target=i386 test/test_parallel_for_worker_count_follows_the_cpu_affinity.pas $(TESTTMP)/parwk_i386
+	tools/expect_same.sh i386/test_parallel_for_worker_count "$$(tools/run_target.sh i386 $(TESTTMP)/parwk_i386)" "$$($(TESTTMP)/parwk_x64)"
+	./$(COMPILER) --threadsafe -Fulib/rtl --target=aarch64 test/test_parallel_for_worker_count_follows_the_cpu_affinity.pas $(TESTTMP)/parwk_a64
+	tools/expect_same.sh aarch64/test_parallel_for_worker_count "$$(tools/run_target.sh aarch64 $(TESTTMP)/parwk_a64)" "$$($(TESTTMP)/parwk_x64)"
+	./$(COMPILER) --threadsafe -Fulib/rtl --target=arm32 test/test_parallel_for_worker_count_follows_the_cpu_affinity.pas $(TESTTMP)/parwk_a32
+	tools/expect_same.sh arm32/test_parallel_for_worker_count "$$(tools/run_target.sh arm32 $(TESTTMP)/parwk_a32)" "$$($(TESTTMP)/parwk_x64)"
 	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_thread_clone.pas $(TESTTMP)/test_thread_clone_guard26 > $(TESTTMP)/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" $(TESTTMP)/test_thread_clone_guard.log

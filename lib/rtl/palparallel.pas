@@ -148,12 +148,16 @@ const SYS_sched_getaffinity = 204;
 const SYS_sched_getaffinity = 242;
 {$define PXX_HAS_AFFINITY}
 {$endif}
+{ aarch64 and arm32 were 122 and 241 -- sched_SETaffinity on both. The call
+  failed with EINVAL, and `parallel for` fell back to 4 workers on every
+  aarch64/arm32 machine, real hardware included.
+  bug-a-parallel-for-uses-4-workers-on-aarch64-and-arm32-because-it-asks-setaffinity }
 {$ifdef CPUAARCH64}
-const SYS_sched_getaffinity = 122;
+const SYS_sched_getaffinity = 123;
 {$define PXX_HAS_AFFINITY}
 {$endif}
 {$ifdef CPU_ARM32}
-const SYS_sched_getaffinity = 241;   { arm EABI }
+const SYS_sched_getaffinity = 242;   { arm EABI }
 {$define PXX_HAS_AFFINITY}
 {$endif}
 
