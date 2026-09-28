@@ -141,4 +141,4 @@ recorded at LOGBOOK 2026-08-31 (frankB): the finding belongs to the ticket, the
 pattern does not, and a note nobody will re-read is not tracking.
 
 ## Log
-- 2026-09-28 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-28 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7eb19c0585.
