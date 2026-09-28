@@ -28,6 +28,13 @@ G="git -c user.email=devtest@example.invalid -c user.name=devtest -c commit.gpgs
 $G init -q --bare "$W/origin.git"
 $G clone -q "$W/origin.git" "$W/wc" 2>/dev/null  # "empty repository" warning is expected
 cd "$W/wc"
+# file-ticket.sh commits with plain `git`, so $G's -c flags never reach it.
+# Give the TEMP clone its own identity (local config, dies with $W): a host
+# with no identity (the release host, deliberately) failed every row, and
+# testmgr's job environment drops GIT_AUTHOR_*/GIT_COMMITTER_* anyway.
+git config user.email devtest@example.invalid
+git config user.name devtest
+git config commit.gpgsign false
 $G symbolic-ref HEAD refs/heads/master
 mkdir -p devdocs/progress/backlog-core tools
 cp "$SCRIPT" tools/file-ticket.sh

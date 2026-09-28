@@ -1256,8 +1256,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_lazyimp26 | diff -u test/test_nilpy_a_missing_module_imported_in_a_function_raises_when_reached.expected -
 	./$(COMPILER) -Futest/nilpy_nsportion/r1 -Futest/nilpy_nsportion/r2 test/test_nilpy_a_relative_import_finds_a_namespace_package_portion_in_another_root.py $(TESTTMP)/test_nilpy_nsportion26
 	$(TESTTMP)/test_nilpy_nsportion26 | diff -u test/test_nilpy_a_relative_import_finds_a_namespace_package_portion_in_another_root.expected -
-	./$(COMPILER) test/test_nilpy_a_subscript_on_a_call_result_of_a_class_without_getitem_raises.py $(TESTTMP)/test_nilpy_callsub26
-	$(TESTTMP)/test_nilpy_callsub26 | diff -u test/test_nilpy_a_subscript_on_a_call_result_of_a_class_without_getitem_raises.expected -
+	./$(COMPILER) test/test_nilpy_a_subscript_on_a_call_result_of_a_class_without_getitem_raises.py $(TESTTMP)/test_nilpy_callsub_nogetitem26
+	$(TESTTMP)/test_nilpy_callsub_nogetitem26 | diff -u test/test_nilpy_a_subscript_on_a_call_result_of_a_class_without_getitem_raises.expected -
 	./$(COMPILER) test/test_nilpy_time_struct_time_indexes_like_a_tuple.py $(TESTTMP)/test_nilpy_structtime26
 	$(TESTTMP)/test_nilpy_structtime26 | diff -u test/test_nilpy_time_struct_time_indexes_like_a_tuple.expected -
 	./$(COMPILER) test/test_nilpy_micropython_const.npy $(TESTTMP)/test_nilpy_mpconst26
@@ -38791,14 +38791,18 @@ test-esp-idf: $(COMPILER)
 	    test/esp_board_wifi_sta_join.npy $(TESTTMP)/esp_board_wifi_sta_join.o >/dev/null \
 	  && echo "=== esp_board_wifi_sta_join builds [$$t]: OK ===" || exit 1; \
 	done
-	@# The C3-joins-S3 heap census over plain HTTP (two boards; recipe in its
-	@# header), built for both ISAs though only the C3 runs it. Its HTTPS twin
+	@# The C3-joins-S3 heap census over plain HTTP, and the S3 visiting the
+	@# C3's access point (two boards each; recipes in their headers), built
+	@# for both ISAs though only one chip runs each. Its HTTPS twin
 	@# is a template that does not build unfilled; its exemption and the reason
 	@# are in test/UNWIRED.txt (a path named here would count as wiring it).
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_c3_joins_s3.npy $(TESTTMP)/esp_board_c3_joins_s3.o >/dev/null \
 	  && echo "=== esp_board_c3_joins_s3 builds [$$t]: OK ===" || exit 1; \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_s3_visits_wifi_ap_c3.npy $(TESTTMP)/esp_board_s3_visits_wifi_ap_c3.o >/dev/null \
+	  && echo "=== esp_board_s3_visits_wifi_ap_c3 builds [$$t]: OK ===" || exit 1; \
 	done
 	@# NilPy files through IDF's VFS (board recipe in the test's header). The
 	@# filesystem is pxx_fs's OPTIONAL mount, reached by a `weakexternal`, so

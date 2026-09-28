@@ -36,9 +36,17 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAKEFILE = os.path.join(REPO, "Makefile")
 
 TARGET_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_./%-]*)\s*:(?!=)")
+# `.py` too: test_nilpy_cross32_values.py is compiled in three targets, and
+# without it its expectation was charged to whichever source came before it.
 COMPILE_RE = re.compile(
-    r"\$\(COMPILER\)\s.*?(test/[A-Za-z0-9_./-]+\.(?:npy|pas|c))\s+"
+    r"\$\(COMPILER\)\s.*?(test/[A-Za-z0-9_./-]+\.(?:npy|py|pas|c))\s+"
     r"\$\(TESTTMP\)/([A-Za-z0-9_.-]+)")
+# The two spellings of "compare with this checked-in file". Both name ONE file,
+# so they cannot drift from each other; they are keyed as that file, not as
+# text. Without this a `| diff -u X.expected -` target read as asserting
+# nothing, and every source it shares with an expect_same target was drift.
+DIFF_FILE_RE = re.compile(r"\|\s*diff\s+-u\s+(test/[A-Za-z0-9_./-]+)\s+-\s*$")
+CAT_FILE_RE = re.compile(r'^"\$\$\(cat\s+(test/[A-Za-z0-9_./-]+)\)"$')
 
 # The 15 TESTTMP binary names two different sources both write. FROZEN, not
 # ratcheted at zero: they exist today, they are safe only because the recipes
@@ -109,6 +117,10 @@ def scan():
                 produced[m.group(2)].add(source)
                 blocks.setdefault((target, source), [])
                 continue
+            m = DIFF_FILE_RE.search(body)
+            if m and source:
+                blocks[(target, source)].append((n, "file:" + m.group(1)))
+                continue
             if "expect_same.sh" in body and source:
                 w = shell_words(body)
                 try:
@@ -117,7 +129,9 @@ def scan():
                     continue
                 args = w[k + 1:]
                 if len(args) >= 3:
-                    blocks[(target, source)].append((n, args[-1]))
+                    c = CAT_FILE_RE.match(args[-1])
+                    blocks[(target, source)].append(
+                        (n, "file:" + c.group(1) if c else args[-1]))
     return blocks, produced
 
 
@@ -151,7 +165,11 @@ def t_no_cross_target_expectation_drift():
     """THE ratchet. Zero today; fires on the first divergence."""
     drift = []
     for src, per_target in sorted(MULTI.items()):
-        seqs = {t: tuple(p for _, p in v) for t, v in per_target.items()}
+        # The DISTINCT expectations, in order. One target running a source
+        # twice (two xtensa ABIs) against the same file is not a divergence;
+        # a copy edited in one target still adds a payload the others lack.
+        seqs = {t: tuple(dict.fromkeys(p for _, p in v))
+                for t, v in per_target.items()}
         if len(set(seqs.values())) > 1:
             where = "; ".join("%s:%s" % (t, [n for n, _ in v])
                               for t, v in sorted(per_target.items()))
