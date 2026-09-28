@@ -556,6 +556,66 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   same output as x86-64. Measured on 2026-09-28 on the tree after pin v448.
   Refused in v441 to v448.
 
+- **Nil Python: a float captured by a lambda or a nested def arrived as the
+  wrong number.** `def bare(x): g = lambda: x; return g()` gave `0.0` for
+  `bare(1.0)` on i386 and arm32; x86-64 and aarch64 were right. Fixed after
+  v448 (`dbd60352fd`, in no pin yet). Measured on 2026-09-28 with
+  `test/test_nilpy_a_captured_float_travels_by_its_bits.npy`, 13 rows compared
+  with CPython: with v448 (`b2b325036c3b`), 5 rows wrong on i386 (for example
+  `param 0.0` for `1.0` and `method 3.0` for `1.5`), the same on arm32 before it
+  stopped (see the next row), and all 13 right on x86-64 and aarch64. With
+  the compiler built at `4cb8b66216` (`0ded1e5d04c8`), all 13 match on x86-64, i386, arm32, aarch64, and hosted Xtensa with
+  both ABIs, under QEMU user mode. The ESP value, `4.6071824188000174e+18` for
+  `1.0`, is as reported in `devdocs/progress/LOGBOOK.md`; on ESP silicon the
+  fix is measured hosted only. **On v448:** call the nested def directly
+  instead of taking it as a value; the fixture's `def direct` row is right
+  with v448 on every target above.
+
+- **Nil Python on arm32: a float default could stop the program with
+  SIGBUS.** A default slot was not 8-byte aligned, and storing a float
+  default into it faulted on arm32 once the layout shifted. Fixed after v448
+  (`4a9cf4c07c`, in no pin yet). Measured on 2026-09-28 with the same test
+  file under QEMU user mode on arm32: with v448 it stops with `Bus error`
+  (exit 135) at the `def default` row; with the compiler built at `4cb8b66216` (`0ded1e5d04c8`) all 13 rows print.
+
+- **Nil Python on the ESP32-S3: `cls(x)` inside a def or method lost its
+  arguments.** With `cls = P`, `return cls(self.a)` gave an object whose
+  `.a` was `0` or `None`, and `cls()` with no arguments then segfaulted. The
+  ESP32-C3 and x86-64 were right. Module-level code was not affected. On the
+  S3, v448 printed `0` (as reported in `devdocs/progress/LOGBOOK.md`). Fixed
+  after v448 (`76d35e065f`, in no pin yet). Measured on 2026-09-28 hosted only:
+  v448 cannot run Nil Python on hosted Xtensa (see the call0 row above), and
+  with the compiler built at `4cb8b66216` (`0ded1e5d04c8`) a probe of `Q().mk().a` and a def-level `cls(3)` prints `7` and `3`
+  on hosted Xtensa with both ABIs, as on x86-64. **On v448:** call the class
+  by its name, `P(self.a)`, which is a direct call like the module-level form
+  that was right; this was not measured on the S3.
+
+- **Pascal: a string element passed to a `var` parameter wrote into shared
+  memory.** `s := 'abc'; SetC(s[2])`, with `procedure SetC(var c: char)`,
+  crashed with a segmentation fault, because the callee wrote into the
+  literal's read-only bytes. With `u := t` sharing one buffer, it changed
+  both. `Move` and `FillChar` into a string element did the same. FPC 3.2.2
+  prints `ayc` and leaves the other copy alone. Fixed after v448
+  (`cbbb1e6418`, in no pin yet). Measured on 2026-09-28 with
+  `test/test_string_element_passed_by_ref_is_made_unique.pas`, 15 rows: with
+  v448 it stops with a segmentation fault on x86-64, i386, arm32 and aarch64,
+  and on riscv32 it runs and prints wrong values silently (`rc2 yefg yefg`,
+  the alias changed too, where FPC prints `rc2 defg yefg`). With the compiler built at `4cb8b66216` (`0ded1e5d04c8`) all 15
+  rows match FPC on those five targets. **On v448:** call `UniqueString(s)`
+  before passing `s[i]` to a `var` parameter, `Move` or `FillChar`.
+
+- **Pascal: a 33rd parameter crashed the compiler.** A routine, a method
+  (32 parameters plus `Self`) or a procedural type with more than 32
+  parameters stopped the compiler with a segmentation fault and no message.
+  It is now refused with `too many parameters (33, max 32, counting Self for
+  a method)`; the limit itself is unchanged. Fixed after v448 (`f619f705dd`,
+  in no pin yet). Measured on 2026-09-28: `test_param_cap_routine_fail.pas`,
+  `test_param_cap_method_fail.pas` and `test_param_cap_proctype_fail.pas`
+  crash v448 (exit 139) and are refused with that message by the compiler built at `4cb8b66216` (`0ded1e5d04c8`). 32
+  parameters, and 31 plus `Self`, compile and print what FPC 3.2.2 prints
+  with both, on x86-64 and i386 (`test_param_cap_at_the_limit.pas`). **On
+  v448:** keep to 32 parameters, counting `Self`; pass a record for more.
+
 - **TLS: a CA file that does not load was accepted.**
   `OpenSslTlsRegisterEx(True, '/nonexistent/ca.pem')` answered `True`, and
   so did a file that is not a certificate, so a mistyped private-CA path
