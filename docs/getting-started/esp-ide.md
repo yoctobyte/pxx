@@ -185,12 +185,14 @@ Detect: /dev/ttyACM0: permission denied: your user needs the dialout group (add 
 
 ## Without clicking
 
-Two options run the IDE unattended. The window still opens, so under a
+Three options run the IDE unattended. The window still opens, so under a
 headless session run it with `xvfb-run -a`.
 
 ```sh
 ./espide.sh --gui-smoke                                     # opens, paints, prints GUI SMOKE OK
 ./espide.sh --auto --port <port> examples/esp32/hello-s3 10 # detect, build+flash, monitor 10 s
+./espide.sh --gui-monitor-smoke --port <port> examples/esp32/hello-s3 6
+                                                            # press Monitor, hold 6 s, press Stop
 ```
 
 `--port` names the board, so an unattended run touches no other. `--auto`
@@ -198,6 +200,16 @@ prints the log to standard output and is meant to end with
 `ESPIDE-AUTO-COMPLETE rc=<n>`: `rc` is 0 when the board was flashed, 1 when
 the build or the flash failed, and 2 when the IDE refused, for any of the
 reasons above.
+
+`--gui-monitor-smoke` presses the same handlers the **Monitor** and **Stop**
+buttons use, holds the monitor open for the seconds you give, and then checks
+that control came back: no child still running, the IDE idle, and both
+`--- serial` and `--- stopped ---` in the log. It is the only mode that drives
+the Stop button, since `--gui-smoke` starts no child. It opens the serial
+port named by `--port`, as the Monitor button does, and builds and flashes
+nothing. On a board it printed `GUI MONITOR SMOKE OK:
+pressed Monitor, held it 6 s, pressed Stop, control came back` and `rc=0`
+(recorded with commit `42eee8e1f6`, which added it after pin v448).
 
 **Before 2026-09-28, after a successful flash `--auto` did not end on time.**
 It opened the monitor, printed `--- serial <port> (115200) ---`, and then
@@ -215,17 +227,28 @@ What was measured, as recorded with that commit by the developer who fixed it
 ended by itself with `monitor stopped after 8 s` and `rc=0`, and a board-free
 test on a pseudo-terminal that sends one burst of output and then stays quiet.
 There, with `cat` as the child the reader made no progress in 12 seconds and
-could not be killed, and with `dd` it made 60 steps. That is one board run
-only. The same record says roughly half of all the runs failed at the flash
+could not be killed, and with `dd` it made 60 steps. A second clean board run
+of `--auto` has been reported since; it is not in the repository's record.
+The same record says roughly half of all the runs failed at the flash
 and never reached the monitor. That is a separate problem;
 `tools/esp_flash.sh` now prints esptool's own reason for a failed write. On an
 older checkout, run `--auto` under `timeout` and judge the flash by the
 `Build+Flash: done` line in its output.
 
+**What keeps the fix from coming back** is not `--gui-monitor-smoke`. With
+`cat` put back as the reader it still passes, because the hang needs bytes
+left unread in the pipe when the board falls silent, and a quiet board leaves
+none. The guard is in `apps/ide/test.sh`: it checks the monitor's command
+line itself, that it reads with `dd` and not with `cat`, with the port quoted.
+
 The decisions behind the refusals live in `apps/ide/garin/espproj.pas`, and
 `apps/ide/test.sh` tests them without opening a window, including which port
-Detect may ask. With pin v448 (sha256 `b2b325036c3b`), at `c0477f7c36` on
-2026-09-28, it reports `316 passed, 0 failed`, and
+Detect may ask. With pin v448 (sha256 `b2b325036c3b`), at `57680139ca` on
+2026-09-28, it reports `323 passed, 0 failed`. With `cat` put back as the
+monitor's reader, in a throwaway copy, it reported `320 passed, 3 failed`:
+the rows `the monitor reads with dd, which does not splice`,
+`the monitor does NOT read with cat, which splices` and
+`and quoted for dd too`. At `c0477f7c36`,
 `xvfb-run -a ./espide.sh --gui-smoke` built the IDE and printed
 `GUI SMOKE OK`.
 
