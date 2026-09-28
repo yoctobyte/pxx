@@ -1352,7 +1352,7 @@ begin
     usesTextfile := False;
     for i := 0 to TokCount - 1 do
       if (Tokens[i].Kind = tkIdent) and
-         ((Tokens[i].SLen = 4) or (Tokens[i].SLen = 5) or (Tokens[i].SLen = 8)) then
+         ((Tokens[i].SLen >= 4) and (Tokens[i].SLen <= 8)) then
       begin
         tnm := GetTokenStr(i);
         if CaseEqual(tnm, 'text') or CaseEqual(tnm, 'textfile') or CaseEqual(tnm, 'ioresult') or
@@ -1364,7 +1364,13 @@ begin
            CaseEqual(tnm, 'file') or
            { Flush(f)/Flush(output): FPC System surface, lives in textfile
              (which also declares the standard Input/Output files). }
-           CaseEqual(tnm, 'flush') then
+           CaseEqual(tnm, 'flush') or
+           { the standard files by name: `WriteLn(Output, x)` / `ReadLn(Input, x)`
+             are standard Pascal and were refused as an undefined variable
+             unless something else pulled the unit. StdErr is NOT here: bare
+             it is the builtin fd-2 constant, and pulling the unit for it would
+             route every StdErr write through the Text RTL for no reason. }
+           CaseEqual(tnm, 'output') or CaseEqual(tnm, 'input') then
         begin usesTextfile := True; Break; end;
       end;
     if usesTextfile then

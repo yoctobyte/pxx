@@ -3528,6 +3528,8 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit26
 	tools/expect_same.sh test_a_unit_initialization_runs_on_wasm32.out "$$($(TESTTMP)/wasminit26 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh test_a_unit_initialization_runs_on_wasm32.err "$$($(TESTTMP)/wasminit26 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin26
+	$(TESTTMP)/outin26 < test/test_output_and_input_resolve_without_a_text_declaration.in | diff -u test/test_output_and_input_resolve_without_a_text_declaration.expected -
 	./$(COMPILER) test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr26
 	tools/expect_same.sh test_nilpy_print_to_stderr.out "$$($(TESTTMP)/npystderr26 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh test_nilpy_print_to_stderr.err "$$($(TESTTMP)/npystderr26 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -18713,6 +18715,8 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit.wasm
 	tools/expect_same.sh wasm32/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/wasminit.wasm 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh wasm32/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/wasminit.wasm 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=wasm32 test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin.wasm
+	tools/expect_same.sh wasm32/test_output_and_input_resolve_without_a_text_declaration "$$(tools/run_target.sh wasm32 $(TESTTMP)/outin.wasm < test/test_output_and_input_resolve_without_a_text_declaration.in)" "$$(cat test/test_output_and_input_resolve_without_a_text_declaration.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr.wasm
 	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -29848,6 +29852,8 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit_i386
 	tools/expect_same.sh i386/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh i386 $(TESTTMP)/wasminit_i386 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh i386/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh i386 $(TESTTMP)/wasminit_i386 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=i386 test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin_i386
+	tools/expect_same.sh i386/test_output_and_input_resolve_without_a_text_declaration "$$(tools/run_target.sh i386 $(TESTTMP)/outin_i386 < test/test_output_and_input_resolve_without_a_text_declaration.in)" "$$(cat test/test_output_and_input_resolve_without_a_text_declaration.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_i386
 	tools/expect_same.sh i386/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh i386/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
