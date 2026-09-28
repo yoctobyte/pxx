@@ -2870,6 +2870,9 @@ function hex(n: Int64): AnsiString;
   leading '-' for a negative magnitude, and '0o0'/'0b0' for zero. }
 function oct(n: Int64): AnsiString;
 function bin(n: Int64): AnsiString;
+{ hex/oct/bin of a VARIANT (base 16/8/2): an integer too big for a machine word
+  is rendered from its bignum; anything else takes the Int64 functions above. }
+function pyvar_tobase(const v: Variant; base: Integer): AnsiString;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -20368,48 +20371,76 @@ begin
 end;
 
 function hex(n: Int64): AnsiString;
-var m: Int64; d: AnsiString;
+var m: QWord; d: AnsiString;
 begin
   if n = 0 then begin Result := '0x0'; Exit; end;
-  m := n;
-  if m < 0 then m := -m;
+  { the magnitude UNSIGNED: -Low(Int64) does not fit an Int64, so `-m` left
+    -2**63 negative, the loop never ran, and hex(-2**63) printed '-0x' }
+  if n < 0 then m := QWord(-(n + 1)) + 1 else m := QWord(n);
   d := '';
   while m > 0 do
   begin
-    d := HexDigitChar(m mod 16) + d;
+    d := HexDigitChar(Integer(m mod 16)) + d;
     m := m div 16;
   end;
   if n < 0 then Result := '-0x' + d else Result := '0x' + d;
 end;
 
 function oct(n: Int64): AnsiString;
-var m: Int64; d: AnsiString;
+var m: QWord; d: AnsiString;
 begin
   if n = 0 then begin Result := '0o0'; Exit; end;
-  m := n;
-  if m < 0 then m := -m;
+  { the magnitude UNSIGNED: -Low(Int64) does not fit an Int64, so `-m` left
+    -2**63 negative, the loop never ran, and hex(-2**63) printed '-0x' }
+  if n < 0 then m := QWord(-(n + 1)) + 1 else m := QWord(n);
   d := '';
   while m > 0 do
   begin
-    d := HexDigitChar(m mod 8) + d;
+    d := HexDigitChar(Integer(m mod 8)) + d;
     m := m div 8;
   end;
   if n < 0 then Result := '-0o' + d else Result := '0o' + d;
 end;
 
 function bin(n: Int64): AnsiString;
-var m: Int64; d: AnsiString;
+var m: QWord; d: AnsiString;
 begin
   if n = 0 then begin Result := '0b0'; Exit; end;
-  m := n;
-  if m < 0 then m := -m;
+  { the magnitude UNSIGNED: -Low(Int64) does not fit an Int64, so `-m` left
+    -2**63 negative, the loop never ran, and hex(-2**63) printed '-0x' }
+  if n < 0 then m := QWord(-(n + 1)) + 1 else m := QWord(n);
   d := '';
   while m > 0 do
   begin
-    d := HexDigitChar(m mod 2) + d;
+    d := HexDigitChar(Integer(m mod 2)) + d;
     m := m div 2;
   end;
   if n < 0 then Result := '-0b' + d else Result := '0b' + d;
+end;
+
+{ A `**` result is a VARIANT, not a PromoInt, so the frontend's promo lowering
+  for hex/oct/bin never saw it: `hex(2 ** 70)` took hex(Int64) and printed 0x0,
+  `hex(3 ** 50)` its low 64 bits and `hex(2 ** 63)` '-0x'. An integer-tagged
+  variant goes through a promo slot (PXXPromoFromVariant reads both the inline
+  VT_INT64 and the heap VT_PROMO_INT64 tiers), which PXXPromoToBase renders.
+  Anything else keeps the Int64 conversion it always had. }
+function pyvar_tobase(const v: Variant; base: Integer): AnsiString;
+var slot: array[0..1] of NativeInt;
+    tg: Int64; n: Int64;
+begin
+  tg := PPyVarRec(@v)^.VType;
+  if (tg = VT_PROMO_INT64_TAG) or (tg = VT_INT64_TAG) then
+  begin
+    PXXPromoInit(@slot);
+    PXXPromoFromVariant(@slot, @v);
+    Result := PXXPromoToBase(@slot, base);
+    PXXPromoClear(@slot);
+    Exit;
+  end;
+  n := v;
+  if base = 16 then Result := hex(n)
+  else if base = 8 then Result := oct(n)
+  else Result := bin(n);
 end;
 
 { A list slice is a SHALLOW copy, as in Python: the new list holds the same

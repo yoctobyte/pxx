@@ -58523,13 +58523,25 @@ begin
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
         PyHoistRestore(lenSavedHoist);
-        if TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) then
+        { A VARIANT too: `**` answers one (pypow_v), and it can hold a bignum
+          that hex(Int64) would take as 0 -- `hex(2 ** 70)` printed 0x0.
+          pyvar_tobase renders an integer variant from its promo form and
+          sends anything else to the Int64 overload as before. }
+        if TypeIsPromoInt(IntToTypeKind(ASTTk[CurASTNode])) or
+           (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) then
         begin
           PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
           if CaseEqual(name, 'hex') then i := 16
           else if CaseEqual(name, 'oct') then i := 8
           else i := 2;
-          procIdx := FindProc('PXXPromoToBase');
+          if IntToTypeKind(ASTTk[CurASTNode]) = tyVariant then
+          begin
+            procIdx := FindProc('pyvar_tobase');
+            if procIdx < 0 then
+              Error('Nil Python: pylib (pyvar_tobase) not loaded');
+          end
+          else
+            procIdx := FindProc('PXXPromoToBase');
           if procIdx < 0 then
             Error('Nil Python: promocore (PXXPromoToBase) not loaded');
           argSeq := AllocNode(AN_ARG);

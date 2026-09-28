@@ -1,0 +1,28 @@
+# hex/oct/bin of a `**` result. `**` answers a Variant, and the frontend sent
+# only PromoInt-typed arguments to the bignum renderer, so a Variant holding a
+# big value went through hex(Int64): hex(2 ** 70) printed 0x0, hex(3 ** 50)
+# only its low 64 bits, and hex(2 ** 63) '-0x'. Every expectation is CPython's.
+b2 = 2 ** 70
+print(b2, hex(b2), oct(b2), bin(b2))
+print(hex(2 ** 70), oct(2 ** 70))
+print(hex(3 ** 50), oct(3 ** 50))
+print(hex(-(2 ** 70)), bin(-(2 ** 65)))
+
+# the machine-word boundary, from both spellings
+for k in [10, 62, 63, 64, 65]:
+    p = 2 ** k
+    print(k, hex(p), oct(p), hex(p - 1), hex(-p))
+print(hex(2 ** 64 - 1), bin(2 ** 64 - 1))
+
+# Int64's own edge: -2**63 has no positive Int64, which the renderer negated
+lo = -9223372036854775807 - 1
+print(hex(lo), oct(lo), bin(lo))
+print(hex(9223372036854775807))
+
+# small powers and a bool stay on the ordinary path
+print(hex(2 ** 8), oct(8 ** 2), bin(2 ** 3), hex(True))
+
+def inner() -> None:
+    y = 2 ** 70
+    print(hex(y), oct(y), bin(y))
+inner()
