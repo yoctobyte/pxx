@@ -5702,3 +5702,42 @@ interrupt watchdog then reboots it. That is in tension with the owner's "we
 should not halt", so frankuser has put it to him. It does not block the math
 decision: on ESP a math error no longer raises at all, so a bad sensor value
 never reaches the halt path. The tension is about exceptions generally.
+
+## 2026-09-28 — the self-host gate's LOUD red (two distinct fixedpoints) can just mean your checkout is behind
+
+Recorded because the gate prints excellent guidance for its OTHER failure mode
+and none for this one, and this one reads like a disaster.
+
+The familiar red is the mtime NOTE: "compiler/pascal26 is OLDER than the last
+commit touching compiler/", which says in its own text that it is an mtime
+comparison, that a comment-only commit trips it while the binary is correct, and
+that the remedy is `make compiler/pascal26` then re-gate. Fine.
+
+The one with no guidance is:
+
+```text
+(both may self-reproduce -- that is exactly the point: two distinct
+ fixedpoints means the binary we test with is not the one these sources define.
+ Local seed contamination, or a self-perpetuating miscompile.)
+/tmp/selfhost-fp-NNN/stage_1a /tmp/selfhost-fp-NNN/tested differ: byte 153, line 1
+```
+
+Measured cause today, on a docs-only change that touched no code at all: the
+checkout was **8 commits behind origin with three compiler/ changes among them**
+(`13f122a0ef`, `a49f6f12c6`, `b1b51f5a0d`). The binary had been rebuilt from the
+older sources, so it genuinely was "not the one these sources define" — the
+message is accurate and its two suggested causes are both wrong for this case.
+
+Remedy, in this order: **rebase onto origin/master FIRST, then `make
+compiler/pascal26`, then re-gate.** Recomputing before rebasing just rebuilds the
+stale tree and the red returns. After the rebase it printed "converged after 1
+round(s)" and the re-gate was GREEN. Do not delete the stamp — the mtime note's
+warning against that applies here too.
+
+Why it is worth a LOGBOOK row rather than nothing: the two reds want opposite
+reactions. The mtime one is usually benign and self-explaining. This one names
+seed contamination and a self-perpetuating miscompile, which during a pin is
+exactly the sentence that makes a seat stop and escalate — and a seat sitting on
+a moving master is the most likely way to see it, so the alarming text and the
+boring cause coincide. That is the shape this tree already calls "the signal
+fires, it is just not about what you think".
