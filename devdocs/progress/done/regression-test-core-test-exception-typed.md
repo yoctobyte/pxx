@@ -48,3 +48,6 @@ expect_same: MISMATCH [test_exception_typed26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-28 — auto-closed by the borg watcher: `test-core#src:test/test_exception_typed.pas` passes at 825fbbc9b7f0 (tier native); it was red at 83095f299651. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
