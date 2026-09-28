@@ -51862,6 +51862,15 @@ begin
   CompilePendingGlobalInits;
   for i := 0 to InitProcCount - 1 do
     EmitCallProc(InitProcs[i]);
+  { wasm32 drops those bytes, exactly as under a Pascal main: its `main` calls
+    the body's chunks, so it is told where the calls belong and
+    WasmEmitMainWrapper makes them there. Without it an imported module's
+    top-level code never ran on wasm32 (`modx.X` read 0). }
+  if TargetArch = TARGET_WASM32 then
+  begin
+    WasmUnitInitSet := True;
+    WasmUnitInitAt := WasmMainChunkCount;
+  end;
   blockNode := AllocNode(AN_BLOCK);
   ASTLeft[blockNode] := mainNode;
   ASTTk[blockNode] := Ord(tyUnknown);

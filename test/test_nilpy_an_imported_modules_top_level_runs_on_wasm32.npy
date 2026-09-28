@@ -1,0 +1,12 @@
+# An imported module's top-level code runs before the importer's body -- on
+# wasm32 too.
+#
+# The module's code compiles into an init proc that the driver calls as
+# machine code; a wasm32 `main` is built from the body's chunks instead, so on
+# wasm32 it never ran and every module-level name read as zero: `X` printed 0,
+# `len(NAMES)` 0. Expected output is CPython's.
+import wasminit_mod
+
+print(wasminit_mod.X, len(wasminit_mod.NAMES), wasminit_mod.NAMES[2])
+print(wasminit_mod.TABLE["k"], wasminit_mod.BOX.v)
+print(wasminit_mod.bump(), wasminit_mod.bump(), wasminit_mod.COUNT)
