@@ -15,7 +15,10 @@ answers, and how to build a small FPC program.
 **What was checked.** Every program on this page was compiled with pin v447
 (compiler sha256 `fad87004e4e8`) and with FPC 3.2.2 (`fpc -O1`) on x86-64
 Linux on 2026-09-28. Both binaries were run. Where the output is the same, the
-page shows it once; where it differs, it shows both.
+page shows it once; where it differs, it shows both. Every program was run
+again with pin v450 (sha256 `c19cc2d531e4`) on 2026-09-28, with the flags the
+page names (`--strict-fpc`, `--mimic-fpc`, `fpc -Sa`), and printed what the
+page shows.
 
 ## What compiles unchanged
 
@@ -366,7 +369,8 @@ pascal26:3: error: uses: unit source not found: fgl
 ```
 
 Within the units that exist, a few common routines are missing. Checked
-2026-09-28 with pin v447, against 28 routines FPC programs use often:
+2026-09-28 with pin v447, against 28 routines FPC programs use often, and the
+three missing ones and the ten named below again with v450:
 `FormatFloat` is not in `SysUtils`, and `TStringList` has no `LoadFromFile`
 or `SaveToFile`. The other 25 compiled, among them `Format`, `FloatToStrF`,
 `StrToIntDef`, `StringReplace`, `FileExists`, `ExtractFileName`, `Now`,

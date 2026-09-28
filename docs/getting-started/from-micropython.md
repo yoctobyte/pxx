@@ -13,7 +13,8 @@ different, and then moves a real MicroPython script and driver onto an
 ESP32-C3.
 
 Every code block on this page was compiled for the ESP32-C3 with pin v445
-(compiler sha256 `caf21ac399f1`) on 2026-09-27. For building and flashing in
+(compiler sha256 `caf21ac399f1`) on 2026-09-27, and again with pin v450
+(`c19cc2d531e4`) on 2026-09-28; all of them build. For building and flashing in
 general, start with [Getting started on the ESP32](./esp32.md).
 
 ## What stays the same
@@ -140,13 +141,15 @@ still holds. It also changes four habits:
       b.other = None      # break the cycle, or a and b are never freed
   ```
 
-- **Dropping a name does not always free the object at once.** `del name` on
-  a local keeps the object until the function returns, up to v448; the
-  compiler after v448 (`c4f5dcf929`) frees it at once. On v445,
-  `name = None` does not release a list or dict early either. v446 releases
-  one built with `[]` and `append` at `name = None`, but keeps a list built by
-  a comprehension until the function returns; the compiler after v446
-  (`cdd6fd3c1f`) releases that one too.
+- **Dropping a name frees the object at once, on current pins.** With v450,
+  `del name` and `name = None` on a local release a list at once, whether it
+  was built with `append` or by a comprehension (measured on 2026-09-28 with
+  `tools/census_at_exit.sh`: a function that drops a list of 30 strings and
+  then exits leaves 1 live allocation, against 32 when it keeps the list).
+  Older pins keep some of these until the function returns: `del name` up to
+  v448 (the fix, `c4f5dcf929`, is in v449); a comprehension's list at
+  `name = None` in v446 (the fix, `cdd6fd3c1f`, is in v447); and on v445 any
+  list or dict at `name = None`.
   What always works: the memory comes back when the function returns. So keep
   large temporary data inside a function rather than at module level, where
   it lives until the program ends.

@@ -134,7 +134,7 @@ cp stable_linux_amd64/default/pinned compiler/pascal26   # seed: make refuses wi
 make && make test
 ```
 
-A fresh clone has no `compiler/pascal26`; `make` stops with *"Self-hosted
+A fresh clone has no `compiler/pascal26`; `make` stops with *"self-hosted
 compiler seed missing"* until it is copied from the pin as above (or built by
 FPC with `make bootstrap`). Accept the build once `make` prints
 `converged after N round(s)`.
