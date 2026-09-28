@@ -127,19 +127,19 @@ still holds. It also changes four habits:
   function keeps two objects per call unless the last line breaks the cycle,
   and then it keeps none:
 
-  ```python
-  class Node:
-      def __init__(self):
-          self.other = None
+```python
+class Node:
+    def __init__(self):
+        self.other = None
 
 
-  def pair():
-      a = Node()
-      b = Node()
-      a.other = b
-      b.other = a
-      b.other = None      # break the cycle, or a and b are never freed
-  ```
+def pair():
+    a = Node()
+    b = Node()
+    a.other = b
+    b.other = a
+    b.other = None      # break the cycle, or a and b are never freed
+```
 
 - **Dropping a name frees the object at once, on current pins.** With v450,
   `del name` and `name = None` on a local release a list at once, whether it
@@ -154,15 +154,15 @@ still holds. It also changes four habits:
   large temporary data inside a function rather than at module level, where
   it lives until the program ends.
 
-  ```python
-  def handle():
-      rows = [str(i) for i in range(100)]
-      print(len(rows))
-      # rows is released when handle() returns
+```python
+def handle():
+    rows = [str(i) for i in range(100)]
+    print(len(rows))
+    # rows is released when handle() returns
 
 
-  handle()
-  ```
+handle()
+```
 
 - **Watch the free heap in a long-running program.** After the first pass it
   should not trend down. See the `free` column in
