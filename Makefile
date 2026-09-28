@@ -8255,6 +8255,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_class_attr_return_type "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_clsattr_ret_rv32)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow_rv32
 	tools/expect_same.sh riscv32/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_shadow_rv32)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
+	./$(COMPILER) --target=riscv32 test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/test_cdecl_warn_rv32run
+	tools/expect_same.sh riscv32/test_cdecl_warning_only_where_ignored "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cdecl_warn_rv32run)" "$$(cat test/test_cdecl_warning_only_where_ignored.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_class_attr_return_type.py $(TESTTMP)/test_nilpy_clsattr_ret_arm32
 	tools/expect_same.sh arm32/test_nilpy_class_attr_return_type "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_clsattr_ret_arm32)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow_arm32
@@ -20771,6 +20773,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) -O2 test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>/dev/null | grep -c warning | grep -qx 0
 	tools/expect_same.sh test_warn_ignored_directives26.1 "$$(./$(COMPILER) -O2 --warn-ignored-directives test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>&1 | grep -c warning)" "5"
 	tools/expect_same.sh test_warn_ignored_directives26.2 "$$($(TESTTMP)/test_warn_ignored_directives26)" "$$(printf '1\n1')"
+	# `cdecl` is silent under --warn-ignored-directives where it selects a
+	# convention (x86-64, i386, aarch64, arm32) and warns only where it is
+	# really ignored (riscv32). One commit back it warned on i386, aarch64 and
+	# arm32 too, and there cdecl is load-bearing. Compile-only, so no qemu here.
+	tools/expect_same.sh test_cdecl_warning_only_where_ignored.x86-64 "$$(./$(COMPILER) --warn-ignored-directives test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/test_cdecl_warn26 2>&1 | grep -c "directive 'cdecl' ignored")" "0"
+	tools/expect_same.sh test_cdecl_warning_only_where_ignored.run "$$($(TESTTMP)/test_cdecl_warn26)" "$$(cat test/test_cdecl_warning_only_where_ignored.expected)"
+	tools/expect_same.sh test_cdecl_warning_only_where_ignored.i386 "$$(./$(COMPILER) --target=i386 --warn-ignored-directives test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/test_cdecl_warn_i386 2>&1 | grep -c "directive 'cdecl' ignored")" "0"
+	tools/expect_same.sh test_cdecl_warning_only_where_ignored.aarch64 "$$(./$(COMPILER) --target=aarch64 --warn-ignored-directives test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/test_cdecl_warn_aarch64 2>&1 | grep -c "directive 'cdecl' ignored")" "0"
+	tools/expect_same.sh test_cdecl_warning_only_where_ignored.arm32 "$$(./$(COMPILER) --target=arm32 --warn-ignored-directives test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/test_cdecl_warn_arm32 2>&1 | grep -c "directive 'cdecl' ignored")" "0"
+	tools/expect_same.sh test_cdecl_warning_only_where_ignored.riscv32 "$$(./$(COMPILER) --target=riscv32 --warn-ignored-directives test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/test_cdecl_warn_riscv32 2>&1 | grep -c "directive 'cdecl' ignored")" "1"
 	./$(COMPILER) test/test_shadow_program_over_unit.pas $(TESTTMP)/test_shadow_program_over_unit26
 	tools/expect_same.sh test_shadow_program_over_unit26 "$$($(TESTTMP)/test_shadow_program_over_unit26)" "$$(printf 'mine\nmine-trim\nX\n7')"
 	# `uses a, b` binds the LAST unit's routine, as FPC does — both orders, and
@@ -29565,6 +29577,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_class_attr_return_type "$$(tools/run_target.sh i386 $(TESTTMP)/clsattr_ret_i386)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/shadow_i386
 	tools/expect_same.sh i386/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh i386 $(TESTTMP)/shadow_i386)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
+	./$(COMPILER) --target=i386 test/test_cdecl_warning_only_where_ignored.pas $(TESTTMP)/cdecl_warn_i386run
+	tools/expect_same.sh i386/test_cdecl_warning_only_where_ignored "$$(tools/run_target.sh i386 $(TESTTMP)/cdecl_warn_i386run)" "$$(cat test/test_cdecl_warning_only_where_ignored.expected)"
 	# Stackless float parameter/local/element (bit pattern or garbage one commit
 	# back) and a generator called after a later one (`1 3 0`, every target).
 	./$(COMPILER) --target=i386 test/test_stackless_float_param_and_element.pas $(TESTTMP)/slfloat_i386

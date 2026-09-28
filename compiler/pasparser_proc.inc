@@ -2093,15 +2093,26 @@ begin
       Warn('directive ''iram'' ignored here: IRAM placement exists on the ESP ' +
            'targets (xtensa, riscv32) only; this target has no separate ' +
            'instruction RAM to place ' + name + ' in');
-    { x86-64 is no longer in this warning's population: there `cdecl` selects a
-      genuine SysV prologue. Narrowed rather than deleted because the other five
-      targets still cannot select a convention per routine.
+    { Asks TargetSelectsCdecl, the one list of targets where `cdecl` selects a
+      C-convention prologue (x86-64, aarch64, arm32, i386). This asked
+      `<> TARGET_X86_64` and so told i386/aarch64/arm32 users the directive was
+      "documentation only" -- where removing it makes the compiler refuse the
+      program (the convention-mismatch check) and made v448 print 0.0.
+      The reason differs on the rest, so the message does too: riscv32's
+      ordinary convention IS the C one; xtensa and wasm32 have no C-convention
+      arm, so the marker neither changes nor promises anything.
       feature-cdecl-bodied-sysv-prologue }
-    if sawCdecl and (TargetArch <> TARGET_X86_64) then
-      Warn('directive ''cdecl'' ignored here: on this target the calling ' +
-           'convention is not selectable per routine, so ' + name +
-           ' already uses it; the marker is documentation only (on x86-64 it ' +
-           'selects a genuine SysV prologue)');
+    if sawCdecl and not TargetSelectsCdecl then
+    begin
+      if TargetArch = TARGET_RISCV32 then
+        Warn('directive ''cdecl'' ignored here: on riscv32 the ordinary calling ' +
+             'convention is already the C one, so ' + name + ' uses it without ' +
+             'the marker')
+      else
+        Warn('directive ''cdecl'' ignored here: this target has no C-convention ' +
+             'prologue to select, so ' + name + ' keeps the compiler''s own ' +
+             'convention (cdecl selects one on x86-64, aarch64, arm32 and i386)');
+    end;
     if sawRegister then
       Warn('directive ''register'' ignored here: the calling convention is the ' +
            'target''s and is not selectable per routine');
