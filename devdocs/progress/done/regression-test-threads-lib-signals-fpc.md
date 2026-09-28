@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: B
+status: done
 ---
 
 > **Track guessed as B from the FAILING STEP** — line 2 of 22, `./compiler/pascal26 --target=xtensa --platform=posix --xtensa-soft-mulhigh test/lib_signals_fpc.pas /tmp/sig_xt`, which names `test/lib_signals_fpc.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 4 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -50,3 +51,5 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-28 — the borg watcher saw `test-threads#src:test/lib_signals_fpc.pas` GREEN at a8e99254ed4b (tier native) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+- 2026-09-28 — frankD re-ran the failing step with the compiler whose sha256 is `0ded1e5d04c8` (built from master after the fix; the fix is on master): the hosted xtensa compile of `test/lib_signals_fpc.pas` (step 2, `--platform=posix --xtensa-soft-mulhigh`) exits 0 with no error. The failure was a compile-time refusal or a deterministic crash, so one run settles it; closed in the coordinator's sweep of tickets fixed on 2026-09-28.
+- 2026-09-28 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
