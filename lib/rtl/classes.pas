@@ -60,8 +60,11 @@ type
     auto-injected System unit, so any FPC source that names them — fcl-fpcunit's
     testutils (`TNoRefCountObject = class(TObject, IInterface)`) is the first —
     finds nothing. Declared here because Classes is what such units already use.
-    pxx interfaces default to CORBA (no refcounting), so this adds the NAME and
-    the three reserved method slots without imposing COM lifetime management. }
+    pxx interfaces default to COM (reference-counted), as FPC's do: without
+    an {$interfaces corba} directive, the last interface reference going out
+    of scope frees the object (measured 2026-09-28). The default is set in
+    paslexer.inc. This declares the NAME and the three reserved method slots
+    that the COM lifetime calls through. }
   HResult = LongInt;
 
   IInterface = interface

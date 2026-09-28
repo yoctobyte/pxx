@@ -4375,7 +4375,7 @@ var
   DefaultCIncludeDirsAdded : Boolean;  { AddDefaultCIncludeDirs has run: it is called both from the C-program path and from every C unit pull, and must register the crtl header root exactly once. }
   CLastExprUndeclared : Boolean;  { set True the instant an undeclared C identifier degrades to a 0 literal (cparser.inc); checked+reset by the call-argument loop right after each ParseCExpr, so a known callee's function-pointer parameter can upgrade this from a warning to a hard error — bug-c-undeclared-identifier-as-function-pointer-becomes-null. }
   NoShims : Boolean;  { --no-shims: resolve a bare NilPy import as if we shipped nothing of our own for that name, so a build that succeeds provably used no compatibility shim (feature-nilpy-dotted-package-imports). It lifts BOTH ours-first substitutions -- the mimic_<module> fallback AND the curated PyRtlUnitServesPython lib/rtl unit -- which is what makes it the only non-absolute door to a host header a shim shadows. Lifting only the first meant the flag said something different for `sqlite3` than for `zlib`, and nothing in its name distinguished them. }
-  InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default off = CORBA (no refcount). }
+  InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default ON (COM, as FPC), set in paslexer.inc; {$interfaces corba} turns it off. }
   ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }
   EnableAutoVar : Boolean;
   EnableLazyVar : Boolean;
@@ -8152,7 +8152,7 @@ var
     bug-p-a-nested-specialization-is-named-by-its-alias-so-one-name-serves-every-outer-specialization }
   UClsAliasOwnerCi : array[0..MAX_TYPEALIAS-1] of Integer;
   UClsAliasCount : Integer;
-  UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default off (CORBA, no refcount). }
+  UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default ON (COM, as FPC); {$interfaces corba} declares a non-refcounted one. }
   { An interface's GUID literal (`['{...}']`), which the parser used to discard.
     Stored as the 16 raw bytes in TGuid memory order (D1:u32, D2:u16, D3:u16,
     D4:8 bytes), so a compile-time blob and a runtime `TGuid` compare byte for byte.
