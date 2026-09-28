@@ -52,7 +52,14 @@ begin
   end;
 end;
 
-procedure WorkerEntry(arg: Pointer); cdecl;
+{ Pascal convention, NOT cdecl: TThreadEntry is `procedure(arg: Pointer)` and
+  both thread routes call it as one -- the clone trampoline directly, the
+  pthread route through PxxPthreadStart, which is the cdecl half glibc sees.
+  This was cdecl until 2026-09-28, when the compiler began refusing a routine
+  stored into a procedural type of another convention (as FPC does); on i386
+  the mismatch read `arg` from the wrong place, unnoticed only because the
+  body never looks at it. }
+procedure WorkerEntry(arg: Pointer);
 begin
   Churn(workerSeen);
   PalThreadExit;
