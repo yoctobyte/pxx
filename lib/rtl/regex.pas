@@ -283,6 +283,8 @@ begin
     ReEmit := 0;
     exit;
   end;
+  if gRe.progLen >= Length(gRe.prog) then
+    SetLength(gRe.prog, 2 * Length(gRe.prog));
   gRe.prog[gRe.progLen].op := op;
   gRe.prog[gRe.progLen].ch := c;
   gRe.prog[gRe.progLen].x := x;
@@ -1091,7 +1093,12 @@ begin
   gRe.flags := flags;
   gRe.ok := True;
   gRe.error := '';
-  SetLength(gRe.prog, RE_MAX_PROG);
+  { The program grows as ReEmit needs it and is trimmed to its length below.
+    It used to be sized RE_MAX_PROG up front: 8192 x 16 bytes = 128 KB for
+    every compile, which on an ESP32-C3 (largest free block ~118 KB with
+    nothing running) made even re.compile("a") run out of memory, and every
+    pattern in the cache kept its 128 KB. }
+  SetLength(gRe.prog, 32);
   SetLength(gRe.classes, 16);
 
   gPar.pat := pattern;
@@ -1108,6 +1115,7 @@ begin
   ReEmit(rMatch, #0, 0, 0);
 
   gRe.groupCount := gPar.nextGroup;
+  SetLength(gRe.prog, gRe.progLen);
   if gPar.failed then
   begin
     gRe.ok := False;

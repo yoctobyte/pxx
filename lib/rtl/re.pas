@@ -136,8 +136,27 @@ function escape(const s: AnsiString): AnsiString;
 
 implementation
 
-const
-  RE_FINDALL_MAX = 4096;   { matches collected per findall call }
+type
+  TReMatchArr = array of TReMatch;
+
+{ Every non-overlapping match of re in s, into ms. ReFindAll fills at most the
+  room it is given, so a full buffer is retried with twice the room. The
+  buffer used to be a fixed 4096 matches up front: a TReMatch is ~164 bytes,
+  so every findall/finditer/split/sub asked for ~670 KB, which an ESP32-C3 or
+  S3 cannot give (re.findall("a", "banana") ran out of memory), and a subject
+  with more than 4096 matches was silently cut short. }
+function FindAllInto(const re: TRegex; const s: AnsiString; var ms: TReMatchArr): Integer;
+var cap, n: Integer;
+begin
+  cap := 16;
+  repeat
+    SetLength(ms, cap);
+    n := ReFindAll(re, s, ms, cap);
+    if n < cap then break;
+    cap := cap * 2;
+  until False;
+  FindAllInto := n;
+end;
 
 { ---- TMatch -------------------------------------------------------------- }
 
@@ -230,10 +249,9 @@ end;
   group; several -> one entry per group. The several case is a tuple there and a
   list here (NilPy has no tuple), indexed the same way. }
 function TPattern.findall(const s: AnsiString): TPyList;
-var ms: array of TReMatch; n, i, g: Integer; out_: TPyList; row: TPyList;
+var ms: TReMatchArr; n, i, g: Integer; out_: TPyList; row: TPyList;
 begin
-  SetLength(ms, RE_FINDALL_MAX);
-  n := ReFindAll(compiled, s, ms, RE_FINDALL_MAX);
+  n := FindAllInto(compiled, s, ms);
   out_ := TPyList.Create;
   for i := 0 to n - 1 do
   begin
@@ -270,10 +288,9 @@ begin
 end;
 
 function TPattern.finditer(const s: AnsiString): TPyList;
-var ms: array of TReMatch; n, i: Integer; out_: TPyList;
+var ms: TReMatchArr; n, i: Integer; out_: TPyList;
 begin
-  SetLength(ms, RE_FINDALL_MAX);
-  n := ReFindAll(compiled, s, ms, RE_FINDALL_MAX);
+  n := FindAllInto(compiled, s, ms);
   out_ := TPyList.Create;
   for i := 0 to n - 1 do
     out_ := out_.append_self(MakeMatch(ms[i], s));
@@ -286,10 +303,9 @@ begin
 end;
 
 function TPattern.split(const s: AnsiString; maxsplit: Integer): TPyList;
-var ms: array of TReMatch; n, i, g, lim, pos: Integer; out_: TPyList;
+var ms: TReMatchArr; n, i, g, lim, pos: Integer; out_: TPyList;
 begin
-  SetLength(ms, RE_FINDALL_MAX);
-  n := ReFindAll(compiled, s, ms, RE_FINDALL_MAX);
+  n := FindAllInto(compiled, s, ms);
   lim := ReLimit(maxsplit);
   out_ := TPyList.Create;
   pos := 1;
@@ -318,11 +334,10 @@ begin
 end;
 
 function TPattern.subn(const repl, s: AnsiString; count: Integer): TPyList;
-var ms: array of TReMatch; n, lim: Integer;
+var ms: TReMatchArr; n, lim: Integer;
 begin
   lim := ReLimit(count);
-  SetLength(ms, RE_FINDALL_MAX);
-  n := ReFindAll(compiled, s, ms, RE_FINDALL_MAX);
+  n := FindAllInto(compiled, s, ms);
   if (lim >= 0) and (n > lim) then n := lim;
   Result := TPyList.Create;
   Result.FKind := PYSEQ_TUPLE;

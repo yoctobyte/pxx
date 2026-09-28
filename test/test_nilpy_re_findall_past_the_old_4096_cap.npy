@@ -1,0 +1,11 @@
+# re.findall/finditer/split/sub collect every match: the collection buffer
+# used to be a fixed 4096 matches (and ~670 KB, which an ESP32 cannot give),
+# so a subject with more matches than that was silently cut short. Counts
+# chosen across the buffer's doublings (16, 32, ...) and past the old cap.
+import re
+
+for k in (0, 1, 15, 16, 17, 100, 4096, 4097, 10000):
+    s = "ab" * k
+    print(k, len(re.findall("a", s)), len(re.finditer("b", s)), len(re.split("b", s)), len(re.sub("a", "", s)))
+print(re.findall("(a)(b)", "abab" * 3)[-1])
+print(re.subn("b", "B", "ab" * 5000)[1])
