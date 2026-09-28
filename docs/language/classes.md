@@ -496,17 +496,23 @@ fields — it adds no storage to the type it extends. Inside a helper method,
 a record or scalar helper it is the value by reference, so a record helper's
 method can mutate its receiver.
 
-**A `record helper` for a record type works after v446** (`cc9ea7228a`): its
-methods are found on the record, fields can be used bare inside the helper, a
-procedure can change `Self`, and it works on an array element and inside
-`with`, in objfpc and in delphi mode, as FPC does. Measured on 2026-09-28 with
-the compiler built at `cc9ea7228a` (sha256 `bcf2481a33ec…`), and against FPC.
+**A `record helper` for a record type works from pin v447** (the fix is
+`cc9ea7228a`). Methods are found on the record, fields can be used bare
+inside the helper, a procedure can change `Self`, and it works on an array
+element and inside `with`, in objfpc and in delphi mode. Re-measured on
+2026-09-28 with pin v447 (sha256 `fad87004e4e8…`) against fpc 3.2.2. The
+output is the same in `{$mode delphi}`, and in objfpc with
+`{$modeswitch advancedrecords}`. FPC needs that switch for a record helper in
+objfpc (without it: "Syntax error, ":" expected but "FOR" found"); PXX does
+not.
 **With v446 and earlier it does not work:** v446 refuses the helper's body
 (`undefined variable (X)` for a bare field), and v445 refused the call
 (`"Sum": no such member on this record/class`). A helper for a string or
 a dynamic array works, and so does a class helper. A helper for a scalar such
-as `Integer` works in `{$mode delphi}`, or in objfpc with
-`{$modeswitch typehelpers}`, the same switch FPC asks for.
+as `Integer` works in PXX in any mode. FPC 3.2.2 accepts one only in
+`{$mode delphi}`, or in objfpc with `{$modeswitch typehelpers}`; without it
+FPC stops at `type helper` with "Identifier not found "helper"". Write the
+switch if the code must also build with FPC.
 
 ```pascal
 type
