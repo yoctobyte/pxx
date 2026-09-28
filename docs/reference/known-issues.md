@@ -241,6 +241,35 @@ what they were measured with.
   kept about 250 blocks alive at exit. Measured with pin v446 (wasmtime,
   `-dPXX_ALLOC_CENSUS`). Wrong in v446.
 
+- **Nil Python on i386 and arm32: values that differed from x86-64.** Found by
+  building the Nil Python test corpus for i386, aarch64 and arm32 at `-O2` and
+  comparing each output with x86-64 and CPython. Now the same on every target:
+  - `next(g)` and `list(g)` on a generator gave nothing or garbage on i386;
+  - `"%x" % -2**63` and `format(v, "o")` raised on i386 and arm32;
+  - a def called through a variable (`f = q; f(1)`) lost its default
+    arguments, and one with `*args` crashed;
+  - on arm32, `int(3000000000.7)`, `round` and `math.floor` of a float past
+    2^31 stopped at 2147483647, and `round(7)` printed a huge number;
+  - on arm32, a def stored in an object field could not be called back;
+  - a method reached by dynamic dispatch or `exec` could return `True` where
+    it computed `False`, and `len()` of an `array.array` could be wrong;
+  - on i386, an object's default repr could show a negative address.
+
+  `test/test_nilpy_cross32_values.py` fails with pin v446, and so do the
+  corpus tests for `round`, `len` of a shim, dynamic dispatch, `exec` returns
+  and object repr, each on the target named above. Wrong in v446.
+
+- **Generators: float values, argument slots, and a string literal.** A
+  `generator; stackless;` routine received a `Double` parameter as its bit
+  pattern (`4612811918334230528.00` for 2.5), lost the fraction of a float
+  local kept across a `yield`, and yielded floats wrongly. A generator called
+  after another generator was declared got its arguments in the wrong places
+  (`1 3 0` for `1 2 3`), silently. A Nil Python generator called with a string
+  literal, `for x in gen("hi")`, crashed. This was on every target. See
+  `test/test_stackless_float_param_and_element.pas` and
+  `test/test_stackless_generator_called_after_a_later_generator.pas`. Wrong in
+  v446.
+
 - **wasm32: `Move(s[i], ...)` on a shared `const` string could change another
   variable.** It unshared the string by mistake, and a later write to one
   copy showed in the other. `Copy` does this internally. Matches FPC 3.2.2

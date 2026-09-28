@@ -82,6 +82,9 @@ CPython 3.14.4: each row behaves as written, and the three targets print the sam
 | `match x:` / `async def` | supported | compile error (`undefined variable (match)`) |
 | `f"""a {v} b"""` | supported | compile error: triple-quoted f-strings are not supported |
 | `import threading` | works | needs the `--threadsafe` compiler flag; the error says so |
+| `def mk(): return gen(5)`, then `list(mk())`, where `gen` is a generator | `[5, 6]` | `[]` on every target (pin v446): a generator returned from a def yields nothing, and `next(mk())` does not compile. Create the generator where it is consumed. |
+| on i386 or arm32, `exec` calling a method whose parameters are annotated (`name: str`, `n: int`, `flag: bool`) | works | crashes (pin v446); a method with unannotated parameters works |
+| on arm32, `from time import sleep as pause`, then `pause(0)` | returns | never returns (pin v446); `from time import sleep` and `sleep(0)` work |
 
 A generator abandoned before it is exhausted, for example by `break`, does not
 release the class instances held in its local variables.
