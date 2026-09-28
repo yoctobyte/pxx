@@ -282,6 +282,33 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
 (`devdocs/progress/tstate/reports/20260928T053636Z-7abbe26-borg.md`).
 `-O3` was not part of that run.
 
+- **Nil Python: a def passed to a Pascal procedure parameter was never
+  called.** With a Pascal `procedure(a: Integer)` type as the parameter,
+  `c.CallPr(show, 5)` ran without calling `show` at all: nothing printed, and
+  the call returned as if the procedure had done nothing. A def passed to a
+  `function` type was called. Wrong in v441 to v450. Fixed after v450
+  (`956cba6006`, in no pin yet). Measured on 2026-09-28 on x86-64 and under
+  QEMU user mode on i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), with
+  v450 (`c19cc2d531e4`) and the compiler built at `52e61383a5`
+  (`8d5d0f2653f0`), and on x86-64 with v441 (`4ebfa2d047a2`), v448 and v449: a
+  def that prints is called twice with the fix and never before it, and
+  `test/test_nilpy_a_def_into_a_procedure_slot_is_called.npy` matches its
+  `.expected` on all seven targets with that compiler. **On v450 and
+  earlier:** give the Pascal side a `function` type and ignore its result.
+
+- **Nil Python: a def with the name of a Pascal unit's global stopped the
+  program.** Pascal names ignore case, so a def `acc` in a program that
+  imports a unit declaring `var Acc` (`import 'cbproc.pas' as c`) read the
+  unit's variable wherever the def was used as a value: `c.CallI(acc, 5)` and
+  `x = acc` then `x(4)` stopped with `Runtime error 216 (nil reference)`.
+  Wrong in v441 to v450. Fixed after v450 (`956cba6006`, in no pin yet).
+  Measured on 2026-09-28 on x86-64 and under QEMU user mode on i386, arm32,
+  aarch64, riscv32 and Xtensa (both ABIs), with v450 (`c19cc2d531e4`) and the
+  compiler built at `52e61383a5` (`8d5d0f2653f0`), and on x86-64 with v441
+  (`4ebfa2d047a2`), v448 and v449: both print the def's results with the fix
+  and stop before it. **On v450 and earlier:** name the def so it matches no
+  global of an imported unit, in any case.
+
 - **Nil Python: `None` tests on every backend but x86-64.** On i386, arm32,
   aarch64, riscv32 and Xtensa (both ABIs), `x == None` was `True` and `x !=
   None` `False` when `x` was `0`, `0.0` or `False`, whether a plain variable,
@@ -895,6 +922,30 @@ MicroPython's assumptions about a small device, such as math errors not halting
 the program. 15 of 16 common MicroPython drivers compile unchanged (measured
 with v445); see
 [MicroPython](../library/micropython.md).
+
+Found on 2026-09-28, and **open in v441 to v450** and after it:
+
+- **Nil Python: arithmetic on `None` gives a number.** `None + 1`, `1 + None`,
+  `None - 1`, `None * 2`, `None + True`, `True - None` and `2 ** 70 + None`
+  treat `None` as `0` (`1`, `1`, `-1`, `0`, `1`, `1`,
+  `1180591620717411303424`), where CPython raises `TypeError`, so an `except
+  TypeError` never runs. Valid programs are not affected; a program that
+  relies on the error is. Measured on 2026-09-28 against CPython, with v450
+  (`c19cc2d531e4`) on x86-64 and under QEMU user mode on i386, arm32, aarch64,
+  riscv32 and Xtensa (both ABIs), and on x86-64 with v441 (`4ebfa2d047a2`) and
+  the compiler built at `52e61383a5` (`8d5d0f2653f0`), which behave the same.
+  **Workaround:** test for `None` (`if x is None:`) before the arithmetic.
+
+- **Nil Python: `==` or `!=` between a float and a large integer stops the
+  program.** `0.0 == 2 ** 64`, `2 ** 64 == 1.5` and `2 ** 64 != 1.5` stop with
+  `Runtime error 219`, where CPython answers `False` or `True`. `<`, `<=`,
+  `>`, `>=` and `in` answer correctly, and so does `==` with an integer that
+  fits in 64 bits. A fix is in progress. Measured on 2026-09-28 against
+  CPython, with v450 (`c19cc2d531e4`) on x86-64 and under QEMU user mode on
+  i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), and on x86-64 with
+  v441 (`4ebfa2d047a2`) and the compiler built at `52e61383a5`
+  (`8d5d0f2653f0`), which behave the same. **Workaround:** convert one side
+  first, as in `float(n) == x`.
 
 ## Reporting a problem
 
