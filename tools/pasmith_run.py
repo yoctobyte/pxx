@@ -91,7 +91,8 @@ CROSS_ARCHS = ["i386", "aarch64", "arm32"]
 # `need` calls. run_target.sh exits 2 when one is missing, which is
 # indistinguishable from a program that exits 2 — so availability is checked
 # here, up front, instead of being inferred from a return code.
-QEMU_BIN = {"i386": "qemu-i386", "aarch64": "qemu-aarch64", "arm32": "qemu-arm"}
+QEMU_BIN = {"i386": "qemu-i386", "aarch64": "qemu-aarch64", "arm32": "qemu-arm",
+            "riscv32": "qemu-riscv32"}
 
 
 def qemu_for(arch):
@@ -130,7 +131,11 @@ class Oracle:
         self.arch = arch
 
 
-def build_oracles(cross):
+def build_oracles(cross, cross_all=False):
+    """`cross_all` (--cross-all) widens the cross arms to riscv32 and adds an
+    -O2 twin of each: the default --cross builds every target at -O0 only, so an
+    optimiser path that miscompiles on ONE backend was invisible (the -O2 arm
+    ran on x86-64 alone). Opt-in, so twatch's default oracle set is unchanged."""
     o = [
         Oracle("fpc-O0", "fpc", ["-O-"]),
         Oracle("fpc-O2", "fpc", ["-O2"]),
@@ -139,7 +144,7 @@ def build_oracles(cross):
         Oracle("pxx-O3", "pxx", ["-O3"]),
     ]
     if cross:
-        for a in CROSS_ARCHS:
+        for a in CROSS_ARCHS + (["riscv32"] if cross_all else []):
             if not qemu_for(a):
                 # Degrade HONESTLY rather than silently. Without its emulator a
                 # cross oracle cannot run the binary at all, so every finding
@@ -153,6 +158,8 @@ def build_oracles(cross):
                       % (QEMU_BIN[a], a), file=sys.stderr)
                 continue
             o.append(Oracle("pxx-%s" % a, "pxx", ["--target=%s" % a], arch=a))
+            if cross_all:
+                o.append(Oracle("pxx-%s-O2" % a, "pxx", ["--target=%s" % a, "-O2"], arch=a))
     return o
 
 
@@ -1013,6 +1020,8 @@ def main():
     ap.add_argument("--seeds", help="explicit seed range, e.g. 1-500 (overrides --minutes)")
     ap.add_argument("--seed", type=int, help="single seed")
     ap.add_argument("--cross", action="store_true", help="also run pxx cross-targets under QEMU")
+    ap.add_argument("--cross-all", action="store_true",
+                    help="--cross plus riscv32, and every cross target at -O2 as well as -O0")
     ap.add_argument("--check", type=int, metavar="N", nargs="?", const=50,
                     help="GENERATOR GATE: compile N seeds with FPC only (no run, no "
                          "oracles). FPC must accept 100%%; anything else is a pasmith "
@@ -1090,7 +1099,7 @@ def main():
             return 2
         return ledger_status(led)
 
-    oracles = build_oracles(a.cross)
+    oracles = build_oracles(a.cross or a.cross_all, a.cross_all)
     workdir = tempfile.mkdtemp(prefix="pasmith.")
     # Reaped on exit: these rounds run ENDLESSLY as Track T idle work, and on
     # a box where /tmp is tmpfs the leak is RAM the test scheduler is counting
