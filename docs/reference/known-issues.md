@@ -1037,6 +1037,19 @@ assign the value you need to a variable in the executed source. Measured on
 2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
 `1763b6232b` (`70e57d59b777`), which behave the same.
 
+**Nil Python: the parameters of an `exec`'d `__body__` read `None`.** A
+`__body__` defined by `exec` and called from the program does not receive its
+arguments: every parameter reads `None`, with no message. After
+`exec("def __body__(s):\n    return s\n", {}, ns)`, `ns["__body__"]("ab")`
+returns `None` (CPython `'ab'`); with two parameters, `[a, b]` is
+`[None, None]` for `(1, "x")`; `n + 1` gives `1` for `41` (CPython `42`); and
+`int(s)` gives `0` for `"ab"` instead of raising `ValueError`. A def nested
+inside `__body__` and returned from it does receive its argument. Measured on
+2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
+`1763b6232b` (`70e57d59b777`), which behave the same. **Workaround:** give
+`__body__` no parameters and return a nested def that takes them, or pass
+values in through a variable in the `exec` globals.
+
 **Nil Python: `raise` inside `exec`'d code stops the program, while a
 builtin's error there can be caught.** `raise ValueError('bad')` in source run
 by `exec` prints `pyeval: ValueError: bad` on standard output and exits with
