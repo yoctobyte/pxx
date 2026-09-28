@@ -16885,14 +16885,15 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-28T03:31:12Z",
+  "date": "2026-09-28T06:40:43Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
-   "test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh"
+   "test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh",
+   "tools-devtest#00"
   ],
-  "sha": "9f9d78b443d1f26c819e2d794d071458f788e952",
+  "sha": "cfc7c6a65d6797ed480314143af4f4c7d2992207",
   "tier": "full",
-  "ver": "v447",
+  "ver": "v448",
   "verdict": "RED"
  },
  "toolchain": {
