@@ -520,6 +520,10 @@ test-nilpy: $(COMPILER)
 	# $(PXX_STABLE) — the fix is a compiler change and is inert in the pin until
 	# the next one carries it.
 	sh test/nilpy_parg_zero_init.sh ./$(COMPILER) $(TESTTMP)
+	# A compiler/builtin unit's own tokens must not fire the ambient math/thread
+	# guess: builtins are in every program, so PromoCmpDbl's `var pi` loaded
+	# `math` into every NilPy program and max(1.5, 2) printed 2.0.
+	sh test/nilpy_no_guessed_unit_in_a_plain_program.sh ./$(COMPILER) $(TESTTMP)
 	# A str default / str-literal-typed hidden global must not cost 8 MiB of .bss
 	# each; the output was always right, so the row asserts the SIZE.
 	sh test/nilpy_str_default_bss.sh ./$(COMPILER) $(TESTTMP)
@@ -8355,6 +8359,20 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_negwide "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_negwide_arm32)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.npy $(TESTTMP)/test_nilpy_negwide_i386
 	tools/expect_same.sh i386/test_nilpy_negwide "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_negwide_i386)" "$$(cat test/test_nilpy_a_negative_wide_literal_in_a_def_is_exact.expected)"
+	# User names the runtime units also spell (pi, e, s, tmp, ln, reset, close...)
+	# beside calls that run those units; CPython's output on every target.
+	./$(COMPILER) test/test_nilpy_common_names_do_not_meet_builtin_internals.npy $(TESTTMP)/test_nilpy_cnames26
+	$(TESTTMP)/test_nilpy_cnames26 | diff -u test/test_nilpy_common_names_do_not_meet_builtin_internals.expected -
+	./$(COMPILER) --target=riscv32 test/test_nilpy_common_names_do_not_meet_builtin_internals.npy $(TESTTMP)/test_nilpy_cnames_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_cnames "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_cnames_riscv32)" "$$(cat test/test_nilpy_common_names_do_not_meet_builtin_internals.expected)"
+	./$(COMPILER) --target=aarch64 test/test_nilpy_common_names_do_not_meet_builtin_internals.npy $(TESTTMP)/test_nilpy_cnames_aarch64
+	tools/expect_same.sh aarch64/test_nilpy_cnames "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_nilpy_cnames_aarch64)" "$$(cat test/test_nilpy_common_names_do_not_meet_builtin_internals.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_common_names_do_not_meet_builtin_internals.npy $(TESTTMP)/test_nilpy_cnames_arm32
+	tools/expect_same.sh arm32/test_nilpy_cnames "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_cnames_arm32)" "$$(cat test/test_nilpy_common_names_do_not_meet_builtin_internals.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_common_names_do_not_meet_builtin_internals.npy $(TESTTMP)/test_nilpy_cnames_i386
+	tools/expect_same.sh i386/test_nilpy_cnames "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_cnames_i386)" "$$(cat test/test_nilpy_common_names_do_not_meet_builtin_internals.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_common_names_do_not_meet_builtin_internals.npy $(TESTTMP)/test_nilpy_cnames_xtensa_windowed
+	tools/expect_same.sh xtensa-windowed/test_nilpy_cnames "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_cnames_xtensa_windowed)" "$$(cat test/test_nilpy_common_names_do_not_meet_builtin_internals.expected)"
 	# hex/oct/bin of a `**` result, which is a Variant: only a PromoInt-typed
 	# argument reached the bignum renderer, so hex(2 ** 70) printed 0x0 on every
 	# target, and hex(-2**63) printed '-0x' (the Int64 renderer negated Low(Int64)).

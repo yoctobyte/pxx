@@ -1,0 +1,42 @@
+# User names that the compiler's own runtime units also spell -- a routine
+# local, a Pascal System/math name, a textfile routine -- next to calls that
+# run those units (bignum promo, float/int comparison, min/max, getattr,
+# str/hex of big values). None of the runtime's names may reach this program:
+# a `var pi` inside promocore's PromoCmpDbl once pulled the whole `math` unit
+# into every NilPy program, and `max(1.5, 2)` printed 2.0.
+pi = 3
+e = 2
+i = 7
+s = "text"
+tmp = [1, 2]
+n = 5
+x = 1.5
+ln = "ln"
+exp = 10
+sqrt = 4
+text = "t"
+frac = 0.25
+
+def reset(v: int) -> int:
+    return v + 1
+
+def close() -> str:
+    return "closed"
+
+def assign(a: int, b: int) -> int:
+    return a * b
+
+print(pi, e, i, s, tmp, n, x, ln, exp, sqrt, text, frac)
+print(max(1.5, 2), min(-0.0, 0.0), max(pi, e), min(i, n))
+print(2 ** 70 > 1.5, 1.5 < 2 ** 64, float(2 ** 53) == 2 ** 53)
+big = 2 ** 70 + pi
+print(big, hex(big), str(-big))
+print(reset(pi), close(), assign(e, i))
+
+class R:
+    def key_at(self, a: int, b: int) -> int:
+        return a + b
+
+r = R()
+e2 = getattr(r, "key_at", None)
+print(e2 is not None, e2(1, 1))

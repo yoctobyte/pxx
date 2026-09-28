@@ -6818,6 +6818,7 @@ var
   unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
   unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
   unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
+  unitIsBuiltin: Boolean;       { resolved from compiler/builtin/ -- no guessed pulls }
   unitTnm: AnsiString;
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
   savedPackRecords, savedPackEnum, savedNChecks, savedMaxStackFrame: Integer;
@@ -7191,6 +7192,22 @@ begin
                         pasLookupOK, pyLookupOK, pyImportLang, pyDotted,
                         pyDottedIsPath, pyRelLevel, path, isCUnit, isCHeader,
                         isPyUnit, emsg);
+  { WHERE the file is, not which search arm found it: `pyeval` names
+    `promocore` in its own `uses`, and a nested uses resolves against the using
+    unit's directory first -- which for a builtin IS compiler/builtin/, reached
+    through the base-dir arm rather than the builtin-tier one. Both spell the
+    directory from the same ResolveToolchainDirs answer. }
+  if BuiltinDirCache = '' then
+  begin
+    ResolveToolchainDirs(cdir, bdir, rtldir, lcldir, asmdir);
+    BuiltinDirCache := bdir;
+  end;
+  unitIsBuiltin := (Length(path) > 0) and (GetFilePath(path) = BuiltinDirCache);
+  { PXXDBG a.units -- every unit this program resolves, and whether it is a
+    builtin. test/nilpy_no_guessed_unit_in_a_plain_program.sh reads it: a
+    plain NilPy program must not list `math` or `palthreadobj`. }
+  if PxxDbgEnabled('a.units') and (Length(path) > 0) then
+    WriteLn('PXXDBG a.units ', lo, ' builtin=', Ord(unitIsBuiltin), ' ', path);
 {$ifndef PXX_NO_NILPY}
   { IMPORT-CLOSURE LEXING. PyLexImportClosure walks the import statements of
     the main program and of every module it reaches, through THIS resolver,
@@ -7969,10 +7986,22 @@ begin
       ParseUsesUnitAmbient('textfile');
     end;
 
-    { Same gating and same idempotence as the textfile pull above. }
-    if unitNeedsMath and (not NoDefaultRtl) and (not TargetIsEspClass) then
+    { Same gating and same idempotence as the textfile pull above -- and NEVER
+      for a unit from compiler/builtin/. These two pulls are a GUESS from bare
+      tokens, there for portable FPC units that call System's sqrt/pi with no
+      `uses`; our own runtime units state their dependencies. A builtin is
+      compiled into every program, so a guess fired by one of ITS tokens loads
+      the unit into every program: PromoCmpDbl's `var pi` (cafc739cbf) pulled
+      `math` into every NilPy program, whose float Max/Min then answered
+      `max(1.5, 2)` as 2.0, and a user `e = getattr(...)` met a unit `e`.
+      Closed by WHERE the unit came from, not by name, so the next local called
+      ln, exp or TThreadID in a builtin is covered too.
+      bug-a-a-builtin-local-name-pulls-a-unit-into-every-program }
+    if unitNeedsMath and (not unitIsBuiltin) and (not NoDefaultRtl) and
+       (not TargetIsEspClass) then
       ParseUsesUnitAmbient('math');
-    if unitNeedsThreads and (not NoDefaultRtl) and (not TargetIsEspClass) then
+    if unitNeedsThreads and (not unitIsBuiltin) and (not NoDefaultRtl) and
+       (not TargetIsEspClass) then
       ParseUsesUnitAmbient('palthreadobj');
 
     { Point parser to first token of the unit }

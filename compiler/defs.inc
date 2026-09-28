@@ -5182,6 +5182,7 @@ var
   PyDynArrBoundName : array of AnsiString;
   PyDynArrBoundProc : array of Integer;
   PyDynArrBoundCount : Integer;
+  BuiltinDirCache : AnsiString;   { compiler/builtin/ as ResolveToolchainDirs spells it; '' until ParseUsesUnitBody first needs it }
   IRFoASkipPlus1 : Integer;  { IRLowerAST's fresh-or-arg wrap: node+1 being lowered unwrapped, 0 = none }
   ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }
   ProcVaOverflowSym : array of Integer; { C variadic: this proc's `__va_overflow` LOCAL, or -1. Recorded because wasm32 receives the variadic area as a TRAILING PARAMETER and has to store it into that local at body entry, and by then the C scope that FindSym('__va_overflow') would need is long closed. Every register target sets the local from its own prologue instead and never reads this. bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse }
