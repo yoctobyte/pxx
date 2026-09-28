@@ -748,7 +748,11 @@ answer silently. (Measured with v425.)
   on purpose, until a conversion to a list exists: `a[1]`, `len(a)`, `for x in
   a`, `print(a)`, `b = a` and `return a` each stop with `"a" holds a Pascal
   dynamic array, which NilPy cannot use as a Python value yet: it can only be
-  passed whole to a Pascal array param...`. v449 refused the binding itself
+  passed whole to a Pascal array param...`. A def that indexes a
+  module-level bound name (`def g(): return a[1]`, before or after the
+  binding) is refused too, by the older `Nil Python: annotate the type / too
+  dynamic`; passing it whole from a def (`return d.SumO(a)`) prints `60`, as
+  intended (x86-64, the later compiler). v449 refused the binding itself
   (see the row under Fixed since v441). A Nil Python list held in a name is
   not accepted by a Pascal array parameter either (`x = [1, 2, 3]` then
   `d.SumO(x)`: `no overload of SumO matches these arguments`). Inside a def,
