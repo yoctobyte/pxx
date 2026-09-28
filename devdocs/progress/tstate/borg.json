@@ -16805,15 +16805,15 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-28T06:40:43Z",
+  "date": "2026-09-28T17:38:07Z",
   "red": [
    "test-core#src:test/c_crtl_wait.c",
    "test-skeleton-frontends-cross-target#src:tools/compiler_srchash.sh",
    "tools-devtest#00"
   ],
-  "sha": "cfc7c6a65d6797ed480314143af4f4c7d2992207",
+  "sha": "5ea9d5ef076a71cba4414527532fe4f44855521d",
   "tier": "full",
-  "ver": "v448",
+  "ver": "v449",
   "verdict": "RED"
  },
  "toolchain": {
