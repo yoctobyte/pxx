@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: N
+status: done
 ---
 
 > **Track guessed as N from the FAILING STEP** — line 2 of 5, `/tmp/test_nilpy_impub26 | diff -u test/test_nilpy_import_does_not_publish_names.expected -`, which names `test/test_nilpy_import_does_not_publish_names.expected`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 2 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -45,3 +46,4 @@ ok: /tmp/testmgr-scratch-3654333/test_nilpy_impub26  [code=537698B  data=130352B
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-09-29 — resolved, commit efa290f3e4.

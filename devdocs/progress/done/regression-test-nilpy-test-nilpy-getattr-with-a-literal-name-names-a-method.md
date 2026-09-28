@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: N
+status: done
 ---
 
 > **Track guessed as N from the FAILING STEP** — line 1 of 27, `./compiler/pascal26 test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy /tmp/test_nilpy_getattrlit26`, which names `test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 2 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -40,3 +41,4 @@ pascal26:67: error: no overload of e matches these arguments
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-09-29 — resolved, commit efa290f3e4.
