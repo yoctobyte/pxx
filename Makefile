@@ -3528,6 +3528,10 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit26
 	tools/expect_same.sh test_a_unit_initialization_runs_on_wasm32.out "$$($(TESTTMP)/wasminit26 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh test_a_unit_initialization_runs_on_wasm32.err "$$($(TESTTMP)/wasminit26 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/wasmfini26
+	tools/expect_same.sh test_a_unit_finalization_runs_on_wasm32.out "$$($(TESTTMP)/wasmfini26 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
+	./$(COMPILER) test/test_nilpy_atexit_runs_on_wasm32.npy $(TESTTMP)/atexit26
+	$(TESTTMP)/atexit26 | diff -u test/test_nilpy_atexit_runs_on_wasm32.expected -
 	./$(COMPILER) test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.npy $(TESTTMP)/pymodinit26
 	$(TESTTMP)/pymodinit26 | diff -u test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected -
 	./$(COMPILER) test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin26
@@ -8401,6 +8405,8 @@ test-threads: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit_rv32
 	tools/expect_same.sh riscv32/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/wasminit_rv32 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh riscv32/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/wasminit_rv32 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=riscv32 test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/wasmfini_rv32
+	tools/expect_same.sh riscv32/test_a_unit_finalization_runs_on_wasm32.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/wasmfini_rv32 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_rv32
 	tools/expect_same.sh riscv32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/npystderr_rv32 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh riscv32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/npystderr_rv32 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -8421,6 +8427,8 @@ test-threads: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit_arm32
 	tools/expect_same.sh arm32/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh arm32 $(TESTTMP)/wasminit_arm32 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh arm32/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh arm32 $(TESTTMP)/wasminit_arm32 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=arm32 test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/wasmfini_arm32
+	tools/expect_same.sh arm32/test_a_unit_finalization_runs_on_wasm32.out "$$(tools/run_target.sh arm32 $(TESTTMP)/wasmfini_arm32 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_arm32
 	tools/expect_same.sh arm32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh arm32 $(TESTTMP)/npystderr_arm32 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh arm32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh arm32 $(TESTTMP)/npystderr_arm32 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -18717,6 +18725,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit.wasm
 	tools/expect_same.sh wasm32/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/wasminit.wasm 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh wasm32/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/wasminit.wasm 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=wasm32 test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/wasmfini.wasm
+	tools/expect_same.sh wasm32/test_a_unit_finalization_runs_on_wasm32.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/wasmfini.wasm 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
+	./$(COMPILER) --target=wasm32 test/test_nilpy_atexit_runs_on_wasm32.npy $(TESTTMP)/atexit.wasm
+	tools/expect_same.sh wasm32/test_nilpy_atexit_runs_on_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/atexit.wasm)" "$$(cat test/test_nilpy_atexit_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.npy $(TESTTMP)/pymodinit.wasm
 	tools/expect_same.sh wasm32/test_nilpy_an_imported_modules_top_level_runs_on_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/pymodinit.wasm)" "$$(cat test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=wasm32 test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin.wasm
@@ -29861,6 +29873,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit_i386
 	tools/expect_same.sh i386/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh i386 $(TESTTMP)/wasminit_i386 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh i386/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh i386 $(TESTTMP)/wasminit_i386 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=i386 test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/wasmfini_i386
+	tools/expect_same.sh i386/test_a_unit_finalization_runs_on_wasm32.out "$$(tools/run_target.sh i386 $(TESTTMP)/wasmfini_i386 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_atexit_runs_on_wasm32.npy $(TESTTMP)/atexit_i386
+	tools/expect_same.sh i386/test_nilpy_atexit_runs_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/atexit_i386)" "$$(cat test/test_nilpy_atexit_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.npy $(TESTTMP)/pymodinit_i386
 	tools/expect_same.sh i386/test_nilpy_an_imported_modules_top_level_runs_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/pymodinit_i386)" "$$(cat test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=i386 test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin_i386
@@ -30350,6 +30366,8 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/wasminit_a64
 	tools/expect_same.sh aarch64/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh aarch64 $(TESTTMP)/wasminit_a64 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh aarch64/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh aarch64 $(TESTTMP)/wasminit_a64 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=aarch64 test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/wasmfini_a64
+	tools/expect_same.sh aarch64/test_a_unit_finalization_runs_on_wasm32.out "$$(tools/run_target.sh aarch64 $(TESTTMP)/wasmfini_a64 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=aarch64 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_a64
 	tools/expect_same.sh aarch64/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh aarch64 $(TESTTMP)/npystderr_a64 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh aarch64/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh aarch64 $(TESTTMP)/npystderr_a64 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -33070,6 +33088,8 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/xt_wasminit_w
 	tools/expect_same.sh xtensa-windowed/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wasminit_w 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh xtensa-windowed/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wasminit_w 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/xt_wasmfini_w
+	tools/expect_same.sh xtensa-windowed/test_a_unit_finalization_runs_on_wasm32.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wasmfini_w 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_print_to_stderr.py $(TESTTMP)/xt_npystderr_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_w 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh xtensa-windowed/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_w 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -33084,6 +33104,8 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_a_unit_initialization_runs_on_wasm32.pas $(TESTTMP)/xt_wasminit_c0
 	tools/expect_same.sh xtensa-call0/test_a_unit_initialization_runs_on_wasm32.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wasminit_c0 2>/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.expected)"
 	tools/expect_same.sh xtensa-call0/test_a_unit_initialization_runs_on_wasm32.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wasminit_c0 2>&1 >/dev/null)" "$$(cat test/test_a_unit_initialization_runs_on_wasm32.err.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_a_unit_finalization_runs_on_wasm32.pas $(TESTTMP)/xt_wasmfini_c0
+	tools/expect_same.sh xtensa-call0/test_a_unit_finalization_runs_on_wasm32.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_wasmfini_c0 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_print_to_stderr.py $(TESTTMP)/xt_npystderr_c0
 	tools/expect_same.sh xtensa-call0/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_c0 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh xtensa-call0/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_npystderr_c0 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"

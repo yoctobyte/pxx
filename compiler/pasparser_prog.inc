@@ -2898,6 +2898,14 @@ begin
       EmitCallProc(exitPi)
     else if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
       EmitCallProc(GetFiniRunnerProc);
+    { wasm32 drops both calls above; its `main` runs the finalizers itself
+      after the last chunk (WasmEmitMainWrapper). }
+    if (TargetArch = TARGET_WASM32) and
+       ((FiniProcCount > 0) or (FiniRunnerProc >= 0)) then
+    begin
+      WasmFiniRunner := GetFiniRunnerProc;
+      WasmFiniRunnerSet := True;
+    end;
     EmitIdfTaskEndCall;   { ESP-IDF, when PXXExitProcess is absent }
     EmitExit(0);   { unreachable once PXXExitProcess is in — it does not return }
   end;

@@ -1,0 +1,24 @@
+# atexit handlers run at normal program end, last registered first -- on
+# wasm32 too.
+#
+# `atexit.register` is carried by a Pascal unit's FINALIZATION, and the drivers
+# end the program by calling the finalizer runner as machine code that a
+# wasm32 `main` (built from the body's chunks) never contained, so on wasm32
+# no handler ever ran: only "body" was printed. Expected output is CPython's.
+import atexit
+
+state = {"n": 0}
+
+
+def first():
+    print("registered first, runs last", state["n"])
+
+
+def second():
+    state["n"] = state["n"] + 1
+    print("registered second, runs first")
+
+
+atexit.register(first)
+atexit.register(second)
+print("body")

@@ -51880,7 +51880,15 @@ begin
     Pascal's driver, and like FPC. `atexit.register(fn)` is a finalization
     handler, so without this an imported module's exit code never ran. }
   if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+  begin
     EmitCallProc(GetFiniRunnerProc);
+    { wasm32 drops that call; its `main` makes it after the last chunk }
+    if TargetArch = TARGET_WASM32 then
+    begin
+      WasmFiniRunner := GetFiniRunnerProc;
+      WasmFiniRunnerSet := True;
+    end;
+  end;
   EmitIdfTaskEndCall;   { ESP-IDF: end the FreeRTOS task rather than busy-park }
   EmitExit(0);
   DbgMainBodyEnd := CodeLen;

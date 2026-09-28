@@ -6395,6 +6395,12 @@ var
   WasmUnitInitSet : Boolean;
   WasmUnitInitAt : Integer;
   WasmMainChunkCount : Integer;   { ir_codegen_wasm32.inc's WasmMainChunk count }
+  { wasm32 only: the finalizer runner `main` calls after the body's last chunk
+    (-1 = none). The drivers' normal-exit call to it is EmitCallProc machine
+    code, which wasm32 drops, so no unit finalization -- and so no Nil Python
+    atexit handler -- ever ran there. }
+  WasmFiniRunner : Integer;
+  WasmFiniRunnerSet : Boolean;
   { Synthesized unit `finalization` procs, in registration (dependency) order;
     run in REVERSE at program exit — normal main-body fall-off AND Halt —
     mirroring FPC (bug-unit-finalization-not-executed). FiniRunnerProc is the

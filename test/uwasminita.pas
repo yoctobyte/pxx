@@ -1,7 +1,7 @@
 { Unit for test_a_unit_initialization_runs_on_wasm32: the `initialization`
   form, reading a typed constant (global initialisers must already be in place
-  when a unit's initialization runs), with a finalization that is not
-  asserted -- finalization on wasm32 is a separate gap. }
+  when a unit's initialization runs). Finalization is
+  test_a_unit_finalization_runs_on_wasm32's. }
 unit uwasminita;
 
 interface

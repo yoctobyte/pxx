@@ -8295,7 +8295,14 @@ begin
     if WasmUnitInitSet and (i = WasmUnitInitAt) then
       for j := 0 to InitProcCount - 1 do
         WasmCall(WasmSlotForProc(InitProcs[j]), Procs[InitProcs[j]].Name);
-    if i = WasmMainChunkCount then break;
+    if i = WasmMainChunkCount then
+    begin
+      { normal fall-off: unit finalization, reverse order, via the runner
+        (it guards itself against a second run) }
+      if WasmFiniRunnerSet then
+        WasmCall(WasmSlotForProc(WasmFiniRunner), Procs[WasmFiniRunner].Name);
+      break;
+    end;
     WasmCall(WasmMainChunk[i],
              'main$' + WasmIntStr(i));
     { AN UNHANDLED EXCEPTION MUST NOT LOOK LIKE SUCCESS. Every body propagates
