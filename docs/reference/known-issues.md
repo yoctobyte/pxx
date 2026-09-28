@@ -33,6 +33,29 @@ the bare profile is for. esptool cannot convert a bare ELF either, since it has
 no section headers. **Workaround:** on hardware, build the program as an
 ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
 
+### riscv32 and Xtensa: arithmetic flushes subnormal doubles to zero
+
+On riscv32 and Xtensa (both ABIs), double arithmetic runs in software
+(`compiler/builtin/softfloat.pas`), which flushes subnormal numbers, the
+values below about 2.2e-308, to zero. Every operation with a subnormal
+operand returns zero (`x * 1.0`, `x + x`, `x - 0.0`, `x / 1.0`), and so does
+every result that would be subnormal (`1e-300 * 1e-10`). Comparing, copying
+and storing a subnormal are exact. So `if x > 0.0 then y := x * 1.0` can give
+a zero `y` for an `x` the same program found to be above zero. Nil Python's
+`math.frexp(5e-324)` gives `(0.5, -1086)` there, where CPython gives
+`(0.5, -1073)`. This is the documented behaviour of that software arithmetic,
+stated in the unit's header, not a crash, and flush-to-zero is a common mode
+on small devices. x86-64, i386, arm32, aarch64 and wasm32 use the hardware or
+host arithmetic and keep subnormals. Measured on 2026-09-28 with v450
+(`c19cc2d531e4`) on x86-64 and under QEMU user mode for the others
+(`wasmtime` for wasm32), with a subnormal built from its bit pattern at run
+time; the same on riscv32 with v441 (`4ebfa2d047a2`) and with the compiler
+built at `fce510f98d` (`f545c8410b32`). The ESP32-C3 and ESP32-S3 use these
+two backends; this was measured on hosted builds only. **If it matters:**
+keep intermediate values above 2.2e-308, for example by working in scaled
+units. A value that is already subnormal cannot be scaled back up on these
+targets, because the scaling is itself arithmetic on it.
+
 ## Memory leaks
 
 Memory leaks were treated as release blockers for this beta. Before the release
