@@ -50,6 +50,9 @@ W boot.esp32: WDT rst info: PRO CPU PC=0x4008ae38
 W boot.esp32: WDT rst info: APP CPU PC=0x40080340
 ```
 
+**Board output, not re-measured on v450.** Compiler `b2b325036c3b` is pin v448; no later
+board run is recorded.
+
 Resolved against this project's own map:
 
 | | PRO CPU PC | resolves to |

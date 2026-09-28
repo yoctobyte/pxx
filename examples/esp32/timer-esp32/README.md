@@ -29,6 +29,10 @@ PXX timer: tick=5
 PXX timer: done ticks=5 status=0
 ```
 
+**Board output, not re-measured on v450.** Last measured 2026-09-28 on an ESP32-D0WD-V3 with
+compiler `b2b325036c3b` (pin v448): the board output matched `main.expected`,
+7 lines (LOGBOOK, 2026-09-28).
+
 `status` is a bitmask the program builds itself — 1 = start failed, 2 = fewer
 than five ticks arrived, 4 = stop failed — so `status=0` cannot be printed by a
 dead timer. That matters here because this whole example family exists to guard

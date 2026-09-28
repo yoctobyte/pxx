@@ -20,4 +20,8 @@ tools/esp_flash.sh --project examples/esp32/nilpy-esp32 --port /dev/ttyACM0
 
 The expected serial output is `main/main.expected`.
 
+**Board output, not re-measured on v450.** Last measured 2026-09-28 on an ESP32-D0WD-V3 with
+compiler `b2b325036c3b` (pin v448): the board output matched `main.expected`,
+4 lines (`examples/esp32/nilpy-hw-esp32/README.md`, LOGBOOK 2026-09-28).
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

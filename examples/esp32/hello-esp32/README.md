@@ -24,6 +24,11 @@ not moved since the pin, so these are the released compiler's numbers).
 The chip table in `docs/targets/esp32.md` is the place that records a board
 result, and it now carries this one.
 
+**Board output, not re-measured on v450.** The last recorded board run is
+2026-09-28 with pin v445 (`caf21ac399f1`, LOGBOOK): the same five `i=N` lines
+and sum, read by eye (no `main.expected`), and the capture had no boot banner,
+so a second boot would not have shown.
+
 **What the board run does and does not establish.** It is one program, and the
 program is deliberately `hello-s3`'s with the words changed — `esp_rom_printf`,
 `gpio_*`, `vTaskDelay`, integer arithmetic. That is what makes the comparison

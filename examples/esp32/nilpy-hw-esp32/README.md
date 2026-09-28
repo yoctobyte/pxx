@@ -71,6 +71,10 @@ W (74) boot.esp32: WDT rst info: PRO CPU PC=0x4008b13c
 W (79) boot.esp32: WDT rst info: APP CPU PC=0x4008b13c
 ```
 
+**Board output, not re-measured on v450.** Compiler `b2b325036c3b` is pin v448; the S3 and C3
+runs quoted above are pin v449. No later board run is recorded on any of the
+three chips.
+
 So: a Timer Group 1 watchdog reset, in a loop, with **both CPUs stopped at the
 same PC**, and the program never reaching its first line (`gpio 0` never
 appears).

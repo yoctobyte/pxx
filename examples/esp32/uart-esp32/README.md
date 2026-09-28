@@ -46,6 +46,9 @@ closed          PASS (0)
 UART-CHECK-DONE passed=10 failed=3
 ```
 
+**Board output, not re-measured on v450.** Compiler `b2b325036c3b` is pin v448; no later
+board run is recorded.
+
 The detail in brackets is `Length(s)`, the number of bytes that came back, and
 that is what makes the three failures readable rather than mysterious. `MSG` is
 `'hello uart1'`, 11 bytes; the fast row expects `MSG + ' at 1M'`, 17.

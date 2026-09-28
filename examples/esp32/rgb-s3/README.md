@@ -31,6 +31,12 @@ Verified on silicon 2026-09-24: ESP32-S3 (QFN56) rev v0.2, 16 MB flash,
 8 MB PSRAM, built with the pinned compiler and flashed through the chip's
 native USB-Serial/JTAG port.
 
+**Board output, not re-measured on v450.** That run (LOGBOOK 2026-09-24, `c586d3cec5`) is the
+last recorded board run (a 2026-09-25 heap soak ran it under QEMU, not on a
+board). The pin current when it was committed was v420 (compiler
+sha256 `af40370a8a91`); the note above does not name it, so that is inferred
+from the commit time.
+
 That port belongs to the chip itself, so every reset disconnects it. On that
 host, after esptool reset the board over USB, the port took about 90 s
 to come back (`device descriptor read/64, error -110`) while the LED was
