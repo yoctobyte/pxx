@@ -12,12 +12,20 @@ own code uses most, and says for each whether PXX has it. It was measured on
 
 Of the 150:
 
-| Result | Count |
-|---|---|
-| present: compiles and prints the same as FPC | 124 |
-| missing: the name is undefined or its type is unknown | 14 |
-| missing overload or member: the name exists, but a common form of it does not | 7 |
-| present, different: compiles, but prints or exits differently | 5 |
+| Result | v447 | after v448 |
+|---|---|---|
+| present: compiles and prints the same as FPC | 124 | 129 |
+| missing: the name is undefined or its type is unknown | 14 | 13 |
+| missing overload or member: the name exists, but a common form of it does not | 7 | 4 |
+| present, different: compiles, but prints or exits differently | 5 | 4 |
+
+The "after v448" column counts five rows as closed by commit `6b34caaf23`,
+which is in no pin yet: `Copy(s, index)`, `Pos(sub, s, offset)`,
+`UpCase(string)`, `Space` and `Power`. Those five were re-measured on
+2026-09-28 with the probe below: with pin v448 (compiler sha256
+`b2b325036c3b`) each still failed as its row says, and with the compiler built
+at `a2614fcb8b` (sha256 `5dea028059af`) each printed what fpc 3.2.2 printed.
+The other 145 rows were not re-measured.
 
 "Present" means one call gave the same output. It does not mean every
 overload, option or edge case behaves the same.
@@ -61,8 +69,8 @@ it was split into smaller probes, one call each, to find the form that fails.
 
 | Rank | Name | Unit | Files | What is missing |
 |---|---|---|---|---|
-| 14 | `Copy` | System | 390 | `Copy(s, index)` (two arguments) is refused: "no overload of Copy matches". The three-argument form works. |
-| 18 | `Pos` | System | 352 | `Pos(sub, s, offset)` (three arguments) is refused. The two-argument form works. |
+| 14 | `Copy` | System | 390 | `Copy(s, index)` (two arguments) is refused: "no overload of Copy matches". The three-argument form works. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Copy(s, 3)` of `'abcdef'` prints `cdef`, as in FPC. |
+| 18 | `Pos` | System | 352 | `Pos(sub, s, offset)` (three arguments) is refused. The two-argument form works. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Pos('b', 'abcabc', 3)` is `5`, and an offset of 0 or past the end gives `0`, as in FPC. |
 | 39 | `Rect` | Classes | 197 | `TRect` is an unknown type, so `Rect` cannot be used. |
 | 42 | `Ptr` | System | 184 | Undefined. FPC keeps it for 16-bit code: `Ptr(seg, ofs)`. |
 | 50 | `Point` | Classes | 150 | `TPoint` is an unknown type. |
@@ -71,11 +79,11 @@ it was split into smaller probes, one call each, to find the form that fails.
 | 67 | `TGuid` | System | 97 | The `TGuid` record works; `GUIDToString` is undefined. |
 | 68 | `TList` | Classes | 97 | `Add`, `Count` and `Items` work; `Pack` is not a member. |
 | 73 | `TypeInfo` | System | 89 | `TypeInfo(Integer)` works; `PTypeInfo(...)^.Name` is not a member. |
-| 81 | `UpCase` | System | 80 | `UpCase(char)` works; `UpCase(string)` is refused. |
+| 81 | `UpCase` | System | 80 | `UpCase(char)` works; `UpCase(string)` is refused. **Fixed after v448** (`6b34caaf23`, in no pin yet). |
 | 85 | `Align` | System | 73 | Undefined. |
 | 86 | `Random` | System | 72 | `Random(n)` works; `Random` with no argument (a Double in [0,1)) is undefined. |
 | 91 | `TCollection` | Classes | 69 | Unknown type. |
-| 93 | `Space` | System | 67 | Undefined. |
+| 93 | `Space` | System | 67 | Undefined. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Length(Space(258))` is `2`, as in FPC, whose parameter is a `Byte`. |
 | 102 | `TCollectionItem` | Classes | 55 | Unknown type (with `TCollection`). |
 | 116 | `NewStr` | SysUtils | 42 | `PString` is an unknown type, so `NewStr` cannot be used. |
 | 134 | `DisposeStr` | SysUtils | 28 | `PString` is an unknown type. |
@@ -95,7 +103,7 @@ They are covered in [Coming from Free Pascal](../getting-started/from-fpc.md).
 | 112 | `TInterfacedObject` | System | 47 | Works as a class and through a declared interface or `IUnknown`. Assigning it to `IInterface` is refused: "class does not implement the interface". Without `SysUtils` it is undefined; FPC has it in `System`. |
 | 120 | `UTF8Decode` | System | 35 | `UTF8Decode('h'#$C3#$A9)` has length 3, not 2: the bytes are not decoded. ASCII input is the same. This is by design: `UnicodeString` is the byte string in the default build. With `{$define PXX_WIDE_PAYLOAD}` the length is 2, as in FPC (measured with pin v447). |
 | 136 | `RunError` | System | 27 | Exit code 204 as in FPC, but "Runtime error 204" goes to standard output; FPC writes it to standard error. |
-| 139 | `Power` | Math | 26 | `Power(2, 10)` gives an integer (`1024` under `:0:1`), FPC a float (`1024.0`). `Power(2.0, 10.0)` is the same. |
+| 139 | `Power` | Math | 26 | `Power(2, 10)` gives an integer: with v448, `Power(2, 10):0:1` prints `1024` where FPC prints `1024.0`, and `Power(2, -1)` prints `1` where FPC prints `0.50`. `Power(2.0, 10.0)` prints `1024.0` in both. **Fixed after v448** (`6b34caaf23`, in no pin yet). `Power` is float-only, as in FPC. |
 
 ## A compiler gap found along the way
 
@@ -117,6 +125,11 @@ end.
 Assigning `s[2] := 'y'` directly works, and so does calling `UniqueString(s)`
 first. `Move(src[1], dst[2], 3)` into such a string crashes the same way.
 
+**Fixed after v448** (`cbbb1e6418`, in no pin yet). Measured on 2026-09-28 on
+x86-64: with pin v448 both programs still stop with a segmentation fault
+(exit 139); with the compiler built at `a2614fcb8b` they print `ayc` and
+`axyze`, as FPC does.
+
 ## All 150
 
 | Rank | Name | Unit | Files | Result |
@@ -134,11 +147,11 @@ first. `Move(src[1], dst[2], 3)` into such a string crashes the same way.
 | 11 | `Dec` | System | 512 | present |
 | 12 | `SetLength` | System | 433 | present |
 | 13 | `Delete` | System | 430 | present |
-| 14 | `Copy` | System | 390 | missing overload or member |
+| 14 | `Copy` | System | 390 | missing overload or member; present after v448 |
 | 15 | `FreeAndNil` | SysUtils | 380 | present |
 | 16 | `TObject` | System | 375 | present |
 | 17 | `Break` | System | 366 | present |
-| 18 | `Pos` | System | 352 | missing overload or member |
+| 18 | `Pos` | System | 352 | missing overload or member; present after v448 |
 | 19 | `Ord` | System | 350 | present |
 | 20 | `Close` | System | 332 | present |
 | 21 | `Str` | System | 323 | present |
@@ -201,7 +214,7 @@ first. `Move(src[1], dst[2], 3)` into such a string crashes the same way.
 | 78 | `TFPList` | Classes | 83 | present |
 | 79 | `Abs` | System | 81 | present |
 | 80 | `Assert` | System | 80 | present |
-| 81 | `UpCase` | System | 80 | missing overload or member |
+| 81 | `UpCase` | System | 80 | missing overload or member; present after v448 |
 | 82 | `StrPas` | System | 78 | present |
 | 83 | `StrToIntDef` | SysUtils | 75 | present |
 | 84 | `Trunc` | System | 73 | present |
@@ -213,7 +226,7 @@ first. `Move(src[1], dst[2], 3)` into such a string crashes the same way.
 | 90 | `ExtractFileName` | SysUtils | 71 | present |
 | 91 | `TCollection` | Classes | 69 | missing |
 | 92 | `Hi` | System | 68 | present |
-| 93 | `Space` | System | 67 | missing |
+| 93 | `Space` | System | 67 | missing; present after v448 |
 | 94 | `ExtractFilePath` | SysUtils | 67 | present |
 | 95 | `HexStr` | System | 64 | present |
 | 96 | `Sin` | System | 64 | present |
@@ -259,7 +272,7 @@ first. `Move(src[1], dst[2], 3)` into such a string crashes the same way.
 | 136 | `RunError` | System | 27 | present, different |
 | 137 | `EConvertError` | SysUtils | 27 | present |
 | 138 | `FindClose` | SysUtils | 27 | present |
-| 139 | `Power` | Math | 26 | present, different |
+| 139 | `Power` | Math | 26 | present, different; present after v448 |
 | 140 | `EncodeTime` | SysUtils | 26 | present |
 | 141 | `Erase` | System | 26 | present |
 | 142 | `Sum` | Math | 25 | missing |

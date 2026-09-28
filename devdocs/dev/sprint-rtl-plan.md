@@ -28,7 +28,9 @@ uses SysUtils, Classes, StrUtils, Math;
 
 - **franks-a3:** `Copy(s, index)`, `Pos(sub, s, offset)`, `UpCase(string)`,
   `Space`, `Power(int, int)`, and the crash when a string element is passed
-  to a `var` parameter.
+  to a `var` parameter. Landed after v448 as `6b34caaf23` and `cbbb1e6418`;
+  each form re-measured on 2026-09-28 against fpc 3.2.2 with the compiler
+  built at `a2614fcb8b` (see `docs/reference/fpc-rtl-coverage.md`).
 - **frankd-a3:** `FormatFloat`, `TStringList.LoadFromFile` and `SaveToFile`,
   and the affinity syscall numbers.
 
