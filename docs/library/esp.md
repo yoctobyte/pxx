@@ -156,14 +156,50 @@ gpio.on_change(4)
 Sources: `INT_SRC_GPIO` (the id is the pin), `INT_SRC_ADC` (the id is the
 channel), `INT_SRC_TIMER` and `INT_SRC_USER`.
 
-**When handlers run.** Handlers run whenever the program blocks in the runtime,
-for example in a sleep, and whenever it calls `poll()`. Each run handles at
-most 16 events, and a handler that blocks does not start a second run inside
-itself.
+**When handlers run.** The interrupt itself runs a short compiled routine
+(Pascal in `espgpio` and `espadc`) that records the event and returns; it never
+calls your handler. Your
+handler, Pascal or Python, runs in the main task: whenever the program blocks
+in the runtime, for example in a sleep, and whenever it calls `poll()`. Nothing
+is delivered while the program computes without blocking or polling.
 
-**When the queue is full.** A new event is dropped and counted in `dropped()`.
-Every event is accounted for: the events pushed equal the events delivered
-plus the events dropped.
+**Two bounds.** The queue holds 64 events. An event that arrives while it is
+full is dropped and counted in `dropped()`, so a loss is always visible: the
+events the interrupts recorded equal the events delivered, plus the events
+dropped, plus the events still pending. Separately, one run handles at most 16
+events and leaves the rest in the queue for the next run; those are deferred,
+not dropped. A sleep or a `poll()` is therefore a bounded amount of work, not a
+promise of an empty queue. A handler that blocks does not start a second run
+inside itself. Pascal can change the 16 with `IntSetDrainBudget(n)`, read it
+with `IntDrainBudget`, and ask `IntInDrain` whether a run is in progress.
+**Python has none of these three**, which is a known limitation.
+
+**What was checked on a board.**
+
+- `gpio-edge-s3` and `gpio-edge-c3`, on both boards with v441 on 2026-09-27
+  (see the table above). After 10 edges with no sleep, 10 events are pending
+  and 0 delivered; after one sleep, all 10 are delivered and 0 pending. A flood
+  of 100 edges leaves 64 pending with `dropped()` above 0; after a drain, the
+  edges the pin's interrupt counted equal delivered plus dropped.
+- The no-allocation contract, `test/esp_board_isr_no_alloc.pas`: the free heap
+  did not move over 9,997 GPIO and 625 ADC interrupts on the ESP32-S3
+  (2026-09-24, development compiler sha256 `58412e442c17…`), and over 10,000
+  and 625 on the ESP32-C3 (2026-09-28, development compiler `139494b2b863…`,
+  with the edge producer moved to core 0, since the C3 has one core). Its
+  control, 1000 allocations of 16 bytes in the main task, reads 28,000 bytes.
+  An allocation inside the interrupt stops the chip on the first one.
+- The queue under a producer on the other core,
+  `test/esp_board_gpio_ring_stress.pas`, ESP32-S3 only: about 672,000 edges
+  in 20 s, in two runs, each edge counted as delivered or dropped, and the
+  delivered ones in sequence with no gap and no repeat (2026-09-24,
+  development compiler `5cb3fdf5896b…`). About half were
+  dropped, on purpose, to keep the interrupt landing inside the queue's reader.
+  The same test against the queue before `0d5df89913` lost 2,503 edges.
+  Neither of these two tests has been repeated with a pinned compiler.
+- `poll()` with no sleep anywhere before it has been checked only on a PC, by
+  the hosted tests. The board test that checks it, and checks that the 16-event
+  budget defers, `test/esp_board_gpio_poll_drain` (Pascal and Python, both
+  chips), builds and has not run on a board yet.
 
 **A script can simply end.** If a program has registered a handler and still
 has an armed source, reaching the end of the program does not stop it: it keeps

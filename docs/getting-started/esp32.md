@@ -211,10 +211,12 @@ Two consequences worth knowing:
 
 - Nothing is delivered while your program computes without sleeping. That is
   by design: events never interrupt your Python code.
-- The queue holds a fixed number of events. Events that arrive while it is
-  full are **dropped and counted** (`interrupts.dropped()`), never lost
-  silently. Sleep in short steps if a source fires faster than your loop
-  sleeps.
+- The queue holds 64 events. Events that arrive while it is full are
+  **dropped and counted** (`interrupts.dropped()`), so a loss always shows.
+  One blocking point handles at most 16 events and leaves the rest queued.
+  Sleep in short steps if a source fires faster than your loop sleeps. The
+  details, and what was measured on a board, are in
+  the `interrupts` section of [ESP32 peripherals](../library/esp.md).
 
 **The hidden loop.** When your main program ends while a handler is registered
 *and* a source is still open (an armed pin, a running ADC), the program does
