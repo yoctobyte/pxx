@@ -12,15 +12,13 @@
 #          census must both grow
 # Run with -Futest/nilpy_freshseam. The same program runs on i386 under qemu.
 #
-# NOT HERE, AND WHY: TA.Mixed on its FRESH arm (`if v > 0 then Exit(Self);
-# Result := TA.Create`). Its verdict is correctly borrowed -- one path returns
-# Self -- so the caller never releases what the other path minted: 500 of 500
-# alive after N discards and after N rebinds (2026-09-27, pin v443 and HEAD, on
-# x86-64 and i386 alike). Deciding it needs a RUN-TIME test (owned exactly when
-# the result is not the argument passed), which no consumer does yet. No
-# function in lib/rtl or pylib has the shape (217 class-result verdicts, the
-# units json/re/urequests/socket/array/collections pull in), so it reaches only
-# a user's own Pascal unit. Mixed's BORROWED arm is here, as Mixed.self.
+# TA.Mixed returns Self OR a new object (`if v > 0 then Exit(Self); Result :=
+# TA.Create`). Until 2026-09-28 it read as a borrow, so its FRESH arm leaked
+# every object it made: 500 of 500 alive after N discards and after N rebinds
+# (pin v443 and HEAD, x86-64 and i386). ClassifyProcResultFresh now marks it
+# fresh-or-arg, and a call whose argument is a plain name is lowered as
+# PXXObjRetainIfSame(call, argument): owned on both arms. Mixed.fresh is z's
+# (v = 0), Mixed.self is p's. No function in lib/rtl or pylib has the shape.
 #
 # Fld, Element and Cached return a FIELD, an element of an array field and a
 # global. Until 2026-09-27 their verdict (not fresh, no parameter returned) read
@@ -154,6 +152,18 @@ def r_NamedSelf():
         s = s + (t.v)
     return s
 
+def d_Mixed_fresh():
+    for i in range(N):
+        z.Mixed()
+
+
+def r_Mixed_fresh():
+    s = 0
+    for i in range(N):
+        t = z.Mixed()
+        s = s + (t.v)
+    return s
+
 def d_Mixed_self():
     for i in range(N):
         p.Mixed()
@@ -265,6 +275,7 @@ else:
     row("MkLocal", d_MkLocal, r_MkLocal)
     row("Me", d_Me, r_Me)
     row("NamedSelf", d_NamedSelf, r_NamedSelf)
+    row("Mixed.fresh", d_Mixed_fresh, r_Mixed_fresh)
     row("Mixed.self", d_Mixed_self, r_Mixed_self)
     row("PassThrough", d_PassThrough, r_PassThrough)
     row("OrNil.nil", d_OrNil_nil, r_OrNil_nil)

@@ -5644,16 +5644,6 @@ end;
   given; TPyList.add returns Self. NilPy defs never qualify: their return arm
   retains a borrow. Such a call is never spilled into an owning argument temp
   (IRLowerCallArg) -- it constructs nothing. }
-function IRCallIsPassThrough(n: Integer): Boolean;
-var p: Integer;
-begin
-  Result := False;
-  p := NodeCallProcIdx(n);
-  if p < 0 then Exit;
-  Result := (ProcResultArgIdx[p] <> -1) and (ProcUnitIdx[p] >= 0) and
-            (not UnitIsPyModule(ProcUnitIdx[p]));
-end;
-
 { The k-th argument VALUE of call n, or -1. }
 function IRCallArgNode(n, k: Integer): Integer;
 var a, i: Integer;
@@ -5668,6 +5658,45 @@ begin
   end;
   if a >= 0 then Result := ASTLeft[a];
 end;
+
+{ A NilPy call to a Pascal routine that returns EITHER parameter k OR a fresh
+  object (ProcResultFreshOrArg: `if v > 0 then Exit(Self); Result :=
+  TA.Create`), whose argument k is a plain NAME -- the symbol, else -1. Such a
+  call is lowered as PXXObjRetainIfSame(call, k): the Self arm is retained, so
+  the result is OWNED on both arms and every consumer takes it as a fresh
+  call's. Read as a borrow instead, the fresh arm leaked every object it made
+  (500 of 500, pin v443, x86-64 and i386). A name, because it is re-read after
+  the call: the callee cannot rebind a NilPy caller's variable, and any other
+  argument would be evaluated twice. Otherwise it stays a borrow and leaks. }
+function IRCallFreshOrArgSym(n: Integer): Integer;
+var p, a, sym: Integer;
+begin
+  Result := -1;
+  if (n < 0) or not NilPyUserCode then Exit;
+  if (ASTKind[n] <> AN_CALL) and (ASTKind[n] <> AN_VIRTUAL_CALL) then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  p := NodeCallProcIdx(n);
+  if (p < 0) or (not ProcResultFreshOrArg[p]) or (ProcResultArgIdx[p] < 0) or
+     (ProcUnitIdx[p] < 0) or UnitIsPyModule(ProcUnitIdx[p]) then Exit;
+  a := IRCallArgNode(n, ProcResultArgIdx[p]);
+  if (a < 0) or (ASTKind[a] <> AN_IDENT) then Exit;
+  sym := Integer(ASTIVal[a]);
+  if (sym < 0) or (sym >= SymCount) or (Syms[sym].TypeKind <> tyClass) or
+     not (Syms[sym].Kind in [skLocal, skGlobal, skParam]) then Exit;
+  Result := sym;
+end;
+
+function IRCallIsPassThrough(n: Integer): Boolean;
+var p: Integer;
+begin
+  Result := False;
+  p := NodeCallProcIdx(n);
+  if p < 0 then Exit;
+  Result := (ProcResultArgIdx[p] <> -1) and (ProcUnitIdx[p] >= 0) and
+            (not UnitIsPyModule(ProcUnitIdx[p])) and
+            (IRCallFreshOrArgSym(n) < 0);   { normalised to owned: see above }
+end;
+
 
 { Does this ARGUMENT, in position k, carry a +1 nobody has bound? A
   construction in position 0 does -- IRLowerCallArg spills a construction to
@@ -10502,7 +10531,8 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer;
-var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
+var foaSym, foaSave: Integer;
+    left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
     spineN: Integer;            { spine table growth — see the arm }
     pcBase: Integer;                { pending by-value interface temps at statement start }
@@ -10603,6 +10633,30 @@ begin
   begin
     Result := -1;
     Exit;
+  end;
+  { A fresh-or-argument Pascal call (IRCallFreshOrArgSym): lower the call once,
+    then PXXObjRetainIfSame(result, argument) so it is owned on both arms. The
+    skip marker stops the re-entry for THIS node wrapping itself again; +1 so
+    that 0 means none. }
+  if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL)) and
+     (IRFoASkipPlus1 <> node + 1) then
+  begin
+    foaSym := IRCallFreshOrArgSym(node);
+    if foaSym >= 0 then
+    begin
+      foaSave := IRFoASkipPlus1;
+      IRFoASkipPlus1 := node + 1;
+      value := IRLowerAST(node);
+      IRFoASkipPlus1 := foaSave;
+      procIdx := FindProc('PXXObjRetainIfSame');
+      if procIdx < 0 then Error('Nil Python: PXXObjRetainIfSame (builtinheap) not loaded');
+      first := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+      last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, foaSym, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+      IRB[first] := last;
+      Result := IRAppendCall(procIdx, first, -1, ASTTk[node]);
+      Exit;
+    end;
   end;
 
   { A PROMOTABLE INT RVALUE IS ITS SLOT ADDRESS. That is promocore's whole

@@ -25615,7 +25615,10 @@ begin
        (Integer(ASTRight[Result]) >= REC_UCLASS_BASE)) or
       ((Integer(ASTIVal[Result]) >= 0) and
        (IntToTypeKind(ASTTk[Result]) = tyClass) and
-       PyDiscardedCallIsOwned(ASTIVal[Result]))) then
+       { ...or a fresh-or-argument call, which the lowering makes owned on
+         both arms (IRCallFreshOrArgSym) }
+       (PyDiscardedCallIsOwned(ASTIVal[Result]) or
+        (IRCallFreshOrArgSym(Result) >= 0)))) then
   begin
     discNew := Result;         { the call whose value is dropped }
     discSym := AllocVar(PyHiddenName('disc'), tyClass);

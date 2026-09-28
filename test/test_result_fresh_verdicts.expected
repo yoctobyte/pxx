@@ -8,6 +8,6 @@ PXXDBG p.fresh TA.Fld FALSE arg=-3
 PXXDBG p.fresh TA.Element FALSE arg=-3
 PXXDBG p.fresh TA.Named TRUE arg=-1
 PXXDBG p.fresh TA.NamedSelf FALSE arg=0
-PXXDBG p.fresh TA.Mixed FALSE arg=0
+PXXDBG p.fresh TA.Mixed FALSE arg=0 fresh-or-arg
 PXXDBG p.fresh TA.ViaLocal TRUE arg=-1
 PXXDBG p.fresh TA.OrNil TRUE arg=-1

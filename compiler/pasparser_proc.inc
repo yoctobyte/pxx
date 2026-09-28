@@ -1092,7 +1092,7 @@ begin
   else if argIdx <> j then argIdx := -2;
 end;
 
-procedure ScanResultStores(procIdx, node, retSym, bodyNode: Integer; var allFresh: Boolean;
+procedure ScanResultStores(procIdx, node, retSym, bodyNode: Integer; var allFresh, allFoA, anyFresh: Boolean;
   var argIdx, budget: Integer);
 begin
   if node < 0 then Exit;
@@ -1101,18 +1101,28 @@ begin
   if (ASTKind[node] = AN_ASSIGN) and (ASTLeft[node] >= 0) and
      (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] = retSym) then
   begin
-    if not ResultExprIsFresh(ASTRight[node], bodyNode, retSym, True) then allFresh := False;
+    if not ResultExprIsFresh(ASTRight[node], bodyNode, retSym, True) then
+    begin
+      allFresh := False;
+      if ResultExprParamIdx(procIdx, ASTRight[node]) < 0 then allFoA := False;
+    end
+    else if not IsNilLiteralNode(ASTRight[node]) then anyFresh := True;
     NoteResultArg(procIdx, ASTRight[node], argIdx);
     Exit;
   end;
   if (ASTKind[node] = AN_EXIT) and (ASTLeft[node] >= 0) then
   begin
-    if not ResultExprIsFresh(ASTLeft[node], bodyNode, retSym, True) then allFresh := False;
+    if not ResultExprIsFresh(ASTLeft[node], bodyNode, retSym, True) then
+    begin
+      allFresh := False;
+      if ResultExprParamIdx(procIdx, ASTLeft[node]) < 0 then allFoA := False;
+    end
+    else if not IsNilLiteralNode(ASTLeft[node]) then anyFresh := True;
     NoteResultArg(procIdx, ASTLeft[node], argIdx);
     Exit;
   end;
-  ScanResultStores(procIdx, ASTChildLeft(node), retSym, bodyNode, allFresh, argIdx, budget);
-  ScanResultStores(procIdx, ASTChildRight(node), retSym, bodyNode, allFresh, argIdx, budget);
+  ScanResultStores(procIdx, ASTChildLeft(node), retSym, bodyNode, allFresh, allFoA, anyFresh, argIdx, budget);
+  ScanResultStores(procIdx, ASTChildRight(node), retSym, bodyNode, allFresh, allFoA, anyFresh, argIdx, budget);
 end;
 
 { OWNED OR BORROWED, read off the body rather than declared. A Pascal callee
@@ -1127,21 +1137,29 @@ end;
   Measured over lib/rtl + pylib at the time of writing: 107 methods with a
   class result, verdicts printed by PXXDBG=p.fresh. }
 procedure ClassifyProcResultFresh(procIdx, bodyNode: Integer);
-var allFresh: Boolean; argIdx, budget: Integer;
+var allFresh, allFoA, anyFresh: Boolean; argIdx, budget: Integer;
 begin
   ProcResultFresh[procIdx] := False;
   ProcResultArgIdx[procIdx] := -1;
+  ProcResultFreshOrArg[procIdx] := False;
   if (not Procs[procIdx].IsFunc) or (Procs[procIdx].RetType <> tyClass) or
      (Procs[procIdx].RetSymIdx < 0) or (bodyNode < 0) then Exit;
   allFresh := True;
+  allFoA := True;
+  anyFresh := False;
   argIdx := -1;
   budget := 200000;
-  ScanResultStores(procIdx, bodyNode, Procs[procIdx].RetSymIdx, bodyNode, allFresh, argIdx, budget);
-  if budget <= 0 then begin allFresh := False; argIdx := -2; end;
+  ScanResultStores(procIdx, bodyNode, Procs[procIdx].RetSymIdx, bodyNode, allFresh, allFoA, anyFresh, argIdx, budget);
+  if budget <= 0 then begin allFresh := False; allFoA := False; argIdx := -2; end;
   ProcResultFresh[procIdx] := allFresh;
   ProcResultArgIdx[procIdx] := argIdx;
+  ProcResultFreshOrArg[procIdx] := allFoA and anyFresh and (not allFresh) and (argIdx >= 0);
   if PxxDbgWants('p.fresh', '*') then
-    WriteLn('PXXDBG p.fresh ', Procs[procIdx].Name, ' ', allFresh, ' arg=', argIdx);
+  begin
+    Write('PXXDBG p.fresh ', Procs[procIdx].Name, ' ', allFresh, ' arg=', argIdx);
+    if ProcResultFreshOrArg[procIdx] then Write(' fresh-or-arg');
+    WriteLn;
+  end;
 end;
 
 function WrapManagementOps(procIdx, bodyNode: Integer): Integer;

@@ -446,6 +446,10 @@ function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
 function PXXObjAllocRaw2(size: NativeInt): Pointer;
 procedure PXXObjRetain(p: Pointer);
+{ The result of a Pascal call that returns EITHER one of its arguments OR a
+  fresh object (ProcResultFreshOrArg): retain it when it IS that argument, so
+  the caller owns exactly one reference either way. }
+function PXXObjRetainIfSame(r, a: Pointer): Pointer;
 procedure PXXObjRelease(p: Pointer);
 procedure PXXObjFree(p: Pointer);
 { Run the Pascal DESTRUCTOR of a class instance whose last NilPy reference just
@@ -3742,6 +3746,12 @@ begin
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1, size);
 {$endif}
+end;
+
+function PXXObjRetainIfSame(r, a: Pointer): Pointer;
+begin
+  if (r <> nil) and (r = a) then PXXObjRetain(r);
+  Result := r;
 end;
 
 procedure PXXObjRetain(p: Pointer);

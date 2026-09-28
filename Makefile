@@ -611,7 +611,7 @@ test-nilpy: $(COMPILER)
 	# Every one of those shapes called from NilPy: each is released exactly once
 	# (alive 0 after N discards and N rebinds), borrowed receivers survive, the
 	# census stays bounded, `keep` is the control, and heap-debug finds no
-	# double release. Mixed's fresh arm is excluded, a known leak (see the file).
+	# double release. Mixed's fresh arm is released at run time (see the file).
 	./$(COMPILER) -dPXX_ALLOC_CENSUS -Futest/nilpy_freshseam test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.npy $(TESTTMP)/test_nilpy_freshseam26
 	$(TESTTMP)/test_nilpy_freshseam26 2>/dev/null | diff -u test/test_nilpy_a_pascal_result_is_released_once_whatever_its_shape.expected -
 	tools/assert_no_leak.sh nilpy_freshseam 300 $(TESTTMP)/test_nilpy_freshseam26
