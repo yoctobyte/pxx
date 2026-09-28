@@ -422,6 +422,8 @@ its own verdict line: `./build.sh qemu-assert` where the project has it, and
 check on 2026-09-25 ran timer-s3, timer-c3, fs-c3 and gpio-c3 through the
 interactive `./build.sh qemu`, which exited without a verdict, so **those four
 were first actually judged with v441**. The table shows `qemu-assert` for them.
+On 2026-09-28 all 13 passed again with pin v448 (sha256 `b2b325036c3b`), in a
+fresh clone at `6b34caaf23`, run one at a time with the commands in the table.
 These QEMU runs are separate from the board runs below. The C3 ones have
 since run on a physical board too; see [On a real ESP32-C3](#on-a-real-esp32-c3).
 The prerequisite is the ESP-IDF toolchain

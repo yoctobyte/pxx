@@ -17,7 +17,12 @@ prints on a PC. On 2026-09-28 both also ran on a real ESP32-C3 board (rev
 v0.4), built exactly as below with the compiler of tree `cdd6fd3c1f` (sha256
 `139494b2b863`), through `tools/esp_flash.sh --project`. The Python program's
 five lines matched its `main.expected`, and the Pascal program printed
-`crc8("123456789") = 244`. The board booted once in each run.
+`crc8("123456789") = 244`. The board booted once in each run. On 2026-09-28
+every command on this page was run again as written, with pin v448 (sha256
+`b2b325036c3b`) in a fresh clone at `6b34caaf23`: both projects built, the
+Python one passed `qemu-assert`, and the Pascal one printed the line above
+under QEMU through `tools/esp_run.sh`. That run found the QEMU command below
+failing with a relative compiler path; it now gives an absolute one.
 
 ## Nil Python calling a Pascal unit
 
@@ -75,7 +80,7 @@ cp -rL nilpy-c3 xpy-c3
 rm -rf xpy-c3/build xpy-c3/main/main.expected
 cp /path/to/main.npy /path/to/filters.pas xpy-c3/main/
 . ~/esp/esp-idf/export.sh
-xpy-c3/build.sh               # build only; the image was 1,418,624 bytes
+xpy-c3/build.sh               # build only; the image was 1,421,184 bytes (v448)
 ```
 
 With the program's expected output saved as `xpy-c3/main/main.expected`,
@@ -136,17 +141,21 @@ cp -rL hello-c3 xpas-c3
 rm -rf xpas-c3/build
 cp /path/to/main.pas /path/to/crc8.c /path/to/crc8.h xpas-c3/main/
 . ~/esp/esp-idf/export.sh
-xpas-c3/build.sh              # build only; the image was 187,376 bytes
+xpas-c3/build.sh              # build only; the image was 187,392 bytes (v448)
 ```
 
-To run it under QEMU instead, without a project of your own:
+To run it under QEMU instead, without a project of your own, from the
+repository root:
 
 ```sh
-ESP_RUN_PXX=stable_linux_amd64/default/pinned tools/esp_run.sh --chip esp32c3 /path/to/main.pas
+ESP_RUN_PXX=$PWD/stable_linux_amd64/default/pinned tools/esp_run.sh --chip esp32c3 /path/to/main.pas
 ```
 
 `tools/esp_run.sh` compiles with `compiler/pascal26` unless `ESP_RUN_PXX`
-names another compiler (not `PXX`), and prints which one it used.
+names another compiler (not `PXX`), and prints which one it used. The path
+must be absolute, because the script compiles from inside a staged ESP-IDF
+project: with a relative one it stops with `No such file or directory` and
+`compiling ... failed`.
 
 ## What this does not cover
 
