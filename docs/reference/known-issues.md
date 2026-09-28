@@ -534,6 +534,38 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   `SumV(MakeArr(n))`, called from Nil Python as `w.SumOfMake(4)`, prints
   `60` with v449.
 
+- **Nil Python on v449: a Pascal `array of T` result bound to a name could not
+  be passed to Pascal.** `a = d.MakeArr(4)`, then `d.SumV(a)`, `d.SumO(a)` or
+  `d.SumC(a)`, printed `60` each with v448, at module level and inside a def,
+  on x86-64 and i386. v449 refuses the binding with `"MakeArr" returns a
+  Pascal dynamic array, which NilPy cannot use as a Python value yet`. Fixed
+  after v449 (`a49f6f12c6`, in no pin yet): the later compiler prints `60` for
+  all three again, in both places and on both targets, and a def that reads a
+  module-level bound name (`def f(): return d.SumO(a)`) prints `60` too. A
+  census over 2000 trips binding two arrays each ends with `live=3`. Measured
+  on 2026-09-28 with v448 (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and the
+  compiler built at `328961e879` (`c19cc2d531e4`), on x86-64 and on i386 under
+  QEMU user mode, with the `dynarr` unit of `test/nilpy_dynarr/`. **On v449:**
+  pass the call inline, `d.SumV(d.MakeArr(4))`, which v449 refuses too (see
+  the row above), or leave the call to Pascal as that row says.
+
+- **Nil Python: a class attribute returned from a method or a def came back as
+  the wrong value.** With `class C:` holding `f = 2.5`, `s = "hi"`, `l = [1,
+  2]` and `n = None`, `return C.f` (directly, or through a local first) was
+  typed as the class. On x86-64 v449 printed `4612811918334230528` for `2.5`
+  (its IEEE bits), numbers for the string and the list, and `0` for `None`; on
+  i386, arm32 and hosted Xtensa (both ABIs) it refused the program, and so it
+  did as an ESP object for riscv32 and Xtensa. Fixed after v449 (`b1b51f5a0d`,
+  in no pin yet). Measured on 2026-09-28 with v449 (`0ded1e5d04c8`) and the
+  compiler built at `328961e879` (`c19cc2d531e4`): the later compiler prints
+  `2.5 hi [1, 2] None 2.5 hi`, as CPython does, on x86-64, i386, arm32, hosted
+  riscv32 and hosted Xtensa with both ABIs under QEMU user mode, and builds
+  the ESP objects; not measured on ESP silicon. `return type(self).k` is still
+  refused, with `Nil Python: expected newline after statement`. **On v449:**
+  read the attribute through the instance instead: `return self.f`
+  (directly, or through a local) prints `2.5 hi None` for the float, string
+  and `None` attributes with v449 on x86-64, i386 and arm32.
+
 - **Nil Python: a Pascal `var` or `out` object parameter lost the object when
   the name held `None`.** `o = None`, then `d.NewInto(o, 5)`, a Pascal
   procedure that creates an object into its `var` parameter, then `print(o)`
@@ -711,18 +743,22 @@ answer silently. (Measured with v425.)
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused with
   `shared-library output is x86-64 only`, as on i386.
-- **Nil Python: a Pascal `array of T` result bound to a name** is refused on
-  purpose: `a = d.MakeArr(4)` stops with `"MakeArr" returns a Pascal dynamic
-  array, which NilPy cannot use as a Python value yet: index the call
-  directly (MakeArr(...)[i]), or have the Pascal side return a list`. A Nil
-  Python list held in a name is not accepted by a Pascal array parameter
-  either (`x = [1, 2, 3]` then `d.SumO(x)`: `no overload of SumO matches
-  these arguments`). Write the call inline instead: `d.SumV(d.MakeArr(4))`
-  after v449, or `d.MakeArr(4)[3]` for one element. Measured on 2026-09-28 with v449 (`0ded1e5d04c8`) and with the compiler built at `f53fd89ef0` (`2dd7329329c8`), on x86-64 and on i386 under QEMU user mode, with the `dynarr` unit of `test/nilpy_dynarr/`. v448
-  compiled the bound form, and `a = d.MakeArr(4)` then `d.SumV(a)`,
-  `d.SumO(a)` and `d.SumC(a)` printed `60` each, at module level and inside
-  a def, on x86-64 and i386, so a program that did this on v448 needs the
-  inline spelling from v449 on.
+- **Nil Python: a name bound to a Pascal `array of T` result** can only be
+  passed whole to a Pascal array parameter. Everything else on it is refused,
+  on purpose, until a conversion to a list exists: `a[1]`, `len(a)`, `for x in
+  a`, `print(a)`, `b = a` and `return a` each stop with `"a" holds a Pascal
+  dynamic array, which NilPy cannot use as a Python value yet: it can only be
+  passed whole to a Pascal array param...`. v449 refused the binding itself
+  (see the row under Fixed since v441). A Nil Python list held in a name is
+  not accepted by a Pascal array parameter either (`x = [1, 2, 3]` then
+  `d.SumO(x)`: `no overload of SumO matches these arguments`). Inside a def,
+  `return d.SumV(a)` is refused with `Nil Python: annotate the type / too
+  dynamic` by v448, v449 and the later compiler; `t = d.SumV(a)` then `return
+  t` prints `60` with v448 and the later compiler. Measured on 2026-09-28 with
+  v448 (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and the compiler built at
+  `328961e879` (`c19cc2d531e4`), on x86-64 and on i386 under QEMU user mode,
+  with the `dynarr` unit of `test/nilpy_dynarr/`.
+
 
 ## Optimisation levels
 
