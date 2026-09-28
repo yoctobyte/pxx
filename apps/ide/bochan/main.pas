@@ -812,6 +812,33 @@ begin
   CheckTrue(e, 'sg wraps', Pos('sg dialout -c ', EspWrapSg('echo hi', True)) = 1);
   CheckStr(e, 'no sg, no wrapper', EspWrapSg('echo hi', False), 'echo hi');
 
+  { THE MONITOR READER MUST NOT SPLICE INTO OUR PIPE, and this is the only place
+    that can say so cheaply. `cat <port>` deadlocked the IDE for up to 4h36m:
+    uutils cat moves tty -> pipe with splice(), splice() into a pipe holds
+    pipe->mutex while it waits for source bytes, and pipe_read() takes that mutex
+    BEFORE it checks O_NONBLOCK -- so the reader sleeps in state D, unkillable,
+    until the board next speaks. The GUI smoke test cannot catch this (measured:
+    with cat put back it still passes, because a quiet board means the deadlocking
+    read is never reached), so what is guarded is the regression that would
+    actually happen: this line being edited back to a splicing reader.
+    bug-s-espide-auto-never-exits-after-build-flash }
+  CheckTrue(e, 'the monitor reads with dd, which does not splice',
+    Pos('exec dd if=', EspMonitorCmd('/dev/ttyUSB0', False)) > 0);
+  CheckTrue(e, 'the monitor does NOT read with cat, which splices',
+    Pos('cat ', EspMonitorCmd('/dev/ttyUSB0', False)) = 0);
+  CheckTrue(e, 'the monitor sets the line raw before reading it',
+    Pos('stty -F ', EspMonitorCmd('/dev/ttyUSB0', False)) = 1);
+  CheckTrue(e, 'the reader execs, so the pid we signal is the reader itself',
+    Pos('; exec ', EspMonitorCmd('/dev/ttyUSB0', False)) > 0);
+  { the port is a shell argument in a one-string command, so it must be quoted
+    in both places it appears -- stty's -F and dd's if= }
+  CheckTrue(e, 'a shell-hostile port name is quoted for stty and for dd',
+    Pos('stty -F ''/dev/tty;rm -rf x''', EspMonitorCmd('/dev/tty;rm -rf x', False)) = 1);
+  CheckTrue(e, 'and quoted for dd too',
+    Pos('if=''/dev/tty;rm -rf x''', EspMonitorCmd('/dev/tty;rm -rf x', False)) > 0);
+  CheckTrue(e, 'the monitor command goes through sg when asked',
+    Pos('sg dialout -c ', EspMonitorCmd('/dev/ttyUSB0', True)) = 1);
+
   { scenario: espproj — is ESP-IDF installed }
   writeln('-- espproj: ESP-IDF detection --');
   idf := EspDetectIdfIn('apps/ide/bochan/fixtures/fakeidf',

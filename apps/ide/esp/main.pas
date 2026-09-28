@@ -26,6 +26,11 @@ program espide;
   Serial ports need the dialout group. Flags:
     espide [folder]                 open folder (default examples/esp32)
     espide --gui-smoke              open, paint, quit (the suite runs it)
+    espide --gui-monitor-smoke --port <dev> <folder> <secs>
+                                    press Monitor, hold it <secs>, press Stop,
+                                    and assert control came back: the GUI half
+                                    of the hardware check, which --gui-smoke
+                                    cannot do because it starts no child
     espide --auto <project> [secs]  detect, build+flash, monitor secs (10),
                                     print the log to stdout, exit 0 on a
                                     flashed board: the hardware check. }
@@ -746,27 +751,11 @@ begin
   StopChild;
   MonitorPort := port;
   AddLog('--- serial ' + port + ' (115200) ---' + #10);
-  { dd, NOT cat, AND THE REASON IS A DEADLOCK RATHER THAN A PREFERENCE.
-    `cat <port>` wedged this monitor for anything from 45 s to 4h36m
-    (bug-s-espide-auto-never-exits-after-build-flash). /bin/cat on plexus is
-    uutils coreutils 0.8.0, which moves tty -> pipe with
-    splice(tty, NULL, pipe, NULL, 1MB, 0). splice() into a pipe takes
-    pipe->mutex and HOLDS IT while it waits for bytes from the source, so a
-    quiet board parks cat inside splice holding the lock. pipe_read() takes the
-    same mutex BEFORE it looks at O_NONBLOCK -- so our non-blocking fd buys
-    nothing -- and espide slept in state D (uninterruptible: SIGTERM will not
-    end it) with zero CPU until the board next said something. The kernel says
-    it plainly: "INFO: task espide is blocked on a mutex likely owned by task
-    cat". dd uses read/write and never splices (measured: 0 splice calls on both
-    the uutils and GNU flavours), so the lock is only ever held across a memcpy.
-    THE INVARIANT, for whoever edits this line next: the monitor child must not
-    splice into our pipe. There is no defence on the reader's side -- a D-state
-    read cannot be interrupted from userspace -- so it has to be avoided here. }
-  if StreamStart(Proc, '/bin/bash', ['-c',
-       EspWrapSg('stty -F ' + EspShellQuote(port) +
-                 ' 115200 cs8 -cstopb -parenb -echo raw || exit 2; ' +
-                 'exec dd if=' + EspShellQuote(port) +
-                 ' bs=512 status=none', UseSg), 'sh']) then
+  { The command, and the reason it is not built here, live in espproj:
+    EspMonitorCmd carries the invariant that the reader must not splice into our
+    pipe, and bochan guards it without a board or a display.
+    bug-s-espide-auto-never-exits-after-build-flash }
+  if StreamStart(Proc, '/bin/bash', ['-c', EspMonitorCmd(port, UseSg), 'sh']) then
   begin
     Mode := mMonitor;
     { the clock --auto's monitor window is measured against, started here rather
@@ -1300,6 +1289,30 @@ begin
   GuiAutoQuit := 0;
 end;
 
+{ --gui-monitor-smoke PRESSES THE BUTTONS THE OWNER PRESSES.
+
+  --gui-smoke opens the window, paints it and quits. It never starts a child, so
+  it could not have caught the monitor hang, and the Stop button's path had never
+  been driven under Xvfb at all -- the one control whose whole job is to give
+  control back. These call the real OnMonitor/OnStop handlers, the same ones the
+  toolbar buttons are wired to at f.MonBtn/f.StopBtn, so what is tested is the
+  shipped path and not a model of it.
+
+  If either handler fails to return, the mode never reaches its assertions and
+  the harness's own timeout reports it -- which is the correct outcome for a
+  hang, and better than a pass. }
+function GuiSmokePressMonitor(data: Pointer): Integer; cdecl;
+begin
+  EspForm.OnMonitor(nil);
+  GuiSmokePressMonitor := 0;
+end;
+
+function GuiSmokePressStop(data: Pointer): Integer; cdecl;
+begin
+  EspForm.OnStop(nil);
+  GuiSmokePressStop := 0;
+end;
+
 { A toolbar button. NO SetBounds: a toolbar places its own items, and a size
   request on one becomes a width the row -- and therefore the window -- cannot
   go below, which is the floor this toolbar exists to remove. }
@@ -1314,7 +1327,7 @@ end;
 
 var
   arg, start, a: AnsiString;
-  ai, pos1: Integer;
+  ai, pos1, smokeRc: Integer;
   f: TEspForm;
 
 begin
@@ -1349,7 +1362,7 @@ begin
     end
     else if a = '--auto' then
       f.AutoRun := True
-    else if a = '--gui-smoke' then
+    else if (a = '--gui-smoke') or (a = '--gui-monitor-smoke') then
       arg := a
     else
     begin
@@ -1501,6 +1514,46 @@ begin
       Halt(1);
     end;
     writeln('GUI SMOKE OK');
+  end
+  else if arg = '--gui-monitor-smoke' then
+  begin
+    { The port must be the pinned one and nothing else: OnMonitor falls back to
+      "the only attached board" when MonitorPort is empty, and on a host with
+      three boards that is somebody else's. }
+    if f.AutoPort <> '' then f.MonitorPort := f.AutoPort;
+    g_timeout_add(600, @GuiSmokePressMonitor, nil);
+    g_timeout_add(600 + f.AutoSecs * 1000, @GuiSmokePressStop, nil);
+    g_timeout_add(600 + f.AutoSecs * 1000 + 1200, @GuiAutoQuit, nil);
+    Application.Run;
+    smokeRc := 0;
+    { Every check reports rather than the first one winning, because "Stop left
+      the child running" and "the monitor never opened" are different bugs and
+      seeing both at once is worth more than seeing the earlier one. }
+    if f.Proc.Running then
+    begin
+      writeln('GUI MONITOR SMOKE FAIL: Stop returned but left the child running');
+      smokeRc := 1;
+    end;
+    if f.Mode <> mIdle then
+    begin
+      writeln('GUI MONITOR SMOKE FAIL: mode is not idle after Stop');
+      smokeRc := 1;
+    end;
+    if Pos('--- serial ', f.LogText) = 0 then
+    begin
+      writeln('GUI MONITOR SMOKE FAIL: the monitor never opened the port');
+      smokeRc := 1;
+    end;
+    if Pos('--- stopped ---', f.LogText) = 0 then
+    begin
+      writeln('GUI MONITOR SMOKE FAIL: Stop did not log that it stopped');
+      smokeRc := 1;
+    end;
+    if smokeRc = 0 then
+      writeln('GUI MONITOR SMOKE OK: pressed Monitor, held it ', f.AutoSecs,
+              ' s, pressed Stop, control came back (log ',
+              Length(f.LogText), ' bytes)');
+    Halt(smokeRc);
   end
   else if f.AutoRun then
   begin

@@ -75,6 +75,35 @@ board wedges ran on.
 The reader used was a ~90-line program over `garin/runner`'s real `StreamStart`
 /`StreamPoll`, so it exercised the shipped code path, not a model of it.
 
+## What guards this, and what cannot
+
+The invariant now lives in code rather than in a comment:
+`EspMonitorCmd(port, useSg)` in `apps/ide/garin/espproj.pas` builds the monitor
+command, `StartMonitor` calls it, and bochan checks it without a board or a
+display (7 rows: reads with `dd`, does **not** read with `cat`, sets the line raw
+first, `exec`s so the pid we signal is the reader itself, quotes a
+shell-hostile port for both `stty -F` and `dd if=`, and goes through `sg` when
+asked). Mutating `dd` back to `cat` fails those rows.
+
+**Two things that do NOT guard it, both measured rather than assumed:**
+
+- **The GUI smoke test cannot catch this.** A new `--gui-monitor-smoke` mode
+  presses the real `OnMonitor` and `OnStop` handlers under Xvfb and asserts
+  control came back; it passes on the fix. But with `cat` put back it **also
+  passes** — because the wedge needs bytes sitting unread in the pipe when the
+  source falls silent, and a quiet board means `poll` reports nothing ready, so
+  the deadlocking read is never reached. The mode is worth having (it is the only
+  thing that drives the Stop button at all, which `--gui-smoke` never did, since
+  that only opens, paints and quits) but it is **not** a regression guard for
+  this bug, and the comment on it says so.
+- **A FIFO does not reproduce it; the source must be a tty.** `cat <fifo>` with
+  one burst then silence gave 50 ticks of progress and state `S`. So the
+  reproducer cannot be written in shell alone — it needs a pty — which is why the
+  gate guards the command string instead of re-deriving the deadlock.
+
+So the regression that is actually guarded is the one that would actually happen:
+this line being edited back to a splicing reader.
+
 ## How it was finally localised, after five instruments failed
 
 Every **external** instrument failed, each for a reason worth not repeating:

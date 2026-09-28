@@ -180,6 +180,24 @@ function EspShellQuote(const s: AnsiString): AnsiString;
 { inner, wrapped in `sg dialout -c` when useSg. }
 function EspWrapSg(const inner: AnsiString; useSg: Boolean): AnsiString;
 
+{ THE SERIAL MONITOR'S COMMAND, here rather than inline in the face, so the one
+  property that matters about it can be tested without a board or a display.
+
+  THE INVARIANT: the reader must not splice into our pipe. `cat <port>` did, and
+  it deadlocked the IDE for up to 4h36m -- /bin/cat on plexus is uutils
+  coreutils, which moves tty -> pipe with splice(), and splice() into a pipe
+  holds pipe->mutex while it waits for source bytes. pipe_read() takes that same
+  mutex BEFORE it checks O_NONBLOCK, so the reading side cannot defend itself:
+  it sleeps in state D, where no signal reaches it, until the board next speaks.
+  dd uses read/write and never splices. bug-s-espide-auto-never-exits-after-build-flash.
+
+  The GUI smoke test cannot guard this -- measured: with `cat` put back it still
+  passes, because a quiet board means poll never reports data, so the read that
+  would deadlock is never reached. Reproducing it needs a pty that falls silent
+  with bytes still in the pipe. So what is guarded here is the thing that would
+  actually regress: someone editing this line back to a splicing reader. }
+function EspMonitorCmd(const port: AnsiString; useSg: Boolean): AnsiString;
+
 { ---- is ESP-IDF installed, and which version ---- }
 
 type
@@ -973,6 +991,18 @@ begin
     EspWrapSg := 'sg dialout -c ' + EspShellQuote(inner)
   else
     EspWrapSg := inner;
+end;
+
+function EspMonitorCmd(const port: AnsiString; useSg: Boolean): AnsiString;
+begin
+  { stty first, so the line is raw before a byte is read; `exec` so the reader
+    replaces the shell and the pid we later signal is the reader itself.
+    dd, NOT cat -- see the interface: cat splices, and a splicing reader
+    deadlocks whoever reads our end of the pipe. }
+  EspMonitorCmd := EspWrapSg(
+    'stty -F ' + EspShellQuote(port) +
+    ' 115200 cs8 -cstopb -parenb -echo raw || exit 2; ' +
+    'exec dd if=' + EspShellQuote(port) + ' bs=512 status=none', useSg);
 end;
 
 { ---- ESP-IDF ---- }
