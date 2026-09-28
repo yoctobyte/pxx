@@ -219,6 +219,13 @@ any pin. The C rows were checked against GCC's output and the Pascal rows
 against FPC 3.2.2. The Nil Python rows were checked against CPython 3 and say
 what they were measured with.
 
+Pin v448's own binary (`b2b325036c3b`) was graded on borg's native test tier
+on 2026-09-28 at `7abbe26f4e`, with no skipped or flaky rows. One row is
+still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
+`wait4`'s rusage untouched
+(`devdocs/progress/tstate/reports/20260928T053636Z-7abbe26-borg.md`).
+`-O3` was not part of that run.
+
 - **Pascal: comparing a LongWord with a signed value on 32-bit targets.** On
   i386, arm32 and riscv32, `c > i` with `c: LongWord = 3000000000` and
   `i: LongInt = -1` answered FALSE, and `$FFFFFFFF = -1` answered TRUE. A
@@ -425,6 +432,67 @@ what they were measured with.
   three print `ab XY a`, as CPython does. Wrong in v441 to v445; fixed in
   v446 (`d58437f7f6`).
 
+- **Nil Python: `re.findall` stopped at 4096 matches, silently.**
+  `len(re.findall("a", "a" * 5000))` answered 4096, and so did a 4,500-match
+  `"ab"` search; CPython answers 5000 and 4500. Measured on 2026-09-28: 4096
+  with pin v447 (`fad87004e4e8`) and its library, on x86-64; 5000 and 4500
+  with pin v448 (`b2b325036c3b`) and its library, on x86-64, i386, aarch64
+  and arm32 (QEMU user mode). Wrong in v441 to v447 (`2c3302f96e`).
+
+- **Nil Python: `re` asked for about 800 KB per call.** One `re.compile("a")`
+  and a `findall` allocated 820,384 bytes in all with pin v447 and 5,432 with
+  pin v448, on x86-64 (`tools/census_at_exit.sh`, 2026-09-28). On an
+  ESP32-C3 that was fatal: under QEMU, a program that compiles a pattern
+  printed `pxx: out of memory (ESP-IDF heap exhausted)` and rebooted in a loop
+  with v447, before its first line of output. With v448 the same program
+  (one `re.compile("a")`, then 20 of `re.compile("a+")` with a `findall`
+  each) printed its results and ended; free heap was 1,140 bytes lower after
+  the 20 compiles. On x86-64, 20 and 80 such compiles both leave 6 blocks
+  live at exit, so it does not grow per call. Measured under QEMU, not on a
+  board. Wrong in v441 to v447 (`2c3302f96e`).
+
+- **ESP32-S3: `import re` did not compile.** Any Nil Python program that
+  imports `re`, built for the S3's windowed Xtensa ABI as the S3 demos are,
+  stopped with `target xtensa windowed: aggregate-result frame offset out of
+  range` in `lib/rtl/regex.pas`. With pin v448 the same program builds
+  (`--target=xtensa --xtensa-abi=windowed --xtensa-long-calls`), and so does
+  the classic ESP32 build (`--target=esp32`), on 2026-09-28. On a physical
+  ESP32-S3 with the v448 binary, `compile`, `search`, `match`, `findall`,
+  `sub`/`subn`, `split`, `fullmatch`, `IGNORECASE`, `finditer` and the
+  pattern cache printed CPython's answers, and a 2,000-iteration heap soak
+  stayed flat at 84 to 88 bytes against a control that kept 647 bytes per
+  result (one boot; recorded in `devdocs/progress/LOGBOOK.md` by
+  `19f4728e10`). Wrong in v441 to v447 (`1c2fb47dd8`). The call0 ABI is
+  still refused; see [Refused, with a message](#refused-with-a-message).
+
+- **Nil Python: `m.start()` and `m.end()` with no argument did not compile.**
+  CPython reads them as group 0: `re.search("b+", "abbbc")` gives `1 4`.
+  pxx stopped with `start() requires 1 argument(s), none given`. Measured on
+  2026-09-28 with pin v448 on x86-64. Wrong in v441 to v448; fixed after
+  v448 (`19f4728e10`), in no pin yet. **On v448:** write `m.start(0)` and
+  `m.end(0)`.
+
+- **TLS: a CA file that does not load was accepted.**
+  `OpenSslTlsRegisterEx(True, '/nonexistent/ca.pem')` answered `True`, and
+  so did a file that is not a certificate, so a mistyped private-CA path
+  looked installed. Only the system store was used. Measured on 2026-09-28,
+  built with `-dPXX_DYNLIB_LIBC` against the system libssl: `True` for both
+  with pin v447, `False` for both with pin v448, on x86-64 and on i386 (QEMU
+  user mode). With no CA file it answers `True` on both. On i386 v447 also
+  crashed: the HTTPS example on
+  [the networking page](../library/networking.md#openssl-backend)
+  segfaulted, and with v448 it prints `status 200`. Wrong in v441 to v447
+  (`9df5de0690`).
+
+- **Pascal and Nil Python: a Pascal result that is `Self` or a new object
+  leaked.** A method like `if V > 0 then Exit(Self); Result := TA.Create(1)`,
+  called from Nil Python, was read as borrowed, so every new object it made
+  was kept. Measured on 2026-09-28 with 500 calls whose results are
+  discarded and 500 that rebind a name, inside a function: 500 objects still
+  alive after the function returned with pin v447 (x86-64), 0 with pin v448
+  on x86-64, i386 and arm32 (QEMU user mode). Wrong in v441 to v447
+  (`180411ab1e`).
+
 ## Fixed in this release
 
 These were wrong in the earlier draft pin v425 and are fixed in v441.
@@ -475,6 +543,14 @@ answer silently. (Measured with v425.)
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused with
   `shared-library output is x86-64 only`, as on i386.
+- **Nil Python for Xtensa with the call0 ABI.** Every Nil Python program,
+  even `x = 1` and `print(x)`, is refused when built with
+  `--target=xtensa --xtensa-abi=call0`: `target xtensa: addi immediate
+  displacement 128 is outside the encodable range -128..127`, in the
+  `builtin/pyeval.pas` that the compiler appends. Measured on 2026-09-28 with
+  pins v447 and v448. The ESP32-S3 and classic ESP32 builds use the windowed
+  ABI and are not affected. **Workaround:** build with
+  `--xtensa-abi=windowed`, as the S3 demos do.
 
 ## Optimisation levels
 
