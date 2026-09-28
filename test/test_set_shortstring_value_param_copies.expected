@@ -1,0 +1,14 @@
+set value  : ok
+str20 value: orig
+short value: orig
+rec of str : orig
+record     : 1
+fixed array: 1
+variant    : 1
+var set    : ok
+var str20  : changed
+const set  : TRUE
+const str  : 4
+forwarded  : orig
+after outer: orig
+SET SHORTSTRING VALUE PARAM OK

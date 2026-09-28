@@ -8934,6 +8934,18 @@ test-threads: $(COMPILER)
 	./$(COMPILER) test/test_set_shortstring_value_param_copies.pas $(TESTTMP)/test_ssvp26
 	tools/expect_same.sh test_ssvp26.1 "$$($(TESTTMP)/test_ssvp26 | tail -1)" "SET SHORTSTRING VALUE PARAM OK"
 	tools/expect_same.sh test_ssvp26.2 "$$($(TESTTMP)/test_ssvp26 | head -1)" "set value  : ok"
+	# ...and CROSS, WHOLE output (.expected is FPC 3.2.2's): the two rows above
+	# read the first and last line only, and riscv32's `var s: string[20]` store
+	# wrote over the callee's own pointer cell -- `var str20 : orig`, in the
+	# middle. bug-a-riscv32-a-frozen-string-store-to-a-var-parameter-misses-the-caller
+	./$(COMPILER) --target=i386 test/test_set_shortstring_value_param_copies.pas $(TESTTMP)/test_ssvp26_i386
+	tools/expect_same.sh i386/test_ssvp26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_ssvp26_i386)" "$$(cat test/test_set_shortstring_value_param_copies.expected)"
+	./$(COMPILER) --target=aarch64 test/test_set_shortstring_value_param_copies.pas $(TESTTMP)/test_ssvp26_aarch64
+	tools/expect_same.sh aarch64/test_ssvp26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_ssvp26_aarch64)" "$$(cat test/test_set_shortstring_value_param_copies.expected)"
+	./$(COMPILER) --target=arm32 test/test_set_shortstring_value_param_copies.pas $(TESTTMP)/test_ssvp26_arm32
+	tools/expect_same.sh arm32/test_ssvp26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_ssvp26_arm32)" "$$(cat test/test_set_shortstring_value_param_copies.expected)"
+	./$(COMPILER) --target=riscv32 test/test_set_shortstring_value_param_copies.pas $(TESTTMP)/test_ssvp26_riscv32
+	tools/expect_same.sh riscv32/test_ssvp26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_ssvp26_riscv32)" "$$(cat test/test_set_shortstring_value_param_copies.expected)"
 	tools/expect_same.sh test_ssvp26.3 "$$($(TESTTMP)/test_ssvp26 | head -2 | tail -1)" "str20 value: orig"
 	tools/expect_same.sh test_ssvp26.4 "$$($(TESTTMP)/test_ssvp26 | head -12 | tail -1)" "forwarded  : orig"
 	# 64-bit named constants (were declared tyInteger -> truncated on 32-bit

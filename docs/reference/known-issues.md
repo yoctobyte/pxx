@@ -202,6 +202,9 @@ v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
   `4294967297 in [4294967297]` answered FALSE. They now answer as on x86-64.
   FPC rejects such items, and pxx warns about them. Wrong in v441 to v446.
 
+- **riscv32: assigning to a `var s: string[N]` parameter did not reach the
+  caller.** The caller kept its old value. Wrong in v441 to v446.
+
 - **arm32: a Pascal callback called from C could crash the C caller.** A
   routine passed to libc's `qsort` returned with the registers the ARM ABI
   says it must preserve (r4 to r10) overwritten. Sorting 3 or more elements

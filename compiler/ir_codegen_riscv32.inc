@@ -491,6 +491,14 @@ begin
   IREmitNodeRISCV32(valNode);                  { a0 = source }
   rv32_addi(reg_t2, reg_a0, 0);                { t2 = src }
   EmitSlotAddrRISCV32(reg_t1, si);             { t1 = dst buffer }
+  { ...or, for a `var`/`out` string[N] PARAMETER, the cell holding the CALLER's
+    buffer address: `s := 'changed'` inside `procedure P(var s: TStr20)` wrote
+    over the pointer in the callee's own frame, so the caller kept 'orig' and
+    the next read of s went through a clobbered pointer (riscv32 only; the
+    other backends' by-ref arms already follow the cell).
+    bug-a-riscv32-a-frozen-string-store-to-a-var-parameter-misses-the-caller }
+  if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+    rv32_lw(reg_t1, reg_t1, 0);                { t1 = &caller buffer }
   srcTk := IntToTypeKind(IRTk[valNode]);
 
   if srcTk = tyChar then
