@@ -124,32 +124,97 @@ fixedpoint() {     # self-host from the PINNED seed — DELEGATED, not re-implem
 # it loses the ability to catch a genuinely contaminated binary — which is the
 # entire point of the anti-Thompson check.
 stale_binary_hint() {
-  local newest binmt
+  # PRINT ONLY. This is called as `[ "$rc" = 0 ] || stale_binary_hint` with
+  # `return "$rc"` after it, so it cannot influence the verdict, and it must not
+  # try to: gate.sh must NOT rebuild before comparing, or it loses the ability to
+  # catch a genuinely contaminated binary.
+  local stamp=compiler/.pascal26.fixedpoint
+  local stampsrc stampbin cursrc curbin newest binmt
+
+  # EXACT PATH, when the self-host stamp is readable. The stamp records the
+  # sha256 of the binary it produced AND the srchash of the sources it was built
+  # from, so staleness is decidable rather than guessed.
+  #
+  # WHY THIS REPLACED AN MTIME COMPARISON, measured 2026-09-28: the old check was
+  #   git log -1 --format=%ct -- compiler/   vs   stat -c %Y compiler/pascal26
+  # i.e. a COMMIT TIMESTAMP against a FILE MTIME, and it is blind to the ordinary
+  # case with several seats on a moving master. A sibling commits a compiler/
+  # change at 20:10, you build at 20:15, you rebase forward at 20:20 and your
+  # sources gain their change: your binary is stale in content while newer in
+  # mtime, so binmt > newest and the hint stays silent. Two of five fixedpoint
+  # FAILs on plexus carried no hint for exactly that reason.
+  if [ -r "$stamp" ]; then
+    stampsrc=$(sed -n 's/^srchash //p' "$stamp")
+    stampbin=$(sed -n 's/^sha256 //p' "$stamp")
+    curbin=$(sha256sum compiler/pascal26 2>/dev/null | cut -d' ' -f1)
+    cursrc=$(tools/compiler_srchash.sh 2>/dev/null)
+
+    if [ -n "$stampbin" ] && [ -n "$curbin" ] && [ "$stampbin" != "$curbin" ]; then
+      say "gate: NOTE compiler/pascal26 is NOT the binary its own stamp describes."
+      say "gate:      stamp sha256 $(printf '%.12s' "$stampbin")  on disk $(printf '%.12s' "$curbin")"
+      say "gate:      Something replaced the binary after the stamp was written --"
+      say "gate:      a \`cp\` of another compiler over it, or a build that did not"
+      say "gate:      update the stamp. This is EXACT, not a heuristic."
+      stale_binary_remedy
+      return 0
+    fi
+
+    if [ -n "$stampsrc" ] && [ -n "$cursrc" ] && [ "$stampsrc" != "$cursrc" ]; then
+      say "gate: NOTE STALE BINARY, exactly: compiler/pascal26 was built from"
+      say "gate:      DIFFERENT SOURCES than the tree now has."
+      say "gate:      stamp srchash $(printf '%.12s' "$stampsrc")  tree $(printf '%.12s' "$cursrc")"
+      say "gate:      ($(tools/compiler_srchash.sh --list 2>/dev/null | wc -l) source files hashed; stamp recorded $(sed -n 's/^srccount //p' "$stamp"))"
+      say "gate:      Unlike the mtime check this replaced, this is true regardless"
+      say "gate:      of WHEN the sibling committed -- a rebase forward after your"
+      say "gate:      build trips it, which is the case that used to go unreported."
+      say "gate:      IT STILL SAYS NOTHING ABOUT CONTENT: a comment-only change to"
+      say "gate:      compiler/ moves srchash while the binary stays byte-identical"
+      say "gate:      and entirely correct. Only a real recompute separates the two."
+      stale_binary_remedy
+      return 0
+    fi
+
+    if [ -n "$stampsrc" ] && [ -n "$cursrc" ]; then
+      say "gate: NOTE staleness is RULED OUT: the stamp says this binary was built"
+      say "gate:      from these exact sources (srchash $(printf '%.12s' "$cursrc")) and the"
+      say "gate:      binary on disk is the one it names. So the failure above is NOT"
+      say "gate:      a stale binary, and the remedy below will not help. Look at the"
+      say "gate:      failure itself."
+      return 0
+    fi
+  fi
+
+  # FALLBACK, only when there is no readable stamp: the old mtime heuristic.
   newest=$(git log -1 --format=%ct -- compiler/ 2>/dev/null) || return 0
   binmt=$(stat -c %Y compiler/pascal26 2>/dev/null) || return 0
   [ -n "$newest" ] && [ -n "$binmt" ] || return 0
   if [ "$binmt" -lt "$newest" ]; then
-    say "gate: NOTE compiler/pascal26 is OLDER than the last commit touching"
+    say "gate: NOTE no self-host stamp, so falling back to an MTIME comparison:"
+    say "gate:      compiler/pascal26 is OLDER than the last commit touching"
     say "gate:      compiler/ ($(git log -1 --format='%h %s' -- compiler/ | cut -c1-60))"
-    say "gate:      Likely a STALE BINARY, not a miscompile — a sibling landed a"
-    say "gate:      compiler change and this checkout has not rebuilt."
-    say "gate:      THIS IS AN MTIME COMPARISON AND SAYS NOTHING ABOUT CONTENT: a"
-    say "gate:      COMMENT-ONLY commit to compiler/ trips it while your binary is"
-    say "gate:      byte-identical and entirely correct (measured 2026-09-21, twice)."
-    say "gate:      Only a real recompute separates the two. Run"
-    say "gate:      'make compiler/pascal26' and look for 'converged after N round(s)'"
-    say "gate:      — a 'verified' line is the STAMP path and rebuilt nothing."
-    say "gate:      'verified' HERE IS EXPECTED AND FINE, and reads as a problem:"
-    say "gate:      the \$(COMPILER) recipe refuses (exit 1) unless the stamp was"
-    say "gate:      written for THESE sources AND names the binary on disk, so it"
-    say "gate:      cannot print 'verified' for a tree it never saw. Rebuilt"
-    say "gate:      nothing usually means THIS gate run's own testmgr step already"
-    say "gate:      rebuilt it. RE-GATE; do not rm the stamp. Measured 2026-09-21:"
-    say "gate:      a seat read 'verified' as the remedy silently no-opping, filed"
-    say "gate:      a closed bug as live, and nearly bought a forced recompute"
-    say "gate:      before every pin. What the verb does NOT tell you is whether"
-    say "gate:      the binary was proven when the FAILING gate ran — it wasn't."
+    say "gate:      Likely a STALE BINARY, not a miscompile. THIS SAYS NOTHING ABOUT"
+    say "gate:      CONTENT, and it is blind to a sibling commit that predates your"
+    say "gate:      build but reached your tree after it."
+    stale_binary_remedy
   fi
+}
+
+# The remedy text, shared by every branch above so it cannot drift between them.
+stale_binary_remedy() {
+  say "gate:      REMEDY: rebase first if you are behind, then run"
+  say "gate:      'make compiler/pascal26', then RE-GATE. Do not rm the stamp."
+  say "gate:      READ THE VERB: 'converged after N round(s)' is a real recompute."
+  say "gate:      'verified — N round(s) (stamp read back; sources match it)' is the"
+  say "gate:      STAMP path and rebuilt NOTHING, and that is EXPECTED and fine --"
+  say "gate:      the \$(COMPILER) recipe refuses unless the stamp was written for"
+  say "gate:      THESE sources and names the binary on disk, so it cannot print"
+  say "gate:      'verified' for a tree it never saw. Rebuilt nothing usually means"
+  say "gate:      THIS gate run's own testmgr step already rebuilt it, which is why"
+  say "gate:      the re-gate then passes with no action of yours."
+  say "gate:      What 'verified' does NOT tell you is whether the binary was proven"
+  say "gate:      when the FAILING gate ran — it wasn't. Measured 2026-09-21: a seat"
+  say "gate:      read 'verified' as the remedy silently no-opping, filed a closed"
+  say "gate:      bug as live, and nearly bought a forced recompute before every pin."
 }
 
 # The seam between the pinned binary's FROZEN builtin RTL and the repo's LIVE
