@@ -5618,3 +5618,87 @@ release-blocking, so both reproducer folders carry the capture instead.
 2026-09-28 | frankS | compiler/pasparser_expr.inc (Copy/UpCase/Space arms), compiler/pasparser_stmt.inc (Delete/Insert RMW temp), test/test_string_rtl_in_frozen_mode.pas (new) | WRONG VALUE under -uPXX_MANAGED_STRING (frozen strings; found by frankd-90, v448 and HEAD): `s := Copy('abcdef', 1, 3)` gave 0 and [], and UpCase(string)/Space gave header bytes. Under -u the builtin is compiled frozen, so its helpers return a frozen [len8][chars] string through a hidden destination, and the intrinsic arms tagged the call tyAnsiString -- the store read that buffer as a managed handle. Now tagged with the helper's own RetType. Also Delete/Insert on a frozen variable changed nothing: the read-modify-write temp was a managed AnsiString handed to the frozen helper's `var` param; the temp now takes the helper's parameter kind. One fpc .expected, managed and frozen, x86-64 and i386. No shipped profile defaults to frozen (paslexer defines PXX_MANAGED_STRING unconditionally); it is opt-in, recommended by docs/targets/esp32.md:233. ClassName/UnitName checked, already right. Seen, not fixed: bare LowerCase and StringOfChar need `uses sysutils` in PXX; FPC's System has both.
 2026-09-28 | frankS | compiler/pyparser.inc (PyRefuseDynArrayResult, PyDynArrBindAhead, PyCheckDynArrBoundRead), compiler/defs.inc, test/test_nilpy_a_bound_pascal_dynamic_array_passes_to_pascal_array_params.npy, _len_/_for_ fail rows, test/test_nilpy_a_bound_dynamic_array_result_is_released.npy (new) | NILPY BOUND DYN ARRAY, regression from 9bd7f662e5 (frankuser/frankd-90): v448 compiled `a = MakeArr(4); SumV(a); SumO(a); SumC(a)` and printed 60 for each, FPC-equal, and 9bd7f662e5 refused it. The line above ("the bound form ... read wrong") was wrong about that shape: only the name's OTHER reads were garbage. `NAME = F(...)` as the whole statement is allowed again; the name may then only be passed whole to a Pascal array parameter (by value, open, const). a[i], len(a), `for x in a`, print(a), `b = a`, `return a`, and a def reading a module-level bound name are refused at compile time. FPC-equal on x86-64 and i386, module level and in a def, rebinding included; 2000 rebinding trips live=2 (bound 50), with a kept-list control at live=1958. Seen, not fixed, and present on v448 too: `return d.SumV(a)` inside that def is "annotate the type / too dynamic" (`t = d.SumV(a); return t` works).
 2026-09-28 | frankS | compiler/builtin/builtinentropy.pas (__pxxHwRandom64), test/test_hw_random_intrinsics.pas, tools/testmgr.py (HOST_CAPS) | SIGILL ON A CPU WITHOUT RDRAND (frankuser; the release rehearsal's plain `make test` on seven, a Westmere Xeon E5645): __pxxHwRandom64 executed RDRAND even after __pxxCpuHasHwRandom said FALSE. The test died right after "ok probe is stable", and any user program calling the draw directly would too (random.pas tier 1 asked the probe first and was safe). The draw now asks the cached probe and answers False with v=0. Nothing executes RDSEED; i386/arm/ESP take the non-x86-64 body, which answers False. Measured: on seven, the new binary gives 0/32 draws and 2/2 ok, and the old one gives SIGILL (rc 132); plexus 3/3; qemu-i386 2/2. The new `absent` argument forces the probe to "no" so hosts with RDRAND check it too: old builtin 1/2 FAIL (32 draws ran), new 2/2. testmgr's rdrand HOST_CAPS skip, which hid this, is removed (list kept, empty).
+
+## 2026-09-28 — feature-a-esp-math-errors-keep-the-device-running was finished on 2026-09-25 and nobody moved the file
+
+Re-verified every wired row of the ESP math-error decision and resolved the
+ticket. **No code changed. The finding is that there was nothing left to
+implement, and the ticket said otherwise for three days.** Its summary still
+read "OPEN: the census residue", which is what `next --track S` offers on.
+
+Rows, run singly rather than through `make test-esp-idf` (that target is a
+suite), compiler `0ded1e5d04c8`, ESP rows on QEMU for both chips:
+
+| row | c3 | s3 |
+|---|---|---|
+| `test_esp_div_by_zero_yields_zero.pas` | PASS | PASS |
+| `c_esp_div_by_zero_yields_zero.c` | PASS | PASS |
+| `test_esp_uncaught_exception_prints.pas` | PASS | PASS |
+| `test_nilpy_esp_math_errors_keep_running.npy` | PASS | PASS |
+
+Desktop control, x86-64, asserting the halt ESP deliberately does not do:
+`test_div_zero_re200` both rows give `Runtime error 200 (division by zero)` and
+`exit=200`, matching Makefile:16672-16673. Both behaviours are true in one tree
+at once, which is the decision working rather than a contradiction.
+
+Compiler identity, stated precisely because the binary moved twice while this
+was being written: every row above was measured on `0ded1e5d04c8`, a sha256
+prefix of the compiler BINARY (the same value `tools/esp_flash.sh` stamps into
+its verdict lines, and the same binary frankb-12's v449 silicon runs used), and
+that sha was computed at measurement time rather than inferred afterwards. Three
+compiler commits landed on origin later the same day (`13f122a0ef` frozen-mode
+string builtins, `a49f6f12c6`/`b1b51f5a0d` NilPy result typing and dynamic-array
+results), none of them in an integer div/mod or float path. The rows are NOT
+re-run for them, following the fleet practice of labelling a row with the
+compiler it was witnessed on rather than chasing every pin.
+
+**Why the ticket looked open when it was not.** Its OPEN section listed two
+census-residue items, and both had already left it:
+
+- `Trunc(1e30)` into a `LongInt` giving -1 is **not ESP-specific**. frankD
+  re-measured on v425, found desktop identical, and moved it to a by-design note
+  (`docs/reference/known-issues.md:733`) — but the ticket summary was not
+  updated, so it still advertised an ESP bug. I re-measured on desktop x86-64
+  rather than trusting the note: `1e30`→LongInt -1, →Int64 max; `-1e30`→LongInt
+  **0**, →Int64 min; nan→0 both; `1e30`→Word 65535, →ShortInt -1. The low bits
+  of the saturated 64-bit value at every width, so the note's mechanism holds and
+  not just its headline. Fixing it on ESP alone would have contradicted a
+  published by-design row and broken "desktop is untouched" — i.e. the stale
+  ticket text was an instruction to do the wrong thing.
+- The uncaught-exception ecall panic was fixed in `7eeb3d7552` with a guard on
+  both chips.
+
+So two seats could have spent a day each re-deriving closed work, which is the
+cost the "status = folder" rule exists to prevent and which a stale SUMMARY
+defeats even when the folder is right. The folder was `backlog-core` and the
+summary was the thing lying.
+
+### A desktop NilPy defect carried out of the ticket before it closed
+
+Measured 2026-09-24 and recorded only inside this ticket: on DESKTOP, `7 // b`
+with a runtime int gives Pascal's runtime error 200, **not**
+`ZeroDivisionError`, and `try/except ZeroDivisionError` cannot catch it. Only the
+literal `1 // 0` raises. Track N, nothing on ESP depends on it.
+
+It is written here because resolving the ticket would have buried it.
+`decide-int-div-zero-behavior-unification.md:174` says that desktop behaviour is
+"Tracked in feature-a-esp-math-errors-keep-the-device-running", which now points
+into `done/`, and line 111 of the same decision asserts "**NilPy is already
+decided and correct**: `7 // 0` raises `ZeroDivisionError`" — true only for a
+literal divisor, false for every runtime one. I have not edited the decision
+text; a DECIDED document's claim is the owner's to correct, and frankuser has it.
+
+No ticket filed, per the month's rule. Same shape as frankB's pointer of
+2026-08-31: the finding belonged to its ticket, the pattern did not, and a note
+left where nobody re-reads it is not tracking. The difference worth naming is
+that this one was about to be filed into `done/` by a tool doing exactly what it
+should.
+
+### Also still open and NOT this ticket's
+
+Whether an ESP program should stop or restart after an uncaught exception is
+undecided (`known-issues.md:684`); today it stops, and under QEMU on C3 the
+interrupt watchdog then reboots it. That is in tension with the owner's "we
+should not halt", so frankuser has put it to him. It does not block the math
+decision: on ESP a math error no longer raises at all, so a bad sensor value
+never reaches the halt path. The tension is about exceptions generally.
