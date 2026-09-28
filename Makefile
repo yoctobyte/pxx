@@ -13776,6 +13776,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_case_arm_temp_finalize.pas $(TESTTMP)/test_cat26
 	tools/expect_same.sh test_cat26 "$$($(TESTTMP)/test_cat26 | tail -1)" "sink=502445"
 	tools/assert_no_leak.sh case_arm_temp_finalize 50 $(TESTTMP)/test_cat26
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_a_const_by_ref_argument_does_not_clone_its_string.pas $(TESTTMP)/constrefarg26
+	tools/expect_same.sh constrefarg26 "$$($(TESTTMP)/constrefarg26 | grep -v '^pxx-census')" "$$(cat test/test_a_const_by_ref_argument_does_not_clone_its_string.expected)"
+	tools/assert_no_leak.sh const_by_ref_argument 20 $(TESTTMP)/constrefarg26
 	@shape=$$(PXXDBG=a.ir:Hot ./$(COMPILER) test/test_case_arm_finalize_shape.pas $(TESTTMP)/test_cafs26 2>&1 \
 	  | awk '/^[0-9]+: label /{L=NR} /^[0-9]+: copy_rec_managed/{C=NR} \
 	         END{ if (C==0) print "NO-FINALIZE-EMITTED"; else if (L==0) print "NO-LABEL"; \
@@ -32110,7 +32113,23 @@ test-wasm32: $(COMPILER)
 	 echo "$$out" | grep -q 'no OS to deliver a signal' \
 	   || { echo "FAIL: wasm32 refused SetSignalHandler for the wrong reason:"; echo "$$out"; exit 1; }; \
 	 echo "  sigpred: wasm32 refuses SetSignalHandler at compile time, with the reason"
-	@echo "wasm32: 53 rows green (46 default + 7 shortstring; 0 excluded)"
+	# LEAK ROWS. The per-trip leaks below were wasm32-only: the other six targets
+	# held flat while these grew with N (frankh-95's cross sweep, 2026-09-28).
+	# bug-a-wasm32-a-managed-record-result-orphans-the-destinations-old-value,
+	# bug-a-wasm32-string-literals-are-heap-copies-so-a-const-table-stays-live,
+	# bug-a-wasm32-a-const-by-ref-argument-clones-the-string-it-indexes
+	./$(COMPILER) --target=wasm32 -dPXX_ALLOC_CENSUS test/test_case_arm_temp_finalize.pas $(TESTTMP)/cat_wasm32
+	tools/expect_same.sh wasm32/test_cat "$$(tools/run_target.sh wasm32 $(TESTTMP)/cat_wasm32 | grep -v '^pxx-census' | tail -1)" "sink=502445"
+	tools/assert_no_leak.sh wasm32/case_arm_temp_finalize 50 tools/run_target.sh wasm32 $(TESTTMP)/cat_wasm32
+	./$(COMPILER) --target=wasm32 -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/irt_wasm32
+	tools/expect_same.sh wasm32/test_irt "$$(tools/run_target.sh wasm32 $(TESTTMP)/irt_wasm32 | grep -v '^pxx-census' | tail -1)" "sink=1003000"
+	tools/assert_no_leak.sh wasm32/interface_result_temp 50 tools/run_target.sh wasm32 $(TESTTMP)/irt_wasm32
+	./$(COMPILER) --target=wasm32 -dPXX_ALLOC_CENSUS test/test_b_json_calc_error_paths_free.pas $(TESTTMP)/jcerr_wasm32
+	tools/assert_no_leak.sh wasm32/json_calc_error_paths 64 tools/run_target.sh wasm32 $(TESTTMP)/jcerr_wasm32
+	./$(COMPILER) --target=wasm32 -dPXX_ALLOC_CENSUS test/test_a_const_by_ref_argument_does_not_clone_its_string.pas $(TESTTMP)/constrefarg_wasm32
+	tools/expect_same.sh wasm32/constrefarg "$$(tools/run_target.sh wasm32 $(TESTTMP)/constrefarg_wasm32 | grep -v '^pxx-census')" "$$(cat test/test_a_const_by_ref_argument_does_not_clone_its_string.expected)"
+	tools/assert_no_leak.sh wasm32/const_by_ref_argument 20 tools/run_target.sh wasm32 $(TESTTMP)/constrefarg_wasm32
+	@echo "wasm32: 57 rows green (46 default + 7 shortstring + 4 leak; 0 excluded)"
 test-xtensa: $(COMPILER)
 	# DISPOSE FINALIZES THE MANAGED POINTEE. It was FreeMem alone, so a record's
 	# string, a ^string, ^dynarray, ^interface and ^Variant all leaked their

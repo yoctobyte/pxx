@@ -56,6 +56,12 @@ var
   WasmLoweredCount  : Integer = 0;
   WasmBrokenNames   : AnsiString = '';
   WasmBrokenUnlisted: Integer = 0;   { broken bodies past the listing cap }
+  { The argument being walked binds a `const` BY-REFERENCE parameter (Move's
+    untyped source, say): an address, so InLValueWrite is set for it, but no
+    write -- WasmEmitIndex reads it to hand `s[i]`'s address without the
+    copy-on-write clone. Saved and restored with InLValueWrite at both
+    argument loops. }
+  WasmConstRefArg   : Boolean = False;
 { Every DISTINCT reason the body being lowered has refused for, LF-separated
   with a leading LF so a membership test is a substring test. `WasmBrokenReason`
   is the first of them and stays, because it is the one a body is named by.
@@ -1356,7 +1362,16 @@ begin
   if WasmBodyBroken then Exit;
   if isStr then
   begin
-    if savedLVW then
+    if savedLVW and WasmConstRefArg then
+      { `Move(s[i], c, 1)`: Move's source is `const` and untyped, so this is
+        an address the callee only READS. Cloning here unshared a string that
+        is never written, and published the clone into a slot nobody
+        releases -- a const parameter's -- so sysutils' Copy (whose body is
+        exactly that Move) leaked one block per call on a shared or static
+        source. The base is still the slot address, as below; load it.
+        bug-a-wasm32-a-const-by-ref-argument-clones-the-string-it-indexes }
+      WasmMemOp($28, 'i32.load', 2, 0)
+    else if savedLVW then
     begin
       { The base is the slot address in write position for BOTH shapes: IR_LEA
         answers slot-address under the flag, and a FIELD/INDEX base is a slot
@@ -4055,7 +4070,7 @@ end;
 
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
 var p, argNode, i, nParams, impIdx: Integer; pvt: Byte;
-    isInstr: Boolean; instrOp: Byte; savedLVW: Boolean;
+    isInstr: Boolean; instrOp: Byte; savedLVW, savedCRA: Boolean;
     vaFirst, vaScr, vaTotal: Integer; isVariadic: Boolean;
 begin
   p := IRA[node];
@@ -4166,9 +4181,13 @@ begin
       which are reads and must keep loading.
       bug-wasm-hosted-compiler-faults-on-a-garbage-string-handle-in-the-unit-resolver }
     savedLVW := InLValueWrite;
+    savedCRA := WasmConstRefArg;
     InLValueWrite := Procs[p].Params[i].IsRef;
+    WasmConstRefArg := InLValueWrite and (i < MAX_PROC_PARAMS) and
+                       ProcParamIsConst[p * MAX_PROC_PARAMS + i];
     WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + Procs[p].Name);
     InLValueWrite := savedLVW;
+    WasmConstRefArg := savedCRA;
     Inc(i);
     argNode := IRB[argNode];
   end;
@@ -4300,7 +4319,7 @@ end;
   which wasm reports at the CALLER. }
 function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
                          const what: AnsiString): Boolean;
-var argNode, i, nParams: Integer; pvt: Byte; savedLVW: Boolean;
+var argNode, i, nParams: Integer; pvt: Byte; savedLVW, savedCRA: Boolean;
 begin
   WasmEmitIndArgs := False;
   nParams := Procs[sigProc].ParamCount;
@@ -4326,9 +4345,13 @@ begin
       alone, so leaving it out would fix `Outer(p)` and leave `p.Method(q)`
       broken in exactly the way that is hardest to attribute. }
     savedLVW := InLValueWrite;
+    savedCRA := WasmConstRefArg;
     InLValueWrite := Procs[sigProc].Params[i].IsRef;
+    WasmConstRefArg := InLValueWrite and (i < MAX_PROC_PARAMS) and
+                       ProcParamIsConst[sigProc * MAX_PROC_PARAMS + i];
     WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + what);
     InLValueWrite := savedLVW;
+    WasmConstRefArg := savedCRA;
     Inc(i);
     argNode := IRB[argNode];
   end;
@@ -6177,6 +6200,23 @@ begin
       chars start at +8 and the length is known here without a load. }
     sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
     si := InternStr(sVal);
+    { A non-empty literal IS a managed string already: emit.inc lays every
+      literal down with a full header and MSTR_STATIC_RC, and the runtime's
+      retain/release leave such a block alone -- so the handle is its address,
+      with no allocation and no retain (EmitStaticLitHandle's rule on the
+      register backends). The heap copy this made instead was not only cost:
+      a typed-const `array of AnsiString` is built by startup code on this
+      target, so pylib's 256-entry PyChar1Tab became 249 heap blocks alive
+      at exit in every program that links pylib -- the residue its own comment
+      says a heap table produces ("live=262 against a threshold of 64"), and
+      json_calc_error_paths' leak row read 265 on wasm32 for exactly that.
+      bug-a-wasm32-string-literals-are-heap-copies-so-a-const-table-stays-live }
+    if (Length(sVal) > 0) or isNilPy then
+    begin
+      WasmDataAddr(Strs[si].Offset + 8);
+      WasmEmitOwnedStr := True;
+      Exit;
+    end;
     WasmI32Const(Length(sVal));
     WasmDataAddr(Strs[si].Offset);
     WasmI32Const(8); WasmOp($6A, 'i32.add');
@@ -7429,7 +7469,7 @@ var
   i, sigIdx, nParams, retSym, psym, pvtI: Integer;
   pvt, resVt: Byte;
   rtk: TTypeKind;
-  nRes, mvHelper: Integer;
+  nRes, mvHelper, rrHelper: Integer;
   nm: AnsiString;
   resumed: Boolean;
 begin
@@ -7699,6 +7739,36 @@ begin
     overwritten it. }
   if (nRes = 1) and (retSym >= 0) and (WasmRetDestLocal >= 0) then
   begin
+    { A REUSED destination still holds the previous value's managed handles;
+      release them before the raw copy orphans them -- the step every native
+      epilogue takes (symtab's EmitProcEpilog) and this one did not. `r :=
+      MkR(i)` in a loop, or a bare `MkR(i);` whose scratch temp is reused per
+      trip, leaked one string per call on wasm32 only (live 398 of 400 trips;
+      the other six targets 3). Interface members first, as everywhere.
+      bug-a-wasm32-a-managed-record-result-orphans-the-destinations-old-value }
+    if (Syms[retSym].TypeKind = tyRecord) and not Syms[retSym].IsArray and
+       RecordHasManagedFields(SymTR[retSym].RecId) then
+    begin
+      if RecordHasComIntfFields(SymTR[retSym].RecId) then
+      begin
+        rrHelper := WasmWriteHelper('PXXRecordReleaseIntf');
+        if rrHelper >= 0 then
+        begin
+          WasmLocalGet(WasmRetDestLocal);
+          WasmRecDescAddr(SymTR[retSym].RecId);
+          if not WasmBodyBroken then
+            WasmCall(WasmSlotForProc(rrHelper), 'PXXRecordReleaseIntf');
+        end;
+      end;
+      rrHelper := WasmWriteHelper('PXXRecordRelease');
+      if rrHelper >= 0 then
+      begin
+        WasmLocalGet(WasmRetDestLocal);
+        WasmRecDescAddr(SymTR[retSym].RecId);
+        if not WasmBodyBroken then
+          WasmCall(WasmSlotForProc(rrHelper), 'PXXRecordRelease');
+      end;
+    end;
     mvHelper := WasmWriteHelper('PXXMemMove');
     if mvHelper >= 0 then
     begin
