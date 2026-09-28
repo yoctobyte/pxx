@@ -1,0 +1,2 @@
+# See nilpy_module_scope_mod.py: the same statements, imported.
+import nilpy_module_scope_mod

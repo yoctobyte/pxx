@@ -39117,8 +39117,8 @@ begin
 end;
 
 function PyShellForDefTok(const nm: AnsiString; tok: Integer): Integer;
-{ The main-program Proc PyRegisterDefShells registered for the def standing at
-  token `tok`. There is at most one: the pre-pass visits each module-level def
+{ The Proc PyRegisterDefShells registered for the def standing at token `tok`,
+  in the main program or in the imported module being compiled (PyShadowDeclHere). There is at most one: the pre-pass visits each module-level def
   exactly once and stamps ProcPyDefTok with the def token it stood on, and
   PyParseDef is entered with the same token as defTok0.
 
@@ -39135,7 +39135,7 @@ begin
   i := ProcChainHead(nm);
   while i >= 0 do
   begin
-    if (ProcUnitIdx[i] = -1) and (Procs[i].Name = nm) and
+    if PyShadowDeclHere(i) and (Procs[i].Name = nm) and
        (ProcPyDefTok[i] = tok + 1) then
     begin
       Result := i;
@@ -55257,6 +55257,27 @@ begin
           node := PyMakeDynAttrSet(node, fieldName, CurASTNode);
           tk := tyUnknown; Result := node; Exit;
         end;
+        { ...and `v._p += 5` is set(v, get(v) OP 5), as the class-typed arm
+          does. Without it the read below parsed, the store was dropped and the
+          statement did nothing: `v._p = 10; v._p += 5` left 10, silently. A
+          receiver is a Variant here whenever its type is not pinned -- an
+          unannotated param, or any param of a def in an imported module.
+          bug-nilpy-augmented-assign-to-a-dynamic-attr-of-a-variant-is-dropped }
+        if PyAugBinTok(CurTok.Kind) <> tkEOF then
+        begin
+          fldSigPi := Ord(PyAugBinTok(CurTok.Kind));
+          Next;
+          PyParseBoolExpr;
+          callIndNode := AllocNode(AN_BINOP);
+          ASTIVal[callIndNode] := fldSigPi;
+          ASTLeft[callIndNode] := PyMakeDynAttrGet(node, fieldName);
+          ASTRight[callIndNode] := CurASTNode;
+          ASTTk[callIndNode] := Ord(tyVariant);
+          if PyAugMarkedTok(TTokenKind(fldSigPi)) then
+            ASTSLen[callIndNode] := PY_BINOP_AUGMENTED;
+          node := PyMakeDynAttrSet(node, fieldName, callIndNode);
+          tk := tyUnknown; Result := node; Exit;
+        end;
         node := PyMakeDynAttrGet(node, fieldName);
         tk := tyVariant; recName := REC_NONE;
         Continue;
@@ -61334,7 +61355,7 @@ begin
 
       pyLateDefPi := -1;
       if (qUnit < 0) and (procIdx >= 0) and
-         (ProcUnitIdx[procIdx] = -1) and (not PyDefBoundHere(procIdx)) and
+         PyShadowDeclHere(procIdx) and (not PyDefBoundHere(procIdx)) and
          (not PyUserShadowsProc(name)) then
       begin
         pyLateDefPi := procIdx;

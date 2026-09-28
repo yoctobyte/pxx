@@ -13130,7 +13130,7 @@ begin
   i := ProcChainHead(Procs[pi].Name);
   while i >= 0 do
   begin
-    if (i <> pi) and (ProcUnitIdx[i] = -1) and (ProcPyDefTok[i] > ProcPyDefTok[pi]) and
+    if (i <> pi) and (ProcUnitIdx[i] = ProcUnitIdx[pi]) and (ProcPyDefTok[i] > ProcPyDefTok[pi]) and
        (Procs[i].Name = Procs[pi].Name) and
        (Procs[i].ParamCount = Procs[pi].ParamCount) and
        PyDefBoundHere(i) then
@@ -13283,7 +13283,12 @@ begin
     call would become a compile error, and CPython accepts a module-body forward
     call that never executes.
     bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
-  if Result and dropLateDef and (ProcUnitIdx[idx] = -1) and
+  { PyShadowDeclHere, not `ProcUnitIdx = -1`: this rule and the superseding one
+    below are about the file being compiled, and an imported module's defs carry
+    its own unit. Tested against -1, a late `def abs`/`def len` in an imported
+    module shadowed the builtin above its def, and a redefined def kept its first
+    body. bug-nilpy-module-top-level-def-rules-held-only-in-the-main-program }
+  if Result and dropLateDef and PyShadowDeclHere(idx) and
      (not PyDefBoundHere(idx)) then Result := False;
   { ...and the OTHER half of the same rule, which needs no dropLateDef guard
     because it can never empty the candidate set: a def is superseded only when
@@ -13293,7 +13298,7 @@ begin
     order, so every call ran the FIRST body
     (bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs) once each
     def got its own Proc. bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
-  if Result and (ProcUnitIdx[idx] = -1) and PyDefSupersededHere(idx) then
+  if Result and PyShadowDeclHere(idx) and PyDefSupersededHere(idx) then
     Result := False;
 end;
 
@@ -13825,7 +13830,9 @@ begin
     i := ProcChainHead(name);
     while i >= 0 do
     begin
-      if ProcNameMatches(i, name) and (ProcUnitIdx[i] <> -1) then
+      { a routine NOT of the file being compiled -- in an imported module the
+        late def itself carries a unit, and must not count as its own fallback }
+      if ProcNameMatches(i, name) and not PyShadowDeclHere(i) then
       begin dropLateDef := True; Break; end;
       i := ProcHashNext[i];
     end;

@@ -1,0 +1,12 @@
+dynattr 15
+dynattr_any 30ab 30ab
+dynattr_top 3
+abs_before 5
+abs_after 99
+len_before 2
+len_after 42
+g_first 1
+g_second 2
+global 13
+late_global 10
+containers 6 [1, 2]

@@ -3665,6 +3665,11 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_sortnlogn26 | diff -u test/test_nilpy_sort_is_stable_and_n_log_n.expected -
 	./$(COMPILER) test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/nonenone_x64
 	$(TESTTMP)/nonenone_x64 | diff -u test/test_nilpy_none_is_none_on_every_backend.expected -
+	# the same module statements as the main program and imported: one .expected
+	./$(COMPILER) test/nilpy_module_scope_mod.py $(TESTTMP)/modscope_main_x64
+	$(TESTTMP)/modscope_main_x64 | diff -u test/test_nilpy_a_module_top_level_behaves_as_a_main_program.expected -
+	./$(COMPILER) test/test_nilpy_a_module_top_level_behaves_as_a_main_program.npy $(TESTTMP)/modscope_imp_x64
+	$(TESTTMP)/modscope_imp_x64 | diff -u test/test_nilpy_a_module_top_level_behaves_as_a_main_program.expected -
 	@# The None ARM of a conditional expression must survive the def's inferred
 	@# RETURN TYPE. PyInferExprType had no arm for the None literal, so it
 	@# answered tyUnknown — the join's IDENTITY ELEMENT — and the other arm stood
@@ -29738,6 +29743,10 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh i386 $(TESTTMP)/sortnlogn_i386)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/nonenone_i386
 	tools/expect_same.sh i386/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh i386 $(TESTTMP)/nonenone_i386)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
+	./$(COMPILER) --target=i386 test/nilpy_module_scope_mod.py $(TESTTMP)/modscope_main_i386
+	tools/expect_same.sh i386/nilpy_module_scope_mod "$$(tools/run_target.sh i386 $(TESTTMP)/modscope_main_i386)" "$$(cat test/test_nilpy_a_module_top_level_behaves_as_a_main_program.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_a_module_top_level_behaves_as_a_main_program.npy $(TESTTMP)/modscope_imp_i386
+	tools/expect_same.sh i386/test_nilpy_a_module_top_level_behaves_as_a_main_program "$$(tools/run_target.sh i386 $(TESTTMP)/modscope_imp_i386)" "$$(cat test/test_nilpy_a_module_top_level_behaves_as_a_main_program.expected)"
 	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_i386
 	tools/assert_no_leak.sh i386/nilpy_sort_raises_releases 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386
 	@if tools/assert_no_leak.sh i386/nilpy_sort_raises_control 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386 keep >/dev/null 2>&1; then \

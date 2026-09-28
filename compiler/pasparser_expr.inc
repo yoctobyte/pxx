@@ -5491,7 +5491,7 @@ begin
 
       pyLateDefPi := -1;
       if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and
-         (ProcUnitIdx[procIdx] = -1) and (not PyDefBoundHere(procIdx)) and
+         PyShadowDeclHere(procIdx) and (not PyDefBoundHere(procIdx)) and
          (not PyUserShadowsProc(name)) then
       begin
         pyLateDefPi := procIdx;
