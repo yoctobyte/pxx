@@ -52,21 +52,34 @@ Python; both reach standard error on all seven targets. On x86-64, format a
 real into a string first (`Str(x:0:1, s)`), and write the empty line as
 `WriteLn(StdErr, '')`.
 
-### Nil Python: zero equals `None` on every backend but x86-64
+### Nil Python: `None` tests go wrong on every backend but x86-64
 
 On i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), `x == None` is `True`
 when `x` is `0`, `0.0` or `False`, and `x != None` is `False`: a plain
 variable, a list element, and a value that may be `None`
 (`v if c else None`) alike. CPython, and PXX on x86-64, say `False` and
-`True`. An empty string compares correctly, and so does `is None` and
-`is not None` in every shape measured (a conditional, an early `return None`,
-`dict.get`, a default argument, a list element). **Open in v441 to v450**; a
-fix is in progress. Measured on 2026-09-28 with v450 (`c19cc2d531e4`) on
-x86-64 and under QEMU user mode for the others, against CPython, and on i386
-with v441 (`4ebfa2d047a2`), v448 and v449, which give the same wrong answer.
-The ESP32-C3 and ESP32-S3 use the riscv32 and Xtensa backends; this was not
+`True`. An empty string compares correctly.
+
+On the same backends, `is None` is wrong in one shape: a function declared to
+return a class (`-> Optional[Word]`) returns `None`, and its result goes
+through a conditional expression, as in
+`w = vm.lookup(name) if isinstance(name, str) else None`. Then `w is None` is
+`False` and `w is not None` is `True`, so an `if w is not None:` guard is
+entered with no object. The same call assigned directly (`w = vm.lookup(name)`)
+is right, and so is `is None` in every other shape measured (an untyped
+function, an early `return None`, `dict.get`, a default argument, a list
+element). The fix for this, `bd6edb9f08`, went into the x86-64 backend only.
+The test is `test/test_nilpy_conditional_expression_none.npy`: with v450 it
+matches its `.expected` on x86-64 and differs on lines 1, 2 and 9 on the six
+others, and on i386 v441, v448 and v449 print the same wrong lines.
+
+Both are **open in v441 to v450**; a fix is in progress. Measured on
+2026-09-28 with v450 (`c19cc2d531e4`) on x86-64 and under QEMU user mode for
+the others, against CPython, and on i386 with v441 (`4ebfa2d047a2`), v448
+and v449, which give the same wrong answers. The ESP32-C3 and ESP32-S3 use the riscv32 and Xtensa backends; this was not
 run on a board. **Workaround:** test for `None` with `is None` or
-`is not None`, never with `==` or `!=`.
+`is not None`, never with `==` or `!=`; and assign an `Optional` class result
+directly, then test it, rather than inside a conditional expression.
 
 ## Memory leaks
 
