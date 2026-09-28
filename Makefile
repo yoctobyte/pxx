@@ -19737,6 +19737,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_hw_random_intrinsics.pas $(TESTTMP)/test_hwrandom26
 	$(TESTTMP)/test_hwrandom26 > $(TESTTMP)/test_hwrandom.out
 	! grep -q FAIL $(TESTTMP)/test_hwrandom.out
+	@grep -q '^total ok' $(TESTTMP)/test_hwrandom.out || { echo "FAIL: test_hw_random_intrinsics did not finish"; cat $(TESTTMP)/test_hwrandom.out; exit 1; }
+	$(TESTTMP)/test_hwrandom26 absent > $(TESTTMP)/test_hwrandom_absent.out
+	@grep -q 'successful draws: 0 / 32' $(TESTTMP)/test_hwrandom_absent.out || { echo "FAIL: a draw ran RDRAND after the probe said absent"; cat $(TESTTMP)/test_hwrandom_absent.out; exit 1; }
 	./$(COMPILER) test/test_byref_arg_lvalue_rule.pas $(TESTTMP)/test_byref_lvalue26
 	tools/expect_same.sh test_byref_lvalue26 "$$($(TESTTMP)/test_byref_lvalue26 | tail -1)" "total ok 12 / 12"
 	! ./$(COMPILER) test/test_byref_arg_lvalue_refused.pas $(TESTTMP)/test_byref_refused26 \

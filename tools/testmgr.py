@@ -1584,12 +1584,16 @@ CORPUS_RE = re.compile(
 # it as STILL-RED rather than as coverage loss. Same argument as the corpus
 # guard below, moved from the filesystem to the CPU.
 #
-# Measured case: seven is a Xeon E5645 (Westmere, 2010). RDRAND arrived with Ivy
-# Bridge in 2012, so `test_hw_random_intrinsics` SIGILLs there on every run and
-# always will. Nothing in the report could distinguish that from a regression.
+# Entries are (job-line regex, /proc/cpuinfo flag, human name). EMPTY on
+# purpose. Its one entry skipped `test_hw_random_intrinsics` where cpuinfo has
+# no rdrand (seven, a Westmere Xeon E5645) because it SIGILLed there. That
+# SIGILL was a real bug, not missing silicon: __pxxHwRandom64 executed RDRAND
+# after the probe said no, which any user on such a CPU hits, and the skip hid
+# it until a plain `make test` failed the release rehearsal. The draw now asks
+# the probe and the row passes on seven, so the entry is gone. Before adding
+# one, check that the program cannot answer "absent" itself: a capability
+# probe that dies without the capability is the defect.
 HOST_CAPS = [
-    (re.compile(r"test_hw_random_intrinsics"), "rdrand",
-     "RDRAND/RDSEED (Intel Ivy Bridge 2012 and later)"),
 ]
 
 
@@ -5288,9 +5292,10 @@ def build_compiler():
     # through bare `make`: an instrumented `make test-core` on seven dies at
     # test_hw_random_intrinsics with SIGILL (no RDRAND on a 2010 Westmere) after
     # 915 of 1735 compiles, because bare make has no idea a job can be
-    # impossible on a host. testmgr does -- HOST_CAPS skips exactly that job --
-    # so routing the sweep here is the difference between 52.7% coverage and
-    # all of it. Empty/unset changes nothing.
+    # impossible on a host. testmgr does (HOST_CAPS; that job no longer needs
+    # it, since the draw now asks the CPUID probe), so routing the sweep here
+    # is the difference between 52.7% coverage and all of it. Empty/unset
+    # changes nothing.
     build_argv = ["make", "--no-print-directory", COMPILER,
                   "BUILD_COMPILER=%s-build" % priv,
                   "VERIFY_COMPILER=%s-verify" % priv,

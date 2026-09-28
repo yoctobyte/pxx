@@ -42,7 +42,8 @@ var
 
   __pxxCpuHasHwRandom probes CPUID leaf 1 ECX bit 30 and caches the answer. The
   probe is mandatory, not decorative: the instruction is absent on plenty of
-  cores and executing it there is #UD.
+  cores and executing it there is #UD, so __pxxHwRandom64 asks it too and
+  answers False there. Nothing here executes RDSEED.
 
   x86-64 only so far. aarch64's MRS RNDR needs FEAT_RNG, which is OPTIONAL and
   needs its own ID_AA64ISAR0_EL1 probe plus system-register support in the a64
@@ -69,7 +70,9 @@ asm
   pop rbx
 end;
 
-function __pxxHwRandom64(var v: UInt64): Boolean; assembler;
+{ The bare instruction. Only __pxxHwRandom64 below calls it, and only after
+  the probe said yes: on a core without RDRAND it is #UD (SIGILL). }
+function __pxxRdrand64(var v: UInt64): Boolean; assembler;
 {$asmMode intel}
 asm
   mov rcx, v
@@ -82,18 +85,17 @@ end;
 {$endif}
 
 {$ifndef CPUX86_64}
+function __pxxRdrand64(var v: UInt64): Boolean;
+begin
+  v := 0;
+  Result := False;
+end;
+
 function __pxxCpuidRdrand: Boolean;
 begin
   Result := False;
 end;
 
-function __pxxHwRandom64(var v: UInt64): Boolean;
-begin
-  { Not "unimplemented": no user-mode hardware RNG instruction exists on this
-    target, so False is the correct answer and routes the caller to tier 2. }
-  v := 0;
-  Result := False;
-end;
 {$endif}
 
 function __pxxCpuHasHwRandom: Boolean;
@@ -106,6 +108,24 @@ begin
     if __pxxCpuidRdrand then HwRandomProbe := 1 else HwRandomProbe := 2;
   end;
   Result := HwRandomProbe = 1;
+end;
+
+function __pxxHwRandom64(var v: UInt64): Boolean;
+begin
+  { ASKS THE PROBE ITSELF. It used to execute RDRAND unconditionally, trusting
+    every caller to have asked __pxxCpuHasHwRandom first, and
+    test_hw_random_intrinsics (which draws whatever the probe says) died with
+    SIGILL on seven, a Westmere Xeon E5645 without RDRAND, where the answer is
+    a failed draw. On a target with no user-mode hardware RNG instruction the
+    probe is False as well, and so is this: not "unimplemented", it is the
+    answer that routes the caller to tier 2. }
+  if not __pxxCpuHasHwRandom then
+  begin
+    v := 0;
+    Result := False;
+    Exit;
+  end;
+  Result := __pxxRdrand64(v);
 end;
 
 end.

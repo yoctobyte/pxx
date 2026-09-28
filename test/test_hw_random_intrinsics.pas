@@ -13,7 +13,13 @@
 
   What a draw must never do is hand back a silent zero it calls entropy: RDRAND
   clears CF and leaves the destination ZERO when it fails, so `Result` is the
-  only thing separating "here is randomness" from "here is nothing". }
+  only thing separating "here is randomness" from "here is nothing".
+
+  `absent` as the first argument forces the cached probe to "no RDRAND"
+  (HwRandomProbe := 2), so a host that HAS the instruction still checks that a
+  draw obeys the probe: __pxxHwRandom64 used to execute RDRAND regardless, and
+  this program died with SIGILL on seven (Westmere, no RDRAND) right after
+  printing "cpu has hardware rng: FALSE". }
 program test_hw_random_intrinsics;
 {$mode objfpc}{$H+}
 
@@ -31,6 +37,7 @@ end;
 
 begin
   pass := 0; fail := 0;
+  if (ParamCount > 0) and (ParamStr(1) = 'absent') then HwRandomProbe := 2;
   has := __pxxCpuHasHwRandom;
   writeln('cpu has hardware rng: ', has);
 
