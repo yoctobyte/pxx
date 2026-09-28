@@ -77,6 +77,7 @@ documentation first.
 - [Dive](./dive/) — a single-page technical overview.
 - [Install](./install/) — set up the pinned compiler and `pxx` wrapper.
 - [Getting started](./getting-started/) — compile and run your first program.
+- [Nil Python on the desktop](./getting-started/nil-python-desktop.md) — Python compiled to a static Linux program: classes, files, json, calling Pascal.
 - [Features](./features/) — what PXX can do today.
 - [Language](./language/) — Pascal basics, the PXX dialect, and FPC
   compatibility notes.

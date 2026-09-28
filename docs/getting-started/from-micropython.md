@@ -12,6 +12,9 @@ explains most of what changes. This page lists what stays the same, what is
 different, and then moves a real MicroPython script and driver onto an
 ESP32-C3.
 
+This page is about the ESP32. To compile and run Python on a PC, start with
+[Nil Python on the desktop](./nil-python-desktop.md).
+
 Every code block on this page was compiled for the ESP32-C3 with pin v445
 (compiler sha256 `caf21ac399f1`) on 2026-09-27, and again with pin v450
 (`c19cc2d531e4`) on 2026-09-28; all of them build. For building and flashing in
