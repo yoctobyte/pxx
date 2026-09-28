@@ -6662,6 +6662,56 @@ begin
         Continue;
       end;
     end;
+    { ...and the class ATTRIBUTE through the class name, `Cls.attr` with no
+      call after it. The walk used to leave it to the token lookup, which
+      answered "class" for `Cls`, so `return C.k` gave the def a tyClass
+      return: a float came back as its raw bits, a str or list as a pointer
+      and None as 0 on x86-64, and every 32-bit target refused to write the
+      result. The attribute's own type is read where the class body recorded
+      it: the instance field of that name (copy-at-construction rows), else
+      the shared slot. When neither is recorded yet, or a selector follows,
+      the honest answer is tyVariant -- never the class. }
+    if (tk = tyClass) and (Tokens[i].Kind = tkIdent) and (i + 2 < endIdx) and
+       (Tokens[i + 1].Kind = tkDot) and (Tokens[i + 2].Kind = tkIdent) and
+       ((i + 3 >= endIdx) or (Tokens[i + 3].Kind <> tkLParen)) and
+       PyIsClassTypeExact(GetTokenStr(i)) then
+    begin
+      ci := FindUClassNonRecord(GetTokenStr(i));
+      tk := tyVariant;
+      if (ci >= 0) and ((i + 3 >= endIdx) or
+         ((Tokens[i + 3].Kind <> tkDot) and (Tokens[i + 3].Kind <> tkLBrack))) then
+      begin
+        si := FindUField(ci, GetTokenStr(i + 2));
+        if si >= 0 then
+        begin
+          tk := IntToTypeKind(UFldTk[si]);
+          if (tk = tyClass) and (UFldRec_[si] >= REC_UCLASS_BASE) then
+            PyInferLastCi := UFldRec_[si] - REC_UCLASS_BASE
+          else if tk = tyClass then
+            tk := tyVariant;
+        end
+        else
+        begin
+          si := FindClassVar(ci, GetTokenStr(i + 2));
+          if si >= 0 then
+          begin
+            tk := Syms[si].TypeKind;
+            if tk = tyClass then
+            begin
+              if Syms[si].RecName >= REC_UCLASS_BASE then
+                PyInferLastCi := Syms[si].RecName - REC_UCLASS_BASE
+              else
+                tk := tyVariant;
+            end;
+          end;
+        end;
+        if tk = tyUnknown then tk := tyVariant;
+      end;
+      i := i + 2;
+      Result := PyWiden(Result, tk);
+      Inc(i);
+      Continue;
+    end;
     { A type NAME followed by '(' is a conversion CALL, not a bare type: it must
       go through the call branch below, which knows the conversion's result type
       AND skips the argument group. Reading it as a type here typed `str(d)` as

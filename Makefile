@@ -4138,6 +4138,11 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow26
 	$(TESTTMP)/test_nilpy_shadow26 | diff -u test/test_nilpy_user_class_shadows_builtin.expected -
+	# `C.attr` returned from a def: its return type was inferred as the class,
+	# so a float came back as raw bits, a str or list as a pointer, None as 0.
+	# Checked against CPython. bug-a-a-class-attribute-returned-through-the-class-name-is-typed-as-the-class
+	./$(COMPILER) test/test_nilpy_class_attr_return_type.py $(TESTTMP)/test_nilpy_clsattr_ret26
+	$(TESTTMP)/test_nilpy_clsattr_ret26 | diff -u test/test_nilpy_class_attr_return_type.expected -
 	./$(COMPILER) test/test_nilpy_dunder_index_sites.npy $(TESTTMP)/test_nilpy_ixsites26
 	$(TESTTMP)/test_nilpy_ixsites26 | diff -u test/test_nilpy_dunder_index_sites.expected -
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_tobject_member_via_local.npy $(TESTTMP)/test_nilpy_tobject_member26
@@ -8244,6 +8249,16 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_cross32_values "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_npy_cross32_rv32)" "$$(cat test/test_nilpy_cross32_values.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall_rv32
 	tools/expect_same.sh riscv32/test_nilpy_attribute_off_a_virtual_call_result "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_virtcall_rv32)" "$$(cat test/test_nilpy_attribute_off_a_virtual_call_result.expected)"
+	# A class attribute returned through the class name: refused on every
+	# 32-bit target one commit back ("write of this type/operand not supported").
+	./$(COMPILER) --target=riscv32 test/test_nilpy_class_attr_return_type.py $(TESTTMP)/test_nilpy_clsattr_ret_rv32
+	tools/expect_same.sh riscv32/test_nilpy_class_attr_return_type "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_clsattr_ret_rv32)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow_rv32
+	tools/expect_same.sh riscv32/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_shadow_rv32)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_class_attr_return_type.py $(TESTTMP)/test_nilpy_clsattr_ret_arm32
+	tools/expect_same.sh arm32/test_nilpy_class_attr_return_type "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_clsattr_ret_arm32)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow_arm32
+	tools/expect_same.sh arm32/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_shadow_arm32)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas $(TESTTMP)/test_critsec_once26
 	tools/expect_same.sh test_critsec_once26 "$$($(TESTTMP)/test_critsec_once26)" "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	# data-parallel loop runtime (palparallel PXXParallelFor): exact partition (each index once), values, edge ranges. worker count is host-dependent, so gate on the deterministic tail.
@@ -29543,6 +29558,10 @@ test-i386: $(COMPILER)
 	# i386 and saturates int(float) at 2^31 on arm32.
 	./$(COMPILER) --target=i386 test/test_nilpy_cross32_values.py $(TESTTMP)/cross32v_i386
 	tools/expect_same.sh i386/test_nilpy_cross32_values "$$(tools/run_target.sh i386 $(TESTTMP)/cross32v_i386)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_class_attr_return_type.py $(TESTTMP)/clsattr_ret_i386
+	tools/expect_same.sh i386/test_nilpy_class_attr_return_type "$$(tools/run_target.sh i386 $(TESTTMP)/clsattr_ret_i386)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/shadow_i386
+	tools/expect_same.sh i386/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh i386 $(TESTTMP)/shadow_i386)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	# Stackless float parameter/local/element (bit pattern or garbage one commit
 	# back) and a generator called after a later one (`1 3 0`, every target).
 	./$(COMPILER) --target=i386 test/test_stackless_float_param_and_element.pas $(TESTTMP)/slfloat_i386
@@ -32715,6 +32734,12 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-call0/test_nilpy_cross32_values "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_np_c0)" "$$(cat test/test_nilpy_cross32_values.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_cross32_values.py $(TESTTMP)/xt_np_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_cross32_values "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_np_w)" "$$(cat test/test_nilpy_cross32_values.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_class_attr_return_type.py $(TESTTMP)/xt_clsattr_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_class_attr_return_type "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_clsattr_w)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_class_attr_return_type.py $(TESTTMP)/xt_clsattr_c0
+	tools/expect_same.sh xtensa-call0/test_nilpy_class_attr_return_type "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_clsattr_c0)" "$$(cat test/test_nilpy_class_attr_return_type.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/xt_shadow_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_shadow_w)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_xtensa_test_u64_to_double_x64
 	tools/expect_same.sh xtensa/test_u64_to_double "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_u64_to_double)" "$$($(TESTTMP)/test_xtensa_test_u64_to_double_x64)"
