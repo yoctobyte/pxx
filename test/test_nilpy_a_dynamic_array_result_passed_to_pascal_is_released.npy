@@ -1,0 +1,15 @@
+# A Pascal `array of T` call result handed straight to a Pascal array
+# parameter is owned by a hidden temp for the call and released after it.
+# 2000 trips, two arrays each: a leak would leave ~4000 live blocks; the
+# Makefile bounds live at 50 (assert_no_leak.sh). Run with -Futest/nilpy_dynarr.
+import 'dynarr.pas' as d
+
+
+def run(n):
+    t = 0
+    for i in range(n):
+        t = t + d.SumV(d.MakeArr(4)) + d.SumO(d.MakeArr(3))
+    return t
+
+
+print(run(2000))

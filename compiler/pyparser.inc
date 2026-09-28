@@ -56391,11 +56391,14 @@ end;
   right, by accident of width. Until the conversion exists it is refused
   everywhere except the two uses that are right: indexing the call directly
   (`MakeArr(4)[3]`, ApplyCallResultPtrSuffix) and handing it whole to a
-  Pascal by-value ARRAY parameter (PyArrayArgSlot; a const or var one refuses
-  a call argument on its own, "by-reference argument must be a variable").
-  REFUSED THAT USED TO WORK: `a = MakeArr(4); SumArr(a)` -- binding it and
-  handing the name back to Pascal was right, and is refused with the rest.
-  Measured 2026-09-28, pin v447. }
+  Pascal ARRAY parameter, by value, open or const (PyArrayArgSlot; the by-ref
+  lvalue check in the call parser admits the call result for it, and a
+  var/out one still needs a real variable).
+  REFUSED THAT USED TO COMPILE: `a = MakeArr(4); SumArr(a)`. It compiled and
+  was wrong anyway (frankd-90: `a[3]` printed 0 for 30 on v441/v448), and a
+  NilPy list in a name is not accepted by an array parameter either, so the
+  bound form needs a typed dyn-array local or a list conversion -- not built.
+  Measured 2026-09-28, pin v447; the pass-through corrected the same day. }
 procedure PyRefuseDynArrayResult(procIdx: Integer);
 begin
   if (procIdx < 0) or (procIdx >= ProcCount) or (not ProcRetIsDynArray[procIdx]) then Exit;
@@ -63821,6 +63824,19 @@ begin
                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
                       ((ASTKind[exprNode] = AN_CALL) and (ASTIVal[exprNode] >= 0) and
                        (ProcRetFixedArrBytes[ASTIVal[exprNode]] > 0) and
+                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
+                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
+                      { ...and a DYNAMIC-array call result into an ARRAY
+                        parameter, `SumArr(MakeArr(4))`: the Pascal frontend
+                        takes it (bug-p-a-call-result-is-refused-as-a-const-
+                        open-array-argument) and IRLowerCallArg parks the fresh
+                        handle, so it has an owner for the call. NilPy refused
+                        it here, and after PyRefuseDynArrayResult closed the
+                        bound-name route there was no way at all to hand one
+                        back to Pascal. var/out still needs a real variable. }
+                      ((ASTKind[exprNode] = AN_CALL) and (ASTIVal[exprNode] >= 0) and
+                       ProcRetIsDynArray[ASTIVal[exprNode]] and
+                       Procs[procIdx].Params[i].IsArray and
                        (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
                         not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
                       TypeIsPromoInt(Procs[procIdx].Params[i].TypeKind) or

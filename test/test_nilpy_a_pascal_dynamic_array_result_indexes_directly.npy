@@ -3,6 +3,9 @@
 # elements read 8 bytes wide, strings as pointers, doubles as raw bits; len()
 # and `for` raised TypeError), and is now refused at compile time -- see
 # test_nilpy_binding_a_pascal_dynamic_array_result_is_refused_fail.npy.
+# Passed straight to a Pascal array parameter (by value, open, const) it is
+# right too: that was refused ("by-reference argument must be a variable")
+# until 2026-09-28, and FPC gives the same sums.
 # Run with -Futest/nilpy_dynarr.
 import 'dynarr.pas' as d
 
@@ -13,7 +16,9 @@ def f():
     for i in range(4):
         t = t + d.MakeArr(4)[i]
     print(t)
+    print(d.SumV(d.MakeArr(4)), d.SumO(d.MakeArr(4)), d.SumC(d.MakeArr(5)))
 
 
 f()
 print(d.MakeArr(5)[0], d.MkStrs(2)[0])
+print(d.SumV(d.MakeArr(3)) + d.SumO(d.MakeArr(2)))
