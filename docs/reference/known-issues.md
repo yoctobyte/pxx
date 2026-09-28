@@ -608,6 +608,17 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   message, and v450 (`c19cc2d531e4`) prints what CPython prints under
   qemu-riscv32. Refused in v441 to v448.
 
+- **Pascal in the frozen-string mode: `Copy` returned an empty string.**
+  Compiled with `-uPXX_MANAGED_STRING`, `s := Copy('abcdef', 1, 3)` into a
+  `string[16]` left `Length(s)` at `0`, with no error, where FPC 3.2.2 gives
+  `abc`. The default (managed) mode was right. Fixed in v450 (`13f122a0ef`).
+  Measured on 2026-09-28 on x86-64: `0` and `[]` with v448 (`b2b325036c3b`)
+  and v449 (`0ded1e5d04c8`), `3` and `[abc]` with v450 (`c19cc2d531e4`). The
+  ESP bare-metal profile refuses that `Copy` at compile time with v449 and
+  v450, so it never reached the wrong value there (measured by frankd-23 on
+  the ESP32-C3 and ESP32-S3 under QEMU). **On v449:** use the default string
+  mode.
+
 - **x86-64: the hardware random draw crashed on a CPU without RDRAND.**
   `__pxxHwRandom64`, the compiler's intrinsic behind the `random` unit's
   hardware tier, executed `RDRAND` even after `__pxxCpuHasHwRandom` had
