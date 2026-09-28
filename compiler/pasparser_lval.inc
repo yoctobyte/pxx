@@ -556,22 +556,20 @@ end;
   through FindHelperForType on the record. A member counts whether it is a
   method or a property, as for the dotted spelling. }
 function WithHelperRecFor(recId: Integer; const name: AnsiString): Integer;
-var h, ci: Integer;
+var h: Integer;
 begin
   WithHelperRecFor := -1;
   if recId = REC_NONE then Exit;
+  { A class or an advanced record: ClassHelperRecFor is the one lookup every
+    member loop asks (its record arm, own member first, landed in cc9ea7228a),
+    so `with` asks it too rather than keeping a second copy. }
   if recId >= REC_UCLASS_BASE then
   begin
-    ci := recId - REC_UCLASS_BASE;
-    if (ci < 0) or (ci >= UClsCount) then Exit;
-    if UClsHelperTk[ci] >= 0 then Exit;   { a helper has no helper }
-    if not UClsIsRecord[ci] then
-    begin
-      h := ClassHelperRecFor(recId, name);
-      if h <> recId then WithHelperRecFor := h;
-      Exit;
-    end;
+    h := ClassHelperRecFor(recId, name);
+    if h <> recId then WithHelperRecFor := h;
+    Exit;
   end;
+  { A plain record has no class row, which ClassHelperRecFor needs. }
   h := FindHelperForType(tyRecord, recId);
   if (h < 0) or (UClsHelperRec[h] <> recId) then Exit;
   if (FindUMeth(h, name) >= 0) or (FindUProp(h, name) >= 0) then
