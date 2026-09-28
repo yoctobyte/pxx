@@ -1865,6 +1865,9 @@ begin
       xtensa_movi(reg_xtensa_a5, 0);
     xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 12);
   end;
+  { A nil CLASS payload is Python's None: retag VT_EMPTY, as x86-64's inline
+    fill does (PXXVarNilObjIsNone). The slot address survives the call. }
+  if payloadTk = tyClass then EmitVarHelperCallXtensa('PXXVarNilObjIsNone');
 end;
 
 procedure EmitLoadVariantAddrXtensa(node: Integer);

@@ -3640,6 +3640,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_capfloat26 | diff -u test/test_nilpy_a_captured_float_travels_by_its_bits.expected -
 	./$(COMPILER) test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/test_nilpy_sortnlogn26
 	$(TESTTMP)/test_nilpy_sortnlogn26 | diff -u test/test_nilpy_sort_is_stable_and_n_log_n.expected -
+	./$(COMPILER) test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/nonenone_x64
+	$(TESTTMP)/nonenone_x64 | diff -u test/test_nilpy_none_is_none_on_every_backend.expected -
 	@# The None ARM of a conditional expression must survive the def's inferred
 	@# RETURN TYPE. PyInferExprType had no arm for the None literal, so it
 	@# answered tyUnknown — the join's IDENTITY ELEMENT — and the other arm stood
@@ -8210,6 +8212,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh i386/test_npy_machineword_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_npy_machineword_i386)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
 	./$(COMPILER) --target=aarch64 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_a64
 	tools/expect_same.sh aarch64/test_npy_machineword_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_npy_machineword_a64)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
+	./$(COMPILER) --target=aarch64 test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/nonenone_a64
+	tools/expect_same.sh aarch64/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh aarch64 $(TESTTMP)/nonenone_a64)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_arm32
 	tools/expect_same.sh arm32/test_npy_machineword_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_machineword_arm32)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
 	# sys.maxsize is the TARGET's largest Py_ssize_t, so this row is the one
@@ -8281,6 +8285,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_shadow_arm32)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_rv32
 	tools/expect_same.sh riscv32/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh riscv32 $(TESTTMP)/sortnlogn_rv32)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/nonenone_rv32
+	tools/expect_same.sh riscv32/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh riscv32 $(TESTTMP)/nonenone_rv32)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_rv32
 	tools/assert_no_leak.sh riscv32/nilpy_sort_raises_releases 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32
 	@if tools/assert_no_leak.sh riscv32/nilpy_sort_raises_control 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32 keep >/dev/null 2>&1; then \
@@ -29561,6 +29567,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh i386 $(TESTTMP)/capfloat_i386)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_i386
 	tools/expect_same.sh i386/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh i386 $(TESTTMP)/sortnlogn_i386)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/nonenone_i386
+	tools/expect_same.sh i386/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh i386 $(TESTTMP)/nonenone_i386)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_i386
 	tools/assert_no_leak.sh i386/nilpy_sort_raises_releases 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386
 	@if tools/assert_no_leak.sh i386/nilpy_sort_raises_control 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386 keep >/dev/null 2>&1; then \
@@ -32789,6 +32797,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_user_class_shadows_builtin "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_shadow_w)" "$$(cat test/test_nilpy_user_class_shadows_builtin.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/xt_sortnlogn_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sortnlogn_w)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/xt_nonenone_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_nonenone_w)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_xtw
 	tools/assert_no_leak.sh xtensa/nilpy_sort_raises_releases 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw
 	@if tools/assert_no_leak.sh xtensa/nilpy_sort_raises_control 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw keep >/dev/null 2>&1; then \
@@ -34868,6 +34878,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_a_captured_float_travels_by_its_bits "$$(tools/run_target.sh arm32 $(TESTTMP)/capfloat_a32)" "$$(cat test/test_nilpy_a_captured_float_travels_by_its_bits.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_sort_is_stable_and_n_log_n.npy $(TESTTMP)/sortnlogn_a32
 	tools/expect_same.sh arm32/test_nilpy_sort_is_stable_and_n_log_n "$$(tools/run_target.sh arm32 $(TESTTMP)/sortnlogn_a32)" "$$(cat test/test_nilpy_sort_is_stable_and_n_log_n.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_none_is_none_on_every_backend.npy $(TESTTMP)/nonenone_a32
+	tools/expect_same.sh arm32/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh arm32 $(TESTTMP)/nonenone_a32)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_a32
 	tools/assert_no_leak.sh arm32/nilpy_sort_raises_releases 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32
 	@if tools/assert_no_leak.sh arm32/nilpy_sort_raises_control 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32 keep >/dev/null 2>&1; then \

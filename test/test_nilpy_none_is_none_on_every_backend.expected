@@ -1,0 +1,16 @@
+direct True False True False
+object False True False True
+ternary True False
+ternary2 True True
+list True True False True
+dict True True
+str None
+str None
+eq False False True True
+eq False False True True
+eq False False True True
+eq False False True True
+eq False False True True
+eq False False True True
+eq True True False False
+strlocal False

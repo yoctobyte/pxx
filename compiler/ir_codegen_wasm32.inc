@@ -6543,7 +6543,7 @@ end;
 { Slot address on the stack, payload already in the local: clear the old value,
   write tag / zero / payload, and LEAVE THE ADDRESS on the stack (IR_VAR_BOX's
   value is that address; the statement arm drops it). }
-procedure WasmVariantFill(tag: Integer);
+procedure WasmVariantFill(tag: Integer; isObj: Boolean);
 begin
   WasmLocalTee(WasmVarAddrL);
   if not WasmCallRtl('PXXVarClear') then Exit;
@@ -6553,6 +6553,12 @@ begin
   WasmMemOp($36, 'i32.store', 2, 4);
   WasmLocalGet(WasmVarAddrL); WasmLocalGet(WasmVarPayL);
   WasmMemOp($37, 'i64.store', 3, 8);
+  { a nil CLASS payload is Python's None -- see PXXVarNilObjIsNone }
+  if isObj then
+  begin
+    WasmLocalGet(WasmVarAddrL);
+    if not WasmCallRtl('PXXVarNilObjIsNone') then Exit;
+  end;
   WasmLocalGet(WasmVarAddrL);
 end;
 
@@ -6604,7 +6610,7 @@ begin
   if not WasmVariantPayload(IRB[node], tk) then Exit;
   WasmVariantAddr(IRA[node]);
   if WasmBodyBroken then Exit;
-  WasmVariantFill(WasmVariantTag(IRB[node], tk));
+  WasmVariantFill(WasmVariantTag(IRB[node], tk), tk = tyClass);
   if WasmBodyBroken then Exit;
   WasmOp($1A, 'drop');            { a statement, so the slot address is unused }
 end;
@@ -6616,7 +6622,7 @@ begin
   if not WasmVariantPayload(IRB[node], tk) then Exit;
   WasmVariantAddr(IRA[node]);     { the temp slot }
   if WasmBodyBroken then Exit;
-  WasmVariantFill(WasmVariantTag(IRB[node], tk));
+  WasmVariantFill(WasmVariantTag(IRB[node], tk), tk = tyClass);
 end;
 
 procedure WasmEmitVarBinop(node: Integer);

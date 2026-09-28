@@ -1242,6 +1242,9 @@ begin
       EmitI32($E580200C);              { str r2, [r0, #12] }
     end;
   end;
+  { A nil CLASS payload is Python's None: retag VT_EMPTY, as x86-64's inline
+    fill does (PXXVarNilObjIsNone). The slot address survives the call. }
+  if payloadTk = tyClass then EmitVarHelperCallArm32('PXXVarNilObjIsNone');
 end;
 
 procedure EmitLoadVariantAddrArm32(node: Integer);

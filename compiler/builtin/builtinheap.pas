@@ -607,6 +607,10 @@ function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeI
 function PXXVarNot(dest: Pointer; src: Pointer): Int64;
 function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
+{ A variant just filled from a CLASS pointer: a nil one is Python's None and
+  retags as VT_EMPTY. Called by every backend's variant fill except x86-64's,
+  which does the same test inline. }
+procedure PXXVarNilObjIsNone(v: Pointer);
 procedure PXXVarReleasePayload(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXVarSetIntf(v: Pointer; inst: Pointer);
@@ -5889,6 +5893,20 @@ begin
   lVal := PMachineWord(Int64(left) + 8)^;
   rVal := PMachineWord(Int64(right) + 8)^;
 
+  { 0. None (VT_EMPTY) equality, ahead of every other dispatch -- the twin of
+    x86-64's inline arm in EmitVarBinOp, which is the only place this rule
+    lived. None equals None and nothing else; the numeric path below reads a
+    None slot's 0 payload, so on every other backend `0 == None`,
+    `0.0 == None` and `False == None` answered True (and `!=` False).
+    bug-nilpy-none-equals-zero-is-true, the half only x86-64 got. }
+  if (isCompare = 1) and ((opTk = 64) or (opTk = 65)) and
+     ((lTag = 0) or (rTag = 0)) then
+  begin
+    if opTk = 64 then Result := Int64(lTag = rTag)     { tkEq }
+    else Result := Int64(lTag <> rTag);                { tkNeq }
+    Exit;
+  end;
+
   { 1. String check }
   if (isCompare = 1) or (opTk = 70) then { tkPlus = 70 }
   begin
@@ -6226,6 +6244,19 @@ begin
   else Exit;
   PXXStrAppend(Pointer(Int64(dest) + 8), rp, rLen);
   Result := 1;
+end;
+
+procedure PXXVarNilObjIsNone(v: Pointer);
+{ A nil object boxed into a variant must read as None: `f() if c else None`
+  with f() returning None, `[f()]`, an Optional passed through a variant
+  parameter. The fill stored the class tag with a 0 payload, so on every
+  backend but x86-64 (whose inline VAR_STORE/VAR_BOX already made this test)
+  `w is None` answered False and the None guard after it was ENTERED.
+  bug-nilpy-conditional-expression-loses-none-identity, the half that only
+  x86-64 ever got. }
+begin
+  if PMachineWord(NativeInt(v) + 8)^ = 0 then
+    PMachineWord(v)^ := 0;                   { VT_EMPTY }
 end;
 
 procedure PXXVarClear(v: Pointer);

@@ -1,0 +1,37 @@
+# None stays None once it passes through a Variant, on every backend. x86-64
+# did two things inline that the shared fill routines and PXXVarBinOp did not:
+# a nil CLASS pointer boxes as VT_EMPTY (None), and None == x compares tags.
+# Without them, on i386/arm32/aarch64/riscv32/xtensa/wasm32 an Optional[W]
+# that was None boxed as a nil object (`is None` False, str() segfault), and
+# `None == 0`, `0.0 == None`, `False == None` were True. x86-64 is the control:
+# its output did not change with the fix.
+from typing import Optional
+
+class W:
+    def __init__(self, n):
+        self.n = n
+
+def look(k) -> Optional[W]:
+    if k == 1:
+        return W(1)
+    return None
+
+a = look(0)
+print("direct", a is None, a is not None, a == None, a != None)
+w = look(1)
+print("object", w is None, w is not None, w == None, w != None)
+b = look(0) if True else None
+print("ternary", b is None, b is not None)
+c = None if False else look(0)
+print("ternary2", c is None, c == None)
+xs = [look(0), look(1), None]
+print("list", xs[0] is None, xs[0] == None, xs[1] is None, xs[2] is None)
+d = {"k": look(0)}
+print("dict", d["k"] is None, d["k"] == None)
+print("str %s" % look(0))
+print("str", str(look(0)))
+vals = [0, 0.0, False, "", [], {}, None]
+for v in vals:
+    print("eq", v == None, None == v, v != None, None != v)
+e = ""
+print("strlocal", e == None)

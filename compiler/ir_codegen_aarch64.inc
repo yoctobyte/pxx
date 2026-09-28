@@ -5193,6 +5193,12 @@ begin
           EmitLoadImmA64(2, sz);
           EmitI32($F9000002);               { str x2, [x0] (tag) }
           EmitI32($F9000401);               { str x1, [x0, #8] (payload) }
+          if tk = tyClass then
+          begin
+            { a nil object is None: VT_EMPTY, as x86-64's inline store does }
+            EmitI32($B5000041);             { cbnz x1, +8 }
+            EmitI32($F900001F);             { str xzr, [x0] (tag = VT_EMPTY) }
+          end;
         end;
       end;
 
@@ -5241,6 +5247,11 @@ begin
         EmitLoadImmA64(2, sz);
         EmitI32($F9000002);               { str x2, [x0] (tag) }
         EmitI32($F9000401);               { str x1, [x0, #8] (payload) }
+        if tk = tyClass then
+        begin
+          EmitI32($B5000041);             { cbnz x1, +8 }
+          EmitI32($F900001F);             { str xzr, [x0] (tag = VT_EMPTY) }
+        end;
       end;
 
     IR_VAR_BINOP:

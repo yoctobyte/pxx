@@ -1440,6 +1440,9 @@ begin
     rv32_sw(reg_t2, reg_a0, 12);
   end;
   rv32_addi(reg_sp, reg_sp, 8);
+  { A nil CLASS payload is Python's None: retag VT_EMPTY, as x86-64's inline
+    fill does (PXXVarNilObjIsNone). The slot address survives the call. }
+  if payloadTk = tyClass then EmitVarHelperCallRISCV32('PXXVarNilObjIsNone');
 end;
 
 procedure EmitLoadVariantAddrRISCV32(node: Integer);

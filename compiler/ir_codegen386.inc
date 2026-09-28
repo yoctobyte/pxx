@@ -944,6 +944,9 @@ begin
     else
       begin EmitB($C7); EmitB($40); EmitB($0C); EmitI32(0); end; { mov dword [eax+12], 0 }
   end;
+  { A nil CLASS payload is Python's None: retag VT_EMPTY, as x86-64's inline
+    fill does (PXXVarNilObjIsNone). The slot address survives the call. }
+  if payloadTk = tyClass then EmitVarHelperCall386('PXXVarNilObjIsNone');
 end;
 
 procedure IREmit386CheckScalarSym(symIdx: Integer; const what: AnsiString);
