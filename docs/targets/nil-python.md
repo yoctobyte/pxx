@@ -90,8 +90,8 @@ A generator abandoned before it is exhausted, for example by `break`, does not
 release the class instances held in its local variables.
 
 A Pascal `array of T` that a Pascal routine returns can be indexed straight
-off the call (`d.MakeArr(4)[3]`). After v449 (`63c957f093` and
-`a49f6f12c6`, in no pin yet) it can also be passed to a Pascal array
+off the call (`d.MakeArr(4)[3]`). Since v450 (`63c957f093` and
+`a49f6f12c6`) it can also be passed to a Pascal array
 parameter by value, `const` or open array, inline
 (`d.SumV(d.MakeArr(4))`) or through a name (`a = d.MakeArr(4)`, then
 `d.SumV(a)`). v449 refuses both; v448 refuses the inline call and

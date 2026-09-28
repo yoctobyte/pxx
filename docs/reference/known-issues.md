@@ -502,52 +502,55 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   `m.end(0)`.
 
 - **Nil Python: a Pascal `array of T` result bound to a name read the wrong
-  values.** With a Pascal unit imported as `d` whose `MakeArr(4)` returns
-  `0, 10, 20, 30` as an `array of Integer`, `a = d.MakeArr(4)` then
-  `print(a[3])` printed `0`, `for x in d.MakeArr(3):` stopped with
-  `TypeError: expected a str, a list or a dict, got int`, and `len()` of it
-  did not compile. After v448 (`9bd7f662e5`, in v449) binding it to a
-  name, `len()` and `for` are refused at compile time, and the message says to
-  index the call directly. `d.MakeArr(4)[3]` prints `30` with every compiler
-  measured. One shape that worked is now refused too: `a = d.MakeArr(4)` then
-  `d.SumArr(a)`, a Pascal routine taking the array, printed `60`. Passing the
-  call straight in, `d.SumArr(d.MakeArr(4))`, compiles with none of them
-  (`by-reference argument must be a variable`), whether the parameter is
-  `const`, by value, `var` or an open array. Measured on 2026-09-28 on x86-64
-  with v441 (`4ebfa2d047a2`), v448 (`b2b325036c3b`) and the compiler built at
-  `a2614fcb8b` (`5dea028059af`); `d.MakeArr(4)[3]` also prints `30` on i386
-  with that compiler. **On v448:** index the call directly, and leave work on
-  the whole array to Pascal.
+  values.** With a Pascal unit imported as `d` whose `MakeArr(4)` returns `0,
+  10, 20, 30` as an `array of Integer`, `a = d.MakeArr(4)` then `print(a[3])`
+  printed `0`, `for x in d.MakeArr(3):` stopped with `TypeError: expected a
+  str, a list or a dict, got int`, and `len()` of it did not compile. After
+  v448 (`9bd7f662e5`, in v449) binding it to a name, `len()` and `for` are
+  refused at compile time, and the message says to index the call directly.
+  `d.MakeArr(4)[3]` prints `30` with every compiler measured. One shape that
+  worked is now refused too: `a = d.MakeArr(4)` then `d.SumArr(a)`, a Pascal
+  routine taking the array, printed `60`. Passing the call straight in,
+  `d.SumArr(d.MakeArr(4))`, compiles with none of them (`by-reference argument
+  must be a variable`), whether the parameter is `const`, by value, `var` or
+  an open array. Measured on 2026-09-28 on x86-64 with v441 (`4ebfa2d047a2`),
+  v448 (`b2b325036c3b`) and the compiler built at `a2614fcb8b`
+  (`5dea028059af`); `d.MakeArr(4)[3]` also prints `30` on i386 with that
+  compiler. **On v448:** index the call directly, and leave work on the whole
+  array to Pascal.
 
-- **Nil Python: a Pascal `array of T` result could not be passed straight to
-  a Pascal array parameter.** `d.SumV(d.MakeArr(4))`, where `SumV` takes the
-  array by value, was refused with `by-reference argument must be a
-  variable`, and so were a `const` parameter (`SumC`) and an open array
-  (`SumO`). Fixed after v449 (`63c957f093`, in no pin yet). Measured on 2026-09-28 with v449 (`0ded1e5d04c8`) and with the compiler built at `f53fd89ef0` (`2dd7329329c8`), on x86-64 and on i386 under QEMU user mode, with the `dynarr` unit of `test/nilpy_dynarr/`: v449
-  refuses all three, at module level and inside a def; with the later
-  compiler `print(d.SumV(d.MakeArr(4)), d.SumO(d.MakeArr(4)),
-  d.SumC(d.MakeArr(5)))` prints `60 60 100` in both places, which is what
-  FPC 3.2.2 prints for the same calls in Pascal. The fixture
+- **Nil Python: a Pascal `array of T` result could not be passed straight to a
+  Pascal array parameter.** `d.SumV(d.MakeArr(4))`, where `SumV` takes the
+  array by value, was refused with `by-reference argument must be a variable`,
+  and so were a `const` parameter (`SumC`) and an open array (`SumO`). Fixed
+  after v449 (`63c957f093`, in v450). Measured on 2026-09-28 with v449
+  (`0ded1e5d04c8`) and with the compiler built at `f53fd89ef0`
+  (`2dd7329329c8`), on x86-64 and on i386 under QEMU user mode, with the
+  `dynarr` unit of `test/nilpy_dynarr/`: v449 refuses all three, at module
+  level and inside a def; with that compiler `print(d.SumV(d.MakeArr(4)),
+  d.SumO(d.MakeArr(4)), d.SumC(d.MakeArr(5)))` prints `60 60 100` in both
+  places, which is what FPC 3.2.2 prints for the same calls in Pascal. The
+  fixture
   `test/test_nilpy_a_dynamic_array_result_passed_to_pascal_is_released.npy`
   (2000 trips, two arrays each) ends with `live=3` in the allocation census.
   **On v449:** leave the call to Pascal: a Pascal routine that returns
-  `SumV(MakeArr(n))`, called from Nil Python as `w.SumOfMake(4)`, prints
-  `60` with v449.
+  `SumV(MakeArr(n))`, called from Nil Python as `w.SumOfMake(4)`, prints `60`
+  with v449.
 
 - **Nil Python on v449: a Pascal `array of T` result bound to a name could not
   be passed to Pascal.** `a = d.MakeArr(4)`, then `d.SumV(a)`, `d.SumO(a)` or
   `d.SumC(a)`, printed `60` each with v448, at module level and inside a def,
   on x86-64 and i386. v449 refuses the binding with `"MakeArr" returns a
   Pascal dynamic array, which NilPy cannot use as a Python value yet`. Fixed
-  after v449 (`a49f6f12c6`, in no pin yet): the later compiler prints `60` for
-  all three again, in both places and on both targets, and a def that reads a
-  module-level bound name (`def f(): return d.SumO(a)`) prints `60` too. A
-  census over 2000 trips binding two arrays each ends with `live=3`. Measured
-  on 2026-09-28 with v448 (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and the
-  compiler built at `328961e879` (`c19cc2d531e4`), on x86-64 and on i386 under
-  QEMU user mode, with the `dynarr` unit of `test/nilpy_dynarr/`. **On v449:**
-  pass the call inline, `d.SumV(d.MakeArr(4))`, which v449 refuses too (see
-  the row above), or leave the call to Pascal as that row says.
+  in v450 (`a49f6f12c6`): v450 prints `60` for all three again, in both places
+  and on both targets, and a def that reads a module-level bound name (`def
+  f(): return d.SumO(a)`) prints `60` too. A census over 2000 trips binding
+  two arrays each ends with `live=3`. Measured on 2026-09-28 with v448
+  (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`), on x86-64
+  and on i386 under QEMU user mode, with the `dynarr` unit of
+  `test/nilpy_dynarr/`. **On v449:** pass the call inline,
+  `d.SumV(d.MakeArr(4))`, which v449 refuses too (see the row above), or leave
+  the call to Pascal as that row says.
 
 - **Nil Python: a class attribute returned from a method or a def came back as
   the wrong value.** With `class C:` holding `f = 2.5`, `s = "hi"`, `l = [1,
@@ -555,16 +558,15 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   typed as the class. On x86-64 v449 printed `4612811918334230528` for `2.5`
   (its IEEE bits), numbers for the string and the list, and `0` for `None`; on
   i386, arm32 and hosted Xtensa (both ABIs) it refused the program, and so it
-  did as an ESP object for riscv32 and Xtensa. Fixed after v449 (`b1b51f5a0d`,
-  in no pin yet). Measured on 2026-09-28 with v449 (`0ded1e5d04c8`) and the
-  compiler built at `328961e879` (`c19cc2d531e4`): the later compiler prints
-  `2.5 hi [1, 2] None 2.5 hi`, as CPython does, on x86-64, i386, arm32, hosted
-  riscv32 and hosted Xtensa with both ABIs under QEMU user mode, and builds
-  the ESP objects; not measured on ESP silicon. `return type(self).k` is still
-  refused, with `Nil Python: expected newline after statement`. **On v449:**
-  read the attribute through the instance instead: `return self.f`
-  (directly, or through a local) prints `2.5 hi None` for the float, string
-  and `None` attributes with v449 on x86-64, i386 and arm32.
+  did as an ESP object for riscv32 and Xtensa. Fixed in v450 (`b1b51f5a0d`).
+  Measured on 2026-09-28 with v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`):
+  v450 prints `2.5 hi [1, 2] None 2.5 hi`, as CPython does, on x86-64, i386,
+  arm32, hosted riscv32 and hosted Xtensa with both ABIs under QEMU user mode,
+  and builds the ESP objects; not measured on ESP silicon. `return
+  type(self).k` is still refused, with `Nil Python: expected newline after
+  statement`. **On v449:** read the attribute through the instance instead:
+  `return self.f` (directly, or through a local) prints `2.5 hi None` for the
+  float, string and `None` attributes with v449 on x86-64, i386 and arm32.
 
 - **Nil Python: a Pascal `var` or `out` object parameter lost the object when
   the name held `None`.** `o = None`, then `d.NewInto(o, 5)`, a Pascal
@@ -595,13 +597,31 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   without it the compiler stops and says so. Refused in v441 to v448. **On
   v448:** use the windowed ABI, as the ESP32-S3 examples do.
 
-- **Nil Python on hosted riscv32 Linux.** Every Nil Python program was
-  refused with `Nil Python is not supported on hosted riscv32 Linux yet`,
-  so a Nil Python bug on the ESP32-C3's architecture could only be looked at
-  on a board or in the ESP QEMU. It now builds and runs under qemu-riscv32,
-  and the Nil Python cross-target test and the class-value test print the
-  same output as x86-64. Measured on 2026-09-28 on the tree after pin v448.
-  Refused in v441 to v448.
+- **Nil Python on hosted riscv32 Linux.** Every Nil Python program was refused
+  with `Nil Python is not supported on hosted riscv32 Linux yet`, so a Nil
+  Python bug on the ESP32-C3's architecture could only be looked at on a board
+  or in the ESP QEMU. It now builds and runs under qemu-riscv32, and the Nil
+  Python cross-target test and the class-value test print the same output as
+  x86-64. Measured on 2026-09-28 on the tree after pin v448. Fixed in v450
+  (`d07cbfbb40`). Measured again on 2026-09-28 with a Nil Python program that
+  returns class attributes: v449 (`0ded1e5d04c8`) refuses it with that
+  message, and v450 (`c19cc2d531e4`) prints what CPython prints under
+  qemu-riscv32. Refused in v441 to v448.
+
+- **x86-64: the hardware random draw crashed on a CPU without RDRAND.**
+  `__pxxHwRandom64`, the compiler's intrinsic behind the `random` unit's
+  hardware tier, executed `RDRAND` even after `__pxxCpuHasHwRandom` had
+  answered `False`, so a program that called it on an older x86-64 CPU (a
+  Westmere Xeon) stopped with `SIGILL`. The `random` unit asks the probe first
+  and was not affected. Fixed in v450 (`70f62b5544`). Measured on 2026-09-28
+  under `qemu-x86_64 -cpu Westmere`, which has no RDRAND: a program that
+  prints the probe and then draws once prints `probe FALSE` and dies with
+  `Illegal instruction` (exit 132) with v448 (`b2b325036c3b`) and v449
+  (`0ded1e5d04c8`), and prints `draw FALSE FALSE` with v450 (`c19cc2d531e4`).
+  `Randomize; Random(1000)` from the `random` unit runs under that CPU model
+  with all three. With `-cpu max` and on the host, all three draw. **On
+  v449:** call `__pxxHwRandom64` only when `__pxxCpuHasHwRandom` is `True`, or
+  use the `random` unit.
 
 - **Nil Python: a float captured by a lambda or a nested def arrived as the
   wrong number.** `def bare(x): g = lambda: x; return g()` gave `0.0` for
@@ -752,15 +772,14 @@ answer silently. (Measured with v425.)
   module-level bound name (`def g(): return a[1]`, before or after the
   binding) is refused too, by the older `Nil Python: annotate the type / too
   dynamic`; passing it whole from a def (`return d.SumO(a)`) prints `60`, as
-  intended (x86-64, the later compiler). v449 refused the binding itself
+  intended (x86-64, v450). v449 refused the binding itself
   (see the row under Fixed since v441). A Nil Python list held in a name is
   not accepted by a Pascal array parameter either (`x = [1, 2, 3]` then
   `d.SumO(x)`: `no overload of SumO matches these arguments`). Inside a def,
   `return d.SumV(a)` is refused with `Nil Python: annotate the type / too
-  dynamic` by v448, v449 and the later compiler; `t = d.SumV(a)` then `return
-  t` prints `60` with v448 and the later compiler. Measured on 2026-09-28 with
-  v448 (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and the compiler built at
-  `328961e879` (`c19cc2d531e4`), on x86-64 and on i386 under QEMU user mode,
+  dynamic` by v448, v449 and v450; `t = d.SumV(a)` then `return
+  t` prints `60` with v448 and v450. Measured on 2026-09-28 with
+  v448 (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`), on x86-64 and on i386 under QEMU user mode,
   with the `dynarr` unit of `test/nilpy_dynarr/`.
 
 
