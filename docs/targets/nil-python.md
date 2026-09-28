@@ -66,7 +66,10 @@ These give CPython's output:
 
 ## Known limits
 
-Each of these was reproduced with the compiler named above.
+Each of these was reproduced with the compiler named above. On 2026-09-28
+every row was checked again with pin v447 (compiler sha256 `fad87004e4e8`),
+built for x86-64, i386 and arm32 (the last two run under QEMU), against
+CPython 3.14.4: each row behaves as written, and the three targets print the same.
 
 | What you write | CPython | Nil Python |
 | --- | --- | --- |
@@ -75,7 +78,7 @@ Each of these was reproduced with the compiler named above.
 | inside a function, `b = len(sys.argv) - 1` (0 with no arguments), then `7 // b` inside `try/except ZeroDivisionError` | `caught` | `Runtime error 200`, exit code 200; the handler never runs. The same for a big int that reaches zero and for `divmod(7, b)`. Some shapes do raise and are caught (a literal `1 // 0`, a module-level `b = 0`, a zero divisor passed in as a parameter), so do not rely on the difference; test the divisor first. |
 | `for v in (x * 2 for x in src()):` | lazy | the generator expression is evaluated in full before the loop starts |
 | `a.nope()` where no class declares `nope` | `AttributeError` at run time | compile error: `A has no method nope` |
-| `A.f = g` (replacing a method) | allowed | compile error; classes are fixed at compile time |
+| `A.f = g` (replacing a method) | allowed | compile error, because classes are fixed at compile time; the message, `cannot call non-static method on class type directly`, does not say so |
 | `match x:` / `async def` | supported | compile error (`undefined variable (match)`) |
 | `f"""a {v} b"""` | supported | compile error: triple-quoted f-strings are not supported |
 | `import threading` | works | needs the `--threadsafe` compiler flag; the error says so |
