@@ -39473,8 +39473,12 @@ test-quick: $(COMPILER)
 	# the riscv32 block above states -- on this target "dropped nothing" was the
 	# default outcome for as long as the export table rooted everything, and a
 	# report line alone would be green on exactly that.
+	@# grep >/dev/null, NOT grep -q: -q exits at the first match, the report line
+	@# comes BEFORE the image is written, and the compiler's next write then dies
+	@# of SIGPIPE -- no dce_wasm_on, and the stat below failed (seen in a gate
+	@# under load, 2026-09-28).
 	@./$(COMPILER) --target=wasm32 --dce --dce-report test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce_wasm_on 2>&1 \
-	  | grep -q 'dce: wasm32: functions' \
+	  | grep 'dce: wasm32: functions' >/dev/null \
 	  || { echo "test_dce_stub_calls[wasm32]: --dce did not run on wasm32"; exit 1; }
 	@./$(COMPILER) --target=wasm32 --no-dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce_wasm_off >/dev/null
 	@szoff=$$(stat -c%s $(TESTTMP)/dce_wasm_off); szon=$$(stat -c%s $(TESTTMP)/dce_wasm_on); \
