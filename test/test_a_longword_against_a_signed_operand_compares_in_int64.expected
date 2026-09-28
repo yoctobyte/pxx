@@ -1,0 +1,18 @@
+c > si   TRUE
+c < i    FALSE
+c >= sh  TRUE
+i <= c   TRUE
+m = i    FALSE
+m <> i   TRUE
+c > -1   TRUE
+-5 < c   TRUE
+arr > i  TRUE
+Big > i  TRUE
+if c > i taken
+while kept 3000000000
+q > n    TRUE
+n < q    TRUE
+q = n    FALSE
+q > i    FALSE
+c > 10   TRUE
+c < 4000000000 TRUE

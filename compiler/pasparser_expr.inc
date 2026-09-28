@@ -10199,6 +10199,34 @@ begin
     TryScalarNamedCast := True;
     Exit;
   end;
+  { A cast of an UNTYPED deref reinterprets the MEMORY at the cast's width, as
+    FPC does: `Int64(p^)` over a bare Pointer reads 8 bytes. The deref has no
+    kind of its own (tyUnknown), so it was loaded at native width and then
+    converted: `Int64(p^)` read 4 bytes on i386/arm32/riscv32 and `Double(p^)`
+    printed the bytes' integer value as a float on every target. Stamp the
+    deref with the target kind; the arms below then see a kind-to-itself cast.
+    An untyped var/const/out PARAMETER is the same memory spelled by name --
+    declared tyPointer, so it read at pointer width -- and becomes the deref
+    the cast-as-lvalue store already builds for it (FinishCastAsLValueStore):
+    `Int64(v)` is `PInt64(@v)^`.
+    bug-p-a-cast-of-an-untyped-deref-reads-at-native-width }
+  if TypeIsOrdinal(castTk) or TypeIsFloat(castTk) then
+  begin
+    if (ASTKind[CurASTNode] = AN_IDENT) and IsUntypedVarParamSym(ASTIVal[CurASTNode]) then
+    begin
+      scNode := AllocNode(AN_ADDR);
+      ASTLeft[scNode] := CurASTNode;
+      ASTTk[scNode] := Ord(tyPointer);
+      CurASTNode := AllocNode(AN_DEREF);
+      ASTLeft[CurASTNode] := scNode;
+      ASTTk[CurASTNode] := Ord(tyUnknown);
+    end;
+    if (ASTKind[CurASTNode] = AN_DEREF) and (ASTTk[CurASTNode] = Ord(tyUnknown)) then
+    begin
+      ASTTk[CurASTNode] := Ord(castTk);
+      ASTSLen[CurASTNode] := Ord(castTk);
+    end;
+  end;
   scTmp := TryExplicitOpCast(CurASTNode, castTk, castCap);
   if scTmp >= 0 then
   begin
@@ -12139,6 +12167,28 @@ begin
       ASTTk[node] := Ord(tyBoolean);
       CurASTNode := node;
       Exit;
+    end;
+    { A 4-byte UNSIGNED operand against a signed one compares in Int64 (the pair
+      widens to a type holding both -- TypeCompareUnsigned's Pascal rule, which
+      answers SIGNED). Its note "values are still evaluated in 64-bit registers"
+      is true on x86-64/aarch64 only: on i386/arm32/riscv32 the pair stayed in
+      32-bit registers, so LongWord(3000000000) read as negative and `c > si`,
+      `c > i`, `c > -1` all answered FALSE, `c = i` TRUE for $FFFFFFFF vs -1.
+      Widen both sides explicitly there, as `Int64(c) > Int64(si)` spells it.
+      bug-p-a-longword-against-a-signed-operand-compares-32-bit-signed-on-32-bit-targets }
+    if (not CProgramMode) and (TARGET_PTR_SIZE = 4) and
+       (op in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) and
+       (((IntToTypeKind(ASTTk[left]) in [tyUInt32, tyNativeUInt]) and
+         (IntToTypeKind(ASTTk[right]) in [tyInteger, tyInt8, tyInt16, tyInt32, tyNativeInt])) or
+        ((IntToTypeKind(ASTTk[right]) in [tyUInt32, tyNativeUInt]) and
+         (IntToTypeKind(ASTTk[left]) in [tyInteger, tyInt8, tyInt16, tyInt32, tyNativeInt]))) then
+    begin
+      node := AllocNode(AN_PTR_CAST);
+      ASTLeft[node] := left; ASTIVal[node] := -1; ASTTk[node] := Ord(tyInt64);
+      left := node;
+      node := AllocNode(AN_PTR_CAST);
+      ASTLeft[node] := right; ASTIVal[node] := -1; ASTTk[node] := Ord(tyInt64);
+      right := node;
     end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;

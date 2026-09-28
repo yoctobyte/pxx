@@ -5,7 +5,7 @@ summary: "The 32-bit backends compare the low word plus a fits-in-int32 flag, so
 track: A
 type: bug
 prio: 20
-status: backlog
+status: done
 found: 2026-09-05
 found-by: frankO (measured on all five runnable targets while fixing the 64-bit half)
 ---
@@ -129,3 +129,22 @@ it. The same probe is worth re-running on the 32-bit targets before writing
 their fix: if plain `if q = 4294967297` is already correct there, whatever it
 uses is the machinery the item loop should be reusing rather than a new
 two-word compare written from scratch.
+
+## Resolution (2026-09-28, frankD)
+
+Taken the way the last section suggested: the general comparison path is right
+at full width on the 32-bit targets (re-measured: `q = 4294967297`,
+`q >= 4294967296` and `q <= 4294967300` answer correctly on i386), so the item
+loop was not taught a two-word compare. On a 32-bit target, a membership whose
+items do not all fit in Int32 is spelled with the ordinary operators instead --
+`(q = a) or ((q >= lo) and (q <= hi))` -- by WideSetInAsCompares, called at the
+end of ParseSetMembershipAST. The test value is evaluated once (a hidden temp
+unless it is a plain name or literal; a call operand runs once, measured).
+Every set that fits in Int32 -- every real Pascal set -- keeps the SPECIAL_IN
+fast path byte for byte.
+
+FPC 3.2.2 is not an oracle here: it truncates too (`1 in [4294967297]` is TRUE
+there) and pxx warns that such an element is outside a set's domain. The
+reference is pxx x86-64, which this test already asserted. `test_set_in_64bit_const`
+now runs cross in test-core (i386/aarch64/arm32/riscv32): SETIN64 OK on all
+four; v446 prints SETIN64 FAILED 5 on the three 32-bit ones.

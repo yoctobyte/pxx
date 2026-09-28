@@ -8701,6 +8701,16 @@ test-threads: $(COMPILER)
 	# method path must pick Ov(TMethod) over Ov(Pointer) exactly as the free path does.
 	./$(COMPILER) test/test_methodref_arg_to_a_method_call.pas $(TESTTMP)/test_mramc26
 	tools/expect_same.sh test_mramc26.1 "$$($(TESTTMP)/test_mramc26 | tr '\n' '|')" "der tag=9|der tag=9|der tag=9|Ov(TMethod)|der tag=9|FOv(TMethod)|der tag=9|"
+	# ...and CROSS (the same by-value pair; v446 crashes on the 32-bit three).
+	# bug-a-a-method-reference-argument-is-passed-by-address-on-32-bit-targets
+	./$(COMPILER) --target=i386 test/test_methodref_arg_to_a_method_call.pas $(TESTTMP)/test_mramc26_i386
+	tools/expect_same.sh i386/test_mramc26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_mramc26_i386 | tr '\n' '|')" "der tag=9|der tag=9|der tag=9|Ov(TMethod)|der tag=9|FOv(TMethod)|der tag=9|"
+	./$(COMPILER) --target=aarch64 test/test_methodref_arg_to_a_method_call.pas $(TESTTMP)/test_mramc26_aarch64
+	tools/expect_same.sh aarch64/test_mramc26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_mramc26_aarch64 | tr '\n' '|')" "der tag=9|der tag=9|der tag=9|Ov(TMethod)|der tag=9|FOv(TMethod)|der tag=9|"
+	./$(COMPILER) --target=arm32 test/test_methodref_arg_to_a_method_call.pas $(TESTTMP)/test_mramc26_arm32
+	tools/expect_same.sh arm32/test_mramc26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_mramc26_arm32 | tr '\n' '|')" "der tag=9|der tag=9|der tag=9|Ov(TMethod)|der tag=9|FOv(TMethod)|der tag=9|"
+	./$(COMPILER) --target=riscv32 test/test_methodref_arg_to_a_method_call.pas $(TESTTMP)/test_mramc26_riscv32
+	tools/expect_same.sh riscv32/test_mramc26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_mramc26_riscv32 | tr '\n' '|')" "der tag=9|der tag=9|der tag=9|Ov(TMethod)|der tag=9|FOv(TMethod)|der tag=9|"
 	# SysOpen/SysRead/SysWrite as an ARGUMENT: the intrinsic's node carried no
 	# type, so overload resolution refused the call. The compile is the assertion.
 	./$(COMPILER) test/test_sys_intrinsic_as_argument.pas $(TESTTMP)/test_siaa26
@@ -8935,6 +8945,17 @@ test-threads: $(COMPILER)
 	# one anyway). Unlike test_const64 this one DOES fail on x86-64 when broken.
 	./$(COMPILER) test/test_set_in_64bit_const.pas $(TESTTMP)/test_set_in_64bit_const_26
 	tools/expect_same.sh test_set_in_64bit_const_26 "$$($(TESTTMP)/test_set_in_64bit_const_26 | tail -1)" "SETIN64 OK"
+	# ...and CROSS: the 32-bit SPECIAL_IN walks compared one word plus a fits-in-
+	# Int32 flag; an item outside Int32 is now spelled with = / >= / <= there.
+	# bug-a-set-membership-32-bit-backends-truncate-the-set-constant
+	./$(COMPILER) --target=i386 test/test_set_in_64bit_const.pas $(TESTTMP)/test_set_in_64bit_const_26_i386
+	tools/expect_same.sh i386/test_set_in_64bit_const_26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_set_in_64bit_const_26_i386 | tail -1)" "SETIN64 OK"
+	./$(COMPILER) --target=aarch64 test/test_set_in_64bit_const.pas $(TESTTMP)/test_set_in_64bit_const_26_aarch64
+	tools/expect_same.sh aarch64/test_set_in_64bit_const_26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_set_in_64bit_const_26_aarch64 | tail -1)" "SETIN64 OK"
+	./$(COMPILER) --target=arm32 test/test_set_in_64bit_const.pas $(TESTTMP)/test_set_in_64bit_const_26_arm32
+	tools/expect_same.sh arm32/test_set_in_64bit_const_26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_set_in_64bit_const_26_arm32 | tail -1)" "SETIN64 OK"
+	./$(COMPILER) --target=riscv32 test/test_set_in_64bit_const.pas $(TESTTMP)/test_set_in_64bit_const_26_riscv32
+	tools/expect_same.sh riscv32/test_set_in_64bit_const_26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_set_in_64bit_const_26_riscv32 | tail -1)" "SETIN64 OK"
 	# The implicit Self at param slot 0 shifts every per-param array with it;
 	# `puntyped` was the last one that did not, so a METHOD's untyped-param flag
 	# sat one slot left of its parameter. Asserted as a RELATION (method must
@@ -9238,6 +9259,36 @@ test-core: $(COMPILER)
 	tools/expect_same.sh arm32/caretprop26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/caretprop26_arm32)" "$$(cat test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.expected)"
 	./$(COMPILER) --target=riscv32 test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.pas $(TESTTMP)/caretprop26_riscv32
 	tools/expect_same.sh riscv32/caretprop26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/caretprop26_riscv32)" "$$(cat test/test_a_caret_on_a_property_getter_result_keeps_the_pointee.expected)"
+	# A CAST OF UNTYPED MEMORY READS AT THE CAST'S WIDTH: `Int64(p^)` over a bare
+	# Pointer and `Int64(v)` of an untyped param read 4 bytes on the 32-bit targets;
+	# `Double(p^)` converted the integer bytes on every target. .expected is FPC's.
+	# v446: 3 rows wrong on x86-64/aarch64, 11 on i386/arm32/riscv32.
+	# bug-p-a-cast-of-an-untyped-deref-reads-at-native-width
+	./$(COMPILER) test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.pas $(TESTTMP)/untypedcast26
+	tools/expect_same.sh untypedcast26 "$$($(TESTTMP)/untypedcast26)" "$$(cat test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.expected)"
+	./$(COMPILER) --target=i386 test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.pas $(TESTTMP)/untypedcast26_i386
+	tools/expect_same.sh i386/untypedcast26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/untypedcast26_i386)" "$$(cat test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.expected)"
+	./$(COMPILER) --target=aarch64 test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.pas $(TESTTMP)/untypedcast26_aarch64
+	tools/expect_same.sh aarch64/untypedcast26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/untypedcast26_aarch64)" "$$(cat test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.expected)"
+	./$(COMPILER) --target=arm32 test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.pas $(TESTTMP)/untypedcast26_arm32
+	tools/expect_same.sh arm32/untypedcast26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/untypedcast26_arm32)" "$$(cat test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.expected)"
+	./$(COMPILER) --target=riscv32 test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.pas $(TESTTMP)/untypedcast26_riscv32
+	tools/expect_same.sh riscv32/untypedcast26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/untypedcast26_riscv32)" "$$(cat test/test_a_cast_of_an_untyped_deref_reads_at_the_casts_width.expected)"
+	# AN INT64 CAST OF A FIELD'S ADDRESS WIDENS THE POINTER: the address node
+	# carried the Int64 field's kind, so the widen was skipped and the 32-bit
+	# targets read a garbage high word. .expected is FPC's. v446: 6-7 rows
+	# wrong on i386/arm32/riscv32.
+	# bug-a-an-int64-cast-of-an-int64-fields-address-keeps-a-garbage-high-word
+	./$(COMPILER) test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.pas $(TESTTMP)/addrwiden26
+	tools/expect_same.sh addrwiden26 "$$($(TESTTMP)/addrwiden26)" "$$(cat test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.expected)"
+	./$(COMPILER) --target=i386 test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.pas $(TESTTMP)/addrwiden26_i386
+	tools/expect_same.sh i386/addrwiden26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/addrwiden26_i386)" "$$(cat test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.expected)"
+	./$(COMPILER) --target=aarch64 test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.pas $(TESTTMP)/addrwiden26_aarch64
+	tools/expect_same.sh aarch64/addrwiden26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/addrwiden26_aarch64)" "$$(cat test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.expected)"
+	./$(COMPILER) --target=arm32 test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.pas $(TESTTMP)/addrwiden26_arm32
+	tools/expect_same.sh arm32/addrwiden26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/addrwiden26_arm32)" "$$(cat test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.expected)"
+	./$(COMPILER) --target=riscv32 test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.pas $(TESTTMP)/addrwiden26_riscv32
+	tools/expect_same.sh riscv32/addrwiden26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/addrwiden26_riscv32)" "$$(cat test/test_an_int64_cast_of_a_fields_address_widens_the_pointer.expected)"
 	# An interface name in a DECLARATION initialiser means its GUID. All four
 	# cells were wrong and in opposite directions: var accepted and stored an
 	# AN_CLASSREF VMT address (silent, and interface identity is matched BY GUID
@@ -10425,6 +10476,17 @@ test-core: $(COMPILER)
 	# a CLASS PROPERTY through the class name: TD.Compressed := True
 	./$(COMPILER) test/test_class_property_b299.pas $(TESTTMP)/test_class_property_b29926
 	tools/expect_same.sh test_class_property_b29926 "$$($(TESTTMP)/test_class_property_b29926)" "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
+	# ...and CROSS: a `static` accessor was handed the metaclass as its first
+	# argument -- refused on i386/aarch64/arm32, the class pointer stored as the
+	# value on riscv32. bug-p-a-static-class-property-setter-is-passed-the-metaclass
+	./$(COMPILER) --target=i386 test/test_class_property_b299.pas $(TESTTMP)/test_class_property_b29926_i386
+	tools/expect_same.sh i386/test_class_property_b29926_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_class_property_b29926_i386)" "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
+	./$(COMPILER) --target=aarch64 test/test_class_property_b299.pas $(TESTTMP)/test_class_property_b29926_aarch64
+	tools/expect_same.sh aarch64/test_class_property_b29926_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_class_property_b29926_aarch64)" "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
+	./$(COMPILER) --target=arm32 test/test_class_property_b299.pas $(TESTTMP)/test_class_property_b29926_arm32
+	tools/expect_same.sh arm32/test_class_property_b29926_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_class_property_b29926_arm32)" "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
+	./$(COMPILER) --target=riscv32 test/test_class_property_b299.pas $(TESTTMP)/test_class_property_b29926_riscv32
+	tools/expect_same.sh riscv32/test_class_property_b29926_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_class_property_b29926_riscv32)" "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
 	# an `array of const` LITERAL to an OVERLOADED constructor (fcl-json TJSONArray.Create)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_ctor_arrayofconst_overload_b298.pas $(TESTTMP)/test_ctor_arrayofconst_overload_b29826
 	tools/expect_same.sh test_ctor_arrayofconst_overload_b29826 "$$($(TESTTMP)/test_ctor_arrayofconst_overload_b29826)" "$$(printf 'noarg n=-1\narr n=3')"
@@ -13383,6 +13445,28 @@ test-core: $(COMPILER)
 	# `q > n` signed) is FPC's own inconsistency and is asserted, not smoothed.
 	./$(COMPILER) test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26
 	tools/expect_same.sh test_cmpsign26 "$$($(TESTTMP)/test_cmpsign26 | tail -1)" "total ok 28 / 28"
+	# ...and CROSS: i386/arm32/riscv32 compared a LongWord against a signed operand
+	# in 32-bit signed registers and QWord against Int64 unsigned. v446: 7 rows of
+	# the above and 15 of the fixture below wrong there; .expected is FPC's.
+	# bug-p-a-longword-against-a-signed-operand-compares-32-bit-signed-on-32-bit-targets
+	./$(COMPILER) --target=i386 test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26_i386
+	tools/expect_same.sh i386/test_cmpsign26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_cmpsign26_i386 | tail -1)" "total ok 28 / 28"
+	./$(COMPILER) --target=aarch64 test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26_aarch64
+	tools/expect_same.sh aarch64/test_cmpsign26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cmpsign26_aarch64 | tail -1)" "total ok 28 / 28"
+	./$(COMPILER) --target=arm32 test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26_arm32
+	tools/expect_same.sh arm32/test_cmpsign26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_cmpsign26_arm32 | tail -1)" "total ok 28 / 28"
+	./$(COMPILER) --target=riscv32 test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26_riscv32
+	tools/expect_same.sh riscv32/test_cmpsign26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_cmpsign26_riscv32 | tail -1)" "total ok 28 / 28"
+	./$(COMPILER) test/test_a_longword_against_a_signed_operand_compares_in_int64.pas $(TESTTMP)/lwcmp26
+	tools/expect_same.sh lwcmp26 "$$($(TESTTMP)/lwcmp26)" "$$(cat test/test_a_longword_against_a_signed_operand_compares_in_int64.expected)"
+	./$(COMPILER) --target=i386 test/test_a_longword_against_a_signed_operand_compares_in_int64.pas $(TESTTMP)/lwcmp26_i386
+	tools/expect_same.sh i386/lwcmp26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/lwcmp26_i386)" "$$(cat test/test_a_longword_against_a_signed_operand_compares_in_int64.expected)"
+	./$(COMPILER) --target=aarch64 test/test_a_longword_against_a_signed_operand_compares_in_int64.pas $(TESTTMP)/lwcmp26_aarch64
+	tools/expect_same.sh aarch64/lwcmp26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/lwcmp26_aarch64)" "$$(cat test/test_a_longword_against_a_signed_operand_compares_in_int64.expected)"
+	./$(COMPILER) --target=arm32 test/test_a_longword_against_a_signed_operand_compares_in_int64.pas $(TESTTMP)/lwcmp26_arm32
+	tools/expect_same.sh arm32/lwcmp26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/lwcmp26_arm32)" "$$(cat test/test_a_longword_against_a_signed_operand_compares_in_int64.expected)"
+	./$(COMPILER) --target=riscv32 test/test_a_longword_against_a_signed_operand_compares_in_int64.pas $(TESTTMP)/lwcmp26_riscv32
+	tools/expect_same.sh riscv32/lwcmp26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/lwcmp26_riscv32)" "$$(cat test/test_a_longword_against_a_signed_operand_compares_in_int64.expected)"
 	# `Str(x, s)` had no unsigned dispatch at all -- `Str(q, s)` on a QWord >= 2^63
 	# gave '-1' while `writeln(q)` two lines away was right -- and write(Text) had
 	# one keyed on `tk = tyUInt64`, one of FOUR spellings of an 8-byte unsigned, so
@@ -19356,6 +19440,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_method_pointer_virtual_b35726 "$$($(TESTTMP)/test_method_pointer_virtual_b35726)" "$$(printf 'nonvirt=15\nvirt-base=6\nvirt-deriv=1005\ndirect=1005')"
 	./$(COMPILER) test/test_method_pointer_arg_b361.pas $(TESTTMP)/test_method_pointer_arg_b36126
 	tools/expect_same.sh test_method_pointer_arg_b36126 "$$($(TESTTMP)/test_method_pointer_arg_b36126)" "$$(printf 'cb=15\ncb=6\ncb=1005')"
+	# ...and CROSS: on a 32-bit target the 8-byte pair is a by-value record
+	# argument (its VALUE in a register pair); `Call(@b.M)` passed the temp's
+	# ADDRESS and segfaulted on i386/arm32/riscv32. v446 crashes all three.
+	# bug-a-a-method-reference-argument-is-passed-by-address-on-32-bit-targets
+	./$(COMPILER) --target=i386 test/test_method_pointer_arg_b361.pas $(TESTTMP)/test_method_pointer_arg_b36126_i386
+	tools/expect_same.sh i386/test_method_pointer_arg_b36126_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_method_pointer_arg_b36126_i386)" "$$(printf 'cb=15\ncb=6\ncb=1005')"
+	./$(COMPILER) --target=aarch64 test/test_method_pointer_arg_b361.pas $(TESTTMP)/test_method_pointer_arg_b36126_aarch64
+	tools/expect_same.sh aarch64/test_method_pointer_arg_b36126_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_method_pointer_arg_b36126_aarch64)" "$$(printf 'cb=15\ncb=6\ncb=1005')"
+	./$(COMPILER) --target=arm32 test/test_method_pointer_arg_b361.pas $(TESTTMP)/test_method_pointer_arg_b36126_arm32
+	tools/expect_same.sh arm32/test_method_pointer_arg_b36126_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_method_pointer_arg_b36126_arm32)" "$$(printf 'cb=15\ncb=6\ncb=1005')"
+	./$(COMPILER) --target=riscv32 test/test_method_pointer_arg_b361.pas $(TESTTMP)/test_method_pointer_arg_b36126_riscv32
+	tools/expect_same.sh riscv32/test_method_pointer_arg_b36126_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_method_pointer_arg_b36126_riscv32)" "$$(printf 'cb=15\ncb=6\ncb=1005')"
 	./$(COMPILER) test/test_forin_aggr_elems.pas $(TESTTMP)/test_forin_aggr_elems26
 	tools/expect_same.sh test_forin_aggr_elems26 "$$($(TESTTMP)/test_forin_aggr_elems26)" "$$(printf 'rec=33\ncls=30\nstr=aabbcc')"
 	./$(COMPILER) test/test_enum_cast.pas $(TESTTMP)/test_enum_cast26
@@ -22684,6 +22780,15 @@ test-core: $(COMPILER)
 	# slot 0 and still prints a plausible number.
 	./$(COMPILER) test/test_class_property_indexed.pas $(TESTTMP)/test_clsprop_idx26
 	tools/expect_same.sh test_clsprop_idx26 "$$($(TESTTMP)/test_clsprop_idx26)" "$$(cat test/test_class_property_indexed.expected)"
+	# ...and CROSS. bug-p-a-static-class-property-setter-is-passed-the-metaclass
+	./$(COMPILER) --target=i386 test/test_class_property_indexed.pas $(TESTTMP)/test_clsprop_idx26_i386
+	tools/expect_same.sh i386/test_clsprop_idx26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_clsprop_idx26_i386)" "$$(cat test/test_class_property_indexed.expected)"
+	./$(COMPILER) --target=aarch64 test/test_class_property_indexed.pas $(TESTTMP)/test_clsprop_idx26_aarch64
+	tools/expect_same.sh aarch64/test_clsprop_idx26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_clsprop_idx26_aarch64)" "$$(cat test/test_class_property_indexed.expected)"
+	./$(COMPILER) --target=arm32 test/test_class_property_indexed.pas $(TESTTMP)/test_clsprop_idx26_arm32
+	tools/expect_same.sh arm32/test_clsprop_idx26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_clsprop_idx26_arm32)" "$$(cat test/test_class_property_indexed.expected)"
+	./$(COMPILER) --target=riscv32 test/test_class_property_indexed.pas $(TESTTMP)/test_clsprop_idx26_riscv32
+	tools/expect_same.sh riscv32/test_clsprop_idx26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_clsprop_idx26_riscv32)" "$$(cat test/test_class_property_indexed.expected)"
 	# A with-scoped property whose accessors are METHODS. The with-scope arm
 	# resolved only FIELD-backed properties and said so in a comment; the fall
 	# through went out of the compiler as `undefined variable`. Every getter
@@ -22821,6 +22926,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_classvarrec26 "$$($(TESTTMP)/test_classvarrec26)" "$$(cat test/test_class_var_in_a_record.expected)"
 	./$(COMPILER) test/test_a_records_static_class_method_is_reachable_through_an_instance.pas $(TESTTMP)/test_recstaticinst26
 	tools/expect_same.sh test_recstaticinst26 "$$($(TESTTMP)/test_recstaticinst26)" "$$(cat test/test_a_records_static_class_method_is_reachable_through_an_instance.expected)"
+	# ...and CROSS: `with R do Add(4)` and `R.P := 3` handed a static routine R
+	# as an argument (riscv32 silent, the other 32-bit targets refused).
+	# bug-p-a-static-class-property-setter-is-passed-the-metaclass
+	./$(COMPILER) --target=i386 test/test_a_records_static_class_method_is_reachable_through_an_instance.pas $(TESTTMP)/test_recstaticinst26_i386
+	tools/expect_same.sh i386/test_recstaticinst26_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_recstaticinst26_i386)" "$$(cat test/test_a_records_static_class_method_is_reachable_through_an_instance.expected)"
+	./$(COMPILER) --target=aarch64 test/test_a_records_static_class_method_is_reachable_through_an_instance.pas $(TESTTMP)/test_recstaticinst26_aarch64
+	tools/expect_same.sh aarch64/test_recstaticinst26_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_recstaticinst26_aarch64)" "$$(cat test/test_a_records_static_class_method_is_reachable_through_an_instance.expected)"
+	./$(COMPILER) --target=arm32 test/test_a_records_static_class_method_is_reachable_through_an_instance.pas $(TESTTMP)/test_recstaticinst26_arm32
+	tools/expect_same.sh arm32/test_recstaticinst26_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_recstaticinst26_arm32)" "$$(cat test/test_a_records_static_class_method_is_reachable_through_an_instance.expected)"
+	./$(COMPILER) --target=riscv32 test/test_a_records_static_class_method_is_reachable_through_an_instance.pas $(TESTTMP)/test_recstaticinst26_riscv32
+	tools/expect_same.sh riscv32/test_recstaticinst26_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_recstaticinst26_riscv32)" "$$(cat test/test_a_records_static_class_method_is_reachable_through_an_instance.expected)"
 	./$(COMPILER) test/test_a_class_const_is_a_constant_when_named_through_its_type.pas $(TESTTMP)/test_qualclsconst26
 	tools/expect_same.sh test_qualclsconst26 "$$($(TESTTMP)/test_qualclsconst26)" "$$(cat test/test_a_class_const_is_a_constant_when_named_through_its_type.expected)"
 	! ./$(COMPILER) test/test_a_class_name_is_not_an_integer_constant_fail.pas $(TESTTMP)/test_clsnameint26 > $(TESTTMP)/test_clsnameint.log 2>&1

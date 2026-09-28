@@ -190,6 +190,41 @@ says. Each was checked against GCC's output on x86-64, and re-checked on
 2026-09-27: with v445 each row is still wrong exactly where it says "after
 v445", and with the compiler at `ae11f1ddb5` every value matches GCC.
 
+- **Pascal: comparing a LongWord with a signed value on 32-bit targets.** On
+  i386, arm32 and riscv32, `c > i` with `c: LongWord = 3000000000` and
+  `i: LongInt = -1` answered FALSE, and `$FFFFFFFF = -1` answered TRUE. A
+  QWord compared with an Int64 was compared unsigned there. Pascal compares
+  these as Int64, and each row now matches FPC 3.2.2 on all five targets.
+  Wrong in v441 to v446.
+
+- **Pascal: `q in [...]` with a set item beyond 32 bits on 32-bit targets.**
+  On i386, arm32 and riscv32, `1 in [4294967297]` answered TRUE and
+  `4294967297 in [4294967297]` answered FALSE. They now answer as on x86-64.
+  FPC rejects such items, and pxx warns about them. Wrong in v441 to v446.
+
+- **Pascal: `Int64(@r.f)` had a garbage high word on 32-bit targets.** For
+  an Int64, QWord or Double field, `Int64(@r.i) - Int64(@r)` answered
+  4294967297 instead of the field's offset on i386, arm32 and riscv32. It now
+  matches FPC 3.2.2. Wrong in v441 to v446.
+
+- **Pascal: `Call(@obj.Method)` crashed on 32-bit targets.** Passing a method
+  reference directly to an `of object` parameter segfaulted on i386, arm32 and
+  riscv32. Passing it through a variable worked. Wrong in v441 to v446.
+
+- **Pascal: a `static` class method was handed an extra argument.** A class
+  property whose accessor is `static`, and a static method called bare inside
+  `with`, got the receiver as a first argument. On riscv32 the setter stored
+  the class pointer instead of the value. i386, aarch64 and arm32 refused to
+  compile the call. Wrong in v441 to v446.
+
+- **Pascal: a cast of untyped memory read at the wrong width.** `Int64(p^)`
+  over a plain `Pointer`, or `Int64(v)` for an untyped `const v`/`var v`
+  parameter, read 4 bytes on i386, arm32 and riscv32. `Double(p^)` and
+  `Single(p^)` converted the bytes' integer value to a float instead of reading
+  them as one, on every target. A cast now reads the memory at the cast type's
+  width, as FPC does, and each row matches FPC 3.2.2 on all five targets. Wrong
+  in v441 to v446.
+
 - **Pascal: `^[i]` on a property's result read the wrong element.** For
   `property L: PIntArray read GetL`, `c.L^[1]` stepped 8 bytes per element
   whatever the element type. It read element 2 of an Integer array, 0 from a

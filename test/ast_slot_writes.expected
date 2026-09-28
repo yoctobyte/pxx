@@ -496,6 +496,7 @@ AN_ASSIGN Right incNode
 AN_ASSIGN Right initExpr
 AN_ASSIGN Right initNode
 AN_ASSIGN Right left
+AN_ASSIGN Right leftExpr
 AN_ASSIGN Right lenNode
 AN_ASSIGN Right listNode
 AN_ASSIGN Right lit
@@ -727,6 +728,7 @@ AN_CALL Left enArg0
 AN_CALL Left eoArg
 AN_CALL Left excFoldA
 AN_CALL Left fcArg
+AN_CALL Left firstArg
 AN_CALL Left flArg1
 AN_CALL Left flArg2
 AN_CALL Left flUnboxArg
@@ -829,6 +831,7 @@ AN_CLASS_CAST Left CurASTNode
 AN_CLASS_CAST Left unboxCall
 AN_COMMA Left Result
 AN_COMMA Left arm
+AN_COMMA Left asg
 AN_COMMA Left asgn
 AN_COMMA Left blockNode
 AN_COMMA Left callNode
@@ -859,6 +862,7 @@ AN_COMMA Right atRecv
 AN_COMMA Right callN
 AN_COMMA Right chMid
 AN_COMMA Right chSeq
+AN_COMMA Right chain
 AN_COMMA Right condNode
 AN_COMMA Right ctorValN
 AN_COMMA Right frIdn
@@ -897,6 +901,7 @@ AN_DEREF Left inode
 AN_DEREF Left node
 AN_DEREF Left operand
 AN_DEREF Left ptrNode
+AN_DEREF Left scNode
 AN_DEREF Left slotAddr
 AN_DYN_COPY Left ASTLeft[argsHead]
 AN_DYN_COPY Left exprNode
@@ -1153,8 +1158,10 @@ AN_PAIR Right stmtNode
 AN_PAIR Right tern
 AN_PARFOR Left callNode
 AN_PTR_CAST Left CurASTNode
+AN_PTR_CAST Left left
 AN_PTR_CAST Left node
 AN_PTR_CAST Left operand
+AN_PTR_CAST Left right
 AN_PTR_CAST Left valNode
 AN_PTR_CAST Left wIdentNode
 AN_PTR_CAST Right -1

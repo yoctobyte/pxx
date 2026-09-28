@@ -5621,11 +5621,22 @@ end;
   the arithmetic/shift rule and it stays; `div`/`mod` must follow the two-operand
   divide rule instead, or `QWord div Int64` divides unsigned on those targets
   while x86-64 and aarch64 divide signed. Same question, one answer, every
-  target. }
+  target.
+
+  A COMPARISON is the same story with the compare rule: `QWord > Int64` is
+  signed in FPC and on x86-64/aarch64 (TypeCompareUnsigned), and the pair path
+  compared it unsigned because a QWord was present -- `q > n` with n = -1
+  answered FALSE on i386/arm32/riscv32 only. An operand with no ordinal kind
+  (synthesized IR) keeps the old rule.
+  bug-p-a-longword-against-a-signed-operand-compares-32-bit-signed-on-32-bit-targets }
 function TypeBinop64Unsigned(op: Integer; lhs, rhs: TTypeKind): Boolean;
 begin
   if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
     Result := TypeDivideUnsigned(lhs, rhs)
+  else if ((op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+           (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
+          TypeIsOrdinal(lhs) and TypeIsOrdinal(rhs) then
+    Result := TypeCompareUnsigned(lhs, rhs)
   else
     Result := (lhs = tyUInt64) or (rhs = tyUInt64);
 end;

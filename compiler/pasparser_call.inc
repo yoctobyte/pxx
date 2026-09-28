@@ -1315,6 +1315,16 @@ begin
     ASTSOffset[callN] := UMthVirSlot[mmi];    { IMT slot }
     ASTLeft[callN] := firstArg;               { args, with NO Self at the head }
   end
+  else if ProcNoSelf[mpi] then
+  begin
+    { A `static` accessor has no Self, whatever the receiver was spelled
+      through: `R.P := 3` over `class procedure SetCV(const v: Integer);
+      static` handed it R as v on riscv32 (i386/aarch64/arm32 refused the
+      arity; x86-64 ignored the extra register). GenMakeStaticMethodCall's
+      rule. bug-p-a-static-class-property-setter-is-passed-the-metaclass }
+    callN := AllocNode(AN_CALL);
+    ASTLeft[callN] := firstArg;
+  end
   else
   begin
     if UMthVirSlot[mmi] >= 0 then

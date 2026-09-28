@@ -950,6 +950,16 @@ begin
           ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
           ASTLeft[mcallNode] := mselfArg;
           mlastArg := mselfArg;
+          { A `static` method has no Self: `with R do Add(4)` over `class
+            function Add(n: Integer): Integer; static` passed R as n on riscv32
+            (6 where FPC says 5; the other 32-bit targets refused the arity).
+            The chain then starts at the first real argument.
+            bug-p-a-static-class-property-setter-is-passed-the-metaclass }
+          if ProcNoSelf[mpi] then
+          begin
+            ASTLeft[mcallNode] := -1;
+            mlastArg := -1;
+          end;
           if CurTok.Kind = tkLParen then
           begin
             Next;
@@ -958,7 +968,8 @@ begin
               ParseExpr;
               margSeq := AllocNode(AN_ARG);
               ASTLeft[margSeq] := CurASTNode;
-              ASTRight[mlastArg] := margSeq;
+              if mlastArg < 0 then ASTLeft[mcallNode] := margSeq
+              else ASTRight[mlastArg] := margSeq;
               mlastArg := margSeq;
               if CurTok.Kind = tkComma then Next
               else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
@@ -1690,10 +1701,22 @@ begin
                   ASTKind[mcallNode] := AN_CLASS_VIRTUAL_CALL;
                   ASTSOffset[mcallNode] := UMthVirSlot[cpMmi];
                 end;
-                margSeq := AllocNode(AN_ARG);
-                ASTLeft[margSeq] := mselfArg;
-                ASTRight[margSeq] := cpArgs;
-                ASTLeft[mcallNode] := margSeq;
+                { A `static` accessor has NO Self (GenMakeStaticMethodCall's own
+                  rule): heading the chain with the metaclass handed
+                  `class procedure SetLevel(v: Integer); static` two arguments.
+                  x86-64 ignored the extra register; i386/aarch64/arm32 refused
+                  ("call argument count mismatch") and riscv32 stored the CLASS
+                  POINTER as v, silently.
+                  bug-p-a-static-class-property-setter-is-passed-the-metaclass }
+                if ProcNoSelf[cpMpi] then
+                  ASTLeft[mcallNode] := cpArgs
+                else
+                begin
+                  margSeq := AllocNode(AN_ARG);
+                  ASTLeft[margSeq] := mselfArg;
+                  ASTRight[margSeq] := cpArgs;
+                  ASTLeft[mcallNode] := margSeq;
+                end;
               end;
 
               if cpIsAssign then
@@ -4202,6 +4225,101 @@ begin
   end;
 end;
 
+function WideSetInAsCompares(inNode, leftExpr: Integer): Integer;
+{ `q in [consts]` on a 32-bit target, when an item does not fit in Int32.
+
+  The SPECIAL_IN walks of i386/arm32/riscv32 compare the LOW word of the test
+  value plus a "fits in Int32" flag, which is right only while every item fits:
+  `1 in [4294967297]` answered TRUE and `4294967297 in [4294967297]` FALSE on
+  all three, while x86-64 and aarch64 were right. The ordinary comparison
+  operators are already right at full width on these targets, so such a
+  membership is spelled with them -- `(q = a) or ((q >= lo) and (q <= hi))` --
+  instead of teaching three hand-emitted item loops a two-word compare. The test
+  value is evaluated once, through a hidden temp when it is not a plain name.
+  Returns inNode untouched when every item fits (the fast path is kept).
+  bug-a-set-membership-32-bit-backends-truncate-the-set-constant }
+var arg, item, tmp, asg, chain, term, lhs: Integer;
+    lo, hi: Int64;   { VALUES, not node indices -- see loVal/hiVal below }
+    wide: Boolean; tk: TTypeKind;
+
+  function WsiLit(v: Int64): Integer;
+  begin
+    Result := AllocNode(AN_INT_LIT);
+    ASTIVal[Result] := v;
+    ASTTk[Result] := Ord(tk);
+  end;
+
+  function WsiCmp(op: TTokenKind; l, r: Integer): Integer;
+  begin
+    Result := AllocNode(AN_BINOP);
+    ASTIVal[Result] := Ord(op);
+    ASTLeft[Result] := l; ASTRight[Result] := r;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+
+  function WsiFits(v: Int64): Boolean;
+  begin
+    Result := (v >= -2147483648) and (v <= 2147483647);
+  end;
+
+begin
+  Result := inNode;
+  wide := False;
+  arg := ASTRight[ASTLeft[inNode]];
+  while arg >= 0 do
+  begin
+    item := ASTLeft[arg];
+    if ASTKind[item] = AN_PAIR then
+      wide := wide or not WsiFits(ASTIVal[ASTLeft[item]]) or not WsiFits(ASTIVal[ASTRight[item]])
+    else
+      wide := wide or not WsiFits(ASTIVal[item]);
+    arg := ASTRight[arg];
+  end;
+  if not wide then Exit;
+  { the items are compared at the test value's own 8-byte kind; a narrower test
+    value compares against Int64 items (the pair widens, as for any compare) }
+  tk := IntToTypeKind(ASTTk[leftExpr]);
+  if tk <> tyUInt64 then tk := tyInt64;
+  asg := -1;
+  if ASTKind[leftExpr] in [AN_IDENT, AN_INT_LIT] then
+    lhs := leftExpr
+  else
+  begin
+    tmp := AllocVar('', IntToTypeKind(ASTTk[leftExpr]));
+    lhs := AllocNode(AN_IDENT);
+    ASTIVal[lhs] := tmp;
+    ASTTk[lhs] := ASTTk[leftExpr];
+    asg := AllocNode(AN_ASSIGN);
+    ASTLeft[asg] := lhs;
+    ASTRight[asg] := leftExpr;
+  end;
+  chain := -1;
+  arg := ASTRight[ASTLeft[inNode]];
+  while arg >= 0 do
+  begin
+    item := ASTLeft[arg];
+    if ASTKind[item] = AN_PAIR then
+    begin
+      lo := ASTIVal[ASTLeft[item]];
+      hi := ASTIVal[ASTRight[item]];
+      term := WsiCmp(tkAnd, WsiCmp(tkGe, lhs, WsiLit(lo)), WsiCmp(tkLe, lhs, WsiLit(hi)));
+    end
+    else
+      term := WsiCmp(tkEq, lhs, WsiLit(ASTIVal[item]));
+    if chain < 0 then chain := term else chain := WsiCmp(tkOr, chain, term);
+    arg := ASTRight[arg];
+  end;
+  if asg >= 0 then
+  begin
+    Result := AllocNode(AN_COMMA);
+    ASTLeft[Result] := asg;
+    ASTRight[Result] := chain;
+    ASTTk[Result] := Ord(tyBoolean);
+  end
+  else
+    Result := chain;
+end;
+
 function ParseSetMembershipAST(leftExpr: Integer): Integer;
 var node, argNode, lastArg, itemNode: Integer; done: Boolean;
     { Int64, NOT Integer: ParseSetConst returns Int64 and ASTIVal is Int64, so
@@ -4286,6 +4404,7 @@ begin
   SetLitCheckAgainst(NodeSemIdOf(leftExpr));
   LastExprTk := tyBoolean;
   Result := node;
+  if TARGET_PTR_SIZE = 4 then Result := WideSetInAsCompares(node, leftExpr);
 end;
 
 function SetElemEndsAtNextTok: Boolean;

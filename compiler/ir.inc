@@ -6626,6 +6626,12 @@ begin
      (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) then
   begin
     Result := IRMethodRefToTemp(argAST);
+    { ...unless the pair travels BY VALUE: on a 32-bit target it is 8 bytes, and
+      a 5..8-byte record argument is its VALUE in a register pair (Arg32Class's
+      A32_RECORD band), as `Call(f)` over a variable lowers it. Passing the
+      temp's ADDRESS there segfaulted `Call(@b.M)` on i386/arm32/riscv32. }
+    if not isRefArg then
+      Result := IRAppend(IR_LOAD_SYM, IRA[Result], -1, -1, 0, Ord(tyRecord));
     Exit;
   end;
   { Implicit class -> interface coercion: a class argument given to an interface
@@ -12089,15 +12095,22 @@ begin
           Silent, and the garbage moved with the stack layout. The IMPLICIT
           conversion (`q := n`) never came through here, which is why it stayed
           correct and hid this.
-          bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit }
+          bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
+
+          ...and it asks IRValueKind, not IRTk: `@r.i` over an Int64 field lowers
+          to an IR_FIELD tagged with the FIELD's kind, so `Int64(@r.i)` looked
+          "already 64 bits", skipped the widen, and the 32-bit backends read a
+          64-bit value whose high word was garbage -- `Int64(@r.i) - Int64(@r)`
+          was 4294967297 for a field at offset 1 on i386/arm32/riscv32.
+          bug-a-an-int64-cast-of-an-int64-fields-address-keeps-a-garbage-high-word }
         if ((castTk = tyInt64) or (castTk = tyUInt64) or
             (((castTk = tyNativeInt) or (castTk = tyNativeUInt)) and
              (TypeSlotSize(castTk) = 8)))
-           and not ((IntToTypeKind(IRTk[Result]) = tyInt64) or
-                    (IntToTypeKind(IRTk[Result]) = tyUInt64) or
-                    (((IntToTypeKind(IRTk[Result]) = tyNativeInt) or
-                      (IntToTypeKind(IRTk[Result]) = tyNativeUInt)) and
-                     (TypeSlotSize(IntToTypeKind(IRTk[Result])) = 8))) then
+           and not ((IRValueKind(Result) = tyInt64) or
+                    (IRValueKind(Result) = tyUInt64) or
+                    (((IRValueKind(Result) = tyNativeInt) or
+                      (IRValueKind(Result) = tyNativeUInt)) and
+                     (TypeSlotSize(IRValueKind(Result)) = 8))) then
         begin
           { Widening numeric reinterpret 32->64 (e.g. Int64(someInteger)): on a
             32-bit target the inner value occupies one register and its high word
@@ -12107,6 +12120,12 @@ begin
             own narrow tag so the extend direction follows its signedness, and the
             sum carries the cast's 64-bit tag. No-op on 64-bit targets where the
             load is already full-width. See bug-i386-arm32-int64-conformance. }
+          { An ADDRESS operand is freshly lowered and read only by this add, so
+            retag it for what it is here (IRLowerDestAddress does the same): the
+            32-bit pair path reads the operand's IRTk, and the pointee's kind
+            made it load an Int64 pair from the field's address. }
+          if IRValueKind(Result) <> IntToTypeKind(IRTk[Result]) then
+            IRTk[Result] := Ord(tyPointer);
           right := IRAppend(IR_CONST_INT, -1, -1, -1, 0, ASTTk[node]);
           Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, ASTTk[node]);
         end
