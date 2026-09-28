@@ -33,25 +33,6 @@ the bare profile is for. esptool cannot convert a bare ELF either, since it has
 no section headers. **Workaround:** on hardware, build the program as an
 ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
 
-### Standard error goes to standard output on the 32-bit and non-x86 targets
-
-On i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), everything written
-with Pascal's `WriteLn(StdErr, ...)` or `Write(StdErr, ...)`, or with Nil
-Python's `print(..., file=sys.stderr)`, goes to standard output, so
-`prog 2>/dev/null` still shows it and a pipe receives it mixed with the real
-output. On x86-64 those calls go to standard error, except a formatted real:
-`WriteLn(StdErr, 1.5:0:1)` writes `1.5` to standard output and only the line
-end to standard error. `WriteLn(StdErr)` with no other argument is refused on
-every target with `expected expression`; FPC 3.2.2 accepts it. **Open in v441
-to v450**; a fix is in progress. Measured on 2026-09-28 with v450
-(`c19cc2d531e4`), on x86-64 and under QEMU user mode for the others, and on
-i386 with v441 (`4ebfa2d047a2`), v448 and v449, which behave the same.
-**Workaround:** open standard error as a file (`Assign(f, '/dev/stderr');
-Rewrite(f); WriteLn(f, ...)`) in Pascal, or use `sys.stderr.write(...)` in Nil
-Python; both reach standard error on all seven targets. On x86-64, format a
-real into a string first (`Str(x:0:1, s)`), and write the empty line as
-`WriteLn(StdErr, '')`.
-
 ## Memory leaks
 
 Memory leaks were treated as release blockers for this beta. Before the release
@@ -281,6 +262,42 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
 `wait4`'s rusage untouched
 (`devdocs/progress/tstate/reports/20260928T053636Z-7abbe26-borg.md`).
 `-O3` was not part of that run.
+
+- **Standard error went to standard output on every target but x86-64.** On
+  i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), Pascal's
+  `WriteLn(StdErr, ...)` and `Write(StdErr, ...)` and Nil Python's `print(...,
+  file=sys.stderr)` wrote to standard output. On x86-64, `WriteLn(StdErr,
+  1.5:0:1)` wrote `1.5` to standard output and only the line end to standard
+  error. `WriteLn(StdErr)` alone was refused on every target with `expected
+  expression`; FPC 3.2.2 accepts it. Wrong in v441 to v450. Fixed after v450
+  (`f3343ccecc`, in no pin yet). Measured on 2026-09-28 on x86-64 and under
+  QEMU user mode on i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), with
+  v450 (`c19cc2d531e4`) and the compiler built at `fce510f98d`
+  (`f545c8410b32`): `test/test_stderr_separation.pas` and
+  `test/test_nilpy_print_to_stderr.py` match their `.expected` and
+  `.err.expected` on all seven targets with that compiler, and so do strings,
+  integers, a formatted real, mixed `Write`/`WriteLn` and the bare
+  `WriteLn(StdErr)`; v450 wrote them to standard output, or refused the bare
+  form. The ESP targets build with the fix; ESP output was not checked on a
+  board. **On v450 and earlier:** open standard error as a file (`Assign(f,
+  '/dev/stderr'); Rewrite(f); WriteLn(f, ...)`) in Pascal, or use
+  `sys.stderr.write(...)` in Nil Python; both reach standard error on all
+  seven targets with v450.
+
+- **Nil Python: a float against a large integer.** `0.0 == 2 ** 64`, `2 ** 64
+  == 1.5` and `2 ** 64 != 1.5` stopped the program with `Runtime error 219`;
+  `<`, `<=`, `>` and `>=` were right. On the same paths, two answers were
+  silently wrong: `x <= nan` and `x >= nan` were `True` for a NaN held in a
+  value that may be another type (CPython: `False`), and an integer beyond
+  2^53 was compared with a float through a double, so `2 ** 53 + 1 == 2.0 **
+  53` was `True`. Wrong in v450 and earlier (the Runtime error also with v441,
+  on x86-64). Fixed after v450 (`cafc739cbf`, in no pin yet). Measured on
+  2026-09-28 against CPython, on x86-64 and under QEMU user mode on i386,
+  arm32, aarch64, riscv32 and Xtensa (both ABIs), with v450 (`c19cc2d531e4`)
+  and the compiler built at `cafc739cbf` (`8d5d0f2653f0`): v450 stops or gives
+  the wrong answer on all seven, and that compiler matches CPython on all
+  seven. **On v450 and earlier:** convert one side first, as in `float(n) ==
+  x`, and test for NaN with `math.isnan`.
 
 - **Nil Python: a def passed to a Pascal procedure parameter was never
   called.** With a Pascal `procedure(a: Integer)` type as the parameter,
@@ -925,27 +942,20 @@ with v445); see
 
 Found on 2026-09-28, and **open in v441 to v450** and after it:
 
-- **Nil Python: arithmetic on `None` gives a number.** `None + 1`, `1 + None`,
-  `None - 1`, `None * 2`, `None + True`, `True - None` and `2 ** 70 + None`
-  treat `None` as `0` (`1`, `1`, `-1`, `0`, `1`, `1`,
-  `1180591620717411303424`), where CPython raises `TypeError`, so an `except
-  TypeError` never runs. Valid programs are not affected; a program that
-  relies on the error is. Measured on 2026-09-28 against CPython, with v450
+- **Nil Python: arithmetic on `None`, or a string minus a large integer, gives
+  a number.** `None + 1`, `1 + None`, `None - 1`, `None * 2`, `None + True`,
+  `True - None` and `2 ** 70 + None` treat `None` as `0` (`1`, `1`, `-1`, `0`,
+  `1`, `1`, `1180591620717411303424`), where CPython raises `TypeError`, so an
+  `except TypeError` never runs. A string minus an integer too large for 64
+  bits does the same: `"ab" - 2 ** 64` gives `-18446744073709551616`, while
+  `"ab" - 5` raises `TypeError` as it should. Measured with v450 and with the
+  compiler built at `cafc739cbf` (`8d5d0f2653f0`) on all seven targets, and
+  with v441 on x86-64. Valid programs are not affected; a program that relies
+  on the error is. Measured on 2026-09-28 against CPython, with v450
   (`c19cc2d531e4`) on x86-64 and under QEMU user mode on i386, arm32, aarch64,
   riscv32 and Xtensa (both ABIs), and on x86-64 with v441 (`4ebfa2d047a2`) and
   the compiler built at `52e61383a5` (`8d5d0f2653f0`), which behave the same.
   **Workaround:** test for `None` (`if x is None:`) before the arithmetic.
-
-- **Nil Python: `==` or `!=` between a float and a large integer stops the
-  program.** `0.0 == 2 ** 64`, `2 ** 64 == 1.5` and `2 ** 64 != 1.5` stop with
-  `Runtime error 219`, where CPython answers `False` or `True`. `<`, `<=`,
-  `>`, `>=` and `in` answer correctly, and so does `==` with an integer that
-  fits in 64 bits. A fix is in progress. Measured on 2026-09-28 against
-  CPython, with v450 (`c19cc2d531e4`) on x86-64 and under QEMU user mode on
-  i386, arm32, aarch64, riscv32 and Xtensa (both ABIs), and on x86-64 with
-  v441 (`4ebfa2d047a2`) and the compiler built at `52e61383a5`
-  (`8d5d0f2653f0`), which behave the same. **Workaround:** convert one side
-  first, as in `float(n) == x`.
 
 ## Reporting a problem
 
