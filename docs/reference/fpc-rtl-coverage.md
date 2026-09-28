@@ -93,7 +93,7 @@ They are covered in [Coming from Free Pascal](../getting-started/from-fpc.md).
 |---|---|---|---|---|
 | 8 | `Error` | System | 701 | `Error(reRangeError)` raises `ERangeError` (unhandled, exit 217). FPC stops with "Runtime error 201", exit 201. |
 | 112 | `TInterfacedObject` | System | 47 | Works as a class and through a declared interface or `IUnknown`. Assigning it to `IInterface` is refused: "class does not implement the interface". Without `SysUtils` it is undefined; FPC has it in `System`. |
-| 120 | `UTF8Decode` | System | 35 | `UTF8Decode('h'#$C3#$A9)` has length 3, not 2: the bytes are not decoded. ASCII input is the same. |
+| 120 | `UTF8Decode` | System | 35 | `UTF8Decode('h'#$C3#$A9)` has length 3, not 2: the bytes are not decoded. ASCII input is the same. This is by design: `UnicodeString` is the byte string in the default build. With `{$define PXX_WIDE_PAYLOAD}` the length is 2, as in FPC (measured with pin v447). |
 | 136 | `RunError` | System | 27 | Exit code 204 as in FPC, but "Runtime error 204" goes to standard output; FPC writes it to standard error. |
 | 139 | `Power` | Math | 26 | `Power(2, 10)` gives an integer (`1024` under `:0:1`), FPC a float (`1024.0`). `Power(2.0, 10.0)` is the same. |
 

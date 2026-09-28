@@ -403,6 +403,30 @@ end.
 
 It prints `2 lines, last: second` under both.
 
+`UnicodeString` is the byte string in PXX's default build, so `UTF8Decode`
+returns its input unchanged: a string with non-ASCII characters keeps one
+element per byte. This is by design, part of PXX's move to UTF-16 strings.
+Define `PXX_WIDE_PAYLOAD` to get FPC's UTF-16 `UnicodeString`, where
+`UTF8Decode` decodes as FPC does:
+
+```pascal
+program utf8len;
+{$mode objfpc}{$H+}
+{$define PXX_WIDE_PAYLOAD}   { without this line PXX prints 3 }
+uses SysUtils;
+var u: UnicodeString;
+begin
+  u := UTF8Decode('h'#$C3#$A9);   { 'hé' as UTF-8 bytes }
+  WriteLn(Length(u));
+end.
+```
+
+It prints `2` under both. Without the define line, PXX prints `3`. ASCII
+text gives the same result either way.
+
+[FPC RTL coverage](../reference/fpc-rtl-coverage.md) lists the 150 routines
+and classes FPC's own code uses most, and says which PXX has.
+
 ## Building a small FPC program
 
 A program with one unit in `src/`:

@@ -50,6 +50,8 @@ uses SysUtils, Classes, StrUtils, Math;
 | 12 | `Sum` (and `SumInt`, `Mean`) | 25 | `lib/rtl/math.pas` | S |
 | 13 | `SwapEndian` | 23 | `compiler/builtin/builtin.pas` | S |
 | 14 | `MaxValue` / `MinValue` | 22 | `lib/rtl/math.pas` | S |
+| 15 | `Error(reRangeError)` halts as FPC does | 701 (`Error`, mostly the word) | `lib/rtl/sysutils.pas` | S |
+| 16 | Runtime-error text to standard error | — | `compiler/builtin/builtin.pas` | S |
 
 ### 1. `Rect`, `Point`, `Bounds` in `Classes` (S)
 
@@ -247,27 +249,65 @@ empty array is not handled (math.pp:484–508).
 
 **Accept:** `writeln(MaxValue([1.0,9.5,3.0]):0:1);` gives `9.5`.
 
-## Owner decisions, not seat work
+### 15. `Error(reRangeError)` halts as FPC does (S)
 
-These differ on purpose, according to comments in the source. Each one
-needs the owner to decide before any seat touches it.
+**FPC:** `Error(e)` is `RunError` with the code for `e`. For
+`reRangeError` that is 201. It halts, with no exception, even with
+`SysUtils` in `uses`. I measured this with fpc 3.2.2 on 2026-09-28:
 
-- **`UTF8Decode`** returns its input unchanged in the default build. Under
-  `{$define PXX_WIDE_PAYLOAD}` it decodes as FPC does:
-  `Length(UTF8Decode('h'#$C3#$A9))` is 2, which I measured with pin v447.
-  The reason is at `lib/rtl/sysutils.pas:630`: it is the Unicode string
-  migration.
-- **`Error(reRangeError)`** raises `ERangeError`, and the program exits with
-  217. The comment at `lib/rtl/sysutils.pas:436` gives the reason: "an FPC
-  program that has `uses sysutils` gets its runtime errors converted to
-  exceptions … so `Error(reRangeError)` there surfaces as a catchable
-  ERangeError". **That premise measures false.** With fpc 3.2.2, a program
-  with `uses SysUtils, Classes, StrUtils, Math` that calls
-  `Error(reRangeError)` prints "Runtime error 201" to standard error and
-  exits with 201. The standing ruling ("language compliance, not
-  error-handling compliance") may still keep the pxx behaviour, but its
-  stated reason needs correcting.
-- **`RunError`** writes "Runtime error N" to standard output
-  (`compiler/builtin/builtin.pas:777`); FPC writes it to standard error. The
-  exit code is the same. This is an S if the owner wants it changed, and it
-  falls under the same ruling.
+```pascal
+program er;
+{$mode objfpc}{$H+}
+uses SysUtils;
+begin
+  try
+    Error(reRangeError);
+  except
+    on e: Exception do writeln('caught ', e.ClassName);
+  end;
+  writeln('after');
+end.
+```
+
+- FPC prints nothing to standard output. It writes
+  `Runtime error 201 at $…` to standard error and exits with 201.
+- `RunError(201)` inside a `try` is not caught either.
+- What `SysUtils` does turn into an exception is a runtime error that
+  compiled code raises: in the same run, a `{$R+}` index out of range gave
+  a catchable `ERangeError`.
+
+pxx v447 prints `caught ERangeError` and `after`, and exits with 0.
+
+**Fix:** make `Error` call `RunError` with FPC's code, and correct the
+comment at `lib/rtl/sysutils.pas:436`: its premise, that FPC surfaces
+`Error(reRangeError)` as a catchable `ERangeError`, is false. FPC's codes, in
+`TRuntimeError` order (`RuntimeErrorExitCodes`, `rtl/inc/systemh.inc:1507`):
+reNone 0, reOutOfMemory 203, reInvalidPtr 204, reDivByZero 200, reRangeError 201, reIntOverflow 215, reInvalidOp 207, reZeroDivide 200, reOverflow 205, reUnderflow 206, reInvalidCast 219, reAccessViolation 216, rePrivInstruction 218, reControlBreak 217, reStackOverflow 202, reVarTypeCast 220, reVarInvalidOp 221, reVarDispatch 222, reVarArrayCreate 223, reVarNotArray 224, reVarArrayBounds 225, reAssertionFailed 227, reExternalException 212, reIntfCastError 228, reSafeCallError 229, reQuit 233, reCodesetConversion 234, reNoDynLibsSupport 235, reThreadError 236.
+
+**Accept:** the program above exits with 201 and prints nothing to standard
+output. Check the seven `generics.defaults.pas` call sites the comment
+names; they only need the program to stop.
+
+### 16. Runtime-error text to standard error (S)
+
+**FPC:** the "Runtime error N at $addr" text, with its backtrace lines,
+goes to standard error.
+
+**pxx:** `RunError` at `compiler/builtin/builtin.pas:777` writes
+`Runtime error N` with `writeln`, to standard output. The exit code is the
+same as FPC's.
+
+**Fix:** write it to standard error. Look for any other path that prints a
+runtime error too, such as the unhandled-exception exit; the census saw
+only `RunError`.
+
+**Accept:** `RunError(204)` exits with 204. Its standard output is empty,
+and its standard error starts with `Runtime error 204`.
+
+## By design, not seat work
+
+- **`UTF8Decode`** returns its input unchanged in the default build, where
+  `UnicodeString` is the byte string. Under `{$define PXX_WIDE_PAYLOAD}` it
+  decodes as FPC does: `Length(UTF8Decode('h'#$C3#$A9))` is 2, which I
+  measured with pin v447. This is the Unicode string migration
+  (`lib/rtl/sysutils.pas:630`), and it stays as it is.
