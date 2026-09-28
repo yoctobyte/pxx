@@ -519,6 +519,21 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   with that compiler. **On v448:** index the call directly, and leave work on
   the whole array to Pascal.
 
+- **Nil Python: a Pascal `array of T` result could not be passed straight to
+  a Pascal array parameter.** `d.SumV(d.MakeArr(4))`, where `SumV` takes the
+  array by value, was refused with `by-reference argument must be a
+  variable`, and so were a `const` parameter (`SumC`) and an open array
+  (`SumO`). Fixed after v449 (`63c957f093`, in no pin yet). Measured on 2026-09-28 with v449 (`0ded1e5d04c8`) and with the compiler built at `f53fd89ef0` (`2dd7329329c8`), on x86-64 and on i386 under QEMU user mode, with the `dynarr` unit of `test/nilpy_dynarr/`: v449
+  refuses all three, at module level and inside a def; with the later
+  compiler `print(d.SumV(d.MakeArr(4)), d.SumO(d.MakeArr(4)),
+  d.SumC(d.MakeArr(5)))` prints `60 60 100` in both places, which is what
+  FPC 3.2.2 prints for the same calls in Pascal. The fixture
+  `test/test_nilpy_a_dynamic_array_result_passed_to_pascal_is_released.npy`
+  (2000 trips, two arrays each) ends with `live=3` in the allocation census.
+  **On v449:** leave the call to Pascal: a Pascal routine that returns
+  `SumV(MakeArr(n))`, called from Nil Python as `w.SumOfMake(4)`, prints
+  `60` with v449.
+
 - **Nil Python: a Pascal `var` or `out` object parameter lost the object when
   the name held `None`.** `o = None`, then `d.NewInto(o, 5)`, a Pascal
   procedure that creates an object into its `var` parameter, then `print(o)`
@@ -696,6 +711,18 @@ answer silently. (Measured with v425.)
   are unbuffered, and the call says so rather than claiming success.
 - **`--shared` on aarch64 and arm32** is refused with
   `shared-library output is x86-64 only`, as on i386.
+- **Nil Python: a Pascal `array of T` result bound to a name** is refused on
+  purpose: `a = d.MakeArr(4)` stops with `"MakeArr" returns a Pascal dynamic
+  array, which NilPy cannot use as a Python value yet: index the call
+  directly (MakeArr(...)[i]), or have the Pascal side return a list`. A Nil
+  Python list held in a name is not accepted by a Pascal array parameter
+  either (`x = [1, 2, 3]` then `d.SumO(x)`: `no overload of SumO matches
+  these arguments`). Write the call inline instead: `d.SumV(d.MakeArr(4))`
+  after v449, or `d.MakeArr(4)[3]` for one element. Measured on 2026-09-28 with v449 (`0ded1e5d04c8`) and with the compiler built at `f53fd89ef0` (`2dd7329329c8`), on x86-64 and on i386 under QEMU user mode, with the `dynarr` unit of `test/nilpy_dynarr/`. v448
+  compiled the bound form, and `a = d.MakeArr(4)` then `d.SumV(a)`,
+  `d.SumO(a)` and `d.SumC(a)` printed `60` each, at module level and inside
+  a def, on x86-64 and i386, so a program that did this on v448 needs the
+  inline spelling from v449 on.
 
 ## Optimisation levels
 

@@ -89,10 +89,15 @@ CPython 3.14.4: each row behaves as written, and the three targets print the sam
 A generator abandoned before it is exhausted, for example by `break`, does not
 release the class instances held in its local variables.
 
-A Pascal `array of T` that a Pascal routine returns can only be indexed
-straight off the call (`d.MakeArr(4)[3]`). After v448, binding it to a name,
-`len()` of it and `for` over it are refused at compile time; with v448 and
-earlier they compile and read wrong values. A Pascal `var` or `out` object
+A Pascal `array of T` that a Pascal routine returns can only be used
+inline: indexed straight off the call (`d.MakeArr(4)[3]`), or, after v449
+(`63c957f093`, in no pin yet), passed straight to a Pascal array parameter
+by value, `const` or open array (`d.SumV(d.MakeArr(4))`). After v448,
+binding it to a name, `len()` of it and `for` over it are refused at compile
+time; with v448 and earlier they compile and read wrong values. Passing a
+bound name to a Pascal routine (`a = d.MakeArr(4)`, then `d.SumV(a)`) gave
+the right answer on v448 and is refused from v449 on, so write the call
+inline. A Pascal `var` or `out` object
 parameter needs a name that already holds an object. See
 [Known issues](../reference/known-issues.md#fixed-since-v441) for what was
 measured.
