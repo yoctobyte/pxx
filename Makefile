@@ -524,6 +524,9 @@ test-nilpy: $(COMPILER)
 	# guess: builtins are in every program, so PromoCmpDbl's `var pi` loaded
 	# `math` into every NilPy program and max(1.5, 2) printed 2.0.
 	sh test/nilpy_no_guessed_unit_in_a_plain_program.sh ./$(COMPILER) $(TESTTMP)
+	# Through the INSTALLED wrapper's -Fu list (lib/crtl/include among it): a
+	# bare `import time` bound time.h ahead of the mimic_time shim there only.
+	sh test/nilpy_import_through_the_installed_wrapper.sh ./$(COMPILER) $(TESTTMP) test/test_nilpy_stdlib_names_beat_c_headers_on_the_install_path.npy
 	# A str default / str-literal-typed hidden global must not cost 8 MiB of .bss
 	# each; the output was always right, so the row asserts the SIZE.
 	sh test/nilpy_str_default_bss.sh ./$(COMPILER) $(TESTTMP)

@@ -6238,7 +6238,18 @@ begin
     later blocks can reach are lib/pcl/gl_c.h, lib/pcl/gtk3_c.h and
     lib/rtl/math_ext.h, and none of them shares a basename with anything a
     search root is likely to carry. }
-  if (Length(UnitContent) = 0) and (Length(deferredCContent) > 0) then
+  { …except for a bare NIL PYTHON import, which takes it LATER, under the same
+    rule as the host headers: after the .py/.npy probes and only when no
+    mimic_ shim of that name exists. The installed ./pxx wrapper passes every
+    lib/ directory as -Fu, lib/crtl/include among them, so `import time` bound
+    lib/crtl/include/time.h here and never reached mimic_time: time.sleep was
+    "no member sleep came of the qualifier time", and `import string` failed
+    the same way through string.h. The bare compiler has no such root, which
+    is why it only broke through the wrapper. An explicit header spelling
+    (`import 'x.h'`, language c) has pyLookupOK False and is untouched.
+    bug-n-an-installed-pxx-binds-import-time-to-a-c-header }
+  if (Length(UnitContent) = 0) and (Length(deferredCContent) > 0) and
+     not (isNilPy and pyLookupOK and (not isPath)) then
   begin
     UnitContent := deferredCContent;
     path := deferredCPath;
@@ -6354,6 +6365,19 @@ begin
     "do not substitute" into "do not import" and left no spelling at all
     reaching a header a shim shadows.
     bug-n-no-shims-refuses-instead-of-resolving-what-the-shim-shadowed }
+  { The -Fu/-I root's held-back C candidate first (see its deferral above):
+    a search root the user or the wrapper named is more specific than the host
+    include path, so it keeps its precedence over /usr/include -- it only lost
+    its place ahead of the Python probes and the shim. }
+  if (Length(UnitContent) = 0) and isNilPy and pyLookupOK and (not isPath) and
+     (Length(deferredCContent) > 0) and
+     (NoShims or (not PyMimicShimExists(lo, rtldir, lcldir))) then
+  begin
+    UnitContent := deferredCContent;
+    path := deferredCPath;
+    isCUnit := True;
+    isCHeader := deferredCIsHeader;
+  end;
   if (Length(UnitContent) = 0) and isNilPy and (pyImportLang <> 'pas') and
      (NoShims or (not PyMimicShimExists(lo, rtldir, lcldir))) then
     PyTryHostHeader(cName, path, UnitContent, isCUnit, isCHeader);

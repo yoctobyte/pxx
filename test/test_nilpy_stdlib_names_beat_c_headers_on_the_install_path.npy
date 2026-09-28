@@ -1,0 +1,20 @@
+# Python modules whose names are also C headers under lib/crtl/include. The
+# installed ./pxx wrapper passes every lib/ directory as -Fu, that one included,
+# so a bare `import time` bound lib/crtl/include/time.h ahead of the mimic_time
+# shim: time.sleep was "no member sleep came of the qualifier time", and string
+# failed the same way through string.h. Compiled THROUGH the wrapper by
+# test/nilpy_import_through_the_installed_wrapper.sh; CPython's output.
+import time
+import string
+import socket
+# Controls: two of the 13 names that also have a lib/crtl/include header and
+# resolved the same with and without the wrapper (frankd-23's census).
+import math
+import errno
+
+t0 = time.time()
+time.sleep(0.01)
+print(time.time() >= t0)
+print(string.ascii_lowercase, string.digits)
+print(socket.AF_INET, socket.SOCK_STREAM)
+print(math.floor(2.5), math.sqrt(16.0), errno.ENOENT)
