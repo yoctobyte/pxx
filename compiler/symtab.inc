@@ -16168,6 +16168,18 @@ end;
   params are live state across yields). wasm32 releases through
   WasmEmitManagedLocals rather than this sweep, and asks the same predicate.
   bug-a-a-by-value-string-param-written-by-the-callee-changes-the-callers-string }
+{ Is the code being compiled RIGHT NOW Pascal source? The main program is
+  whatever IsPascalFrontend says; a unit is Pascal unless it is a `.py` module
+  or a C translation unit -- only the Pascal parsers open units otherwise. }
+function CompilingPascalCode: Boolean;
+begin
+  if CurrentUnitIdx < 0 then
+    CompilingPascalCode := IsPascalFrontend
+  else
+    CompilingPascalCode := not (UnitIsPyModule(CurrentUnitIdx) or
+                                UnitIsCTranslationUnit(CurrentUnitIdx));
+end;
+
 function SymOwnedValueParam(i: Integer): Boolean;
 var k: Integer;
 begin
@@ -16175,7 +16187,18 @@ begin
   if (i < 0) or (i >= SymCount) or (CurProc < 0) then Exit;
   if Syms[i].Kind <> skParam then Exit;
   if Syms[i].IsRef then Exit;
-  if (not IsPascalFrontend) or NilPyUserCode then Exit;
+  { PASCAL CODE, not a Pascal PROGRAM: the question is what language the routine
+    being compiled is written in. IsPascalFrontend says what the MAIN program
+    is, so in a NilPy (or C, BASIC, ...) program every Pascal unit loaded with
+    it -- pylib, pyeval, the RTL, a user's `import 'x.pas'` -- lost the entry
+    retain and the exit release while the STORE side still released the old
+    handle. A Pascal routine calling another in such a program then saw the
+    callee write the caller's string in place, and a callee that rebound its
+    param released a reference it never took: a double free, then a crash in
+    PXXAlloc on a corrupted bin (a held repr patch whose nested TryCand did
+    `digits := Copy(digits, ...)`).
+    bug-a-a-pascal-unit-in-a-non-pascal-program-does-not-own-its-by-value-strings }
+  if not CompilingPascalCode then Exit;
   if CurProcIsStackless then Exit;
   if SymCellPtr[i] >= 0 then Exit;
   if not (((Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray) or

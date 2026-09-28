@@ -1,0 +1,16 @@
+# A Pascal unit loaded into a NilPy program owns its by-value AnsiString
+# params, as it does in a Pascal program: the callee retains on entry and
+# releases on exit. Before the fix the ownership rule asked what the MAIN
+# program was, so here the callee wrote the caller's string in place
+# ("Xello! Xello!") and a callee that rebound its param released a reference
+# it never took. `keep` is the leak row's control.
+import sys
+import 'byvalstr.pas' as bv
+
+print(bv.InPlace())
+kept = []
+for i in range(2000):
+    r = bv.Rebinds(3)
+    if len(sys.argv) > 1 and sys.argv[1] == "keep":
+        kept.append(r)
+print(r, len(kept) > 0)
