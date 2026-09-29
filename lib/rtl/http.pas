@@ -579,7 +579,7 @@ var ms: Integer;
 begin
   Inc(gMpCounter);
   ms := Integer(PalMonotonicMillis and $7FFFFFFF);
-  Result := '----frank2Boundary' + IntToStr(ms) + 'x' + IntToStr(gMpCounter);
+  Result := '----pxxBoundary' + IntToStr(ms) + 'x' + IntToStr(gMpCounter);
 end;
 
 function HttpMultipartContentType(const boundary: AnsiString): AnsiString;
