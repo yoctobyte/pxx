@@ -69,6 +69,9 @@ GCC-compiled code or into a file format. (Measured with v425, and again on
 2026-09-28 with v450 (`c19cc2d531e4`) and the compiler built at `fce510f98d`:
 8 and 16 bytes, against GCC's 16 and 32.)
 
+**Workaround:** use `double`, not `long double`, in a struct that GCC-compiled
+code or a file format shares.
+
 ### riscv32 and Xtensa: arithmetic flushes subnormal doubles to zero
 
 On riscv32 and Xtensa (both ABIs), double arithmetic runs in software
@@ -170,13 +173,12 @@ Found on 2026-09-28, and **open in v441 to v450** and after it:
   `1`, `1`, `1180591620717411303424`), where CPython raises `TypeError`, so an
   `except TypeError` never runs. A string minus an integer too large for 64
   bits does the same: `"ab" - 2 ** 64` gives `-18446744073709551616`, while
-  `"ab" - 5` raises `TypeError` as it should. Measured with v450 and with the
-  compiler built at `cafc739cbf` (`8d5d0f2653f0`) on all seven targets, and
-  with v441 on x86-64. Valid programs are not affected; a program that relies
-  on the error is. Measured on 2026-09-28 against CPython, with v450
-  (`c19cc2d531e4`) on x86-64 and under QEMU user mode on i386, arm32, aarch64,
-  riscv32 and Xtensa (both ABIs), and on x86-64 with v441 (`4ebfa2d047a2`) and
-  the compiler built at `52e61383a5` (`8d5d0f2653f0`), which behave the same.
+  `"ab" - 5` raises `TypeError` as it should. Valid programs are not
+  affected; a program that relies on the error is. Measured on 2026-09-28
+  against CPython, with v450 (`c19cc2d531e4`) and the compiler `8d5d0f2653f0`
+  (built at `cafc739cbf`) on x86-64 and under QEMU user mode on i386, arm32,
+  aarch64, riscv32 and Xtensa (both ABIs), and with v441 (`4ebfa2d047a2`) on
+  x86-64, which behave the same.
   **Workaround:** test for `None` (`if x is None:`) before the arithmetic.
 
 **Nil Python through `./pxx`: `import time` and `import string` find the C
@@ -213,6 +215,9 @@ its recipe and the table are in `test/esp_board_list_sort_ceiling.npy`.
 **Workaround:** on a C3, keep a list you sort under about 2,000 elements.
 
 ### exec and eval
+
+`exec` and `eval` run Nil Python source at run time, and accept less than the
+compiler does. These five rows are where that goes wrong.
 
 **Nil Python: a method reached from `exec` takes the type of its one compiled
 call, and a float passed to an integer parameter is silently truncated.** When
@@ -332,6 +337,8 @@ desktop Pascal programs have TLS through the `http` unit.
 experimental: its differential check against `-O2` had two failing shards at
 v439. Use `-O3` only if you check the output.
 
+**Workaround:** use `-O2`, the default.
+
 ## By design: `Trunc` of an out-of-range float into a 32-bit integer
 
 `Trunc(1e30)` stored in an `Int64` saturates to 9223372036854775807. Stored in
@@ -351,7 +358,7 @@ the two behave differently on purpose:
 | --- | --- | --- |
 | Pascal and C: integer `div` / `mod` by zero | runtime error 200, the program stops | gives 0, the program continues |
 | Pascal and C: float division by zero | Inf or NaN | Inf or NaN |
-| Nil Python: `//` and `%` by zero | runtime error 200, which `except` cannot catch, when the divisor is only known at run time; `ZeroDivisionError` when the compiler can see it is zero or the def is typed (measured with v450; which is intended is waiting for the owner's decision, see [ESP32 peripherals](../library/esp.md)) | gives 0, the program continues |
+| Nil Python: `//` and `%` by zero | runtime error 200, which `except` cannot catch, when the divisor is only known at run time; `ZeroDivisionError` when the compiler can see it is zero or the def is typed (measured with v450; this may change before 1.0, so test the divisor if a program depends on either behaviour) | gives 0, the program continues |
 | Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
 
 Each cell was measured on v425. The desktop column was measured again on
@@ -366,12 +373,10 @@ test the divisor yourself.
 
 ## Reporting a problem
 
-Open an issue at <https://github.com/yoctobyte/pxx/issues> with the smallest
-source file that shows the problem, the exact command you ran (including any
-`--target=`), what you expected and what you got, and the output of
-`./pxx --doctor` with the commit of your checkout (`git log -1 --format=%h`).
-A program that compiles and gives a wrong answer is the most useful report you
-can send.
+[Reporting bugs](./reporting-bugs.md) says what to put in a report, how to
+name the compiler you ran (from a checkout or a release archive), and how to
+cut a program down to a small reproducer. A program that compiles and gives a
+wrong answer is the most useful report you can send.
 
 ## History
 
@@ -380,16 +385,16 @@ What was wrong in an earlier pin and is fixed, and the measurements behind the o
 ### Fixed since v441
 
 These are wrong in v441 and fixed in a later pin or after the latest one, as
-each row says: "wrong in v441 to v446" means fixed after v446, and not yet in
-any pin. The C rows were checked against GCC's output and the Pascal rows
+each row says: "wrong in v441 to v446" means v446 is the last pin with the
+fault; the fix landed after it, so the source of every later pin carries it. The C rows were checked against GCC's output and the Pascal rows
 against FPC 3.2.2. The Nil Python rows were checked against CPython 3 and say
 what they were measured with.
 
 Pin v448's own binary (`b2b325036c3b`) was graded on the native test tier
 on 2026-09-28 at `7abbe26f4e`, with no skipped or flaky rows. One row is
 still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
-`wait4`'s rusage untouched
-(`devdocs/progress/tstate/reports/20260928T053636Z-7abbe26-borg.md`).
+`wait4`'s rusage untouched; whether PXX or the emulator is at fault is not
+yet known.
 `-O3` was not part of that run.
 
 - **Standard error went to standard output on every target but x86-64.** On
