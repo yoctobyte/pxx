@@ -20,7 +20,16 @@ print(f.name[-4:])
 # NOT `print(tempfile.gettempdir())`: testmgr sandboxes a job by rewriting /tmp
 # paths to its scratch directory, and it rewrites the EXPECTATION too — so an
 # absolute /tmp in the expected output can never match what the program prints.
-# Assert the property instead of printing the path.
-print(tempfile.gettempdir() == "/tmp")
+# Assert the property instead of printing the path. The property is CPython's
+# candidate order -- $TMPDIR, $TEMP, $TMP, then /tmp -- computed from THIS
+# environment, not the literal "/tmp": testmgr pins TMPDIR per job, so a fixed
+# "/tmp" went red the moment gettempdir started honouring it (922294133d).
+want = "/tmp"
+for var in ["TMPDIR", "TEMP", "TMP"]:
+    cand = os.environ.get(var, "")
+    if cand != "" and os.path.isdir(cand):   # CPython also tests it is writable
+        want = os.path.abspath(cand)
+        break
+print(tempfile.gettempdir() == want)
 os.remove(f.name)
 print(os.path.exists(f.name))
