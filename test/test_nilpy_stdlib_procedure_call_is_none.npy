@@ -1,0 +1,21 @@
+# A stdlib call backed by a Pascal PROCEDURE is None as a value, as in CPython.
+# Every procedure-backed entry of PyStdlibCallProc but sys.exit (no value to
+# see) is used here as a value and as a statement.
+# bug-n-a-stdlib-procedure-call-is-not-none-as-a-value
+import random
+import sys
+
+xs = [3, 1, 2]
+random.seed(1)
+print(random.seed(1) is None)
+x = random.seed(2)
+print(x is None)
+print(random.seed(3))
+random.shuffle(xs)
+print(random.shuffle(xs) is None)
+print(sorted(xs))
+sys.setswitchinterval(0.005)
+print(sys.setswitchinterval(0.005) is None)
+y = sys.setswitchinterval(0.005)
+print(y)
+print([random.seed(4), 7])

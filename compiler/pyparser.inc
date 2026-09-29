@@ -15617,6 +15617,18 @@ begin
     Result := rngCall;
     Exit;
   end;
+  if not Procs[procIdx].IsFunc then
+  begin
+    { a shim that is a Pascal PROCEDURE (`random.seed`, `random.shuffle`) is
+      None as a value, as in CPython; typed by its absent RetType it read
+      whatever the call left in the result register.
+      bug-n-a-stdlib-procedure-call-is-not-none-as-a-value }
+    divNode := AllocNode(AN_COMMA);
+    ASTLeft[divNode] := callNode;
+    ASTRight[divNode] := PyMakeNone;
+    ASTTk[divNode] := ASTTk[ASTRight[divNode]];
+    callNode := divNode;
+  end;
   LastExprTk := IntToTypeKind(ASTTk[callNode]);
   Result := callNode;
 end;
