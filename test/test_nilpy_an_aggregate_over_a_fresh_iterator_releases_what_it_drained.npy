@@ -1,0 +1,32 @@
+# sum/any/all/tuple/max/min/sorted over a fresh CURSOR (map, filter, iter) or a
+# range release the list they drain it into: the list is only read, and
+# nothing released it (pin v451: 2 blocks per call, every one of these). The
+# cursor belongs to the caller and must survive until the call returns.
+# `keep` holds the results, the positive control: it must trip the bound.
+# The value line is CPython's.
+import sys
+
+a = [3, 1, 2]
+
+
+def g(p):
+    return -p
+
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "drop"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 500
+kept = []
+total = 0
+for i in range(n):
+    total += sum(map(g, a)) + sum(iter(a), 10) + sum(filter(g, a))
+    total += max(map(g, a)) + min(iter(a)) + max(iter(a), key=g)
+    total += min(range(5)) + max(range(5), key=g)
+    if any(map(g, a)) and all(iter(a)):
+        total += 1
+    t = tuple(map(g, a))
+    s = sorted(iter(a), key=g, reverse=True)
+    r = sorted(range(3))
+    total += t[0] + s[0] + r[2]
+    if mode == "keep":
+        kept.append(sorted(map(g, a)))
+print(total)

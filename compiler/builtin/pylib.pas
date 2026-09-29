@@ -16885,9 +16885,17 @@ begin
   Result := 0;   { unreachable }
 end;
 
+{ The CURSOR consumers: the same fault the range consumers below had, fixed
+  the same way. The drained list is only READ by the aggregate, so it is
+  released here; the cursor belongs to the caller, who releases it. Without
+  this `sum(map(f, xs))` and `tuple(iter(xs))` leaked the drained list per
+  call (pin v451: 2 blocks each). }
 function sum(it: TPyIter): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := sum(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := sum(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 { The RANGE consumers. Each drains a fresh cursor, so consuming a range does
@@ -16976,23 +16984,35 @@ begin
 end;
 
 function sum(it: TPyIter; const start: Variant): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := sum(pyiter_drain(it), start);
+  tmp := pyiter_drain(it);
+  Result := sum(tmp, start);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 function tuple(it: TPyIter): TPyList; overload;
+var tmp: TPyList;
 begin
-  Result := tuple(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := tuple(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 function any(it: TPyIter): Boolean; overload;
+var tmp: TPyList;
 begin
-  Result := any(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := any(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 function all(it: TPyIter): Boolean; overload;
+var tmp: TPyList;
 begin
-  Result := all(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := all(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 { Each of these releases the fresh copy pylist_v answers -- see max(const v:

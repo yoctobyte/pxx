@@ -6781,34 +6781,57 @@ begin
   Result := pyiter_filter_i(key, up);
 end;
 
+{ The drained or listed temporary is only READ -- sorted() builds its own
+  list, min()/max() hand back an element -- so each releases it. They did not,
+  and `max(map(f, xs))`, `sorted(iter(xs))`, `min(range(n))` leaked the whole
+  temporary list per call (pin v451: 2 blocks each). The cursor belongs to the
+  caller. Same fault and fix as pylib's sum/tuple/any/all over a cursor. }
 function sorted(it: TPyIter; key: Pointer; reverse: Boolean): TPyList; overload;
+var tmp: TPyList;
 begin
-  Result := sorted(pyiter_drain(it), key, reverse);
+  tmp := pyiter_drain(it);
+  Result := sorted(tmp, key, reverse);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function min(it: TPyIter; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := min(pyiter_drain(it), key);
+  tmp := pyiter_drain(it);
+  Result := min(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function max(it: TPyIter; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := max(pyiter_drain(it), key);
+  tmp := pyiter_drain(it);
+  Result := max(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function sorted(r: TPyRange; key: Pointer; reverse: Boolean): TPyList; overload;
+var tmp: TPyList;
 begin
-  Result := sorted(list(r), key, reverse);
+  tmp := list(r);
+  Result := sorted(tmp, key, reverse);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function min(r: TPyRange; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := min(list(r), key);
+  tmp := list(r);
+  Result := min(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function max(r: TPyRange; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := max(list(r), key);
+  tmp := list(r);
+  Result := max(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;

@@ -622,6 +622,14 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_zip_map_released 300 $(TESTTMP)/test_nilpy_zipmaprel26
 	@if tools/assert_no_leak.sh nilpy_zip_map_control 300 $(TESTTMP)/test_nilpy_zipmaprel26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_zip_map control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# sum/any/all/tuple/max/min/sorted over a fresh cursor or a range release the
+	# list they drain it into (pin v451: ~12,000 live here; flat baseline ~86).
+	# `keep` is the positive control. The value line is CPython's.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_an_aggregate_over_a_fresh_iterator_releases_what_it_drained.npy $(TESTTMP)/test_nilpy_aggdrain26
+	tools/expect_same.sh nilpy_agg_drain_value "$$($(TESTTMP)/test_nilpy_aggdrain26 2>/dev/null)" "9000"
+	tools/assert_no_leak.sh nilpy_agg_drain_released 200 $(TESTTMP)/test_nilpy_aggdrain26
+	@if tools/assert_no_leak.sh nilpy_agg_drain_control 200 $(TESTTMP)/test_nilpy_aggdrain26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_agg_drain control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	# list.clear() and dict.clear() release the elements they drop (both only
 	# zeroed the length, so the elements were orphaned once the container went
 	# away: pin v441 leaves ~75,000 live here). `keep` is the positive control.
