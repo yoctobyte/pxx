@@ -15,6 +15,10 @@ Units for Pascal:
 
 - [`bignum`](#bignum-arbitrary-precision-integers): integers of any size.
 - [`zlib`](#zlib-deflate-and-inflate): deflate compression, for Pascal and Nil Python.
+- [`hashing`, `sha256`, `sha512`](#hashing-sha256-and-sha512-checksums-and-digests): CRC32, Adler32, SHA-2, HMAC and HKDF.
+- [`png` and `image`](#png-and-image-reading-and-writing-png-files): reading and writing PNG files.
+- [`strutils`](#strutils-fpcs-string-helpers-in-part): a part of FPC's `StrUtils`.
+- [`dateutils`](#dateutils-fpcs-date-helpers-in-part): a part of FPC's `DateUtils`.
 
 Modules for Nil Python:
 
@@ -22,6 +26,7 @@ Modules for Nil Python:
 - [`pathlib`](#pathlib-paths-as-objects): paths as objects.
 - [`urllib.parse`](#urllibparse-splitting-a-url): splitting and quoting URLs.
 - [`sqlite3`](#sqlite3-the-db-api-over-the-system-library): SQLite through Python's DB-API.
+- [`tempfile`](#tempfile-temporary-files-and-directories): temporary files and directories.
 
 ## `bignum`: arbitrary-precision integers
 
@@ -119,6 +124,180 @@ Limits:
   `hashing.TByteArray`.
 - The Python surface is the four functions above: there is no `compressobj`
   or `decompressobj` for streaming.
+
+## `hashing`, `sha256` and `sha512`: checksums and digests
+
+`hashing` has CRC32 (the polynomial PNG, zlib and gzip use) and Adler32, over a
+`TByteArray`. `sha256` has SHA-256, HMAC-SHA256 and HKDF-SHA256, and `sha512`
+has SHA-512. The SHA units take and return byte strings (`AnsiString`, one
+byte per character). A digest comes back as raw bytes, and `Sha256Hex` turns
+any byte string into lower-case hex, including a SHA-512 digest.
+
+```pascal
+program hs;
+uses sysutils, hashing, sha256, sha512;
+var b: TByteArray; prk: AnsiString; i: Integer;
+begin
+  WriteLn(Sha256Hex(Sha256('abc')));
+  WriteLn(Sha256Hex(HmacSha256('key', 'The quick brown fox jumps over the lazy dog')));
+  WriteLn(Sha256Hex(Sha512('abc')));
+  prk := HkdfExtract(#$00#$01#$02#$03#$04#$05#$06#$07#$08#$09#$0a#$0b#$0c,
+                     StringOfChar(#$0b, 22));
+  WriteLn(Sha256Hex(HkdfExpand(prk, #$f0#$f1#$f2#$f3#$f4#$f5#$f6#$f7#$f8#$f9, 42)));
+  SetLength(b, 5);
+  for i := 0 to 4 do b[i] := Ord('hello'[i + 1]);
+  WriteLn(CRC32Bytes(b), ' ', Adler32(b));
+end.
+```
+
+```text
+ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8
+ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f
+3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865
+907060870 103547413
+```
+
+CPython's `hashlib`, `hmac` and `zlib` give the same values. The HKDF line is
+test case 1 of RFC 5869. Hashing 1 MB with `Sha256` took 0.13 s.
+
+Limits:
+
+- The SHA functions work on a whole string in memory. There is no streaming
+  interface to feed data in pieces. CRC32 has one: `CRC32Init`,
+  `CRC32Update` for each byte, `CRC32Final`.
+- For Pascal there is no SHA-1, MD5, SHA-384 or SHA-224 unit. From Nil Python,
+  `import hashlib` is a separate shim with its own list of algorithms.
+- `StringOfChar`, used above, needs `uses sysutils` in PXX. FPC has it in
+  `System`.
+
+## `png` and `image`: reading and writing PNG files
+
+`image` holds a bitmap: `TImage` has `Width`, `Height` and `Pixels`, an array
+of 8-bit `TRGBA` values in row order. `png` reads a PNG file's bytes into a
+`TImage` with `PngDecodeRGBA`, and writes one with `PngEncodeRGBA`. No
+compression library is needed.
+
+```pascal
+program pe;
+uses sysutils, hashing, image, png;
+var img, back: TImage; x, y: Integer; bytes: TByteArray;
+begin
+  ImageInit(img, 64, 32);
+  for y := 0 to 31 do
+    for x := 0 to 63 do
+      ImageSetPixel(img, x, y, MakeRGBA(x * 4, y * 8, 128, 255));
+  PngEncodeRGBA(img, bytes);
+  WriteLn(Length(bytes), ' bytes');
+  WriteLn(PngDecodeRGBA(bytes, back), ' ', back.Width, 'x', back.Height, ' ',
+          ImageGetPixel(back, 10, 3).R, ' ', ImageGetPixel(back, 10, 3).G);
+end.
+```
+
+```text
+2513 bytes
+TRUE 64x32 40 24
+```
+
+The encoder writes 8-bit RGBA (colour type 6), which every PNG reader
+accepts; the Python imaging library PIL read the file above back with every
+pixel equal. The decoder reads every non-interlaced colour type: files written
+by PIL as RGBA, RGB, grayscale, grayscale with alpha, palette, 1-bit and
+16-bit grayscale all decoded to the same pixels PIL reports. Every result is
+widened to 8-bit RGBA: a 16-bit sample keeps its high byte.
+`PngLastColourType` and `PngLastBitDepth` report what the file was.
+
+Limits:
+
+- An interlaced (Adam7) file is refused, and `PngLastError` says
+  `interlaced (adam7) png is not supported`.
+- The encoder writes only 8-bit RGBA, with no palette or grayscale output, so
+  a picture with few colours makes a larger file than it needs to.
+- The encoder writes only the `IHDR`, `IDAT` and `IEND` chunks: no text,
+  gamma or colour profile. When reading, a file with a text chunk decoded to
+  the right pixels. Other extra chunks were not tried.
+- Files are passed as a `TByteArray`, so the `uses` order rule under
+  [`zlib`](#zlib-deflate-and-inflate) applies: `sysutils` before `hashing`.
+
+## `strutils`: FPC's string helpers, in part
+
+26 routines from FPC's `StrUtils`: `LeftStr`, `RightStr`, `MidStr`,
+`DupeString`, `PosEx`, `ReverseString`, `AddChar`, `AddCharR`, the
+`AnsiContains`/`AnsiStarts`/`AnsiEnds`/`AnsiReplace`/`AnsiIndex` routines in
+their `Str` and `Text` forms, `WordCount`, `ExtractWord`, `WordPosition`,
+`ExtractWordPos`, `ExtractDelimited`, `ExtractSubstr`, `IfThen` and
+`SplitString`.
+
+```pascal
+program su;
+{$mode objfpc}{$H+}
+uses sysutils, strutils;
+var p: Integer; parts: TStringArray; i: Integer;
+const s = 'the quick brown fox';
+begin
+  WriteLn(LeftStr(s, 3), '|', RightStr(s, 3), '|', MidStr(s, 5, 5), '|', DupeString('ab', 3));
+  WriteLn(PosEx('o', s, 14), ' ', ReverseString('abc'), ' ', AddChar('*', 'x', 4));
+  WriteLn(AnsiContainsText(s, 'QUICK'), ' ', AnsiReplaceText('A-b-a', 'a', 'x'),
+          ' ', AnsiIndexStr('fox', ['the', 'fox']));
+  WriteLn(WordCount(s, [' ']), ' ', ExtractWord(3, s, [' ']), ' ',
+          ExtractDelimited(3, 'a,b,,c', [',']), '|');
+  p := 1;
+  Write(ExtractSubstr('k=v;x', p, ['=', ';']), ' ');
+  WriteLn(ExtractSubstr('k=v;x', p, ['=', ';']), ' ', p);
+  parts := SplitString('a b  c', ' ');
+  Write(Length(parts), ':');
+  for i := 0 to High(parts) do Write(' [', parts[i], ']');
+  WriteLn;
+end.
+```
+
+```text
+the|fox|quick|ababab
+18 cba ***x
+TRUE x-b-x 1
+4 brown |
+k v 5
+4: [a] [b] [] [c]
+```
+
+FPC 3.2.2 prints the same, and a program calling all 26 routines printed the
+same as FPC on every line.
+
+Limits: FPC's `StrUtils` has many more routines. Among the common ones,
+`ContainsStr`, `StartsStr`, `EndsStr`, `ReplaceStr`, `ReplaceText`, `RPos`,
+`NPos`, `PosSet`, `DelSpace`, `PadLeft`, `StuffString`, `IntToRoman` and
+`Soundex` are missing: a call to one does not compile.
+
+## `dateutils`: FPC's date helpers, in part
+
+Seven routines from FPC's `DateUtils`: `YearOf`, `MonthOf`, `DayOf`,
+`HourOf`, `MinuteOf`, `SecondOf` and `EncodeDateTime`. `TDateTime` itself, `Now`,
+`FormatDateTime`, `DayOfWeek` and `IsLeapYear` are in `sysutils`, as in FPC.
+
+```pascal
+program du;
+{$mode objfpc}{$H+}
+uses sysutils, dateutils;
+var t: TDateTime;
+begin
+  t := EncodeDateTime(2026, 9, 29, 14, 5, 42, 250);
+  WriteLn(YearOf(t), ' ', MonthOf(t), ' ', DayOf(t), ' ', HourOf(t), ' ', MinuteOf(t), ' ', SecondOf(t));
+  WriteLn(FormatDateTime('yyyy-mm-dd hh:nn:ss', t));
+  WriteLn(t:0:6);
+end.
+```
+
+```text
+2026 9 29 14 5 42
+2026-09-29 14:05:42
+46294.587295
+```
+
+FPC 3.2.2 prints the same.
+
+Limits: the rest of `DateUtils` is missing. `IncDay`, `DaysBetween`,
+`DateTimeToUnix`, `UnixToDateTime`, `DayOfTheWeek` and `MilliSecondOf` do not
+compile, for example.
 
 ## `configparser`: INI files
 
@@ -271,6 +450,43 @@ Limits:
   `cursor()`, `description`, `lastrowid`, `rowcount`, named (`:name`)
   parameters, and the exception subclasses such as `IntegrityError`. Catch
   `sqlite3.Error`.
+
+## `tempfile`: temporary files and directories
+
+`NamedTemporaryFile(suffix=, prefix=, dir=, delete=False)`, `mkdtemp(suffix=,
+prefix=, dir=)` and `gettempdir()`.
+
+```python
+import tempfile
+import os
+
+d = tempfile.mkdtemp(prefix="run-", dir=".")
+f = tempfile.NamedTemporaryFile(suffix=".csv", prefix="data-", dir=d, delete=False)
+f.close()
+print(os.path.isdir(d), oct(os.stat(d).st_mode & 0o777))
+print(os.path.basename(f.name).startswith("data-"), f.name.endswith(".csv"), os.path.getsize(f.name))
+```
+
+```text
+True 0o700
+True True 0
+```
+
+CPython prints the same.
+
+Where it differs from CPython:
+
+- `NamedTemporaryFile` creates the file, empty, and closes it at once. What
+  you get back is its name (`f.name`), not an open file. Open it by name to
+  write to it.
+- `delete=True` is refused at run time: the program stops with `Unhandled
+  exception: Exception: tempfile.NamedTemporaryFile(delete=True) is not
+  supported ...`. That is CPython's default, so pass `delete=False` and remove
+  the file yourself.
+- `gettempdir()` always returns `/tmp`. CPython returns `$TMPDIR` when it is
+  set.
+- `mkstemp`, `TemporaryFile`, `TemporaryDirectory` and `SpooledTemporaryFile`
+  are not there.
 
 ## Next
 

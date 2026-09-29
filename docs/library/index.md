@@ -19,6 +19,8 @@ programs can use these units without passing extra `-Fu` flags.
 | [`classes` & `streams`](./core.md) | Object, list, and stream infrastructure (lists, string lists, memory streams) for FPC-style code. |
 | [`textfile`](./file-io.md) | Pascal file I/O — text files (`Text`, `WriteLn`, `ReadLn`) and record files (`file of T`, `Seek`, `FileSize`), including the standard `Input`/`Output` files, `Flush`, and `Erase`. |
 | `strings` | Classic NUL-terminated `PChar` routines (`StrLen`, `StrPos`, `StrComp`, …). |
+| [`strutils`](./more-units.md#strutils-fpcs-string-helpers-in-part) | 26 of FPC's `StrUtils` routines. |
+| [`dateutils`](./more-units.md#dateutils-fpcs-date-helpers-in-part) | 7 of FPC's `DateUtils` routines. |
 | `math` | Numeric helpers. |
 | `ucomplex` | Complex numbers with the FPC `ucomplex` API and operator overloads. |
 | `vecmath` | 2/3/4-component vectors and matrices (`TVec3`, `TMat4`, …) with operator overloads. |
@@ -52,7 +54,7 @@ refused.
 | [`json`](./json.md) | JSON parser / serializer support. |
 | `httpjson` | HTTP helpers for JSON payloads. |
 | `base64` | Base64 encoding and decoding. |
-| `png` / `image` | PNG encoding **and** decoding for non-interlaced 8-bit RGBA (colour type 6), plus a simple RGBA bitmap type. Encoding needs no compression library; decoding accepts stored, fixed-Huffman and dynamic-Huffman deflate streams and all standard RGBA scanline filters. |
+| [`png` / `image`](./more-units.md#png-and-image-reading-and-writing-png-files) | PNG decoding of every non-interlaced colour type and bit depth, and encoding as 8-bit RGBA, plus a simple RGBA bitmap type. No compression library is needed. |
 | [`zlib`](./more-units.md#zlib-deflate-and-inflate) | Deflate compression and decompression, from Pascal and as Nil Python's `zlib` module. |
 
 ## Networking and async
@@ -70,7 +72,7 @@ refused.
 
 | Unit | Area |
 | --- | --- |
-| `sha256`, `sha512`, `hashing` | Hashing helpers. |
+| [`sha256`, `sha512`, `hashing`](./more-units.md#hashing-sha256-and-sha512-checksums-and-digests) | SHA-256, SHA-512, HMAC-SHA256, HKDF, CRC32 and Adler32. |
 | `random` | Random byte and number helpers. |
 | `aesgcm`, `chacha20poly1305` | Authenticated encryption primitives. |
 | `ed25519`, `ecdsa_p256`, `x25519`, `rsa`, `x509` | Public-key and certificate building blocks. |
@@ -95,6 +97,7 @@ program reaches them with `import`. The ones below have entries of their own.
 | [`pathlib`](./more-units.md#pathlib-paths-as-objects) | Paths as objects. |
 | [`urllib.parse`](./more-units.md#urllibparse-splitting-a-url) | Splitting and quoting URLs. |
 | [`sqlite3`](./more-units.md#sqlite3-the-db-api-over-the-system-library) | SQLite through Python's DB-API. |
+| [`tempfile`](./more-units.md#tempfile-temporary-files-and-directories) | Temporary files and directories. |
 | [`zlib`](./more-units.md#zlib-deflate-and-inflate) | Deflate, `crc32` and `adler32`. |
 
 The rest are listed under [Nil Python: Shims](../targets/nil-python.md#shims-standing-in-for-a-python-package).
