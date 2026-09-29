@@ -41,3 +41,37 @@ declared last, so the overrun hits the stack deterministically instead of
 depending on .bss layout. It matches fpc 3.2.2. On the v451 compiler the canary
 takes 216 bytes of damage (212 on riscv32 and xtensa-windowed) on all six
 targets; it takes 0 with the fix.
+
+## Census: the other anonymous temps (2026-09-29, frankH, at db816a204d)
+
+The same class would be any `AllocVar('', <kind decided at run time>)` that
+can be a `string[N]` or ShortString. AllocVar reads the capacity of
+tyShortString/tyFixedString from LastTypeStrCap. tyString gets 255 regardless
+and is safe. `string[N]` for N in 1..255 IS tyShortString with capacity N, so
+"anonymous temps default to 255" would break truncation to N. Each caller has
+to state its own capacity.
+
+Method: a scratch build routed all 46 such call sites through a tagged wrapper
+that logged (site, kind, inherited capacity) whenever the kind was frozen. It
+then compiled every Pascal test in test/ plus the fpc testsuite (2405 files)
+and every .npy test (1161 files). The instrumentation was reverted afterwards
+and never committed.
+
+| site | reached with a frozen kind | capacity source | status |
+|---|---|---|---|
+| ir.inc IRAppendCall hidden dest | yes (caps 8,10,40,80,90,255) | ProcRetStrCap (this fix) | fixed here |
+| ir.inc IRBuildHiddenDest | not in corpus | ProcRetStrCap (this fix) | fixed here |
+| ir.inc by-value param temp (managed->frozen arm) | yes (4,8,10,20,255) | ProcParamStrCap, pinned | correct |
+| ir.inc by-value param temp (frozen arm) | yes (4,12,255) | ProcParamStrCap, pinned | correct |
+| 42 other sites (ir.inc spill/argTk/case/for/inline/vrBox/dcElem, pasparser_expr cast temps, pasparser_stmt, pasparser_lval, pyparser, zparser, cparser) | never, in 3566 files | inherited | unreached |
+
+A canary probe also covered by-value and const string[N] params fed from an
+expression, an inline function's result and param, and a ShortString result
+passed straight on, with a String[5] declared last. All matched fpc with zero
+damage.
+
+Conclusion: no second site shows the defect. The 42 unreached sites inherit a
+capacity only for a kind they have not been seen to allocate. If one ever
+does, the fix is the one used here: pin LastTypeStrCap from the value's own
+capacity around the AllocVar and restore it afterwards. No ticket was filed,
+by frankuser's rule (no damage anywhere means no ticket).
