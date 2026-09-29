@@ -456,7 +456,9 @@ chip. Once a second it:
 
 The ADC and button interrupts are handled in Pascal (`espadc`, `espgpio`),
 and the Python handlers run afterwards in the main task, so they are ordinary
-code.
+code. This is the core of the program, shortened: `...` and the missing
+constants, `state` and helpers are in the full file,
+`examples/esp32/monitor-s3/main/main.npy`, which is the one to build.
 
 ```python
 import time
