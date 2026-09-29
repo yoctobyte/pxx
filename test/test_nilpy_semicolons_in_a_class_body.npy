@@ -1,0 +1,31 @@
+# Simple statements separated by ';' in a CLASS body: `k = 1; j = 2`. The
+# member pre-pass registers an attribute only at the start of a line and skips
+# to the next newline, so everything after the first ';' was lost and `P.j`
+# failed with "class method not found: j". Covers plain, string and list
+# attributes, a trailing ';', annotated attributes, a method alias after a ';',
+# a one-line class, a one-line def (whose ';' belongs to the def), a method
+# body, and a subclass that overrides one of them. Checked against CPython.
+# bug-n-semicolon-separated-class-attributes-lose-all-but-the-first
+class P:
+    k = 1; j = 2
+    s = "x"; t = [1, 2];
+    n: int = 3; m: int = 4
+    def total(self):
+        a = self.k; b = self.j
+        return a + b + self.n + self.m
+    def one(self): v = self.k * 10; return v + self.j
+    def __mul__(self, o):
+        return self.k * 100 + o
+    __rmul__ = __mul__; tag = "t"
+
+class R: x = 5; y = 6
+
+class Q(P):
+    k = 7; extra = 8
+
+p = P()
+print(P.k, P.j, P.s, P.t, P.n, P.m, P.tag)
+print(p.total(), p.one(), p * 3, 3 * p)
+print(R.x, R.y, R().y)
+q = Q()
+print(q.k, q.j, q.extra, q.total())

@@ -927,6 +927,80 @@ begin
   end;
 end;
 
+{ `class P:` with a body line `k = 1; j = 2`. Python allows several simple
+  statements on one line, and at a class body's own level each is a separate
+  member. The program loop, PyParseBlock and the module loop consume the ';',
+  but a class body is read by TOKEN-LEVEL scanners as well as by its parser --
+  the member pre-pass (PyRegisterClassMembers) keys every attribute on "an
+  identifier at the start of a line", and every skip in it runs to the next
+  NEWLINE -- so `j` was never registered and `P.j` failed with "class method
+  not found: j" (and a method alias or annotated attribute after a ';' would
+  be lost the same way). As with the one-line suite above, the shape is
+  normalised here, once, for every reader: within a class body at the body's
+  own indentation, on a line that begins with a name or a string, a ';'
+  outside brackets IS a NEWLINE, and becomes one.
+
+  Not a one-line `def f(self): a; b` -- the lexer already made that an indented
+  suite, one level deeper, where the ';' belongs to the def and PyParseBlock
+  handles it -- and not a line opened by a compound keyword spelled as a name
+  (`with`, `async`, `match`), whose ';' belongs to its suite.
+  bug-n-semicolon-separated-class-attributes-lose-all-but-the-first }
+procedure PyClassBodySemicolons(lo, hi: Integer);
+var i, k, depth, brackets: Integer; lineFirst: TTokenKind; lineOk, atStart: Boolean;
+    w: AnsiString;
+begin
+  for i := lo to hi - 1 do
+  begin
+    if Tokens[i].Kind <> tkClass then Continue;
+    { the header's ':' then NEWLINE INDENT; anything else is not a class body }
+    k := i + 1;
+    brackets := 0;
+    while (k < hi) and not ((brackets = 0) and (Tokens[k].Kind = tkColon)) and
+          (Tokens[k].Kind <> tkNewline) do
+    begin
+      if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(brackets)
+      else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(brackets);
+      Inc(k);
+    end;
+    if (k + 2 >= hi) or (Tokens[k].Kind <> tkColon) or
+       (Tokens[k + 1].Kind <> tkNewline) or (Tokens[k + 2].Kind <> tkIndent) then Continue;
+    k := k + 3;
+    depth := 0; brackets := 0; atStart := True; lineOk := False;
+    lineFirst := tkEOF;
+    while k < hi do
+    begin
+      case Tokens[k].Kind of
+        tkIndent: begin Inc(depth); atStart := True; end;
+        tkDedent: begin Dec(depth); atStart := True; if depth < 0 then Break; end;
+        tkNewline: atStart := True;
+      else
+        begin
+          if atStart then
+          begin
+            atStart := False;
+            lineFirst := Tokens[k].Kind;
+            lineOk := (depth = 0) and (lineFirst in [tkIdent, tkString]);
+            if lineOk and (lineFirst = tkIdent) then
+            begin
+              w := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+              if (w = 'with') or (w = 'async') or (w = 'match') then lineOk := False;
+            end;
+            brackets := 0;
+          end;
+          if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(brackets)
+          else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(brackets)
+          else if (Tokens[k].Kind = tkSemicolon) and lineOk and (brackets = 0) then
+          begin
+            Tokens[k].Kind := tkNewline;
+            atStart := True;
+          end;
+        end;
+      end;
+      Inc(k);
+    end;
+  end;
+end;
+
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;
@@ -1688,6 +1762,7 @@ begin
   end;
 
   PyEmitToken(tkEOF, 0, SrcLine, '');
+  PyClassBodySemicolons(streamBase, TokCount);
 end;
 
 { Lex a `.py` MODULE into the token stream, after whatever is already there,
