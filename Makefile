@@ -3598,6 +3598,15 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/intstrlit26 | diff -u test/test_nilpy_int_and_str_of_a_string_literal.expected -
 	./$(COMPILER) test/test_nilpy_path_read_text_keeps_the_file_as_written.npy $(TESTTMP)/pathrt26
 	$(TESTTMP)/pathrt26 | diff -u test/test_nilpy_path_read_text_keeps_the_file_as_written.expected -
+	./$(COMPILER) test/test_nilpy_tempfile_gettempdir_follows_tmpdir.npy $(TESTTMP)/tfgettmp26
+	mkdir -p $(TESTTMP)/tfdir
+	tools/expect_same.sh tempfile_gettempdir_tmpdir "$$(env TMPDIR=$(TESTTMP)/tfdir/ TEMP= TMP= $(TESTTMP)/tfgettmp26 tmpdir TMPDIR)" "tmpdir True False True"
+	tools/expect_same.sh tempfile_gettempdir_temp "$$(env TMPDIR=/nonexistent_pxx TEMP=$(TESTTMP)/tfdir TMP= $(TESTTMP)/tfgettmp26 temp TEMP)" "temp True False True"
+	tools/expect_same.sh tempfile_gettempdir_tmp "$$(env -u TMPDIR -u TEMP TMP=$(TESTTMP)/tfdir/./ $(TESTTMP)/tfgettmp26 tmp TMP)" "tmp True False True"
+	tools/expect_same.sh tempfile_gettempdir_none "$$(env -u TMPDIR -u TEMP -u TMP $(TESTTMP)/tfgettmp26 none -)" "none True False True"
+	tools/expect_same.sh tempfile_gettempdir_ro "$$(env TMPDIR=/proc TEMP=$(TESTTMP)/tfdir TMP= $(TESTTMP)/tfgettmp26 ro TEMP)" "ro True False True"
+	./$(COMPILER) test/test_nilpy_named_temporary_file_deletes_on_close.npy $(TESTTMP)/tfdelete26
+	$(TESTTMP)/tfdelete26 | diff -u test/test_nilpy_named_temporary_file_deletes_on_close.expected -
 	./$(COMPILER) test/test_nilpy_semicolons_in_a_class_body.npy $(TESTTMP)/semicls26
 	$(TESTTMP)/semicls26 | diff -u test/test_nilpy_semicolons_in_a_class_body.expected -
 	./$(COMPILER) test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin26
@@ -30166,6 +30175,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_int_and_str_of_a_string_literal "$$(tools/run_target.sh i386 $(TESTTMP)/intstrlit_i386)" "$$(cat test/test_nilpy_int_and_str_of_a_string_literal.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_path_read_text_keeps_the_file_as_written.npy $(TESTTMP)/pathrt_i386
 	tools/expect_same.sh i386/test_nilpy_path_read_text_keeps_the_file_as_written "$$(tools/run_target.sh i386 $(TESTTMP)/pathrt_i386)" "$$(cat test/test_nilpy_path_read_text_keeps_the_file_as_written.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_named_temporary_file_deletes_on_close.npy $(TESTTMP)/tfdelete_i386
+	tools/expect_same.sh i386/test_nilpy_named_temporary_file_deletes_on_close "$$(tools/run_target.sh i386 $(TESTTMP)/tfdelete_i386)" "$$(cat test/test_nilpy_named_temporary_file_deletes_on_close.expected)"
 	./$(COMPILER) --target=i386 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_i386
 	tools/expect_same.sh i386/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh i386 $(TESTTMP)/realloc_i386)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=i386 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof_i386

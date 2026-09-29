@@ -10,24 +10,24 @@
 
     tempfile.NamedTemporaryFile(suffix=, prefix=, dir=, delete=)   -> an object
       with `.name` and `.close()`.
-    tempfile.gettempdir()                                          -> '/tmp'
+    tempfile.gettempdir()          -> $TMPDIR, $TEMP, $TMP, /tmp, ... as CPython
     tempfile.mkdtemp(suffix=, prefix=, dir=)                        -> a path
     tempfile.mkstemp / TemporaryDirectory / SpooledTemporaryFile
       -> NOT here.
 
-  TWO DIFFERENCES FROM CPYTHON, both deliberate and both visible:
+  THE DIFFERENCES FROM CPYTHON, all deliberate and all visible:
 
   1. The file is CREATED (empty) and immediately closed; the object is a NAME,
      not an open handle. CPython hands back a file object you can write through.
      Every censused use takes `.name` and hands it to something else that opens
      it by path, which is the shape this supports. Writing through the object is
      an error rather than a silent no-op — there is no write method to call.
-  2. `delete=True` is REFUSED, not honoured. CPython would remove the file when
-     the object is closed or collected; NilPy has no finaliser to hang that on,
-     and deleting at close would break the `.name`-then-open pattern above. So
-     the honest answer is to fail at the call rather than delete at a moment the
-     caller does not expect. `delete=False`, which is what the pattern uses, is
-     the supported form.
+  2. `delete=True` (CPython's default) removes the file at `.close()` and at
+     the end of a `with` block, as CPython does. It is NOT removed when the
+     object is merely dropped: a Pascal object's destructor does not run when
+     NilPy releases it, so there is no collection hook. CPython also deletes
+     then. So an unclosed delete=True file is left behind here. It used to raise
+     at the call, which stopped every program that took the default.
 
   Defers to feature-nilpy-py-module-loader (T3): once the frontend can compile a
   package's own sources, the real tempfile compiles and this goes away. }
@@ -42,9 +42,12 @@ type
   NamedTemporaryFile = class
   public
     name: AnsiString;
+    FDelete, FClosed: Boolean;
     constructor Create(const suffix: AnsiString = ''; const prefix: AnsiString = '';
                        const dir: AnsiString = ''; delete: Boolean = True);
     procedure close;
+    function __enter__: NamedTemporaryFile;
+    procedure __exit__(const a, b, c: Variant);
   end;
 
 function gettempdir: AnsiString;
@@ -88,27 +91,65 @@ begin
   TfSysTempDir := GetTempDir;
 end;
 
+var
+  TfTempDir: AnsiString;   { CPython's tempfile.tempdir: fixed by the first call }
+
+{ A candidate directory CPython would accept: it exists and we may create in
+  it. CPython tests by creating a file; write+search access is the same answer
+  without leaving anything behind. }
+function TfUsableDir(const d: AnsiString): Boolean;
+var z: AnsiString;
+begin
+  TfUsableDir := False;
+  if d = '' then Exit;
+  if not DirectoryExists(d) then Exit;
+  z := d + #0;
+  TfUsableDir := PalAccess(PChar(z), 3) = 0;    { W_OK or X_OK }
+end;
+
+{ os.path.abspath: absolute, no trailing separator (except the root). }
+function TfAbs(const d: AnsiString): AnsiString;
+var r: AnsiString;
+begin
+  if (Length(d) > 0) and (d[1] = '/') then r := d
+  else r := GetCurrentDir + '/' + d;
+  r := ExpandFileName(r);
+  while (Length(r) > 1) and (r[Length(r)] = '/') do
+    r := Copy(r, 1, Length(r) - 1);
+  TfAbs := r;
+end;
+
+{ CPython's _candidate_tempdir_list order: $TMPDIR, $TEMP, $TMP, then /tmp,
+  /var/tmp, /usr/tmp, then the current directory; the first usable one wins,
+  and the answer is cached for the rest of the run. It used to be the RTL's
+  fixed default temp directory, which ignored $TMPDIR. }
 function gettempdir: AnsiString;
 var d: AnsiString;
 begin
-  d := TfSysTempDir;
-  { CPython's gettempdir() has no trailing separator; the RTL's has one }
-  if (Length(d) > 1) and (d[Length(d)] = '/') then
-    d := Copy(d, 1, Length(d) - 1);
-  gettempdir := d;
+  if TfTempDir = '' then
+  begin
+    d := '';
+    if TfUsableDir(GetEnvironmentVariable('TMPDIR')) then d := GetEnvironmentVariable('TMPDIR')
+    else if TfUsableDir(GetEnvironmentVariable('TEMP')) then d := GetEnvironmentVariable('TEMP')
+    else if TfUsableDir(GetEnvironmentVariable('TMP')) then d := GetEnvironmentVariable('TMP')
+    else if TfUsableDir('/tmp') then d := '/tmp'
+    else if TfUsableDir('/var/tmp') then d := '/var/tmp'
+    else if TfUsableDir('/usr/tmp') then d := '/usr/tmp'
+    else d := GetCurrentDir;
+    TfTempDir := TfAbs(d);
+  end;
+  gettempdir := TfTempDir;
 end;
 
 constructor NamedTemporaryFile.Create(const suffix, prefix, dir: AnsiString;
                                       delete: Boolean);
-var base, pfx: AnsiString; f: TextFile;
+var base, pfx, d: AnsiString; f: TextFile;
 begin
-  if delete then
-    raise Exception.Create('tempfile.NamedTemporaryFile(delete=True) is not '
-      + 'supported: there is no finaliser to delete on, and deleting at close '
-      + 'would break the .name-then-open pattern. Pass delete=False and remove '
-      + 'the file yourself.');
+  FDelete := delete;
+  FClosed := False;
   if prefix = '' then pfx := 'tmp' else pfx := prefix;
-  base := GetTempFileName(dir, pfx);
+  if dir = '' then d := gettempdir else d := dir;
+  base := GetTempFileName(d, pfx);
   name := base + suffix;
   { create it empty, so `.name` names a file that EXISTS — os.path.exists on it
     is true straight away, as it is in CPython }
@@ -146,9 +187,21 @@ end;
 
 procedure NamedTemporaryFile.close;
 begin
-  { the file is already closed — the object is a name, not a handle (see the
-    unit header). Present so the call site's `.close()` compiles and means
-    something honest: nothing is open. }
+  { Nothing is open (the object is a name, see the unit header). What close
+    means here is CPython's delete=True: remove the file, once. }
+  if FClosed then Exit;
+  FClosed := True;
+  if FDelete then DeleteFile(name);
+end;
+
+function NamedTemporaryFile.__enter__: NamedTemporaryFile;
+begin
+  __enter__ := Self;
+end;
+
+procedure NamedTemporaryFile.__exit__(const a, b, c: Variant);
+begin
+  close;
 end;
 
 end.

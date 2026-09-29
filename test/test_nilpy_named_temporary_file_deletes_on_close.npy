@@ -1,0 +1,35 @@
+# NamedTemporaryFile's delete=True (CPython's default) removes the file at
+# close() and at the end of a `with` block. It raised at the call, which
+# stopped every program that took the default.
+# bug-l-tempfile-ignores-tmpdir-and-refuses-delete-true
+import os
+import tempfile
+
+f = tempfile.NamedTemporaryFile()
+n = f.name
+print("default exists", os.path.exists(n))
+f.close()
+print("after close", os.path.exists(n))
+f.close()
+print("second close ok")
+print("in gettempdir", os.path.dirname(n) == tempfile.gettempdir())
+
+g = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", prefix="pxx_")
+print("keep", os.path.basename(g.name).startswith("pxx_"), g.name.endswith(".txt"))
+g.close()
+print("kept after close", os.path.exists(g.name))
+os.remove(g.name)
+
+with tempfile.NamedTemporaryFile() as h:
+    m = h.name
+    print("with exists", os.path.exists(m))
+    with open(m, "w") as w:
+        w.write("by name")
+    with open(m) as r:
+        print("read back", r.read())
+print("after with", os.path.exists(m))
+
+with tempfile.NamedTemporaryFile(delete=False) as k:
+    km = k.name
+print("delete=False after with", os.path.exists(km))
+os.remove(km)

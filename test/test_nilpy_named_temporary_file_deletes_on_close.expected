@@ -1,0 +1,10 @@
+default exists True
+after close False
+second close ok
+in gettempdir True
+keep True True
+kept after close True
+with exists True
+read back by name
+after with False
+delete=False after with True

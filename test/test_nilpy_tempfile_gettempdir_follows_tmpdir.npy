@@ -1,0 +1,20 @@
+# tempfile.gettempdir() takes the first usable directory among $TMPDIR, $TEMP
+# and $TMP, then /tmp, as an absolute path with no trailing separator. It
+# returned a fixed /tmp. The rows run this under three environments; each run
+# names the variable that must win ("-" for /tmp), and prints whether it
+# did, whether the answer ends in a separator, and whether a second call agrees.
+# The "ro" row sets TMPDIR to a directory nobody may create in (/proc), which
+# CPython skips.
+# bug-l-tempfile-ignores-tmpdir-and-refuses-delete-true
+import os
+import sys
+import tempfile
+
+case = sys.argv[1]
+want = sys.argv[2]
+d = tempfile.gettempdir()
+if want == "-":
+    exp = "/tmp"
+else:
+    exp = os.path.abspath(os.environ[want])
+print(case, d == exp, d.endswith("/"), d == tempfile.gettempdir())
