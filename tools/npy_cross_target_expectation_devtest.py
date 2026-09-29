@@ -38,8 +38,11 @@ MAKEFILE = os.path.join(REPO, "Makefile")
 TARGET_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_./%-]*)\s*:(?!=)")
 # `.py` too: test_nilpy_cross32_values.py is compiled in three targets, and
 # without it its expectation was charged to whichever source came before it.
+# ANY source path, not only test/: an examples/ row (examples/tk/...) left
+# `source` unchanged, so its assertions were charged to the last test/ source
+# above it, and that source read as drifting between targets.
 COMPILE_RE = re.compile(
-    r"\$\(COMPILER\)\s.*?(test/[A-Za-z0-9_./-]+\.(?:npy|py|pas|c))\s+"
+    r"\$\(COMPILER\)\s.*?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:npy|py|pas|c))\s+"
     r"\$\(TESTTMP\)/([A-Za-z0-9_.-]+)")
 # The two spellings of "compare with this checked-in file". Both name ONE file,
 # so they cannot drift from each other; they are keyed as that file, not as
@@ -116,7 +119,11 @@ def scan():
                 source = m.group(1)
                 produced[m.group(2)].add(source)
                 blocks.setdefault((target, source), [])
-                continue
+                # An expect_same row may compile its own source inside the
+                # command substitution (xt_fwdjump): it names the source AND
+                # asserts, so it must not be skipped as a bare compile.
+                if "expect_same.sh" not in body:
+                    continue
             m = DIFF_FILE_RE.search(body)
             if m and source:
                 blocks[(target, source)].append((n, "file:" + m.group(1)))
