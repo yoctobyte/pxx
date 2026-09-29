@@ -43,7 +43,8 @@ error.** Measured with v451:
 - An `iv` that is not 12 bytes gives output that is not AES-GCM.
 - `Chacha20Poly1305Seal` takes a key that is not 32 bytes.
 
-After v451 all three are fixed (see "Fixed after pin v451" below). With
+After v451 all three are fixed (`e5a1209b78`, in no pin yet; see "Fixed
+after pin v451" below). With
 v451 itself, pass exactly the lengths given below. For comparison, Python's
 `cryptography` treats a 32-byte AES key as AES-256, gives real AES-GCM for
 an `iv` of another length, and refuses a ChaCha20 key that is not 32 bytes.
@@ -135,12 +136,17 @@ strings. An empty message gives the same bare tag as Python too.
 Where it differs from Python's `cryptography`: an `iv` of 1 to 7 bytes, or
 more than 128, is accepted here, as GCM allows; Python refuses it.
 
-**Fixed after pin v451.** Up to and including v451, `aesgcm` was AES-128
+**Fixed after pin v451** (`e5a1209b78`, in no pin yet). Up to and including v451, `aesgcm` was AES-128
 only and used the first 16 bytes of a longer key without a word, so asking
 for AES-256 gave AES-128. An `iv` that was not 12 bytes gave output that
 was not GCM. `chacha20poly1305` took a key of any length and read past the
 end of a short one. All three now match `cryptography`, refusals included
 (`test/lib_aead_key_and_iv_lengths`, on x86-64 and on the ESP32-C3 and S3).
+Measured on 2026-09-29 on x86-64 with compiler `81c16b5e3461` and the
+library as of `e5a1209b78`: a 32-byte key gives the same bytes as Python's
+AES-256, an 8-byte `iv` the same bytes as Python's GCM, and a 16-byte
+ChaCha20 key raises `EChaCha20Poly1305` ("the key must be 32 bytes, not
+16").
 
 `ChaCha20(key, counter, nonce, data)` and `Poly1305(key, msg)` are the two
 halves on their own (RFC 8439), and `AesEncryptBlock(key, block)` encrypts
