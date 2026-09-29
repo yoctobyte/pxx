@@ -2409,16 +2409,22 @@ const
     {$ifdef CPU_WASM32} block to -- the MECHANISM differs, not the constants.
     bug-n-the-nilpy-pal-issues-raw-syscalls-so-every-file-body-traps-on-wasm32 }
   PLATFORM_WASI  = 2;
-  { Bytes reserved below the windowed locals frame for the constant-sp
-    expression/argument spill stack. Stage-1 nesting is shallow; 192 = 48
-    slots is ample and keeps every offset inside the s32i/l32i imm range.
-    It is 192 rather than 256 so that adding XT_OUTARG_REGION below keeps the
-    per-frame reservation at 256 bytes: the frame rounds UP to a multiple of
-    256, so one extra byte over the boundary would DOUBLE every windowed frame
-    — and with ESP-IDF's 3584-byte task stacks that halves the recursion depth
-    a program can survive (measured: a 19-deep Int64 print died with
-    LoadProhibited when the reservation crossed to 512). }
-  XT_EXPR_REGION = 192;
+  { Bytes the windowed MAIN BODY reserves for its constant-sp expression/
+    argument spill stack, above XT_OUTARG_REGION. Only the main body uses it:
+    a procedure's frame is patched to exactly what its stack reached
+    (PatchProcPrologue, XtSpillMax), with l32i's reach as its only cap, while
+    the entry stub reserves this fixed amount and is never patched.
+
+    It was 192, sized when EVERY windowed frame paid it and rounded to 256 --
+    a 256-byte step cost ~11 levels of recursion on ESP-IDF's 3584-byte task
+    stacks (bug-a-xtensa-windowed-frame-minimum-256-bytes). Exact procedure
+    frames retired that cost, and 192 was left capping only the main body:
+    a Nil Python call there with more than ~11 Variant arguments (four words
+    each) was refused with "expression/argument stack exceeds reserved frame",
+    while the same call inside a def compiled. 960 gives main the procedure
+    reach (XT_OUTARG_REGION + this = 1024) for 768 bytes of ONE frame, not
+    one per call level. }
+  XT_EXPR_REGION = 960;
   { Bytes reserved at the BOTTOM of a windowed frame (sp+0 upward) for the
     OUTGOING arguments that do not fit the register set: the Xtensa ABI puts
     argument words 6.. in the caller's frame at sp+0, sp+4, ... and the callee

@@ -399,7 +399,8 @@ function XtSpillLimit: Integer;
   reach, 1020 -- the old 256 was a guess about frame size that stopped being
   load-bearing when frames became exact. The MAIN body is different: the entry
   stub reserves a FIXED XT_OUTARG_REGION + XT_EXPR_REGION and is never
-  patched, so it keeps that cap. What needed the room: pyeval's closure bridge
+  patched, so it keeps that cap -- now sized to the same 1024 (defs.inc
+  XT_EXPR_REGION). What needed the room: pyeval's closure bridge
   stages up to 32 Int64 arguments, 64 words, now that the indirect path pushes
   an Int64 as the two words it is. }
 begin

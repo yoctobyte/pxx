@@ -32847,6 +32847,15 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/dispfin "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispfin_xtw)" "$$(cat test/test_a_dispose_finalizes_the_managed_pointee.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_dispose_of_a_call_result_finalizes_the_pointee.pas $(TESTTMP)/test_dispcall_xtw
 	tools/expect_same.sh xtensa-windowed/dispcall "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dispcall_xtw)" "$$(cat test/test_a_dispose_of_a_call_result_finalizes_the_pointee.expected)"
+	@# more than 16 Variant-sized Nil Python params put a param slot past addi's
+	@# -128..127 from a15, and a 30-argument call in the MAIN body overran its
+	@# fixed spill region; both were compile errors on windowed only (S3)
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_a_method_takes_more_than_sixteen_parameters.npy $(TESTTMP)/test_wideparams_xtw
+	tools/expect_same.sh xtensa-windowed/wideparams "$$(tools/run_target.sh xtensa $(TESTTMP)/test_wideparams_xtw)" "$$(cat test/test_nilpy_a_method_takes_more_than_sixteen_parameters.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_a_dataclass_ctor_takes_as_many_fields_as_a_proc.npy $(TESTTMP)/test_dcfields_xtw
+	tools/expect_same.sh xtensa-windowed/dcfields "$$(tools/run_target.sh xtensa $(TESTTMP)/test_dcfields_xtw)" "$$(cat test/test_nilpy_a_dataclass_ctor_takes_as_many_fields_as_a_proc.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_escaping_closure_many_captures.npy $(TESTTMP)/test_closurecaps_xtw
+	tools/expect_same.sh xtensa-windowed/closurecaps "$$(tools/run_target.sh xtensa $(TESTTMP)/test_closurecaps_xtw)" "$$(printf '843\n952\n1173\n1398\n2217\n1181\n1 2 3 108')"
 	# FINALIZE OF A WHOLE FIXED ARRAY WALKS EVERY ELEMENT, and Dispose of a
 	# pointer to one releases them all. The node carries the ELEMENT's type, so
 	# the array was finalized as element 0 (pin v438: 32-112 B/iter through

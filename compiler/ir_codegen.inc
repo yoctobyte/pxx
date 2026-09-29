@@ -2992,10 +2992,18 @@ begin
       sz := ParamSlotWordSize(idx);
       if XtensaABI = XTENSA_ABI_WINDOWED then
       begin
+        { a15, not EmitFrameAddrXtensa's a7: a7 still holds incoming word 5
+          here. Past addi's -128..127 the offset goes through a8 itself --
+          seventeen Variant-sized NilPy params (16 bytes each) reach it, where
+          seventeen Pascal Integers do not. EmitLoadConstXtensa touches
+          nothing but its destination. }
         if (Syms[idx].Offset >= -128) and (Syms[idx].Offset <= 127) then
           xtensa_addi(reg_xtensa_a8, reg_xtensa_a15, Syms[idx].Offset)
         else
-          Error('target xtensa windowed: parameter frame offset out of range');
+        begin
+          EmitLoadConstXtensa(reg_xtensa_a8, Syms[idx].Offset);
+          xtensa_add(reg_xtensa_a8, reg_xtensa_a15, reg_xtensa_a8);
+        end;
       end
       else
         EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
