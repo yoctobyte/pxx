@@ -8697,6 +8697,17 @@ begin
         opNode := AllocNode(AN_CALL);
         ASTIVal[opNode] := -103;
         ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyPointer);
+        { Only the x86-64 backend lowers -103 (inline, under the heap lock).
+          Elsewhere call the heap unit's PXXRealloc(p, size, align) instead,
+          which does the same header-sized copy; every other backend refused
+          -103 as an unsupported builtin
+          (bug-a-reallocmem-builds-only-on-x86-64). }
+        if (TargetArch <> TARGET_X86_64) and (FindProc('PXXRealloc') >= 0) then
+        begin
+          ASTRight[ASTRight[argSeq]] := AllocNode(AN_ARG);
+          ASTLeft[ASTRight[ASTRight[argSeq]]] := GenMakeIntLit(8);   { align }
+          ASTIVal[opNode] := FindProc('PXXRealloc');
+        end;
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end

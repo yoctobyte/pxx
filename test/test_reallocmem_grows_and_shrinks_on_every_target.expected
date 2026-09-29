@@ -1,0 +1,6 @@
+grow ok TRUE
+shrink ok TRUE
+from nil -7
+field grow ok TRUE last 50
+untyped TRUE
+done

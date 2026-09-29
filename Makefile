@@ -3577,6 +3577,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/outin26 < test/test_output_and_input_resolve_without_a_text_declaration.in | diff -u test/test_output_and_input_resolve_without_a_text_declaration.expected -
 	./$(COMPILER) test/test_div_by_a_run_time_zero_raises_on_wasm32.pas $(TESTTMP)/divzero26
 	$(TESTTMP)/divzero26 | diff -u test/test_div_by_a_run_time_zero_raises_on_wasm32.expected -
+	./$(COMPILER) test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc26
+	$(TESTTMP)/realloc26 | diff -u test/test_reallocmem_grows_and_shrinks_on_every_target.expected -
 	./$(COMPILER) test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr26
 	tools/expect_same.sh test_nilpy_print_to_stderr.out "$$($(TESTTMP)/npystderr26 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh test_nilpy_print_to_stderr.err "$$($(TESTTMP)/npystderr26 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -8556,6 +8558,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_float_repr_near_the_denormals_is_fast "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/reprdenorm_rv32)" "$$(cat test/test_nilpy_float_repr_near_the_denormals_is_fast.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.npy $(TESTTMP)/reprpow2_rv32
 	tools/expect_same.sh riscv32/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/reprpow2_rv32)" "$$(cat test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.expected)"
+	./$(COMPILER) --target=riscv32 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_rv32
+	tools/expect_same.sh riscv32/test_reallocmem_grows_and_shrinks_on_every_target "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/realloc_rv32)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=riscv32 test/test_text_write_float_and_pchar.pas $(TESTTMP)/textfmt_rv32
 	tools/expect_same.sh riscv32/test_text_write_float_and_pchar.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/textfmt_rv32 2>/dev/null)" "$$(cat test/test_text_write_float_and_pchar.expected)"
 	tools/expect_same.sh riscv32/test_text_write_float_and_pchar.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/textfmt_rv32 2>&1 >/dev/null)" "$$(cat test/test_text_write_float_and_pchar.err.expected)"
@@ -30060,6 +30064,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_output_and_input_resolve_without_a_text_declaration "$$(tools/run_target.sh i386 $(TESTTMP)/outin_i386 < test/test_output_and_input_resolve_without_a_text_declaration.in)" "$$(cat test/test_output_and_input_resolve_without_a_text_declaration.expected)"
 	./$(COMPILER) --target=i386 test/test_div_by_a_run_time_zero_raises_on_wasm32.pas $(TESTTMP)/divzero_i386
 	tools/expect_same.sh i386/test_div_by_a_run_time_zero_raises_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/divzero_i386)" "$$(cat test/test_div_by_a_run_time_zero_raises_on_wasm32.expected)"
+	./$(COMPILER) --target=i386 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_i386
+	tools/expect_same.sh i386/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh i386 $(TESTTMP)/realloc_i386)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_i386
 	tools/expect_same.sh i386/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh i386/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -33292,6 +33298,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_float_repr_near_the_denormals_is_fast "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_reprdenorm_w)" "$$(cat test/test_nilpy_float_repr_near_the_denormals_is_fast.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.npy $(TESTTMP)/xt_reprpow2_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_reprpow2_w)" "$$(cat test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/xt_realloc_w
+	tools/expect_same.sh xtensa-windowed/test_reallocmem_grows_and_shrinks_on_every_target "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_realloc_w)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_stderr_separation.pas $(TESTTMP)/xt_stderrsep_c0
 	tools/expect_same.sh xtensa-call0/test_stderr_separation.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
 	tools/expect_same.sh xtensa-call0/test_stderr_separation.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
@@ -35412,6 +35420,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_length_of_a_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_pas_a32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=arm32 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_a32
 	tools/expect_same.sh arm32/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh arm32 $(TESTTMP)/sstmp_pas_a32)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
+	./$(COMPILER) --target=arm32 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_a32
+	tools/expect_same.sh arm32/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh arm32 $(TESTTMP)/realloc_a32)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
+	./$(COMPILER) --target=aarch64 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_a64
+	tools/expect_same.sh aarch64/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh aarch64 $(TESTTMP)/realloc_a64)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_a32
 	tools/assert_no_leak.sh arm32/nilpy_sort_raises_releases 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32
 	@if tools/assert_no_leak.sh arm32/nilpy_sort_raises_control 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32 keep >/dev/null 2>&1; then \
