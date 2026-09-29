@@ -39475,6 +39475,12 @@ test-esp-idf: $(COMPILER)
 	@./$(COMPILER) --target=esp32c3 --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_list_sort_ceiling.npy $(TESTTMP)/esp_board_list_sort_ceiling.o >/dev/null \
 	  && echo "=== esp_board_list_sort_ceiling builds [esp32c3]: OK ===" || exit 1
+	@# An I2C write nobody ACKs raises OSError ENODEV (errno 19), not IDF's raw
+	@# ESP_ERR_INVALID_RESPONSE 264. Build only; the check needs the board with
+	@# nothing on the bus (recipe and expected lines in its header).
+	@./$(COMPILER) --target=esp32c3 --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/esp_board_i2c_nack_is_enodev.npy $(TESTTMP)/esp_board_i2c_nack_is_enodev.o >/dev/null \
+	  && echo "=== esp_board_i2c_nack_is_enodev builds [esp32c3]: OK ===" || exit 1
 	@# espspi's NilPy surface, the board half of which is
 	@# test/esp_board_spi_surface.npy (recipe in its header).
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \

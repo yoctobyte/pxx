@@ -119,7 +119,6 @@ _none_
 | regression-test-emit-obj-c-obj-data-dup-a-2 | A | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_dup_a.c at 7b781ce15084 in step 25/261, `for t in "" "--target=i386" "--target=riscv32 --platform=esp" "--target=xtensa --platform=esp"; do \ ./compiler/pascal2…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-threadsafe-object-offset-zero | A | 70 | regression | regression: test-emit-obj#src:test/c_threadsafe_object_offset_zero.c@2 at aef4ee1310f9 in step 32/683, `tools/emit_obj_target_set_check.sh ./compiler/pascal26 /tmp/emit_obj_target_set` (auto-filed by twatch) | — |
-| regression-test-nilpy-event-and-children-are-released | T | 70 | regression | first-ever red: test-nilpy#src:examples/tk/event_and_children_are_released.npy at fc6f76591258 in step 2/2, `if command -v xvfb-run >/dev/null 2>&1; then \ tools/expect_same.sh nilpy_tk_event_children_value "$(timeout 120 env GD…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-args-errors-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy at 523c10e42d90 in step 1/5, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_args_errors.npy /tmp/test_cpyext_args_err…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-containers-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy at 523c10e42d90 in step 1/5, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_containers.npy /tmp/test_cpyext_container…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-cython-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy at 523c10e42d90 in step 1/7, `./compiler/pascal26 -DPy_LIMITED_API=0x030c0000 -DCYTHON_COMPRESS_STRINGS=0 -Futest/nilpy_units -Ilib/cpyext/include te…` (auto-filed by twatch) | — |
@@ -128,6 +127,7 @@ _none_
 | regression-test-nilpy-test-cpyext-markupsafe-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_markupsafe.npy at 523c10e42d90 in step 1/15, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_markupsafe.npy /tmp/test_cpyext_markupsaf…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-dotted-package-import-3 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1 at 523c10e42d90 in step 1/8, `./compiler/pascal26 test/test_nilpy_dotted_package_import.npy /tmp/test_nilpy_dottedimport26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-float-repr-roundtrip-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_float_repr_roundtrip.npy at 57ec17b34398 in step 1/4, `./compiler/pascal26 test/test_nilpy_float_repr_roundtrip.npy /tmp/test_nilpy_float_repr26` (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-reflected-host-call-shapes | T | 70 | regression | first-ever red: test-nilpy#src:test/test_nilpy_reflected_host_call_shapes.npy at 1086f130add0 in step 6/10, `tools/expect_same.sh hostshape26/native "$(/tmp/test_nilpy_hostshape26 2>/dev/null)" "$(printf 'HOSTSHAPE-MODE wide\nHO…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_method_vs_pascal_string_helper.npy at 9bd5d47ef746 in step 1/2, `./compiler/pascal26 test/test_nilpy_str_method_vs_pascal_string_helper.npy /tmp/test_nilpy_strmhelper26` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-3 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 at 64db7e73f8f1 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 2/6` (auto-filed by twatch) | — |
@@ -1133,9 +1133,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4067)
+## done (4068)
 
-4067 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4068 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1295,7 +1295,6 @@ _none_
 - [p 70] [A] regression-test-emit-obj-c-obj-data-dup-a-2
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [A] regression-test-emit-obj-c-threadsafe-object-offset-zero
-- [p 70] [T] regression-test-nilpy-event-and-children-are-released
 - [p 70] [N] regression-test-nilpy-test-cpyext-args-errors-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-containers-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-cython-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -1304,6 +1303,7 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-cpyext-markupsafe-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-dotted-package-import-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-float-repr-roundtrip-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [T] regression-test-nilpy-test-nilpy-reflected-host-call-shapes
 - [p 70] [N] regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-3

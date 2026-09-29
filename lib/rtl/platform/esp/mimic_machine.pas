@@ -144,6 +144,7 @@ implementation
 const
   ESP_FAIL        = -1;
   ESP_ERR_TIMEOUT = $107;
+  ESP_ERR_INVALID_RESPONSE = $108;   { IDF's i2c_master driver on a NACK }
   MP_ENODEV       = 19;
   MP_ETIMEDOUT    = 110;
   NO_DEVICE_CS    = -1;   { espspi: the program drives CS itself }
@@ -151,12 +152,18 @@ const
 { MicroPython ESP32's mapping of an esp_err_t (machine_i2c.c, mphalport.c)
   and its str() of the OSError it raises. espi2c answers NOT_FOUND when no
   device ACKs its address, which is the ESP_FAIL case under IDF's newer
-  driver. }
+  driver. A write or read that nobody ACKs comes back from IDF's
+  i2c_master_transmit as ESP_ERR_INVALID_RESPONSE ("NACK is received",
+  esp_driver_i2c/i2c_master.c in IDF v6.0.1), and that too is ENODEV: without
+  it docs/library/micropython.md's no-display program printed
+  `[Errno 264] Unknown error` on an ESP32-C3 board instead of
+  `[Errno 19] ENODEV`, and a driver testing `e.errno == 19` missed it. }
 procedure RaiseEsp(rc: Integer);
 var e: Integer; name: AnsiString;
 begin
   if (rc = ESP_ERR_TIMEOUT) then e := MP_ETIMEDOUT
-  else if (rc = ESP_FAIL) or (rc = I2C_ERR_NOT_FOUND) or (rc = $103) then e := MP_ENODEV
+  else if (rc = ESP_FAIL) or (rc = I2C_ERR_NOT_FOUND) or (rc = $103) or
+          (rc = ESP_ERR_INVALID_RESPONSE) then e := MP_ENODEV
   else e := rc;
   if e = MP_ENODEV then name := 'ENODEV'
   else if e = MP_ETIMEDOUT then name := 'ETIMEDOUT'

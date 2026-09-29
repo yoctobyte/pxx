@@ -1,0 +1,33 @@
+# BOARD ONLY: a write that no I2C device answers raises MicroPython's
+# OSError ENODEV, not IDF's raw error number.
+#
+# Run it with nothing on the bus (SCL GPIO9, SDA GPIO8, the pins
+# docs/library/micropython.md uses):
+#
+#   PXX=$PWD/compiler/pascal26 PXX_MAIN=$PWD/test/esp_board_i2c_nack_is_enodev.npy \
+#     tools/esp_flash.sh --project examples/esp32/nilpy-hw-c3 --no-verify --seconds 20
+#
+# Expected output, as MicroPython's ESP32 port prints it:
+#
+#   found: []
+#   errno 19 True
+#   args0 19
+#   [Errno 19] ENODEV
+#
+# IDF v6's i2c_master_transmit answers a NACK with ESP_ERR_INVALID_RESPONSE
+# (0x108). Before lib/rtl/platform/esp/mimic_machine.pas mapped it, the ESP32-C3
+# board printed "errno 264 False" and "[Errno 264] Unknown error", so a driver's
+# `e.errno == 19` check missed a missing display.
+# MEASURED 2026-09-29 by frankB on the ESP32-C3 board with v451 d9b7226769cc:
+# the four lines above.
+from machine import Pin, I2C
+
+i2c = I2C(0, scl=Pin(9), sda=Pin(8), freq=400000)
+print("found:", i2c.scan())
+try:
+    i2c.writeto(0x3C, bytes((0x80, 0x81)))
+    print("a device answered at 0x3C")
+except OSError as e:
+    print("errno", e.errno, e.errno == 19)
+    print("args0", e.args[0])
+    print(e)
