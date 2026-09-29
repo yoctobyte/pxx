@@ -3617,6 +3617,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/tfdelete26 | diff -u test/test_nilpy_named_temporary_file_deletes_on_close.expected -
 	./$(COMPILER) test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.npy $(TESTTMP)/rootfree26
 	$(TESTTMP)/rootfree26 | diff -u test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.expected -
+	./$(COMPILER) test/test_nilpy_an_object_stored_into_a_variant_is_retained.npy $(TESTTMP)/varobjret26
+	$(TESTTMP)/varobjret26 | diff -u test/test_nilpy_an_object_stored_into_a_variant_is_retained.expected -
 	./$(COMPILER) test/test_nilpy_semicolons_in_a_class_body.npy $(TESTTMP)/semicls26
 	$(TESTTMP)/semicls26 | diff -u test/test_nilpy_semicolons_in_a_class_body.expected -
 	./$(COMPILER) test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin26
@@ -19067,6 +19069,15 @@ test-core: $(COMPILER)
 	tools/expect_same.sh wasm32/test_div_by_a_run_time_zero_raises_on_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/divzero.wasm)" "$$(cat test/test_div_by_a_run_time_zero_raises_on_wasm32.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_int_and_str_of_a_string_literal.npy $(TESTTMP)/intstrlit.wasm
 	tools/expect_same.sh wasm32/test_nilpy_int_and_str_of_a_string_literal "$$(tools/run_target.sh wasm32 $(TESTTMP)/intstrlit.wasm)" "$$(cat test/test_nilpy_int_and_str_of_a_string_literal.expected)"
+	# an object stored into a Variant takes a reference on wasm32 as elsewhere;
+	# the leak row is the other half (`keep` is its positive control).
+	./$(COMPILER) --target=wasm32 test/test_nilpy_an_object_stored_into_a_variant_is_retained.npy $(TESTTMP)/varobjret.wasm
+	tools/expect_same.sh wasm32/test_nilpy_an_object_stored_into_a_variant_is_retained "$$(tools/run_target.sh wasm32 $(TESTTMP)/varobjret.wasm)" "$$(cat test/test_nilpy_an_object_stored_into_a_variant_is_retained.expected)"
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=wasm32 test/test_nilpy_an_object_stored_into_a_variant_is_released.npy $(TESTTMP)/varobjrel.wasm
+	tools/expect_same.sh wasm32/test_nilpy_an_object_stored_into_a_variant_is_released "$$(tools/run_target.sh wasm32 $(TESTTMP)/varobjrel.wasm drop 5000 2>/dev/null)" "25000"
+	tools/assert_no_leak.sh wasm32_nilpy_variant_object_store_released 100 tools/run_target.sh wasm32 $(TESTTMP)/varobjrel.wasm drop 5000
+	@if tools/assert_no_leak.sh wasm32_nilpy_variant_object_store_released_control 100 tools/run_target.sh wasm32 $(TESTTMP)/varobjrel.wasm keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: wasm32_nilpy_variant_object_store_released control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	./$(COMPILER) --target=wasm32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr.wasm
 	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -30251,6 +30262,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_named_temporary_file_deletes_on_close "$$(tools/run_target.sh i386 $(TESTTMP)/tfdelete_i386)" "$$(cat test/test_nilpy_named_temporary_file_deletes_on_close.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.npy $(TESTTMP)/rootfree_i386
 	tools/expect_same.sh i386/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot "$$(tools/run_target.sh i386 $(TESTTMP)/rootfree_i386)" "$$(cat test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_an_object_stored_into_a_variant_is_retained.npy $(TESTTMP)/varobjret_i386
+	tools/expect_same.sh i386/test_nilpy_an_object_stored_into_a_variant_is_retained "$$(tools/run_target.sh i386 $(TESTTMP)/varobjret_i386)" "$$(cat test/test_nilpy_an_object_stored_into_a_variant_is_retained.expected)"
 	./$(COMPILER) --target=i386 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_i386
 	tools/expect_same.sh i386/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh i386 $(TESTTMP)/realloc_i386)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=i386 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof_i386

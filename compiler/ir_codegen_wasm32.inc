@@ -6573,6 +6573,26 @@ begin
     WasmEmitValueAs(valNode, WT_I64, 'Variant payload');
     if WasmBodyBroken then Exit;
   end
+  else if tk = tyClass then
+  begin
+    { THE SLOT TAKES ITS OWN REFERENCE, unless the source already owns its +1
+      (a call result, a NilPy construction's conduit temp) -- the predicate
+      every other backend asks (IRNodeOwnsManagedObj). Without it `v = xs;
+      v = 1` released xs's only reference and freed the list under its
+      owner: `len(xs)` read the freed block's fill afterwards, and a list
+      handed to a pylib shim inside a loop was empty from the 2nd iteration.
+      PXXObjRetain no-ops on an instance with no refcount header.
+      bug-a-a-variant-store-of-an-object-does-not-retain-on-wasm32 }
+    WasmEmitValueAs(valNode, WT_I32, 'Variant payload');
+    if WasmBodyBroken then Exit;
+    if not IRNodeOwnsManagedObj(valNode) then
+    begin
+      WasmLocalTee(WasmVarAddrL);
+      if not WasmCallRtl('PXXObjRetain') then Exit;
+      WasmLocalGet(WasmVarAddrL);
+    end;
+    WasmOp($AD, 'i64.extend_i32_u');
+  end
   else
   begin
     WasmEmitValueAs(valNode, WT_I32, 'Variant payload');

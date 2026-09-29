@@ -1,0 +1,20 @@
+# The retain an object takes when stored into a Variant is released when the
+# Variant is overwritten, and an OWNED source (a fresh list) is not retained
+# twice. `drop` overwrites each one; `keep` holds them all (the positive
+# control: its live count must grow with the loop).
+import sys
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "drop"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 5000
+pop = [1, 2, 3]
+kept = []
+total = 0
+for i in range(n):
+    v = pop
+    total += len(v)
+    v = [i, i]
+    total += len(v)
+    if mode == "keep":
+        kept.append(v)
+    v = 0
+print(total)

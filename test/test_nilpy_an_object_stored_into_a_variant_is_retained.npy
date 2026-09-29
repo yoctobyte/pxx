@@ -1,0 +1,53 @@
+# Storing an object into a Variant takes a reference. On wasm32 it did not:
+# `v = xs; v = 1` released xs's only reference and freed the list under its
+# owner, and a list handed to a pylib shim inside a loop was empty from the
+# second iteration. Every other target was right.
+# bug-a-a-variant-store-of-an-object-does-not-retain-on-wasm32
+import math
+import random
+
+
+def size(x):
+    return len(x)
+
+
+def shuffled(x):
+    random.shuffle(x)
+
+
+pop = [10, 20, 30, 40, 50]
+v = pop
+print(len(pop))
+v = 1
+print(len(pop), pop)
+
+for i in range(3):
+    random.shuffle(pop)
+    print(len(pop), sorted(pop))
+
+for i in range(3):
+    print(math.prod(pop), math.fsum(pop))
+
+for i in range(3):
+    print(random.choice(pop) in pop, size(pop))
+
+i = 0
+while i < 3:
+    shuffled(pop)
+    w = [pop]
+    print(len(w[0]))
+    i += 1
+
+
+def local_alias():
+    xs = [1, 2, 3]
+    y = xs
+    y = "gone"
+    print(len(xs), xs, y)
+    for j in range(2):
+        z = xs
+        print(len(z))
+
+
+local_alias()
+print(sorted(pop))
