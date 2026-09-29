@@ -8406,6 +8406,24 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_powhex "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_powhex_i386)" "$$(cat test/test_nilpy_hex_oct_bin_of_a_power_result_is_exact.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_hex_oct_bin_of_a_power_result_is_exact.npy $(TESTTMP)/test_nilpy_powhex_xtensa_windowed
 	tools/expect_same.sh xtensa-windowed/test_nilpy_powhex "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_powhex_xtensa_windowed)" "$$(cat test/test_nilpy_hex_oct_bin_of_a_power_result_is_exact.expected)"
+	./$(COMPILER) test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64add26
+	$(TESTTMP)/test_nilpy_i64add26 | diff -u test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.expected -
+	./$(COMPILER) --target=riscv32 test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64add_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_i64add "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_i64add_riscv32)" "$$(cat test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.expected)"
+	./$(COMPILER) --target=aarch64 test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64add_aarch64
+	tools/expect_same.sh aarch64/test_nilpy_i64add "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_nilpy_i64add_aarch64)" "$$(cat test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64add_arm32
+	tools/expect_same.sh arm32/test_nilpy_i64add "$$(tools/run_target.sh arm32 $(TESTTMP)/test_nilpy_i64add_arm32)" "$$(cat test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64add_i386
+	tools/expect_same.sh i386/test_nilpy_i64add "$$(tools/run_target.sh i386 $(TESTTMP)/test_nilpy_i64add_i386)" "$$(cat test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64add_xtensa_windowed
+	tools/expect_same.sh xtensa-windowed/test_nilpy_i64add "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_i64add_xtensa_windowed)" "$$(cat test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.expected)"
+	# the fast path writes a fresh heap payload per result on a 32-bit target;
+	# a census bound catches one that is never released
+	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64addc_i386
+	tools/assert_no_leak.sh i386/nilpy_i64add 300 tools/run_target.sh i386 $(TESTTMP)/test_nilpy_i64addc_i386 >/dev/null
+	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_nilpy_int64_add_on_a_32_bit_target_is_exact.npy $(TESTTMP)/test_nilpy_i64addc_riscv32
+	tools/assert_no_leak.sh riscv32/nilpy_i64add 300 tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_i64addc_riscv32 >/dev/null
 	# os.stat / os.path.getsize / f.tell() / os.rename off x86-64. stat had no
 	# layout except on x86-64 and answered a zeroed result with NO error
 	# (statx now, one layout everywhere); riscv32's syscall 62 is _llseek, not
