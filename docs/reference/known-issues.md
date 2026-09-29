@@ -167,18 +167,28 @@ unpacked release archive, with `HttpGet('https://<host>/')`:
 | cloudflare.com | fails | status 301 | ECDSA with SHA-384 above the leaf |
 | example.com | fails | status 200 | ECDSA with SHA-384, P-384 keys |
 | www.python.org | status 200 | status 200 | RSA with SHA-256 only |
+| docs.espressif.com | fails (TLS 1.2 only) | status 302 | not reached |
+| micropython.org | fails (TLS 1.2 only) | status 200 | not reached |
 
 Every host that failed has an ECDSA signature with SHA-384 in its chain,
 and the one that worked has none. The 403 and 301 are the sites' own HTTP
 answers; the TLS connection succeeded. The compiler built at `c44341534a`
 (`81c16b5e3461`) fails in the same way on letsencrypt.org and example.com,
 and gets 200 from www.python.org. Of the 121 roots in that store, 35 have a
-P-384 key. The signature types `x509` understands are listed on
+P-384 key.
+
+The native backend speaks TLS 1.3 only. A server that offers only TLS 1.2
+answers its first message with an alert, and the request fails with
+`expected a handshake record, got type 21` (21 is a TLS alert). Both
+docs.espressif.com and micropython.org did that; `openssl s_client -tls1_3`
+got alert 70 (protocol version) and alert 40 (handshake failure) from them.
+This is by design for now, not the signature gap above. The signature types `x509` understands are listed on
 [Cryptography](../library/crypto.md#checking-signatures-and-certificates-x509-rsa-ed25519).
 
 **Workaround:** on x86-64 (and i386 from v448), use the OpenSSL backend,
 `OpenSslTlsRegister` from `tls_openssl`, built with `-dPXX_DYNLIB_LIBC`: it
-reached all seven hosts above, verifying each certificate. See
+completed the TLS handshake with all nine hosts above, verifying each
+certificate. See
 [Networking](../library/networking.md#openssl-backend). A static program
 with no C library has no workaround yet.
 
