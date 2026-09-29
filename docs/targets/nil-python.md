@@ -88,7 +88,7 @@ written, including the last three rows.
 | `f"""a {v} b"""` | supported | compile error: triple-quoted f-strings are not supported |
 | `import threading` | works | needs the `--threadsafe` compiler flag; the error says so |
 | `def mk(): return gen(5)`, then `list(mk())`, where `gen` is a generator | `[5, 6]` | `[]` on every target: a generator returned from a def yields nothing, and `next(mk())` does not compile. Create the generator where it is consumed. |
-| on i386 or arm32, `exec` calling a method whose parameters are annotated (`name: str`, `n: int`, `flag: bool`) | works | the call runs with wrong arguments: `p.greet('x', 3, True)` prints `hi  12884901888 True` on i386 and `hi x 12884901888 False` on arm32 (pin v450; pin v446 crashed here). A method with unannotated parameters works |
+| on i386, arm32 or riscv32, `exec` calling a method whose parameters are annotated (`name: str`, `n: int`, `flag: bool`) | works | the call runs with wrong arguments: `p.greet('x', 3, True)` prints `hi  12884901888 True` on i386 and `hi x 12884901888 False` on arm32 and riscv32 (pin v450; pin v446 crashed on i386 and arm32). Annotating the parameters as `object` works, and so do unannotated parameters on a method the program never calls directly; see [Known issues](../reference/known-issues.md#nil-python) |
 | on arm32, `from time import sleep as pause`, then `pause(0)` | returns | never returns; `from time import sleep` and `sleep(0)` work |
 
 A generator abandoned before it is exhausted, for example by `break`, does not
