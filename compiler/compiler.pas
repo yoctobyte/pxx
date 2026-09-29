@@ -475,32 +475,34 @@ const
     $748f82ee, $78a5636f, $84c87814, $8cc70208, $90befffa, $a4506ceb, $bef9a3f7, $c67178f2);
 
 { 32-bit words held in Int64 and masked, so the arithmetic is the same under
-  FPC (the seed) and under pxx, whatever each does with Cardinal overflow. }
-function BidRotr(x: Int64; n: Integer): Int64;
-begin
-  BidRotr := ((x shr n) or (x shl (32 - n))) and $FFFFFFFF;
-end;
-
+  FPC (the seed) and under pxx, whatever each does with Cardinal overflow. The
+  rotations are written out inline rather than called: a call per rotation was
+  600 calls a block and most of the time --version took. }
 procedure BidBlock(off: Integer);
-var i: Integer; a, b, c, d, e, f, g, h, t1, t2, s0, s1: Int64;
+var i: Integer; a, b, c, d, e, f, g, h, t1, t2, x: Int64;
 begin
   for i := 0 to 15 do
     BidW[i] := (Int64(BidBuf[off + 4 * i]) shl 24) or (Int64(BidBuf[off + 4 * i + 1]) shl 16) or
                (Int64(BidBuf[off + 4 * i + 2]) shl 8) or Int64(BidBuf[off + 4 * i + 3]);
   for i := 16 to 63 do
   begin
-    s0 := BidRotr(BidW[i - 15], 7) xor BidRotr(BidW[i - 15], 18) xor (BidW[i - 15] shr 3);
-    s1 := BidRotr(BidW[i - 2], 17) xor BidRotr(BidW[i - 2], 19) xor (BidW[i - 2] shr 10);
-    BidW[i] := (BidW[i - 16] + s0 + BidW[i - 7] + s1) and $FFFFFFFF;
+    x := BidW[i - 15] or (BidW[i - 15] shl 32);
+    t1 := ((x shr 7) xor (x shr 18) xor (BidW[i - 15] shr 3)) and $FFFFFFFF;
+    x := BidW[i - 2] or (BidW[i - 2] shl 32);
+    t2 := ((x shr 17) xor (x shr 19) xor (BidW[i - 2] shr 10)) and $FFFFFFFF;
+    BidW[i] := (BidW[i - 16] + t1 + BidW[i - 7] + t2) and $FFFFFFFF;
   end;
   a := BidH[0]; b := BidH[1]; c := BidH[2]; d := BidH[3];
   e := BidH[4]; f := BidH[5]; g := BidH[6]; h := BidH[7];
   for i := 0 to 63 do
   begin
-    s1 := BidRotr(e, 6) xor BidRotr(e, 11) xor BidRotr(e, 25);
-    t1 := (h + s1 + ((e and f) xor ((e xor $FFFFFFFF) and g)) + BidK[i] + BidW[i]) and $FFFFFFFF;
-    s0 := BidRotr(a, 2) xor BidRotr(a, 13) xor BidRotr(a, 22);
-    t2 := (s0 + ((a and b) xor (a and c) xor (b and c))) and $FFFFFFFF;
+    { a 32-bit rotate right by n is bits n..n+31 of the word doubled }
+    x := e or (e shl 32);
+    t1 := (h + (((x shr 6) xor (x shr 11) xor (x shr 25)) and $FFFFFFFF) +
+           ((e and f) xor ((e xor $FFFFFFFF) and g)) + BidK[i] + BidW[i]) and $FFFFFFFF;
+    x := a or (a shl 32);
+    t2 := ((((x shr 2) xor (x shr 13) xor (x shr 22)) and $FFFFFFFF) +
+           ((a and b) xor (a and c) xor (b and c))) and $FFFFFFFF;
     h := g; g := f; f := e;
     e := (d + t1) and $FFFFFFFF;
     d := c; c := b; b := a;
