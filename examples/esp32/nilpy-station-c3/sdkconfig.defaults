@@ -1,5 +1,8 @@
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+# 24 KiB: at 16 KiB an interpreted lambda call on top of a large module
+# body hit the stack guard on silicon (test_nilpy_wide_call_through_a_callable_value).
+# 24 KiB passes it and costs 11 KiB of heap; 32 KiB would cost 20 KiB.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
 CONFIG_WL_SECTOR_SIZE_4096=y
