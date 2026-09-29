@@ -51,16 +51,27 @@ begin
   Result := fn;
 end;
 
+{ Is `a` the callable `b` names? CPython's unregister compares with ==. A def
+  or a bound method is a {code, receiver} PAIR (pycallback_is), and every
+  mention of the name boxes a NEW pair, so its identity is the pair's contents:
+  matching the payload let `unregister(f)` miss the `register(f)` it undoes.
+  A lambda or a closure is one heap object per value, so it matches by object. }
+function SameCallable(const a, b: Variant): Boolean;
+begin
+  if pycallback_is(a) and pycallback_is(b) then
+    SameCallable := (pybound_code(a) = pybound_code(b)) and
+                    (pybound_recv(a) = pybound_recv(b))
+  else
+    SameCallable := PPyVarRec(@a)^.Payload = PPyVarRec(@b)^.Payload;
+end;
+
 procedure unregister(const fn: Variant);
 var i, j: Integer;
 begin
   i := 0;
   while i < gCount do
   begin
-    { same callable = same boxed payload: a bound method's pair object, a
-      closure/bound-fn object, or a code address. PyVarEq is pylib-internal, and
-      identity is the right test here anyway — CPython matches by object. }
-    if PPyVarRec(@gFns[i])^.Payload = PPyVarRec(@fn)^.Payload then
+    if SameCallable(gFns[i], fn) then
     begin
       for j := i to gCount - 2 do gFns[j] := gFns[j + 1];
       gCount := gCount - 1;

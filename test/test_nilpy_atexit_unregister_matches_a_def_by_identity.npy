@@ -1,0 +1,36 @@
+import atexit
+
+class Box:
+    def __init__(self, name):
+        self.name = name
+
+    def close(self):
+        print("close", self.name)
+
+def never():
+    print("never ran")
+
+def twice():
+    print("twice ran")
+
+def kept():
+    print("kept ran")
+
+lam = lambda: print("lam ran")
+lam_kept = lambda: print("lam_kept ran")
+a = Box("a")
+b = Box("b")
+
+atexit.register(kept)
+atexit.register(never)
+atexit.register(lam)
+atexit.register(lam_kept)
+atexit.register(twice)
+atexit.register(twice)
+atexit.register(a.close)
+atexit.register(b.close)
+atexit.unregister(never)
+atexit.unregister(lam)
+atexit.unregister(twice)
+atexit.unregister(a.close)
+print("body done")

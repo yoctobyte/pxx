@@ -3612,6 +3612,10 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_a_unit_finalization_runs_on_wasm32.out "$$($(TESTTMP)/wasmfini26 2>/dev/null)" "$$(cat test/test_a_unit_finalization_runs_on_wasm32.expected)"
 	./$(COMPILER) test/test_nilpy_atexit_runs_on_wasm32.npy $(TESTTMP)/atexit26
 	$(TESTTMP)/atexit26 | diff -u test/test_nilpy_atexit_runs_on_wasm32.expected -
+	# atexit.unregister finds a def by what it is, not by the box one mention
+	# of its name made: a def named twice, a lambda, a bound method. CPython's.
+	./$(COMPILER) test/test_nilpy_atexit_unregister_matches_a_def_by_identity.npy $(TESTTMP)/atexitunreg26
+	$(TESTTMP)/atexitunreg26 | diff -u test/test_nilpy_atexit_unregister_matches_a_def_by_identity.expected -
 	./$(COMPILER) test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.npy $(TESTTMP)/pymodinit26
 	$(TESTTMP)/pymodinit26 | diff -u test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected -
 	# `a = 1; b = 2` at an imported module's top level failed to parse.
