@@ -4935,6 +4935,25 @@ end;
   other VT_OBJECT receiver is treated as a reflected HOST object and routed
   through the trampoline (PyHostCall). Method coverage is the corpus subset;
   unsupported names error clearly. }
+{ THE `byteorder` ARGUMENT OF int.to_bytes / int.from_bytes, which this unit used to
+  drop on the floor. `args.at(idx)` is it when supplied; absent, CPython 3.11+
+  defaults to BIG, and so does the compiled intrinsic
+  (PyParseByteOrderAndSigned in compiler/pyparser.inc sets bigEnd := True before
+  looking). The default mattering is not academic: with the argument OMITTED the
+  compiled path answered `1 2` for (258).to_bytes(2) and this one answered `2 1`. }
+function PyByteOrderIsBig(args: TPyList; idx: Integer): Boolean;
+var s: AnsiString;
+begin
+  PyByteOrderIsBig := True;
+  if (args = nil) or (args.count <= idx) then Exit;
+  s := pystr_of(args.at(idx));
+  if s = 'little' then PyByteOrderIsBig := False
+  else if s = 'big' then PyByteOrderIsBig := True
+  else
+    { CPython's own wording, so a program matching on the message still matches. }
+    raise ValueError.Create('byteorder must be either ''little'' or ''big''');
+end;
+
 procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
                           var res: Variant);
 var
@@ -4945,6 +4964,7 @@ var
   i: Integer;
   signedKw: Boolean;
   rvt: Int64;
+  byRev: TPyBytes;   { the byte-reversed half of a big-endian to_bytes/from_bytes }
 begin
   args := TPyList.Create;
   kwNames := TPyList.Create;
@@ -4963,7 +4983,22 @@ begin
     begin
       if mname = 'to_bytes' then
       begin
+        { pyint_to_bytes IS LITTLE-ENDIAN ONLY, and deliberately so: it takes no
+          byteorder parameter, and the big-endian half is a separate reversal the
+          CALLER composes. The compiled intrinsic does exactly that
+          (PyMakeBytesReversed wraps the call node when bigEnd); this arm did not,
+          which is why `(5).to_bytes(2, "big")` answered `5 0` here and `0 5` when
+          compiled, and why "little" passed for the wrong reason. }
         by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
+        if PyByteOrderIsBig(args, 1) then
+        begin
+          byRev := pybytes_reversed(by);
+          { The little-endian intermediate is referenced by nothing -- it was
+            created a statement ago and never boxed, so no slot holds its +1 and
+            freeing it here is the only thing that can. }
+          by.Free;
+          by := byRev;
+        end;
         res := PyBoxObjNew(Pointer(by));   { fresh: the slot takes its +1 }
         Exit;
       end;
@@ -4976,7 +5011,23 @@ begin
     begin
       if (PPyRec(@recv)^.Payload = 2) and (mname = 'from_bytes') then
       begin
-        res := pyvar_of_int(pyint_from_bytes(TPyBytes(pyvarobj(args.at(0))), signedKw));
+        { Same defect, same shape, and the report that started this named only
+          to_bytes: from_bytes read `b"\x01\x02"` as 513 here against 258 compiled
+          and 258 in CPython. pyint_from_bytes is little-endian only for the same
+          deliberate reason, and the compiled intrinsic reverses its INPUT rather
+          than its output (PyParseFromBytes). A round trip inside eval() was
+          therefore self-consistent and wrong against every other producer, which
+          is the one shape a to_bytes-then-from_bytes fixture would not catch. }
+        if PyByteOrderIsBig(args, 1) then
+        begin
+          byRev := pybytes_reversed(TPyBytes(pyvarobj(args.at(0))));
+          res := pyvar_of_int(pyint_from_bytes(byRev, signedKw));
+          { byRev is ours alone: the caller's bytes are untouched and this copy was
+            never boxed, so nothing else will release it. }
+          byRev.Free;
+        end
+        else
+          res := pyvar_of_int(pyint_from_bytes(TPyBytes(pyvarobj(args.at(0))), signedKw));
         Exit;
       end;
       EvalError('type method not supported: ' + mname);

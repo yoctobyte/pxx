@@ -1,0 +1,19 @@
+c big   2 -> 0 5 
+e big   2 -> 0 5 
+c little2 -> 5 0 
+e little2 -> 5 0 
+c big   4 -> 0 0 1 2 
+e big   4 -> 0 0 1 2 
+c little4 -> 2 1 0 0 
+e little4 -> 2 1 0 0 
+c default -> 1 2 
+e default -> 1 2 
+c signed  -> 255 254 
+e signed  -> 255 254 
+c fb big    -> 258
+e fb big    -> 258
+c fb little -> 513
+e fb little -> 513
+c fb deflt  -> 258
+e fb deflt  -> 258
+bad order   -> ValueError

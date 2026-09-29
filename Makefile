@@ -5102,6 +5102,21 @@ test-nilpy: $(COMPILER)
 	# refusal changes nothing that worked.
 	./$(COMPILER) test/test_nilpy_exec_body_with_parameters_is_refused.npy $(TESTTMP)/test_nilpy_cbody26
 	tools/expect_same.sh cbody26 "$$($(TESTTMP)/test_nilpy_cbody26)" "BODYARG-CHECK failures=0"
+	# to_bytes/from_bytes inside eval() honour the byte order. eval's arm dropped the
+	# argument and was ALWAYS little-endian, so every "little" row passed by
+	# coincidence and only "big" was wrong -- which is how it survived. It was also
+	# from_bytes (b"\x01\x02" read as 513 against CPython's 258) and also the
+	# DEFAULT: omitted byteorder is BIG since CPython 3.11, and the compiled
+	# intrinsic already defaulted that way, so the two paths disagreed on the
+	# likeliest spelling of all. THE `c` AND `e` ROWS ARE THE COMPILED AND eval
+	# PATHS OF THE SAME EXPRESSION and must agree with each other and with python3.
+	# .expected IS python3's output, generated from CPython -- generated from pxx it
+	# would assert only that pxx has not changed, which is not the property wanted.
+	# The round-trip trap: both halves were little-endian, so a to_bytes-then-
+	# from_bytes fixture would have passed while both were broken. from_bytes is
+	# therefore asserted against literal bytes and an expected integer.
+	./$(COMPILER) test/test_nilpy_eval_to_bytes_honours_byte_order.npy $(TESTTMP)/test_nilpy_evalbo26
+	$(TESTTMP)/test_nilpy_evalbo26 | diff -u test/test_nilpy_eval_to_bytes_honours_byte_order.expected -
 	# {*xs} deduplicates: the set display's STAR arm called extend (appends)
 	# while its ordinary elements went through add (dedups). The list rows are
 	# what says [*xs] did not become a set.

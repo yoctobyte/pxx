@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: 0BSD
+# int.to_bytes / int.from_bytes INSIDE eval() honour the byte order, as the
+# compiled path always did.
+#
+# eval()'s arm dropped the `byteorder` argument entirely and was always
+# little-endian. The failure was not uniform and that is what made it survive:
+#
+#     (5).to_bytes(2, "big")        compiled 0 5     eval 5 0      CPython 0 5
+#     (5).to_bytes(2, "little")     compiled 5 0     eval 5 0      CPython 5 0
+#     int.from_bytes(b"\x01\x02", "big")   compiled 258  eval 513  CPython 258
+#
+# so every "little" row PASSED, by coincidence, and only the "big" rows were wrong.
+# Reported (by another seat) as to_bytes ignoring the byte order; it was also
+# from_bytes, and it was also the DEFAULT -- with the argument omitted the compiled
+# path answered `1 2` and eval answered `2 1`, because CPython 3.11+ defaults
+# byteorder to BIG and so does the compiled intrinsic
+# (PyParseByteOrderAndSigned sets bigEnd := True before it looks for an argument).
+# Since 3.11 made big the default, the OMITTED case is the likeliest one in real
+# code, which makes the default rows below the most valuable in this file.
+#
+# WHY IT WAS ONLY THE eval PATH. pyint_to_bytes / pyint_from_bytes in pylib take no
+# byteorder parameter at all, deliberately: they are little-endian, and big-endian
+# is a separate REVERSAL that the caller composes. The compiled intrinsic composes
+# it (PyMakeBytesReversed wraps the call node, or its input for from_bytes);
+# pyeval's runtime arm simply never did. So this was a missing composition step, not
+# a broken conversion, and the fix adds the same step rather than a new parameter.
+#
+# `signed=` WAS NEVER BROKEN and the signed rows prove it stays that way: (-2)
+# answered 254 255 where CPython says 255 254 -- the right two's-complement
+# magnitude, byte-swapped. Only the ordering was ever dropped.
+#
+# A ROUND TRIP INSIDE eval WAS SELF-CONSISTENT AND WRONG, which is the one shape a
+# to_bytes-then-from_bytes fixture cannot catch: both halves were little-endian, so
+# they agreed with each other and with nothing else. That is why from_bytes is
+# asserted here against literal bytes and an expected INTEGER, independently of
+# to_bytes, rather than as its inverse.
+#
+# THE .expected IS python3's OUTPUT, generated from CPython and not from pxx. A
+# file of this kind generated from the implementation it tests asserts only that
+# the implementation has not changed, which is not the property wanted here.
+
+
+def show(label, b):
+    out = ""
+    i = 0
+    while i < len(b):
+        out = out + str(b[i]) + " "
+        i = i + 1
+    print(label + " -> " + out)
+
+
+# ---- to_bytes, both paths, both orders, two widths ----
+show("c big   2", (5).to_bytes(2, "big"))
+show("e big   2", eval('(5).to_bytes(2, "big")'))
+show("c little2", (5).to_bytes(2, "little"))
+show("e little2", eval('(5).to_bytes(2, "little")'))
+show("c big   4", (258).to_bytes(4, "big"))
+show("e big   4", eval('(258).to_bytes(4, "big")'))
+show("c little4", (258).to_bytes(4, "little"))
+show("e little4", eval('(258).to_bytes(4, "little")'))
+
+# ---- the DEFAULT: omitted byteorder is BIG since CPython 3.11 ----
+show("c default", (258).to_bytes(2))
+show("e default", eval('(258).to_bytes(2)'))
+
+# ---- signed=, which was never the broken part ----
+show("c signed ", (-2).to_bytes(2, "big", signed=True))
+show("e signed ", eval('(-2).to_bytes(2, "big", signed=True)'))
+
+# ---- from_bytes, asserted against an expected integer, not as to_bytes' inverse ----
+print("c fb big    -> " + str(int.from_bytes(b"\x01\x02", "big")))
+print("e fb big    -> " + str(eval('int.from_bytes(b"\\x01\\x02", "big")')))
+print("c fb little -> " + str(int.from_bytes(b"\x01\x02", "little")))
+print("e fb little -> " + str(eval('int.from_bytes(b"\\x01\\x02", "little")')))
+print("c fb deflt  -> " + str(int.from_bytes(b"\x01\x02")))
+print("e fb deflt  -> " + str(eval('int.from_bytes(b"\\x01\\x02")')))
+
+# ---- a byte order that is neither: CPython's ValueError, with its wording ----
+try:
+    junk = eval('(5).to_bytes(2, "middle")')
+    print("bad order   -> no exception")
+except ValueError as e:
+    print("bad order   -> ValueError")
