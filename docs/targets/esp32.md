@@ -47,9 +47,21 @@ now) it says `esp_run: building <project> for <chip> ...` before the build.
 The Nil Python examples boot under QEMU through
 their own `build.sh qemu-assert`, which compares the output with
 `main/main.expected`: `examples/esp32/nilpy-c3/build.sh qemu-assert` ended
-with `OK   nilpy-c3 -- ... output == main/main.expected, one boot`. Fourteen
-of the 36 example READMEs give QEMU commands, `nilpy-c3` and `nilpy-s3`
-among them; most of the others drive hardware that QEMU does not emulate.
+with `OK   nilpy-c3 -- ... output == main/main.expected, one boot`.
+
+Each of the 36 example READMEs says how the project runs without a board.
+Seventeen give a QEMU command, each checked on 2026-09-29 with v451 from
+the release archive and recorded in the README: `./build.sh qemu-assert`
+for `fs-c3`, `gpio-c3`, `isrctx-c3`, `nilpy-c3`, `nilpy-esp32`,
+`nilpy-hw-c3`, `nilpy-hw-esp32`, `nilpy-hw-s3`, `nilpy-s3`, `spi-s3`,
+`timer-c3`, `timer-esp32` and `timer-s3`, and `./build.sh qemu` for
+`dns-c3`, `hello-c3`, `hello-s3` and `net-c3`. The other nineteen start
+with "This example needs a board", name the board, and say why: they use
+hardware Espressif's QEMU does not model. The Wi-Fi projects and `adc-c3`
+and `adc-s3` boot under QEMU but print nothing, and `monitor-s3` and
+`nilpy-logger-s3` ship no `main/main.expected`, so their `./build.sh
+qemu-assert` stops with `main/main.expected: No such file or directory`
+after the build.
 A QEMU started
 by hand with `-serial mon:stdio` keeps running after the program ends; press
 Ctrl-A, then X, to stop it.
