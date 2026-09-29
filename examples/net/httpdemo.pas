@@ -1,6 +1,6 @@
 { SPDX-License-Identifier: 0BSD }
 program httpdemo;
-{ frank2 native net-lib showcase — no external network needed.
+{ PXX native net-lib showcase — no external network needed.
 
   A loopback HTTP/1.1 server coroutine and a client coroutine run on ONE thread,
   both driven by the epoll reactor (scheduler). Over a single keep-alive
@@ -38,7 +38,7 @@ begin
   if req.Path = '/' then
     DemoHandler := HttpBuildResponse(200, 'OK',
                      'Set-Cookie: sid=demo123; Path=/'#13#10 + KEEPALIVE,
-                     'Welcome to frank2 net')
+                     'Welcome to pxx net')
   else if req.Path = '/me' then
   begin
     if Pos('sid=demo123', HttpRequestHeader(req, 'Cookie')) > 0 then

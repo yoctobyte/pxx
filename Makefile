@@ -41805,7 +41805,7 @@ endif
 	tools/expect_same.sh lib_httpjson.1 "$$($(TESTTMP)/lib_httpjson | grep -c '=ok')" "7"
 	tools/expect_same.sh lib_httpjson.2 "$$($(TESTTMP)/lib_httpjson | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/httpdemo
-	tools/expect_same.sh httpdemo "$$(/tmp/httpdemo | grep -c -e 'Welcome to frank2 net' -e 'cookie: sid=demo123' -e 'hello sid=demo123' -e 'body:   hello world' -e '^done')" "5"
+	tools/expect_same.sh httpdemo "$$(/tmp/httpdemo | grep -c -e 'Welcome to pxx net' -e 'cookie: sid=demo123' -e 'hello sid=demo123' -e 'body:   hello world' -e '^done')" "5"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_https_mock.pas $(TESTTMP)/lib_https_mock
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).

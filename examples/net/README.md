@@ -14,7 +14,7 @@ prints:
 
 ```text
 GET /        -> 200 OK
-  body:   Welcome to frank2 net
+  body:   Welcome to pxx net
   cookie: sid=demo123
 GET /me      -> 200 OK  (cookie sent back)
   body:   hello sid=demo123
