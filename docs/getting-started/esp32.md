@@ -29,7 +29,13 @@ PXX produces the application object; ESP-IDF provides the bootloader, FreeRTOS,
 the drivers, and the final link. Install ESP-IDF v6.0.1 by
 [Espressif's instructions](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/),
 for the chips you have, into `~/esp/esp-idf` (the tools look there by default;
-set `ESP_IDF_DIR` otherwise). Then, in every shell you build from:
+set `ESP_IDF_DIR` otherwise). For both chips on this page, run ESP-IDF's
+installer as `./install.sh esp32s3,esp32c3`: the C3 needs the RISC-V
+toolchain and the S3 the Xtensa one. It is a large install: ESP-IDF v6.0.1
+with both toolchains, both QEMUs and their Python environment took 7.7 GB
+of disk on the machine these pages were checked on (2.7 GB in
+`~/esp/esp-idf`, 5.0 GB in `~/.espressif`). If ESP-IDF is already installed,
+skip to the next step. Then, in every shell you build from:
 
 ```sh
 . ~/esp/esp-idf/export.sh
@@ -60,12 +66,33 @@ examples/esp32/nilpy-s3/build.sh      # Nil Python, ESP32-S3
 examples/esp32/nilpy-c3/build.sh      # Nil Python, ESP32-C3
 ```
 
-To run a built example with no board, under Espressif's QEMU, see "Running
-without a board" in [ESP32](../targets/esp32.md). QEMU is not part of a
-default ESP-IDF install, and that page has the line that adds it.
-
 Each one ends with `Project build complete` and `app_main present in image
-map`, and leaves the image in the project's `build/` directory.
+map`, and leaves the image in the project's `build/` directory. The first
+build of a project compiles about 990 ESP-IDF files and takes a few minutes
+(2 minutes 24 seconds for `hello-c3` on a PC with 12 CPU threads); later builds of the
+same project are quicker. On the way, ESP-IDF prints about 1,300 lines,
+among them a few `NOTE: ... is not a valid bool value ... treated as 'n'`
+lines from its own configuration files. Those are ESP-IDF's, and harmless.
+
+**Running without a board.** Espressif's QEMU emulates the C3 and the S3.
+It is not part of a default ESP-IDF install; the line that adds it is under
+"Running without a board" in [ESP32](../targets/esp32.md). Then, from the
+top of the PXX directory:
+
+```sh
+tools/esp_run.sh --chip esp32c3 examples/esp32/hello-c3/main/main.pas   # a Pascal program
+examples/esp32/nilpy-c3/build.sh qemu-assert                            # the Nil Python example
+```
+
+`tools/esp_run.sh` builds the program into the chip's `hello-*` project,
+boots it and prints what it wrote: the five `PXX hello from Pascal: i=N`
+lines and `PXX sum 1..5 = 15`. **It prints nothing else while it builds**,
+which took about 3 minutes the first time and 1 minute after that. A Nil
+Python example's `build.sh qemu-assert` builds, boots and compares the
+output with the example's `main/main.expected`, and ends with a line that
+starts `OK   nilpy-c3`. Use `--chip esp32s3` with `hello-s3`, and
+`nilpy-s3`, for the S3. Measured on 2026-09-29 with pin v451 (compiler
+sha256 `d9b7226769cc`) from an unpacked release archive and ESP-IDF v6.0.1.
 
 **An ESP32-C3 instead of an S3.** The walk below uses the S3. For a C3, swap the
 suffix: `hello-c3` for `hello-s3`, `nilpy-c3` or `nilpy-hw-c3` for the Python

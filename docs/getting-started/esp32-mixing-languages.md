@@ -23,7 +23,12 @@ every command on this page was run again as written, with pin v448 (sha256
 `b2b325036c3b`) in a fresh clone at `6b34caaf23`: both projects built, the
 Python one passed `qemu-assert`, and the Pascal one printed the line above
 under QEMU through `tools/esp_run.sh`. That run found the QEMU command below
-failing with a relative compiler path; it now gives an absolute one.
+failing with a relative compiler path; it now gives an absolute one. On
+2026-09-29 the page was walked again from an unpacked archive of pin v451
+(sha256 `d9b7226769cc`), with ESP-IDF v6.0.1 already installed: both
+Python projects passed `qemu-assert` on the C3 and the S3, and the Pascal
+program printed its line under QEMU. The QEMU line for a checkout does not
+work in an archive; the section below gives the one that does.
 
 ## Nil Python calling a Pascal unit
 
@@ -81,7 +86,7 @@ cp -rL nilpy-c3 xpy-c3
 rm -rf xpy-c3/build xpy-c3/main/main.expected
 cp /path/to/main.npy /path/to/filters.pas xpy-c3/main/
 . ~/esp/esp-idf/export.sh
-xpy-c3/build.sh               # build only; the image was 1,421,184 bytes (v448)
+xpy-c3/build.sh               # build only; the image was 1,459,728 bytes (v451)
 ```
 
 With the program's expected output saved as `xpy-c3/main/main.expected`,
@@ -91,7 +96,8 @@ With the program's expected output saved as `xpy-c3/main/main.expected`,
 For an ESP32-S3, copy `nilpy-s3` instead of `nilpy-c3` (to `xpy-s3`) and use
 the same files. With pin v450 on 2026-09-29 it built (the image was 1,342,912
 bytes) and `xpy-s3/build.sh qemu-assert` printed `OK xpy-s3 -- ... output ==
-main/main.expected, one boot` with the output shown above.
+main/main.expected, one boot` with the output shown above. With pin v451 from
+an unpacked archive the image was 1,373,000 bytes, and the result the same.
 
 The ESP units themselves work the same way: `import 'espgpio.pas' as gpio` in
 [Getting started on the ESP32](./esp32.md#4-a-python-program) is a Pascal unit
@@ -150,12 +156,27 @@ cp /path/to/main.pas /path/to/crc8.c /path/to/crc8.h xpas-c3/main/
 xpas-c3/build.sh              # build only; the image was 187,392 bytes (v448)
 ```
 
-To run it under QEMU instead, without a project of your own, from the
-repository root:
+To run it under QEMU instead, without a project of your own, from the top of
+the PXX directory. In an unpacked release archive:
+
+```sh
+tools/esp_run.sh --chip esp32c3 /path/to/main.pas
+```
+
+In a git checkout, name the pinned compiler, because a checkout has no
+`compiler/pascal26` until you build one:
 
 ```sh
 ESP_RUN_PXX=$PWD/stable_linux_amd64/default/pinned tools/esp_run.sh --chip esp32c3 /path/to/main.pas
 ```
+
+The second line does not work in a release archive: the archive has no
+`stable_linux_amd64/`, and the script stops with `esp_run: compiler
+.../stable_linux_amd64/default/pinned not found or not executable`. With pin
+v451 from an unpacked archive on 2026-09-29, the first line printed
+`crc8("123456789") = 244` after about a minute, with nothing printed while it
+built. That was with its `hello-c3` project already built once; the first
+run takes about 3 minutes.
 
 `tools/esp_run.sh` compiles with `compiler/pascal26` unless `ESP_RUN_PXX`
 names another compiler (not `PXX`), and prints which one it used. The script

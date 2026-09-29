@@ -40,7 +40,14 @@ tools/esp_run.sh --chip esp32c3 examples/esp32/hello-c3/main/main.pas
 it under QEMU, and prints the program's output. With pin v450, from a fresh
 v0.1.0-beta.1 tarball and ESP-IDF v6.0.1, that printed the six lines quoted in
 `hello-c3`'s README, and the same with `--chip esp32s3` and `hello-s3`
-(2026-09-29). Each example's README gives its own QEMU commands. A QEMU started
+(2026-09-29). With pin v451 from an unpacked archive it did the same on
+2026-09-29; it printed nothing while it built, for about 3 minutes the first
+time and 1 minute after. The Nil Python examples boot under QEMU through
+their own `build.sh qemu-assert`, which compares the output with
+`main/main.expected`: `examples/esp32/nilpy-c3/build.sh qemu-assert` ended
+with `OK   nilpy-c3 -- ... output == main/main.expected, one boot`. Twelve
+of the 36 example READMEs give QEMU commands; `nilpy-c3` and `nilpy-s3` are
+among those that do not. A QEMU started
 by hand with `-serial mon:stdio` keeps running after the program ends; press
 Ctrl-A, then X, to stop it.
 
