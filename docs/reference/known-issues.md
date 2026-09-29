@@ -906,7 +906,10 @@ These were wrong in v424 and fixed in v425, and so are fixed here too:
 ## Refused, with a message
 
 These do not compile, or compile with a warning. None of them produces a wrong
-answer silently. (Measured with v425.)
+answer silently. (Measured with v425, and again on 2026-09-29 with v451,
+`d9b7226769cc`: the `__thread` warning on riscv32, `setvbuf` returning nonzero
+for `_IOFBF` and `_IOLBF` and 0 for `_IONBF` on all five Linux CPUs, and
+`--shared` refused on aarch64, arm32 and i386.)
 
 - **C `__thread` on riscv32** compiles with a warning that every thread
   shares one copy. riscv32 has no threads, so no program is affected.
@@ -957,7 +960,8 @@ v439. Use `-O3` only if you check the output.
 
 `Trunc(1e30)` stored in an `Int64` saturates to 9223372036854775807. Stored in
 a `LongInt` it gives -1, the low 32 bits of that saturated value. This is the
-same on every target, desktop and ESP (measured with v425). A float that does
+same on every target, desktop and ESP (measured with v425; the desktop half
+again with v451 on x86-64, i386, aarch64, arm32 and riscv32). A float that does
 not fit the integer type it is truncated into has no meaningful integer value;
 test the range first if the input can be that large.
 
@@ -974,10 +978,14 @@ the two behave differently on purpose:
 | Nil Python: `//` and `%` by zero | runtime error 200, which `except` cannot catch, when the divisor is only known at run time; `ZeroDivisionError` when the compiler can see it is zero or the def is typed (measured with v450; which is intended is waiting for the owner's decision, see [ESP32 peripherals](../library/esp.md)) | gives 0, the program continues |
 | Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
 
-Each cell was measured on v425. The desktop column was run on x86-64, i386,
-aarch64, arm32 and riscv32 Linux (Nil Python had no hosted riscv32 then). The ESP
+Each cell was measured on v425. The desktop column was measured again on
+2026-09-29 with v451 (`d9b7226769cc`) on x86-64, i386, aarch64, arm32 and
+riscv32 Linux, for Pascal, C and Nil Python, and every cell held. The ESP
 column was measured under Espressif's QEMU on both chips, for Pascal, C and
-Nil Python. This is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
+Nil Python; its Pascal and C integer cell again with v450 (see
+[Numbers on ESP](../library/esp.md#numbers-on-esp)). wasm32 is not in the
+desktop column: there an integer division by zero stops the module (see
+"Stops at run time" above). This is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
 test the divisor yourself.
 
 ## Nil Python
@@ -1060,6 +1068,22 @@ gives `ns["result"] == 42`. **Workaround:** name the def `__body__`, or
 assign the value you need to a variable in the executed source. Measured on
 2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
 `1763b6232b` (`70e57d59b777`), which behave the same.
+
+**Nil Python on i386, arm32 and riscv32: `exec` code calling a method with
+annotated parameters passes wrong values.** With `def greet(self, name: str,
+n: int, flag: bool)`, the call `p.greet('x', 3, True)` made from source run by
+`exec` prints `hi  12884901888 True` on i386 (an empty string, and 3 moved up
+32 bits) and `hi x 12884901888 False` on arm32 and riscv32, with no message;
+x86-64 and aarch64 print `hi x 3 True`, as CPython does. A parameter without
+an annotation is affected the same way once the compiler has given it a type
+from its compiled calls (see the row above on a method reached from `exec`):
+after `p.plain("y", 4, False)` in the program, the `exec` call prints `hi
+12884901888 True` on i386 and stops with SIGSEGV on arm32. Without any
+compiled call, or annotated as `object`, it gets the right values. Measured on
+2026-09-29 with v450 (`c19cc2d531e4`) and v451 (`d9b7226769cc`), which behave
+the same, under QEMU user mode. **Workaround:** on a 32-bit target, annotate
+the parameters of a method that `exec` code calls as `object` (`name: object,
+n: object, flag: object`); measured on i386, arm32 and riscv32 with v451.
 
 **Nil Python: the parameters of an `exec`'d `__body__` read `None`.** A
 `__body__` defined by `exec` and called from the program does not receive its
