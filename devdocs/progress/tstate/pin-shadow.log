@@ -1172,3 +1172,4 @@
 2026-09-28T22:29:47Z	borg	b9932c32c28ebfc1993409c532cebbcc15d980cd	would NOT pin b9932c32c28e — 2 red(s) the current pin does not have, 3 inherited from the current pin: test-nilpy#src:test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy, test-nilpy#src:test/test_nilpy_import_does_not_publish_names.npy
 2026-09-28T23:33:28Z	borg	463383a0b19f25acc0b356ac4c65eef168cb58fb	would-pin PENDING 463383a0b19f — qualifies, streak 1/2
 2026-09-29T00:57:25Z	borg	64db7e73f8f1fd8f7070ca65beb3a4fc9561e5e6	would NOT pin 64db7e73f8f1 — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-pascal-conformance#shard2/6
+2026-09-29T01:27:45Z	borg	890da59886956a6b0f606a1865be6dedbc6c7685	would NOT pin 890da5988695 — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-pascal-conformance#shard2/6
