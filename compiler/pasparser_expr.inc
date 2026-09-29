@@ -811,6 +811,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     copyElemRec: Integer;    { element rec of a dynamic-array Copy's source, for a `[i]` suffix }
     mrefNode: Integer;       { a `@`-less method reference inside a method-pointer cast, or -1 }
     ptrCastElemTk: TTypeKind;   { element of a PChar/PWideChar cast — what `p^` and `p[i]` yield }
+    pchLit: AnsiString;         { a one-character literal cast to PChar, as the string it is }
     castSem: Integer;    { the SEMANTIC IDENTITY a named-type cast confers — an enum's type index for `TEnum(x)`, a sized boolean's for `ByteBool(x)`, else SEM_NONE. See the cast arm }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
@@ -7935,6 +7936,34 @@ begin
             Expect(tkLParen, '(');
             ParseExpr;
             Expect(tkRParen, ')');
+            { A ONE-CHARACTER LITERAL IS A STRING HERE, not its character code.
+              The factor parser makes `'x'` (and `#120`, and a `const K = 'x'`)
+              an ordinal Char node, so the adapter below reinterpreted 120 as
+              the pointer: `PChar('x')` printed 120 and a C callee reading it
+              segfaulted. fpc 3.2.2 gives a pointer to a NUL-terminated "x", the
+              same as `PChar('xy')`, so the constant becomes that literal. A Char
+              that is NOT a constant (a variable, a typed const, a call) has no
+              string to point at, and fpc refuses it:
+              `Illegal type conversion: "Char" to "PChar"`.
+              bug-a-pchar-of-a-one-character-literal-is-its-char-code }
+            { The NODE's kind is asked as well as LastExprTk: a named
+              `const K = 'x'` comes back an AN_INT_LIT tagged tyChar with
+              LastExprTk left at something else. }
+            if (LastExprTk = tyChar) or
+               ((CurASTNode >= 0) and (IntToTypeKind(ASTTk[CurASTNode]) = tyChar)) then
+            begin
+              if ASTKind[CurASTNode] <> AN_INT_LIT then
+                Error('Illegal type conversion: "Char" to "' + name + '" -- only a ' +
+                      'character CONSTANT is a one-character string here; for a ' +
+                      'variable take the address of a string holding it (fpc refuses ' +
+                      'this cast too)');
+              pchLit := Chr(ASTIVal[CurASTNode]);
+              CurASTNode := AllocNode(AN_STR_LIT);
+              ASTSOffset[CurASTNode] := StoredName(pchLit);
+              ASTSLen[CurASTNode] := 1;
+              ASTTk[CurASTNode] := Ord(tyString);
+              LastExprTk := tyString;
+            end;
             node := AllocNode(AN_PTR_CAST);
             ASTLeft[node] := CurASTNode;
             ASTIVal[node] := -2; { PChar adapter }

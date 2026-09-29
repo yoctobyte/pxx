@@ -3780,6 +3780,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/lenarrvar_x64 | diff -u test/test_length_of_an_array_of_variant.expected -
 	./$(COMPILER) test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_x64
 	$(TESTTMP)/sstmp_pas_x64 | diff -u test/test_a_shortstring_result_temp_holds_the_whole_result.expected -
+	./$(COMPILER) test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_x64
+	$(TESTTMP)/pch1_pas_x64 | diff -u test/test_pchar_of_a_one_character_literal.expected -
+	@# fpc 3.2.2 refuses PChar of a Char that is not a constant, so must we.
+	@./$(COMPILER) test/test_pchar_of_a_char_variable_is_refused.pas $(TESTTMP)/pch1_refused 2>&1 \
+	  | grep 'Illegal type conversion: "Char" to "PChar"' >/dev/null \
+	  || { echo 'test_pchar_of_a_char_variable_is_refused: FAIL - PChar of a Char variable compiled, or refused for another reason'; exit 1; }
 	# a def in an imported module keeps its annotations: the used-as-a-value scan
 	# reached into pylib and made every param a Variant. Same module as main and
 	# imported, one .expected; then the scan's own count, which the output alone
@@ -8462,6 +8468,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_length_of_an_array_of_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenarrvar_a64)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=aarch64 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_a64
 	tools/expect_same.sh aarch64/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh aarch64 $(TESTTMP)/sstmp_pas_a64)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
+	./$(COMPILER) --target=aarch64 test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_a64
+	tools/expect_same.sh aarch64/test_pchar_of_a_one_character_literal "$$(tools/run_target.sh aarch64 $(TESTTMP)/pch1_pas_a64)" "$$(cat test/test_pchar_of_a_one_character_literal.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_arm32
 	tools/expect_same.sh arm32/test_npy_machineword_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_machineword_arm32)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
 	# sys.maxsize is the TARGET's largest Py_ssize_t, so this row is the one
@@ -8716,6 +8724,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_length_of_an_array_of_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenarrvar_rv32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=riscv32 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_rv32
 	tools/expect_same.sh riscv32/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh riscv32 $(TESTTMP)/sstmp_pas_rv32)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
+	./$(COMPILER) --target=riscv32 test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_rv32
+	tools/expect_same.sh riscv32/test_pchar_of_a_one_character_literal "$$(tools/run_target.sh riscv32 $(TESTTMP)/pch1_pas_rv32)" "$$(cat test/test_pchar_of_a_one_character_literal.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_rv32
 	tools/assert_no_leak.sh riscv32/nilpy_sort_raises_releases 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32
 	@if tools/assert_no_leak.sh riscv32/nilpy_sort_raises_control 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32 keep >/dev/null 2>&1; then \
@@ -30117,6 +30127,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_length_of_an_array_of_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenarrvar_i386)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=i386 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_i386
 	tools/expect_same.sh i386/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh i386 $(TESTTMP)/sstmp_pas_i386)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
+	./$(COMPILER) --target=i386 test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_i386
+	tools/expect_same.sh i386/test_pchar_of_a_one_character_literal "$$(tools/run_target.sh i386 $(TESTTMP)/pch1_pas_i386)" "$$(cat test/test_pchar_of_a_one_character_literal.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_a_module_def_keeps_its_annotations.npy $(TESTTMP)/modtyped_imp_i386
 	tools/expect_same.sh i386/test_nilpy_a_module_def_keeps_its_annotations "$$(tools/run_target.sh i386 $(TESTTMP)/modtyped_imp_i386)" "$$(cat test/test_nilpy_a_module_def_keeps_its_annotations.expected)"
 	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_i386
@@ -33468,6 +33480,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_length_of_an_array_of_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenarrvar_xtw)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_xtw
 	tools/expect_same.sh xtensa-windowed/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh xtensa $(TESTTMP)/sstmp_pas_xtw)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_xtw
+	tools/expect_same.sh xtensa-windowed/test_pchar_of_a_one_character_literal "$$(tools/run_target.sh xtensa $(TESTTMP)/pch1_pas_xtw)" "$$(cat test/test_pchar_of_a_one_character_literal.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_xtw
 	tools/assert_no_leak.sh xtensa/nilpy_sort_raises_releases 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw
 	@if tools/assert_no_leak.sh xtensa/nilpy_sort_raises_control 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw keep >/dev/null 2>&1; then \
@@ -35563,6 +35577,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh arm32 $(TESTTMP)/realloc_a32)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=aarch64 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_a64
 	tools/expect_same.sh aarch64/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh aarch64 $(TESTTMP)/realloc_a64)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
+	./$(COMPILER) --target=arm32 test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_a32
+	tools/expect_same.sh arm32/test_pchar_of_a_one_character_literal "$$(tools/run_target.sh arm32 $(TESTTMP)/pch1_pas_a32)" "$$(cat test/test_pchar_of_a_one_character_literal.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_a32
 	tools/assert_no_leak.sh arm32/nilpy_sort_raises_releases 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32
 	@if tools/assert_no_leak.sh arm32/nilpy_sort_raises_control 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32 keep >/dev/null 2>&1; then \
