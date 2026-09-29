@@ -6530,3 +6530,52 @@ separate ticket.
 2026-09-29 | frankD | (open, not fixed) | `from M import *` DOES NOT BIND CALL-TABLE MEMBERS. `from random import *` then `seed(1)` is "undefined variable (seed)"; the same for sys.argv, os.path.basename and itertools.count. These members are not declared by a unit but mapped by PyStdlibCallProc (pyparser.inc), a 76-entry if/else chain over dotted names, which a star import cannot enumerate. Fix: turn it into a constant table (all 76 entries have the one shape `dotted = 'k' then Result := 'v'`) and have PyStarImportRecord call PyStdAliasRecord for each member under the root; PyIsStdlibMemberValue (sys/os values) needs the same. bug-n-from-import-star-does-not-compile has the rest.
 2026-09-29 | frankD | (open, not fixed) | TEMPFILE: AN UNCLOSED delete=True NamedTemporaryFile SURVIVES THE PROGRAM'S EXIT; CPython removes it (the object's finalizer, at the latest at interpreter shutdown). pylib has no atexit hook to hang it on, and a Pascal object's destructor does not run when NilPy releases it. A fix would be a small registry of live delete=True names in tempfile.pas, swept by a finalization section, if unit finalization runs on every exit path (sys.exit and an uncaught exception included; not probed). Found by frankd-23; see done/bug-l-named-temporary-file-has-no-write.
 2026-09-29 | frankD | fixed (local, compiler freeze) | The entry "`from M import *` does not bind call-table members" above: random, sys, os and os.path members are now bound by `*`; see done/bug-n-from-import-star-does-not-bind-call-table-members.
+
+### A gate was asked for and a deletion was right: PXXDBG cannot reach a builtin (2026-09-29)
+
+`compiler/builtin/pyeval.pas` carried four leftover debugging writes — one in
+`ParseMethodCall`'s reflected-call handler, three in `PyClosureInvoke`'s — writing
+to `StdErr` on every failed reflected host call and on any exception out of a Nil
+Python closure, in ordinary release builds. The obvious repair is to put them
+behind `PXXDBG`, and that is what was asked for first. It does not work, for a
+structural reason worth writing down once so nobody designs against it again.
+
+**`PXXDBG` is a COMPILE-TIME switch read by the compiler.** These four writes are
+not compiler code. They live in a *builtin*, which is compiled into the user's
+program and runs inside it, long after the compiler has exited — so the variable
+the compiler read is not in scope in any sense at the moment these execute. The
+fallback of reading the environment at run time instead fails on its own terms:
+the ESP targets are bare metal with no `/proc/self/environ` and no environment to
+read. A `PXXDBG` gate here would have been a dead switch that reads as a working
+one, which is worse than either the writes or their absence.
+
+**The measurement that made the deletion obviously right** rather than merely
+tidy. Same compiler, only `builtin/pyeval.pas` changing, on
+`test_nilpy_reflected_host_call_shapes.npy`: stdout byte-identical
+(`HOSTSHAPE-CHECK failures=0` both), stderr **1012 bytes → 0**. Those 1012 bytes
+were two copies of the refusal message `191239f538` had just added — the probe
+was reprinting every refused call's `TypeError` to stderr, so a program relying on
+that refusal paid roughly 500 bytes of somebody else's debugging per refused call.
+The leftover probe was actively making the new feature worse, and nothing pointed
+at it until the bytes were counted.
+
+**What was deliberately NOT done.** All four writes immediately precede a `raise`,
+so deleting them cannot change control flow — which is the whole argument for why
+a quick gate sufficed and no second full tier was spent. What is left in each
+handler is a pure re-raise, and those frames are now redundant. Removing an
+exception frame from a builtin is a *codegen* change and not a deletion, so it
+would not have been covered by that argument or by that test budget; both handlers
+now carry a comment saying the frame can go with them and what it would cost to
+show it safely. A deletion whose justification stops exactly where the evidence
+stops is worth more than a tidier diff.
+
+**And the verification had to dodge an unrelated red.** Every exec/pyeval row
+segfaults at origin tip `722c38c6faeb` because `c65fc287f6` made `Length`/`High`
+of an array of Variant stringify element 0 instead of counting it, and `pyeval`
+takes `Length` of exactly such arrays on the exec path these rows use.
+`test_open_array_of_variant.pas` isolates it with no crash at all: `35 7 9` at the
+v451 pin, `30 1 9` at tip. So the before/after above was taken on a scratch-dir
+copy of the v451 pinned compiler `d9b7226769cc` with the committed pin untouched,
+and the row is queued to be re-run at tip once the fix for that lands. A
+measurement taken around an unrelated red is worth keeping only if it says out
+loud that it was.

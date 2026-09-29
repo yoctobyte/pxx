@@ -5005,16 +5005,20 @@ begin
       try
         PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
       except
+        { A leftover debugging probe wrote the method name, the receiver's type and
+          every argument's type to StdErr here on EVERY failed reflected call, in
+          ordinary release builds -- so a program whose own output is data got
+          somebody's debugging mixed into its stderr, with no way to switch it off.
+          It is deleted. What is left is a pure re-raise, which is all the frame
+          ever did besides printing: deleting Writes that PRECEDE a `raise` cannot
+          change control flow, which is why this needed no full tier.
+
+          The frame is now redundant and could go with the Writes. Removing an
+          exception frame from a builtin is a codegen change rather than a deletion,
+          so it is not this commit's claim and is left to someone measuring more
+          than a quick gate. }
         on E: Exception do
-        begin
-          Write(StdErr, 'PROBE hostcall ', mname, ' recv=',
-                PyVarTypeNameOf(recv), ' args:');
-          if args <> nil then
-            for i := 0 to args.count - 1 do
-              Write(StdErr, ' ', PyVarTypeNameOf(args.at(i)));
-          WriteLn(StdErr, ' || ', E.Message);
           raise;
-        end;
       end;
       Exit;
     end;
@@ -5578,19 +5582,13 @@ begin
   else
     ExecSuite(True);
   except
+    { Three more of the same leftover probes: the first 40 tokens of the closure
+      body, every local with its type, and the exception message -- all to StdErr
+      on ANY exception out of a Nil Python closure, release builds included. Deleted
+      for the reason given at the one in ParseMethodCall, including why the frame
+      itself stays. }
     on E: Exception do
-    begin
-      Write(StdErr, 'PROBE body:');
-      for i := Closures[cidx].BodyPos to Closures[cidx].BodyPos + 40 do
-        if i < TkN then Write(StdErr, ' ', TkText[i]);
-      WriteLn(StdErr, '');
-      Write(StdErr, 'PROBE locals:');
-      for i := 0 to LclN - 1 do
-        Write(StdErr, ' ', LclNames[i], '=', PyVarTypeNameOf(LclVals[i]));
-      WriteLn(StdErr, '');
-      WriteLn(StdErr, 'PROBE err: ', E.Message);
       raise;
-    end;
   end;
   res := ReturnValue;
 
