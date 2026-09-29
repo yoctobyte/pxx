@@ -3594,6 +3594,8 @@ test-nilpy: $(COMPILER)
 	# bug-n-semicolon-separated-statements-fail-at-an-imported-modules-top-level
 	./$(COMPILER) test/test_nilpy_semicolons_at_an_imported_modules_top_level.npy $(TESTTMP)/semimod26
 	$(TESTTMP)/semimod26 | diff -u test/test_nilpy_semicolons_at_an_imported_modules_top_level.expected -
+	./$(COMPILER) test/test_nilpy_int_and_str_of_a_string_literal.npy $(TESTTMP)/intstrlit26
+	$(TESTTMP)/intstrlit26 | diff -u test/test_nilpy_int_and_str_of_a_string_literal.expected -
 	./$(COMPILER) test/test_nilpy_semicolons_in_a_class_body.npy $(TESTTMP)/semicls26
 	$(TESTTMP)/semicls26 | diff -u test/test_nilpy_semicolons_in_a_class_body.expected -
 	./$(COMPILER) test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin26
@@ -18988,6 +18990,8 @@ test-core: $(COMPILER)
 	# (exit 134) before any handler. bug-a-wasm32-div-by-a-run-time-zero-traps-instead-of-raising
 	./$(COMPILER) --target=wasm32 test/test_div_by_a_run_time_zero_raises_on_wasm32.pas $(TESTTMP)/divzero.wasm
 	tools/expect_same.sh wasm32/test_div_by_a_run_time_zero_raises_on_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/divzero.wasm)" "$$(cat test/test_div_by_a_run_time_zero_raises_on_wasm32.expected)"
+	./$(COMPILER) --target=wasm32 test/test_nilpy_int_and_str_of_a_string_literal.npy $(TESTTMP)/intstrlit.wasm
+	tools/expect_same.sh wasm32/test_nilpy_int_and_str_of_a_string_literal "$$(tools/run_target.sh wasm32 $(TESTTMP)/intstrlit.wasm)" "$$(cat test/test_nilpy_int_and_str_of_a_string_literal.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr.wasm
 	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh wasm32/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh wasm32 $(TESTTMP)/npystderr.wasm 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -30154,6 +30158,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_output_and_input_resolve_without_a_text_declaration "$$(tools/run_target.sh i386 $(TESTTMP)/outin_i386 < test/test_output_and_input_resolve_without_a_text_declaration.in)" "$$(cat test/test_output_and_input_resolve_without_a_text_declaration.expected)"
 	./$(COMPILER) --target=i386 test/test_div_by_a_run_time_zero_raises_on_wasm32.pas $(TESTTMP)/divzero_i386
 	tools/expect_same.sh i386/test_div_by_a_run_time_zero_raises_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/divzero_i386)" "$$(cat test/test_div_by_a_run_time_zero_raises_on_wasm32.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_int_and_str_of_a_string_literal.npy $(TESTTMP)/intstrlit_i386
+	tools/expect_same.sh i386/test_nilpy_int_and_str_of_a_string_literal "$$(tools/run_target.sh i386 $(TESTTMP)/intstrlit_i386)" "$$(cat test/test_nilpy_int_and_str_of_a_string_literal.expected)"
 	./$(COMPILER) --target=i386 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_i386
 	tools/expect_same.sh i386/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh i386 $(TESTTMP)/realloc_i386)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=i386 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof_i386

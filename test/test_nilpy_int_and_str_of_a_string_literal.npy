@@ -1,0 +1,20 @@
+# int() and str() of a string LITERAL. Both intrinsics build their pylib
+# call themselves; they passed the literal raw where the ordinary call path
+# binds it to an AnsiString first. On wasm32 that raw value is the frozen
+# blob's address, so int("42") and str("ab") trapped (out of bounds memory
+# access) while `s = "42"; int(s)` worked.
+# bug-n-int-and-str-of-a-string-literal-trap-on-wasm32
+print(int("42"))
+print(int("4"))
+print(int("0"))
+print(int(" -13 ") + 1)
+print(int("123456789012345678901234567890") + 1)
+print(str("ab"))
+print(str(""))
+print(len(str("abc")))
+print(str("x") + str("y"))
+n = int("7") * int("6")
+print(n)
+s = "42"
+print(int(s) == int("42"))
+print(f"{int('9')}{str('!')}")

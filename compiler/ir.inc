@@ -5708,6 +5708,25 @@ begin
   Result := IRAppend(IR_LOAD_SYM, sym, -1, -1, 0, Ord(tyAnsiString));
 end;
 
+{ A string LITERAL handed to a pylib AnsiString parameter by the -200/-201
+  intrinsics, which build their call themselves. The general call path binds a
+  literal to a hidden AnsiString local first and passes that; these passed the
+  raw literal typed tyString. On wasm32 that value is the frozen blob's own
+  address, not an AnsiString, so `int("42")` and `str("ab")` read a garbage
+  header and trapped (out of bounds), while `s = "42"; int(s)` worked. Returns
+  the value to pass and sets tk to the type to tag it with. }
+function IRLitAsAnsiStrArg(argAST, value: Integer; var tk: TTypeKind): Integer;
+var sym: Integer;
+begin
+  Result := value;
+  if (argAST < 0) or (ASTKind[argAST] <> AN_STR_LIT) or (tk <> tyString) then Exit;
+  sym := AllocVar('', tyAnsiString);
+  SymIsHiddenArgTemp[sym] := True;
+  IRAppend(IR_STORE_SYM, sym, value, -1, 0, Ord(tyAnsiString));
+  Result := IRAppend(IR_LOAD_SYM, sym, -1, -1, 0, Ord(tyAnsiString));
+  tk := tyAnsiString;
+end;
+
 { A call to a Pascal LIBRARY routine that hands back one of its own arguments
   (ProcResultArgIdx, read off its body by ClassifyProcResultFresh):
   pylist_mark_list and the other mark_* stamps return the list they were
@@ -17177,6 +17196,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           promoDst := IRPromoTempSlot(promoSym);
           value := IRBindFreshStrArg(argVal,
                      IRLowerCallArg(procIdx, 1, argVal, Procs[procIdx].Params[1].IsRef), False);
+          value := IRLitAsAnsiStrArg(argVal, value, argTk);
           argNode := IRAppend(IR_ARG, promoDst, -1, -1, 0, Ord(tyPointer));
           value := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
           IRB[argNode] := value;
@@ -17192,6 +17212,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           if procIdx < 0 then Error('int: pystr_to_int (pylib) not loaded');
           value := IRBindFreshStrArg(argVal,
                      IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef), False);
+          value := IRLitAsAnsiStrArg(argVal, value, argTk);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
           Result := IRAppendCall(procIdx, argNode, -1, Ord(tyInt64));
           Exit;
@@ -17221,6 +17242,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           if procIdx < 0 then Error('str: pystr_of (pylib) overload not found');
           value := IRBindFreshStrArg(argVal,
                      IRLowerCallArg(procIdx, 0, argVal, Procs[procIdx].Params[0].IsRef), False);
+          value := IRLitAsAnsiStrArg(argVal, value, argTk);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
           Result := IRAppendCall(procIdx, argNode, -1, Ord(Procs[procIdx].RetType));
           Exit;
