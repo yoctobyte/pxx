@@ -23,6 +23,7 @@ The `scheduler` unit provides the core coroutine lifestyle routines. Coroutines 
   
 - **`procedure CoYield;`**
   Voluntarily yields control, allowing the scheduler to run other ready coroutines in a round-robin fashion.
+  The reactor checks sockets and timers only when no coroutine is ready, so a coroutine that loops on `CoYield` alone keeps the ones waiting on the network parked for as long as it loops. To wait, use `CoSleep`. Measured with pin v451 on 2026-09-29: see [DNS](./dns.md#resolving-without-blocking-dns_async).
   
 - **`procedure CoSleep(ms: Integer);`**
   Suspends the current coroutine for `ms` milliseconds. The scheduler registers a non-blocking timer and yields, allowing other tasks to run. Control returns to the coroutine once the timer expires.

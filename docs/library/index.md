@@ -63,7 +63,7 @@ refused.
 | --- | --- |
 | [`http`](./networking.md) | HTTP/1.1 client with redirects, chunked responses, pooling, and TLS backend support. |
 | `net` / `sockets` | Lower-level networking primitives. |
-| `dns`, `dns_async` | DNS lookup helpers. |
+| [`dns`, `dns_async`, `dns_libc`](./dns.md) | Host names to IPv4 and IPv6 addresses: PXX's own resolver by default, systemd-resolved or the C library by choice, and a form for coroutines. |
 | [`scheduler` & `coroutine`](./async.md) | Coroutine reactor, cooperative scheduling, and async networking support. |
 | [`palthreadobj`, `palparallel`](./concurrency.md) | OS-level threads (`TThread`) and the `parallel for` worker pool. |
 | `tls`, `tls_openssl` | TLS backend interface and OpenSSL-backed implementation. |
