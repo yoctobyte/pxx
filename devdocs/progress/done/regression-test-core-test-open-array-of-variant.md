@@ -45,3 +45,6 @@ expect_same: MISMATCH [test_open_array_of_variant26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-29 — auto-closed by the borg watcher: `test-core#src:test/test_open_array_of_variant.pas` passes at f499d25ded91 (tier native); it was red at a69c18a0208e. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
