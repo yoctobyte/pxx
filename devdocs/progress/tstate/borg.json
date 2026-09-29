@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-28T21:58:20Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "373713ce08d37e81f7e599a1e955f09c95986db6",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-28T22:06:35Z",
    "fixed": [],
    "new_red": [],
@@ -517,6 +508,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-29T19:15:35Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "71639cac13bed0889ba9c2c14cddada2743aad07",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -3915,12 +3915,13 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-esp-bare#src:test/test_esp_varparam.pas": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "71639cac13bed0889ba9c2c14cddada2743aad07",
-  "test-esp-idf#src:test/esp_board_gpio_ring_stress.pas": "99724f255840652004713722e20b1f1c10ec20b8",
-  "test-esp-idf#src:test/esp_board_i2c_nack_is_enodev.npy": "99724f255840652004713722e20b1f1c10ec20b8",
-  "test-esp-idf#src:test/esp_board_list_sort_ceiling.npy": "99724f255840652004713722e20b1f1c10ec20b8",
-  "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "99724f255840652004713722e20b1f1c10ec20b8",
-  "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "99724f255840652004713722e20b1f1c10ec20b8",
-  "test-esp-idf#src:tools/compiler_srchash.sh": "99724f255840652004713722e20b1f1c10ec20b8",
+  "test-esp-idf#src:test/esp_board_gpio_ring_stress.pas": "71639cac13bed0889ba9c2c14cddada2743aad07",
+  "test-esp-idf#src:test/esp_board_i2c_nack_is_enodev.npy": "71639cac13bed0889ba9c2c14cddada2743aad07",
+  "test-esp-idf#src:test/esp_board_list_sort_ceiling.npy": "71639cac13bed0889ba9c2c14cddada2743aad07",
+  "test-esp-idf#src:test/esp_from_machine_import_star.npy": "71639cac13bed0889ba9c2c14cddada2743aad07",
+  "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "71639cac13bed0889ba9c2c14cddada2743aad07",
+  "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "71639cac13bed0889ba9c2c14cddada2743aad07",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-fgl#src:tools/compiler_srchash.sh": "71639cac13bed0889ba9c2c14cddada2743aad07",
@@ -5988,7 +5989,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-threads#src:tools/compiler_srchash.sh": "71639cac13bed0889ba9c2c14cddada2743aad07",
-  "test-uforth#src:tools/compiler_srchash.sh": "99724f255840652004713722e20b1f1c10ec20b8",
+  "test-uforth#src:tools/compiler_srchash.sh": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-uforth#src:tools/compiler_srchash.sh@1": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-uforth#src:tools/compiler_srchash.sh@10": "71639cac13bed0889ba9c2c14cddada2743aad07",
   "test-uforth#src:tools/compiler_srchash.sh@11": "71639cac13bed0889ba9c2c14cddada2743aad07",
@@ -9646,6 +9647,7 @@
   "test-esp-idf#src:test/esp_board_gpio_ring_stress.pas": "slow",
   "test-esp-idf#src:test/esp_board_i2c_nack_is_enodev.npy": "slow",
   "test-esp-idf#src:test/esp_board_list_sort_ceiling.npy": "slow",
+  "test-esp-idf#src:test/esp_from_machine_import_star.npy": "slow",
   "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "slow",
   "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "slow",
   "test-esp-idf#src:tools/compiler_srchash.sh": "slow",
@@ -15351,6 +15353,7 @@
   "test-esp-idf#src:test/esp_board_gpio_ring_stress.pas": "pass",
   "test-esp-idf#src:test/esp_board_i2c_nack_is_enodev.npy": "pass",
   "test-esp-idf#src:test/esp_board_list_sort_ceiling.npy": "pass",
+  "test-esp-idf#src:test/esp_from_machine_import_star.npy": "pass",
   "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "pass",
   "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "pass",
   "test-esp-idf#src:tools/compiler_srchash.sh": "pass",
@@ -17657,14 +17660,14 @@
  },
  "last": {
   "code_fp": "f35167cd4e55",
-  "date": "2026-09-29T18:53:58Z",
+  "date": "2026-09-29T19:15:35Z",
   "deadline": 3600.0,
   "sha": "71639cac13bed0889ba9c2c14cddada2743aad07",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1420.9
+  "verdict": "GREEN",
+  "wall": 1285.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -17715,14 +17718,14 @@
   },
   "slow": {
    "code_fp": "f35167cd4e55",
-   "date": "2026-09-29T08:13:42Z",
+   "date": "2026-09-29T19:15:35Z",
    "deadline": 3600.0,
-   "sha": "99724f255840652004713722e20b1f1c10ec20b8",
+   "sha": "71639cac13bed0889ba9c2c14cddada2743aad07",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 1262.8
+   "wall": 1285.8
   }
  },
  "last_full": {
