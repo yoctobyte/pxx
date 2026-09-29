@@ -36447,15 +36447,17 @@ test-fpjson:
 	fi; \
 	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
 	root="$$(pwd)"; \
+	case "$(PXX_STABLE)" in /*) stable="$(PXX_STABLE)" ;; *) stable="$$root/$(PXX_STABLE)" ;; esac; \
+	case "$(FCLJSON_SRC)" in /*) fcl="$(FCLJSON_SRC)" ;; *) fcl="$$root/$(FCLJSON_SRC)" ;; esac; \
 	for d in fcl-json/src fcl-json/tests fcl-fpcunit/src; do \
-	  for f in "$$root/$(FCLJSON_SRC)/$$d"/*; do \
+	  for f in "$$fcl/$$d"/*; do \
 	    case "$$(basename "$$f")" in testutils.pp) continue ;; esac; \
 	    ln -sf "$$f" "$$wd/"; \
 	  done; \
 	done; \
 	cp test/fpjson/testutils.pas test/fpjson/tjrun.pp "$$wd/"; \
 	echo "compiling fpjson suite runner ..."; \
-	if ! ( cd "$$wd" && "$$root/$(PXX_STABLE)" --mimic-fpc \
+	if ! ( cd "$$wd" && "$$stable" --mimic-fpc \
 	    -Fu"$$root/lib/rtl" -Fu"$$root/lib/rtl/platform/posix" \
 	    tjrun.pp "$$wd/tjrun" ) > "$$wd/compile.txt" 2>&1; then \
 	  echo "test-fpjson: FAIL — the suite runner did not COMPILE (this is a"; \
