@@ -15192,6 +15192,7 @@ begin
   else if dotted = 'random.uniform' then Result := 'pyrandom_uniform'
   else if dotted = 'random.choice' then Result := 'pyrandom_choice'
   else if dotted = 'random.shuffle' then Result := 'pyrandom_shuffle'
+  else if dotted = 'random.sample' then Result := 'pyrandom_sample'
   { math.dist is NOT here: it needs Sqrt, which lives in lib/rtl/math.pas and a
     BUILTIN unit cannot reach (the same wall math.log/math.pow hit — see their
     note above), while its arguments are pylib CONTAINERS the RTL cannot name.

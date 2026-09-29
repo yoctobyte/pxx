@@ -1,0 +1,10 @@
+list 3 True True
+[10, 20, 30, 40, 50]
+True
+[]
+2 True True
+10 10 True
+list 2
+ValueError Sample larger than population or is negative
+TypeError set
+[10, 20, 30, 40, 50]

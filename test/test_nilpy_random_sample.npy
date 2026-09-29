@@ -1,0 +1,32 @@
+# random.sample(population, k): k distinct elements as a new list, the
+# population untouched. Compared on the result's SHAPE, not its values: the
+# generator is not CPython's Mersenne Twister.
+import random
+from random import sample
+
+random.seed(7)
+pop = [10, 20, 30, 40, 50]
+s = random.sample(pop, 3)
+print(type(s).__name__, len(s), len(set(s)) == 3, all(x in pop for x in s))
+print(pop)
+t = sample(pop, 5)
+print(sorted(t) == pop)
+print(sample(pop, 0))
+u = random.sample("abcdef", 2)
+print(len(u), all(c in "abcdef" for c in u), u[0] != u[1])
+r = sample(range(100), 10)
+print(len(r), len(set(r)), all(0 <= x < 100 for x in r))
+tu = random.sample((1, 2, 3), 2)
+print(type(tu).__name__, len(tu))
+try:
+    random.sample(pop, 6)
+except ValueError as e:
+    print("ValueError", e)
+try:
+    random.sample({1, 2, 3}, 2)
+except TypeError:
+    print("TypeError set")
+seen = set()
+for i in range(200):
+    seen.add(sample(pop, 1)[0])
+print(sorted(seen))

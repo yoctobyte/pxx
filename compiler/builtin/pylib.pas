@@ -2767,6 +2767,7 @@ function pyrandom_randrange(n: Int64): Int64;
 function pyrandom_uniform(a, b: Double): Double;
 function pyrandom_choice(const src: Variant): Variant;
 procedure pyrandom_shuffle(const src: Variant);
+function pyrandom_sample(const src: Variant; k: Int64): Variant;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 { `next(x)` / `next(x, default)` where x is whatever the argument turned out to
@@ -8782,6 +8783,38 @@ begin
     l.put(i, l.at(j));
     l.put(j, tmp);
   end;
+end;
+
+{ k distinct elements, in selection order, as a NEW list; the population is
+  not touched. A partial Fisher-Yates over pylist_v's copy. CPython (3.11+)
+  refuses a set or a dict here, so that is refused too, before the copy. }
+function pyrandom_sample(const src: Variant; k: Int64): Variant;
+var i, j: Integer; tmp: Variant; o: TObject; l, r: TPyList;
+begin
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if (o is TPyDict) or ((o is TPyList) and (TPyList(o).FKind = PYSEQ_SET)) then
+      raise TypeError.Create('Population must be a sequence.  For dicts or sets, use sorted(d).');
+  end;
+  l := pylist_v(src);
+  if (k < 0) or (k > l.count) then
+  begin
+    PXXObjRelease(Pointer(l));
+    raise ValueError.Create('Sample larger than population or is negative');
+  end;
+  r := TPyList.Create;
+  for i := 0 to Integer(k) - 1 do
+  begin
+    j := Integer(pyrandom_randint(i, l.count - 1));
+    tmp := l.at(i);
+    l.put(i, l.at(j));
+    l.put(j, tmp);
+    r.append(l.at(i));
+  end;
+  PXXObjRelease(Pointer(l));
+  Result := r;                { the Variant takes its own reference }
+  PXXObjRelease(Pointer(r));
 end;
 
 function pymath_copysign(x, y: Double): Double;
