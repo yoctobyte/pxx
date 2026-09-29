@@ -66,8 +66,41 @@ function call(const argv: Variant): Integer;
 
 implementation
 
+{ The program to exec for argv[0], found the way execvp finds it, which is what
+  CPython's Popen does: a name with a '/' is used as given, and a bare name is
+  looked up in each PATH directory in order, the first executable one winning
+  (an empty PATH entry is the current directory). With PATH unset the search
+  list is glibc's default, /bin:/usr/bin. When nothing matches, the bare name is
+  returned unchanged and the exec fails in the child as it did before (status
+  127). Without this, `subprocess.run(["sh", "-c", "exit 3"])` answered 127:
+  the exec below is execve, which never searches PATH. }
+function ResolveProgram(const prog: AnsiString): AnsiString;
+var path, dir, cand: AnsiString;
+    i, start: Integer;
+begin
+  Result := prog;
+  if (prog = '') or (Pos('/', prog) > 0) then Exit;
+  path := GetEnvironmentVariable('PATH');
+  if path = '' then path := '/bin:/usr/bin';
+  start := 1;
+  for i := 1 to Length(path) + 1 do
+    if (i > Length(path)) or (path[i] = ':') then
+    begin
+      dir := Copy(path, start, i - start);
+      start := i + 1;
+      if dir = '' then cand := prog
+      else cand := dir + '/' + prog;
+      if PalAccess(PChar(cand), 1) = 0 then      { X_OK }
+      begin
+        Result := cand;
+        Exit;
+      end;
+    end;
+end;
+
 { argv[0] is the program; the rest are its arguments, which is Python's shape
-  and ExecutePipeline's too. }
+  and ExecutePipeline's too. The program is resolved through PATH; argv[0]
+  itself is passed on as written, as execvp does. }
 function ArgvProgram(const argv: Variant): AnsiString;
 var l: TPyList;
 begin
@@ -77,7 +110,7 @@ begin
     WriteLn('subprocess: the argument list is empty');
     Halt(1);
   end;
-  Result := pystr_of(l.at(0));
+  Result := ResolveProgram(pystr_of(l.at(0)));
 end;
 
 procedure CheckRedirect(const v: Variant; const which: AnsiString);
@@ -124,7 +157,9 @@ begin
   { The child inherits OUR environment — built in the parent, before vfork, so
     the first-use read of /proc/self/environ does not happen in the child. It
     used to be a hard-coded empty envp, which handed every subprocess `env -i`:
-    no PATH, so `subprocess.run(["some_tool"])` could not even find its tool. }
+    the child ran with no PATH, HOME or LANG of its own. (Finding argv[0]
+    itself is not the environment's job -- execve never searches PATH -- and
+    ArgvProgram does that lookup in the parent.) }
   envp := EnvironmentBlock;
   { PalVforkAndExec dup2's the fds it is given and skips the ones that are -1,
     so /dev/null on the child's stdout is one open() away and everything else

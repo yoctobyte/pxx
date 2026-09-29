@@ -1,0 +1,13 @@
+# subprocess finds argv[0] on PATH, as CPython's Popen does (execvp). The exec
+# underneath is execve, which never searches PATH, so a bare name like "sh" or
+# "true" ran nothing and every call answered 127. A name with a '/' is used as
+# written. Every line is CPython's output.
+import subprocess
+
+print("run sh:", subprocess.run(["sh", "-c", "exit 3"]).returncode)
+print("call true:", subprocess.call(["true"]))
+print("call false:", subprocess.call(["false"]))
+print("absolute:", subprocess.call(["/bin/sh", "-c", "exit 5"]))
+p = subprocess.Popen(["sh", "-c", "exit 4"])
+print("popen wait:", p.wait())
+print("devnull:", subprocess.Popen(["sh", "-c", "echo not shown; exit 0"], stdout=subprocess.DEVNULL).wait())

@@ -5045,6 +5045,10 @@ test-nilpy: $(COMPILER)
 	# (?P<n>) / (?i) / a++ block is a documented difference (header).
 	./$(COMPILER) test/test_nilpy_re_an_unsupported_pattern_raises_re_error.npy $(TESTTMP)/test_nilpy_reerror26
 	$(TESTTMP)/test_nilpy_reerror26 | diff -u test/test_nilpy_re_an_unsupported_pattern_raises_re_error.expected -
+	# subprocess finds a bare argv[0] on PATH (execvp, as CPython's Popen does);
+	# before, `run(["sh", ...])` answered 127. The .expected is CPython's.
+	./$(COMPILER) test/test_nilpy_subprocess_finds_its_program_on_path.npy $(TESTTMP)/test_nilpy_subprocpath26
+	$(TESTTMP)/test_nilpy_subprocpath26 | diff -u test/test_nilpy_subprocess_finds_its_program_on_path.expected -
 	# os.path.split / normpath / getsize / expanduser
 	./$(COMPILER) test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore26
 	$(TESTTMP)/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -

@@ -1,0 +1,6 @@
+run sh: 3
+call true: 0
+call false: 1
+absolute: 5
+popen wait: 4
+devnull: 0
