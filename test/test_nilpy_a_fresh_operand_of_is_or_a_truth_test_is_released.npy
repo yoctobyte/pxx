@@ -1,0 +1,51 @@
+# A fresh class result used straight as an operand of `is` / `is not` or as a
+# truth test is released, and evaluated once. Nothing bound it, so the compare
+# read the handle and dropped it: one match object per
+# `re.match(...) is not None`, one list per `if f():` (pin v451). The container
+# truth test also read its operand twice, so `if f():` called f() twice.
+# `keep` holds every result, the positive control: it must trip the bound.
+# The value line is CPython's.
+import re
+import sys
+
+
+class K:
+    def __init__(self, v):
+        self.v = v
+
+
+calls = 0
+
+
+def mk(v):
+    return K(v)
+
+
+def ml():
+    global calls
+    calls += 1
+    return [calls]
+
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "drop"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 2000
+p = re.compile("^h.*o$")
+kept = []
+hits = 0
+for i in range(n):
+    if p.match("hello") is not None:
+        hits += 1
+    if re.search("l+", "hello") is None:
+        hits -= 100
+    if mk(i) is not None:
+        hits += 1
+    if K(i) is None:
+        hits -= 100
+    if mk(i) is mk(i):
+        hits -= 100
+    if ml():
+        hits += 1
+    if mode == "keep":
+        kept.append(mk(i))
+        kept.append(ml())
+print(hits, calls)

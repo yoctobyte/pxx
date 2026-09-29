@@ -3495,6 +3495,47 @@ begin
   CurASTNode := left;
 end;
 
+function PyDiscardedCallIsOwned(p: Integer): Boolean; forward;
+function PyCallYieldsOwnedObj(n: Integer): Boolean; forward;
+
+{ An OPERAND that is a fresh class result -- `p.match(s) is not None`,
+  `if re.match(...):` -- has nobody to release it: the compare or truth test
+  reads the handle and drops it, so every evaluation leaked the object (pin
+  v451: one match object per `re.match(...) is not None`, one list and its
+  storage per `if f():`). Bind it to a hidden class local, exactly as the
+  discard binder does for a statement (PyBindDiscardedValue), so it gets the
+  same rebind-release in a loop and release at scope exit. Returns the node to
+  use in place of `n` and sets `asgn` to the binding, or -1 when `n` is not
+  owned; the caller evaluates `asgn` ONCE, ahead of the whole condition, with
+  PyWithOperandBinding. Not the AN_COMMA itself: the container truth test reads
+  its operand twice (nil guard, then count), and a comma there ran the call
+  twice. }
+function PyBindOwnedOperand(n: Integer; var asgn: Integer): Integer;
+var sym: Integer;
+begin
+  Result := n;
+  asgn := -1;
+  if not PyCallYieldsOwnedObj(n) then Exit;
+  sym := AllocVar(PyHiddenName('opnd'), tyClass);
+  Syms[sym].RecName := ResolveNodeRec(n);
+  SymSyncTypeRef(sym);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(sym);
+  ASTRight[asgn] := n;
+  Result := PyMakeIdent(sym);
+  ASTTk[Result] := ASTTk[n];
+end;
+
+function PyWithOperandBinding(asgn, node: Integer): Integer;
+begin
+  Result := node;
+  if asgn < 0 then Exit;
+  Result := AllocNode(AN_COMMA);
+  ASTLeft[Result] := asgn;
+  ASTRight[Result] := node;
+  ASTTk[Result] := ASTTk[node];
+end;
+
 { `is` / `is not`: identity comparison. v1 lowers to pointer/scalar equality —
   correct for the None checks uforth uses (class refs and pointer fields
   compare against nil; Optional[int] fields compare against the 0 sentinel,
@@ -3522,7 +3563,7 @@ begin
 end;
 
 procedure PyParseIsCmp;
-var left, right, node, i, j, ucCi, ucMmi: Integer; neg, dunderBuilt, ovrIn: Boolean; rTk: TTypeKind;
+var left, right, node, i, j, ucCi, ucMmi, asgnL, asgnR: Integer; neg, dunderBuilt, ovrIn: Boolean; rTk: TTypeKind;
 begin
   PyParseBitOr;
   left := CurASTNode;
@@ -3546,6 +3587,7 @@ begin
       if PyNoneOperandHere then
       begin
         Next;
+        left := PyBindOwnedOperand(left, asgnL);
         rTk := IntToTypeKind(ASTTk[left]);
         if rTk = tyVariant then
           { VARIANT: a tag test (VT_EMPTY), not a payload compare — a payload
@@ -3578,11 +3620,13 @@ begin
           else ASTTk[right] := ASTTk[left];
           ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
         end;
-        left := node;
+        left := PyWithOperandBinding(asgnL, node);
         Continue;
       end;
       PyParseBitOr;
       right := CurASTNode;
+      left := PyBindOwnedOperand(left, asgnL);
+      right := PyBindOwnedOperand(right, asgnR);
       node := AllocNode(AN_BINOP);
       if neg then ASTIVal[node] := Ord(tkNeq) else ASTIVal[node] := Ord(tkEq);
       ASTLeft[node] := left; ASTRight[node] := right;
@@ -3594,7 +3638,7 @@ begin
         those arms decline it and the pointer compare stands
         (bug-nilpy-is-on-two-lists-compares-contents). }
       ASTSLen[node] := PY_BINOP_IDENTITY;
-      left := node;
+      left := PyWithOperandBinding(asgnL, PyWithOperandBinding(asgnR, node));
     end
     else
     begin
@@ -4134,7 +4178,7 @@ end;
 
 function PyMakeTruthy(n: Integer): Integer;
 var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
-    nilNode, guardNode, falseNode, pairNode, ternNode: Integer;
+    nilNode, guardNode, falseNode, pairNode, ternNode, asgn: Integer;
 begin
   Result := n;
   { An ARBITRARY-PRECISION int tests against ZERO explicitly. Its rvalue IS the
@@ -4200,10 +4244,19 @@ begin
   if IntToTypeKind(ASTTk[n]) = tyClass then
   begin
     rec := ResolveNodeRec(n);
+    { a fresh result (`if f():`, `if re.match(...):`) is bound once and the
+      binding wraps the finished test: the container arm reads it twice, which
+      ran the call twice, and nothing released either result }
+    n := PyBindOwnedOperand(n, asgn);
+    Result := n;
     if (rec >= REC_UCLASS_BASE) and PyIsPylibContainerCi(rec - REC_UCLASS_BASE) then
     begin
       lenNode := PyCallMeth1(rec - REC_UCLASS_BASE, 'count', n, -1);
-      if lenNode < 0 then Exit;
+      if lenNode < 0 then
+      begin
+        Result := PyWithOperandBinding(asgn, n);
+        Exit;
+      end;
       zeroNode := AllocNode(AN_INT_LIT);
       ASTIVal[zeroNode] := 0; ASTTk[zeroNode] := Ord(tyInteger);
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkNeq);
@@ -4241,6 +4294,7 @@ begin
       node := PyClassTruthyDunder(rec - REC_UCLASS_BASE, n);
       if node >= 0 then Result := node;
     end;
+    Result := PyWithOperandBinding(asgn, Result);
   end;
 end;
 
@@ -25668,6 +25722,22 @@ begin
     end;
 end;
 
+{ Is `n` a call whose class result the caller OWNS: a construction, or a
+  class-typed call the discard rule above calls owned -- or a fresh-or-argument
+  call, which the lowering makes owned on both arms (IRCallFreshOrArgSym).
+  Shared by the statement discard binder and the operand binder
+  (PyBindOwnedOperand), so the two cannot disagree about what is owned. }
+function PyCallYieldsOwnedObj(n: Integer): Boolean;
+begin
+  Result := (n >= 0) and (ASTKind[n] = AN_CALL) and
+    (((ASTIVal[n] = -Ord(tkGetMem)) and
+      (Integer(ASTRight[n]) >= REC_UCLASS_BASE)) or
+     ((Integer(ASTIVal[n]) >= 0) and
+      (IntToTypeKind(ASTTk[n]) = tyClass) and
+      (PyDiscardedCallIsOwned(ASTIVal[n]) or
+       (IRCallFreshOrArgSym(n) >= 0))));
+end;
+
 { Bind an expression statement's discarded class value to a hidden local.
   Called from BOTH expression-statement arms of PyParseStatement: the bare
   one and the dotted one (`obj.m()`, `u.read()`), which returned its node
@@ -25719,15 +25789,7 @@ begin
     borrow (IRNodeYieldsOwnedRef's note). The assignment lowering still takes
     every class-typed call as owned, so `t = s.add(k)` has the same flaw;
     nobody writes that, and everyone writes `s.add(k)`. }
-  if (Result >= 0) and (ASTKind[Result] = AN_CALL) and
-     (((ASTIVal[Result] = -Ord(tkGetMem)) and
-       (Integer(ASTRight[Result]) >= REC_UCLASS_BASE)) or
-      ((Integer(ASTIVal[Result]) >= 0) and
-       (IntToTypeKind(ASTTk[Result]) = tyClass) and
-       { ...or a fresh-or-argument call, which the lowering makes owned on
-         both arms (IRCallFreshOrArgSym) }
-       (PyDiscardedCallIsOwned(ASTIVal[Result]) or
-        (IRCallFreshOrArgSym(Result) >= 0)))) then
+  if (Result >= 0) and PyCallYieldsOwnedObj(Result) then
   begin
     discNew := Result;         { the call whose value is dropped }
     discSym := AllocVar(PyHiddenName('disc'), tyClass);

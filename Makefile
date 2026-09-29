@@ -597,6 +597,14 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_configparser_items_released 100 $(TESTTMP)/test_nilpy_cpitems26
 	@if tools/assert_no_leak.sh nilpy_configparser_items_control 100 $(TESTTMP)/test_nilpy_cpitems26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_configparser_items control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# A fresh class result used straight as an `is` operand or a truth test is
+	# released and evaluated once (pin v451: ~15,800 live here, and `if f():`
+	# called f() twice). `keep` is the positive control. The value line is CPython's.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_fresh_operand_of_is_or_a_truth_test_is_released.npy $(TESTTMP)/test_nilpy_opndrel26
+	tools/expect_same.sh nilpy_fresh_operand_value "$$($(TESTTMP)/test_nilpy_opndrel26 2>/dev/null)" "6000 2000"
+	tools/assert_no_leak.sh nilpy_fresh_operand_released 100 $(TESTTMP)/test_nilpy_opndrel26
+	@if tools/assert_no_leak.sh nilpy_fresh_operand_control 100 $(TESTTMP)/test_nilpy_opndrel26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_fresh_operand control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	# list.clear() and dict.clear() release the elements they drop (both only
 	# zeroed the length, so the elements were orphaned once the container went
 	# away: pin v441 leaves ~75,000 live here). `keep` is the positive control.
