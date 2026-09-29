@@ -46,3 +46,6 @@ expect_same: MISMATCH [hostshape26/native]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-29 — the borg watcher saw `test-nilpy#src:test/test_nilpy_reflected_host_call_shapes.npy` GREEN at 216d4bd7ca7f (tier full) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
