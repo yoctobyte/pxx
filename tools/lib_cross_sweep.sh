@@ -37,7 +37,11 @@ trap 'rm -rf "$OUT"' EXIT
 for f in test/lib_*.pas; do
   b=$(basename "$f" .pas)
   $PX -Fulib/rtl "$f" "$OUT/${b}.x64" >/dev/null 2>&1 || { echo "SKIP $b (no native build)"; continue; }
-  ref=$(timeout 60 "$OUT/${b}.x64" 2>&1); rrc=$?
+  # The tests that take a scratch directory, as their Makefile rows pass it.
+  # Without it they print only their usage line, on every target alike, and
+  # the comparison below matched two usage lines (lib_charset, lib_blockio).
+  case $b in lib_charset|lib_blockio) arg="$OUT";; lib_dirio|lib_findfirst) arg="$OUT/${b}_sandbox";; *) arg="";; esac
+  ref=$(timeout 60 "$OUT/${b}.x64" $arg 2>&1); rrc=$?
   # riscv32 is OPT-IN (SWEEP_RISCV32=1), not because it does not matter -- it is
   # ESP32's core -- but because it is a documented STAGE 1 port with no heap
   # allocator (`builtinheap` is skipped there; see feature-target-esp32). So the
@@ -61,7 +65,7 @@ for f in test/lib_*.pas; do
     if ! $PX --target=$tgt -Fulib/rtl "$f" "$OUT/${b}.$tgt" >/dev/null 2>&1; then
       echo "BUILDFAIL $b $tgt"; continue
     fi
-    got=$(timeout 60 $q "$OUT/${b}.$tgt" 2>&1); grc=$?
+    got=$(timeout 60 $q "$OUT/${b}.$tgt" $arg 2>&1); grc=$?
     if [ "$got" != "$ref" ]; then
       nd=$(diff <(printf '%s\n' "$ref") <(printf '%s\n' "$got") | grep -c '^<')
       echo "DIFF $b $tgt  ($nd lines; rc $rrc vs $grc)"
