@@ -17298,8 +17298,8 @@
   "wall": 1301.0
  },
  "last_idle_tier_try": {
-  "date": "2026-09-28T22:38:07Z",
-  "sha": "658b3b9841c28c763776be563085f6b0d3368dbf",
+  "date": "2026-09-29T03:10:09Z",
+  "sha": "a69c18a0208eb10268a2642c7c6bd258880f104b",
   "tier": "full"
  },
  "last_opt": {
@@ -17410,6 +17410,7 @@
     "d75e10e22db4f5038ff5a28e94690944e4bb996c",
     "b478aa405be966e342f18fee67a0c7ba1dff38dd"
    ],
+   "range_non_causal": false,
    "src": "test/test_a_bracket_argument_reaches_the_same_door_at_every_call_path.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -17433,6 +17434,7 @@
     "d75e10e22db4f5038ff5a28e94690944e4bb996c",
     "b478aa405be966e342f18fee67a0c7ba1dff38dd"
    ],
+   "range_non_causal": false,
    "src": "test/test_open_array_of_variant.pas tools/expect_same.sh",
    "status": "fail"
   }
