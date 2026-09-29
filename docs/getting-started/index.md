@@ -169,9 +169,9 @@ with the C side pulling the implementation in directly:
 ```
 
 `-DSQLITE_THREADSAFE=0` is for a single-threaded program. A program that uses
-SQLite from several threads builds with `--threadsafe` instead, from a checkout
-at or after `3f28aafab`; with the C runtime of pin v425's own checkout such a
-build hangs.
+SQLite from several threads builds with `--threadsafe` instead;
+`test/csqlite_thread_test.c` does that, with several threads on one connection
+and on one connection each, and printed `all OK` with pin v441 and with v450.
 
 Now SQLite is *part of* your binary, dead-code-eliminated with everything else,
 and `ldd` again reports no dynamic dependencies. Both routes are exercised by

@@ -48,7 +48,7 @@ The C frontend compiles standard C directly to native ELF in a single pass (see
 | --- | --- |
 | **c-testsuite** | All 220 programs of the standard C conformance battery pass (pin v425, x86-64, 2026-09-25). |
 | **zlib** | Compresses with output **byte-for-byte identical to a gcc-built zlib's** output. |
-| **SQLite** | The amalgamation compiles and runs — in-memory and file-backed databases, CRUD, and multi-threaded access — as a **libc-free, zero-dependency** binary. A multi-threaded (`--threadsafe`) build needs the C runtime from a checkout at or after `3f28aafab`; with pin v425's own checkout it hangs in `sqlite3_open`. |
+| **SQLite** | The amalgamation compiles and runs — in-memory and file-backed databases, CRUD, and multi-threaded access — as a **libc-free, zero-dependency** binary. A multi-threaded (`--threadsafe`) build runs `test/csqlite_thread_test.c`, several threads on one connection and on one connection each, to `all OK` (pin v441 and v450, x86-64, 2026-09-29). |
 | **Lua** | The reference interpreter compiles and runs Lua programs. |
 | **cJSON** | Parses and serialises. |
 | **QuickJS** (quickjs-ng 0.9.0) | The JavaScript engine compiles as a zero-dependency binary and runs the in-tree smoke test byte-for-byte. |
