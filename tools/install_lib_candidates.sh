@@ -144,8 +144,11 @@ say() { printf '%s\n' "==> $*"; }
 die() { printf '%s\n' "error: $*" >&2; exit 1; }
 
 # Refuse to run unless library_candidates/ is ignored — keeps fetched source out
-# of the repo. git check-ignore exits 0 when the path IS ignored.
+# of the repo. git check-ignore exits 0 when the path IS ignored. An unpacked
+# release archive is not a git work tree, so nothing fetched there can be
+# committed and there is nothing to guard; inside a checkout the rule is strict.
 guard_ignored() {
+  git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
   if ! git -C "$ROOT" check-ignore -q "$DEST/"; then
     die "library_candidates/ is NOT gitignored — refusing to fetch (would risk committing third-party source). Add 'library_candidates/' to .gitignore first."
   fi
@@ -822,4 +825,8 @@ EOF
     *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|busybox|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
   esac
 done
-say "done. library_candidates/ stays gitignored — nothing entered the repo."
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  say "done. library_candidates/ stays gitignored — nothing entered the repo."
+else
+  say "done."
+fi
