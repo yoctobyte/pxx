@@ -170,13 +170,14 @@ In a git checkout, name the pinned compiler, because a checkout has no
 ESP_RUN_PXX=$PWD/stable_linux_amd64/default/pinned tools/esp_run.sh --chip esp32c3 /path/to/main.pas
 ```
 
-The second line does not work in a release archive: the archive has no
-`stable_linux_amd64/`, and the script stops with `esp_run: compiler
-.../stable_linux_amd64/default/pinned not found or not executable`. With pin
-v451 from an unpacked archive on 2026-09-29, the first line printed
-`crc8("123456789") = 244` after about a minute, with nothing printed while it
-built. That was with its `hello-c3` project already built once; the first
-run takes about 3 minutes.
+An archive has no `stable_linux_amd64/`. With the `tools/esp_run.sh` of pin
+v451 or earlier, the second line stops there with `esp_run: compiler
+.../stable_linux_amd64/default/pinned not found or not executable`, so use
+the first. The script in the repository now falls back to the archive's
+`compiler/pxx-x86_64` and says so. With pin v451 from an unpacked archive on
+2026-09-29, the first line printed `crc8("123456789") = 244` after about a
+minute, with nothing printed while it built. That was with its `hello-c3`
+project already built once; the first run takes 2 to 3 minutes.
 
 `tools/esp_run.sh` compiles with `compiler/pascal26` unless `ESP_RUN_PXX`
 names another compiler (not `PXX`), and prints which one it used. The script

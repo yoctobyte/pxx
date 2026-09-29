@@ -207,7 +207,7 @@ Defaults:
 
 - ESP-IDF directory: `$HOME/esp/esp-idf`
 - ESP-IDF version: `v6.0.1`
-- IDF targets: `esp32s2,esp32s3`
+- IDF targets: `esp32c3,esp32s3`
 - Espressif QEMU tools: `qemu-xtensa qemu-riscv32`
 
 Override with environment variables:
@@ -215,7 +215,7 @@ Override with environment variables:
 ```bash
 ESP_IDF_DIR=$HOME/esp/esp-idf-v6 \
 ESP_IDF_VERSION=v6.0.1 \
-ESP_IDF_TARGETS=esp32s2,esp32s3 \
+ESP_IDF_TARGETS=esp32c3,esp32s3 \
 ESP_IDF_QEMU_TOOLS="qemu-xtensa qemu-riscv32" \
 tools/install_esp32_target.sh
 ```

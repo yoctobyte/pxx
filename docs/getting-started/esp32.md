@@ -30,8 +30,8 @@ the drivers, and the final link. Install ESP-IDF v6.0.1 by
 [Espressif's instructions](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/),
 for the chips you have, into `~/esp/esp-idf` (the tools look there by default;
 set `ESP_IDF_DIR` otherwise). For both chips on this page, run ESP-IDF's
-installer as `./install.sh esp32s3,esp32c3`: the C3 needs the RISC-V
-toolchain and the S3 the Xtensa one. It is a large install: ESP-IDF v6.0.1
+installer as `./install.sh esp32s3,esp32c3`, which installs the compilers
+and debuggers for both. It is a large install: ESP-IDF v6.0.1
 with both toolchains, both QEMUs and their Python environment took 7.7 GB
 of disk on the machine these pages were checked on (2.7 GB in
 `~/esp/esp-idf`, 5.0 GB in `~/.espressif`). If ESP-IDF is already installed,
@@ -86,8 +86,11 @@ examples/esp32/nilpy-c3/build.sh qemu-assert                            # the Ni
 
 `tools/esp_run.sh` builds the program into the chip's `hello-*` project,
 boots it and prints what it wrote: the five `PXX hello from Pascal: i=N`
-lines and `PXX sum 1..5 = 15`. **It prints nothing else while it builds**,
-which took about 3 minutes the first time and 1 minute after that. A Nil
+lines and `PXX sum 1..5 = 15`. **The build is slow and quiet**: 2 to 3
+minutes the first time, under a minute after that. From the next pin the
+script first prints a line such as `esp_run: building hello-c3 for esp32c3
+(the first build takes 2 to 3 minutes)...`; the one in v451 prints nothing
+while it builds, which looks like a hang but is not. A Nil
 Python example's `build.sh qemu-assert` builds, boots and compares the
 output with the example's `main/main.expected`, and ends with a line that
 starts `OK   nilpy-c3`. Use `--chip esp32s3` with `hello-s3`, and

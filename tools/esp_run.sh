@@ -49,6 +49,18 @@ case "$PXX" in
   /*) ;;
   */*) PXX="$PWD/$PXX" ;;
 esac
+# A release archive ships no stable_linux_amd64/ (export-ignored); its
+# compiler is compiler/pxx-<arch>. The checkout recipe
+# ESP_RUN_PXX=$PWD/stable_linux_amd64/default/pinned stopped here in an
+# unpacked archive (walked 2026-09-29), so fall back to the archive's own
+# binary, and say so.
+case "$PXX" in
+  */stable_linux_amd64/default/pinned)
+    if [ ! -x "$PXX" ] && [ -x "$REPO_ROOT/compiler/pxx-x86_64" ]; then
+      echo "esp_run: $PXX not here (a release archive has none); using $REPO_ROOT/compiler/pxx-x86_64" >&2
+      PXX="$REPO_ROOT/compiler/pxx-x86_64"
+    fi ;;
+esac
 if [ "${PXX#*/}" != "$PXX" ] && [ ! -x "$PXX" ]; then
   echo "esp_run: compiler $PXX not found or not executable (ESP_RUN_PXX, or build compiler/pascal26)" >&2
   exit 2
@@ -141,10 +153,16 @@ build_failed() {
   echo "         program's." >&2
   exit 1
 }
+# The build prints nothing (its log goes to $BLOG), and a first build compiles
+# about 990 ESP-IDF files: 3 minutes of silence read as a hang to a newcomer
+# (walked 2026-09-29). Say what is happening, on stderr -- stdout carries only
+# the program's own output.
 if [ -f build/build.ninja ]; then
+  echo "esp_run: building $(basename "$PROJ") for $CHIP (about a minute)..." >&2
   rm -f build/*.elf build/*.bin
   ninja -C build >"$BLOG" 2>&1 || build_failed
 else
+  echo "esp_run: building $(basename "$PROJ") for $CHIP (the first build takes 2 to 3 minutes)..." >&2
   { idf.py set-target "$CHIP" && idf.py build; } >"$BLOG" 2>&1 || build_failed
 fi
 

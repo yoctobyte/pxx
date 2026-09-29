@@ -163,6 +163,12 @@ fi
 if [ "$(ask "Install ESP-IDF in ~/esp (builds for ESP32 boards, plus Espressif's QEMU to run them without one)?" n)" = y ]; then
   "$ROOT/tools/install_esp32_target.sh" || note "ESP32 IDF install failed — skipped"
   note "after it finishes:  . \$HOME/esp/esp-idf/export.sh"
+elif [ -f "${ESP_IDF_DIR:-$HOME/esp/esp-idf}/export.sh" ]; then
+  # Said out loud: under --yes this step used to print nothing at all, so a
+  # newcomer could not tell the ESP32 part had been skipped.
+  note "ESP32: skipped; ESP-IDF is already at ${ESP_IDF_DIR:-$HOME/esp/esp-idf} (use it with:  . ${ESP_IDF_DIR:-\$HOME/esp/esp-idf}/export.sh)"
+else
+  note "ESP32: skipped (ESP-IDF not installed). Later:  tools/install_esp32_target.sh  (several GB; see docs/install/)"
 fi
 
 # ---------------------------------------------------------------------------

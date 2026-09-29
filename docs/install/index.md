@@ -230,11 +230,13 @@ the tool before using the ESP32 helpers. Expect several gigabytes: ESP-IDF
 v6.0.1 with the Xtensa and RISC-V toolchains, both QEMUs and their Python
 environment took 7.7 GB of disk on the machine these pages were checked on,
 and the installer clones ESP-IDF's whole repository. The installer
-(`tools/install_esp32_target.sh`) sets up the toolchains for the ESP32-S2 and
-S3 only, because its target list, `ESP_IDF_TARGETS`, defaults to
-`esp32s2,esp32s3`. For the ESP32-C3, set it before you run the installer, for
-example `ESP_IDF_TARGETS=esp32s3,esp32c3 tools/install_esp32_target.sh`. If
-you already have ESP-IDF v6.0.1, you need none of this: see
+(`tools/install_esp32_target.sh`) sets ESP-IDF up for the ESP32-C3 and S3,
+the two chips PXX supports: both compilers, both debuggers and both QEMUs.
+An installer from pin v451 or earlier asks ESP-IDF for the S2 and S3
+instead. That still installs the RISC-V compiler the C3 builds with, but not
+the C3's debugger, `riscv32-esp-elf-gdb`; to get it, run it with
+`ESP_IDF_TARGETS=esp32c3,esp32s3`. If you already have ESP-IDF v6.0.1, you
+need none of this: see
 [Getting started on the ESP32](../getting-started/esp32.md).
 
 ## Building from source

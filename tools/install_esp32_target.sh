@@ -17,7 +17,9 @@
 # every build under $TMPDIR instead (tools/esp_stage.sh); only a build.sh run by
 # hand inside a checkout still writes there.
 #   ESP_IDF_VERSION=v6.0.1
-#   ESP_IDF_TARGETS=esp32s2,esp32s3
+#   ESP_IDF_TARGETS=esp32c3,esp32s3   (the two chips PXX supports; the list
+#     only adds tools: for esp32s2,esp32s3 ESP-IDF v6.0.1 already installs
+#     riscv32-esp-elf, for the S3's RISC-V ULP, and esp32c3 adds the C3's gdb)
 #   ESP_IDF_QEMU_TOOLS="qemu-xtensa qemu-riscv32"
 #
 # A child script cannot permanently update the caller's PATH. After this
@@ -27,7 +29,7 @@ set -eu
 
 ESP_IDF_DIR="${ESP_IDF_DIR:-$HOME/esp/esp-idf}"
 ESP_IDF_VERSION="${ESP_IDF_VERSION:-v6.0.1}"
-ESP_IDF_TARGETS="${ESP_IDF_TARGETS:-esp32s2,esp32s3}"
+ESP_IDF_TARGETS="${ESP_IDF_TARGETS:-esp32c3,esp32s3}"
 ESP_IDF_QEMU_TOOLS="${ESP_IDF_QEMU_TOOLS:-qemu-xtensa qemu-riscv32}"
 ESP_IDF_REPO="${ESP_IDF_REPO:-https://github.com/espressif/esp-idf.git}"
 ESP_IDF_INSTALL_HOST_PACKAGES="${ESP_IDF_INSTALL_HOST_PACKAGES:-auto}"
