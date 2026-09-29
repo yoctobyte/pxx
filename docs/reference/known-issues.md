@@ -13,7 +13,51 @@ so; nothing in this release is known to have changed them.
 Problems that **compile and silently give a wrong answer** come first, because a
 refusal at least tells you something is wrong.
 
+## At a glance
+
+Every open issue on this page, one line each. The rows below give the
+details, the measurements and the workarounds.
+
+**Silently wrong: compiles, and gives a wrong answer with no message**
+
+- C `long double` is 8 bytes, not GCC's 16: [row](#c-long-double-is-8-bytes)
+- riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero: [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
+- Nil Python: arithmetic on `None` gives a number instead of `TypeError`: [Nil Python](#nil-python)
+- Nil Python: a method called from `exec` code can get a truncated or wrong argument, and an `exec`'d `__body__` reads its parameters as `None`: [exec and eval](#exec-and-eval)
+
+**Stops at run time**
+
+- wasm32: integer division by zero stops the module instead of raising: [Stops at run time](#stops-at-run-time)
+- ESP: a bare-metal image faults on a real chip; use the ESP-IDF build: [row](#esp-bare-metal-images-do-not-run-on-a-real-chip)
+- Nil Python: `raise` inside `exec`'d code cannot be caught: [exec and eval](#exec-and-eval)
+- Nil Python on the ESP32-C3: sorting a list needs about as much free heap again as the list: [Nil Python](#nil-python)
+
+**Refused, or not what you expect**
+
+- Four refusals with a message (C `__thread` on riscv32, `setvbuf` buffering, `--shared` off x86-64, a Nil Python name holding a Pascal array): [Refused, with a message](#refused-with-a-message)
+- Nil Python through `./pxx`: `import time` and `import string` find the C headers: [Nil Python](#nil-python)
+- Nil Python: `exec` stores a def only when it is named `__body__`: [exec and eval](#exec-and-eval)
+- `-O3` is experimental: [Optimisation levels](#optimisation-levels)
+
+**Memory**
+
+- Nil Python never frees a reference cycle; a module-level statement keeps its string temporary until it runs again; program globals are not finalized at exit: [Memory leaks](#memory-leaks)
+
+**ESP networking**
+
+- TLS on ESP does not check certificates unless the program asks: [ESP networking](#esp-networking)
+- ESP32-C3 network runs stall under QEMU (the emulator, not the program): [ESP networking under load](#esp-networking-under-load)
+
+**By design**
+
+- `Trunc` of an out-of-range float into a 32-bit integer: [row](#by-design-trunc-of-an-out-of-range-float-into-a-32-bit-integer)
+- Integer division by zero stops a desktop program and gives 0 on ESP: [Math errors](#by-design-math-errors)
+
+**Unresolved:** one test row, riscv32 `wait4` under QEMU 8.2.2, is described at the start of [Fixed since v441](#fixed-since-v441).
+
 ## Silently wrong
+
+Four more rows that give a wrong answer with no message are Nil Python rows, under [Nil Python](#nil-python): arithmetic on `None`, and three shapes of `exec`.
 
 ### C: `long double` is 8 bytes
 
@@ -24,16 +68,6 @@ and 32 under GCC. That matters as soon as such a struct crosses into
 GCC-compiled code or into a file format. (Measured with v425, and again on
 2026-09-28 with v450 (`c19cc2d531e4`) and the compiler built at `fce510f98d`:
 8 and 16 bytes, against GCC's 16 and 32.)
-
-### ESP: bare-metal images do not run on a real chip
-
-Images built with `--esp-profile=bare` fault on the first byte access to a
-global or a string, and their UART output is lost. Measured on an ESP32-S3 with
-v424; a bare ESP32-C3 image has never been run on silicon. They run under
-Espressif's QEMU (`qemu-system-xtensa` and `qemu-system-riscv32`), which is what
-the bare profile is for. esptool cannot convert a bare ELF either, since it has
-no section headers. **Workaround:** on hardware, build the program as an
-ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
 
 ### riscv32 and Xtensa: arithmetic flushes subnormal doubles to zero
 
@@ -60,90 +94,208 @@ keep intermediate values above 2.2e-308, for example by working in scaled
 units. A value that is already subnormal cannot be scaled back up on these
 targets, because the scaling is itself arithmetic on it.
 
+## Stops at run time
+
+- **wasm32: integer division or `mod` by zero stops the module instead of
+  raising `EDivByZero`.** `a div b` or `a mod b` with `b` zero at run time
+  ends the program with wasmtime's `wasm trap: integer divide by zero` (exit
+  134), so an `except on E: EDivByZero` around it never runs and no Runtime
+  error 200 is printed. On x86-64 the same program prints `caught
+  EDivByZero`, as FPC 3.2.2 does, and without the `try` it stops with
+  `Runtime error 200 (division by zero)`. Measured on 2026-09-29 under
+  wasmtime 48.0.1 with v450 (`c19cc2d531e4`) and the compiler built at
+  `dadc02de44` (`d9b7226769cc`), which behave the same. **Workaround:** on
+  wasm32, test the divisor for zero before dividing.
+
+### ESP: bare-metal images do not run on a real chip
+
+Images built with `--esp-profile=bare` fault on the first byte access to a
+global or a string, and their UART output is lost. Measured on an ESP32-S3 with
+v424; a bare ESP32-C3 image has never been run on silicon. They run under
+Espressif's QEMU (`qemu-system-xtensa` and `qemu-system-riscv32`), which is what
+the bare profile is for. esptool cannot convert a bare ELF either, since it has
+no section headers. **Workaround:** on hardware, build the program as an
+ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
+
+## Refused, with a message
+
+These do not compile, or compile with a warning. None of them produces a wrong
+answer silently. (Measured with v425, and again on 2026-09-29 with v451,
+`d9b7226769cc`: the `__thread` warning on riscv32, `setvbuf` returning nonzero
+for `_IOFBF` and `_IOLBF` and 0 for `_IONBF` on all five Linux CPUs, and
+`--shared` refused on aarch64, arm32 and i386.)
+
+- **C `__thread` on riscv32** compiles with a warning that every thread
+  shares one copy. riscv32 has no threads, so no program is affected.
+- **C `setvbuf` with full or line buffering** returns nonzero: PXX's C streams
+  are unbuffered, and the call says so rather than claiming success.
+- **`--shared` on aarch64 and arm32** is refused with
+  `shared-library output is x86-64 only`, as on i386.
+- **Nil Python: a name bound to a Pascal `array of T` result** can only be
+  passed whole to a Pascal array parameter. Everything else on it is refused,
+  on purpose, until a conversion to a list exists: `a[1]`, `len(a)`, `for x in
+  a`, `print(a)`, `b = a` and `return a` each stop with `"a" holds a Pascal
+  dynamic array, which NilPy cannot use as a Python value yet: it can only be
+  passed whole to a Pascal array param...`. A def that indexes a
+  module-level bound name (`def g(): return a[1]`, before or after the
+  binding) is refused too, by the older `Nil Python: annotate the type / too
+  dynamic`; passing it whole from a def (`return d.SumO(a)`) prints `60`, as
+  intended (x86-64, v450). v449 refused the binding itself
+  (see the row under Fixed since v441). A Nil Python list held in a name is
+  not accepted by a Pascal array parameter either (`x = [1, 2, 3]` then
+  `d.SumO(x)`: `no overload of SumO matches these arguments`). Inside a def,
+  `return d.SumV(a)` is refused with `Nil Python: annotate the type / too
+  dynamic` by v448, v449 and v450; `t = d.SumV(a)` then `return
+  t` prints `60` with v448 and v450. Measured on 2026-09-28 with
+  v448 (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`), on x86-64 and on i386 under QEMU user mode,
+  with the `dynarr` unit of `test/nilpy_dynarr/`.
+
+## Nil Python
+
+Nil Python is best effort in this beta. It compiles Python-shaped source ahead
+of time and is not CPython: CPython compatibility is not a goal of this
+release, and it has a real backlog. Its measured list of limits is kept on the
+[Nil Python page](../targets/nil-python.md#known-limits), and the deliberate
+differences from CPython are recorded beside it. On ESP, the model is
+MicroPython's assumptions about a small device, such as math errors not halting
+the program. 15 of 16 common MicroPython drivers compile unchanged (measured
+with v445); see
+[MicroPython](../library/micropython.md).
+
+Found on 2026-09-28, and **open in v441 to v450** and after it:
+
+- **Nil Python: arithmetic on `None`, or a string minus a large integer, gives
+  a number.** `None + 1`, `1 + None`, `None - 1`, `None * 2`, `None + True`,
+  `True - None` and `2 ** 70 + None` treat `None` as `0` (`1`, `1`, `-1`, `0`,
+  `1`, `1`, `1180591620717411303424`), where CPython raises `TypeError`, so an
+  `except TypeError` never runs. A string minus an integer too large for 64
+  bits does the same: `"ab" - 2 ** 64` gives `-18446744073709551616`, while
+  `"ab" - 5` raises `TypeError` as it should. Measured with v450 and with the
+  compiler built at `cafc739cbf` (`8d5d0f2653f0`) on all seven targets, and
+  with v441 on x86-64. Valid programs are not affected; a program that relies
+  on the error is. Measured on 2026-09-28 against CPython, with v450
+  (`c19cc2d531e4`) on x86-64 and under QEMU user mode on i386, arm32, aarch64,
+  riscv32 and Xtensa (both ABIs), and on x86-64 with v441 (`4ebfa2d047a2`) and
+  the compiler built at `52e61383a5` (`8d5d0f2653f0`), which behave the same.
+  **Workaround:** test for `None` (`if x is None:`) before the arithmetic.
+
+**Nil Python through `./pxx`: `import time` and `import string` find the C
+headers.** The `./pxx` wrapper that `install.sh` writes puts `lib/crtl/include`
+on the unit search path, and there Nil Python's `import time` and `import
+string` bind the C headers `time.h` and `string.h` instead of PXX's Python
+modules. `time.sleep`, `time.sleep_ms`, `time.ticks_ms` and
+`string.ascii_lowercase` then fail to compile with `no member sleep came of
+the qualifier time` (and the same for the others). `time.time()` still
+compiles, because C declares `time()`, and `import math` is not affected.
+The same programs compile and run when the compiler is called directly: a
+program that is only `import time` and `time.sleep(0.01)` builds that way but
+not through `./pxx`. Measured on 2026-09-29 on x86-64 with the pinned v450
+(`c19cc2d531e4`), through a checkout's `./pxx` (written by
+`tools/install.sh`, last changed on 2026-09-25) and directly. **Workaround:** call the compiler directly
+(`compiler/pxx-<arch>` in the release tarball, the pinned binary in a
+checkout) instead of `./pxx` for a Nil Python program that imports `time` or
+`string`.
+
+**Nil Python on the ESP32-C3: `list.sort()` runs out of heap at about half
+the list length that can be built.** On a C3 board, in the `nilpy-c3` example
+project, a shuffled list of integers can be built up to 4,093 elements (4,125
+runs out of memory), but sorting it fits only up to 2,031 (2,062 runs out,
+2,078 with v450, whose insertion sort did not finish 2,031 elements within
+the 45-second run, but did not run out of memory either). A list of objects with `__lt__` sorts up to 2,037 (2,068
+runs out) with both compilers. The limit is the same with v450's insertion
+sort and with the merge sort that replaced it, so the sort's own index
+scratch space is not what sets it; sorting needs about as much free heap
+again as the list itself. The program fails with `pxx: out of memory
+(ESP-IDF heap exhausted)`. Measured on 2026-09-28 and 2026-09-29 by booting
+one size at a time, with v450 (`c19cc2d531e4`) and the compiler built at
+`aefc7ba4bd` (`1634f6483109`); the 4,093 is for the second only. The program,
+its recipe and the table are in `test/esp_board_list_sort_ceiling.npy`.
+**Workaround:** on a C3, keep a list you sort under about 2,000 elements.
+
+### exec and eval
+
+**Nil Python: a method reached from `exec` takes the type of its one compiled
+call, and a float passed to an integer parameter is silently truncated.** When
+every compiled call of a method passes the same kind of value to a parameter
+with no annotation, the compiler gives that parameter the type (`def mi(self,
+x)` called only as `n.mi(3)` makes `x` an integer). That is deliberate and
+makes such calls fast. A call from source compiled at run time, such as
+`exec("def __body__():\n    n.mi(2.7)\n", env, ns)`, cannot be seen at
+compile time, so its argument is converted to that type rather than passed as
+is. One of the three results is a wrong answer with no message: a float into
+an integer parameter is truncated (`n.mi(2.7)` gets `2`, CPython `2.7`). The
+other two are by design: a string into that parameter raises `TypeError`
+(CPython passes `'ab'`), and an integer into a float parameter arrives as `3.0`
+(CPython `3`), which loses nothing. A parameter whose compiled calls pass
+different kinds of value is not given a type, and behaves as in CPython.
+Measured on 2026-09-29 with v450 (`c19cc2d531e4`) and the compiler built at
+`6dcfbbb0e0` (`9ce84ba69527`) on x86-64, and with the latter under QEMU user
+mode on i386, arm32, aarch64 and riscv32, which print the same.
+**Workaround:** annotate a parameter that `exec` code will call as `x:
+object` (or `Any`). That keeps the compiler from giving it a type, so all
+three calls print what CPython prints (x86-64, `9ce84ba69527`). A scalar
+annotation such as `x: float` gives it a type by hand: it stops the
+truncation, but a string still raises `TypeError`.
+
+**Nil Python: `exec` publishes a def only when it is named `__body__`.**
+After `exec("def f():\n    return 42\n", {}, ns)`, `ns` is empty, and
+`ns["f"]` raises `KeyError: 'f'`. The message names your key, so it reads as
+a wrong lookup, while the cause is that `exec` did not store the def. Only a
+def named `__body__` lands in `ns`; `helper`, `f` and `__b__` do not. A
+variable assigned at the top of the executed source is stored:
+`exec("def helper(x):\n    return x + 1\nresult = helper(41)\n", {}, ns)`
+gives `ns["result"] == 42`. **Workaround:** name the def `__body__`, or
+assign the value you need to a variable in the executed source. Measured on
+2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
+`1763b6232b` (`70e57d59b777`), which behave the same.
+
+**Nil Python on i386, arm32 and riscv32: `exec` code calling a method with
+annotated parameters passes wrong values.** With `def greet(self, name: str,
+n: int, flag: bool)`, the call `p.greet('x', 3, True)` made from source run by
+`exec` prints `hi  12884901888 True` on i386 (an empty string, and 3 moved up
+32 bits) and `hi x 12884901888 False` on arm32 and riscv32, with no message;
+x86-64 and aarch64 print `hi x 3 True`, as CPython does. A parameter without
+an annotation is affected the same way once the compiler has given it a type
+from its compiled calls (see the row above on a method reached from `exec`):
+after `p.plain("y", 4, False)` in the program, the `exec` call prints `hi
+12884901888 True` on i386 and stops with SIGSEGV on arm32. Without any
+compiled call, or annotated as `object`, it gets the right values. Measured on
+2026-09-29 with v450 (`c19cc2d531e4`) and v451 (`d9b7226769cc`), which behave
+the same, under QEMU user mode. **Workaround:** on a 32-bit target, annotate
+the parameters of a method that `exec` code calls as `object` (`name: object,
+n: object, flag: object`); measured on i386, arm32 and riscv32 with v451.
+
+**Nil Python: the parameters of an `exec`'d `__body__` read `None`.** A
+`__body__` defined by `exec` and called from the program does not receive its
+arguments: every parameter reads `None`, with no message. After
+`exec("def __body__(s):\n    return s\n", {}, ns)`, `ns["__body__"]("ab")`
+returns `None` (CPython `'ab'`); with two parameters, `[a, b]` is
+`[None, None]` for `(1, "x")`; `n + 1` gives `1` for `41` (CPython `42`); and
+`int(s)` gives `0` for `"ab"` instead of raising `ValueError`. A def nested
+inside `__body__` and returned from it does receive its argument. Measured on
+2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
+`1763b6232b` (`70e57d59b777`), which behave the same. **Workaround:** give
+`__body__` no parameters and return a nested def that takes them, or pass
+values in through a variable in the `exec` globals.
+
+**Nil Python: `raise` inside `exec`'d code stops the program, while a
+builtin's error there can be caught.** `raise ValueError('bad')` in source run
+by `exec` prints `pyeval: ValueError: bad` on standard output and exits with
+status 1; an `except ValueError` around the call never runs. That `raise` is
+not yet catchable there is by design for now: making it catchable is a later
+step, as the comment on the `raise` handler in `compiler/builtin/pyeval.pas`
+says. A `try` inside the executed source is not accepted either (`pyeval:
+unexpected token in expression: ":"`). An error that a builtin raises is an
+ordinary exception, and the caller's `except` catches it: `int('ab')` gives
+`ValueError` in a `__body__` and in a def nested in it, and `[1][5]` gives
+`IndexError` in a `__body__`. Measured on 2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and
+the compiler built at `1763b6232b` (`70e57d59b777`), which behave the same.
+**Workaround:** test the condition in the executed code with an `if` and
+return a value the caller checks (such as `-1`), instead of raising.
+
 ## Memory leaks
 
-Memory leaks were treated as release blockers for this beta. Before the release
-every leak test in the tree was re-run. The Nil Python checks each ran beside a
-deliberate leak, to prove they could catch one; the Pascal and C checks had no
-such control at the time. The Pascal checks got one after v448 (`cfcfc49263`,
-in v449): the same census, run with a string and an array kept on
-purpose on each of 400 trips, must trip the bound. Measured on 2026-09-28 with
-the compiler built at `a2614fcb8b`: 4 blocks live, and 1,080 with the
-deliberate leak, on x86-64; 5 and 1,186 on i386 and arm32 (QEMU user mode).
-The C checks still have no control. The re-run covered:
-
-- all 164 automated leak checks in the test suite;
-- 49 Pascal shapes on seven targets (x86-64, i386, aarch64, arm32, riscv32,
-  and Xtensa in both calling conventions) at `-O0` to `-O3`, covering strings,
-  dynamic arrays, managed records, interfaces, closures, exceptions, classes,
-  generics, `TStringList` and `Format`;
-- threads (`TThread` with managed fields, a `TStringList` under a critical
-  section) on x86-64, i386, aarch64 and arm32;
-- real programs: uforth, eleven Pascal examples, and Lua 5.4 scripts.
-
-**No open compiler-caused leak was known when v441 was released.** The sweep
-found five, and all five are fixed in this release. If you are on an older pin,
-use the workaround. One more was found after the release; it is listed after
-these five.
-
-- **`Dispose(p)` did not finalize the thing `p` points at.** When `p` points at
-  a record with a string, dynamic-array, interface or `Variant` field, or at a
-  string, dynamic array, interface or `Variant` itself, 16 to 160 bytes were
-  lost per `Dispose`, on every target. **Older pins:** call `Finalize(p^)`
-  before `Dispose(p)`.
-- **`Finalize` of a whole fixed array of managed elements released only the
-  first element.** **Older pins:** finalize the elements in a loop.
-- **`Dispose(F())` did not finalize the pointee when the pointer came from a
-  function call.** **Older pins:** assign the pointer to a variable and dispose
-  of that.
-- **Nil Python: a `for` loop target that already held an object** kept one
-  object per iteration. **Older pins:** give the loop variable a fresh name.
-- **Nil Python: a `lambda` passed straight as an argument**, as in
-  `sorted(xs, key=lambda v: -v)`, kept one closure per call. **Older pins:** bind
-  the lambda to a name first.
-
-Found after the release, on 2026-09-27, in v441, and fixed since:
-
-- **Nil Python: `list.clear()` and `dict.clear()` did not release what they
-  dropped.** The elements, or the keys and values, stayed allocated after the
-  list or dict itself was freed. A function that fills a list with 20 strings
-  and clears it lost 20 strings per call. A buffer cleared and refilled in a
-  loop does not grow, because refilling releases the old elements, but the
-  last contents are lost when the buffer goes away. Fixed in v442
-  (`fbfdcd1ea8`), in the runtime that the compiler links into every Nil Python
-  program; measured fixed with v445. **On v441:**
-  assign a new empty container (`buf = []`, `d = {}`) instead of calling
-  `clear()`.
-- **Nil Python: a computed string on the left of `*` leaked.** `str(i) * 2`,
-  `"%d" % i * 2` and `s.upper() * 2` each lost one string per evaluation.
-  Fixed in v446 (`c64b304036`). Measured on 2026-09-28 with
-  `tools/census_at_exit.sh`, a 30-pass loop over `str(i) * 2` inside a
-  function: 31 live with v445 (`caf21ac399f1`), 2 with v446
-  (`ae3466a018d8`). **On v445 and earlier:** name the string first
-  (`t = str(i)`, then `t * 2`).
-
-Found on 2026-09-28, wrong in v441 to v448, and fixed in v449:
-
-- **Pascal: a handled exception object was freed without running its
-  destructor.** When an `except` block finished with the exception, its memory
-  was released but its `Destroy` never ran, so anything the destructor frees
-  was lost. That held for `on E: ... do`, a bare `except`, a `raise` caught
-  one level further out, and a `try`/`finally` inside the `try`. An exception
-  class that owns a `TStringList` lost the list on every raise. FPC 3.2.2 runs
-  `Destroy` once in each case. Fixed in v449 (`846a574b00`). Measured again on
-  2026-09-28 with the pinned binaries, each in its own tree: v448
-  (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`): the same
-  test counts 0 in every shape with v448, and matches its `.expected` with
-  v449 and v450, on x86-64, i386 and arm32 (QEMU user mode). First measured on
-  2026-09-28 with
-  `test/test_a_handled_exception_runs_its_destructor_once.pas`: every shape
-  counted 0 `Destroy` calls with v441 (`4ebfa2d047a2`) and v448
-  (`b2b325036c3b`), and 1, as FPC 3.2.2 does, with the compiler built at
-  `a2614fcb8b` (`5dea028059af`) on x86-64, i386 and arm32 (QEMU user mode).
-  Its 500 raises of the owning class left 1,892 blocks live with v448 and 4
-  with that compiler. **On v448 and earlier:** an exception class with no
-  fields of its own that need freeing loses nothing, since the object's own
-  memory is released.
+Three limits are open; the leaks fixed before and after the release are listed under [History](#history).
 
 Program-level global variables are not finalized when the program exits. This
 is a one-time cost at exit, not a leak that grows while the program runs.
@@ -154,43 +306,6 @@ again. That is at most one string per source line, and a loop reuses it, so
 the cost is bounded by the program's length and does not grow while it runs.
 Inside a function, temporaries are released when the statement ends.
 
-A list or dict that a statement creates, such as `kept = []`, stays allocated
-until that same statement runs again or the function returns. That holds even
-after the name is bound to something else (`kept = []` a second time on
-another line, `kept = None`, `kept = 5`), and calling a method on it
-(`kept.append(r)`) holds it the same way. At module level it is held until
-the program ends. It does not add up in a loop, but a function that fills a
-list and then drops it keeps the contents until it returns. On an ESP32-C3
-with about 70 KB free, 34 kept HTTP responses (about 1.4 KB each) held that
-way ran the heap low enough that Wi-Fi stopped working. Fixed in v446
-(`31d314dfa8`): the container is released as soon as the last name lets go of
-it. v446 does not cover a list built by a comprehension
-(`rows = [str(i) for i in range(n)]`): after `rows = None` it is still kept
-until the function returns. That is fixed after v446 (`cdd6fd3c1f`, in v447).
-Measured on 2026-09-28 with `tools/census_at_exit.sh`, a function whose list
-of 30 strings is dropped before it exits: `kept = None` leaves 1 live with
-v446 (`ae3466a018d8`); a comprehension then `rows = None` leaves 32 with v446
-and 1 with the compiler at `e072d579b0` (`ccd62c91f30e`). **On v445 and
-earlier, and for a comprehension on v446:** return from the function, or let
-it end, to get the memory back.
-
-`del name` on a local variable does not release what the name refers to; the
-object stays allocated until the function returns. This is so from v446 to
-v448, and fixed in v449 (`c4f5dcf929`). Measured again on 2026-09-28 with the
-pinned binaries, each in its own tree: v448 (`b2b325036c3b`), v449
-(`0ded1e5d04c8`) and v450 (`c19cc2d531e4`), a function that builds a list of
-30 strings and exits inside the function: under `del`, 32 live with v448 and 1
-with v449 and v450; under `= None`, 1 with all three; kept, 32 with all three.
-On v446 to v448, assign `name = None` instead, which does release it. On v445
-and earlier `name = None` does not release it either (see the paragraph
-above): return from the function. (Measured on 2026-09-28, the same list of 30
-strings: under `del` 32 live with v446 and with the compiler at `e072d579b0`;
-under `= None` 1 with both, and 32 with v445. Measured again with
-`tools/census_at_exit.sh`, the census taken inside the function: under `del`
-32 live with v448 (`b2b325036c3b`) and 1 with the compiler built at
-`a2614fcb8b` (`5dea028059af`), under `= None` 1 with both, and 32 with both
-when the list is kept.)
-
 **Nil Python: a reference cycle is never freed.** Nil Python frees an object
 when its last reference goes away; there is no garbage collector to find
 objects that only refer to each other. That is the design for this beta, and
@@ -200,30 +315,7 @@ both after it returns: 2 objects kept after one call, 10 after five, measured
 with v445 and with the compiler at `ae11f1ddb5`. **Workaround:** break the
 cycle before letting go (`b.other = None`); measured, that keeps none.
 
-### ESP networking
-
-Networking was soaked under Espressif's QEMU with the v440 compiler (v441
-differs from it only in the `Dispose(F())` fix). None of these runs showed
-memory or sockets growing:
-
-| what ran | chip | result |
-| --- | --- | --- |
-| 10,000 HTTP requests with `urequests` (Nil Python) | ESP32-S3 | 64 bytes in total over 10,000 requests |
-| 1,000 sessions each of `ntptime`, `umqtt.simple` and `umqtt.robust` (Nil Python) | ESP32-S3 | 0 bytes per session |
-| 3,000 MQTT sessions with `umqtt.simple` (Nil Python) | ESP32-C3 | the same socket number every session; heap flat after the first 25 |
-| 320 TCP connections over loopback, server and client in Pascal | ESP32-S3 | 0 bytes over 40 passes |
-| 300 HTTPS requests with `urequests` (Nil Python; v442 or later) | ESP32-S3 (QEMU) | 68 bytes in total over 300 requests |
-| 300 HTTPS requests with `urequests` over Wi-Fi (Nil Python; v442) | ESP32-C3 board | no growth: free heap level at about 65 KB throughout |
-
-Each run was checked against a deliberate leak, which it caught. An earlier
-reading of about 0.6 bytes per pass on the Nil Python example programs turned
-out to be the soak's own report lines, one kept string per checkpoint line (see
-the Nil Python paragraph above). With those lines moved into a function, the
-four Nil Python examples keep 0 bytes after 10, 160, 640 and 1,280 passes on
-both chips, with v441, beside a deliberate leak that reads 76 bytes per pass.
-A MicroPython-style main loop written at module level, making 1,000 requests
-with a `print` each time, holds about 1.6 KB once (the last response, still
-bound to its variable, as in CPython) and then stays level.
+## ESP networking
 
 **TLS on ESP is client-only, and does not check certificates by default.**
 `ssl.wrap_socket` and `SSLContext` work, so `urequests.get("https://...")` and
@@ -234,48 +326,58 @@ passes the authority it trusts; there are none on the chip. See
 `ssl` module, so `urequests` there refuses `https://` URLs with a `ValueError`;
 desktop Pascal programs have TLS through the `http` unit.
 
-Two limits apply to these measurements:
+## Optimisation levels
 
-- **Over real Wi-Fi, two boards and two libraries have been measured**; the
-  rows above ran over QEMU's emulated Ethernet. On 2026-09-28, with the
-  compiler built from tree `cdd6fd3c1f` (sha256 `139494b2b863`; pin v447
-  contains that tree, v446 does not), a physical ESP32-S3 made 300
-  `urequests` fetches over a home Wi-Fi network. At every checkpoint its free
-  heap was between 12 bytes lower and 328 bytes higher than at the start, and
-  130 seconds after the last fetch it was 216 bytes higher. Both an ESP32-C3
-  and an ESP32-S3 ran 300 `umqtt.simple` sessions against a broker on that
-  network, 0 errors each. Each MQTT run was about 1.3 KB short while
-  connections were closing (the S3 briefly 4.7 KB at session 200, back to
-  1.3 KB by 300), and 130 seconds after the last session had about 1.9 KB
-  more free heap than at the start. The positive controls, which keep every
-  response or session on purpose, lost 1,438 bytes per fetch and 1,116 to
-  1,142 bytes per session, so the measurement would have seen a leak.
-  Longer runs the same day, with the compiler of tree `577e7acf0e`: 10,000
-  `urequests` fetches on the ESP32-C3 ended using 120 bytes more heap
-  than at the start, and were never more than 320 bytes away; 3,000
-  `umqtt.simple` sessions on the ESP32-S3 ended with 2,056 bytes more free. Both
-  runs had no errors and never rebooted. On
-  2026-09-27, one ESP32-C3 board with the v441 compiler, joined to a home
-  Wi-Fi network, fetched a page from a PC on that network 1,000 times. Free
-  heap stayed within 400 bytes of where it started, with no upward trend, and
-  ended 364 bytes higher. A second run of 300 fetches grew by 20 bytes, and after the
-  function holding the responses returned and 130 seconds passed, all of it
-  had come back. Its positive control kept 20 responses, which cost 1,434
-  bytes each.
-- **Long network runs on the ESP32-C3 stop under QEMU** after a few hundred to
-  a few thousand requests: the program stops making progress, although memory
-  and sockets are not exhausted. At the stall, the emulated network card holds
-  received frames and has an interrupt pending that is never delivered, so the
-  program waits forever for data that has already arrived. This happens below
-  the compiled program, in the emulator's network path, and has not been seen
-  on the ESP32-S3. On a physical C3 over real Wi-Fi it did not happen: about
-  1,700 requests over three runs on 2026-09-27, with no stall. Under QEMU it
-  comes much sooner over TLS: four of five HTTPS runs on the C3 stopped within
-  their first twenty requests, with a compiler from before the HTTPS leak fix
-  and one from after it alike. The C3 HTTPS figure in the table above is from
-  the board, over Wi-Fi.
+`-O2` is the default and the level the compiler proves on itself. `-O3` is
+experimental: its differential check against `-O2` had two failing shards at
+v439. Use `-O3` only if you check the output.
 
-## Fixed since v441
+## By design: `Trunc` of an out-of-range float into a 32-bit integer
+
+`Trunc(1e30)` stored in an `Int64` saturates to 9223372036854775807. Stored in
+a `LongInt` it gives -1, the low 32 bits of that saturated value. This is the
+same on every target, desktop and ESP (measured with v425; the desktop half
+again with v451 on x86-64, i386, aarch64, arm32 and riscv32). A float that does
+not fit the integer type it is truncated into has no meaningful integer value;
+test the range first if the input can be that large.
+
+## By design: math errors
+
+An embedded device should keep running when a sensor produces a value that
+causes a math error. A desktop program should stop and say what happened. So
+the two behave differently on purpose:
+
+| | Desktop (Linux, all CPUs) | ESP32-S3 and ESP32-C3 |
+| --- | --- | --- |
+| Pascal and C: integer `div` / `mod` by zero | runtime error 200, the program stops | gives 0, the program continues |
+| Pascal and C: float division by zero | Inf or NaN | Inf or NaN |
+| Nil Python: `//` and `%` by zero | runtime error 200, which `except` cannot catch, when the divisor is only known at run time; `ZeroDivisionError` when the compiler can see it is zero or the def is typed (measured with v450; which is intended is waiting for the owner's decision, see [ESP32 peripherals](../library/esp.md)) | gives 0, the program continues |
+| Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
+
+Each cell was measured on v425. The desktop column was measured again on
+2026-09-29 with v451 (`d9b7226769cc`) on x86-64, i386, aarch64, arm32 and
+riscv32 Linux, for Pascal, C and Nil Python, and every cell held. The ESP
+column was measured under Espressif's QEMU on both chips, for Pascal, C and
+Nil Python; its Pascal and C integer cell again with v450 (see
+[Numbers on ESP](../library/esp.md#numbers-on-esp)). wasm32 is not in the
+desktop column: there an integer division by zero stops the module (see
+"Stops at run time" above). This is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
+test the divisor yourself.
+
+## Reporting a problem
+
+Open an issue at <https://github.com/yoctobyte/pxx/issues> with the smallest
+source file that shows the problem, the exact command you ran (including any
+`--target=`), what you expected and what you got, and the output of
+`./pxx --doctor` with the commit of your checkout (`git log -1 --format=%h`).
+A program that compiles and gives a wrong answer is the most useful report you
+can send.
+
+## History
+
+What was wrong in an earlier pin and is fixed, and the measurements behind the open rows above.
+
+### Fixed since v441
 
 These are wrong in v441 and fixed in a later pin or after the latest one, as
 each row says: "wrong in v441 to v446" means fixed after v446, and not yet in
@@ -864,7 +966,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   on x86-64, i386 and arm32 (QEMU user mode). Wrong in v441 to v447
   (`180411ab1e`).
 
-## Fixed in this release
+### Fixed in this release
 
 These were wrong in the earlier draft pin v425 and are fixed in v441.
 
@@ -903,237 +1005,190 @@ These were wrong in v424 and fixed in v425, and so are fixed here too:
 - **C `sizeof` of a multidimensional array, a typedef of array typedefs, and
   `sizeof (t)->key`** gave wrong sizes or were refused.
 
-## Refused, with a message
+### The pre-release leak sweep, and leaks fixed since
 
-These do not compile, or compile with a warning. None of them produces a wrong
-answer silently. (Measured with v425, and again on 2026-09-29 with v451,
-`d9b7226769cc`: the `__thread` warning on riscv32, `setvbuf` returning nonzero
-for `_IOFBF` and `_IOLBF` and 0 for `_IONBF` on all five Linux CPUs, and
-`--shared` refused on aarch64, arm32 and i386.)
+Memory leaks were treated as release blockers for this beta. Before the release
+every leak test in the tree was re-run. The Nil Python checks each ran beside a
+deliberate leak, to prove they could catch one; the Pascal and C checks had no
+such control at the time. The Pascal checks got one after v448 (`cfcfc49263`,
+in v449): the same census, run with a string and an array kept on
+purpose on each of 400 trips, must trip the bound. Measured on 2026-09-28 with
+the compiler built at `a2614fcb8b`: 4 blocks live, and 1,080 with the
+deliberate leak, on x86-64; 5 and 1,186 on i386 and arm32 (QEMU user mode).
+The C checks still have no control. The re-run covered:
 
-- **C `__thread` on riscv32** compiles with a warning that every thread
-  shares one copy. riscv32 has no threads, so no program is affected.
-- **C `setvbuf` with full or line buffering** returns nonzero: PXX's C streams
-  are unbuffered, and the call says so rather than claiming success.
-- **`--shared` on aarch64 and arm32** is refused with
-  `shared-library output is x86-64 only`, as on i386.
-- **Nil Python: a name bound to a Pascal `array of T` result** can only be
-  passed whole to a Pascal array parameter. Everything else on it is refused,
-  on purpose, until a conversion to a list exists: `a[1]`, `len(a)`, `for x in
-  a`, `print(a)`, `b = a` and `return a` each stop with `"a" holds a Pascal
-  dynamic array, which NilPy cannot use as a Python value yet: it can only be
-  passed whole to a Pascal array param...`. A def that indexes a
-  module-level bound name (`def g(): return a[1]`, before or after the
-  binding) is refused too, by the older `Nil Python: annotate the type / too
-  dynamic`; passing it whole from a def (`return d.SumO(a)`) prints `60`, as
-  intended (x86-64, v450). v449 refused the binding itself
-  (see the row under Fixed since v441). A Nil Python list held in a name is
-  not accepted by a Pascal array parameter either (`x = [1, 2, 3]` then
-  `d.SumO(x)`: `no overload of SumO matches these arguments`). Inside a def,
-  `return d.SumV(a)` is refused with `Nil Python: annotate the type / too
-  dynamic` by v448, v449 and v450; `t = d.SumV(a)` then `return
-  t` prints `60` with v448 and v450. Measured on 2026-09-28 with
-  v448 (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`), on x86-64 and on i386 under QEMU user mode,
-  with the `dynarr` unit of `test/nilpy_dynarr/`.
+- all 164 automated leak checks in the test suite;
+- 49 Pascal shapes on seven targets (x86-64, i386, aarch64, arm32, riscv32,
+  and Xtensa in both calling conventions) at `-O0` to `-O3`, covering strings,
+  dynamic arrays, managed records, interfaces, closures, exceptions, classes,
+  generics, `TStringList` and `Format`;
+- threads (`TThread` with managed fields, a `TStringList` under a critical
+  section) on x86-64, i386, aarch64 and arm32;
+- real programs: uforth, eleven Pascal examples, and Lua 5.4 scripts.
 
+**No open compiler-caused leak was known when v441 was released.** The sweep
+found five, and all five are fixed in this release. If you are on an older pin,
+use the workaround. One more was found after the release; it is listed after
+these five.
 
-## Stops at run time
+- **`Dispose(p)` did not finalize the thing `p` points at.** When `p` points at
+  a record with a string, dynamic-array, interface or `Variant` field, or at a
+  string, dynamic array, interface or `Variant` itself, 16 to 160 bytes were
+  lost per `Dispose`, on every target. **Older pins:** call `Finalize(p^)`
+  before `Dispose(p)`.
+- **`Finalize` of a whole fixed array of managed elements released only the
+  first element.** **Older pins:** finalize the elements in a loop.
+- **`Dispose(F())` did not finalize the pointee when the pointer came from a
+  function call.** **Older pins:** assign the pointer to a variable and dispose
+  of that.
+- **Nil Python: a `for` loop target that already held an object** kept one
+  object per iteration. **Older pins:** give the loop variable a fresh name.
+- **Nil Python: a `lambda` passed straight as an argument**, as in
+  `sorted(xs, key=lambda v: -v)`, kept one closure per call. **Older pins:** bind
+  the lambda to a name first.
 
-- **wasm32: integer division or `mod` by zero stops the module instead of
-  raising `EDivByZero`.** `a div b` or `a mod b` with `b` zero at run time
-  ends the program with wasmtime's `wasm trap: integer divide by zero` (exit
-  134), so an `except on E: EDivByZero` around it never runs and no Runtime
-  error 200 is printed. On x86-64 the same program prints `caught
-  EDivByZero`, as FPC 3.2.2 does, and without the `try` it stops with
-  `Runtime error 200 (division by zero)`. Measured on 2026-09-29 under
-  wasmtime 48.0.1 with v450 (`c19cc2d531e4`) and the compiler built at
-  `dadc02de44` (`d9b7226769cc`), which behave the same. **Workaround:** on
-  wasm32, test the divisor for zero before dividing.
+Found after the release, on 2026-09-27, in v441, and fixed since:
 
-## Optimisation levels
+- **Nil Python: `list.clear()` and `dict.clear()` did not release what they
+  dropped.** The elements, or the keys and values, stayed allocated after the
+  list or dict itself was freed. A function that fills a list with 20 strings
+  and clears it lost 20 strings per call. A buffer cleared and refilled in a
+  loop does not grow, because refilling releases the old elements, but the
+  last contents are lost when the buffer goes away. Fixed in v442
+  (`fbfdcd1ea8`), in the runtime that the compiler links into every Nil Python
+  program; measured fixed with v445. **On v441:**
+  assign a new empty container (`buf = []`, `d = {}`) instead of calling
+  `clear()`.
+- **Nil Python: a computed string on the left of `*` leaked.** `str(i) * 2`,
+  `"%d" % i * 2` and `s.upper() * 2` each lost one string per evaluation.
+  Fixed in v446 (`c64b304036`). Measured on 2026-09-28 with
+  `tools/census_at_exit.sh`, a 30-pass loop over `str(i) * 2` inside a
+  function: 31 live with v445 (`caf21ac399f1`), 2 with v446
+  (`ae3466a018d8`). **On v445 and earlier:** name the string first
+  (`t = str(i)`, then `t * 2`).
 
-`-O2` is the default and the level the compiler proves on itself. `-O3` is
-experimental: its differential check against `-O2` had two failing shards at
-v439. Use `-O3` only if you check the output.
+Found on 2026-09-28, wrong in v441 to v448, and fixed in v449:
 
-## By design: `Trunc` of an out-of-range float into a 32-bit integer
+- **Pascal: a handled exception object was freed without running its
+  destructor.** When an `except` block finished with the exception, its memory
+  was released but its `Destroy` never ran, so anything the destructor frees
+  was lost. That held for `on E: ... do`, a bare `except`, a `raise` caught
+  one level further out, and a `try`/`finally` inside the `try`. An exception
+  class that owns a `TStringList` lost the list on every raise. FPC 3.2.2 runs
+  `Destroy` once in each case. Fixed in v449 (`846a574b00`). Measured again on
+  2026-09-28 with the pinned binaries, each in its own tree: v448
+  (`b2b325036c3b`), v449 (`0ded1e5d04c8`) and v450 (`c19cc2d531e4`): the same
+  test counts 0 in every shape with v448, and matches its `.expected` with
+  v449 and v450, on x86-64, i386 and arm32 (QEMU user mode). First measured on
+  2026-09-28 with
+  `test/test_a_handled_exception_runs_its_destructor_once.pas`: every shape
+  counted 0 `Destroy` calls with v441 (`4ebfa2d047a2`) and v448
+  (`b2b325036c3b`), and 1, as FPC 3.2.2 does, with the compiler built at
+  `a2614fcb8b` (`5dea028059af`) on x86-64, i386 and arm32 (QEMU user mode).
+  Its 500 raises of the owning class left 1,892 blocks live with v448 and 4
+  with that compiler. **On v448 and earlier:** an exception class with no
+  fields of its own that need freeing loses nothing, since the object's own
+  memory is released.
 
-`Trunc(1e30)` stored in an `Int64` saturates to 9223372036854775807. Stored in
-a `LongInt` it gives -1, the low 32 bits of that saturated value. This is the
-same on every target, desktop and ESP (measured with v425; the desktop half
-again with v451 on x86-64, i386, aarch64, arm32 and riscv32). A float that does
-not fit the integer type it is truncated into has no meaningful integer value;
-test the range first if the input can be that large.
+A list or dict that a statement creates, such as `kept = []`, stays allocated
+until that same statement runs again or the function returns. That holds even
+after the name is bound to something else (`kept = []` a second time on
+another line, `kept = None`, `kept = 5`), and calling a method on it
+(`kept.append(r)`) holds it the same way. At module level it is held until
+the program ends. It does not add up in a loop, but a function that fills a
+list and then drops it keeps the contents until it returns. On an ESP32-C3
+with about 70 KB free, 34 kept HTTP responses (about 1.4 KB each) held that
+way ran the heap low enough that Wi-Fi stopped working. Fixed in v446
+(`31d314dfa8`): the container is released as soon as the last name lets go of
+it. v446 does not cover a list built by a comprehension
+(`rows = [str(i) for i in range(n)]`): after `rows = None` it is still kept
+until the function returns. That is fixed after v446 (`cdd6fd3c1f`, in v447).
+Measured on 2026-09-28 with `tools/census_at_exit.sh`, a function whose list
+of 30 strings is dropped before it exits: `kept = None` leaves 1 live with
+v446 (`ae3466a018d8`); a comprehension then `rows = None` leaves 32 with v446
+and 1 with the compiler at `e072d579b0` (`ccd62c91f30e`). **On v445 and
+earlier, and for a comprehension on v446:** return from the function, or let
+it end, to get the memory back.
 
-## By design: math errors
+`del name` on a local variable does not release what the name refers to; the
+object stays allocated until the function returns. This is so from v446 to
+v448, and fixed in v449 (`c4f5dcf929`). Measured again on 2026-09-28 with the
+pinned binaries, each in its own tree: v448 (`b2b325036c3b`), v449
+(`0ded1e5d04c8`) and v450 (`c19cc2d531e4`), a function that builds a list of
+30 strings and exits inside the function: under `del`, 32 live with v448 and 1
+with v449 and v450; under `= None`, 1 with all three; kept, 32 with all three.
+On v446 to v448, assign `name = None` instead, which does release it. On v445
+and earlier `name = None` does not release it either (see the paragraph
+above): return from the function. (Measured on 2026-09-28, the same list of 30
+strings: under `del` 32 live with v446 and with the compiler at `e072d579b0`;
+under `= None` 1 with both, and 32 with v445. Measured again with
+`tools/census_at_exit.sh`, the census taken inside the function: under `del`
+32 live with v448 (`b2b325036c3b`) and 1 with the compiler built at
+`a2614fcb8b` (`5dea028059af`), under `= None` 1 with both, and 32 with both
+when the list is kept.)
 
-An embedded device should keep running when a sensor produces a value that
-causes a math error. A desktop program should stop and say what happened. So
-the two behave differently on purpose:
+### ESP networking under load
 
-| | Desktop (Linux, all CPUs) | ESP32-S3 and ESP32-C3 |
+Networking was soaked under Espressif's QEMU with the v440 compiler (v441
+differs from it only in the `Dispose(F())` fix). None of these runs showed
+memory or sockets growing:
+
+| what ran | chip | result |
 | --- | --- | --- |
-| Pascal and C: integer `div` / `mod` by zero | runtime error 200, the program stops | gives 0, the program continues |
-| Pascal and C: float division by zero | Inf or NaN | Inf or NaN |
-| Nil Python: `//` and `%` by zero | runtime error 200, which `except` cannot catch, when the divisor is only known at run time; `ZeroDivisionError` when the compiler can see it is zero or the def is typed (measured with v450; which is intended is waiting for the owner's decision, see [ESP32 peripherals](../library/esp.md)) | gives 0, the program continues |
-| Nil Python: float `/` by zero | `ZeroDivisionError`, as in CPython | Inf |
+| 10,000 HTTP requests with `urequests` (Nil Python) | ESP32-S3 | 64 bytes in total over 10,000 requests |
+| 1,000 sessions each of `ntptime`, `umqtt.simple` and `umqtt.robust` (Nil Python) | ESP32-S3 | 0 bytes per session |
+| 3,000 MQTT sessions with `umqtt.simple` (Nil Python) | ESP32-C3 | the same socket number every session; heap flat after the first 25 |
+| 320 TCP connections over loopback, server and client in Pascal | ESP32-S3 | 0 bytes over 40 passes |
+| 300 HTTPS requests with `urequests` (Nil Python; v442 or later) | ESP32-S3 (QEMU) | 68 bytes in total over 300 requests |
+| 300 HTTPS requests with `urequests` over Wi-Fi (Nil Python; v442) | ESP32-C3 board | no growth: free heap level at about 65 KB throughout |
 
-Each cell was measured on v425. The desktop column was measured again on
-2026-09-29 with v451 (`d9b7226769cc`) on x86-64, i386, aarch64, arm32 and
-riscv32 Linux, for Pascal, C and Nil Python, and every cell held. The ESP
-column was measured under Espressif's QEMU on both chips, for Pascal, C and
-Nil Python; its Pascal and C integer cell again with v450 (see
-[Numbers on ESP](../library/esp.md#numbers-on-esp)). wasm32 is not in the
-desktop column: there an integer division by zero stops the module (see
-"Stops at run time" above). This is not a bug to be fixed: if you need a zero divisor to stop an ESP program,
-test the divisor yourself.
+Each run was checked against a deliberate leak, which it caught. An earlier
+reading of about 0.6 bytes per pass on the Nil Python example programs turned
+out to be the soak's own report lines, one kept string per checkpoint line (see
+the Nil Python paragraph above). With those lines moved into a function, the
+four Nil Python examples keep 0 bytes after 10, 160, 640 and 1,280 passes on
+both chips, with v441, beside a deliberate leak that reads 76 bytes per pass.
+A MicroPython-style main loop written at module level, making 1,000 requests
+with a `print` each time, holds about 1.6 KB once (the last response, still
+bound to its variable, as in CPython) and then stays level.
 
-## Nil Python
+Two limits apply to these measurements:
 
-Nil Python is best effort in this beta. It compiles Python-shaped source ahead
-of time and is not CPython: CPython compatibility is not a goal of this
-release, and it has a real backlog. Its measured list of limits is kept on the
-[Nil Python page](../targets/nil-python.md#known-limits), and the deliberate
-differences from CPython are recorded beside it. On ESP, the model is
-MicroPython's assumptions about a small device, such as math errors not halting
-the program. 15 of 16 common MicroPython drivers compile unchanged (measured
-with v445); see
-[MicroPython](../library/micropython.md).
-
-Found on 2026-09-28, and **open in v441 to v450** and after it:
-
-- **Nil Python: arithmetic on `None`, or a string minus a large integer, gives
-  a number.** `None + 1`, `1 + None`, `None - 1`, `None * 2`, `None + True`,
-  `True - None` and `2 ** 70 + None` treat `None` as `0` (`1`, `1`, `-1`, `0`,
-  `1`, `1`, `1180591620717411303424`), where CPython raises `TypeError`, so an
-  `except TypeError` never runs. A string minus an integer too large for 64
-  bits does the same: `"ab" - 2 ** 64` gives `-18446744073709551616`, while
-  `"ab" - 5` raises `TypeError` as it should. Measured with v450 and with the
-  compiler built at `cafc739cbf` (`8d5d0f2653f0`) on all seven targets, and
-  with v441 on x86-64. Valid programs are not affected; a program that relies
-  on the error is. Measured on 2026-09-28 against CPython, with v450
-  (`c19cc2d531e4`) on x86-64 and under QEMU user mode on i386, arm32, aarch64,
-  riscv32 and Xtensa (both ABIs), and on x86-64 with v441 (`4ebfa2d047a2`) and
-  the compiler built at `52e61383a5` (`8d5d0f2653f0`), which behave the same.
-  **Workaround:** test for `None` (`if x is None:`) before the arithmetic.
-
-**Nil Python: a method reached from `exec` takes the type of its one compiled
-call, and a float passed to an integer parameter is silently truncated.** When
-every compiled call of a method passes the same kind of value to a parameter
-with no annotation, the compiler gives that parameter the type (`def mi(self,
-x)` called only as `n.mi(3)` makes `x` an integer). That is deliberate and
-makes such calls fast. A call from source compiled at run time, such as
-`exec("def __body__():\n    n.mi(2.7)\n", env, ns)`, cannot be seen at
-compile time, so its argument is converted to that type rather than passed as
-is. One of the three results is a wrong answer with no message: a float into
-an integer parameter is truncated (`n.mi(2.7)` gets `2`, CPython `2.7`). The
-other two are by design: a string into that parameter raises `TypeError`
-(CPython passes `'ab'`), and an integer into a float parameter arrives as `3.0`
-(CPython `3`), which loses nothing. A parameter whose compiled calls pass
-different kinds of value is not given a type, and behaves as in CPython.
-Measured on 2026-09-29 with v450 (`c19cc2d531e4`) and the compiler built at
-`6dcfbbb0e0` (`9ce84ba69527`) on x86-64, and with the latter under QEMU user
-mode on i386, arm32, aarch64 and riscv32, which print the same.
-**Workaround:** annotate a parameter that `exec` code will call as `x:
-object` (or `Any`). That keeps the compiler from giving it a type, so all
-three calls print what CPython prints (x86-64, `9ce84ba69527`). A scalar
-annotation such as `x: float` gives it a type by hand: it stops the
-truncation, but a string still raises `TypeError`.
-
-**Nil Python through `./pxx`: `import time` and `import string` find the C
-headers.** The `./pxx` wrapper that `install.sh` writes puts `lib/crtl/include`
-on the unit search path, and there Nil Python's `import time` and `import
-string` bind the C headers `time.h` and `string.h` instead of PXX's Python
-modules. `time.sleep`, `time.sleep_ms`, `time.ticks_ms` and
-`string.ascii_lowercase` then fail to compile with `no member sleep came of
-the qualifier time` (and the same for the others). `time.time()` still
-compiles, because C declares `time()`, and `import math` is not affected.
-The same programs compile and run when the compiler is called directly: a
-program that is only `import time` and `time.sleep(0.01)` builds that way but
-not through `./pxx`. Measured on 2026-09-29 on x86-64 with the pinned v450
-(`c19cc2d531e4`), through a checkout's `./pxx` (written by
-`tools/install.sh`, last changed on 2026-09-25) and directly. **Workaround:** call the compiler directly
-(`compiler/pxx-<arch>` in the release tarball, the pinned binary in a
-checkout) instead of `./pxx` for a Nil Python program that imports `time` or
-`string`.
-
-**Nil Python: `exec` publishes a def only when it is named `__body__`.**
-After `exec("def f():\n    return 42\n", {}, ns)`, `ns` is empty, and
-`ns["f"]` raises `KeyError: 'f'`. The message names your key, so it reads as
-a wrong lookup, while the cause is that `exec` did not store the def. Only a
-def named `__body__` lands in `ns`; `helper`, `f` and `__b__` do not. A
-variable assigned at the top of the executed source is stored:
-`exec("def helper(x):\n    return x + 1\nresult = helper(41)\n", {}, ns)`
-gives `ns["result"] == 42`. **Workaround:** name the def `__body__`, or
-assign the value you need to a variable in the executed source. Measured on
-2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
-`1763b6232b` (`70e57d59b777`), which behave the same.
-
-**Nil Python on i386, arm32 and riscv32: `exec` code calling a method with
-annotated parameters passes wrong values.** With `def greet(self, name: str,
-n: int, flag: bool)`, the call `p.greet('x', 3, True)` made from source run by
-`exec` prints `hi  12884901888 True` on i386 (an empty string, and 3 moved up
-32 bits) and `hi x 12884901888 False` on arm32 and riscv32, with no message;
-x86-64 and aarch64 print `hi x 3 True`, as CPython does. A parameter without
-an annotation is affected the same way once the compiler has given it a type
-from its compiled calls (see the row above on a method reached from `exec`):
-after `p.plain("y", 4, False)` in the program, the `exec` call prints `hi
-12884901888 True` on i386 and stops with SIGSEGV on arm32. Without any
-compiled call, or annotated as `object`, it gets the right values. Measured on
-2026-09-29 with v450 (`c19cc2d531e4`) and v451 (`d9b7226769cc`), which behave
-the same, under QEMU user mode. **Workaround:** on a 32-bit target, annotate
-the parameters of a method that `exec` code calls as `object` (`name: object,
-n: object, flag: object`); measured on i386, arm32 and riscv32 with v451.
-
-**Nil Python: the parameters of an `exec`'d `__body__` read `None`.** A
-`__body__` defined by `exec` and called from the program does not receive its
-arguments: every parameter reads `None`, with no message. After
-`exec("def __body__(s):\n    return s\n", {}, ns)`, `ns["__body__"]("ab")`
-returns `None` (CPython `'ab'`); with two parameters, `[a, b]` is
-`[None, None]` for `(1, "x")`; `n + 1` gives `1` for `41` (CPython `42`); and
-`int(s)` gives `0` for `"ab"` instead of raising `ValueError`. A def nested
-inside `__body__` and returned from it does receive its argument. Measured on
-2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and the compiler built at
-`1763b6232b` (`70e57d59b777`), which behave the same. **Workaround:** give
-`__body__` no parameters and return a nested def that takes them, or pass
-values in through a variable in the `exec` globals.
-
-**Nil Python: `raise` inside `exec`'d code stops the program, while a
-builtin's error there can be caught.** `raise ValueError('bad')` in source run
-by `exec` prints `pyeval: ValueError: bad` on standard output and exits with
-status 1; an `except ValueError` around the call never runs. That `raise` is
-not yet catchable there is by design for now: making it catchable is a later
-step, as the comment on the `raise` handler in `compiler/builtin/pyeval.pas`
-says. A `try` inside the executed source is not accepted either (`pyeval:
-unexpected token in expression: ":"`). An error that a builtin raises is an
-ordinary exception, and the caller's `except` catches it: `int('ab')` gives
-`ValueError` in a `__body__` and in a def nested in it, and `[1][5]` gives
-`IndexError` in a `__body__`. Measured on 2026-09-29 on x86-64 with v450 (`c19cc2d531e4`) and
-the compiler built at `1763b6232b` (`70e57d59b777`), which behave the same.
-**Workaround:** test the condition in the executed code with an `if` and
-return a value the caller checks (such as `-1`), instead of raising.
-
-**Nil Python on the ESP32-C3: `list.sort()` runs out of heap at about half
-the list length that can be built.** On a C3 board, in the `nilpy-c3` example
-project, a shuffled list of integers can be built up to 4,093 elements (4,125
-runs out of memory), but sorting it fits only up to 2,031 (2,062 runs out,
-2,078 with v450, whose insertion sort did not finish 2,031 elements within
-the 45-second run, but did not run out of memory either). A list of objects with `__lt__` sorts up to 2,037 (2,068
-runs out) with both compilers. The limit is the same with v450's insertion
-sort and with the merge sort that replaced it, so the sort's own index
-scratch space is not what sets it; sorting needs about as much free heap
-again as the list itself. The program fails with `pxx: out of memory
-(ESP-IDF heap exhausted)`. Measured on 2026-09-28 and 2026-09-29 by booting
-one size at a time, with v450 (`c19cc2d531e4`) and the compiler built at
-`aefc7ba4bd` (`1634f6483109`); the 4,093 is for the second only. The program,
-its recipe and the table are in `test/esp_board_list_sort_ceiling.npy`.
-**Workaround:** on a C3, keep a list you sort under about 2,000 elements.
-
-## Reporting a problem
-
-Open an issue at <https://github.com/yoctobyte/pxx/issues> with the smallest
-source file that shows the problem, the exact command you ran (including any
-`--target=`), what you expected and what you got, and the output of
-`./pxx --doctor` with the commit of your checkout (`git log -1 --format=%h`).
-A program that compiles and gives a wrong answer is the most useful report you
-can send.
+- **Over real Wi-Fi, two boards and two libraries have been measured**; the
+  rows above ran over QEMU's emulated Ethernet. On 2026-09-28, with the
+  compiler built from tree `cdd6fd3c1f` (sha256 `139494b2b863`; pin v447
+  contains that tree, v446 does not), a physical ESP32-S3 made 300
+  `urequests` fetches over a home Wi-Fi network. At every checkpoint its free
+  heap was between 12 bytes lower and 328 bytes higher than at the start, and
+  130 seconds after the last fetch it was 216 bytes higher. Both an ESP32-C3
+  and an ESP32-S3 ran 300 `umqtt.simple` sessions against a broker on that
+  network, 0 errors each. Each MQTT run was about 1.3 KB short while
+  connections were closing (the S3 briefly 4.7 KB at session 200, back to
+  1.3 KB by 300), and 130 seconds after the last session had about 1.9 KB
+  more free heap than at the start. The positive controls, which keep every
+  response or session on purpose, lost 1,438 bytes per fetch and 1,116 to
+  1,142 bytes per session, so the measurement would have seen a leak.
+  Longer runs the same day, with the compiler of tree `577e7acf0e`: 10,000
+  `urequests` fetches on the ESP32-C3 ended using 120 bytes more heap
+  than at the start, and were never more than 320 bytes away; 3,000
+  `umqtt.simple` sessions on the ESP32-S3 ended with 2,056 bytes more free. Both
+  runs had no errors and never rebooted. On
+  2026-09-27, one ESP32-C3 board with the v441 compiler, joined to a home
+  Wi-Fi network, fetched a page from a PC on that network 1,000 times. Free
+  heap stayed within 400 bytes of where it started, with no upward trend, and
+  ended 364 bytes higher. A second run of 300 fetches grew by 20 bytes, and after the
+  function holding the responses returned and 130 seconds passed, all of it
+  had come back. Its positive control kept 20 responses, which cost 1,434
+  bytes each.
+- **Long network runs on the ESP32-C3 stop under QEMU** after a few hundred to
+  a few thousand requests: the program stops making progress, although memory
+  and sockets are not exhausted. At the stall, the emulated network card holds
+  received frames and has an interrupt pending that is never delivered, so the
+  program waits forever for data that has already arrived. This happens below
+  the compiled program, in the emulator's network path, and has not been seen
+  on the ESP32-S3. On a physical C3 over real Wi-Fi it did not happen: about
+  1,700 requests over three runs on 2026-09-27, with no stall. Under QEMU it
+  comes much sooner over TLS: four of five HTTPS runs on the C3 stopped within
+  their first twenty requests, with a compiler from before the HTTPS leak fix
+  and one from after it alike. The C3 HTTPS figure in the table above is from
+  the board, over Wi-Fi.
