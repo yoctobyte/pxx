@@ -94,6 +94,7 @@ program reaches them with `import`. The ones below have entries of their own.
 
 | Module | Area |
 | --- | --- |
+| [`atexit`](./system-units.md#atexit-running-code-when-the-program-ends) | Functions to run when the program ends. |
 | [`configparser`](./more-units.md#configparser-ini-files) | INI settings files. |
 | [`pathlib`](./more-units.md#pathlib-paths-as-objects) | Paths as objects. |
 | [`urllib.parse`](./more-units.md#urllibparse-splitting-a-url) | Splitting and quoting URLs. |
@@ -111,6 +112,7 @@ an ESP backend path in an ESP32 object build.
 
 | Unit | Description |
 | --- | --- |
+| [System units](./system-units.md) | `signals` (Unix signal handlers), `syncobjs` (`TCriticalSection`), `dynlibs` (loading a `.so` at run time) and `bitset` (a bit array), with FPC's names. |
 | [ESP32 peripherals](./esp.md) | `espgpio`, `espuart`, `espadc`, `esppwm`, `espi2c`, `espspi`, `espnvs`, `esptimer`, `espsys` and `interrupts`: pins, serial, analog input, PWM, I2C, SPI, stored settings and timers on the ESP32, from Pascal and Nil Python. |
 | [MicroPython code on pxx](./micropython.md) | `machine` (`Pin`, `I2C`, `SPI`, `RTC`), `framebuf`, `micropython.const` and MicroPython's `time` names on the ESP32, so published MicroPython drivers compile unchanged; how to fetch and measure real drivers. |
 

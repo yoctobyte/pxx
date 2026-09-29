@@ -24,6 +24,7 @@ details, the measurements and the workarounds.
 - riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero: [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
 - Nil Python: arithmetic on `None`, or a string minus a large integer, gives a number instead of `TypeError`: [Nil Python](#nil-python)
 - Nil Python: `hex`, `oct` and `bin` of a `**` result past 64 bits: [Nil Python](#nil-python)
+- Nil Python: `atexit.unregister(f)` with a def named directly leaves it registered: [Nil Python](#nil-python)
 - Nil Python: a method called from `exec` code can get a truncated or wrong argument, and an `exec`'d `__body__` reads its parameters as `None`: [exec and eval](#exec-and-eval)
 
 **Stops at run time**
@@ -181,6 +182,16 @@ Found on 2026-09-29, and **open in v441 to v451**:
   behave the same. **Workaround:** `import math` and write `math.sqrt(x)`, or
   import the names you use, `from math import sqrt, pi`; with v451 both print
   what CPython prints.
+
+- **Nil Python: `atexit.unregister(f)` does nothing when `f` is a def named
+  directly.** After `atexit.register(never)` and `atexit.unregister(never)`,
+  `never` still runs when the program ends; CPython does not run it. Measured
+  on 2026-09-29 on x86-64 with v441 (`4ebfa2d047a2`), v450 (`c19cc2d531e4`)
+  and v451 (`d9b7226769cc`), which behave the same, and with the compiler
+  built at `bf32c6b618`. **Workaround:** pass the same variable to both calls
+  (`h = never`, `atexit.register(h)`, `atexit.unregister(h)`), or the value
+  `register` returned; with v451 both remove it. See
+  [System units](../library/system-units.md#atexit-running-code-when-the-program-ends).
 
 Found on 2026-09-28, and **open in v441 to v450** and after it:
 
