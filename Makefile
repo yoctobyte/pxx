@@ -4219,6 +4219,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_floatrepr26 | diff -u test/test_nilpy_float_repr.expected -
 	./$(COMPILER) test/test_nilpy_float_repr_near_the_denormals_is_fast.npy $(TESTTMP)/test_nilpy_reprdenorm26
 	timeout 120 $(TESTTMP)/test_nilpy_reprdenorm26 | diff -u test/test_nilpy_float_repr_near_the_denormals_is_fast.expected -
+	# repr of a power of two above the denormals is CPython's shortest, not a digit
+	# longer. bug-n-repr-of-some-powers-of-two-is-one-digit-longer-than-cpythons
+	./$(COMPILER) test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.npy $(TESTTMP)/reprpow2_26
+	$(TESTTMP)/reprpow2_26 | diff -u test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.expected -
 	./$(COMPILER) test/test_nilpy_user_class_shadows_builtin.npy $(TESTTMP)/test_nilpy_shadow26
 	$(TESTTMP)/test_nilpy_shadow26 | diff -u test/test_nilpy_user_class_shadows_builtin.expected -
 	# `C.attr` returned from a def: its return type was inferred as the class,
@@ -8488,6 +8492,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_the_sys_streams.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/sysstreams_rv32 2>&1 >/dev/null)" "$$(cat test/test_nilpy_the_sys_streams.err.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_float_repr_near_the_denormals_is_fast.npy $(TESTTMP)/reprdenorm_rv32
 	tools/expect_same.sh riscv32/test_nilpy_float_repr_near_the_denormals_is_fast "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/reprdenorm_rv32)" "$$(cat test/test_nilpy_float_repr_near_the_denormals_is_fast.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.npy $(TESTTMP)/reprpow2_rv32
+	tools/expect_same.sh riscv32/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/reprpow2_rv32)" "$$(cat test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.expected)"
 	./$(COMPILER) --target=riscv32 test/test_text_write_float_and_pchar.pas $(TESTTMP)/textfmt_rv32
 	tools/expect_same.sh riscv32/test_text_write_float_and_pchar.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/textfmt_rv32 2>/dev/null)" "$$(cat test/test_text_write_float_and_pchar.expected)"
 	tools/expect_same.sh riscv32/test_text_write_float_and_pchar.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/textfmt_rv32 2>&1 >/dev/null)" "$$(cat test/test_text_write_float_and_pchar.err.expected)"
@@ -33204,6 +33210,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_the_sys_streams.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_sysstreams_w 2>&1 >/dev/null)" "$$(cat test/test_nilpy_the_sys_streams.err.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_float_repr_near_the_denormals_is_fast.npy $(TESTTMP)/xt_reprdenorm_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_float_repr_near_the_denormals_is_fast "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_reprdenorm_w)" "$$(cat test/test_nilpy_float_repr_near_the_denormals_is_fast.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.npy $(TESTTMP)/xt_reprpow2_w
+	tools/expect_same.sh xtensa-windowed/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_reprpow2_w)" "$$(cat test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_stderr_separation.pas $(TESTTMP)/xt_stderrsep_c0
 	tools/expect_same.sh xtensa-call0/test_stderr_separation.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
 	tools/expect_same.sh xtensa-call0/test_stderr_separation.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"

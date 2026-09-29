@@ -19493,12 +19493,43 @@ end;
   av's mantissa even -- which costs three expansions for the whole loop, and
   only a candidate that passes is parsed.
 
+  At each length the correctly rounded candidate is tried, and at a power of two
+  above the denormals also the one on the OTHER side of av. Elsewhere the
+  round-trip interval is symmetric, so the farther one never reads back when
+  the nearer did not; there, the gap below is half the gap above, and CPython's
+  shortest can be the one rounded the other way: 7.120236347223045e-307
+  (2^-1016), where rounding alone gave 17 digits. Only there, because trying
+  it at every length cost 60% on a 9762-value run for no other value.
+
   `av` must be finite, positive and nonzero; the caller handles the rest.
   Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
 function PyFloatRepr(av: Double): AnsiString;
-var sig, tail, decExp, de0, loE, hiE, cLo, cHi: Integer;
-    ds, ds0, loS, hiS, cand: AnsiString; mant: Int64; exp2: Integer;
-    even: Boolean;
+var sig, decExp, de0, loE, hiE, altE: Integer;
+    ds, ds0, loS, hiS, alt, found: AnsiString; mant: Int64; exp2: Integer;
+    even, pow2: Boolean;
+
+  { True, with the candidate (digits, dexp) laid out in `found`, if it reads
+    back as av }
+  function TryCand(digits: AnsiString; dexp: Integer): Boolean;
+  var tail, cLo, cHi: Integer; cand: AnsiString;
+  begin
+    TryCand := False;
+    tail := Length(digits);
+    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
+    digits := Copy(digits, 1, tail);
+    cLo := PyExDecCmp(digits, dexp, loS, loE);
+    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
+    if not (((cLo > 0) or ((cLo = 0) and even)) and
+            ((cHi < 0) or ((cHi = 0) and even))) then Exit;
+    cand := PyFloatLayout(digits, dexp);
+    if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
+       PyExDecDoubleToBits(av) then
+    begin
+      found := cand;
+      TryCand := True;
+    end;
+  end;
+
 begin
   Result := '';
   PyExDecSplit(av, mant, exp2);
@@ -19506,7 +19537,8 @@ begin
   { the midpoint with the next double up; and with the next one down, which
     at a power of two above the denormals has half the spacing }
   PyExDecOfMant(2 * mant + 1, exp2 - 1, hiS, hiE);
-  if (mant = (Int64(1) shl 52)) and (exp2 > -1074) then
+  pow2 := (mant = (Int64(1) shl 52)) and (exp2 > -1074);
+  if pow2 then
     PyExDecOfMant(4 * mant - 1, exp2 - 2, loS, loE)
   else
     PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
@@ -19516,21 +19548,19 @@ begin
     ds := ds0;
     decExp := de0;
     PyExDecRound(ds, decExp, sig);
-    tail := Length(ds);
-    while (tail > 1) and (ds[tail] = '0') do tail := tail - 1;
-    ds := Copy(ds, 1, tail);
-    cLo := PyExDecCmp(ds, decExp, loS, loE);
-    cHi := PyExDecCmp(ds, decExp, hiS, hiE);
-    if ((cLo > 0) or ((cLo = 0) and even)) and
-       ((cHi < 0) or ((cHi = 0) and even)) then
+    if TryCand(ds, decExp) then begin Result := found; Exit; end;
+    if pow2 and (Length(ds0) > sig) then
     begin
-      cand := PyFloatLayout(ds, decExp);
-      if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
-         PyExDecDoubleToBits(av) then
+      { the other sig-digit neighbour of av: the truncation if rounding went
+        up, else the truncation rounded up (a trailing 9 forces the carry) }
+      alt := Copy(ds0, 1, sig);
+      altE := de0;
+      if PyExDecCmp(alt, altE, ds, decExp) = 0 then
       begin
-        Result := cand;
-        Exit;
+        alt := alt + '9';
+        PyExDecRound(alt, altE, sig);
       end;
+      if TryCand(alt, altE) then begin Result := found; Exit; end;
     end;
   end;
 end;
