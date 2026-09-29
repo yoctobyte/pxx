@@ -3723,6 +3723,11 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_byvalstr_owned 100 $(TESTTMP)/byvalstr_census
 	@if tools/assert_no_leak.sh nilpy_byvalstr_control 100 $(TESTTMP)/byvalstr_census keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_byvalstr control (keep) did not trip the bound -- the census cannot see these strings"; exit 1; fi
+	# Length/UpCase/Copy of a Variant work on the string it converts to (fpc)
+	./$(COMPILER) test/test_nilpy_length_of_a_variant_measures_its_string.npy $(TESTTMP)/lenvar_npy_x64
+	$(TESTTMP)/lenvar_npy_x64 | diff -u test/test_nilpy_length_of_a_variant_measures_its_string.expected -
+	./$(COMPILER) test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_x64
+	$(TESTTMP)/lenvar_pas_x64 | diff -u test/test_length_of_a_variant.expected -
 	@# The None ARM of a conditional expression must survive the def's inferred
 	@# RETURN TYPE. PyInferExprType had no arm for the None literal, so it
 	@# answered tyUnknown — the join's IDENTITY ELEMENT — and the other arm stood
@@ -8313,6 +8318,10 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh aarch64 $(TESTTMP)/nonenone_a64)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=aarch64 -Futest/nilpy_byvalstr test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.npy $(TESTTMP)/byvalstr_a64
 	tools/expect_same.sh aarch64/test_nilpy_a_pascal_unit_owns_its_by_value_strings "$$(tools/run_target.sh aarch64 $(TESTTMP)/byvalstr_a64)" "$$(cat test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.expected)"
+	./$(COMPILER) --target=aarch64 test/test_nilpy_length_of_a_variant_measures_its_string.npy $(TESTTMP)/lenvar_npy_a64
+	tools/expect_same.sh aarch64/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenvar_npy_a64)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
+	./$(COMPILER) --target=aarch64 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_a64
+	tools/expect_same.sh aarch64/test_length_of_a_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenvar_pas_a64)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_arm32
 	tools/expect_same.sh arm32/test_npy_machineword_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_machineword_arm32)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
 	# sys.maxsize is the TARGET's largest Py_ssize_t, so this row is the one
@@ -8553,6 +8562,10 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh riscv32 $(TESTTMP)/nonenone_rv32)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=riscv32 -Futest/nilpy_byvalstr test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.npy $(TESTTMP)/byvalstr_rv32
 	tools/expect_same.sh riscv32/test_nilpy_a_pascal_unit_owns_its_by_value_strings "$$(tools/run_target.sh riscv32 $(TESTTMP)/byvalstr_rv32)" "$$(cat test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_length_of_a_variant_measures_its_string.npy $(TESTTMP)/lenvar_npy_rv32
+	tools/expect_same.sh riscv32/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_npy_rv32)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
+	./$(COMPILER) --target=riscv32 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_rv32
+	tools/expect_same.sh riscv32/test_length_of_a_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_pas_rv32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_rv32
 	tools/assert_no_leak.sh riscv32/nilpy_sort_raises_releases 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32
 	@if tools/assert_no_leak.sh riscv32/nilpy_sort_raises_control 200 tools/run_target.sh riscv32 $(TESTTMP)/sortraise_rv32 keep >/dev/null 2>&1; then \
@@ -29944,6 +29957,10 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_a_module_top_level_behaves_as_a_main_program "$$(tools/run_target.sh i386 $(TESTTMP)/modscope_imp_i386)" "$$(cat test/test_nilpy_a_module_top_level_behaves_as_a_main_program.expected)"
 	./$(COMPILER) --target=i386 -Futest/nilpy_byvalstr test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.npy $(TESTTMP)/byvalstr_i386
 	tools/expect_same.sh i386/test_nilpy_a_pascal_unit_owns_its_by_value_strings "$$(tools/run_target.sh i386 $(TESTTMP)/byvalstr_i386)" "$$(cat test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_length_of_a_variant_measures_its_string.npy $(TESTTMP)/lenvar_npy_i386
+	tools/expect_same.sh i386/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_npy_i386)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
+	./$(COMPILER) --target=i386 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_i386
+	tools/expect_same.sh i386/test_length_of_a_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_pas_i386)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_i386
 	tools/assert_no_leak.sh i386/nilpy_sort_raises_releases 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386
 	@if tools/assert_no_leak.sh i386/nilpy_sort_raises_control 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386 keep >/dev/null 2>&1; then \
@@ -33271,6 +33288,10 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_nonenone_w)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -Futest/nilpy_byvalstr test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.npy $(TESTTMP)/xt_byvalstr_w
 	tools/expect_same.sh xtensa-windowed/test_nilpy_a_pascal_unit_owns_its_by_value_strings "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_byvalstr_w)" "$$(cat test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_nilpy_length_of_a_variant_measures_its_string.npy $(TESTTMP)/lenvar_npy_xtw
+	tools/expect_same.sh xtensa-windowed/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh xtensa $(TESTTMP)/lenvar_npy_xtw)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_xtw
+	tools/expect_same.sh xtensa-windowed/test_length_of_a_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenvar_pas_xtw)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_xtw
 	tools/assert_no_leak.sh xtensa/nilpy_sort_raises_releases 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw
 	@if tools/assert_no_leak.sh xtensa/nilpy_sort_raises_control 200 tools/run_target.sh xtensa $(TESTTMP)/sortraise_xtw keep >/dev/null 2>&1; then \
@@ -35354,6 +35375,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_none_is_none_on_every_backend "$$(tools/run_target.sh arm32 $(TESTTMP)/nonenone_a32)" "$$(cat test/test_nilpy_none_is_none_on_every_backend.expected)"
 	./$(COMPILER) --target=arm32 -Futest/nilpy_byvalstr test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.npy $(TESTTMP)/byvalstr_a32
 	tools/expect_same.sh arm32/test_nilpy_a_pascal_unit_owns_its_by_value_strings "$$(tools/run_target.sh arm32 $(TESTTMP)/byvalstr_a32)" "$$(cat test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_length_of_a_variant_measures_its_string.npy $(TESTTMP)/lenvar_npy_a32
+	tools/expect_same.sh arm32/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_npy_a32)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
+	./$(COMPILER) --target=arm32 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_a32
+	tools/expect_same.sh arm32/test_length_of_a_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_pas_a32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_a32
 	tools/assert_no_leak.sh arm32/nilpy_sort_raises_releases 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32
 	@if tools/assert_no_leak.sh arm32/nilpy_sort_raises_control 200 tools/run_target.sh arm32 $(TESTTMP)/sortraise_a32 keep >/dev/null 2>&1; then \

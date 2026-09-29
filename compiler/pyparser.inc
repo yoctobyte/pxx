@@ -62048,6 +62048,20 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr; node := CurASTNode;
         Expect(tkRParen, ')');
+        { UpCase(s) on a STRING (or a Variant holding one) is the string form, as
+          in ParseFactorCore. This fork of it never got that arm, so a NilPy
+          `UpCase(s)` ran the Char helper on the string and printed one garbage
+          byte. bug-a-string-intrinsics-pick-the-wrong-arm-for-a-variant }
+        if IntToTypeKind(ASTTk[node]) in [tyString, tyAnsiString, tyFixedString, tyVariant] then
+        begin
+          helperPi := FindProc('__pxxUpCaseStr');
+          if helperPi < 0 then Error('UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)');
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+          CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(Procs[helperPi].RetType);
+          LastExprTk := Procs[helperPi].RetType;
+          Exit;
+        end;
         helperPi := FindProc('__pxxUpCase');
         if helperPi < 0 then Error('UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
@@ -62436,7 +62450,10 @@ begin
           explicit-uses overload path. }
         ci := FindProc('__pxxStrCopy');
         cpyPi := ci;
-        if (ci >= 0) and (IntToTypeKind(ASTTk[exprNode]) in [tyString, tyAnsiString, tyFixedString]) then
+        { ...and a VARIANT, which converts to the string it holds (fpc's rule), not
+          to a dynamic array: `Copy(xs[0], 2, 2)` was refused as a dyn-array Copy.
+          bug-a-string-intrinsics-pick-the-wrong-arm-for-a-variant }
+        if (ci >= 0) and (IntToTypeKind(ASTTk[exprNode]) in [tyString, tyAnsiString, tyFixedString, tyVariant]) then
         begin
           if addrNode = -1 then
           begin

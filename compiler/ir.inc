@@ -1242,6 +1242,7 @@ end;
 function IRLowerAST(node: Integer): Integer; forward;
 procedure IREmitCaughtExcFree(ownTmp, clsTmp: Integer; onUnwind: Boolean); forward;   { declared further down; IRLowerCleanupToDepth needs it to free a caught exception on an early exit OUT of its handler }
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
+function IRLowerVariantAsStr(argAST: Integer): Integer; forward;
 function IRLowerBoxOperand(argAST: Integer): Integer; forward;
 function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRNodePyBytesRec(n: Integer): Integer; forward;   { declared further down; IRLowerCallArg needs it to spot a bytes/bytearray argument }
@@ -9548,6 +9549,28 @@ begin
   IRLowerVariantAsScalar := vuCall;
 end;
 
+{ A tyVariant expression as an owned AnsiString VALUE, in the frontend's own
+  spelling: NilPy's pystr_of (through IRLowerVariantAsScalar) or Pascal's
+  VariantToStrPas -- FPC converts a Variant to a string wherever a string
+  intrinsic meets one. Parked in an owning temp, as the scalar unbox does. }
+function IRLowerVariantAsStr(argAST: Integer): Integer;
+var vsProc, vsArg, vsCall, vsTmp: Integer;
+begin
+  if PyProgramMode then
+  begin
+    IRLowerVariantAsStr := IRLowerVariantAsScalar(argAST, tyAnsiString);
+    Exit;
+  end;
+  vsProc := FindProc('VariantToStrPas');
+  if vsProc < 0 then Error('variant to string: VariantToStrPas builtin not loaded');
+  vsArg := IRAppend(IR_ARG, IRVariantAddr(argAST), -1, -1, 0, Ord(tyVariant));
+  vsCall := IRAppendCall(vsProc, vsArg, -1, Ord(tyAnsiString));
+  vsTmp := AllocVar('', tyAnsiString);
+  SymIsHiddenArgTemp[vsTmp] := True;
+  IRAppend(IR_STORE_SYM, vsTmp, vsCall, -1, 0, Ord(tyAnsiString));
+  IRLowerVariantAsStr := IRAppend(IR_LOAD_SYM, vsTmp, -1, -1, 0, Ord(tyAnsiString));
+end;
+
 { Whole STATIC-array assignment whose elements are MANAGED (AnsiString, or a
   record with managed fields): `b := a`, `rec.arr := other.arr`.
 
@@ -17455,6 +17478,18 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           see this. The deref is borrowed (ASTKind AN_DEREF is already excluded
           from the managed-temp owning path above), so no double-free. See
           bug-managed-length-via-pointer-deref. }
+        { `Length(v)` with v a VARIANT: measure the string it converts to, as
+          FPC does and as a typed string would be. Every backend's Length has
+          arms for a string, a dynamic array and a frozen inline string, and
+          none for a Variant, so the force-addressed slot fell into the frozen
+          arm and read the TAG word: 6 (VT str) on x86-64, garbage on i386,
+          silently -- `Length(xs[0])`, and every `line: str` param of a def in
+          an imported module, whose params arrive as Variants.
+          bug-a-length-of-a-variant-reads-its-tag }
+        if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyVariant) then
+          value := IRLowerVariantAsStr(ASTLeft[item])
+        else
         if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
            (ASTKind[ASTLeft[item]] = AN_DEREF) and
            (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then

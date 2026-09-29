@@ -1,0 +1,26 @@
+# Pascal's string intrinsics on a VARIANT work on the string the variant
+# converts to -- FPC's rule -- and give what a typed str gives, so each row
+# prints a pair that must agree. Length: Every backend's Length had arms for a string, a dynamic
+# array and a frozen inline string and none for a Variant, which fell into the
+# frozen arm and read the TAG word: 6 (VT str) on x86-64, garbage on i386.
+w = ["xyz", 1, "héllo"]
+s = "xyz"
+t = "héllo"
+print(Length(w[0]), Length(s))
+print(Length(w[2]), Length(t))
+
+
+def measure(v):
+    n = Length(v)
+    return n
+
+
+print(measure(w[0]), measure(w[2]))
+
+# UpCase and Copy took the wrong ARM: NilPy's fork of the intrinsic parser
+# had no string arm for UpCase at all (one garbage byte even for a typed str),
+# and Copy refused a Variant as a dynamic-array Copy.
+u = " aBcd "
+w2 = [u, 2]
+print("[" + UpCase(w2[0]) + "]", "[" + UpCase(u) + "]")
+print("[" + Copy(w2[0], 2, 2) + "]", "[" + Copy(u, 2, 2) + "]")

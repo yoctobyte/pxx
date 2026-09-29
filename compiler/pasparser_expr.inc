@@ -6906,7 +6906,7 @@ begin
         Expect(tkRParen, ')');
         { UpCase(s) on a STRING is System's too (FPC 3.2.2 astrings.inc): ASCII
           a..z only, a new string. Picked by the argument's type. }
-        if IntToTypeKind(ASTTk[node]) in [tyString, tyAnsiString, tyFixedString] then
+        if IntToTypeKind(ASTTk[node]) in [tyString, tyAnsiString, tyFixedString, tyVariant] then
         begin
           helperPi := FindProc('__pxxUpCaseStr');
           if helperPi < 0 then Error('UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)');
@@ -7253,7 +7253,10 @@ begin
           explicit-uses overload path. }
         ci := FindProc('__pxxStrCopy');
         cpyPi := ci;
-        if (ci >= 0) and (IntToTypeKind(ASTTk[exprNode]) in [tyString, tyAnsiString, tyFixedString]) then
+        { ...and a VARIANT, which converts to the string it holds (fpc's rule), not
+          to a dynamic array: `Copy(xs[0], 2, 2)` was refused as a dyn-array Copy.
+          bug-a-string-intrinsics-pick-the-wrong-arm-for-a-variant }
+        if (ci >= 0) and (IntToTypeKind(ASTTk[exprNode]) in [tyString, tyAnsiString, tyFixedString, tyVariant]) then
         begin
           if addrNode = -1 then
           begin
