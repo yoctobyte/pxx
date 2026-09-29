@@ -1181,3 +1181,5 @@
 2026-09-29T05:25:35Z	borg	d01a436c1ce904c5f6fe6f8c7efa2bb4bf24ff86	would NOT pin d01a436c1ce9 — 20 red(s) the current pin does not have, 3 inherited from the current pin: test-core#src:test/test_a_bracket_argument_reaches_the_same_door_at_every_call_path.pas, test-core#src:test/test_nilpy_html_tempfile.npy, test-core#src:test/test_open_array_of_variant.pas, test-emit-obj#src:test/c_obj_data_import.c, test-nilpy#src:test/test_nilpy_html_tempfile.npy
 2026-09-29T06:08:13Z	borg	216d4bd7ca7f0c80977e4369297fcda90c912d75	would NOT pin 216d4bd7ca7f — 2 red(s) the current pin does not have, 3 inherited from the current pin: test-core#src:test/test_nilpy_html_tempfile.npy, test-nilpy#src:test/test_nilpy_html_tempfile.npy
 2026-09-29T06:40:24Z	borg	5d6131afff983ce6e5151e056c0d99aef0d43ff4	would-pin PENDING 5d6131afff98 — qualifies, streak 1/2
+2026-09-29T07:20:52Z	borg	499b4144fbdc71f9caa83693ce199670a796ab63	WOULD PIN 499b4144fbdc — 3 red(s), none new, 3 inherited from the current pin, self-host clean, streak 2/2
+2026-09-29T07:20:52Z	borg	499b4144fbdc71f9caa83693ce199670a796ab63	AUTO-PIN DECLINED — HEAD is d7befe84f4dd, not the tested 499b4144fbdc
