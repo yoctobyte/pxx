@@ -1139,7 +1139,8 @@ begin
   ev.widget := TkCmdArg(argc, argv, 9);
   PPyVarRec(@evv)^.VType := 7;              { VT_OBJECT }
   PPyVarRec(@evv)^.Payload := Int64(NativeInt(Pointer(ev)));
-  PXXObjRetain(Pointer(ev));
+  { evv owns Create's reference and its finalization releases it; a retain
+    here leaked the Event and its strings on every event. }
   TkiCallValue(gTkCb[idx], evv, True);
   TkiReleaseCb(idx);
 end;
@@ -1438,8 +1439,11 @@ begin
         w.kind := 'widget';
         PPyVarRec(@v)^.VType := 7;
         PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(w)));
-        PXXObjRetain(Pointer(w));
         Result.append(v);
+        { the list took its own reference: hand Create's back and empty v, so
+          the next child's pokes do not overwrite a reference nobody drops }
+        PPyVarRec(@v)^.VType := 0;
+        PXXObjRelease(Pointer(w));
       end;
       cur := '';
     end

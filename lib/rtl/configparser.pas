@@ -254,8 +254,10 @@ begin
         pair.append(CpStrVar(sects[i].vals[j]));
         PPyVarRec(@v)^.VType := 7;
         PPyVarRec(@v)^.Payload := Int64(NativeInt(Pointer(pair)));
-        PXXObjRetain(Pointer(pair));
         Result.append(v);
+        { the list took its own reference: hand Create's back and empty v }
+        PPyVarRec(@v)^.VType := 0;
+        PXXObjRelease(Pointer(pair));
       end;
 end;
 

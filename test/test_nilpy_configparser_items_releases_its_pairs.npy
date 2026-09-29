@@ -1,0 +1,21 @@
+# configparser's items(section) hands back a list of (key, value) pairs, and
+# each pair is released with the list. The pair was boxed with an extra retain
+# on top of the one the list takes, so every call leaked each pair and its two
+# strings (pin v451: live grew by 6 per call of a 3-key section).
+# `keep` holds every result, the positive control: it must trip the bound.
+import configparser
+import sys
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "drop"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 2000
+cp = configparser.ConfigParser()
+cp.read_string("[a]\nx = 1\ny = 2\nz = 3\n")
+kept = []
+total = 0
+for i in range(n):
+    its = cp.items("a")
+    total += len(its)
+    if mode == "keep":
+        kept.append(its)
+k, v = cp.items("a")[2]
+print(total, k, v)

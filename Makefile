@@ -589,6 +589,14 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_int_str_fresh_released 50 $(TESTTMP)/test_nilpy_intstrfresh26 fresh 1000
 	@if tools/assert_no_leak.sh nilpy_int_str_fresh_control 50 $(TESTTMP)/test_nilpy_intstrfresh26 keep 1000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_int_str_fresh control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# configparser's items() releases its (key, value) pairs with the list (the
+	# pairs were boxed with an extra retain: pin v451 leaves ~11,700 live here).
+	# `keep` is the positive control. The value line is CPython's.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_configparser_items_releases_its_pairs.npy $(TESTTMP)/test_nilpy_cpitems26
+	tools/expect_same.sh nilpy_configparser_items_value "$$($(TESTTMP)/test_nilpy_cpitems26 2>/dev/null)" "6000 z 3"
+	tools/assert_no_leak.sh nilpy_configparser_items_released 100 $(TESTTMP)/test_nilpy_cpitems26
+	@if tools/assert_no_leak.sh nilpy_configparser_items_control 100 $(TESTTMP)/test_nilpy_cpitems26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_configparser_items control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	# list.clear() and dict.clear() release the elements they drop (both only
 	# zeroed the length, so the elements were orphaned once the container went
 	# away: pin v441 leaves ~75,000 live here). `keep` is the positive control.
@@ -1055,6 +1063,16 @@ test-nilpy: $(COMPILER)
 	  done; \
 	  echo "  tk: facade, field-class identity and callbacks ran under Xvfb"; \
 	else echo "  tk: no xvfb-run, skipping the facade RUN (compiled only)"; fi
+	# An event callback's Event and the widgets winfo_children() returns are
+	# released (both were boxed with an extra retain: pin v451 leaves ~2,400
+	# live here). `keep` is the positive control and must trip the bound.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS examples/tk/event_and_children_are_released.npy $(TESTTMP)/test_nilpy_tkevrel26
+	@if command -v xvfb-run >/dev/null 2>&1; then \
+	  tools/expect_same.sh nilpy_tk_event_children_value "$$(timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkevrel26 2>/dev/null)" "True 900 2" || exit 1; \
+	  tools/assert_no_leak.sh nilpy_tk_event_children_released 100 timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkevrel26 || exit 1; \
+	  if tools/assert_no_leak.sh nilpy_tk_event_children_control 100 timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkevrel26 keep >/dev/null 2>&1; then \
+	    echo "FAIL: nilpy_tk_event_children control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi; \
+	else echo "  tk: no xvfb-run, skipping the event/children leak RUN (compiled only)"; fi
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy $(TESTTMP)/test_nilpy_kwname26
 	tools/expect_same.sh test_nilpy_kwname26.1 "$$($(TESTTMP)/test_nilpy_kwname26)" "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	# a unit-qualified class construction (mod.Class(args))
