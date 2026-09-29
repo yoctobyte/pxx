@@ -125,7 +125,11 @@ targets, because the scaling is itself arithmetic on it.
   includes `ucomplex`'s `complex` and `vecmath`'s vectors, whose units
   declare no unary minus. Measured on 2026-09-29 on x86-64 with v441
   (`4ebfa2d047a2`), v451 (`d9b7226769cc`) and the compiler built at
-  `9bf9b1c173` (`722c38c6faeb`), which behave the same.
+  `9bf9b1c173` (`722c38c6faeb`), which behave the same. Wrong in v441 to
+  v451. Fixed after v451 (`f499d25ded`, in no pin yet): the compiler built at
+  `f499d25ded` (`81c16b5e3461`) refuses `-r` with FPC's `Operator is not
+  overloaded: - "TR"`, and a `vecmath` vector the same way; `ucomplex` now
+  declares a unary minus, so `-z` gives the same answer as `cneg(z)`.
   **Workaround:** `cneg(z)` for a complex number, `v * -1.0` for a vector;
   both give the right answer with v451. See
   [Complex numbers, vectors and RTTI](../library/math-and-rtti.md).
@@ -300,7 +304,9 @@ mode on i386, arm32, aarch64 and riscv32, which print the same.
 object` (or `Any`). That keeps the compiler from giving it a type, so all
 three calls print what CPython prints (x86-64, `9ce84ba69527`). A scalar
 annotation such as `x: float` gives it a type by hand: it stops the
-truncation, but a string still raises `TypeError`.
+truncation, but a string still raises `TypeError`. Re-measured on 2026-09-29
+with the compiler built at `f499d25ded` (`81c16b5e3461`) on x86-64 and aarch64:
+the same as v451, and the `object` annotation still works.
 
 **Nil Python: `exec` publishes a def only when it is named `__body__`.**
 After `exec("def f():\n    return 42\n", {}, ns)`, `ns` is empty, and
@@ -326,9 +332,17 @@ after `p.plain("y", 4, False)` in the program, the `exec` call prints `hi
 12884901888 True` on i386 and stops with SIGSEGV on arm32. Without any
 compiled call, or annotated as `object`, it gets the right values. Measured on
 2026-09-29 with v450 (`c19cc2d531e4`) and v451 (`d9b7226769cc`), which behave
-the same, under QEMU user mode. **Workaround:** on a 32-bit target, annotate
-the parameters of a method that `exec` code calls as `object` (`name: object,
-n: object, flag: object`); measured on i386, arm32 and riscv32 with v451.
+the same, under QEMU user mode. Wrong in v441 to v451. Fixed after v451
+(`191239f538`, in no pin yet): with the compiler built at `f499d25ded`
+(`81c16b5e3461`), on i386, arm32 and riscv32, such a call raises a
+`TypeError` that the caller can catch (`reflected call to greet is refused:
+parameter 1 ... is not 64-bit, so the arguments would be misaligned ...`)
+instead of passing wrong values, for the annotated method and for the
+unannotated one alike; x86-64 and aarch64 still print `hi x 3 True`.
+**Workaround:** on a 32-bit target, annotate the parameters of a method that
+`exec` code calls as `object` (`name: object, n: object, flag: object`);
+measured on i386, arm32 and riscv32 with v451, and with the compiler built at
+`f499d25ded`, where it gives the right values too.
 
 **Nil Python: the parameters of an `exec`'d `__body__` read `None`.** A
 `__body__` defined by `exec` and called from the program does not receive its
