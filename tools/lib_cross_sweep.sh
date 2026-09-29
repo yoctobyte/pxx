@@ -30,7 +30,7 @@
 #
 # Usage: tools/lib_cross_sweep.sh   (no rebuild; uses the pinned stable)
 set -u
-cd /home/rene/frank2
+cd "$(dirname "$0")/.." || exit 1
 PX="${PXX_STABLE:-./stable_linux_amd64/default/pinned}"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT

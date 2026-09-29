@@ -18,7 +18,7 @@ has a managed payload and only it can double-free or leak.
 import os, subprocess, sys, shutil
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "psweep"
-PXX = "/home/rene/frankonpiler/compiler/pascal26"
+PXX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "compiler", "pascal26")
 TARGET = sys.argv[2] if len(sys.argv) > 2 else ""
 
 VALUES = [0, 1, -1, 7, 255, -255,
