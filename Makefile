@@ -1074,9 +1074,13 @@ test-nilpy: $(COMPILER)
 	# An event callback's Event and the widgets winfo_children() returns are
 	# released (both were boxed with an extra retain: pin v451 leaves ~2,400
 	# live here). `keep` is the positive control and must trip the bound.
+	# The VALUE comes from a plain build: the census build prints its reports on
+	# stderr, and under xvfb-run in the tier environment they reached the
+	# captured output (borg full at fc6f765, live=23..31 lines in the value).
+	./$(COMPILER) examples/tk/event_and_children_are_released.npy $(TESTTMP)/test_nilpy_tkevrel_v26
 	./$(COMPILER) -dPXX_ALLOC_CENSUS examples/tk/event_and_children_are_released.npy $(TESTTMP)/test_nilpy_tkevrel26
 	@if command -v xvfb-run >/dev/null 2>&1; then \
-	  tools/expect_same.sh nilpy_tk_event_children_value "$$(timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkevrel26 2>/dev/null)" "True 900 2" || exit 1; \
+	  tools/expect_same.sh nilpy_tk_event_children_value "$$(timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkevrel_v26 2>/dev/null)" "True 900 2" || exit 1; \
 	  tools/assert_no_leak.sh nilpy_tk_event_children_released 100 timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkevrel26 || exit 1; \
 	  if tools/assert_no_leak.sh nilpy_tk_event_children_control 100 timeout 120 env GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_nilpy_tkevrel26 keep >/dev/null 2>&1; then \
 	    echo "FAIL: nilpy_tk_event_children control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi; \

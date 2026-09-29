@@ -6494,3 +6494,4 @@ item as well, while a per-pattern thunk table would not, because it only
 enumerates further. That is an argument for the generic invoker that neither item
 makes on its own, and it belongs with the (a)/(b) analysis rather than in a
 separate ticket.
+2026-09-29 | frankS | Makefile (test-nilpy: the tk event/children leak row) | NEW-RED FIX (borg full at fc6f765): the row's VALUE check ran the -dPXX_ALLOC_CENSUS binary, whose census reports go to stderr, and in borg's environment they reached the captured output (live=23..31 lines). Not reproduced on plexus, where /usr/bin/xvfb-run runs the command without 2>&1; an xvfb-run that merges stderr gives exactly borg's output. The value now comes from a plain build, and the two assert_no_leak rows keep the census build, so the leak check is unchanged. testmgr --job on the row: GREEN.
