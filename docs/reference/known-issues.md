@@ -23,6 +23,7 @@ details, the measurements and the workarounds.
 - C `long double` is 8 bytes, not GCC's 16: [row](#c-long-double-is-8-bytes)
 - riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero: [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
 - Nil Python: arithmetic on `None`, or a string minus a large integer, gives a number instead of `TypeError`: [Nil Python](#nil-python)
+- Nil Python: `hex`, `oct` and `bin` of a `**` result past 64 bits: [Nil Python](#nil-python)
 - Nil Python: a method called from `exec` code can get a truncated or wrong argument, and an `exec`'d `__body__` reads its parameters as `None`: [exec and eval](#exec-and-eval)
 
 **Stops at run time**
@@ -35,7 +36,7 @@ details, the measurements and the workarounds.
 **Refused, or not what you expect**
 
 - Four refusals with a message (C `__thread` on riscv32, `setvbuf` buffering, `--shared` off x86-64, a Nil Python name holding a Pascal array): [Refused, with a message](#refused-with-a-message)
-- Nil Python through `./pxx`: `import time` and `import string` find the C headers: [Nil Python](#nil-python)
+- Nil Python through `./pxx`: `import time`, `import string` and `import utime` find the C headers: [Nil Python](#nil-python)
 - Nil Python: `exec` stores a def only when it is named `__body__`: [exec and eval](#exec-and-eval)
 - `-O3` is experimental: [Optimisation levels](#optimisation-levels)
 
@@ -107,8 +108,12 @@ targets, because the scaling is itself arithmetic on it.
   EDivByZero`, as FPC 3.2.2 does, and without the `try` it stops with
   `Runtime error 200 (division by zero)`. Measured on 2026-09-29 under
   wasmtime 48.0.1 with v450 (`c19cc2d531e4`) and the compiler built at
-  `dadc02de44` (`d9b7226769cc`), which behave the same. **Workaround:** on
-  wasm32, test the divisor for zero before dividing.
+  `dadc02de44` (`d9b7226769cc`), which behave the same. Wrong in v441 to
+  v451. Fixed after v451 (`3a406ba550`, in no pin yet): the compiler built at
+  `ff27fe7269` (`18dcf7f85d20`) prints `caught: Division by zero` for a
+  `try`/`except on E: EDivByZero` around `7 div ParamCount` under wasmtime,
+  where v451 stops the module. **Workaround:** on wasm32, test the divisor
+  for zero before dividing.
 
 ### ESP: bare-metal images do not run on a real chip
 
@@ -181,8 +186,21 @@ Found on 2026-09-28, and **open in v441 to v450** and after it:
   x86-64, which behave the same.
   **Workaround:** test for `None` (`if x is None:`) before the arithmetic.
 
-**Nil Python through `./pxx`: `import time` and `import string` find the C
-headers.** The `./pxx` wrapper that `install.sh` writes puts `lib/crtl/include`
+- **Nil Python: `hex`, `oct` and `bin` of a `**` result are wrong past 64
+  bits.** `hex(2 ** 70)` prints `0x0` and `hex(3 ** 50)` prints
+  `0x53f0db2fd09de3c9`, its low 64 bits, where CPython prints
+  `0x400000000000000000` and `0x980553f0db2fd09de3c9`; `hex(-2 ** 63)` prints
+  `-0x` for CPython's `-0x8000000000000000`. Measured on 2026-09-29 on x86-64
+  with v441 (`4ebfa2d047a2`), v450 (`c19cc2d531e4`) and v451
+  (`d9b7226769cc`), which behave the same. Wrong in v441 to v451. Fixed after
+  v451 (`e375fbfd68`, in no pin yet): the compiler built at `ff27fe7269`
+  (`18dcf7f85d20`) prints CPython's three lines. **Workaround:** convert
+  through a string first, as in `hex(int(str(2 ** 70)))`: with v451 that
+  gives CPython's output for `hex`, `oct` and `bin` in the cases above. Typing the
+  variable `int` does not help, and `format(n, "x")` raises `ValueError`.
+
+**Nil Python through `./pxx`: `import time`, `import string` and `import
+utime` find the C headers.** The `./pxx` wrapper that `install.sh` writes puts `lib/crtl/include`
 on the unit search path, and there Nil Python's `import time` and `import
 string` bind the C headers `time.h` and `string.h` instead of PXX's Python
 modules. `time.sleep`, `time.sleep_ms`, `time.ticks_ms` and
@@ -191,12 +209,18 @@ the qualifier time` (and the same for the others). `time.time()` still
 compiles, because C declares `time()`, and `import math` is not affected.
 The same programs compile and run when the compiler is called directly: a
 program that is only `import time` and `time.sleep(0.01)` builds that way but
-not through `./pxx`. Measured on 2026-09-29 on x86-64 with the pinned v450
+not through `./pxx`. `import utime` fails differently: `print(utime.localtime(31536000))`
+stops at compile time with `this build would die at exec: localtime is
+imported from libutime.so`, and prints `(1971, 1, 1, 0, 0, 0, 4, 1)` when the
+compiler is called directly (v451, 2026-09-29). Measured on 2026-09-29 on x86-64 with the pinned v450
 (`c19cc2d531e4`), through a checkout's `./pxx` (written by
 `tools/install.sh`, last changed on 2026-09-25) and directly. **Workaround:** call the compiler directly
 (`compiler/pxx-<arch>` in the release tarball, the pinned binary in a
-checkout) instead of `./pxx` for a Nil Python program that imports `time` or
-`string`.
+checkout) instead of `./pxx` for a Nil Python program that imports `time`,
+`string` or `utime`. Wrong in v441 to v451. Fixed after v451 (`ff6115d2d1`,
+in no pin yet): through a wrapper that runs the compiler built at
+`ff27fe7269` (`18dcf7f85d20`), `time.sleep` compiles, `string.digits` prints
+`0123456789` and the `utime` line prints the tuple above.
 
 **Nil Python on the ESP32-C3: `list.sort()` runs out of heap at about half
 the list length that can be built.** On a C3 board, in the `nilpy-c3` example
