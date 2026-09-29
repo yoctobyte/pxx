@@ -20,6 +20,7 @@ details, the measurements and the workarounds.
 
 **Silently wrong: compiles, and gives a wrong answer with no message**
 
+- Pascal: `SetLength` past a `ShortString` or `string[N]`'s capacity, then filling it, writes over neighbouring variables and can crash: [row](#pascal-setlength-past-a-short-strings-capacity-overruns-it)
 - C `long double` is 8 bytes, not GCC's 16: [row](#c-long-double-is-8-bytes)
 - riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero: [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
 - Nil Python: arithmetic on `None`, or a string minus a large integer, gives a number instead of `TypeError`: [Nil Python](#nil-python)
@@ -62,7 +63,51 @@ details, the measurements and the workarounds.
 
 ## Silently wrong
 
-Four more rows that give a wrong answer with no message are Nil Python rows, under [Nil Python](#nil-python): arithmetic on `None`, and three shapes of `exec`.
+One Pascal row comes first. Four more rows that give a wrong answer with no message are Nil Python rows, under [Nil Python](#nil-python): arithmetic on `None`, and three shapes of `exec`.
+
+### Pascal: SetLength past a short string's capacity overruns it
+
+A `ShortString` holds at most 255 characters and a `string[N]` at most N.
+`SetLength` with a larger count, held in a variable, does not stop at that
+capacity, so the loop that usually follows writes past the end of the
+variable, over whatever the program keeps next to it, and can crash:
+
+```pascal
+program overrun;
+var
+  t: string[10];
+  guard: Integer;
+  n, i: Integer;
+begin
+  guard := 777;
+  n := 50;
+  SetLength(t, n);                          { Length(t) is now 50, not 10 }
+  for i := 1 to Length(t) do t[i] := 'x';   { writes 40 bytes past t }
+  writeln('var ', Length(t), ' ', guard);
+end.
+```
+
+Measured on 2026-09-29 on x86-64 with v441 (`4ebfa2d047a2`) and v451
+(`d9b7226769cc`), which behave the same:
+
+- A `string[10]` set to 50 reads back 50. Filling it with `FillChar`
+  changed a neighbouring `Integer` from 777 to 2021161080; the program
+  above, built from this page, crashed with a segmentation fault (exit 139)
+  and printed nothing.
+- A `ShortString` set to 1000 reads back 232, the count's low byte. FPC
+  gives 255.
+
+FPC 3.2.2 also lets a `string[10]` grow to 50 and overwrite its neighbour
+(the `Integer` read 30840 there), so for `string[N]` this is FPC's behaviour
+too. It is listed because the result is memory corruption.
+
+**Workaround:** check the count against the string's capacity first:
+`if n > High(t) then n := High(t);`. `High` of a `string[10]` is 10, and of
+a `ShortString` 255, with v451 as with FPC.
+
+A fix is in progress after v451. The first attempt (`5ebf185c24`) clamps
+only in some programs: on the compiler built from it (`553677b94940`), the
+example above still crashes.
 
 ### C: `long double` is 8 bytes
 
