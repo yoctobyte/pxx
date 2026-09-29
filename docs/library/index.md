@@ -83,8 +83,9 @@ refused.
 | Unit | Area |
 | --- | --- |
 | [`ansiterm`, `ansirender`, `screen`, `lineedit`, `menu`](./terminal-ui.md) | Terminal UI helpers. |
-| `forms`, `controls`, `stdctrls`, `extctrls`, `dialogs`, `menus` | PCL component-library units. |
-| `gtk3`, `gtk3widgets`, `glarea`, `graphics` | GTK/OpenGL-backed GUI pieces used by demos and the Eliah IDE. |
+| [`forms`, `controls`, `stdctrls`, `extctrls`, `comctrls`, `dialogs`, `menus`](./pcl.md) | PCL: GUI programs in Pascal, Lazarus-style forms and controls over GTK 3. |
+| [`graphics`, `glarea`](./pcl.md#what-works), `gtk3`, `gtk3widgets` | Cairo drawing and an OpenGL area for PCL forms; the GTK 3 binding and widgetset underneath. |
+| [`tkinter`](./tkinter.md) | GUI programs in Nil Python, over the system's Tcl/Tk 8.6. |
 
 ## Python modules for Nil Python
 
