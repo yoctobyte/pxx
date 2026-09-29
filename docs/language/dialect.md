@@ -262,11 +262,21 @@ inserts none:
 if @pthread_create <> nil then { use it } else { fall back };
 ```
 
-It is for *"use this C facility if the program already has it"*, not for
-avoiding a dependency you actually took: a weak import still contributes its
-library to `DT_NEEDED`. What it buys is that one unit can reach a symbol that
-may be absent without every program including that unit failing to start. A
-fully static link with no interpreter bakes the same zero.
+It is for *"use this C facility if the program already has it"*. What it buys
+is that one unit can reach a symbol that may be absent without every program
+including that unit failing to start.
+
+A weak import does not make the program depend on its library. A library
+reached only through weak imports gets no `DT_NEEDED` entry, so its symbols
+read `nil` even when the library is installed. A program whose imports are all
+weak is linked statically, with no interpreter, and every weak symbol in it
+reads `nil`. This is by design. To have the weak symbol resolve when the
+library is present, declare at least one ordinary `external` from that same
+library: the program is then linked dynamically against it, and `@f` is
+non-nil wherever the symbol exists. With an ordinary `external getpid` from
+`libc.so.6` beside the weak `pthread_create`, `@pthread_create` is non-nil.
+Without it, `@pthread_create` is `nil`, and so is a weak `cbrt` from
+`libm.so.6` when the program has no ordinary import from `libm`.
 
 ### Finding out which ones are inert here: `--warn-ignored-directives`
 
