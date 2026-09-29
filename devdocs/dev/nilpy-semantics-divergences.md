@@ -67,11 +67,12 @@ What this means for a program moved between them:
   driver that calls `machine.freq()` is refused at compile time with the name
   in the message, instead of raising `AttributeError` on the board.
 
-Observed while measuring, not diagnosed: on the C3 under QEMU a pure
-computation loop of 100,000 Nil Python iterations, with no sleep, ended in the
-same interrupt-watchdog panic ("Interrupt wdt timeout on CPU0") before its next
-line printed. The 1,000-iteration loop in the interrupts row did not. Whether
-that happens on a real C3 has not been checked.
+Under QEMU only, a long loop on the C3 can end in an interrupt-watchdog panic
+in vPortYield: a pure computation loop of 100,000 Nil Python iterations, with no
+sleep, ended in "Interrupt wdt timeout on CPU0" before its next line printed.
+The board runs it. The panic is in FreeRTOS (vPortYield and
+SysTickIsrHandler, with no PXX code on the frame), and on a real C3 the program
+runs to completion (reported by frankb-12, 2026-09-29, not committed).
 
 ---
 
