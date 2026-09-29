@@ -1,0 +1,12 @@
+# Simple statements separated by ';' at an IMPORTED module's top level. The
+# program loop and every indented block accepted them, but the module loop
+# parsed the first statement and then failed on the ';' ("expected
+# expression"), on every target. Covers: assignments, augmented assignments,
+# calls, a trailing ';', a one-line if/for suite, and a string after the
+# ';'. Checked against CPython.
+# bug-n-semicolon-separated-statements-fail-at-an-imported-modules-top-level
+import semimod
+
+print(semimod.a, semimod.b, semimod.s, semimod.total)
+print(semimod.name, semimod.names)
+print(semimod.log)

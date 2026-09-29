@@ -51274,21 +51274,29 @@ begin
     end
     else
     begin
-      tmark := PyStmtTempCount;
-      stmt := PyParseStatement;
-      stmt := PySeqAppend(PyFlushHoist(-1), stmt);
-      stmt := PyReleaseTempsSince(stmt, tmark, -1);
-      if stmt >= 0 then
-      begin
-        if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
-        else
+      { Several simple statements on one line (`a = 1; b = 2`), as in the
+        program loop and PyParseBlock. The loop consumed only the first and
+        the `;` failed as "expected expression" -- in an imported module
+        only. bug-n-semicolon-separated-statements-fail-at-an-imported-modules-top-level }
+      repeat
+        tmark := PyStmtTempCount;
+        stmt := PyParseStatement;
+        stmt := PySeqAppend(PyFlushHoist(-1), stmt);
+        stmt := PyReleaseTempsSince(stmt, tmark, -1);
+        if stmt >= 0 then
         begin
-          ASTRight[lastSeq] := AllocNode(AN_SEQ);
-          lastSeq := ASTRight[lastSeq];
-          ASTLeft[lastSeq] := stmt;
+          if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
+          else
+          begin
+            ASTRight[lastSeq] := AllocNode(AN_SEQ);
+            lastSeq := ASTRight[lastSeq];
+            ASTLeft[lastSeq] := stmt;
+          end;
         end;
-      end;
-      ASTArenaFloor := ASTNodeCount;   { see the note at the loop head }
+        ASTArenaFloor := ASTNodeCount;   { see the note at the loop head }
+        if CurTok.Kind <> tkSemicolon then Break;
+        Next;
+      until CurTok.Kind in [tkNewline, tkDedent, tkEOF];   { a trailing ';' }
     end;
     PySkipNewlines;
   end;

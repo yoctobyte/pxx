@@ -3541,6 +3541,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/atexit26 | diff -u test/test_nilpy_atexit_runs_on_wasm32.expected -
 	./$(COMPILER) test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.npy $(TESTTMP)/pymodinit26
 	$(TESTTMP)/pymodinit26 | diff -u test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected -
+	# `a = 1; b = 2` at an imported module's top level failed to parse.
+	# bug-n-semicolon-separated-statements-fail-at-an-imported-modules-top-level
+	./$(COMPILER) test/test_nilpy_semicolons_at_an_imported_modules_top_level.npy $(TESTTMP)/semimod26
+	$(TESTTMP)/semimod26 | diff -u test/test_nilpy_semicolons_at_an_imported_modules_top_level.expected -
 	./$(COMPILER) test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin26
 	$(TESTTMP)/outin26 < test/test_output_and_input_resolve_without_a_text_declaration.in | diff -u test/test_output_and_input_resolve_without_a_text_declaration.expected -
 	./$(COMPILER) test/test_div_by_a_run_time_zero_raises_on_wasm32.pas $(TESTTMP)/divzero26
@@ -18788,6 +18792,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh wasm32/test_nilpy_atexit_runs_on_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/atexit.wasm)" "$$(cat test/test_nilpy_atexit_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.npy $(TESTTMP)/pymodinit.wasm
 	tools/expect_same.sh wasm32/test_nilpy_an_imported_modules_top_level_runs_on_wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/pymodinit.wasm)" "$$(cat test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected)"
+	./$(COMPILER) --target=wasm32 test/test_nilpy_semicolons_at_an_imported_modules_top_level.npy $(TESTTMP)/semimod.wasm
+	tools/expect_same.sh wasm32/test_nilpy_semicolons_at_an_imported_modules_top_level "$$(tools/run_target.sh wasm32 $(TESTTMP)/semimod.wasm)" "$$(cat test/test_nilpy_semicolons_at_an_imported_modules_top_level.expected)"
 	./$(COMPILER) --target=wasm32 test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin.wasm
 	tools/expect_same.sh wasm32/test_output_and_input_resolve_without_a_text_declaration "$$(tools/run_target.sh wasm32 $(TESTTMP)/outin.wasm < test/test_output_and_input_resolve_without_a_text_declaration.in)" "$$(cat test/test_output_and_input_resolve_without_a_text_declaration.expected)"
 	# div/mod by a run-time zero raised nothing on wasm32: the instruction trapped
@@ -29944,6 +29950,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_atexit_runs_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/atexit_i386)" "$$(cat test/test_nilpy_atexit_runs_on_wasm32.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.npy $(TESTTMP)/pymodinit_i386
 	tools/expect_same.sh i386/test_nilpy_an_imported_modules_top_level_runs_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/pymodinit_i386)" "$$(cat test/test_nilpy_an_imported_modules_top_level_runs_on_wasm32.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_semicolons_at_an_imported_modules_top_level.npy $(TESTTMP)/semimod_i386
+	tools/expect_same.sh i386/test_nilpy_semicolons_at_an_imported_modules_top_level "$$(tools/run_target.sh i386 $(TESTTMP)/semimod_i386)" "$$(cat test/test_nilpy_semicolons_at_an_imported_modules_top_level.expected)"
 	./$(COMPILER) --target=i386 test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin_i386
 	tools/expect_same.sh i386/test_output_and_input_resolve_without_a_text_declaration "$$(tools/run_target.sh i386 $(TESTTMP)/outin_i386 < test/test_output_and_input_resolve_without_a_text_declaration.in)" "$$(cat test/test_output_and_input_resolve_without_a_text_declaration.expected)"
 	./$(COMPILER) --target=i386 test/test_div_by_a_run_time_zero_raises_on_wasm32.pas $(TESTTMP)/divzero_i386
