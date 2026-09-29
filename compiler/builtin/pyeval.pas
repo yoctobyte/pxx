@@ -1234,11 +1234,25 @@ var
     the older refusal here cost a bisect to read. }
   sawDouble: Boolean;
   shapeBad: AnsiString;
+  { The receiver's class name, for the exceptions below. NamePtr can be nil, and a
+    diagnostic that crashes while reporting a problem is worse than the problem. }
+  clsName: AnsiString;
 begin
   cls := GetInstanceRTTI(vmobj);
+  { INVARIANT, AND DELIBERATELY STILL A HALT. No RTTI means the compiler did not
+    emit what this code requires: the program did nothing wrong, can do nothing
+    about it, and there is no CPython exception this corresponds to. The sites
+    below became raises because they report the PROGRAM's error; this one does
+    not. }
   if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI on vm for host call ', name); Halt(1); end;
+  if cls^.NamePtr <> nil then clsName := cls^.NamePtr^ else clsName := '<unnamed class>';
   mi := PyFindMethCI(cls, name);
-  if mi = nil then begin writeln(StdErr, 'pyeval: vm has no method ', name); Halt(1); end;
+  { THE PROGRAM ASKED FOR A METHOD THAT IS NOT THERE, which is an AttributeError
+    in CPython and was an uncatchable process exit here. Same wording as the
+    attribute lookup in PyGetAttr, so the two read alike. }
+  if mi = nil then
+    raise AttributeError.Create(Chr(39) + clsName + Chr(39) +
+      ' object has no attribute ' + Chr(39) + name + Chr(39));
 
   n := Integer(mi^.Arity) - 1;   { drop Self }
   { `S.init`, as CPython names the callee in a call-shape TypeError }
@@ -1323,13 +1337,19 @@ begin
     if not ptrFamily then
     begin
       { Name the offending parameter. "unsupported param shape" on its own cost
-        a bisect to turn into a sentence, and the shape is the whole question. }
-      writeln(StdErr, 'pyeval: host method ', name, ' has an unsupported param shape',
-              ' (arity ', n, '), kinds:');
+        a bisect to turn into a sentence, and the shape is the whole question.
+        NOW ONE STRING RATHER THAN A HEADER PLUS A LOOP OF WRITELNS: an exception
+        carries a message, not a stream, and the kinds are the message. That is a
+        gain and not just a translation -- the old form could be split across two
+        streams, and was, until the diagnostics moved to stderr. }
+      shapeBad := 'reflected call to ' + clsName + '.' + name + ' is refused: its '
+                + 'parameter shape is not one this bridge can pass (arity '
+                + pystr_of(Int64(n)) + '), kinds:';
       if pk <> nil then
         for i := 1 to n do
-          writeln(StdErr, '  param ', i, ' kind ', pk[i]);
-      Halt(1);
+          shapeBad := shapeBad + ' [param ' + pystr_of(Int64(i)) + ' kind '
+                    + pystr_of(pk[i]) + ']';
+      raise TypeError.Create(shapeBad);
     end;
 
     { ---- SHAPES THIS BRIDGE GETS WRONG, refused instead of corrupted ----
@@ -1629,10 +1649,10 @@ begin
           else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
         end;
       else
-        begin
-          writeln(StdErr, 'pyeval: host method ', name, ' has an unsupported mixed shape (', mc, ' ints, ', kc, ' doubles)');
-          Halt(1);
-        end;
+        raise TypeError.Create('reflected call to ' + clsName + '.' + name
+                + ' is refused: this bridge has no thunk for a mixed shape of '
+                + pystr_of(Int64(mc)) + ' integer-class and ' + pystr_of(Int64(kc))
+                + ' double parameters');
       end;
       if mixedInt then
       begin
@@ -1754,7 +1774,9 @@ begin
       4: begin vf4 := TVFn4(code); res := vf4(vmobj, a0, a1, a2, a3); end;
       5: begin vf5 := TVFn5(code); res := vf5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     Exit;
   end;
@@ -1770,7 +1792,9 @@ begin
       4: begin vp4 := TVPr4(code); vp4(vmobj, a0, a1, a2, a3); end;
       5: begin vp5 := TVPr5(code); vp5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     res := MakeNone;
     Exit;
@@ -1787,7 +1811,9 @@ begin
       4: begin sf4 := TSFn4(code); res := MakeStr(sf4(vmobj, a0, a1, a2, a3)); end;
       5: begin sf5 := TSFn5(code); res := MakeStr(sf5(vmobj, a0, a1, a2, a3, a4)); end;
     else
-      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     Exit;
   end;
@@ -1809,7 +1835,9 @@ begin
       4: begin if4 := TIFn4(code); res := pyvar_of_int(PyNarrowRet(if4(vmobj, a0, a1, a2, a3), rk)); end;
       5: begin if5 := TIFn5(code); res := pyvar_of_int(PyNarrowRet(if5(vmobj, a0, a1, a2, a3, a4), rk)); end;
     else
-      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     { (PyNarrowRet: the callee set only its own width -- see pylib.) }
     { A BOOLEAN return shares this family's ABI but not its Python type: boxed
@@ -1832,7 +1860,9 @@ begin
       4: begin df4 := TDFn4(code); res := df4(vmobj, a0, a1, a2, a3); end;
       5: begin df5 := TDFn5(code); res := df5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     Exit;
   end;
@@ -1851,15 +1881,18 @@ begin
       4: begin of4 := TOFn4(code); pret := of4(vmobj, a0, a1, a2, a3); end;
       5: begin of5 := TOFn5(code); pret := of5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
     PXXObjRetain(Pointer(NativeInt(pret)));
     Exit;
   end;
 
-  writeln(StdErr, 'pyeval: unsupported host-call return kind ', rk, ' for ', name);
-  Halt(1);
+  raise TypeError.Create('reflected call to ' + clsName + '.' + name
+          + ' is refused: this bridge cannot box a return value of kind '
+          + pystr_of(Int64(rk)));
 end;
 
 { ---- field (attribute) reflection: M2 ---- }
@@ -1964,7 +1997,11 @@ begin
     22: PVariant(p)^ := val;
     23: PAnsiString(p)^ := pystr_of(val);
   else
-    begin writeln(StdErr, 'pyeval: cannot assign to object-typed attribute ', name); Halt(1); end;
+    { The program assigned to an attribute whose stored type this reflection cannot
+      write. CPython assigns it happily, so a refusal is the honest report and a
+      process exit was not one. No class name here: PyFieldSet takes a bare obj. }
+    raise TypeError.Create('cannot assign to attribute ' + Chr(39) + name + Chr(39)
+            + ': its declared type is not one this reflection can write');
   end;
 end;
 
@@ -2194,10 +2231,15 @@ begin
   else HexVal := Ord(c) - Ord('A') + 10;
 end;
 
+{ MALFORMED SOURCE IS THE PROGRAM'S ERROR AND CPython CALLS IT SyntaxError. This
+  is reached only from exec()/eval(), i.e. from source the program itself supplied
+  at run time, so a process exit took the decision away from the one place that
+  could have handled it. The 'pyeval tokenizer: ' prefix is gone because the
+  exception's own type now carries that: CPython says `SyntaxError: invalid
+  syntax`, not a prefixed line. }
 procedure TokError(const msg: AnsiString);
 begin
-  writeln(StdErr, 'pyeval tokenizer: ', msg);
-  Halt(1);
+  raise SyntaxError.Create(msg);
 end;
 
 function PyEscQuote(const s: AnsiString): AnsiString;

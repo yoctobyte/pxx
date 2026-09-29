@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: 0BSD
+# WHAT pyeval's REFLECTED-CALL BRIDGE REFUSES, a program can now CATCH.
+#
+# Twelve sites in compiler/builtin/pyeval.pas used to report the PROGRAM's error
+# with a `writeln` and a `Halt(1)`: an uncatchable process exit, where CPython
+# raises something a program can handle. They raise now. This file is the oracle
+# for the three exception TYPES that are reachable from Nil Python, and for the
+# control that says the refusals have not leaked into ordinary calls.
+#
+# THE PRECEDENT THIS FOLLOWS is in the same unit, at the `nargs < n` guard:
+# "TOO FEW ARGUMENTS IS THE PROGRAM'S ERROR, SO IT IS THE PROGRAM'S EXCEPTION",
+# converted 2026-09-11 from a writeln + Halt for exactly these reasons
+# (bug-n-a-too-few-args-runtime-dispatch-halts-the-process-where-cpython-raises-
+# typeerror). The twelve conversions extend that decision to its siblings rather
+# than inventing a policy.
+#
+# WHY THE TYPE AND NOT JUST "IT RAISED". Each row names the CPython type, because
+# a refusal that raises the WRONG type is worse than a halt: a program catches it
+# and acts on a false classification. That is also why EvalError was deliberately
+# NOT converted -- it funnels 57 call sites spanning SyntaxError, TypeError and
+# NotImplementedError, so no single type is right for it. See the LOGBOOK.
+#
+# MEASURED AGAINST CPython, and FOUR OF THE FIVE ROWS AGREE WITH IT EXACTLY:
+# control (no exception), missing method (AttributeError), and both tokenizer rows
+# (SyntaxError). The fifth DELIBERATELY DIVERGES and must not be read as parity:
+# CPython runs `h.wide(1,2,3,4,5,6)` perfectly happily, because it has no thunk
+# table to run out of. Our TypeError there is a "this bridge cannot do it yet"
+# refusal, not CPython behaviour. It is an improvement on what that shape did
+# before -- a process exit, and before that a silently wrong value -- and it is
+# still a divergence, so it is written down as one. When the bridge grows a generic
+# invoker that row becomes "no exception" and this file's oracle is what says so.
+#
+# THE CONTROL ROW IS LOAD-BEARING and is first on purpose. If `h.ok(1,2)` ever
+# starts raising, a refusal has leaked out of the error paths into ordinary
+# reflection, and every other row in this file would still pass.
+#
+# WHAT IS *NOT* COVERED HERE, said out loud because a file that looks complete and
+# is not is worse than a short one. Four of the twelve conversions have no row
+# below, because their trigger cannot be built from Nil Python alone:
+#   * unsupported PARAM SHAPE -- needs a host parameter whose type kind is outside
+#     the bridge's accepted set (e.g. UInt64, kind 14). Nil Python cannot declare
+#     one; it needs a Pascal host class.
+#   * unsupported MIXED SHAPE -- needs an (int-count, double-count) pair the thunk
+#     table has no arm for.
+#   * unsupported RETURN KIND -- needs a host method returning such a type.
+#   * assignment to an OBJECT-TYPED ATTRIBUTE -- needs a field whose declared type
+#     this reflection cannot write.
+# All four are reachable from a Pascal host class and are worth a second file when
+# someone adds one. They are conversions of the same shape as the ones proven
+# below, not a different mechanism.
+
+
+class H:
+    def ok(self, a, b):
+        return a + b
+
+    # SIX integer-class parameters. The bridge marshals at most five (pa[0..4]),
+    # so this is the arity refusal -- reachable from Nil Python, unlike the other
+    # three bridge refusals.
+    def wide(self, a, b, c, d, e, f):
+        return a + b + c + d + e + f
+
+
+h = H()
+# THESE COMPILED CALLS ARE THE TRIGGER, not setup: they narrow the bare parameters
+# above, which is what routes the exec'd calls below through the thunk table
+# instead of the all-Variant arm.
+h.ok(1, 2)
+h.wide(1, 2, 3, 4, 5, 6)
+
+env = {"h": h}
+
+
+def attempt(label, src):
+    # Names the TYPE, not just that something was raised -- see the header.
+    try:
+        exec(src, env)
+        print(label + " -> no exception")
+    except AttributeError as e:
+        print(label + " -> AttributeError")
+    except SyntaxError as e:
+        print(label + " -> SyntaxError")
+    except TypeError as e:
+        print(label + " -> TypeError")
+
+
+attempt("control ok      ", "h.ok(1,2)")
+# A method the class does not declare. CPython: AttributeError.
+attempt("missing method  ", "h.nosuchthing(1)")
+# Tokenizer failures, reached only from exec()/eval() -- source the program itself
+# supplied at run time, so a process exit took the decision away from the one
+# place that could have handled it. CPython: SyntaxError.
+attempt("unterminated str", "h.ok('oops)")
+attempt("bad character   ", "h.ok(1) ` ")
+# More parameters than the bridge has thunks for. CPython runs this fine, so the
+# honest report is a catchable "not supported". CPython type for that: TypeError.
+attempt("arity too large ", "h.wide(1,2,3,4,5,6)")

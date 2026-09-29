@@ -5063,10 +5063,13 @@ test-nilpy: $(COMPILER)
 	# --platform=posix here, as every wasm32 row is: that combination fails on an
 	# unrelated missing SYS_getgid in the posix backend, which cost me a wrong turn.
 	./$(COMPILER) test/test_nilpy_reflected_host_call_shapes.npy $(TESTTMP)/test_nilpy_hostshape26
-	# stderr is dropped on every row because this test TRIGGERS refusals on
-	# purpose, and pyeval's pre-existing `PROBE hostcall` wrapper prints the caught
-	# exception there before re-raising it. The assertion is the two stdout lines,
-	# and a failure still shows: a row that stops early loses the `failures=0` line.
+	# stderr is dropped on every row because this test TRIGGERS refusals on purpose.
+	# It USED TO BE REQUIRED: pyeval's leftover `PROBE hostcall` wrapper reprinted
+	# every caught exception to stderr before re-raising, ~500 bytes per refused
+	# call. Those four writes are deleted now (measured: this row's stderr went
+	# 1012 bytes -> 0), so the redirect is belt-and-braces rather than load-bearing.
+	# Kept deliberately: the assertion is the two stdout lines, and a future
+	# diagnostic on stderr should not turn this row red for the wrong reason.
 	tools/expect_same.sh hostshape26/native "$$($(TESTTMP)/test_nilpy_hostshape26 2>/dev/null)" "$$(printf 'HOSTSHAPE-MODE wide\nHOSTSHAPE-CHECK failures=0')"
 	@for t in i386 riscv32 arm32 aarch64; do \
 	  case $$t in i386) q=qemu-i386; want=narrow;; riscv32) q=qemu-riscv32; want=narrow;; arm32) q=qemu-arm; want=narrow;; aarch64) q=qemu-aarch64; want=wide;; esac; \
@@ -5074,6 +5077,18 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=$$t --platform=posix test/test_nilpy_reflected_host_call_shapes.npy $(TESTTMP)/hostshape_$$t >/dev/null || { echo "hostshape $$t compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh hostshape/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/hostshape_$$t 2>/dev/null)" "$$(printf 'HOSTSHAPE-MODE %s\nHOSTSHAPE-CHECK failures=0' $$want)" || exit 1; \
 	done
+	# What the reflected-call bridge REFUSES, a program can now CATCH. Twelve sites
+	# in pyeval.pas reported the PROGRAM's error with a writeln + Halt(1) -- an
+	# uncatchable process exit where CPython raises. They raise now, and this row
+	# pins the TYPE of each, because a refusal that raises the WRONG type is worse
+	# than a halt: a program catches it and acts on a false classification.
+	# FOUR OF THE FIVE ROWS MATCH CPython EXACTLY (measured); the arity row is a
+	# DELIBERATE DIVERGENCE -- CPython runs it fine, having no thunk table to run
+	# out of -- and the test file says so rather than implying parity.
+	# The control row is first and load-bearing: if an ordinary reflected call ever
+	# starts raising, a refusal has leaked out of the error paths.
+	./$(COMPILER) test/test_nilpy_pyeval_fatal_diagnostics_are_catchable.npy $(TESTTMP)/test_nilpy_dcatch26
+	$(TESTTMP)/test_nilpy_dcatch26 | diff -u test/test_nilpy_pyeval_fatal_diagnostics_are_catchable.expected -
 	# {*xs} deduplicates: the set display's STAR arm called extend (appends)
 	# while its ordinary elements went through add (dedups). The list rows are
 	# what says [*xs] did not become a set.

@@ -1,0 +1,5 @@
+control ok       -> no exception
+missing method   -> AttributeError
+unterminated str -> SyntaxError
+bad character    -> SyntaxError
+arity too large  -> TypeError
