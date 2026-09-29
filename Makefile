@@ -3596,6 +3596,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/semimod26 | diff -u test/test_nilpy_semicolons_at_an_imported_modules_top_level.expected -
 	./$(COMPILER) test/test_nilpy_int_and_str_of_a_string_literal.npy $(TESTTMP)/intstrlit26
 	$(TESTTMP)/intstrlit26 | diff -u test/test_nilpy_int_and_str_of_a_string_literal.expected -
+	./$(COMPILER) test/test_nilpy_path_read_text_keeps_the_file_as_written.npy $(TESTTMP)/pathrt26
+	$(TESTTMP)/pathrt26 | diff -u test/test_nilpy_path_read_text_keeps_the_file_as_written.expected -
 	./$(COMPILER) test/test_nilpy_semicolons_in_a_class_body.npy $(TESTTMP)/semicls26
 	$(TESTTMP)/semicls26 | diff -u test/test_nilpy_semicolons_in_a_class_body.expected -
 	./$(COMPILER) test/test_output_and_input_resolve_without_a_text_declaration.pas $(TESTTMP)/outin26
@@ -8683,6 +8685,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_a_pascal_unit_owns_its_by_value_strings "$$(tools/run_target.sh riscv32 $(TESTTMP)/byvalstr_rv32)" "$$(cat test/test_nilpy_a_pascal_unit_owns_its_by_value_strings.expected)"
 	./$(COMPILER) --target=riscv32 test/test_nilpy_length_of_a_variant_measures_its_string.npy $(TESTTMP)/lenvar_npy_rv32
 	tools/expect_same.sh riscv32/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_npy_rv32)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_path_read_text_keeps_the_file_as_written.npy $(TESTTMP)/pathrt_rv32
+	tools/expect_same.sh riscv32/test_nilpy_path_read_text_keeps_the_file_as_written "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/pathrt_rv32)" "$$(cat test/test_nilpy_path_read_text_keeps_the_file_as_written.expected)"
 	./$(COMPILER) --target=riscv32 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_rv32
 	tools/expect_same.sh riscv32/test_length_of_a_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_pas_rv32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=riscv32 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_rv32
@@ -30160,6 +30164,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_div_by_a_run_time_zero_raises_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/divzero_i386)" "$$(cat test/test_div_by_a_run_time_zero_raises_on_wasm32.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_int_and_str_of_a_string_literal.npy $(TESTTMP)/intstrlit_i386
 	tools/expect_same.sh i386/test_nilpy_int_and_str_of_a_string_literal "$$(tools/run_target.sh i386 $(TESTTMP)/intstrlit_i386)" "$$(cat test/test_nilpy_int_and_str_of_a_string_literal.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_path_read_text_keeps_the_file_as_written.npy $(TESTTMP)/pathrt_i386
+	tools/expect_same.sh i386/test_nilpy_path_read_text_keeps_the_file_as_written "$$(tools/run_target.sh i386 $(TESTTMP)/pathrt_i386)" "$$(cat test/test_nilpy_path_read_text_keeps_the_file_as_written.expected)"
 	./$(COMPILER) --target=i386 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_i386
 	tools/expect_same.sh i386/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh i386 $(TESTTMP)/realloc_i386)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=i386 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof_i386

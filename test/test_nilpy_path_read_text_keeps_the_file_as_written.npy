@@ -1,0 +1,37 @@
+# Path.read_text returns the file's text as CPython does: the final newline
+# kept, an empty file as "", and \r\n or a lone \r read as \n (text mode).
+# It was rebuilt from ReadLn lines and dropped the final newline.
+# bug-l-path-read-text-drops-the-final-newline
+import os
+import sys
+from pathlib import Path
+
+# Scratch from TESTMGR_TMP first (testmgr's per-run dir), then TESTTMP, then
+# /tmp -- the order test_nilpy_class_named_like_an_rtl_record.npy explains.
+d = (os.environ.get("TESTMGR_TMP")
+     or os.environ.get("TESTTMP")
+     or "/tmp") + "/_pxx_rt_" + os.path.basename(sys.argv[0])
+os.makedirs(d, exist_ok=True)
+
+def show(name, data):
+    p = Path(d + "/" + name)
+    p.write_text(data)
+    t = p.read_text()
+    print(name, len(t), repr(t))
+    os.remove(d + "/" + name)
+
+show("nl", "0123456789abcdef\n")
+show("no_nl", "0123456789abcdef")
+show("empty", "")
+show("two_lines", "one\ntwo\n")
+show("blank_lines", "\n\n\n")
+show("crlf", "a\r\nb\r\n")
+show("lone_cr", "a\rb")
+show("mixed", "x\r\ny\nz\r")
+
+p = Path(d + "/round")
+p.write_text("keep\nthis\n")
+p.write_text(p.read_text())
+print("round trip", repr(p.read_text()))
+os.remove(d + "/round")
+os.rmdir(d)

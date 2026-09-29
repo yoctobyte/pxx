@@ -209,21 +209,33 @@ begin
   __str__ := s;
 end;
 
+{ The file's bytes with CPython's text-mode newline translation: \r\n and a
+  lone \r read as \n, everything else as-is. It was rebuilt from ReadLn lines
+  joined by #10, which dropped the final newline (17 chars where CPython reads
+  18). }
 function Path.read_text: AnsiString;
-var f: TextFile; line, r: AnsiString; first: Boolean;
+var f: TPyFile; raw, r: AnsiString; i, n: Integer;
 begin
-  r := '';
-  first := True;
-  AssignFile(f, s);
-  Reset(f);
-  while not Eof(f) do
+  f := pyfile_open(s, 'r');
+  raw := f.readall;
+  f.close;
+  f.Free;         { a Pascal unit owns what it creates; nothing releases it for us }
+  SetLength(r, Length(raw));
+  n := 0;
+  i := 1;
+  while i <= Length(raw) do
   begin
-    ReadLn(f, line);
-    if not first then r := r + #10;
-    r := r + line;
-    first := False;
+    Inc(n);
+    if raw[i] = #13 then
+    begin
+      r[n] := #10;
+      if (i < Length(raw)) and (raw[i + 1] = #10) then Inc(i);
+    end
+    else
+      r[n] := raw[i];
+    Inc(i);
   end;
-  CloseFile(f);
+  SetLength(r, n);
   read_text := r;
 end;
 
