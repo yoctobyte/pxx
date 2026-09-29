@@ -41,6 +41,7 @@ details, the measurements and the workarounds.
 - Nil Python through `./pxx`: `import time`, `import string` and `import utime` find the C headers: [Nil Python](#nil-python)
 - Nil Python: `exec` stores a def only when it is named `__body__`: [exec and eval](#exec-and-eval)
 - Nil Python: `from X import *` does not compile: [Nil Python](#nil-python)
+- HTTPS through the native TLS backend fails on most sites, because it cannot check a P-384 or SHA-384 signature; the OpenSSL backend works: [row](#native-tls-most-https-sites-fail-certificate-verification)
 - `-O3` is experimental: [Optimisation levels](#optimisation-levels)
 
 **Memory**
@@ -143,6 +144,43 @@ Espressif's QEMU (`qemu-system-xtensa` and `qemu-system-riscv32`), which is what
 the bare profile is for. esptool cannot convert a bare ELF either, since it has
 no section headers. **Workaround:** on hardware, build the program as an
 ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
+
+### Native TLS: most HTTPS sites fail certificate verification
+
+The native TLS 1.3 backend (`tls13_native`, switched on with
+`Tls13NativeRegister`) cannot check an ECDSA signature made with SHA-384,
+and cannot use a P-384 key. Nearly every public site has one somewhere in
+its certificate chain, so for most sites the request fails cleanly: `Ok` is
+`False`, and `Tls13NativeLastError` says `certificate chain does not verify
+to a trusted root (store /etc/ssl/certs/ca-certificates.crt, 121 roots)`.
+It fails closed: no connection is accepted that was not verified.
+
+Measured on 2026-09-29 on x86-64 with v451 (`d9b7226769cc`), from an
+unpacked release archive, with `HttpGet('https://<host>/')`:
+
+| host | native backend | OpenSSL backend | chain, from `openssl s_client` |
+| --- | --- | --- | --- |
+| letsencrypt.org | fails | status 200 | ECDSA with SHA-384, P-384 keys |
+| github.com | fails | status 200 | ECDSA with SHA-384 above the leaf |
+| codeberg.org | fails | status 200 | ECDSA with SHA-384, P-384 keys |
+| www.wikipedia.org | fails | status 403 | ECDSA with SHA-384, P-384 keys |
+| cloudflare.com | fails | status 301 | ECDSA with SHA-384 above the leaf |
+| example.com | fails | status 200 | ECDSA with SHA-384, P-384 keys |
+| www.python.org | status 200 | status 200 | RSA with SHA-256 only |
+
+Every host that failed has an ECDSA signature with SHA-384 in its chain,
+and the one that worked has none. The 403 and 301 are the sites' own HTTP
+answers; the TLS connection succeeded. The compiler built at `c44341534a`
+(`81c16b5e3461`) fails in the same way on letsencrypt.org and example.com,
+and gets 200 from www.python.org. Of the 121 roots in that store, 35 have a
+P-384 key. The signature types `x509` understands are listed on
+[Cryptography](../library/crypto.md#checking-signatures-and-certificates-x509-rsa-ed25519).
+
+**Workaround:** on x86-64 (and i386 from v448), use the OpenSSL backend,
+`OpenSslTlsRegister` from `tls_openssl`, built with `-dPXX_DYNLIB_LIBC`: it
+reached all seven hosts above, verifying each certificate. See
+[Networking](../library/networking.md#openssl-backend). A static program
+with no C library has no workaround yet.
 
 ## Refused, with a message
 

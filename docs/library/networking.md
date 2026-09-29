@@ -168,5 +168,15 @@ mode:
   without a libssl for those targets installed).
 - riscv32: refused at compile time, because it has no dynamic loader.
 
-A from-scratch native TLS stack is planned as a second, interchangeable backend
-behind the same seam.
+### Native backend
+
+A from-scratch TLS 1.3 client, `tls13_native`, sits behind the same seam
+and needs no C library: call `Tls13NativeRegister` instead of
+`OpenSslTlsRegister`, and `Tls13NativeLastError` says why a handshake
+failed. It checks the server's certificate chain against the system trust
+store. With v451 it cannot check a certificate signed with ECDSA and
+SHA-384, which most public sites use somewhere in their chain, so most
+`https://` requests through it fail. In a measurement of seven well-known
+sites, only www.python.org worked. See
+[Known issues](../reference/known-issues.md#native-tls-most-https-sites-fail-certificate-verification)
+for the list, and use the OpenSSL backend where you can.
