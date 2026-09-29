@@ -70,9 +70,16 @@ What this means for a program moved between them:
 Under QEMU only, a long loop on the C3 can end in an interrupt-watchdog panic
 in vPortYield: a pure computation loop of 100,000 Nil Python iterations, with no
 sleep, ended in "Interrupt wdt timeout on CPU0" before its next line printed.
-The board runs it. The panic is in FreeRTOS (vPortYield and
-SysTickIsrHandler, with no PXX code on the frame), and on a real C3 the program
-runs to completion (reported by frankb-12, 2026-09-29, not committed).
+This is QEMU's, not the program's: the panic is in FreeRTOS (vPortYield and
+SysTickIsrHandler, with no PXX code on the frame), in QEMU's emulation of the
+cross-core yield interrupt. On a real C3 the loop never trips the interrupt
+watchdog. With a compiler that has `36c83f225a` (after v451) it runs to
+completion; with v451 it
+only starves the task watchdog and takes more than 90 s, because its counter
+passes 2^31 and each add takes the big-integer path that commit sped up. The
+board record is `d26dbb7006`,
+devdocs/evidence/esp-nilpy-sweep-v451-2026-09-29/README.md, "Interrupt-watchdog
+panics under QEMU are QEMU-only".
 
 ---
 
