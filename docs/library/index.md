@@ -66,7 +66,7 @@ refused.
 | [`dns`, `dns_async`, `dns_libc`](./dns.md) | Host names to IPv4 and IPv6 addresses: PXX's own resolver by default, systemd-resolved or the C library by choice, and a form for coroutines. |
 | [`scheduler` & `coroutine`](./async.md) | Coroutine reactor, cooperative scheduling, and async networking support. |
 | [`palthreadobj`, `palparallel`](./concurrency.md) | OS-level threads (`TThread`) and the `parallel for` worker pool. |
-| `tls`, `tls_openssl` | TLS backend interface and OpenSSL-backed implementation. |
+| [`tls`, `tls_openssl`](./networking.md#https) | TLS backend interface and OpenSSL-backed implementation: HTTPS clients and servers. |
 
 ## Crypto and checksums
 
@@ -74,8 +74,8 @@ refused.
 | --- | --- |
 | [`sha256`, `sha512`, `hashing`](./more-units.md#hashing-sha256-and-sha512-checksums-and-digests) | SHA-256, SHA-512, HMAC-SHA256, HKDF, CRC32 and Adler32. |
 | `random` | Random byte and number helpers. |
-| `aesgcm`, `chacha20poly1305` | Authenticated encryption primitives. |
-| `ed25519`, `ecdsa_p256`, `x25519`, `rsa`, `x509` | Public-key and certificate building blocks. |
+| [`aesgcm`, `chacha20poly1305`](./crypto.md#encrypting-aesgcm-and-chacha20poly1305) | AES-128-GCM and ChaCha20-Poly1305 authenticated encryption. |
+| [`x25519`, `ecdsa_p256`, `ed25519`, `rsa`, `x509`](./crypto.md) | Key agreement, P-256 signing, signature checks, and reading and checking certificates. No side-channel claim: see the page. |
 | `tls13_*` | Native TLS 1.3 handshake/key/record work in progress. |
 
 ## Terminal, UI, and PCL
