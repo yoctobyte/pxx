@@ -174,9 +174,15 @@ A from-scratch TLS 1.3 client, `tls13_native`, sits behind the same seam
 and needs no C library: call `Tls13NativeRegister` instead of
 `OpenSslTlsRegister`, and `Tls13NativeLastError` says why a handshake
 failed. It checks the server's certificate chain against the system trust
-store. With v451 it cannot check a certificate signed with ECDSA and
-SHA-384, which most public sites use somewhere in their chain, so most
-`https://` requests through it fail. In a measurement of seven well-known
-sites, only www.python.org worked. See
+store. It speaks TLS 1.3 only, so a server that offers only TLS 1.2
+refuses it; docs.espressif.com and micropython.org are two.
+
+Up to and including v451 it cannot check a certificate signed with ECDSA
+and SHA-384, which most public sites use somewhere in their chain, so most
+`https://` requests through it fail: of nine well-known sites, only
+www.python.org worked. Fixed after v451 (`8d0a99417e`, in no pin yet): the
+compiler built at that commit reached seven of the nine, all but the two
+TLS 1.2-only sites. On an ESP32-C3 the check is slow: an HTTPS request to
+letsencrypt.org spends about 80 s in the handshake. See
 [Known issues](../reference/known-issues.md#native-tls-most-https-sites-fail-certificate-verification)
-for the list, and use the OpenSSL backend where you can.
+for the measurements. With v451, use the OpenSSL backend where you can.

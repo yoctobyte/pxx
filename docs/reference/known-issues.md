@@ -42,7 +42,7 @@ details, the measurements and the workarounds.
 - Nil Python through `./pxx`: `import time`, `import string` and `import utime` find the C headers: [Nil Python](#nil-python)
 - Nil Python: `exec` stores a def only when it is named `__body__`: [exec and eval](#exec-and-eval)
 - Nil Python: `from X import *` does not compile: [Nil Python](#nil-python)
-- HTTPS through the native TLS backend fails on most sites, because it cannot check a P-384 or SHA-384 signature; the OpenSSL backend works: [row](#native-tls-most-https-sites-fail-certificate-verification)
+- HTTPS through the native TLS backend fails on most sites, because it cannot check a P-384 or SHA-384 signature (v441 to v451; fixed after v451); the OpenSSL backend works: [row](#native-tls-most-https-sites-fail-certificate-verification)
 - `-O3` is experimental: [Optimisation levels](#optimisation-levels)
 
 **Memory**
@@ -192,6 +192,9 @@ ESP-IDF component (the default); see [ESP32](../targets/esp32.md).
 
 ### Native TLS: most HTTPS sites fail certificate verification
 
+Wrong in v441 to v451. Fixed after v451 (`8d0a99417e`, in no pin yet); see
+"After v451" below. TLS 1.2-only servers still fail.
+
 The native TLS 1.3 backend (`tls13_native`, switched on with
 `Tls13NativeRegister`) cannot check an ECDSA signature made with SHA-384,
 and cannot use a P-384 key. Nearly every public site has one somewhere in
@@ -236,6 +239,26 @@ completed the TLS handshake with all nine hosts above, verifying each
 certificate. See
 [Networking](../library/networking.md#openssl-backend). A static program
 with no C library has no workaround yet.
+
+**After v451** (`8d0a99417e`, in no pin yet), `x509` checks ECDSA with
+SHA-384 and SHA-512, keys on P-384, and RSA with SHA-384 and SHA-512.
+Measured on 2026-09-29 on x86-64 with the compiler built at `8d0a99417e`
+(`553677b94940`, with that tree's library), same program, same nine hosts:
+the six that failed now complete the handshake and give the same status as
+the OpenSSL backend (200, 200, 200, 403, 301, 200), www.python.org still
+gives 200, and docs.espressif.com and micropython.org still fail with
+`expected a handshake record, got type 21`, because they speak only TLS
+1.2. The v451 build, run in the same minute, still failed on
+letsencrypt.org and example.com. Of the 121 roots in the store, 115 now
+verify their own signature, against 58 with v451; the six left are five
+signed with SHA-1 and one on P-521, which `x509` still refuses.
+
+**Slow on the ESP32-C3.** The fix is correct there but slow. Measured on an
+ESP32-C3 board by the fix's author, after v451: one P-384 signature check
+takes 22.8 s and one P-256 check 12.1 s, so an HTTPS request to
+letsencrypt.org spends about 80 s in the TLS handshake. The ESP32-S3 has
+not been measured. See
+[Cryptography](../library/crypto.md#checking-signatures-and-certificates-x509-rsa-ed25519).
 
 ## Refused, with a message
 

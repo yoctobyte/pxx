@@ -257,7 +257,7 @@ second.
   or with SHA-384, which most public certificate authorities use somewhere
   in their chains, did not verify, so the native TLS client refused
   letsencrypt.org, github.com, www.wikipedia.org and others. That is fixed
-  after v451.
+  after v451 (`8d0a99417e`, in no pin yet).
 - `X509ValidAt(cert, 'YYYYMMDDHHMMSS')` checks the dates. The time is UTC,
   written as 14 digits.
 - `X509HostMatch(cert, host)` checks the host name against the
@@ -376,7 +376,7 @@ computed, `RsaVerifyPkcs1Sha384` and `RsaVerifyPkcs1Sha512`, and
 `Sha384(msg)` in `sha512`. `EcdsaRSn(der, 48, rs)` turns a P-384 DER
 signature into r||s. `ecdsa_p384` only verifies; it cannot sign.
 
-**Slow on the ESP32-C3.** Measured on the board after v451: one P-384
+**Slow on the ESP32-C3.** Measured on the board after v451 (`8d0a99417e`): one P-384
 verify takes 22.8 s and one P-256 verify 12.1 s (on x86-64: 54 ms and
 26 ms). A TLS handshake with letsencrypt.org checks three P-384 signatures
 and one P-256 signature, so the native client spends about 80 s in it on
