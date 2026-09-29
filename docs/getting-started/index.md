@@ -23,7 +23,7 @@ Compile and run:
 
 ```sh
 $ ./pxx hello.pas hello
-ok: hello  [code=600B  data=408B  bss=34600B  procs=37  codeseg=3808B]
+ok: hello  [code=600B  data=416B  bss=34600B  procs=37  codeseg=3808B]
 $ ./hello
 Hello, world!
 ```

@@ -33,10 +33,9 @@ the Linux kernel. That holds for every frontend.
 
 ## What works
 
-The [examples showcase](../examples/index.md) is the best answer: every entry on it was
-compiled and run with pin v423, and its example programs were rebuilt with
-v424, v425 and v441, where the batch programs printed identical output. It shows the
-output or a screenshot of each. The highlights:
+The [examples showcase](../examples/index.md) is the best answer. It was last
+checked on 2026-09-29 with pin v450, and rows measured on an earlier pin say
+which. It shows the output or a screenshot of each. The highlights:
 
 - **Pascal:** terminal and GTK applications, an IDE written in PXX, a chess
   engine, a parallel `for` loop, and the compiler itself, which PXX builds to a
@@ -85,7 +84,9 @@ other Linux targets (`tools/run_target.sh`), and under wasmtime for wasm32.
 A **refusal** is a compile-time error that names the reason, for example
 *"Nil Python is not supported on hosted riscv32 Linux yet; build it for the
 ESP32 instead"*. It is not a crash.
-The table is the same as with the draft pin v425.
+The table is the same as with the draft pin v425. Later pins build Nil Python
+for riscv32 too: with v450 and v451 the same program prints `42` under QEMU
+(2026-09-29), where v441 refuses it with the message above.
 
 - x86-64 is the host and the most heavily tested target.
 - wasm32 is the least tested: its suites are run by hand, not continuously.
@@ -133,7 +134,7 @@ profile on hardware.
   usable from Pascal and from Nil Python. Their interfaces, examples and limits
   are in [ESP32 peripherals](../library/esp.md). **Talking to a real I2C or SPI device has not
   been tested yet**; the board checks covered each bus without a device.
-- **Memory over time:** the ESP lane ran the examples in a loop on the S3
+- **Memory over time:** the examples ran in a loop on the S3
   board. With v424, `print` of a number leaked memory on every pass (44 bytes
   per pass in `nilpy-s3`, 220 in `nilpy-hw-s3`, 264 in `gpio-edge-s3`), on
   xtensa every comparison of a function's string result leaked too, and
@@ -154,36 +155,6 @@ shapes that have no meaning there return an explicit "unsupported" error rather
 than a plausible wrong answer. To start, follow
 [Getting started on the ESP32](../getting-started/esp32.md): installing
 ESP-IDF, then a first Pascal, C and Nil Python program.
-
-## Fixed in v425
-
-These were wrong in pin v424 and are fixed in the draft pin v425, and so in
-v441, which descends from it. Unless a row says otherwise, each was checked on
-2026-09-25 by running the same program with v424 and with v425; the numbers
-below are from those two compilers. What was fixed between v425 and v441 is
-listed under
-[Fixed in this release](../reference/known-issues.md#fixed-in-this-release).
-
-| Fix | Commit | What changes |
-| --- | --- | --- |
-| `print` / `writeln` of a function result leaks | `e7a07c9cd` | Writing a string that a function returned no longer leaks it, on every backend. `writeln(F(k))` 200 times: 190 strings live on v424, 2 on v425. For Nil Python every `print` of a number, float or container leaked one string; on the ESP32-S3 that was 44 bytes per run. |
-| xtensa: comparing a function's string result leaks | `3671e2940` | `if F(4) <> 'soak'` leaked the result on every evaluation, on xtensa only. Measured by its author: 0 bytes per iteration on the ESP32-S3 board afterwards. |
-| libc `printf` output lost at exit | `dde6816ce`, `93a03391c` | A program that imports from libc now flushes libc's buffers at exit. v424 printed nothing; v425 prints `42 ok`. The follow-up keeps programs that only reach libc weakly, such as threaded ones, static. |
-| A type named like a compiler-internal record gets the wrong layout | `74ebf5593` | `type TProc = record A: array[0..99] of Int64; end` is 800 bytes, as in FPC (v424: 1344). An enum named `TSymbol` is 4 bytes (v424: 104). A class named `TProc` no longer crashes in `Free` (measured by its author). |
-| `SizeOf` of a class type gave the instance size | `2b06006e1` | `SizeOf(TFoo)` for a class type is now the reference width, the same as `SizeOf` of a variable of that type and as FPC: 8 on x86-64 (v424: 32 for a class with three `Int64` fields), 4 on i386 and arm32. On v424, `Move(f, g, SizeOf(TFoo))` between two class references copied past the variable. |
-| riscv32 could not export a routine to C | `73ed7a4e4` | `exports f` for a `cdecl` routine now works on riscv32, so a C program in an ESP32-C3 build can link and call it. xtensa still refuses, and the message says why. v425 builds the object; linking and running it was measured by the fix's author. |
-| `--shared` off x86-64 reads like an internal error | `45bbfb187` | On aarch64 and arm32, `--shared` now says `shared-library output is x86-64 only`, as i386 did. v424 said `internal: no init/fini thunk prologue`. |
-| A `var` argument of the wrong width through an overloaded routine | `6ff482413` | The refusal now names the parameter and both widths, where v424 said only `no overload of M matches these arguments`. Measured by its author. |
-| C `struct tm` lacks `tm_gmtoff` and `tm_zone` | `f82b42a21` | The C runtime's `struct tm` has both fields and honours `TZ=":zone"`. This is runtime-library source, so any checkout at or after the commit has it; it is what lets QuickJS build. |
-| tcc does not compile | `3c1952549`, `8d32d8c8a` | v424 stopped in `tccpp.c`. v425 compiles the Tiny C Compiler, and that tcc compiles a program to the same executable as a GCC-built tcc, and compiles itself to the same binary as a GCC-built tcc does, which in turn reproduces itself. That tcc cannot use `-run`; a separate build can, see [Status](../reference/status.md). |
-| C `sizeof` of a dereferenced array, a typedef of array typedefs, `sizeof (t)->key` | `7b781ce15` | `sizeof *table` for `char *table[][4]` is 32, not 8, so `sizeof a / sizeof *a` counts rows correctly. `typedef vec4 mat4[4]` is 64 bytes and can be initialised as a local, and `sizeof (t)->key` parses. A probe of all three prints the same as gcc (`32 3 64 8 16`), where v424 refuses it. tiny-regex-c's own `test1`, which counts its test table this way, crashed on v424 and passes 76 of 76 on v425, with output identical to gcc's; its `test2` and `test_compile` match gcc too. |
-| A discarded class result from a dotted call leaks (`adc.read()`) | `c4eb85dc39` | In Nil Python, a call such as `adc.read()` or `h.make()` used as a bare statement now releases the object it returns, as the assigned form always did. The fix's own test leaves 1,002 objects live on v424 and 6 with the fix (compiler `790bc11fb9c2…`, tree `f35e6ff62`). On the ESP32-S3 board with v425, `adc-s3` looped 60 times keeps its free heap at 271,232 bytes from the first pass to the last, where a compiler without the fix (sha256 `bb17d23beea5…`) fell from 253,688 to 78,252 bytes by pass 10 (board runs by the ESP lane, ESP-IDF v6.0.1). |
-| C `printf` of a `double` on riscv32 | `64483b8e4` | Once a call had more arguments than fit in registers, the extra `double`s printed as a tiny number or garbage. This is in the C runtime; v425 prints `1.5 2.5 3.5 4.5`, as GCC does. |
-| wasm32 C with `#include <math.h>` | `c89be3ee6` | v424 refused any such program with `wasm: var-name pool full`. v425 builds it, and it runs under wasmtime. |
-| ESP32-S3 bare program with a `Double` and managed strings | `e0db3791c` | v424 failed to build it (`j displacement … is outside the encodable range`). v425 builds it, and it prints its output under `qemu-system-xtensa`. |
-| `--list-targets` described wasm32 as having no codegen | `3472ffc42` | v425 lists wasm32 as `via wasmtime`, for Pascal, C and Nil Python. |
-| `#include <zlib.h>` did not import zlib | `5eca70e93` | A C program that includes a system library's header now records that library (`libz.so.1` for zlib) and runs. v424 imported every such function from libc, and the program failed at load. |
-| A C macro alias of a function-like macro was not rescanned | `473d9aa83` | With `#define F(t) ((t) + 1)`, `#define B F` and `#define A B`, the calls `B(x)` and `A(x)` now expand to `F`'s body as in GCC, at any depth. v424 refused them as calls to an undeclared function. |
 
 ## Known issues
 
@@ -225,3 +196,36 @@ answer usually is not.
 
 Contributions are welcome under the terms in `CONTRIBUTING.md` in the
 repository.
+
+## Fixed in v425
+
+This section matters only if you used the draft pin v424; the release is
+later than both.
+
+These were wrong in pin v424 and are fixed in the draft pin v425, and so in
+v441, which descends from it. Unless a row says otherwise, each was checked on
+2026-09-25 by running the same program with v424 and with v425; the numbers
+below are from those two compilers. What was fixed between v425 and v441 is
+listed under
+[Fixed in this release](../reference/known-issues.md#fixed-in-this-release).
+
+| Fix | Commit | What changes |
+| --- | --- | --- |
+| `print` / `writeln` of a function result leaks | `e7a07c9cd` | Writing a string that a function returned no longer leaks it, on every backend. `writeln(F(k))` 200 times: 190 strings live on v424, 2 on v425. For Nil Python every `print` of a number, float or container leaked one string; on the ESP32-S3 that was 44 bytes per run. |
+| xtensa: comparing a function's string result leaks | `3671e2940` | `if F(4) <> 'soak'` leaked the result on every evaluation, on xtensa only. Measured by its author: 0 bytes per iteration on the ESP32-S3 board afterwards. |
+| libc `printf` output lost at exit | `dde6816ce`, `93a03391c` | A program that imports from libc now flushes libc's buffers at exit. v424 printed nothing; v425 prints `42 ok`. The follow-up keeps programs that only reach libc weakly, such as threaded ones, static. |
+| A type named like a compiler-internal record gets the wrong layout | `74ebf5593` | `type TProc = record A: array[0..99] of Int64; end` is 800 bytes, as in FPC (v424: 1344). An enum named `TSymbol` is 4 bytes (v424: 104). A class named `TProc` no longer crashes in `Free` (measured by its author). |
+| `SizeOf` of a class type gave the instance size | `2b06006e1` | `SizeOf(TFoo)` for a class type is now the reference width, the same as `SizeOf` of a variable of that type and as FPC: 8 on x86-64 (v424: 32 for a class with three `Int64` fields), 4 on i386 and arm32. On v424, `Move(f, g, SizeOf(TFoo))` between two class references copied past the variable. |
+| riscv32 could not export a routine to C | `73ed7a4e4` | `exports f` for a `cdecl` routine now works on riscv32, so a C program in an ESP32-C3 build can link and call it. xtensa still refuses, and the message says why. v425 builds the object; linking and running it was measured by the fix's author. |
+| `--shared` off x86-64 reads like an internal error | `45bbfb187` | On aarch64 and arm32, `--shared` now says `shared-library output is x86-64 only`, as i386 did. v424 said `internal: no init/fini thunk prologue`. |
+| A `var` argument of the wrong width through an overloaded routine | `6ff482413` | The refusal now names the parameter and both widths, where v424 said only `no overload of M matches these arguments`. Measured by its author. |
+| C `struct tm` lacks `tm_gmtoff` and `tm_zone` | `f82b42a21` | The C runtime's `struct tm` has both fields and honours `TZ=":zone"`. This is runtime-library source, so any checkout at or after the commit has it; it is what lets QuickJS build. |
+| tcc does not compile | `3c1952549`, `8d32d8c8a` | v424 stopped in `tccpp.c`. v425 compiles the Tiny C Compiler, and that tcc compiles a program to the same executable as a GCC-built tcc, and compiles itself to the same binary as a GCC-built tcc does, which in turn reproduces itself. That tcc cannot use `-run`; a separate build can, see [Status](../reference/status.md). |
+| C `sizeof` of a dereferenced array, a typedef of array typedefs, `sizeof (t)->key` | `7b781ce15` | `sizeof *table` for `char *table[][4]` is 32, not 8, so `sizeof a / sizeof *a` counts rows correctly. `typedef vec4 mat4[4]` is 64 bytes and can be initialised as a local, and `sizeof (t)->key` parses. A probe of all three prints the same as gcc (`32 3 64 8 16`), where v424 refuses it. tiny-regex-c's own `test1`, which counts its test table this way, crashed on v424 and passes 76 of 76 on v425, with output identical to gcc's; its `test2` and `test_compile` match gcc too. |
+| A discarded class result from a dotted call leaks (`adc.read()`) | `c4eb85dc39` | In Nil Python, a call such as `adc.read()` or `h.make()` used as a bare statement now releases the object it returns, as the assigned form always did. The fix's own test leaves 1,002 objects live on v424 and 6 with the fix (compiler `790bc11fb9c2…`, tree `f35e6ff62`). On the ESP32-S3 board with v425, `adc-s3` looped 60 times keeps its free heap at 271,232 bytes from the first pass to the last, where a compiler without the fix (sha256 `bb17d23beea5…`) fell from 253,688 to 78,252 bytes by pass 10 (board runs with ESP-IDF v6.0.1). |
+| C `printf` of a `double` on riscv32 | `64483b8e4` | Once a call had more arguments than fit in registers, the extra `double`s printed as a tiny number or garbage. This is in the C runtime; v425 prints `1.5 2.5 3.5 4.5`, as GCC does. |
+| wasm32 C with `#include <math.h>` | `c89be3ee6` | v424 refused any such program with `wasm: var-name pool full`. v425 builds it, and it runs under wasmtime. |
+| ESP32-S3 bare program with a `Double` and managed strings | `e0db3791c` | v424 failed to build it (`j displacement … is outside the encodable range`). v425 builds it, and it prints its output under `qemu-system-xtensa`. |
+| `--list-targets` described wasm32 as having no codegen | `3472ffc42` | v425 lists wasm32 as `via wasmtime`, for Pascal, C and Nil Python. |
+| `#include <zlib.h>` did not import zlib | `5eca70e93` | A C program that includes a system library's header now records that library (`libz.so.1` for zlib) and runs. v424 imported every such function from libc, and the program failed at load. |
+| A C macro alias of a function-like macro was not rescanned | `473d9aa83` | With `#define F(t) ((t) + 1)`, `#define B F` and `#define A B`, the calls `B(x)` and `A(x)` now expand to `F`'s body as in GCC, at any depth. v424 refused them as calls to an undeclared function. |
