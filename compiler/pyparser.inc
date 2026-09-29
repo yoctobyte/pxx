@@ -2798,8 +2798,10 @@ end;
   AN_IS_TEST class checks; a variant operand is unboxed via pylib pyvarobj.
   The operand subtree is re-emitted per OR term (pure idents in the corpus;
   a side-effecting operand would double-evaluate — b346 family, noted). }
+function PyBindOwnedOperand(n: Integer; var asgn: Integer): Integer; forward;
+function PyWithOperandBinding(asgn, node: Integer): Integer; forward;
 procedure PyParseIsinstance;
-var xNode, node, left, term, callN, argN, tagCall: Integer;
+var xNode, xAsgn, node, left, term, callN, argN, tagCall: Integer;
     isVar, hadTuple: Boolean; nm: AnsiString; ci: Integer;
     rtArg, rtArg2: Integer;   { the runtime `isinstance(x, <value>)` call }
 
@@ -2937,7 +2939,9 @@ begin
   Next;                     { 'isinstance' }
   Expect(tkLParen, '(');
   PyParseBoolExpr;
-  xNode := CurASTNode;
+  { a fresh object is bound once and released: every type in a tuple reads
+    xNode, and nothing released it (pin v451, one per call) }
+  xNode := PyBindOwnedOperand(CurASTNode, xAsgn);
   isVar := IntToTypeKind(ASTTk[xNode]) = tyVariant;
   Expect(tkComma, ',');
   left := -1;
@@ -3133,7 +3137,7 @@ begin
     the parse ran off the end of the program. }
   if hadTuple then Expect(tkRParen, ')');   { tuple close }
   Expect(tkRParen, ')');                    { call close }
-  CurASTNode := left;
+  CurASTNode := PyWithOperandBinding(xAsgn, left);
 end;
 
 procedure PyParseIssubclass;
@@ -3534,6 +3538,19 @@ begin
   ASTLeft[Result] := asgn;
   ASTRight[Result] := node;
   ASTTk[Result] := ASTTk[node];
+end;
+
+{ ...and the in-place form, for an operand read ONCE by whatever consumes it:
+  the binding travels with the operand as `(opnd := n, opnd)`, so it runs
+  exactly where the operand is evaluated, inside any short-circuit or loop
+  condition around it. ParseExpr's comparisons (`f() == None`, `f() == [1]`,
+  `a < f()`) and the object argument of isinstance()/getattr() use it; each
+  dropped the fresh object before (pin v451, one per evaluation). }
+function PyBindOwnedOperandInline(n: Integer): Integer;
+var asgn: Integer;
+begin
+  Result := PyBindOwnedOperand(n, asgn);
+  Result := PyWithOperandBinding(asgn, Result);
 end;
 
 { `is` / `is not`: identity comparison. v1 lowers to pointer/scalar equality —
@@ -59030,6 +59047,11 @@ begin
         end;
         atName := PyParseAttrName;
         atFld := PyAttrFieldIdx(atRecv, atName);
+        { a FIELD read off a fresh object releases the object
+          (PyBindOwnedOperandInline). Only a field: a method or property
+          result may still refer to its receiver. }
+        if atIsGet and (atFld >= 0) then
+          atRecv := PyBindOwnedOperandInline(atRecv);
         { hasattr asks a WIDER question than "is it a declared field" — a method
           is an attribute too. Answered from the same tables the call uses; see
           PyAttrExists. Only the hasattr ANSWER moves: `atFld` stays the field

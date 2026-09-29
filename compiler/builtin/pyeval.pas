@@ -4904,8 +4904,7 @@ begin
       if mname = 'to_bytes' then
       begin
         by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
-        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(by));
-        PXXObjRetain(Pointer(by));   { slot owns +1 (magic-guarded) }
+        res := PyBoxObjNew(Pointer(by));   { fresh: the slot takes its +1 }
         Exit;
       end;
       EvalError('int method not supported: ' + mname);
@@ -4959,8 +4958,7 @@ begin
       else if mname = 'encode' then
       begin
         b2 := pystr_encode(s);
-        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(b2));
-        PXXObjRetain(Pointer(b2));   { slot owns +1 (magic-guarded) }
+        res := PyBoxObjNew(Pointer(b2));   { fresh: the slot takes its +1 }
       end
       else
         EvalError('str method not supported: ' + mname);

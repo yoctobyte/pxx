@@ -1,0 +1,58 @@
+# A fresh class result compared with == != < (either side), or passed as the
+# object to isinstance() or getattr(), is released and evaluated once. Nothing
+# bound it, so each evaluation dropped the object (pin v451: one per
+# `f() == None`, one list per `f() == [1]`, one per `isinstance(f(), K)`), and
+# isinstance() with a tuple of types called f() once per type.
+# `keep` holds every result, the positive control: it must trip the bound.
+# The value line is CPython's.
+import sys
+
+
+class A:
+    def __init__(self, v):
+        self.v = v
+
+
+class B:
+    def __init__(self, v):
+        self.v = v
+
+
+calls = 0
+
+
+def fa():
+    global calls
+    calls += 1
+    return A(calls)
+
+
+def fl():
+    global calls
+    calls += 1
+    return [calls]
+
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "drop"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 1000
+kept = []
+hits = 0
+for i in range(n):
+    if fa() == None:
+        hits -= 100
+    if None != fa():
+        hits += 1
+    if fl() == [0]:
+        hits -= 100
+    if [0] < fl():
+        hits += 1
+    if isinstance(fa(), (B, A)):
+        hits += 1
+    if getattr(fa(), "v") > 0:
+        hits += 1
+    if fl() != fl():
+        hits += 1
+    if mode == "keep":
+        kept.append(fa())
+        kept.append(fl())
+print(hits, calls)

@@ -39,15 +39,15 @@ var
   gSrc: AnsiString;
   gPos: Integer;
 
-{ Box a container into the variant the caller receives. pylib does this inline
-  wherever it builds one (VT_OBJECT = tag 7, payload = the instance pointer,
-  plus the retain that makes the slot an owner); there is no exported helper
-  for it, so the same three lines live here. }
+{ Box a container into the variant the caller receives (VT_OBJECT = tag 7,
+  payload = the instance pointer). Every caller hands over a FRESH list or
+  dict, so the variant takes Create's reference and must not retain: a retain
+  here leaked every container literal_eval built (pin v451: 9 live per call of
+  a three-container literal). }
 function BoxObj(o: TObject): Variant;
 begin
   PPyVarRec(@Result)^.VType := 7;
   PPyVarRec(@Result)^.Payload := Int64(NativeInt(Pointer(o)));
-  PXXObjRetain(Pointer(o));
 end;
 
 procedure LitError(const what: AnsiString);

@@ -1,0 +1,40 @@
+# zip() of five or more iterables, map() over five or more, ast.literal_eval
+# and a bytes result inside eval() release what they build. Each boxed a fresh
+# object and retained it on top of the reference it already owned: the zip's
+# item list and every cursor in it, the map's zip, every container
+# literal_eval built, the bytes eval returned (pin v451: 17, 26, 9 and 2 live
+# per evaluation). One zip argument is already an iterator, which zip must
+# borrow, not release. `keep` holds the results, the positive control: it must
+# trip the bound. The value line is CPython's.
+import ast
+import sys
+
+a = [1, 2]
+b = [3, 4]
+c = [5, 6]
+d = [7, 8]
+e = [9, 10]
+
+
+def f(p, q, r, s, t):
+    return p + t
+
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "drop"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 500
+kept = []
+total = 0
+for i in range(n):
+    it = iter(a)
+    for t in zip(it, b, iter(c), d, e):
+        total += t[0] + t[4]
+    total += next(it, 100)
+    ms = list(map(f, a, b, c, d, e))
+    total += ms[0] + ms[1]
+    lit = ast.literal_eval("[1, {'k': (2, 3)}]")
+    total += lit[1]["k"][1]
+    total += len(eval("'ab'.encode()"))
+    if mode == "keep":
+        kept.append(zip(a, b, c, d, e))
+        kept.append(lit)
+print(total)

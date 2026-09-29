@@ -605,6 +605,23 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_fresh_operand_released 100 $(TESTTMP)/test_nilpy_opndrel26
 	@if tools/assert_no_leak.sh nilpy_fresh_operand_control 100 $(TESTTMP)/test_nilpy_opndrel26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_fresh_operand control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# ...and as a comparison operand (== != <, either side) or the object of
+	# isinstance()/getattr() (pin v451: ~12,000 live here, and a tuple
+	# isinstance() called f() once per type). `keep` is the positive control.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_fresh_operand_of_a_comparison_or_isinstance_is_released.npy $(TESTTMP)/test_nilpy_cmpopnd26
+	tools/expect_same.sh nilpy_fresh_cmp_operand_value "$$($(TESTTMP)/test_nilpy_cmpopnd26 2>/dev/null)" "5000 8000"
+	tools/assert_no_leak.sh nilpy_fresh_cmp_operand_released 100 $(TESTTMP)/test_nilpy_cmpopnd26
+	@if tools/assert_no_leak.sh nilpy_fresh_cmp_operand_control 100 $(TESTTMP)/test_nilpy_cmpopnd26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_fresh_cmp_operand control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# zip() of five+ iterables, map() over five+, ast.literal_eval and a bytes
+	# result inside eval() release what they build (pin v451: ~24,900 live here;
+	# the flat baseline is ~106, from ast's own globals). `keep` is the positive
+	# control. The value line is CPython's.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_zip_map_literal_eval_and_eval_bytes_release_what_they_build.npy $(TESTTMP)/test_nilpy_zipmaprel26
+	tools/expect_same.sh nilpy_zip_map_release_value "$$($(TESTTMP)/test_nilpy_zipmaprel26 2>/dev/null)" "74500"
+	tools/assert_no_leak.sh nilpy_zip_map_released 300 $(TESTTMP)/test_nilpy_zipmaprel26
+	@if tools/assert_no_leak.sh nilpy_zip_map_control 300 $(TESTTMP)/test_nilpy_zipmaprel26 keep >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_zip_map control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	# list.clear() and dict.clear() release the elements they drop (both only
 	# zeroed the length, so the elements were orphaned once the container went
 	# away: pin v441 leaves ~75,000 live here). `keep` is the positive control.

@@ -15668,12 +15668,14 @@ begin
 end;
 
 function pyiter_zip_n(items: TPyList): TPyIter;
-var i, n: Integer; cur: TPyIter; pv: Variant;
+var i, n: Integer; cur: TPyIter; pv, el: Variant;
 begin
   Result := TPyIter.Create;
   Result.FKind := PYITER_K_ZIPN;
+  { CONSTRUCTED here, so it already owns rc=1 for this field -- the FBox rule
+    (TPyIter.Create). The retain that stood here made it rc=2 against the one
+    finalizer release, and the list kept every cursor in it alive. }
   Result.FSrc := TPyList.Create;
-  PXXObjRetain(Pointer(Result.FSrc));
   n := 0;
   if items <> nil then n := len(items);
   i := 0;
@@ -15681,11 +15683,18 @@ begin
   begin
     { pyiter_v is the one iterable-to-cursor conversion, so a row that is itself
       a str/range/dict/user object works without a per-shape arm here. }
-    cur := pyiter_v(items.at(i));
+    el := items.at(i);
+    cur := pyiter_v(el);
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(cur)));
-    PXXObjRetain(Pointer(cur));
     Result.FSrc.append(pv);
+    { the list took its own reference. pv is re-poked next pass, so empty it,
+      and hand back Create's reference when pyiter_v made a fresh cursor (an
+      iterator argument comes back as itself, borrowed). The old retain here
+      leaked every cursor: pin v451, 17 live per 5-way zip. }
+    PPyVarRec(@pv)^.VType := 0;
+    if not ((pyvartag(el) = 7) and (TObject(pyvarobj(el)) = TObject(cur))) then
+      PXXObjRelease(Pointer(cur));
     Inc(i);
   end;
 end;
@@ -15748,11 +15757,16 @@ begin
 end;
 
 function pyiter_map_star(const cb: Variant; items: TPyList): TPyIter;
+var z: TPyIter;
 begin
-  Result := pyiter_map_i(nil, pyiter_zip_n(items));
+  { pyiter_map_i takes its own reference to a borrowed upstream, and this one
+    is fresh: hand Create's back. FSrc is constructed, so no retain (the FBox
+    rule). Both extras leaked the whole zip and its cursors per call. }
+  z := pyiter_zip_n(items);
+  Result := pyiter_map_i(nil, z);
+  PXXObjRelease(Pointer(z));
   Result.FStart := 4;
   Result.FSrc := TPyList.Create;
-  PXXObjRetain(Pointer(Result.FSrc));
   Result.FSrc.append(cb);
 end;
 

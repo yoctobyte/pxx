@@ -11869,6 +11869,12 @@ begin
     left := CurASTNode;
     ParseSimpleExpr;
     right := CurASTNode;
+    { a fresh object compared is released: see PyBindOwnedOperandInline }
+    if PyExprMode and NilPyUserCode then
+    begin
+      left := PyBindOwnedOperandInline(left);
+      right := PyBindOwnedOperandInline(right);
+    end;
     { …and comparing two truth values compares their TRUTH, not their raw
       ordinals. Ahead of the enum diagnostics below, which ask
       `NodeSemIdOf(x) >= 0` and are therefore about the enum family only -- a
