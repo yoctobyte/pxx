@@ -1,0 +1,27 @@
+b'YWJj' b'abc'
+b'YW*Jj' b'abc'
+'YW Jj\n' b'abc'
+b'YWJjZA==' b'abcd'
+b'YWJjZA=' binascii.Error: Incorrect padding
+b'YWJjZA' binascii.Error: Incorrect padding
+b'YWJjZ' binascii.Error: Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
+b'YQ==YWJj' binascii.Error: Incorrect padding
+b'Y=Q==' b'a'
+b'!!!!' b''
+b'' b''
+b'YW\x00Jj' b'abc'
+b'=YWJj' b'abc'
+b'YWJjZA===' b'abcd'
+b'YQ' binascii.Error: Incorrect padding
+b'YWI=' b'ab'
+b'YQ==YQ==' b'a\x06\x10'
+b'YQ=YQ==' b'a\x06\x10'
+b'YWJ=j' b'abc'
+b'YWJjZ===' binascii.Error: Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
+b'Y' binascii.Error: Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+b'YWJjYWJjY' binascii.Error: Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+b'-_-_' b''
+b'YQ=\n=' b'a'
+b'YW=Jj' b'abc'
+binascii.Error is a ValueError
+b'\x00\xff round trip'

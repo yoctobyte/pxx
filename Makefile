@@ -1328,6 +1328,11 @@ test-nilpy: $(COMPILER)
 	TZ='CET-1CEST,M3.5.0,M10.5.0/3' $(TESTTMP)/test_nilpy_mplogging26 | diff -u test/test_nilpy_micropython_logging_walls.expected -
 	./$(COMPILER) test/test_nilpy_binascii_hexlify_unhexlify_and_base64.py $(TESTTMP)/test_nilpy_binascii26
 	$(TESTTMP)/test_nilpy_binascii26 | diff -u test/test_nilpy_binascii_hexlify_unhexlify_and_base64.expected -
+	# base64.b64decode discards what is not base64 (CPython's validate=False)
+	# and raises binascii.Error on open padding; it used to answer b''. The
+	# .expected is CPython 3.14's.
+	./$(COMPILER) test/test_nilpy_base64_b64decode_discards_what_is_not_base64.npy $(TESTTMP)/test_nilpy_b64dec26
+	$(TESTTMP)/test_nilpy_b64dec26 | diff -u test/test_nilpy_base64_b64decode_discards_what_is_not_base64.expected -
 	./$(COMPILER) test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.py $(TESTTMP)/test_nilpy_udp26
 	$(TESTTMP)/test_nilpy_udp26 | diff -u test/test_nilpy_socket_udp_sendto_recvfrom_and_getaddrinfo.expected -
 	./$(COMPILER) test/test_nilpy_struct_pack_into_a_bytearray.py $(TESTTMP)/test_nilpy_packinto26

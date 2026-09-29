@@ -48,6 +48,12 @@ function Base64DecodeStr(const s: AnsiString): AnsiString;
 function b64encode(const data: Variant): TPyBytes;
 function b64decode(const data: Variant): TPyBytes;
 
+type
+  { CPython's `binascii.Error`, declared HERE because b64decode raises it and
+    mimic_binascii already uses this unit; binascii re-exports it as `Error`.
+    A ValueError, as in CPython, so `except ValueError` catches it too. }
+  BinasciiError = class(ValueError) end;
+
 implementation
 
 function b64encode(const data: Variant): TPyBytes;
@@ -71,7 +77,7 @@ begin
     returned empty rather than wrong. The round-trip idiom
     `b64decode(b64encode(x)) == x` was False against CPython's True and is the
     row that found it. }
-  b64decode := StrToPy(Base64DecodeStr(PyToText(data)));
+  b64decode := StrToPy(PyB64DecodeText(PyToText(data)));
 end;
 
 const
@@ -126,6 +132,71 @@ begin
   else if c = '/' then Result := 63
   else if (c = ' ') or (c = #9) or (c = #10) or (c = #13) then Result := -2
   else Result := -1;
+end;
+
+{ Python's b64decode (validate=False), which is CPython 3.14's a2b_base64 in
+  its non-strict mode. It is NOT Base64Decode above: that one is strict (an
+  invalid character empties the result), which is what the net lib wants, and
+  CPython instead DISCARDS every character outside the alphabet and decodes the
+  rest. `b64decode(b"YW*Jj")` answered b'' here against CPython's b'abc'.
+  The '=' rules, measured against CPython 3.14 rather than read off a spec:
+  - '=' counts as padding only at the third or fourth character of a quantum,
+    and padding is complete when those fill the quantum; it never stops the
+    scan, and any extra '=' is ignored;
+  - a data character after complete padding reopens the quantum, so
+    `YQ==YWJj` is "Incorrect padding", not b'aabc';
+  - a quantum left open ends in binascii.Error: one character over a multiple
+    of four has its own message, anything else is "Incorrect padding". }
+function PyB64DecodeText(const s: AnsiString): AnsiString;
+var i, v, qp, pads, left, outLen: Integer; complete: Boolean; n: AnsiString;
+begin
+  Result := '';
+  SetLength(Result, (Length(s) div 4 + 1) * 3);   { upper bound }
+  outLen := 0; qp := 0; pads := 0; left := 0; complete := False;
+  for i := 1 to Length(s) do
+  begin
+    if s[i] = '=' then
+    begin
+      if qp >= 2 then
+      begin
+        pads := pads + 1;
+        if qp + pads >= 4 then complete := True;
+      end;
+      Continue;
+    end;
+    v := B64Val(s[i]);
+    if v < 0 then Continue;          { outside the alphabet: discarded }
+    pads := 0;
+    complete := False;
+    case qp of
+      0: begin left := v; qp := 1; end;
+      1: begin
+           outLen := outLen + 1;
+           Result[outLen] := AnsiChar(((left shl 2) or (v shr 4)) and $FF);
+           left := v and $0F; qp := 2;
+         end;
+      2: begin
+           outLen := outLen + 1;
+           Result[outLen] := AnsiChar(((left shl 4) or (v shr 2)) and $FF);
+           left := v and $03; qp := 3;
+         end;
+    else
+      outLen := outLen + 1;
+      Result[outLen] := AnsiChar(((left shl 6) or v) and $FF);
+      left := 0; qp := 0;
+    end;
+  end;
+  if (qp <> 0) and not complete then
+  begin
+    if qp = 1 then
+    begin
+      Str(outLen div 3 * 4 + 1, n);
+      raise BinasciiError.Create('Invalid base64-encoded string: number of data characters (' +
+        n + ') cannot be 1 more than a multiple of 4');
+    end;
+    raise BinasciiError.Create('Incorrect padding');
+  end;
+  SetLength(Result, outLen);
 end;
 
 function Base64Decode(const s: AnsiString; var data: TByteArray): Boolean;

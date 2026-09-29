@@ -1,0 +1,13 @@
+import base64
+import binascii
+cases = [b'YWJj', b'YW*Jj', 'YW Jj\n', b'YWJjZA==', b'YWJjZA=', b'YWJjZA', b'YWJjZ', b'YQ==YWJj', b'Y=Q==', b'!!!!', b'', b'YW\x00Jj', b'=YWJj', b'YWJjZA===', b'YQ', b'YWI=', b'YQ==YQ==', b'YQ=YQ==', b'YWJ=j', b'YWJjZ===', b'Y', b'YWJjYWJjY', b'-_-_', b'YQ=\n=', b'YW=Jj']
+for c in cases:
+    try:
+        print(repr(c), base64.b64decode(c))
+    except binascii.Error as e:
+        print(repr(c), "binascii.Error:", e)
+try:
+    base64.b64decode(b"YWJ")
+except ValueError:
+    print("binascii.Error is a ValueError")
+print(base64.b64decode(base64.b64encode(b"\x00\xff round trip")))

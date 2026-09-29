@@ -23,7 +23,9 @@ interface
 uses hashing, pylib, pymarshal, base64;   { TByteArray }
 
 type
-  Error = class(ValueError) end;
+  { base64's class, not a second one: a2b_base64 is b64decode, which raises
+    it, and `except binascii.Error` has to catch what b64decode raises. }
+  Error = BinasciiError;
 
 function hexlify(const data: Variant; const sep: AnsiString = ''): TPyBytes;
 function unhexlify(const data: Variant): TPyBytes;
