@@ -1,0 +1,8 @@
+# Imported AFTER shadowmod by test_nilpy_an_imported_module_shadows_builtins.npy:
+# a module that shadows nothing still reaches the builtins, so shadowmod's
+# own definitions stayed in shadowmod.
+from collections import Counter
+
+for y in [[1, 2], "abc"]:
+    print(len(y), list(y), bool(y))
+print(Counter("aab")["a"])

@@ -17242,8 +17242,14 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         correctly won resolution would still be rewritten to pylib's pylen_v and
         never run — the third name-keyed surface the shadowing work had to
         cover, after the parser intrinsics and the overload demote
-        (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin). }
+        (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin).
+        ...and not a routine of an IMPORTED .py module either: that is the
+        user's def too, and -1 means only the main program. A module's `def len`
+        called on a for-loop variable was swapped for pylen_v, its str result
+        retagged Int64, and printing it segfaulted
+        (test_nilpy_user_def_shadows_builtin, via an import; frankh-95's trace). }
       if PyProgramMode and (cpi >= 0) and (ProcUnitIdx[cpi] <> -1) and
+         (not UnitIsPyModule(ProcUnitIdx[cpi])) and
          (ASTLeft[node] <> -1) and (ASTRight[ASTLeft[node]] = -1) and
          (IntToTypeKind(ASTTk[ASTLeft[ASTLeft[node]]]) = tyVariant) then
       begin

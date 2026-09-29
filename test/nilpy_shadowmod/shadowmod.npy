@@ -1,0 +1,30 @@
+# Imported by test_nilpy_an_imported_module_shadows_builtins.npy: a module's
+# own class and defs shadow builtins of the same name, as the main program's do.
+class Counter:
+    k = 0
+
+
+def g():
+    return Counter.k
+
+
+class dict:
+    tag = "mine"
+
+
+def len(x):
+    return "mine-len"
+
+
+def list(x):
+    return "mine-list"
+
+
+def bool(x):
+    return "mine-bool"
+
+
+print("counter:", Counter.k, g(), Counter().k)
+print("dict:", dict.tag)
+for _y in [[1, 2]]:
+    print(len(_y), list(_y), bool(_y))

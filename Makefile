@@ -7448,6 +7448,12 @@ test-nilpy: $(COMPILER)
 	# builtin. A user def merely joined the overload set and lost on ARGUMENT FIT,
 	# so the program silently printed the builtin's answer. See the test's header;
 	# expectations are CPython's.
+	./$(COMPILER) -Futest/nilpy_shadowmod test/test_nilpy_an_imported_module_shadows_builtins.npy $(TESTTMP)/test_nilpy_modshadow26
+	$(TESTTMP)/test_nilpy_modshadow26 | diff -u test/test_nilpy_an_imported_module_shadows_builtins.expected -
+	./$(COMPILER) --target=riscv32 -Futest/nilpy_shadowmod test/test_nilpy_an_imported_module_shadows_builtins.npy $(TESTTMP)/test_nilpy_modshadow_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_modshadow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_modshadow_riscv32)" "$$(cat test/test_nilpy_an_imported_module_shadows_builtins.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -Futest/nilpy_shadowmod test/test_nilpy_an_imported_module_shadows_builtins.npy $(TESTTMP)/test_nilpy_modshadow_xtw
+	tools/expect_same.sh xtensa-windowed/test_nilpy_modshadow "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_modshadow_xtw)" "$$(cat test/test_nilpy_an_imported_module_shadows_builtins.expected)"
 	./$(COMPILER) test/test_nilpy_user_def_shadows_builtin.npy $(TESTTMP)/test_nilpy_defshadow26
 	tools/expect_same.sh test_nilpy_defshadow26 "$$($(TESTTMP)/test_nilpy_defshadow26)" "$$(printf '%b' 'mine-sorted mine-counter\nmine-len mine-len mine-len mine-len\nmine-len\nmine-abs mine-str mine-min mine-max\nmine-sum mine-int mine-list mine-round\nmine-divmod mine-hex mine-reversed mine-enumerate\nmine-float mine-bool mine-bool')"
 	# A Python annotation is metadata, not enforcement: `-> int` returning 2.5 gave

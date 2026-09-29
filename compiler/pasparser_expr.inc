@@ -5379,9 +5379,15 @@ begin
         which sends the reader to the class body rather than to the name
         (bug-nilpy-user-class-named-like-a-pylib-builtin-is-shadowed).
 
-        UClsUnitIdx = -1 is "declared in the main program", so this only fires
-        for a class the user wrote; a pylib class keeps losing to a pylib
-        routine exactly as before, and Pascal is untouched. }
+        Asked of the unit being compiled, CurrentUnitIdx, which is -1 for the main
+        program: Python's rule is per-module, and a class in an IMPORTED module
+        shadows the builtin there just as it does in the main program. The row
+        used to ask of -1 alone, so `class Counter` in an imported module still
+        lost to pylib's Counter() and `Counter.k` raised "'TPyDict' object has no
+        attribute 'k'" (test_nilpy_user_class_shadows_builtin, via an import).
+        Only a class the user wrote is found in a user unit, so a pylib class
+        keeps losing to a pylib routine exactly as before, and Pascal is
+        untouched. }
       { …matched EXACTLY. FindUClassInUnit is case-insensitive, Pascal-style, so
         a lowercase `def f` lost its proc to `class F` — and then, since classes
         became values, `f(1, 2)` compiled clean and raised "takes 0 positional
@@ -5392,7 +5398,7 @@ begin
         are the same rule at the other four
         (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
       if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
-         (FindUClassInUnit(name, -1) >= 0) and PyIsClassTypeExact(name) then
+         (FindUClassInUnit(name, CurrentUnitIdx) >= 0) and PyIsClassTypeExact(name) then
         procIdx := -1;
 
       { The Pascal twin of the rule above: a TYPE declared HERE beats a ROUTINE

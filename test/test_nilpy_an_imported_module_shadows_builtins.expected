@@ -1,0 +1,6 @@
+counter: 0 0 0
+dict: mine
+mine-len mine-list mine-bool
+2 [1, 2] True
+3 ['a', 'b', 'c'] True
+2

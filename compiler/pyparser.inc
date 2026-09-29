@@ -61279,8 +61279,12 @@ begin
         PyIsExactCtorName (construction) and the two guards added beside them
         are the same rule at the other four
         (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
+      { Of the unit being compiled (-1 for the main program), not of -1 alone:
+        a class in an IMPORTED module shadows the builtin there too, and asking
+        only the main program left `class Counter` in a module bound to pylib's
+        Counter(). The twin in pasparser_expr.inc asks the same way. }
       if (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
-         (FindUClassInUnit(name, -1) >= 0) and PyIsClassTypeExact(name) then
+         (FindUClassInUnit(name, CurrentUnitIdx) >= 0) and PyIsClassTypeExact(name) then
         procIdx := -1;
 
       { A NilPy module-level `def` is NOT bound above its own `def` statement —

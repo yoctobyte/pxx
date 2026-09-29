@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# Python's shadowing rule is per module: a class or def in an IMPORTED module
+# shadows the builtin of that name there, exactly as in the main program. Two
+# checks asked "is this the main program's?" (unit -1) where they meant "is
+# this the user's?", so in a module:
+#   - `class Counter` lost to pylib's Counter() (a dict), and `Counter.k`
+#     raised "'TPyDict' object has no attribute 'k'" (exit 217);
+#   - `def len` called on a for-loop variable was rewritten to pylib's pylen_v,
+#     its str result retagged Int64, and printing it segfaulted (exit 139).
+# test_nilpy_user_class_shadows_builtin and test_nilpy_user_def_shadows_builtin
+# cover the main program. shadowctl, imported after it, shadows nothing and
+# must still reach the builtins.
+#
+# NOT covered here, and still open: the main program itself sees an imported
+# module's `len` and `class Counter` over the builtins (flat unit scope), so
+# the control lives in a second module rather than in this file.
+import shadowmod
+import shadowctl
