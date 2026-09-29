@@ -1174,3 +1174,4 @@
 2026-09-29T00:57:25Z	borg	64db7e73f8f1fd8f7070ca65beb3a4fc9561e5e6	would NOT pin 64db7e73f8f1 — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-pascal-conformance#shard2/6
 2026-09-29T01:27:45Z	borg	890da59886956a6b0f606a1865be6dedbc6c7685	would NOT pin 890da5988695 — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-pascal-conformance#shard2/6
 2026-09-29T01:58:13Z	borg	39436c49c52ea185c01e313fdec1a99419bc37e9	would NOT pin 39436c49c52e — 1 red(s) the current pin does not have, 3 inherited from the current pin: test-pascal-conformance#shard2/6
+2026-09-29T03:01:13Z	borg	fc6f765912586216a49a40da8ef8dc371f4e5be0	would NOT pin fc6f76591258 — 3 red(s) the current pin does not have, 3 inherited from the current pin: test-nilpy#src:examples/tk/event_and_children_are_released.npy, test-pascal-conformance#shard2/6, tools-devtest#00
