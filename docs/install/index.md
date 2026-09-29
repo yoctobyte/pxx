@@ -75,7 +75,7 @@ worth knowing apart, because only the second is unusual:
 
   This answers the harder question — *are the binaries I was given the ones this
   source produces?* — and it is a check most compilers cannot offer, because
-  PXX's build is a byte-identical self-host fixed point. It is a statement about
+  PXX's build is a byte-identical self-host [fixed point](../reference/glossary.md#build-terms-a-newcomer-meets-first). It is a statement about
   determinism of *our own* build; it is not a comparison against any other
   compiler's output.
 

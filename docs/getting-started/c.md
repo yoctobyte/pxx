@@ -7,7 +7,7 @@ order: 22
 
 The same `pxx` compiler that builds Pascal also compiles C. It picks the C
 frontend from the `.c` extension; there is no separate tool. Every command on
-this page was run with **pin v450** (compiler sha256 `c19cc2d531e4…`) on
+this page was run with [**pin v450**](../reference/glossary.md#terms-in-the-release-notes-and-the-esp-pages) (compiler sha256 `c19cc2d531e4…`) on
 2026-09-29, from the root of a checkout set up as in
 [Install](../install/index.md). The figures for the two large programs under
 "Real programs" come from the examples showcase.
@@ -192,7 +192,7 @@ the parts of the runtime it uses, and this flag lets the linker drop the
 duplicates. Here it gives 113 KB instead of 566 KB. `--link` is x86-64 only
 today, and it prints its section statistics on standard error.
 
-**One translation unit.** A file that includes the others builds as a single
+**One translation unit** (a [*unity build*](../reference/glossary.md#terms-in-the-release-notes-and-the-esp-pages)). A file that includes the others builds as a single
 program, and the result is smallest (79 KB here):
 
 ```c

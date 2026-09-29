@@ -13,7 +13,7 @@ and built with PXX, like the [Eliah IDE](../examples/index.md#the-eliah-ide),
 and shares Eliah's core. The name `esp` is a working name.
 
 The window, menus and messages on this page were re-checked on 2026-09-27
-against the source at `e4cbac2491` with pin v445 (compiler sha256
+against the source at `e4cbac2491` with [pin](../reference/glossary.md#terms-in-the-release-notes-and-the-esp-pages) v445 (compiler sha256
 `caf21ac399f1`): `./espide.sh --gui-smoke` printed `GUI SMOKE OK`, and
 `apps/ide/test.sh` reported `304 passed, 0 failed`. Detect and Build+Flash
 were not pressed for that check. The board steps below were run earlier, from

@@ -11,7 +11,7 @@ family. There is no interpreter on the chip: a Python program ends up as xtensa
 application by ESP-IDF's own build.
 
 This page takes you from an empty machine to a program running on a board. The
-reference material (the bare-metal profile, code size, floating point) is in
+reference material (the [bare-metal profile](../reference/glossary.md#terms-in-the-release-notes-and-the-esp-pages), code size, floating point) is in
 [ESP32 / Microcontrollers](../targets/esp32.md). To detect, build, flash and monitor from
 one window, see [The ESP32 IDE](./esp-ide.md).
 
@@ -40,7 +40,7 @@ Your user needs to be allowed to open the board's serial port. On most Linux
 systems that means the `dialout` group.
 
 The scripts below find the PXX compiler on their own: in a git checkout they
-use the pinned compiler, `stable_linux_amd64/default/pinned`, and in a release
+use the [pinned compiler](../reference/glossary.md#build-terms-a-newcomer-meets-first), `stable_linux_amd64/default/pinned`, and in a release
 tarball `compiler/pxx-<arch>`. Set `PXX` only to use a different one, for
 example a compiler you built yourself:
 
@@ -395,7 +395,7 @@ was not recorded), ESP-IDF v6.0.1, CPU at 160 MHz, 2026-09-24/25.
   check. `monitor-s3` is flat with both. Three examples, each re-run in a
   loop, lost bytes on every pass with an earlier compiler (`bb17d23beea5`):
   `nilpy-s3` about 44, `nilpy-hw-s3` about 220, `gpio-edge-s3` about 264.
-  Pin v424 predates that fix, so expect the same from it; v425 carries it.
+  Every pin from v425 on, v441 included, carries both fixes.
   With the later compiler all three are flat. `adc-s3` run in a loop lost about
   17.5 KB per pass with both of those compilers, because an `adc.read()` whose
   result is thrown away was not released: with `bb17d23beea5` its free heap
@@ -403,4 +403,3 @@ was not recorded), ESP-IDF v6.0.1, CPU at 160 MHz, 2026-09-24/25.
   (`c4eb85dc39`): with pin v425, 60 passes keep the free heap at 271,232 bytes
   from pass 0 to pass 60, with the lowest point at 264,440 throughout, the same
   as compiler `790bc11fb9c2` (built from `e94295369`) measured before the pin.
-  On v424, assign the result, as `monitor-s3` does.

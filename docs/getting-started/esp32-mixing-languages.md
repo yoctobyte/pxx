@@ -10,7 +10,7 @@ on the ESP32 a Python program can call a Pascal unit, and a Pascal program can
 call C, with no binding code in between. This page shows both on an ESP32-C3;
 the Python example also runs on an emulated ESP32-S3.
 
-**What was checked.** With pin v445 (compiler sha256 `caf21ac399f1`) on
+**What was checked.** With [pin](../reference/glossary.md#terms-in-the-release-notes-and-the-esp-pages) v445 (compiler sha256 `caf21ac399f1`) on
 2026-09-27, in a fresh clone at `025a005851`, with ESP-IDF v6.0.1: both
 programs below built through ESP-IDF to a C3 image, and both ran under
 Espressif's QEMU for the ESP32-C3 and printed exactly what the same source

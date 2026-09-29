@@ -12,7 +12,7 @@ command line, and its unit and object files. This page lists what carries over
 unchanged, what the mode lines do, where the two compilers give different
 answers, and how to build a small FPC program.
 
-**What was checked.** Every program on this page was compiled with pin v447
+**What was checked.** Every program on this page was compiled with [pin](../reference/glossary.md#terms-in-the-release-notes-and-the-esp-pages) v447
 (compiler sha256 `fad87004e4e8`) and with FPC 3.2.2 (`fpc -O1`) on x86-64
 Linux on 2026-09-28. Both binaries were run. Where the output is the same, the
 page shows it once; where it differs, it shows both. Every program was run
@@ -170,7 +170,8 @@ number (`Write(st.Pop, ' ')`). FPC 3.2.2 prints the same bytes.
 
 On a larger scale, PXX runs a curated 550 programs of FPC 3.2.2's own test
 suite (`tools/run_pascal_conformance.sh`). With pin v441, 427 pass and 0
-fail; 50 do not apply here, and 73 are skipped, each with a written reason
+fail, and the same with v451 (2026-09-29); 50 do not apply here, and 73 are
+skipped, each with a written reason
 (see [the examples showcase](../examples/index.md)).
 
 ## Mode lines
