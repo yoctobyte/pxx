@@ -3617,6 +3617,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/tfdelete26 | diff -u test/test_nilpy_named_temporary_file_deletes_on_close.expected -
 	./$(COMPILER) test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.npy $(TESTTMP)/rootfree26
 	$(TESTTMP)/rootfree26 | diff -u test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.expected -
+	./$(COMPILER) test/test_nilpy_named_temporary_file_writes_and_reads.npy $(TESTTMP)/tfrw26
+	$(TESTTMP)/tfrw26 | diff -u test/test_nilpy_named_temporary_file_writes_and_reads.expected -
 	./$(COMPILER) test/test_nilpy_an_object_stored_into_a_variant_is_retained.npy $(TESTTMP)/varobjret26
 	$(TESTTMP)/varobjret26 | diff -u test/test_nilpy_an_object_stored_into_a_variant_is_retained.expected -
 	./$(COMPILER) test/test_nilpy_from_import_star.npy $(TESTTMP)/fromstar26
@@ -30324,6 +30326,10 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_named_temporary_file_deletes_on_close "$$(tools/run_target.sh i386 $(TESTTMP)/tfdelete_i386)" "$$(cat test/test_nilpy_named_temporary_file_deletes_on_close.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.npy $(TESTTMP)/rootfree_i386
 	tools/expect_same.sh i386/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot "$$(tools/run_target.sh i386 $(TESTTMP)/rootfree_i386)" "$$(cat test/test_nilpy_runtime_free_lands_on_a_filled_destroy_slot.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_named_temporary_file_writes_and_reads.npy $(TESTTMP)/tfrw_i386
+	tools/expect_same.sh i386/test_nilpy_named_temporary_file_writes_and_reads "$$(tools/run_target.sh i386 $(TESTTMP)/tfrw_i386)" "$$(cat test/test_nilpy_named_temporary_file_writes_and_reads.expected)"
+	./$(COMPILER) --target=riscv32 test/test_nilpy_named_temporary_file_writes_and_reads.npy $(TESTTMP)/tfrw_rv32
+	tools/expect_same.sh riscv32/test_nilpy_named_temporary_file_writes_and_reads "$$(tools/run_target.sh riscv32 $(TESTTMP)/tfrw_rv32)" "$$(cat test/test_nilpy_named_temporary_file_writes_and_reads.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_an_object_stored_into_a_variant_is_retained.npy $(TESTTMP)/varobjret_i386
 	tools/expect_same.sh i386/test_nilpy_an_object_stored_into_a_variant_is_retained "$$(tools/run_target.sh i386 $(TESTTMP)/varobjret_i386)" "$$(cat test/test_nilpy_an_object_stored_into_a_variant_is_retained.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_from_import_star.npy $(TESTTMP)/fromstar_i386

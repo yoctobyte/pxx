@@ -8,8 +8,11 @@
   THE SUBSET, stated plainly, because a shim that quietly approximates is worse
   than one that refuses:
 
-    tempfile.NamedTemporaryFile(suffix=, prefix=, dir=, delete=)   -> an object
-      with `.name` and `.close()`.
+    tempfile.NamedTemporaryFile(mode='w+b', buffering, encoding, newline,
+      suffix=, prefix=, dir=, delete=)   -> an open file with `.name`:
+      write/writelines/read/readline/readlines/seek/tell/flush/close. CPython's
+      parameter ORDER, so a positional `NamedTemporaryFile("w")` is the mode.
+      buffering, encoding and newline are accepted and ignored.
     tempfile.gettempdir()          -> $TMPDIR, $TEMP, $TMP, /tmp, ... as CPython
     tempfile.mkdtemp(suffix=, prefix=, dir=)                        -> a path
     tempfile.mkstemp / TemporaryDirectory / SpooledTemporaryFile
@@ -17,11 +20,10 @@
 
   THE DIFFERENCES FROM CPYTHON, all deliberate and all visible:
 
-  1. The file is CREATED (empty) and immediately closed; the object is a NAME,
-     not an open handle. CPython hands back a file object you can write through.
-     Every censused use takes `.name` and hands it to something else that opens
-     it by path, which is the shape this supports. Writing through the object is
-     an error rather than a silent no-op — there is no write method to call.
+  1. The file is opened through pylib's own file object (what `open()` yields),
+     in the given mode, so the reads answer str or bytes as `open()` does.
+     A binary-mode write of a str is not refused here, where CPython raises
+     TypeError.
   2. `delete=True` (CPython's default) removes the file at `.close()` and at
      the end of a `with` block, as CPython does. It is NOT removed when the
      object is merely dropped: a Pascal object's destructor does not run when
@@ -36,15 +38,28 @@ unit tempfile;
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
-uses sysutils, platform;   { platform: PalMkdir, for an exclusive 0700 create }
+uses pylib, sysutils, platform;   { pylib: the file object; platform: PalMkdir, for an exclusive 0700 create }
 
 type
   NamedTemporaryFile = class
   public
     name: AnsiString;
     FDelete, FClosed: Boolean;
-    constructor Create(const suffix: AnsiString = ''; const prefix: AnsiString = '';
+    FFile: TPyFile;
+    constructor Create(const mode: AnsiString = 'w+b'; buffering: Int64 = -1;
+                       const encoding: AnsiString = ''; const newline: AnsiString = '';
+                       const suffix: AnsiString = ''; const prefix: AnsiString = '';
                        const dir: AnsiString = ''; delete: Boolean = True);
+    function write(const v: Variant): Int64;
+    procedure writelines(const v: Variant);
+    function read: Variant; overload;
+    function read(n: Int64): Variant; overload;
+    function readline: Variant;
+    function readlines: TPyList;
+    procedure seek(pos: Int64); overload;
+    procedure seek(pos: Int64; whence: Int64); overload;
+    function tell: Int64;
+    procedure flush;
     procedure close;
     function __enter__: NamedTemporaryFile;
     procedure __exit__(const a, b, c: Variant);
@@ -141,7 +156,9 @@ begin
   gettempdir := TfTempDir;
 end;
 
-constructor NamedTemporaryFile.Create(const suffix, prefix, dir: AnsiString;
+constructor NamedTemporaryFile.Create(const mode: AnsiString; buffering: Int64;
+                                      const encoding, newline: AnsiString;
+                                      const suffix, prefix, dir: AnsiString;
                                       delete: Boolean);
 var base, pfx, d: AnsiString; f: TextFile;
 begin
@@ -156,6 +173,57 @@ begin
   AssignFile(f, name);
   Rewrite(f);
   CloseFile(f);
+  FFile := pyfile_open(name, mode);
+end;
+
+function NamedTemporaryFile.write(const v: Variant): Int64;
+begin
+  write := FFile.write(v);
+end;
+
+procedure NamedTemporaryFile.writelines(const v: Variant);
+begin
+  FFile.writelines(v);
+end;
+
+function NamedTemporaryFile.read: Variant;
+begin
+  read := FFile.read;
+end;
+
+function NamedTemporaryFile.read(n: Int64): Variant;
+begin
+  read := FFile.read(n);
+end;
+
+function NamedTemporaryFile.readline: Variant;
+begin
+  readline := FFile.readline;
+end;
+
+function NamedTemporaryFile.readlines: TPyList;
+begin
+  readlines := FFile.readlines;
+end;
+
+procedure NamedTemporaryFile.seek(pos: Int64);
+begin
+  FFile.seek(pos);
+end;
+
+procedure NamedTemporaryFile.seek(pos: Int64; whence: Int64);
+begin
+  FFile.seek(pos, whence);
+end;
+
+function NamedTemporaryFile.tell: Int64;
+begin
+  tell := FFile.tell;
+end;
+
+procedure NamedTemporaryFile.flush;
+begin
+  FFile.flush;
 end;
 
 function mkdtemp(const suffix, prefix, dir: AnsiString): AnsiString;
@@ -187,10 +255,13 @@ end;
 
 procedure NamedTemporaryFile.close;
 begin
-  { Nothing is open (the object is a name, see the unit header). What close
-    means here is CPython's delete=True: remove the file, once. }
+  { Close the file, then CPython's delete=True: remove it. Once. The file
+    object is freed here: NilPy does not run this object's destructor. }
   if FClosed then Exit;
   FClosed := True;
+  FFile.close;
+  FFile.Free;
+  FFile := nil;
   if FDelete then DeleteFile(name);
 end;
 

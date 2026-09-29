@@ -1,0 +1,49 @@
+# NamedTemporaryFile is an open file, as in CPython: write/read/seek through
+# the object, in the mode asked for (w+b by default), and `mode` is the
+# first positional parameter.
+# bug-l-named-temporary-file-has-no-write
+import os
+import tempfile
+
+d = os.environ.get("TESTMGR_TMP") or os.environ.get("TESTTMP") or "/tmp"
+
+f = tempfile.NamedTemporaryFile(dir=d)
+print(f.write(b"abc\ndef\n"))
+f.seek(0)
+print(f.read())
+f.seek(4)
+print(f.read(2), f.tell())
+f.close()
+print(os.path.exists(f.name))
+
+t = tempfile.NamedTemporaryFile("w+", suffix=".txt", dir=d)
+print(t.name.endswith(".txt"))
+print(t.write("one\n"))
+t.writelines(["two\n", "three\n"])
+t.flush()
+with open(t.name) as g:
+    print(repr(g.read()))
+t.seek(0)
+print(repr(t.readline()))
+print(t.readlines())
+t.seek(0, 2)
+print(t.tell())
+t.close()
+print(os.path.exists(t.name))
+
+with tempfile.NamedTemporaryFile(mode="w", delete=False, dir=d, prefix="pxx_") as k:
+    k.write("kept\n")
+    name = k.name
+print(os.path.basename(name).startswith("pxx_"))
+with open(name) as g:
+    print(repr(g.read()))
+os.remove(name)
+print(os.path.exists(name))
+
+with tempfile.NamedTemporaryFile("w+b", dir=d) as b:
+    b.write(b"\x00\x01\xff")
+    b.seek(0)
+    data = b.read()
+    print(type(data).__name__, len(data), data[2])
+    bname = b.name
+print(os.path.exists(bname))

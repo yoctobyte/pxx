@@ -1,0 +1,16 @@
+8
+b'abc\ndef\n'
+b'de' 6
+False
+True
+4
+'one\ntwo\nthree\n'
+'one\n'
+['two\n', 'three\n']
+14
+False
+True
+'kept\n'
+False
+bytes 3 255
+False
