@@ -21,6 +21,60 @@ CPython itself rejects, or in a way no accepting program can observe.
 
 ---
 
+## On the ESP32 the reference is MicroPython, not CPython
+
+*Written 2026-09-29 (frankD). Every "Nil Python" cell below was measured
+that day with pin v451 (compiler sha256 `d9b7226769cc`), called directly
+through `tools/esp_run.sh` under Espressif's QEMU (ESP_RUN_PXX set to the
+pinned binary). v451's `./pxx` wrapper was not used, because it
+mis-resolves `import time` (see known-issues). The ESP32-C3 was measured
+first, and the ESP32-S3 where the C3 result could differ.*
+
+The rule for this section is a per-platform one. A desktop Nil Python program
+is held to CPython. On an ESP chip the target is **MicroPython**: a device
+that should keep running when a sensor yields a bad value, not stop. This was
+relayed by the coordinator as the owner's decision of 2026-09-23. No
+committed record of that decision was found, so treat that date as reported,
+not verified. The file's rule above is about CPython; the rows here are
+where the ESP build deliberately follows the device model instead, plus one
+row (uncaught exceptions) whose outcome is still open.
+
+The MicroPython column was **not run here**: there is no MicroPython board or
+binary on the measuring machine. Each cell says where it comes from.
+
+| On the ESP chip | Nil Python (v451, QEMU) | MicroPython | CPython 3 (desktop) |
+| --- | --- | --- | --- |
+| `a // b`, `a % b` with `b` zero at run time | `0` and `0`; the program continues, and a `try`/`except ZeroDivisionError` around it never fires (C3 and S3 identical) | raises `ZeroDivisionError` (its documented behaviour; not run here) | raises `ZeroDivisionError` (measured) |
+| `7.0 / 0.0` from a run-time zero | `inf` (C3, S3) | raises `ZeroDivisionError` (not run here) | raises `ZeroDivisionError` (measured) |
+| float precision and formatting | 64-bit doubles: `1 / 3` prints `0.3333333333333333`, `0.1 + 0.2` prints `0.30000000000000004`, `1e22`, `1.5e-07`, `f"{3.14159:.2f}"` `3.14`, identical to CPython (C3, S3) | the esp32 port is built with single-precision floats (`MICROPY_FLOAT_IMPL_FLOAT` in `ports/esp32/mpconfigport.h`, read 2026-09-29), so fewer digits; outputs not run here | as Nil Python (measured) |
+| subnormal doubles | flushed to zero: `1e-300 * 1e-10` prints `0.0` and `2.0 ** -1074 > 0.0` prints `False` (C3, S3); the known-issues row "riscv32 and Xtensa: arithmetic flushes subnormal doubles to zero" | single precision has its own, smaller subnormal range; not run here | `1e-310` and `True` (measured) |
+| big integers | exact: `2 ** 70` prints `1180591620717411303424` (C3, S3) | arbitrary precision on the esp32 port (`MICROPY_LONGINT_IMPL_MPZ`, same file); not run here | exact (measured) |
+| the `machine` module | a subset: `Pin`, `I2C`, `SoftI2C`, `SPI`, `RTC` (see docs/library/micropython.md). `machine.freq()`, `machine.reset()`, `machine.unique_id()`, `machine.deepsleep()` and `Pin.irq()` are refused **at compile time** by name ("no member freq came of the qualifier machine", "Pin has no method irq"); `Pin(2, Pin.OUT).on()` builds (C3, compile only) | all of these exist | no `machine` module |
+| an uncaught exception | prints `Unhandled exception: ValueError: boom`, then the main task spins. On the C3 the task watchdog reports it 2.5 s after `app_main` started, an interrupt-watchdog panic follows, and the chip **reboots and runs the program again**: four runs, three reboots, in a 15 s QEMU run. On the S3 under QEMU the message was followed by nothing for 60 s (no watchdog report, no reboot); the runtime path is the same busy loop on both chips (`PXXReportUnhandled` in `compiler/builtin/exceptions.pas`), and whether the S3's silence is the chip or the emulator is not separated. **The intended behaviour, stop or restart, is pending the owner's decision** | prints a traceback, and the board drops to the REPL without resetting (MicroPython's "reset and boot sequence" docs, read 2026-09-29) | traceback on stderr, exit status 1 (measured) |
+| interrupts | an interrupt only records an event; the handler runs later in the **main task**, when the program sleeps or calls `interrupts.poll()`, and may allocate and print. Measured on the C3: two events pushed, then a 1,000-step loop: `pending 2 delivered 0`; after `time.sleep_ms(10)`: both handlers ran, `IntInDrain()` was `True` in each, and the list they appended to read `[1, 2]`. With real GPIO and ADC interrupts this is recorded on both boards in docs/library/esp.md ("What was checked on a board") | `Pin.irq()`: with `hard=True` the handler runs with less delay and "may not allocate memory"; the default soft handler runs with ordinary delay (machine.Pin docs, read 2026-09-29) | no interrupts |
+
+What this means for a program moved between them:
+
+- **Division by zero is the sharpest difference.** Code written for MicroPython or
+  CPython that relies on catching `ZeroDivisionError` gets `0` or `inf` on the
+  chip instead, with no exception. On the desktop, Nil Python stops with runtime
+  error 200 for an integer zero only known at run time (see the known-issues
+  "By design: math errors" table). Test the divisor where it matters.
+- **Numbers print like CPython, not like MicroPython on an ESP32**, because
+  Nil Python keeps 64-bit doubles on the chip. That is closer to the desktop
+  and further from a MicroPython board.
+- **A missing `machine` name fails the build, not the run.** A MicroPython
+  driver that calls `machine.freq()` is refused at compile time with the name
+  in the message, instead of raising `AttributeError` on the board.
+
+Observed while measuring, not diagnosed: on the C3 under QEMU a pure
+computation loop of 100,000 Nil Python iterations, with no sleep, ended in the
+same interrupt-watchdog panic ("Interrupt wdt timeout on CPU0") before its next
+line printed. The 1,000-iteration loop in the interrupts row did not. Whether
+that happens on a real C3 has not been checked.
+
+---
+
 ## Mutating a dict while iterating it is not detected
 
 *Decided 2026-08-04 (Rene). See `decide-nilpy-dict-mutation-during-iteration`.*

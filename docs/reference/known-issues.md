@@ -1013,9 +1013,13 @@ These were wrong in the earlier draft pin v425 and are fixed in v441.
   interim pins v439 and v440 `Dispose(a[F()])` called `F` three times. v441
   calls it once.
 - **ESP: an uncaught exception did not report itself.** The program now prints
-  `Unhandled exception: <Class>: <Message>`, as on a desktop, before it stops
-  (`7eeb3d755`). Whether an ESP program should stop or restart after that has
-  not been decided; it stops.
+  `Unhandled exception: <Class>: <Message>`, as on a desktop (`7eeb3d755`).
+  Whether the chip should then stop or restart has not been decided.
+  Currently the main task spins after the message:
+  on the ESP32-C3 under QEMU with v451 the task watchdog fires, and the chip
+  reboots and runs the program again (2026-09-29). On the ESP32-S3 under QEMU
+  nothing followed the message for 60 s; whether that is the emulator is not
+  known. See `devdocs/dev/nilpy-semantics-divergences.md`.
 - **The five memory leaks** listed under [The pre-release leak sweep, and leaks fixed since](#the-pre-release-leak-sweep-and-leaks-fixed-since).
 
 These were wrong in v424 and fixed in v425, and so are fixed here too:
