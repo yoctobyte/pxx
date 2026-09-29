@@ -72,6 +72,9 @@ Each of these was reproduced with the compiler named above. On 2026-09-28
 every row was checked again with pin v447 (compiler sha256 `fad87004e4e8`),
 built for x86-64, i386 and arm32 (the last two run under QEMU), against
 CPython 3.14.4: each row behaves as written, and the three targets print the same.
+On 2026-09-29 every row was run again with pin v450 (compiler sha256
+`c19cc2d531e4`, called directly), on the same three targets: each behaves as
+written, including the last three rows.
 
 | What you write | CPython | Nil Python |
 | --- | --- | --- |
@@ -84,9 +87,9 @@ CPython 3.14.4: each row behaves as written, and the three targets print the sam
 | `match x:` / `async def` | supported | compile error (`undefined variable (match)`) |
 | `f"""a {v} b"""` | supported | compile error: triple-quoted f-strings are not supported |
 | `import threading` | works | needs the `--threadsafe` compiler flag; the error says so |
-| `def mk(): return gen(5)`, then `list(mk())`, where `gen` is a generator | `[5, 6]` | `[]` on every target (pin v446): a generator returned from a def yields nothing, and `next(mk())` does not compile. Create the generator where it is consumed. |
-| on i386 or arm32, `exec` calling a method whose parameters are annotated (`name: str`, `n: int`, `flag: bool`) | works | crashes (pin v446); a method with unannotated parameters works |
-| on arm32, `from time import sleep as pause`, then `pause(0)` | returns | never returns (pin v446); `from time import sleep` and `sleep(0)` work |
+| `def mk(): return gen(5)`, then `list(mk())`, where `gen` is a generator | `[5, 6]` | `[]` on every target: a generator returned from a def yields nothing, and `next(mk())` does not compile. Create the generator where it is consumed. |
+| on i386 or arm32, `exec` calling a method whose parameters are annotated (`name: str`, `n: int`, `flag: bool`) | works | the call runs with wrong arguments: `p.greet('x', 3, True)` prints `hi  12884901888 True` on i386 and `hi x 12884901888 False` on arm32 (pin v450; pin v446 crashed here). A method with unannotated parameters works |
+| on arm32, `from time import sleep as pause`, then `pause(0)` | returns | never returns; `from time import sleep` and `sleep(0)` work |
 
 A generator abandoned before it is exhausted, for example by `break`, does not
 release the class instances held in its local variables.

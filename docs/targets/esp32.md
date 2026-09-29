@@ -284,10 +284,9 @@ Notes for the bare profile:
   `frozen tyString concat unsupported` rather than miscompiling, so it is safe
   to try.
 - On the ESP32-S3, a bare program that declares a `Double` and uses managed
-  strings builds and runs under QEMU from pin v425 (re-run with v445). With v424 it could fail to
-  build with `j displacement … is outside the encodable range
-  -131072..131071`; on v424, keep floats out of such a program, or build it as
-  an ESP-IDF component.
+  strings builds and runs under QEMU (measured with pin v445). Pin v424
+  could refuse it with `j displacement … is outside the encodable range
+  -131072..131071`; v425 and v445 build it.
 - A program that falls off the end parks in a self-loop (there is no OS to
   exit to). End interactive experiments with `while True do ;`.
 - Interrupt handlers: mark a routine `interrupt;` for a raw hardware-vector
