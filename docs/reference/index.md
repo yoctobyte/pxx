@@ -19,6 +19,7 @@ Reference pages collect exact command-line and operational details.
 - [FPC RTL coverage](./fpc-rtl-coverage.md)
 - [Current limits](./limits.md)
 - [Known issues in beta 0.1](./known-issues.md)
+- [Reporting bugs](./reporting-bugs.md)
 - [Licensing](./licensing.md)
 - [Glossary](./glossary.md)
 
