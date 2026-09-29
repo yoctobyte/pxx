@@ -63,8 +63,8 @@ These give CPython's output:
   `enumerate`, `zip`, `map`, `filter`, `any`, `all`, `isinstance`, `type`.
 - **Catchable errors**: `int("abc")` raises `ValueError`, a bad index raises
   `IndexError`, a missing key raises `KeyError`.
-- **Modules**: `math`, `re`, `json`, `random`, `collections.Counter`, `zlib`
-  and others, each backed by a PXX unit (see [imports](#imports)).
+- **Modules**: `math`, `re`, `json`, `random`, `Counter` and `deque` from
+  `collections` (imported by name), `zlib` and others, each backed by a PXX unit (see [imports](#imports)).
 
 ## Known limits
 

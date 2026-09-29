@@ -21,6 +21,9 @@ programs can use these units without passing extra `-Fu` flags.
 | `strings` | Classic NUL-terminated `PChar` routines (`StrLen`, `StrPos`, `StrComp`, …). |
 | [`strutils`](./more-units.md#strutils-fpcs-string-helpers-in-part) | 26 of FPC's `StrUtils` routines. |
 | [`dateutils`](./more-units.md#dateutils-fpcs-date-helpers-in-part) | 7 of FPC's `DateUtils` routines. |
+| [`collections`](./more-units.md#collections-a-generic-list) | A small generic list, `TList<T>`. |
+| [`contnrs`](./more-units.md#contnrs-object-lists) | FPC's `TFPObjectList` and `TFPHashObjectList`. |
+| [`regex`](./more-units.md#regex-regular-expressions-for-pascal) | Regular expressions with Python's syntax. |
 | `math` | Numeric helpers. |
 | [`ucomplex`](./math-and-rtti.md#ucomplex-complex-numbers) | Complex numbers with the FPC `ucomplex` API and operator overloads. |
 | [`vecmath`](./math-and-rtti.md#vecmath-vectors-and-matrices) | 2/3/4-component vectors and matrices (`TVec3`, `TMat4`, …) with operator overloads. |
@@ -52,8 +55,8 @@ refused.
 | Unit | Area |
 | --- | --- |
 | [`json`](./json.md) | JSON parser / serializer support. |
-| `httpjson` | HTTP helpers for JSON payloads. |
-| `base64` | Base64 encoding and decoding. |
+| [`httpjson`](./more-units.md#httpjson-json-over-http) | Fetch and post JSON over HTTP. |
+| [`base64`](./more-units.md#base64-encoding-bytes-as-text) | Base64 encoding and decoding, for Pascal and Nil Python. |
 | [`png` / `image`](./more-units.md#png-and-image-reading-and-writing-png-files) | PNG decoding of every non-interlaced colour type and bit depth, and encoding as 8-bit RGBA, plus a simple RGBA bitmap type. No compression library is needed. |
 | [`zlib`](./more-units.md#zlib-deflate-and-inflate) | Deflate compression and decompression, from Pascal and as Nil Python's `zlib` module. |
 
@@ -73,7 +76,7 @@ refused.
 | Unit | Area |
 | --- | --- |
 | [`sha256`, `sha512`, `hashing`](./more-units.md#hashing-sha256-and-sha512-checksums-and-digests) | SHA-256, SHA-512, HMAC-SHA256, HKDF, CRC32 and Adler32. |
-| `random` | Random byte and number helpers. |
+| [`random`](./more-units.md#random-seeded-generators) | Seeded xoshiro256** generators and OS entropy. |
 | [`aesgcm`, `chacha20poly1305`](./crypto.md#encrypting-aesgcm-and-chacha20poly1305) | AES-128-GCM and ChaCha20-Poly1305 authenticated encryption. |
 | [`x25519`, `ecdsa_p256`, `ed25519`, `rsa`, `x509`](./crypto.md) | Key agreement, P-256 signing, signature checks, and reading and checking certificates. No side-channel claim: see the page. |
 | `tls13_*` | Native TLS 1.3 handshake/key/record work in progress. |
@@ -101,6 +104,13 @@ program reaches them with `import`. The ones below have entries of their own.
 | [`sqlite3`](./more-units.md#sqlite3-the-db-api-over-the-system-library) | SQLite through Python's DB-API. |
 | [`tempfile`](./more-units.md#tempfile-temporary-files-and-directories) | Temporary files and directories. |
 | [`zlib`](./more-units.md#zlib-deflate-and-inflate) | Deflate, `crc32` and `adler32`. |
+| [`base64`](./more-units.md#base64-encoding-bytes-as-text) | `b64encode` and `b64decode`. |
+| [`re`](./more-units.md#re-regular-expressions-for-nil-python) | Regular expressions. |
+| [`random`](./more-units.md#random-for-nil-python) | Random numbers, not CPython's sequence. |
+| [`collections`](./more-units.md#collections-counter-and-deque) | `Counter` and `deque`. |
+| [`html`](./more-units.md#html-escaping-text-for-html) | `escape` and `unescape`. |
+| [`markdown`](./more-units.md#markdown-readme-shaped-markdown-to-html) | A subset of Markdown to HTML. |
+| [`subprocess`](./more-units.md#subprocess-running-other-programs) | Running other programs. |
 
 The rest are listed under [Nil Python: Shims](../targets/nil-python.md#shims-standing-in-for-a-python-package).
 
