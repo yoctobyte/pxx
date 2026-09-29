@@ -3625,6 +3625,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/procnone26 | diff -u test/test_nilpy_stdlib_procedure_call_is_none.expected -
 	./$(COMPILER) test/test_nilpy_random_sample.npy $(TESTTMP)/rsample26
 	$(TESTTMP)/rsample26 | diff -u test/test_nilpy_random_sample.expected -
+	./$(COMPILER) test/test_nilpy_collections_counter_qualified.npy $(TESTTMP)/ctrq26
+	$(TESTTMP)/ctrq26 | diff -u test/test_nilpy_collections_counter_qualified.expected -
 	# random.sample releases its copy of the population; `keep` is the positive
 	# control and must trip the bound.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_random_sample_releases_its_copy.npy $(TESTTMP)/rsample_leak26
@@ -19126,6 +19128,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh wasm32/test_nilpy_stdlib_procedure_call_is_none "$$(tools/run_target.sh wasm32 $(TESTTMP)/procnone.wasm)" "$$(cat test/test_nilpy_stdlib_procedure_call_is_none.expected)"
 	./$(COMPILER) --target=wasm32 test/test_nilpy_random_sample.npy $(TESTTMP)/rsample.wasm
 	tools/expect_same.sh wasm32/test_nilpy_random_sample "$$(tools/run_target.sh wasm32 $(TESTTMP)/rsample.wasm)" "$$(cat test/test_nilpy_random_sample.expected)"
+	./$(COMPILER) --target=wasm32 test/test_nilpy_collections_counter_qualified.npy $(TESTTMP)/ctrq.wasm
+	tools/expect_same.sh wasm32/test_nilpy_collections_counter_qualified "$$(tools/run_target.sh wasm32 $(TESTTMP)/ctrq.wasm)" "$$(cat test/test_nilpy_collections_counter_qualified.expected)"
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=wasm32 test/test_nilpy_random_sample_releases_its_copy.npy $(TESTTMP)/rsample_leak.wasm
 	tools/assert_no_leak.sh wasm32_nilpy_random_sample_released 100 tools/run_target.sh wasm32 $(TESTTMP)/rsample_leak.wasm drop 5000
 	./$(COMPILER) --target=wasm32 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr.wasm
@@ -30328,6 +30332,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_stdlib_procedure_call_is_none "$$(tools/run_target.sh i386 $(TESTTMP)/procnone_i386)" "$$(cat test/test_nilpy_stdlib_procedure_call_is_none.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_random_sample.npy $(TESTTMP)/rsample_i386
 	tools/expect_same.sh i386/test_nilpy_random_sample "$$(tools/run_target.sh i386 $(TESTTMP)/rsample_i386)" "$$(cat test/test_nilpy_random_sample.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_collections_counter_qualified.npy $(TESTTMP)/ctrq_i386
+	tools/expect_same.sh i386/test_nilpy_collections_counter_qualified "$$(tools/run_target.sh i386 $(TESTTMP)/ctrq_i386)" "$$(cat test/test_nilpy_collections_counter_qualified.expected)"
 	./$(COMPILER) --target=i386 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_i386
 	tools/expect_same.sh i386/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh i386 $(TESTTMP)/realloc_i386)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
 	./$(COMPILER) --target=i386 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof_i386

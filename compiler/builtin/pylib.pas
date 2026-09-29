@@ -2849,6 +2849,8 @@ function pydeque_new(l: TPyList): TPyDeque; overload;
 function Counter: TPyDict;
 function Counter(l: TPyList): TPyDict; overload;
 function Counter(const s: AnsiString): TPyDict; overload;
+function pycounter_new: TPyDict; overload;
+function pycounter_new(const src: Variant): TPyDict; overload;
 { `reversed(x)` — a CURSOR walking the source backwards, which is what CPython
   returns (`list_reverseiterator`). It used to be the reversed COPY, on the
   grounds that NilPy's `for` was a counted-loop desugar with no iterator
@@ -5693,7 +5695,11 @@ begin
   begin
     Result := PySeqKindName(TPyList(o).FKind);
   end
-  else if o is TPyDict then Result := 'dict'
+  else if o is TPyDict then
+  begin
+    { a Counter is a dict subclass in CPython, named Counter }
+    if TPyDict(o).FCounterMode then Result := 'Counter' else Result := 'dict';
+  end
   else if o is TPyBytes then
   begin
     if TPyBytes(o).FViewOf <> nil then Result := 'memoryview'
@@ -9665,6 +9671,38 @@ begin
     the whole bug this routes around rather than fixing twice. }
   c.update(s);
   Result := c;
+end;
+
+{ `collections.Counter(x)` -- the QUALIFIED spelling, reached through
+  PyStdlibCallProc. That table picks an overload by arity alone, and Counter's
+  two 1-argument overloads differ only by type, so this one takes a Variant and
+  selects at run time: update(Variant) already counts a str's characters, adds
+  a mapping's values and counts a list's elements. Anything else iterable (a
+  range, a generator) is materialised first, as CPython iterates it. Its own
+  name, not `Counter`, for the reason pydeque_new has one: a program's own
+  `def Counter` must not be what the qualified call reaches.
+  bug-n-collections-counter-qualified-does-not-compile }
+function pycounter_new: TPyDict;
+begin
+  Result := Counter;
+end;
+
+function pycounter_new(const src: Variant): TPyDict;
+var o: TObject; l: TPyList;
+begin
+  Result := Counter;
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if (o <> nil) and not (o is TPyDict) and not (o is TPyList) then
+    begin
+      l := pylist_v(src);
+      Result.update(l);
+      PXXObjRelease(Pointer(l));
+      Exit;
+    end;
+  end;
+  Result.update(src);
 end;
 
 function TPyDict.itemlist: TPyList;
@@ -23134,9 +23172,30 @@ begin
 end;
 
 function pydict_repr(d: TPyDict): AnsiString;
-var i: Integer; ks: TPyList; k: Variant;
+var i: Integer; ks, mc, pair: TPyList; k: Variant;
 begin
   if d = nil then begin Result := '{}'; Exit; end;
+  { A COUNTER prints as CPython's does: `Counter({...})` in most_common order
+    (highest count first, ties in insertion order), and `Counter()` when
+    empty. It printed as a plain dict in insertion order. }
+  if d.FCounterMode then
+  begin
+    mc := d.most_common;
+    if mc.count = 0 then Result := 'Counter()'
+    else
+    begin
+      Result := 'Counter({';
+      for i := 0 to mc.count - 1 do
+      begin
+        if i > 0 then Result := Result + ', ';
+        pair := TPyList(pyvarobj(mc.at(i)));
+        Result := Result + pyvar_repr(pair.at(0)) + ': ' + pyvar_repr(pair.at(1));
+      end;
+      Result := Result + '})';
+    end;
+    PXXObjRelease(Pointer(mc));
+    Exit;
+  end;
   Result := '{';
   ks := d.keylist;
   for i := 0 to ks.count - 1 do

@@ -15274,6 +15274,10 @@ begin
     differently spelled proc (`Power`) — an accident, not a guard.
     bug-n-collections-deque-is-missing }
   else if dotted = 'collections.deque' then Result := 'pydeque_new'
+  { Counter, which the note above held back: its target takes a Variant and
+    selects by type at run time, so arity is enough here.
+    bug-n-collections-counter-qualified-does-not-compile }
+  else if dotted = 'collections.Counter' then Result := 'pycounter_new'
   else Result := '';
 end;
 
