@@ -61,3 +61,6 @@ bad `fc6f76591258`, and this is the job's **first-ever run** — there is no ear
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-29 — auto-closed by the borg watcher: `test-nilpy#src:examples/tk/event_and_children_are_released.npy` passes at 1086f130add0 (tier full); it was red at fc6f76591258. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
