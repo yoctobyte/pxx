@@ -46,3 +46,6 @@ expect_same: MISMATCH [test_nilpy_htmltmp26.2]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-29 — the borg watcher saw `test-core#src:test/test_nilpy_html_tempfile.npy` GREEN at 5d6131afff98 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-nilpy-html-tempfile-3`, not `regression-test-core-test-nilpy-html-tempfile`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
