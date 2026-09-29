@@ -44,3 +44,6 @@ expect_same: MISMATCH [test_bracketdoor26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-29 — the borg watcher saw `test-core#src:test/test_a_bracket_argument_reaches_the_same_door_at_every_call_path.pas` GREEN at f499d25ded91 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-a-bracket-argument-reaches-the-same-door-at-every-call-path-2`, not `regression-test-core-test-a-bracket-argument-reaches-the-same-door-at-every-call-path`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
