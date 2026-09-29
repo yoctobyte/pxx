@@ -5089,6 +5089,19 @@ test-nilpy: $(COMPILER)
 	# starts raising, a refusal has leaked out of the error paths.
 	./$(COMPILER) test/test_nilpy_pyeval_fatal_diagnostics_are_catchable.npy $(TESTTMP)/test_nilpy_dcatch26
 	$(TESTTMP)/test_nilpy_dcatch26 | diff -u test/test_nilpy_pyeval_fatal_diagnostics_are_catchable.expected -
+	# An exec'd `__body__` declaring a BARE parameter is refused at PUBLICATION,
+	# every arity: PyBodyTramp is parameterless, so CallUserFn filled the parameter
+	# with None and `__body__("7")` answered 0 from int(s) instead of failing.
+	# THE THREE DEFAULTED/EMPTY ROWS ARE THE LOAD-BEARING ONES. ExecDef binds a
+	# DEFAULTED parameter at def time and keeps it out of FnParams entirely, so
+	# `def __body__(a=5)` works and MUST NOT be refused -- measured 5, and (a=5,b=7)
+	# measured 12, on v451 d9b7226769cc before the rule was written. A rule of
+	# "refuse any declared parameter" would have broken both, which is precisely the
+	# mistake the host-call shape refusal made twice, caught both times by a control.
+	# Every in-repo `__body__` and uforth's own are parameterless (checked), so this
+	# refusal changes nothing that worked.
+	./$(COMPILER) test/test_nilpy_exec_body_with_parameters_is_refused.npy $(TESTTMP)/test_nilpy_cbody26
+	tools/expect_same.sh cbody26 "$$($(TESTTMP)/test_nilpy_cbody26)" "BODYARG-CHECK failures=0"
 	# {*xs} deduplicates: the set display's STAR arm called extend (appends)
 	# while its ordinary elements went through add (dedups). The list rows are
 	# what says [*xs] did not become a set.

@@ -6956,6 +6956,7 @@ end;
 
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 var cslot, si: Integer;
+    bodyIdx: Integer;   { the pending `__body__` def, for the arity refusal below }
 begin
   EnvG := g;
   { Locals live in pyeval's own arrays (see LclSet), and `l` is SEEDED FROM and
@@ -7034,8 +7035,42 @@ begin
     (regression-test-uforth-00, bisected to the guard — the guard exposed this,
     it did not introduce it). pyvar_of_callable stamps VT_CALLABLE for a bare
     code address, which is what this is, and takes no phantom reference. }
-  if (l <> nil) and (FnFind('__body__') >= 0) then
+  bodyIdx := FnFind('__body__');
+  if (l <> nil) and (bodyIdx >= 0) then
+  begin
+    { A BARE PARAMETER IS REFUSED HERE, AT PUBLICATION, AT EVERY ARITY, because
+      PyBodyTramp above is PARAMETERLESS: it hands CallUserFn an empty TPyList, and
+      CallUserFn then fills every declared parameter with None because nothing bound
+      it. So `__body__("7")` did not fail -- it ran with the parameter None and
+      `int(s)` answered 0. Refusing where the arity is known beats returning a
+      plausible wrong number from a call the program cannot inspect.
+
+      ONLY BARE PARAMETERS, and that is measured rather than assumed. ExecDef
+      evaluates a DEFAULTED parameter at def time, stores it as a local of the
+      defining scope, and -- its own comment -- does "not append to params: the call
+      site never passes it". So FnParams holds exactly the parameters a call must
+      supply, which are exactly the ones this trampoline cannot, and the test is one
+      comparison: no '=' scanning, and no comma-inside-a-default hazard like
+      `a=(1,2)`. Measured on v451 d9b7226769cc before the rule was written:
+      `def __body__(a=5)` answers 5 and `def __body__(a=5,b=7)` answers 12, both
+      CORRECT, while a bare `a` answers None. A rule of "refuse any declared
+      parameter" would have broken those two working shapes -- which is the mistake
+      the host-call shape refusal made twice, both times caught by a control row.
+
+      EVERY ARITY, not just the ones that could be fixed. The sole N-arg route is
+      `PyClosureCall1`, hardwired at arity ONE in compiler/pyparser.inc with no
+      PyClosureCall2, so republishing `__body__` as a source closure would fix
+      `__body__(s)` and leave `__body__(a, b)` silently None. An arity-dependent
+      half-fix is the shape this unit keeps being burned by. }
+    if FnParams[bodyIdx] <> '' then
+      raise TypeError.Create('exec() cannot publish __body__ with parameters ('
+              + FnParams[bodyIdx] + '): it is reached through a parameterless '
+              + 'trampoline, so nothing would bind them and the call would return '
+              + 'a value computed from None rather than fail. Give the parameters '
+              + 'DEFAULTS, which are bound at def time and do work, or assign a '
+              + 'variable in the exec''d source instead of returning a def');
     l.store(MakeStr('__body__'), pyvar_of_callable(Pointer(@PyBodyTramp)));
+  end;
   { ...and every other top-level binding, which is the general case the
     `__body__` line above was the one hand-wired instance of. }
   if l <> nil then

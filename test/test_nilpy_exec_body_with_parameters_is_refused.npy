@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: 0BSD
+# AN exec'd `__body__` THAT DECLARES A BARE PARAMETER IS REFUSED AT EXEC TIME,
+# because nothing would ever bind it and the call returned a plausible wrong
+# answer instead of failing.
+#
+# exec() publishes `__body__` into the namespace dict as a callable variant whose
+# payload is &PyBodyTramp. That trampoline is PARAMETERLESS: it hands CallUserFn an
+# empty TPyList, and CallUserFn then fills every declared parameter with None
+# because nothing bound it. So `__body__("7")` did not fail -- it ran with the
+# parameter set to None, and `int(s)` on it answered 0. Measured before this
+# refusal existed, on the v451 pin d9b7226769cc.
+#
+# THE ONLY N-ARG ROUTE THAT EXISTS IS ARITY ONE. `PyClosureCall1(clv, a0)` is
+# hardwired in compiler/pyparser.inc as `pyvartag(callee)=9 ? PyClosureCall1(...)
+# : <defCall>`; there is no PyClosureCall2. Republishing `__body__` as a source
+# closure would therefore fix `__body__(s)` and leave `__body__(a, b)` silently
+# None -- an arity-dependent half-fix, which is the exact shape the host-call
+# bridge already taught this file to refuse. So the refusal covers EVERY arity and
+# a fix covering one was declined.
+#
+# THE DEFAULTED ROWS ARE THE LOAD-BEARING ONES and they are why the rule is
+# "bare parameters" and not "any parameters". ExecDef treats the two kinds
+# completely differently: a defaulted parameter is evaluated AT DEF TIME and stored
+# as a local of the defining scope, and -- its own comment -- is "Not appended to
+# params: the call site never passes it." Only BARE parameters reach FnParams. So
+# FnParams holds exactly the parameters a call must supply, which are exactly the
+# ones PyBodyTramp cannot supply, and the rule is one comparison with no '='
+# scanning and no comma-inside-a-default hazard like `a=(1,2)`.
+#
+# MEASURED on the v451 pin before the rule was written, which is the only reason it
+# is this narrow:
+#     no params        -> 42      correct
+#     one bare param   -> None    SILENTLY WRONG
+#     one defaulted    -> 5       CORRECT, must not be refused
+#     two defaulted    -> 12      CORRECT, must not be refused
+#     bare + default   -> None/7  bare wrong, default right
+# A rule of "refuse any declared parameter" would have broken two shapes that work
+# today. The host-call refusal was wrong twice in exactly that way -- once by
+# allowing a narrow last parameter, once by refusing three shapes correct on all
+# five targets -- and both times the controls were what caught it.
+#
+# THE REFUSAL FIRES AT EXEC, NOT AT CALL, which the rows below assert by never
+# calling anything in the refused cases: publication is where the arity is known
+# and where the program can still do something about it.
+
+fails = [0]
+
+
+def check(label, ok):
+    if not ok:
+        fails[0] = fails[0] + 1
+        print("BODYARG FAIL " + label)
+
+
+def publish(src):
+    # Returns "REFUSED" if exec itself raised, else calls it and returns the value.
+    ns = {}
+    try:
+        exec(src, {}, ns)
+    except TypeError as e:
+        return "REFUSED"
+    return str(ns["__body__"]())
+
+
+# ---- Allowed: nothing to bind, or everything bound at def time. ----
+check("no params", publish("def __body__():\n    return 42\n") == "42")
+check("one defaulted", publish("def __body__(a=5):\n    return a\n") == "5")
+check("two defaulted", publish("def __body__(a=5, b=7):\n    return a + b\n") == "12")
+
+# ---- Refused: a bare parameter, at every arity. ----
+check("one bare", publish("def __body__(a):\n    return a\n") == "REFUSED")
+check("two bare", publish("def __body__(a, b):\n    return a\n") == "REFUSED")
+check("three bare", publish("def __body__(a, b, c):\n    return a\n") == "REFUSED")
+check("bare then default", publish("def __body__(a, b=7):\n    return a\n") == "REFUSED")
+
+print("BODYARG-CHECK failures=" + str(fails[0]))
