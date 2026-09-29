@@ -662,8 +662,10 @@ Limits:
 - There is no `glob`, `rglob`, `resolve`, `absolute`, `iterdir`, `PurePath` or
   Windows path flavour, and no comparison or hashing of paths. A call to one of
   them is a compile error, for example `Path has no method .glob()`.
-- `read_text()` drops the file's last newline: on the file above it returns 17
-  characters, where CPython returns 18. `open(path).read()` returns all 18.
+- On v451, `read_text()` drops the file's last newline: on the file above it
+  returns 17 characters, where CPython returns 18. `open(path).read()` returns
+  all 18. Fixed after v451 (f5e0947c56): `read_text()` returns what CPython
+  returns, including for a file with CRLF line ends.
 
 ## `urllib.parse`: splitting a URL
 
@@ -767,12 +769,15 @@ Where it differs from CPython:
 - `NamedTemporaryFile` creates the file, empty, and closes it at once. What
   you get back is its name (`f.name`), not an open file. Open it by name to
   write to it.
-- `delete=True` is refused at run time: the program stops with `Unhandled
-  exception: Exception: tempfile.NamedTemporaryFile(delete=True) is not
-  supported ...`. That is CPython's default, so pass `delete=False` and remove
-  the file yourself.
-- `gettempdir()` always returns `/tmp`. CPython returns `$TMPDIR` when it is
-  set.
+- On v451, `delete=True` is refused at run time: the program stops with
+  `Unhandled exception: Exception: tempfile.NamedTemporaryFile(delete=True) is
+  not supported ...`. That is CPython's default, so on v451 pass
+  `delete=False` and remove the file yourself. Fixed after v451 (922294133d):
+  `delete=True` deletes the file on `close()` or at the end of a `with` block.
+  A file that is never closed stays, where CPython deletes it when the program
+  ends.
+- On v451, `gettempdir()` always returns `/tmp`. CPython returns `$TMPDIR` when
+  it is set. Fixed after v451 (922294133d): `gettempdir()` follows `$TMPDIR`.
 - `mkstemp`, `TemporaryFile`, `TemporaryDirectory` and `SpooledTemporaryFile`
   are not there.
 
@@ -809,12 +814,15 @@ CPython prints the same.
 
 Where it differs from CPython, on v451:
 
-- **A pattern the engine does not support matches nothing, silently.**
-  Lookahead `(?=...)`, lookbehind `(?<=...)`, backreferences such as `\1`,
-  named groups `(?P<name>...)` and possessive quantifiers such as `a++` make
-  `re.search` return `None`, and `re.compile` does not raise. CPython matches
-  them. To find out, ask the compiled pattern: `re.compile(r"foo(?=bar)").ok()`
-  is `False` and `.error()` is `only (?:...) group extensions are supported`.
+- Lookahead `(?=...)`, lookbehind `(?<=...)`, backreferences such as `\1`,
+  named groups `(?P<name>...)` and possessive quantifiers such as `a++` are
+  not supported; CPython matches them. **On v451 such a pattern matches
+  nothing, silently:** `re.search` returns `None` and `re.compile` does not
+  raise. To find out on v451, ask the compiled pattern:
+  `re.compile(r"foo(?=bar)").ok()` is `False` and `.error()` is
+  `only (?:...) group extensions are supported`. Fixed after v451
+  (ce1337e318): `re.compile` and the other `re` functions raise `re.error`
+  with that message.
 - With two or more groups, `findall` returns lists where CPython returns
   tuples: `re.findall(r"(\w)=(\d)", "a=1 b=2")` prints
   `[['a', '1'], ['b', '2']]`, CPython `[('a', '1'), ('b', '2')]`.
@@ -1003,10 +1011,11 @@ CPython prints the same.
 
 Where it differs from CPython, on v451:
 
-- **Give the program's full path.** The first item is not looked up in
-  `PATH`: `subprocess.run(["sh", "-c", "exit 3"])` returns 127 and
+- **On v451, give the program's full path.** The first item is not looked up
+  in `PATH`: `subprocess.run(["sh", "-c", "exit 3"])` returns 127 and
   `subprocess.call(["true"])` returns 127, where CPython finds `/bin/sh` and
-  `/bin/true` and returns 3 and 0.
+  `/bin/true` and returns 3 and 0. Fixed after v451 (8356b05c2a): the program
+  is looked up in `PATH`, and those two calls return 3 and 0.
 - There is no way to read a child's output yet. `run` refuses
   `capture_output=`, `stdout=`, `shell=`, `check=` and `cwd=` when the program
   is compiled (`run has no parameter named ...`), `check_output` and
