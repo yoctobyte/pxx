@@ -6,9 +6,11 @@ order: 22
 # Getting started with C
 
 The same `pxx` compiler that builds Pascal also compiles C. It picks the C
-frontend from the `.c` extension; there is no separate tool. Everything on this
-page was run with **pin v425** (compiler sha256 `426b2fbf3f08…`) on
-2026-09-25, from the root of a checkout set up as in [Install](../install/index.md).
+frontend from the `.c` extension; there is no separate tool. Every command on
+this page was run with **pin v450** (compiler sha256 `c19cc2d531e4…`) on
+2026-09-29, from the root of a checkout set up as in
+[Install](../install/index.md). The figures for the two large programs under
+"Real programs" come from the examples showcase.
 
 ## Hello, world
 
@@ -103,14 +105,12 @@ libraries instead of the built-in runtime:
 | `./pxx --system-libs prog.c prog` | `libc.so.6` and `libm.so.6` |
 
 With `--system-libs` (all of libc), a program's `printf` output is flushed at
-exit. v424 lost it, because the program does not exit through libc; if you are
-on v424, call `fflush(stdout)` before `main` returns.
+exit, as with the built-in runtime.
 
 **Other system libraries, such as zlib, SQLite or GTK, link from C.** A
 function declared in a system header binds to that header's shared library
 when the library on your machine exports it, so `#include <zlib.h>` records
-`libz.so.1` and the program runs. v424 recorded only `libc.so.6`, and the
-program failed when started with `undefined symbol: zlibVersion`.
+`libz.so.1` and the program runs.
 
 You can also avoid the system library altogether:
 
@@ -242,7 +242,7 @@ int main(void)
 tools/run_target.sh aarch64 cross.a64
 ```
 
-Built with v425 and run under QEMU user mode (wasm32 under wasmtime), each
+Built with v450 and run under QEMU user mode (wasm32 under wasmtime), each
 output matches GCC's build of the same file on x86-64:
 
 | Target | Output |
@@ -253,9 +253,6 @@ output matches GCC's build of the same file on x86-64:
 | arm32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
 | riscv32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
 | wasm32 | `3 7 19 42 \| 1.4142 \| 6 \| 32-bit` |
-
-v424 refused any wasm32 C program that includes `math.h`, with
-`wasm: var-name pool full`; v425 builds them.
 
 C also runs on the ESP32 chips; see [ESP32](../targets/esp32.md).
 
