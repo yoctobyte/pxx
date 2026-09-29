@@ -1,0 +1,11 @@
+var 10 xxxxxxxxxx 777
+short 255 777
+negative 0
+negative short 0
+field 8 ffffffff 555
+elem 6 eeeeee keep
+deref 255
+once 255 1
+byvar 255
+fits 7
+guard 777

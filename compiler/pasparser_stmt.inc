@@ -5622,18 +5622,26 @@ begin
   if Result <= 0 then Result := DEFAULT_STR_CAP;
 end;
 
-function ClampFrozenSetLenCount(target, count: Integer): Integer;
+function ClampFrozenSetLenCount(target, count: Integer; var pre: Integer): Integer;
 { SetLength on a frozen string stored the count into the length prefix as
   given: a ShortString kept its low byte (SetLength(s, 1000) read back 232) and
   a string[10] took 50, so a fill loop over Length(s) wrote past the buffer.
   fpc clamps a ShortString at 255; it does not clamp string[N] at N and
   overruns there, and pxx clamps both, as memory safety over matching fpc's
-  overrun. A literal is folded here; anything else goes through
-  PXXShortLenClamp once, so a count with side effects is evaluated once.
+  overrun. A literal is folded here. Anything else is evaluated ONCE into a
+  hidden temp and clamped inline, returned in `pre` to run before the
+  SetLength: `tmp := count; if tmp > N then tmp := N; if tmp < 0 then tmp := 0`.
+
+  INLINE, NOT A HELPER CALL. The first version called builtin's
+  PXXShortLenClamp and skipped the clamp when FindProc could not see it, and
+  builtin is loaded into a program without a uses clause only when a trigger
+  name appears. So `n := 50; SetLength(t, n)` stayed unclamped and segfaulted
+  unless the program also happened to call HexStr, and the fixtures did.
   bug-a-setlength-on-a-shortstring-does-not-clamp-at-its-capacity }
-var cap, clampPi, capLit: Integer;
+var cap, tmp, hiIf, loIf, pair: Integer;
 begin
   Result := count;
+  pre := -1;
   cap := FrozenSetLenCap(target);
   if ASTKind[count] = AN_INT_LIT then
   begin
@@ -5641,10 +5649,22 @@ begin
     else if ASTIVal[count] > cap then ASTIVal[count] := cap;
     Exit;
   end;
-  clampPi := FindProc('PXXShortLenClamp');
-  if clampPi < 0 then Exit;   { no builtin (--no-default-rtl): unclamped, as before }
-  capLit := AllocNode(AN_INT_LIT); ASTIVal[capLit] := cap; ASTTk[capLit] := Ord(tyInteger);
-  Result := GenMakeCall6(clampPi, tyInteger, count, capLit, -1, -1, -1, -1);
+  tmp := AllocVar('', tyInteger);
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := GenMakeAssign(GenMakeIdent(tmp, tyInteger), GenMakeIntLit(cap));
+  ASTRight[pair] := -1;
+  hiIf := AllocNode(AN_IF);
+  ASTLeft[hiIf] := GenMakeCmp(Ord(tkGt), GenMakeIdent(tmp, tyInteger), GenMakeIntLit(cap));
+  ASTRight[hiIf] := pair;
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := GenMakeAssign(GenMakeIdent(tmp, tyInteger), GenMakeIntLit(0));
+  ASTRight[pair] := -1;
+  loIf := AllocNode(AN_IF);
+  ASTLeft[loIf] := GenMakeCmp(Ord(tkLt), GenMakeIdent(tmp, tyInteger), GenMakeIntLit(0));
+  ASTRight[loIf] := pair;
+  pre := GenMakeSeq(GenMakeAssign(GenMakeIdent(tmp, tyInteger), count),
+         GenMakeSeq(hiIf, GenMakeSeq(loIf, -1)));
+  Result := GenMakeIdent(tmp, tyInteger);
 end;
 
 function BuildMultiSetLen(target: Integer; outerIsArr: Boolean): Integer;
@@ -7100,6 +7120,7 @@ var
   isLn, slIsArrTarget, slIsDynArr, frDot: Boolean;
   slCastDrop: Boolean;   { SetLength(TS(s), n): a STRING-typed cast around the target, dropped rather than reinterpreted }
   slCastTk: TTypeKind;   { ...and the kind that decided it }
+  slClampPre: Integer;   { a frozen-string SetLength's clamp statements, run before it (ClampFrozenSetLenCount) }
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   smArityBad: Boolean;   { the bare implicit-Self site already reported arity by NAME -- see its call tail }
   castPrevTok, qUnit: Integer;
@@ -8681,9 +8702,11 @@ begin
           if not slIsDynArr then
             Error('SetLength: multiple dimensions require a dynamic array');
         end;
+        slClampPre := -1;
         if not slIsArrTarget then
-          SetLenDimNode[0] := ClampFrozenSetLenCount(valNode, SetLenDimNode[0]);
+          SetLenDimNode[0] := ClampFrozenSetLenCount(valNode, SetLenDimNode[0], slClampPre);
         node := BuildMultiSetLen(valNode, slIsArrTarget);
+        if slClampPre >= 0 then node := chainSeq(slClampPre, node);
       end
       else if CaseEqual(name, 'New') and SoftIntrinsicOpen('New', qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then

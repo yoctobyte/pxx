@@ -483,13 +483,6 @@ function BinStr(Val: Int64; cnt: Integer): AnsiString;
   trigger as theirs. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 function StringOfChar(ch: Char; count: Integer): AnsiString;
 
-{ SetLength on a frozen string (ShortString, string[N], and every string under
-  -uPXX_MANAGED_STRING) takes its count through this: 0..cap. The parser
-  inserts the call; a literal count is folded there instead. fpc clamps a
-  ShortString at 255 and does NOT clamp string[N] at N (it overruns); pxx
-  clamps both. bug-a-setlength-on-a-shortstring-does-not-clamp-at-its-capacity }
-function PXXShortLenClamp(n, cap: Integer): Integer;
-
 { FPC System BIT SCAN: Bsf = index of the lowest set bit, Bsr = index of the
   highest, both 0-based from the least significant bit. A ZERO argument answers
   255 in every width — FPC's sentinel, not an index, and the reason these
@@ -743,13 +736,6 @@ begin
     if (Val and 1) <> 0 then Result[i] := '1' else Result[i] := '0';
     Val := Val shr 1;
   end;
-end;
-
-function PXXShortLenClamp(n, cap: Integer): Integer;
-begin
-  if n < 0 then Result := 0
-  else if n > cap then Result := cap
-  else Result := n;
 end;
 
 { The fill runs to Length(Result), not count: SetLength clamps a frozen

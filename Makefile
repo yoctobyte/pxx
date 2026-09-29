@@ -3790,6 +3790,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/lenvar_pas_x64 | diff -u test/test_length_of_a_variant.expected -
 	./$(COMPILER) test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_x64
 	$(TESTTMP)/lenarrvar_x64 | diff -u test/test_length_of_an_array_of_variant.expected -
+	./$(COMPILER) test/test_setlength_clamps_with_no_builtin_in_the_program.pas $(TESTTMP)/slnb_x64
+	$(TESTTMP)/slnb_x64 | diff -u test/test_setlength_clamps_with_no_builtin_in_the_program.expected -
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_setlength_clamps_with_no_builtin_in_the_program.pas $(TESTTMP)/slnb_frozen
+	$(TESTTMP)/slnb_frozen | diff -u test/test_setlength_clamps_with_no_builtin_in_the_program.expected -
 	./$(COMPILER) test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_x64
 	$(TESTTMP)/sl255_x64 | diff -u test/test_setlength_on_a_shortstring_clamps_at_255.expected -
 	./$(COMPILER) test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_x64
@@ -8502,6 +8506,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_length_of_a_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenvar_pas_a64)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=aarch64 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a64
 	tools/expect_same.sh aarch64/test_length_of_an_array_of_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenarrvar_a64)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=aarch64 test/test_setlength_clamps_with_no_builtin_in_the_program.pas $(TESTTMP)/slnb_a64
+	tools/expect_same.sh aarch64/test_setlength_clamps_with_no_builtin_in_the_program "$$(tools/run_target.sh aarch64 $(TESTTMP)/slnb_a64)" "$$(cat test/test_setlength_clamps_with_no_builtin_in_the_program.expected)"
 	./$(COMPILER) --target=aarch64 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_a64
 	tools/expect_same.sh aarch64/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh aarch64 $(TESTTMP)/sl255_a64)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
 	./$(COMPILER) --target=aarch64 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_a64
@@ -8770,6 +8776,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_length_of_a_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_pas_rv32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=riscv32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_rv32
 	tools/expect_same.sh riscv32/test_length_of_an_array_of_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenarrvar_rv32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=riscv32 test/test_setlength_clamps_with_no_builtin_in_the_program.pas $(TESTTMP)/slnb_rv32
+	tools/expect_same.sh riscv32/test_setlength_clamps_with_no_builtin_in_the_program "$$(tools/run_target.sh riscv32 $(TESTTMP)/slnb_rv32)" "$$(cat test/test_setlength_clamps_with_no_builtin_in_the_program.expected)"
 	./$(COMPILER) --target=riscv32 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_rv32
 	tools/expect_same.sh riscv32/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh riscv32 $(TESTTMP)/sl255_rv32)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
 	./$(COMPILER) --target=riscv32 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_rv32
@@ -30194,6 +30202,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_length_of_a_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_pas_i386)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=i386 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_i386
 	tools/expect_same.sh i386/test_length_of_an_array_of_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenarrvar_i386)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=i386 test/test_setlength_clamps_with_no_builtin_in_the_program.pas $(TESTTMP)/slnb_i386
+	tools/expect_same.sh i386/test_setlength_clamps_with_no_builtin_in_the_program "$$(tools/run_target.sh i386 $(TESTTMP)/slnb_i386)" "$$(cat test/test_setlength_clamps_with_no_builtin_in_the_program.expected)"
 	./$(COMPILER) --target=i386 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_i386
 	tools/expect_same.sh i386/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh i386 $(TESTTMP)/sl255_i386)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
 	./$(COMPILER) --target=i386 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_i386
@@ -33563,6 +33573,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_length_of_a_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenvar_pas_xtw)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_xtw
 	tools/expect_same.sh xtensa-windowed/test_length_of_an_array_of_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenarrvar_xtw)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_setlength_clamps_with_no_builtin_in_the_program.pas $(TESTTMP)/slnb_xtw
+	tools/expect_same.sh xtensa-windowed/test_setlength_clamps_with_no_builtin_in_the_program "$$(tools/run_target.sh xtensa $(TESTTMP)/slnb_xtw)" "$$(cat test/test_setlength_clamps_with_no_builtin_in_the_program.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_xtw
 	tools/expect_same.sh xtensa-windowed/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh xtensa $(TESTTMP)/sl255_xtw)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_xtw
@@ -35668,6 +35680,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_length_of_a_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_pas_a32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=arm32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a32
 	tools/expect_same.sh arm32/test_length_of_an_array_of_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenarrvar_a32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=arm32 test/test_setlength_clamps_with_no_builtin_in_the_program.pas $(TESTTMP)/slnb_a32
+	tools/expect_same.sh arm32/test_setlength_clamps_with_no_builtin_in_the_program "$$(tools/run_target.sh arm32 $(TESTTMP)/slnb_a32)" "$$(cat test/test_setlength_clamps_with_no_builtin_in_the_program.expected)"
 	./$(COMPILER) --target=arm32 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_a32
 	tools/expect_same.sh arm32/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh arm32 $(TESTTMP)/sl255_a32)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
 	./$(COMPILER) --target=arm32 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_a32
