@@ -77,8 +77,10 @@ begin
   tmpdir := GetEnvironmentVariable('TESTMGR_TMP');
   if tmpdir = '' then tmpdir := GetEnvironmentVariable('TESTTMP');
   if tmpdir = '' then tmpdir := '/tmp';
-  pathA := tmpdir + '/test_fileofstrn_a.bin';
-  pathB := tmpdir + '/test_fileofstrn_b.bin';
+  { Named after the binary too: two rows run this source and their jobs share
+    one TESTMGR_TMP. }
+  pathA := tmpdir + '/' + ExtractFileName(ParamStr(0)) + '_fileofstrn_a.bin';
+  pathB := tmpdir + '/' + ExtractFileName(ParamStr(0)) + '_fileofstrn_b.bin';
 
 {$IFDEF ROW_MISMATCH}
   { A real disagreement: a 256-byte ShortString into an 11-byte record. This

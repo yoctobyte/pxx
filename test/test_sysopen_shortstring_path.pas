@@ -44,10 +44,14 @@ begin
   dir := GetEnvironmentVariable('TESTMGR_TMP');
   if dir = '' then dir := GetEnvironmentVariable('TESTTMP');
   if dir = '' then dir := '/tmp';
+  { Named after the binary too: four rows run this source, their jobs share
+    one TESTMGR_TMP, and a fixed name let one row's file stand in for
+    another's. Each row's binary path is its own. }
+  dir := dir + '/' + ExtractFileName(ParamStr(0));
 
   { create the file through the MANAGED path, so this test's own setup does not
     depend on the branch it is testing. }
-  mp := dir + '/pxx_sysopen_shortstring_path.tmp';
+  mp := dir + '_pxx_sysopen_shortstring_path.tmp';
   buf[0] := 'P'; buf[1] := 'X'; buf[2] := 'X'; buf[3] := '2'; buf[4] := '6';
   fd := SysOpen(mp, 577);          { O_WRONLY | O_CREAT | O_TRUNC }
   n := SysWrite(fd, buf, 5);
@@ -55,7 +59,7 @@ begin
   SysClose(fd);
   writeln('setup wrote ', n);
 
-  sp := dir + '/pxx_sysopen_shortstring_path.tmp';
+  sp := dir + '_pxx_sysopen_shortstring_path.tmp';
   fd := SysOpen(sp, 0);
   writeln('short open  ', fd > 2);
   if fd > 2 then
@@ -66,7 +70,7 @@ begin
     SysClose(fd);
   end;
 
-  sp := dir + '/pxx_sysopen_shortstring_no_such_file_anywhere.tmp';
+  sp := dir + '_pxx_sysopen_shortstring_no_such_file_anywhere.tmp';
   writeln('short miss  ', SysOpen(sp, 0) < 0);
   writeln('SYSOPEN SHORTSTRING PATH OK');
 end.
