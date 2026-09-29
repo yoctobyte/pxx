@@ -15,6 +15,10 @@ interface
 { True iff `sig` is a valid PKCS#1 v1.5 / SHA-256 signature of `msg` under the
   RSA public key (`n`, `e`), all big-endian byte strings. }
 function RsaVerifyPkcs1Sha256(const n, e, msg, sig: AnsiString): Boolean;
+{ The same with SHA-384 and SHA-512 (sha384/sha512WithRSAEncryption
+  certificates). }
+function RsaVerifyPkcs1Sha384(const n, e, msg, sig: AnsiString): Boolean;
+function RsaVerifyPkcs1Sha512(const n, e, msg, sig: AnsiString): Boolean;
 
 { True iff `sig` is a valid RSASSA-PSS / SHA-256 signature of `msg` under the
   RSA public key (`n`, `e`), with MGF1-SHA256 and a 32-byte salt — which is
@@ -26,7 +30,7 @@ function RsaVerifyPssSha256(const n, e, msg, sig: AnsiString): Boolean;
 
 implementation
 
-uses bignum, sha256, sysutils;
+uses bignum, sha256, sha512, sysutils;
 
 { big-endian bytes -> bignum. Accumulates in a local (managed-record Result used
   as a call arg in its own reassignment miscompiles — bug-managed-record-result-
@@ -58,19 +62,17 @@ begin
   end;
 end;
 
-function RsaVerifyPkcs1Sha256(const n, e, msg, sig: AnsiString): Boolean;
-const
-  { DigestInfo prefix for SHA-256 (DER of the algorithm id + 0x04 0x20). }
-  DI: array[0..18] of Byte = (
-    $30,$31,$30,$0d,$06,$09,$60,$86,$48,$01,$65,$03,$04,$02,$01,$05,$00,$04,$20);
+{ PKCS#1 v1.5 over a ready digest: `di` is the DER DigestInfo prefix of the
+  hash (19 bytes for both SHA-256 and SHA-384), `digest` the hash itself. }
+function RsaVerifyPkcs1Digest(const n, e, di, digest, sig: AnsiString): Boolean;
 var
   nBig, eBig, sigBig, m: TBigInt;
   k, i, diff, psLen: Integer;
-  em, expected, digest: AnsiString;
+  em, expected: AnsiString;
 begin
   Result := False;
   k := Length(n);
-  if (k < 3 + 19 + 32) or (Length(sig) <> k) then Exit;
+  if (k < 3 + Length(di) + Length(digest)) or (Length(sig) <> k) then Exit;
 
   nBig   := BytesToBig(n);
   eBig   := BytesToBig(e);
@@ -81,13 +83,11 @@ begin
   em := BigToBytes(m, k);
 
   { expected EM = 00 01 (FF * psLen) 00 || DigestInfo || H(msg) }
-  digest := Sha256(msg);
-  psLen  := k - 3 - 19 - 32;
+  psLen  := k - 3 - Length(di) - Length(digest);
   expected := Chr(0) + Chr(1);
   for i := 1 to psLen do expected := expected + Chr($FF);
   expected := expected + Chr(0);
-  for i := 0 to 18 do expected := expected + Chr(DI[i]);
-  expected := expected + digest;
+  expected := expected + di + digest;
 
   { A LENGTH-INDEPENDENT compare, which is NOT the same as constant-time, and the
     old "-ish" in this comment was doing a lot of work. Side-channel resistance is
@@ -97,6 +97,30 @@ begin
   diff := 0;
   for i := 1 to Length(em) do diff := diff or (Ord(em[i]) xor Ord(expected[i]));
   Result := diff = 0;
+end;
+
+function RsaVerifyPkcs1Sha256(const n, e, msg, sig: AnsiString): Boolean;
+begin
+  { DigestInfo prefix for SHA-256: the algorithm id's DER, then 04 20 }
+  Result := RsaVerifyPkcs1Digest(n, e,
+    #$30#$31#$30#$0d#$06#$09#$60#$86#$48#$01#$65#$03#$04#$02#$01#$05#$00#$04#$20,
+    Sha256(msg), sig);
+end;
+
+function RsaVerifyPkcs1Sha384(const n, e, msg, sig: AnsiString): Boolean;
+begin
+  { DigestInfo prefix for SHA-384: 2.16.840.1.101.3.4.2.2, then 04 30 }
+  Result := RsaVerifyPkcs1Digest(n, e,
+    #$30#$41#$30#$0d#$06#$09#$60#$86#$48#$01#$65#$03#$04#$02#$02#$05#$00#$04#$30,
+    Sha384(msg), sig);
+end;
+
+function RsaVerifyPkcs1Sha512(const n, e, msg, sig: AnsiString): Boolean;
+begin
+  { DigestInfo prefix for SHA-512: 2.16.840.1.101.3.4.2.3, then 04 40 }
+  Result := RsaVerifyPkcs1Digest(n, e,
+    #$30#$51#$30#$0d#$06#$09#$60#$86#$48#$01#$65#$03#$04#$02#$03#$05#$00#$04#$40,
+    Sha512(msg), sig);
 end;
 
 { MGF1 with SHA-256 (RFC 8017 B.2.1): T = H(seed || counter) repeated, truncated

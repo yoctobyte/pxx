@@ -77,7 +77,7 @@ procedure Tls13NativeRegister;
 implementation
 
 uses sysutils, net, platform, random, x25519, sha256, tls13_keys, tls13_record,
-     tls13_hs, x509, truststore, ed25519, ecdsa_p256, rsa, tls13_ktls,
+     tls13_hs, x509, truststore, ed25519, ecdsa_p256, ecdsa_p384, rsa, tls13_ktls,
      scheduler;   { InCoroutine / WaitReadable — see the socket-helper note }
 
 const
@@ -430,6 +430,18 @@ begin
           begin
             EcdsaRS(cvSig, cvRS);
             cvOk := EcdsaP256Verify(Copy(leaf.PubBits, 2, 64), signedContent, cvRS);
+          end
+          else if (Ord(cvScheme[1]) = $05) and (Ord(cvScheme[2]) = $03) then  { ecdsa_p384_sha384 }
+          begin
+            { the scheme names the curve: a leaf key that is not a 97-byte
+              uncompressed P-384 point cannot have made this signature }
+            cvOk := False;
+            if (Length(leaf.PubBits) = 97) and (Ord(leaf.PubBits[1]) = 4) then
+            begin
+              EcdsaRSn(cvSig, 48, cvRS);
+              if cvRS <> '' then
+                cvOk := EcdsaP384Verify(Copy(leaf.PubBits, 2, 96), signedContent, cvRS);
+            end;
           end
           else if (Ord(cvScheme[1]) = $08) and (Ord(cvScheme[2]) = $04) then  { rsa_pss }
           begin

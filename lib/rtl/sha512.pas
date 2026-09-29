@@ -10,6 +10,10 @@ interface
 
 { 64-byte SHA-512 digest of `msg`, as a raw AnsiString. }
 function Sha512(const msg: AnsiString): AnsiString;
+{ 48-byte SHA-384 digest: the same compression with FIPS 180-4's other initial
+  hash value, truncated. What ecdsa-with-SHA384 and sha384WithRSAEncryption
+  certificates are signed over. }
+function Sha384(const msg: AnsiString): AnsiString;
 
 implementation
 
@@ -77,17 +81,14 @@ begin
   H[4] := H[4] + e; H[5] := H[5] + f; H[6] := H[6] + g; H[7] := H[7] + hh;
 end;
 
-function Sha512(const msg: AnsiString): AnsiString;
+{ The whole hash over H already holding the initial value; the first
+  `outWords` words of the final state are the digest. }
+function Sha512Core(const msg: AnsiString; var H: array of Int64; outWords: Integer): AnsiString;
 var
-  H: array[0..7] of Int64;
   data: AnsiString;
   padLen, i, j, nblocks: Integer;
   bitLen: Int64;
 begin
-  H[0] := Int64($6a09e667f3bcc908); H[1] := Int64($bb67ae8584caa73b);
-  H[2] := Int64($3c6ef372fe94f82b); H[3] := Int64($a54ff53a5f1d36f1);
-  H[4] := Int64($510e527fade682d1); H[5] := Int64($9b05688c2b3e6c1f);
-  H[6] := Int64($1f83d9abfb41bd6b); H[7] := Int64($5be0cd19137e2179);
 
   bitLen := Int64(Length(msg)) * 8;
 
@@ -103,9 +104,29 @@ begin
     Block(data, i*128 + 1, H);
 
   Result := '';
-  for i := 0 to 7 do
+  for i := 0 to outWords - 1 do
     for j := 7 downto 0 do
       Result := Result + Chr((H[i] shr (j*8)) and $FF);
+end;
+
+function Sha512(const msg: AnsiString): AnsiString;
+var H: array[0..7] of Int64;
+begin
+  H[0] := Int64($6a09e667f3bcc908); H[1] := Int64($bb67ae8584caa73b);
+  H[2] := Int64($3c6ef372fe94f82b); H[3] := Int64($a54ff53a5f1d36f1);
+  H[4] := Int64($510e527fade682d1); H[5] := Int64($9b05688c2b3e6c1f);
+  H[6] := Int64($1f83d9abfb41bd6b); H[7] := Int64($5be0cd19137e2179);
+  Result := Sha512Core(msg, H, 8);
+end;
+
+function Sha384(const msg: AnsiString): AnsiString;
+var H: array[0..7] of Int64;
+begin
+  H[0] := Int64($cbbb9d5dc1059ed8); H[1] := Int64($629a292a367cd507);
+  H[2] := Int64($9159015a3070dd17); H[3] := Int64($152fecd8f70e5939);
+  H[4] := Int64($67332667ffc00b31); H[5] := Int64($8eb44a8768581511);
+  H[6] := Int64($db0c2e0d64f98fa7); H[7] := Int64($47b5481dbefa4fa4);
+  Result := Sha512Core(msg, H, 6);
 end;
 
 end.

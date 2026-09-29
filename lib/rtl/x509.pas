@@ -27,6 +27,8 @@ type
     NotBefore: AnsiString;   { normalised YYYYMMDDHHMMSS }
     NotAfter:  AnsiString;   { normalised YYYYMMDDHHMMSS }
     ExtRaw:    AnsiString;   { raw Extensions SEQUENCE value (for SAN) }
+    KeyParamOid: AnsiString; { SPKI algorithm parameters when they are an OID:
+                               an EC key's named curve; '' otherwise }
   end;
 
 { Parse a DER certificate into its key fields. Result.Ok is False on malformed. }
@@ -60,14 +62,28 @@ procedure RsaKey(const pubBits: AnsiString; var n, e: AnsiString);
 { DER Ecdsa-Sig-Value (SEQUENCE { r INTEGER, s INTEGER }) -> the raw 64-byte
   r||s pair EcdsaP256Verify expects. }
 procedure EcdsaRS(const sigValue: AnsiString; var rs: AnsiString);
+{ The same for a curve of any size: r and s each `size` bytes (48 for P-384).
+  An integer longer than `size` leaves rs '' -- it cannot be a valid scalar. }
+procedure EcdsaRSn(const sigValue: AnsiString; size: Integer; var rs: AnsiString);
 
 implementation
 
-uses rsa, ecdsa_p256, ed25519;
+uses rsa, ecdsa_p256, ecdsa_p384, ed25519, sha256, sha512;
 
 const
   OID_RSA_SHA256 = #$2a#$86#$48#$86#$f7#$0d#$01#$01#$0b;
   OID_ECDSA_SHA256 = #$2a#$86#$48#$ce#$3d#$04#$03#$02;
+  { ecdsa-with-SHA384 (1.2.840.10045.4.3.3) and sha384WithRSAEncryption
+    (1.2.840.113549.1.1.12): what most public CAs' P-384 and many RSA
+    hierarchies sign with. }
+  OID_ECDSA_SHA384 = #$2a#$86#$48#$ce#$3d#$04#$03#$03;
+  OID_RSA_SHA384 = #$2a#$86#$48#$86#$f7#$0d#$01#$01#$0c;
+  { ...and their SHA-512 siblings, which some roots in the system store use }
+  OID_ECDSA_SHA512 = #$2a#$86#$48#$ce#$3d#$04#$03#$04;
+  OID_RSA_SHA512 = #$2a#$86#$48#$86#$f7#$0d#$01#$01#$0d;
+  { named curves in an EC SubjectPublicKeyInfo: prime256v1, secp384r1 }
+  OID_CURVE_P256 = #$2a#$86#$48#$ce#$3d#$03#$01#$07;
+  OID_CURVE_P384 = #$2b#$81#$04#$00#$22;
   OID_ED25519 = #$2b#$65#$70;
   { 1.2.840.113549.1.1.10 rsassaPss — what a modern CA signs with. }
   OID_RSA_PSS = #$2a#$86#$48#$86#$f7#$0d#$01#$01#$0a;
@@ -209,6 +225,12 @@ begin
   DerTLV(der, algVs, tag, vs, vl, np);          { OID }
   if tag <> $06 then Exit;
   Result.KeyAlgOid := Copy(der, vs, vl);
+  Result.KeyParamOid := '';
+  if np < algVs + algVl then
+  begin
+    DerTLV(der, np, tag, vs, vl, np);           { parameters: a curve OID, NULL, ... }
+    if tag = $06 then Result.KeyParamOid := Copy(der, vs, vl);
+  end;
   { subjectPublicKey BIT STRING is the sibling after the algorithm SEQ }
   DerTLV(der, algNp, bitTag, bitVs, bitVl, bitNp);
   if bitTag <> $03 then Exit;
@@ -245,22 +267,52 @@ begin
   e := StripLeadZero(Copy(pubBits, vs, vl));
 end;
 
-{ Extract ECDSA (r, s) from a signature SEQUENCE, each padded to 32 bytes. }
-procedure EcdsaRS(const sigValue: AnsiString; var rs: AnsiString);
+{ Extract ECDSA (r, s) from a signature SEQUENCE, each padded to `size` bytes. }
+procedure EcdsaRSn(const sigValue: AnsiString; size: Integer; var rs: AnsiString);
 var tag, vs, vl, np, p: Integer; r, s: AnsiString;
 begin
   DerTLV(sigValue, 1, tag, vs, vl, np);    { SEQUENCE }
   p := vs;
   DerTLV(sigValue, p, tag, vs, vl, np);    { r }
-  r := LeftPad(StripLeadZero(Copy(sigValue, vs, vl)), 32);
+  r := LeftPad(StripLeadZero(Copy(sigValue, vs, vl)), size);
   p := np;
   DerTLV(sigValue, p, tag, vs, vl, np);    { s }
-  s := LeftPad(StripLeadZero(Copy(sigValue, vs, vl)), 32);
+  s := LeftPad(StripLeadZero(Copy(sigValue, vs, vl)), size);
   rs := r + s;
+  if Length(rs) <> 2 * size then rs := '';
+end;
+
+procedure EcdsaRS(const sigValue: AnsiString; var rs: AnsiString);
+begin
+  EcdsaRSn(sigValue, 32, rs);
+end;
+
+{ An ECDSA certificate signature, whichever of P-256 / P-384 the ISSUER's key is
+  on and whichever of SHA-256 / SHA-384 the signature names: the curve comes
+  from the issuer's SPKI, the hash from the signature algorithm, and X.509
+  lets them differ. A key on any other curve fails closed. }
+function EcdsaCertVerify(const cert, issuer: TCert; const digest: AnsiString): Boolean;
+var rs: AnsiString; plen: Integer;
+begin
+  Result := False;
+  plen := Length(issuer.PubBits);
+  if (plen < 1) or (Ord(issuer.PubBits[1]) <> 4) then Exit;   { uncompressed point only }
+  if (issuer.KeyParamOid = OID_CURVE_P384) and (plen = 97) then
+  begin
+    EcdsaRSn(cert.SigValue, 48, rs);
+    if rs = '' then Exit;
+    Result := EcdsaP384VerifyHash(Copy(issuer.PubBits, 2, 96), digest, rs);
+  end
+  else if ((issuer.KeyParamOid = OID_CURVE_P256) or (issuer.KeyParamOid = '')) and (plen = 65) then
+  begin
+    EcdsaRSn(cert.SigValue, 32, rs);
+    if rs = '' then Exit;
+    Result := EcdsaP256VerifyHash(Copy(issuer.PubBits, 2, 64), digest, rs);
+  end;
 end;
 
 function X509VerifySig(const cert, issuer: TCert): Boolean;
-var n, e, rs: AnsiString;
+var n, e: AnsiString;
 begin
   Result := False;
   if not (cert.Ok and issuer.Ok) then Exit;
@@ -284,12 +336,22 @@ begin
     RsaKey(issuer.PubBits, n, e);
     Result := RsaVerifyPssSha256(n, e, cert.TbsRaw, cert.SigValue);
   end
-  else if cert.SigAlgOid = OID_ECDSA_SHA256 then
+  else if cert.SigAlgOid = OID_RSA_SHA384 then
   begin
-    EcdsaRS(cert.SigValue, rs);
-    { EC SPKI key bits = 04 || X || Y; drop the 0x04 prefix }
-    Result := EcdsaP256Verify(Copy(issuer.PubBits, 2, 64), cert.TbsRaw, rs);
+    RsaKey(issuer.PubBits, n, e);
+    Result := RsaVerifyPkcs1Sha384(n, e, cert.TbsRaw, cert.SigValue);
   end
+  else if cert.SigAlgOid = OID_RSA_SHA512 then
+  begin
+    RsaKey(issuer.PubBits, n, e);
+    Result := RsaVerifyPkcs1Sha512(n, e, cert.TbsRaw, cert.SigValue);
+  end
+  else if cert.SigAlgOid = OID_ECDSA_SHA256 then
+    Result := EcdsaCertVerify(cert, issuer, Sha256(cert.TbsRaw))
+  else if cert.SigAlgOid = OID_ECDSA_SHA384 then
+    Result := EcdsaCertVerify(cert, issuer, Sha384(cert.TbsRaw))
+  else if cert.SigAlgOid = OID_ECDSA_SHA512 then
+    Result := EcdsaCertVerify(cert, issuer, Sha512(cert.TbsRaw))
   else if cert.SigAlgOid = OID_ED25519 then
     Result := Ed25519Verify(issuer.PubBits, cert.TbsRaw, cert.SigValue);
 end;

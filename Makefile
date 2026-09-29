@@ -42124,6 +42124,19 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_x509.pas $(TESTTMP)/lib_x509
 	tools/expect_same.sh lib_x509.1 "$$($(TESTTMP)/lib_x509 | grep -c '=ok')" "17"
 	tools/expect_same.sh lib_x509.2 "$$($(TESTTMP)/lib_x509 | grep -c 'FAIL')" "0"
+	# P-384 ECDSA verify against cryptography's signatures (+ SHA-384, the
+	# P-384 field, and the inputs a verifier must reject), then X.509 over
+	# ecdsa-with-SHA384/512, sha384/512WithRSA and P-384 issuer keys: real
+	# letsencrypt.org / github.com / Certum links and synthetic ones, each also
+	# refused with a byte changed, the wrong issuer and a skipped level. Before
+	# this, every such certificate verified FALSE and the native TLS client
+	# refused letsencrypt.org and github.com.
+	$(PXX_STABLE) -Fulib/rtl test/lib_ecdsa_p384.pas $(TESTTMP)/lib_ecdsa_p384
+	tools/expect_same.sh lib_ecdsa_p384.1 "$$($(TESTTMP)/lib_ecdsa_p384 | grep -c '=ok')" "34"
+	tools/expect_same.sh lib_ecdsa_p384.2 "$$($(TESTTMP)/lib_ecdsa_p384 | grep -c 'FAIL')" "0"
+	$(PXX_STABLE) -Fulib/rtl test/lib_x509_sha384.pas $(TESTTMP)/lib_x509_sha384
+	tools/expect_same.sh lib_x509_sha384.1 "$$($(TESTTMP)/lib_x509_sha384 | grep -c '=ok')" "54"
+	tools/expect_same.sh lib_x509_sha384.2 "$$($(TESTTMP)/lib_x509_sha384 | grep -c 'FAIL')" "0"
 	# 16, not 14: `fixture-listen` and `fixture-connect` were added when the
 	# hardcoded port 28755 became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable). The

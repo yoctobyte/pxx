@@ -93,8 +93,13 @@ begin
   { supported_groups (10): X25519 (001d) }
   exts := exts + Ext(10, Vec16(U16($001d)));
 
-  { signature_algorithms (13): ed25519, ecdsa_p256_sha256, rsa_pss_sha256, rsa_pkcs1_sha256 }
-  exts := exts + Ext(13, Vec16(U16($0807) + U16($0403) + U16($0804) + U16($0401)));
+  { signature_algorithms (13): ed25519, ecdsa_p256_sha256, ecdsa_p384_sha384,
+    rsa_pss_sha256, rsa_pkcs1_sha256/384/512. With no
+    signature_algorithms_cert this list also says which CERTIFICATE signatures
+    are acceptable, which is why the two PKCS#1 codepoints are here although a
+    CertificateVerify in them is refused (RFC 8446 4.2.3). }
+  exts := exts + Ext(13, Vec16(U16($0807) + U16($0403) + U16($0503) + U16($0804) +
+                               U16($0401) + U16($0501) + U16($0601)));
 
   { key_share (51): one X25519 entry }
   ks := U16($001d) + Vec16(x25519pub);        { group + key_exchange }

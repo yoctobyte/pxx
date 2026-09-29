@@ -59,6 +59,10 @@ interface
 { True iff (r||s) is a valid P-256/SHA-256 signature of `msg` under the public
   key `qxy` (64 bytes, Qx||Qy). `sig` is 64 bytes (r||s). }
 function EcdsaP256Verify(const qxy, msg, sig: AnsiString): Boolean;
+{ The same over a ready digest of any length, of which the leftmost 256 bits
+  are used (FIPS 186-4 6.4): a certificate signed ecdsa-with-SHA384 by a P-256
+  key is verified with the SHA-384 digest here. }
+function EcdsaP256VerifyHash(const qxy, digest, sig: AnsiString): Boolean;
 
 { Public key Qx||Qy (64 bytes) from a 32-byte private scalar. '' on error. }
 function EcdsaP256PubFromPriv(const priv: AnsiString): AnsiString;
@@ -323,6 +327,11 @@ begin
 end;
 
 function EcdsaP256Verify(const qxy, msg, sig: AnsiString): Boolean;
+begin
+  Result := EcdsaP256VerifyHash(qxy, Sha256(msg), sig);
+end;
+
+function EcdsaP256VerifyHash(const qxy, digest, sig: AnsiString): Boolean;
 var
   r, s, e, w, u1, u2, one: TBigInt;
   qxb, qyb, u1b, u2b, affxb: AnsiString;
@@ -341,7 +350,9 @@ begin
   if (BigCompare(r, one) < 0) or (BigCompare(r, N) >= 0) then Exit;
   if (BigCompare(s, one) < 0) or (BigCompare(s, N) >= 0) then Exit;
 
-  e := BytesToBig(Sha256(msg));      { 256-bit hash, no truncation needed for P-256 }
+  { the leftmost 256 bits of the digest; a SHA-256 digest is used whole }
+  if Length(digest) > 32 then e := BytesToBig(Copy(digest, 1, 32))
+  else e := BytesToBig(digest);
   BigDivMod(e, N, q1, rem); e := rem;
 
   w  := MInv(s, N);

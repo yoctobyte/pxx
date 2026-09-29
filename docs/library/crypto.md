@@ -14,8 +14,9 @@ need no external library:
 | [`chacha20poly1305`](#encrypting-aesgcm-and-chacha20poly1305) | ChaCha20-Poly1305 authenticated encryption, and ChaCha20 and Poly1305 on their own |
 | [`x25519`](#agreeing-on-a-key-x25519) | X25519 key agreement |
 | [`ecdsa_p256`](#signing-ecdsa_p256) | ECDSA on P-256 with SHA-256: key generation, signing and verifying |
+| [`ecdsa_p384`](#checking-signatures-and-certificates-x509-rsa-ed25519) | ECDSA on P-384: verifying only |
 | [`ed25519`](#checking-signatures-and-certificates-x509-rsa-ed25519) | Ed25519 verification |
-| [`rsa`](#checking-signatures-and-certificates-x509-rsa-ed25519) | RSA verification, PKCS#1 v1.5 and PSS, with SHA-256 |
+| [`rsa`](#checking-signatures-and-certificates-x509-rsa-ed25519) | RSA verification: PKCS#1 v1.5 with SHA-256, SHA-384 or SHA-512, and PSS with SHA-256 |
 | [`x509`](#checking-signatures-and-certificates-x509-rsa-ed25519) | Reading a DER certificate, and checking its signature, dates and host name |
 
 For HTTPS, use the OpenSSL backend described on the
@@ -245,11 +246,18 @@ second.
 
 - `X509VerifySig(cert, issuer)` checks the certificate's signature with
   the issuer's public key. Pass the certificate twice for a self-signed
-  one. It understands RSA with SHA-256 (PKCS#1 v1.5 or PSS), ECDSA on
-  P-256 with SHA-256, and Ed25519. Anything else gives `FALSE`, as if the
-  signature were wrong: a certificate signed with P-384, or with RSA and
-  SHA-384, both common among public certificate authorities, does not
-  verify, where OpenSSL accepts it.
+  one. It understands RSA PKCS#1 v1.5 with SHA-256, SHA-384 or SHA-512,
+  RSA-PSS with SHA-256, ECDSA with SHA-256, SHA-384 or SHA-512 when the
+  issuer's key is on P-256 or P-384, and Ed25519. Anything else gives
+  `FALSE`, as if the signature were wrong: a key on P-521, and SHA-1, do
+  not verify. Of the 121 roots in a Debian trust store, 115 verify their
+  own signature; the other six are five SHA-1 roots and one P-521 root.
+  **Up to and including pin v451** it understood only RSA with SHA-256,
+  ECDSA on P-256 with SHA-256 and Ed25519. A certificate signed with P-384
+  or with SHA-384, which most public certificate authorities use somewhere
+  in their chains, did not verify, so the native TLS client refused
+  letsencrypt.org, github.com, www.wikipedia.org and others. That is fixed
+  after v451.
 - `X509ValidAt(cert, 'YYYYMMDDHHMMSS')` checks the dates. The time is UTC,
   written as 14 digits.
 - `X509HostMatch(cert, host)` checks the host name against the
@@ -359,3 +367,19 @@ length TLS 1.3 uses, the length of the hash. `openssl dgst` with
 `-sigopt rsa_padding_mode:pss` and no salt length uses the longest salt that
 fits, and PXX refuses that signature (`FALSE`), where OpenSSL accepts it.
 Sign with `-sigopt rsa_pss_saltlen:32`, as above.
+
+The verifiers `X509VerifySig` uses are also there on their own:
+`EcdsaP384Verify(qxy, msg, sig)` (96-byte key Qx||Qy, 96-byte r||s,
+SHA-384), `EcdsaP384VerifyHash(qxy, digest, sig)` and
+`EcdsaP256VerifyHash(qxy, digest, sig)` over a digest you have already
+computed, `RsaVerifyPkcs1Sha384` and `RsaVerifyPkcs1Sha512`, and
+`Sha384(msg)` in `sha512`. `EcdsaRSn(der, 48, rs)` turns a P-384 DER
+signature into r||s. `ecdsa_p384` only verifies; it cannot sign.
+
+**Slow on the ESP32-C3.** Measured on the board after v451: one P-384
+verify takes 22.8 s and one P-256 verify 12.1 s (on x86-64: 54 ms and
+26 ms). A TLS handshake with letsencrypt.org checks three P-384 signatures
+and one P-256 signature, so the native client spends about 80 s in it on
+the C3, with task-watchdog warnings in the log. The answer is right, only
+slow. Most of the time goes to the arithmetic modulo the curve order, which
+runs on the general `bignum` unit.
