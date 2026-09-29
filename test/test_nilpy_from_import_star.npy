@@ -1,0 +1,14 @@
+# `from X import *` failed to compile for every module ("expected
+# expression"). It binds X's __all__, or else every public top-level name;
+# a public name that is also a builtin (len, max) now means X's, and a
+# builtin X does not export (sum here) stays the builtin.
+# bug-n-from-import-star-does-not-compile
+from math import *
+from starmod_plain import *
+from starmod_all import *
+
+print(sqrt(16.0), floor(2.7), pi > 3.14)
+print(greet("x"), VALUE, Box(3).v)
+print(len([1, 2, 3]))
+print(listed(), max(1, 5))
+print(sum([1, 2]))

@@ -1532,6 +1532,13 @@ var
   PyImpNameSrc: array[0..255] of Integer;   { the unit it was imported FROM (FindUnitOrAlias), or -1 }
   PyImpNameReal: array[0..255] of Integer;  { interned source spelling: `X` of `from M import X as Y` }
   PyImpNameCount: Integer;
+  { What `from M import *` binds, read off M's source as its top level is
+    parsed: every `def`/`class`/`NAME =` at M's top level, and the strings of
+    an `__all__ = [...]` there (IsAll). PyStarImportRecord reads it. }
+  PyTopName: array[0..2047] of AnsiString;    { exact spelling }
+  PyTopNameUnit: array[0..2047] of Integer;   { the module's unit }
+  PyTopNameIsAll: array[0..2047] of Boolean;  { listed in __all__, not declared }
+  PyTopNameCount: Integer;
   { True only while parsing a def's RETURN annotation: there Optional[int] maps
     to tyVariant (None = VT_EMPTY tag) instead of the tyInt64 0-sentinel, so
     `return d.get(k)` hands back a None distinguishable from a legitimate 0
@@ -8971,6 +8978,101 @@ begin
       Result := True;
       Exit;
     end;
+end;
+
+procedure PyTopNameAdd(const nm: AnsiString; isAll: Boolean);
+var i: Integer;
+begin
+  if (nm = '') or (CurrentUnitIdx < 0) then Exit;
+  { A declared name matters to a star import only when a builtin shares it
+    (PyStarImportRecord), so only those are kept; __all__ items all are,
+    since their presence is what says the module has an __all__. }
+  if (not isAll) and (not PythonSideDeclaresRoutine(nm, CurrentUnitIdx)) then Exit;
+  for i := 0 to PyTopNameCount - 1 do
+    if (PyTopName[i] = nm) and (PyTopNameUnit[i] = CurrentUnitIdx) and
+       (PyTopNameIsAll[i] = isAll) then Exit;       { the second pass }
+  if PyTopNameCount > High(PyTopName) then Exit;
+  PyTopName[PyTopNameCount] := nm;
+  PyTopNameUnit[PyTopNameCount] := CurrentUnitIdx;
+  PyTopNameIsAll[PyTopNameCount] := isAll;
+  Inc(PyTopNameCount);
+end;
+
+{ Called at each top-level statement of an imported module, BEFORE it is
+  parsed, and consumes nothing. Notes the name a `def`/`class`/`NAME =` binds,
+  and the string items of `__all__ = [...]` or `(...)`, for PyStarImportRecord. }
+procedure PyNoteTopName;
+var k, depth: Integer;
+begin
+  if CurrentUnitIdx < 0 then Exit;
+  k := TokPos - 1;                                   { CurTok }
+  if (CurTok.Kind = tkClass) or (CurTok.Kind = tkFunction) then
+  begin
+    if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
+      PyTopNameAdd(GetTokenStr(TokPos), False);
+    Exit;
+  end;
+  if (CurTok.Kind <> tkIdent) or (TokPos >= TokCount) or
+     (Tokens[TokPos].Kind <> tkAssign) then Exit;
+  if CurTok.SVal <> '__all__' then
+  begin
+    PyTopNameAdd(CurTok.SVal, False);
+    Exit;
+  end;
+  k := TokPos + 1;                                   { after `=` }
+  if (k >= TokCount) or not (Tokens[k].Kind in [tkLBrack, tkLParen]) then Exit;
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind in [tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[k].Kind in [tkRBrack, tkRParen] then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end
+    else if (depth = 1) and (Tokens[k].Kind = tkString) then
+      PyTopNameAdd(GetTokenStr(k), True)
+    else if Tokens[k].Kind in [tkNewline, tkEOF] then Break;
+    Inc(k);
+  end;
+end;
+
+{ `from M import *` binds M's __all__, or else every top-level name of M not
+  starting with `_`. Unit scope is flat, so those names already RESOLVE; what
+  a star import must add is what a named import adds for a name a builtin also
+  has (8878f1ea97): the record that lets this unit's bare `len` reach M's def
+  instead of the builtin. Only such names are recorded, so the table stays
+  small. A name M does not export stays reachable through flat scope, where
+  CPython raises NameError: a known difference, and the same one a named
+  from-import has. }
+procedure PyStarImportRecord(srcUnit: Integer);
+var i, j: Integer; hasAll, take: Boolean; nm: AnsiString;
+begin
+  if srcUnit < 0 then Exit;
+  hasAll := False;
+  for i := 0 to PyTopNameCount - 1 do
+    if (PyTopNameUnit[i] = srcUnit) and PyTopNameIsAll[i] then hasAll := True;
+  for i := 0 to PyTopNameCount - 1 do
+  begin
+    if PyTopNameUnit[i] <> srcUnit then Continue;
+    if hasAll then take := PyTopNameIsAll[i]
+    else
+    begin
+      nm := PyTopName[i];
+      take := (not PyTopNameIsAll[i]) and (Length(nm) > 0) and (nm[1] <> '_');
+    end;
+    if not take then Continue;
+    nm := PyTopName[i];
+    if not PythonSideDeclaresRoutine(nm, srcUnit) then Continue;
+    if PyUnitImportedName(nm, CurrentUnitIdx, srcUnit) then Continue;
+    if PyImpNameCount > High(PyImpName) then Exit;
+    j := PyImpNameCount;
+    PyImpName[j] := InternStr(LowerCase(nm));
+    PyImpNameUnit[j] := CurrentUnitIdx;
+    PyImpNameSrc[j] := srcUnit;
+    PyImpNameReal[j] := InternStr(nm);
+    Inc(PyImpNameCount);
+  end;
 end;
 
 function PyUserNameShadowsHere(const nm: AnsiString): Boolean;
@@ -49678,6 +49780,12 @@ begin
         bug-n-from-collections-import-counter-binds-something-that-always-answers-zero }
       if PyImportIsConsumedOnly(impRoot, impName) then
       begin
+        { `from typing import *`: the names these roots export are pylib
+          symbols already in scope, so there is nothing to bind. A member the
+          compiler maps by call table (sys.argv) is NOT bound by `*`; it walls
+          at its use site as an undefined variable, as an unknown name does. }
+        if CurTok.Kind = tkStar then Next
+        else
         while CurTok.Kind = tkIdent do
         begin
           isCount := CaseEqual(impRoot, 'itertools') and
@@ -49721,6 +49829,14 @@ begin
           that identity: unique per statement, and the same on both of the two
           passes this block is visited on. See PyImpAliasStmt's declaration. }
         aliasStmtTok := TokPos;
+        { `from X import *` -- see PyStarImportRecord. It parsed as a
+          missing name and died as "expected expression" for every module. }
+        if CurTok.Kind = tkStar then
+        begin
+          Next;
+          PyStarImportRecord(FindUnitOrAlias(impName));
+        end
+        else
         while CurTok.Kind = tkIdent do
         begin
           { Record the name against the IMPORTING module (ParseUsesUnit has
@@ -51300,6 +51416,7 @@ begin
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do
   begin
+    PyNoteTopName;
     if CurTok.Kind = tkClass then
     begin
       PyClsEvalCi := -1;
@@ -51654,6 +51771,7 @@ begin
   end;
   PyCountAlias := '';
   PyImpNameCount := 0;
+  PyTopNameCount := 0;
   PyStdAliasCount := 0;
   PyOptMissingCount := 0;
   PyInferSelfCi := -1;
