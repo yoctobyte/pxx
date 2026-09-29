@@ -59,7 +59,7 @@ pxx (pascal26) — self-hosting Pascal-dialect compiler
   frontends:   pascal c nilpy rust zig ada basic fortran algol erlang lolcode whitespace
   host arch:   x86-64 linux
   build:       sha256 d67ea56f34a7   (sha256sum of this binary, first 12)
-  release:     v0.1.0-beta.2 "Blaise"   (MANIFEST.sha256 names this binary)
+  release:     v0.1.0-beta.1 "Blaise"   (MANIFEST.sha256 names this binary)
   source:      ab6ab895b9bc   (the commit the release was built from)
 ```
 
