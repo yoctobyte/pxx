@@ -29,7 +29,7 @@ last, which opens the demo launcher:
 ```text
 Put pxx on your PATH (~/.local/bin)? [y/N]
 Fetch & configure Synapse (networking: HTTP/FTP/SMTP, blocking clients)? [y/N]
-Install the ESP32 IDF toolchain (bare-metal / xtensa+riscv32 targets)? [y/N]
+Install ESP-IDF in ~/esp (builds for ESP32 boards, plus Espressif's QEMU to run them without one)? [y/N]
 Build the Eliah IDE (needs GTK3 dev libs)? [y/N]
 Explore the example apps now (./demos.sh)? [Y/n]
 ```

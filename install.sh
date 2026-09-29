@@ -160,7 +160,7 @@ CFG
     note "synapse ready at external/synapse (compile with: --mimic-fpc -Fu external/synapse)"
   fi
 fi
-if [ "$(ask 'Install the ESP32 IDF toolchain (bare-metal / xtensa+riscv32 targets)?' n)" = y ]; then
+if [ "$(ask "Install ESP-IDF in ~/esp (builds for ESP32 boards, plus Espressif's QEMU to run them without one)?" n)" = y ]; then
   "$ROOT/tools/install_esp32_target.sh" || note "ESP32 IDF install failed — skipped"
   note "after it finishes:  . \$HOME/esp/esp-idf/export.sh"
 fi
