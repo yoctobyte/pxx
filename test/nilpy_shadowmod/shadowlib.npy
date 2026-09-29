@@ -1,0 +1,19 @@
+# Imported by test_nilpy_an_imported_modules_names_stay_in_the_module.npy. It
+# declares builtin-named things the importer must NOT see through a bare name.
+class Counter:
+    k = 5
+
+
+def len(x):
+    return "shadowlib-len"
+
+
+def list(x):
+    return "shadowlib-list"
+
+
+def bool(x):
+    return "shadowlib-bool"
+
+
+print("shadowlib sees its own:", len([1]), list(1), bool(0), Counter.k)

@@ -1,0 +1,5 @@
+# Imported by test_nilpy_an_imported_modules_names_stay_in_the_module.npy:
+# `from shadowlib2 import Counter` re-binds the name in THIS module only.
+from shadowlib2 import Counter
+
+print("shadowuse from-import:", Counter.k, Counter().k)

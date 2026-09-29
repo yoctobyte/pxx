@@ -1,0 +1,7 @@
+shadowlib sees its own: shadowlib-len shadowlib-list shadowlib-bool 5
+shadowuse from-import: 7 7
+2 [1, 2] True
+3 ['a', 'b', 'c'] True
+2 False
+2
+shadowlib-len shadowlib-list 5

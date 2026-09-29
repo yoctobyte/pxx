@@ -7448,6 +7448,10 @@ test-nilpy: $(COMPILER)
 	# builtin. A user def merely joined the overload set and lost on ARGUMENT FIT,
 	# so the program silently printed the builtin's answer. See the test's header;
 	# expectations are CPython's.
+	./$(COMPILER) -Futest/nilpy_shadowmod test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy $(TESTTMP)/test_nilpy_modstay26
+	$(TESTTMP)/test_nilpy_modstay26 | diff -u test/test_nilpy_an_imported_modules_names_stay_in_the_module.expected -
+	./$(COMPILER) --target=riscv32 -Futest/nilpy_shadowmod test/test_nilpy_an_imported_modules_names_stay_in_the_module.npy $(TESTTMP)/test_nilpy_modstay_riscv32
+	tools/expect_same.sh riscv32/test_nilpy_modstay "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_nilpy_modstay_riscv32)" "$$(cat test/test_nilpy_an_imported_modules_names_stay_in_the_module.expected)"
 	./$(COMPILER) -Futest/nilpy_shadowmod test/test_nilpy_an_imported_module_shadows_builtins.npy $(TESTTMP)/test_nilpy_modshadow26
 	$(TESTTMP)/test_nilpy_modshadow26 | diff -u test/test_nilpy_an_imported_module_shadows_builtins.expected -
 	./$(COMPILER) --target=riscv32 -Futest/nilpy_shadowmod test/test_nilpy_an_imported_module_shadows_builtins.npy $(TESTTMP)/test_nilpy_modshadow_riscv32

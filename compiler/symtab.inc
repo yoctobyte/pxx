@@ -1264,6 +1264,9 @@ function DeclVisibleBareRoutine(declUnit: Integer; declInImpl: Boolean;
 { DeclVisible plus the qualified-only rule — body beside DeclVisible's. }
 function PythonSideDeclaresRoutine(const name: AnsiString;
                                    exceptUnit: Integer): Boolean; forward;
+function PyUnitImportedName(const name: AnsiString; unitIdx, srcUnit: Integer): Boolean; forward;
+{ Did `unitIdx` bind `name` with a `from <srcUnit> import name` (pyparser.inc,
+  where the import table lives)? }
 { …and its helper, whose BODY sits below ProcNameMatches because it calls it —
   the FPC seed build has none of pxx's declare-anywhere laxness and is the canary
   that catches this (bug-a-fpc-seed-drift-emitasmx64-forward). }
@@ -1652,6 +1655,24 @@ begin
   if not DeclVisibleBareRoutine then Exit;
   if QualNameLookup or DeclVisibilityProbe then Exit;
   if not NilPyUserCode then Exit;
+  { An imported .py MODULE's routine gets the same rule when it is looked up
+    from ANOTHER unit: `import m` binds `m`, so a `def len` in m must not ambush
+    the importer's bare `len`. It did -- main's len([1, 2]) resolved to m's def
+    and printed m's answer (segfaulting before cd23b4ec35), and nothing here
+    applied because QualOnlyUnitIdx marks Pascal units only. Same narrowness as
+    above: only a name the Python side already declares is hidden, so the
+    dialect's lax bare call of a module's non-builtin def keeps working; m's
+    own code (CurrentUnitIdx = m) and `m.len` (QualNameLookup) still reach it;
+    and `from m import len` in the importer re-binds the name there -- from
+    m, not from anywhere: `from collections import Counter` must not re-admit
+    m's Counter. }
+  if UnitIsPyModule(declUnit) and (declUnit <> CurrentUnitIdx) then
+  begin
+    if PyUnitImportedName(name, CurrentUnitIdx, declUnit) then Exit;
+    if PythonSideDeclaresRoutine(name, declUnit) then
+      DeclVisibleBareRoutine := False;
+    Exit;
+  end;
   if not UnitIsQualifiedOnly(declUnit) then Exit;
   if PythonSideDeclaresRoutine(name, declUnit) then
     DeclVisibleBareRoutine := False;
@@ -2152,6 +2173,21 @@ begin
   FindUClass := FindUClassImpl(name, True);
 {$ENDIF}
 {$ENDIF}
+end;
+
+{ The user class `name` binds in the unit being compiled: its own class, or one
+  it from-imported from the module that declares it (`from m import Counter`).
+  -1 otherwise. What the "a user class beats a pylib routine" rule asks, in
+  pyparser.inc and in its pasparser_expr.inc twin: asking only of the current
+  unit left a from-imported `class Counter` bound to pylib's Counter(). }
+function PyUserClassBoundHere(const name: AnsiString): Integer;
+begin
+  Result := FindUClassInUnit(name, CurrentUnitIdx);
+  if Result >= 0 then Exit;
+  Result := FindUClass(name);
+  if (Result >= 0) and not (UnitIsPyModule(UClsUnitIdx[Result]) and
+     PyUnitImportedName(name, CurrentUnitIdx, UClsUnitIdx[Result])) then
+    Result := -1;
 end;
 
 

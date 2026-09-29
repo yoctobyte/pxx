@@ -5398,7 +5398,7 @@ begin
         are the same rule at the other four
         (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
       if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
-         (FindUClassInUnit(name, CurrentUnitIdx) >= 0) and PyIsClassTypeExact(name) then
+         (PyUserClassBoundHere(name) >= 0) and PyIsClassTypeExact(name) then
         procIdx := -1;
 
       { The Pascal twin of the rule above: a TYPE declared HERE beats a ROUTINE

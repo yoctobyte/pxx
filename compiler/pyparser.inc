@@ -1199,6 +1199,18 @@ begin
   Result := False;
   ci := FindUClassNonRecord(nm);
   if ci < 0 then Exit;
+  { The routine rule of DeclVisibleBareRoutine, for a construction: a class
+    in ANOTHER imported .py module does not ambush a builtin of its name.
+    `import m` binds `m`, so where m declares `class Counter`, the importer's
+    `Counter("aab")` is collections' (a routine) and not m's class --
+    it was m's, even after `from collections import Counter`, and the program
+    raised "'Counter' object is not subscriptable". Narrow the same way: only
+    a name pylib already declares, and a `from m import Counter` in this unit
+    re-binds it. }
+  if UnitIsPyModule(UClsUnitIdx[ci]) and (UClsUnitIdx[ci] <> CurrentUnitIdx) and
+     NilPyUserCode and (not QualNameLookup) and
+     PythonSideDeclaresRoutine(nm, UClsUnitIdx[ci]) and
+     (not PyUnitImportedName(nm, CurrentUnitIdx, UClsUnitIdx[ci])) then Exit;
   if PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm then
   begin
     Result := True;
@@ -8876,6 +8888,20 @@ end;
   this module defines it (a def or a module-level variable, both tagged with the
   current unit) or imported it by name. A def in some OTHER module does not,
   even though flat unit scope makes it findable. bug-nilpy-imported-name-shadows-builtin-everywhere. }
+function PyUnitImportedName(const name: AnsiString; unitIdx, srcUnit: Integer): Boolean;
+var i, ni: Integer;
+begin
+  Result := False;
+  ni := InternStr(LowerCase(name));
+  for i := 0 to PyImpNameCount - 1 do
+    if (PyImpName[i] = ni) and (PyImpNameUnit[i] = unitIdx) and
+       (PyImpNameSrc[i] = srcUnit) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function PyUserNameShadowsHere(const nm: AnsiString): Boolean;
 var si, i, ni, pi: Integer;
 begin
@@ -61284,7 +61310,7 @@ begin
         only the main program left `class Counter` in a module bound to pylib's
         Counter(). The twin in pasparser_expr.inc asks the same way. }
       if (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
-         (FindUClassInUnit(name, CurrentUnitIdx) >= 0) and PyIsClassTypeExact(name) then
+         (PyUserClassBoundHere(name) >= 0) and PyIsClassTypeExact(name) then
         procIdx := -1;
 
       { A NilPy module-level `def` is NOT bound above its own `def` statement —

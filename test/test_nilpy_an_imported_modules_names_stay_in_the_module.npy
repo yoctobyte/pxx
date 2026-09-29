@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# `import m` binds exactly one name, `m`. A module's `def len` or `class
+# Counter` stays in the module: the importer's bare `len`, `list`, `bool` and
+# `Counter` are still the builtins (or what the importer itself imported), and
+# only `m.len` / `m.Counter` reach the module's. Before the fix, flat unit
+# scope let them through: the importer's `len([1, 2])` resolved to the module's
+# def (a segfault, then the module's string), and `Counter("aab")` constructed
+# the module's class, even after `from collections import Counter`.
+# The no-publish rule for Pascal units (test_nilpy_import_does_not_publish_names)
+# now covers imported .py modules too, with the same narrowness: only names the
+# Python side already declares are hidden.
+import shadowlib
+import shadowuse
+from collections import Counter
+
+for y in [[1, 2], "abc"]:
+    print(len(y), list(y), bool(y))
+print(len([1, 2]), bool([]))
+print(Counter("aab")["a"])
+print(shadowlib.len([1]), shadowlib.list(1), shadowlib.Counter.k)

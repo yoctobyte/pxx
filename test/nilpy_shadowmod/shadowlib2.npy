@@ -1,0 +1,4 @@
+# Imported by test_nilpy_an_imported_modules_names_stay_in_the_module.npy for a
+# from-import: its class is re-bound in the importer on purpose.
+class Counter:
+    k = 7
