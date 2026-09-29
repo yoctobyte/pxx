@@ -42415,6 +42415,12 @@ endif
 	$(TESTTMP)/lib_mimic_utime | diff -u test/lib_mimic_utime.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_framebuf.npy $(TESTTMP)/lib_mimic_framebuf
 	$(TESTTMP)/lib_mimic_framebuf | diff -u test/lib_mimic_framebuf.expected -
+	# fill() writes whole bytes instead of one _set per pixel; every format and
+	# a width/height on and off the byte boundary, with and without stride
+	# padding, must leave the buffer exactly as fill_rect does. The .expected
+	# came from CPython running lib/rtl/mimic_framebuf.py.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_framebuf_fill_matches_fill_rect.npy $(TESTTMP)/lib_mimic_framebuf_fill_matches_fill_rect
+	$(TESTTMP)/lib_mimic_framebuf_fill_matches_fill_rect | diff -u test/lib_mimic_framebuf_fill_matches_fill_rect.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"

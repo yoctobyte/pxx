@@ -1,0 +1,33 @@
+# fill() writes whole bytes where the frame covers them instead of one _set per
+# pixel (a 128x64 MONO_VLSB fill(0) took over a minute on an ESP32-C3 board). It
+# must leave every byte exactly as fill_rect(0, 0, w, h, c) does: stride padding
+# and the bits past the last row or column untouched. Each buffer starts from
+# the same non-zero pattern so an over-write shows.
+import framebuf
+
+fmts = [framebuf.MONO_VLSB, framebuf.MONO_HLSB, framebuf.MONO_HMSB, framebuf.RGB565,
+        framebuf.GS2_HMSB, framebuf.GS4_HMSB, framebuf.GS8]
+cases = 0
+bad = 0
+for f in fmts:
+    for w in (8, 9):
+        for h in (8, 9):
+            for extra in (0, 3):
+                for c in (1, 0x1234):
+                    size = 2 * (w + extra + 8) * (h + 8)
+                    a = bytearray(size)
+                    b = bytearray(size)
+                    i = 0
+                    while i < size:
+                        a[i] = (i * 37 + 11) & 0xFF
+                        b[i] = (i * 37 + 11) & 0xFF
+                        i = i + 1
+                    fa = framebuf.FrameBuffer(a, w, h, f, w + extra)
+                    fb = framebuf.FrameBuffer(b, w, h, f, w + extra)
+                    fa.fill(c)
+                    fb.fill_rect(0, 0, w, h, c)
+                    cases = cases + 1
+                    if a != b:
+                        bad = bad + 1
+                        print("differs: format", f, "w", w, "h", h, "stride", w + extra, "c", c)
+print("cases", cases, "differ", bad)

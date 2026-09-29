@@ -83,37 +83,66 @@ class FrameBuffer:
 
     # ---- one pixel, no clipping (callers clip) ------------------------------
 
+    # _set is a dispatcher over one small method per format rather than one body
+    # with seven branches. A method's prologue zeroes the temp slots of EVERY
+    # branch it contains, taken or not, so the one-body version paid for all
+    # seven formats on every pixel: about 265 slot zeroings per call, which put
+    # micropython.md's `fill(0)` of a 128x64 MONO_VLSB buffer past a minute on
+    # an ESP32-C3 board (0.08 s on x86-64).
     def _set(self, x, y, c):
         f = self.format
-        b = self.buf
         if f == MONO_VLSB:
-            i = (y >> 3) * self.stride + x
-            bit = y & 7
-            b[i] = (b[i] & ~(1 << bit)) | (int(c != 0) << bit)
+            self._set_mvlsb(x, y, c)
         elif f == MONO_HLSB:
-            i = (x + y * self.stride) >> 3
-            bit = 7 - (x & 7)
-            b[i] = (b[i] & ~(1 << bit)) | (int(c != 0) << bit)
+            self._set_mhlsb(x, y, c)
         elif f == MONO_HMSB:
-            i = (x + y * self.stride) >> 3
-            bit = x & 7
-            b[i] = (b[i] & ~(1 << bit)) | (int(c != 0) << bit)
+            self._set_mhmsb(x, y, c)
         elif f == RGB565:
-            i = (x + y * self.stride) * 2
-            b[i] = c & 0xFF
-            b[i + 1] = (c >> 8) & 0xFF
+            self._set_rgb565(x, y, c)
         elif f == GS2_HMSB:
-            i = (x + y * self.stride) >> 2
-            shift = (x & 3) << 1
-            b[i] = (b[i] & ~(3 << shift)) | ((c & 3) << shift)
+            self._set_gs2(x, y, c)
         elif f == GS4_HMSB:
-            i = (x + y * self.stride) >> 1
-            if x & 1:
-                b[i] = (c & 0x0F) | (b[i] & 0xF0)
-            else:
-                b[i] = ((c & 0x0F) << 4) | (b[i] & 0x0F)
+            self._set_gs4(x, y, c)
         else:
-            b[x + y * self.stride] = c & 0xFF
+            self.buf[x + y * self.stride] = c & 0xFF
+
+    def _set_mvlsb(self, x, y, c):
+        b = self.buf
+        i = (y >> 3) * self.stride + x
+        bit = y & 7
+        b[i] = (b[i] & ~(1 << bit)) | (int(c != 0) << bit)
+
+    def _set_mhlsb(self, x, y, c):
+        b = self.buf
+        i = (x + y * self.stride) >> 3
+        bit = 7 - (x & 7)
+        b[i] = (b[i] & ~(1 << bit)) | (int(c != 0) << bit)
+
+    def _set_mhmsb(self, x, y, c):
+        b = self.buf
+        i = (x + y * self.stride) >> 3
+        bit = x & 7
+        b[i] = (b[i] & ~(1 << bit)) | (int(c != 0) << bit)
+
+    def _set_rgb565(self, x, y, c):
+        b = self.buf
+        i = (x + y * self.stride) * 2
+        b[i] = c & 0xFF
+        b[i + 1] = (c >> 8) & 0xFF
+
+    def _set_gs2(self, x, y, c):
+        b = self.buf
+        i = (x + y * self.stride) >> 2
+        shift = (x & 3) << 1
+        b[i] = (b[i] & ~(3 << shift)) | ((c & 3) << shift)
+
+    def _set_gs4(self, x, y, c):
+        b = self.buf
+        i = (x + y * self.stride) >> 1
+        if x & 1:
+            b[i] = (c & 0x0F) | (b[i] & 0xF0)
+        else:
+            b[i] = ((c & 0x0F) << 4) | (b[i] & 0x0F)
 
     def _get(self, x, y):
         f = self.format
@@ -142,7 +171,64 @@ class FrameBuffer:
     # ---- the public surface ---------------------------------------------------
 
     def fill(self, c):
-        self.fill_rect(0, 0, self.width, self.height, c)
+        # Whole bytes where the frame covers them, which is every byte in the
+        # usual geometries, instead of one _set per pixel: 1024 byte stores for
+        # a 128x64 display rather than 8192 pixel calls. Only when no byte it
+        # writes holds a pixel outside the frame -- stride padding and the bits
+        # past the last row or column stay untouched, as fill_rect leaves them.
+        f = self.format
+        w = self.width
+        h = self.height
+        b = self.buf
+        if f == MONO_VLSB and h & 7 == 0:
+            v = 0xFF if c != 0 else 0
+            page = 0
+            while page < h >> 3:
+                i = page * self.stride
+                end = i + w
+                while i < end:
+                    b[i] = v
+                    i = i + 1
+                page = page + 1
+            return
+        per = 0
+        v = 0
+        if (f == MONO_HLSB or f == MONO_HMSB) and w & 7 == 0:
+            per = 8
+            v = 0xFF if c != 0 else 0
+        elif f == GS2_HMSB and w & 3 == 0:
+            per = 4
+            v = (c & 3) * 0x55
+        elif f == GS4_HMSB and w & 1 == 0:
+            per = 2
+            v = (c & 0x0F) * 0x11
+        elif f == GS8:
+            per = 1
+            v = c & 0xFF
+        if per > 0:
+            y = 0
+            while y < h:
+                i = (y * self.stride) // per
+                end = i + w // per
+                while i < end:
+                    b[i] = v
+                    i = i + 1
+                y = y + 1
+            return
+        if f == RGB565:
+            lo = c & 0xFF
+            hi = (c >> 8) & 0xFF
+            y = 0
+            while y < h:
+                i = y * self.stride * 2
+                end = i + w * 2
+                while i < end:
+                    b[i] = lo
+                    b[i + 1] = hi
+                    i = i + 2
+                y = y + 1
+            return
+        self.fill_rect(0, 0, w, h, c)
 
     def pixel(self, x, y, c=None):
         # pixel(x, y) answers the colour, or None off the buffer;
