@@ -49,6 +49,16 @@ const
   DOTALL = 4;
 
 type
+  { re.error. Raised by compile() -- and so by every module-level function,
+    which all compile through the same cache -- when the engine cannot take the
+    pattern: a pattern CPython also rejects ("(", "a**", "[z-a]"), and one
+    CPython accepts but this engine does not implement (lookaround, \1, (?P<n>),
+    inline flags, possessive a++). It used to come back as a pattern whose
+    search() answered None, so a program that used one of those features got a
+    silent wrong answer; now it gets an exception it can catch or read. The
+    message is the engine's, not CPython's "... at position N". }
+  error = class(Exception);
+
   { A match. Carries its subject so group() can cut text out of it. }
   TMatch = class
     subject: AnsiString;
@@ -415,6 +425,8 @@ begin
   p := TPattern.Create;
   p.pattern := pattern;
   p.compiled := ReCompile(pattern, flags);
+  if not p.compiled.ok then
+    raise error.Create(p.compiled.error);
   SetLength(PatCacheSrc, n + 1);
   SetLength(PatCacheFlg, n + 1);
   SetLength(PatCacheVal, n + 1);

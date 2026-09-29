@@ -5039,6 +5039,12 @@ test-nilpy: $(COMPILER)
 	# of the engine's own, which is how re.sub(p,r,s,-1) replaced everything.
 	./$(COMPILER) test/test_nilpy_re_split_subn_finditer.npy $(TESTTMP)/test_nilpy_resplit26
 	$(TESTTMP)/test_nilpy_resplit26 | diff -u test/test_nilpy_re_split_subn_finditer.expected -
+	# re.compile (and every re function) raises re.error for a pattern the
+	# engine cannot take, instead of search() answering None. The block of
+	# patterns CPython also rejects is CPython's output; the lookaround / \1 /
+	# (?P<n>) / (?i) / a++ block is a documented difference (header).
+	./$(COMPILER) test/test_nilpy_re_an_unsupported_pattern_raises_re_error.npy $(TESTTMP)/test_nilpy_reerror26
+	$(TESTTMP)/test_nilpy_reerror26 | diff -u test/test_nilpy_re_an_unsupported_pattern_raises_re_error.expected -
 	# os.path.split / normpath / getsize / expanduser
 	./$(COMPILER) test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore26
 	$(TESTTMP)/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -

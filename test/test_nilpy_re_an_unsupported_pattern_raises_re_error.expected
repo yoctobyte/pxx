@@ -1,0 +1,24 @@
+-- rejected by CPython too --
+'(' re.error
+')' re.error
+'a**' re.error
+'[z-a]' re.error
+'a{2,1}' re.error
+'\\' re.error
+-- valid, but not implemented here --
+'(?=a)a' re.error
+'(?<=a)b' re.error
+'(?!a)b' re.error
+'(a)\\1' re.error
+'(?P<n>a)' re.error
+'(?i)a' re.error
+'a++' re.error
+-- the module-level functions raise too --
+search re.error
+match re.error
+findall re.error
+sub re.error
+-- a raise is not cached, and valid patterns still work --
+re.error re.error
+b ['1', '22', '333']
+re.error is an Exception: True

@@ -1,0 +1,53 @@
+# re.compile raises re.error when the engine cannot take the pattern, and so do
+# re.search / re.match / re.findall / re.sub, which compile through it. Before,
+# the pattern compiled "fine" and search() answered None: a program using
+# lookahead or a backreference got a silent wrong answer.
+#
+# The first block is patterns CPython rejects too; those lines are CPython's own
+# output. The second block is patterns CPython ACCEPTS but this engine does not
+# implement -- lookaround, \1, (?P<name>...), inline flags, possessive a++.
+# There this port deliberately differs from CPython: it raises re.error rather
+# than answer, and those lines are NOT CPython's (CPython prints "compiled").
+# Only whether it raised is printed, not the message: CPython's says "... at
+# position N" and the engine's does not.
+import re
+
+
+def try_compile(p):
+    try:
+        re.compile(p)
+        return "compiled"
+    except re.error:
+        return "re.error"
+
+
+print("-- rejected by CPython too --")
+for p in ["(", ")", "a**", "[z-a]", "a{2,1}", "\\"]:
+    print(repr(p), try_compile(p))
+
+print("-- valid, but not implemented here --")
+for p in ["(?=a)a", "(?<=a)b", "(?!a)b", "(a)\\1", "(?P<n>a)", "(?i)a", "a++"]:
+    print(repr(p), try_compile(p))
+
+print("-- the module-level functions raise too --")
+for f in ("search", "match", "findall", "sub"):
+    try:
+        if f == "search":
+            re.search("(a)\\1", "aa")
+        elif f == "match":
+            re.match("(?=a)a", "a")
+        elif f == "findall":
+            re.findall("(?<=a)b", "ab")
+        else:
+            re.sub("(?P<n>a)", "x", "a")
+        print(f, "answered")
+    except re.error:
+        print(f, "re.error")
+
+print("-- a raise is not cached, and valid patterns still work --")
+print(try_compile("("), try_compile("("))
+print(re.search("a|b", "xyb").group(0), re.findall("[0-9]+", "a1b22c333"))
+try:
+    re.compile("(")
+except Exception as e:
+    print("re.error is an Exception:", isinstance(e, Exception))
