@@ -41,7 +41,12 @@ for f in test/lib_*.pas; do
   # Without it they print only their usage line, on every target alike, and
   # the comparison below matched two usage lines (lib_charset, lib_blockio).
   case $b in lib_charset|lib_blockio) arg="$OUT";; lib_dirio|lib_findfirst) arg="$OUT/${b}_sandbox";; *) arg="";; esac
-  ref=$(timeout 60 "$OUT/${b}.x64" $arg 2>&1); rrc=$?
+  # lib_strtofloat_lemire is slow under qemu-user, not hung: 220 s on
+  # qemu-aarch64 against 6.2 s native (load 48, 2026-09-29), with all 112207
+  # lines equal to x64. 60 s cut it off and read as a divergence.
+  to=60
+  case $b in lib_strtofloat_lemire) to=900;; esac
+  ref=$(timeout $to "$OUT/${b}.x64" $arg 2>&1); rrc=$?
   # riscv32 is OPT-IN (SWEEP_RISCV32=1), not because it does not matter -- it is
   # ESP32's core -- but because it is a documented STAGE 1 port with no heap
   # allocator (`builtinheap` is skipped there; see feature-target-esp32). So the
@@ -65,7 +70,7 @@ for f in test/lib_*.pas; do
     if ! $PX --target=$tgt -Fulib/rtl "$f" "$OUT/${b}.$tgt" >/dev/null 2>&1; then
       echo "BUILDFAIL $b $tgt"; continue
     fi
-    got=$(timeout 60 $q "$OUT/${b}.$tgt" $arg 2>&1); grc=$?
+    got=$(timeout $to $q "$OUT/${b}.$tgt" $arg 2>&1); grc=$?
     if [ "$got" != "$ref" ]; then
       nd=$(diff <(printf '%s\n' "$ref") <(printf '%s\n' "$got") | grep -c '^<')
       echo "DIFF $b $tgt  ($nd lines; rc $rrc vs $grc)"
