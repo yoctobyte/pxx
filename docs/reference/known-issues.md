@@ -1224,4 +1224,10 @@ Two limits apply to these measurements:
   comes much sooner over TLS: four of five HTTPS runs on the C3 stopped within
   their first twenty requests, with a compiler from before the HTTPS leak fix
   and one from after it alike. The C3 HTTPS figure in the table above is from
-  the board, over Wi-Fi.
+  the board, over Wi-Fi. **Workaround:** run long network tests under QEMU on
+  the ESP32-S3, or keep a C3 run short. With pin v451 on 2026-09-29,
+  `tools/esp_qemu_urequests.sh nilpy-c3` went silent after 500 of its 1,000
+  requests, while the same command with `UREQ_N=200` completed and
+  `tools/esp_qemu_urequests.sh nilpy-s3` completed all 1,000. When the chip
+  goes silent, that script waits for `UREQ_TIMEOUT` (1,800 seconds by default)
+  before it reports the failure.

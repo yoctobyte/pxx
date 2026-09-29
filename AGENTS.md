@@ -109,10 +109,11 @@ Check verdicts by the job's own printed line (for example "gate: GREEN" or
   `tools/esp_qemu_urequests.sh nilpy-s3` took 213 s on 2026-09-29 (pin v451),
   all three rows OK. Prefer the S3: under QEMU the C3 (`nilpy-c3`) can stall
   after a few hundred requests, because the emulated network card loses a
-  receive interrupt (a QEMU limit, not a leak; the diagnosis is in the BLAISE
-  LEAK LIST). On 2026-09-29 the chip went silent after 500 of its 1000
-  requests; the script waits for UREQ_TIMEOUT (1800 s) before it reports that,
-  so this run was stopped by hand after 794 s.
+  receive interrupt (a QEMU limit, not a leak; a C3 board over Wi-Fi does not
+  stall). See docs/reference/known-issues.md, "ESP networking under load". On
+  2026-09-29 the chip went silent after 500 of its 1000 requests; the script
+  waits for UREQ_TIMEOUT (1800 s) before it reports that, so this run was
+  stopped by hand after 794 s. With UREQ_N=200 the C3 run completed (138 s).
 - Heap soaks: SOAK_BODY=<file.npy> tools/esp_heap_soak_nilpy.sh --passes 40
   --settle 150 nilpy-logger-s3 [--as c3] [--control]; read the
   `SOAK <example> <chip> settled delta=<bytes>` line (bytes still gone after

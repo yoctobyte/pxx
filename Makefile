@@ -36685,7 +36685,7 @@ test-fpjson:
 # both NATIVE and PYTHON-bodied stdlib words evaluate — `1 2 + .` (native `+`) and
 # `10 3 / .` (`/` is a PYTHON block, exec'd via the pyeval bridge + bound-method
 # env) — expecting "3" then "3", clean exit. Skips if the tree is absent:
-#   git clone git@github.com:yoctobyte/uforth ~/projects/uforth
+#   git clone https://github.com/yoctobyte/uforth ~/projects/uforth
 UFORTH_SRC ?= $(HOME)/projects/uforth
 # uforth's OWN corpora, run DIFFERENTIALLY: the same uforth.py under CPython is
 # the oracle, so there is nothing recorded here to go stale when uforth moves.
@@ -36771,7 +36771,7 @@ UFORTH_WORDSETS ?= core.fr coreplustest.fth doubletest.fth exceptiontest.fth \
                    blocktest.fth toolstest.fth filetest.fth
 test-uforth: $(COMPILER)
 	@if [ ! -f "$(UFORTH_SRC)/uforth.py" ]; then \
-	  echo "test-uforth: SKIP — no uforth tree at $(UFORTH_SRC) (git clone git@github.com:yoctobyte/uforth $(UFORTH_SRC))"; \
+	  echo "test-uforth: SKIP — no uforth tree at $(UFORTH_SRC) (git clone https://github.com/yoctobyte/uforth $(UFORTH_SRC))"; \
 	  exit 0; \
 	fi; \
 	wd="$$(mktemp -d)"; \
