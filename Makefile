@@ -3776,6 +3776,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/lenvar_npy_x64 | diff -u test/test_nilpy_length_of_a_variant_measures_its_string.expected -
 	./$(COMPILER) test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_x64
 	$(TESTTMP)/lenvar_pas_x64 | diff -u test/test_length_of_a_variant.expected -
+	./$(COMPILER) test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_x64
+	$(TESTTMP)/lenarrvar_x64 | diff -u test/test_length_of_an_array_of_variant.expected -
 	./$(COMPILER) test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_x64
 	$(TESTTMP)/sstmp_pas_x64 | diff -u test/test_a_shortstring_result_temp_holds_the_whole_result.expected -
 	# a def in an imported module keeps its annotations: the used-as-a-value scan
@@ -8456,6 +8458,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenvar_npy_a64)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
 	./$(COMPILER) --target=aarch64 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_a64
 	tools/expect_same.sh aarch64/test_length_of_a_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenvar_pas_a64)" "$$(cat test/test_length_of_a_variant.expected)"
+	./$(COMPILER) --target=aarch64 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a64
+	tools/expect_same.sh aarch64/test_length_of_an_array_of_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenarrvar_a64)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=aarch64 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_a64
 	tools/expect_same.sh aarch64/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh aarch64 $(TESTTMP)/sstmp_pas_a64)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_arm32
@@ -8708,6 +8712,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_path_read_text_keeps_the_file_as_written "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/pathrt_rv32)" "$$(cat test/test_nilpy_path_read_text_keeps_the_file_as_written.expected)"
 	./$(COMPILER) --target=riscv32 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_rv32
 	tools/expect_same.sh riscv32/test_length_of_a_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_pas_rv32)" "$$(cat test/test_length_of_a_variant.expected)"
+	./$(COMPILER) --target=riscv32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_rv32
+	tools/expect_same.sh riscv32/test_length_of_an_array_of_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenarrvar_rv32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=riscv32 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_rv32
 	tools/expect_same.sh riscv32/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh riscv32 $(TESTTMP)/sstmp_pas_rv32)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_rv32
@@ -30107,6 +30113,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_npy_i386)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
 	./$(COMPILER) --target=i386 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_i386
 	tools/expect_same.sh i386/test_length_of_a_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_pas_i386)" "$$(cat test/test_length_of_a_variant.expected)"
+	./$(COMPILER) --target=i386 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_i386
+	tools/expect_same.sh i386/test_length_of_an_array_of_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenarrvar_i386)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=i386 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_i386
 	tools/expect_same.sh i386/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh i386 $(TESTTMP)/sstmp_pas_i386)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_a_module_def_keeps_its_annotations.npy $(TESTTMP)/modtyped_imp_i386
@@ -33456,6 +33464,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh xtensa $(TESTTMP)/lenvar_npy_xtw)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_xtw
 	tools/expect_same.sh xtensa-windowed/test_length_of_a_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenvar_pas_xtw)" "$$(cat test/test_length_of_a_variant.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_xtw
+	tools/expect_same.sh xtensa-windowed/test_length_of_an_array_of_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenarrvar_xtw)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_xtw
 	tools/expect_same.sh xtensa-windowed/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh xtensa $(TESTTMP)/sstmp_pas_xtw)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_xtw
@@ -35545,6 +35555,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_npy_a32)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
 	./$(COMPILER) --target=arm32 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_a32
 	tools/expect_same.sh arm32/test_length_of_a_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_pas_a32)" "$$(cat test/test_length_of_a_variant.expected)"
+	./$(COMPILER) --target=arm32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a32
+	tools/expect_same.sh arm32/test_length_of_an_array_of_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenarrvar_a32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
 	./$(COMPILER) --target=arm32 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_a32
 	tools/expect_same.sh arm32/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh arm32 $(TESTTMP)/sstmp_pas_a32)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=arm32 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_a32

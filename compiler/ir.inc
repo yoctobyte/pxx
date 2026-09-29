@@ -17528,7 +17528,13 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           an imported module, whose params arrive as Variants.
           bug-a-length-of-a-variant-reads-its-tag }
         if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
-           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyVariant) then
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyVariant) and
+           { An array's kind IS its element kind, so `array of Variant` reads
+             tyVariant too: without these two, Length/High of an open or
+             dynamic array of Variant measured element 0's string instead.
+             bug-a-length-of-an-array-of-variant-measures-its-first-element }
+           (not ASTNodeIsWholeArray(ASTLeft[item])) and
+           (NodeDynDepth(ASTLeft[item]) = 0) then
           value := IRLowerVariantAsStr(ASTLeft[item])
         else
         if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
