@@ -1,0 +1,30 @@
+# pylib/pyeval are Pascal units, and their `args.Free` / `src.Free` on a class
+# with no Destroy dispatch through the reserved ROOT_VMT_DESTROY slot. Only
+# Pascal's ParseProgram filled that slot; a NilPy program left it nil, so the
+# first runtime Free jumped to address 0 (sorted(), a def through a variable,
+# a method called from exec'd code). Equals CPython.
+
+def three():
+    return 3
+
+def call(f):
+    return f()
+
+g = three
+print(g())
+print(call(three))
+print(sorted([3, 1, 2]))
+xs = [5, 4]
+xs.sort()
+print(xs)
+
+class N:
+    def mi(self, x):
+        return x
+
+n = N()
+print(n.mi(3))
+env = {"n": n}
+ns = {}
+exec("def __body__():\n    return n.mi(5)\n", env, ns)
+print(ns["__body__"]())

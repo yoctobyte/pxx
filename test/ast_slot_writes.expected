@@ -183,6 +183,7 @@ AN_ARG Left hiNode
 AN_ARG Left identNode
 AN_ARG Left idxN
 AN_ARG Left idxNode
+AN_ARG Left instNode
 AN_ARG Left intBaseArg
 AN_ARG Left isFuncNode
 AN_ARG Left itemNode
@@ -1274,6 +1275,7 @@ AN_TYPEINFO Left 1
 AN_VARREC_ARRAY Left elemHead
 AN_VAR_DECL Left -1
 AN_VAR_DECL Left assignNode
+AN_VIRTUAL_CALL Right ROOT_VMT_DESTROY
 AN_VIRTUAL_CALL Right UMthVirSlot[dfMmi]
 AN_VIRTUAL_CALL Right UMthVirSlot[hitMmi]
 AN_VIRTUAL_CALL Right UMthVirSlot[mmi]

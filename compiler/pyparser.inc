@@ -52042,6 +52042,10 @@ begin
     ParseProgram does this; .npy needs it too now that string/variant codegen
     calls PXXAlloc. }
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
+  { The reserved root slots, as Pascal's ParseProgram fills them: pylib/pyeval
+    are Pascal, and their Free and the handler's destructor dispatch through
+    ROOT_VMT_DESTROY. Left unfilled, every builtin class kept a nil slot 0. }
+  FillRootVMTSlotDefaults;
   ApplyCallFixups;
 {$IFDEF PXX_SCANCOUNT}
   WriteLn(StdErr, 'pxx-scancount: tokens=', MainProgramTokCount,

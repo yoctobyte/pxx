@@ -14798,6 +14798,7 @@ begin
 
   CProgramMode := False;
   EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
+  FillRootVMTSlotDefaults;   { the reserved root slots, as ParseProgram and the NilPy epilogue fill them }
   ApplyCallFixups;
 
   { Object mode emitted no entry stub, so there is nothing to patch and no

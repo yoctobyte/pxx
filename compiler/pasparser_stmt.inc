@@ -2366,8 +2366,49 @@ end;
   the class or an ancestor declares one; otherwise just the instance heap block
   (the GetMem from `TFoo.Create`) is released. Niling the var makes a second
   `Free` a no-op. symIdx must be a non-record class-instance variable. }
+function GenMakeDestroyCall(instNode, ci: Integer): Integer;
+{ The Destroy call a Free desugaring runs before FreeMem, or -1 for none. The
+  three Free builders (variable, Self field, expression) shared the decision
+  "call Destroy if the class HAS a Destroy row" and each spelled it inline.
+
+  NO Destroy ROW YET IS NOT "NO DESTRUCTOR". Inside a UNIT, TObject has no
+  Destroy member while the unit's bodies parse: the program mints that row at
+  the end of pass 1, and the unit pre-scan deliberately does not (an early row
+  corrupted the heap -- see EnsureTObjectRootMethodsEx). So `TObject(p).Free`
+  and `o.Free` on a TObject-typed receiver in a unit ran FreeMem alone, and an
+  override's destructor never ran: contnrs' TFPObjectList with OwnsObjects
+  leaked every item, where fpc destroys them. The reserved slot is always
+  filled by then -- the override, or FillRootVMTSlotDefaults' empty default --
+  so this dispatches through it exactly as the row would, with the default
+  body's signature (Self only), and mints nothing.
+  bug-a-free-on-a-tobject-in-a-unit-skips-the-overridden-destructor }
+var dsSelf, dsPi: Integer;
+begin
+  Result := -1;
+  if ci < 0 then Exit;
+  if FindUMeth(ci, 'Destroy') >= 0 then
+  begin
+    Result := GenMakeMethodCall0(instNode, ci, 'Destroy');
+    Exit;
+  end;
+  if UClsIsRecord[ci] or UClsIsInterface[ci] then Exit;
+  if ROOT_VMT_DESTROY >= RootVMTSlotCount then Exit;   { --compact-classes: no slot }
+  if UClsVirtCount[ci] < RootVMTSlotCount then Exit;
+  dsPi := FindProc('__pxxTObjectDestroy');
+  if dsPi < 0 then Exit;
+  Result := AllocNode(AN_VIRTUAL_CALL);
+  ASTRight[Result] := ROOT_VMT_DESTROY;
+  ASTIVal[Result] := dsPi;
+  ASTTk[Result] := Ord(Procs[dsPi].RetType);
+  dsSelf := AllocNode(AN_ARG);
+  ASTLeft[dsSelf] := instNode;
+  ASTRight[dsSelf] := -1;
+  ASTLeft[Result] := dsSelf;
+end;
+
 function GenMakeFreeObject(symIdx: Integer): Integer;
 var ci, freeArg, freeCall, nilLit, nilAssign, cond, thenSeq, pairNode, ifNode: Integer;
+    dsCall: Integer;
 begin
   ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
 
@@ -2386,8 +2427,8 @@ begin
   nilAssign := GenMakeAssign(GenMakeIdent(symIdx, tyClass), nilLit);
 
   thenSeq := chainSeq(freeCall, nilAssign);
-  if FindUMeth(ci, 'Destroy') >= 0 then
-    thenSeq := chainSeq(GenMakeMethodCall0(GenMakeIdent(symIdx, tyClass), ci, 'Destroy'), thenSeq);
+  dsCall := GenMakeDestroyCall(GenMakeIdent(symIdx, tyClass), ci);
+  if dsCall >= 0 then thenSeq := chainSeq(dsCall, thenSeq);
 
   { if obj <> nil then thenSeq }
   nilLit := AllocNode(AN_INT_LIT);
@@ -2422,6 +2463,7 @@ function GenMakeFreeObjectField(selfIdx, fOff, fLen, ci: Integer): Integer;
   method: the field twin of GenMakeFreeObject above — nil-guarded
   [Destroy;] FreeMem; field := nil. }
 var freeArg, freeCall, nilLit, nilAssign, cond, thenSeq, pairNode, ifNode: Integer;
+    dsCall: Integer;
 begin
   { FreeMem(Self.field) }
   freeArg := AllocNode(AN_ARG);
@@ -2438,8 +2480,8 @@ begin
   nilAssign := GenMakeAssign(GenMakeSelfClassFieldNode(selfIdx, fOff, fLen), nilLit);
 
   thenSeq := chainSeq(freeCall, nilAssign);
-  if FindUMeth(ci, 'Destroy') >= 0 then
-    thenSeq := chainSeq(GenMakeMethodCall0(GenMakeSelfClassFieldNode(selfIdx, fOff, fLen), ci, 'Destroy'), thenSeq);
+  dsCall := GenMakeDestroyCall(GenMakeSelfClassFieldNode(selfIdx, fOff, fLen), ci);
+  if dsCall >= 0 then thenSeq := chainSeq(dsCall, thenSeq);
 
   { if Self.field <> nil then thenSeq }
   nilLit := AllocNode(AN_INT_LIT);
@@ -2477,7 +2519,7 @@ function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer;
   tyClass (ir.inc:13578). Same three lines as the `with`-temp at :4356.
   bug-p-free-on-a-computed-receiver-is-refused-because-the-desugaring-clones-it }
 var freeArg, freeCall, nilLit, cond, thenSeq, pairNode, ifNode: Integer;
-    tmpSym, tmpIdent, preAssign: Integer;
+    tmpSym, tmpIdent, preAssign, dsCall: Integer;
 begin
   preAssign := -1;
   if not PureDesignator(objNode) then
@@ -2501,8 +2543,8 @@ begin
     FindProc cannot see builtin procs yet
     (bug-a-class-managed-fields-not-finalized-on-destroy). }
   thenSeq := freeCall;
-  if (ci >= 0) and (FindUMeth(ci, 'Destroy') >= 0) then
-    thenSeq := chainSeq(GenMakeMethodCall0(CloneAST(objNode), ci, 'Destroy'), chainSeq(freeCall, -1));
+  dsCall := GenMakeDestroyCall(CloneAST(objNode), ci);
+  if dsCall >= 0 then thenSeq := chainSeq(dsCall, chainSeq(freeCall, -1));
 
   { if expr <> nil then thenSeq }
   nilLit := AllocNode(AN_INT_LIT);

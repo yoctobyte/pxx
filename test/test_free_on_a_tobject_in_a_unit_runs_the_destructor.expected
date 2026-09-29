@@ -1,0 +1,3 @@
+unit TObject(p).Free: 1
+unit o.Free (o: TObject): 2
+program TObject(p).Free: 3
