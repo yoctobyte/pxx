@@ -3662,6 +3662,11 @@ begin
             procIdx := FindProc('PXXStdinEof');
             if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
             EmitCallProc(procIdx);
+            { Windowed: the result is in the caller's a10, as at every other
+              value-returning call. Without the move the Boolean was whatever
+              a2 held before the call, so `while not Eof` stopped early. }
+            if XtensaABI = XTENSA_ABI_WINDOWED then
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
             Exit;
           end;
           if procIdx = -SPECIAL_IN then

@@ -2859,6 +2859,8 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_attribute_off_a_virtual_call_result "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_virtcall_xtw)" "$$(cat test/test_nilpy_attribute_off_a_virtual_call_result.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall_xtc0
 	tools/expect_same.sh xtensa-call0/test_nilpy_attribute_off_a_virtual_call_result "$$(tools/run_target.sh xtensa $(TESTTMP)/test_nilpy_virtcall_xtc0)" "$$(cat test/test_nilpy_attribute_off_a_virtual_call_result.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --xtensa-abi=call0 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/xt_eof_c0
+	tools/expect_same.sh xtensa-call0/test_bare_eof_on_stdin_on_every_target "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_eof_c0 < test/test_bare_eof_on_stdin_on_every_target.in)" "$$(cat test/test_bare_eof_on_stdin_on_every_target.expected)"
 	# a member lookup through a qualifier that supplies nothing must name the
 	# QUALIFIER, not just the member — and a bare name must keep the short form
 	# The expected LINE is derived from the fixture, not pinned: the subject of this
@@ -3600,6 +3602,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/divzero26 | diff -u test/test_div_by_a_run_time_zero_raises_on_wasm32.expected -
 	./$(COMPILER) test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc26
 	$(TESTTMP)/realloc26 | diff -u test/test_reallocmem_grows_and_shrinks_on_every_target.expected -
+	./$(COMPILER) test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof26
+	timeout 60 $(TESTTMP)/eof26 < test/test_bare_eof_on_stdin_on_every_target.in | diff -u test/test_bare_eof_on_stdin_on_every_target.expected -
 	./$(COMPILER) test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr26
 	tools/expect_same.sh test_nilpy_print_to_stderr.out "$$($(TESTTMP)/npystderr26 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh test_nilpy_print_to_stderr.err "$$($(TESTTMP)/npystderr26 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -8644,6 +8648,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/reprpow2_rv32)" "$$(cat test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.expected)"
 	./$(COMPILER) --target=riscv32 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_rv32
 	tools/expect_same.sh riscv32/test_reallocmem_grows_and_shrinks_on_every_target "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/realloc_rv32)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
+	./$(COMPILER) --target=riscv32 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof_rv32
+	tools/expect_same.sh riscv32/test_bare_eof_on_stdin_on_every_target "$$(timeout 120 tools/run_target.sh riscv32 $(TESTTMP)/eof_rv32 < test/test_bare_eof_on_stdin_on_every_target.in)" "$$(cat test/test_bare_eof_on_stdin_on_every_target.expected)"
 	./$(COMPILER) --target=riscv32 test/test_text_write_float_and_pchar.pas $(TESTTMP)/textfmt_rv32
 	tools/expect_same.sh riscv32/test_text_write_float_and_pchar.out "$$(tools/run_target.sh riscv32 $(TESTTMP)/textfmt_rv32 2>/dev/null)" "$$(cat test/test_text_write_float_and_pchar.expected)"
 	tools/expect_same.sh riscv32/test_text_write_float_and_pchar.err "$$(tools/run_target.sh riscv32 $(TESTTMP)/textfmt_rv32 2>&1 >/dev/null)" "$$(cat test/test_text_write_float_and_pchar.err.expected)"
@@ -30150,6 +30156,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_div_by_a_run_time_zero_raises_on_wasm32 "$$(tools/run_target.sh i386 $(TESTTMP)/divzero_i386)" "$$(cat test/test_div_by_a_run_time_zero_raises_on_wasm32.expected)"
 	./$(COMPILER) --target=i386 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_i386
 	tools/expect_same.sh i386/test_reallocmem_grows_and_shrinks_on_every_target "$$(tools/run_target.sh i386 $(TESTTMP)/realloc_i386)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
+	./$(COMPILER) --target=i386 test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/eof_i386
+	tools/expect_same.sh i386/test_bare_eof_on_stdin_on_every_target "$$(timeout 120 tools/run_target.sh i386 $(TESTTMP)/eof_i386 < test/test_bare_eof_on_stdin_on_every_target.in)" "$$(cat test/test_bare_eof_on_stdin_on_every_target.expected)"
 	./$(COMPILER) --target=i386 test/test_nilpy_print_to_stderr.py $(TESTTMP)/npystderr_i386
 	tools/expect_same.sh i386/test_nilpy_print_to_stderr.out "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.expected)"
 	tools/expect_same.sh i386/test_nilpy_print_to_stderr.err "$$(tools/run_target.sh i386 $(TESTTMP)/npystderr_i386 2>&1 >/dev/null)" "$$(cat test/test_nilpy_print_to_stderr.err.expected)"
@@ -33384,6 +33392,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_reprpow2_w)" "$$(cat test/test_nilpy_float_repr_of_a_power_of_two_is_the_shortest.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/xt_realloc_w
 	tools/expect_same.sh xtensa-windowed/test_reallocmem_grows_and_shrinks_on_every_target "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_realloc_w)" "$$(cat test/test_reallocmem_grows_and_shrinks_on_every_target.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --xtensa-abi=windowed test/test_bare_eof_on_stdin_on_every_target.pas $(TESTTMP)/xt_eof_w
+	tools/expect_same.sh xtensa-windowed/test_bare_eof_on_stdin_on_every_target "$$(timeout 120 tools/run_target.sh xtensa $(TESTTMP)/xt_eof_w < test/test_bare_eof_on_stdin_on_every_target.in)" "$$(cat test/test_bare_eof_on_stdin_on_every_target.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 --xtensa-long-calls test/test_stderr_separation.pas $(TESTTMP)/xt_stderrsep_c0
 	tools/expect_same.sh xtensa-call0/test_stderr_separation.out "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>/dev/null)" "$$(cat test/test_stderr_separation.expected)"
 	tools/expect_same.sh xtensa-call0/test_stderr_separation.err "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_stderrsep_c0 2>&1 >/dev/null)" "$$(cat test/test_stderr_separation.err.expected)"
