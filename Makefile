@@ -4907,6 +4907,69 @@ test-nilpy: $(COMPILER)
 	# positionally and put(chars=x, index=y) bound them swapped, silently.
 	./$(COMPILER) test/test_nilpy_pyeval_host_kwargs_bind_by_name.npy $(TESTTMP)/test_nilpy_pyevalkw26
 	$(TESTTMP)/test_nilpy_pyevalkw26 | diff -u test/test_nilpy_pyeval_host_kwargs_bind_by_name.expected -
+	# WHICH PARAMETER SHAPES THE REFLECTED HOST-CALL BRIDGE ACCEPTS, and which it
+	# now REFUSES instead of corrupting. Directly above is the file whose own two
+	# COMPILED call sites -- labelled "these never had the bug, and are the
+	# control" -- are what break the four exec rows beneath them: a compiled site
+	# narrows the bare parameter (PyParamTypeFromSites), which routes the exec'd
+	# call through PyHostCall's thunk table, and that table is indexed by the COUNT
+	# of integer-class args and the COUNT of doubles rather than by the callee's
+	# actual parameter sequence. ONE defect, TWO faces -- ORDER on EVERY target,
+	# WIDTH on 32-bit only. See the LOGBOOK entry of 2026-09-29.
+	#
+	# THE ORDER FACE IS POSITIONAL, NOT ABOUT "MIXING", and that distinction is
+	# the whole reason the trailing-double rows in the test file exist. The bridge
+	# passes every non-double and THEN every double, so a callee whose doubles are
+	# all TRAILING already receives its arguments correctly -- (Int64, Double) and
+	# (Int64, Int64, Double) are right on all five targets. What breaks is a
+	# non-double that FOLLOWS a double, which is why (Int64, Double, Int64) is
+	# corrupt while (Int64, Int64, Double) is fine. The first version of this
+	# refusal said "any double mixed with a non-double" and was WRONG: it refused
+	# three working shapes, and the full test-nilpy tier caught it by turning
+	# test_nilpy_dynamic_call_takes_defaults_from_its_own_class red -- that row's
+	# `at(self, x, z, outside)` has its double last and agrees with CPython.
+	# ALSO NOTE that row is a COMPILED open-world dispatch, not an exec: the thunk
+	# path is reached by any call whose receiver class the frontend cannot know.
+	#
+	# MEASURED at 7967cd294d, compiler binary d9b7226769cc, before and after, on
+	# x86-64, aarch64, i386, riscv32 and arm32: every shape measured correct before
+	# is still correct, every shape measured wrong or crashing is refused, and
+	# three SIGSEGVs on the 32-bit targets became clean refusals (rc=139 -> rc=0).
+	# The binary sha CANNOT tell before from after -- compiler/builtin/pyeval.pas
+	# is a builtin compiled into user programs, not embedded in the compiler -- so
+	# d9b7226769cc labels both columns and the difference is the refusal's presence.
+	#
+	# THE MODE IS PINNED PER TARGET, so a target that changes behaviour turns this
+	# row red until someone writes down that it did. `wide` = 64-bit, where every
+	# integer-class parameter is 8 bytes and only the ORDER face bites. `narrow` =
+	# a 32-bit target, where a parameter that is not 64-bit is refused.
+	#
+	# 32-BIT IS ONE WORD FOR THREE DIFFERENT BOUNDARIES, which is why the refusal
+	# is the union and not a per-target allow-list: (Int64, AnsiString) is correct
+	# on riscv32 and arm32 and WRONG on i386; (Int64, Int64, AnsiString) is correct
+	# only on riscv32. Measured before and after on all five.
+	#
+	# wasm32 IS ABSENT ON PURPOSE. Any host method reached through exec() traps
+	# there, including one with no compiled call site anywhere, and it does so with
+	# AND WITHOUT this change -- re-verified at 7967cd294d by reverting only
+	# pyeval.pas -- so it is a separate pre-existing wasm32 defect and not this
+	# row's subject. Plain NilPy try/except works there, so it is not exception
+	# support; 9de858f83d ("wasm32 runs every unit's initialization section") was a
+	# plausible cause and is measurably not it. Note wasm32 is built WITHOUT
+	# --platform=posix here, as every wasm32 row is: that combination fails on an
+	# unrelated missing SYS_getgid in the posix backend, which cost me a wrong turn.
+	./$(COMPILER) test/test_nilpy_reflected_host_call_shapes.npy $(TESTTMP)/test_nilpy_hostshape26
+	# stderr is dropped on every row because this test TRIGGERS refusals on
+	# purpose, and pyeval's pre-existing `PROBE hostcall` wrapper prints the caught
+	# exception there before re-raising it. The assertion is the two stdout lines,
+	# and a failure still shows: a row that stops early loses the `failures=0` line.
+	tools/expect_same.sh hostshape26/native "$$($(TESTTMP)/test_nilpy_hostshape26 2>/dev/null)" "$$(printf 'HOSTSHAPE-MODE wide\nHOSTSHAPE-CHECK failures=0')"
+	@for t in i386 riscv32 arm32 aarch64; do \
+	  case $$t in i386) q=qemu-i386; want=narrow;; riscv32) q=qemu-riscv32; want=narrow;; arm32) q=qemu-arm; want=narrow;; aarch64) q=qemu-aarch64; want=wide;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  hostshape: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/test_nilpy_reflected_host_call_shapes.npy $(TESTTMP)/hostshape_$$t >/dev/null || { echo "hostshape $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh hostshape/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/hostshape_$$t 2>/dev/null)" "$$(printf 'HOSTSHAPE-MODE %s\nHOSTSHAPE-CHECK failures=0' $$want)" || exit 1; \
+	done
 	# {*xs} deduplicates: the set display's STAR arm called extend (appends)
 	# while its ordinary elements went through add (dedups). The list rows are
 	# what says [*xs] did not become a set.

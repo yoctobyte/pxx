@@ -1,0 +1,204 @@
+# SPDX-License-Identifier: 0BSD
+# WHICH PARAMETER SHAPES A REFLECTED HOST CALL ACCEPTS, asserted rather than
+# assumed -- and the shapes it must REFUSE rather than corrupt.
+#
+# A bare Nil Python parameter is narrowed to a scalar when every compiled call
+# site agrees (PyParamTypeFromSites). A call arriving later through exec(), or
+# through a run-time dispatch on a receiver whose class the frontend could not
+# know, goes through PyHostCall's thunk table -- and that table is indexed by the
+# COUNT of integer-class arguments and the COUNT of doubles, then called with
+# every integer-class argument first and every double second, each in an 8-byte
+# slot. So it only matches a callee whose parameter ORDER and WIDTHS happen to
+# agree with that. ONE defect, TWO faces:
+#
+#   ORDER, every target, and it is POSITIONAL. Because the bridge passes every
+#       non-double and THEN every double, a callee whose doubles are all TRAILING
+#       already receives its arguments correctly -- `at(self, x, z, outside)` is
+#       the ordinary case and it works. What breaks is a double with a non-double
+#       AFTER it. (Double, Int64) called with (9.5, 7) gave 3.5e-323 and
+#       4621537642612260864 -- the int read as a double and 9.5's bits read as an
+#       int -- BYTE IDENTICAL on x86-64, aarch64, i386, arm32 and riscv32. So did
+#       (Int64, Double, Int64), which is the row that proves it is position and
+#       not "mixing": one double, one non-double after it, same corruption.
+#       With a pointer-sized parameter instead it SIGSEGVed on x86-64 and aarch64.
+#
+#   WIDTH, 32-bit only.  Each thunk slot is 8 bytes while the callee reads its
+#       parameters at their own widths, so a NON-DOUBLE parameter narrower than
+#       64 bits displaces everything after it. A trailing double does not escape
+#       it: (AnsiString, Double) and (Variant, Double) return the double as 0.0
+#       on riscv32 and arm32, and (Variant, Variant, Double) SIGSEGVed on all
+#       three 32-bit targets. And the boundary DIFFERS PER TARGET:
+#       (Int64, AnsiString) is correct on riscv32 and arm32 but wrong on i386;
+#       (Int64, Int64, AnsiString) is correct only on riscv32; i386 alone gets
+#       (AnsiString, Double) right. Three 32-bit targets, three boundaries -- so
+#       the refusal is the union, and a per-target allow-list would rot.
+#
+# WHY THE TRAILING-DOUBLE ROWS BELOW EXIST, and they are the most valuable rows
+# in the file. The first version of this refusal rejected ANY double mixed with a
+# non-double, which is wrong: it refused three shapes that are correct on all five
+# targets. Nothing here caught it -- both order rows put the double FIRST -- and
+# it was the full test-nilpy tier that turned
+# test_nilpy_dynamic_call_takes_defaults_from_its_own_class red, because that
+# row's `at` has its double last, worked before the change and agrees with
+# CPython. ONE ARRANGEMENT OF A MIX IS NOT THE MIX. The rows are here so the next
+# person to tighten this rule has to answer them.
+#
+# WHAT THIS FILE PINS is the refusal, because the alternative was SILENT WRONG
+# OUTPUT on every 32-bit target including the ESP chips, and a SIGSEGV for three
+# shapes. The proper fix is a thunk per parameter-type SEQUENCE rather than per
+# (m, k) counts, or a generic invoker; both are design decisions, and when one
+# lands the refused rows below become passing rows and this file's oracle is what
+# says so.
+#
+# THE MODE IS DECIDED BY ONE PROBE and every other width row must AGREE with it,
+# the same contract as test_subnormal_double_arithmetic.pas. The Makefile pins
+# the expected word per target, so a target that changes behaviour turns red
+# until someone writes down that it did. Green under either mode BY DESIGN, and
+# not therefore toothless: what it catches is a HALF-fixed bridge (some shapes
+# accepted and not others), which is what a partial fix looks like.
+#
+# THE CONTROL ROW IS LOAD-BEARING. A method never called from compiled code keeps
+# Variant parameters, never reaches the thunk table at all, and must behave
+# exactly as before on every target -- including the (double, str) shape that the
+# thunk path refuses. If that row ever turns red, the refusal has leaked out of
+# the narrowed path and is breaking ordinary reflection.
+#
+# And the irony worth keeping: it is the COMPILED call sites that break the
+# reflected call. A file's compiled "controls" are its trigger.
+
+fails = [0]
+notes = []
+
+
+def check(label, ok):
+    if not ok:
+        fails[0] = fails[0] + 1
+        print("SHAPE FAIL", label)
+
+
+class W:
+    # Narrowed by the compiled call sites below.
+    def ii(self, a, b):
+        notes.append("ii " + str(a) + " " + str(b))
+
+    def iii(self, a, b, c):
+        notes.append("iii " + str(a) + " " + str(b) + " " + str(c))
+
+    def f1(self, a):
+        notes.append("f1 " + str(a))
+
+    def ff(self, a, b):
+        notes.append("ff " + str(a) + " " + str(b))
+
+    def isx(self, a, b):
+        notes.append("isx " + str(a) + " " + str(b))
+
+    def ss(self, a, b):
+        notes.append("ss " + str(a) + " " + str(b))
+
+    def fi(self, a, b):
+        notes.append("fi " + str(a) + " " + str(b))
+
+    # TRAILING doubles after 64-bit non-doubles: correct on every target.
+    def if_(self, a, b):
+        notes.append("if " + str(a) + " " + str(b))
+
+    def iif(self, a, b, c):
+        notes.append("iif " + str(a) + " " + str(b) + " " + str(c))
+
+    # A double with a non-double AFTER it: the order face, double NOT first.
+    def ifi(self, a, b, c):
+        notes.append("ifi " + str(a) + " " + str(b) + " " + str(c))
+
+    # A narrow non-double then a trailing double: 64-bit only.
+    def sf(self, a, b):
+        notes.append("sf " + str(a) + " " + str(b))
+
+    # NEVER called from compiled code: parameters stay Variant.
+    def vv(self, a, b):
+        notes.append("vv " + str(a) + " " + str(b))
+
+
+w = W()
+# THESE COMPILED CALLS ARE THE TRIGGER, not incidental setup: they are what
+# narrow the bare parameters above and so what routes the exec'd calls below
+# through the thunk table.
+w.ii(1, 2)
+w.iii(1, 2, 3)
+w.f1(1.5)
+w.ff(1.5, 2.5)
+w.isx(1, "S")
+w.ss("S", "T")
+w.fi(1.5, 3)
+w.if_(1, 2.5)
+w.iif(1, 2, 2.5)
+w.ifi(1, 2.5, 3)
+w.sf("S", 2.5)
+
+env = {"w": w}
+
+
+def call(src):
+    # Returns the note the method appended, or "REFUSED".
+    #
+    # THE NAME __body__ IS NOT ARBITRARY and renaming it breaks this file with a
+    # bare KeyError that says nothing about why. exec() publishes exactly that one
+    # def into the namespace dict, by hand (compiler/builtin/pyeval.pas, the
+    # `FnFind('__body__')` store); the general loop under it publishes top-level
+    # VARIABLES, not defs. Measured 2026-09-29 on v450 c19cc2d531e4 and on
+    # d9b7226769cc (the fixedpoint of 7967cd294d) -- a SHA rather than "HEAD",
+    # which means nothing to a later reader: __body__ lands, and f, fn, body,
+    # __b__, __x__, __init__ and __ab__ all leave the dict empty. Any other name
+    # here makes every row below raise
+    # KeyError before it reaches a host call, and a reader would be debugging the
+    # bridge instead of the idiom.
+    ns = {}
+    before = len(notes)
+    try:
+        exec("def __body__():\n    " + src + "\n", env, ns)
+        ns["__body__"]()
+    except TypeError as e:
+        return "REFUSED"
+    if len(notes) == before:
+        return "NOTHING"
+    return notes[len(notes) - 1]
+
+
+# ---- Allowed on EVERY target: all non-doubles 64-bit, doubles trailing. ----
+check("ii", call("w.ii(7,8)") == "ii 7 8")
+check("iii", call("w.iii(7,8,9)") == "iii 7 8 9")
+check("f1", call("w.f1(9.5)") == "f1 9.5")
+check("ff", call("w.ff(9.5,8.5)") == "ff 9.5 8.5")
+# The rows that refute "any mix is bad". These MUST pass everywhere.
+check("if trailing double", call("w.if_(7,9.5)") == "if 7 9.5")
+check("iif trailing double", call("w.iif(7,8,9.5)") == "iif 7 8 9.5")
+
+# ---- Refused on EVERY target: a non-double AFTER a double. ----
+check("fi refused", call("w.fi(9.5,7)") == "REFUSED")
+# Double in the MIDDLE: position, not mixing. If this ever stops being refused
+# while `fi` still is, the rule has been rewritten as "first parameter" and is
+# wrong again.
+check("ifi refused", call("w.ifi(7,9.5,8)") == "REFUSED")
+
+# ---- The width face: decide the mode from ONE probe. ----
+probe = call("w.isx(7,'X')")
+narrow = probe == "REFUSED"
+if narrow:
+    print("HOSTSHAPE-MODE narrow")
+else:
+    print("HOSTSHAPE-MODE wide")
+
+# ---- Every other width row must AGREE with that mode. ----
+if narrow:
+    check("ss refused", call("w.ss('X','Y')") == "REFUSED")
+    check("sf refused", call("w.sf('X',9.5)") == "REFUSED")
+else:
+    check("isx value", probe == "isx 7 X")
+    check("ss value", call("w.ss('X','Y')") == "ss X Y")
+    check("sf value", call("w.sf('X',9.5)") == "sf X 9.5")
+
+# ---- CONTROL: still Variant, so it never reaches the thunk table. ----
+check("vv str", call("w.vv('X',7)") == "vv X 7")
+check("vv double+str", call("w.vv(1.5,'X')") == "vv 1.5 X")
+
+print("HOSTSHAPE-CHECK failures=" + str(fails[0]))

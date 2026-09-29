@@ -6204,3 +6204,293 @@ at.
 2026-09-29 | frankS | compiler/pyparser.inc (PyBindOwnedOperand + PyWithOperandBinding new; PyCallYieldsOwnedObj new, shared with the discard binder PyBindDiscardedValue; used by PyParseIsCmp's two `is` arms and PyMakeTruthy's class arm), test/test_nilpy_a_fresh_operand_of_is_or_a_truth_test_is_released.npy, Makefile (test-nilpy census row with a `keep` control) | LEAK + WRONG VALUE: a fresh class result used straight as an `is`/`is not` operand or as a truth test was never released: one match object per `re.match(...) is not None`, one object per `f() is None`, and one list per `if f():` (census, N=1 vs N=21: live 7 -> 27). The container truth test also read its operand twice, so `if f():` CALLED f() TWICE (CPython once). The operand is now bound once to a hidden class local, with the discard binder's ownership rule, and the binding wraps the finished condition. Fixture census: live 15825 -> 25; value 6000 4000 -> CPython's 6000 2000, also on i386, riscv32 and aarch64. `bool(f())` and `not f()` are flat too. Differential over the 138 NilPy tests with a call as an `is` operand or a bare-call condition, old vs new compiler: 0 diffs. Found by the mixed-language census (the `import re` example grew 1 per iteration).
 2026-09-29 | frankS | (open, not fixed) | LEAK (found with the above; also on origin): three more shapes still drop a fresh operand, measured N=1 vs N=21: `f() == None` (7 -> 27), `f() == [1, 2]` (2 -> 42, one list per iteration) and `isinstance(f(), K)` (1 -> 21). `==` is parsed by the shared expression parser, not PyParseIsCmp, and isinstance's object is argument 0, which IRLowerCallArg's owning-temp spill excludes (the receiver guard). `f() != None` is flat.
 2026-09-29 | frankB | examples/esp32/nilpy-station-s3/sdkconfig.defaults (main stack 16 -> 32 KiB), examples/esp32/nilpy-station-c3/sdkconfig.defaults (16 -> 24 KiB) | S3/C3 MAIN-TASK STACK OVERFLOW ON SILICON (for frankuser). test_nilpy_wide_call_through_a_callable_value crashed on the S3 board (LoadProhibited, backtrace spanning 19,424 B over a 16 KiB stack) and on the C3 board (Stack protection fault; QEMU hid it on the C3). Mechanism: the module body's frame is 8,192 B on xtensa and 8,064 B on riscv32 because every lowering temp gets its own frame slot for the life of the procedure (129 AllocVar('') sites in compiler/ir.inc, no slot reuse across statements): measured per statement on riscv32, a star call costs 216 B, a `"%s" % (tuple,)` 88 B and a list literal 48 B. That is not a fixed buffer, and reusing slots means lifetime-based slot allocation, so no compiler change tonight. On top of it an interpreted lambda call (PyClosureInvoke -> ParsePrimary/ParsePower recursion, 784 B frames) needs about 10 KiB. After the change, on silicon with v451 d9b7226769cc: S3 32 KiB: F.npy, Q.npy (repros, frankB scratch) and the row MATCH, one boot each, no "stack overflow in task main", no Guru. C3 24 KiB: F.npy and the row MATCH, no Guru. C3 heap cost: free_heap 260,556 -> 249,308 B at 24 KiB (240,092 at 32 KiB), largest free block 126,976 -> 114,688; a 4093-int list and a 1900-int sort still fit.
+
+## 2026-09-29 — the reflected host-call bridge: ONE defect indexed by counts, two faces, and the test file's own controls were the trigger
+
+Routed to me as frankd-a3's item 5, "32-bit pyeval": three files, reported as a
+kwargs-binding bug, a segfault and wrong booleans. It is none of those. **The
+booleans were not mine** (a riscv32 bool-parameter codegen bug, franks-a3's), and
+the other two are ONE defect that is **not 32-bit** — its worse face segfaults
+x86-64.
+
+### The defect, in one sentence
+
+`PyHostCall`'s thunk table is selected by `mc * 8 + kc` — the COUNT of
+integer-class arguments and the COUNT of doubles — and then called with every
+`pa[]` first and every `pd[]` second, each in an 8-byte slot. So the thunk's
+parameter SEQUENCE and WIDTHS are assumed, not derived from the callee. Two faces:
+
+| face | population | symptom |
+|---|---|---|
+| ORDER | **every target** | a non-double that FOLLOWS a double arrives swapped, or SIGSEGVs. Trailing doubles are fine — see the correction below, which cost me two wrong rules |
+| WIDTH | 32-bit only | a non-double parameter narrower than 64 bits displaces everything after it, including a trailing double |
+
+`(Double, Int64)` called with `(9.5, 7)` answers `a=3.5e-323 b=4621537642612260864`
+— the int read as a double, and 9.5's bit pattern read as an int — **byte
+identical on x86-64, aarch64, i386, arm32 and riscv32**. That identity is the
+evidence it is logic in shared source and not an ABI difference. Swap the int for
+a string and x86-64 and aarch64 SIGSEGV.
+
+The `TPM*` types' own comment justifies the reordering with "the SysV ABI assigns
+integer-class and SSE-class arguments to two INDEPENDENT register files". The
+callee is pxx-compiled Pascal and pxx's convention does not classify that way,
+which is precisely why the corruption is identical on five targets.
+
+### What made it look like a 32-bit exec bug
+
+**`exec` alone is FINE.** The trigger is a COMPILED call site:
+
+```text
+exec'd two('P','Q') alone                      -> a=P b=Q     correct
+compiled two("C1","C2") first, then that exec   -> a=P b=      broken
+compiled call to a DIFFERENT method first       -> a=P b=Q     correct
+compiled two("S1", 7) first, then that exec     -> REFUSED: expected a number, got str
+TWO compiled sites that DISAGREE on the type    -> a=P b=Q     correct
+```
+
+Because `PyParamTypeFromSites` narrows a bare parameter when every call site it
+can SEE agrees, and an `exec` site is a string at compile time — the unseeable
+site par excellence. One compiled site narrows the parameter; two conflicting
+ones veto the narrowing and the bug vanishes. A method with Variant parameters
+never reaches the thunk table at all.
+
+**So the test file's own controls are the trigger.**
+`test_nilpy_pyeval_host_kwargs_bind_by_name.npy` labels its two compiled call
+sites "these never had the bug, and are the control" — and they are what break
+the four rows underneath them. That is also why the defect reads as "exec is
+broken" when exec alone is correct.
+
+### The narrowing half is NOT a bug, and its header said so first
+
+`PyParamTypeFromSites` records the measurement behind it: annotating one
+constructor's parameters took `Grid.at` from 1337 B / 48 calls / 0 SSE to
+280 B / 1 call / 3 SSE, nineteen times faster, under the owner's rule that
+programs do not contort for the frontend. And its header already predicts this
+exact residual:
+
+> A site the scan still cannot see (`getattr(o, 'f')(x)`, a module imported by a
+> path the closure does not walk) meets a typed parameter: the coercion RAISES on
+> a string and widens an int into a float exactly, and truncates a double into an
+> int silently — the one residual, `pyvar_to_int`.
+
+My first instruction from the coordinator was to stop that narrowing from reaching
+the reflected signature. That would have reverted a measured optimisation, and it
+also cannot work mechanically: the body is COMPILED for a 4-byte pointer, so
+advertising Variant in the RTTI and passing a variant address is a fresh ABI
+mismatch. Stopped and said so; the instruction was withdrawn. **A fifth instance
+tonight of a warning already written in a file I had open.** It is now a
+known-issues row instead of a code change.
+
+### Landed: refuse the shapes this bridge gets wrong
+
+Print-nothing, change-nothing for shapes that work. A named, CATCHABLE `TypeError`
+naming the method and the reason for the rest, in place of silent wrong values and
+three segfaults. The rule, after two wrong versions:
+
+- **ORDER, every target:** refuse if any non-double parameter FOLLOWS a double.
+- **WIDTH, 32-bit only:** refuse if any NON-DOUBLE parameter is not 64-bit
+  (`pxxTkInt64`/`UInt64`).
+
+**I tried to allow a narrow LAST parameter and the matrix refuted it.** Nothing
+follows it to be displaced, so `(Int64, AnsiString)` is correct on riscv32 — and
+WRONG on i386, where 7 came back as 34359738367. `(Int64, Int64, AnsiString)` is
+correct only on riscv32; arm32 gets it wrong while getting the two-parameter form
+right. **Three 32-bit targets, three different boundaries.** So the refusal is the
+union of what is broken anywhere, and a per-target allow-list would rot. I would
+have shipped the wrong rule had I measured two targets instead of five — the same
+error as "32-bit targets" for the subnormals, caught this time by the table rather
+than by a reviewer.
+
+### Then the second wrong rule, and this one only the full tier could catch
+
+The version above ALSO said "refuse any double mixed with a non-double", on every
+target. That is wrong, and it is the more instructive mistake.
+
+The bridge passes every non-double and THEN every double. So a callee whose
+doubles are all **trailing** already receives its arguments in the right places.
+Measured on the PRE-change compiler, all five targets:
+
+| shape | pre-change | first rule | corrected rule |
+|---|---|---|---|
+| `(Int64, Double)` | CORRECT | refused | allowed |
+| `(Int64, Double, Double)` | CORRECT | refused | allowed |
+| `(Int64, Int64, Double)` | CORRECT | refused | allowed |
+| `(Double, Int64)` | corrupt | refused | refused |
+| `(Double, Double, Int64)` | corrupt | refused | refused |
+| `(Int64, Double, Int64)` | corrupt | refused | refused |
+| `(Double, Int64, Double)` | corrupt | refused | refused |
+
+So it refused three shapes that work on every target. `(Int64, Double, Int64)` is
+the row that settles the mechanism: one double with one non-double after it, same
+byte-identical corruption as double-first. **It is position, not mixing.**
+
+**WHAT CAUGHT IT, and my own test file could not have.** The full `test-nilpy`
+tier turned `test_nilpy_dynamic_call_takes_defaults_from_its_own_class` red. That
+row's `at(self, x, z, outside)` has its double LAST, worked before the change, and
+agrees with CPython — `stable_pinned` prints its four expected lines exactly. The
+red row was right and I was wrong. My file's two order rows both put the double
+FIRST, so it asserted one arrangement of a mix and I stated a rule about every
+arrangement. That is the third instance in one session of one mistake: measuring a
+set and then stating a rule about a superset (two 32-bit targets → "32-bit
+targets"; double-first → "mixed"). The trailing-double rows are now in the test
+file precisely so the next person to tighten this rule has to answer them.
+
+**AND THE PATH IS WIDER THAN I HAD BEEN SAYING.** I had described the thunk path
+as what an `exec`'d call reaches. It is also reached by an ordinary COMPILED call
+dispatched at run time on a receiver whose class the frontend could not know — the
+open-world dispatch path, which is what that test exercises. The guard that
+Variant parameters never reach it still holds exactly as measured; but the blast
+radius was never "programs that call exec", and I had told frankuser it was. On
+that basis this does not go into v451 (pinned at `778a245ff3`); it lands for v452
+after grading on origin.
+
+The width face needed widening in the other direction at the same time: a trailing
+double does NOT escape the 32-bit problem. `(AnsiString, Double)` and
+`(Variant, Double)` return the double as **0.0** on riscv32 and arm32, and
+`(Variant, Variant, Double)` SIGSEGVs on all three 32-bit targets — three crashes
+that are now clean refusals. i386 alone gets `(AnsiString, Double)` right and arm32
+alone gets `(Int64, AnsiString, Double)` right, so the union argument stands
+unchanged.
+
+### One process near-miss worth recording
+
+The first tier run was launched as `... make test-nilpy 2>&1 | tail -40`, and the
+background job reported **exit code 0** while `make` had printed
+`*** [Makefile:1925: test-nilpy] Error 1` in the captured text. A pipeline's status
+is its LAST command's, so `tail` succeeding masked make failing. I read the output
+and saw the failure, but a glance at the exit code alone would have called a red
+tier green — and the whole reason for running it was to find exactly this. **Never
+pipe a gate or a tier through `tail`**: redirect to a file and record `$?` on its
+own line, which is how the re-run was launched.
+
+### Not fixed, deliberately
+
+The real fix is a thunk per parameter-type SEQUENCE rather than per `(m, k)`
+counts, or a generic invoker that builds the frame per target. Per-pattern thunks
+are correct and mechanical but combinatorial — each parameter is 4-or-8 or a
+double, so arity ≤ 5 is dozens of patterns across four result flavours, on top of
+the ~100 thunk types already there. A generic invoker is small at the call site
+and large and target-specific underneath. Both are design decisions with an ABI
+blast radius, so they are the owner's, and the refusal is what stops the silent
+corruption in the meantime. When either lands, the refused rows in
+`test/test_nilpy_reflected_host_call_shapes.npy` become passing rows and its
+oracle is what says so.
+
+### Separately found and NOT fixed: wasm32 cannot do reflected host calls at all
+
+Any host method called through `exec` traps with `unreachable` on wasm32 — including
+a call with no compiled call site anywhere, so it is not the narrowing. Reproduced
+on the PRE-change compiler, so it is not this change. Plain NilPy `try`/`except`
+works there, so it is not exception support either. wasm32 is therefore excluded
+from the new test's rows with that reason recorded rather than silently skipped.
+
+### Also found, also not fixed: exec() publishes exactly one def name, `__body__`
+
+`exec("def NAME(): ...", env, ns)` puts NAME into `ns` only when NAME is literally
+`__body__`. Any other name is dropped silently and `ns[NAME]` then raises
+`KeyError`. Measured 2026-09-29 on binary `f545c8410b32` (the fixedpoint of
+`e4c44532a2`) and re-measured unchanged on `d9b7226769cc` (the fixedpoint of
+`7967cd294d`) after rebasing over 47 commits including 18 under `compiler/`:
+`__body__` lands, and
+`f`, `fn`, `body`, `__b__`, `__x__`, `__init__` and `__ab__` all leave the dict
+with zero keys.
+
+The cause is visible in `compiler/builtin/pyeval.pas`: the `FnFind('__body__')`
+store publishes that one name by hand, and the loop directly under it — commented
+as "every other top-level binding, which is the general case the `__body__` line
+above was the one hand-wired instance of" — walks `LclNames`/`LclVals`, which are
+top-level VARIABLES. A `def` is registered in the Fn table instead, so the
+general case never generalised to the thing the comment says it generalises.
+
+Recorded because of how it presents. I wrote a probe with `__body__` shortened to
+`__b__`, got `Unhandled exception: KeyError: '__b__'`, and spent the next minutes
+looking for a fault in the host-call bridge.
+
+(I first wrote that sentence claiming the KeyError names `__body__` rather than
+the name you chose, and told frankd-90 so. **That is wrong** and I checked it only
+because it was about to go into a known-issues row: measured across `__b__`,
+`run`, `helper` and `__x__`, the error names the name you chose, every time. The
+misleading part is real but different — a `KeyError` points at the caller's own
+dict lookup, so it reads as "you asked for a key that isn't there" when the cause
+is that `exec` silently declined to put it there. Nothing in the message mentions
+`exec`, the def, or the one name that would have worked.)
+
+frankd-90 was about to write
+exec probes for the same area, so it went to them as a warning ahead of time, and
+`test/test_nilpy_reflected_host_call_shapes.npy` now says in a comment why its
+helper cannot be renamed.
+
+Not filed as a ticket (no new tickets unless release-blocking, and this one has a
+one-word workaround). Whether the general loop should cover defs is a small,
+self-contained fix for whoever picks the area up next.
+
+### And the twin finding, which is a MILESTONE and not a defect
+
+frankd-90 measured that an explicit `raise` inside exec'd NilPy is not catchable
+from compiled code: it prints `pyeval: ValueError: bad` and exits 1 where CPython
+runs the handler. True, and reproduced here on HEAD. But `ExecRaise`'s own header
+comment has said so since it was written:
+
+> `{ raise ExcName('message') | raise ExcName | raise. ... Propagated by halting
+> with a diagnostic -- catchable try/except is a later milestone. }`
+
+and the body is `writeln('pyeval: ', excName, ': ', msg); Halt(1);`. So this is
+the softfloat-subnormal shape exactly: a documented deferral that no test asserts
+and nothing outside the one file states. **I called that one a defect and was
+wrong, so this time I said so before anyone wrote a row.** The honest smaller
+claim, which is worth a row: the diagnostic goes to STDOUT and kills the process,
+while an error raised from inside a builtin (`int('ab')`) becomes a real exception
+and IS catchable — two errors in the same exec'd closure behave completely
+differently and the source gives no hint which you have.
+
+That single line also resolves why frankd-90 could not reproduce the PROBE leak
+above. Their shape used `raise`, which halts before any exception exists, so
+`PyClosureInvoke`'s `except` never runs and prints nothing; mine used `int('ab')`,
+which raises for real. One fact, two threads that looked unrelated for an hour.
+The lesson is the cheap one: when two seats measure the same area and disagree,
+the first thing to compare is not the version or the target but whether the two
+probes trigger the same mechanism.
+
+### Queued, measured, not implemented: an exec'd `__body__`'s parameters are never bound
+
+Routed by frankuser from frankd-90. Measured on HEAD, and it is every parameter at
+every arity, not one case:
+
+| source | pxx | CPython |
+|---|---|---|
+| `def __body__(s): return s` called with `"ab"` | `None` | `ab` |
+| `def __body__(a, b): return [a, b]` | `[None, None]` | `['x','y']` |
+| `def __body__(s): return int(s)` called with `"7"` | **`0`** | `7` |
+| `def __body__(): return 'noargs'` | `noargs` | `noargs` |
+
+The `int(s)` row is the one that matters: a silent `0`, not an error.
+
+The cause is one line of signature. `PyBodyTramp` is a PARAMETERLESS Pascal
+function that builds an empty `TPyList` and hands it to `CallUserFn`, and `exec`
+publishes it with `pyvar_of_callable(@PyBodyTramp)` — a bare code address whose
+dynamic-call signature is 0 args. The caller's arguments are dropped at the ABI
+before `CallUserFn` is reached, and `CallUserFn` then fills each declared
+parameter with `None` because nothing bound it. Nothing is wrong with
+`CallUserFn`; it is the right function called with an empty list.
+
+**Why the answer is a refusal and not a fix.** The only N-arg route that exists is
+the `VT_PYCLOSURE` bridge, and it exists at **arity one only** —
+`PyClosureCall1(clv, a0)`, hardwired in `compiler/pyparser.inc` as
+`pyvartag(callee)=9 ? PyClosureCall1(callee, arg) : <defCall>`. There is no
+`PyClosureCall2`. `pyclosure_src_new` already builds a closure from source text
+WITH a params string, so republishing `__body__` as a closure is available and
+would fix `__body__(s)` — and leave `__body__(a, b)` silently `None`. An
+arity-dependent defect is the half-fixed shape these files keep warning about, so
+a refusal covering every arity is worth more than a fix covering one. Arity 0,
+which is the uforth idiom and everything that works today, is unaffected.
+
+**AND IT IS THE SAME SHORTFALL AS THE BRIDGE ABOVE, one level up.** `PyHostCall`'s
+thunk table is enumerated by argument COUNTS and fits only the callees whose shape
+happens to match; the closure reverse bridge is enumerated by arity and stops at
+one. Both are dispatch machinery enumerated by shape rather than generalised, and
+both fail by handing back a plausible wrong value instead of an error. So the
+generic invoker — if the owner picks it for the bridge — very likely retires this
+item as well, while a per-pattern thunk table would not, because it only
+enumerates further. That is an argument for the generic invoker that neither item
+makes on its own, and it belongs with the (a)/(b) analysis rather than in a
+separate ticket.

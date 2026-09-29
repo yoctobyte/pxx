@@ -1227,6 +1227,13 @@ var
     into a variant array. `-dPXX_HEAP_DEBUG` says WRITE AFTER FREE. }
   pvHold: array[0..4] of TPyRec;
   pret: Int64;
+  { The measured shape refusal below. sawDouble tracks whether a double has been
+    seen yet while scanning the parameters left to right, which is all the order
+    rule needs; shapeBad is empty for a shape this bridge passes correctly and
+    otherwise says WHY, because "unsupported param shape" with no reason is what
+    the older refusal here cost a bisect to read. }
+  sawDouble: Boolean;
+  shapeBad: AnsiString;
 begin
   cls := GetInstanceRTTI(vmobj);
   if cls = nil then begin writeln('pyeval: no RTTI on vm for host call ', name); Halt(1); end;
@@ -1324,6 +1331,115 @@ begin
           writeln('  param ', i, ' kind ', pk[i]);
       Halt(1);
     end;
+
+    { ---- SHAPES THIS BRIDGE GETS WRONG, refused instead of corrupted ----
+
+      ONE DEFECT, TWO FACES. The thunk is chosen by `mc * 8 + kc` below -- the
+      COUNT of integer-class arguments and the COUNT of doubles -- and called
+      with every pa[] first and every pd[] second. So the thunk's parameter
+      SEQUENCE is (ints..., doubles...) whatever the callee actually declared,
+      and each pa[] slot is an Int64 whatever width the callee's parameter is.
+      Both assumptions hold only for a subset of signatures:
+
+        ORDER, every target, and it is POSITIONAL, not a property of "mixing".
+          The thunk passes every pa[] slot and then every pd[] slot, so a callee
+          whose doubles are all TRAILING already receives its arguments in the
+          right places. What breaks is a double that comes BEFORE a non-double.
+          `def fi(self, a, b)` narrowed to (Double, Int64), called reflectively
+          with (9.5, 7), gave a=3.5e-323 (the int 7 read as a double) and
+          b=4621537642612260864 (the bits of 9.5 read as an int) -- BYTE
+          IDENTICAL on x86-64, aarch64, i386, arm32 and riscv32, which is what
+          says this is logic here and not an ABI difference. So does (Double,
+          Double, Int64) and, decisively, (Int64, Double, Int64): one double
+          with a non-double after it is enough. With a pointer-sized parameter
+          instead of the int it SIGSEGVs on x86-64 and aarch64. The comment on
+          the TPM* types justifies the reordering with SysV's two independent
+          register files; the callee is pxx-compiled Pascal and pxx's own
+          convention does not classify that way, which is why the corruption is
+          identical on all five.
+
+          I FIRST WROTE THIS RULE AS "refuse any double mixed with a non-double"
+          and that was WRONG -- it refuses (Int64, Double), (Int64, Double,
+          Double) and (Int64, Int64, Double), all of which are CORRECT on all
+          five targets. It was caught by the full test-nilpy tier turning
+          test_nilpy_dynamic_call_takes_defaults_from_its_own_class red: that
+          row's `at(self, x, z, outside)` has its double last, worked before the
+          change, and agrees with CPython. My own test file could not have
+          caught it, because both of its order rows put the double FIRST. One
+          arrangement of a mix is not the mix.
+
+        WIDTH, 32-bit only.  pa[] is `array of Int64`, so each argument occupies
+          an 8-byte slot, while the callee reads its parameters at their own
+          widths. On a 64-bit target every integer-class parameter is 8 bytes
+          and the two agree. On a 32-bit one a pointer-sized parameter is 4, so
+          everything after it shifts: (AnsiString, Int64) with ('T', 9) gave
+          9 shl 32, and (Int64, AnsiString, AnsiString) lost the last string
+          entirely. A TRAILING double does not escape this either -- it is
+          read out of pd[], but the shifted pa[] is what decides how many slots
+          were consumed: (AnsiString, Double) and (Variant, Double) both return
+          the double as 0.0 on riscv32 and arm32, and (Variant, Variant, Double)
+          SIGSEGVs on all three 32-bit targets. So the width rule applies to the
+          NON-DOUBLE parameters and is independent of the order rule.
+
+      MEASURED, not reasoned: 19 shapes across 6 targets, before and after, and
+      the corrected rule was measured against the PRE-change compiler on each so
+      that "refused" is only ever claimed for a shape that was already broken.
+      See the LOGBOOK entry of 2026-09-28 and its 09-29 correction.
+
+      THIS PATH ONLY. A method whose parameters are still Variants does not come
+      here at all (`allVariant` above), so an unnarrowed host call is completely
+      unaffected. What brings a method here is PyParamTypeFromSites narrowing a
+      BARE parameter from its compiled call sites -- so, for the reflected
+      caller, a compiled call site is what breaks it. The proper fix is a thunk
+      per parameter-type SEQUENCE rather than per (m, k) counts, or a generic
+      invoker; either is a design decision and neither is this. }
+    shapeBad := '';
+
+    { ORDER: a double may not precede a non-double. Equivalently, the parameter
+      list must partition as [non-doubles...][doubles...], which is the shape
+      the pa[]-then-pd[] call below actually produces. Trailing doubles are
+      fine and common -- `at(self, x, z, outside)` is the ordinary case. }
+    sawDouble := False;
+    for i := 1 to n do
+      if pk[i] = TK_DOUBLE then sawDouble := True
+      else if sawDouble and (shapeBad = '') then
+        shapeBad := 'parameter ' + pystr_of(Int64(i)) + ' (kind '
+                  + pystr_of(pk[i]) + ') is not a double but follows one, and '
+                  + 'this bridge passes every non-double before every double, '
+                  + 'so they would arrive in the wrong order';
+
+    { WIDTH, 32-bit only: every NON-DOUBLE parameter must be a full 64 bits, not
+      merely every one but the last. A narrow last parameter looked safe and is
+      not: nothing follows it to be displaced, so it survives on riscv32 --
+      (Int64, AnsiString) and (Int64, Int64, AnsiString) both answer correctly
+      there -- but i386 gets (Int64, AnsiString) WRONG (7 came back as
+      34359738367) and arm32 gets (Int64, Int64, AnsiString) wrong while getting
+      the two-parameter form right. Three 32-bit targets, three different
+      boundaries, so the union is the only rule that is true everywhere and a
+      per-target allow-list would rot.
+
+      This deliberately refuses a few shapes that DO work on one 32-bit target:
+      i386 handles (AnsiString, Double) and (Variant, Double), arm32 handles
+      (Int64, AnsiString, Double). Each of those is wrong on at least one of the
+      other two, and (Variant, Variant, Double) SIGSEGVs on all three. Refusing
+      a working shape costs a caller a clear error; allowing a broken one costs
+      a wrong answer, and on these targets often a crash. }
+    if (shapeBad = '') and (SizeOf(Pointer) < 8) then
+      for i := 1 to n do
+        if (pk[i] <> TK_DOUBLE) and (shapeBad = '')
+           and not ((pk[i] = 13) or (pk[i] = 14)) then
+          shapeBad := 'parameter ' + pystr_of(Int64(i)) + ' (kind '
+                    + pystr_of(pk[i]) + ') is not 64-bit, so the arguments would '
+                    + 'be misaligned: a reflected call with pointer-sized '
+                    + 'parameters is not supported on 32-bit targets yet';
+    if shapeBad <> '' then
+      raise TypeError.Create('reflected call to ' + name + ' is refused: '
+              + shapeBad + '. This shape returned WRONG VALUES, or crashed, '
+              + 'rather than failing before this check existed. Annotating the '
+              + 'parameters does not help -- what narrowed them is the compiled '
+              + 'call sites. Call it directly, or keep its parameters Variant, '
+              + 'until the call bridge is fixed');
+
     for i := 0 to 4 do begin pa[i] := 0; pd[i] := 0.0; end;
     mc := 0; kc := 0;
     for i := 1 to n do
