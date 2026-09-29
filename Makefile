@@ -3790,6 +3790,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/lenvar_pas_x64 | diff -u test/test_length_of_a_variant.expected -
 	./$(COMPILER) test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_x64
 	$(TESTTMP)/lenarrvar_x64 | diff -u test/test_length_of_an_array_of_variant.expected -
+	./$(COMPILER) test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_x64
+	$(TESTTMP)/sl255_x64 | diff -u test/test_setlength_on_a_shortstring_clamps_at_255.expected -
+	./$(COMPILER) test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_x64
+	$(TESTTMP)/slnn_x64 | diff -u test/test_setlength_on_a_string_n_clamps_at_n.expected -
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_frozen
+	$(TESTTMP)/slnn_frozen | diff -u test/test_setlength_on_a_string_n_clamps_at_n.expected -
 	./$(COMPILER) test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_x64
 	$(TESTTMP)/soc_x64 | diff -u test/test_stringofchar_needs_no_uses_clause.expected -
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_frozen
@@ -8496,6 +8502,10 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_length_of_a_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenvar_pas_a64)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=aarch64 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a64
 	tools/expect_same.sh aarch64/test_length_of_an_array_of_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenarrvar_a64)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=aarch64 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_a64
+	tools/expect_same.sh aarch64/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh aarch64 $(TESTTMP)/sl255_a64)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
+	./$(COMPILER) --target=aarch64 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_a64
+	tools/expect_same.sh aarch64/test_setlength_on_a_string_n_clamps_at_n "$$(tools/run_target.sh aarch64 $(TESTTMP)/slnn_a64)" "$$(cat test/test_setlength_on_a_string_n_clamps_at_n.expected)"
 	./$(COMPILER) --target=aarch64 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_a64
 	tools/expect_same.sh aarch64/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh aarch64 $(TESTTMP)/soc_a64)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=aarch64 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_a64
@@ -8760,6 +8770,10 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_length_of_a_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_pas_rv32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=riscv32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_rv32
 	tools/expect_same.sh riscv32/test_length_of_an_array_of_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenarrvar_rv32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=riscv32 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_rv32
+	tools/expect_same.sh riscv32/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh riscv32 $(TESTTMP)/sl255_rv32)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
+	./$(COMPILER) --target=riscv32 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_rv32
+	tools/expect_same.sh riscv32/test_setlength_on_a_string_n_clamps_at_n "$$(tools/run_target.sh riscv32 $(TESTTMP)/slnn_rv32)" "$$(cat test/test_setlength_on_a_string_n_clamps_at_n.expected)"
 	./$(COMPILER) --target=riscv32 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_rv32
 	tools/expect_same.sh riscv32/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh riscv32 $(TESTTMP)/soc_rv32)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=riscv32 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_rv32
@@ -30180,6 +30194,10 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_length_of_a_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_pas_i386)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=i386 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_i386
 	tools/expect_same.sh i386/test_length_of_an_array_of_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenarrvar_i386)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=i386 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_i386
+	tools/expect_same.sh i386/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh i386 $(TESTTMP)/sl255_i386)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
+	./$(COMPILER) --target=i386 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_i386
+	tools/expect_same.sh i386/test_setlength_on_a_string_n_clamps_at_n "$$(tools/run_target.sh i386 $(TESTTMP)/slnn_i386)" "$$(cat test/test_setlength_on_a_string_n_clamps_at_n.expected)"
 	./$(COMPILER) --target=i386 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_i386
 	tools/expect_same.sh i386/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh i386 $(TESTTMP)/soc_i386)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=i386 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_i386
@@ -33545,6 +33563,10 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_length_of_a_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenvar_pas_xtw)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_xtw
 	tools/expect_same.sh xtensa-windowed/test_length_of_an_array_of_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenarrvar_xtw)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_xtw
+	tools/expect_same.sh xtensa-windowed/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh xtensa $(TESTTMP)/sl255_xtw)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_xtw
+	tools/expect_same.sh xtensa-windowed/test_setlength_on_a_string_n_clamps_at_n "$$(tools/run_target.sh xtensa $(TESTTMP)/slnn_xtw)" "$$(cat test/test_setlength_on_a_string_n_clamps_at_n.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_xtw
 	tools/expect_same.sh xtensa-windowed/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh xtensa $(TESTTMP)/soc_xtw)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_xtw
@@ -35646,6 +35668,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_length_of_a_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_pas_a32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=arm32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a32
 	tools/expect_same.sh arm32/test_length_of_an_array_of_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenarrvar_a32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=arm32 test/test_setlength_on_a_shortstring_clamps_at_255.pas $(TESTTMP)/sl255_a32
+	tools/expect_same.sh arm32/test_setlength_on_a_shortstring_clamps_at_255 "$$(tools/run_target.sh arm32 $(TESTTMP)/sl255_a32)" "$$(cat test/test_setlength_on_a_shortstring_clamps_at_255.expected)"
+	./$(COMPILER) --target=arm32 test/test_setlength_on_a_string_n_clamps_at_n.pas $(TESTTMP)/slnn_a32
+	tools/expect_same.sh arm32/test_setlength_on_a_string_n_clamps_at_n "$$(tools/run_target.sh arm32 $(TESTTMP)/slnn_a32)" "$$(cat test/test_setlength_on_a_string_n_clamps_at_n.expected)"
 	./$(COMPILER) --target=arm32 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_a32
 	tools/expect_same.sh arm32/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh arm32 $(TESTTMP)/soc_a32)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=arm32 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_a32

@@ -1,0 +1,11 @@
+var 10 xxxxxxxxxx 777
+literal 10
+field 8 ffffffff 555
+elem 6 eeeeee keep
+deref 8 dddddddd
+negative 0
+negative literal 0
+hexstr 255
+octstr 255
+binstr 255
+guard 777

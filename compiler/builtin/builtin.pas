@@ -483,6 +483,13 @@ function BinStr(Val: Int64; cnt: Integer): AnsiString;
   trigger as theirs. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 function StringOfChar(ch: Char; count: Integer): AnsiString;
 
+{ SetLength on a frozen string (ShortString, string[N], and every string under
+  -uPXX_MANAGED_STRING) takes its count through this: 0..cap. The parser
+  inserts the call; a literal count is folded there instead. fpc clamps a
+  ShortString at 255 and does NOT clamp string[N] at N (it overruns); pxx
+  clamps both. bug-a-setlength-on-a-shortstring-does-not-clamp-at-its-capacity }
+function PXXShortLenClamp(n, cap: Integer): Integer;
+
 { FPC System BIT SCAN: Bsf = index of the lowest set bit, Bsr = index of the
   highest, both 0-based from the least significant bit. A ZERO argument answers
   255 in every width — FPC's sentinel, not an index, and the reason these
@@ -662,7 +669,7 @@ begin
   if Len < 0 then Len := 0;
   SetLength(S, Len);
   if Buf = nil then Exit;
-  for i := 1 to Len do
+  for i := 1 to Length(S) do   { a frozen S holds at most its capacity }
     S[i] := Buf[i - 1];
 end;
 
@@ -697,6 +704,7 @@ var
 begin
   if cnt < 0 then cnt := 0;
   SetLength(Result, cnt);
+  cnt := Length(Result);   { a frozen Result holds at most its capacity }
   for i := cnt downto 1 do
   begin
     Result[i] := digits[Integer(Val and $F) + 1];
@@ -715,6 +723,7 @@ var
 begin
   if cnt < 0 then cnt := 0;
   SetLength(Result, cnt);
+  cnt := Length(Result);   { a frozen Result holds at most its capacity }
   for i := cnt downto 1 do
   begin
     Result[i] := digits[Integer(Val and $7) + 1];
@@ -728,6 +737,7 @@ var
 begin
   if cnt < 0 then cnt := 0;
   SetLength(Result, cnt);
+  cnt := Length(Result);   { a frozen Result holds at most its capacity }
   for i := cnt downto 1 do
   begin
     if (Val and 1) <> 0 then Result[i] := '1' else Result[i] := '0';
@@ -735,14 +745,21 @@ begin
   end;
 end;
 
-{ Concatenation, as the sysutils copy: a frozen (short) Result stops at 255
-  there, where SetLength(Result, count) does not clamp and the fill ran past it. }
-function StringOfChar(ch: Char; count: Integer): AnsiString;
-var s: AnsiString; i: Integer;
+function PXXShortLenClamp(n, cap: Integer): Integer;
 begin
-  s := '';
-  for i := 1 to count do s := s + ch;
-  Result := s;
+  if n < 0 then Result := 0
+  else if n > cap then Result := cap
+  else Result := n;
+end;
+
+{ The fill runs to Length(Result), not count: SetLength clamps a frozen
+  (short) Result at its capacity. }
+function StringOfChar(ch: Char; count: Integer): AnsiString;
+var i: Integer;
+begin
+  if count < 0 then count := 0;
+  SetLength(Result, count);
+  for i := 1 to Length(Result) do Result[i] := ch;
 end;
 
 { Bit scan. The zero case answers 255 BEFORE the loop, so the loop itself can

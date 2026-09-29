@@ -534,3 +534,27 @@ themselves and raises for neither: `Null + 1` is `Null`, `Unassigned + 1` is
 agrees — the value keeps propagating, nothing raises — and only the tag `VarType`
 reports differs. That is what `builtin.pas`' `PXXVarBinOpPas` is relying on, and
 until now it was recorded only there and in `lib/rtl/variants.pas`' header.
+
+## `SetLength` on a `string[N]` clamps at N; FPC clamps only at 255
+
+Decided 2026-09-29 (frankuser, with [[bug-a-setlength-on-a-shortstring-does-not-clamp-at-its-capacity]]).
+Measured against fpc 3.2.2:
+
+| | pxx | FPC |
+| --- | --- | --- |
+| `SetLength(s, 1000)`, `s: ShortString` | 255 | 255 |
+| `SetLength(t, 50)`, `t: string[10]` | **10** | 50, and a fill over `Length(t)` overruns `t` |
+| the same on a `string[8]` record field, a `string[6]` array element, a `p^` of a `^string[8]` | **8 / 6 / 8** | 50 / 50 / 50 |
+| `SetLength(s, -1)`, `SetLength(s, n)` with `n = -5` | 0, 0 | 255, 251 (the count's low byte, measured) |
+| `HexStr(1, 300)` into a ShortString | 255 characters | 44 (FPC takes the width constant as a byte and warns) |
+
+FPC's `string[10]` result is an overrun, not a value, since the length prefix
+claims bytes the variable doesn't have. pxx clamps at the declared capacity so
+that a loop over `Length` stays inside the buffer. Where FPC is well-defined,
+a ShortString at 255, pxx matches it
+(test_setlength_on_a_shortstring_clamps_at_255, FPC's own output); the
+string[N] rows are pxx's own expected output
+(test_setlength_on_a_string_n_clamps_at_n).
+
+Direction: a real divergence, chosen for memory safety. It applies in the
+default build and under `-uPXX_MANAGED_STRING`, where every `string` is frozen.

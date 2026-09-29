@@ -5601,6 +5601,52 @@ begin
   Result := seqN;
 end;
 
+function FrozenSetLenCap(target: Integer): Integer;
+{ The declared capacity of a frozen-string SetLength target: N for string[N],
+  255 for a ShortString or a frozen `string` with no N. Asked by shape, as the
+  truncating assignment asks it (IRLowerAST's lhsStrCap): a symbol, a record
+  field, an array element, a `p^`. }
+begin
+  Result := 0;
+  if target >= 0 then
+  begin
+    if (ASTKind[target] = AN_IDENT) and (ASTIVal[target] >= 0) then
+      Result := SymStrCap[ASTIVal[target]]
+    else if ASTKind[target] = AN_FIELD then
+      Result := RecFieldStrCap(ResolveNodeRec(ASTLeft[target]), GetASTIdentName(target))
+    else if ASTKind[target] = AN_INDEX then
+      Result := FrozenStrElemCapOf(ASTLeft[target])
+    else if ASTKind[target] = AN_DEREF then
+      Result := FrozenStrCapOfDeref(target);
+  end;
+  if Result <= 0 then Result := DEFAULT_STR_CAP;
+end;
+
+function ClampFrozenSetLenCount(target, count: Integer): Integer;
+{ SetLength on a frozen string stored the count into the length prefix as
+  given: a ShortString kept its low byte (SetLength(s, 1000) read back 232) and
+  a string[10] took 50, so a fill loop over Length(s) wrote past the buffer.
+  fpc clamps a ShortString at 255; it does not clamp string[N] at N and
+  overruns there, and pxx clamps both, as memory safety over matching fpc's
+  overrun. A literal is folded here; anything else goes through
+  PXXShortLenClamp once, so a count with side effects is evaluated once.
+  bug-a-setlength-on-a-shortstring-does-not-clamp-at-its-capacity }
+var cap, clampPi, capLit: Integer;
+begin
+  Result := count;
+  cap := FrozenSetLenCap(target);
+  if ASTKind[count] = AN_INT_LIT then
+  begin
+    if ASTIVal[count] < 0 then ASTIVal[count] := 0
+    else if ASTIVal[count] > cap then ASTIVal[count] := cap;
+    Exit;
+  end;
+  clampPi := FindProc('PXXShortLenClamp');
+  if clampPi < 0 then Exit;   { no builtin (--no-default-rtl): unclamped, as before }
+  capLit := AllocNode(AN_INT_LIT); ASTIVal[capLit] := cap; ASTTk[capLit] := Ord(tyInteger);
+  Result := GenMakeCall6(clampPi, tyInteger, count, capLit, -1, -1, -1, -1);
+end;
+
 function BuildMultiSetLen(target: Integer; outerIsArr: Boolean): Integer;
 { Build the whole `SetLength(target, d0 [, d1, ...])` from the dim nodes in
   SetLenDimNode[0..SetLenDimN-1]. Single-dim returns just the call (same as the
@@ -8635,6 +8681,8 @@ begin
           if not slIsDynArr then
             Error('SetLength: multiple dimensions require a dynamic array');
         end;
+        if not slIsArrTarget then
+          SetLenDimNode[0] := ClampFrozenSetLenCount(valNode, SetLenDimNode[0]);
         node := BuildMultiSetLen(valNode, slIsArrTarget);
       end
       else if CaseEqual(name, 'New') and SoftIntrinsicOpen('New', qUnit) and

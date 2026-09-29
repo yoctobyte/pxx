@@ -113,12 +113,11 @@ pinned lib/rtl build doesn't see the builtin copy, and a program that also
 `uses SysUtils` resolves without a clash; both were measured. Four names are
 now declared only in sysutils: LowerCase, StrLen, StrPas and SysBackTraceStr.
 
-The builtin body is the sysutils body (concatenation), not
-`SetLength(Result, count)` plus a fill. In frozen mode (-uPXX_MANAGED_STRING),
-SetLength on a short Result does not clamp at 255: SetLength(s, 1000) reports
-Length 1000 and the fill ran past the buffer (SIGSEGV; `HexStr(1, 300)` crashes
-the same way). fpc clamps there. That is a separate bug, reported to frankuser.
-Concatenation stops at 255, which is fpc's shortstring answer.
+The builtin body is SetLength plus a fill to Length(Result). At first it
+concatenated, because in frozen mode SetLength on a short Result did not clamp
+at 255 and a fill to `count` ran past the buffer. That was fixed as
+bug-a-setlength-on-a-shortstring-does-not-clamp-at-its-capacity, and the body
+went back to the linear form.
 
 test_stringofchar_needs_no_uses_clause is fpc 3.2.2's output and passes on six
 targets, plus an x86-64 frozen row that expects 255.

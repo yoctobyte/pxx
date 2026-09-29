@@ -1,0 +1,11 @@
+literal 255 12345
+variable 255 12345
+once 255 1
+byvar 255
+fits 7
+insert 255 aaaa0123
+concat 255 4
+concat10 10 abc0123456
+inttohex 255
+str10 10 [          ]
+guard 12345
