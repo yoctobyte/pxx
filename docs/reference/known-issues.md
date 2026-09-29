@@ -38,6 +38,7 @@ details, the measurements and the workarounds.
 - Four refusals with a message (C `__thread` on riscv32, `setvbuf` buffering, `--shared` off x86-64, a Nil Python name holding a Pascal array): [Refused, with a message](#refused-with-a-message)
 - Nil Python through `./pxx`: `import time`, `import string` and `import utime` find the C headers: [Nil Python](#nil-python)
 - Nil Python: `exec` stores a def only when it is named `__body__`: [exec and eval](#exec-and-eval)
+- Nil Python: `from X import *` does not compile: [Nil Python](#nil-python)
 - `-O3` is experimental: [Optimisation levels](#optimisation-levels)
 
 **Memory**
@@ -169,6 +170,17 @@ MicroPython's assumptions about a small device, such as math errors not halting
 the program. 15 of 16 common MicroPython drivers compile unchanged (measured
 with v445); see
 [MicroPython](../library/micropython.md).
+
+Found on 2026-09-29, and **open in v441 to v451**:
+
+- **Nil Python: `from X import *` does not compile.** A star import from any
+  module, such as `from math import *` or `from os.path import *`, stops the
+  build with `expected expression` on that line, where CPython imports the
+  module's public names. Measured on 2026-09-29 on x86-64 with v441
+  (`4ebfa2d047a2`), v450 (`c19cc2d531e4`) and v451 (`d9b7226769cc`), which
+  behave the same. **Workaround:** `import math` and write `math.sqrt(x)`, or
+  import the names you use, `from math import sqrt, pi`; with v451 both print
+  what CPython prints.
 
 Found on 2026-09-28, and **open in v441 to v450** and after it:
 

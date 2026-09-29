@@ -85,6 +85,7 @@ written, including the last three rows.
 | `a.nope()` where no class declares `nope` | `AttributeError` at run time | compile error: `A has no method nope` |
 | `A.f = g` (replacing a method) | allowed | compile error, because classes are fixed at compile time; the message, `cannot call non-static method on class type directly`, does not say so |
 | `match x:` / `async def` | supported | compile error (`undefined variable (match)`) |
+| `from math import *` (a star import, from any module) | imports the module's public names | compile error: `expected expression`, on line 1. Write `import math` and `math.sqrt`, or name what you use: `from math import sqrt, pi`. Measured on x86-64 with v441, v450 and v451 (2026-09-29); see [Known issues](../reference/known-issues.md#nil-python) |
 | `f"""a {v} b"""` | supported | compile error: triple-quoted f-strings are not supported |
 | `import threading` | works | needs the `--threadsafe` compiler flag; the error says so |
 | `def mk(): return gen(5)`, then `list(mk())`, where `gen` is a generator | `[5, 6]` | `[]` on every target: a generator returned from a def yields nothing, and `next(mk())` does not compile. Create the generator where it is consumed. |
