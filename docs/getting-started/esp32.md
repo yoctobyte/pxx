@@ -127,7 +127,10 @@ filesystem the test image does not mount.
 
 Python on the chip is Nil Python: Python syntax compiled to machine code, not
 an interpreter. `examples/esp32/monitor-s3/main/main.npy` is a small sensor
-monitor, written the way you would write it on a PC:
+monitor, written the way you would write it on a PC. The block below is
+shortened (its constants, `state` and helpers such as `collect` are left
+out, and `...` marks a cut), so it does not compile on its own; build the
+full file:
 
 ```python
 import time

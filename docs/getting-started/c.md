@@ -28,7 +28,7 @@ int main(void)
 
 ```sh
 $ ./pxx hello.c hello
-ok: hello  [code=61924B  data=12928B  bss=72488B  procs=915  codeseg=65248B]
+ok: hello  [code=62126B  data=12928B  bss=75560B  procs=920  codeseg=65248B]
 $ ./hello
 Hello, world!
 ```

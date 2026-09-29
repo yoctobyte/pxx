@@ -192,6 +192,10 @@ program draws two lines on a 128x64 I2C display five times.
 tools/install_lib_candidates.sh micropython-drivers
 ```
 
+This step needs a git checkout. In an unpacked release archive the script
+stops with `error: library_candidates/ is NOT gitignored — refusing to
+fetch`, because it asks git whether that directory is ignored.
+
 The file is then
 `library_candidates/micropython-drivers/micropython-lib/micropython/drivers/display/ssd1306/ssd1306.py`.
 
