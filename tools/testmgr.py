@@ -3347,15 +3347,26 @@ def split_jobs(target, lines):
             # Comment lines just above it (`make -n` echoes them) are its
             # description and go with it; a group of nothing but comments
             # would otherwise become a prologue every job waits for.
-            if cur and all(not l.strip() or l.strip().startswith("#") for l in cur):
-                groups.append(cur + [ln])
-            else:
-                if cur:
-                    groups.append(cur)
-                groups.append([ln])
+            # Only the TRAILING run of comments moves: what sits above it
+            # (a prologue's setup lines) stays where it was. Moving nothing
+            # when the group also held setup left the description in the
+            # prologue, and a comment there naming the pinned path made
+            # test-core#00 pin_built (testmgr_pin_built_devtest).
+            k = len(cur)
+            while k > 0 and (not cur[k - 1].strip() or
+                             cur[k - 1].strip().startswith("#")):
+                k -= 1
+            if k > 0:
+                groups.append(cur[:k])
+            groups.append(cur[k:] + [ln])
             cur, cur_has_check = [], False
             continue
-        if COMPILE_RE.match(ln.strip()) and cur and cur_has_check:
+        # A group of nothing but comments is the description of the compile
+        # that follows, never a job of its own: split there and the job has
+        # no recipe line, so nothing reports its status (twatch devtest 3c).
+        # It happened right after a script test, which resets `cur`.
+        if COMPILE_RE.match(ln.strip()) and cur and cur_has_check and \
+                not all(not l.strip() or l.strip().startswith("#") for l in cur):
             groups.append(cur)
             cur, cur_has_check = [], False
         cur.append(ln)
