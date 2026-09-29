@@ -67,10 +67,13 @@ exp(i*pi) = -1.000+0.000i
 FPC 3.2.2 prints the same seven lines. Where PXX differs from FPC's unit,
 measured with v451:
 
-- **Negate with `cneg(z)`, not `-z`.** `w := -z` compiles but the program
-  crashes when it runs (see
-  [Known issues](../reference/known-issues.md#stops-at-run-time)). FPC's
-  unit has no `cneg`, which is why the example defines one for FPC.
+- **Negate with `cneg(z)`, not `-z`.** With v451, `w := -z` compiles but
+  the program crashes when it runs (see
+  [Known issues](../reference/known-issues.md#stops-at-run-time)). Fixed
+  after v451 (`f499d25ded`, in no pin yet): the compiler built there
+  (`81c16b5e3461`) gives `-z` the same answer as `cneg(z)` and as FPC,
+  `-1.0-2.0i` for `cinit(1, 2)`. FPC's unit has no `cneg`, which is why the
+  example defines one for FPC.
 - **A real number works on the right of an operator but not on the left.**
   `z + 1.0`, `z - 1.0`, `z * 2.0` and `z / 2.0` give FPC's results;
   `1.0 + z` and `2.0 * z` stop the build ("no operator overload found for
@@ -140,7 +143,10 @@ det(rotation) = 1.000
 
 The same steps written out in Python give the same eight lines. As with
 `ucomplex`, a number goes on the right (`v * 0.25`; `0.25 * v` is refused),
-and `-v` compiles but crashes: write `v * -1.0`.
+and with v451 `-v` compiles but crashes: write `v * -1.0`. After v451
+(`f499d25ded`, in no pin yet), `-v` stops the build instead, with FPC's
+message for a type that has no unary minus: `Operator is not overloaded: -
+"TVec3"`.
 
 ## typinfo: properties by name
 

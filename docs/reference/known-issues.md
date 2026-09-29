@@ -30,7 +30,7 @@ details, the measurements and the workarounds.
 **Stops at run time**
 
 - wasm32: integer division by zero stops the module instead of raising: [Stops at run time](#stops-at-run-time)
-- Pascal: unary minus on a record compiles and then crashes: [Stops at run time](#stops-at-run-time)
+- Pascal: unary minus on a record compiles and then crashes (v441 to v451; fixed after v451): [Stops at run time](#stops-at-run-time)
 - ESP: a bare-metal image faults on a real chip; use the ESP-IDF build: [row](#esp-bare-metal-images-do-not-run-on-a-real-chip)
 - Nil Python: `raise` inside `exec`'d code cannot be caught: [exec and eval](#exec-and-eval)
 - Nil Python on the ESP32-C3: sorting a list needs about as much free heap again as the list: [Nil Python](#nil-python)
