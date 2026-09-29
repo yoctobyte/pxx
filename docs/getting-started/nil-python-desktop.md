@@ -13,7 +13,7 @@ ESP32, where Nil Python gets MicroPython's module names, start with
 [Coming from MicroPython](./from-micropython.md) instead.
 
 **What was checked.** Every program on this page was cut from this page and
-built with pin v450 (compiler sha256 `c19cc2d531e4`) from the
+built with [pin](../reference/glossary.md#terms-in-the-release-notes-and-the-esp-pages) v450 (compiler sha256 `c19cc2d531e4`) from the
 v0.1.0-beta.1 release tarball, after `./install.sh --yes`, on x86-64 Linux on
 2026-09-29. Each output block is what the program printed. For the first three
 programs, CPython 3.14.4 printed the same bytes.

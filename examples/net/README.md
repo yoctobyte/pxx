@@ -1,6 +1,6 @@
 # examples/net — native networking showcase
 
-`httpdemo.pas` is a self-contained demo of frank2's native networking library
+`httpdemo.pas` is a self-contained demo of PXX's native networking library
 (`lib/rtl/http.pas` and friends) — no external network needed. A loopback HTTP
 server and client run as coroutines on one reactor thread.
 

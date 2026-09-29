@@ -90,6 +90,19 @@ agree, and this is the one to read first if either is new.
 | ESP profile | Embedded platform profile selected by `--esp-profile=bare`. |
 | Object output | Relocatable `.o` output selected by `--emit-obj` or a `.o` output name. |
 
+## Terms in the release notes and the ESP pages
+
+| Term | Meaning |
+| --- | --- |
+| Nil Python | The Python-shaped language PXX compiles ahead of time into a native program, with no interpreter. It is not CPython. `pxx` is the command; Nil Python is one of the languages it compiles. See [Nil Python](../targets/nil-python.md). |
+| Pin, "pin v450" | A numbered compiler build that the project has frozen and named. The docs say which pin a figure was measured with. [Reporting bugs](./reporting-bugs.md#what-to-put-in-a-report) shows how to find out which one you have. |
+| Hosted | Running as a Linux program, natively or under QEMU user mode, as opposed to on an ESP chip. "Hosted Xtensa" and "hosted riscv32" are Linux builds for the ESP chips' CPUs that the project's tests use to check ESP code under QEMU. See [Targets](../targets/index.md). |
+| Unity build | Several C source files compiled as one translation unit, from one file that `#include`s the others. See [A project with several files](../getting-started/c.md#a-project-with-several-files). |
+| Soft-float | Floating point done by integer routines instead of FPU instructions. ESP builds use it, and link the routines in only when a program uses a float. See [ESP32: Floating point](../targets/esp32.md#floating-point). |
+| Windowed, call0 | The two Xtensa calling conventions (`--xtensa-abi=`). An ESP-IDF build for a named Xtensa chip, such as `--target=esp32s3`, is windowed, because ESP-IDF requires it; plain `--target=xtensa` and `--esp-profile=bare` use call0. See [Command line](./cli.md#options). |
+| ESP-IDF mode, bare profile | The two ways to build for an ESP chip. ESP-IDF mode, the default, emits an object that ESP-IDF links into firmware and runs on real boards. The bare profile (`--esp-profile=bare`) emits a standalone image that runs under QEMU only. See [ESP32: Mode 2](../targets/esp32.md#mode-2-esp-idf-component-emit-obj). |
+| `--platform=esp` | Selects the ESP platform layer, where FreeRTOS provides tasks rather than processes. An ESP chip name in `--target=` implies it. See [Command line](./cli.md#options). |
+
 ## Eliah IDE terms
 
 `apps/ide/` names its components with a Hebrew scheme; see
