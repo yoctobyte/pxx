@@ -1,0 +1,54 @@
+row	chips	kind	class	note
+test_nilpy_a_builtin_over_a_variant_list_releases_its_copy	c3 s3	differ	sweep harness	the host oracle timed out; the wrapped host build gives the full answer
+test_nilpy_atexit_io	c3 s3	differ	sweep harness	the row is wrapped as an imported module: output after @@BATCH-END or module-init order
+test_nilpy_catchable_runtime_errors	c3 s3	differ	by design: ESP math rule	x/0, x%0, overflow, domain -> inf/nan/0 with no exception; subnormals flush; pow within ~1e-13
+test_nilpy_class_attr_shared_slot_via_call_result	c3 s3	differ	compiler: imported module	a user `class Counter` resolves to pylib's Counter dict (frankh-95)
+test_nilpy_class_field_no_container_no_leak	c3 s3	differ	speed ceiling	correct and flat, does not finish in 600 s on the C3 board
+test_nilpy_collections_deque	c3 s3	differ	heap ceiling	earlier output right, then out of memory (board-checked on the C3)
+test_nilpy_exception_no_leak	c3 s3	differ	speed ceiling	correct and flat, does not finish in 600 s on the C3 board
+test_nilpy_float_overflow_raises	c3 s3	differ	by design: ESP math rule	x/0, x%0, overflow, domain -> inf/nan/0 with no exception; subnormals flush; pow within ~1e-13
+test_nilpy_float_repr_roundtrip	c3	differ	speed ceiling	MATCH on the C3 board; slower than the QEMU window
+test_nilpy_from_import_as_alias	c3 s3	differ	sweep harness	the row is wrapped as an imported module: output after @@BATCH-END or module-init order
+test_nilpy_keyword_call_tuple_on_a_skipped_default	c3 s3	differ	compiler: non-x86-64 backends	wrong on every backend but x86-64 (frankz-e5)
+test_nilpy_managed_local_in_unwound_frame	s3	differ	speed ceiling	values right on the S3 board; only task-watchdog noise
+test_nilpy_math_domain_errors	c3 s3	differ	by design: ESP math rule	x/0, x%0, overflow, domain -> inf/nan/0 with no exception; subnormals flush; pow within ~1e-13
+test_nilpy_math_frexp_isqrt_isfinite_are_exact	c3 s3	differ	by design: ESP math rule	x/0, x%0, overflow, domain -> inf/nan/0 with no exception; subnormals flush; pow within ~1e-13
+test_nilpy_module_identity	c3 s3	differ	sweep harness	the row is wrapped as an imported module: output after @@BATCH-END or module-init order
+test_nilpy_module_member_as_a_value	c3 s3	differ	sweep harness	the row is wrapped as an imported module: output after @@BATCH-END or module-init order
+test_nilpy_object_in_variant_slot_survives_churn	c3 s3	differ	QEMU artefact	MATCH on the C3 board
+test_nilpy_pow_domain	c3 s3	differ	by design: ESP math rule	x/0, x%0, overflow, domain -> inf/nan/0 with no exception; subnormals flush; pow within ~1e-13
+test_nilpy_pow_matches_cpython	c3 s3	differ	by design: ESP math rule	x/0, x%0, overflow, domain -> inf/nan/0 with no exception; subnormals flush; pow within ~1e-13
+test_nilpy_print_arg_eval_order	c3 s3	differ	by design: ESP math rule	x/0, x%0, overflow, domain -> inf/nan/0 with no exception; subnormals flush; pow within ~1e-13
+test_nilpy_promo_local_zero_init	c3 s3	differ	heap ceiling	earlier output right, then out of memory (board-checked on the C3)
+test_nilpy_py_module_import	c3 s3	differ	sweep harness	the row is wrapped as an imported module: output after @@BATCH-END or module-init order
+test_nilpy_pyeval_host_kwargs_bind_by_name	c3 s3	differ	compiler: pyeval	pyeval host items (frankz-e5)
+test_nilpy_pyeval_host_mixed_params	c3 s3	differ	compiler: pyeval	pyeval host items (frankz-e5)
+test_nilpy_re_findall_past_the_old_4096_cap	c3 s3	differ	heap ceiling	earlier output right, then out of memory (board-checked on the C3)
+test_nilpy_str_param	c3 s3	differ	compiler: imported module	Length() in an imported module returns 6 for "ab" (frankh-95)
+test_nilpy_str_repeat_linear	c3 s3	differ	heap ceiling	earlier output right, then out of memory (board-checked on the C3)
+test_nilpy_the_struct_module	c3 s3	differ	heap ceiling	only the 12000-element pack runs out of memory (QEMU, not board-checked)
+test_nilpy_user_class_shadows_builtin	c3 s3	differ	compiler: imported module	a user `class Counter` resolves to pylib's Counter dict (frankh-95)
+test_nilpy_user_def_shadows_builtin	c3 s3	differ	compiler: imported module	user `def len` + len() on a for variable segfaults (frankh-95)
+test_nilpy_variant_borrow_two_slots	s3	differ	QEMU artefact	MATCH on the C3 board
+test_nilpy_variant_str_boxing	c3 s3	differ	QEMU artefact	MATCH on the C3 board
+test_nilpy_wide_call_through_a_callable_value	s3 (c3 silicon)	differ	station stack (FIXED 93e6adbf5f)	main-task stack overflow: 8 KiB module-body frame + ~10 KiB interpreted lambda; S3 LoadProhibited, C3 stack guard on silicon
+test_nilpy_a_bytearray_reaches_a_c_pointer_parameter	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_bytes_expression_reaches_a_c_pointer_parameter_as_its_buffer	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_bytes_payload_is_nul_terminated_for_a_c_string_seam	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_dataclass_ctor_takes_as_many_fields_as_a_proc	s3	nobuild	compiler: xtensa (FIXED 5e8f30bd4d)	a def with >16 params: parameter frame offset out of range; MATCH on the S3 board at 5e8f30bd4d
+test_nilpy_a_header_whose_library_is_not_spelled_like_its_file	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_headers_directory_names_its_library	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_headers_directory_names_the_wrong_library	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_list_reaches_a_c_pointer_parameter_through_a_variant	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_a_method_takes_more_than_sixteen_parameters	s3	nobuild	compiler: xtensa (FIXED 5e8f30bd4d)	a def with >16 params: parameter frame offset out of range; MATCH on the S3 board at 5e8f30bd4d
+test_nilpy_beside_the_source_wins	c3 s3	nobuild	sweep harness	the wrapper loses the relative sub/ path; builds directly
+test_nilpy_chained_assign_nested_attr	c3 s3	nobuild	compiler: imported module	`a = 1; b = 2` at an imported module top level is a parse error (frankd-a3); builds and runs directly
+test_nilpy_chained_assign_powassign	c3 s3	nobuild	compiler: imported module	`a = 1; b = 2` at an imported module top level is a parse error (frankd-a3); builds and runs directly
+test_nilpy_escaping_closure_many_captures	s3	nobuild	compiler: xtensa (FIXED 5e8f30bd4d)	a def with >16 params: parameter frame offset out of range; MATCH on the S3 board at 5e8f30bd4d
+test_nilpy_import_c_header_still_works	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_module_docstring	c3 s3	nobuild	by design: imported module	an imported module's __doc__ is refused
+test_nilpy_module_docstring_absent	c3 s3	nobuild	by design: imported module	an imported module's __doc__ is refused
+test_nilpy_module_docstring_dedent_columns	c3 s3	nobuild	by design: imported module	an imported module's __doc__ is refused
+test_nilpy_not_on_a_c_width_integer	c3 s3	nobuild	by design: host C headers	needs glibc headers the ESP does not have
+test_nilpy_suites	c3 s3	nobuild	compiler: imported module	`a = 1; b = 2` at an imported module top level is a parse error (frankd-a3); builds and runs directly
