@@ -3784,6 +3784,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/tofree_x64 | diff -u test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected -
 	./$(COMPILER) test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_x64
 	$(TESTTMP)/ownlistn_x64 | diff -u test/test_an_owning_object_list_counts_its_destructors.expected -
+	./$(COMPILER) test/test_unary_minus_on_a_record_with_an_operator.pas $(TESTTMP)/unminus_x64
+	$(TESTTMP)/unminus_x64 | diff -u test/test_unary_minus_on_a_record_with_an_operator.expected -
+	@# fpc 3.2.2 refuses unary minus on a record with no operator; it used to compile and segfault.
+	@./$(COMPILER) test/test_unary_minus_on_a_record_needs_an_operator.pas $(TESTTMP)/unminus_refused 2>&1 \
+	  | grep 'Operator is not overloaded: - "R"' >/dev/null \
+	  || { echo 'test_unary_minus_on_a_record_needs_an_operator: FAIL - unary minus on a plain record compiled, or refused for another reason'; exit 1; }
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_an_owning_object_list_destroys_its_items.pas $(TESTTMP)/ownleak_x64
 	tools/assert_no_leak.sh owning_object_list_destroys 200 $(TESTTMP)/ownleak_x64
 	@if tools/assert_no_leak.sh owning_object_list_control 200 $(TESTTMP)/ownleak_x64 keep >/dev/null 2>&1; then \
@@ -8480,6 +8486,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh aarch64 $(TESTTMP)/tofree_a64)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=aarch64 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_a64
 	tools/expect_same.sh aarch64/test_an_owning_object_list_counts_its_destructors "$$(tools/run_target.sh aarch64 $(TESTTMP)/ownlistn_a64)" "$$(cat test/test_an_owning_object_list_counts_its_destructors.expected)"
+	./$(COMPILER) --target=aarch64 test/test_unary_minus_on_a_record_with_an_operator.pas $(TESTTMP)/unminus_a64
+	tools/expect_same.sh aarch64/test_unary_minus_on_a_record_with_an_operator "$$(tools/run_target.sh aarch64 $(TESTTMP)/unminus_a64)" "$$(cat test/test_unary_minus_on_a_record_with_an_operator.expected)"
 	./$(COMPILER) --target=aarch64 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_a64
 	tools/expect_same.sh aarch64/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh aarch64 $(TESTTMP)/sstmp_pas_a64)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=aarch64 test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_a64
@@ -8740,6 +8748,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh riscv32 $(TESTTMP)/tofree_rv32)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=riscv32 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_rv32
 	tools/expect_same.sh riscv32/test_an_owning_object_list_counts_its_destructors "$$(tools/run_target.sh riscv32 $(TESTTMP)/ownlistn_rv32)" "$$(cat test/test_an_owning_object_list_counts_its_destructors.expected)"
+	./$(COMPILER) --target=riscv32 test/test_unary_minus_on_a_record_with_an_operator.pas $(TESTTMP)/unminus_rv32
+	tools/expect_same.sh riscv32/test_unary_minus_on_a_record_with_an_operator "$$(tools/run_target.sh riscv32 $(TESTTMP)/unminus_rv32)" "$$(cat test/test_unary_minus_on_a_record_with_an_operator.expected)"
 	./$(COMPILER) --target=riscv32 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_rv32
 	tools/expect_same.sh riscv32/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh riscv32 $(TESTTMP)/sstmp_pas_rv32)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=riscv32 test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_rv32
@@ -30147,6 +30157,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh i386 $(TESTTMP)/tofree_i386)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=i386 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_i386
 	tools/expect_same.sh i386/test_an_owning_object_list_counts_its_destructors "$$(tools/run_target.sh i386 $(TESTTMP)/ownlistn_i386)" "$$(cat test/test_an_owning_object_list_counts_its_destructors.expected)"
+	./$(COMPILER) --target=i386 test/test_unary_minus_on_a_record_with_an_operator.pas $(TESTTMP)/unminus_i386
+	tools/expect_same.sh i386/test_unary_minus_on_a_record_with_an_operator "$$(tools/run_target.sh i386 $(TESTTMP)/unminus_i386)" "$$(cat test/test_unary_minus_on_a_record_with_an_operator.expected)"
 	./$(COMPILER) --target=i386 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_i386
 	tools/expect_same.sh i386/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh i386 $(TESTTMP)/sstmp_pas_i386)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=i386 test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_i386
@@ -33506,6 +33518,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh xtensa $(TESTTMP)/tofree_xtw)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_xtw
 	tools/expect_same.sh xtensa-windowed/test_an_owning_object_list_counts_its_destructors "$$(tools/run_target.sh xtensa $(TESTTMP)/ownlistn_xtw)" "$$(cat test/test_an_owning_object_list_counts_its_destructors.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_unary_minus_on_a_record_with_an_operator.pas $(TESTTMP)/unminus_xtw
+	tools/expect_same.sh xtensa-windowed/test_unary_minus_on_a_record_with_an_operator "$$(tools/run_target.sh xtensa $(TESTTMP)/unminus_xtw)" "$$(cat test/test_unary_minus_on_a_record_with_an_operator.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_xtw
 	tools/expect_same.sh xtensa-windowed/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh xtensa $(TESTTMP)/sstmp_pas_xtw)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_pchar_of_a_one_character_literal.pas $(TESTTMP)/pch1_pas_xtw
@@ -35603,6 +35617,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh arm32 $(TESTTMP)/tofree_a32)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=arm32 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_a32
 	tools/expect_same.sh arm32/test_an_owning_object_list_counts_its_destructors "$$(tools/run_target.sh arm32 $(TESTTMP)/ownlistn_a32)" "$$(cat test/test_an_owning_object_list_counts_its_destructors.expected)"
+	./$(COMPILER) --target=arm32 test/test_unary_minus_on_a_record_with_an_operator.pas $(TESTTMP)/unminus_a32
+	tools/expect_same.sh arm32/test_unary_minus_on_a_record_with_an_operator "$$(tools/run_target.sh arm32 $(TESTTMP)/unminus_a32)" "$$(cat test/test_unary_minus_on_a_record_with_an_operator.expected)"
 	./$(COMPILER) --target=arm32 test/test_a_shortstring_result_temp_holds_the_whole_result.pas $(TESTTMP)/sstmp_pas_a32
 	tools/expect_same.sh arm32/test_a_shortstring_result_temp_holds_the_whole_result "$$(tools/run_target.sh arm32 $(TESTTMP)/sstmp_pas_a32)" "$$(cat test/test_a_shortstring_result_temp_holds_the_whole_result.expected)"
 	./$(COMPILER) --target=arm32 test/test_reallocmem_grows_and_shrinks_on_every_target.pas $(TESTTMP)/realloc_a32

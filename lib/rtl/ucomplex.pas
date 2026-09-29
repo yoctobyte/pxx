@@ -34,6 +34,10 @@ const
 { four base operations and comparison — (complex, complex) forms only }
 operator + (z1, z2: complex) z: complex;
 operator - (z1, z2: complex) z: complex;
+{ Unary minus, as fpc's ucomplex declares it: without it `w := -z` compiled
+  into an integer negation of the record and segfaulted.
+  bug-a-unary-minus-on-a-record-without-an-operator-compiles-and-segfaults }
+operator - (z1: complex) z: complex;
 operator * (z1, z2: complex) z: complex;
 operator / (znum, zden: complex) z: complex;
 operator = (z1, z2: complex) b: Boolean;
@@ -104,6 +108,12 @@ operator - (z1, z2: complex) z: complex;
 begin
   z.re := z1.re - z2.re;
   z.im := z1.im - z2.im;
+end;
+
+operator - (z1: complex) z: complex;
+begin
+  z.re := -z1.re;
+  z.im := -z1.im;
 end;
 
 operator * (z1, z2: complex) z: complex;

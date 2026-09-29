@@ -853,6 +853,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     bitNot: Boolean; notOrdTk: TTypeKind; notConstV: Int64;
     notBlv: Boolean;              { `not` over a Boolean LITERAL — folded, see the site }
     unOvl: Integer;   { unary operator overload on a record/class operand }
+    unRec: Integer;   { the record/class operand of a unary minus with no overload, for the refusal }
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
     szNestCi, szHops, szI: Integer; szNestName: AnsiString;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
     szScan, szBd, szExprNode: Integer;
@@ -2029,6 +2030,25 @@ begin
       begin
         CurASTNode := unOvl;
         Exit;
+      end;
+      { ...and a record or class operand WITHOUT one is fpc's compile error,
+        not an integer negation of its address. `b := -a` on a plain record
+        built an AN_NEG over the aggregate, compiled, and SEGFAULTED at run
+        time (frankd-90; ucomplex `-z`, vecmath `-v` on a TVec3). fpc 3.2.2:
+        `Operator is not overloaded: - "R"`. Pascal only: Nil Python's `-obj`
+        is __neg__ and never reaches this arm's AN_NEG.
+        bug-a-unary-minus-on-a-record-without-an-operator-compiles-and-segfaults }
+      if (not PyExprMode) and
+         ((IntToTypeKind(ASTTk[left]) = tyRecord) or
+          (IntToTypeKind(ASTTk[left]) = tyClass)) then
+      begin
+        unRec := ResolveNodeRec(left);
+        if unRec >= REC_UCLASS_BASE then
+          Error('Operator is not overloaded: - "' +
+                GetSliceName(UClsNOff[unRec - REC_UCLASS_BASE],
+                             UClsNLen[unRec - REC_UCLASS_BASE]) + '"')
+        else
+          Error('Operator is not overloaded: - on a record or class operand');
       end;
       node := AllocNode(AN_NEG); ASTLeft[node] := left;
       { Carry the operand's type, as the additive-level sign in ParseSimpleExpr
