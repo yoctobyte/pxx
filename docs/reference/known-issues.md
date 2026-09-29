@@ -22,7 +22,7 @@ details, the measurements and the workarounds.
 
 - C `long double` is 8 bytes, not GCC's 16: [row](#c-long-double-is-8-bytes)
 - riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero: [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
-- Nil Python: arithmetic on `None` gives a number instead of `TypeError`: [Nil Python](#nil-python)
+- Nil Python: arithmetic on `None`, or a string minus a large integer, gives a number instead of `TypeError`: [Nil Python](#nil-python)
 - Nil Python: a method called from `exec` code can get a truncated or wrong argument, and an `exec`'d `__body__` reads its parameters as `None`: [exec and eval](#exec-and-eval)
 
 **Stops at run time**
@@ -857,7 +857,7 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   Measured on 2026-09-28 on x86-64: `0` and `[]` with v448 (`b2b325036c3b`)
   and v449 (`0ded1e5d04c8`), `3` and `[abc]` with v450 (`c19cc2d531e4`). The
   ESP bare-metal profile refuses that `Copy` at compile time with v449 and
-  v450, so it never reached the wrong value there (measured by frankd-23 on
+  v450, so it never reached the wrong value there (measured on
   the ESP32-C3 and ESP32-S3 under QEMU). **On v449:** use the default string
   mode.
 
@@ -887,8 +887,8 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   v449 (`0ded1e5d04c8`), all 13 match on x86-64, i386, arm32, aarch64, and
   hosted Xtensa with both ABIs, under QEMU user mode. The ESP value,
   `4.6071824188000174e+18` for `1.0`, is as reported in
-  `devdocs/progress/LOGBOOK.md`; on ESP silicon the fix was reported by
-  frankb-12 on 2026-09-28 and not yet in the LOGBOOK: v449 (`0ded1e5d04c8`,
+  `devdocs/progress/LOGBOOK.md`; on ESP silicon the fix was reported on
+  2026-09-28, in a report not yet recorded in the repository: v449 (`0ded1e5d04c8`,
   tree `5ea9d5ef07`) on a real ESP32-C3 and ESP32-S3, one image and one boot
   per chip, where the fixture's rows and `bare(1.0)` match CPython. **On
   v448:** call the nested def directly instead of taking it as a value; the
@@ -906,11 +906,11 @@ still red: `test/c_crtl_wait.c`, where riscv32 under QEMU 8.2.2 leaves
   was `0` or `None`, and `cls()` with no arguments then segfaulted. The
   ESP32-C3 and x86-64 were right. Module-level code was not affected. On the
   S3, v448 printed `0` (as reported in `devdocs/progress/LOGBOOK.md`). Fixed
-  in v449 (`76d35e065f`). On silicon it was reported by frankb-12 on
-  2026-09-28 and not yet in the LOGBOOK: v449 (`0ded1e5d04c8`, tree
+  in v449 (`76d35e065f`). On silicon it was reported on
+  2026-09-28, in a report not yet recorded in the repository: v449 (`0ded1e5d04c8`, tree
   `5ea9d5ef07`) on a real ESP32-C3 and ESP32-S3, one image and one boot per
-  chip, where the class-value row and `cls()` match CPython. Measured by
-  frankD on 2026-09-28 hosted only: v448 cannot run Nil Python on hosted
+  chip, where the class-value row and `cls()` match CPython. Measured on
+  2026-09-28, hosted only: v448 cannot run Nil Python on hosted
   Xtensa (see the call0 row above), and with v449 (`0ded1e5d04c8`) a probe of
   `Q().mk().a` and a def-level `cls(3)` prints `7` and `3` on hosted Xtensa
   with both ABIs, as on x86-64. **On v448:** call the class by its name,
@@ -987,7 +987,7 @@ These were wrong in the earlier draft pin v425 and are fixed in v441.
   `Unhandled exception: <Class>: <Message>`, as on a desktop, before it stops
   (`7eeb3d755`). Whether an ESP program should stop or restart after that has
   not been decided; it stops.
-- **The five memory leaks** listed under [Memory leaks](#memory-leaks).
+- **The five memory leaks** listed under [The pre-release leak sweep, and leaks fixed since](#the-pre-release-leak-sweep-and-leaks-fixed-since).
 
 These were wrong in v424 and fixed in v425, and so are fixed here too:
 
