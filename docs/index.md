@@ -88,6 +88,7 @@ documentation first.
 - [Reference](./reference/) — command line, configuration, limits, and glossary.
 - [Known issues in beta 0.1](./reference/known-issues.md) — what is wrong
   in the current pin, and the workarounds.
+- [Reporting bugs](./reference/reporting-bugs.md) — what to check first, what to put in a report, and how to make a small reproducer.
 
 > These docs are published at <https://pxxc.org> directly from the project's git
 > repository, <https://github.com/yoctobyte/pxx>. Found a mistake? The source

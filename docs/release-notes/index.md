@@ -205,15 +205,18 @@ The full list, restamped to v441, is on its own page:
 
 ## Reporting bugs
 
-Open an issue at <https://github.com/yoctobyte/pxx/issues>. The most useful
-report contains:
+Before you report, check [Known issues](../reference/known-issues.md).
+[Reporting bugs](../reference/reporting-bugs.md) says what to include and how
+to cut a program down to a small reproducer. Open an issue at
+<https://github.com/yoctobyte/pxx/issues>. The most useful report contains:
 
 1. the smallest source file that shows the problem;
 2. the exact command you ran, including `--target=` if any;
 3. what you expected and what you got (for C, GCC's output is a good
    "expected"; for Pascal, FPC's; for Nil Python, CPython's);
-4. the output of `./pxx --doctor`, and the commit of your checkout
-   (`git log -1 --format=%h`).
+4. the output of `./pxx --doctor`, and which compiler `./pxx` ran:
+   `sha256sum "$(./pxx --where | sed -n 's/^binary: *//p')"` (in a checkout,
+   `git log -1 --format=%h` too).
 
 **Programs that compile and quietly give a wrong answer are the most valuable
 reports.** A refusal with a clear message is usually already known; a wrong
