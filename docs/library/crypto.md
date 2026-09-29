@@ -32,9 +32,22 @@ so. They are fine for checking signatures
 on files, for tests and for learning. Do not use them where an attacker can
 time many operations with your key, for instance to protect a server.
 
+**None of the functions checks the length of a key or a nonce, and a wrong
+length is not an error.** Measured with v451:
+
+- `aesgcm` is AES-128 only. Given a 32-byte key meant for AES-256,
+  `AesGcmSeal` uses the first 16 bytes and encrypts with AES-128.
+  Anything that expects AES-256 cannot open the result, and the key is
+  half as strong as you meant.
+- An `iv` that is not 12 bytes gives output that is not AES-GCM.
+- `Chacha20Poly1305Seal` takes a key that is not 32 bytes.
+
+Pass exactly the lengths given below. For comparison, Python's
+`cryptography` treats a 32-byte AES key as AES-256, gives real AES-GCM for
+an `iv` of another length, and refuses a ChaCha20 key that is not 32 bytes.
+
 All byte strings (keys, nonces, messages, signatures) are `AnsiString`, one
-byte per character. None of the functions checks the length of a key or a
-nonce. Pass exactly the lengths given here.
+byte per character.
 
 Each example was built with pin v451 (compiler sha256 `d9b7226769cc`)
 through `./pxx` on Linux x86-64 on 2026-09-29.
