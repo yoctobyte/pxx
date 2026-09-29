@@ -3684,15 +3684,30 @@ begin
   Result := IRAppend(IR_LOAD_SYM, addrTmp, -1, -1, 0, Ord(tyPointer));
 end;
 
+function IRHiddenRetStrCap(procIdx: Integer): Integer;
+{ The capacity of procIdx's frozen-string result, as the callee copies it out. }
+begin
+  if ProcRetStrCap[procIdx] > 0 then IRHiddenRetStrCap := ProcRetStrCap[procIdx]
+  else IRHiddenRetStrCap := DEFAULT_STR_CAP;
+end;
+
 function IRBuildHiddenDest(procIdx: Integer): Integer;
 { Allocate the caller-owned scratch destination for a call that returns an
   aggregate / frozen string by hidden pointer, and return its IR_LEA address node.
   The direct-call path inlines this in IRAppendCall (IRC = the dest); virtual /
   indirect calls store the returned node in IRCallDest[callNode]. }
-var scratchSym, savedRecId: Integer;
+var scratchSym, savedRecId, savedStrCap: Integer;
 begin
   savedRecId := LastTypeRecId;
   if Procs[procIdx].RetType = tyRecord then LastTypeRecId := ProcRetRecId[procIdx];
+  { A FROZEN-STRING result needs a scratch of the CALLEE's capacity. AllocVar
+    reads a `string[N]` capacity from LastTypeStrCap, which here is whatever the
+    parser saw last, not this proc's result: toperator94's ShortString operator
+    got an 81-byte temp from a String[80] parsed earlier and copied 256 bytes
+    into it, past the end of .bss once the runtime grew by one proc.
+    bug-a-a-frozen-string-call-result-temp-takes-a-stale-capacity }
+  savedStrCap := LastTypeStrCap;
+  LastTypeStrCap := IRHiddenRetStrCap(procIdx);
   { A FIXED-ARRAY result needs a scratch of the WHOLE array, not of one element:
     Procs[].RetType carries the element kind, so AllocVar would reserve 4 bytes
     for a 12-byte answer and the callee's copy would run off the end. Byte array
@@ -3703,6 +3718,7 @@ begin
   else
     scratchSym := AllocVar('', Procs[procIdx].RetType);
   LastTypeRecId := savedRecId;
+  LastTypeStrCap := savedStrCap;
   if (Procs[procIdx].RetType = tyRecord) and RecordHasManagedFields(ProcRetRecId[procIdx]) then
     SymIsHiddenArgTemp[scratchSym] := True;
   { THE SIBLING OF IRAppendCall's VARIANT HIDDEN-DEST ARM, and it was missing
@@ -3749,7 +3765,7 @@ begin
 end;
 
 function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer;
-var scratchSym, scratchAddr, savedRecId: Integer; intfA0, intfA1: Integer;
+var scratchSym, scratchAddr, savedRecId, savedStrCap: Integer; intfA0, intfA1: Integer;
 begin
   if ABIRetViaHiddenDestProc(procIdx) then
   begin
@@ -3758,12 +3774,15 @@ begin
     savedRecId := LastTypeRecId;
     if Procs[procIdx].RetType = tyRecord then
       LastTypeRecId := ProcRetRecId[procIdx];
+    savedStrCap := LastTypeStrCap;
+    LastTypeStrCap := IRHiddenRetStrCap(procIdx);   { see IRBuildHiddenDest }
     { see IRBuildHiddenDest: a fixed-array result needs the whole array }
     if ProcRetFixedArrBytes[procIdx] > 0 then
       scratchSym := AllocArray('', tyUInt8, 0, ProcRetFixedArrBytes[procIdx] - 1)
     else
       scratchSym := AllocVar('', Procs[procIdx].RetType);
     LastTypeRecId := savedRecId;
+    LastTypeStrCap := savedStrCap;
     { This hidden aggregate-result temp is allocated during IR lowering, after the
       parser's prologue zero-init pass. If the call sits on a branch that is not
       taken (e.g. `Result := F(0); Exit` in an untaken early-exit), the temp is
