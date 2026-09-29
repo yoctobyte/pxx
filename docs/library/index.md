@@ -22,10 +22,10 @@ programs can use these units without passing extra `-Fu` flags.
 | [`strutils`](./more-units.md#strutils-fpcs-string-helpers-in-part) | 26 of FPC's `StrUtils` routines. |
 | [`dateutils`](./more-units.md#dateutils-fpcs-date-helpers-in-part) | 7 of FPC's `DateUtils` routines. |
 | `math` | Numeric helpers. |
-| `ucomplex` | Complex numbers with the FPC `ucomplex` API and operator overloads. |
-| `vecmath` | 2/3/4-component vectors and matrices (`TVec3`, `TMat4`, …) with operator overloads. |
+| [`ucomplex`](./math-and-rtti.md#ucomplex-complex-numbers) | Complex numbers with the FPC `ucomplex` API and operator overloads. |
+| [`vecmath`](./math-and-rtti.md#vecmath-vectors-and-matrices) | 2/3/4-component vectors and matrices (`TVec3`, `TMat4`, …) with operator overloads. |
 | [`bignum`](./more-units.md#bignum-arbitrary-precision-integers) | Arbitrary-precision integers with operator overloads. |
-| `typinfo` | RTTI inspection helpers. |
+| [`typinfo`](./math-and-rtti.md#typinfo-properties-by-name) | Published properties read and written by name, with FPC's routine names. |
 
 Several language features also have runtime support in the default environment:
 managed strings, dynamic arrays, exceptions, interfaces, classes, RTTI, and file

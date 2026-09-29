@@ -30,6 +30,7 @@ details, the measurements and the workarounds.
 **Stops at run time**
 
 - wasm32: integer division by zero stops the module instead of raising: [Stops at run time](#stops-at-run-time)
+- Pascal: unary minus on a record compiles and then crashes: [Stops at run time](#stops-at-run-time)
 - ESP: a bare-metal image faults on a real chip; use the ESP-IDF build: [row](#esp-bare-metal-images-do-not-run-on-a-real-chip)
 - Nil Python: `raise` inside `exec`'d code cannot be caught: [exec and eval](#exec-and-eval)
 - Nil Python on the ESP32-C3: sorting a list needs about as much free heap again as the list: [Nil Python](#nil-python)
@@ -117,6 +118,18 @@ targets, because the scaling is itself arithmetic on it.
   where v451 stops the module. **Workaround:** on wasm32, test the divisor
   for zero before dividing.
 
+- **Pascal: `-r` on a record compiles, and the program crashes.** For a
+  record `r` with no unary `-` operator, `b := -r` builds, and the program
+  stops with a segmentation fault (exit 139) when that line runs, before it
+  prints anything. FPC refuses it: "Operator is not overloaded". This
+  includes `ucomplex`'s `complex` and `vecmath`'s vectors, whose units
+  declare no unary minus. Measured on 2026-09-29 on x86-64 with v441
+  (`4ebfa2d047a2`), v451 (`d9b7226769cc`) and the compiler built at
+  `9bf9b1c173` (`722c38c6faeb`), which behave the same.
+  **Workaround:** `cneg(z)` for a complex number, `v * -1.0` for a vector;
+  both give the right answer with v451. See
+  [Complex numbers, vectors and RTTI](../library/math-and-rtti.md).
+
 ### ESP: bare-metal images do not run on a real chip
 
 Images built with `--esp-profile=bare` fault on the first byte access to a
@@ -188,7 +201,7 @@ Found on 2026-09-29, and **open in v441 to v451**:
   `never` still runs when the program ends; CPython does not run it. Measured
   on 2026-09-29 on x86-64 with v441 (`4ebfa2d047a2`), v450 (`c19cc2d531e4`)
   and v451 (`d9b7226769cc`), which behave the same, and with the compiler
-  built at `bf32c6b618`. **Workaround:** pass the same variable to both calls
+  built at `9bf9b1c173` (`722c38c6faeb`). **Workaround:** pass the same variable to both calls
   (`h = never`, `atexit.register(h)`, `atexit.unregister(h)`), or the value
   `register` returned; with v451 both remove it. See
   [System units](../library/system-units.md#atexit-running-code-when-the-program-ends).

@@ -300,4 +300,4 @@ CPython prints the same three lines. Two differences, measured with v451:
   still runs `never` at exit, where CPython does not. It works when both
   calls pass the same variable (`h = never`, then `register(h)` and
   `unregister(h)`), or the value `register` returned. The current compiler
-  (built at `bf32c6b618`) behaves the same.
+  (`722c38c6faeb`, built at `9bf9b1c173`) behaves the same.
