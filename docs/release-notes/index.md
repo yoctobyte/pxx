@@ -214,9 +214,10 @@ to cut a program down to a small reproducer. Open an issue at
 2. the exact command you ran, including `--target=` if any;
 3. what you expected and what you got (for C, GCC's output is a good
    "expected"; for Pascal, FPC's; for Nil Python, CPython's);
-4. the output of `./pxx --doctor`, and which compiler `./pxx` ran:
-   `sha256sum "$(./pxx --where | sed -n 's/^binary: *//p')"` (in a checkout,
-   `git log -1 --format=%h` too).
+4. the output of `./pxx --version` and `./pxx --doctor`. Both name the
+   compiler binary by its SHA-256, and by its release or pin when a record
+   names it. The v0.1.0-beta.1 binary predates that; with it, add
+   `sha256sum "$(./pxx --where | sed -n 's/^binary: *//p')"`.
 
 **Programs that compile and quietly give a wrong answer are the most valuable
 reports.** A refusal with a clear message is usually already known; a wrong

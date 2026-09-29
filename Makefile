@@ -40026,6 +40026,10 @@ test-quick: $(COMPILER)
 	# the one that costs the most and shows up in no compile test.
 	./$(COMPILER) --version | grep -q '^pxx (pascal26)'
 	./$(COMPILER) --version | grep -q 'generation:  26'
+	# The build line is the SHA-256 of the binary itself, as sha256sum prints it.
+	set -e; want=$$(sha256sum $(COMPILER) | cut -c1-12); \
+	  ./$(COMPILER) --version | grep -q "^  build:       sha256 $$want " || { echo "--version build line is not sha256sum's $$want"; ./$(COMPILER) --version; exit 1; }; \
+	  ./$(COMPILER) --doctor | grep -q "^build:       sha256 $$want " || { echo "--doctor build line is not sha256sum's $$want"; exit 1; }
 	./$(COMPILER) --list-targets | grep -q '^x86_64 (default)'
 	./$(COMPILER) --list-targets | grep -q '^xtensa'
 	./$(COMPILER) --help | grep -q 'usage: pxx'

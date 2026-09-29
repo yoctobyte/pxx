@@ -342,6 +342,21 @@ build_dist() {
   # x86-64 binary IS the fixedpoint, so `make` in the bundle verifies in one
   # round and needs nothing outside it.
   cp "$d/compiler/pxx-x86_64" "$d/compiler/pascal26"
+  # RELEASE-ID: what `pxx --version` prints for a bundle's binary. The binary
+  # cannot carry this itself -- an embedded commit would make its bytes depend
+  # on git state, and selfcheck.sh rebuilds it from this tarball, where there is
+  # no .git. So the compiler hashes itself, finds that hash in MANIFEST.sha256,
+  # and only then reads these lines. `pin` is written only when the release
+  # binary IS the pinned one (pin_identity's own test).
+  {
+    echo "tag      $tag"
+    echo "codename $codename"
+    echo "source   $(git -C "$REPO_ROOT" rev-parse HEAD)"
+    if [[ -e "$PIN_DIR/pinned" ]] &&
+       [[ "$(sha256sum "$COMPILER" | awk '{print $1}')" == "$(sha256sum "$PIN_DIR/pinned" | awk '{print $1}')" ]]; then
+      echo "pin      v$(cat "$PIN_DIR/VERSION")"
+    fi
+  } > "$d/RELEASE-ID"
   # Top-level entry point (also under tools/). ONE quick start, the same in
   # README, the install page and RELEASE.md: ./install.sh --yes writes ./pxx,
   # which every docs page uses, and ./selfcheck.sh finds the host binary itself.
@@ -399,6 +414,7 @@ PATH as well (a wrapper in ~/.local/bin).
     docs/                 public user documentation
     Makefile, tools/      build + verification system
     MANIFEST.sha256       SHA-256 of each prebuilt binary (reproducible)
+    RELEASE-ID            tag, codename, source commit, pin -- what \`pxx --version\` reports
     install.sh, selfcheck.sh  setup (writes ./pxx) + reproduce helpers
 
 ## Rebuild from source

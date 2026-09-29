@@ -439,12 +439,271 @@ begin
   AddPasUnitDir('lib/rtl/platform/' + pal);
 end;
 
+{ BUILD IDENTITY — which compiler this is, for a bug report.
+
+  The binary cannot carry its own hash, and embedding a source sha at build
+  time would make the bytes depend on the git state, so a tarball rebuilt by
+  selfcheck.sh (no .git) would no longer reproduce MANIFEST.sha256. So the
+  identity is computed at run time instead: the SHA-256 of /proc/self/exe,
+  which is exactly what `sha256sum` of the binary prints, then looked up in
+  the ledgers that already name binaries by that hash:
+
+    a checkout   stable_linux_amd64/default/pin.log (one line per pin: the
+                 version, the binary's sha256, the source commit), and
+                 compiler/.pascal26.fixedpoint (the last `make` build);
+    a tarball    MANIFEST.sha256 (the shipped binaries) and RELEASE-ID
+                 (tag, codename, source commit, pin), both written by
+                 tools/release.sh.
+
+  Nothing is claimed that a ledger does not confirm by hash: a binary that
+  matches none of them says so rather than borrowing a nearby VERSION file. }
+
+var
+  BidBuf: array[0..65535] of Byte;
+  BidW: array[0..63] of Int64;
+  BidH: array[0..7] of Int64;
+
+const
+  BidK: array[0..63] of Int64 = (
+    $428a2f98, $71374491, $b5c0fbcf, $e9b5dba5, $3956c25b, $59f111f1, $923f82a4, $ab1c5ed5,
+    $d807aa98, $12835b01, $243185be, $550c7dc3, $72be5d74, $80deb1fe, $9bdc06a7, $c19bf174,
+    $e49b69c1, $efbe4786, $0fc19dc6, $240ca1cc, $2de92c6f, $4a7484aa, $5cb0a9dc, $76f988da,
+    $983e5152, $a831c66d, $b00327c8, $bf597fc7, $c6e00bf3, $d5a79147, $06ca6351, $14292967,
+    $27b70a85, $2e1b2138, $4d2c6dfc, $53380d13, $650a7354, $766a0abb, $81c2c92e, $92722c85,
+    $a2bfe8a1, $a81a664b, $c24b8b70, $c76c51a3, $d192e819, $d6990624, $f40e3585, $106aa070,
+    $19a4c116, $1e376c08, $2748774c, $34b0bcb5, $391c0cb3, $4ed8aa4a, $5b9cca4f, $682e6ff3,
+    $748f82ee, $78a5636f, $84c87814, $8cc70208, $90befffa, $a4506ceb, $bef9a3f7, $c67178f2);
+
+{ 32-bit words held in Int64 and masked, so the arithmetic is the same under
+  FPC (the seed) and under pxx, whatever each does with Cardinal overflow. }
+function BidRotr(x: Int64; n: Integer): Int64;
+begin
+  BidRotr := ((x shr n) or (x shl (32 - n))) and $FFFFFFFF;
+end;
+
+procedure BidBlock(off: Integer);
+var i: Integer; a, b, c, d, e, f, g, h, t1, t2, s0, s1: Int64;
+begin
+  for i := 0 to 15 do
+    BidW[i] := (Int64(BidBuf[off + 4 * i]) shl 24) or (Int64(BidBuf[off + 4 * i + 1]) shl 16) or
+               (Int64(BidBuf[off + 4 * i + 2]) shl 8) or Int64(BidBuf[off + 4 * i + 3]);
+  for i := 16 to 63 do
+  begin
+    s0 := BidRotr(BidW[i - 15], 7) xor BidRotr(BidW[i - 15], 18) xor (BidW[i - 15] shr 3);
+    s1 := BidRotr(BidW[i - 2], 17) xor BidRotr(BidW[i - 2], 19) xor (BidW[i - 2] shr 10);
+    BidW[i] := (BidW[i - 16] + s0 + BidW[i - 7] + s1) and $FFFFFFFF;
+  end;
+  a := BidH[0]; b := BidH[1]; c := BidH[2]; d := BidH[3];
+  e := BidH[4]; f := BidH[5]; g := BidH[6]; h := BidH[7];
+  for i := 0 to 63 do
+  begin
+    s1 := BidRotr(e, 6) xor BidRotr(e, 11) xor BidRotr(e, 25);
+    t1 := (h + s1 + ((e and f) xor ((e xor $FFFFFFFF) and g)) + BidK[i] + BidW[i]) and $FFFFFFFF;
+    s0 := BidRotr(a, 2) xor BidRotr(a, 13) xor BidRotr(a, 22);
+    t2 := (s0 + ((a and b) xor (a and c) xor (b and c))) and $FFFFFFFF;
+    h := g; g := f; f := e;
+    e := (d + t1) and $FFFFFFFF;
+    d := c; c := b; b := a;
+    a := (t1 + t2) and $FFFFFFFF;
+  end;
+  BidH[0] := (BidH[0] + a) and $FFFFFFFF; BidH[1] := (BidH[1] + b) and $FFFFFFFF;
+  BidH[2] := (BidH[2] + c) and $FFFFFFFF; BidH[3] := (BidH[3] + d) and $FFFFFFFF;
+  BidH[4] := (BidH[4] + e) and $FFFFFFFF; BidH[5] := (BidH[5] + f) and $FFFFFFFF;
+  BidH[6] := (BidH[6] + g) and $FFFFFFFF; BidH[7] := (BidH[7] + h) and $FFFFFFFF;
+end;
+
+{ Lower-case hex SHA-256 of a file, as sha256sum prints it; '' if unreadable. }
+function BidFileSha256(const path: AnsiString): AnsiString;
+const HexD: AnsiString = '0123456789abcdef';
+var fd, got, fill, off, i, j: Integer; total: Int64;
+begin
+  BidFileSha256 := '';
+  fd := sysopen(path, 0);
+  if fd < 0 then Exit;
+  BidH[0] := $6a09e667; BidH[1] := $bb67ae85; BidH[2] := $3c6ef372; BidH[3] := $a54ff53a;
+  BidH[4] := $510e527f; BidH[5] := $9b05688c; BidH[6] := $1f83d9ab; BidH[7] := $5be0cd19;
+  total := 0;
+  fill := 0;
+  repeat
+    got := sysread(fd, BidBuf[fill], 65536 - fill);
+    if got < 0 then begin sysclose(fd); Exit; end;
+    total := total + got;
+    fill := fill + got;
+    off := 0;
+    while fill - off >= 64 do
+    begin
+      BidBlock(off);
+      off := off + 64;
+    end;
+    { carry the partial block to the front }
+    for i := 0 to fill - off - 1 do BidBuf[i] := BidBuf[off + i];
+    fill := fill - off;
+  until got = 0;
+  sysclose(fd);
+  { padding: 0x80, zeros, the 64-bit big-endian bit length }
+  BidBuf[fill] := $80;
+  fill := fill + 1;
+  if fill > 56 then
+  begin
+    while fill < 64 do begin BidBuf[fill] := 0; fill := fill + 1; end;
+    BidBlock(0);
+    fill := 0;
+  end;
+  while fill < 56 do begin BidBuf[fill] := 0; fill := fill + 1; end;
+  total := total * 8;
+  for i := 0 to 7 do BidBuf[56 + i] := (total shr (8 * (7 - i))) and $FF;
+  BidBlock(0);
+  for i := 0 to 7 do
+    for j := 7 downto 0 do
+      BidFileSha256 := BidFileSha256 + HexD[((BidH[i] shr (4 * j)) and $F) + 1];
+end;
+
+{ A whole small text file ('' if absent). The ledgers are a few hundred lines. }
+function BidReadText(const path: AnsiString): AnsiString;
+var fd, got: Integer; chunk: AnsiString;
+begin
+  BidReadText := '';
+  fd := sysopen(path, 0);
+  if fd < 0 then Exit;
+  repeat
+    got := sysread(fd, BidBuf[0], 65536);
+    if got > 0 then
+    begin
+      SetLength(chunk, got);
+      Move(BidBuf[0], chunk[1], got);
+      BidReadText := BidReadText + chunk;
+    end;
+  until got <= 0;
+  sysclose(fd);
+end;
+
+{ The whitespace-separated fields of the line of `text` that contains `key`
+  as a whole field; '' if no line does. }
+function BidLineWith(const text, key: AnsiString): AnsiString;
+var i, st: Integer; line: AnsiString;
+begin
+  BidLineWith := '';
+  i := 1;
+  while i <= Length(text) do
+  begin
+    st := i;
+    while (i <= Length(text)) and (text[i] <> #10) do i := i + 1;
+    line := ' ' + Copy(text, st, i - st) + ' ';
+    if (Pos(' ' + key + ' ', line) > 0) then
+    begin
+      BidLineWith := line;
+      Exit;
+    end;
+    i := i + 1;
+  end;
+end;
+
+{ Field n (1-based) of a space/tab-separated line. }
+function BidField(const line: AnsiString; n: Integer): AnsiString;
+var i, k, st: Integer;
+begin
+  BidField := '';
+  i := 1; k := 0;
+  while i <= Length(line) do
+  begin
+    while (i <= Length(line)) and ((line[i] = ' ') or (line[i] = #9) or (line[i] = #13)) do i := i + 1;
+    if i > Length(line) then Exit;
+    st := i;
+    while (i <= Length(line)) and not ((line[i] = ' ') or (line[i] = #9) or (line[i] = #13)) do i := i + 1;
+    k := k + 1;
+    if k = n then begin BidField := Copy(line, st, i - st); Exit; end;
+  end;
+end;
+
+{ The value after `key` in a RELEASE-ID line `key value...`. }
+function BidRelVal(const text, key: AnsiString): AnsiString;
+var line: AnsiString; p: Integer;
+begin
+  line := BidLineWith(text, key);
+  BidRelVal := '';
+  if (line = '') or (BidField(line, 1) <> key) then Exit;
+  p := Pos(key, line) + Length(key);
+  while (p <= Length(line)) and (line[p] = ' ') do p := p + 1;
+  BidRelVal := Copy(line, p, Length(line) - p);
+end;
+
+{ Prints the `build:` lines. `indent` lines them up under the caller's report. }
+procedure PrintBuildIdentity(const indent: AnsiString);
+var sha, dir, root, text, line, ver, src, rel: AnsiString; i, n: Integer; found: Boolean;
+begin
+  sha := BidFileSha256('/proc/self/exe');
+  if sha = '' then
+  begin
+    WriteLn(indent, 'build:       (cannot read /proc/self/exe to hash it)');
+    Exit;
+  end;
+  WriteLn(indent, 'build:       sha256 ', Copy(sha, 1, 12), '   (sha256sum of this binary, first 12)');
+  found := False;
+  dir := GetFilePath(ParamStr(0));
+  { <root>/compiler/<binary> in a checkout or a tarball; the pinned binary is
+    one level deeper, <root>/stable_linux_amd64/default/<binary>. }
+  for n := 1 to 2 do
+  begin
+    if n = 1 then root := dir + '../' else root := dir + '../../';
+    text := BidReadText(root + 'stable_linux_amd64/default/pin.log');
+    line := BidLineWith(text, sha);
+    if line <> '' then
+    begin
+      ver := ''; src := '';
+      i := 1;
+      while BidField(line, i) <> '' do
+      begin
+        if BidField(line, i + 1) = sha then ver := BidField(line, i);
+        i := i + 1;
+      end;
+      src := BidField(line, i - 1);
+      if Length(src) <> 40 then src := '';
+      WriteLn(indent, 'pin:         ', ver, '   (stable_linux_amd64/default/pin.log names this binary)');
+      if src <> '' then WriteLn(indent, 'source:      ', Copy(src, 1, 12), '   (the commit that pin was cut from)');
+      found := True;
+      Break;
+    end;
+    text := BidReadText(root + 'MANIFEST.sha256');
+    if BidLineWith(text, sha) <> '' then
+    begin
+      text := BidReadText(root + 'RELEASE-ID');
+      rel := BidRelVal(text, 'tag');
+      if rel = '' then
+        WriteLn(indent, 'release:     a release bundle''s binary   (MANIFEST.sha256 names it; no RELEASE-ID)')
+      else
+      begin
+        line := BidRelVal(text, 'codename');
+        if line <> '' then rel := rel + ' "' + line + '"';
+        WriteLn(indent, 'release:     ', rel, '   (MANIFEST.sha256 names this binary)');
+        line := BidRelVal(text, 'pin');
+        if line <> '' then WriteLn(indent, 'pin:         ', line);
+        line := BidRelVal(text, 'source');
+        if line <> '' then WriteLn(indent, 'source:      ', Copy(line, 1, 12), '   (the commit the release was built from)');
+      end;
+      found := True;
+      Break;
+    end;
+    text := BidReadText(root + 'compiler/.pascal26.fixedpoint');
+    if BidLineWith(text, sha) <> '' then
+    begin
+      WriteLn(indent, 'local:       the last `make compiler/pascal26` in this checkout (not a pin or release)');
+      WriteLn(indent, 'sources:     srchash ', Copy(BidField(BidLineWith(text, 'srchash'), 2), 1, 12),
+              '   (compiler/.pascal26.fixedpoint)');
+      found := True;
+      Break;
+    end;
+  end;
+  if not found then
+    WriteLn(indent, 'local:       not a pin or a release binary (no ledger next to it names this hash)');
+end;
+
 procedure PrintVersionInfo;
 begin
   WriteLn('pxx (pascal26) — self-hosting Pascal-dialect compiler');
   WriteLn('  generation:  ', PXX_GENERATION, '   (the value {$IF PXX_VERSION >= n} tests)');
   WriteLn('  frontends:   pascal c nilpy rust zig ada basic fortran algol erlang lolcode whitespace');
   WriteLn('  host arch:   x86-64 linux');
+  PrintBuildIdentity('  ');
 end;
 
 procedure PrintTargetList;
@@ -804,6 +1063,7 @@ begin
   ResolveToolchainDirs(cdir, bdir, rtldir, lcldir, asmdir);
   home := PxxGetEnv('HOME');
   WriteLn('pxx doctor — what this box can do with this binary');
+  PrintBuildIdentity('');
   WriteLn;
   WriteLn('compile and run, this host:');
   ShowDoctorRow('native x86-64 programs', True, 'always — pxx emits ELF directly, no as/ld needed', '');

@@ -51,14 +51,31 @@ Each exits 0.
 | `--doctor` | what this box can do — cross-run, ESP, gdb, FPC seed, gcc |
 
 `--version` names the compiler generation — the same number a
-`{$IF PXX_VERSION >= n}` directive tests:
+`{$IF PXX_VERSION >= n}` directive tests — and which binary this is:
 
 ```
 pxx (pascal26) — self-hosting Pascal-dialect compiler
   generation:  26   (the value {$IF PXX_VERSION >= n} tests)
   frontends:   pascal c nilpy rust zig ada basic fortran algol erlang lolcode whitespace
   host arch:   x86-64 linux
+  build:       sha256 d67ea56f34a7   (sha256sum of this binary, first 12)
+  release:     v0.1.0-beta.2 "Blaise"   (MANIFEST.sha256 names this binary)
+  source:      ab6ab895b9bc   (the commit the release was built from)
 ```
+
+The `build:` line is always there. The compiler hashes its own binary each
+time `--version` runs, which takes about half a second. The lines under it come
+from a record next to the binary that lists that hash:
+
+- In a release archive, `MANIFEST.sha256` and `RELEASE-ID` give `release:` and
+  `source:`, and `pin:` when the release binary is a pin.
+- In a clone, `stable_linux_amd64/default/pin.log` gives `pin:` and `source:`.
+  A compiler built by `make` gives `local:` and the source hash from
+  `compiler/.pascal26.fixedpoint`.
+- A binary that no record names gives `local: not a pin or a release binary`.
+
+The example above is from a test bundle, not a published release. `--doctor`
+prints the same lines at the top of its report.
 
 That frontend list is every frontend compiled into the binary, and they sit at
 very different stages. The ones these docs cover in depth are Pascal,

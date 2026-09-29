@@ -41,15 +41,24 @@ you. Say which entry you mean.
 1. **Which compiler you ran.** Paste the output of:
 
    ```sh
+   ./pxx --version
+   ```
+
+   Its `build:` line is the SHA-256 of the compiler binary that `./pxx` runs
+   (the first 12 digits of what `sha256sum` prints). The lines under it say
+   where that binary came from: a release archive's `release:` and `source:`,
+   or a clone's `pin:` and `source:`. A binary that no record names says
+   `local:`. The compiler computes the hash itself, so it works the same in
+   an archive and in a clone, and needs no `git`.
+
+   If `--version` prints no `build:` line, your compiler is older than this
+   feature. The v0.1.0-beta.1 archive is one of them. Paste this instead:
+
+   ```sh
    ./pxx --where | head -1
    sha256sum "$(./pxx --where | sed -n 's/^binary: *//p')"
    ```
 
-   The first line names the compiler binary that `./pxx` runs, and the second
-   gives its fingerprint. In a release archive that binary is
-   `compiler/pxx-x86_64`; in a clone it is the pinned compiler. From a clone,
-   add `git log -1 --format=%h` too. A later version of `pxx --version` will
-   print a build identifier itself; until it does, use these lines.
 2. **The exact command**, with every flag. The ones that change the result
    most are `--target=` (the CPU, or an ESP chip name such as `esp32c3`),
    `--platform=`, `--esp-profile=bare`, `-O0` to `-O3`, `--threadsafe` and
