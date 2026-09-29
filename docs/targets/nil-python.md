@@ -292,6 +292,26 @@ note: reportlab_lib_pagesizes -> mimic_reportlab_lib_pagesizes (shim, subset)
 A shim covers what PXX needed, not the package. `--no-shims` refuses every
 substitution, so a build that passes with it contains no stand-in code.
 
+The shims in pin v451, each checked with a one-line `import` on 2026-09-29:
+
+- **Build for Linux (probed on x86-64; not checked on the ESP32 here):** `argparse`, `array`, `binascii`, `bisect`,
+  `calendar`, `codecs`, `collections.abc`, `colorsys`, `copy`, `framebuf`,
+  `gc`, `hashlib`, `heapq`, `micropython`, `mmap`, `queue`, `shutil`, `six`,
+  `six.moves`, `socket`, `sqlite3`, `string`, `struct`, `time`,
+  `tkinter.font`, `urequests`, `urllib.error`, `urllib.parse`,
+  `urllib.request`, `utime`, `uuid`, `warnings`, `wave`, `weakref`,
+  `xml.dom`, `xml.dom.minidom`, `xml.etree.ElementTree`, `xml.sax.saxutils`,
+  `xml.sax.xmlreader`, and `reportlab.lib.colors`, `reportlab.lib.pagesizes`,
+  `reportlab.lib.units`, `reportlab.lib.utils`, `reportlab.pdfbase`,
+  `reportlab.pdfbase.pdfmetrics` and `reportlab.pdfgen`.
+- **For the ESP32 only (refused on Linux, build for the ESP32-C3):** `esp32`, `machine`, `network`, `ssl` and `_onewire`.
+  See [MicroPython code on PXX](../library/micropython.md).
+- **With `--threadsafe`:** `threading`. Without the flag the import is refused
+  and the message says why.
+
+Some of these have entries with an example and their limits in
+[More units](../library/more-units.md).
+
 ### Python extension modules import bare
 
 A Pascal unit that declares `{$PYEXTENSION}` and binds the cpyext runtime is a

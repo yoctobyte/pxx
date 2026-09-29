@@ -22,7 +22,7 @@ programs can use these units without passing extra `-Fu` flags.
 | `math` | Numeric helpers. |
 | `ucomplex` | Complex numbers with the FPC `ucomplex` API and operator overloads. |
 | `vecmath` | 2/3/4-component vectors and matrices (`TVec3`, `TMat4`, …) with operator overloads. |
-| `bignum` | Arbitrary-precision integers with operator overloads. |
+| [`bignum`](./more-units.md#bignum-arbitrary-precision-integers) | Arbitrary-precision integers with operator overloads. |
 | `typinfo` | RTTI inspection helpers. |
 
 Several language features also have runtime support in the default environment:
@@ -53,7 +53,7 @@ refused.
 | `httpjson` | HTTP helpers for JSON payloads. |
 | `base64` | Base64 encoding and decoding. |
 | `png` / `image` | PNG encoding **and** decoding for non-interlaced 8-bit RGBA (colour type 6), plus a simple RGBA bitmap type. Encoding needs no compression library; decoding accepts stored, fixed-Huffman and dynamic-Huffman deflate streams and all standard RGBA scanline filters. |
-| `zlib` | Compression support. |
+| [`zlib`](./more-units.md#zlib-deflate-and-inflate) | Deflate compression and decompression, from Pascal and as Nil Python's `zlib` module. |
 
 ## Networking and async
 
@@ -83,6 +83,21 @@ refused.
 | [`ansiterm`, `ansirender`, `screen`, `lineedit`, `menu`](./terminal-ui.md) | Terminal UI helpers. |
 | `forms`, `controls`, `stdctrls`, `extctrls`, `dialogs`, `menus` | PCL component-library units. |
 | `gtk3`, `gtk3widgets`, `glarea`, `graphics` | GTK/OpenGL-backed GUI pieces used by demos and the Eliah IDE. |
+
+## Python modules for Nil Python
+
+Some units are written to be a Python module of the same name, and a `.npy`
+program reaches them with `import`. The ones below have entries of their own.
+
+| Module | Area |
+| --- | --- |
+| [`configparser`](./more-units.md#configparser-ini-files) | INI settings files. |
+| [`pathlib`](./more-units.md#pathlib-paths-as-objects) | Paths as objects. |
+| [`urllib.parse`](./more-units.md#urllibparse-splitting-a-url) | Splitting and quoting URLs. |
+| [`sqlite3`](./more-units.md#sqlite3-the-db-api-over-the-system-library) | SQLite through Python's DB-API. |
+| [`zlib`](./more-units.md#zlib-deflate-and-inflate) | Deflate, `crc32` and `adler32`. |
+
+The rest are listed under [Nil Python: Shims](../targets/nil-python.md#shims-standing-in-for-a-python-package).
 
 ## Platform units
 
