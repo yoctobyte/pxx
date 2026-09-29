@@ -17605,12 +17605,12 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-09-28T07:41:12Z",
+  "date": "2026-09-29T08:27:53Z",
   "hw_fp": "400820b50be1",
-  "probe_ratio": 1.014,
+  "probe_ratio": 1.02,
   "rc": 1,
   "rows": 0,
-  "sha": "b8a18120508b4ff54e0b64ce2b4d0e1a0276e5c3"
+  "sha": "99724f255840652004713722e20b1f1c10ec20b8"
  },
  "last_breadth_try": {
   "date": "2026-09-28T15:11:04Z",
