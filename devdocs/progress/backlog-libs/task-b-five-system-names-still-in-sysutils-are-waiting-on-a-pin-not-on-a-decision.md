@@ -103,3 +103,27 @@ Measured before landing: the pinned compiler compiles a program calling all six
 through `uses sysutils` and prints the fpc values; the same program against
 `sysutils.pas` as it stood on origin/master answers `undefined variable
 (SetString)` — the positive control fires.
+
+## 2026-09-29 — StringOfChar joins the duplicate shape (frankH, via frankuser)
+
+StringOfChar is now declared in compiler/builtin/builtin.pas with a pre-scan
+trigger in pasparser_prog.inc, and its lib/rtl/sysutils.pas copy is KEPT, the
+same shape as the six above. A program with no `uses` clause calls it. The
+pinned lib/rtl build doesn't see the builtin copy, and a program that also
+`uses SysUtils` resolves without a clash; both were measured. Four names are
+now declared only in sysutils: LowerCase, StrLen, StrPas and SysBackTraceStr.
+
+The builtin body is the sysutils body (concatenation), not
+`SetLength(Result, count)` plus a fill. In frozen mode (-uPXX_MANAGED_STRING),
+SetLength on a short Result does not clamp at 255: SetLength(s, 1000) reports
+Length 1000 and the fill ran past the buffer (SIGSEGV; `HexStr(1, 300)` crashes
+the same way). fpc clamps there. That is a separate bug, reported to frankuser.
+Concatenation stops at 255, which is fpc's shortstring answer.
+
+test_stringofchar_needs_no_uses_clause is fpc 3.2.2's output and passes on six
+targets, plus an x86-64 frozen row that expects 255.
+
+A census of System routines that pxx runs only through `uses SysUtils` (fpc
+runs them with no uses clause) counted six before this change: Error, LowerCase,
+StringOfChar, StrLen, StrPas and TInterfacedObject. Five remain. Random with
+no argument is a separate known gap: pxx has Random(n) only.

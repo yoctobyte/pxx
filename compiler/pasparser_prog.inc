@@ -2253,6 +2253,9 @@ begin
           CaseEqual(GetTokenStr(i), 'allocmem') or CaseEqual(GetTokenStr(i), 'setstring') or
           CaseEqual(GetTokenStr(i), 'utf8decode') or CaseEqual(GetTokenStr(i), 'utf8encode') or
           CaseEqual(GetTokenStr(i), 'runerror') or CaseEqual(GetTokenStr(i), 'uniquestring') or
+          { ...and StringOfChar, declared in builtin with its sysutils copy
+            KEPT for the pinned lib/rtl build (see its declaration). }
+          CaseEqual(GetTokenStr(i), 'stringofchar') or
           CaseEqual(GetTokenStr(i), 'lo') or CaseEqual(GetTokenStr(i), 'hi') or
           CaseEqual(GetTokenStr(i), 'swap'))) or
         { sLineBreak is the one BARE name of that group: FPC declares it as a

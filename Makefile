@@ -3790,6 +3790,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/lenvar_pas_x64 | diff -u test/test_length_of_a_variant.expected -
 	./$(COMPILER) test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_x64
 	$(TESTTMP)/lenarrvar_x64 | diff -u test/test_length_of_an_array_of_variant.expected -
+	./$(COMPILER) test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_x64
+	$(TESTTMP)/soc_x64 | diff -u test/test_stringofchar_needs_no_uses_clause.expected -
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_frozen
+	tools/expect_same.sh stringofchar_frozen_stops_at_255 "$$($(TESTTMP)/soc_frozen | tail -1)" "255"
 	./$(COMPILER) test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_x64
 	$(TESTTMP)/tofree_x64 | diff -u test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected -
 	./$(COMPILER) test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_x64
@@ -8492,6 +8496,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_length_of_a_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenvar_pas_a64)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=aarch64 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a64
 	tools/expect_same.sh aarch64/test_length_of_an_array_of_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/lenarrvar_a64)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=aarch64 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_a64
+	tools/expect_same.sh aarch64/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh aarch64 $(TESTTMP)/soc_a64)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=aarch64 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_a64
 	tools/expect_same.sh aarch64/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh aarch64 $(TESTTMP)/tofree_a64)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=aarch64 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_a64
@@ -8754,6 +8760,8 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_length_of_a_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenvar_pas_rv32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=riscv32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_rv32
 	tools/expect_same.sh riscv32/test_length_of_an_array_of_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/lenarrvar_rv32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=riscv32 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_rv32
+	tools/expect_same.sh riscv32/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh riscv32 $(TESTTMP)/soc_rv32)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=riscv32 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_rv32
 	tools/expect_same.sh riscv32/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh riscv32 $(TESTTMP)/tofree_rv32)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=riscv32 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_rv32
@@ -30172,6 +30180,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_length_of_a_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_pas_i386)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=i386 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_i386
 	tools/expect_same.sh i386/test_length_of_an_array_of_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenarrvar_i386)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=i386 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_i386
+	tools/expect_same.sh i386/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh i386 $(TESTTMP)/soc_i386)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=i386 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_i386
 	tools/expect_same.sh i386/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh i386 $(TESTTMP)/tofree_i386)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=i386 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_i386
@@ -33535,6 +33545,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/test_length_of_a_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenvar_pas_xtw)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_xtw
 	tools/expect_same.sh xtensa-windowed/test_length_of_an_array_of_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/lenarrvar_xtw)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_xtw
+	tools/expect_same.sh xtensa-windowed/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh xtensa $(TESTTMP)/soc_xtw)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_xtw
 	tools/expect_same.sh xtensa-windowed/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh xtensa $(TESTTMP)/tofree_xtw)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed --xtensa-long-calls test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_xtw
@@ -35634,6 +35646,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_length_of_a_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenvar_pas_a32)" "$$(cat test/test_length_of_a_variant.expected)"
 	./$(COMPILER) --target=arm32 test/test_length_of_an_array_of_variant.pas $(TESTTMP)/lenarrvar_a32
 	tools/expect_same.sh arm32/test_length_of_an_array_of_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/lenarrvar_a32)" "$$(cat test/test_length_of_an_array_of_variant.expected)"
+	./$(COMPILER) --target=arm32 test/test_stringofchar_needs_no_uses_clause.pas $(TESTTMP)/soc_a32
+	tools/expect_same.sh arm32/test_stringofchar_needs_no_uses_clause "$$(tools/run_target.sh arm32 $(TESTTMP)/soc_a32)" "$$(cat test/test_stringofchar_needs_no_uses_clause.expected)"
 	./$(COMPILER) --target=arm32 test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.pas $(TESTTMP)/tofree_a32
 	tools/expect_same.sh arm32/test_free_on_a_tobject_in_a_unit_runs_the_destructor "$$(tools/run_target.sh arm32 $(TESTTMP)/tofree_a32)" "$$(cat test/test_free_on_a_tobject_in_a_unit_runs_the_destructor.expected)"
 	./$(COMPILER) --target=arm32 test/test_an_owning_object_list_counts_its_destructors.pas $(TESTTMP)/ownlistn_a32
