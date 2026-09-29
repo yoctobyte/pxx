@@ -1515,6 +1515,14 @@ var
   PyStdAliasBase: array[0..127] of Integer;  { interned lowercase DOTTED root ('sys', 'os.path') }
   PyStdAliasUnit: array[0..127] of Integer;  { CurrentUnitIdx of the importer }
   PyStdAliasCount: Integer;
+  { `from sys import *` -- the ROOTS a star import named, per importing unit.
+    Not an enumeration of members: a bare name falls back to asking whether a
+    star root PROVIDES it (PyStdProvidesMember), the same question an explicit
+    `from sys import argv` asks, so the two can never disagree about what the
+    call table holds. See PyStdAliasLookup. }
+  PyStdStarRoot: array[0..31] of Integer;  { interned lowercase DOTTED root }
+  PyStdStarUnit: array[0..31] of Integer;  { CurrentUnitIdx of the importer }
+  PyStdStarCount: Integer;
   { Names a module pulled in with `from X import name`, tagged with the
     IMPORTING module's unit index. Unit scope in this compiler is flat, so a
     name another module imported is findable from everywhere — which is wrong
@@ -14612,7 +14620,7 @@ var i, ni, pi, si: Integer;
 begin
   Result := '';
   member := '';
-  if (nm = '') or (PyStdAliasCount = 0) then Exit;
+  if (nm = '') or ((PyStdAliasCount = 0) and (PyStdStarCount = 0)) then Exit;
   ni := InternStr(LowerCase(nm));
   for i := 0 to PyStdAliasCount - 1 do
     if (PyStdAliasName[i] = ni) and (PyStdAliasUnit[i] = CurrentUnitIdx) then
@@ -14626,6 +14634,25 @@ begin
         the rename resolve nothing at all. }
       member := Strs[PyStdAliasMember[i]].Text;
       Result := Strs[PyStdAliasBase[i]].Text;
+      Exit;
+    end;
+  { A STAR import binds every PUBLIC member its root provides -- CPython's rule
+    for a module without __all__, which is what these call-table roots are.
+    The same shadowing test as above: a def or a variable of this module wins,
+    as a later binding wins over a star import in CPython. The name is asked
+    AS SPELLED, since the call table is matched as spelled (see
+    PyStdProvidesMember). }
+  if (PyStdStarCount = 0) or (nm[1] = '_') then Exit;
+  for i := 0 to PyStdStarCount - 1 do
+    if (PyStdStarUnit[i] = CurrentUnitIdx) and
+       PyStdProvidesMember(Strs[PyStdStarRoot[i]].Text, nm) then
+    begin
+      pi := FindProcInUnit(nm, CurrentUnitIdx);
+      if (pi >= 0) and PyDefBoundHere(pi) then Exit;
+      si := FindSym(nm);
+      if (si >= 0) and (SymUnitIdx[si] = CurrentUnitIdx) then Exit;
+      member := nm;
+      Result := Strs[PyStdStarRoot[i]].Text;
       Exit;
     end;
 end;
@@ -49218,6 +49245,19 @@ end;
   whether its members are compiler-provided. `from random import randint` proved
   that: random takes the unit arm and its members live in the same call table
   sys.exit does. }
+{ `from <root> import *` for a root whose members the compiler provides. }
+procedure PyStdStarRecord(const dottedRoot: AnsiString);
+var i, ri: Integer;
+begin
+  ri := InternStr(LowerCase(dottedRoot));
+  for i := 0 to PyStdStarCount - 1 do
+    if (PyStdStarRoot[i] = ri) and (PyStdStarUnit[i] = CurrentUnitIdx) then Exit;
+  if PyStdStarCount > High(PyStdStarRoot) then Exit;
+  PyStdStarRoot[PyStdStarCount] := ri;
+  PyStdStarUnit[PyStdStarCount] := CurrentUnitIdx;
+  Inc(PyStdStarCount);
+end;
+
 procedure PyStdAliasRecord(const dottedRoot, member, alias: AnsiString);
 begin
   if PyStdAliasCount >= 128 then Exit;
@@ -49798,10 +49838,13 @@ begin
       if PyImportIsConsumedOnly(impRoot, impName) then
       begin
         { `from typing import *`: the names these roots export are pylib
-          symbols already in scope, so there is nothing to bind. A member the
-          compiler maps by call table (sys.argv) is NOT bound by `*`; it walls
-          at its use site as an undefined variable, as an unknown name does. }
-        if CurTok.Kind = tkStar then Next
+          symbols already in scope. A member the compiler maps by call table
+          (sys.argv, os.getcwd) is bound through PyStdStarRecord. }
+        if CurTok.Kind = tkStar then
+        begin
+          Next;
+          PyStdStarRecord(impDotted);
+        end
         else
         while CurTok.Kind = tkIdent do
         begin
@@ -49852,6 +49895,9 @@ begin
         begin
           Next;
           PyStarImportRecord(FindUnitOrAlias(impName));
+          { ...and the call-table members of a root that also has a unit:
+            random's seed/choice live in the table, not in lib/rtl/random. }
+          PyStdStarRecord(impDotted);
         end
         else
         while CurTok.Kind = tkIdent do
@@ -51790,6 +51836,7 @@ begin
   PyImpNameCount := 0;
   PyTopNameCount := 0;
   PyStdAliasCount := 0;
+  PyStdStarCount := 0;
   PyOptMissingCount := 0;
   PyInferSelfCi := -1;
   PyExprHadOptionalMissing := False;

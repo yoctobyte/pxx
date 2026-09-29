@@ -1,0 +1,16 @@
+# MicroPython's idiom on a board: `from machine import *` / `from time import *`
+# and then Pin, sleep_ms, ticks_ms and ticks_diff bare. machine and time are
+# Pascal shim units (lib/rtl/platform/esp), so their names reach a star import
+# through flat unit scope. The Makefile row builds this for the ESP32-C3; under
+# QEMU (tools/esp_run.sh --chip esp32c3, ESP_RUN_PROJECT=nilpy-hw-c3) it prints
+# `0 True`, as the qualified spelling does and as MicroPython does.
+# bug-n-from-import-star-does-not-bind-call-table-members
+from machine import *
+from time import *
+
+p = Pin(2, Pin.OUT)
+for i in range(3):
+    p.value(i % 2)
+    sleep_ms(10)
+t = ticks_ms()
+print(p.value(), ticks_diff(ticks_ms(), t) >= 0)

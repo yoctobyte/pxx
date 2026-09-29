@@ -3623,6 +3623,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/varobjret26 | diff -u test/test_nilpy_an_object_stored_into_a_variant_is_retained.expected -
 	./$(COMPILER) test/test_nilpy_from_import_star.npy $(TESTTMP)/fromstar26
 	$(TESTTMP)/fromstar26 | diff -u test/test_nilpy_from_import_star.expected -
+	./$(COMPILER) test/test_nilpy_from_import_star_of_a_compiler_provided_module.npy $(TESTTMP)/fromstarct26
+	$(TESTTMP)/fromstarct26 | diff -u test/test_nilpy_from_import_star_of_a_compiler_provided_module.expected -
 	./$(COMPILER) test/test_nilpy_stdlib_procedure_call_is_none.npy $(TESTTMP)/procnone26
 	$(TESTTMP)/procnone26 | diff -u test/test_nilpy_stdlib_procedure_call_is_none.expected -
 	./$(COMPILER) test/test_nilpy_random_sample.npy $(TESTTMP)/rsample26
@@ -39744,6 +39746,10 @@ test-esp-idf: $(COMPILER)
 	    test/esp_qemu_mpy_pin_protocols.npy $(TESTTMP)/esp_qemu_mpy_pin_protocols.o >/dev/null \
 	  && echo "=== esp_qemu_mpy_pin_protocols builds [$$t]: OK ===" || exit 1; \
 	done
+	@# `from machine import *` / `from time import *` with Pin and sleep_ms bare,
+	@# the MicroPython idiom; build-only here, the QEMU run is in the file header.
+	./$(COMPILER) --target=riscv32 --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	  test/esp_from_machine_import_star.npy $(TESTTMP)/esp_from_machine_import_star.o >/dev/null
 	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
 	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
 	    test/esp_board_hidden_loop.npy $(TESTTMP)/esp_board_hidden_loop.o >/dev/null \

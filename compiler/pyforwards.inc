@@ -446,3 +446,4 @@ function PyBuiltinValueHelperAhead: Boolean; forward; { Nil Python: is the token
 function PyBuiltinIntrinsicValue: Integer; forward; { Nil Python: that intrinsic AS a callable value, or -1 consuming nothing (pyparser.inc) }
 
 {$endif}
+function PyStdProvidesMember(const dottedRoot, member: AnsiString): Boolean; forward; { star-import fallback in PyStdAliasLookup (pyparser.inc) }

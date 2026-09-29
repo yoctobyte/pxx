@@ -1,0 +1,29 @@
+# `from X import *` where X's members are provided by the compiler's call
+# table (random, sys, os, os.path) binds the public ones, as CPython does. A
+# later def or assignment in this module wins, and another module is not
+# touched.
+# bug-n-from-import-star-does-not-bind-call-table-members
+from random import *
+from sys import *
+from os import *
+from os.path import *
+from starmod_randint_own import use
+
+seed(1)
+print(randint(3, 3), choice([7]), 0.0 <= random() < 1.0)
+xs = [1, 2, 3]
+shuffle(xs)
+print(sorted(xs), len(sample(xs, 2)))
+print(len(argv) >= 1)
+print(getcwd() != "", isabs(getcwd()))
+print(join("a", "b"), basename("/x/y.txt"), splitext("f.tar.gz")[1])
+print(use())
+
+
+def uniform(a, b):
+    return "mine"
+
+
+print(uniform(1, 2))
+randrange = 5
+print(randrange)
