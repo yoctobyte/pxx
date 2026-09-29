@@ -1236,9 +1236,9 @@ var
   shapeBad: AnsiString;
 begin
   cls := GetInstanceRTTI(vmobj);
-  if cls = nil then begin writeln('pyeval: no RTTI on vm for host call ', name); Halt(1); end;
+  if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI on vm for host call ', name); Halt(1); end;
   mi := PyFindMethCI(cls, name);
-  if mi = nil then begin writeln('pyeval: vm has no method ', name); Halt(1); end;
+  if mi = nil then begin writeln(StdErr, 'pyeval: vm has no method ', name); Halt(1); end;
 
   n := Integer(mi^.Arity) - 1;   { drop Self }
   { `S.init`, as CPython names the callee in a call-shape TypeError }
@@ -1324,11 +1324,11 @@ begin
     begin
       { Name the offending parameter. "unsupported param shape" on its own cost
         a bisect to turn into a sentence, and the shape is the whole question. }
-      writeln('pyeval: host method ', name, ' has an unsupported param shape',
+      writeln(StdErr, 'pyeval: host method ', name, ' has an unsupported param shape',
               ' (arity ', n, '), kinds:');
       if pk <> nil then
         for i := 1 to n do
-          writeln('  param ', i, ' kind ', pk[i]);
+          writeln(StdErr, '  param ', i, ' kind ', pk[i]);
       Halt(1);
     end;
 
@@ -1630,7 +1630,7 @@ begin
         end;
       else
         begin
-          writeln('pyeval: host method ', name, ' has an unsupported mixed shape (', mc, ' ints, ', kc, ' doubles)');
+          writeln(StdErr, 'pyeval: host method ', name, ' has an unsupported mixed shape (', mc, ' ints, ', kc, ' doubles)');
           Halt(1);
         end;
       end;
@@ -1754,7 +1754,7 @@ begin
       4: begin vf4 := TVFn4(code); res := vf4(vmobj, a0, a1, a2, a3); end;
       5: begin vf5 := TVFn5(code); res := vf5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
     Exit;
   end;
@@ -1770,7 +1770,7 @@ begin
       4: begin vp4 := TVPr4(code); vp4(vmobj, a0, a1, a2, a3); end;
       5: begin vp5 := TVPr5(code); vp5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
     res := MakeNone;
     Exit;
@@ -1787,7 +1787,7 @@ begin
       4: begin sf4 := TSFn4(code); res := MakeStr(sf4(vmobj, a0, a1, a2, a3)); end;
       5: begin sf5 := TSFn5(code); res := MakeStr(sf5(vmobj, a0, a1, a2, a3, a4)); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
     Exit;
   end;
@@ -1809,7 +1809,7 @@ begin
       4: begin if4 := TIFn4(code); res := pyvar_of_int(PyNarrowRet(if4(vmobj, a0, a1, a2, a3), rk)); end;
       5: begin if5 := TIFn5(code); res := pyvar_of_int(PyNarrowRet(if5(vmobj, a0, a1, a2, a3, a4), rk)); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
     { (PyNarrowRet: the callee set only its own width -- see pylib.) }
     { A BOOLEAN return shares this family's ABI but not its Python type: boxed
@@ -1832,7 +1832,7 @@ begin
       4: begin df4 := TDFn4(code); res := df4(vmobj, a0, a1, a2, a3); end;
       5: begin df5 := TDFn5(code); res := df5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
     Exit;
   end;
@@ -1851,14 +1851,14 @@ begin
       4: begin of4 := TOFn4(code); pret := of4(vmobj, a0, a1, a2, a3); end;
       5: begin of5 := TOFn5(code); pret := of5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      begin writeln(StdErr, 'pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
     end;
     PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
     PXXObjRetain(Pointer(NativeInt(pret)));
     Exit;
   end;
 
-  writeln('pyeval: unsupported host-call return kind ', rk, ' for ', name);
+  writeln(StdErr, 'pyeval: unsupported host-call return kind ', rk, ' for ', name);
   Halt(1);
 end;
 
@@ -1879,7 +1879,7 @@ var
   gname: AnsiString;
 begin
   cls := GetInstanceRTTI(obj);
-  if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
+  if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
   if p = nil then
   begin
@@ -1951,7 +1951,7 @@ var
   p: Pointer;
 begin
   cls := GetInstanceRTTI(obj);
-  if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
+  if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
   if p = nil then begin pydynattr_set(obj, name, val); Exit; end;
   case kind of
@@ -1964,7 +1964,7 @@ begin
     22: PVariant(p)^ := val;
     23: PAnsiString(p)^ := pystr_of(val);
   else
-    begin writeln('pyeval: cannot assign to object-typed attribute ', name); Halt(1); end;
+    begin writeln(StdErr, 'pyeval: cannot assign to object-typed attribute ', name); Halt(1); end;
   end;
 end;
 
@@ -2196,7 +2196,7 @@ end;
 
 procedure TokError(const msg: AnsiString);
 begin
-  writeln('pyeval tokenizer: ', msg);
+  writeln(StdErr, 'pyeval tokenizer: ', msg);
   Halt(1);
 end;
 
@@ -2586,9 +2586,20 @@ end;
 
 { ---- evaluator (recursive descent; every node returns via a var-out param) ---- }
 
+{ THIS IS A FUNNEL WITH 57 CALLERS AND THEY ARE NOT ONE EXCEPTION TYPE, which is
+  why it still halts after the sites around it became raises. The messages reaching
+  here divide at least three ways by what CPython would have raised: SyntaxError
+  ('def: expected a name', 'expected an indented block'), TypeError ('abs() expects
+  1 arg', 'cannot call method <m> on this value') and NotImplementedError
+  ('augmented slice assignment not supported', 'genexp: unsupported iterable').
+  So the one change that cannot be made is converting EvalError itself: whatever
+  single type it raised would be the wrong type for most of its callers, and a
+  program that CATCHES a wrong classification is worse off than one that saw an
+  honest halt. Triaging the 57 sites is a real item and is named in the LOGBOOK;
+  it is not a tidy-up of this procedure. }
 procedure EvalError(const msg: AnsiString);
 begin
-  writeln('pyeval: ', msg);
+  writeln(StdErr, 'pyeval: ', msg);
   Halt(1);
 end;
 
@@ -3956,6 +3967,11 @@ begin
     if not IsOp(')') then
     begin
       ParseExpr(recv);
+      { STAYS ON STDOUT. This is the implementation of `sys.stdout.write`, not a
+        diagnostic: it is the program's own output, and the commit that moved this
+        unit's fatal diagnostics to stderr deliberately left it and `print` alone.
+        Moving either would redirect every Nil Python program's output and break
+        every oracle in the tier. }
       if (fld = 'write') and (name = 'stdout') and Executing then
         write(pystr_of(recv));
     end;
@@ -4669,6 +4685,8 @@ begin
       if i > 0 then s := s + sep;
       s := s + pystr_of(args.at(i));
     end;
+    { STAYS ON STDOUT: this is `print`, the program's output. See the note at
+      sys.stdout.write above. }
     write(s); write(endc);
     res := MakeNone; Exit;
   end;
@@ -5361,9 +5379,16 @@ begin
   end
   else
     excName := 'Exception';
+  { THE STREAM MOVED; THE HALT DID NOT, AND THAT IS NOT AN OVERSIGHT. This site
+    looks exactly like the other fifteen fatal diagnostics -- a writeln and a
+    Halt(1) -- and it is not the same kind of thing. A Nil Python `raise` arrives
+    here, so replacing this Halt with a real raise IS implementing catchable
+    try/except for this frontend, which is the milestone the comment at the top of
+    this procedure defers. Anyone taking this on as "the last of the sixteen" will
+    find that out halfway in. Named in the LOGBOOK as its own item. }
   if Executing then
   begin
-    writeln('pyeval: ', excName, ': ', msg);
+    writeln(StdErr, 'pyeval: ', excName, ': ', msg);
     Halt(1);
   end;
 end;

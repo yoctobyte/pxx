@@ -6579,3 +6579,47 @@ copy of the v451 pinned compiler `d9b7226769cc` with the committed pin untouched
 and the row is queued to be re-run at tip once the fix for that lands. A
 measurement taken around an unrelated red is worth keeping only if it says out
 loud that it was.
+
+### Two named follow-ons from the pyeval diagnostics work, neither started (2026-09-29)
+
+Moving pyeval's fatal diagnostics off stdout, and then converting the ones that
+report the PROGRAM's error into catchable exceptions, turned up two items that
+look like more of the same work and are not. Both are named here rather than
+started, because each is larger than the thing that uncovered it.
+
+**Follow-on 1: `EvalError` is a funnel with 57 callers, and they are not one
+exception type.** `EvalError` (`compiler/builtin/pyeval.pas`) is a single
+`writeln` + `Halt(1)` reached from 57 call sites, and those sites carry at least
+three different CPython exception types:
+
+| CPython type | examples of the message |
+|---|---|
+| `SyntaxError` | `def: expected a name`, `expected an indented block`, `expected , or ) in call`, `del: expected a target` |
+| `TypeError` | `abs() expects 1 arg`, `cannot call method <m> on this value`, `bytes method not supported: <m>` |
+| `NotImplementedError` | `augmented slice assignment not supported`, `genexp: unsupported iterable`, `for: M1/M2 iterate over a list/range only` |
+
+So converting `EvalError` ITSELF is the one thing that cannot be done: whatever
+single type it raises is the wrong type for most of its callers, and a diagnostic
+that reports the wrong exception type is worse than one that halts honestly,
+because a program can then catch it and act on a false classification. The real
+work is triaging 57 call sites and giving each a fixture that catches the right
+type. That is its own item.
+
+**Follow-on 2: converting `ExecRaise` IS the catchable-`try`/`except` milestone,
+not a tidy-up of it.** `ExecRaise` is the sixteenth fatal site and looks exactly
+like the other fifteen — a `writeln` and a `Halt(1)`. It is not the same kind of
+thing, and its own comment says so: *"Propagated by halting with a diagnostic --
+catchable try/except is a later milestone"*. A Nil Python `raise` reaches it, and
+making it raise a real exception instead of halting is precisely what
+implementing catchable `try`/`except` for this frontend means. Anyone who picks
+this up as "the last of the sixteen" will discover that halfway in. Leave it
+halting until the milestone is taken deliberately.
+
+**The general shape worth remembering.** Both of these hid behind a uniform
+surface: sixteen sites that all looked like `writeln` + `Halt(1)`, of which one is
+a language milestone and one is a 57-way triage. The stream move (stdout ->
+stderr) is safe across all of them precisely because it does not care about the
+distinction; the conversion to exceptions cares about nothing else. That is why
+they were done as separate commits, and why the classification table lives in the
+stream-move commit — it is the artefact that tells the next person which of the
+two jobs they are actually signing up for.
