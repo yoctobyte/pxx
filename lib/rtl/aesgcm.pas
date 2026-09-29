@@ -1,9 +1,19 @@
 { SPDX-License-Identifier: Zlib }
 unit aesgcm;
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
-{ AES-128 + AES-128-GCM AEAD (NIST SP 800-38D / FIPS-197). Pure Pascal, no
+{ AES-128/192/256 + AES-GCM AEAD (NIST SP 800-38D / FIPS-197). Pure Pascal, no
   external library — a TLS 1.3 AEAD (TLS_AES_128_GCM_SHA256), the second half of
   milestone M2 of feature-tls13-from-scratch.
+
+  The key length picks the cipher, as in every other AES-GCM API: 16 bytes is
+  AES-128, 24 AES-192, 32 AES-256. Any other length RAISES EAesGcm. Until
+  2026-09-29 there was only AES-128 and a 32-byte key was silently cut to its
+  first 16 bytes -- a caller asking for AES-256 got AES-128 and could not tell.
+  The IV may be any non-empty length: 12 bytes is used as J0's prefix (the TLS
+  case), any other length goes through GHASH as SP 800-38D says. That also used
+  to be 12 bytes only, and an 8-byte IV gave output that was not GCM at all
+  (four bytes read past the IV). An empty IV raises. Both are checked against
+  Python's cryptography package in test/lib_aesgcm_key_and_iv_lengths.pas.
 
   Encrypt-only AES (GCM uses the forward cipher in CTR mode + GHASH). GHASH does a
   bit-serial GF(2^128) multiply (correct over fast; the handshake is low-volume,
@@ -37,12 +47,21 @@ unit aesgcm;
 
 interface
 
-{ AES-128-GCM. key = 16 bytes, iv = 12 bytes (96-bit, the TLS case). }
+uses sysutils;   { Exception, for the refusal below }
+
+type
+  { A key or an IV this unit does not implement. A programming error, not an
+    authentication failure, so AesGcmOpen raises it too rather than answering
+    False. }
+  EAesGcm = class(Exception) end;
+
+{ AES-GCM. key = 16, 24 or 32 bytes (AES-128/192/256); iv = any non-empty
+  length, 12 bytes being the usual (and the TLS) one. }
 function AesGcmSeal(const key, iv, aad, plaintext: AnsiString): AnsiString;   { ct || 16-byte tag }
 function AesGcmOpen(const key, iv, aad, ciphertextAndTag: AnsiString;
                     var plaintext: AnsiString): Boolean;
 
-{ Raw AES-128 single-block encrypt (16-byte key, 16-byte block). Exposed for
+{ Raw AES single-block encrypt (16/24/32-byte key, 16-byte block). Exposed for
   tests / other modes. }
 function AesEncryptBlock(const key, block: AnsiString): AnsiString;
 
@@ -71,7 +90,12 @@ const
 
 type
   TBlk = array[0..15] of Byte;
-  TRoundKeys = array[0..175] of Byte;
+  { Round keys for up to AES-256 (15 round keys of 16 bytes) and the round
+    count the key length gives: 10, 12 or 14. }
+  TRoundKeys = record
+    b: array[0..239] of Byte;
+    nr: Integer;
+  end;
 
 { Whole static-array `:=` does not copy on the pinned compiler
   (bug-fixed-array-assignment-no-copy) — copy element by element. }
@@ -85,27 +109,45 @@ begin
   else XTime := (b shl 1) and $ff;
 end;
 
-procedure ExpandKey(const key: AnsiString; var rk: TRoundKeys);
-var i: Integer; t0, t1, t2, t3, u: Byte;
+function KeyLenName(n: Integer): AnsiString;
 begin
-  for i := 0 to 15 do rk[i] := Ord(key[i + 1]);
-  i := 16;
-  while i < 176 do
+  Str(n, Result);
+end;
+
+{ FIPS-197 section 5.2, for Nk = 4, 6 or 8 words. The caller has already
+  checked the length. }
+procedure ExpandKey(const key: AnsiString; var rk: TRoundKeys);
+var i, nk, total: Integer; t0, t1, t2, t3, u: Byte;
+begin
+  if (Length(key) <> 16) and (Length(key) <> 24) and (Length(key) <> 32) then
+    raise EAesGcm.Create('aesgcm: the key must be 16, 24 or 32 bytes, not ' +
+                         KeyLenName(Length(key)));
+  nk := Length(key) div 4;
+  rk.nr := nk + 6;
+  total := 16 * (rk.nr + 1);
+  for i := 0 to Length(key) - 1 do rk.b[i] := Ord(key[i + 1]);
+  i := Length(key);
+  while i < total do
   begin
-    t0 := rk[i-4]; t1 := rk[i-3]; t2 := rk[i-2]; t3 := rk[i-1];
-    if (i mod 16) = 0 then
+    t0 := rk.b[i-4]; t1 := rk.b[i-3]; t2 := rk.b[i-2]; t3 := rk.b[i-1];
+    if ((i div 4) mod nk) = 0 then
     begin
       { RotWord + SubWord + Rcon }
       u  := t0;
-      t0 := SBox[t1] xor RCon[i div 16];
+      t0 := SBox[t1] xor RCon[(i div 4) div nk];
       t1 := SBox[t2];
       t2 := SBox[t3];
       t3 := SBox[u];
+    end
+    else if (nk > 6) and (((i div 4) mod nk) = 4) then
+    begin
+      { AES-256 only: SubWord without the rotation }
+      t0 := SBox[t0]; t1 := SBox[t1]; t2 := SBox[t2]; t3 := SBox[t3];
     end;
-    rk[i]   := rk[i-16]   xor t0;
-    rk[i+1] := rk[i-16+1] xor t1;
-    rk[i+2] := rk[i-16+2] xor t2;
-    rk[i+3] := rk[i-16+3] xor t3;
+    rk.b[i]   := rk.b[i-4*nk]   xor t0;
+    rk.b[i+1] := rk.b[i-4*nk+1] xor t1;
+    rk.b[i+2] := rk.b[i-4*nk+2] xor t2;
+    rk.b[i+3] := rk.b[i-4*nk+3] xor t3;
     i := i + 4;
   end;
 end;
@@ -113,8 +155,8 @@ end;
 procedure EncryptBlk(const rk: TRoundKeys; var s: TBlk);
 var round, c, i: Integer; t, u0, u1, u2, u3: Byte; tmp: TBlk;
 begin
-  for i := 0 to 15 do s[i] := s[i] xor rk[i];        { round 0 AddRoundKey }
-  for round := 1 to 10 do
+  for i := 0 to 15 do s[i] := s[i] xor rk.b[i];      { round 0 AddRoundKey }
+  for round := 1 to rk.nr do
   begin
     for i := 0 to 15 do s[i] := SBox[s[i]];           { SubBytes }
     { ShiftRows (state is column-major: index = row + 4*col) }
@@ -122,7 +164,7 @@ begin
     s[1]  := tmp[5];  s[5]  := tmp[9];  s[9]  := tmp[13]; s[13] := tmp[1];
     s[2]  := tmp[10]; s[6]  := tmp[14]; s[10] := tmp[2];  s[14] := tmp[6];
     s[3]  := tmp[15]; s[7]  := tmp[3];  s[11] := tmp[7];  s[15] := tmp[11];
-    if round < 10 then
+    if round < rk.nr then
       for c := 0 to 3 do                              { MixColumns }
       begin
         u0 := s[4*c]; u1 := s[4*c+1]; u2 := s[4*c+2]; u3 := s[4*c+3];
@@ -132,7 +174,7 @@ begin
         s[4*c+2] := u2 xor t xor XTime(u2 xor u3);
         s[4*c+3] := u3 xor t xor XTime(u3 xor u0);
       end;
-    for i := 0 to 15 do s[i] := s[i] xor rk[round*16 + i];   { AddRoundKey }
+    for i := 0 to 15 do s[i] := s[i] xor rk.b[round*16 + i];   { AddRoundKey }
   end;
 end;
 
@@ -140,6 +182,8 @@ function AesEncryptBlock(const key, block: AnsiString): AnsiString;
 var rk: TRoundKeys; s: TBlk; i: Integer;
 begin
   ExpandKey(key, rk);
+  if Length(block) <> 16 then
+    raise EAesGcm.Create('aesgcm: a block is 16 bytes, not ' + KeyLenName(Length(block)));
   for i := 0 to 15 do s[i] := Ord(block[i + 1]);
   EncryptBlk(rk, s);
   SetLength(Result, 16);
@@ -246,18 +290,29 @@ begin
   for i := 0 to 15 do Result[i + 1] := Chr(x[i] xor ej0[i]);
 end;
 
-{ Common setup: round keys, H = AES_K(0), J0 = IV||0^31||1, and the data counter
-  inc32(J0). }
+{ Common setup: round keys, H = AES_K(0), J0, and the data counter inc32(J0).
+  J0 is SP 800-38D section 7.1 step 2: IV||0^31||1 for a 96-bit IV, and for any
+  other length GHASH_H(IV||0^s||0^64||[len(IV)]_64), where GhashUpdate's own
+  zero-padding of the IV's last block is the 0^s. }
 procedure GcmSetup(const key, iv: AnsiString; var rk: TRoundKeys;
                    var h, j0, ctr: TBlk);
 var i: Integer;
 begin
   ExpandKey(key, rk);
+  if Length(iv) = 0 then raise EAesGcm.Create('aesgcm: the IV must not be empty');
   for i := 0 to 15 do h[i] := 0;
   EncryptBlk(rk, h);
   for i := 0 to 15 do j0[i] := 0;
-  for i := 0 to 11 do j0[i] := Ord(iv[i + 1]);
-  j0[15] := 1;
+  if Length(iv) = 12 then
+  begin
+    for i := 0 to 11 do j0[i] := Ord(iv[i + 1]);
+    j0[15] := 1;
+  end
+  else
+  begin
+    GhashUpdate(j0, h, iv);
+    GhashUpdate(j0, h, Be64(0) + Be64(Int64(Length(iv)) * 8));
+  end;
   BlkCopy(ctr, j0);
   Inc32(ctr);
 end;
@@ -286,12 +341,12 @@ var rk: TRoundKeys; h, j0, ctr: TBlk; ct, tag, wantTag: AnsiString; clen: Intege
 begin
   plaintext := '';
   Result := False;
+  GcmSetup(key, iv, rk, h, j0, ctr);         { first: a bad key raises, whatever the input }
   if Length(ciphertextAndTag) < 16 then Exit;
   clen := Length(ciphertextAndTag) - 16;
   ct  := Copy(ciphertextAndTag, 1, clen);
   tag := Copy(ciphertextAndTag, clen + 1, 16);
 
-  GcmSetup(key, iv, rk, h, j0, ctr);
   wantTag := GcmTag(rk, h, j0, aad, ct);     { GHASH over the ciphertext }
   if not ConstEq(tag, wantTag) then Exit;     { auth fail -> withhold plaintext }
   plaintext := AesCtr(rk, ctr, ct);           { CTR is symmetric: decrypt }

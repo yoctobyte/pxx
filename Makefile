@@ -42047,6 +42047,12 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_aesgcm.pas $(TESTTMP)/lib_aesgcm
 	tools/expect_same.sh lib_aesgcm.1 "$$($(TESTTMP)/lib_aesgcm | grep -c '=ok')" "8"
 	tools/expect_same.sh lib_aesgcm.2 "$$($(TESTTMP)/lib_aesgcm | grep -c 'FAIL')" "0"
+	# AES-GCM at 128/192/256 bits and at IVs other than 12 bytes, and the key
+	# and nonce lengths AES-GCM and ChaCha20-Poly1305 refuse. The .expected is
+	# Python's cryptography (the .py beside it); v451 gave AES-128 for a 32-byte
+	# key and read a 16-byte ChaCha key past its end.
+	$(PXX_STABLE) -Fulib/rtl test/lib_aead_key_and_iv_lengths.pas $(TESTTMP)/lib_aead_lengths
+	$(TESTTMP)/lib_aead_lengths | diff -u test/lib_aead_key_and_iv_lengths.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_rsa.pas $(TESTTMP)/lib_rsa
 	tools/expect_same.sh lib_rsa.1 "$$($(TESTTMP)/lib_rsa | grep -c '=ok')" "3"
 	tools/expect_same.sh lib_rsa.2 "$$($(TESTTMP)/lib_rsa | grep -c 'FAIL')" "0"

@@ -8,9 +8,22 @@ unit chacha20poly1305;
   ChaCha20 is 32-bit ARX (fast, table-free). Poly1305 uses the standard 5x26-bit
   limb representation with Int64 products (poly1305-donna style) — self-contained,
   no bignum. Byte buffers are AnsiString (one byte per char). Verified against the
-  RFC 8439 vectors in test/lib_chacha20poly1305. }
+  RFC 8439 vectors in test/lib_chacha20poly1305.
+
+  A key that is not 32 bytes, or a nonce that is not 12, RAISES
+  EChaCha20Poly1305. Until 2026-09-29 nothing was checked: a 16-byte key read
+  key[17..32] past the end of the string, which on x86-64 was the allocation's
+  zeroed slack, so it silently encrypted under key||0^16 (measured against
+  Python's cryptography, which refuses the key). }
 
 interface
+
+uses sysutils;   { Exception, for the refusal below }
+
+type
+  { A key or nonce of the wrong length. A programming error, not an
+    authentication failure, so the Open side raises it too. }
+  EChaCha20Poly1305 = class(Exception) end;
 
 { ChaCha20 keystream/cipher. key = 32 bytes, nonce = 12 bytes, counter = initial
   block counter (RFC uses 1 for payload; 0 generates the Poly1305 key). XORs data
@@ -30,6 +43,21 @@ function Chacha20Poly1305Open(const key, nonce, aad, ciphertextAndTag: AnsiStrin
                              var plaintext: AnsiString): Boolean;
 
 implementation
+
+function LenName(n: Integer): AnsiString;
+begin
+  Str(n, Result);
+end;
+
+procedure CheckKeyNonce(const key, nonce: AnsiString);
+begin
+  if Length(key) <> 32 then
+    raise EChaCha20Poly1305.Create('chacha20poly1305: the key must be 32 bytes, not ' +
+                                   LenName(Length(key)));
+  if Length(nonce) <> 12 then
+    raise EChaCha20Poly1305.Create('chacha20poly1305: the nonce must be 12 bytes, not ' +
+                                   LenName(Length(nonce)));
+end;
 
 function RotL32(x: LongWord; n: Integer): LongWord;
 begin
@@ -65,6 +93,7 @@ end;
 function ChaCha20BlockStr(const key: AnsiString; counter: LongWord; const nonce: AnsiString): AnsiString;
 var st, w: array[0..15] of LongWord; i: Integer;
 begin
+  CheckKeyNonce(key, nonce);   { every path to the key comes through here }
   st[0] := $61707865; st[1] := $3320646e; st[2] := $79622d32; st[3] := $6b206574;
   for i := 0 to 7 do st[4 + i] := Le32(key, 1 + i*4);
   st[12] := counter;
@@ -123,6 +152,9 @@ var
 const
   M26 = $3ffffff;
 begin
+  if Length(key) <> 32 then
+    raise EChaCha20Poly1305.Create('poly1305: the key must be 32 bytes, not ' +
+                                   LenName(Length(key)));
   t0 := Le32(key, 1); t1 := Le32(key, 5); t2 := Le32(key, 9); t3 := Le32(key, 13);
   { r, with the clamp folded into the masks }
   r0 :=  t0                         and $3ffffff;
@@ -257,11 +289,11 @@ var otk, ct, mac, tag, want: AnsiString; clen: Integer;
 begin
   plaintext := '';
   Result := False;
+  otk := Poly1305KeyGen(key, nonce);   { first: a bad key raises, whatever the input }
   if Length(ciphertextAndTag) < 16 then Exit;
   clen := Length(ciphertextAndTag) - 16;
   ct  := Copy(ciphertextAndTag, 1, clen);
   tag := Copy(ciphertextAndTag, clen + 1, 16);
-  otk := Poly1305KeyGen(key, nonce);
   mac := aad + Pad16(Length(aad)) + ct + Pad16(clen) +
          Le64(Length(aad)) + Le64(clen);
   want := Poly1305(otk, mac);

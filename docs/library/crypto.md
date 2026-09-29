@@ -10,7 +10,7 @@ need no external library:
 
 | Unit | What it does |
 | --- | --- |
-| [`aesgcm`](#encrypting-aesgcm-and-chacha20poly1305) | AES-128-GCM authenticated encryption |
+| [`aesgcm`](#encrypting-aesgcm-and-chacha20poly1305) | AES-GCM authenticated encryption (128, 192 and 256-bit keys) |
 | [`chacha20poly1305`](#encrypting-aesgcm-and-chacha20poly1305) | ChaCha20-Poly1305 authenticated encryption, and ChaCha20 and Poly1305 on their own |
 | [`x25519`](#agreeing-on-a-key-x25519) | X25519 key agreement |
 | [`ecdsa_p256`](#signing-ecdsa_p256) | ECDSA on P-256 with SHA-256: key generation, signing and verifying |
@@ -32,8 +32,9 @@ so. They are fine for checking signatures
 on files, for tests and for learning. Do not use them where an attacker can
 time many operations with your key, for instance to protect a server.
 
-**None of the functions checks the length of a key or a nonce, and a wrong
-length is not an error.** Measured with v451:
+**Up to and including pin v451, `aesgcm` and `chacha20poly1305` did not
+check the length of a key or a nonce, and a wrong length was not an
+error.** Measured with v451:
 
 - `aesgcm` is AES-128 only. Given a 32-byte key meant for AES-256,
   `AesGcmSeal` uses the first 16 bytes and encrypts with AES-128.
@@ -42,12 +43,16 @@ length is not an error.** Measured with v451:
 - An `iv` that is not 12 bytes gives output that is not AES-GCM.
 - `Chacha20Poly1305Seal` takes a key that is not 32 bytes.
 
-Pass exactly the lengths given below. For comparison, Python's
+After v451 all three are fixed (see "Fixed after pin v451" below). With
+v451 itself, pass exactly the lengths given below. For comparison, Python's
 `cryptography` treats a 32-byte AES key as AES-256, gives real AES-GCM for
 an `iv` of another length, and refuses a ChaCha20 key that is not 32 bytes.
 
 All byte strings (keys, nonces, messages, signatures) are `AnsiString`, one
-byte per character.
+byte per character. After v451, `aesgcm` and `chacha20poly1305` refuse a
+key or a nonce of a length they do not implement: they raise an exception
+(`EAesGcm`, `EChaCha20Poly1305`) instead of encrypting. The other units do
+not check lengths, so pass exactly the lengths given here.
 
 Each example was built with pin v451 (compiler sha256 `d9b7226769cc`)
 through `./pxx` on Linux x86-64 on 2026-09-29.
@@ -60,13 +65,16 @@ also covers extra data you pass unencrypted (`aad`, such as a header), so a
 change to either is caught.
 
 - `AesGcmSeal(key, iv, aad, plaintext)` and
-  `AesGcmOpen(key, iv, aad, sealed, plaintext)`: a 16-byte key and a
-  12-byte `iv`.
+  `AesGcmOpen(key, iv, aad, sealed, plaintext)`: a 16, 24 or 32-byte key
+  (AES-128, AES-192 or AES-256) and an `iv` of any length but 0; 12 bytes
+  is the usual length.
 - `Chacha20Poly1305Seal(key, nonce, aad, plaintext)` and
   `Chacha20Poly1305Open(key, nonce, aad, sealed, plaintext)`: a 32-byte key
   and a 12-byte nonce.
 
-Open returns `True` and sets `plaintext`, or returns `False`. Never use the
+Open returns `True` and sets `plaintext`, or returns `False` when the tag
+does not match. A key or nonce of the wrong length raises, on Open as on
+Seal. Never use the
 same key and nonce twice for two different messages.
 
 ```pascal
@@ -124,15 +132,15 @@ Python's `AESGCM(b"k" * 16).encrypt(b"n" * 12, b"attack at dawn", b"header v1")`
 and `ChaCha20Poly1305(b"K" * 32).encrypt(...)` give the same two hex
 strings. An empty message gives the same bare tag as Python too.
 
-Where it differs from Python's `cryptography`:
+Where it differs from Python's `cryptography`: an `iv` of 1 to 7 bytes, or
+more than 128, is accepted here, as GCM allows; Python refuses it.
 
-- **AES-128 only.** A 32-byte key does not give AES-256: `AesGcmSeal` uses
-  its first 16 bytes and says nothing. Python treats a 32-byte key as
-  AES-256, and the output differs.
-- **The `iv` must be 12 bytes.** An 8-byte `iv` gives output, with no
-  error, that is not what GCM gives for that `iv`.
-- **ChaCha20-Poly1305 takes a key of the wrong length**, 16 bytes for
-  instance, without an error. Python refuses it ("key must be 32 bytes").
+**Fixed after pin v451.** Up to and including v451, `aesgcm` was AES-128
+only and used the first 16 bytes of a longer key without a word, so asking
+for AES-256 gave AES-128. An `iv` that was not 12 bytes gave output that
+was not GCM. `chacha20poly1305` took a key of any length and read past the
+end of a short one. All three now match `cryptography`, refusals included
+(`test/lib_aead_key_and_iv_lengths`, on x86-64 and on the ESP32-C3 and S3).
 
 `ChaCha20(key, counter, nonce, data)` and `Poly1305(key, msg)` are the two
 halves on their own (RFC 8439), and `AesEncryptBlock(key, block)` encrypts
