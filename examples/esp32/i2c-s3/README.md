@@ -18,4 +18,8 @@ Build, flash and check the board's output, from the repository root:
 tools/esp_flash.sh --project examples/esp32/i2c-s3 --port /dev/ttyACM0
 ```
 
+## QEMU
+
+This example needs a board: an ESP32-S3 board; the full test also needs two jumper wires, GPIO17 to GPIO15 and GPIO18 to GPIO16. `build.sh` has no QEMU mode: Espressif's QEMU does not model the I2C controllers.
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

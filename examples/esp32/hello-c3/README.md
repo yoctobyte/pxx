@@ -58,6 +58,8 @@ Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espre
 The program then parks in a `vTaskDelay` loop (PXX's `app_main` has no
 returning epilogue yet), so the FreeRTOS idle task keeps the watchdog fed.
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu` printed the six `PXX hello from Pascal` lines, ending `PXX sum 1..5 = 15`, after about 4 minutes.
+
 ## Notes
 
 - Externals are hand-declared (`procedure esp_rom_printf(fmt: string;

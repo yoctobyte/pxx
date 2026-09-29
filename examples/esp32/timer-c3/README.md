@@ -25,6 +25,8 @@ aren't wired in the relocatable-object writer yet
 ./build.sh qemu-assert        # boot + ASSERT the expected sequence, non-interactive
 ```
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu-assert` ended with `OK   timer-c3 qemu acceptance -- 5 esp_timer callbacks, status=0` after about 3 minutes.
+
 ## Status: RUNS. Verified under QEMU 2026-08-30.
 
 This example was written 2026-07-11 and went unexecuted for seven weeks because

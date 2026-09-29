@@ -38,3 +38,7 @@ channel 6 and the server listened on port 80. An ESP32-S3 then joined
 `GET /` requests from 192.168.4.2.
 
 The image is 892,800 bytes, in the stock 1 MB app partition.
+
+## QEMU
+
+This example needs a board: an ESP32-C3 board, and a phone or laptop to join its Wi-Fi network. Espressif's QEMU has no Wi-Fi, and `build.sh` has no QEMU mode.

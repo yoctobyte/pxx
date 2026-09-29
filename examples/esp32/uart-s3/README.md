@@ -18,4 +18,8 @@ Build, flash and check the board's output, from the repository root:
 tools/esp_flash.sh --project examples/esp32/uart-s3 --port /dev/ttyACM0
 ```
 
+## QEMU
+
+This example needs a board: an ESP32-S3 board, nothing wired. `build.sh` has no QEMU mode.
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

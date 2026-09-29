@@ -33,6 +33,8 @@ period arrived with a stale pointer in its high half and the alarm was set some
 
 `make test-esp-idf` now guards both chips against a repeat.
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu-assert` ended with `OK   timer-s3 qemu acceptance -- 5 esp_timer callbacks on emulated XTENSA, status=0` after about 3 minutes.
+
 ## `./build.sh qemu-assert` — non-interactive, added 2026-08-30
 
 `build.sh qemu` hands you an interactive monitor and cannot assert; piping it

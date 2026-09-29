@@ -32,4 +32,6 @@ tools/esp_flash.sh --project examples/esp32/nilpy-c3 --port /dev/ttyACM0
 
 The expected serial output is `main/main.expected`.
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu-assert` ended with `OK   nilpy-c3 -- a static Python application runs on the esp32c3, output == main/main.expected, one boot` after about 4 minutes.
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

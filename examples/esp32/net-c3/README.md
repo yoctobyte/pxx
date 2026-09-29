@@ -47,6 +47,8 @@ sockaddr from `getsockname` / `recvfrom` here; tracked by
 `devdocs/progress/backlog/feature-pal-esp-lwip-sockaddr-readback.md`. They are not
 gated so the smoke reflects the proven plumbing.
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu` ended with `esp32c3 lwIP loopback socket smoke: PASS` after about 3 minutes.
+
 ## Notes
 
 - `esp32s3` (Xtensa): the PAL socket unit now compiles for Xtensa too (checked

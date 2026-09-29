@@ -64,3 +64,7 @@ full chain took 25.0 s. Each recompile made IDF's ldgen regenerate
 fragment files and the section tables of 17 IDF archives. None of those are
 our archive, and the output was byte-identical every time. Upload is mostly
 fixed cost: going from 921600 to 2000000 baud saves about 0.1 s.
+
+## QEMU
+
+This example needs a board: an ESP32-S3 devkit with its onboard WS2812 RGB LED. `build.sh` has no QEMU mode, and the result is a colour you look at.

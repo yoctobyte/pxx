@@ -27,3 +27,7 @@ procedure and what to check.
 This project also doubles as `tools/esp_flash.sh`'s S2 harness: it links whatever
 `.pas` the script is given, which is why its component `REQUIRES esp_timer lwip
 esp_netif` even though the hello itself uses none of them.
+
+## QEMU
+
+This example needs a board: an ESP32-S2 board. Espressif's QEMU has no ESP32-S2 machine.

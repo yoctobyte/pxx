@@ -23,4 +23,8 @@ Build, flash and check the board's output, from the repository root:
 tools/esp_flash.sh --project examples/esp32/nilpy-logger-s3 --port /dev/ttyACM0
 ```
 
+## QEMU
+
+This example needs a board: an ESP32-S3 board, and a phone or laptop to join its Wi-Fi network. Espressif's QEMU has no Wi-Fi, and the project ships no `main/main.expected`: `./build.sh qemu-assert` stops with `main/main.expected: No such file or directory`. Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive.
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

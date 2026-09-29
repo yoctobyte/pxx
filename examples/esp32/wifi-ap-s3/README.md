@@ -38,3 +38,7 @@ The image is 804 KB (1 MB app partition). `idf.py size-components` puts
 the Pascal archive at 51.6 KB of code plus 7.2 KB of read-only data, about 7%.
 The Wi-Fi stack (net80211, pp, phy, wpa_supplicant, mbedTLS) is about 340 KB of
 code, and lwIP is 89 KB.
+
+## QEMU
+
+This example needs a board: an ESP32-S3 board, and a phone or laptop to join its Wi-Fi network. Espressif's QEMU has no Wi-Fi, and `build.sh` has no QEMU mode.

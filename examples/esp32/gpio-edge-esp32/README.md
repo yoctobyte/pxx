@@ -95,3 +95,7 @@ otherwise.
 The owner's settled ESP scope is the **S3 and C3**. The classic ESP32 is **proven
 where run, not promised**, and this project is here for the diagnosis above as
 much as for the coverage.
+
+## QEMU
+
+This example needs a board: a classic ESP32 board. Under QEMU the program runs to `GPIO-EDGE-DONE` but sees no edges (`armed 0`, `isr 0`), so `./build.sh qemu-assert` reports FAIL: QEMU models no GPIO input. Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive.

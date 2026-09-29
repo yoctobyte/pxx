@@ -18,4 +18,8 @@ Build, flash and check the board's output, from the repository root:
 tools/esp_flash.sh --project examples/esp32/pwm-s3 --port /dev/ttyACM0
 ```
 
+## QEMU
+
+This example needs a board: an ESP32-S3 board, nothing wired. `build.sh` has no QEMU mode: Espressif's QEMU models no GPIO input, so the chip cannot read its own pin back.
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

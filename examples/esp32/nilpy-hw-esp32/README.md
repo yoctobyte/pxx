@@ -43,6 +43,8 @@ done True
 Nothing in that oracle is chip-specific, which is why one `main.expected` serves
 all three.
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu-assert` ended with `OK   nilpy-hw-esp32 -- a static Python application runs on the esp32, output == main/main.expected, one boot` after about 7 minutes.
+
 ## IT DOES NOT RUN ON LX6 SILICON YET, and this folder is the reproducer
 
 **Status on the classic ESP32, measured 2026-09-28 with compiler `b2b325036c3b`:

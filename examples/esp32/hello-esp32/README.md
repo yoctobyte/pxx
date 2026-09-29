@@ -77,3 +77,7 @@ the axes that differ between LX6 and LX7 and are therefore where to look:
 - **Config rather than ISA.** A `LoadStoreError` or an alignment fault is more
   likely a memory-map or cache-config difference than a bad opcode.
 - **Dual core.** `SocCoreCount` answers 2 for this part, as for the S3.
+
+## QEMU
+
+This example needs a board: a classic ESP32 board. `build.sh` has no QEMU mode. For a classic ESP32 under QEMU, see `timer-esp32` or `nilpy-esp32`.

@@ -111,3 +111,7 @@ the loopback path never leaves the peripheral.
 The owner's settled ESP scope is the **S3 and C3**. The classic ESP32 is
 **proven where run, not promised**; the chip each result was witnessed on is
 recorded in the docs rather than implied.
+
+## QEMU
+
+This example needs a board: a classic ESP32 board, nothing wired. `build.sh` has no QEMU mode.

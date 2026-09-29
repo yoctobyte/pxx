@@ -20,4 +20,8 @@ tools/esp_flash.sh --project examples/esp32/adc-c3 --port /dev/ttyACM0
 
 The expected serial output is `main/main.expected`.
 
+## QEMU
+
+This example needs a board: an ESP32-C3 board, nothing wired. Its `./build.sh qemu-assert` builds and boots, but the program prints nothing under QEMU: Espressif's QEMU does not model the ADC. Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive.
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

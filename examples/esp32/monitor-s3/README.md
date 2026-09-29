@@ -18,4 +18,8 @@ Build, flash and check the board's output, from the repository root:
 tools/esp_flash.sh --project examples/esp32/monitor-s3 --port /dev/ttyACM0
 ```
 
+## QEMU
+
+This example needs a board: an ESP32-S3 devkit (it reads the ADC and counts presses of the BOOT button). The project ships no `main/main.expected`, so `./build.sh qemu-assert` stops with `main/main.expected: No such file or directory` after the build. Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive.
+
 See [ESP32 / Microcontrollers](../../../docs/targets/esp32.md) for how far each chip is proven.

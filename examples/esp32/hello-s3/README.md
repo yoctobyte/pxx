@@ -52,3 +52,5 @@ Re-checked 2026-09-28 with pin v450 (compiler sha256 `c19cc2d531e4`) under Espre
 The program then blinks GPIO 2 and parks through `vTaskDelay`, so FreeRTOS
 idle continues to run. GPIO 2 is only a simple smoke default; use the board's
 actual LED GPIO for hardware demos if needed.
+
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu` printed the six `PXX hello from Pascal S3` lines, ending `PXX S3 sum 1..5 = 15`, after about 2 minutes.

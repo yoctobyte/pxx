@@ -103,6 +103,8 @@ identical:
   because the `EAI_*` mapping is the one place this binding could be *silently*
   wrong, and this is where that becomes visible on a device that has a network.
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu` ended with `esp32c3 lwIP resolver smoke: PASS` after about 4 minutes.
+
 ### The `EAI_*` trap, and why `nx-rc=2` is the interesting line
 
 **lwIP's `getaddrinfo` error codes are positive 200–204; glibc's are negative

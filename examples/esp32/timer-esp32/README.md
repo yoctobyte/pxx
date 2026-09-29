@@ -41,6 +41,8 @@ its low word sent `esp_timer_start_periodic` a period with a stale pointer in
 its high half, setting the alarm some 145,000 years out
 (`devdocs/progress/done/bug-esp-timer-callback-never-dispatched.md`).
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu-assert` ended with `OK   timer-esp32 qemu acceptance -- 5 esp_timer callbacks on an emulated LX6, status=0` after about 4 minutes.
+
 ## What differs from `timer-s3`, and why
 
 Only the build script, and only in three places:

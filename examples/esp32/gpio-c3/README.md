@@ -39,6 +39,8 @@ edges are a consequence of that, not a separate gap — and no amount of
 cleverness with edge types, ISR flags or pin choice will work around it, which
 is precisely what you would otherwise spend a day discovering.
 
+Checked on 2026-09-29 with v451 (compiler sha256 `d9b7226769cc`) from the release archive, under Espressif's QEMU, not on a board: `./build.sh qemu-assert` ended with `OK   gpio-c3 probe -- QEMU GPIO input path still unmodelled (expected)` after about 4 minutes.
+
 ## Consequence for slice 2
 
 The GPIO callback API cannot be accepted here. Writing it would mean shipping
