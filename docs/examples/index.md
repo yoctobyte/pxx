@@ -740,25 +740,28 @@ printed `hello`. Configuring BusyBox's tree needs GCC on the host; the build
 after that does not. The other libraries in the table have no archive route
 yet: use a checkout.
 
-Every row was re-run on 2026-09-27 with **pin v441** (commit `5c1696ca79`,
-compiler sha256 `4ebfa2d047a2…`), the beta 0.1 release, at checkout
-`ab1960b987`, and every row gave the same result as with the draft pin v425
-(commit `4fbf33f69`, sha256 `426b2fbf3f08…`) on 2026-09-25. Each row says how
-it was checked: against the recipe's expected output, against the same driver
-program built by GCC and linked with glibc, or both. The binary sizes are for
-builds without `-g`, with v441; where a size rounds differently from v425's,
-both are given.
+Every row was re-run on 2026-09-29 with **pin v450** (compiler sha256
+`c19cc2d531e4…`), from the v0.1.0-beta.1 release archive, with the library
+sources taken from a checkout's `library_candidates/`. Every row gave the same
+result as with pin v441 (commit `5c1696ca79`, sha256 `4ebfa2d047a2…`) on
+2026-09-27. Each row says how it was checked: against the recipe's expected
+output, against the same driver program built by GCC and linked with glibc, or
+both. The binary sizes are for builds without `-g`, with v450, and a KB is
+1,024 bytes and an MB 1,024 KB. The page used to give two sizes in units of
+1,000, 171 KB for the BusyBox unity build and 4.9 MB for QuickJS; those two
+binaries did not shrink. The BusyBox rows ran in the archive without
+`--pinned`, because there `compiler/pascal26` is the v450 compiler.
 
 | Program | Version | How it was checked | Binary |
 | --- | --- | --- | --- |
-| **BusyBox**, unity build | 1.36.1 | `tools/busybox_diff.sh --pinned --targets x86_64`: applets `cat` and `echo` as one translation unit; output byte-identical to a GCC build over 29 cases | 171 KB |
+| **BusyBox**, unity build | 1.36.1 | `tools/busybox_diff.sh --pinned --targets x86_64`: applets `cat` and `echo` as one translation unit; output byte-identical to a GCC build over 29 cases | 167 KB |
 | **BusyBox**, linked by PXX itself | same | `tools/busybox_diff.sh --pinned --pxx-link --targets x86_64 --applets "cat echo ls wc sort ash"`: 55 objects linked by `pascal26 --link` with no external linker; no `PT_INTERP`; byte-identical to GCC over 82 cases | 20 MB |
 | **SQLite** | 3.46.0 | amalgamation plus a ten-line `sqlite3_exec` driver; the SQL session below | 3.2 MB |
 | **zlib** | 1.3.1 | zlib's own `test/example.c`: output byte-identical to the same program built by GCC | 717 KB |
-| **Lua** | 5.4.7 | the six `test/lua/*.lua` programs: all match the expected output, and all six outputs are byte-identical to the GCC build; the stock `lua.c` interpreter also builds and runs | 984 KB (v425: 968 KB) |
+| **Lua** | 5.4.7 | the six `test/lua/*.lua` programs: all match the expected output, and all six outputs are byte-identical to the GCC build; the stock `lua.c` interpreter also builds and runs | 984 KB |
 | **cJSON** | 1.7.18 | the five `test/cjson/*.json` documents round-trip: all match the expected output and the GCC build | 149 KB |
 | **Duktape** | 2.7.0 | a JavaScript engine: `test/duktape/duk_smoke.c` runs a curated script, exits 42, and prints 29 lines byte-identical to the expected output and to the GCC build | 1.4 MB |
-| **QuickJS** (quickjs-ng) | 0.9.0 | `./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/quickjs test/quickjs/runner.c qjs` (about 11 s), then `./qjs "$(cat test/quickjs/smoke.js)"`: output byte-identical to `test/quickjs/smoke.expected`. | 4.9 MB |
+| **QuickJS** (quickjs-ng) | 0.9.0 | `./pxx -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/quickjs test/quickjs/runner.c qjs` (about 11 s), then `./qjs "$(cat test/quickjs/smoke.js)"`: output byte-identical to `test/quickjs/smoke.expected`. | 4.7 MB |
 | **tcc**, the Tiny C Compiler | mob `a338258d` | from the repository root, `./pxx -Ilibrary_candidates/tcc library_candidates/tcc/tcc.c tcc`. That tcc compiles a C program into the same executable, byte for byte, as a GCC-built tcc does, and compiles `tcc.c` into a tcc byte-identical to the one the GCC-built tcc produces, which then reproduces itself. It uses tcc's own build tree for `config.h` and `libtcc1.a`. Unlike the other rows it links glibc's `libc.so.6` dynamically. `tcc -run` needs a different build; see [Status](../reference/status.md) | 1.8 MB |
 | **tiny-regex-c** | `f2632c6d` | its own three test programs, each built together with `re.c`: `test1` passes 76 of 76, and all three print the same as the GCC build. `test1` counts its test table with `sizeof a / sizeof *a`, which v424 got wrong | 102 KB (`test1`) |
 | **ENet**, reliable UDP networking | 1.3.18 | its eight Unix `.c` files (all but `win32.c`) built as one unit with a 50-line driver in which a server and a client, in one process, connect over `127.0.0.1` and send one reliable packet each way: `result: connected=1 server=1 client=1`, output identical to the GCC build | 196 KB |
@@ -786,9 +789,9 @@ Here `driver.c` is `#include "sqlite3.c"` plus a `main` that opens `:memory:`
 and passes its argument to `sqlite3_exec`. `-DSQLITE_THREADSAFE=0` builds SQLite
 without its own locking, which a single-threaded program does not need. Without
 it, SQLite's mutexes use `<pthread.h>` and the compiler asks for
-`--threadsafe`. A `--threadsafe` build needs a checkout at or after `3f28aafab`:
-with the C runtime of v425's own checkout it hangs in `sqlite3_open` (see
-[Known issues](../reference/known-issues.md)).
+`--threadsafe`. With v450, a `--threadsafe` build of the same driver, without
+`-DSQLITE_THREADSAFE=0`, prints the same session, and is 3.3 MB. The draft pin
+v425 hung in `sqlite3_open` there; the C runtime fix is `3f28aafab`.
 
 zlib's own test program gives the same output as the GCC build, byte for byte:
 
