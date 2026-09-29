@@ -20,7 +20,7 @@ details, the measurements and the workarounds.
 
 **Silently wrong: compiles, and gives a wrong answer with no message**
 
-- Pascal: `SetLength` past a `ShortString` or `string[N]`'s capacity, then filling it, writes over neighbouring variables and can crash: [row](#pascal-setlength-past-a-short-strings-capacity-overruns-it)
+- Pascal: `SetLength` past a `ShortString` or `string[N]`'s capacity, then filling it, writes over neighbouring variables and can crash (v441 to v451; fixed after v451): [row](#pascal-setlength-past-a-short-strings-capacity-overruns-it)
 - C `long double` is 8 bytes, not GCC's 16: [row](#c-long-double-is-8-bytes)
 - riscv32 and Xtensa (the ESP32 CPUs) flush subnormal doubles to zero: [row](#riscv32-and-xtensa-arithmetic-flushes-subnormal-doubles-to-zero)
 - Nil Python: arithmetic on `None`, or a string minus a large integer, gives a number instead of `TypeError`: [Nil Python](#nil-python)
@@ -105,9 +105,15 @@ too. It is listed because the result is memory corruption.
 `if n > High(t) then n := High(t);`. `High` of a `string[10]` is 10, and of
 a `ShortString` 255, with v451 as with FPC.
 
-A fix is in progress after v451. The first attempt (`5ebf185c24`) clamps
-only in some programs: on the compiler built from it (`553677b94940`), the
-example above still crashes.
+Wrong in v441 to v451. Fixed after v451 (`5ebf185c24` and `e04f41f9d7`, in
+no pin yet): `SetLength` stops at the capacity. On the compiler built at
+`e04f41f9d7` (`a91df2b3a1a8`) the program above prints `var 10 777`, and a
+count of 50 held in a variable gives 10 for a `string[10]`, 8 for a
+`string[8]` record field and 6 for an element of an array of `string[6]`,
+each with its neighbour unchanged; a `ShortString` set to 1000, or through
+a pointer to 300, gives 255, as in FPC. Two answers differ from FPC on
+purpose: a `string[N]` stops at N where FPC overruns it, and a negative
+count gives 0 where FPC gives the count's low byte (251 for -5).
 
 ### C: `long double` is 8 bytes
 
