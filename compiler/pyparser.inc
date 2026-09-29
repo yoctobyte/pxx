@@ -38379,33 +38379,40 @@ function PyDefUsedAsValueByScan(const nm: AnsiString): Boolean;
   table is checked against under -dPXX_DVAL_CROSSCHECK. It walks [0,
   MainProgramTokCount) per call; see PyDefUsedAsValue for why that is the cost
   being removed. }
-var j: Integer;
+var j, r, lo, hi: Integer;
     atStmtStart, inImport: Boolean;
 begin
   Result := False;
-  j := 0;
-  atStmtStart := True;
-  inImport := False;
-  while j < MainProgramTokCount do
+  { PYTHON ranges only -- see PyBuildDValTable }
+  r := 0;
+  while PyPyRangeAt(r, lo, hi) do
   begin
-    if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+    if hi > MainProgramTokCount then hi := MainProgramTokCount;
+    j := lo;
+    atStmtStart := True;
+    inImport := False;
+    while j < hi do
     begin
-      atStmtStart := True;
-      inImport := False;
-    end
-    else if atStmtStart then
-    begin
-      inImport := (Tokens[j].Kind = tkUses) or
-                  ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
-      atStmtStart := False;
-    end;
-    if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, nm) then
-      case PyDValKindAt(j, inImport) of
-        1: begin Result := True; Exit; end;
-        2: if PyDValDotQualifies(j, nm) then
-           begin Result := True; Exit; end;
+      if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+      begin
+        atStmtStart := True;
+        inImport := False;
+      end
+      else if atStmtStart then
+      begin
+        inImport := (Tokens[j].Kind = tkUses) or
+                    ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
+        atStmtStart := False;
       end;
-    Inc(j);
+      if (Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, nm) then
+        case PyDValKindAt(j, inImport) of
+          1: begin Result := True; Exit; end;
+          2: if PyDValDotQualifies(j, nm) then
+             begin Result := True; Exit; end;
+        end;
+      Inc(j);
+    end;
+    Inc(r);
   end;
 end;
 
@@ -38416,46 +38423,61 @@ procedure PyBuildDValTable;
 
   Rebuilt when MainProgramTokCount moves -- which is once per import, never per
   definition -- exactly as PyBuildEnclTable keys on TokCount. }
-var j, k: Integer;
+var j, k, r, lo, hi: Integer;
     atStmtStart, inImport: Boolean;
 begin
   PyDValN := 0; PyDValOverflow := False;
-  j := 0;
-  atStmtStart := True;
-  inImport := False;
-  while j < MainProgramTokCount do
+  { PYTHON ranges only. In an imported module MainProgramTokCount is the end of
+    THAT module, so [0, MainProgramTokCount) also held every Pascal unit lexed
+    before it -- pylib, the RTL -- and a bare Pascal identifier there, matched
+    case-insensitively, made a module def "used as a value": `def flen` met
+    pylib's `FLen: Integer` and every param and the result became Variants
+    (61081 candidates for a four-line module). A Variant `line: str` then met
+    Length(), which read its tag. For the main program range 0 IS the old
+    range, so nothing changes there.
+    bug-n-a-module-def-is-used-as-a-value-because-pylib-names-it }
+  r := 0;
+  while PyPyRangeAt(r, lo, hi) and not PyDValOverflow do
   begin
-    if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+    if hi > MainProgramTokCount then hi := MainProgramTokCount;
+    j := lo;
+    atStmtStart := True;
+    inImport := False;
+    while j < hi do
     begin
-      atStmtStart := True;
-      inImport := False;
-    end
-    else if atStmtStart then
-    begin
-      inImport := (Tokens[j].Kind = tkUses) or
-                  ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
-      atStmtStart := False;
-    end;
-    k := PyDValKindAt(j, inImport);
-    if k <> 0 then
-    begin
-      if PyDValN >= PY_DVAL_MAX then
+      if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
       begin
-        PyDValOverflow := True;
-        Break;
+        atStmtStart := True;
+        inImport := False;
+      end
+      else if atStmtStart then
+      begin
+        inImport := (Tokens[j].Kind = tkUses) or
+                    ((Tokens[j].Kind = tkIdent) and TokenCaseEqual(j, 'from'));
+        atStmtStart := False;
       end;
-      PyDValTok[PyDValN] := j;
+      k := PyDValKindAt(j, inImport);
+      if k <> 0 then
+      begin
+        if PyDValN >= PY_DVAL_MAX then
+        begin
+          PyDValOverflow := True;
+          Break;
+        end;
+        PyDValTok[PyDValN] := j;
 {$IFDEF PXX_DVAL_BREAK}
-      PyDValKind[PyDValN] := 0;   { POSITIVE CONTROL: deliberately wrong, so a
-                                    crosscheck run that reports ZERO
-                                    disagreements is proof of a dead
-                                    instrument rather than of a correct table }
+        PyDValKind[PyDValN] := 0;   { POSITIVE CONTROL: deliberately wrong, so a
+                                      crosscheck run that reports ZERO
+                                      disagreements is proof of a dead
+                                      instrument rather than of a correct table }
 {$ELSE}
-      PyDValKind[PyDValN] := k;
+        PyDValKind[PyDValN] := k;
 {$ENDIF}
-      Inc(PyDValN);
+        Inc(PyDValN);
+      end;
+      Inc(j);
     end;
-    Inc(j);
+    Inc(r);
   end;
   PyDValBuilt := MainProgramTokCount;
 end;

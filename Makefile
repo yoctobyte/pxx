@@ -3728,6 +3728,17 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/lenvar_npy_x64 | diff -u test/test_nilpy_length_of_a_variant_measures_its_string.expected -
 	./$(COMPILER) test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_x64
 	$(TESTTMP)/lenvar_pas_x64 | diff -u test/test_length_of_a_variant.expected -
+	# a def in an imported module keeps its annotations: the used-as-a-value scan
+	# reached into pylib and made every param a Variant. Same module as main and
+	# imported, one .expected; then the scan's own count, which the output alone
+	# cannot see once Length(Variant) is right (61142 candidates before).
+	./$(COMPILER) test/nilpy_module_typed_def_mod.py $(TESTTMP)/modtyped_main_x64
+	$(TESTTMP)/modtyped_main_x64 | diff -u test/test_nilpy_a_module_def_keeps_its_annotations.expected -
+	./$(COMPILER) test/test_nilpy_a_module_def_keeps_its_annotations.npy $(TESTTMP)/modtyped_imp_x64
+	$(TESTTMP)/modtyped_imp_x64 | diff -u test/test_nilpy_a_module_def_keeps_its_annotations.expected -
+	@c=$$(PXXDBG=n.dval ./$(COMPILER) test/test_nilpy_a_module_def_keeps_its_annotations.npy $(TESTTMP)/modtyped_dval 2>&1 | sed -n 's/.*PXXDBG n\.dval .* cands=//p' | sort -n | tail -1); \
+	  if [ -z "$$c" ]; then echo "FAIL: nilpy_module_typed_def: PXXDBG=n.dval printed nothing -- the instrument is gone"; exit 1; fi; \
+	  if [ "$$c" -gt 1000 ]; then echo "FAIL: nilpy_module_typed_def: $$c used-as-a-value candidates for a 30-line module -- the scan reaches Pascal units again"; exit 1; fi
 	@# The None ARM of a conditional expression must survive the def's inferred
 	@# RETURN TYPE. PyInferExprType had no arm for the None literal, so it
 	@# answered tyUnknown — the join's IDENTITY ELEMENT — and the other arm stood
@@ -29961,6 +29972,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_length_of_a_variant_measures_its_string "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_npy_i386)" "$$(cat test/test_nilpy_length_of_a_variant_measures_its_string.expected)"
 	./$(COMPILER) --target=i386 test/test_length_of_a_variant.pas $(TESTTMP)/lenvar_pas_i386
 	tools/expect_same.sh i386/test_length_of_a_variant "$$(tools/run_target.sh i386 $(TESTTMP)/lenvar_pas_i386)" "$$(cat test/test_length_of_a_variant.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_a_module_def_keeps_its_annotations.npy $(TESTTMP)/modtyped_imp_i386
+	tools/expect_same.sh i386/test_nilpy_a_module_def_keeps_its_annotations "$$(tools/run_target.sh i386 $(TESTTMP)/modtyped_imp_i386)" "$$(cat test/test_nilpy_a_module_def_keeps_its_annotations.expected)"
 	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_nilpy_a_sort_that_raises_releases_its_scratch.npy $(TESTTMP)/sortraise_i386
 	tools/assert_no_leak.sh i386/nilpy_sort_raises_releases 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386
 	@if tools/assert_no_leak.sh i386/nilpy_sort_raises_control 200 tools/run_target.sh i386 $(TESTTMP)/sortraise_i386 keep >/dev/null 2>&1; then \
