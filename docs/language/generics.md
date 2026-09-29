@@ -59,11 +59,22 @@ useful when a unit uses one generic routine on several types and would otherwise
 carry an identifier per (routine, type) pair:
 
 ```pascal
+generic procedure Swap<T>(var A, B: T);
+var Tmp: T;
 begin
-  WriteLn(specialize Max<Integer>(3, 9));   { expression position }
+  Tmp := A; A := B; B := Tmp;
+end;
+
+var S1, S2: string;
+begin
+  S1 := 'left'; S2 := 'right';
+  WriteLn(specialize Max<Integer>(3, 9));   { expression position: 9 }
   specialize Swap<string>(S1, S2);          { statement position  }
+  WriteLn(S1, ' ', S2);                     { right left }
 end.
 ```
+
+With the `Max` declaration above it, this is a whole program.
 
 The two spellings produce one specialization per (routine, type) pair, and can
 be mixed freely in the same program.

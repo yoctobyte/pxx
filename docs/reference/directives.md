@@ -142,7 +142,7 @@ Each takes `ON` / `OFF` and has a matching command-line flag — see
 | --- | --- | --- | --- |
 | `{$STRICT ON\|OFF}` | FPC-parity strictness umbrella (routine visibility). | Off | `--strict` |
 | `{$STRICT_OVERLOAD ON\|OFF}` | Require explicit `overload;`. | Off | `--strict-overload` |
-| `{$STRICT_OPERATOR ON\|OFF}` | Reject `=` / `<>` on class operands. | Off | `--strict-operator` |
+| `{$STRICT_OPERATOR ON\|OFF}` | Reject an `operator =` / `operator <>` overload for a class type; comparing two class variables with `=` is allowed either way. | Off | `--strict-operator` |
 | `{$STRICT_CASE ON\|OFF}` | Inverted-range / duplicate `case`-label diagnostics. | Off | `--strict-case` |
 | `{$STRICT_VISIBILITY ON\|OFF}` | Enforce member visibility. | Off | `--strict-visibility` |
 | `{$STRICT_FPC ON\|OFF}` | FPC-parity umbrella: case + operator + visibility + require-forward (not overload), plus two semantic rules — FPC shift widths and `Variant`→`Char`. | Off | `--strict-fpc` |
