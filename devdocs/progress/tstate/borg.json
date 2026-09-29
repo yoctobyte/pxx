@@ -17628,6 +17628,7 @@
     "ce1337e3184d224760fd5741428fc33c2c1bfbb5",
     "8356b05c2aed0d6481e72d8f4798582105501eba"
    ],
+   "range_non_causal": false,
    "src": "test/c_obj_data_import.c test/c_obj_data_export.c +3",
    "status": "fail"
   },
@@ -17654,6 +17655,7 @@
     "ce1337e3184d224760fd5741428fc33c2c1bfbb5",
     "8356b05c2aed0d6481e72d8f4798582105501eba"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_html_tempfile.npy tools/expect_same.sh",
    "status": "fail"
   }
