@@ -11859,9 +11859,18 @@ function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
   like the fast one was the slow one (bug-nilpy-str-repeat-is-quadratic).
   Found by a scaling curve -- every small case was fine and the failure read as
   a hang, not a wrong answer. }
+{ Filled by DOUBLING block copies through the raw handle, not per character.
+  `Result[k] := s[j]` is an indexed store into a managed string, and each one
+  paid the copy-on-write check and an ASCII-flag reset -- measured on i386,
+  `"x" * 2000` cost ~750k instructions, ten times the equivalent concat. The
+  raw writes are sound because SetLength has just handed back a block this
+  routine owns alone. The first copy scans (PXXBlockCopy's OR) and the answer
+  is stamped: every later copy repeats those bytes, so it holds for the whole
+  result, and without it `len()` of the result rescanned all of it -- half
+  the remaining cost of `"x" * 2000` once the fill was fixed. }
 var
-  i, k, m, total: Int64;
-  j: Int64;
+  k, c, m, total, orAll: Int64;
+  d: Pointer;
 begin
   Result := '';
   m := Length(s);
@@ -11873,13 +11882,17 @@ begin
     raise OverflowError.Create('repeated string is too long');
   total := m * n;
   SetLength(Result, total);
-  k := 1;
-  for i := 1 to n do
-    for j := 1 to m do
-    begin
-      Result[k] := s[j];
-      k := k + 1;
-    end;
+  d := Pointer(Result);
+  orAll := PXXBlockCopy(Int64(d), Int64(Pointer(s)), m);
+  k := m;
+  while k < total do
+  begin
+    c := k;                              { [0, k) is filled; copy it forward }
+    if c > total - k then c := total - k;
+    PXXMemMove(Pointer(Int64(d) + k), d, c);
+    k := k + c;
+  end;
+  PXXStrSetAscii(d, orAll = 0);
 end;
 
 function pystr_to_int(const s: AnsiString): Int64;

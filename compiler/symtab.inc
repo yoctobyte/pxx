@@ -16688,7 +16688,9 @@ end;
   x86-64 keeps `rep stosb` inline (the hardware memset), which is the same
   guarantee produced by the same owner, not a second implementation of it. }
 procedure EmitZeroFrameSlot(frameOff, nBytes: Integer);
-var helperPi: Integer;
+const
+  ZERO_FRAME_INLINE_MAX = 32;   { bytes; see the inline arm below }
+var helperPi, q: Integer;
 begin
   { wasm32 owns this guarantee elsewhere, and the arm is a NO-OP rather than
     an omission — which is the whole reason it is spelled out. Two facts make
@@ -16764,6 +16766,53 @@ begin
     EmitB($48); EmitB($31); EmitB($C0);                      { xor rax, rax }
     EmitB($48); EmitB($C7); EmitB($C1); EmitI32(nBytes);     { mov rcx, nBytes }
     EmitB($F3); EmitB($AA);                                  { rep stosb }
+    Exit;
+  end;
+
+  { A SMALL aggregate on a 32-bit target is stored inline, word by word. The
+    case this is for is the 16-byte variant slot: a NilPy method has one per
+    variant temp, all zeroed in the prologue, and the call it used to cost ran
+    a counted loop that did more work than the four stores it performed --
+    measured on i386, FrameBuffer._set_mvlsb made 44 PXXMemZero calls per
+    pixel at ~306 instructions each. The same scratch registers as the
+    pointer-sized arm above; a misaligned or larger extent keeps the call. }
+  if (nBytes <= ZERO_FRAME_INLINE_MAX) and ((nBytes and 3) = 0) and
+     ((frameOff and 3) = 0) and
+     ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+      (TargetArch = TARGET_RISCV32)) then
+  begin
+    if TargetArch = TARGET_I386 then
+    begin
+      q := 0;
+      while q < nBytes do
+      begin
+        EmitB($C7); EmitB($85); EmitI32(frameOff + q); EmitI32(0);  { mov dword [ebp+off+q], 0 }
+        q := q + 4;
+      end;
+    end
+    else if TargetArch = TARGET_ARM32 then
+    begin
+      EmitLoadImmArm32(9, frameOff);
+      EmitI32($E08B9009);                        { add r9, fp, r9 }
+      EmitI32($E3A00000);                        { mov r0, #0 }
+      q := 0;
+      while q < nBytes do
+      begin
+        EmitI32($E5890000 or q);                 { str r0, [r9, #q] }
+        q := q + 4;
+      end;
+    end
+    else
+    begin
+      EmitLoadImmRISCV32(reg_t0, frameOff);
+      rv32_add(reg_t0, reg_s0, reg_t0);
+      q := 0;
+      while q < nBytes do
+      begin
+        rv32_sw(reg_zero, reg_t0, q);            { sw zero, q(t0) }
+        q := q + 4;
+      end;
+    end;
     Exit;
   end;
 

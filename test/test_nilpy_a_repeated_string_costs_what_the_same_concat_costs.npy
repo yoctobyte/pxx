@@ -1,0 +1,65 @@
+# `s * n` must cost the heap what the same string built by `+` costs. It cost
+# twice that on every target without an inline SetLength (i386, arm32, rv32,
+# xtensa): pystr_repeat starts from '', a NilPy '' is a real block rather than
+# nil, and PXXStrSetLen took "an existing string growing" for an append loop
+# and doubled the first sizing. On i386 before the fix, 50 kept `"x" * 1000`
+# held 103696 bytes where 50 kept concats held about 52000.
+#
+# Each row keeps K results of one spelling and reads how far gc.mem_alloc
+# grew. `same` is True when the two spellings are within a quarter of each
+# other (a doubling is not; first-fit reuse can differ by a word). `floor` is
+# True when each spelling grew by at least K times the string's length: it
+# guards the READOUT, which drifted low -- PXXAlloc counted a reused block
+# at the size asked rather than the size PXXFree later subtracts, so after
+# the rep phase freed its blocks the concat phase read 27440 bytes for 50000
+# bytes of strings, and the short rows read 0.
+#
+# The second block checks repeat's VALUES, because the fill changed with the
+# fix (block copies instead of per-character stores) and the result now
+# carries a stamped ASCII answer: `len` and indexing on a non-ASCII repeat
+# count code points only if that stamp is right.
+import gc
+
+K = 50
+
+
+def grow(f):
+    keep = [f(0)]
+    m0 = gc.mem_alloc()
+    for i in range(K):
+        keep.append(f(i))
+    return gc.mem_alloc() - m0
+
+
+def rep_x(i):
+    return "x" * 1000
+
+
+def cat_x(i):
+    h = "x" * 500
+    return h + h
+
+
+def rep_ab(i):
+    return "ab" * 20
+
+
+def cat_ab(i):
+    h = "ab" * 10
+    return h + h
+
+
+for name, a, b, size in [("x1000", rep_x, cat_x, 1000), ("ab20", rep_ab, cat_ab, 40)]:
+    dr = grow(a)
+    dc = grow(b)
+    print(name, "same", dr * 4 < dc * 5 and dc * 4 < dr * 5,
+          "floor", dr >= K * size and dc >= K * size)
+
+print("abc" * 5)
+print(repr("ab" * 1), repr("ab" * 0), repr("ab" * -3), repr("" * 9))
+e = "é" * 3
+print(len(e), e[1] == "é", e == "ééé")
+m = "aé" * 4
+print(len(m), m[3], m[-1] == "é", m.upper() == "AÉ" * 4)
+k = "x" * 1000
+print(len(k), k[999], k.count("x"), k.isascii())

@@ -630,6 +630,17 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_agg_drain_released 200 $(TESTTMP)/test_nilpy_aggdrain26
 	@if tools/assert_no_leak.sh nilpy_agg_drain_control 200 $(TESTTMP)/test_nilpy_aggdrain26 keep >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_agg_drain control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# `s * n` costs the heap what the same concat costs (it was double on every
+	# target without an inline SetLength), and gc.mem_alloc reads kept strings
+	# at their size (a reused larger block was counted at the size asked, so
+	# the readout drifted low, to 0). i386/arm32/rv32 are the targets the
+	# doubling lived on; the host row covers the readout.
+	./$(COMPILER) test/test_nilpy_a_repeated_string_costs_what_the_same_concat_costs.npy $(TESTTMP)/test_nilpy_strrepcost26
+	$(TESTTMP)/test_nilpy_strrepcost26 | diff -u test/test_nilpy_a_repeated_string_costs_what_the_same_concat_costs.expected -
+	./$(COMPILER) --target=i386 test/test_nilpy_a_repeated_string_costs_what_the_same_concat_costs.npy $(TESTTMP)/test_nilpy_strrepcost_i386
+	./$(COMPILER) --target=arm32 test/test_nilpy_a_repeated_string_costs_what_the_same_concat_costs.npy $(TESTTMP)/test_nilpy_strrepcost_arm32
+	./$(COMPILER) --target=riscv32 test/test_nilpy_a_repeated_string_costs_what_the_same_concat_costs.npy $(TESTTMP)/test_nilpy_strrepcost_rv32
+	@for t in i386:i386 arm32:arm32 riscv32:rv32; do tools/run_target.sh $${t%%:*} $(TESTTMP)/test_nilpy_strrepcost_$${t##*:} | diff -u test/test_nilpy_a_repeated_string_costs_what_the_same_concat_costs.expected - || { echo "FAIL: nilpy str repeat cost on $${t%%:*}"; exit 1; }; done
 	# list.clear() and dict.clear() release the elements they drop (both only
 	# zeroed the length, so the elements were orphaned once the container went
 	# away: pin v441 leaves ~75,000 live here). `keep` is the positive control.
