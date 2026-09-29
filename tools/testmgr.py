@@ -1539,6 +1539,15 @@ def sample_sessions(sids):
 COMPILE_RE = re.compile(
     r"^\.?/?(?:" + re.escape(COMPILER)
     + r"|stable_[A-Za-z0-9_]+/[A-Za-z0-9_.-]+/(?:pinned|latest))\b")
+# A shell script HANDED the compiler (`sh test/x.sh ./compiler/pascal26 /tmp`) is
+# a self-contained test that compiles inside the script, so COMPILE_RE cannot
+# see it. split_jobs treats one as a job of its own, and never as part of a
+# target's setup prologue. Four of them opened test-nilpy and so WERE its
+# prologue -- test-nilpy#00, on which all 1119 other jobs depended -- and at
+# full-tier load that job ran past its 90 s budget and took the whole target
+# down as "not run" (seven, at 688fa4b898). test-core#00 had two the same way.
+SCRIPT_TEST_RE = re.compile(
+    r"^(?:sh|bash)\s+\S+\.sh\s+\.?/?" + re.escape(COMPILER) + r"\b")
 # corpus trees under library_candidates/ are gitignored scratch; a box that
 # hasn't fetched them must SKIP the jobs that reference them, not fail them
 #
@@ -3333,6 +3342,19 @@ def split_jobs(target, lines):
     stay atomic, while compile/check pairs (test-core style) split."""
     groups, cur, cur_has_check = [], [], False
     for ln in lines:
+        if SCRIPT_TEST_RE.match(ln.strip()):
+            # its own job: compile and check both happen inside the script.
+            # Comment lines just above it (`make -n` echoes them) are its
+            # description and go with it; a group of nothing but comments
+            # would otherwise become a prologue every job waits for.
+            if cur and all(not l.strip() or l.strip().startswith("#") for l in cur):
+                groups.append(cur + [ln])
+            else:
+                if cur:
+                    groups.append(cur)
+                groups.append([ln])
+            cur, cur_has_check = [], False
+            continue
         if COMPILE_RE.match(ln.strip()) and cur and cur_has_check:
             groups.append(cur)
             cur, cur_has_check = [], False
@@ -3429,7 +3451,9 @@ def split_jobs(target, lines):
         jobs.append(Job(target, i, g))
     # a leading group with no compiler invocation is a prologue every other
     # job in this target depends on (setup lines: rm, mkdir, env checks)
-    if len(jobs) > 1 and not any(COMPILE_RE.match(l.strip()) for l in jobs[0].lines):
+    if len(jobs) > 1 and not any(COMPILE_RE.match(l.strip()) or
+                                 SCRIPT_TEST_RE.match(l.strip())
+                                 for l in jobs[0].lines):
         for j in jobs[1:]:
             j.deps.append(jobs[0])
     return jobs
