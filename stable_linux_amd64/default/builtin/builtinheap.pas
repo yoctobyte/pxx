@@ -617,6 +617,7 @@ procedure PXXVarSetIntf(v: Pointer; inst: Pointer);
 procedure PXXIntfFromVariant(dest: Pointer; v: Pointer);
 procedure PXXPromoRetainOne(p: Pointer);
 procedure PXXWriteVariant(v: Pointer);
+procedure PXXWriteVariantPy(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
   Exposed so builtin.pas's `Str(F, S)` shares the ONE correct implementation
   rather than carrying its own normalise loop (which disagreed with writeln's
@@ -1009,6 +1010,17 @@ const
     PXXMemZero. Not a rival implementation -- purely the call boundary; above it
     PXXMemZero decides everything. Swept on x86-64. }
   ALLOC_INLINE_ZERO_MAX = 64;
+  { OR-ed into PXXAlloc's `align` by a caller that writes every byte it will
+    ever read, so the reuse paths skip their zeroing. It rides in `align`
+    because no allocator body reads that parameter, which makes the flag free:
+    a third parameter or a no-zero twin of the body would put a call layer or
+    a second copy of the allocator on every allocation. Honoured by the native
+    allocator only -- the calloc profiles (ESP-IDF, -dPXX_LIBC_HEAP) zero
+    regardless, which is correct, only slower. A caller that sets it owns the
+    WHOLE block: on a 32-bit target that includes the high half of every 8-byte
+    header field, which PMachineWord does not reach. Callers: PXXStrConcat,
+    PXXStrSetLen. }
+  PXX_ALLOC_NOZERO = $40000000;
   HEAP_BIN_COUNT = HEAP_BIN_MAX div 8;      { 64: classes 8,16,...,512 }
   { -dPXX_HEAP_DEBUG only: how many freed blocks are held out of the free list
     before one is really reused. Big enough that a dangling read almost always
@@ -1721,7 +1733,11 @@ begin
         call-always is 0.91x at 8 bytes and 0.92x at 32 (a real regression,
         old faster in 9 of 9 interleaved rounds) but 1.75x at 256 and 4.53x
         at 2048. }
-      if size <= ALLOC_INLINE_ZERO_MAX then
+      if (align and PXX_ALLOC_NOZERO) <> 0 then
+      begin
+        { the caller writes the block in full -- see PXX_ALLOC_NOZERO }
+      end
+      else if size <= ALLOC_INLINE_ZERO_MAX then
       begin
         i := 0;
         while i < size do
@@ -1758,6 +1774,15 @@ begin
 {$ifdef PXX_ALLOC_CENSUS}
         CensusList := CensusList + 1;
 {$endif}
+        { First fit hands out the WHOLE block, which may be larger than asked,
+          and PXXFree will subtract its header size -- so count that, not
+          `size`. Counting `size` drifted HeapLiveBytes LOW on every oversized
+          reuse, past zero after a few (GetFPCHeapStatus then clamps to 0), and
+          low is the direction that hides a leak from a mem_alloc check: 50
+          kept 1000-byte strings read as 27440 bytes, and 50 forty-byte ones
+          as 0, after a phase that had freed larger blocks. }
+        HeapLiveBytes := HeapLiveBytes + (PMachineWord(cur - 8)^ - size);
+        if HeapLiveBytes > HeapPeakBytes then HeapPeakBytes := HeapLiveBytes;
         { PXXMemZero, not a hand-rolled word loop. The loop that used to be here
           (and in the bin path above) is the SECOND spelling of a primitive this
           unit already exports: PXXMemZero is `rep stosb` on x86-64 and falls
@@ -1766,7 +1791,8 @@ begin
           the pxx/FPC ratio on `b := nil; SetLength(b, N)` grew with N --
           1.32x at 32 bytes, 2.29x at 256, 4.62x at 2048 -- which is the
           signature of a per-BYTE cost, not per-call overhead. }
-        PXXMemZero(Pointer(cur), size);
+        if (align and PXX_ALLOC_NOZERO) = 0 then
+          PXXMemZero(Pointer(cur), size);
         Result := Pointer(cur);
 {$ifdef PXX_THREADSAFE}
         PXXHeapSpin := 0;
@@ -2480,23 +2506,31 @@ const
   the one bit PXXStrMeta looks at: $80 when any byte had its high bit set, else
   0. Callers that do not want the scan simply ignore the result. }
 function PXXBlockCopy(d: Int64; s: Int64; n: Int64): Int64;
-var i, w, acc: Int64;
+{ The loop runs on MACHINE-WORD locals. The parameters stay Int64 (a dozen
+  callers pass Int64 addresses), but a loop counted, compared and OR-ed in Int64
+  on a 32-bit target pays a register pair and a carry for every step of a copy
+  whose every address and length fits a word -- measured on i386 in the
+  commit that introduced this comment. }
+var dd, ss, nn, i, w, acc: NativeInt;
 begin
+  dd := NativeInt(d);
+  ss := NativeInt(s);
+  nn := NativeInt(n);
   acc := 0;
   i := 0;
   w := SizeOf(NativeInt);
   if PXXWordCopyOk(d, s, n) then
-    while i + w <= n do
+    while i + w <= nn do
     begin
-      PMachineWord(d + i)^ := PMachineWord(s + i)^;
-      acc := acc or PMachineWord(s + i)^;
+      PMachineWord(dd + i)^ := PMachineWord(ss + i)^;
+      acc := acc or PMachineWord(ss + i)^;
       i := i + w;
     end;
-  if (acc and PXX_HIGH_BITS) <> 0 then acc := $80 else acc := 0;
-  while i < n do
+  if (Int64(acc) and PXX_HIGH_BITS) <> 0 then acc := $80 else acc := 0;
+  while i < nn do
   begin
-    PByte(d + i)^ := PByte(s + i)^;
-    acc := acc or PByte(s + i)^;
+    PByte(dd + i)^ := PByte(ss + i)^;
+    acc := acc or PByte(ss + i)^;
     i := i + 1;
   end;
   if (acc and $80) <> 0 then PXXBlockCopy := $80 else PXXBlockCopy := 0;
@@ -2627,10 +2661,23 @@ begin
     Result := nil;
     Exit;
   end;
-  base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 1, 8));   { +1 = nul terminator }
+  { Unzeroed: every byte of the block is written below, so zeroing it first
+    was pure cost -- on i386 it was a third of `t = s + "!"` with a 2000-byte
+    s. What "every byte" takes: the header's high halves on a 32-bit target,
+    and the payload's LAST 8 bytes (terminator plus round-up padding) stored
+    before the copy lands on the front of them. The payload is
+    roundup8(total + 1) bytes, so that word starts at total rounded down. }
+  base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 1, 8 or PXX_ALLOC_NOZERO));   { +1 = nul terminator }
+{$ifdef CPU32}
+  PInt32(base + PXX_HDR_META + 4)^ := 0;
+  PInt32(base + PXX_HDR_RC + 4)^ := 0;
+  PInt32(base + PXX_HDR_LEN + 4)^ := 0;
+{$endif}
   PMachineWord(base + PXX_HDR_RC)^ := 1;        { refcount }
   PMachineWord(base + PXX_HDR_LEN)^ := total;   { length }
   d := base + PXX_HDR_SIZE;
+  PInt32(d + (total and not Int64(7)))^ := 0;
+  PInt32(d + (total and not Int64(7)) + 4)^ := 0;
   { one word per iteration where the ends allow it, byte tail otherwise, and
     the ASCII scan folded in — see PXXBlockCopy. Each segment asks for itself:
     `d + lenA` is only word-aligned when lenA happens to be a multiple of the
@@ -5323,12 +5370,13 @@ end;
 
 { Zero n bytes at dst. }
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
-var d, i, w: Int64;
+{ Machine-word locals, for the reason PXXBlockCopy's header gives. }
+var d, i, w: NativeInt;
 {$ifdef CPUX86_64}
     bmR: Int64;
 {$endif}
 begin
-  d := Int64(dst);
+  d := NativeInt(dst);
 {$ifdef CPUX86_64}
   { `rep stosb` pays a fixed microcode startup of tens of cycles before it moves
     a byte, so a SHORT span never earns it back -- the word loop below beats it
@@ -5514,9 +5562,22 @@ begin
     therefore any numeric output, whose div-by-10 strength-reduces into one --
     needs --xtensa-soft-mulhigh. tools/run_target.sh has carried that for
     longer than this bug has existed. Real xtensa hardware has the instruction.) }
+  { `oldLen > 0` because an EMPTY string is not an append loop: a NilPy '' is
+    a real block rather than nil (see PXXStrFromLit), so without it the first
+    sizing of `Result := ''; SetLength(Result, n)` -- str repeat, and every
+    other builder that starts from '' -- asked for twice what it wrote. }
   want := newLen + PXX_HDR_SIZE + 1;
-  if (oldData <> nil) and (newLen > oldLen) then want := want + want;
-  newBase := PXXAlloc(want, 8);
+  if (oldData <> nil) and (oldLen > 0) and (newLen > oldLen) then want := want + want;
+  { Unzeroed, for PXXStrConcat's reason: the header is written below in full
+    and the payload is copied, then zeroed from the copy's end through the
+    word that holds the terminator. Spare capacity past that is never read --
+    the in-place path above zeroes what it grows into. }
+  newBase := PXXAlloc(want, 8 or PXX_ALLOC_NOZERO);
+{$ifdef CPU32}
+  PInt32(Int64(newBase) + PXX_HDR_META + 4)^ := 0;
+  PInt32(Int64(newBase) + PXX_HDR_RC + 4)^ := 0;
+  PInt32(Int64(newBase) + PXX_HDR_LEN + 4)^ := 0;
+{$endif}
   PXXHdrInit(Int64(newBase));
   PMachineWord(Int64(newBase) + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
   PMachineWord(Int64(newBase) + PXX_HDR_RC)^ := 1;        { refcount }
@@ -5534,9 +5595,11 @@ begin
     PXXBlockCopy(Int64(newData), Int64(oldData), copyLen);
   end;
 
-  if newLen > copyLen then
-    PXXMemZero(Pointer(Int64(newData) + copyLen), newLen - copyLen);
-  PByte(Int64(newData) + newLen)^ := 0;       { nul terminator }
+  { through the end of the terminator's 8-byte word, not just to newLen: the
+    block came back unzeroed. roundup8(newLen + 1) lies inside the payload
+    because want >= newLen + PXX_HDR_SIZE + 1 and the header is 8-aligned. }
+  PXXMemZero(Pointer(Int64(newData) + copyLen),
+             ((newLen + 8) and not Int64(7)) - copyLen);
 
   PMachineWord(strSlot)^ := Int64(newData);
   PXXStrDecRef(oldData);
@@ -6331,9 +6394,27 @@ procedure PXXVarClear(v: Pointer);
   is re-prepared through this routine once per loop iteration
   (bug-nilpy-bound-fn-closure-objects-are-never-freed,
   refactor-a-variant-object-tag-list-lives-in-four-places). }
+var a: NativeInt;
 begin
   PXXVarReleasePayload(v);
-  PXXMemZero(v, 16);
+  { The 16 bytes stored inline, not through PXXMemZero: this is the hottest
+    zeroing site in a NilPy program (every variant temp re-prepared per loop
+    iteration), and a call plus a counted loop for a span that is always
+    exactly two or four words cost more than the whole store. A slot that is
+    not word-aligned (a packed record) still takes the call, which asks its own
+    alignment question. }
+  a := NativeInt(v);
+  if (a and (SizeOf(NativeInt) - 1)) = 0 then
+  begin
+    PMachineWord(a)^ := 0;
+    PMachineWord(a + SizeOf(NativeInt))^ := 0;
+{$ifdef CPU32}
+    PMachineWord(a + 8)^ := 0;
+    PMachineWord(a + 12)^ := 0;
+{$endif}
+  end
+  else
+    PXXMemZero(v, 16);
 end;
 
 procedure PXXVarReleasePayload(v: Pointer);
@@ -7138,14 +7219,16 @@ procedure PXXWriteVariant(v: Pointer);
   x86-64's inline EmitWriteVariant: bool as True/False, int/int64 as a signed
   integer, double natural, char raw, string payload bytes.
 
-  Two arms x86-64 has and this does not, deliberately: it spells an EMPTY slot
-  `None` and an OBJECT slot `<object>`, both Python renderings. FPC prints
-  nothing for a cleared Variant and RAISES for Null, so copying those spellings
-  here would propagate a contested rendering to three more targets — that
-  question is [[bug-a-a-null-variant-renders-as-none-in-pascal]] and settles in
-  one place for all targets once it is answered. Measured 2026-08-24 across
-  bool / int / negative int / double / char / string: after the bool arm below,
-  Boolean was the ONLY tag the two renderers disagreed about. }
+  The two arms that were once x86-64's alone now match it, since
+  bug-a-a-null-variant-renders-as-none-in-pascal settled the question there:
+  an OBJECT slot prints `<object>` in either language (a blank is worse than a
+  visible placeholder), and an EMPTY slot prints nothing here -- FPC's answer
+  -- and `None` through PXXWriteVariantPy, which the backends call instead
+  when the main program is Nil Python (the runtime cannot see PyProgramMode;
+  the caller makes the split, as with PXXVarBinOpPas). Until then every other
+  target printed both as nothing, so a tuple passed to a Pascal `const v:
+  Variant` parameter and written from there vanished on the ESP chips:
+  bug-n-an-object-or-none-variant-writes-as-nothing-off-x86-64. }
 var tag, iv, len, i, s: Int64; ch: Char;
 begin
   tag := PMachineWord(v)^;
@@ -7183,6 +7266,8 @@ begin
     ch := Chr(PByte(Int64(v) + 8)^);
     PXXPutC(ch);
   end
+  else if tag = 7 then  { VT_OBJECT -- x86-64's EmitWriteVariant spells it the same }
+    PXXPutLit('<object>')
   else if (tag = 6) or ((tag >= 8192) and (tag <= 8199)) then
   { VT_STRING, or any tag in the promotable-int block: a promo too large for
     the inline tier rides in a variant as a managed AnsiString of its exact
@@ -7202,6 +7287,15 @@ begin
       end;
     end;
   end;
+end;
+
+{ PXXWriteVariant with Python's spelling of an EMPTY slot, `None`; the
+  backends call this one when the main program is Nil Python (x86-64 makes the
+  same split inline on PyProgramMode). }
+procedure PXXWriteVariantPy(v: Pointer);
+begin
+  if PMachineWord(v)^ = 0 then PXXPutLit('None')
+  else PXXWriteVariant(v);
 end;
 {$endif}
 

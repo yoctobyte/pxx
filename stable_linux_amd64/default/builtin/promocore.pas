@@ -777,14 +777,16 @@ var s: AnsiString;
     i, k: Integer;
     v: Int64;
 begin
-  s := '';
-  if a.neg then s := s + #1 else s := s + #0;
+  { sized once: appending a byte at a time reallocated the string 8 times a
+    limb, and PackBig runs on every heap-tier result }
+  SetLength(s, 1 + 8 * Length(a.limbs));
+  if a.neg then s[1] := #1 else s[1] := #0;
   for i := 0 to Length(a.limbs) - 1 do
   begin
     v := a.limbs[i];
     for k := 0 to 7 do
     begin
-      s := s + Chr(Byte(v and 255));
+      s[2 + i * 8 + k] := Chr(Byte(v and 255));
       v := v shr 8;
     end;
   end;
@@ -807,6 +809,52 @@ begin
     r.limbs[i] := v;
   end;
   UnpackBig := r;
+end;
+
+{ A packed payload as an Int64, when it fits one. Only 32-bit targets call
+  this, so it does no 64-bit division (a software loop there): at most 3
+  limbs, and a 3-limb value fits exactly when its limbs are at most
+  9|223372036|854775807 -- or ...808 when negative, so Low(Int64) is accepted.
+  A negative value accumulates in the negative domain for the same reason. }
+function PackedToInt64(const s: AnsiString; var v: Int64): Boolean;
+var n, i, k: Integer;
+    limb: LongInt;
+    acc: Int64;
+    ls: array[0..2] of Int64;
+    neg: Boolean;
+    base: NativeInt;
+begin
+  PackedToInt64 := False;
+  if Length(s) < 1 then Exit;
+  n := (Length(s) - 1) shr 3;               { not div: a software loop on i386 }
+  if n > 3 then Exit;                       { >= 1e27 }
+  neg := Ord(s[1]) = 1;
+  { Through a byte pointer (s[i] is a checked, uniquing access per byte), and
+    only the low 4 bytes of each 8-byte word: a limb is below 1e9 < 2^30, so
+    the high 4 are zero and a 32-bit accumulator is exact. }
+  base := NativeInt(Pointer(s)) + 1;
+  for i := 0 to n - 1 do
+  begin
+    limb := 0;
+    for k := 3 downto 0 do
+      limb := (limb shl 8) or LongInt(PByte(base + i * 8 + k)^);
+    ls[i] := limb;
+  end;
+  if n = 3 then
+  begin
+    if ls[2] > 9 then Exit;
+    if ls[2] = 9 then
+    begin
+      if ls[1] > 223372036 then Exit;
+      if (ls[1] = 223372036) and (ls[0] > 854775807 + Ord(neg)) then Exit;
+    end;
+  end;
+  acc := 0;
+  for i := n - 1 downto 0 do
+    if neg then acc := acc * BIG_BASE - ls[i]
+    else acc := acc * BIG_BASE + ls[i];
+  v := acc;
+  PackedToInt64 := True;
 end;
 
 { Read a slot as a bignum, whichever tier it is in. }
@@ -1090,6 +1138,105 @@ begin
     PXXPromoFromInt(dst, SlotInt(src));
 end;
 
+{ ---- the Int64 tier of a 32-bit target -----------------------------------
+
+  On a 32-bit target the inline word is 32 bits, so every value from 2^31 to
+  2^63 -- a tick counter, a millisecond timestamp, ordinary numbers on an ESP32
+  -- lives on the HEAP tier, and each add went UnpackBig -> BAddSigned ->
+  PackBig: ~57k instructions (frankb-12, i386), so a loop that takes 0.55 s on
+  x86-64 could not finish in 600 s on C3 silicon. These two read and write the
+  packed form straight to and from an Int64, so an add or subtract whose
+  operands and result all fit Int64 never builds a TBig; only an Int64 overflow
+  takes the bignum tier. On a 64-bit target such values are already inline and
+  never get here: every caller tests SizeOf(NativeInt) < 8 first. }
+
+{ The slot's value as an Int64, when it has one. The heap form is canonical
+  (StoreBig demotes), but a heap value may still fit Int64 without fitting the
+  32-bit inline word -- which is the whole point. }
+function SlotToInt64(p: Pointer; var v: Int64): Boolean;
+var sp: PPromoStr;
+begin
+  if SlotTag(p) <> PROMO_TAG_HEAP then
+  begin
+    v := SlotInt(p);
+    SlotToInt64 := True;
+    Exit;
+  end;
+  sp := PPromoStr(SlotPayloadAddr(p));
+  SlotToInt64 := PackedToInt64(sp^, v);
+end;
+
+{ m := m div 1e9, rem := m mod 1e9, with no division at all. On i386 every
+  integer div -- a LongInt one included -- is a 64-step software loop, and two
+  per limb cost more than the whole add. Only shifts and multiplies (inline
+  there) are used: m shr 30 never exceeds m div 1e9, because 2^30 > 1e9, so
+  subtracting that many 1e9s keeps q*1e9 + m invariant and shrinks m to under
+  2^30 in about ten rounds from 2^63; one more 1e9 may remain. }
+procedure DivBigBase(var m: QWord; var rem: Int64);
+var q, t: QWord;
+begin
+  q := 0;
+  while m >= 1073741824 do
+  begin
+    t := m shr 30;
+    q := q + t;
+    m := m - t * BIG_BASE;
+  end;
+  if m >= BIG_BASE then
+  begin
+    q := q + 1;
+    m := m - BIG_BASE;
+  end;
+  rem := Int64(m);
+  m := q;
+end;
+
+{ dst := v, choosing the tier; the heap form is exactly PackBig(BFromInt(v)) }
+procedure SlotStoreInt64(dst: Pointer; v: Int64);
+var s: AnsiString;
+    w: PPromoWord;
+    sp: PPromoStr;
+    m: QWord;
+    ls: array[0..2] of Int64;
+    limb: LongInt;
+    nl, i, k: Integer;
+    base: NativeInt;
+begin
+  if NativeFits(v) then
+  begin
+    PXXPromoFromInt(dst, v);
+    Exit;
+  end;
+  { magnitude without negating Low(Int64), which has no positive Int64 }
+  if v < 0 then m := QWord(-(v + 1)) + 1 else m := QWord(v);
+  nl := 0;
+  while m > 0 do
+  begin
+    DivBigBase(m, ls[nl]);
+    Inc(nl);
+  end;
+  { a fresh SetLength string is unique, so writing through its pointer is
+    safe, and skips the per-byte uniquing check of s[i] := }
+  SetLength(s, 1 + 8 * nl);
+  base := NativeInt(Pointer(s));
+  if v < 0 then PByte(base)^ := 1 else PByte(base)^ := 0;
+  for i := 0 to nl - 1 do
+  begin
+    limb := LongInt(ls[i]);                 { < 1e9: the high 4 bytes are 0 }
+    for k := 0 to 3 do
+    begin
+      PByte(base + 1 + i * 8 + k)^ := Byte(limb and 255);
+      PByte(base + 5 + i * 8 + k)^ := 0;
+      limb := limb shr 8;
+    end;
+  end;
+  PXXPromoClear(dst);
+  w := PPromoWord(dst);
+  w^ := PROMO_TAG_HEAP;
+  sp := PPromoStr(SlotPayloadAddr(dst));
+  sp^ := s;
+end;
+
 { ---- arithmetic -------------------------------------------------------- }
 
 { The inline fast path is tried first and only falls back to the bignum tier on
@@ -1118,6 +1265,15 @@ begin
     else
       PXXPromoFromInt(dst, r);
     Exit;
+  end;
+  if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) and SlotToInt64(b, y) then
+  begin
+    r := x + y;
+    if not (((x >= 0) = (y >= 0)) and ((r >= 0) <> (x >= 0))) then
+    begin
+      SlotStoreInt64(dst, r);
+      Exit;
+    end;
   end;
   AddSlowVV(dst, a, b);
 end;
@@ -1250,6 +1406,15 @@ begin
       PXXPromoFromInt(dst, r);
     Exit;
   end;
+  if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) and SlotToInt64(b, y) then
+  begin
+    r := x - y;
+    if not (((x >= 0) <> (y >= 0)) and ((r >= 0) <> (x >= 0))) then
+    begin
+      SlotStoreInt64(dst, r);
+      Exit;
+    end;
+  end;
   SubSlowVV(dst, a, b);
 end;
 
@@ -1325,6 +1490,15 @@ begin
       PXXPromoFromInt(dst, r);
     Exit;
   end;
+  if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) then
+  begin
+    r := x + b;
+    if not (((x >= 0) = (b >= 0)) and ((r >= 0) <> (x >= 0))) then
+    begin
+      SlotStoreInt64(dst, r);
+      Exit;
+    end;
+  end;
   AddIntSlow(dst, a, b);
 end;
 
@@ -1345,6 +1519,15 @@ begin
     else
       PXXPromoFromInt(dst, r);
     Exit;
+  end;
+  if (SizeOf(NativeInt) < 8) and SlotToInt64(a, x) then
+  begin
+    r := x - b;
+    if not (((x >= 0) <> (b >= 0)) and ((r >= 0) <> (x >= 0))) then
+    begin
+      SlotStoreInt64(dst, r);
+      Exit;
+    end;
   end;
   SubIntSlow(dst, a, b);
 end;

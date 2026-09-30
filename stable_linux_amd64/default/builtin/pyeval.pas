@@ -1227,11 +1227,32 @@ var
     into a variant array. `-dPXX_HEAP_DEBUG` says WRITE AFTER FREE. }
   pvHold: array[0..4] of TPyRec;
   pret: Int64;
+  { The measured shape refusal below. sawDouble tracks whether a double has been
+    seen yet while scanning the parameters left to right, which is all the order
+    rule needs; shapeBad is empty for a shape this bridge passes correctly and
+    otherwise says WHY, because "unsupported param shape" with no reason is what
+    the older refusal here cost a bisect to read. }
+  sawDouble: Boolean;
+  shapeBad: AnsiString;
+  { The receiver's class name, for the exceptions below. NamePtr can be nil, and a
+    diagnostic that crashes while reporting a problem is worse than the problem. }
+  clsName: AnsiString;
 begin
   cls := GetInstanceRTTI(vmobj);
-  if cls = nil then begin writeln('pyeval: no RTTI on vm for host call ', name); Halt(1); end;
+  { INVARIANT, AND DELIBERATELY STILL A HALT. No RTTI means the compiler did not
+    emit what this code requires: the program did nothing wrong, can do nothing
+    about it, and there is no CPython exception this corresponds to. The sites
+    below became raises because they report the PROGRAM's error; this one does
+    not. }
+  if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI on vm for host call ', name); Halt(1); end;
+  if cls^.NamePtr <> nil then clsName := cls^.NamePtr^ else clsName := '<unnamed class>';
   mi := PyFindMethCI(cls, name);
-  if mi = nil then begin writeln('pyeval: vm has no method ', name); Halt(1); end;
+  { THE PROGRAM ASKED FOR A METHOD THAT IS NOT THERE, which is an AttributeError
+    in CPython and was an uncatchable process exit here. Same wording as the
+    attribute lookup in PyGetAttr, so the two read alike. }
+  if mi = nil then
+    raise AttributeError.Create(Chr(39) + clsName + Chr(39) +
+      ' object has no attribute ' + Chr(39) + name + Chr(39));
 
   n := Integer(mi^.Arity) - 1;   { drop Self }
   { `S.init`, as CPython names the callee in a call-shape TypeError }
@@ -1316,14 +1337,129 @@ begin
     if not ptrFamily then
     begin
       { Name the offending parameter. "unsupported param shape" on its own cost
-        a bisect to turn into a sentence, and the shape is the whole question. }
-      writeln('pyeval: host method ', name, ' has an unsupported param shape',
-              ' (arity ', n, '), kinds:');
+        a bisect to turn into a sentence, and the shape is the whole question.
+        NOW ONE STRING RATHER THAN A HEADER PLUS A LOOP OF WRITELNS: an exception
+        carries a message, not a stream, and the kinds are the message. That is a
+        gain and not just a translation -- the old form could be split across two
+        streams, and was, until the diagnostics moved to stderr. }
+      shapeBad := 'reflected call to ' + clsName + '.' + name + ' is refused: its '
+                + 'parameter shape is not one this bridge can pass (arity '
+                + pystr_of(Int64(n)) + '), kinds:';
       if pk <> nil then
         for i := 1 to n do
-          writeln('  param ', i, ' kind ', pk[i]);
-      Halt(1);
+          shapeBad := shapeBad + ' [param ' + pystr_of(Int64(i)) + ' kind '
+                    + pystr_of(pk[i]) + ']';
+      raise TypeError.Create(shapeBad);
     end;
+
+    { ---- SHAPES THIS BRIDGE GETS WRONG, refused instead of corrupted ----
+
+      ONE DEFECT, TWO FACES. The thunk is chosen by `mc * 8 + kc` below -- the
+      COUNT of integer-class arguments and the COUNT of doubles -- and called
+      with every pa[] first and every pd[] second. So the thunk's parameter
+      SEQUENCE is (ints..., doubles...) whatever the callee actually declared,
+      and each pa[] slot is an Int64 whatever width the callee's parameter is.
+      Both assumptions hold only for a subset of signatures:
+
+        ORDER, every target, and it is POSITIONAL, not a property of "mixing".
+          The thunk passes every pa[] slot and then every pd[] slot, so a callee
+          whose doubles are all TRAILING already receives its arguments in the
+          right places. What breaks is a double that comes BEFORE a non-double.
+          `def fi(self, a, b)` narrowed to (Double, Int64), called reflectively
+          with (9.5, 7), gave a=3.5e-323 (the int 7 read as a double) and
+          b=4621537642612260864 (the bits of 9.5 read as an int) -- BYTE
+          IDENTICAL on x86-64, aarch64, i386, arm32 and riscv32, which is what
+          says this is logic here and not an ABI difference. So does (Double,
+          Double, Int64) and, decisively, (Int64, Double, Int64): one double
+          with a non-double after it is enough. With a pointer-sized parameter
+          instead of the int it SIGSEGVs on x86-64 and aarch64. The comment on
+          the TPM* types justifies the reordering with SysV's two independent
+          register files; the callee is pxx-compiled Pascal and pxx's own
+          convention does not classify that way, which is why the corruption is
+          identical on all five.
+
+          I FIRST WROTE THIS RULE AS "refuse any double mixed with a non-double"
+          and that was WRONG -- it refuses (Int64, Double), (Int64, Double,
+          Double) and (Int64, Int64, Double), all of which are CORRECT on all
+          five targets. It was caught by the full test-nilpy tier turning
+          test_nilpy_dynamic_call_takes_defaults_from_its_own_class red: that
+          row's `at(self, x, z, outside)` has its double last, worked before the
+          change, and agrees with CPython. My own test file could not have
+          caught it, because both of its order rows put the double FIRST. One
+          arrangement of a mix is not the mix.
+
+        WIDTH, 32-bit only.  pa[] is `array of Int64`, so each argument occupies
+          an 8-byte slot, while the callee reads its parameters at their own
+          widths. On a 64-bit target every integer-class parameter is 8 bytes
+          and the two agree. On a 32-bit one a pointer-sized parameter is 4, so
+          everything after it shifts: (AnsiString, Int64) with ('T', 9) gave
+          9 shl 32, and (Int64, AnsiString, AnsiString) lost the last string
+          entirely. A TRAILING double does not escape this either -- it is
+          read out of pd[], but the shifted pa[] is what decides how many slots
+          were consumed: (AnsiString, Double) and (Variant, Double) both return
+          the double as 0.0 on riscv32 and arm32, and (Variant, Variant, Double)
+          SIGSEGVs on all three 32-bit targets. So the width rule applies to the
+          NON-DOUBLE parameters and is independent of the order rule.
+
+      MEASURED, not reasoned: 19 shapes across 6 targets, before and after, and
+      the corrected rule was measured against the PRE-change compiler on each so
+      that "refused" is only ever claimed for a shape that was already broken.
+      See the LOGBOOK entry of 2026-09-28 and its 09-29 correction.
+
+      THIS PATH ONLY. A method whose parameters are still Variants does not come
+      here at all (`allVariant` above), so an unnarrowed host call is completely
+      unaffected. What brings a method here is PyParamTypeFromSites narrowing a
+      BARE parameter from its compiled call sites -- so, for the reflected
+      caller, a compiled call site is what breaks it. The proper fix is a thunk
+      per parameter-type SEQUENCE rather than per (m, k) counts, or a generic
+      invoker; either is a design decision and neither is this. }
+    shapeBad := '';
+
+    { ORDER: a double may not precede a non-double. Equivalently, the parameter
+      list must partition as [non-doubles...][doubles...], which is the shape
+      the pa[]-then-pd[] call below actually produces. Trailing doubles are
+      fine and common -- `at(self, x, z, outside)` is the ordinary case. }
+    sawDouble := False;
+    for i := 1 to n do
+      if pk[i] = TK_DOUBLE then sawDouble := True
+      else if sawDouble and (shapeBad = '') then
+        shapeBad := 'parameter ' + pystr_of(Int64(i)) + ' (kind '
+                  + pystr_of(pk[i]) + ') is not a double but follows one, and '
+                  + 'this bridge passes every non-double before every double, '
+                  + 'so they would arrive in the wrong order';
+
+    { WIDTH, 32-bit only: every NON-DOUBLE parameter must be a full 64 bits, not
+      merely every one but the last. A narrow last parameter looked safe and is
+      not: nothing follows it to be displaced, so it survives on riscv32 --
+      (Int64, AnsiString) and (Int64, Int64, AnsiString) both answer correctly
+      there -- but i386 gets (Int64, AnsiString) WRONG (7 came back as
+      34359738367) and arm32 gets (Int64, Int64, AnsiString) wrong while getting
+      the two-parameter form right. Three 32-bit targets, three different
+      boundaries, so the union is the only rule that is true everywhere and a
+      per-target allow-list would rot.
+
+      This deliberately refuses a few shapes that DO work on one 32-bit target:
+      i386 handles (AnsiString, Double) and (Variant, Double), arm32 handles
+      (Int64, AnsiString, Double). Each of those is wrong on at least one of the
+      other two, and (Variant, Variant, Double) SIGSEGVs on all three. Refusing
+      a working shape costs a caller a clear error; allowing a broken one costs
+      a wrong answer, and on these targets often a crash. }
+    if (shapeBad = '') and (SizeOf(Pointer) < 8) then
+      for i := 1 to n do
+        if (pk[i] <> TK_DOUBLE) and (shapeBad = '')
+           and not ((pk[i] = 13) or (pk[i] = 14)) then
+          shapeBad := 'parameter ' + pystr_of(Int64(i)) + ' (kind '
+                    + pystr_of(pk[i]) + ') is not 64-bit, so the arguments would '
+                    + 'be misaligned: a reflected call with pointer-sized '
+                    + 'parameters is not supported on 32-bit targets yet';
+    if shapeBad <> '' then
+      raise TypeError.Create('reflected call to ' + name + ' is refused: '
+              + shapeBad + '. This shape returned WRONG VALUES, or crashed, '
+              + 'rather than failing before this check existed. Annotating the '
+              + 'parameters does not help -- what narrowed them is the compiled '
+              + 'call sites. Call it directly, or keep its parameters Variant, '
+              + 'until the call bridge is fixed');
+
     for i := 0 to 4 do begin pa[i] := 0; pd[i] := 0.0; end;
     mc := 0; kc := 0;
     for i := 1 to n do
@@ -1513,10 +1649,10 @@ begin
           else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
         end;
       else
-        begin
-          writeln('pyeval: host method ', name, ' has an unsupported mixed shape (', mc, ' ints, ', kc, ' doubles)');
-          Halt(1);
-        end;
+        raise TypeError.Create('reflected call to ' + clsName + '.' + name
+                + ' is refused: this bridge has no thunk for a mixed shape of '
+                + pystr_of(Int64(mc)) + ' integer-class and ' + pystr_of(Int64(kc))
+                + ' double parameters');
       end;
       if mixedInt then
       begin
@@ -1638,7 +1774,9 @@ begin
       4: begin vf4 := TVFn4(code); res := vf4(vmobj, a0, a1, a2, a3); end;
       5: begin vf5 := TVFn5(code); res := vf5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     Exit;
   end;
@@ -1654,7 +1792,9 @@ begin
       4: begin vp4 := TVPr4(code); vp4(vmobj, a0, a1, a2, a3); end;
       5: begin vp5 := TVPr5(code); vp5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     res := MakeNone;
     Exit;
@@ -1671,7 +1811,9 @@ begin
       4: begin sf4 := TSFn4(code); res := MakeStr(sf4(vmobj, a0, a1, a2, a3)); end;
       5: begin sf5 := TSFn5(code); res := MakeStr(sf5(vmobj, a0, a1, a2, a3, a4)); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     Exit;
   end;
@@ -1693,7 +1835,9 @@ begin
       4: begin if4 := TIFn4(code); res := pyvar_of_int(PyNarrowRet(if4(vmobj, a0, a1, a2, a3), rk)); end;
       5: begin if5 := TIFn5(code); res := pyvar_of_int(PyNarrowRet(if5(vmobj, a0, a1, a2, a3, a4), rk)); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     { (PyNarrowRet: the callee set only its own width -- see pylib.) }
     { A BOOLEAN return shares this family's ABI but not its Python type: boxed
@@ -1716,7 +1860,9 @@ begin
       4: begin df4 := TDFn4(code); res := df4(vmobj, a0, a1, a2, a3); end;
       5: begin df5 := TDFn5(code); res := df5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     Exit;
   end;
@@ -1735,15 +1881,18 @@ begin
       4: begin of4 := TOFn4(code); pret := of4(vmobj, a0, a1, a2, a3); end;
       5: begin of5 := TOFn5(code); pret := of5(vmobj, a0, a1, a2, a3, a4); end;
     else
-      begin writeln('pyeval: host arity ', n, ' too large for ', name); Halt(1); end;
+      raise TypeError.Create('reflected call to ' + clsName + '.' + name
+              + ' is refused: arity ' + pystr_of(Int64(n)) + ' is more than this '
+              + 'bridge has thunks for');
     end;
     PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
     PXXObjRetain(Pointer(NativeInt(pret)));
     Exit;
   end;
 
-  writeln('pyeval: unsupported host-call return kind ', rk, ' for ', name);
-  Halt(1);
+  raise TypeError.Create('reflected call to ' + clsName + '.' + name
+          + ' is refused: this bridge cannot box a return value of kind '
+          + pystr_of(Int64(rk)));
 end;
 
 { ---- field (attribute) reflection: M2 ---- }
@@ -1763,7 +1912,7 @@ var
   gname: AnsiString;
 begin
   cls := GetInstanceRTTI(obj);
-  if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
+  if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
   if p = nil then
   begin
@@ -1835,7 +1984,7 @@ var
   p: Pointer;
 begin
   cls := GetInstanceRTTI(obj);
-  if cls = nil then begin writeln('pyeval: no RTTI for attribute ', name); Halt(1); end;
+  if cls = nil then begin writeln(StdErr, 'pyeval: no RTTI for attribute ', name); Halt(1); end;
   p := GetFieldPtr(obj, cls, name, kind);
   if p = nil then begin pydynattr_set(obj, name, val); Exit; end;
   case kind of
@@ -1848,7 +1997,11 @@ begin
     22: PVariant(p)^ := val;
     23: PAnsiString(p)^ := pystr_of(val);
   else
-    begin writeln('pyeval: cannot assign to object-typed attribute ', name); Halt(1); end;
+    { The program assigned to an attribute whose stored type this reflection cannot
+      write. CPython assigns it happily, so a refusal is the honest report and a
+      process exit was not one. No class name here: PyFieldSet takes a bare obj. }
+    raise TypeError.Create('cannot assign to attribute ' + Chr(39) + name + Chr(39)
+            + ': its declared type is not one this reflection can write');
   end;
 end;
 
@@ -2078,10 +2231,15 @@ begin
   else HexVal := Ord(c) - Ord('A') + 10;
 end;
 
+{ MALFORMED SOURCE IS THE PROGRAM'S ERROR AND CPython CALLS IT SyntaxError. This
+  is reached only from exec()/eval(), i.e. from source the program itself supplied
+  at run time, so a process exit took the decision away from the one place that
+  could have handled it. The 'pyeval tokenizer: ' prefix is gone because the
+  exception's own type now carries that: CPython says `SyntaxError: invalid
+  syntax`, not a prefixed line. }
 procedure TokError(const msg: AnsiString);
 begin
-  writeln('pyeval tokenizer: ', msg);
-  Halt(1);
+  raise SyntaxError.Create(msg);
 end;
 
 function PyEscQuote(const s: AnsiString): AnsiString;
@@ -2470,9 +2628,20 @@ end;
 
 { ---- evaluator (recursive descent; every node returns via a var-out param) ---- }
 
+{ THIS IS A FUNNEL WITH 57 CALLERS AND THEY ARE NOT ONE EXCEPTION TYPE, which is
+  why it still halts after the sites around it became raises. The messages reaching
+  here divide at least three ways by what CPython would have raised: SyntaxError
+  ('def: expected a name', 'expected an indented block'), TypeError ('abs() expects
+  1 arg', 'cannot call method <m> on this value') and NotImplementedError
+  ('augmented slice assignment not supported', 'genexp: unsupported iterable').
+  So the one change that cannot be made is converting EvalError itself: whatever
+  single type it raised would be the wrong type for most of its callers, and a
+  program that CATCHES a wrong classification is worse off than one that saw an
+  honest halt. Triaging the 57 sites is a real item and is named in the LOGBOOK;
+  it is not a tidy-up of this procedure. }
 procedure EvalError(const msg: AnsiString);
 begin
-  writeln('pyeval: ', msg);
+  writeln(StdErr, 'pyeval: ', msg);
   Halt(1);
 end;
 
@@ -3840,6 +4009,11 @@ begin
     if not IsOp(')') then
     begin
       ParseExpr(recv);
+      { STAYS ON STDOUT. This is the implementation of `sys.stdout.write`, not a
+        diagnostic: it is the program's own output, and the commit that moved this
+        unit's fatal diagnostics to stderr deliberately left it and `print` alone.
+        Moving either would redirect every Nil Python program's output and break
+        every oracle in the tier. }
       if (fld = 'write') and (name = 'stdout') and Executing then
         write(pystr_of(recv));
     end;
@@ -4553,6 +4727,8 @@ begin
       if i > 0 then s := s + sep;
       s := s + pystr_of(args.at(i));
     end;
+    { STAYS ON STDOUT: this is `print`, the program's output. See the note at
+      sys.stdout.write above. }
     write(s); write(endc);
     res := MakeNone; Exit;
   end;
@@ -4759,6 +4935,25 @@ end;
   other VT_OBJECT receiver is treated as a reflected HOST object and routed
   through the trampoline (PyHostCall). Method coverage is the corpus subset;
   unsupported names error clearly. }
+{ THE `byteorder` ARGUMENT OF int.to_bytes / int.from_bytes, which this unit used to
+  drop on the floor. `args.at(idx)` is it when supplied; absent, CPython 3.11+
+  defaults to BIG, and so does the compiled intrinsic
+  (PyParseByteOrderAndSigned in compiler/pyparser.inc sets bigEnd := True before
+  looking). The default mattering is not academic: with the argument OMITTED the
+  compiled path answered `1 2` for (258).to_bytes(2) and this one answered `2 1`. }
+function PyByteOrderIsBig(args: TPyList; idx: Integer): Boolean;
+var s: AnsiString;
+begin
+  PyByteOrderIsBig := True;
+  if (args = nil) or (args.count <= idx) then Exit;
+  s := pystr_of(args.at(idx));
+  if s = 'little' then PyByteOrderIsBig := False
+  else if s = 'big' then PyByteOrderIsBig := True
+  else
+    { CPython's own wording, so a program matching on the message still matches. }
+    raise ValueError.Create('byteorder must be either ''little'' or ''big''');
+end;
+
 procedure ParseMethodCall(const recv: Variant; const mname: AnsiString;
                           var res: Variant);
 var
@@ -4769,6 +4964,7 @@ var
   i: Integer;
   signedKw: Boolean;
   rvt: Int64;
+  byRev: TPyBytes;   { the byte-reversed half of a big-endian to_bytes/from_bytes }
 begin
   args := TPyList.Create;
   kwNames := TPyList.Create;
@@ -4787,9 +4983,23 @@ begin
     begin
       if mname = 'to_bytes' then
       begin
+        { pyint_to_bytes IS LITTLE-ENDIAN ONLY, and deliberately so: it takes no
+          byteorder parameter, and the big-endian half is a separate reversal the
+          CALLER composes. The compiled intrinsic does exactly that
+          (PyMakeBytesReversed wraps the call node when bigEnd); this arm did not,
+          which is why `(5).to_bytes(2, "big")` answered `5 0` here and `0 5` when
+          compiled, and why "little" passed for the wrong reason. }
         by := pyint_to_bytes(pyvar_to_int(recv), pyvar_to_int(args.at(0)), signedKw);
-        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(by));
-        PXXObjRetain(Pointer(by));   { slot owns +1 (magic-guarded) }
+        if PyByteOrderIsBig(args, 1) then
+        begin
+          byRev := pybytes_reversed(by);
+          { The little-endian intermediate is referenced by nothing -- it was
+            created a statement ago and never boxed, so no slot holds its +1 and
+            freeing it here is the only thing that can. }
+          by.Free;
+          by := byRev;
+        end;
+        res := PyBoxObjNew(Pointer(by));   { fresh: the slot takes its +1 }
         Exit;
       end;
       EvalError('int method not supported: ' + mname);
@@ -4801,7 +5011,23 @@ begin
     begin
       if (PPyRec(@recv)^.Payload = 2) and (mname = 'from_bytes') then
       begin
-        res := pyvar_of_int(pyint_from_bytes(TPyBytes(pyvarobj(args.at(0))), signedKw));
+        { Same defect, same shape, and the report that started this named only
+          to_bytes: from_bytes read `b"\x01\x02"` as 513 here against 258 compiled
+          and 258 in CPython. pyint_from_bytes is little-endian only for the same
+          deliberate reason, and the compiled intrinsic reverses its INPUT rather
+          than its output (PyParseFromBytes). A round trip inside eval() was
+          therefore self-consistent and wrong against every other producer, which
+          is the one shape a to_bytes-then-from_bytes fixture would not catch. }
+        if PyByteOrderIsBig(args, 1) then
+        begin
+          byRev := pybytes_reversed(TPyBytes(pyvarobj(args.at(0))));
+          res := pyvar_of_int(pyint_from_bytes(byRev, signedKw));
+          { byRev is ours alone: the caller's bytes are untouched and this copy was
+            never boxed, so nothing else will release it. }
+          byRev.Free;
+        end
+        else
+          res := pyvar_of_int(pyint_from_bytes(TPyBytes(pyvarobj(args.at(0))), signedKw));
         Exit;
       end;
       EvalError('type method not supported: ' + mname);
@@ -4843,8 +5069,7 @@ begin
       else if mname = 'encode' then
       begin
         b2 := pystr_encode(s);
-        PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := Int64(Pointer(b2));
-        PXXObjRetain(Pointer(b2));   { slot owns +1 (magic-guarded) }
+        res := PyBoxObjNew(Pointer(b2));   { fresh: the slot takes its +1 }
       end
       else
         EvalError('str method not supported: ' + mname);
@@ -4891,16 +5116,20 @@ begin
       try
         PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
       except
+        { A leftover debugging probe wrote the method name, the receiver's type and
+          every argument's type to StdErr here on EVERY failed reflected call, in
+          ordinary release builds -- so a program whose own output is data got
+          somebody's debugging mixed into its stderr, with no way to switch it off.
+          It is deleted. What is left is a pure re-raise, which is all the frame
+          ever did besides printing: deleting Writes that PRECEDE a `raise` cannot
+          change control flow, which is why this needed no full tier.
+
+          The frame is now redundant and could go with the Writes. Removing an
+          exception frame from a builtin is a codegen change rather than a deletion,
+          so it is not this commit's claim and is left to someone measuring more
+          than a quick gate. }
         on E: Exception do
-        begin
-          Write(StdErr, 'PROBE hostcall ', mname, ' recv=',
-                PyVarTypeNameOf(recv), ' args:');
-          if args <> nil then
-            for i := 0 to args.count - 1 do
-              Write(StdErr, ' ', PyVarTypeNameOf(args.at(i)));
-          WriteLn(StdErr, ' || ', E.Message);
           raise;
-        end;
       end;
       Exit;
     end;
@@ -5243,9 +5472,16 @@ begin
   end
   else
     excName := 'Exception';
+  { THE STREAM MOVED; THE HALT DID NOT, AND THAT IS NOT AN OVERSIGHT. This site
+    looks exactly like the other fifteen fatal diagnostics -- a writeln and a
+    Halt(1) -- and it is not the same kind of thing. A Nil Python `raise` arrives
+    here, so replacing this Halt with a real raise IS implementing catchable
+    try/except for this frontend, which is the milestone the comment at the top of
+    this procedure defers. Anyone taking this on as "the last of the sixteen" will
+    find that out halfway in. Named in the LOGBOOK as its own item. }
   if Executing then
   begin
-    writeln('pyeval: ', excName, ': ', msg);
+    writeln(StdErr, 'pyeval: ', excName, ': ', msg);
     Halt(1);
   end;
 end;
@@ -5464,19 +5700,13 @@ begin
   else
     ExecSuite(True);
   except
+    { Three more of the same leftover probes: the first 40 tokens of the closure
+      body, every local with its type, and the exception message -- all to StdErr
+      on ANY exception out of a Nil Python closure, release builds included. Deleted
+      for the reason given at the one in ParseMethodCall, including why the frame
+      itself stays. }
     on E: Exception do
-    begin
-      Write(StdErr, 'PROBE body:');
-      for i := Closures[cidx].BodyPos to Closures[cidx].BodyPos + 40 do
-        if i < TkN then Write(StdErr, ' ', TkText[i]);
-      WriteLn(StdErr, '');
-      Write(StdErr, 'PROBE locals:');
-      for i := 0 to LclN - 1 do
-        Write(StdErr, ' ', LclNames[i], '=', PyVarTypeNameOf(LclVals[i]));
-      WriteLn(StdErr, '');
-      WriteLn(StdErr, 'PROBE err: ', E.Message);
       raise;
-    end;
   end;
   res := ReturnValue;
 
@@ -6667,34 +6897,57 @@ begin
   Result := pyiter_filter_i(key, up);
 end;
 
+{ The drained or listed temporary is only READ -- sorted() builds its own
+  list, min()/max() hand back an element -- so each releases it. They did not,
+  and `max(map(f, xs))`, `sorted(iter(xs))`, `min(range(n))` leaked the whole
+  temporary list per call (pin v451: 2 blocks each). The cursor belongs to the
+  caller. Same fault and fix as pylib's sum/tuple/any/all over a cursor. }
 function sorted(it: TPyIter; key: Pointer; reverse: Boolean): TPyList; overload;
+var tmp: TPyList;
 begin
-  Result := sorted(pyiter_drain(it), key, reverse);
+  tmp := pyiter_drain(it);
+  Result := sorted(tmp, key, reverse);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function min(it: TPyIter; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := min(pyiter_drain(it), key);
+  tmp := pyiter_drain(it);
+  Result := min(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function max(it: TPyIter; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := max(pyiter_drain(it), key);
+  tmp := pyiter_drain(it);
+  Result := max(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function sorted(r: TPyRange; key: Pointer; reverse: Boolean): TPyList; overload;
+var tmp: TPyList;
 begin
-  Result := sorted(list(r), key, reverse);
+  tmp := list(r);
+  Result := sorted(tmp, key, reverse);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function min(r: TPyRange; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := min(list(r), key);
+  tmp := list(r);
+  Result := min(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function max(r: TPyRange; key: Pointer): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := max(list(r), key);
+  tmp := list(r);
+  Result := max(tmp, key);
+  PXXObjRelease(Pointer(tmp));
 end;
 
 function pyclosure_call_ptr(objptr: Pointer; const a0: Variant): Integer;
@@ -6754,6 +7007,7 @@ end;
 
 procedure EvalPyStmts(const src: AnsiString; g: TPyDict; l: TPyDict);
 var cslot, si: Integer;
+    bodyIdx: Integer;   { the pending `__body__` def, for the arity refusal below }
 begin
   EnvG := g;
   { Locals live in pyeval's own arrays (see LclSet), and `l` is SEEDED FROM and
@@ -6832,8 +7086,42 @@ begin
     (regression-test-uforth-00, bisected to the guard — the guard exposed this,
     it did not introduce it). pyvar_of_callable stamps VT_CALLABLE for a bare
     code address, which is what this is, and takes no phantom reference. }
-  if (l <> nil) and (FnFind('__body__') >= 0) then
+  bodyIdx := FnFind('__body__');
+  if (l <> nil) and (bodyIdx >= 0) then
+  begin
+    { A BARE PARAMETER IS REFUSED HERE, AT PUBLICATION, AT EVERY ARITY, because
+      PyBodyTramp above is PARAMETERLESS: it hands CallUserFn an empty TPyList, and
+      CallUserFn then fills every declared parameter with None because nothing bound
+      it. So `__body__("7")` did not fail -- it ran with the parameter None and
+      `int(s)` answered 0. Refusing where the arity is known beats returning a
+      plausible wrong number from a call the program cannot inspect.
+
+      ONLY BARE PARAMETERS, and that is measured rather than assumed. ExecDef
+      evaluates a DEFAULTED parameter at def time, stores it as a local of the
+      defining scope, and -- its own comment -- does "not append to params: the call
+      site never passes it". So FnParams holds exactly the parameters a call must
+      supply, which are exactly the ones this trampoline cannot, and the test is one
+      comparison: no '=' scanning, and no comma-inside-a-default hazard like
+      `a=(1,2)`. Measured on v451 d9b7226769cc before the rule was written:
+      `def __body__(a=5)` answers 5 and `def __body__(a=5,b=7)` answers 12, both
+      CORRECT, while a bare `a` answers None. A rule of "refuse any declared
+      parameter" would have broken those two working shapes -- which is the mistake
+      the host-call shape refusal made twice, both times caught by a control row.
+
+      EVERY ARITY, not just the ones that could be fixed. The sole N-arg route is
+      `PyClosureCall1`, hardwired at arity ONE in compiler/pyparser.inc with no
+      PyClosureCall2, so republishing `__body__` as a source closure would fix
+      `__body__(s)` and leave `__body__(a, b)` silently None. An arity-dependent
+      half-fix is the shape this unit keeps being burned by. }
+    if FnParams[bodyIdx] <> '' then
+      raise TypeError.Create('exec() cannot publish __body__ with parameters ('
+              + FnParams[bodyIdx] + '): it is reached through a parameterless '
+              + 'trampoline, so nothing would bind them and the call would return '
+              + 'a value computed from None rather than fail. Give the parameters '
+              + 'DEFAULTS, which are bound at def time and do work, or assign a '
+              + 'variable in the exec''d source instead of returning a def');
     l.store(MakeStr('__body__'), pyvar_of_callable(Pointer(@PyBodyTramp)));
+  end;
   { ...and every other top-level binding, which is the general case the
     `__body__` line above was the one hand-wired instance of. }
   if l <> nil then

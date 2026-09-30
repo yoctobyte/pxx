@@ -474,6 +474,15 @@ function HexStr(Val: Int64; cnt: Integer): AnsiString;
 function OctStr(Val: Int64; cnt: Integer): AnsiString;
 function BinStr(Val: Int64; cnt: Integer): AnsiString;
 
+{ FPC System.StringOfChar(c, l): l copies of c, '' when l <= 0. FPC has it in
+  System, so a program with no `uses` clause calls it. It is DECLARED HERE AND
+  KEPT in lib/rtl/sysutils.pas, the duplicate shape the six names above use: the
+  $(PXX_STABLE) build of lib/rtl and the test/lib_ rows reads the pin's FROZEN
+  builtin, which does not carry this body yet (test/lib_strpchar.pas:49 is the
+  caller that failed the first time). Delete the sysutils copy on the same
+  trigger as theirs. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+function StringOfChar(ch: Char; count: Integer): AnsiString;
+
 { FPC System BIT SCAN: Bsf = index of the lowest set bit, Bsr = index of the
   highest, both 0-based from the least significant bit. A ZERO argument answers
   255 in every width — FPC's sentinel, not an index, and the reason these
@@ -653,7 +662,7 @@ begin
   if Len < 0 then Len := 0;
   SetLength(S, Len);
   if Buf = nil then Exit;
-  for i := 1 to Len do
+  for i := 1 to Length(S) do   { a frozen S holds at most its capacity }
     S[i] := Buf[i - 1];
 end;
 
@@ -688,6 +697,7 @@ var
 begin
   if cnt < 0 then cnt := 0;
   SetLength(Result, cnt);
+  cnt := Length(Result);   { a frozen Result holds at most its capacity }
   for i := cnt downto 1 do
   begin
     Result[i] := digits[Integer(Val and $F) + 1];
@@ -706,6 +716,7 @@ var
 begin
   if cnt < 0 then cnt := 0;
   SetLength(Result, cnt);
+  cnt := Length(Result);   { a frozen Result holds at most its capacity }
   for i := cnt downto 1 do
   begin
     Result[i] := digits[Integer(Val and $7) + 1];
@@ -719,11 +730,22 @@ var
 begin
   if cnt < 0 then cnt := 0;
   SetLength(Result, cnt);
+  cnt := Length(Result);   { a frozen Result holds at most its capacity }
   for i := cnt downto 1 do
   begin
     if (Val and 1) <> 0 then Result[i] := '1' else Result[i] := '0';
     Val := Val shr 1;
   end;
+end;
+
+{ The fill runs to Length(Result), not count: SetLength clamps a frozen
+  (short) Result at its capacity. }
+function StringOfChar(ch: Char; count: Integer): AnsiString;
+var i: Integer;
+begin
+  if count < 0 then count := 0;
+  SetLength(Result, count);
+  for i := 1 to Length(Result) do Result[i] := ch;
 end;
 
 { Bit scan. The zero case answers 255 BEFORE the loop, so the loop itself can

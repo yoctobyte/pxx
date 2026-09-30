@@ -2767,6 +2767,7 @@ function pyrandom_randrange(n: Int64): Int64;
 function pyrandom_uniform(a, b: Double): Double;
 function pyrandom_choice(const src: Variant): Variant;
 procedure pyrandom_shuffle(const src: Variant);
+function pyrandom_sample(const src: Variant; k: Int64): Variant;
 function pynext_first(l: TPyList): Variant;
 function pynext_first_or(l: TPyList; const dflt: Variant): Variant;
 { `next(x)` / `next(x, default)` where x is whatever the argument turned out to
@@ -2848,6 +2849,8 @@ function pydeque_new(l: TPyList): TPyDeque; overload;
 function Counter: TPyDict;
 function Counter(l: TPyList): TPyDict; overload;
 function Counter(const s: AnsiString): TPyDict; overload;
+function pycounter_new: TPyDict; overload;
+function pycounter_new(const src: Variant): TPyDict; overload;
 { `reversed(x)` — a CURSOR walking the source backwards, which is what CPython
   returns (`list_reverseiterator`). It used to be the reversed COPY, on the
   grounds that NilPy's `for` was a counted-loop desugar with no iterator
@@ -2870,6 +2873,9 @@ function hex(n: Int64): AnsiString;
   leading '-' for a negative magnitude, and '0o0'/'0b0' for zero. }
 function oct(n: Int64): AnsiString;
 function bin(n: Int64): AnsiString;
+{ hex/oct/bin of a VARIANT (base 16/8/2): an integer too big for a machine word
+  is rendered from its bignum; anything else takes the Int64 functions above. }
+function pyvar_tobase(const v: Variant; base: Integer): AnsiString;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -5689,7 +5695,11 @@ begin
   begin
     Result := PySeqKindName(TPyList(o).FKind);
   end
-  else if o is TPyDict then Result := 'dict'
+  else if o is TPyDict then
+  begin
+    { a Counter is a dict subclass in CPython, named Counter }
+    if TPyDict(o).FCounterMode then Result := 'Counter' else Result := 'dict';
+  end
   else if o is TPyBytes then
   begin
     if TPyBytes(o).FViewOf <> nil then Result := 'memoryview'
@@ -8781,6 +8791,38 @@ begin
   end;
 end;
 
+{ k distinct elements, in selection order, as a NEW list; the population is
+  not touched. A partial Fisher-Yates over pylist_v's copy. CPython (3.11+)
+  refuses a set or a dict here, so that is refused too, before the copy. }
+function pyrandom_sample(const src: Variant; k: Int64): Variant;
+var i, j: Integer; tmp: Variant; o: TObject; l, r: TPyList;
+begin
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if (o is TPyDict) or ((o is TPyList) and (TPyList(o).FKind = PYSEQ_SET)) then
+      raise TypeError.Create('Population must be a sequence.  For dicts or sets, use sorted(d).');
+  end;
+  l := pylist_v(src);
+  if (k < 0) or (k > l.count) then
+  begin
+    PXXObjRelease(Pointer(l));
+    raise ValueError.Create('Sample larger than population or is negative');
+  end;
+  r := TPyList.Create;
+  for i := 0 to Integer(k) - 1 do
+  begin
+    j := Integer(pyrandom_randint(i, l.count - 1));
+    tmp := l.at(i);
+    l.put(i, l.at(j));
+    l.put(j, tmp);
+    r.append(l.at(i));
+  end;
+  PXXObjRelease(Pointer(l));
+  Result := r;                { the Variant takes its own reference }
+  PXXObjRelease(Pointer(r));
+end;
+
 function pymath_copysign(x, y: Double): Double;
 var m: Double; pb: PInt64;
 begin
@@ -9629,6 +9671,38 @@ begin
     the whole bug this routes around rather than fixing twice. }
   c.update(s);
   Result := c;
+end;
+
+{ `collections.Counter(x)` -- the QUALIFIED spelling, reached through
+  PyStdlibCallProc. That table picks an overload by arity alone, and Counter's
+  two 1-argument overloads differ only by type, so this one takes a Variant and
+  selects at run time: update(Variant) already counts a str's characters, adds
+  a mapping's values and counts a list's elements. Anything else iterable (a
+  range, a generator) is materialised first, as CPython iterates it. Its own
+  name, not `Counter`, for the reason pydeque_new has one: a program's own
+  `def Counter` must not be what the qualified call reaches.
+  bug-n-collections-counter-qualified-does-not-compile }
+function pycounter_new: TPyDict;
+begin
+  Result := Counter;
+end;
+
+function pycounter_new(const src: Variant): TPyDict;
+var o: TObject; l: TPyList;
+begin
+  Result := Counter;
+  if pyvartag(src) = 7 then
+  begin
+    o := TObject(pyvarobj(src));
+    if (o <> nil) and not (o is TPyDict) and not (o is TPyList) then
+    begin
+      l := pylist_v(src);
+      Result.update(l);
+      PXXObjRelease(Pointer(l));
+      Exit;
+    end;
+  end;
+  Result.update(src);
 end;
 
 function TPyDict.itemlist: TPyList;
@@ -11785,9 +11859,18 @@ function pystr_repeat(const s: AnsiString; n: Int64): AnsiString;
   like the fast one was the slow one (bug-nilpy-str-repeat-is-quadratic).
   Found by a scaling curve -- every small case was fine and the failure read as
   a hang, not a wrong answer. }
+{ Filled by DOUBLING block copies through the raw handle, not per character.
+  `Result[k] := s[j]` is an indexed store into a managed string, and each one
+  paid the copy-on-write check and an ASCII-flag reset -- measured on i386,
+  `"x" * 2000` cost ~750k instructions, ten times the equivalent concat. The
+  raw writes are sound because SetLength has just handed back a block this
+  routine owns alone. The first copy scans (PXXBlockCopy's OR) and the answer
+  is stamped: every later copy repeats those bytes, so it holds for the whole
+  result, and without it `len()` of the result rescanned all of it -- half
+  the remaining cost of `"x" * 2000` once the fill was fixed. }
 var
-  i, k, m, total: Int64;
-  j: Int64;
+  k, c, m, total, orAll: Int64;
+  d: Pointer;
 begin
   Result := '';
   m := Length(s);
@@ -11799,13 +11882,17 @@ begin
     raise OverflowError.Create('repeated string is too long');
   total := m * n;
   SetLength(Result, total);
-  k := 1;
-  for i := 1 to n do
-    for j := 1 to m do
-    begin
-      Result[k] := s[j];
-      k := k + 1;
-    end;
+  d := Pointer(Result);
+  orAll := PXXBlockCopy(Int64(d), Int64(Pointer(s)), m);
+  k := m;
+  while k < total do
+  begin
+    c := k;                              { [0, k) is filled; copy it forward }
+    if c > total - k then c := total - k;
+    PXXMemMove(Pointer(Int64(d) + k), d, c);
+    k := k + c;
+  end;
+  PXXStrSetAscii(d, orAll = 0);
 end;
 
 function pystr_to_int(const s: AnsiString): Int64;
@@ -15665,12 +15752,14 @@ begin
 end;
 
 function pyiter_zip_n(items: TPyList): TPyIter;
-var i, n: Integer; cur: TPyIter; pv: Variant;
+var i, n: Integer; cur: TPyIter; pv, el: Variant;
 begin
   Result := TPyIter.Create;
   Result.FKind := PYITER_K_ZIPN;
+  { CONSTRUCTED here, so it already owns rc=1 for this field -- the FBox rule
+    (TPyIter.Create). The retain that stood here made it rc=2 against the one
+    finalizer release, and the list kept every cursor in it alive. }
   Result.FSrc := TPyList.Create;
-  PXXObjRetain(Pointer(Result.FSrc));
   n := 0;
   if items <> nil then n := len(items);
   i := 0;
@@ -15678,11 +15767,18 @@ begin
   begin
     { pyiter_v is the one iterable-to-cursor conversion, so a row that is itself
       a str/range/dict/user object works without a per-shape arm here. }
-    cur := pyiter_v(items.at(i));
+    el := items.at(i);
+    cur := pyiter_v(el);
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(cur)));
-    PXXObjRetain(Pointer(cur));
     Result.FSrc.append(pv);
+    { the list took its own reference. pv is re-poked next pass, so empty it,
+      and hand back Create's reference when pyiter_v made a fresh cursor (an
+      iterator argument comes back as itself, borrowed). The old retain here
+      leaked every cursor: pin v451, 17 live per 5-way zip. }
+    PPyVarRec(@pv)^.VType := 0;
+    if not ((pyvartag(el) = 7) and (TObject(pyvarobj(el)) = TObject(cur))) then
+      PXXObjRelease(Pointer(cur));
     Inc(i);
   end;
 end;
@@ -15745,11 +15841,16 @@ begin
 end;
 
 function pyiter_map_star(const cb: Variant; items: TPyList): TPyIter;
+var z: TPyIter;
 begin
-  Result := pyiter_map_i(nil, pyiter_zip_n(items));
+  { pyiter_map_i takes its own reference to a borrowed upstream, and this one
+    is fresh: hand Create's back. FSrc is constructed, so no retain (the FBox
+    rule). Both extras leaked the whole zip and its cursors per call. }
+  z := pyiter_zip_n(items);
+  Result := pyiter_map_i(nil, z);
+  PXXObjRelease(Pointer(z));
   Result.FStart := 4;
   Result.FSrc := TPyList.Create;
-  PXXObjRetain(Pointer(Result.FSrc));
   Result.FSrc.append(cb);
 end;
 
@@ -16868,9 +16969,17 @@ begin
   Result := 0;   { unreachable }
 end;
 
+{ The CURSOR consumers: the same fault the range consumers below had, fixed
+  the same way. The drained list is only READ by the aggregate, so it is
+  released here; the cursor belongs to the caller, who releases it. Without
+  this `sum(map(f, xs))` and `tuple(iter(xs))` leaked the drained list per
+  call (pin v451: 2 blocks each). }
 function sum(it: TPyIter): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := sum(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := sum(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 { The RANGE consumers. Each drains a fresh cursor, so consuming a range does
@@ -16959,23 +17068,35 @@ begin
 end;
 
 function sum(it: TPyIter; const start: Variant): Variant; overload;
+var tmp: TPyList;
 begin
-  Result := sum(pyiter_drain(it), start);
+  tmp := pyiter_drain(it);
+  Result := sum(tmp, start);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 function tuple(it: TPyIter): TPyList; overload;
+var tmp: TPyList;
 begin
-  Result := tuple(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := tuple(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 function any(it: TPyIter): Boolean; overload;
+var tmp: TPyList;
 begin
-  Result := any(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := any(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 function all(it: TPyIter): Boolean; overload;
+var tmp: TPyList;
 begin
-  Result := all(pyiter_drain(it));
+  tmp := pyiter_drain(it);
+  Result := all(tmp);
+  PXXObjRelease(Pointer(tmp));   { only READ by the aggregate }
 end;
 
 { Each of these releases the fresh copy pylist_v answers -- see max(const v:
@@ -19490,12 +19611,43 @@ end;
   av's mantissa even -- which costs three expansions for the whole loop, and
   only a candidate that passes is parsed.
 
+  At each length the correctly rounded candidate is tried, and at a power of two
+  above the denormals also the one on the OTHER side of av. Elsewhere the
+  round-trip interval is symmetric, so the farther one never reads back when
+  the nearer did not; there, the gap below is half the gap above, and CPython's
+  shortest can be the one rounded the other way: 7.120236347223045e-307
+  (2^-1016), where rounding alone gave 17 digits. Only there, because trying
+  it at every length cost 60% on a 9762-value run for no other value.
+
   `av` must be finite, positive and nonzero; the caller handles the rest.
   Returns '' if nothing round-tripped, which cannot happen at sig = 17. }
 function PyFloatRepr(av: Double): AnsiString;
-var sig, tail, decExp, de0, loE, hiE, cLo, cHi: Integer;
-    ds, ds0, loS, hiS, cand: AnsiString; mant: Int64; exp2: Integer;
-    even: Boolean;
+var sig, decExp, de0, loE, hiE, altE: Integer;
+    ds, ds0, loS, hiS, alt, found: AnsiString; mant: Int64; exp2: Integer;
+    even, pow2: Boolean;
+
+  { True, with the candidate (digits, dexp) laid out in `found`, if it reads
+    back as av }
+  function TryCand(digits: AnsiString; dexp: Integer): Boolean;
+  var tail, cLo, cHi: Integer; cand: AnsiString;
+  begin
+    TryCand := False;
+    tail := Length(digits);
+    while (tail > 1) and (digits[tail] = '0') do tail := tail - 1;
+    digits := Copy(digits, 1, tail);
+    cLo := PyExDecCmp(digits, dexp, loS, loE);
+    cHi := PyExDecCmp(digits, dexp, hiS, hiE);
+    if not (((cLo > 0) or ((cLo = 0) and even)) and
+            ((cHi < 0) or ((cHi = 0) and even))) then Exit;
+    cand := PyFloatLayout(digits, dexp);
+    if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
+       PyExDecDoubleToBits(av) then
+    begin
+      found := cand;
+      TryCand := True;
+    end;
+  end;
+
 begin
   Result := '';
   PyExDecSplit(av, mant, exp2);
@@ -19503,7 +19655,8 @@ begin
   { the midpoint with the next double up; and with the next one down, which
     at a power of two above the denormals has half the spacing }
   PyExDecOfMant(2 * mant + 1, exp2 - 1, hiS, hiE);
-  if (mant = (Int64(1) shl 52)) and (exp2 > -1074) then
+  pow2 := (mant = (Int64(1) shl 52)) and (exp2 > -1074);
+  if pow2 then
     PyExDecOfMant(4 * mant - 1, exp2 - 2, loS, loE)
   else
     PyExDecOfMant(2 * mant - 1, exp2 - 1, loS, loE);
@@ -19513,21 +19666,19 @@ begin
     ds := ds0;
     decExp := de0;
     PyExDecRound(ds, decExp, sig);
-    tail := Length(ds);
-    while (tail > 1) and (ds[tail] = '0') do tail := tail - 1;
-    ds := Copy(ds, 1, tail);
-    cLo := PyExDecCmp(ds, decExp, loS, loE);
-    cHi := PyExDecCmp(ds, decExp, hiS, hiE);
-    if ((cLo > 0) or ((cLo = 0) and even)) and
-       ((cHi < 0) or ((cHi = 0) and even)) then
+    if TryCand(ds, decExp) then begin Result := found; Exit; end;
+    if pow2 and (Length(ds0) > sig) then
     begin
-      cand := PyFloatLayout(ds, decExp);
-      if PyExDecDoubleToBits(PyStrToFloatDef(cand, 0.0)) =
-         PyExDecDoubleToBits(av) then
+      { the other sig-digit neighbour of av: the truncation if rounding went
+        up, else the truncation rounded up (a trailing 9 forces the carry) }
+      alt := Copy(ds0, 1, sig);
+      altE := de0;
+      if PyExDecCmp(alt, altE, ds, decExp) = 0 then
       begin
-        Result := cand;
-        Exit;
+        alt := alt + '9';
+        PyExDecRound(alt, altE, sig);
       end;
+      if TryCand(alt, altE) then begin Result := found; Exit; end;
     end;
   end;
 end;
@@ -20368,48 +20519,76 @@ begin
 end;
 
 function hex(n: Int64): AnsiString;
-var m: Int64; d: AnsiString;
+var m: QWord; d: AnsiString;
 begin
   if n = 0 then begin Result := '0x0'; Exit; end;
-  m := n;
-  if m < 0 then m := -m;
+  { the magnitude UNSIGNED: -Low(Int64) does not fit an Int64, so `-m` left
+    -2**63 negative, the loop never ran, and hex(-2**63) printed '-0x' }
+  if n < 0 then m := QWord(-(n + 1)) + 1 else m := QWord(n);
   d := '';
   while m > 0 do
   begin
-    d := HexDigitChar(m mod 16) + d;
+    d := HexDigitChar(Integer(m mod 16)) + d;
     m := m div 16;
   end;
   if n < 0 then Result := '-0x' + d else Result := '0x' + d;
 end;
 
 function oct(n: Int64): AnsiString;
-var m: Int64; d: AnsiString;
+var m: QWord; d: AnsiString;
 begin
   if n = 0 then begin Result := '0o0'; Exit; end;
-  m := n;
-  if m < 0 then m := -m;
+  { the magnitude UNSIGNED: -Low(Int64) does not fit an Int64, so `-m` left
+    -2**63 negative, the loop never ran, and hex(-2**63) printed '-0x' }
+  if n < 0 then m := QWord(-(n + 1)) + 1 else m := QWord(n);
   d := '';
   while m > 0 do
   begin
-    d := HexDigitChar(m mod 8) + d;
+    d := HexDigitChar(Integer(m mod 8)) + d;
     m := m div 8;
   end;
   if n < 0 then Result := '-0o' + d else Result := '0o' + d;
 end;
 
 function bin(n: Int64): AnsiString;
-var m: Int64; d: AnsiString;
+var m: QWord; d: AnsiString;
 begin
   if n = 0 then begin Result := '0b0'; Exit; end;
-  m := n;
-  if m < 0 then m := -m;
+  { the magnitude UNSIGNED: -Low(Int64) does not fit an Int64, so `-m` left
+    -2**63 negative, the loop never ran, and hex(-2**63) printed '-0x' }
+  if n < 0 then m := QWord(-(n + 1)) + 1 else m := QWord(n);
   d := '';
   while m > 0 do
   begin
-    d := HexDigitChar(m mod 2) + d;
+    d := HexDigitChar(Integer(m mod 2)) + d;
     m := m div 2;
   end;
   if n < 0 then Result := '-0b' + d else Result := '0b' + d;
+end;
+
+{ A `**` result is a VARIANT, not a PromoInt, so the frontend's promo lowering
+  for hex/oct/bin never saw it: `hex(2 ** 70)` took hex(Int64) and printed 0x0,
+  `hex(3 ** 50)` its low 64 bits and `hex(2 ** 63)` '-0x'. An integer-tagged
+  variant goes through a promo slot (PXXPromoFromVariant reads both the inline
+  VT_INT64 and the heap VT_PROMO_INT64 tiers), which PXXPromoToBase renders.
+  Anything else keeps the Int64 conversion it always had. }
+function pyvar_tobase(const v: Variant; base: Integer): AnsiString;
+var slot: array[0..1] of NativeInt;
+    tg: Int64; n: Int64;
+begin
+  tg := PPyVarRec(@v)^.VType;
+  if (tg = VT_PROMO_INT64_TAG) or (tg = VT_INT64_TAG) then
+  begin
+    PXXPromoInit(@slot);
+    PXXPromoFromVariant(@slot, @v);
+    Result := PXXPromoToBase(@slot, base);
+    PXXPromoClear(@slot);
+    Exit;
+  end;
+  n := v;
+  if base = 16 then Result := hex(n)
+  else if base = 8 then Result := oct(n)
+  else Result := bin(n);
 end;
 
 { A list slice is a SHALLOW copy, as in Python: the new list holds the same
@@ -23006,9 +23185,30 @@ begin
 end;
 
 function pydict_repr(d: TPyDict): AnsiString;
-var i: Integer; ks: TPyList; k: Variant;
+var i: Integer; ks, mc, pair: TPyList; k: Variant;
 begin
   if d = nil then begin Result := '{}'; Exit; end;
+  { A COUNTER prints as CPython's does: `Counter({...})` in most_common order
+    (highest count first, ties in insertion order), and `Counter()` when
+    empty. It printed as a plain dict in insertion order. }
+  if d.FCounterMode then
+  begin
+    mc := d.most_common;
+    if mc.count = 0 then Result := 'Counter()'
+    else
+    begin
+      Result := 'Counter({';
+      for i := 0 to mc.count - 1 do
+      begin
+        if i > 0 then Result := Result + ', ';
+        pair := TPyList(pyvarobj(mc.at(i)));
+        Result := Result + pyvar_repr(pair.at(0)) + ': ' + pyvar_repr(pair.at(1));
+      end;
+      Result := Result + '})';
+    end;
+    PXXObjRelease(Pointer(mc));
+    Exit;
+  end;
   Result := '{';
   ks := d.keylist;
   for i := 0 to ks.count - 1 do
