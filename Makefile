@@ -573,6 +573,19 @@ test-nilpy: $(COMPILER)
 	  echo "FAIL: nilpy_user_class_iteration control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_iterating_a_user_class_does_not_leak.npy $(TESTTMP)/test_nilpy_ucliter_hd26
 	$(TESTTMP)/test_nilpy_ucliter_hd26 | diff -u test/test_nilpy_iterating_a_user_class_does_not_leak.expected -
+	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
+	# stepped by next() and dropped, or never started; a generator nested in
+	# another one is closed with it, and a class whose __iter__ is a generator
+	# is the same path. Pin v452 left ~37 objects live per pass of this loop.
+	# `keep` is the positive control and must trip the bound. The HEAP_DEBUG
+	# row diffs against CPython: closing runs the step function once more with
+	# the state set to close, and a double release is how that goes wrong.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.npy $(TESTTMP)/test_nilpy_genclose26
+	tools/assert_no_leak.sh nilpy_generator_close 300 $(TESTTMP)/test_nilpy_genclose26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_generator_close_control 300 $(TESTTMP)/test_nilpy_genclose26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_generator_close control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.npy $(TESTTMP)/test_nilpy_genclose_hd26
+	$(TESTTMP)/test_nilpy_genclose_hd26 | diff -u test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.expected -
 	# A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS RELEASED after the call --
 	# sorted/min key=, a method's Variant parameter. Nothing owned the fresh
 	# closure object (pin v438: ~6 live per iteration of this loop); `keep` is

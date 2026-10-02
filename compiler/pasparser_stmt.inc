@@ -577,6 +577,47 @@ begin
   GenForInGenTeardown := GenMakeSeq(tryNode, -1);
 end;
 
+{ Tear down a for-in's stackless instance held in local `gIdx`, a generator
+  of proc `gpi`: when it did not run to the end, set SL_STATE_CLOSE and step
+  it once so it releases what its locals hold (BuildStacklessStep); then free
+  the block and nil the local. ONLY when not done -- after the fall-off the
+  slots still hold the released values, and a second restore would release
+  them again. The nil is what lets an ENCLOSING generator's own teardown find
+  the local and know the instance is already gone.
+
+  The step's ABI is (self + the declared params); only self is real, the rest
+  are padded exactly as the advance call pads them -- by-ref ones with the
+  addressable instance local. Built fresh per call: a node used twice is
+  emitted twice. }
+function GenSlCloseAndFree(gIdx, gpi: Integer): Integer;
+var sa: array[1..6] of Integer; k, closeIf, closePair, lit: Integer;
+begin
+  for k := 1 to 6 do
+  begin
+    sa[k] := -1;
+    if ProcGenParamCnt[gpi] >= k then
+      if Procs[gpi].Params[k].IsRef then sa[k] := GenMakeIdent(gIdx, tyPointer)
+      else sa[k] := GenZeroLit;
+  end;
+  closeIf := AllocNode(AN_IF);
+  ASTLeft[closeIf] := GenMakeCmp(Ord(tkEq),
+    GenMakeCall6(FindProc('SlGet'), tyInt64, GenMakeIdent(gIdx, tyPointer),
+                 GenMakeIntLit(SL_OFF_DONE), -1, -1, -1, -1),
+    GenMakeIntLit(0));
+  closePair := AllocNode(AN_PAIR);
+  ASTLeft[closePair] := GenMakeSeq(
+    GenSlSetStmt2(gIdx, SL_OFF_STATE, GenMakeIntLit(SL_STATE_CLOSE)),
+    GenMakeSeq(GenMakeCall8(gpi, tyBoolean, GenMakeIdent(gIdx, tyPointer),
+                            sa[1], sa[2], sa[3], sa[4], sa[5], sa[6], -1), -1));
+  ASTRight[closePair] := -1;
+  ASTRight[closeIf] := closePair;
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := 0; ASTTk[lit] := Ord(tyPointer);
+  Result := GenMakeSeq(closeIf,
+            GenMakeSeq(GenMakeCall6(FindProc('SlFree'), tyPointer,
+                         GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1),
+            GenMakeSeq(GenMakeAssign(GenMakeIdent(gIdx, tyPointer), lit), -1)));
+end;
+
 function ParseForInGeneratorAST(varIdx, gpi, recvNode, elemPrologue: Integer): Integer;
 var
   dbgK: Integer;   { PXXDBG=a.slslot probe only }
@@ -675,7 +716,12 @@ begin
     bodyNode := ParseStatementAST;
   end;
 
-  gIdx := AllocVar('', tyPointer);
+  { Named, not anonymous: an enclosing STACKLESS generator finds the locals
+    that hold an inner generator's instance by this prefix and closes them
+    when it is torn down itself (SLReleaseLocalsAtDone). The procedure index
+    is in the name because that is what the close call needs. }
+  Inc(GenForInInstSeq);
+  gIdx := AllocVar('$slgen.' + AIntToStr(gpi) + '.' + AIntToStr(GenForInInstSeq), tyPointer);
   nargsLit := AllocNode(AN_INT_LIT);  ASTIVal[nargsLit] := nargs; ASTTk[nargsLit] := Ord(tyInt64);
 
   if ProcIsStackless[gpi] then
@@ -853,6 +899,9 @@ begin
     ASTRight[whileNode] := innerSeq;
 
     callFree := GenMakeCall6(FindProc('SlFree'), tyPointer, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
+    { A `break` (or a raise) leaves the loop with the instance not done:
+      close it, free it, and nil the local -- see GenSlCloseAndFree. }
+    callFree := GenSlCloseAndFree(gIdx, gpi);
     Result := GenMakeSeq(assignG, GenForInGenTeardown(whileNode, callFree));
     Exit;
   end;
@@ -2842,18 +2891,90 @@ end;
   slot. An EARLY teardown (a `break` out of the for-in, a dropped cursor) never
   reaches this path; that half needs the per-proc slot map
   bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells describes. }
+{ The generator proc index out of a `$slgen.<gpi>.<seq>` local's name, -1 when
+  it does not parse. }
+function SLForInInstProc(const nm: AnsiString): Integer;
+var k: Integer;
+begin
+  Result := 0;
+  k := 8;
+  if (k > Length(nm)) or not (nm[k] in ['0'..'9']) then begin Result := -1; Exit; end;
+  while (k <= Length(nm)) and (nm[k] in ['0'..'9']) do
+  begin
+    Result := Result * 10 + (Ord(nm[k]) - Ord('0'));
+    Inc(k);
+  end;
+end;
+
 function SLReleaseLocalsAtDone: Integer;
-var i, head, tail, stmt, lit, a1, a2, a3, relProc: Integer;
+var i, head, tail, stmt, lit, a1, a2, a3, relProc, varClr, strDec, act: Integer;
+    gpiN, ifN, pairN: Integer;
 begin
   head := -1; tail := -1;
   relProc := FindProc('PXXObjRelease');
   if relProc < 0 then begin Result := -1; Exit; end;
+  varClr := FindProc('PXXVarClear');
+  strDec := FindProc('PXXStrDecRef');
   for i := CurGenScopeBase to SymCount - 1 do
   begin
     if SymGenSlot[i] < 0 then Continue;
     if Syms[i].Kind <> skLocal then Continue;
     if Syms[i].IsRef or Syms[i].IsArray then Continue;
-    if ScopeExitReleaseAction(i, a1, a2, a3) <> SXR_OBJ then Continue;
+    { An INNER for-in's instance, still live because this generator is being
+      closed in the middle of that loop (its own teardown was never reached).
+      Close and free it too, guarded by nil: after the inner loop ended
+      normally, its teardown already freed it and nil'ed the local. Found by
+      its name -- see the AllocVar in ParseForInGeneratorAST. }
+    if (Syms[i].TypeKind = tyPointer) and (Copy(Syms[i].Name, 1, 7) = '$slgen.') then
+    begin
+      gpiN := SLForInInstProc(Syms[i].Name);
+      if (gpiN >= 0) and (gpiN < ProcCount) then
+      begin
+        ifN := AllocNode(AN_IF);
+        lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := 0; ASTTk[lit] := Ord(tyPointer);
+        ASTLeft[ifN] := GenMakeCmp(Ord(tkNeq), GenMakeIdent(i, tyPointer), lit);
+        pairN := AllocNode(AN_PAIR);
+        ASTLeft[pairN] := GenSlCloseAndFree(i, gpiN);
+        ASTRight[pairN] := -1;
+        ASTRight[ifN] := pairN;
+        stmt := GenMakeSeq(ifN, -1);
+        if head < 0 then begin head := stmt; tail := head; end
+        else begin ASTRight[tail] := stmt; tail := ASTRight[tail]; end;
+      end;
+      Continue;
+    end;
+    act := ScopeExitReleaseAction(i, a1, a2, a3);
+    { A VARIANT local too -- the epilogue's SXR_VAR, PXXVarClear through the
+      local's own slot, which also leaves it empty. A NilPy `for p in items`
+      inside a generator types `p` as a variant, so the last element it held
+      outlived every instance that ran to the end: one object per generator,
+      measured 2026-10-02 (`for p in items: yield p` over a list of
+      instances, census live +1 per pass; `yield p.v` the same). The slot copy
+      is a raw blob of the same 16 bytes (SLRestoreLocals' SlUnblob) and
+      SlFree releases no slot, so this is the one release. }
+    if (act = SXR_VAR) and (varClr >= 0) then
+    begin
+      stmt := GenMakeCall6(varClr, tyPointer, GenMakeSlotAddr(i), -1, -1, -1, -1, -1);
+      if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
+      else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
+      Continue;
+    end;
+    { ...and a STRING local, the epilogue's SXR_STR: PXXStrDecRef on the slot
+      VALUE, then nil. The restore copies the handle word raw
+      (SLRestoreLocals), so this is again the one release. `acc = acc + s`
+      in a generator leaked its last string per instance, run to the end or
+      not. }
+    if (act = SXR_STR) and (strDec >= 0) then
+    begin
+      stmt := GenMakeCall6(strDec, tyPointer, GenMakeSlotWord(i), -1, -1, -1, -1, -1);
+      if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
+      else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
+      lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := 0; ASTTk[lit] := Ord(tyPointer);
+      stmt := GenMakeAssign(GenMakeSlotWord(i), lit);
+      ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail];
+      Continue;
+    end;
+    if act <> SXR_OBJ then Continue;
     { the epilogue's own SXR_OBJ release, then nil so nothing else can
       reach the freed object -- a class-typed assignment does not release
       here, the NilPy store emits its own retain/release }
@@ -3026,12 +3147,44 @@ end;
   holds (SLReleaseLocalsAtDone) and marks it done. As an AN_EXIT it left the
   step function directly and leaked the locals and the last yielded value.
   NOT descended into a try block: a goto out of a protected region is not
-  something this lowering promises, so a return there keeps its old path. }
-procedure SLRewriteReturns(node, doneLbl: Integer);
+  something this lowering promises, so a return there keeps its exit and gets
+  SLRewriteReturnsInTry instead. }
+procedure SLRewriteReturnsInTry(node, selfSym: Integer);
+var ex: Integer;
 begin
   if node < 0 then Exit;
   case ASTKind[node] of
-    AN_TRY_EXCEPT, AN_TRY_FINALLY: Exit;
+    AN_EXIT:
+      if ASTLeft[node] < 0 then
+      begin
+        { A return inside a try leaves the step function directly. The frame
+          holds the live locals and the slots hold the values from the last
+          yield, so a later close would release stale copies and miss the live
+          ones. Save the locals and mark the state CLOSE: whichever runs next,
+          a teardown's close or another step, takes the close path and
+          releases what is in the slots. The node is rewritten in place
+          because its parent is any statement position. }
+        ex := AllocNode(AN_EXIT); ASTLeft[ex] := -1;
+        ASTKind[node] := AN_SEQ;
+        ASTSOffset[node] := -1; ASTSLen[node] := 0;
+        ASTLeft[node] := chainSeq(SLSaveLocals(selfSym),
+                         GenMakeSeq(GenSlSetStmt(selfSym, SL_OFF_STATE,
+                                                 GenMakeIntLit(SL_STATE_CLOSE)), -1));
+        ASTRight[node] := GenMakeSeq(ex, -1);
+      end;
+    else
+      begin
+        SLRewriteReturnsInTry(ASTChildLeft(node), selfSym);
+        SLRewriteReturnsInTry(ASTChildRight(node), selfSym);
+      end;
+  end;
+end;
+
+procedure SLRewriteReturns(node, doneLbl, selfSym: Integer);
+begin
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_TRY_EXCEPT, AN_TRY_FINALLY: SLRewriteReturnsInTry(node, selfSym);
     AN_EXIT:
       if ASTLeft[node] < 0 then
       begin
@@ -3041,8 +3194,8 @@ begin
       end;
     else
       begin
-        SLRewriteReturns(ASTChildLeft(node), doneLbl);
-        SLRewriteReturns(ASTChildRight(node), doneLbl);
+        SLRewriteReturns(ASTChildLeft(node), doneLbl, selfSym);
+        SLRewriteReturns(ASTChildRight(node), doneLbl, selfSym);
       end;
   end;
 end;
@@ -3291,7 +3444,7 @@ begin
 
   CurGenStateCtr := 1;                   { state 0 = first entry (falls through) }
   doneLbl := NewSyntheticLabel;
-  SLRewriteReturns(bodyAST, doneLbl);
+  SLRewriteReturns(bodyAST, doneLbl, selfSym);
   bodyLo := SLLower(bodyAST, selfSym, retSym);
 
   { Dispatch: for each yield-state k, if state=k goto its resume label. }
@@ -3306,6 +3459,19 @@ begin
   end;
 
   restore := SLRestoreLocals(selfSym);
+  { CLOSE: a teardown that drops an instance before it ran to the end sets the
+    state to SL_STATE_CLOSE and calls the step once more. The locals have just
+    been restored from the slots, so jumping straight to the fall-off path
+    releases exactly what the instance still holds -- the same release the
+    exhaustion path does, with the body skipped. It is Python's
+    generator.close() minus GeneratorExit: no `finally` in the body runs.
+    Before this, a `break` out of a for-in over a generator, or a cursor
+    dropped after next(), leaked every managed local the generator held (a
+    list of three instances: 5 objects per pass, measured 2026-10-02).
+    bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells }
+  restore := chainSeq(restore, GenMakeSeq(GenMakeIfGoto(
+               GenMakeCmp(Ord(tkEq), GenSlGet(selfSym, SL_OFF_STATE),
+                          GenMakeIntLit(SL_STATE_CLOSE)), doneLbl), -1));
 
   { Fall-off: release what the generator holds, mark exhausted, return False.
     The last yielded VARIANT still sits in the CURRENT region with the

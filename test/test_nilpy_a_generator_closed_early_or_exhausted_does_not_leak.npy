@@ -1,0 +1,120 @@
+# A generator frees its locals whether it runs to the end, is left by `break`,
+# is stepped by next() and dropped, or is never started -- and a generator
+# nested inside another one is closed when the outer one is. A class whose
+# __iter__ is a generator, and a for over a freshly constructed object, are
+# the same mechanism. Strings held in generator locals are released too, and
+# so is what a generator holds when it returns from inside a try block.
+#
+# No argument: prints the shapes (diffed against CPython). `leak N`: runs
+# them N times and keeps nothing. `keep N`: keeps one result per pass, the
+# positive control for the census bound.
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+
+def inner(n):
+    items = [P(i) for i in range(n)]
+    for p in items:
+        yield p
+
+
+def outer(n):
+    for p in inner(n):
+        yield P(p.v * 10)
+
+
+def strs(n):
+    acc = ""
+    d = {}
+    for i in range(n):
+        acc = acc + str(i)
+        d[acc] = i
+        yield acc
+
+
+class Bag:
+    def __init__(self, xs):
+        self.xs = xs
+
+    def __iter__(self):
+        for x in self.xs:
+            yield P(x)
+
+
+def never_started(n):
+    items = [P(i) for i in range(n)]
+    for p in items:
+        yield p
+
+
+def ret_in_try(n):
+    items = [P(i) for i in range(n)]
+    for p in items:
+        try:
+            if p.v == 2:
+                return
+        except ValueError:
+            print("no")
+        yield p
+
+
+def show():
+    t = []
+    for p in outer(4):
+        t.append(p.v)
+        if p.v == 20:
+            break
+    print(t)
+    for s in strs(5):
+        if len(s) == 3:
+            print("stop at", s)
+            break
+    g = strs(4)
+    print(next(g), next(g))
+    print([p.v for p in Bag([1, 2, 3])])
+    for p in Bag([5, 6, 7]):
+        print("bag", p.v)
+        break
+    h = never_started(3)
+    print(sum(p.v for p in inner(4)))
+    print(list(strs(3)))
+    print([p.v for p in outer(3)])
+    for p in ret_in_try(5):
+        print("rt", p.v)
+    print([p.v for p in ret_in_try(4)])
+
+
+def passes(n, held):
+    for k in range(n):
+        for p in outer(4):
+            if p.v == 20:
+                break
+        for s in strs(5):
+            if len(s) == 3:
+                break
+        g = strs(4)
+        a = next(g)
+        x = [p.v for p in Bag([1, 2, 3])]
+        for p in Bag([5, 6, 7]):
+            break
+        h = never_started(3)
+        y = sum(p.v for p in inner(4))
+        z = list(strs(3))
+        w = list(outer(3))
+        for p in ret_in_try(5):
+            pass
+        v = list(ret_in_try(4))
+        if held is not None:
+            held.append(w)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

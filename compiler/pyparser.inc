@@ -30162,7 +30162,13 @@ begin
        ((FindUMeth(ci, '__iter__') >= 0) or
         ((FindUMeth(ci, '__getitem__') >= 0) and (FindUMeth(ci, '__len__') < 0))) then
     begin
-      contNode := PyCallProc1('pyiter_of_userobj', contNode);
+      { A FRESH instance (`for x in Cls(...)`) is the loop's to release, and
+        the loop holds only the cursor -- the _owned entry drops the
+        construction's reference once the cursor has taken its own. }
+      if PyCallYieldsOwnedObj(contNode) then
+        contNode := PyCallProc1('pyiter_of_userobj_owned', contNode)
+      else
+        contNode := PyCallProc1('pyiter_of_userobj', contNode);
       if contNode < 0 then
         Error('Nil Python: pylib (pyiter_of_userobj) not loaded');
       ci := iterCi;

@@ -16859,6 +16859,17 @@ begin
       handed to the caller needs its own. See PyUserObjNoArgMeth's contract. }
     PXXObjRetain(Pointer(ito));
     Result := TPyIter(ito);
+    { A GENERATOR `__iter__` (__pxx_gen_iter__) seeds `self` into the
+      instance's first slot RAW -- the generator borrows it. A cursor over it
+      must therefore keep the object alive itself, or `for x in Bag(...)`
+      would free the Bag under its own running generator once the loop
+      releases its temporary. FObj is unused by the SLGEN kind and the
+      finalizer releases it. }
+    if (Result.FKind = PYITER_K_SLGEN) and (Result.FObj = nil) and (o <> nil) then
+    begin
+      Result.FObj := o;
+      PXXObjRetain(Pointer(o));
+    end;
     Exit;
   end;
   Result := TPyIter.Create;
@@ -16893,6 +16904,18 @@ begin
   end;
   Result.FObj := ito;
   PXXObjRetain(Pointer(ito));
+end;
+
+{ pyiter_of_userobj for a FRESH object the caller owns -- `for x in Cls(...)`,
+  `[v for v in Cls(...)]`. The cursor takes every reference it needs (FObj, or
+  the __iter__ result), so the construction's own reference is dropped here.
+  Nothing else held it: each loop over a fresh instance leaked the instance
+  and everything it owned (one Bag and its list per pass, measured 2026-10-02).
+  bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells }
+function pyiter_of_userobj_owned(o: TObject): TPyIter;
+begin
+  Result := pyiter_of_userobj(o);
+  if o <> nil then PXXObjRelease(Pointer(o));
 end;
 
 function pyiter_of_range(r: TPyRange): TPyIter;
@@ -17365,6 +17388,18 @@ begin
       at step exit, and teardown is exactly where this stands. }
     if it.FGenInst <> nil then
     begin
+      { CLOSE an instance that did not run to the end -- a cursor dropped
+        after next(), or a consumer that stopped early -- so the step releases
+        what its locals hold before the block goes. State -1 is the
+        compiler's SL_STATE_CLOSE (defs.inc); offsets 0 and 24 are STATE and
+        DONE, fixed by the same layout comment as CURRENT above. Only when not
+        done: after the fall-off the slots still hold the released values. }
+      if (it.FGenStep <> nil) and
+         (PInt64(Pointer(Int64(it.FGenInst) + 24))^ = 0) then
+      begin
+        PInt64(it.FGenInst)^ := -1;
+        TPyGenStep(it.FGenStep)(it.FGenInst);
+      end;
       FreeMem(it.FGenInst);
       it.FGenInst := nil;
     end;

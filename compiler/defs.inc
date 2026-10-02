@@ -1734,6 +1734,11 @@ const
   SL_OFF_CURRENT   = 16;   { = CO_OFF_CURRENT }
   SL_OFF_DONE      = 24;   { = CO_OFF_DONE }
   SL_OFF_SLOTS     = 48;   { = CO_OFF_PARAMS; params+locals, 8 bytes each }
+  { The STATE value a teardown writes before one last step call, so the step
+    releases what the instance still holds and returns False without running
+    the body. Never a yield state: those count up from 1. pylib's cursor
+    finalizer writes the same -1 (it does not see this unit). }
+  SL_STATE_CLOSE   = -1;
   MAX_GEN_STATES   = 1024; { max yields in one stackless generator body }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
@@ -4947,6 +4952,7 @@ var
   SymDynElemRowLen : array of Integer; { for a depth-1 DYNAMIC array (or open-array param) whose ELEMENT is a named FIXED array (`array of T`, T = array[lo..hi] of Base): elements per row (flattened). 0 = scalar element. d[i]'s stride = RowLen*base size; d[i][j] indexes within the row. }
   SymDynElemRowLo  : array of Integer; { the row's low bound (T's lo) for normalising d[i][j]'s inner index. Only meaningful when SymDynElemRowLen > 0 and the row is 1-D. }
   SymGenSlot  : array of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
+  GenForInInstSeq: Integer;      { uniquifier for the `$slgen.<gpi>.<n>` instance locals (ParseForInGeneratorAST) }
   SymIsExcBinder : array of Boolean; { NilPy `except C as e` binder. Its reference is BORROWED from the in-flight exception and only becomes OWNED when the handler completes normally, so the UNWIND LANDING PAD -- which runs exactly when it did not -- must not release it. See SymSkipScopeExitRelease. }
   SymProcSig  : array of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   SymElemProcSig : array of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }

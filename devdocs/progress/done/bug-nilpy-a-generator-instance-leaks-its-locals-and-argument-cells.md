@@ -2,8 +2,8 @@
 track: N
 prio: 35
 type: bug
-status: backlog
-summary: 'MECHANISM: a stackless generator keeps its managed locals as live state across yields, so the step epilogue never releases them, and nothing else did at teardown. FIXED on the EXHAUSTION path (2026-09-24): running off the end, or a plain `return`, now releases the slotted class locals and the last yielded variant before marking the generator done (SLReleaseLocalsAtDone, SLRewriteReturns, BuildStacklessStep). STILL LEAKS on EARLY teardown -- a `break` out of the for-in, a cursor dropped before exhaustion, a `return` inside a try block -- where the frame is gone and only the instance slots hold the references; that needs the per-proc slot-kind map below, read at SlFree. The argument-cell half of the old summary no longer reproduces at HEAD."'
+status: done
+summary: 'FIXED 2026-10-02 (frankuser). A stackless generator now releases what it holds however it ends. Exhaustion and a plain return were fixed 2026-09-24. Early teardown (a break out of a for-in, a cursor dropped after next(), a generator never started, an inner generator inside an outer one) now CLOSES the instance: the state is set to SL_STATE_CLOSE and the step runs once more, restores the locals and jumps to the release tail. A return inside a try saves the locals and marks the state CLOSE before it exits. String, variant and nested-generator locals are released too. Close does not run a finally block (yield inside try is refused anyway).'
 ---
 
 # A Nil Python generator instance leaks its locals and its argument cells
@@ -166,3 +166,41 @@ yields its own object live=2; `return` part-way live=1; `break` live=2706
 checks values against CPython plain and under -dPXX_HEAP_DEBUG (no
 use-after-free), plus an assert_no_leak.sh row with bound 200: HEAD live=17,
 pin v421 (4e32f1dde0ec) live=8349, fails the bound.
+
+## Closed (2026-10-02, frankuser)
+
+Early teardown, the half that was left. Measured on pin v452 with
+`test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.npy`:
+5000 passes leave live=187479 on the pin (about 37 blocks per pass) and
+live=92 with the fix (bound 300). The `keep` control leaves 22564 and trips
+the bound.
+
+The mechanism is close, not a per-proc descriptor table. The step function
+already knows its own slots, so the teardown does not have to:
+
+1. `SL_STATE_CLOSE = -1` (defs.inc). `BuildStacklessStep` checks it right
+   after `SLRestoreLocals` and jumps to the fall-off tail, so the release is
+   the same code the exhaustion path runs, with the body skipped.
+2. `GenSlCloseAndFree` (pasparser_stmt.inc) replaces the for-in desugar's bare
+   `SlFree`: if DONE is 0, set STATE to CLOSE and call the step once, then
+   `SlFree`, then nil the instance local.
+3. The `TPyIter` finalizer (pylib.pas) does the same for a cursor: DONE 0 →
+   STATE := -1 → `FGenStep(FGenInst)` before `FreeMem`.
+4. `SLReleaseLocalsAtDone` now also releases variant locals (`PXXVarClear`)
+   and string locals (`PXXStrDecRef`), and closes an inner for-in's generator
+   instance (a `$slgen.<gpi>.<seq>` local). That last one is how an outer
+   generator closed early closes the inner one it was iterating.
+5. A `return` inside a try block cannot be routed to the tail (a goto out of a
+   protected region), so `SLRewriteReturnsInTry` makes it save the locals and
+   set STATE to CLOSE before it exits. Without that the slots held the values
+   from the last yield and the close released stale copies: one block per
+   generator.
+6. `for x in Cls(...)` where `__iter__` is a generator: `pyiter_of_userobj`
+   keeps the object alive in the cursor (FObj), and `pyiter_of_userobj_owned`
+   drops the call's own reference, so a fresh iterable is freed with its cursor.
+
+Under -dPXX_HEAP_DEBUG the fixture's output is identical to CPython's.
+
+Not done: close does not run a `finally` (Python's GeneratorExit). A `yield`
+inside `try` is refused by this lowering ("yield only allowed at top level or
+inside for/while/if/case"), so there is no suspended try to unwind.
