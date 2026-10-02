@@ -561,6 +561,18 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_fresh_method_discard 300 $(TESTTMP)/test_nilpy_freshdisc26 fresh 5000
 	@if tools/assert_no_leak.sh nilpy_fresh_method_discard_control 300 $(TESTTMP)/test_nilpy_freshdisc26 keep 5000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_fresh_method_discard control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# ITERATING A USER CLASS DOES NOT LEAK: list()/sum()/zip()/iter() over a
+	# class with __iter__, and every object its __next__ yields. Pin v452 leaked
+	# 18 objects per pass of this fixture (live=89206 at 5000 passes); fixed,
+	# 48. `keep` is the positive control and must trip the bound. The HEAP_DEBUG
+	# row diffs against CPython: the fix drops a NilPy def's owned reference,
+	# and an over-release is the way it could go wrong.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_iterating_a_user_class_does_not_leak.npy $(TESTTMP)/test_nilpy_ucliter26
+	tools/assert_no_leak.sh nilpy_user_class_iteration 300 $(TESTTMP)/test_nilpy_ucliter26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_user_class_iteration_control 300 $(TESTTMP)/test_nilpy_ucliter26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_user_class_iteration control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_iterating_a_user_class_does_not_leak.npy $(TESTTMP)/test_nilpy_ucliter_hd26
+	$(TESTTMP)/test_nilpy_ucliter_hd26 | diff -u test/test_nilpy_iterating_a_user_class_does_not_leak.expected -
 	# A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS RELEASED after the call --
 	# sorted/min key=, a method's Variant parameter. Nothing owned the fresh
 	# closure object (pin v438: ~6 live per iteration of this loop); `keep` is

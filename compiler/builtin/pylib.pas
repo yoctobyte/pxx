@@ -16855,6 +16855,9 @@ begin
     bug-nilpy-builtins-over-a-user-iterable-answer-empty }
   if (ito <> nil) and (ito is TPyIter) then
   begin
+    { `itv` holds the only reference and dies when this returns, so the cursor
+      handed to the caller needs its own. See PyUserObjNoArgMeth's contract. }
+    PXXObjRetain(Pointer(ito));
     Result := TPyIter(ito);
     Exit;
   end;
@@ -22394,21 +22397,19 @@ begin
   begin
     fv := TNoArgV(mi^.Code);
     res := fv(Pointer(o));
-    { A VARIANT-returning dunder that hands back an OBJECT takes the same extra
-      reference the RetKind=6 arm below takes, and for the same reason: every
-      caller here reads the payload out with pyvarobj and keeps the raw pointer
-      AFTER its own `res` dies, so a balanced variant leaves them holding freed
-      memory. pyiter_of_userobj is the one that proved it — `def __iter__(self)
-      -> Any: return iter(xs)` returned a cursor over a list that was already
-      gone, so `list(obj)` answered [] and -dPXX_HEAP_DEBUG turned the same
-      program into a SEGV. The class-returning spelling of the identical method
-      was correct, because THIS retain is what kept its cursor alive.
+    { THE CONTRACT, both object arms: on return `res` holds the caller's ONE
+      reference and there is no other. A caller that keeps the raw pointer
+      after `res` dies takes its own retain (pyiter_of_userobj does).
 
-      Two arms of one rule where only one had been updated: the dunder's
-      declared return KIND is an implementation detail of type inference, and
-      nothing above this line should change ownership because of it.
-      bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides }
-    if pyvar_is_objtag(res) then PXXObjRetain(pyvarobj(res));
+      This arm used to add an EXTRA reference for every caller, and the RetKind=6
+      arm below did too, so that a caller holding the raw pointer past `res`
+      would not be left with freed memory (`def __iter__(self) -> Any: return
+      iter(xs)` answered [] and SEGVed under -dPXX_HEAP_DEBUG). Nothing ever
+      dropped that extra reference, so it leaked: one `__iter__` result per
+      list()/sum()/iter() over a user class, one object per value a user
+      `__next__` yields, and with `return self` the instance itself. The fix
+      was moved to the one caller that kept the pointer.
+      bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call }
     PyUserObjNoArgMeth := True;
     Exit;
   end;
@@ -22416,8 +22417,18 @@ begin
   begin
     fo := TNoArgO(mi^.Code);
     ro := fo(Pointer(o));
-    if ro <> nil then PXXObjRetain(Pointer(ro));
     res := TObject(ro);
+    { A NilPy def hands back an OWNED reference (+1): a fresh object arrives
+      at rc=1, and `return self` / `return self.q` retain on the way out (see
+      the discard rule in ir.inc). `res` took its own reference above, so the
+      def's is dropped here or it is never dropped at all. A PASCAL method
+      returns a BORROWED pointer (TWaveFile.__enter__ is `Result := Self`), and
+      releasing that would free a live object. RTTI_METH_FLAG_HASSIG is set
+      from PyProcIsNilPyDef (rtti_emit.inc), so it is exactly the "a NilPy
+      def" test, and it holds for the compiler-generated __pxx_gen_iter__ too:
+      that method belongs to the main module and returns a fresh cursor. }
+    if (ro <> nil) and ((mi^.Flags and RTTI_METH_FLAG_HASSIG) <> 0) then
+      PXXObjRelease(Pointer(ro));
     PyUserObjNoArgMeth := True;
     Exit;
   end;

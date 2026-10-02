@@ -1,0 +1,136 @@
+# ITERATING A USER CLASS MUST NOT LEAK.
+#
+# list(), sum(), zip(), `in` and iter() over a user class all go through
+# pyiter_of_userobj, which calls `__iter__` through PyUserObjNoArgMeth, and the
+# cursor calls `__next__` the same way. That call added an EXTRA reference to
+# every object a dunder returned, on top of the reference a NilPy def already
+# hands its caller, and nothing ever dropped either one. So each pass leaked the
+# `__iter__` result: the instance itself when `__iter__` is `return self`, a
+# separate iterator object, or the cursor of `return iter(self.xs)`. Each object
+# a user `__next__` yields leaked too. Measured 2026-10-02 at 53dbb01c15 (pin
+# v452): the `leak` mode below leaked 18 objects per pass (census live 41 after
+# 1 pass, 1841 after 101), against 0 under CPython.
+#
+# THE OWNERSHIP RULE THIS PINS: a NilPy def returns an OWNED reference and a
+# Pascal method a BORROWED one, told apart at run time by RTTI_METH_FLAG_HASSIG.
+# The default mode checks the values against CPython; run under
+# -dPXX_HEAP_DEBUG it is what catches an over-release, which is the way this
+# fix could go wrong.
+#
+# Modes: (none) prints the values. `leak N` runs every shape N times and must
+# stay under the bound. `keep N` holds what it builds, and it MUST trip the
+# bound, or the census cannot see this leak.
+
+import sys
+from typing import Any
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+
+class ObjNext:
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+
+    def __iter__(self):
+        self.i = 0
+        return self
+
+    def __next__(self):
+        if self.i >= self.n:
+            raise StopIteration
+        self.i += 1
+        return P(self.i * 10)
+
+
+class Gen:
+    def __init__(self, xs):
+        self.xs = xs
+
+    def __iter__(self):
+        for x in self.xs:
+            yield x * 2
+
+
+class AnyIter:
+    def __init__(self, xs):
+        self.xs = xs
+
+    def __iter__(self) -> Any:
+        return iter(self.xs)
+
+
+class Field:
+    def __init__(self, xs):
+        self.it = iter(xs)
+
+    def __iter__(self):
+        return self.it
+
+
+class Base:
+    def __iter__(self):
+        return iter(self.items())
+
+
+class Mix(Base):
+    def items(self):
+        return [7, 8, 9]
+
+
+class Sel:
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+
+    def __iter__(self):
+        self.i = 0
+        return self
+
+    def __next__(self):
+        if self.i >= self.n:
+            raise StopIteration
+        self.i += 1
+        return self.i
+
+
+def show():
+    print([p.v for p in list(ObjNext(3))])
+    print(list(Gen([1, 2, 3])), sum(Gen([1, 2, 3])))
+    a = AnyIter(["a", "b"])
+    print(list(a), list(a))
+    f = Field([4, 5, 6])
+    print(list(f), list(f))
+    print(list(Mix()), sum(Mix()), 8 in Mix())
+    s = Sel(4)
+    print(list(s), sum(s), list(zip(s, Sel(2))))
+    for x in Sel(2):
+        print("for", x)
+    t = []
+    for p in ObjNext(2):
+        t.append(p)
+    print([q.v for q in t])
+
+
+def passes(n, held):
+    for k in range(n):
+        x = list(ObjNext(3))
+        y = list(Gen([1, 2, 3]))
+        z = list(AnyIter([1, 2]))
+        w = list(Mix())
+        f = list(Field([1, 2]))
+        o = Sel(4)
+        q = list(o)
+        if held is not None:
+            held.append(x)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

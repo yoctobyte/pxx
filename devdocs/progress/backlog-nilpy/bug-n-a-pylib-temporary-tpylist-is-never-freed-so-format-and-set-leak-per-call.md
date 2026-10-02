@@ -232,3 +232,45 @@ The census is a candidate list and not a population; `TPyDeque.Compact` is a
 real defect nobody can reach yet; and `pyiter_of_userobj` has a measured
 residual with a named mechanism and no fix.
 
+
+## 2026-10-02 — the pyiter_of_userobj residual, found to be much larger and fixed (frankuser)
+
+The "63 bytes/call" residual above was the visible tip of a wider defect.
+The census showed objects, not bytes:
+
+| loop body (5000 passes) | at pin v452 | fixed |
+| --- | --- | --- |
+| `list(o)`, `__iter__` returns `self` | 0 per pass, but the instance itself never dies | 0 |
+| `o = Sel(4); list(o)`, fresh each pass | 1 object per pass (the instance) | 0 |
+| `__iter__` returns a separate iterator object | 1 per pass | 0 |
+| `__iter__` returns `iter(self.xs)` | 3 per pass | 0 |
+| a `__next__` that yields fresh objects | 1 per yielded value | 0 |
+
+**Mechanism.** `PyUserObjNoArgMeth` (pylib.pas) added an EXTRA reference to
+every object a no-argument dunder returned, in both object arms (RetKind 6 and
+22). The reason given was that callers keep the raw pointer after `res` dies.
+On top of that, a NilPy def already hands back an OWNED reference: the objtrace
+of the separate-iterator case read `A1 R2 R3 R4 r3 r2`, ending at rc=2. Nothing
+dropped either reference.
+
+**Fix.** There is now one contract: `res` holds the caller's only reference.
+- The RetKind 6 arm releases the def's owned reference after `res` takes its
+  own, but ONLY for a NilPy def. A Pascal method returns a borrowed pointer
+  (`TWaveFile.__enter__` is `Result := Self`), and releasing that would free a
+  live object. The test is `RTTI_METH_FLAG_HASSIG`, which rtti_emit.inc sets
+  from `PyProcIsNilPyDef`, so it is exactly "a NilPy def". It also holds for
+  the generated `__pxx_gen_iter__`, which returns a fresh cursor.
+- The RetKind 22 arm takes no extra reference any more.
+- `pyiter_of_userobj`, the one caller that kept the pointer, retains the
+  cursor it returns.
+
+**Verified.** Values match CPython under `-dPXX_HEAP_DEBUG` for every shape:
+object-yielding `__next__`, generator `__iter__`, `-> Any` returning
+`iter(xs)`, a field-held iterator iterated twice, a mixin base `__iter__`,
+`sum`/`zip`/`in`/`for`. Regression test:
+`test/test_nilpy_iterating_a_user_class_does_not_leak.npy`, wired into
+test-nilpy. It reads live=89206 against a bound of 300 on the unfixed pylib,
+and 48 fixed. Its `keep` control trips the bound.
+
+**Still open in this ticket:** `TPyDeque.Compact` (unreachable), and the census
+remains a candidate list rather than a population.
