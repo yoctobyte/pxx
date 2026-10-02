@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -93,3 +93,37 @@ the trailing-comma fix), which agree; the pinned compiler (v435, sha of stable_l
 on 2026-09-25) fails the same way. v435 already carries a457570295, so this
 does not date the bug; nothing older was run. Same symptom as above with nothing captured,
 which suggests the cause is the object-typed lambda RESULT and not the capture.
+
+## Closed (2026-10-02, frankuser)
+
+Mechanism: PyCompileLambdaBody returned a class-typed value only when
+`PyLambdaResultIsOwnedTemp` called it fresh. Fresh meant one of: the
+lambda's own hoist temp, a named pylib container constructor, or a user def.
+Anything else was evaluated and dropped, and `$pyresult` stayed None. A
+captured name is a global or an enclosing local, so it never passed. The
+gate dates from `lambda s: log.append(s)` taking a captured `log` to refcount
+0 (4 retains, 5 releases).
+
+That over-release no longer reproduces. With the gate removed, the following
+run 2000 passes under -dPXX_HEAP_DEBUG with output identical to CPython:
+`log.append` through a lambda, a user method returning `self`, and captured,
+field, subscript, dict-value, `a + b`, `a * 2` and slice bodies. Census is
+flat in each case. So the gate, its three helpers (PyLambdaResultIsOwnedTemp,
+PyProcIsPyDefined, PyProcIsFreshContainerCtor) and its carve-outs are gone,
+and a lambda body is now an AN_EXIT like a def's `return`.
+
+The pin got all of these wrong: `(lambda: lv)()`, `(lambda: a + b)()`,
+`(lambda: p.kids)()` and `(lambda: xs[1]).v` were None or raised.
+
+Fixtures, all with census + `keep` control + HEAP_DEBUG diff:
+- test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy
+  (also an i386 leg)
+- test_nilpy_a_lambda_returns_a_borrowed_or_computed_object.npy
+- test_nilpy_a_lambda_that_constructs_a_class_instance_returns_it.npy
+
+Not fixed here: a DISCARDED `a + b` or `bv + b"x"` (a bare expression
+statement) still leaks two objects per execution. pylist_concat and
+pybytes_concat are classified borrowed because `r.put(...)` on their result
+local counts as an escape (LocalUseEscapes treats any method call on the
+local as one). Assigned forms are flat. Filed as
+bug-n-a-discarded-list-or-bytes-concat-leaks-because-its-builder-reads-as-borrowed.

@@ -18219,7 +18219,7 @@ end;
   stages exactly what the call site wrote. That is the case PyProcRequiredArity
   exists for, and it is why this is a unit test and not a structural one.
 
-  NAMED BY UNIT, the way PyProcIsFreshContainerCtor is, and for the same reason:
+  NAMED BY UNIT, as the old lambda freshness list was, and for the same reason:
   "does this callee get its defaults filled for it?" is not answerable from the
   signature. pylib and pyeval are the Pascal builtin surface a bare Python name
   resolves to. A main-program def (ProcUnitIdx < 0) and an imported `.py`
@@ -18642,9 +18642,9 @@ begin
       question for a SYNTHESIZED WRAPPER, whose body is always
       `return realproc(a0, ...)` and which therefore returns exactly what the
       direct call at that site would. That is why the relaxation is paired with
-      the bStart = -1 arm in PyCompileLambdaBody and NOT with a wider
-      PyProcIsFreshContainerCtor: the lambda path keeps the old behaviour
-      untouched. Boxing an aliasing result is already what the direct-call path
+      the bStart = -1 arm in PyCompileLambdaBody. (The lifted-lambda freshness
+      gate itself was removed on 2026-10-02 once aliasing measured safe; see
+      the note at PyCompileLambdaBody's exit wrap.) Boxing an aliasing result is already what the direct-call path
       does -- `x = log.append(i)` 500 times is correct and matches CPython -- so
       the wrapper doing the same is not a new ownership claim.
       bug-n-a-stdlib-shim-function-returning-a-container-is-broken-when-taken-as-a-value }
@@ -18744,8 +18744,8 @@ end;
 
   ONLY the one-argument, value-returning shapes are here. Left out on purpose,
   each for a stated reason rather than for being harder:
-    divmod    arity 2 returning a fresh TPyList, which PyProcIsFreshContainerCtor
-              does not list (it keys on the PYTHON name, and the helper is
+    divmod    arity 2 returning a fresh TPyList, which the lambda freshness list
+              did not list when this was written (it keyed on the PYTHON name; the helper is
               `pydivmod_v`), so the wrapper's return side would discard it;
     enumerate/filter/map/zip
               lazy constructors with SEVERAL entry points picked from the
@@ -39593,105 +39593,6 @@ end;
   half — a lambda has no statements, no locals and no nested defs, so what is
   left is the prologue, the expression, and the epilogue.
   (feature-nilpy-lambda-compiled-closure) }
-{ Is this lambda body's value a FRESHLY BUILT object the body itself owns, as
-  opposed to an alias of something that outlives the call?
-
-  The distinction matters because PyCompileLambdaBody refuses to return a
-  tyClass/tyRecord value at all — see the note at its exit-wrap — and that
-  blanket refusal was aimed at `lambda s: log.append(s)`, whose result is the
-  CAPTURED list itself. A container LITERAL is the opposite case: its lowering
-  hoists `__py_lit_N := <new>` and hands back a read of that temp, which OWNS
-  the construction ref (see PyParseListLiteralT), so returning it is exactly
-  what every other body path does with a `return [..]`.
-
-  Structural, not by name: an AN_IDENT of a LOCAL allocated inside this body's
-  own scope. A capture arrives as a PARAMETER and so is excluded, which is the
-  aliasing case the refusal exists for; a method-call result is an AN_CALL and
-  is excluded too. A lambda body is a single expression, so a local here can
-  only be a hoist temp.
-
-  SECOND CASE (2026-08-09): a call to one of pylib's own CONSTRUCTOR builtins —
-  `list(s)`, `tuple(s)`, `sorted(s)`, `dict(x)`, `bytes(b)`, `reversed(l)`.
-  These were on the wrong side of the line and the cost was not "returns None":
-  the refusal emits the call and NO exit at all, so `$pyresult` is never stored
-  and the caller reads an uninitialised slot — `lambda x: list(x)` gave None and
-  `lambda x: sorted(x)` SEGFAULTED, from the same cause.
-
-  The distinction that matters is fresh-vs-alias, not call-vs-ident, and these
-  are provably fresh: every one of them does `r := TPyList.Create` (or the
-  bytes/dict equivalent) and fills a NEW object, so the value owns its
-  construction ref exactly as a literal's hoist temp does. Verified by reading
-  the bodies in pylib.pas, not assumed from the Python semantics — `bytes(b)`
-  in particular could have returned its argument and does not, it copies.
-
-  A USER def returning a list stays excluded even though it is also an AN_CALL:
-  it may return a captured global, which is the aliasing case again. Hence the
-  unit check — the name alone is not enough, because a user `def list(...)`
-  shadows by argument fit (project_findproc_by_name_ignores_overloads), and
-  matching it by name would hand back an alias under a builtin's name. }
-function PyProcIsFreshContainerCtor(pi: Integer): Boolean;
-{ A pylib builtin that ALWAYS returns a newly constructed container. Named
-  rather than structural because "does this callee alias one of its arguments?"
-  is not answerable from the signature; the unit check is what keeps a
-  same-named user def out. }
-var nm, un: AnsiString;
-begin
-  PyProcIsFreshContainerCtor := False;
-  if (pi < 0) or (pi >= ProcCount) then Exit;
-  if ProcUnitIdx[pi] < 0 then Exit;      { the main program — a user def }
-  un := Strs[ProcUnitIdx[pi]].Text;
-  nm := Procs[pi].Name;
-  if un = 'pylib' then
-    PyProcIsFreshContainerCtor :=
-      CaseEqual(nm, 'list') or CaseEqual(nm, 'tuple') or CaseEqual(nm, 'dict') or
-      CaseEqual(nm, 'bytes') or CaseEqual(nm, 'bytearray') or
-      CaseEqual(nm, 'reversed')
-  else if un = 'pyeval' then
-    { `sorted` lives in pyeval, not pylib, because it takes a key CALLBACK. Its
-      body is `r := TPyList.Create` then append, same as the pylib rows. }
-    PyProcIsFreshContainerCtor := CaseEqual(nm, 'sorted');
-end;
-
-{ A callee compiled from PYTHON source: the main program or a module on the
-  PyModUnitIdx list. Its `return` stores through the same AN_EXIT coercion a
-  lambda's exit uses, so its class-typed value arrives OWNED exactly as a
-  written `def l(): return f()` receives it -- the borrowed-Self shape the
-  refusal below guards against is a pylib method's, never a def's. }
-function PyProcIsPyDefined(pi: Integer): Boolean;
-var m: Integer;
-begin
-  PyProcIsPyDefined := False;
-  if (pi < 0) or (pi >= ProcCount) then Exit;
-  if ProcUnitIdx[pi] < 0 then begin PyProcIsPyDefined := True; Exit; end;
-  for m := 0 to PyModUnitCount - 1 do
-    if PyModUnitIdx[m] = ProcUnitIdx[pi] then begin PyProcIsPyDefined := True; Exit; end;
-end;
-
-function PyLambdaResultIsOwnedTemp(n, procIdx: Integer): Boolean;
-var s: Integer;
-begin
-  PyLambdaResultIsOwnedTemp := False;
-  if n < 0 then Exit;
-  if ASTKind[n] in [AN_CALL, AN_VIRTUAL_CALL] then
-  begin
-    { A call to a def the program wrote (module function or method) returning
-      a tuple, list or instance answered None: the body was emitted for its
-      side effect and $pyresult never stored. `(lambda: freetup())()` and
-      `(lambda: a.tup())()` -- found by the lekkerzeilen seat's parity sweep the
-      moment it wrapped its rows in `lambda:` (2026-09-16). Measured with the
-      alloc census: a def returning a captured global, and a captured object's
-      self-returning method, balance the same as the scalar shape. }
-    PyLambdaResultIsOwnedTemp := PyProcIsFreshContainerCtor(ASTIVal[n]) or
-                                 PyProcIsPyDefined(ASTIVal[n]);
-    Exit;
-  end;
-  if ASTKind[n] <> AN_IDENT then Exit;
-  s := ASTIVal[n];
-  if (s < 0) or (s >= SymCount) then Exit;
-  if Syms[s].Kind <> skLocal then Exit;
-  PyLambdaResultIsOwnedTemp := s >= Procs[procIdx].ScopeBase;
-end;
-
 procedure PyCompileLambdaBody(procIdx, bStart, realProcIdx: Integer);
 var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode, exitNode,
     wArgSeq, wArgLast, wArgNode, wIdentNode, wCallNode, wCastNode,
@@ -39993,24 +39894,21 @@ begin
     ever wrote $pyresult; only a lambda used purely for its side effect (the
     shape the lifter was first built for) happened to look correct.
 
-    EXCLUDES a tyClass/tyRecord result: `lambda s: log.append(s)` (append
-    returns Self) boxed into $pyresult and released by a caller that discards
-    it drove the SAME captured `log` to refcount 0 and freed it out from under
-    the enclosing scope that still owned it (traced with -dPXX_OBJTRACE: 4
-    retains/5 releases where the scalar/string case balances at 2/2) --
-    an aliased captured object's ownership around the bound-fn bridge is not
-    accounted for correctly here, and is the ARC gap
-    bug-nilpy-bound-fn-closure-objects-are-never-freed already tracks. Keep
-    the old discard-only behaviour for that shape rather than risk it; every
-    scalar and managed-STRING result (checked with -dPXX_OBJTRACE too, and
-    balances) is fixed.
-    bug-nilpy-lifted-lambda-discards-its-return-value
-
-    A container LITERAL is carved back OUT of that exclusion: `lambda x: [x, 1]`
-    and `lambda x: (x, x+1)` hand back a read of a hoist temp that OWNS its
-    construction ref, so there is no second owner to unbalance — and being
-    swept up by the blanket refusal made every such lambda return None, silently
-    (bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list). }
+    A CLASS-TYPED value used to be EXCLUDED unless it was provably fresh,
+    and was evaluated for its side effect and dropped. The reason was
+    `lambda s: log.append(s)` (append returns Self): boxed into $pyresult and
+    released by a caller that discarded it, it took the captured `log` to
+    refcount 0 (OBJTRACE then: 4 retains, 5 releases). That no longer
+    reproduces. Measured 2026-10-02 with the exclusion removed: the AN_EXIT
+    store retains a borrowed value as a def's `return` does, `log.append`
+    and a user method returning `self` run 2000 passes clean under
+    -dPXX_HEAP_DEBUG, and the census is flat. The exclusion had grown a list
+    of carve-outs (a hoist temp, a pylib container ctor, a user def), and
+    everything outside it answered None: a construction, a captured name, a
+    field, a subscript, `a + b`, `a[:1]`, `a * 2`.
+    bug-nilpy-lifted-lambda-discards-its-return-value,
+    bug-n-a-lambda-that-constructs-a-class-instance-returns-none,
+    bug-n-a-lambda-returning-a-captured-heap-value-yields-none }
   { A CLONE THUNK is a PROCEDURE: there is no $pyresult to store into and the
     callee's Variant result is discarded on purpose (the child never returns, so
     a result has nowhere to go). Wrapping it in AN_EXIT would store through a
@@ -40027,21 +39925,6 @@ begin
       and a nil reference when the def wrote a unit global (measured on
       x86-64). Evaluated as a statement, the def's Variant result is dropped
       the way any discarded call's is. }
-    node := CurASTNode
-  else if (bStart <> -1) and (bStart <> -3) and
-     (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
-     not PyLambdaResultIsOwnedTemp(CurASTNode, procIdx) then
-    { `bStart <> -1` EXEMPTS THE SYNTHESIZED CALLABLE-VALUE WRAPPER (and -3, the
-      word thunk, which forwards its real body's result the same way).
-      The freshness question this arm asks is a question about an arbitrary
-      LAMBDA BODY, which may evaluate to a captured alias; a wrapper's body is
-      always `return realproc(a0, ...)`, so it hands back exactly what a direct
-      call at that site hands back. Discarding it made the wrapper answer None
-      for every class-returning callee -- measured: with the wrapper admitted but
-      this arm still discarding, `f = re.findall; f("a", "banana")` printed
-      `None` instead of segfaulting, which is the same bug one layer along.
-      Both halves are needed: the wrapper coerces the ARGUMENTS, this returns the
-      RESULT. }
     node := CurASTNode
   else
   begin

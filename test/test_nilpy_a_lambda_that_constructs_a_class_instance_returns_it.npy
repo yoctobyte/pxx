@@ -1,0 +1,59 @@
+# `f = lambda: A(4)` returned None: a lambda's class-typed value is only
+# returned when it is known to be owned, and a construction was not on that
+# list. It must come back, be released when dropped, and not be released
+# twice when kept.
+#
+# No argument: prints (diffed against CPython). `leak N`: N passes keeping
+# nothing. `keep N`: keeps one instance per pass, the census control.
+import sys
+
+
+class A:
+    def __init__(self, n):
+        self.n = n
+
+
+def run(mk):
+    o = mk()
+    return o.n
+
+
+def show():
+    f = lambda: A(4)
+    print(f().n)
+    print(run(f))
+    g = lambda k: A(k * 2)
+    print(g(5).n)
+    k = 3
+    h = lambda: A(k + 1)
+    print(h().n)
+    print([a.n for a in map(g, [1, 2, 3])])
+    makers = [lambda: A(1), lambda: A(2)]
+    print([m().n for m in makers])
+    f()
+    kept = f()
+    kept.n = 9
+    print(kept.n, f().n)
+
+
+def passes(n, held):
+    f = lambda: A(4)
+    g = lambda k: A(k * 2)
+    t = 0
+    for i in range(n):
+        t += f().n
+        t += run(f)
+        a = g(i)
+        t += a.n
+        f()
+        if held is not None:
+            held.append(g(i))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

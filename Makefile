@@ -573,6 +573,39 @@ test-nilpy: $(COMPILER)
 	  echo "FAIL: nilpy_user_class_iteration control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_iterating_a_user_class_does_not_leak.npy $(TESTTMP)/test_nilpy_ucliter_hd26
 	$(TESTTMP)/test_nilpy_ucliter_hd26 | diff -u test/test_nilpy_iterating_a_user_class_does_not_leak.expected -
+	# A LAMBDA THAT CONSTRUCTS AN INSTANCE RETURNS IT: `f = lambda: A(4)` was
+	# None (pin v452). The census row checks the returned instance is released
+	# when dropped; `keep` is its control. The HEAP_DEBUG row diffs against
+	# CPython, because a double release is how returning an owned value goes wrong.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_lambda_that_constructs_a_class_instance_returns_it.npy $(TESTTMP)/test_nilpy_lamctor26
+	tools/assert_no_leak.sh nilpy_lambda_ctor 300 $(TESTTMP)/test_nilpy_lamctor26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_lambda_ctor_control 300 $(TESTTMP)/test_nilpy_lamctor26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_lambda_ctor control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_lambda_that_constructs_a_class_instance_returns_it.npy $(TESTTMP)/test_nilpy_lamctor_hd26
+	$(TESTTMP)/test_nilpy_lamctor_hd26 | diff -u test/test_nilpy_a_lambda_that_constructs_a_class_instance_returns_it.expected -
+	# A LAMBDA RETURNS A CAPTURED OBJECT: `lv = [1]; (lambda: lv)()` was None for
+	# a list, dict, tuple, bytes or instance (pin v452). The value returned is a
+	# BORROWED name, so the HEAP_DEBUG row is the one that matters: the caller
+	# drops what it got, and the captured object must survive that.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy $(TESTTMP)/test_nilpy_lamcaph_hd26
+	$(TESTTMP)/test_nilpy_lamcaph_hd26 | diff -u test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy $(TESTTMP)/test_nilpy_lamcaph26
+	tools/assert_no_leak.sh nilpy_lambda_captured 300 $(TESTTMP)/test_nilpy_lamcaph26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_lambda_captured_control 300 $(TESTTMP)/test_nilpy_lamcaph26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_lambda_captured control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.npy $(TESTTMP)/test_nilpy_lamcaph26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_lamcaph26_i386 | diff -u test/test_nilpy_a_lambda_returning_a_captured_heap_value_returns_it.expected -; \
+	else echo "=== test_nilpy_lamcaph: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A LAMBDA RETURNS ANY OBJECT ITS BODY EVALUATES TO: a field, a subscript,
+	# `a + b`, a slice, a method returning self (pin v452: None for all of them).
+	# HEAP_DEBUG is the row that matters for the borrowed ones.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_lambda_returns_a_borrowed_or_computed_object.npy $(TESTTMP)/test_nilpy_lamobj_hd26
+	$(TESTTMP)/test_nilpy_lamobj_hd26 | diff -u test/test_nilpy_a_lambda_returns_a_borrowed_or_computed_object.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_lambda_returns_a_borrowed_or_computed_object.npy $(TESTTMP)/test_nilpy_lamobj26
+	tools/assert_no_leak.sh nilpy_lambda_returns_object 300 $(TESTTMP)/test_nilpy_lamobj26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_lambda_returns_object_control 300 $(TESTTMP)/test_nilpy_lamobj26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_lambda_returns_object control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

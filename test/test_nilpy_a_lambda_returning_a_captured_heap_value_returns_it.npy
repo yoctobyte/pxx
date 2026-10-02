@@ -1,0 +1,47 @@
+# `lv = [1]; (lambda: lv)()` returned None for a list, dict, tuple, bytes or
+# instance: a lambda returned a class-typed NAME only when it was its own
+# local. It must come back, be the same object, and survive the caller
+# dropping it (the HEAP_DEBUG row). `leak N` / `keep N` drive the census.
+import sys
+class P:
+    def __init__(self, v):
+        self.v = v
+
+lv = [1]
+dv = {"k": 1}
+tv = (1,)
+bv = b"a"
+po = P(3)
+def show():
+    print(repr((lambda: lv)()), repr((lambda: dv)()), repr((lambda: tv)()), repr((lambda: bv)()))
+    print((lambda: po)().v)
+    loc = [5, 6]
+    f = lambda: loc
+    x = f()
+    x.append(7)
+    print(loc, f())
+    g = lambda: bv
+    print(g() is bv)
+    log = []
+    h = lambda s: log.append(s)
+    h(1); h(2)
+    print(log)
+
+def passes(n, held):
+    loc = [1, 2]
+    f = lambda: loc
+    k = lambda: po
+    t = 0
+    for i in range(n):
+        t += len(f())
+        t += k().v
+        y = f()
+        f()
+        if held is not None:
+            held.append([i])
+    print(t, len(loc), po.v)
+
+if len(sys.argv) < 2:
+    show()
+else:
+    passes(int(sys.argv[2]), None if sys.argv[1] == "leak" else [])

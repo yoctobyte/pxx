@@ -1,0 +1,81 @@
+# A lambda returned a class-typed value only when it was provably fresh, and
+# answered None for everything else: a field, a subscript, a dict value,
+# `a + b`, `a * 2`, a slice, and a method that returns `self`. The guard was
+# for `lambda s: log.append(s)` releasing the captured `log`, which no longer
+# happens. This checks the values against CPython and, under -dPXX_HEAP_DEBUG,
+# that a borrowed object survives every caller dropping it.
+#
+# No argument: prints. `leak N` / `keep N` drive the census.
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+        self.kids = [v, v + 1]
+        self.me = None
+
+
+class Box:
+    def __init__(self):
+        self.items = []
+
+    def add(self, x):
+        self.items.append(x)
+        return self
+
+
+def show():
+    p = P(3)
+    p.me = P(9)
+    xs = [P(1), P(2)]
+    d = {"k": P(5)}
+    a = [1, 2]
+    b = [3]
+    bv = b"ab"
+    print((lambda: p.kids)(), (lambda: xs[1])().v, (lambda: d["k"])().v, (lambda: p.me)().v)
+    print((lambda q: q.kids)(p))
+    print((lambda: a + b)(), (lambda: a * 2)(), (lambda: a[:1])(), (lambda x: [x] + a)(0))
+    print((lambda: bv + b"x")(), (lambda x: x + [1])([5]))
+    log = []
+    h = lambda s: log.append(s)
+    print(h(1), log)
+    bx = Box()
+    k = lambda v: bx.add(v)
+    print(k(4) is bx, bx.items)
+    print(sorted([P(3), P(1), P(2)], key=lambda q: q.kids)[0].v)
+
+
+def passes(n, held):
+    p = P(3)
+    p.me = P(9)
+    xs = [P(1), P(2)]
+    a = [1, 2]
+    log = []
+    h = lambda s: log.append(s)
+    bx = Box()
+    k = lambda v: bx.add(v)
+    f1 = lambda: p.kids
+    f2 = lambda: xs[1]
+    f3 = lambda: p.me
+    f4 = lambda: a + [3]
+    f5 = lambda: a[:1]
+    t = 0
+    for i in range(n):
+        t += len(f1()) + f2().v + f3().v + len(f4()) + len(f5())
+        f1(); f2(); f3(); f4(); f5()
+        h(i)
+        r = h(i)
+        k(i)
+        q = k(i)
+        if held is not None:
+            held.append(f4())
+    print(t, len(log), len(bx.items), p.kids, xs[1].v, p.me.v, len(a))
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])
