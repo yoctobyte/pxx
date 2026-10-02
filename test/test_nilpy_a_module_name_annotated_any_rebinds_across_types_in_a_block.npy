@@ -1,0 +1,14 @@
+# The annotation the refusal in
+# test_nilpy_a_module_name_rebound_to_a_string_in_a_block_is_refused_fail.npy
+# names: `x: Any` makes the slot a variant, so the same loop binds a number, a
+# string and a list to one module name and prints what CPython prints.
+from typing import Any
+
+a = [1, 2, 3]
+for k in range(2):
+    x: Any = len(a)
+    print(x)
+    x = "s" * 3
+    print(x)
+    x = list(a)
+    print(x)

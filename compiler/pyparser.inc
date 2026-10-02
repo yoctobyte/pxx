@@ -25706,6 +25706,75 @@ begin
   else PyParseListLiteralT(tkBegin, tkEnd, True);
 end;
 
+{ Which of three storage families a static kind is, for the rebinding check
+  below: 1 a number or bool (an 8- or 16-byte scalar slot), 2 a string, 3 an
+  object handle. 0 is everything else, a VARIANT included, and the check never
+  fires on a 0: a variant slot takes anything, and a variant RHS is converted
+  by the store. }
+function PyRebindFamily(tk: TTypeKind): Integer;
+begin
+  Result := 0;
+  case tk of
+    tyInteger, tyBoolean, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
+    tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt, tySingle,
+    tyDouble, tyPromoInt32, tyPromoInt64:
+      Result := 1;
+    tyString, tyAnsiString, tyShortString, tyFixedString:
+      Result := 2;
+    tyClass:
+      Result := 3;
+  end;
+end;
+
+{ A MODULE name bound with one storage family and later bound with another,
+  where nothing widened it to a variant, has its second value stored RAW into
+  the first one's slot. A string or a list written into an int slot prints as
+  its address, and the object is never released:
+
+      for k in range(n):
+          x = len(a)
+          x = "s" * 3
+          print(x)          # CPython: sss    pxx: 6291688
+
+  The widening exists. PyCollectModuleLocalsAST joins every binding it can
+  read. But inside a block it reads only a handful of no-parse shapes (a
+  literal, a known name, a constructor call), because trial-parsing a block
+  statement can Halt on a name the pre-pass has not seen. Neither `len(a)` nor
+  `"s" * 3` is one of those shapes, so the real parse's FIRST binding decided
+  the slot alone. Straight-line module code and def bodies trial-parse every
+  binding and were always right.
+
+  Refused, by name, until the pre-pass can read these shapes: a wrong value is
+  worse than a clear refusal, and the annotation the message names does make
+  the program work. Only the three families below; a variant on either side,
+  and a number meeting a number, are untouched.
+  bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw }
+procedure PyRefuseUnwidenedModuleRebind(const name: AnsiString;
+                                        lhsTk: TTypeKind; rhsNode: Integer);
+var lf, rf: Integer;
+  function FamName(f: Integer): AnsiString;
+  begin
+    if f = 1 then Result := 'a number'
+    else if f = 2 then Result := 'a string'
+    else Result := 'an object';
+  end;
+begin
+  lf := PyRebindFamily(lhsTk);
+  rf := PyRebindFamily(IntToTypeKind(ASTTk[rhsNode]));
+  if (lf = 0) or (rf = 0) or (lf = rf) then Exit;
+  { Only a STRING or an OBJECT arriving is believed. A NUMBER is not: the
+    static kind of an operator over objects reads as an int whether or not
+    it is one, and `{"a": 1} - {"b": 2}` (which raises TypeError at run time,
+    correctly; test_nilpy_set_ops.npy) would be refused for no reason. A
+    number written into an object slot stays unchecked here. }
+  if rf = 1 then Exit;
+  Error('Nil Python: module variable `' + name + '` was first bound to ' +
+        FamName(lf) + ' and is bound to ' + FamName(rf) + ' here, inside a ' +
+        'block; this frontend cannot give it both types. Annotate its first ' +
+        'binding as `' + name + ': Any = ...` (from typing import Any), or ' +
+        'use a separate name');
+end;
+
 procedure PyCoerceAssignmentRHS(lhsTk: TTypeKind; rhsNode: Integer);
 begin
   { Numeric casts are not represented by a shared AST node yet. For widened
@@ -36599,7 +36668,9 @@ begin
     if PyTypingPass then
     begin
       PyNoteLocalType(name, IntToTypeKind(ASTTk[rhsNode]), ResolveNodeRec(rhsNode));
-    end;
+    end
+    else if CurProc < 0 then
+      PyRefuseUnwidenedModuleRebind(name, Syms[symIdx].TypeKind, rhsNode);
     lhsNode := PyMakeIdent(symIdx);
     PyNoteOptionalTaint(symIdx, rhsNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);

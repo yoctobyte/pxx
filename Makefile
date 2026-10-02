@@ -7404,6 +7404,13 @@ test-nilpy: $(COMPILER)
 	@# .expected: a set operator now RETURNS a set, so these repr as {2, 3} —
 	@# the old inline expectation encoded the list-repr this ticket removed.
 	$(TESTTMP)/test_nilpy_setops26 | diff -u test/test_nilpy_set_ops.expected -
+	@# A module name bound to a number and rebound to a string INSIDE A BLOCK
+	@# printed the string's address (pin v452) -- refused now, by name; the
+	@# `x: Any` annotation the refusal names makes the same loop work.
+	! ./$(COMPILER) test/test_nilpy_a_module_name_rebound_to_a_string_in_a_block_is_refused_fail.npy $(TESTTMP)/test_nilpy_blkrebindstr26 > $(TESTTMP)/test_nilpy_blkrebindstr.log 2>&1
+	grep -q "cannot give it both types" $(TESTTMP)/test_nilpy_blkrebindstr.log
+	./$(COMPILER) test/test_nilpy_a_module_name_annotated_any_rebinds_across_types_in_a_block.npy $(TESTTMP)/test_nilpy_blkrebindany26
+	$(TESTTMP)/test_nilpy_blkrebindany26 | diff -u test/test_nilpy_a_module_name_annotated_any_rebinds_across_types_in_a_block.expected -
 	# bin()/oct() builtins, and enumerate(xs, start) / enumerate(xs, start=N); expectation is CPython's own output
 	./$(COMPILER) test/test_nilpy_bin_oct_enumerate_start.npy $(TESTTMP)/test_nilpy_bome26
 	tools/expect_same.sh test_nilpy_bome26 "$$($(TESTTMP)/test_nilpy_bome26)" "$$(printf '%b' '0b1010 0o12 0xa\n-0b101 -0o5\n0b0 0o0\n[(1, \047a\047), (2, \047b\047)]\n[(5, \047a\047), (6, \047b\047)]\n[(0, \047a\047), (1, \047b\047)]')"

@@ -1,0 +1,13 @@
+# A module name first bound to a NUMBER and rebound to a STRING (or a list,
+# or any object) INSIDE A BLOCK was stored raw into the number's slot: this
+# loop printed 6291688, the string's address, where CPython prints `sss`, and
+# leaked the string every pass. Neither binding is a shape the module pre-pass
+# can read inside a block, so nothing widened the slot to a variant. Until it
+# can, the compiler refuses this by name, pointing at the annotation that
+# makes it work (the sibling test_nilpy_a_module_name_annotated_any_*).
+# bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw
+a = [1, 2, 3]
+for k in range(2):
+    x = len(a)
+    x = "s" * 3
+    print(x)
