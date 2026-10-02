@@ -1,0 +1,69 @@
+# `for i, c in enumerate(s)` over a str was refused ("enumerate(list(s))
+# works") for a leak that no longer reproduces. This pins the spellings:
+# a literal, a variable, a call result, a concat, a str parameter, start=,
+# break, return from inside the loop, inside a generator, an empty str.
+#
+# No argument: prints (diffed against CPython). `leak N`: runs the loop N
+# times keeping nothing. `keep N`: keeps one string per pass, the census
+# control.
+import sys
+
+
+def word(k):
+    return "x" + str(k) + "yz"
+
+
+def count_a(s):
+    n = 0
+    for i, c in enumerate(s):
+        if c == "a":
+            n += i
+    return n
+
+
+def pos(s: str) -> int:
+    for i, c in enumerate(s):
+        if c == "q":
+            return i
+    return -1
+
+
+def gen(s):
+    for i, c in enumerate(s):
+        yield str(i) + c
+
+
+def passes(n, show, held):
+    tot = 0
+    for k in range(n):
+        s = word(k)
+        for i, c in enumerate("abc"):
+            if show:
+                print(i, c)
+        for i, c in enumerate(s, 1):
+            tot += i
+            if show:
+                print(i, c)
+        for i, c in enumerate(word(k), start=10):
+            if c == "y":
+                tot += i
+        for i, c in enumerate(s + "!"):
+            if i == 2:
+                break
+        tot += count_a("abracadabra") + pos("xxq") + pos("zz")
+        for i, ch in enumerate(""):
+            print("never")
+        if show:
+            print(list(gen("hey")))
+        if held is not None:
+            held.append(s + "!")
+    print(tot)
+
+
+if len(sys.argv) < 2:
+    passes(2, True, None)
+    print(count_a("abracadabra"), pos("xxq"), pos("zz"))
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), False, None)
+else:
+    passes(int(sys.argv[2]), False, [])

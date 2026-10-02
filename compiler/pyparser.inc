@@ -30021,14 +30021,11 @@ begin
   if enumMode then Expect(tkRParen, ')');
   if filtIdx >= 0 then Tokens[filtIdx].Kind := tkIf;   { un-hide the filter }
   contNode := CurASTNode;
-  { enumerate() over a STRING trips an inline-placeholder leak in the element
-    tree (AN_INLINE_PARAM reaching IRLowerAST) — filed separately rather than
-    worked around here, since a wrong lowering is worse than a clear refusal
-    (bug-a-nilpy-enumerate-over-str-inline-param-leak). }
-  if enumMode and ((IntToTypeKind(ASTTk[contNode]) = tyString) or
-                   (IntToTypeKind(ASTTk[contNode]) = tyAnsiString)) then
-    Error('Nil Python: enumerate() over a str is not supported yet — ' +
-          'enumerate(list(s)) works');
+  { enumerate() over a STRING used to be refused here, citing an
+    inline-placeholder leak. Re-measured 2026-10-02: it compiles, prints what
+    CPython prints, and is flat on the census, on x86-64, i386, arm32,
+    aarch64, riscv32 and xtensa. The refusal was stale.
+    bug-a-nilpy-enumerate-over-str-inline-param-leak }
   contTk := IntToTypeKind(ASTTk[contNode]);
   isStr := (contTk = tyString) or (contTk = tyAnsiString);
   listCi := FindUClass('TPyList');

@@ -88,3 +88,20 @@ produces a released slot (the original `4 2`), and one that skips too little
 could leave a slot addressed past its frame, which is the shape of an
 out-of-bounds. That is a hypothesis from the header, not a measurement; treat
 it as the first thing to disprove.
+
+## Seen again 2026-10-02 (frankuser), smaller
+
+Any Nil Python generator driven through a CURSOR traps on wasm32 with `wasm
+trap: indirect call type mismatch`. The cursor path is list(), next() and
+sum(). A for-in over the generator is fine, because it calls the step
+directly. Reproduced on pin v452 and at HEAD:
+
+    def gen(s):
+        for c in s:
+            yield c + "!"
+    print(list(gen(["a", "b"])))
+
+The cursor calls the step function through a pointer (`TPyGenStep(FGenStep)`
+in pylib.pas). wasm checks the signature at an indirect call, and the step
+function's emitted type evidently differs from TPyGenStep's. That fits this
+ticket's out-of-bounds fault and may be the same defect.

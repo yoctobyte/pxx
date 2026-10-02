@@ -7492,6 +7492,19 @@ test-nilpy: $(COMPILER)
 	# Pascal overloads are never consulted — the str is exploded at the call site.
 	./$(COMPILER) test/test_nilpy_str_iterable_builtins.npy $(TESTTMP)/test_nilpy_striter26
 	tools/expect_same.sh test_nilpy_striter26 "$$($(TESTTMP)/test_nilpy_striter26)" "$$(printf '%b' '[\047a\047, \047b\047, \047c\047]\n[\047a\047, \047b\047, \047c\047]\n3\nabc\n[\047c\047, \047b\047, \047a\047]\n[(\047c\047, \047x\047), (\047a\047, \047y\047), (\047b\047, \047z\047)]\n[(\047c\047, 1), (\047a\047, 2), (\047b\047, 3)]\n[(1, \047c\047), (2, \047a\047), (3, \047b\047)]\n[(0, \047c\047), (1, \047a\047), (2, \047b\047)]\n[(1, \047c\047), (2, \047a\047), (3, \047b\047)]\n[(-2, \047c\047), (-1, \047a\047), (0, \047b\047)]\n1 c\n2 a\n3 b\n(\047c\047, \047x\047)\n(0, \047c\047)\n[]\n[]\n[]\n[1, 2, 3]\n[(1, 1), (2, 2), (3, 3)]\n[(0, 1), (1, 2), (2, 3)]\n[\047a\047, \047b\047, \047c\047]\n[\047b\047, \047a\047, \047c\047]\nbac')"
+	# ENUMERATE OVER A STR IN A FOR HEADER compiles. It was refused for a leak
+	# that no longer reproduces; the census row is the claim that it is gone,
+	# `keep` is its positive control, and i386 is the 32-bit leg.
+	./$(COMPILER) test/test_nilpy_enumerate_over_a_str_in_a_for_header.npy $(TESTTMP)/test_nilpy_enumstr26
+	$(TESTTMP)/test_nilpy_enumstr26 | diff -u test/test_nilpy_enumerate_over_a_str_in_a_for_header.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_enumerate_over_a_str_in_a_for_header.npy $(TESTTMP)/test_nilpy_enumstr_cen26
+	tools/assert_no_leak.sh nilpy_enumerate_str 300 $(TESTTMP)/test_nilpy_enumstr_cen26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_enumerate_str_control 300 $(TESTTMP)/test_nilpy_enumstr_cen26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_enumerate_str control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_enumerate_over_a_str_in_a_for_header.npy $(TESTTMP)/test_nilpy_enumstr26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_enumstr26_i386 | diff -u test/test_nilpy_enumerate_over_a_str_in_a_for_header.expected -; \
+	else echo "=== test_nilpy_enumstr: qemu-i386 absent, i386 NOT verified ==="; fi
 	# in-place mutators return None. list.remove/insert and dict.remove/update
 	# were PROCEDURES, so reading their result read a value never written —
 	# garbage (1592266472), '()', or a spurious IndexError, silently.

@@ -4,7 +4,7 @@ title: enumerate() over a str trips an inline-placeholder leak (AN_INLINE_PARAM 
 track: A
 type: bug
 prio: 35
-status: open
+status: done
 ---
 
 ## Summary
@@ -52,3 +52,27 @@ Found while correcting a DIFFERENT false "filed separately" in the same file
 Census across `compiler/**` and `lib/**` that day: 33 comments claim paperwork,
 21 name a resolvable slug, 12 name nothing checkable, and this was the one that
 named a slug with no ticket behind it.
+
+## Closed (2026-10-02, frankuser): the refusal was stale
+
+Did what the "read this first" section asks. I removed the refusal, rebuilt
+(fixedpoint 6c793080e6af), and ran `for i, c in enumerate(...)` over a literal,
+a variable, a call result, a concat, a str parameter (annotated and not),
+`start=` positional and keyword, `break`, `return` from inside the loop, a
+generator, and an empty str.
+
+- Output is identical to CPython on x86-64, i386, arm32, aarch64, riscv32 and
+  xtensa (hosted, windowed, long calls).
+- The census is flat: live=9 after 1 pass and after 1001 passes. The fixture
+  with 5000 passes is live=21 (bound 300); the `keep` control is live=4766.
+- -dPXX_HEAP_DEBUG output is identical to CPython's.
+
+No AN_INLINE_PARAM leak reproduces, so the refusal is gone.
+
+wasm32: the plain loops are right, but `list(gen(s))` traps with "indirect call
+type mismatch". That is not this construct. Any generator driven through a
+cursor traps the same way on pin v452 (`list(gen(["a", "b"]))`). It belongs with
+bug-a-a-nilpy-generator-slice-faults-out-of-bounds-under-wasm32.
+
+Test: `test/test_nilpy_enumerate_over_a_str_in_a_for_header.npy`. It has a plain
+diff, a census row with a `keep` control, and an i386 leg.
