@@ -8472,7 +8472,9 @@ begin
   PyParseBoolExpr;
   PyClsBodyCi := savedBodyCi;
   PyClsBodyUpTo := savedBodyUpTo;
-  valNode := CurASTNode;
+  { a lambda initialiser is a heap closure pointer; box it into a callable
+    variant as `g = lambda` does, or `C.f(2)` reads an int and is not callable }
+  valNode := PyBoxCallableValue(CurASTNode);
   gname := PyClsAttrGlobalName(ci, nm);
   { the member pre-pass already allocated this slot and registered it as a class
     var (PyClsAttrEnsureGlobal) — RETYPE it here rather than allocating a second

@@ -47,3 +47,14 @@ Both doors, since they are separate: `gl.clear(2)` through the CLASS and
 open divergence for plain functions
 ([[bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver]]),
 so a lambda row there needs to say which behaviour it is asserting.
+
+## Fixed 2026-10-02
+
+PyEmitClassAttrExpr stored the lambda's closure pointer into the hidden
+class-attribute global raw; the module-level `g = lambda` path boxes it with
+PyBoxCallableValue, and the class-body path now does the same. While there,
+`type()` of any def, lambda or bound method printed `<class 'NoneType'>`
+(no builtin type code carried 'function' or 'method'); PYBT_FUNCTION and
+PYBT_METHOD close that. Test:
+test/test_nilpy_a_lambda_in_a_class_attribute_is_a_callable_function.npy
+(HEAP_DEBUG and i386 rows, diffed against CPython).

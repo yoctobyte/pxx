@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:19 blocked:9 backlog:51 backlog-umbrella:14 backlog-core:168 backlog-nilpy:183 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4086 rejected:89`
+`working:34 unfinished:19 blocked:9 backlog:50 backlog-umbrella:14 backlog-core:167 backlog-nilpy:181 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4094 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 
@@ -78,7 +78,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 580, ranked
+## Ready — top 30 of 576, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -88,16 +88,15 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
+- `[p 80] [N]` bug-n-a-module-name-rebound-to-another-type-inside-a-block-stores-raw
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
-- `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-an-unused-import-edge-makes-a-method-receive-an-instance-of-the-wrong-class
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A+N]` bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter (unblocks 1)
 - `[p 70] [A]` bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program (unblocks 1)
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 1)
 - `[p 70] [A]` feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
@@ -110,5 +109,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - `[p 70] [N]` bug-n-a-staticmethod-called-through-cls-raises-attributeerror
 - `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
+- `[p 70] [N]` bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation
 
-_550 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_546 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

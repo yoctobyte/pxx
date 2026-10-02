@@ -1,0 +1,29 @@
+# A lambda bound in a class body (`clear = lambda a: ...`) read back as an int,
+# the closure's address, so `C.clear(2)` raised "object is not callable". And
+# type() of any def, lambda or bound method printed <class 'NoneType'> while
+# its __name__ said function. Diffed against CPython.
+
+
+class gl:
+    triple = lambda a: a * 3
+    pair = lambda a, b: [a, b]
+
+
+def add(a, b):
+    return a + b
+
+
+class C:
+    def m(self):
+        return 1
+
+
+v = gl.triple
+print(type(v), v(2), gl.triple(4), gl.pair(1, "x"))
+g = lambda a: a
+h = add
+c = C()
+print(type(g), type(add), type(h), type(c.m))
+print(type(g).__name__, type(g) == type(add), type(g) == type(1))
+print(type(3), type(None), type("s"), type([]))
+print(callable(v), callable(gl.pair), isinstance(g, int))

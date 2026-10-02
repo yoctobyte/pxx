@@ -91,7 +91,11 @@ const
   { `type(None)` is `<class 'NoneType'>` in CPython, and NoneType is a real type
     object there — so it needs a code even though no one writes `NoneType`. }
   PYBT_NONETYPE  = 13;
-  PYBT_LAST      = 13;
+  { a def or lambda, and a bound method: `type(f)` printed `<class 'NoneType'>`
+    while `type(f).__name__` said function, because no code carried the name }
+  PYBT_FUNCTION  = 14;
+  PYBT_METHOD    = 15;
+  PYBT_LAST      = 15;
 
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
@@ -21919,6 +21923,8 @@ begin
     PYBT_FROZENSET: Result := 'frozenset';
     PYBT_TYPE:      Result := 'type';
     PYBT_NONETYPE:  Result := 'NoneType';
+    PYBT_FUNCTION:  Result := 'function';
+    PYBT_METHOD:    Result := 'method';
   else
     Result := '?';
   end;

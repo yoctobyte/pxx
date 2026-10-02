@@ -606,6 +606,15 @@ test-nilpy: $(COMPILER)
 	tools/assert_no_leak.sh nilpy_lambda_returns_object 300 $(TESTTMP)/test_nilpy_lamobj26 leak 5000
 	@if tools/assert_no_leak.sh nilpy_lambda_returns_object_control 300 $(TESTTMP)/test_nilpy_lamobj26 keep 5000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_lambda_returns_object control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# A LAMBDA IN A CLASS ATTRIBUTE IS A CALLABLE FUNCTION, and type() of a def,
+	# lambda or bound method names it (pin v452: an int that raised "not
+	# callable", and <class 'NoneType'>).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_lambda_in_a_class_attribute_is_a_callable_function.npy $(TESTTMP)/test_nilpy_lamattr_hd26
+	$(TESTTMP)/test_nilpy_lamattr_hd26 | diff -u test/test_nilpy_a_lambda_in_a_class_attribute_is_a_callable_function.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_lambda_in_a_class_attribute_is_a_callable_function.npy $(TESTTMP)/test_nilpy_lamattr26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_lamattr26_i386 | diff -u test/test_nilpy_a_lambda_in_a_class_attribute_is_a_callable_function.expected -; \
+	else echo "=== test_nilpy_lamattr: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator
