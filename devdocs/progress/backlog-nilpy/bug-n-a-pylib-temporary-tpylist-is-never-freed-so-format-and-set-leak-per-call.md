@@ -274,3 +274,30 @@ and 48 fixed. Its `keep` control trips the bound.
 
 **Still open in this ticket:** `TPyDeque.Compact` (unreachable), and the census
 remains a candidate list rather than a population.
+
+## 2026-10-02 (later) — measured instead of censused: a probe over ~180 builtins
+
+Each expression ran in a loop under `-dPXX_ALLOC_CENSUS` at N=10 and
+N=4010; a growth above 400 live objects flags it. Of ~180 expressions
+(string, list, dict, set, bytes, comprehension, map/filter/zip, min/max/sum,
+sorted with keys, class construction), these leaked, all fixed:
+
+| expression | at v452 | mechanism |
+| --- | --- | --- |
+| `dict(zip(a, b))`, `dict(<iterator>)` | 10 objects/call | drained pair list dropped (both `dict` arms) |
+| `dict.fromkeys(xs[, v])` | ~2/call | `pylist_v` copy dropped |
+| `min/max(xs, default=d)` | ~2/call | same |
+| `min/max(xs, key=f)` held in a variable | same | same (PyMinMaxByKey) |
+| `sorted(s)`, `min(s)`, `max(s)` over a str | ~2/call | `pystr_charlist` dropped |
+| `s.rsplit(sep, n)`, `s.rsplit(None, n)` | ~4/call | backward scratch list |
+| `reversed(range(...))` | 1/call | the reversed TPyRange; the cursor copies it |
+| `iter(bytes)`, `pyiter_v` over bytes/file, `reversed(<user iterable>)` | 1/call | `pyiter_of_list` / `pyiter_rev_list` RETAIN, so a fresh list passed straight in sat at rc 2 -- new `PyIterAdoptList` |
+| `math.prod/fsum/dist`, `random.choice` over a variant | 1-2/call | `pylist_v` copy |
+
+`pylist_v` answers a fresh list on every arm; every caller in pylib was
+checked and the remaining ones already release. Regression test:
+test/test_nilpy_builtins_release_the_temporary_list_they_read.npy (112673
+live at v452, 45 now; HEAP_DEBUG and i386 rows diff against CPython).
+
+Not covered by the probe: statements (with/try/class bodies), the stdlib
+mimic units under lib/rtl, and anything needing I/O.

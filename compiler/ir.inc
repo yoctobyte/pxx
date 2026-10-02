@@ -5787,6 +5787,24 @@ begin
 end;
 
 
+{ A plain def of the NilPy program (or of an imported .npy module), not a
+  method: its parameter 0 is an ordinary argument, never a receiver. The
+  receiver guard in IRLowerCallArg exists for the desugars, which call
+  runtime-library routines and methods; a def reaches neither, so `f(P(1))`
+  can spill its construction like any later argument. It leaked one instance
+  per call, the commonest way to hand a fresh object to a function.
+  Same test as PyProcIsNilPyDef (rtti_emit.inc), which is included later. }
+function IRCalleeIsPlainNilPyDef(cpi: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if (cpi < 0) or (cpi >= ProcCount) or (Pos('.', Procs[cpi].Name) > 0) then Exit;
+  if (Procs[cpi].ParamCount > 0) and (LowerCase(Procs[cpi].Params[0].Name) = 'self') then Exit;
+  if ProcUnitIdx[cpi] < 0 then begin Result := True; Exit; end;
+  for k := 0 to PyModUnitCount - 1 do
+    if PyModUnitIdx[k] = ProcUnitIdx[cpi] then begin Result := True; Exit; end;
+end;
+
 { Does this ARGUMENT, in position k, carry a +1 nobody has bound? A
   construction in position 0 does -- IRLowerCallArg spills a construction to
   an owning temp only from position 1 on (the receiver guard) -- and so does a
@@ -6286,7 +6304,7 @@ begin
          the for-in and method desugars route the SAME construction subtree
          through receiver position (pathIdx 0) with their own binding plumbing,
          and spilling it there double-consumes (test_nilpy_forin SIGSEGV). }
-       ( (pathIdx >= 1) and
+       ( ((pathIdx >= 1) or IRCalleeIsPlainNilPyDef(cpi)) and
          ( ((Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
             (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE))
            or (IntToTypeKind(ASTTk[argAST]) = tyClass) ) )

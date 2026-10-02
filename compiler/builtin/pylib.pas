@@ -1841,6 +1841,10 @@ var
   The two-call protocol: `pyiter_has` prefetches, `pyiter_take` consumes. See
   TPyIter's declaration for why it is two calls and not one. }
 function pyiter_of_list(l: TPyList): TPyIter;
+{ A cursor over a list the CALLER just built and drops: pyiter_of_list takes
+  its own reference, so handing it `list(b)` straight left the list at rc 2
+  with one owner. This one adopts the constructor's reference instead. }
+function PyIterAdoptList(l: TPyList): TPyIter;
 function pyiter_of_str(const s: AnsiString): TPyIter;
 { A generator expression bound to a NAME. The elements are materialised, but
   the VALUE is a cursor over them, because single consumption is the observable
@@ -4287,6 +4291,7 @@ begin
   Result := TPyList.Create;
   if i >= 1 then Result.append(Copy(s, 1, i));
   for k := parts.count - 1 downto 0 do Result.append(parts.at(k));
+  PXXObjRelease(Pointer(parts));   { the backward scratch list, copied out }
 end;
 
 { s.rsplit(sep, maxsplit): like split(sep, maxsplit) but the splits are taken
@@ -4327,6 +4332,7 @@ begin
   parts.append(Copy(s, 1, en));
   Result := TPyList.Create;
   for k := parts.count - 1 downto 0 do Result.append(parts.at(k));
+  PXXObjRelease(Pointer(parts));   { the backward scratch list, copied out }
 end;
 
 { s.partition(sep) — a 3-tuple (before, sep, after) at the FIRST occurrence, or
@@ -6110,7 +6116,7 @@ end;
 
 function iter(b: TPyBytes): TPyIter; overload;
 begin
-  Result := pyiter_of_list(list(b));
+  Result := PyIterAdoptList(list(b));
 end;
 
 function iter(const s: AnsiString): TPyIter; overload;
@@ -6385,21 +6391,30 @@ begin
   l.FCap := newCap;
 end;
 
-function TPyList.append_self(const v: Variant): TPyList;
+{ The one append body. append and append_self both call it rather than one
+  calling the other: append_self hands Self back, so routing append through
+  it made every `r.append(x)` read as an escape of r (ProcParamStays), and a
+  routine building a fresh list that way read as returning a borrow. }
+procedure PyListAppendRaw(l: TPyList; const v: Variant);
 var
   src, dst: PPyVarRec;
 begin
-  PyListGrow(Self, FLen + 1);
+  PyListGrow(l, l.FLen + 1);
   src := PPyVarRec(@v);
-  dst := PPyVarRec(NativeInt(FItems) + FLen * 16);
+  dst := PPyVarRec(NativeInt(l.FItems) + l.FLen * 16);
   PyVarSlotSet(dst, src);
-  FLen := FLen + 1;
+  l.FLen := l.FLen + 1;
+end;
+
+function TPyList.append_self(const v: Variant): TPyList;
+begin
+  PyListAppendRaw(Self, v);
   Result := Self;
 end;
 
 function TPyList.append(const v: Variant): Variant;
 begin
-  Self.append_self(v);
+  PyListAppendRaw(Self, v);
   Result := pynone;
 end;
 
@@ -7788,8 +7803,13 @@ begin
   if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
     raise TypeError.Create('max() argument is not iterable');
   l := pylist_v(c);
-  if (l = nil) or (l.count = 0) then Result := d
-  else Result := PyExtremeOfList(l, True);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if (l = nil) or (l.count = 0) then Result := d
+    else Result := PyExtremeOfList(l, True);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function pymin_default(const c: Variant; const d: Variant): Variant;
@@ -7798,8 +7818,13 @@ begin
   if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
     raise TypeError.Create('min() argument is not iterable');
   l := pylist_v(c);
-  if (l = nil) or (l.count = 0) then Result := d
-  else Result := PyExtremeOfList(l, False);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if (l = nil) or (l.count = 0) then Result := d
+    else Result := PyExtremeOfList(l, False);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 function pyid_v(const v: Variant): Int64;
@@ -8603,8 +8628,13 @@ var i: Integer; acc: Variant; l: TPyList;
 begin
   acc := 1;
   l := pylist_v(src);
-  if l <> nil then
-    for i := 0 to l.count - 1 do acc := acc * l.at(i);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if l <> nil then
+      for i := 0 to l.count - 1 do acc := acc * l.at(i);
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
   Result := acc;
 end;
 
@@ -8630,6 +8660,7 @@ begin
       else c := c + ((v - t) + sum);
       sum := t;
     end;
+  if l <> nil then PXXObjRelease(Pointer(l));   { a fresh copy, only read }
   Result := sum + c;
 end;
 
@@ -8649,6 +8680,8 @@ var i: Integer; lp, lq: TPyList; d, m, sum, c, t, v: Double;
 begin
   lp := pylist_v(p);
   lq := pylist_v(q);
+  { both fresh copies, only read: released on every path }
+  try
   if (lp = nil) or (lq = nil) then
     raise TypeError.Create('dist(): expected two sequences of numbers');
   if lp.count <> lq.count then
@@ -8672,6 +8705,10 @@ begin
     sum := t;
   end;
   Result := m * PyCxSqrt(sum + c);
+  finally
+    if lp <> nil then PXXObjRelease(Pointer(lp));
+    if lq <> nil then PXXObjRelease(Pointer(lq));
+  end;
 end;
 
 { math.perm(n, k) — ordered arrangements, n!/(n-k)!, computed as the falling
@@ -8763,9 +8800,14 @@ function pyrandom_choice(const src: Variant): Variant;
 var l: TPyList;
 begin
   l := pylist_v(src);
-  if (l = nil) or (l.count = 0) then
-    raise IndexError.Create('Cannot choose from an empty sequence');
-  Result := l.at(Integer(pyrandom_randint(0, l.count - 1)));
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
+    if (l = nil) or (l.count = 0) then
+      raise IndexError.Create('Cannot choose from an empty sequence');
+    Result := l.at(Integer(pyrandom_randint(0, l.count - 1)));
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
+  end;
 end;
 
 { Fisher-Yates, in place — `random.shuffle(xs)` returns None and mutates, which
@@ -9345,8 +9387,11 @@ begin
   d := TPyDict.Create;
   l := pylist_v(src);
   if l <> nil then
+  begin
     for i := 0 to l.count - 1 do
       d.store(l.at(i), pynone());
+    PXXObjRelease(Pointer(l));   { a fresh copy (pylist_v), only read }
+  end;
   Result := d;
 end;
 
@@ -9365,8 +9410,11 @@ begin
   d := TPyDict.Create;
   l := pylist_v(src);
   if l <> nil then
+  begin
     for i := 0 to l.count - 1 do
       d.store(l.at(i), v);
+    PXXObjRelease(Pointer(l));   { a fresh copy (pylist_v), only read }
+  end;
   Result := d;
 end;
 
@@ -12080,6 +12128,8 @@ begin
     walks the keys. Same one normaliser the plain max/min arms use.
     bug-nilpy-max-and-min-do-not-iterate-a-dict }
   l := pylist_v(c);
+  { pylist_v answers a fresh copy for every input (see max below) }
+  try
   n := 0;
   if l <> nil then n := l.count;
   if n = 0 then
@@ -12102,6 +12152,9 @@ begin
       bestK := curK;
       Result := cur;
     end;
+  end;
+  finally
+    if l <> nil then PXXObjRelease(Pointer(l));
   end;
 end;
 
@@ -15631,6 +15684,12 @@ begin
   PXXObjRetain(Pointer(l));
 end;
 
+function PyIterAdoptList(l: TPyList): TPyIter;
+begin
+  Result := pyiter_of_list(l);
+  if l <> nil then PXXObjRelease(Pointer(l));
+end;
+
 function pyiter_of_str(const s: AnsiString): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -15694,8 +15753,8 @@ begin
       PXXObjRelease(Pointer(dks));
       Exit;
     end;
-    if o is TPyBytes then begin Result := pyiter_of_list(list(TPyBytes(o))); Exit; end;
-    if o is TPyFile then begin Result := pyiter_of_list(TPyFile(o).readlines); Exit; end;
+    if o is TPyBytes then begin Result := PyIterAdoptList(list(TPyBytes(o))); Exit; end;
+    if o is TPyFile then begin Result := PyIterAdoptList(TPyFile(o).readlines); Exit; end;
     { a RANGE hands back a FRESH cursor every time — that is what re-iterable
       means, and it is why range is not itself a cursor }
     if o is TPyRange then begin Result := pyiter_of_range(TPyRange(o)); Exit; end;
@@ -15710,7 +15769,7 @@ begin
     end;
   end;
   PyTypeError(pyvartag(v), 'an iterable');
-  Result := pyiter_of_list(TPyList.Create);
+  Result := PyIterAdoptList(TPyList.Create);
 end;
 
 function pyiter_enum(const v: Variant; start: Int64): TPyIter;
@@ -16995,10 +17054,10 @@ begin
     one as the other is the whole bug. }
   if b = nil then
   begin
-    pyiter_of_bytes := pyiter_of_list(TPyList.Create);
+    pyiter_of_bytes := PyIterAdoptList(TPyList.Create);
     Exit;
   end;
-  pyiter_of_bytes := pyiter_of_list(list(b));
+  pyiter_of_bytes := PyIterAdoptList(list(b));
 end;
 
 function pyrange_is(const v: Variant): Boolean;
@@ -17140,14 +17199,19 @@ begin
 end;
 
 function reversed(r: TPyRange): TPyIter; overload;
+var rr: TPyRange;
 begin
   { CPython gives a range_iterator walking backwards. Built as the equivalent
     range rather than a materialised list, so reversed(range(10 ** 9)) is
     still three fields. }
-  if pyrange_len(r) = 0 then Result := pyiter_of_range(pyrange3(0, 0, 1))
-  else Result := pyiter_of_range(pyrange3(r.FStart + (pyrange_len(r) - 1) * r.FStep,
-                                          r.FStart - r.FStep,
-                                          -r.FStep));
+  { the cursor copies the range's three fields and keeps no reference, so the
+    range built here is released once read }
+  if pyrange_len(r) = 0 then rr := pyrange3(0, 0, 1)
+  else rr := pyrange3(r.FStart + (pyrange_len(r) - 1) * r.FStep,
+                      r.FStart - r.FStep,
+                      -r.FStep);
+  Result := pyiter_of_range(rr);
+  PXXObjRelease(Pointer(rr));
 end;
 
 function sum(it: TPyIter; const start: Variant): Variant; overload;
@@ -20396,11 +20460,16 @@ begin
     if PyUserObjIterable(o) then
     begin
       seq := pyseq_of_obj(o);
-      if seq <> nil then begin Result := reversed(seq); Exit; end;
+      if seq <> nil then
+      begin
+        Result := reversed(seq);      { the cursor retains it; seq is fresh }
+        PXXObjRelease(Pointer(seq));
+        Exit;
+      end;
     end;
   end;
   if pyvartag(v) = 6 then begin Result := reversed(pystr_of(v)); Exit; end;
-  Result := pyiter_of_list(TPyList.Create);
+  Result := PyIterAdoptList(TPyList.Create);
 end;
 
 function tuple(const s: AnsiString): TPyList; overload;
@@ -20579,7 +20648,14 @@ begin
       (bug-nilpy-dict-of-a-zip-or-any-cursor-is-empty). The pair walk itself is
       dict(TPyList), which is TPyDict.update. }
     seq := pyseq_of_obj(o);
-    if seq <> nil then begin Result := dict(seq); Exit; end;
+    if seq <> nil then
+    begin
+      { every pyseq_of_obj arm builds a NEW list (checked arm by arm in
+        bug-n-a-pylib-temporary-tpylist-...), and update only reads it }
+      Result := dict(seq);
+      PXXObjRelease(Pointer(seq));
+      Exit;
+    end;
   end;
   Result := TPyDict.Create;   { None / non-mapping }
 end;
@@ -20587,8 +20663,13 @@ end;
 { dict(<cursor>) with a STATIC cursor type — the same rule one level up, so the
   call does not have to be boxed into a variant to find its meaning. }
 function dict(it: TPyIter): TPyDict; overload;
+var seq: TPyList;
 begin
-  Result := dict(pyiter_drain(it));
+  { the drained list is fresh and only read; dropping it leaked the list and
+    kept every pair alive -- dict(zip(a, b)) left 10 objects per call }
+  seq := pyiter_drain(it);
+  Result := dict(seq);
+  PXXObjRelease(Pointer(seq));
 end;
 
 { dict(pairs): each element is a (key, value) sequence. TPyDict.update(TPyList)

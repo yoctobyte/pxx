@@ -917,7 +917,7 @@ end;
   budget. Conservative on purpose: an escape only keeps today's borrowed
   verdict, whose cost is a leak; it can never free a live object. }
 function LocalUseEscapes(node, sym, retSym: Integer; var budget: Integer): Boolean;
-var l, r: Integer;
+var l, r, cp, a, k: Integer;
 begin
   Result := False;
   if node < 0 then Exit;
@@ -937,13 +937,55 @@ begin
       Result := LocalUseEscapes(r, sym, retSym, budget);   { `r := f(r)` escapes }
       Exit;
     end;
-    if (l >= 0) and (ASTKind[l] = AN_IDENT) and (Integer(ASTIVal[l]) = retSym) and
+    if (not LocalUseStrictExit) and
+       (l >= 0) and (ASTKind[l] = AN_IDENT) and (Integer(ASTIVal[l]) = retSym) and
        (r >= 0) and (ASTKind[r] = AN_IDENT) and (Integer(ASTIVal[r]) = sym) then
       Exit;                                                  { Result := r }
   end;
-  if (ASTKind[node] = AN_EXIT) and (l >= 0) and (ASTKind[l] = AN_IDENT) and
+  if (not LocalUseStrictExit) and
+     (ASTKind[node] = AN_EXIT) and (l >= 0) and (ASTKind[l] = AN_IDENT) and
      (Integer(ASTIVal[l]) = sym) then
     Exit;                                                    { Exit(r) }
+  { `r = nil`, `r <> other`: comparing the reference hands it nowhere }
+  if (ASTKind[node] = AN_BINOP) and
+     ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+     (((l >= 0) and (ASTKind[l] = AN_IDENT) and (Integer(ASTIVal[l]) = sym)) or
+      ((r >= 0) and (ASTKind[r] = AN_IDENT) and (Integer(ASTIVal[r]) = sym))) then
+  begin
+    Result := ((l >= 0) and not ((ASTKind[l] = AN_IDENT) and (Integer(ASTIVal[l]) = sym)) and
+               LocalUseEscapes(l, sym, retSym, budget)) or
+              ((r >= 0) and not ((ASTKind[r] = AN_IDENT) and (Integer(ASTIVal[r]) = sym)) and
+               LocalUseEscapes(r, sym, retSym, budget));
+    Exit;
+  end;
+  { A STATIC call handed the local bare in a slot the callee keeps in
+    (ProcParamStays) -- `r.append(x)`, whose slot 0 is Self: that argument
+    does not carry r out, the others still may. Not a virtual call, where the
+    override that runs may not be the one judged. }
+  if ASTKind[node] = AN_CALL then
+  begin
+    cp := NodeCallProcIdx(node);
+    if (cp >= 0) and (ProcParamStays[cp] <> 0) then
+    begin
+      a := l;
+      k := 0;
+      while (a >= 0) and (ASTKind[a] = AN_ARG) do
+      begin
+        if (k < 32) and ((ProcParamStays[cp] and (LongWord(1) shl k)) <> 0) and
+           (ASTLeft[a] >= 0) and (ASTKind[ASTLeft[a]] = AN_IDENT) and
+           (Integer(ASTIVal[ASTLeft[a]]) = sym) then
+        else if LocalUseEscapes(ASTLeft[a], sym, retSym, budget) then
+        begin
+          Result := True;
+          Exit;
+        end;
+        a := ASTRight[a];
+        Inc(k);
+      end;
+      if a >= 0 then Result := LocalUseEscapes(a, sym, retSym, budget);
+      Exit;
+    end;
+  end;
   if (ASTKind[node] = AN_FIELD) and (l >= 0) and (ASTKind[l] = AN_IDENT) and
      (Integer(ASTIVal[l]) = sym) then
   begin
@@ -1160,6 +1202,37 @@ begin
     if ProcResultFreshOrArg[procIdx] then Write(' fresh-or-arg');
     WriteLn;
   end;
+end;
+
+{ Sets ProcParamStays: each class-typed VALUE parameter (Self included) whose
+  body never lets it out in any way LocalUseEscapes sees, returning it
+  included. A var/out parameter never qualifies -- the callee can store a new
+  object into the caller's local. A routine with a nested routine is refused
+  outright, since that body reaches the parameters through the frame and is
+  not part of this one. }
+procedure ClassifyParamStays(procIdx, bodyNode: Integer);
+var sym, budget, k, j: Integer; bits: LongWord;
+begin
+  ProcParamStays[procIdx] := 0;
+  if bodyNode < 0 then Exit;
+  for k := procIdx + 1 to ProcCount - 1 do
+    if ProcLexParent[k] = procIdx then Exit;
+  bits := 0;
+  LocalUseStrictExit := True;
+  for j := 0 to Procs[procIdx].ParamCount - 1 do
+  begin
+    if j >= 32 then Break;
+    if (Procs[procIdx].Params[j].TypeKind <> tyClass) or Procs[procIdx].Params[j].IsRef then Continue;
+    sym := Procs[procIdx].Params[j].SymIdx;
+    if (sym < 0) or (sym >= SymCount) then Continue;
+    budget := 200000;
+    if (not LocalUseEscapes(bodyNode, sym, -1, budget)) and (budget > 0) then
+      bits := bits or (LongWord(1) shl j);
+  end;
+  LocalUseStrictExit := False;
+  ProcParamStays[procIdx] := bits;
+  if PxxDbgWants('p.paramstays', Procs[procIdx].Name) then
+    WriteLn('PXXDBG p.paramstays ', Procs[procIdx].Name, ' ', bits);
 end;
 
 function WrapManagementOps(procIdx, bodyNode: Integer): Integer;
@@ -3960,6 +4033,7 @@ begin
               ' FindSym(Self)=', FindSym('Self'));
     inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
     ClassifyProcResultFresh(procIdx, inlineBodyNode);
+    ClassifyParamStays(procIdx, inlineBodyNode);
     CurrentUnitIdx := savedBodyUnitIdx;
     SpecBodyHostUnitIdx := savedSpecHost;
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);

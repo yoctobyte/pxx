@@ -1,0 +1,105 @@
+# `f(P(1))` -- a construction handed straight to a def as its FIRST argument --
+# leaked the instance on every call: argument position 0 was excluded from the
+# owning spill because a method's receiver sits there, and the for-in and
+# method desugars route a construction through it with their own binding. A
+# plain def has no receiver. Position 1 and later were always spilled.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG -- every
+# def here keeps the argument somewhere (a global, a list, a field, a closure,
+# a generator, its result), so an over-release shows as a freed read. `leak N`
+# / `keep N` drive the census.
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "P(%d)" % self.v
+
+    def twice(self):
+        return self.v * 2
+
+
+class Box:
+    def __init__(self):
+        self.items = []
+
+    def put(self, p):
+        self.items.append(p)
+
+
+held = []
+last = None
+
+
+def use(p):
+    return p.v + 1
+
+
+def ident(p):
+    return p
+
+
+def stash(p):
+    held.append(p)
+    return len(held)
+
+
+def setlast(p):
+    global last
+    last = p
+
+
+def cap(p):
+    def inner():
+        return p.v
+    return inner
+
+
+def gen(p, n):
+    for i in range(n):
+        yield p
+
+
+def star(*ps):
+    return [q.v for q in ps]
+
+
+def kw(p, scale=1):
+    return p.v * scale
+
+
+def nest(p):
+    return ident(ident(p))
+
+
+def show():
+    print(use(P(1)), ident(P(2)), stash(P(3)), held)
+    setlast(P(4))
+    print(last, cap(P(5))(), list(gen(P(6), 2)), star(P(7), P(8)), kw(P(9), scale=2))
+    print(nest(P(10)), P(11).twice(), ident(P(12)).twice(), [ident(P(i)) for i in range(2)])
+    b = Box()
+    b.put(P(13))
+    print(b.items, held, last)
+    for q in ident([P(14)]):
+        print(q)
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += use(P(i)) + ident(P(i)).v + nest(P(i)).v + kw(P(i)) + cap(P(i))()
+        setlast(P(i))
+        if keep is not None:
+            keep.append(ident(P(i)))
+    print(t, last)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

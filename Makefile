@@ -615,6 +615,48 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_lambda_in_a_class_attribute_is_a_callable_function.npy $(TESTTMP)/test_nilpy_lamattr26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_lamattr26_i386 | diff -u test/test_nilpy_a_lambda_in_a_class_attribute_is_a_callable_function.expected -; \
 	else echo "=== test_nilpy_lamattr: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A DISCARDED CONCAT, SLICE OR REPEAT IS RELEASED: the runtime helpers fill
+	# their result through r.append / r.put, which read as an escape until each
+	# call was judged by whether the callee keeps that argument in
+	# (ProcParamStays); dict(zip()) also dropped its drained pair list.
+	# Pin v452: 75373 live after 5000 passes.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_discarded_concat_slice_or_repeat_is_released.npy $(TESTTMP)/test_nilpy_discrel_hd26
+	$(TESTTMP)/test_nilpy_discrel_hd26 | diff -u test/test_nilpy_a_discarded_concat_slice_or_repeat_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_discarded_concat_slice_or_repeat_is_released.npy $(TESTTMP)/test_nilpy_discrel26
+	tools/assert_no_leak.sh nilpy_discarded_concat 300 $(TESTTMP)/test_nilpy_discrel26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_discarded_concat_control 300 $(TESTTMP)/test_nilpy_discrel26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_discarded_concat control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_discarded_concat_slice_or_repeat_is_released.npy $(TESTTMP)/test_nilpy_discrel26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_discrel26_i386 | diff -u test/test_nilpy_a_discarded_concat_slice_or_repeat_is_released.expected -; \
+	else echo "=== test_nilpy_discrel: qemu-i386 absent, i386 NOT verified ==="; fi
+	# BUILTINS RELEASE THE TEMPORARY LIST THEY READ: min/max default=, sorted/
+	# min/max over a str, dict.fromkeys, rsplit(sep, n), reversed(range),
+	# iter(bytes), math.prod/fsum/dist, random.choice. Pin v452: 112673 live
+	# after 5000 passes.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_builtins_release_the_temporary_list_they_read.npy $(TESTTMP)/test_nilpy_bltmp_hd26
+	$(TESTTMP)/test_nilpy_bltmp_hd26 | diff -u test/test_nilpy_builtins_release_the_temporary_list_they_read.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_builtins_release_the_temporary_list_they_read.npy $(TESTTMP)/test_nilpy_bltmp26
+	tools/assert_no_leak.sh nilpy_builtin_temporaries 300 $(TESTTMP)/test_nilpy_bltmp26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_builtin_temporaries_control 300 $(TESTTMP)/test_nilpy_bltmp26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_builtin_temporaries control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_builtins_release_the_temporary_list_they_read.npy $(TESTTMP)/test_nilpy_bltmp26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_bltmp26_i386 | diff -u test/test_nilpy_builtins_release_the_temporary_list_they_read.expected -; \
+	else echo "=== test_nilpy_bltmp: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A CONSTRUCTION PASSED AS A DEF'S FIRST ARGUMENT IS RELEASED: `f(P(1))`
+	# leaked the instance per call (pin v452: 22277 live after 5000 passes);
+	# position 0 was excluded from the owning spill for method receivers.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_construction_passed_as_a_first_argument_is_released.npy $(TESTTMP)/test_nilpy_carg_hd26
+	$(TESTTMP)/test_nilpy_carg_hd26 | diff -u test/test_nilpy_a_construction_passed_as_a_first_argument_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_construction_passed_as_a_first_argument_is_released.npy $(TESTTMP)/test_nilpy_carg26
+	tools/assert_no_leak.sh nilpy_ctor_first_arg 300 $(TESTTMP)/test_nilpy_carg26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_ctor_first_arg_control 300 $(TESTTMP)/test_nilpy_carg26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_ctor_first_arg control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_construction_passed_as_a_first_argument_is_released.npy $(TESTTMP)/test_nilpy_carg26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_carg26_i386 | diff -u test/test_nilpy_a_construction_passed_as_a_first_argument_is_released.expected -; \
+	else echo "=== test_nilpy_carg: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

@@ -1,0 +1,57 @@
+# A list or bytes built by a runtime helper and DISCARDED -- `a + b` as a bare
+# statement, a slice, a repeat, zip/enumerate never iterated -- leaked: the
+# helpers fill their result with r.append / r.put, and any method call on the
+# result local read as an escape, so the result looked borrowed and nothing
+# released it. 2000 objects live after 1000 passes at pin v452. Now each call
+# a routine makes is judged by whether the callee keeps that argument in.
+# dict(zip(a, b)) and dict(<iterator>) also dropped the list they drained the
+# pairs into: 10 objects per call.
+#
+# No argument: prints, diffed against CPython. `leak N` / `keep N` drive the
+# census; `keep` holds every result and must trip the bound.
+import sys
+
+
+def show():
+    a = [1, 2, 3]
+    b = [4]
+    bv = b"ab"
+    t = (1, 2)
+    print(a + b, a * 2, a[1:], a[::2], bv + b"x", bv * 3, t + (3,), t[1:])
+    print(list(zip(a, b)), list(enumerate(b)), [1] + a + [9])
+    print(dict(zip(a, a)), dict(iter([(1, [2])])), dict(enumerate(b)))
+    r = a + b
+    r.append(5)
+    print(r, a, b)
+
+
+def passes(n, held):
+    a = [1, 2, 3]
+    b = [4]
+    bv = b"ab"
+    t = (1, 2)
+    for i in range(n):
+        a + b
+        a * 2
+        a[1:]
+        a[::2]
+        bv + b"x"
+        bv * 3
+        t + (3,)
+        t[1:]
+        zip(a, b)
+        enumerate(b)
+        d = dict(zip(a, a))
+        d = dict(iter([(1, [2])]))
+        if held is not None:
+            held.append(a + b)
+            held.append(bv * 3)
+    print(len(a), len(b), len(bv))
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

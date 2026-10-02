@@ -5187,6 +5187,16 @@ var
     `if v > 0 then Exit(Self); Result := TA.Create`. Neither verdict above
     holds, and the caller can decide only at run time (IRCallFreshOrArgSym). }
   ProcResultFreshOrArg : array of Boolean;
+  { Bit j: the routine's class-typed value parameter j never gets out of its
+    body -- no store, cast or return of it, and every call it is handed to
+    keeps it in the same way. Self is parameter 0 of a method, so
+    `r.append(x)` on a local leaves that local unescaped (LocalUseEscapes), and
+    a routine that builds its result through such calls (pylist_concat) reads
+    as fresh. Set by ClassifyParamStays; 0 until then, which is an escape. }
+  ProcParamStays : array of LongWord;
+  { LocalUseEscapes: treat `Exit(local)` and `Result := local` as escapes
+    too. Set only while ClassifySelfStays asks about Self. }
+  LocalUseStrictExit : Boolean;
   PyArrayArgSlot : Boolean;  { NilPy: parsing an argument for a Pascal ARRAY parameter (PyRefuseDynArrayResult) }
   PyArrayArgTok : Integer;   { ...and the token that argument starts at (valid while PyArrayArgSlot) }
   { NilPy names bound to a Pascal dynamic-array call result (`a = MakeArr(4)`),

@@ -36,3 +36,25 @@ releases, so it needs a tier and a HEAP_DEBUG sweep, not just this repro.
 Low priority: a bare `a + b` statement is rare in real code. The lambda
 `return` of the same value, which used to give None, was fixed separately
 (bug-n-a-lambda-returning-a-captured-heap-value-yields-none).
+
+## Fixed 2026-10-02
+
+Generalised past the shape above: ProcParamStays is a per-routine bitmask of
+class-typed VALUE parameters (Self is parameter 0) whose body never lets them
+out, judged by LocalUseEscapes with `Result := p` / `Exit(p)` counted as
+escapes. A STATIC call handed a local bare in a slot whose bit is set no
+longer counts as an escape of that local; a virtual call still does. Two
+supporting changes: `p = nil` / `p <> q` is not an escape (PySeqIndexError
+compared its list to nil), and TPyList.append no longer routes through
+append_self, which returns Self -- both now call PyListAppendRaw.
+
+Verdicts that changed to fresh (x86-64, a program importing the common
+modules): pylist_concat/repeat/slice/slice_step, pybytes_concat/repeat,
+pyenumerate(2), pyzip, pymap_int/float/str, pysys_argv, PySelectReady,
+pyselect_select, TPyDict.itemlist/most_common, getaddrinfo, socket.read/
+readline, DecodeAt, struct unpack/unpack_from. Each builds and returns a new
+object.
+
+test/test_nilpy_a_discarded_concat_slice_or_repeat_is_released.npy: 75373
+live after 5000 passes at v452, 59 after. HEAP_DEBUG and i386 rows diff
+against CPython.

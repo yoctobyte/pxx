@@ -6662,13 +6662,25 @@ end;
 { pystr_charlist, not a private byte walk: it is the one exploder, so a
   non-ASCII string cannot answer per-byte here and per-character in sorted(). }
 function min(const s: AnsiString; key: Pointer): Variant; overload;
+var cl: TPyList;
 begin
-  Result := min(pystr_charlist(s), key);
+  cl := pystr_charlist(s);   { fresh, only read }
+  try
+    Result := min(cl, key);
+  finally
+    PXXObjRelease(Pointer(cl));
+  end;
 end;
 
 function max(const s: AnsiString; key: Pointer): Variant; overload;
+var cl: TPyList;
 begin
-  Result := max(pystr_charlist(s), key);
+  cl := pystr_charlist(s);   { fresh, only read }
+  try
+    Result := max(cl, key);
+  finally
+    PXXObjRelease(Pointer(cl));
+  end;
 end;
 
 { Dispatch on the runtime tag through pylib's ONE object->sequence chain
@@ -6739,12 +6751,16 @@ end;
   (bug-nilpy-sorted-over-a-string-segfaults). Same shape as list(const s), which
   already had its own overload — this is the sibling that was missing. }
 function sorted(const s: AnsiString; key: Pointer; reverse: Boolean): TPyList; overload;
+var cl: TPyList;
 begin
   { pystr_charlist, not a private byte walk: `sorted("béa")` split the é into
     its two UTF-8 bytes and answered four elements where list() answered three.
     Same lesson as the note on pystr_charlist — one exploder, not two.
     bug-nilpy-non-ascii-string-surface-measured }
-  Result := sorted(pystr_charlist(s), key, reverse);
+  { the char list is fresh and sorted() copies out of it }
+  cl := pystr_charlist(s);
+  Result := sorted(cl, key, reverse);
+  PXXObjRelease(Pointer(cl));
 end;
 
 function sorted(const v: Variant; key: Pointer; reverse: Boolean): TPyList; overload;

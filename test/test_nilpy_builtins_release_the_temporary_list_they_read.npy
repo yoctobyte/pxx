@@ -1,0 +1,59 @@
+# Runtime builtins that build a temporary list, read it and drop it leaked the
+# list (and with it every element it held) on each call: min/max with
+# default=, min/max/sorted over a str, dict.fromkeys, s.rsplit(sep, n),
+# reversed(range), iter(bytes), math.prod/fsum/dist, random.choice. Found by a
+# census probe over ~180 builtin expressions, 2026-10-02.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG, which is
+# what catches a release that came too early. `leak N` / `keep N` drive the
+# census; `keep` holds every result and must trip the bound.
+import sys
+import math
+import random
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+
+def show():
+    L = [3, [1], "x"]
+    ps = [P(2), P(1)]
+    s = "hello"
+    print(min([2, 1], default=0), max([], default=None), max(L[:1], default=L))
+    print(min(s), max(s), min(s, key=lambda c: -ord(c)), sorted(s), sorted("cab", reverse=True))
+    fk = dict.fromkeys(ps[:1], L)
+    print(dict.fromkeys(["a", "b"]), [k.v for k in fk], list(fk.values()), len(dict.fromkeys(ps)))
+    print("a,b,c".rsplit(",", 1), "a b  c".rsplit(None, 1), "a-b".rsplit("-", 5))
+    print(list(reversed(range(5))), list(reversed(range(0))), list(reversed(range(1, 9, 3))))
+    print(list(iter(b"abc")), math.prod([2, 3, 4]), math.fsum([0.1] * 10), math.dist([0, 0], [3, 4]))
+    print(random.choice([ps[0]]).v, ps[0].v, ps[1].v, L)
+
+
+def passes(n, held):
+    L = [3, 1, 2]
+    s = "hello"
+    for i in range(n):
+        a = min(L, default=0)
+        b = max([], default=None)
+        c = sorted(s)
+        d = min(s)
+        e = dict.fromkeys(L)
+        f = "a,b,c".rsplit(",", 1)
+        g = list(reversed(range(5)))
+        h = list(iter(b"ab"))
+        k = math.prod(L) + math.fsum(L) + math.dist(L, L)
+        m = random.choice(L)
+        if held is not None:
+            held.append(c)
+            held.append(e)
+    print(len(L), s)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])
