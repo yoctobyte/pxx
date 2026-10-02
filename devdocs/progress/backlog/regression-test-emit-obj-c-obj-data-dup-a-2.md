@@ -67,8 +67,10 @@ Eliminated, each by measurement or search, not reasoning:
 - **cwd-running programs** (c_ofa26, c_xi26) unlink only their own named
   files.
 
-Not yet examined: whether testmgr can run one job twice at once, for example a
-retry after an inner timeout while the first attempt's children still run. A
-second attempt's leading `rm -f $(TESTTMP)/cods_*.o` would explain exactly
-this signature, and so would load-dependence. tools/testmgr.py's retry path is
-the next place to read.
+**FOUND, same day.** It was neither a retry nor a second run. testmgr's
+split_jobs put #03's leading `rm -f $(TESTTMP)/cods_*.o` at the END of job
+#02, because a job starts at a compile line and the rm is not one. #02 runs
+concurrently with #03, so the rm deleted #03's fresh objects whenever the two
+overlapped, which at tier load they do. The shared-filename merge did not
+join them because a glob is not a filename. A scan of every target found one
+more case (espx_, #04 against #06). Both rm lines are removed.

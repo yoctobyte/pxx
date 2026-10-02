@@ -37798,7 +37798,11 @@ test-emit-obj: $(COMPILER)
 	#    writer. An i386 row is what catches one writer's counts describing a
 	#    table the other one wrote -- which happened while landing this, as a
 	#    truncated object no x86-64 row could see.
-	rm -f $(TESTTMP)/cods_*.o $(TESTTMP)/cods_link* 
+	#    (No pre-clean `rm` of the objects here. testmgr's split put such a line at
+	#    the END OF THE PREVIOUS JOB, which runs concurrently with this one, so
+	#    under tier load it deleted objects this job had just written:
+	#    test-emit-obj#03 `ld: cannot find cods_imp_x64.o`, 2026-10-02. Every
+	#    output below is overwritten by its own compile or `gcc -o`.)
 	./$(COMPILER) --emit-obj test/c_obj_data_import.c $(TESTTMP)/cods_imp_x64.o
 	./$(COMPILER) --emit-obj --target=i386 test/c_obj_data_import.c $(TESTTMP)/cods_imp_386.o
 	./$(COMPILER) --emit-obj test/c_obj_data_export.c $(TESTTMP)/cods_exp_x64.o
@@ -38144,7 +38148,11 @@ test-emit-obj: $(COMPILER)
 	#    arithmetic is separate, and in both the externals sit AFTER the exported
 	#    symbols -- so an index short by the export count names the wrong callee
 	#    and still links.
-	rm -f $(TESTTMP)/espx_*.o
+	#    (No pre-clean `rm` of the objects here. testmgr's split put such a line at
+	#    the END OF THE PREVIOUS JOB, which runs concurrently with this one, so
+	#    under tier load it deleted objects this job had just written:
+	#    the same race as the cods_ rows above, 2026-10-02. Every
+	#    output below is overwritten by its own compile or `gcc -o`.)
 	@for t in riscv32 xtensa; do \
 	  ./$(COMPILER) --emit-obj --target=$$t --platform=esp test/c_obj_esp_export.c $(TESTTMP)/espx_c_$$t.o >/dev/null || { echo "test-emit-obj: the C ESP fixture FAILED to build for $$t"; exit 1; }; \
 	  readelf -sW $(TESTTMP)/espx_c_$$t.o | grep -qE "FUNC +GLOBAL +DEFAULT +[0-9]+ esp_helper$$" || { echo "test-emit-obj: $$t object does not export the cdecl routine esp_helper"; exit 1; }; \
