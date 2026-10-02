@@ -2848,6 +2848,8 @@ test-nilpy: $(COMPILER)
 	# finally, and its own raise escapes this statement's except).
 	./$(COMPILER) test/test_nilpy_loop_else.npy $(TESTTMP)/test_nilpy_loop_else26
 	tools/expect_same.sh test_nilpy_loop_else26.1 "$$($(TESTTMP)/test_nilpy_loop_else26)" "$$(printf 'for-else ran\nwhile-else ran\nafter break loop\nm = 2\nempty loop else ran\nouter 1\nouter 2\nouter else ran\nouter else ran, inner skipped\nplain break i = 2\nrange else ran\nrange break i = 1\nfound\nexhausted')"
+	./$(COMPILER) test/test_nilpy_try_with_an_empty_finally_is_accepted.npy $(TESTTMP)/test_nilpy_tryfinpass26
+	tools/expect_same.sh test_nilpy_tryfinpass26 "$$($(TESTTMP)/test_nilpy_tryfinpass26)" "$$(python3 test/test_nilpy_try_with_an_empty_finally_is_accepted.npy)"
 	./$(COMPILER) test/test_nilpy_try_else.npy $(TESTTMP)/test_nilpy_try_else26
 	tools/expect_same.sh test_nilpy_try_else26 "$$($(TESTTMP)/test_nilpy_try_else26)" "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy $(TESTTMP)/test_nilpy_membership_bool_return26

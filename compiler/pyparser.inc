@@ -27785,6 +27785,7 @@ var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Inte
     excRecs: array[0..15] of Integer; nExc, ei: Integer;   { except (A, B, ...) tuple }
     bridgeCi: Integer;                 { sysutils' Pascal `Exception`, when the arm is the bare root }
     hidLo, hidHi, hidDepth: Integer;   { the handler suite, for the binder rename }
+    hasFin: Boolean;
 begin
   Inc(GenTryDepth);
   Next;                                { `try` }
@@ -27978,7 +27979,8 @@ begin
   end;
 
   finSeq := -1;
-  if CurTok.Kind = tkFinally then
+  hasFin := CurTok.Kind = tkFinally;
+  if hasFin then
   begin
     Next;
     Expect(tkColon, ':');
@@ -27988,7 +27990,9 @@ begin
     Expect(tkDedent, 'dedent');
   end;
 
-  if (handlerHead = -1) and (finSeq = -1) then
+  { hasFin, not finSeq: a `finally: pass` parses to an empty block (-1), and
+    `try: ... finally: pass` is legal Python that was refused here. }
+  if (handlerHead = -1) and not hasFin then
     Error('Nil Python: try: needs an except: or a finally:');
 
   innerNode := trySeq;
@@ -28024,7 +28028,11 @@ begin
       block-consumed check on the node kind, so say so explicitly }
     innerNode := PySeqAppend(PySeqAppend(-1, PyMakeFlagSet(elseFlag, False)), innerNode);
     PyStmtAteBlock := True;
-  end;
+  end
+  else if (handlerHead = -1) and (finSeq = -1) then
+    { an empty finally and no except: the statement is just its body, which
+      is not a try node either, so the same block-consumed flag is needed }
+    PyStmtAteBlock := True;
   PyParseTry := innerNode;
 end;
 

@@ -1,0 +1,31 @@
+# `finally: pass` is legal Python. Its block parses to nothing, and the check
+# for "try needs an except or a finally" read that as no finally at all.
+def f(x):
+    try:
+        print("body", x)
+    finally:
+        pass
+
+
+def g(x):
+    try:
+        if x > 1:
+            raise ValueError("big")
+        print("small", x)
+    except ValueError as e:
+        print("caught", e)
+    finally:
+        pass
+
+
+try:
+    print("module")
+finally:
+    pass
+for i in range(3):
+    try:
+        f(i)
+    finally:
+        pass
+    g(i)
+print("done")
