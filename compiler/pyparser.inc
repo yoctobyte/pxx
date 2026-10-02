@@ -25963,7 +25963,12 @@ end;
   (PyBindOwnedOperand), so the two cannot disagree about what is owned. }
 function PyCallYieldsOwnedObj(n: Integer): Boolean;
 begin
-  Result := (n >= 0) and (ASTKind[n] = AN_CALL) and
+  { AN_VIRTUAL_CALL too: it keeps the proc index in IVal, and a method with an
+    override returns owned exactly as a static one does. Without it
+    `Kid(k).clone().v` / `b.clone().get()` leaked the clone whenever the class
+    had a subclass, while the same chain on a leaf class was clean. }
+  Result := (n >= 0) and
+    ((ASTKind[n] = AN_CALL) or (ASTKind[n] = AN_VIRTUAL_CALL)) and
     (((ASTIVal[n] = -Ord(tkGetMem)) and
       (Integer(ASTRight[n]) >= REC_UCLASS_BASE)) or
      ((Integer(ASTIVal[n]) >= 0) and
@@ -26464,7 +26469,7 @@ end;
   concept always costs (devdocs/dev/normalise-dont-special-case.md).
   bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored }
 function PyClassStrNode(node, argCi: Integer): Integer;
-var mmi, excCi, rootCi, fieldNode: Integer;
+var mmi, excCi, rootCi, fieldNode, hoistTail: Integer;
 begin
   PyClassStrNode := -1;
   if (node < 0) or (argCi < 0) then Exit;
@@ -26472,6 +26477,24 @@ begin
   if mmi < 0 then mmi := FindUMeth(argCi, '__repr__');
   if mmi >= 0 then
   begin
+    { `str(P(1))`, `repr(mk())`, `f"{P(1)}"` LEAKED THE INSTANCE, one per
+      evaluation: an owned value passed straight in as the dunder's receiver,
+      which nothing releases (pin v452: 3588 live after 4000 passes). Hoisted
+      to an ARC local, as the parsed `C(...).m()` spelling already is -- see
+      bug-n-a-construction-consumed-as-a-method-receiver-leaks. Only an OWNED
+      node: a borrowed one needs no owner, and the hoist would move its
+      evaluation ahead of the statement for nothing. FOLDED back into the
+      expression (PyFoldHoistSince) rather than left on the statement queue:
+      the f-string and len() sites park and merge that queue around a trial
+      parse, which dropped or reordered a hoist queued here (rc 217). }
+    if PyCallYieldsOwnedObj(node) then
+    begin
+      hoistTail := PyHoistTail;
+      node := PyEvalOnce(node);
+      PyClassStrNode := PyFoldHoistSince(hoistTail,
+        PyCallMeth1(argCi, PyRawName(UMthNOff[mmi], UMthNLen[mmi]), node, -1));
+      Exit;
+    end;
     PyClassStrNode := PyCallMeth1(argCi, PyRawName(UMthNOff[mmi], UMthNLen[mmi]),
                                   node, -1);
     Exit;
@@ -26493,11 +26516,18 @@ begin
   end;
   if (excCi >= 0) and ((argCi = excCi) or IsSubclassOf(argCi, excCi)) then
   begin
+    hoistTail := -2;
+    if PyCallYieldsOwnedObj(node) then
+    begin
+      hoistTail := PyHoistTail;
+      node := PyEvalOnce(node);
+    end;
     fieldNode := AllocNode(AN_FIELD);
     ASTLeft[fieldNode] := node;
     ASTSOffset[fieldNode] := StoredName('msg');
     ASTSLen[fieldNode] := 3;
     ASTTk[fieldNode] := Ord(tyAnsiString);
+    if hoistTail <> -2 then fieldNode := PyFoldHoistSince(hoistTail, fieldNode);
     PyClassStrNode := fieldNode;
   end;
 end;
@@ -52298,8 +52328,12 @@ begin
     Silent, and the more links a chain has the further the answer drifts. Bound
     to a hidden temp, which is also what Python's evaluation order says. The
     Pascal twin in pasparser_*.inc keeps its current codegen, so the self-host
-    binary is untouched. }
-  if (ASTKind[node] = AN_CALL) and (CurTok.Kind in [tkDot, tkLBrack]) then
+    binary is untouched.
+    A VIRTUAL call too (a method some subclass overrides): left unbound, its
+    owned result had no owner and leaked one object per link --
+    `Kid(k).clone().v` -- while the same chain on a leaf class was clean. }
+  if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL)) and
+     (CurTok.Kind in [tkDot, tkLBrack]) then
     node := PyEvalOnce(node);
   while CurTok.Kind in [tkDot, tkLBrack] do
   begin

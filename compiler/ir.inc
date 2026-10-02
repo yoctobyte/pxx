@@ -6299,7 +6299,12 @@ begin
         object each loop iteration. }
   if NilPyUserCode and (not isRefArg) and
      (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
-     (ASTKind[argAST] = AN_CALL) and
+     { A VIRTUAL call's result is owned exactly as a static one's is -- the
+       node keeps the proc index in IVal -- but only AN_CALL was spilled, so
+       a method with an override in a subclass leaked its result whenever it
+       was an argument: `C(k).get()[0]`, `len(C(k).get())`, `f(o.get())`
+       (pin v452: ~2 objects per evaluation). }
+     ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_VIRTUAL_CALL)) and
      ( { A construction / tyClass-tagged arg keeps the pathIdx>=1 receiver guard:
          the for-in and method desugars route the SAME construction subtree
          through receiver position (pathIdx 0) with their own binding plumbing,
@@ -19653,7 +19658,23 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             instance" is the same question the folding work in the ticket has to
             answer properly (a provably-non-nil receiver — Self in a method chain,
             a just-constructed object), and one predicate is the point. }
-          value := IRWrapNilChk(IRLowerAST(ASTLeft[item]), node, True)
+        begin
+          { ...and an OWNED call result as the receiver -- `x.clone().get()`
+            where get() is virtual -- goes through the same owning spill a
+            direct call's argument 0 gets (IRLowerCallArg, the object-returning
+            call arm), or nothing released it: one clone per evaluation leaked
+            whenever the class had a subclass. Only that shape: everything else
+            keeps the plain receiver lowering. }
+          if NilPyUserCode and
+             ((ASTKind[ASTLeft[item]] = AN_CALL) or
+              (ASTKind[ASTLeft[item]] = AN_VIRTUAL_CALL)) and
+             (Integer(ASTIVal[ASTLeft[item]]) >= 0) and
+             (ProcRetRecId[Integer(ASTIVal[ASTLeft[item]])] >= REC_UCLASS_BASE) and
+             (not IRCallIsPassThrough(ASTLeft[item])) then
+            value := IRWrapNilChk(IRLowerCallArg(cpi, 0, ASTLeft[item], False), node, True)
+          else
+            value := IRWrapNilChk(IRLowerAST(ASTLeft[item]), node, True);
+        end
         else
           value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         { Same argument conversions as the direct AN_CALL path — the virtual

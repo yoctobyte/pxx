@@ -1,0 +1,86 @@
+# Two ways an OWNED object was handed on with nobody to release it, one
+# instance (or more) per evaluation:
+#
+# str(P(1)) / f"{P(1)}" / str(mk()) -- the compiler lowers these to a direct
+# call of the class's __str__/__repr__ with the construction as the receiver,
+# and nothing owned the receiver. The parsed spelling `P(1).m()` was already
+# hoisted to an owning local; this one bypassed it.
+#
+# C(k).get()[0], len(C(k).get()), C(k).clone().v, C(k).clone().get() when the
+# method is VIRTUAL (the class has a subclass). A NilPy method's result is
+# owned; a static call's result is bound to an owning temp when it is an
+# argument, a receiver or a field base, and a virtual call's was not.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG. `leak N`
+# / `keep N` drive the census.
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "P(%d)" % self.v
+
+
+class E(Exception):
+    pass
+
+
+class Base:
+    def __init__(self, v):
+        self.v = v
+        self.items = [v, v + 1]
+
+    def get(self):
+        return self.items
+
+    def clone(self):
+        return Base(self.v + 1)
+
+
+class Kid(Base):
+    def __init__(self, v):
+        super().__init__(v)
+        self.extra = {"k": [v]}
+
+    def clone(self):
+        return Kid(self.v + 10)
+
+
+def mk(v):
+    return P(v)
+
+
+def first(xs):
+    return xs[0]
+
+
+def show():
+    print(str(P(1)), f"<{P(2)}>", str(mk(3)), str(E("boom")), f"{E('bang')}")
+    flag = False
+    print("no" if flag else str(P(4)), flag and str(P(5)), [str(P(j)) for j in range(2)])
+    print(Kid(1).get()[0], len(Kid(2).get()), first(Kid(3).get()), Kid(4).get() + [9])
+    print(Kid(5).clone().v, Base(6).clone().get(), str(Kid(7).get()))
+    k = Kid(8)
+    print(first(k.get()), k.clone().get()[1], k.items)
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        s = str(P(i)) + f"{P(i)}" + str(mk(i)) + str(E("e"))
+        t += len(s) + Kid(i).get()[0] + len(Kid(i).get()) + first(Base(i).get())
+        t += Kid(i).clone().v + len(str(Kid(i).get())) + len(Kid(i).clone().get())
+        if keep is not None:
+            keep.append(Kid(i))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])
