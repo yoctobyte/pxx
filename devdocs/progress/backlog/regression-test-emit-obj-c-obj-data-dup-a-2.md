@@ -38,3 +38,37 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-25 — the borg watcher saw `test-emit-obj#src:test/c_obj_data_dup_a.c` GREEN at dcb660109dad (tier full) and did NOT close this: this is a repeat stub (`regression-test-emit-obj-c-obj-data-dup-a-2`, not `regression-test-emit-obj-c-obj-data-dup-a`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## 2026-10-02 (frankuser): a second flake in the same job group, test-emit-obj#03
+
+In two consecutive full tiers on plexus (`nice -n 15`, load ~24), #03 failed
+with an object it had just written already gone:
+
+    ok: /tmp/testmgr-scratch-1289354/cods_imp_x64.o  [code=19482B ...]
+    ... five more ok: lines ...
+    /usr/bin/x86_64-linux-gnu-ld.bfd: cannot find /tmp/testmgr-scratch-1289354/cods_imp_x64.o
+    test-emit-obj: data-import object FAILED to link
+
+Run alone (`--job 'test-emit-obj#03'`), it is green.
+
+Eliminated, each by measurement or search, not reasoning:
+- **Another Makefile `rm`.** A glob-expanding scan of every
+  `rm ... $(TESTTMP)/...` line finds exactly one that matches
+  `cods_imp_x64.o`: #03's own first line (Makefile ~37801).
+- **A tool or test script deleting `*.o` or the scratch dir.** No script
+  under tools/ or test/ does. The test/*.sh scripts handed `$(TESTTMP)`
+  delete nothing.
+- **The six-hour /tmp wiper.** A fresh `--emit-obj` object has a current
+  mtime.
+- **A fixed intermediate path in the compiler.** There is no `'/tmp/'`
+  literal and no rename in the output path. Identical sizes for #03's
+  imp_x64 and #04's dup_a in the failing run are normal; those two objects
+  differ but always size alike.
+- **cwd-running programs** (c_ofa26, c_xi26) unlink only their own named
+  files.
+
+Not yet examined: whether testmgr can run one job twice at once, for example a
+retry after an inner timeout while the first attempt's children still run. A
+second attempt's leading `rm -f $(TESTTMP)/cods_*.o` would explain exactly
+this signature, and so would load-dependence. tools/testmgr.py's retry path is
+the next place to read.
