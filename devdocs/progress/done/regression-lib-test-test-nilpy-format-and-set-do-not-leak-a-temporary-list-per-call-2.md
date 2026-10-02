@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: T
+status: done
 ---
 
 > **Track T by default, because this job TIMED OUT.** The source path says what a job compiles, not what went wrong, and a timeout did not fail in any of its sources — it ran out of budget. Guessing a lane from the path is the wrong turn `bug-t-a-timeout-bisects-to-an-innocent-commit` was filed to stop, so a timeout stays T's until someone shows otherwise. Re-lane it if the budget was not the problem.
@@ -44,3 +45,17 @@ takes it from the repro line.*
 - 2026-09-24 — the borg watcher saw `lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy` GREEN at 692ea558bbe4 (tier full) and did NOT close this: this is a repeat stub (`regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call-2`, not `regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-24 — the borg watcher saw `lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy` GREEN at e09adcd641b6 (tier full) and did NOT close this: this is a repeat stub (`regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call-2`, not `regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-25 — the borg watcher saw `lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy` GREEN at fdca56b72841 (tier full) and did NOT close this: this is a repeat stub (`regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call-2`, not `regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## Closed (2026-10-02, frankuser): a budget timeout, removed twice over
+
+It was never a leak. The job ran out of its 90 s unit budget on a loaded
+borg. On 2026-09-25, N in the fixture was cut from 12000 to 1000 (see the
+fixture's own "N IS A SLOPE, NOT A SOAK" note), and every borg run logged
+above since then is green.
+
+The fixture was still slow for its size: 5.0 s on plexus against CPython's
+0.23 s. Profiling found the cause. `pyiter_has` cleared about 46 Variant temps
+on every element step. It now has a fast path for list, range and generator
+cursors, and the fixture runs in 3.6 s. The deeper cost, an exception frame
+around every routine with a managed result, is filed as
+perf-a-a-routine-with-a-managed-result-pays-an-exception-frame-even-when-its-body-cannot-raise.
