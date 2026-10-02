@@ -1072,6 +1072,7 @@ AN_PAIR Left AllocNode(AN_INT_LIT)
 AN_PAIR Left GenMakeAssign(GenMakeIdent(tmp, tyInteger), GenMakeIntLit(0))
 AN_PAIR Left GenMakeAssign(GenMakeIdent(tmp, tyInteger), GenMakeIntLit(cap))
 AN_PAIR Left GenMakeGoto(lblIdx)
+AN_PAIR Left GenSlCloseAndFree(i, gpiN)
 AN_PAIR Left PyForceVariant(PyMakeDynAttrGet(baseNode, fname))
 AN_PAIR Left PyMakeDynAttrGet(atRecv, atName)
 AN_PAIR Left PyMakeIdent(caN)
@@ -1215,6 +1216,7 @@ AN_SEQ Left strLoop
 AN_SEQ Left wAssign
 AN_SEQ Right -1
 AN_SEQ Right AllocNode(AN_SEQ)
+AN_SEQ Right GenMakeSeq(ex, -1)
 AN_SEQ Right bodyNode
 AN_SEQ Right forN
 AN_SEQ Right head
