@@ -2,7 +2,7 @@
 track: A+N
 prio: 60
 type: bug
-status: open
+status: done
 found: 2026-09-20
 found-by: frankS
 blocked-by: []
@@ -288,3 +288,25 @@ writes a file. That is
 of the umbrella and now the largest single one, with a chain naming the method.
 The two `PyCallKey1` rows are the unconditional `PyIterCallHook` install and
 stay by design — see the note above on why lazy installation is not an option.
+
+## Closed (2026-10-02, frankuser): the title's claim no longer holds on either ISA
+
+Re-measured at 6f3a8bb040 on `examples/esp32/nilpy-c3/main/main.npy` with
+`--platform=esp --no-signals --dce --emit-obj --dce-why=PyHostCall`:
+
+| ISA | live code | PyHostCall |
+| --- | --- | --- |
+| riscv32 | 1,028,276 B, 531 bodies | **DROPPED** |
+| xtensa (`--xtensa-long-calls`) | 881,136 B, 531 bodies | **DROPPED** |
+
+The interpreter is now rooted only through `PyMakeClosureObj`'s hook install
+(frankS, 2026-09-20). The riscv32 stub-target rung that hid it there closed
+on 2026-09-22 (bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program).
+What remains large is
+[[feature-a-unreferenced-class-rtti-keeps-every-method-alive]]
+(`TPyFile.writelines` via a VMT slot), a different ticket.
+
+**Image growth, for whoever picks up image size next.** riscv32 live code was
+931,552 B on 2026-09-22 and is 1,022,744 B on pin v452, so about 91 KB was
+added between those two. It was not traced here. Today's commits add 5,532 B
+on top of that, mostly the fast-path `pyiter_has` (4,448 B).
