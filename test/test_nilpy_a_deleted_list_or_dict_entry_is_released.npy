@@ -1,0 +1,59 @@
+# `del l[i]`, `del l[a:b]`, `del d[k]` and `d.pop(k)` over object values leaked
+# what they removed. The list delete shifted the tail down with put, which
+# retains, then lowered the length, leaving the top slots holding references
+# nothing revisits; the dict remove overwrote the removed key and value with a
+# raw shift and never released them. Two blocks per call for a list value.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG (a delete
+# then an insert reuses the vacated slot, which is where an over-release would
+# show). `leak N` / `keep N` drive the census.
+import sys
+
+
+def show():
+    a = [[1], [2], [3], [4]]
+    del a[0]
+    del a[-1]
+    a.append([5])
+    del a[0:1]
+    a.append([6])
+    print(a)
+    d = {"a": [1], "b": [2], "c": [3]}
+    del d["a"]
+    d["d"] = [4]
+    print(d.pop("b"), d.pop("zz", [0]), d)
+    d["e"] = [5]
+    del d["e"]
+    d["f"] = [6]
+    print(d, len(d), list(d))
+    big = {}
+    for i in range(40):
+        big[str(i)] = [i]
+    for i in range(0, 40, 3):
+        del big[str(i)]
+    for i in range(40, 50):
+        big[str(i)] = [i]
+    print(len(big), big["1"], big["49"], "3" in big, sum(v[0] for v in big.values()))
+
+
+def passes(n, held):
+    for i in range(n):
+        a = [[1], [2], [3]]
+        del a[0]
+        del a[0:1]
+        d = {"a": [1], "b": [2]}
+        del d["a"]
+        x = d.pop("b")
+        d["c"] = [i]
+        if held is not None:
+            held.append(a)
+            held.append(x)
+    print(len(a), len(d))
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

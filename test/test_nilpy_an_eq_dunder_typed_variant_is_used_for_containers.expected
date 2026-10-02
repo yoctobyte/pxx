@@ -1,0 +1,5 @@
+one two True False None
+True False 1 2
+2 True True False False
+[1, 2] 1 True False
+[2] two 0

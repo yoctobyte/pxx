@@ -1,0 +1,12 @@
+KeyError('zz') 'zz' ('zz',)
+KeyError(1, 2) (1, 2) (1, 2)
+KeyError()  ()
+ValueError('a', 2) ('a', 2) ('a', 2)
+ValueError('m') m ('m',)
+ValueError()  ()
+E('x', 1) ('x', 1) ('x', 1)
+E()  ()
+IndexError(3) 3 (3,)
+RuntimeError('q') q ('q',)
+KeyError('q') 'q' ('q',)
+ValueError('bad', [1, 2]) [1, 2] 2

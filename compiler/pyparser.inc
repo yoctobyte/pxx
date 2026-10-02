@@ -33278,6 +33278,57 @@ begin
   if w <> declTk then PyReboundParamSlotType := w;
 end;
 
+{ Does a nested def in this body declare `nm` nonlocal? The same depth >= 2
+  statement-start scan PyPromoteNonlocalCells makes. }
+function PyNestedDeclaresNonlocal(bodyStart: Integer; const nm: AnsiString): Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  i := bodyStart;
+  depth := 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth <= 0 then Break;
+    end
+    else if (depth >= 2) and (Tokens[i].Kind = tkIdent) and (i > 0) and
+            (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) and
+            (GetTokenStr(i) = 'nonlocal') then
+    begin
+      Inc(i);
+      while (i < TokCount) and (Tokens[i].Kind = tkIdent) do
+      begin
+        if GetTokenStr(i) = nm then begin Result := True; Exit; end;
+        Inc(i);
+        if (i < TokCount) and (Tokens[i].Kind = tkComma) then Inc(i) else Break;
+      end;
+      Continue;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ The type to lay a local out as. A CLASS or STRING local that a nested def
+  declares `nonlocal`, where that def escapes the frame, is laid out as a
+  VARIANT: only a variant (or a scalar) can become the frame cell
+  (PyCellPromotable), and the cell is what the escaped def writes through. Left
+  a class, the closure bound the OBJECT where its by-ref parameter wanted an
+  address, so `x = x + [v]` or `x.append(v)` in the closure stored through the
+  list's own header and the process died (pin v452, SIGSEGV), and `x = [v]`
+  was silently lost. A variant holds a list or str with its own reference, so
+  nothing else about the name changes. }
+function PyNonlocalCellTk(bodyStart: Integer; const nm: AnsiString; tk: TTypeKind): TTypeKind;
+begin
+  Result := tk;
+  if not ((tk = tyClass) or (tk = tyAnsiString) or (tk = tyString)) then Exit;
+  if not PyNestedDeclaresNonlocal(bodyStart, nm) then Exit;
+  if not PyBodyLiftsANestedDef(bodyStart) then Exit;
+  Result := tyVariant;
+end;
+
 function PyPromoteNonlocalCells(bodyStart: Integer): Integer;
 var i, depth: Integer;
 begin
@@ -40387,8 +40438,8 @@ begin
   for i := 0 to PyLocalCount - 1 do
     if PyAssignTargetSym(PyLocals[i].Name) < 0 then
     begin
-      idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
-      if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+      idx := AllocVar(PyLocals[i].Name, PyNonlocalCellTk(bodyStart, PyLocals[i].Name, PyLocals[i].TypeKind));
+      if (Syms[idx].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
       begin
         Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
         SymSyncTypeRef(idx);
@@ -47317,8 +47368,8 @@ begin
   for i := 0 to PyLocalCount - 1 do
     if PyAssignTargetSym(PyLocals[i].Name) < 0 then
     begin
-      idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
-      if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+      idx := AllocVar(PyLocals[i].Name, PyNonlocalCellTk(bodyStart, PyLocals[i].Name, PyLocals[i].TypeKind));
+      if (Syms[idx].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
       begin
         Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
         SymSyncTypeRef(idx);

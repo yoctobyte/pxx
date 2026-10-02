@@ -301,3 +301,27 @@ live at v452, 45 now; HEAP_DEBUG and i386 rows diff against CPython).
 
 Not covered by the probe: statements (with/try/class bodies), the stdlib
 mimic units under lib/rtl, and anything needing I/O.
+
+## 2026-10-03 — statement probe: del, exceptions, and three crashes found on the way
+
+The same probe, with each case as a loop body instead of an expression. Leaks
+found and fixed (each with a regression test and census + keep control):
+
+| shape | at v452 | mechanism |
+| --- | --- | --- |
+| `del l[i]`, `del l[a:b]` | 18317 live / 5000 passes (test mix) | the shift left the vacated top slots holding references |
+| `del d[k]`, `d.pop(k)` | same test | the removed key and value were never released |
+| `Exception(a, b)` | use-after-free + leak | `pyexc_setargs` stored the args tuple without retaining it |
+| `repr(KeyError(k))`, `str(KeyError(k))` | 1/call | `GetArgs` returns an owned reference; the renderer dropped it |
+
+Correctness bugs met on the way, fixed in the same batch: a Variant-typed
+`__eq__` (`return isinstance(o, P) and ...`) was ignored by dict/set/`in`;
+repr of a multi-argument exception used its message, not its args; a
+`nonlocal` list or str in an escaping closure crashed; a class passed as the
+function of `map()` or as a `key=` crashed.
+
+Still leaking, left alone: `repr(P(1))` -- `repr(o: TObject)` boxes its
+argument into a local Variant, so ParamStays cannot prove it borrows and a
+construction at position 0 is not spilled (widening that spill to every free
+function over-released inside the generator, iterator and exception helpers:
+measured, reverted). Frame cells (`pycell_new`) are still never freed.

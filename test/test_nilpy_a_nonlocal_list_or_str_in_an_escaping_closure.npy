@@ -1,0 +1,120 @@
+# A list, dict, str or object that an ESCAPING nested def declares `nonlocal`
+# crashed or lost its writes: only a scalar or a variant could become the
+# shared frame cell, so the closure bound the object itself where its by-ref
+# parameter wanted the cell's address. `x = x + [v]` and `x.append(v)` stored
+# through the list's header (SIGSEGV at pin v452); `x = [v]` was silently
+# dropped. Diffed against CPython under -dPXX_HEAP_DEBUG.
+#
+# NOT census-checked: a frame cell is never freed (pycell_new, "leaked like the
+# bound-fn object"), so every activation that creates an escaping closure over
+# a nonlocal leaks its cell -- an int counter too, at the pin -- and a cell
+# holding a list now keeps that list as well. `leak N` shows it.
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+
+def acc_list():
+    x = []
+
+    def add(v):
+        nonlocal x
+        x = x + [v]
+        return x
+    return add
+
+
+def acc_append():
+    x = []
+
+    def add(v):
+        nonlocal x
+        x.append(v)
+        return len(x)
+    return add
+
+
+def acc_str():
+    s = ""
+
+    def add(v):
+        nonlocal s
+        s = s + str(v)
+        return s
+    return add
+
+
+def acc_obj():
+    best = P(0)
+
+    def see(v):
+        nonlocal best
+        if v > best.v:
+            best = P(v)
+        return best.v
+    return see
+
+
+def pair():
+    d = {}
+
+    def put(k, v):
+        nonlocal d
+        d = dict(d)
+        d[k] = v
+        return d
+
+    def get():
+        return d
+    return put, get
+
+
+def direct():
+    x = [1]
+
+    def bump():
+        nonlocal x
+        x = x + [len(x) + 1]
+    bump()
+    bump()
+    return x
+
+
+def show():
+    f = acc_list()
+    print(f(1), f(2), f(3))
+    g = acc_append()
+    print(g("a"), g("b"))
+    h = acc_str()
+    print(h(1), h(22))
+    k = acc_obj()
+    print(k(3), k(1), k(7))
+    put, get = pair()
+    put("a", [1])
+    put("b", "x")
+    print(get(), direct())
+
+
+def passes(n, held):
+    for i in range(n):
+        f = acc_list()
+        f(i)
+        f(P(i))
+        h = acc_str()
+        h(i)
+        k = acc_obj()
+        k(i)
+        if held is not None:
+            held.append(f)
+    print(f(0), h(1), k(2))
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

@@ -657,6 +657,61 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_construction_passed_as_a_first_argument_is_released.npy $(TESTTMP)/test_nilpy_carg26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_carg26_i386 | diff -u test/test_nilpy_a_construction_passed_as_a_first_argument_is_released.expected -; \
 	else echo "=== test_nilpy_carg: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A DELETED LIST OR DICT ENTRY IS RELEASED: del l[i] / del l[a:b] left the
+	# top slots holding references after the shift; del d[k] / d.pop(k) never
+	# released the removed key and value. Pin v452: 18317 live after 5000 passes.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_deleted_list_or_dict_entry_is_released.npy $(TESTTMP)/test_nilpy_dellk_hd26
+	$(TESTTMP)/test_nilpy_dellk_hd26 | diff -u test/test_nilpy_a_deleted_list_or_dict_entry_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_deleted_list_or_dict_entry_is_released.npy $(TESTTMP)/test_nilpy_dellk26
+	tools/assert_no_leak.sh nilpy_deleted_entry 300 $(TESTTMP)/test_nilpy_dellk26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_deleted_entry_control 300 $(TESTTMP)/test_nilpy_dellk26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_deleted_entry control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_deleted_list_or_dict_entry_is_released.npy $(TESTTMP)/test_nilpy_dellk26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_dellk26_i386 | diff -u test/test_nilpy_a_deleted_list_or_dict_entry_is_released.expected -; \
+	else echo "=== test_nilpy_dellk: qemu-i386 absent, i386 NOT verified ==="; fi
+	# AN __eq__ TYPED VARIANT IS USED BY CONTAINERS: `return isinstance(o, P) and
+	# ...` made the def RetKind 22, which the runtime dunder dispatcher declined,
+	# so dict/set/`in` compared by identity (pin v452: KeyError on an equal key).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_an_eq_dunder_typed_variant_is_used_for_containers.npy $(TESTTMP)/test_nilpy_eqvar_hd26
+	$(TESTTMP)/test_nilpy_eqvar_hd26 | diff -u test/test_nilpy_an_eq_dunder_typed_variant_is_used_for_containers.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_an_eq_dunder_typed_variant_is_used_for_containers.npy $(TESTTMP)/test_nilpy_eqvar26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_eqvar26_i386 | diff -u test/test_nilpy_an_eq_dunder_typed_variant_is_used_for_containers.expected -; \
+	else echo "=== test_nilpy_eqvar: qemu-i386 absent, i386 NOT verified ==="; fi
+	# AN EXCEPTION RENDERS FROM ITS ARGS AND RELEASES THEM: a multi-argument
+	# exception's tuple was released twice; repr/str of a KeyError leaked the
+	# args it read; repr of a multi-argument exception used its message.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_an_exception_renders_from_its_args_and_releases_them.npy $(TESTTMP)/test_nilpy_excrend_hd26
+	$(TESTTMP)/test_nilpy_excrend_hd26 | diff -u test/test_nilpy_an_exception_renders_from_its_args_and_releases_them.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_an_exception_renders_from_its_args_and_releases_them.npy $(TESTTMP)/test_nilpy_excrend26
+	tools/assert_no_leak.sh nilpy_exception_args 300 $(TESTTMP)/test_nilpy_excrend26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_exception_args_control 300 $(TESTTMP)/test_nilpy_excrend26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_exception_args control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_an_exception_renders_from_its_args_and_releases_them.npy $(TESTTMP)/test_nilpy_excrend26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_excrend26_i386 | diff -u test/test_nilpy_an_exception_renders_from_its_args_and_releases_them.expected -; \
+	else echo "=== test_nilpy_excrend: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A NONLOCAL LIST OR STR IN AN ESCAPING CLOSURE is laid out as a variant so
+	# it can become the frame cell (pin v452: SIGSEGV on x = x + [v]).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_nonlocal_list_or_str_in_an_escaping_closure.npy $(TESTTMP)/test_nilpy_nlcell_hd26
+	$(TESTTMP)/test_nilpy_nlcell_hd26 | diff -u test/test_nilpy_a_nonlocal_list_or_str_in_an_escaping_closure.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_nonlocal_list_or_str_in_an_escaping_closure.npy $(TESTTMP)/test_nilpy_nlcell26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_nlcell26_i386 | diff -u test/test_nilpy_a_nonlocal_list_or_str_in_an_escaping_closure.expected -; \
+	else echo "=== test_nilpy_nlcell: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A CLASS AS THE FUNCTION OF map() OR A key= constructs (pin v452: SIGSEGV,
+	# the RTTI blob was called as code).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_class_as_the_function_of_map_or_a_key.npy $(TESTTMP)/test_nilpy_clsmap_hd26
+	$(TESTTMP)/test_nilpy_clsmap_hd26 | diff -u test/test_nilpy_a_class_as_the_function_of_map_or_a_key.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_class_as_the_function_of_map_or_a_key.npy $(TESTTMP)/test_nilpy_clsmap26
+	tools/assert_no_leak.sh nilpy_class_as_callable 300 $(TESTTMP)/test_nilpy_clsmap26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_class_as_callable_control 300 $(TESTTMP)/test_nilpy_clsmap26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_class_as_callable control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_class_as_the_function_of_map_or_a_key.npy $(TESTTMP)/test_nilpy_clsmap26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_clsmap26_i386 | diff -u test/test_nilpy_a_class_as_the_function_of_map_or_a_key.expected -; \
+	else echo "=== test_nilpy_clsmap: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

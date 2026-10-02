@@ -3029,6 +3029,12 @@ function pyvar_callee_addr(const v: Variant; const what: AnsiString): Pointer;
   says so plainly instead of borrowing the dynamic-call path's arity message
   (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
+{ A CLASS held as a value, as a Pointer-typed callable (`map(Point, xs)`,
+  `sorted(xs, key=Version)`): its RTTI blob is not code, so it travels as a
+  small tagged block, one per class, that PyCallKey1 recognises and constructs
+  through. pyclasscall_rtti answers the blob for such a block, else nil. }
+function pyclasscall_of(rtti: Pointer): Pointer;
+function pyclasscall_rtti(p: Pointer): Pointer;
 function pyvar_callable_ptr_opt(const v: Variant; const what: AnsiString): Pointer;   { ...for a parameter whose default is nil: None means "not given", not an error }
 { Python's `callable(x)`. It was simply absent (`undefined variable`), while the
   predicate it needs — PyVarIsCallable, the same "callable" this dialect
@@ -4851,6 +4857,42 @@ begin
   Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
+var
+  PyClassCallMagicMarker: Integer;
+  PyClassCallCache: array of Pointer;
+  PyClassCallCount: Integer;
+
+function pyclasscall_of(rtti: Pointer): Pointer;
+var i: Integer; p: PPointer;
+begin
+  { cached per class and never freed: a program has a fixed set of classes, so
+    this is bounded, and the block may be held by any number of cursors }
+  for i := 0 to PyClassCallCount - 1 do
+    if PPointer(NativeInt(PyClassCallCache[i]) + SizeOf(Pointer))^ = rtti then
+    begin
+      Result := PyClassCallCache[i];
+      Exit;
+    end;
+  { 64 zeroed bytes: the dispatcher tests other callable kinds first, and each
+    of those reads a word at its own offset }
+  GetMem(Result, 64);
+  FillChar(Result^, 64, 0);
+  p := PPointer(Result);
+  p^ := @PyClassCallMagicMarker;
+  PPointer(NativeInt(Result) + SizeOf(Pointer))^ := rtti;
+  if PyClassCallCount >= Length(PyClassCallCache) then
+    SetLength(PyClassCallCache, PyClassCallCount * 2 + 8);
+  PyClassCallCache[PyClassCallCount] := Result;
+  Inc(PyClassCallCount);
+end;
+
+function pyclasscall_rtti(p: Pointer): Pointer;
+begin
+  Result := nil;
+  if (p <> nil) and (PPointer(p)^ = @PyClassCallMagicMarker) then
+    Result := PPointer(NativeInt(p) + SizeOf(Pointer))^;
+end;
+
 function pyvar_callable_ptr(const v: Variant; const what: AnsiString): Pointer;
 var nm: AnsiString;
 begin
@@ -4872,6 +4914,14 @@ begin
   if PPyVarRec(@v)^.VType = 13 then                    { VT_BTYPE }
     raise TypeError.Create(nm + ': calling ' + pybtype_name(pybtype_code(v))
       + '() through a type held as a value is not supported yet');
+  { A CLASS (VT_CLASSREF): its payload is the RTTI blob, and handing that over
+    as a code address jumped into it -- `list(map(Point, xs))` and
+    `sorted(xs, key=Version)` died with SIGSEGV (pin v452). }
+  if (PPyVarRec(@v)^.VType = 11) and (PPyVarRec(@v)^.Payload <> 0) then
+  begin
+    Result := pyclasscall_of(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+    Exit;
+  end;
   Result := Pointer(PPyVarRec(@v)^.Payload);
   if Result = nil then
     raise TypeError.Create(nm + ' is not callable — the value '
@@ -4893,6 +4943,11 @@ function pyvar_callable_ptr_opt(const v: Variant; const what: AnsiString): Point
   bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
 begin
   if what = '' then ;      { same shape as its strict twin; nothing to report }
+  if (PPyVarRec(@v)^.VType = 11) and (PPyVarRec(@v)^.Payload <> 0) then
+  begin
+    Result := pyclasscall_of(Pointer(NativeInt(PPyVarRec(@v)^.Payload)));
+    Exit;
+  end;
   Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
@@ -8010,6 +8065,11 @@ begin
   Result := pynone;   { Python's in-place mutators return None }
   i := indexof(k);
   if i < 0 then PyKeyError(k);
+  { release the removed entry: the raw shift below overwrites its slots
+    without, so `del d[k]` and `d.pop(k)` leaked the key and value -- two
+    blocks per call for a list value, and the value was never freed }
+  PyVarSlotClear(PPyVarRec(NativeInt(FKeys) + i * 16));
+  PyVarSlotClear(PPyVarRec(NativeInt(FVals) + i * 16));
   for j := i to FLen - 2 do
   begin
     src := PPyVarRec(NativeInt(FKeys) + (j + 1) * 16);
@@ -8020,6 +8080,16 @@ begin
     dst := PPyVarRec(NativeInt(FVals) + j * 16);
     dst^.VType := src^.VType;
     dst^.Payload := src^.Payload;
+  end;
+  { the vacated top slot holds a raw copy of the entry that moved down; zero
+    it without a release, or the next store there (PyVarSlotSet) would
+    release a live entry }
+  if i < FLen - 1 then
+  begin
+    dst := PPyVarRec(NativeInt(FKeys) + (FLen - 1) * 16);
+    dst^.VType := 0; dst^.Payload := 0;
+    dst := PPyVarRec(NativeInt(FVals) + (FLen - 1) * 16);
+    dst^.VType := 0; dst^.Payload := 0;
   end;
   FLen := FLen - 1;
   { the tail shift renumbered every entry after the hole, so the stored slot
@@ -14511,6 +14581,13 @@ begin
     building the object and raising it. }
   Result := e;
   if e = nil then Exit;
+  { the exception takes its OWN reference: the tuple is built in a hidden
+    NilPy local (PyMakeTupleFromArgs) which releases it at scope exit, and the
+    exception's finalizer releases argsv too -- one count, two owners, and
+    HEAP_DEBUG reported `RELEASE of a FREED object` for every multi-argument
+    exception that was dropped }
+  if t <> nil then PXXObjRetain(Pointer(t));
+  if ExceptionBase(e).argsv <> nil then PXXObjRelease(Pointer(ExceptionBase(e).argsv));
   ExceptionBase(e).argsv := t;
   { OSError's two-argument form prints as CPython's errno sentence, not as
     the tuple repr every other multi-argument exception prints. }
@@ -20823,6 +20900,13 @@ begin
   { shift the tail down over the deleted range }
   for i := hi to l.count - 1 do
     l.put(i - gap, l.at(i));
+  { the top `gap` slots now hold either a deleted element (a tail delete never
+    shifts) or a second reference to a shifted one -- put retains, it does not
+    move. Below FLen nothing revisits them, so clear them first, with the
+    finalizer's spelling; `del l[0]` on a list of lists leaked two blocks per
+    call, and a deleted object was never freed. }
+  for i := l.count - gap to l.count - 1 do
+    PyVarSlotClear(PPyVarRec(NativeInt(l.FItems) + i * 16));
   l.FLen := l.count - gap;
 end;
 
@@ -22308,6 +22392,12 @@ type
     fixed hand-written classes and left every dataclass still comparing by
     handle. }
   TPyEqObjFn = function(self: Pointer; other: Pointer): Boolean;
+  { ...and both again for a comparison dunder whose result NilPy types as a
+    Variant: `return isinstance(other, P) and other.v == self.v` -- the `and`
+    of two bools is typed Variant, so the def is RetKind 22 -- which is how
+    CPython's own docs spell __eq__. }
+  TPyEqVFn    = function(self: Pointer; const other: Variant): Variant;
+  TPyEqObjVFn = function(self: Pointer; other: Pointer): Variant;
   TPyHashFn  = function(self: Pointer): Int64;
   { ...and the shape an UNANNOTATED `def __hash__(self)` actually has. NilPy
     types an unannotated def's result as a Variant (RetKind 22), which is the
@@ -22386,6 +22476,7 @@ type
 function PyUserObjBoolDunder(selfObj, otherObj: TObject; const otherV: Variant;
                              const dunder: AnsiString; var res: Boolean): Boolean;
 var cls: PClassRTTI; mi: PMethInfo; fn: TPyEqFn; fnObj: TPyEqObjFn; pk: PInt64;
+    vfn: TPyEqVFn; vfnObj: TPyEqObjVFn; isV: Boolean; rv: Variant;
 begin
   PyUserObjBoolDunder := False;
   { `otherObj` may legitimately be NIL: the other operand is an int, a float, a
@@ -22406,13 +22497,26 @@ begin
   mi := PyFindDunder(cls, dunder);
   if mi = nil then Exit;
   if mi^.Arity <> 2 then Exit;
-  if mi^.RetKind <> 2 then Exit;              { Boolean }
+  { Boolean, or a Variant read for its truth. Declining the Variant shape left
+    the comparison at IDENTITY: `P(1) in {P(1): 0}` was False, a dict lookup
+    with an equal key missed, and a set kept both copies, with no diagnostic. }
+  if (mi^.RetKind <> 2) and (mi^.RetKind <> 22) then Exit;
+  isV := mi^.RetKind = 22;
   if mi^.ParamKinds = nil then Exit;
   pk := PInt64(mi^.ParamKinds);
   if pk[1] = 22 then                          { `other` is a Variant }
   begin
-    fn := TPyEqFn(mi^.Code);
-    res := fn(Pointer(selfObj), otherV);
+    if isV then
+    begin
+      vfn := TPyEqVFn(mi^.Code);
+      rv := vfn(Pointer(selfObj), otherV);
+      res := pyvar_to_bool(rv);
+    end
+    else
+    begin
+      fn := TPyEqFn(mi^.Code);
+      res := fn(Pointer(selfObj), otherV);
+    end;
     PyUserObjBoolDunder := True;
     Exit;
   end;
@@ -22432,8 +22536,17 @@ begin
       caller is left with. So `P(3) == "x"` and `P(3) == Q(3)` stay False
       instead of reading a Q as a P. }
     if GetInstanceRTTI(Pointer(selfObj)) <> GetInstanceRTTI(Pointer(otherObj)) then Exit;
-    fnObj := TPyEqObjFn(mi^.Code);
-    res := fnObj(Pointer(selfObj), Pointer(otherObj));
+    if isV then
+    begin
+      vfnObj := TPyEqObjVFn(mi^.Code);
+      rv := vfnObj(Pointer(selfObj), Pointer(otherObj));
+      res := pyvar_to_bool(rv);
+    end
+    else
+    begin
+      fnObj := TPyEqObjFn(mi^.Code);
+      res := fnObj(Pointer(selfObj), Pointer(otherObj));
+    end;
     PyUserObjBoolDunder := True;
     Exit;
   end;
@@ -23068,6 +23181,38 @@ begin
   PyUserObjUnhashable := True;
 end;
 
+{ CPython renders an exception from its ARGS: repr is `Cls(<args repr>)`, so
+  `ValueError('a', 2)` and `KeyError()`; KeyError's str is the repr of its one
+  argument, or of the whole tuple when it has several. Answers False when
+  there are no args to read. GetArgs answers an OWNED reference on both of its
+  arms, so it is read once and released here -- the code this replaced called
+  it up to three times per render and released none (`repr(KeyError(k))`
+  leaked two blocks per call), and repr'd a multi-argument exception from its
+  rendered message: ValueError("('a', 2)"). }
+function PyExcArgsRender(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
+var ka: TPyList;
+begin
+  Result := False;
+  ka := Exception(o).GetArgs;
+  if ka = nil then Exit;
+  if wantRepr then
+  begin
+    if ka.count = 1 then
+      outS := TObject(o).ClassName + '(' + pyvar_repr(ka.at(0)) + ')'
+    else
+      outS := TObject(o).ClassName + pylist_repr(ka);
+    Result := True;
+  end
+  else if o is KeyError then
+  begin
+    if ka.count = 1 then outS := pyvar_repr(ka.at(0))
+    else if ka.count = 0 then outS := ''
+    else outS := pylist_repr(ka);
+    Result := True;
+  end;
+  PXXObjRelease(Pointer(ka));
+end;
+
 function PyUserObjStr(o: TObject; wantRepr: Boolean; var outS: AnsiString): Boolean;
 var cls: PClassRTTI; mi: PMethInfo; fn: TPyDunderFn;
 begin
@@ -23128,10 +23273,7 @@ begin
       the single argument. A KeyError carrying zero or several arguments falls
       through to the message, as CPython's own __str__ does.
       bug-nilpy-exception-args-attribute-missing }
-    if (o is KeyError) and (Exception(o).GetArgs <> nil) and
-       (Exception(o).GetArgs.count = 1) then
-      outS := pyvar_repr(Exception(o).GetArgs.at(0))
-    else
+    if not ((o is KeyError) and PyExcArgsRender(o, False, outS)) then
       outS := ExceptionBase(o).Message;
     PyUserObjStr := True;
     Exit;
@@ -23143,14 +23285,12 @@ begin
     raised. `args` settles it: repr the ARGUMENT, whoever built the exception,
     and the two cases agree.
     bug-nilpy-exception-args-attribute-missing }
-  if (mi = nil) and wantRepr and (o is KeyError) and
-     (Exception(o).GetArgs <> nil) and (Exception(o).GetArgs.count = 1) then
+  if (mi = nil) and wantRepr and (o is Exception) and PyExcArgsRender(o, True, outS) then
   begin
-    outS := TObject(o).ClassName + '(' + pyvar_repr(Exception(o).GetArgs.at(0)) + ')';
     PyUserObjStr := True;
     Exit;
   end;
-  if (mi = nil) and wantRepr and (o is ExceptionBase) and (not (o is KeyError)) then
+  if (mi = nil) and wantRepr and (o is ExceptionBase) then
   begin
     if ExceptionBase(o).Message = '' then
       outS := TObject(o).ClassName + '()'

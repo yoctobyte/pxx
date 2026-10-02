@@ -1,0 +1,53 @@
+# Three defects in how an exception holds its args, all on dropped exceptions:
+# - a multi-argument exception's tuple had one reference and two owners (the
+#   hidden local it was built in, and the exception's finalizer):
+#   `RELEASE of a FREED object` under -dPXX_HEAP_DEBUG, ~3 blocks leaked;
+# - repr()/str() of a KeyError read `args` up to three times per render and
+#   released none: two blocks per call;
+# - repr() of a multi-argument exception came from its rendered message,
+#   ValueError("('a', 2)"), and KeyError(1, 2) printed as a bare object.
+#
+# No argument: prints, diffed against CPython. `leak N` / `keep N` drive the
+# census; `keep` holds every exception and must trip the bound.
+import sys
+
+
+class E(Exception):
+    pass
+
+
+def show():
+    for e in [KeyError("zz"), KeyError(1, 2), KeyError(), ValueError("a", 2), ValueError("m"),
+              ValueError(), E("x", 1), E(), IndexError(3), RuntimeError("q")]:
+        print(repr(e), str(e), e.args)
+    try:
+        {}["q"]
+    except KeyError as x:
+        print(repr(x), str(x), x.args)
+    try:
+        raise ValueError("bad", [1, 2])
+    except ValueError as x:
+        print(repr(x), x.args[1], len(x.args))
+
+
+def passes(n, held):
+    for i in range(n):
+        a = ValueError("a", i)
+        b = KeyError("k")
+        r = repr(b) + str(b) + repr(a) + str(a)
+        try:
+            raise E("x", [i])
+        except E as c:
+            r = repr(c)
+        if held is not None:
+            held.append(a)
+            held.append(b)
+    print(r)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

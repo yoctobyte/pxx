@@ -1,0 +1,53 @@
+# A CLASS passed where a callable is expected -- `map(Point, xs)`,
+# `sorted(xs, key=Version)`, `min(xs, key=K)`, `filter(K, xs)` -- handed the
+# class's RTTI blob to the dispatcher as a code address and the program died
+# with SIGSEGV (pin v452). A class called through a variant (`f = K; f(1)`)
+# always constructed; this is the same construction reached from a Pointer
+# parameter. Diffed against CPython under -dPXX_HEAP_DEBUG; `leak N` / `keep N`
+# drive the census.
+import sys
+
+
+class Point:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "Point(%d)" % self.v
+
+    def __lt__(self, o):
+        return self.v < o.v
+
+
+class Ver:
+    def __init__(self, s):
+        self.parts = [int(p) for p in s.split(".")]
+
+    def __lt__(self, o):
+        return self.parts < o.parts
+
+
+def show():
+    print(list(map(Point, [3, 1, 2])))
+    print(sorted(["1.10", "1.9", "1.2"], key=Ver))
+    print(min([5, 2, 8], key=Point), max([5, 2, 8], key=Point))
+    print(list(filter(Point, [1, 2])), [p.v for p in map(Point, range(3))])
+    pts = sorted(map(Point, [9, 4]))
+    print(pts, pts[0].v)
+
+
+def passes(n, held):
+    for i in range(n):
+        a = list(map(Point, [i, i + 1]))
+        b = sorted(["1.2", "1.10"], key=Ver)
+        if held is not None:
+            held.append(a)
+    print(a, b)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

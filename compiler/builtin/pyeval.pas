@@ -6578,10 +6578,20 @@ type
       all, identified purely by elimination of the other three).
   feature-nilpy-callable-value-unified-dispatch }
 function PyCallKey1(key: Pointer; const a0: Variant): Variant;
-var code, recv: Pointer; m1: TPyKeyCbM1; f1: TPyKeyCbF1; res: Variant;
+var code, recv: Pointer; m1: TPyKeyCbM1; f1: TPyKeyCbF1; res, cref: Variant;
 begin
   Result := pynone;
   if key = nil then Exit;
+  { a CLASS as the callable constructs (pyvar_callable_ptr's tagged block) }
+  if pyclasscall_rtti(key) <> nil then
+  begin
+    PPyRec(@cref)^.VType := 11;
+    PPyRec(@cref)^.Payload := Int64(NativeInt(pyclasscall_rtti(key)));
+    res := pynone;
+    PyClassRefNew(cref, 1, a0, pynone, pynone, pynone, res);
+    Result := res;
+    Exit;
+  end;
   if PXXObjIsBoundPair(key) then
   begin
     { pylib's dispatcher, not a second copy of it: it reads the pair's
