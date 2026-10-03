@@ -441,3 +441,42 @@ kept the construction's reference after PyObjAsVar had taken its own.
 
 Measured flat and left alone: `sort(key=..)` (keys.Free), `sorted(t, key=..)`
 over a tuple (13 vs 24 at N=300/3000, constant).
+
+## 2026-10-03 (round 4) -- class protocols: a called instance, and a folded dunder result as an argument
+
+A probe over the class protocols (every operator/container dunder, `__call__`,
+properties, super(), static/class methods, closures, nonlocal, *args/**kw,
+defaults, lambdas, a user iterator, a context manager, a user exception,
+__eq__/__hash__ in index/remove/dict/in, generators of instances; ~50 shapes)
+found two leaks, both one object per evaluation:
+
+- `V(k)("z")` -- a fresh instance called through `__call__`
+  (PyMakeCallDunder) had no owner for its receiver: 309 vs 2893 live at
+  N=300/3000. It now binds the receiver exactly as PyCallMeth1 does for every
+  other dunder.
+- `len(W(k) + 1)`, `sum(..)`, `max(..)`, `sorted(..)`, `list(..)`,
+  `(W(k) + 1).count(1)`, `3 in (W(k) + 1)` -- the dunder's RESULT handed
+  straight to a function. The parser folds the receiver's binding in front of
+  the call, so the argument is a comma; IRLowerCallArg's owned-argument spill
+  tested the comma's kind and let the owned list through unreleased (546 vs
+  5781). The spill now reads the fold's value (its last element, as
+  PyCallYieldsOwnedObj does), emits the leading statements in order, and
+  spills the tail like a bare call. This predates the `__call__` fix; binding
+  that receiver only made `len(V(k)(1))` show it.
+
+test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released:
+e810efc70a 78095 live after 5000 passes, now 50; byte-identical to CPython
+under -dPXX_HEAP_DEBUG and on i386; census flat on aarch64, arm32 and riscv32.
+
+The Pascal frontend was probed with the same census on the way (managed
+strings, records with managed fields, dynamic and nested arrays, open arrays,
+Insert/Delete/Copy, variants, TStringList, Format, interfaces through a
+function result, class fields, exceptions raised mid-routine with managed
+locals): all flat.
+
+Compile gaps met (compatibility, not leaks; no tickets filed): a user
+decorator (feature-nilpy-user-defined-decorators, open) and `f(**{"q": 2})`
+with a LITERAL mapping (a name works). Fixed on the way: `print(x) if c else
+None` as a statement (the print statement ended at its ')' and the `if` began
+a new one; `f() if c else None` always worked) --
+test_nilpy_a_conditional_print_runs_as_a_statement.

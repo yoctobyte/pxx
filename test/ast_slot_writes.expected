@@ -984,10 +984,12 @@ AN_IF Left exprNode
 AN_IF Left flGuardCall
 AN_IF Left hasCall
 AN_IF Left notNode
+AN_IF Left ptCond
 AN_IF Left smGuardCall
 AN_IF Left smNotNode
 AN_IF Left vtNotNode
 AN_IF Right elsePair
+AN_IF Right node
 AN_IF Right pair
 AN_IF Right pairN
 AN_IF Right pairNode
@@ -1167,6 +1169,7 @@ AN_PAIR Right limitNode
 AN_PAIR Right lo
 AN_PAIR Right p2
 AN_PAIR Right pair2
+AN_PAIR Right ptElse
 AN_PAIR Right right
 AN_PAIR Right rngLt
 AN_PAIR Right stmtNode

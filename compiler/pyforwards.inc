@@ -88,6 +88,7 @@ function PyStrMethodOwnsMember(recvTk: TTypeKind; const memb: AnsiString): Boole
 function PyMakeDynCall(baseNode: Integer): Integer; forward; { Nil Python: call a callable stored in a variant (pyparser.inc) }
 function PyBoxCallableValue(node: Integer): Integer; forward; { Nil Python: box a closure/bound-fn pointer into a callable variant (pyparser.inc) }
 function PyMakeCallDunder(baseNode: Integer): Integer; forward; { Nil Python: call a class instance's __call__ (pyparser.inc) }
+function PyOwnedArg0NeedsBinding(n: Integer): Boolean; forward; { Nil Python: a receiver nothing owns (pyparser.inc) }
 function PyWrapClosureFieldCall(fieldNode, argExpr, defCall: Integer): Integer; forward; { Nil Python: a Callable field may hold a pyeval closure (pyparser.inc) }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer; forward; { Nil Python: `obj.method` (no call) -> a bound-method value (pyparser.inc) }
 procedure PyParseLambdaStub; forward; { Nil Python: lambda -> pyeval closure value (pyparser.inc) }

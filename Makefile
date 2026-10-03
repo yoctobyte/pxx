@@ -740,6 +740,20 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_construction_or_result_as_a_dunder_receiver_is_released.npy $(TESTTMP)/test_nilpy_dunrecv26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_dunrecv26_i386 | diff -u test/test_nilpy_a_construction_or_result_as_a_dunder_receiver_is_released.expected -; \
 	else echo "=== test_nilpy_dunrecv: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A CALLED INSTANCE AND A FOLDED DUNDER RESULT ARE RELEASED: V(k)("z") had
+	# no owner for its receiver, and len(W(k) + 1) / sum(..) / max(..) took the
+	# folded dunder result as a comma the owned-argument spill did not read.
+	# e810efc70a: 78095 live after 5000 passes.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released.npy $(TESTTMP)/test_nilpy_callinst_hd26
+	$(TESTTMP)/test_nilpy_callinst_hd26 | diff -u test/test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released.npy $(TESTTMP)/test_nilpy_callinst26
+	tools/assert_no_leak.sh nilpy_called_instance 300 $(TESTTMP)/test_nilpy_callinst26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_called_instance_control 300 $(TESTTMP)/test_nilpy_callinst26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_called_instance control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released.npy $(TESTTMP)/test_nilpy_callinst26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_callinst26_i386 | diff -u test/test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released.expected -; \
+	else echo "=== test_nilpy_callinst: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame
@@ -896,6 +910,10 @@ test-nilpy: $(COMPILER)
 	# A STR UNPACKS, AND AN UNPACK CHECKS ITS COUNT (ValueError both ways).
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_str_unpacks_and_an_unpack_checks_its_count.npy $(TESTTMP)/test_nilpy_strunp_hd26
 	$(TESTTMP)/test_nilpy_strunp_hd26 | diff -u test/test_nilpy_a_str_unpacks_and_an_unpack_checks_its_count.expected -
+	# `print(x) if c else None` AS A STATEMENT: the print statement ended at its
+	# ')' and the `if` began a new statement ("expected ':' before 'else'").
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_conditional_print_runs_as_a_statement.npy $(TESTTMP)/test_nilpy_condprint_hd26
+	$(TESTTMP)/test_nilpy_condprint_hd26 | diff -u test/test_nilpy_a_conditional_print_runs_as_a_statement.expected -
 	# A RANGE VALUE INDEXES, AND A FILTER TAKES TWO `if` CLAUSES.
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_range_value_indexes_and_a_filter_takes_two_clauses.npy $(TESTTMP)/test_nilpy_rngfilt_hd26
 	$(TESTTMP)/test_nilpy_rngfilt_hd26 | diff -u test/test_nilpy_a_range_value_indexes_and_a_filter_takes_two_clauses.expected -

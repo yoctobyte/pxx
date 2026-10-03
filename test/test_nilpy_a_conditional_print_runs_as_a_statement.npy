@@ -1,0 +1,25 @@
+# `print(x) if c else None` -- a conditional expression used as a statement,
+# the one-line logging idiom. The print statement ended at its ')' and the
+# `if` was read as a new statement: "expected ':' before 'else'".
+# `f() if c else None` always worked (a call is an expression).
+log = []
+
+
+def note(s):
+    log.append(s)
+    return len(log)
+
+
+def run(verbose):
+    print("on", verbose) if verbose else None
+    print("off") if not verbose else note("quiet")
+    for i in range(4):
+        print("even", i) if i % 2 == 0 else note("odd %d" % i)
+
+
+run(True)
+run(False)
+print(log)
+k = 3
+print(k) if k > 2 else None
+print("never") if k > 9 else None

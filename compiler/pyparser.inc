@@ -17035,7 +17035,8 @@ end;
   '(' (a parse error today — there is no other legitimate reading). CurTok is
   the '('; arbitrary arity, unlike PyCallMeth1/2's fixed 0/1/2 args. }
 function PyMakeCallDunder(baseNode: Integer): Integer;
-var ci, mmi, mpi, selfArg, lastArg, argNode, notCallablePi: Integer;
+var ci, mmi, mpi, selfArg, lastArg, argNode, notCallablePi, hoistTail: Integer;
+    ownRecv: Boolean;
 begin
   Result := baseNode;
   ci := ResolveNodeRec(baseNode);
@@ -17064,6 +17065,16 @@ begin
     Exit;
   end;
   mpi := UMthProc_[mmi];
+  { A CONSTRUCTION or fresh result as the callee -- `V(k)('z')` -- is the
+    receiver PyCallMeth1 binds for every other dunder: nothing else owns it,
+    so pin v452 leaked one instance per call. Same binding, same fold. }
+  ownRecv := PyOwnedArg0NeedsBinding(baseNode);
+  hoistTail := -1;
+  if ownRecv then
+  begin
+    hoistTail := PyHoistTail;
+    baseNode := PyEvalOnce(baseNode);
+  end;
   selfArg := AllocNode(AN_ARG);
   ASTLeft[selfArg] := baseNode; ASTRight[selfArg] := -1;
   lastArg := selfArg;
@@ -17082,6 +17093,7 @@ begin
   ASTTk[Result] := Ord(Procs[mpi].RetType);
   ASTRight[Result] := ProcRetRecId[mpi];
   ASTLeft[Result] := selfArg;
+  if ownRecv then Result := PyFoldHoistSince(hoistTail, Result);
 end;
 
 { `<value>(args)` where the value is a VARIANT holding a callable — the function
@@ -35934,6 +35946,7 @@ var chainN: Integer;   { targets in a chained assignment `a = b = v` }
     cmpExisted: Boolean;
     asrtCond, asrtMsg, asrtProc, asrtA0, asrtA1: Integer;   { assert statement }
     delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
+    ptCond, ptElse: Integer;   { `print(x) if c else None` as a statement }
     delSavedInDel: Boolean;
     setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
     subA1, subA2, subRead: Integer; subPow: Boolean;   { `<expr>[k] op= v` — bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
@@ -36576,6 +36589,41 @@ begin
       (PyIsIdent('print') and (not PyUserShadowsProc('print')))) then
   begin
     Result := PyParsePrint;
+    { `print(x) if c else None` -- a conditional EXPRESSION used as a
+      statement, the one-line logging idiom. The print statement ended at its
+      ')' and the `if` was read as the start of a new statement ("expected ':'
+      before 'else'"); `f() if c else None` already worked, because a call
+      goes through the expression path. Lowered as the statement it means:
+      `if c: print(x)` plus the else value run for its effect -- None
+      contributes nothing, a call is run, anything else is refused by name. }
+    if CurTok.Kind = tkIf then
+    begin
+      Next;
+      PyParseBoolExpr;
+      ptCond := PyMakeTruthy(CurASTNode);
+      Expect(tkElse, 'else');
+      if CurTok.Kind = tkNil then
+      begin
+        Next;
+        ptElse := -1;
+      end
+      else
+      begin
+        PyParseBoolExpr;
+        ptElse := CurASTNode;
+        if (ptElse < 0) or ((ASTKind[ptElse] <> AN_CALL) and
+                           (ASTKind[ptElse] <> AN_VIRTUAL_CALL)) then
+          Error('Nil Python: a conditional expression used as a statement takes '
+                + 'None or a call after its else');
+        ptElse := PyBindDiscardedValue(ptElse);
+      end;
+      node := AllocNode(AN_PAIR);
+      ASTLeft[node] := Result;
+      ASTRight[node] := ptElse;
+      Result := AllocNode(AN_IF);
+      ASTLeft[Result] := ptCond;
+      ASTRight[Result] := node;
+    end;
     Exit;
   end;
   if PyIsIdent('super') and (TokPos < TokCount) and

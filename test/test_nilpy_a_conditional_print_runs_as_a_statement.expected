@@ -1,0 +1,8 @@
+on True
+even 0
+even 2
+off
+even 0
+even 2
+['quiet', 'odd 1', 'odd 3', 'odd 1', 'odd 3']
+3

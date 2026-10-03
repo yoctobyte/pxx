@@ -1,0 +1,65 @@
+# Two owned values nothing released, one object per evaluation:
+#
+#   V(k)("z")             -- a fresh INSTANCE called through __call__: the
+#                            receiver of the call had no owner
+#   len(W(k) + 1), sum(V(k)(1)), max(..), sorted(..), (W(k) + 1).count(1)
+#                         -- a dunder RESULT handed straight to a function:
+#                            the parser folds the receiver's binding in front
+#                            of the call, and the IR's owned-argument spill
+#                            tested the fold's kind (a comma), not its value
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG. `leak N`
+# / `keep N` drive the census.
+import sys
+
+
+class V:
+    def __init__(self, x):
+        self.x = x
+
+    def __call__(self, z):
+        return [z, self.x]
+
+    def __repr__(self):
+        return "V(%d)" % self.x
+
+
+class W:
+    def __init__(self, x):
+        self.x = x
+
+    def __add__(self, o):
+        return [self.x, o, self.x + o]
+
+
+def mkv(n):
+    return V(n)
+
+
+def show():
+    print(V(1)("z"), mkv(2)("q"), len(V(3)(4)), str(V(5)(6)), f"{V(7)(8)}")
+    print(len(W(1) + 2), sum(W(2) + 3), max(W(3) + 4), sorted(W(9) + 1))
+    print(list(W(1) + 1), (W(2) + 2).count(2), 4 in (W(2) + 2), (W(2) + 2)[2])
+    print(len((W(1) + 2) + [7]), [e for e in W(5) + 1], sum(V(4)(5)))
+    o = V(9)
+    print(o(1), o("x"))
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += len(V(i)(1)) + len(mkv(i)(2)) + len(W(i) + 1) + sum(W(i) + 2)
+        t += max(W(i) + 3) + len(sorted(W(i) + 1)) + (W(i) + 1).count(1)
+        t += len(list(W(i) + 1)) + (1 if 3 in (W(i) + 1) else 0)
+        V(i)("z")
+        if keep is not None:
+            keep.append(V(i)(i))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

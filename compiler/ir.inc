@@ -5987,6 +5987,7 @@ var argTk: TTypeKind;
     value: Integer;
     caCount, caElemRec, caElemSz, caSym, savedRec: Integer;
     cmHad: Boolean; cmTk: TTypeKind; cmTmp, cmVal: Integer;   { comma-argument pin }
+    spTail: Integer;   { the value of a folded owned argument }
     caElemTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall, caNone: Integer;
     oaEligible: Boolean;
@@ -6358,6 +6359,17 @@ begin
         the top per-iteration doloop leak found via DHAT). Both spill to the
         same owning temp whose inline release-of-previous drops the prior trip's
         object each loop iteration. }
+  { ...and the same call as the VALUE of a fold -- `len(W(k) + 1)`,
+    `sum(V(k)(1))`: the parser binds an owned dunder receiver to a local and
+    folds the binding in front of the call (PyFoldHoistSince), so the argument
+    is a comma whose last element is the owned result. The spill below tested
+    the comma's own kind and let it through unowned: one list per evaluation
+    (pin v452). Its value is its last element (PyCallYieldsOwnedObj reads it
+    the same way); the leading statements are emitted first, in order, and the
+    tail is spilled like a bare call. }
+  spTail := argAST;
+  if NilPyUserCode then
+    while (spTail >= 0) and (ASTKind[spTail] = AN_COMMA) do spTail := ASTRight[spTail];
   if NilPyUserCode and (not isRefArg) and
      (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      { A VIRTUAL call's result is owned exactly as a static one's is -- the
@@ -6365,15 +6377,15 @@ begin
        a method with an override in a subclass leaked its result whenever it
        was an argument: `C(k).get()[0]`, `len(C(k).get())`, `f(o.get())`
        (pin v452: ~2 objects per evaluation). }
-     ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_VIRTUAL_CALL)) and
+     ((ASTKind[spTail] = AN_CALL) or (ASTKind[spTail] = AN_VIRTUAL_CALL)) and
      ( { A construction / tyClass-tagged arg keeps the pathIdx>=1 receiver guard:
          the for-in and method desugars route the SAME construction subtree
          through receiver position (pathIdx 0) with their own binding plumbing,
          and spilling it there double-consumes (test_nilpy_forin SIGSEGV). }
        ( ((pathIdx >= 1) or IRCalleeIsPlainNilPyDef(cpi) or IRCalleeIsLibraryRepr(cpi)) and
-         ( ((Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
-            (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE))
-           or (IntToTypeKind(ASTTk[argAST]) = tyClass) ) )
+         ( ((Integer(ASTIVal[spTail]) = -Ord(tkGetMem)) and
+            (Integer(ASTRight[spTail]) >= REC_UCLASS_BASE))
+           or (IntToTypeKind(ASTTk[spTail]) = tyClass) ) )
        { An object-returning PROC call result (`pybytes_slice`, `pylist_slice`,
          `list`, a factory — ProcRetRecId set) is owned (+1) but in a value-arg
          position often carries a tyPointer tag rather than tyClass, so the
@@ -6384,19 +6396,24 @@ begin
          receiver, so it is safe to spill even at pathIdx 0 (bytes()/len() are
          free functions, not methods). All NilPy results are owned + the consumer
          borrows, so spill+release stays balanced regardless of the param tag. }
-       or ((Integer(ASTIVal[argAST]) >= 0) and
-           (ProcRetRecId[Integer(ASTIVal[argAST])] >= REC_UCLASS_BASE)) ) and
+       or ((Integer(ASTIVal[spTail]) >= 0) and
+           (ProcRetRecId[Integer(ASTIVal[spTail])] >= REC_UCLASS_BASE)) ) and
      { ...but a borrow of an argument is not a construction: its object
        already has an owner (the hoisted temp under `bytes()`). }
-     (not IRCallIsPassThrough(argAST)) then
+     (not IRCallIsPassThrough(spTail)) then
   begin
     tmpSym := AllocVar('', tyClass);
-    if (Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
-       (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE) then
-      Syms[tmpSym].RecName := ASTRight[argAST]
+    if (Integer(ASTIVal[spTail]) = -Ord(tkGetMem)) and
+       (Integer(ASTRight[spTail]) >= REC_UCLASS_BASE) then
+      Syms[tmpSym].RecName := ASTRight[spTail]
     else
       Syms[tmpSym].RecName := REC_NONE;   { generic owned object; PXXObjRelease is magic-guarded }
     SymSyncTypeRef(tmpSym);
+    while ASTKind[argAST] = AN_COMMA do
+    begin
+      IRDiscardValue(ASTLeft[argAST], IRLowerAST(ASTLeft[argAST]));
+      argAST := ASTRight[argAST];
+    end;
     value := IRLowerAST(argAST);
     arcCall := FindProc('PXXObjRelease');
     if arcCall >= 0 then
