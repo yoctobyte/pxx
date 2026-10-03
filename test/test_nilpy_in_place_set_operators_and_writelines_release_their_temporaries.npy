@@ -1,0 +1,56 @@
+# The in-place set operators snapshot one or both sides before they mutate
+# (removing renumbers the backing list, and `s ^= s` / `s -= s` must see the
+# sets as they were), and file.writelines() materialises its argument into a
+# list first; isdisjoint() built the whole intersection to read its count.
+# Those temporaries were never released: pin v452 left ~2 objects live per
+# call of `&=`, `-=` and writelines, ~4 per `^=`, ~7 per round of the three
+# *_update methods, and one per isdisjoint().
+#
+# No argument: prints the shapes (diffed against CPython). `leak N`: runs
+# them N times and keeps nothing. `keep N`: keeps one result per pass, the
+# positive control for the census bound.
+import sys
+
+
+def shapes(k):
+    a = {1, 2, 3, k}
+    a &= {2, 3, 5}
+    b = {1, 2, 3, k}
+    b ^= {2, 3, 9}
+    c = {1, 2, 3, k}
+    c -= {2, 3}
+    d = {1, 2, 3, 7}
+    d.intersection_update({2, 3, 7})
+    d.difference_update({7})
+    d.symmetric_difference_update({3, 8})
+    e = {1, 2, 3}
+    e ^= e
+    f = {4, 5}
+    f -= f
+    out = open("/dev/null", "w")
+    out.writelines(["a", "b", str(k)])
+    out.writelines(("c", "d"))
+    out.close()
+    g = [a.isdisjoint({99}), a.isdisjoint([3, 4]), f.isdisjoint(a)]
+    return [sorted(a), sorted(b), sorted(c), sorted(d), sorted(e), sorted(f), g]
+
+
+def show():
+    for row in shapes(40):
+        print(row)
+    print(shapes(2))
+
+
+def passes(n, held):
+    for k in range(n):
+        r = shapes(k)
+        if held is not None:
+            held.append(r)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

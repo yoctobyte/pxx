@@ -1,0 +1,112 @@
+# collections.defaultdict and collections.OrderedDict, both spellings and an
+# alias, against CPython. At pin v452 neither existed ("undefined variable"),
+# `from collections import Counter as C` bound nothing, and a builtin type
+# held as a value -- the factory a defaultdict is given -- leaked what it
+# built and could not build a set at all.
+import collections
+from collections import defaultdict
+
+class Box:
+    def __init__(self):
+        self.n = 0
+
+def zero():
+    return 0
+
+words = "the cat and the hat and the bat".split()
+c = defaultdict(int)
+for w in words:
+    c[w] += 1
+print(sorted(c.items()))
+g = defaultdict(list)
+for w in words:
+    g[len(w)].append(w)
+print(sorted(g.items()))
+s = defaultdict(set)
+s["a"].add(1)
+s["a"].add(1)
+s["b"].add(2)
+print(sorted((k, sorted(v)) for k, v in s.items()))
+st = defaultdict(str)
+st["x"] += "ab"
+print(st["x"], st["y"] == "", len(st))
+nest = defaultdict(lambda: defaultdict(int))
+nest["a"]["b"] += 2
+nest["a"]["c"] += 1
+print(sorted(nest["a"].items()), len(nest))
+dz = collections.defaultdict(zero)
+print(dz["q"], "q" in dz, "r" in dz, dz.get("r"), len(dz))
+bx = defaultdict(Box)
+bx["k"].n += 5
+print(bx["k"].n)
+plain = defaultdict()
+try:
+    plain["x"]
+except KeyError as e:
+    print("KeyError", e)
+nf = defaultdict(None)
+try:
+    nf["x"]
+except KeyError:
+    print("KeyError none")
+cp = g.copy()
+print(cp[99], 99 in g)
+dd = dict(c)
+try:
+    dd["zzz"]
+except KeyError:
+    print("dict() copy is plain")
+print(type(c).__name__, isinstance(c, dict))
+init = defaultdict(int, {"a": 1})
+init["b"] += 1
+print(sorted(init.items()))
+print(cp.pop(99), g.setdefault(3, ["x"])[0])
+for k in sorted(c):
+    print(k, c[k])
+
+from collections import OrderedDict as O
+from collections import OrderedDict
+d = O()
+d['b'] = 1
+d['a'] = 2
+print(d, repr(O()), type(d).__name__, isinstance(d, dict))
+d.move_to_end('b')
+print(list(d))
+d.move_to_end('b', False)
+print(list(d))
+d.move_to_end('b', last=False)
+print(list(d))
+print(d.popitem(), d.popitem(last=False), d)
+print(collections.OrderedDict([('x', 1), ('y', 2)]) == {'y': 2, 'x': 1})
+e = OrderedDict({"k": 1})
+e["j"] = 2
+print(e, dict(e), e.copy())
+try:
+    e.move_to_end("zz")
+except KeyError as ex:
+    print("KeyError", ex)
+lru = OrderedDict()
+for k in [1, 2, 3, 1, 4, 2, 5]:
+    if k in lru:
+        lru.move_to_end(k)
+    lru[k] = True
+    if len(lru) > 3:
+        lru.popitem(last=False)
+print(list(lru))
+
+from collections import deque as dq
+from collections import Counter as Cn
+print(list(dq([1])), Cn("aab")["a"])
+print(repr(defaultdict(list)), str(defaultdict(int, {"z": 0})))
+f = dict
+src = {"a": 1}
+copy_of = f(src)
+copy_of["b"] = 2
+print(src, copy_of)
+g = list
+xs = [1]
+ys = g(xs)
+ys.append(2)
+print(xs, ys, g("ab"), sorted(set([3, 1])))
+for t in [list, dict, set, tuple, frozenset, str, int]:
+    print(repr(t()))

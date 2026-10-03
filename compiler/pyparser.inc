@@ -14885,6 +14885,7 @@ begin
   { The BARE spelling first — `from sys import argv` then `argv`. It occupies
     ONE token, so it is tested before the dotted form's TokPos+1 read. }
   base := PyStdAliasLookup(GetTokenStr(TokPos - 1), aliasMem);
+  aliasMem := LowerCase(aliasMem);   { the VALUE table is matched folded }
   if (base <> '') and PyIsStdlibMemberValue(base, aliasMem, False) then
   begin
     Result := True;
@@ -14933,6 +14934,7 @@ begin
      ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) then
   begin
     base := LowerCase(PyStdAliasLookup(GetTokenStr(TokPos - 1), nm));
+    nm := LowerCase(nm);         { the VALUE table is matched folded }
     Next;                        { the bare name; nm is its MEMBER }
   end
   else
@@ -15431,6 +15433,8 @@ begin
     selects by type at run time, so arity is enough here.
     bug-n-collections-counter-qualified-does-not-compile }
   else if dotted = 'collections.Counter' then Result := 'pycounter_new'
+  else if dotted = 'collections.defaultdict' then Result := 'pydefaultdict_new'
+  else if dotted = 'collections.OrderedDict' then Result := 'pyordereddict_new'
   else Result := '';
 end;
 
@@ -49713,7 +49717,11 @@ begin
   if PyStdAliasCount >= 128 then Exit;
   if not PyStdProvidesMember(dottedRoot, member) then Exit;
   PyStdAliasName[PyStdAliasCount] := InternStr(LowerCase(alias));
-  PyStdAliasMember[PyStdAliasCount] := InternStr(LowerCase(member));
+  { AS SPELLED: the call table is matched as spelled (PyStdProvidesMember),
+    and a folded member made `from collections import Counter as C` resolve
+    `collections.counter` -- nothing -- while `deque`, lowercase already,
+    worked. The value-table readers fold it themselves. }
+  PyStdAliasMember[PyStdAliasCount] := InternStr(member);
   PyStdAliasBase[PyStdAliasCount] := InternStr(LowerCase(dottedRoot));
   PyStdAliasUnit[PyStdAliasCount] := CurrentUnitIdx;
   Inc(PyStdAliasCount);

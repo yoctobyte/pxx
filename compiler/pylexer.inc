@@ -527,8 +527,10 @@ var
   sdEq, sdK: Integer;      { `{expr=}`: index of the `=`, and a copy cursor }
   q, c, hq: Char;
   inHole, wroteAny, sawTriple: Boolean;
+  convCall: AnsiString;    { a `!r`/`!s` that a format spec follows; see the ':' arm }
 begin
   pdepth := 0;
+  convCall := '';
   n := Length(Source);
   PyFsReset(n);
   i := 1;
@@ -774,6 +776,18 @@ begin
           Inc(i, 2);
           continue;
         end
+        else if (depth = 0) and (c = '!') and (i + 2 <= n) and
+                ((Source[i + 1] = 'r') or (Source[i + 1] = 's')) and
+                (Source[i + 2] = ':') then
+        begin
+          { `{x!r:>8}` -- a conversion AND a format spec, which CPython applies
+            in that order: the spec formats the converted STRING. Remembered
+            here and applied by the ':' arm below, which wraps the hole as
+            pyformat_of(pyrepr_of(x), ">8"). }
+          if Source[i + 1] = 'r' then convCall := 'pyrepr_of' else convCall := 'pystr_of';
+          Inc(i, 2);       { onto the ':' }
+          continue;
+        end
         else if (depth = 0) and (c = '!') then
           ErrorAt(ln, 'Nil Python: only the !r and !s f-string conversions are supported')
         else if (depth = 0) and (c = ':') then
@@ -784,7 +798,14 @@ begin
             stops the parser and the formatter from disagreeing about what
             "05x" means. pyformat_of rejects anything it does not implement,
             at run time, by name. }
-          PyFStrSwapLastCall('pyformat_of(');
+          if convCall <> '' then
+          begin
+            PyFStrSwapLastCall('pyformat_of(' + convCall + '(');
+            PyFsPutCh(')');
+            convCall := '';
+          end
+          else
+            PyFStrSwapLastCall('pyformat_of(');
           PyFsPut(', "');
           Inc(i);
           while (i <= n) and (Source[i] <> '}') do

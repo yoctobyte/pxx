@@ -1,0 +1,11 @@
+# `{x!r:>8}` -- a conversion AND a format spec, applied in that order. At pin
+# v452 it was refused at compile time ("only the !r and !s f-string
+# conversions are supported"), though each half compiled alone.
+k = 7
+name = "ab"
+print(f"[{k:05d}] [{k/3:.2f}] [{str(k)!r:>8}] [{name!r:<6}] [{name!s:^6}] [{name!r}] [{k!r:>4}]")
+w = 9
+print(f"[{name!r:>{w}}] [{3.5!s:>6}]")
+rows = [("a", 1), ("bcd", 22)]
+for n, v in rows:
+    print(f"{n!r:<7}|{v!s:>4}|{n!s:*^7}")

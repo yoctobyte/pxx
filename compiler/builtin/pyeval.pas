@@ -7293,5 +7293,7 @@ initialization
     pymap_iter/pyfilter_iter, i.e. exactly when a map happened to be running.
     bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload }
   PyIterCallHook := @PyCallKey1;
+  { ...and the zero-argument call, for a defaultdict's factory }
+  PyCall0Hook := @pyvar_callv0;
 
 end.

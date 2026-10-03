@@ -856,6 +856,21 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_generator_outlives_its_caller_and_its_arguments.npy $(TESTTMP)/test_nilpy_genout26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_genout26_i386 | diff -u test/test_nilpy_a_generator_outlives_its_caller_and_its_arguments.expected -; \
 	else echo "=== test_nilpy_genout: qemu-i386 absent, i386 NOT verified ==="; fi
+	# COLLECTIONS.DEFAULTDICT AND ORDEREDDICT, both spellings and an alias. At pin
+	# v452 neither existed, and `from collections import Counter as C` bound nothing.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_collections_defaultdict_and_ordereddict.npy $(TESTTMP)/test_nilpy_colldd_hd26
+	$(TESTTMP)/test_nilpy_colldd_hd26 | diff -u test/test_nilpy_collections_defaultdict_and_ordereddict.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_collections_defaultdict_and_ordereddict.npy $(TESTTMP)/test_nilpy_colldd26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_colldd26_i386 | diff -u test/test_nilpy_collections_defaultdict_and_ordereddict.expected -; \
+	else echo "=== test_nilpy_colldd: qemu-i386 absent, i386 NOT verified ==="; fi
+	# AN F-STRING CONVERSION TAKES A FORMAT SPEC: `{x!r:>8}` was refused at pin v452.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_an_fstring_conversion_takes_a_format_spec.npy $(TESTTMP)/test_nilpy_fsconv_hd26
+	$(TESTTMP)/test_nilpy_fsconv_hd26 | diff -u test/test_nilpy_an_fstring_conversion_takes_a_format_spec.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_an_fstring_conversion_takes_a_format_spec.npy $(TESTTMP)/test_nilpy_fsconv26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_fsconv26_i386 | diff -u test/test_nilpy_an_fstring_conversion_takes_a_format_spec.expected -; \
+	else echo "=== test_nilpy_fsconv: qemu-i386 absent, i386 NOT verified ==="; fi
 	# YIELD FROM delegates: a generator, a list, a str, a range, nested, and a
 	# delegation abandoned by break or by dropping a stepped generator. A parse
 	# error at pin v452.
@@ -905,6 +920,17 @@ test-nilpy: $(COMPILER)
 	  echo "FAIL: nilpy_generator_close control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.npy $(TESTTMP)/test_nilpy_genclose_hd26
 	$(TESTTMP)/test_nilpy_genclose_hd26 | diff -u test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.expected -
+	# THE IN-PLACE SET OPERATORS AND writelines() RELEASE THEIR TEMPORARIES:
+	# `&=` `^=` `-=` and the *_update methods snapshot a side before mutating,
+	# and writelines() materialises its argument; none of those lists were
+	# released (pin v452: ~124k live after this loop). `keep` is the positive
+	# control; the HEAP_DEBUG row covers `s ^= s` / `s -= s` (same object).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_in_place_set_operators_and_writelines_release_their_temporaries.npy $(TESTTMP)/test_nilpy_setsnap26
+	tools/assert_no_leak.sh nilpy_setsnap 300 $(TESTTMP)/test_nilpy_setsnap26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_setsnap_control 300 $(TESTTMP)/test_nilpy_setsnap26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_setsnap control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_in_place_set_operators_and_writelines_release_their_temporaries.npy $(TESTTMP)/test_nilpy_setsnap_hd26
+	$(TESTTMP)/test_nilpy_setsnap_hd26 | diff -u test/test_nilpy_in_place_set_operators_and_writelines_release_their_temporaries.expected -
 	# A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS RELEASED after the call --
 	# sorted/min key=, a method's Variant parameter. Nothing owned the fresh
 	# closure object (pin v438: ~6 live per iteration of this loop); `keep` is

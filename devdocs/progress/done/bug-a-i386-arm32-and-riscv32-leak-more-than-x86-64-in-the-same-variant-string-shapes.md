@@ -3,6 +3,8 @@ type: bug
 track: A
 prio: 4
 summary: i386, arm32 and riscv32 leak MORE than x86-64 and aarch64 in the same variant/string shapes — 3616/3856/364 against 1549 on one program before the temp-ownership fix, and the allocation COUNT differs too (i386 8671 vs 5411), so at least one further scope-exit hole is target-specific
+status: done
+owner: frankuser
 tags: [memory-leak, variant, ansistring, i386, arm32, riscv32, cross-target]
 ---
 
@@ -83,3 +85,30 @@ i386 and riscv32 against 7 on x86-64 and aarch64 — a real 32-vs-64-bit split
 from the promo stride. So the identical rows are identical because the counts
 match, not because one binary ran five times. That is the check that makes a
 20-shape zero mean something.
+
+## Closed 2026-10-03 (frankuser) -- the last divergence was i386 boxing a LITERAL
+
+Re-measured at HEAD, the full program, -dPXX_ALLOC_CENSUS: x86-64, arm32,
+aarch64 and riscv32 all `allocs=5411 live=2`; **i386 `allocs=6088 live=1`**.
+Split by arm (the ticket's own advice), every arm matched across x86-64 and
+i386 except `ArmLit`: 0 allocations on x86-64, ~2 per trip on i386. Narrowed
+further to one statement each:
+
+    v := 'literal';                 x86-64 0   i386 1 per store
+    if v = 'literal' then ...       x86-64 0   i386 1 per compare
+
+Not a leak (frees matched) -- a COPY. The IR is identical on both targets
+(`const_str` -> `var_store`); the i386 backend's IR_VAR_STORE and IR_VAR_BOX
+arms called PXXStrFromLit for a tyString source unconditionally, while
+EmitStaticLitHandle386 -- the i386 port of x86-64's static-literal handle,
+already used at three other i386 sites -- was never asked there. Both arms ask
+it first now; no retain, for the reason that function documents.
+
+After: i386 `allocs=5411 frees=5409 live=2`, the same as the other four,
+same output (hits=2800, the tail payload intact). This also explains the
+ticket's original allocation-COUNT column for i386: that spread was this
+copy, which a pure ownership fix could not move.
+
+arm32's and riscv32's earlier spreads had already closed (their literal
+paths were ported under
+perf-a-every-string-literal-assignment-heap-copies-on-i386-arm32-riscv32-and-xtensa).

@@ -5714,7 +5714,15 @@ begin
           { A CODE ADDRESS overrides the type-kind answer — defs.inc's
             VT_CALLABLE_TAG; the x86-64 arm carries the full note. }
           if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
-          if tk = tyString then
+          { A LITERAL boxes as its static handle, as on x86-64
+            (EmitStaticLitHandle) and arm32/riscv32 -- this arm was the one
+            i386 site still copying it: `v := 'lit'` allocated once per store
+            here and never on the other four targets, measured 2026-10-03
+            (bug-a-i386-arm32-and-riscv32-leak-more-than-x86-64-in-the-same-
+            variant-string-shapes). No retain: see EmitStaticLitHandle386. }
+          if (tk = tyString) and EmitStaticLitHandle386(IRB[node]) then
+            EmitB($50)                               { push payload }
+          else if tk = tyString then
           begin
             IREmitNode386(IRB[node]);                { eax = inline string buffer }
             EmitB($50);                              { push eax }
@@ -5804,7 +5812,11 @@ begin
         j := VariantTagForTk(tk, 'Variant operand');
         { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
         if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
-        if tk = tyString then
+        { the literal's static handle -- see the IR_VAR_STORE arm above;
+          `v = 'lit'` boxed a fresh copy per comparison }
+        if (tk = tyString) and EmitStaticLitHandle386(IRB[node]) then
+          EmitB($50)                                 { push payload }
+        else if tk = tyString then
         begin
           IREmitNode386(IRB[node]);                  { eax = inline string buffer }
           EmitB($50);

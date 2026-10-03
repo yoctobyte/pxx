@@ -171,6 +171,9 @@ type
   { pyeval's PyCallKey1, installed into PyIterCallHook: the one entry point
     that knows all four callable representations. See that variable. }
   TPyIterCall = function(key: Pointer; const a0: Variant): Variant;
+  { ...and a ZERO-argument call of a callable VALUE, pyeval's pyvar_callv0:
+    a defaultdict's factory. }
+  TPyCall0 = function(const cb: Variant): Variant;
   { ...and its N-argument twin for `map(f, a, b, ...)`: the callable as a
     VARIANT (pyeval's pyvar_callv<n> dispatch) and one zipped tuple, spread. }
   TPyIterStarCall = function(const cb: Variant; t: Pointer): Variant;   { t: the TPyList tuple, declared below }
@@ -423,6 +426,17 @@ type
       a dict: subscript, items(), iteration and dict(c) all work already, and
       only the missing-key read changes. }
     FCounterMode: Boolean;
+    { `collections.defaultdict(factory)` is the same kind of MODE: a missing
+      key on a subscript READ calls the factory, stores the result and answers
+      it. get(), `in` and pop() are untouched, as in CPython, where only
+      __getitem__ consults __missing__. The factory is any callable value
+      (`list`, `int`, a def, a lambda), called through PyCall0Hook. }
+    FHasFactory: Boolean;
+    FDefFactory: Variant;
+    { `collections.OrderedDict`: a plain dict already keeps insertion order,
+      so the mode changes only what the value SAYS it is (type name, repr).
+      move_to_end and popitem(last) are dict methods, harmless on any dict. }
+    FOrdered: Boolean;
     { Counter.update(iterable) COUNTS elements; a plain dict's update(pairs)
       merges them. The mode picks which, which is why they share a name. }
     function update(l: TPyList): Variant;   { None, see TPyList.remove }
@@ -453,6 +467,11 @@ type
       what CPython 3.7+ does now that dicts are insertion-ordered. Raises
       KeyError on an empty dict, as CPython does. The pair is a tuple. }
     function popitem: TPyList;
+    { OrderedDict.popitem(last=True): last=False pops the FIRST pair (FIFO) }
+    function popitem(last: Boolean): TPyList; overload;
+    { OrderedDict.move_to_end(key, last=True): KeyError when key is absent }
+    function move_to_end(const k: Variant): Variant;
+    function move_to_end(const k: Variant; last: Boolean): Variant; overload;
     { Counter.most_common([n]): (element, count) pairs, highest count first. The
       pair is a 2-element list — NilPy has no tuple type; indexing is identical. }
     function most_common: TPyList;
@@ -1846,6 +1865,7 @@ var
     silently yielding the unmapped element. }
   PyIterCallHook: TPyIterCall;
   PyIterStarHook: TPyIterStarCall;
+  PyCall0Hook: TPyCall0;
 
 { ---- cursors (TPyIter) -------------------------------------------------
   The two-call protocol: `pyiter_has` prefetches, `pyiter_take` consumes. See
@@ -2873,6 +2893,22 @@ function Counter(l: TPyList): TPyDict; overload;
 function Counter(const s: AnsiString): TPyDict; overload;
 function pycounter_new: TPyDict; overload;
 function pycounter_new(const src: Variant): TPyDict; overload;
+{ `collections.defaultdict(factory[, mapping])` -- a dict in factory mode
+  (see TPyDict.FHasFactory). `defaultdict()` and `defaultdict(None)` have no
+  factory and raise KeyError like a plain dict, as CPython's do. }
+function pydefaultdict_new: TPyDict; overload;
+function pydefaultdict_new(const f: Variant): TPyDict; overload;
+function pydefaultdict_new(const f: Variant; const src: Variant): TPyDict; overload;
+{ ...and the BARE spelling, `from collections import defaultdict`, which
+  reaches a pylib proc by name exactly as `deque` and `Counter` do. }
+function defaultdict: TPyDict; overload;
+function defaultdict(const f: Variant): TPyDict; overload;
+function defaultdict(const f: Variant; const src: Variant): TPyDict; overload;
+{ `collections.OrderedDict([src])`, both spellings -- see TPyDict.FOrdered }
+function pyordereddict_new: TPyDict; overload;
+function pyordereddict_new(const src: Variant): TPyDict; overload;
+function OrderedDict: TPyDict; overload;
+function OrderedDict(const src: Variant): TPyDict; overload;
 { `reversed(x)` — a CURSOR walking the source backwards, which is what CPython
   returns (`list_reverseiterator`). It used to be the reversed COPY, on the
   grounds that NilPy's `for` was a counted-loop desugar with no iterator
@@ -5777,7 +5813,10 @@ begin
   else if o is TPyDict then
   begin
     { a Counter is a dict subclass in CPython, named Counter }
-    if TPyDict(o).FCounterMode then Result := 'Counter' else Result := 'dict';
+    if TPyDict(o).FCounterMode then Result := 'Counter'
+    else if TPyDict(o).FHasFactory then Result := 'defaultdict'
+    else if TPyDict(o).FOrdered then Result := 'OrderedDict'
+    else Result := 'dict';
   end
   else if o is TPyBytes then
   begin
@@ -6571,6 +6610,7 @@ begin
     v := snap.at(i);
     if not pycontains(other, v) then Self.remove(v);
   end;
+  PXXObjRelease(Pointer(snap));
 end;
 
 function TPyList.setsymdiff(other: TPyList): Variant;
@@ -6596,6 +6636,8 @@ begin
     v := snapOther.at(i);
     if not pycontains(snapSelf, v) then Self.add(v);
   end;
+  PXXObjRelease(Pointer(snapSelf));
+  PXXObjRelease(Pointer(snapOther));
 end;
 
 function TPyList.setdiff(other: TPyList): Variant;
@@ -6612,6 +6654,7 @@ begin
     v := snapOther.at(i);
     if pycontains(Self, v) then Self.remove(v);
   end;
+  PXXObjRelease(Pointer(snapOther));
 end;
 
 function TPyList.at(i: Integer): Variant;
@@ -6938,12 +6981,16 @@ begin
 end;
 
 function TPyList.isdisjoint(other: TPyList): Boolean;
-var r: TPyList;
+var i: Integer;
 begin
-  { "no element in common" — the intersection being empty. Python accepts ANY
-    iterable here, and a list IS the set representation, so no kind check. }
-  r := pyset_and(Self, other);
-  Result := (r = nil) or (r.count = 0);
+  { "no element in common". Python accepts ANY iterable here, and a list IS
+    the set representation, so no kind check. A membership walk, not the
+    intersection: building pyset_and's list only to read its count leaked that
+    list on every call. }
+  Result := True;
+  if (Self = nil) or (other = nil) then Exit;
+  for i := 0 to other.count - 1 do
+    if pycontains(Self, other.at(i)) then begin Result := False; Exit; end;
 end;
 
 procedure TPyList.discard(const v: Variant);
@@ -8021,6 +8068,15 @@ begin
       Result := 0;
       exit;
     end;
+    { defaultdict: __missing__ is "call the factory, store, answer it" }
+    if FHasFactory then
+    begin
+      if PyCall0Hook = nil then
+        raise Exception.Create('defaultdict: the callable dispatch (pyeval) is not linked');
+      Result := PyCall0Hook(FDefFactory);
+      store(k, Result);
+      exit;
+    end;
     PyKeyError(k);
   end;
   src := PPyVarRec(NativeInt(FVals) + i * 16);
@@ -8172,6 +8228,13 @@ var ks, vs: TPyList; i: Integer;
 begin
   Result := TPyDict.Create;
   Result.FCounterMode := FCounterMode;
+  { d.copy() of a defaultdict is a defaultdict with the same factory }
+  if FHasFactory then
+  begin
+    Result.FHasFactory := True;
+    Result.FDefFactory := FDefFactory;
+  end;
+  Result.FOrdered := FOrdered;
   ks := keylist;
   vs := vallist;
   for i := 0 to ks.count - 1 do Result.store(ks.at(i), vs.at(i));
@@ -8203,6 +8266,55 @@ begin
   Result.append(vs.at(n));
   remove(k);
   { both snapshots are read-only temporaries here -- measured 656 bytes/call }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
+end;
+
+{ ONE path that builds the tuple, for either end: a body that returns only
+  what it minted is what ClassifyProcResultFresh recognises, and that is what
+  makes a DISCARDED `d.popitem(last=False)` released. Forwarding to popitem()
+  for last=True made the result look borrowed -- two blocks per discarded
+  call, measured 2026-10-03 on an LRU loop. }
+function TPyDict.popitem(last: Boolean): TPyList;
+var ks: TPyList; k: Variant;
+begin
+  ks := keylist;
+  if ks.count = 0 then
+  begin
+    PXXObjRelease(Pointer(ks));
+    raise KeyError.Create('dictionary is empty');
+  end;
+  if last then k := ks.at(ks.count - 1) else k := ks.at(0);
+  PXXObjRelease(Pointer(ks));
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(k);
+  Result.append(fetch(k));
+  remove(k);
+end;
+
+function TPyDict.move_to_end(const k: Variant): Variant;
+begin
+  Result := move_to_end(k, True);
+end;
+
+{ Remove and re-insert: insertion order IS the storage order (FKeys), so a
+  store after a remove lands at the end. To the FRONT, the rest are re-stored
+  after it. O(n) for last=False, which CPython's linked list does in O(1); an
+  OrderedDict used as an LRU moves to the END, which is the cheap direction. }
+function TPyDict.move_to_end(const k: Variant; last: Boolean): Variant;
+var v: Variant; ks, vs: TPyList; i: Integer;
+begin
+  Result := pynone;
+  if indexof(k) < 0 then PyKeyError(k);
+  v := fetch(k);
+  remove(k);
+  if last then begin store(k, v); Exit; end;
+  ks := keylist;
+  vs := vallist;
+  for i := 0 to ks.count - 1 do remove(ks.at(i));
+  store(k, v);
+  for i := 0 to ks.count - 1 do store(ks.at(i), vs.at(i));
   PXXObjRelease(Pointer(ks));
   PXXObjRelease(Pointer(vs));
 end;
@@ -9883,6 +9995,65 @@ end;
 function pycounter_new: TPyDict;
 begin
   Result := Counter;
+end;
+
+function pydefaultdict_new: TPyDict;
+begin
+  Result := TPyDict.Create;
+end;
+
+function pydefaultdict_new(const f: Variant): TPyDict;
+begin
+  Result := TPyDict.Create;
+  if pyvartag(f) <> 0 then
+  begin
+    Result.FHasFactory := True;
+    Result.FDefFactory := f;
+  end;
+end;
+
+function pydefaultdict_new(const f: Variant; const src: Variant): TPyDict;
+begin
+  Result := pydefaultdict_new(f);
+  Result.update(src);
+end;
+
+function pyordereddict_new: TPyDict;
+begin
+  Result := TPyDict.Create;
+  Result.FOrdered := True;
+end;
+
+function pyordereddict_new(const src: Variant): TPyDict;
+begin
+  { `()`: a bare own name inside its own body is the RESULT, not a call }
+  Result := pyordereddict_new();
+  Result.update(src);
+end;
+
+function OrderedDict: TPyDict;
+begin
+  Result := pyordereddict_new;
+end;
+
+function OrderedDict(const src: Variant): TPyDict;
+begin
+  Result := pyordereddict_new(src);
+end;
+
+function defaultdict: TPyDict;
+begin
+  Result := pydefaultdict_new;
+end;
+
+function defaultdict(const f: Variant): TPyDict;
+begin
+  Result := pydefaultdict_new(f);
+end;
+
+function defaultdict(const f: Variant; const src: Variant): TPyDict;
+begin
+  Result := pydefaultdict_new(f, src);
 end;
 
 function pycounter_new(const src: Variant): TPyDict;
@@ -17648,6 +17819,11 @@ begin
     if d.FKeys <> nil then FreeMem(d.FKeys);
     if d.FVals <> nil then FreeMem(d.FVals);
     if d.FHash <> nil then FreeMem(d.FHash);
+    if d.FHasFactory then
+    begin
+      PyVarSlotClear(PPyVarRec(@d.FDefFactory));
+      d.FHasFactory := False;
+    end;
     d.FKeys := nil; d.FVals := nil; d.FHash := nil;
     d.FLen := 0; d.FCap := 0; d.FHashCap := 0;
     Exit;
@@ -22031,8 +22207,10 @@ begin
   end;
   if seq = nil then
     raise TypeError.Create('writelines() argument must be an iterable of str');
+  { pyseq_of_obj hands back a FRESH list on every arm (a copy for a list) }
   for i := 0 to seq.count - 1 do
     Self.write(seq.at(i));
+  PXXObjRelease(Pointer(seq));
 end;
 
 procedure TPyFile.seek(pos: Int64);
@@ -22254,7 +22432,7 @@ procedure pybtype_call1(const t: Variant; const a0: Variant; var res: Variant);
   (project_variant_fn_return_forward_nrvo_corruption). Measured, not assumed —
   as a function, `list("abc")` came back tagged int and printed empty while the
   scalar arms happened to survive. }
-var code: Int64; tmp: Variant;
+var code: Int64; tmp: Variant; l: TPyList; d, dc: TPyDict;
 begin
   code := pybtype_code(t);
   case code of
@@ -22266,9 +22444,36 @@ begin
       handed to a `var` parameter is the NRVO shape that corrupts
       (project_variant_fn_return_forward_nrvo_corruption — measured here as
       `list("abc")` printing an empty line). }
-    PYBT_LIST:      begin PyObjAsVar(pylist_v(a0), tmp); res := tmp; end;
-    PYBT_DICT:      begin PyObjAsVar(pydict_v(a0), tmp); res := tmp; end;
-    PYBT_SET:       begin PyObjAsVar(pyset_of(a0), tmp); res := tmp; end;
+    { Each of these answers a reference the caller OWNS, and PyObjAsVar takes
+      its own, so the call's is dropped once the box holds one: `f = list;
+      f("ab")` leaked the list per call (1.85 blocks, -dPXX_ALLOC_CENSUS,
+      2026-10-03), set() and dict() likewise. dict() COPIES, as CPython's
+      does: pydict_v hands back the argument's own dict, so `f = dict;
+      e = f(d)` used to alias d. }
+    PYBT_LIST:
+      begin
+        l := pylist_v(a0);
+        PyObjAsVar(l, tmp); PXXObjRelease(Pointer(l)); res := tmp;
+      end;
+    PYBT_DICT:
+      begin
+        d := pydict_v(a0);
+        dc := d.copy;
+        PXXObjRelease(Pointer(d));
+        dc.FCounterMode := False;
+        dc.FOrdered := False;
+        if dc.FHasFactory then
+        begin
+          PyVarSlotClear(PPyVarRec(@dc.FDefFactory));
+          dc.FHasFactory := False;
+        end;
+        PyObjAsVar(dc, tmp); PXXObjRelease(Pointer(dc)); res := tmp;
+      end;
+    PYBT_SET:
+      begin
+        l := pyset_of(a0);
+        PyObjAsVar(l, tmp); PXXObjRelease(Pointer(l)); res := tmp;
+      end;
   else
     { bytes / bytearray / tuple / frozenset through a NAME are not wired yet.
       Refused by name rather than silently answering something else — the same
@@ -22328,7 +22533,7 @@ begin
 end;
 
 procedure pybtype_call0(const t: Variant; var res: Variant);
-var tmp: Variant;
+var tmp: Variant; e: TPyList; d: TPyDict;
 begin
   { the empty value of the type — `list()`, `str()`, `int()`, spelled through a
     binding. Built by handing the conversion an empty value of its own shape,
@@ -22338,8 +22543,31 @@ begin
     PYBT_INT:   res := pyvar_of_int(0);
     PYBT_FLOAT: res := Double(0.0);
     PYBT_BOOL:  res := pyvar_of_bool(False);
-    PYBT_LIST:  begin PyObjAsVar(TPyList.Create, tmp); res := tmp; end;
-    PYBT_DICT:  begin PyObjAsVar(TPyDict.Create, tmp); res := tmp; end;
+    { PyObjAsVar takes its OWN reference, so the construction's is dropped
+      once the box holds one -- without that every `f = list; f()` leaked the
+      list, measured 2026-10-03 as 1.8 blocks per call through a
+      defaultdict(list) under -dPXX_ALLOC_CENSUS. }
+    PYBT_DICT:
+      begin
+        d := TPyDict.Create;
+        PyObjAsVar(d, tmp);
+        PXXObjRelease(Pointer(d));
+        res := tmp;
+      end;
+    { ...and the four that are a TPyList, three with a kind stamp --
+      `defaultdict(set)` is how grouping code is written }
+    PYBT_LIST, PYBT_SET, PYBT_TUPLE, PYBT_FROZENSET:
+      begin
+        e := TPyList.Create;
+        case pybtype_code(t) of
+          PYBT_SET:       e.FKind := PYSEQ_SET;
+          PYBT_TUPLE:     e.FKind := PYSEQ_TUPLE;
+          PYBT_FROZENSET: e.FKind := PYSEQ_FROZENSET;
+        end;
+        PyObjAsVar(e, tmp);
+        PXXObjRelease(Pointer(e));
+        res := tmp;
+      end;
   else
     raise TypeError.Create(pybtype_name(pybtype_code(t))
       + '() through a type held as a value is not supported yet');
@@ -23672,6 +23900,16 @@ begin
   { see dict(): keylist constructs a fresh list that nothing else releases }
   PXXObjRelease(Pointer(ks));
   Result := Result + '}';
+  { a defaultdict names its factory, as CPython's repr does:
+    `defaultdict(<class 'list'>, {1: [2]})` }
+  if d.FHasFactory then
+    Result := 'defaultdict(' + pyvar_repr(d.FDefFactory) + ', ' + Result + ')'
+  else if d.FOrdered then
+  begin
+    { CPython 3.12+: `OrderedDict({'b': 1})`, and `OrderedDict()` when empty }
+    if Result = '{}' then Result := 'OrderedDict()'
+    else Result := 'OrderedDict(' + Result + ')';
+  end;
 end;
 
 { CPython bytes repr: b'...' with printable ASCII kept, \t \n \r named, the
