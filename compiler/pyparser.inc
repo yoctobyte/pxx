@@ -50543,7 +50543,7 @@ end;
   name the package unit declares wins, which is CPython's order, and only a
   module file or subpackage beside that `__init__` answers. }
 function PyPackageSubmoduleKey(const pkgName, sub: AnsiString): AnsiString;
-var u, i: Integer; path, dir: AnsiString;
+var u, i, j: Integer; path, dir: AnsiString;
 begin
   Result := '';
   u := FindUnitOrAlias(pkgName);
@@ -50561,6 +50561,26 @@ begin
     if (dir = '') and (CompiledUnits[i] = u) and (CompiledUnitFile[i] >= 0) then
     begin
       path := KeyStrs[CompiledUnitFile[i]];
+      { A SHIM PACKAGE -- `from xml.dom import minidom` with xml.dom answered by
+        mimic_xml_dom. A shim has no `__init__` directory: its submodule is the
+        flat sibling file mimic_<pkg>_<sub>, which is exactly what
+        `import xml.dom.minidom` already resolves to. Asked beside the shim's
+        own file, so the answer comes from the directory that answered the
+        package. }
+      j := Length(path);
+      while (j > 0) and (path[j] <> '/') do Dec(j);
+      if Copy(path, j + 1, 6) = 'mimic_' then
+      begin
+        { lower case, as every shim file is named: `ElementTree` is
+          mimic_xml_etree_elementtree }
+        if PySourceExists(Copy(path, 1, j) + 'mimic_' + LowerCase(pkgName + '_' + sub) + '.py') or
+           PySourceExists(Copy(path, 1, j) + 'mimic_' + LowerCase(pkgName + '_' + sub) + '.pas') then
+        begin
+          Result := pkgName + '_' + sub;
+          Exit;
+        end;
+        Continue;
+      end;
       if (Length(path) > 12) and (Copy(path, Length(path) - 11, 12) = '/__init__.py') then
         dir := Copy(path, 1, Length(path) - 11)
       else if (Length(path) > 13) and (Copy(path, Length(path) - 12, 13) = '/__init__.npy') then

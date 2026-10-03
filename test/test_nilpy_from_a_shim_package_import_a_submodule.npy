@@ -1,0 +1,23 @@
+# `from pkg import sub` where the package and its submodule are SHIMS --
+# `from xml.dom import minidom`, `from urllib import parse`, `from xml.etree
+# import ElementTree as ET`. A shim has no `__init__` directory, so the
+# package-submodule rule (PyPackageSubmoduleKey) found nothing and the first
+# use said "no member ... came of the qualifier"; urllib and xml.etree had no
+# package shim at all. The submodule is the flat sibling file mimic_<pkg>_<sub>,
+# the same file `import pkg.sub` already reaches.
+from xml.dom import minidom
+from urllib import parse
+from urllib.parse import unquote
+from xml.etree import ElementTree as ET
+
+impl = minidom.getDOMImplementation()
+doc = impl.createDocument(None, "root", None)
+el = doc.createElement("e")
+el.setAttribute("k", "v")
+doc.documentElement.appendChild(el)
+print(doc.documentElement.tagName, el.getAttribute("k"))
+print(parse.quote("a b/c"), unquote(parse.quote("x y")))
+print(parse.urlparse("http://h.example/p?q=1").netloc)
+r = ET.Element("root", {"a": "1"})
+r.append(ET.Element("child"))
+print(r.tag, len(r), r.get("a"), r.find("child").tag)

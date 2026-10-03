@@ -839,6 +839,15 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_the_functools_shim_matches_cpython.npy $(TESTTMP)/test_nilpy_functools26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_functools26_i386 | diff -u test/test_nilpy_the_functools_shim_matches_cpython.expected -; \
 	else echo "=== test_nilpy_functools: qemu-i386 absent, i386 NOT verified ==="; fi
+	# FROM A SHIM PACKAGE IMPORT A SUBMODULE: `from xml.dom import minidom`,
+	# `from urllib import parse`, `from xml.etree import ElementTree as ET` bound
+	# nothing (a shim has no `__init__` directory for PyPackageSubmoduleKey).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_from_a_shim_package_import_a_submodule.npy $(TESTTMP)/test_nilpy_shimsubmod_hd26
+	$(TESTTMP)/test_nilpy_shimsubmod_hd26 | diff -u test/test_nilpy_from_a_shim_package_import_a_submodule.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_from_a_shim_package_import_a_submodule.npy $(TESTTMP)/test_nilpy_shimsubmod26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_shimsubmod26_i386 | diff -u test/test_nilpy_from_a_shim_package_import_a_submodule.expected -; \
+	else echo "=== test_nilpy_shimsubmod: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame
