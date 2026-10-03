@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:34 unfinished:18 blocked:9 backlog:50 backlog-umbrella:14 backlog-core:167 backlog-nilpy:179 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4097 rejected:89`
+`working:34 unfinished:18 blocked:9 backlog:50 backlog-umbrella:14 backlog-core:167 backlog-nilpy:174 backlog-tools:72 backlog-pascal:12 backlog-decide:49 backlog-libs:28 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:1 experimental:20 rainy-day:50 low-prio:78 known-incompat:6 float:23 done-followup:3 decided:153 done:4102 rejected:89`
 
 ## Held now (working/ — do not touch these files)
 
@@ -77,7 +77,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 - `task-e-decompose-a-lekkerzeilen-roofs-frame-so-two-perf-tickets-stop-guessing-at-their-own-prize` [E]
 
-## Ready — top 30 of 573, ranked
+## Ready — top 30 of 568, ranked
 
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
@@ -103,11 +103,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
 - `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 - `[p 70] [N]` bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
-- `[p 70] [N]` bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - `[p 70] [N]` bug-n-a-staticmethod-called-through-cls-raises-attributeerror
 - `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - `[p 70] [N]` bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation
+- `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 
-_543 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_538 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

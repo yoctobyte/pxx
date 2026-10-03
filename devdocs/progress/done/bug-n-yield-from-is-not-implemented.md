@@ -81,3 +81,42 @@ the fix updates it and re-checks whether 3.9 is still the right number.
 above, and a test that pins the two behaviours a re-yield loop would get wrong:
 the sub-generator's return value reaching the `yield from` expression, and
 `send()` reaching the inner generator.
+
+## Fixed 2026-10-03 (frankuser), statement form only
+
+`yield from E` desugars, in the yield arm of the statement parser
+(`PyYieldFromLoop`, compiler/pyparser.inc), to the loop it means:
+
+    it = pyiter_own_v(E)        # hidden managed TPyIter local
+    while pyiter_has(it):
+        yield pyiter_take(it)
+
+`pyiter_own_v` (pylib) is `pyiter_v` that always hands back an OWNED cursor
+(it retains when E is already an iterator, which pyiter_v returns borrowed),
+so the hidden local releases it like any other generator local -- including
+when the delegating generator is abandoned mid-delegation (`break`, or a
+stepped generator dropped), which goes through SLReleaseLocalsAtDone.
+
+**On the scope note above.** The two behaviours a re-yield loop would get
+wrong are both out of reach in NilPy, and both are REFUSED rather than
+approximated, so nothing lands silently wrong:
+
+- `yield` is not an expression in NilPy at all -- `x = yield 1` is
+  `undefined variable (yield)` -- so there is no `send()` to forward, and
+  `x = yield from g()` (the return-value form) fails the same way.
+- `throw()`/`close()` forwarding: NilPy generators have no `throw()`; close
+  is the teardown above, and it reaches the delegate because the delegate is
+  a local of the delegating frame.
+
+So the statement form is exact for what NilPy generators can express. The
+expression form waits on `yield` as an expression.
+
+The probe-suite tripwire mentioned above was never written
+(feature-n-sys-version-info-implementation-and-the-probe-suite is still in
+the backlog), so nothing trips.
+
+Test: test_nilpy_yield_from_delegates_and_an_abandoned_delegation_is_released
+-- a generator, a list, a str, a range, nested delegation, a generator method
+delegating to another, `break` mid-delegation and a dropped stepped generator;
+HEAP_DEBUG diff against CPython, census flat (live ~40 at 5000 passes, bound
+300, keep control trips), i386 under qemu.

@@ -382,3 +382,29 @@ used as a value segfaulted on x86-64, whose call puts all seven step words
 on the stack while the cursor passed one in a register. A generator with
 `*args`, and a generator method on a receiver of unknown type, are now
 refused by name instead of crashing.
+
+## 2026-10-03 (night) -- stdlib probe: one leak, in deque
+
+The probe over the stdlib mimic units and I/O, the family the 10-02 note
+left uncovered: json dumps/loads (nested, indent, sort_keys), Counter
+(most_common, +=, values, dict()), deque, struct pack/unpack/calcsize,
+io.StringIO/BytesIO, re sub/split/finditer/findall, os.path, time,
+str.format and %, sorted with a key, `with open(..)` write/read/readlines/
+line iteration, a plain open/close, context managers with and without an
+exception. 50 shapes, N=10 against N=4010. All flat but one:
+
+- `collections.deque`: TPyDeque.Compact replaced FBuf by a raw field store
+  and never released the old list, so every deque leaked one list on its
+  first appendleft, and another on each compaction after a run of popleft.
+  164588 live after 2000 passes of the test's loop; 66 now. A deque held in
+  a variant (back through a tuple) could not be indexed, assigned or
+  iterated; pyvar_getitem / pyvar_setitem / pyseq_of_obj grew a TPyDeque
+  arm. test_nilpy_a_deque_releases_its_old_buffer_and_indexes_through_a_variant.
+
+Compile gaps the probe met (compatibility, not leaks; no tickets filed):
+`deque(maxlen=n)`, `StringIO.readlines()`, iterating a StringIO,
+`match.groups()`, `re.sub` with a callable, `collections.defaultdict(..)`,
+`collections.OrderedDict()`, `str(b, "utf-8")`.
+
+Four older leak tickets were re-measured on the way and found flat at HEAD,
+closed with test_nilpy_a_discarded_or_variant_routed_result_is_released.
