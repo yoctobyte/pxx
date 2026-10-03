@@ -1,22 +1,66 @@
 # PXX
 
-**Home: <https://pxxc.org>** — the documentation site, published from this
-repository. Source: <https://github.com/yoctobyte/pxx>. Those two are the only
-official sources; nothing else distributes PXX.
+**One compiler, written from scratch, for Pascal, C and Python, producing
+native programs for Linux and the ESP32.**
 
-PXX is a provisional name for a from-scratch, self-hosting Pascal compiler. It
-emits ELF executables directly — no assembler or linker step — for Linux x86-64
-(native) plus i386, aarch64, arm32 and riscv32. **Its flagship is the ESP32:
-Pascal and Python programs compiled to native code for the ESP32-S3, ESP32-C3
-and classic ESP32, through ESP-IDF** (see
-[Highlights](#highlights)). The executable is still `compiler/pascal26`; naming things is the
-one compiler problem not solved by recursion.
+It has its own runtime, ELF writer and linker, so the output is a finished
+static executable with no assembler, no `ld`, no libc and no interpreter. It
+compiles itself to a byte-identical binary.
 
-The compiler is written in plain Pascal and currently supports a tested Object
-Pascal subset: classes, generics, overloads, operators, exceptions, RTTI,
-component streaming groundwork, C interop, and mainline C and Nil Python
-frontends alongside experimental BASIC, Rust and Zig ones. The long-term
-direction is a multi-language native compiler sharing one IR and backend.
+Save this as `primes.py`. It's plain Python, nothing PXX-specific:
+
+```python
+def primes(n):
+    sieve = [True] * (n + 1)
+    out = []
+    for i in range(2, n + 1):
+        if sieve[i]:
+            out.append(i)
+            for j in range(i * i, n + 1, i):
+                sieve[j] = False
+    return out
+
+ps = primes(100)
+print(len(ps), "primes below 100, the last is", ps[-1])
+```
+
+Then, on x86-64 Linux, with the beta 0.1 release:
+
+```sh
+sha256sum -c SHA256SUMS && tar xzf pxx-v0.1.0-beta.1.tar.gz
+cd pxx-v0.1.0-beta.1 && ./install.sh --yes
+./pxx ../primes.py ../primes && ../primes
+```
+
+```text
+25 primes below 100, the last is 97
+```
+
+That `primes` is a 515 KB static ELF executable with the same output as
+CPython. Download: **[v0.1.0-beta.1 "Blaise"](https://github.com/yoctobyte/pxx/releases/tag/v0.1.0-beta.1)**.
+
+- **Three languages, one backend:** Pascal (the Free Pascal dialect, solid),
+  C (solid: SQLite, Lua, QuickJS, zlib, the Tiny C Compiler and BusyBox
+  compile unmodified and match GCC's build), and Nil Python (ordinary Python
+  compiled ahead of time; best effort).
+- **Targets:** x86-64, i386, aarch64, arm32, riscv32 and wasm32, plus native
+  firmware for the ESP32-S3 and ESP32-C3. On real C3 and S3 boards every
+  example passed, Python calling Pascal ran on the C3, and 300 HTTP fetches
+  over real Wi-Fi on the S3 ran with 0 errors.
+- **How it was made:** one person's architecture, decisions and hardware
+  testing; the code was written by AI coding agents under that direction, and
+  every commit says so.
+
+The Pascal side covers a tested Object Pascal subset: classes, generics,
+overloads, operators, exceptions, RTTI and C interop, with experimental BASIC,
+Rust and Zig frontends beside the main three. The long-term direction is a
+multi-language native compiler sharing one IR and backend.
+
+Home: <https://pxxc.org>, the documentation site, published from this
+repository. Source: <https://github.com/yoctobyte/pxx>. Those two are the
+only official sources; nothing else distributes PXX. (PXX is a provisional
+name; the compiler binary is still `compiler/pascal26`. Naming things is the
+one compiler problem not solved by recursion.)
 
 ## Looking for sponsors
 
