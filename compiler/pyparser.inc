@@ -17317,15 +17317,9 @@ begin
     if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkStar) then
     begin
-      { `f(*xs, **d)` is legal Python and is NOT supported here, refused rather
-        than dropped: the positional half leaves through PyStarDynCall, which
-        has no keyword channel at all, so accepting this would silently discard
-        every keyword. }
-      if starSym >= 0 then
-        Error('Nil Python: `*iterable` and `**mapping` in the same call '
-              + 'through a callable value is not supported — the positional '
-              + 'half is dispatched by PyStarDynCall, which has no keyword '
-              + 'channel, so the keywords would be silently dropped');
+      { `f(*xs, **d)`: PyStarDynCall has no keyword channel, so a star list
+        WITH keywords leaves through pyvar_callv_kw_star instead (below). It
+        was refused here, which is what `functools.partial` is made of. }
       Next;                              { the first '*' }
       Next;                              { the second '*' }
       PyParseBoolExpr;
@@ -17375,7 +17369,7 @@ begin
       parameter names out of the signature record.
       bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
     if isNilPy and (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind = tkAssign) and (starSym < 0) then
+       (Tokens[TokPos].Kind = tkAssign) then
     begin
       kwName := CurTok.SVal;
       Next;                              { the name }
@@ -17412,8 +17406,33 @@ begin
     if CurTok.Kind = tkComma then Next else Break;
   end;
   Expect(tkRParen, ')');
+  { a star list AND keywords: the count is the list's, read at run time }
+  if (starSym >= 0) and (kwNamesSym >= 0) and
+     (FindProc('pyvar_callv_kw_star') >= 0) then
+  begin
+    dispArg := AllocNode(AN_ARG);
+    ASTLeft[dispArg] := baseNode;
+    kwN := AllocNode(AN_ARG);
+    ASTLeft[kwN] := PyMakeIdent(starSym);
+    ASTRight[dispArg] := kwN; kwTail := kwN;
+    kwN := AllocNode(AN_ARG);
+    ASTLeft[kwN] := PyMakeIdent(kwNamesSym);
+    ASTRight[kwTail] := kwN; kwTail := kwN;
+    kwN := AllocNode(AN_ARG);
+    ASTLeft[kwN] := PyMakeIdent(kwValsSym);
+    ASTRight[kwN] := -1;
+    ASTRight[kwTail] := kwN;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := FindProc('pyvar_callv_kw_star');
+    ASTLeft[Result] := dispArg;
+    ASTTk[Result] := Ord(tyVariant);
+    Exit;
+  end;
   if starSym >= 0 then
   begin
+    if kwNamesSym >= 0 then
+      Error('Nil Python: `*iterable` with keyword arguments through a callable '
+            + 'value needs pyvar_callv_kw_star (pyeval)');
     Result := PyStarDynCall(baseNode, starSym, calleeNm);
     Exit;
   end;

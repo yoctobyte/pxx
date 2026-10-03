@@ -1,0 +1,12 @@
+10 16
+120
+TypeError reduce() of empty iterable with no initial value
+25 8 15 3 27
+23416728348467685 1275 42 42
+2 4 2 6 4
+CacheInfo(hits=1, misses=4, maxsize=2, currsize=2)
+1 81
+CacheInfo(hits=0, misses=0, maxsize=2, currsize=0)
+['a', 'bb', 'ccc']
+['ccc', 'bb', 'a']
+hihi

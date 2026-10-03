@@ -1,0 +1,93 @@
+# lib/rtl/mimic_functools.py against CPython's functools: reduce, partial,
+# wraps, lru_cache in its three spellings (bare, empty call, maxsize=), cache,
+# cache_info/cache_clear, LRU eviction order, and cmp_to_key. The shim rests on
+# four fixes made with it (instance-call argument lists, a callable instance
+# as a key, *args with **kw through a callable value, a *args __call__ reached
+# through a variant), so this also pins those through a real library.
+import sys
+import functools
+from functools import reduce, partial, lru_cache, cmp_to_key, wraps, cache
+
+
+def add(a, b):
+    return a + b
+
+
+def power(base, exp=2):
+    return base ** exp
+
+
+def compare(a, b):
+    return len(a) - len(b)
+
+
+sq = partial(power, exp=2)
+cube = partial(power, exp=3)
+add10 = partial(add, 10)
+
+
+@lru_cache(maxsize=None)
+def fib(n):
+    return n if n < 2 else fib(n - 1) + fib(n - 2)
+
+
+@functools.lru_cache(maxsize=2)
+def ident(x):
+    return x * 2
+
+
+@lru_cache
+def tri(n):
+    return 0 if n == 0 else n + tri(n - 1)
+
+
+@cache
+def double(n):
+    return n + n
+
+
+def logged(f):
+    @wraps(f)
+    def w(*args):
+        return f(*args)
+    return w
+
+
+@logged
+def hello(n):
+    return "hi" * n
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += reduce(add, [i, 1, 2]) + reduce(add, [], i)
+        t += sq(i % 7) + cube(2) + add10(i) + partial(power, i % 5)(exp=2)
+        t += ident(i % 3) + double(i % 5) + fib(i % 30)
+        t += len(sorted(["ccc", "a", str(i)], key=cmp_to_key(compare))[0])
+        if keep is not None:
+            keep.append(partial(add, [i]))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    print(reduce(add, [1, 2, 3, 4]), reduce(add, [1, 2, 3], 10))
+    print(functools.reduce(lambda a, b: a * b, range(1, 6)))
+    try:
+        reduce(add, [])
+    except TypeError as e:
+        print("TypeError", e)
+    print(sq(5), cube(2), add10(5), partial(add, 1)(2), partial(power)(3, exp=3))
+    print(fib(80), tri(50), double(21), double(21))
+    print(ident(1), ident(2), ident(1), ident(3), ident(2))
+    print(ident.cache_info())
+    print(ident.cache_info().hits, fib.cache_info().currsize)
+    ident.cache_clear()
+    print(ident.cache_info())
+    print(sorted(["ccc", "a", "bb"], key=cmp_to_key(compare)))
+    print(sorted(["ccc", "a", "bb"], key=cmp_to_key(compare), reverse=True))
+    print(hello(2))
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

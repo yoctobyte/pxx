@@ -825,6 +825,20 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_mapping_spread_into_a_star_and_kwargs_def_is_collected.npy $(TESTTMP)/test_nilpy_kwspreadstar26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_kwspreadstar26_i386 | diff -u test/test_nilpy_a_mapping_spread_into_a_star_and_kwargs_def_is_collected.expected -; \
 	else echo "=== test_nilpy_kwspreadstar: qemu-i386 absent, i386 NOT verified ==="; fi
+	# THE FUNCTOOLS SHIM MATCHES CPYTHON: lib/rtl/mimic_functools.py -- reduce,
+	# partial, wraps, lru_cache (bare / () / maxsize=), cache, cmp_to_key. It
+	# rests on `*args`+`**kw` through a callable value (pyvar_callv_kw_star) and
+	# a `*args` __call__ reached through a variant (PyCallDunder's star arm).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_the_functools_shim_matches_cpython.npy $(TESTTMP)/test_nilpy_functools_hd26
+	$(TESTTMP)/test_nilpy_functools_hd26 | diff -u test/test_nilpy_the_functools_shim_matches_cpython.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_the_functools_shim_matches_cpython.npy $(TESTTMP)/test_nilpy_functools26
+	tools/assert_no_leak.sh nilpy_functools_shim 300 $(TESTTMP)/test_nilpy_functools26 leak 1000
+	@if tools/assert_no_leak.sh nilpy_functools_shim_control 300 $(TESTTMP)/test_nilpy_functools26 keep 1000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_functools_shim control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_the_functools_shim_matches_cpython.npy $(TESTTMP)/test_nilpy_functools26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_functools26_i386 | diff -u test/test_nilpy_the_functools_shim_matches_cpython.expected -; \
+	else echo "=== test_nilpy_functools: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame
@@ -4038,13 +4052,13 @@ test-nilpy: $(COMPILER)
 	# merely dropped the names would pass every in-order row.
 	./$(COMPILER) test/test_nilpy_double_star_at_a_callable_value_call.npy $(TESTTMP)/test_nilpy_dstarcv26
 	$(TESTTMP)/test_nilpy_dstarcv26 2>&1 | diff -u test/test_nilpy_double_star_at_a_callable_value_call.expected -
-	# The refusal has no oracle by construction -- CPython accepts `f(*xs, **d)`
-	# and we do not. It is REFUSED rather than dropped because the positional
-	# half leaves through PyStarDynCall, which has no keyword channel, so
-	# accepting it would silently discard every keyword.
-	printf 'def f(a=0, b=0):\n    return a + b\ng = f\nprint(g(*[1], **{"b": 2}))\n' > $(TESTTMP)/dstarcv_both.npy
-	! ./$(COMPILER) $(TESTTMP)/dstarcv_both.npy $(TESTTMP)/dstarcv_both26 > $(TESTTMP)/dstarcv_both.log 2>&1
-	grep -q 'no keyword channel' $(TESTTMP)/dstarcv_both.log
+	# `f(*xs, **d)` through a callable value. It used to be REFUSED (PyStarDynCall
+	# has no keyword channel); since 2026-10-03 it leaves through
+	# pyvar_callv_kw_star, which reads the positional count off the star list at
+	# run time. CPython prints 3, then 13.
+	printf 'def f(a=0, b=0):\n    return a + b\ng = f\nprint(g(*[1], **{"b": 2}))\nprint(g(*[], b=13))\n' > $(TESTTMP)/dstarcv_both.npy
+	./$(COMPILER) $(TESTTMP)/dstarcv_both.npy $(TESTTMP)/dstarcv_both26
+	tools/expect_same.sh dstarcv_both "$$($(TESTTMP)/dstarcv_both26 | tr '\n' ' ')" "3 13 "
 	# ...and a keyword argument at a CALLABLE FIELD, where THE RECEIVER is the
 	# discriminator and not the field. A plain name and a function call bind the
 	# name at compile time (PyKwArgIndex/PyBindKwArgs) and always worked; a list

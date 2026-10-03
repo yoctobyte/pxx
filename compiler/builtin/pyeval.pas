@@ -318,6 +318,7 @@ function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
 function pyvar_callv_kw(const cb: Variant; nPos: Integer;
                        const a0, a1, a2, a3: Variant;
                        kwNames, kwVals: TPyList): Variant;
+function pyvar_callv_kw_star(const cb: Variant; args, kwNames, kwVals: TPyList): Variant;
 function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 { The four-argument dispatcher. Past arity 3 the old lowering calls through the
   callee's payload as a code ADDRESS — a segfault for a lambda, whose value is
@@ -5910,13 +5911,36 @@ function PyCallDunder(const cb: Variant; n: Integer;
   this is a receiver + an argument list and nothing else. It is reached only
   after PyFindMethCI has confirmed the method, which is what makes PyHostCall's
   missing-method Halt unreachable from here. }
-var inst: Pointer; args: TPyList;
+var inst: Pointer; args: TPyList; mi: PMethInfo; pair: Variant;
 begin
   PyCallDunder := False;
   if PPyRec(@cb)^.VType <> VT_NC_OBJECT then Exit;
   inst := Pointer(NativeInt(PPyRec(@cb)^.Payload));
   if inst = nil then Exit;
-  if PyFindMethCI(GetInstanceRTTI(inst), '__call__') = nil then Exit;
+  mi := PyFindMethCI(GetInstanceRTTI(inst), '__call__');
+  if mi = nil then Exit;
+  { A `__call__(self, *args)` COLLECTS: PyHostCall passes arguments one slot
+    each, so the collector read a loose argument as its packed tuple and the
+    program segfaulted -- `functools.lru_cache`'s wrapper reached through a
+    decorator factory's result is exactly this. The bound pair packs (the same
+    pybound_new_star the getattr bridge builds from these two words, and safe
+    for the same reason: `__call__` is always normalised to the all-variant
+    ABI, PyMethodUsedAsValue). The star index is in SIGNATURE space in the
+    Flags word, +1 so that 0 means none; the pair wants the callee's own. }
+  if ((mi^.Flags shr 8) and 255) > 0 then
+  begin
+    pair := pybound_new_star(mi^.Code, inst, mi^.RetKind <> 0,
+                             Integer((mi^.Flags shr 8) and 255) - 2);
+    case n of
+      0: res := pybound_callv0(pair);
+      1: res := pybound_callv1(pair, a0);
+      2: res := pybound_callv2(pair, a0, a1);
+    else
+      res := pybound_callv3(pair, a0, a1, a2);
+    end;
+    PyCallDunder := True;
+    Exit;
+  end;
   args := TPyList.Create;
   if n >= 1 then args.append(a0);
   if n >= 2 then args.append(a1);
@@ -6077,6 +6101,39 @@ begin
   raise TypeError.Create('a keyword argument through this kind of callable '
           + 'value is not supported yet (an interpreted closure and a class '
           + 'reached as a value still carry no parameter names)');
+end;
+
+function pyvar_callv_kw_star(const cb: Variant; args, kwNames, kwVals: TPyList): Variant;
+{ `fn(*xs, k=v)` / `fn(*xs, **d)` through a callable VALUE: the positional
+  count is a RUN-TIME fact (the star list), so the compile-time count
+  pyvar_callv_kw takes is supplied here from the list. With no keyword in the
+  end (an empty `**{}`) the call is the plain positional one, so a callable
+  shape that carries no parameter names still works. Four positionals, the
+  width pyvar_callv_kw has; past it a named refusal rather than dropping
+  arguments. This is what `functools.partial`'s
+  `self.func(*self.args, *args, **kw)` is made of. }
+var n: Integer; a: array[0..3] of Variant; i: Integer;
+begin
+  n := args.count;
+  if n > 4 then
+    raise TypeError.Create('a call through a callable value with *unpacking '
+            + 'and keyword arguments takes at most 4 positional arguments, got '
+            + pystr_of(Int64(n)));
+  for i := 0 to 3 do
+    if i < n then a[i] := args.at(i) else a[i] := pynone;
+  if (kwNames = nil) or (kwNames.count = 0) then
+  begin
+    case n of
+      0: Result := pyvar_callv0(cb);
+      1: Result := pyvar_callv1(cb, a[0]);
+      2: Result := pyvar_callv2(cb, a[0], a[1]);
+      3: Result := pyvar_callv3(cb, a[0], a[1], a[2]);
+    else
+      Result := pyvar_callv4(cb, a[0], a[1], a[2], a[3]);
+    end;
+    Exit;
+  end;
+  Result := pyvar_callv_kw(cb, n, a[0], a[1], a[2], a[3], kwNames, kwVals);
 end;
 
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
