@@ -767,6 +767,19 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.npy $(TESTTMP)/test_nilpy_binderunw26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_binderunw26_i386 | diff -u test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.expected -; \
 	else echo "=== test_nilpy_binderunw: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A FRESH OBJECT RENDERED BY str() OR AN F-STRING IS RELEASED: str(Q()),
+	# f"{Q()}", str([P(1)]) handed the construction to a pylib renderer as argument
+	# 0, outside the owning spill (pin v452: 9582 live after 5000 passes).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_fresh_object_rendered_by_str_or_an_fstring_is_released.npy $(TESTTMP)/test_nilpy_freshrender_hd26
+	$(TESTTMP)/test_nilpy_freshrender_hd26 | diff -u test/test_nilpy_a_fresh_object_rendered_by_str_or_an_fstring_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_fresh_object_rendered_by_str_or_an_fstring_is_released.npy $(TESTTMP)/test_nilpy_freshrender26
+	tools/assert_no_leak.sh nilpy_fresh_render 300 $(TESTTMP)/test_nilpy_freshrender26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_fresh_render_control 300 $(TESTTMP)/test_nilpy_freshrender26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_fresh_render control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_fresh_object_rendered_by_str_or_an_fstring_is_released.npy $(TESTTMP)/test_nilpy_freshrender26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_freshrender26_i386 | diff -u test/test_nilpy_a_fresh_object_rendered_by_str_or_an_fstring_is_released.expected -; \
+	else echo "=== test_nilpy_freshrender: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

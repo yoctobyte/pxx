@@ -78,6 +78,7 @@ function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString; forwar
 function PyForceVariant(node: Integer): Integer; forward;  { box a value into a variant (pyparser.inc) }
 function PyBindOwnedOperandInline(n: Integer): Integer; forward;  { a fresh class-result operand bound in place to a hidden local, so it is released (pyparser.inc) }
 function PyEvalOnce(node: Integer): Integer; forward;  { bind a value to a hidden temp so it is evaluated once (pyparser.inc) }
+function PyRenderCallOwned(procIdx, n: Integer): Integer; forward;  { a renderer call with an owned argument 0 bound and folded (pyparser.inc) }
 function PyMakePercentFormat(fmtNode, argsNode: Integer): Integer; forward;  { `str % args` (pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }

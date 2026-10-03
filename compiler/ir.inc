@@ -5850,6 +5850,22 @@ begin
     if PyModUnitIdx[k] = ProcUnitIdx[cpi] then begin Result := True; Exit; end;
 end;
 
+{ The runtime library's repr() of an object, list or dict: a free function
+  whose one parameter is a borrow -- it renders and keeps nothing. Named rather
+  than inferred because ProcParamStays cannot see it: repr(o: TObject) boxes o
+  into a local Variant behind a retain, which reads as an escape. A
+  construction there, `repr(Q())`, had no owner and leaked one instance per
+  call (pin v452), so position 0 spills as it does for a plain def. }
+function IRCalleeIsLibraryRepr(cpi: Integer): Boolean;
+begin
+  Result := (cpi >= 0) and (cpi < ProcCount) and
+            (LowerCase(Procs[cpi].Name) = 'repr') and
+            (Procs[cpi].ParamCount = 1) and
+            (Procs[cpi].Params[0].TypeKind = tyClass) and
+            (not Procs[cpi].Params[0].IsRef) and
+            (ProcUnitIdx[cpi] >= 0) and (not UnitIsPyModule(ProcUnitIdx[cpi]));
+end;
+
 { Does this ARGUMENT, in position k, carry a +1 nobody has bound? A
   construction in position 0 does -- IRLowerCallArg spills a construction to
   an owning temp only from position 1 on (the receiver guard) -- and so does a
@@ -6354,7 +6370,7 @@ begin
          the for-in and method desugars route the SAME construction subtree
          through receiver position (pathIdx 0) with their own binding plumbing,
          and spilling it there double-consumes (test_nilpy_forin SIGSEGV). }
-       ( ((pathIdx >= 1) or IRCalleeIsPlainNilPyDef(cpi)) and
+       ( ((pathIdx >= 1) or IRCalleeIsPlainNilPyDef(cpi) or IRCalleeIsLibraryRepr(cpi)) and
          ( ((Integer(ASTIVal[argAST]) = -Ord(tkGetMem)) and
             (Integer(ASTRight[argAST]) >= REC_UCLASS_BASE))
            or (IntToTypeKind(ASTTk[argAST]) = tyClass) ) )

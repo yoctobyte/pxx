@@ -1,0 +1,58 @@
+# str(), print() and an f-string of a FRESH object -- a class with no
+# __str__/__repr__, or a fresh list or dict -- hand it to a pylib renderer
+# (pyobj_str_of, pylist_repr, pydict_repr) as argument 0, where the IR's owning
+# spill does not reach. One instance per evaluation leaked. The construction is
+# now bound to an owning local, folded into the expression. repr() of a fresh
+# object leaked the same way through pylib's repr(o: TObject); that position 0
+# now spills like a plain def's.
+#
+# A plain object renders as `<__main__.Q object at 0x...>`, whose address
+# differs run to run, so the output checks the shape instead of printing it.
+# `leak N` / `keep N` drive the census.
+import sys
+
+
+class Q:
+    def __init__(self, a):
+        self.a = a
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "P(%d)" % self.v
+
+
+def plain(s):
+    return s.startswith("<__main__.Q object at 0x") and s.endswith(">")
+
+
+def show():
+    print(plain(str(Q(1))), plain(f"{Q(2)}"), plain("%s" % Q(3)))
+    print(str([P(1), P(2)]), f"{[P(3)]}", str({"k": P(4)}), f"{ {'j': [P(5)]} }")
+    print(len(str(Q(6))) > 20, "x" + str(Q(7))[:10])
+    q = Q(8)
+    print(plain(repr(Q(9))), repr(P(10)), repr([P(11)]), plain(repr(q)), repr(q) == repr(q), q.a)
+    p = P(12)
+    print(repr(p), repr(p).upper(), p.v)
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += len(str(Q(i))) // 100 + len(f"{Q(i)}") // 100
+        t += len(str([P(i)])) + len(f"{[P(i), P(i)]}") + len(str({"k": P(i)}))
+        t += len(repr(Q(i))) // 100 + len(repr(P(i)))
+        if keep is not None:
+            keep.append(Q(i))
+    print(t > 0)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

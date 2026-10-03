@@ -26625,13 +26625,12 @@ begin
     pname := 'pyobj_str_of';
   procIdx := FindProc(pname);
   if procIdx < 0 then Exit;   { pylib not loaded — leave the old behaviour }
-  argNode := AllocNode(AN_ARG);
-  ASTLeft[argNode] := n;
-  callNode := AllocNode(AN_CALL);
-  ASTIVal[callNode] := procIdx;
-  ASTTk[callNode] := Ord(tyAnsiString);
-  ASTLeft[callNode] := argNode;
-  Result := callNode;
+  { `str(Q())` / `print(Q())` / `f"{Q()}"` of a class with no dunders, or of a
+    fresh container, handed the construction to the renderer at position 0,
+    where the IR's owning spill does not reach (the receiver guard): one
+    instance per evaluation. Bound and folded exactly as PyCallMeth1 binds a
+    construction receiver. }
+  Result := PyRenderCallOwned(procIdx, n);
 end;
 
 { Which print KEYWORD ARGUMENT is at CurTok, or '' for a positional one.
@@ -28651,6 +28650,43 @@ begin
   if rec = REC_UCLASS_BASE + ci then PyNodeListCi := ci;
 end;
 
+{ Is `n` an owned value nothing will release when it is handed to a runtime
+  routine at argument 0 -- a construction (the IR's owning spill stops short of
+  position 0, the receiver guard), or a fold PyCallMeth1 / this routine already
+  made around an owned result? Shared by the two binders below. }
+function PyOwnedArg0NeedsBinding(n: Integer): Boolean;
+begin
+  Result := (n >= 0) and
+    (((ASTKind[n] = AN_CALL) and (Integer(ASTIVal[n]) = -Ord(tkGetMem)) and
+      (Integer(ASTRight[n]) >= REC_UCLASS_BASE)) or
+     ((ASTKind[n] = AN_COMMA) and PyCallYieldsOwnedObj(n)));
+end;
+
+{ `procIdx(n)` as a string-valued call -- the renderers pyobj_str_of,
+  pylist_repr, pydict_repr, pybytes_repr -- with an owned `n` bound to an ARC
+  local and the binding folded into the expression, so it runs where the
+  argument is evaluated and survives the hoist-queue parking of the
+  len()/f-string trial parses. `str(Q())`, `print(Q())`, `f"{Q()}"` of a class
+  with no dunders, and `str([P(1)])`, leaked the argument per evaluation. }
+function PyRenderCallOwned(procIdx, n: Integer): Integer;
+var hoistTail, argNode: Integer; bind: Boolean;
+begin
+  bind := PyOwnedArg0NeedsBinding(n);
+  hoistTail := -1;
+  if bind then
+  begin
+    hoistTail := PyHoistTail;
+    n := PyEvalOnce(n);
+  end;
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := n;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyAnsiString);
+  ASTLeft[Result] := argNode;
+  if bind then Result := PyFoldHoistSince(hoistTail, Result);
+end;
+
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer;
 var mmi, mpi, selfArg, valArg, hoistTail: Integer;
@@ -28669,14 +28705,10 @@ begin
     folded back into the expression (PyFoldHoistSince) so the binding runs
     where the operand is evaluated and survives the hoist-queue parking the
     len()/f-string trial parses do. }
-  ownRecv := (selfNode >= 0) and
-    (((ASTKind[selfNode] = AN_CALL) and
-      (Integer(ASTIVal[selfNode]) = -Ord(tkGetMem)) and
-      (Integer(ASTRight[selfNode]) >= REC_UCLASS_BASE)) or
-     { ...and an owned result that is already such a FOLD (`V(1) * 3 + w`:
-       the product is a comma, which the IR's owned-call spill does not
-       recognise as a call) }
-     ((ASTKind[selfNode] = AN_COMMA) and PyCallYieldsOwnedObj(selfNode)));
+  { ...and an owned result that is already such a FOLD (`V(1) * 3 + w`: the
+    product is a comma, which the IR's owned-call spill does not recognise as
+    a call) -- PyOwnedArg0NeedsBinding answers both }
+  ownRecv := PyOwnedArg0NeedsBinding(selfNode);
   hoistTail := -1;
   if ownRecv then
   begin
@@ -58773,10 +58805,7 @@ begin
             if procIdx >= 0 then
             begin
               PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
-              argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-              node := AllocNode(AN_CALL);
-              ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyAnsiString);
-              ASTLeft[node] := argSeq;
+              node := PyRenderCallOwned(procIdx, CurASTNode);
               Expect(tkRParen, ')');
               CurASTNode := node; LastExprTk := tyAnsiString;
               Exit;

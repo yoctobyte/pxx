@@ -2750,10 +2750,7 @@ begin
             if procIdx >= 0 then
             begin
               PyHoistMerge(lenSavedHoist, lenTrialHoist);   { the trial AST is kept }
-              argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-              node := AllocNode(AN_CALL);
-              ASTIVal[node] := procIdx; ASTTk[node] := Ord(tyAnsiString);
-              ASTLeft[node] := argSeq;
+              node := PyRenderCallOwned(procIdx, CurASTNode);
               Expect(tkRParen, ')');
               CurASTNode := node; LastExprTk := tyAnsiString;
               Exit;
