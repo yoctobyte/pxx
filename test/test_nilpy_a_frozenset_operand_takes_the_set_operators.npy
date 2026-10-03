@@ -1,0 +1,16 @@
+# `frozenset | frozenset` (and & - ^, and a frozenset against a set) raised
+# "unsupported operand type(s)": the run-time check that refuses list operands
+# knew only the SET kind. The result takes the LEFT operand's type, as in
+# CPython. `type(a | s)` was a parse error: type()'s argument stopped at `|`.
+# Diffed against CPython under -dPXX_HEAP_DEBUG.
+a = frozenset([1, 2])
+b = frozenset([3])
+s = {1, 2}
+print(a | b, a & frozenset([2]), a - b, a ^ b)
+print(frozenset([1, 2]) | frozenset([3]))
+print(s | {3}, a | s, s | a, s - a, a & s)
+print(type(a | s).__name__, type(s | a).__name__)
+v = a
+if len(s) > 9:
+    v = None
+print(v | s, s ^ v)

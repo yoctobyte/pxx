@@ -1,0 +1,83 @@
+# `acc.add(arm * 2.0)` inside `def f(acc, arm)`: the call-site scan that types
+# add()'s bare parameter typed the argument as a float -- `arm` is itself a
+# bare parameter, the scan could not see it was a V, so `* 2.0` read as
+# arithmetic. add() then took a Double parameter and refused the V it was
+# handed ("no overload of add matches"), or read it as a number at run time
+# ("expected a number, got object"). Found in lekkerzeilen's Accumulator
+# (`acc.add_force(v * -0.5)`). The same through a local bound from a method
+# or a field of a class declared further down, which the scan cannot see yet
+# and must answer as dynamic, not as a float.
+class V:
+    def __init__(self, x):
+        self.x = x
+
+    def __mul__(self, s):
+        return V(self.x * s)
+
+    __rmul__ = __mul__
+
+    def __add__(self, o):
+        return V(self.x + o.x)
+
+    def __iadd__(self, o):
+        self.x += o.x
+        return self
+
+    def __neg__(self):
+        return V(-self.x)
+
+    def __repr__(self):
+        return "V(%s)" % self.x
+
+
+class Q:
+    def __init__(self, w):
+        self.w = w
+
+    def __mul__(self, o):
+        return Q(self.w * o.w)
+
+
+class Acc:
+    def __init__(self):
+        self.f = V(0)
+        self.g = V(0)
+
+    def add(self, v):
+        self.f = self.f + v
+
+    def add2(self, a, v):
+        self.f += v
+
+    def push(self, v):
+        self.g += v
+
+
+class Early:
+    def get(self):
+        return V(5.0)
+
+
+def f(acc, arm, st, e):
+    acc.add(arm * 2.0)
+    acc.add2(1, arm * 3)
+    acc.add(-arm)
+    v = st.get()
+    acc.push(v * -0.5)
+    w = st.q
+    acc.push(w * 2)
+    u = e.get()
+    acc.push(u * 2.0)
+    acc.push(2 * arm)
+    print(acc.f, acc.g)
+
+
+class Late:
+    def __init__(self):
+        self.q = V(3.0)
+
+    def get(self):
+        return V(7.0)
+
+
+f(Acc(), V(1.0), Late(), Early())

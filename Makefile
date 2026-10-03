@@ -823,6 +823,22 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_next_on_a_user_iterator_calls_its_dunder_next.npy $(TESTTMP)/test_nilpy_nextuser26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_nextuser26_i386 | diff -u test/test_nilpy_next_on_a_user_iterator_calls_its_dunder_next.expected -; \
 	else echo "=== test_nilpy_nextuser: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A FROZENSET OPERAND TAKES THE SET OPERATORS: refused at run time at pin v452.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_frozenset_operand_takes_the_set_operators.npy $(TESTTMP)/test_nilpy_frozenop_hd26
+	$(TESTTMP)/test_nilpy_frozenop_hd26 | diff -u test/test_nilpy_a_frozenset_operand_takes_the_set_operators.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_frozenset_operand_takes_the_set_operators.npy $(TESTTMP)/test_nilpy_frozenop26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_frozenop26_i386 | diff -u test/test_nilpy_a_frozenset_operand_takes_the_set_operators.expected -; \
+	else echo "=== test_nilpy_frozenop: qemu-i386 absent, i386 NOT verified ==="; fi
+	# AN OPERATOR ON A CLASS PARAMETER types the callee's parameter as the
+	# dunder's class, not as a float: `acc.add(arm * 2.0)` was refused at
+	# compile time or read as a number at run time at pin v452.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_an_operator_on_a_class_parameter_types_the_callees_parameter.npy $(TESTTMP)/test_nilpy_opparam_hd26
+	$(TESTTMP)/test_nilpy_opparam_hd26 | diff -u test/test_nilpy_an_operator_on_a_class_parameter_types_the_callees_parameter.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_an_operator_on_a_class_parameter_types_the_callees_parameter.npy $(TESTTMP)/test_nilpy_opparam26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_opparam26_i386 | diff -u test/test_nilpy_an_operator_on_a_class_parameter_types_the_callees_parameter.expected -; \
+	else echo "=== test_nilpy_opparam: qemu-i386 absent, i386 NOT verified ==="; fi
 	# YIELD FROM delegates: a generator, a list, a str, a range, nested, and a
 	# delegation abandoned by break or by dropping a stepped generator. A parse
 	# error at pin v452.

@@ -7492,12 +7492,21 @@ end;
 procedure PySetRequireSets(a, b: TPyList; const op: AnsiString);
 var ka, kb: AnsiString;
 begin
-  if ((a = nil) or (a.FKind = PYSEQ_SET)) and
-     ((b = nil) or (b.FKind = PYSEQ_SET)) then Exit;
+  if ((a = nil) or (a.FKind = PYSEQ_SET) or (a.FKind = PYSEQ_FROZENSET)) and
+     ((b = nil) or (b.FKind = PYSEQ_SET) or (b.FKind = PYSEQ_FROZENSET)) then Exit;
   if a = nil then ka := 'set' else ka := PySeqKindName(a.FKind);
   if b = nil then kb := 'set' else kb := PySeqKindName(b.FKind);
   raise TypeError.Create('unsupported operand type(s) for ' + op + ': '''
     + ka + ''' and ''' + kb + '''');
+end;
+
+{ The result of a set operator has the LEFT operand's type, as in CPython:
+  `frozenset | set` is a frozenset, `set | frozenset` a set. A frozenset
+  operand was refused outright before (the require check knew only sets). }
+function PySetResultKind(a: TPyList): Integer;
+begin
+  if (a <> nil) and (a.FKind = PYSEQ_FROZENSET) then Result := PYSEQ_FROZENSET
+  else Result := PYSEQ_SET;
 end;
 
 function pyset_and(a: TPyList; b: TPyList): TPyList;
@@ -7505,7 +7514,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '&');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;      { set & set is a SET, not a list }
+  Result.FKind := PySetResultKind(a);      { set & set is a SET, not a list }
   if (a = nil) or (b = nil) then Exit;
   for i := 0 to a.count - 1 do
     if pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -7516,7 +7525,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '|');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;
+  Result.FKind := PySetResultKind(a);
   if a <> nil then
     for i := 0 to a.count - 1 do Result.add(a.at(i));
   if b <> nil then
@@ -7528,7 +7537,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '-');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;
+  Result.FKind := PySetResultKind(a);
   if a = nil then Exit;
   for i := 0 to a.count - 1 do
     if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));
@@ -7539,7 +7548,7 @@ var i: Integer;
 begin
   PySetRequireSets(a, b, '^');
   Result := TPyList.Create;
-  Result.FKind := PYSEQ_SET;
+  Result.FKind := PySetResultKind(a);
   if a <> nil then
     for i := 0 to a.count - 1 do
       if (b = nil) or not pycontains(b, a.at(i)) then Result.add(a.at(i));

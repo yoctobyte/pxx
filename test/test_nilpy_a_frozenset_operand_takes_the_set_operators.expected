@@ -1,0 +1,5 @@
+frozenset({1, 2, 3}) frozenset({2}) frozenset({1, 2}) frozenset({1, 2, 3})
+frozenset({1, 2, 3})
+{1, 2, 3} frozenset({1, 2}) {1, 2} set() frozenset({1, 2})
+frozenset set
+frozenset({1, 2}) set()

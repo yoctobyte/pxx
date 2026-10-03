@@ -499,6 +499,7 @@ var
   PyInferHdrLo, PyInferHdrHi: Integer;
   PyInferBodyLo, PyInferBodyHi: Integer;
   PyChaseBareDepth: Integer;   { recursion bound for PyChaseBareLocalClass; 0 at rest }
+  PyChaseLastTk: TTypeKind;    { the kind PyChaseBareLocalClass's last chase found, class or not }
   PyInferFieldCi: Integer;     { the class whose fields PyInferFieldDecl is typing; -1 outside }
   { PyParamTypeFromSites memo, keyed by the def token (unique for the whole
     compilation: imported modules APPEND to Tokens) and the parameter name }
@@ -5914,9 +5915,10 @@ function PyChaseBareLocalClass(startIdx, endIdx: Integer;
   answer is what it was before this chase existed: no identity.
   bug-n-attribute-access-directly-on-a-dunder-result-segfaults }
 const MAX_CHASE_DEPTH = 4;
-var s, e: Integer; t2: TTypeKind;
+var s, e: Integer; t2: TTypeKind; encl: AnsiString;
 begin
   Result := False;
+  PyChaseLastTk := tyUnknown;
   if (tk = tyClass) and (ci >= 0) then Exit;
   if (tk <> tyUnknown) and (tk <> tyClass) and (tk <> tyVariant) then Exit;
   if (PyInferBodyLo < 0) or (PyInferBodyHi <= PyInferBodyLo) then Exit;
@@ -5934,6 +5936,28 @@ begin
                           GetTokenStr(s)) then Exit;
   Inc(PyChaseBareDepth);
   t2 := PyRetNameType(PyInferBodyLo, s, GetTokenStr(s));
+  PyChaseLastTk := t2;
+  { A bare PARAMETER has no assignment to chase: its identity is what its
+    call sites pass, the same answer the def's own body is typed with. A
+    call-site scan types `c.add(arm * 2.0)` inside `def f(c, arm)` through
+    here, and without it `arm` was a class of nobody, the dunder arm could
+    not open V.__mul__, and `* 2.0` made the argument a float -- so add()'s
+    parameter was typed Double and the call refused the V it was handed
+    ("no overload of add matches"), or read it as a number at run time.
+    lekkerzeilen sim.py, Accumulator.add_force(v * -0.5). }
+  if ((t2 <> tyClass) or (PyInferLastCi < 0)) and (PyPSDepth < 6) and
+     (GetTokenStr(s) <> 'self') and (GetTokenStr(s) <> 'cls') and
+     (PyInferHdrLo >= 0) and (PyInferHdrHi > PyInferHdrLo) and
+     PyHeaderHasParam(PyInferHdrLo, PyInferHdrHi, GetTokenStr(s)) and
+     (PyHeaderParamType(PyInferHdrLo, PyInferHdrHi, GetTokenStr(s)) = tyUnknown) then
+  begin
+    Inc(PyPSDepth);
+    t2 := PyParamTypeFromSites(PyInferHdrLo, GetTokenStr(s),
+                               PyDefSiteMode(PyInferHdrLo, encl), encl);
+    Dec(PyPSDepth);
+    PyInferLastCi := -1;
+    if t2 = tyClass then PyInferLastCi := PyPSLastCi;
+  end;
   Dec(PyChaseBareDepth);
   if (t2 = tyClass) and (PyInferLastCi >= 0) then
   begin
@@ -6062,6 +6086,7 @@ var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKin
     ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
     divAt: Integer; divL, divR: TTypeKind;
     ctorCi, ctorEnd, ctorSelCi: Integer; ctorTk: TTypeKind;  { `Foo().m().f` chase }
+    psRcvCi: Integer;   { a site-typed CLASS parameter as a chain's receiver }
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
@@ -6363,6 +6388,18 @@ begin
         { a bare local operand has no identity here in either pass -- see
           PyChaseBareLocalClass; without this `(a + b)` was a class of nobody }
         PyChaseBareLocalClass(startIdx, k2, tk, rcvCi);
+        { A bare local whose binding is DYNAMIC (`v = st.get()` with get's
+          class not yet known, `x = d["k"]`) may hold an object whose dunder
+          answers anything, so the operator's result is dynamic too. The scan
+          below sees only the bare name -- unknown in a pre-pass -- and typed
+          `v * 2.0` a float, which a site-typed parameter then took as its
+          type and refused or misread the object it was handed. }
+        if (tk = tyUnknown) and (PyChaseLastTk = tyVariant) then
+        begin
+          Result := tyVariant;
+          PyInferLastCi := -1;
+          Exit;
+        end;
         if (tk = tyClass) and (rcvCi >= 0) then
         begin
           fi := FindUMeth(rcvCi, PyBinOpDunderName(Tokens[k2].Kind));
@@ -6825,6 +6862,7 @@ begin
       if Tokens[i].Kind = tkIdent then
       begin
         name := GetTokenStr(i);
+        psRcvCi := -1;
         { Call form `name(...)`: take the callee's return type and skip the
           whole argument group so arg tokens do not pollute the widening. }
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
@@ -7019,7 +7057,14 @@ begin
                                        PyDefSiteMode(PyInferHdrLo, smPName), smPName);
           Dec(PyPSDepth);
           if (qcTk = tyDouble) or (qcTk = tyAnsiString) or PyIsSiteIntTk(qcTk) then
-            tk := qcTk;
+            tk := qcTk
+          { a CLASS the sites agree on is the RECEIVER's identity for a
+            `.field` / `.method()` chain below -- `v = state.velocity_at(arm)`
+            in `def accumulate(self, state, env, acc)`. Kept to a receiver:
+            the bare name alone still answers what it did. }
+          else if (qcTk = tyClass) and (PyPSLastCi >= 0) and (i + 1 < endIdx) and
+                  (Tokens[i + 1].Kind = tkDot) then
+            psRcvCi := PyPSLastCi;
         end;
         { obj.method(...) on a class-typed name: the expression's type is the
           METHOD's return type; skip the whole postfix chain. }
@@ -7030,7 +7075,8 @@ begin
           a misleading "expected :" on the FOLLOWING line
           (bug-nilpy-self-method-call-loses-return-class). }
         rcvCi := -1;
-        if (ci >= 0) and (PyLocals[ci].RecCi >= 0) then rcvCi := PyLocals[ci].RecCi
+        if psRcvCi >= 0 then rcvCi := psRcvCi
+        else if (ci >= 0) and (PyLocals[ci].RecCi >= 0) then rcvCi := PyLocals[ci].RecCi
         else if (name = 'self') and (CurSelfClass >= REC_UCLASS_BASE) then
           rcvCi := CurSelfClass - REC_UCLASS_BASE
         else if (name = 'self') and (PyInferSelfCi >= 0) then
@@ -7138,6 +7184,32 @@ begin
             i := fldAt + 1;
             Continue;
           end;
+        end;
+        { A SITE-TYPED parameter's class may not have its members registered
+          yet -- the class is declared further down the file than the def
+          whose call sites are being typed. A member the class does not know
+          (yet) is a dynamic read: answer a variant and consume the chain,
+          rather than leaving the selectors to the arithmetic scan, which typed
+          `v = st.q; c.add(v * 2.0)` a float. }
+        if (psRcvCi >= 0) and (i + 2 < endIdx) and (Tokens[i + 1].Kind = tkDot) and
+           (Tokens[i + 2].Kind = tkIdent) and
+           (FindUField(psRcvCi, GetTokenStr(i + 2)) < 0) and
+           (FindUMeth(psRcvCi, GetTokenStr(i + 2)) < 0) then
+        begin
+          fldAt := i + 2;
+          while fldAt + 1 < endIdx do
+          begin
+            if Tokens[fldAt + 1].Kind in [tkLParen, tkLBrack] then
+              fldAt := PyEndOfGroup(fldAt + 1, endIdx) - 1
+            else if (fldAt + 2 < endIdx) and (Tokens[fldAt + 1].Kind = tkDot) and
+                    (Tokens[fldAt + 2].Kind = tkIdent) then
+              fldAt := fldAt + 2
+            else Break;
+          end;
+          Result := PyWiden(Result, tyVariant);
+          PyInferLastCi := -1;
+          i := fldAt + 1;
+          Continue;
         end;
         if (rcvCi >= 0) and
            (i + 3 < endIdx) and (Tokens[i + 1].Kind = tkDot) and
@@ -10586,7 +10658,9 @@ begin
      (not PyUserShadowsProc('type')) then
   begin
     Next; Expect(tkLParen, '(');
-    ParseExpr;
+    { the FULL Python expression: ParseExpr stops short of `|` / `^` / `&`,
+      so `type(a | b).__name__` was "expected ')' before '|'" }
+    PyParseBoolExpr;
     tpObjNode := CurASTNode;
     Expect(tkRParen, ')');
     if (CurTok.Kind <> tkDot) or (TokPos >= TokCount) or
