@@ -4038,6 +4038,11 @@ begin
         { EVERY method carries a Self at index 0 now -- a class method's Self is the
           metaclass. So the implicit arg is always there, static or not. }
         want := nExplicitArgs + 1;
+        { ...and a NilPy generator METHOD carries its injected instance ahead
+          of Self, one parameter the call never spells }
+        if isNilPy and ProcIsGenerator[UMthProc_[mbase + i]] and
+           ProcIsStackless[UMthProc_[mbase + i]] then
+          Inc(want);
         if ProcArityMatches(UMthProc_[mbase + i], want) and (nCand < MAX_OVL_CAND) then
         begin
           cand[nCand] := mbase + i;
@@ -4071,6 +4076,15 @@ begin
   if nCand = 0 then
   begin
     Result := FindUMethArity(ci, name, nExplicitArgs);
+    Exit;
+  end;
+  { A lone generator method is the answer: the type probe below lines the
+    arguments up from Params[1], which for a generator is Self, not the first
+    argument. The generator value builder checks the count itself. }
+  if isNilPy and (nCand = 1) and ProcIsGenerator[UMthProc_[cand[0]]] and
+     ProcIsStackless[UMthProc_[cand[0]]] then
+  begin
+    Result := cand[0];
     Exit;
   end;
 

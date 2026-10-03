@@ -177,6 +177,12 @@ type
   { A stackless generator's step function: `function(instance): Boolean`,
     has-next. See PYITER_K_SLGEN. }
   TPyGenStep = function(inst: Pointer): Boolean;
+  { ...and a step with SIX declared parameters, called with its full seven
+    words. x86-64 passes every argument of a routine with more than six on the
+    STACK, the instance included, so the one-word call above handed such a
+    step a nil instance (segfault). The pads are never read: a cursor's
+    instance arrives with its slots already seeded. }
+  TPyGenStepWide = function(inst: Pointer; p1, p2, p3, p4, p5, p6: Pointer): Boolean;
   PInt64 = ^Int64;
   { pylib's own name for a variant pointer — pyeval declares one too, but this
     unit is compiled before it. Used to read a generator's yielded element out
@@ -950,6 +956,7 @@ type
       is what guarantees they agree. }
     FGenInst: Pointer;
     FGenStep: Pointer;
+    FGenWide: Boolean;   { FGenStep is a TPyGenStepWide }
     constructor Create;
   end;
 
@@ -15734,6 +15741,7 @@ begin
   FIsGen := False;
   FGenInst := nil;
   FGenStep := nil;
+  FGenWide := False;
 end;
 
 { A stackless GENERATOR as a first-class value: wrap its heap instance and step
@@ -15751,6 +15759,23 @@ begin
   Result.FGenInst := inst;
   Result.FGenStep := step;
   Result.FIsGen := True;
+end;
+
+{ The compiler's choice for a step it calls with all seven words on the stack
+  (TPyGenStepWide). }
+function pygen_iter_new_wide(inst: Pointer; step: Pointer): TPyIter;
+begin
+  Result := pygen_iter_new(inst, step);
+  Result.FGenWide := True;
+end;
+
+{ One step of a generator cursor, in the shape its step function takes. }
+function PyGenStepOnce(it: TPyIter): Boolean;
+begin
+  if it.FGenWide then
+    Result := TPyGenStepWide(it.FGenStep)(it.FGenInst, nil, nil, nil, nil, nil, nil)
+  else
+    Result := TPyGenStep(it.FGenStep)(it.FGenInst);
 end;
 
 function pyiter_of_list(l: TPyList): TPyIter;
@@ -16016,7 +16041,7 @@ end;
   instructions, 2.97M variant clears over 64k steps, against CPython's under
   a microsecond. }
 function pyiter_has_slow(it: TPyIter): Boolean;
-var genStep: TPyGenStep; genCur: Pointer;   { PYITER_K_SLGEN }
+var genCur: Pointer;   { PYITER_K_SLGEN }
     l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
     lenv, idxv: Variant;   { PYITER_K_SEQOBJ's __len__ / __getitem__ }
@@ -16041,8 +16066,7 @@ begin
       guarantees the layout of. }
     if (it.FGenInst = nil) or (it.FGenStep = nil) then
       begin it.FEnd := True; Exit; end;
-    genStep := TPyGenStep(it.FGenStep);
-    if not genStep(it.FGenInst) then begin it.FEnd := True; Exit; end;
+    if not PyGenStepOnce(it) then begin it.FEnd := True; Exit; end;
     genCur := Pointer(PInt64(Pointer(Int64(it.FGenInst) + 16))^);
     if genCur = nil then begin it.FEnd := True; Exit; end;
     it.FBox.put(0, PPyVariant(genCur)^);
@@ -16348,7 +16372,7 @@ end;
   temps of their own, so a step costs what its arm does. The arms are the
   same code as pyiter_has_slow's; everything else goes there. }
 function pyiter_has(it: TPyIter): Boolean;
-var genStep: TPyGenStep; genCur: Pointer; l: TPyList;
+var genCur: Pointer; l: TPyList;
 begin
   Result := False;
   if it = nil then Exit;
@@ -16378,8 +16402,7 @@ begin
   begin
     if (it.FGenInst = nil) or (it.FGenStep = nil) then
       begin it.FEnd := True; Exit; end;
-    genStep := TPyGenStep(it.FGenStep);
-    if not genStep(it.FGenInst) then begin it.FEnd := True; Exit; end;
+    if not PyGenStepOnce(it) then begin it.FEnd := True; Exit; end;
     genCur := Pointer(PInt64(Pointer(Int64(it.FGenInst) + 16))^);
     if genCur = nil then begin it.FEnd := True; Exit; end;
     it.FBox.put(0, PPyVariant(genCur)^);
@@ -17596,7 +17619,7 @@ begin
          (PInt64(Pointer(Int64(it.FGenInst) + 24))^ = 0) then
       begin
         PInt64(it.FGenInst)^ := -1;
-        TPyGenStep(it.FGenStep)(it.FGenInst);
+        PyGenStepOnce(it);
       end;
       FreeMem(it.FGenInst);
       it.FGenInst := nil;

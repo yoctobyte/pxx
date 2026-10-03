@@ -21355,6 +21355,18 @@ begin
   ASTRight[selfArg] := -1;
   lastArg := selfArg;
   mpi := UMthProc_[mmi];
+  { A generator METHOD called on a fresh receiver -- `C(1).items(6)` -- is a
+    generator VALUE, as a plain generator's call is. Called like an ordinary
+    method it ran the step routine once and answered its Boolean, so
+    `list(C(1).items(6, 2))` was [] and `for v in C(10).items(3)` raised
+    TypeError. }
+  if isNilPy and ProcIsGenerator[mpi] and ProcIsStackless[mpi] and
+     (not UMthIsStatic[mmi]) then
+  begin
+    Result := PyBuildGeneratorValueAt(mpi, baseNode);
+    LastExprTk := IntToTypeKind(ASTTk[Result]);
+    Exit;
+  end;
   Expect(tkLParen, '(');
   n := 0;
   anyKw := False;
@@ -22559,6 +22571,16 @@ begin
     include a fitting arity is not a miss, which is why the test is
     FindUMethArityStrict rather than FindUMethArity — the latter falls back to
     the first name match and can therefore never reject. }
+  { A GENERATOR method on a receiver whose class is not known here. Its value
+    is a cursor over a fresh instance (PyBuildGeneratorValueAt), which needs
+    the class at compile time; the run-time dispatcher calls the step routine
+    as if it were the method, and that segfaulted. Refused by name, with the
+    spelling that works. }
+  if (hitPi >= 0) and (hitCi >= 0) and (CurTok.Kind = tkLParen) and
+     ProcIsGenerator[hitPi] and ProcIsStackless[hitPi] then
+    Error('Nil Python: .' + mname + '() is a generator method, and calling one '
+          + 'on a receiver of unknown type is not supported yet -- annotate the '
+          + 'receiver (`o: ' + PyRawName(UClsNOff[hitCi], UClsNLen[hitCi]) + '`)');
   if (hitPi >= 0) and (CurTok.Kind = tkLParen) and (not dictKwHit)
      and (ProcPyStarIdx[hitPi] < 0) and (ProcPyKwIdx[hitPi] < 0) then
   begin
@@ -31518,6 +31540,30 @@ begin
   Result := GenMakeIdent(ps, tyPointer);
 end;
 
+{ Seed declared parameter k (1-based) of a generator VALUE's instance gIdx
+  with argNode, by hoisted statements. }
+procedure PyGenSeedValueArg(gpi, gIdx, k, argNode: Integer);
+var t: Integer;
+begin
+  { a variant parameter is by-ref, so its slot holds a heap cell that
+    outlives the call — the same cell the `for` desugar builds }
+  if PyGenArgNeedsCell(gpi, k) then
+    argNode := PyGenValueArgCell(argNode)
+  else if PasGenArgNeedsStrTemp(gpi, k) then
+  begin
+    { an AnsiString parameter (inferred from a str literal) needs a
+      materialised handle, as in the `for` desugar -- see
+      PasGenArgNeedsStrTemp }
+    t := AllocVar('', tyAnsiString);
+    PyHoistStmt(PyMakeAssignNode(GenMakeIdent(t, tyAnsiString), argNode));
+    argNode := GenMakeIdent(t, tyAnsiString);
+  end;
+  { GenSeedArg: a FLOAT parameter is seeded bitwise, the way the step
+    restores it (bug-a-a-float-parameter-of-a-stackless-generator-arrives-as-its-bit-pattern);
+    GenArgSlotOff is the `for` desugar's offset, recorded per proc }
+  PyHoistStmt(GenSeedArg(gIdx, GenArgSlotOff(gpi, k), ParamStoredKind(gpi, k), argNode));
+end;
+
 { A generator CALL in value position — `g = gen(args)`, `list(gen())`,
   `next(gen())`, a generator handed to another function.
 
@@ -31535,16 +31581,21 @@ end;
   park the queue instead of using it.
 
   Enters with the cursor on the generator's NAME. }
-function PyBuildGeneratorValue(gpi: Integer): Integer;
-var gIdx, nargs, argNode, slotOff, k: Integer;
+{ The value of a generator CALL with the cursor on its `(`. recvNode >= 0 is
+  a generator METHOD's receiver, seeded as declared parameter 1 (`self`), the
+  way the `for` desugar passes it as argument 0. }
+function PyBuildGeneratorValueAt(gpi, recvNode: Integer): Integer;
+var gIdx, nargs, argNode, k: Integer;
     instLit, allocCall, stepNode, a0, a1: Integer;
 begin
   if (FindProc('SlNew') < 0) or (FindProc('SlSet') < 0) then
     Error('Nil Python: a generator value needs lib/rtl/slgen in scope');
   if FindProc('pygen_iter_new') < 0 then
     Error('Nil Python: pylib (pygen_iter_new) not loaded');
-  Next;                                { past the generator's name }
   Expect(tkLParen, '(');
+  if ProcPyStarIdx[gpi] >= 0 then
+    Error('Nil Python: a generator with *args is not supported yet (`'
+          + Procs[gpi].Name + '`)');
 
   gIdx := AllocVar('', tyPointer);
   instLit := AllocNode(AN_INT_LIT);
@@ -31557,6 +31608,11 @@ begin
     order — slot k at SL_OFF_SLOTS + 8*k, the numbering the state-machine
     transform assigns and the `for` desugar already relies on. }
   nargs := 0;
+  if recvNode >= 0 then
+  begin
+    PyGenSeedValueArg(gpi, gIdx, 1, recvNode);
+    nargs := 1;
+  end;
   if CurTok.Kind <> tkRParen then
     repeat
       PyParseBoolExpr;
@@ -31564,26 +31620,17 @@ begin
       if nargs >= ProcGenParamCnt[gpi] then
         Error('Nil Python: too many arguments to generator `'
               + Procs[gpi].Name + '`');
-      { a variant parameter is by-ref, so its slot holds a heap cell that
-        outlives the call — the same cell the `for` desugar builds }
-      if PyGenArgNeedsCell(gpi, nargs + 1) then
-        argNode := PyGenValueArgCell(argNode)
-      else if PasGenArgNeedsStrTemp(gpi, nargs + 1) then
-      begin
-        { an AnsiString parameter (inferred from a str literal) needs a
-          materialised handle, as in the `for` desugar -- see
-          PasGenArgNeedsStrTemp }
-        k := AllocVar('', tyAnsiString);
-        PyHoistStmt(PyMakeAssignNode(GenMakeIdent(k, tyAnsiString), argNode));
-        argNode := GenMakeIdent(k, tyAnsiString);
-      end;
-      slotOff := GenArgSlotOff(gpi, nargs + 1);   { the `for` desugar's offset, recorded per proc }
-      { GenSeedArg: a FLOAT parameter is seeded bitwise, the way the step
-        restores it (bug-a-a-float-parameter-of-a-stackless-generator-arrives-as-its-bit-pattern) }
-      PyHoistStmt(GenSeedArg(gIdx, slotOff, ParamStoredKind(gpi, nargs + 1), argNode));
+      PyGenSeedValueArg(gpi, gIdx, nargs + 1, argNode);
       Inc(nargs);
     until not Eat(tkComma);
   Expect(tkRParen, ')');
+  { an omitted trailing argument takes its declared default, as a call of a
+    plain def does }
+  while (nargs < ProcGenParamCnt[gpi]) and PyGenParamHasDefault(gpi, nargs + 1) do
+  begin
+    PyGenSeedValueArg(gpi, gIdx, nargs + 1, DefaultArgValueNode(gpi, nargs + 1));
+    Inc(nargs);
+  end;
   if nargs < ProcGenParamCnt[gpi] then
     Error('Nil Python: generator `' + Procs[gpi].Name + '` needs '
           + AIntToStr(ProcGenParamCnt[gpi]) + ' argument(s), got '
@@ -31594,6 +31641,11 @@ begin
   ASTTk[stepNode] := Ord(tyPointer);
 
   k := FindProc('pygen_iter_new');
+  { x86-64 passes all seven words of a six-parameter step on the stack, the
+    instance included, so the cursor must call it in that shape }
+  if (TargetArch = TARGET_X86_64) and (Procs[gpi].ParamCount > 6) and
+     (FindProc('pygen_iter_new_wide') >= 0) then
+    k := FindProc('pygen_iter_new_wide');
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := stepNode; ASTRight[a1] := -1;
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := GenMakeIdent(gIdx, tyPointer); ASTRight[a0] := a1;
   Result := AllocNode(AN_CALL);
@@ -31604,6 +31656,13 @@ begin
     receiver's class sees a TPyIter rather than an untyped node — see
     PyCallProc1, which carries it for the same reason }
   if Procs[k].RetType = tyClass then ASTRight[Result] := ProcRetRecId[k];
+end;
+
+{ ...with the cursor on the generator's NAME. }
+function PyBuildGeneratorValue(gpi: Integer): Integer;
+begin
+  Next;                                { past the generator's name }
+  Result := PyBuildGeneratorValueAt(gpi, -1);
 end;
 
 { Bind the loop target of a GENERATOR for-in, and build the statements that
@@ -56418,6 +56477,23 @@ begin
         end
         else
         begin
+          { A generator METHOD in value position -- `list(c.items(6))`,
+            `g = c.items(3)` -- is a generator VALUE, as a plain generator's
+            call is (PyBuildGeneratorValueAt). Called like an ordinary method
+            it ran the step routine once and answered its Boolean, and the
+            arity loop below lined the arguments up from the injected instance
+            parameter, so `c.items(6)` against `items(self, n, step=1)` was
+            refused and `c.items(6, 2)` answered []. `for v in c.items(..)` is
+            caught before this, by the for-in desugar. }
+          if (mmi >= 0) and ProcIsGenerator[mpi] and ProcIsStackless[mpi] and
+             (CurTok.Kind = tkLParen) then
+          begin
+            node := PyBuildGeneratorValueAt(mpi, node);
+            tk := IntToTypeKind(ASTTk[node]);
+            if tk = tyClass then recName := Integer(ASTRight[node])
+            else recName := REC_NONE;
+            Continue;
+          end;
           if mmi >= 0 then
           begin
             if UMthVirSlot[mmi] >= 0 then

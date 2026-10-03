@@ -1,0 +1,62 @@
+# A generator's VARIANT argument -- `None`, a list, anything that is not
+# typed at the call -- is passed in a 16-byte heap cell, because the body
+# reads it again at every resume, long after the call expression is gone.
+# Nothing freed the cell, nor what it still held: one cell (and, for a list
+# argument, the list) per generator call, run to the end, broken out of, or
+# dropped after next(). The generator now releases its cells when it is done
+# or closed.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG, so a
+# cell freed while the body still reads it shows as a freed read.
+# `leak N` / `keep N` drive the census.
+import sys
+
+
+def gv(n, d):
+    i = 0
+    while i < n:
+        yield [i, d]
+        i += 1
+
+
+def gd(n, step=1, tag="t", d=None):
+    i = 0
+    while i < n:
+        yield [tag, i, d]
+        i += step
+
+
+def show():
+    print(list(gv(2, None)), list(gv(2, [7])), list(gd(3)), list(gd(4, 2, "u", [1])))
+    for v in gv(3, "s"):
+        print(v)
+    for v in gv(5, [8]):
+        print(v)
+        break
+    it = gd(5, 1, "w", {"k": 1})
+    print(next(it), next(it))
+    print(sum(len(x) for x in gd(3)), [x[1] for x in gv(2, None)])
+
+
+def passes(n, keep):
+    t = 0
+    for k in range(n):
+        for v in gv(3, None):
+            t += len(v)
+        t += len(list(gv(2, [k])))
+        for v in gd(5, 1, "u", [k]):
+            t += v[1]
+            break
+        it = gd(4, 1, "w", [k])
+        t += next(it)[1]
+        if keep is not None:
+            keep.append([k])
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

@@ -352,3 +352,33 @@ history: repr(o: TObject) boxes into a local Variant, so ParamStays cannot
 prove it borrows); and the compatibility gaps the probe met, which are not
 leaks -- module-qualified `itertools.*` and `collections.OrderedDict()` /
 `defaultdict(list)` / `namedtuple(..)` calls do not compile.
+
+## 2026-10-03 (evening) -- renderers, and a generator's argument cells
+
+`repr(P(1))`, the one left above, is fixed (e0516eb180), with the rest of
+its family: `str(Q())` of a class with no dunders, `f"{Q()}"`,
+`str([P(1)])` and `print()` of a fresh object all handed the construction
+to a pylib renderer as argument 0. The renderer calls built in the parser
+(PyReprContainer, both f-string twins) now bind an owned argument and fold
+the binding into the expression (PyRenderCallOwned). `repr()` goes through
+the ordinary overload set, so there the IR's position-0 spill names pylib's
+repr overloads instead (IRCalleeIsLibraryRepr): they only borrow, which
+ProcParamStays cannot prove for `repr(o: TObject)`. Pin v452: 18309 live
+after 5000 passes; now 35.
+
+A generator's VARIANT argument cell (`pycell_new`, one per variant argument
+per call) is now freed when the generator is done or closed
+(SLReleaseLocalsAtDone calls pycell_free_at on each such parameter slot).
+Pin v452, every argument spelled out: 64113 live after 5000 passes; now 39.
+The `nonlocal` frame cells were fixed earlier (aafccd97bb), so no
+`pycell_new` cell is left unowned on these paths.
+
+Correctness bugs found in the same generator probe, fixed in the same batch:
+`for v in g(5)` over `def g(n, step=2)` seeded the omitted defaults as 0
+(step 0 looped forever) while `list(g(5))` was refused; a generator METHOD
+anywhere but `for v in name.gen(..)` ran its step routine once and answered
+its Boolean (`list(C(1).items(6, 2))` was []); a six-parameter generator
+used as a value segfaulted on x86-64, whose call puts all seven step words
+on the stack while the cursor passed one in a register. A generator with
+`*args`, and a generator method on a receiver of unknown type, are now
+refused by name instead of crashing.

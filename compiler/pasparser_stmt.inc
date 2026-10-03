@@ -339,6 +339,14 @@ begin
   ASTTk[Result] := Ord(tyPointer);
 end;
 
+{ Does declared parameter k (1-based: slot 0 of the proc is the injected
+  instance) of generator gpi carry a default? }
+function PyGenParamHasDefault(gpi, k: Integer): Boolean;
+begin
+  Result := (k < Procs[gpi].ParamCount) and (k < MAX_PROC_PARAMS) and
+            ProcParamHasDefault[gpi * MAX_PROC_PARAMS + k];
+end;
+
 { Does argument `k` of this generator need a heap cell to carry it?
 
   ONLY a Nil Python VARIANT parameter. The test that shipped first was
@@ -698,6 +706,39 @@ begin
         Inc(nargs);
       until not Eat(tkComma);
     Expect(tkRParen, ')');
+  end;
+  { A NilPy generator's omitted trailing argument takes its declared default,
+    and a wrong count is refused, as the VALUE path (PyBuildGeneratorValue)
+    already did. This path checked neither: `for v in g(5)` over
+    `def g(n, step=2)` seeded step as 0 and looped forever, and a surplus
+    argument -- `*xs` collects nothing here -- landed in a slot the body never
+    reads, leaving xs nil (Runtime error 216). Params[0] is the injected
+    instance, so declared parameter k is slot k + 1. }
+  if PyExprMode then
+  begin
+    while (nargs < ProcGenParamCnt[gpi]) and (nargs < 6) and
+          PyGenParamHasDefault(gpi, nargs + 1) do
+    begin
+      case nargs of
+        0: a0 := DefaultArgValueNode(gpi, 1);
+        1: a1 := DefaultArgValueNode(gpi, 2);
+        2: a2 := DefaultArgValueNode(gpi, 3);
+        3: a3 := DefaultArgValueNode(gpi, 4);
+        4: a4 := DefaultArgValueNode(gpi, 5);
+        5: a5 := DefaultArgValueNode(gpi, 6);
+      end;
+      Inc(nargs);
+    end;
+    if ProcPyStarIdx[gpi] >= 0 then
+      Error('Nil Python: a generator with *args is not supported yet (`'
+            + Procs[gpi].Name + '`)');
+    if nargs > ProcGenParamCnt[gpi] then
+      Error('Nil Python: too many arguments to generator `'
+            + Procs[gpi].Name + '`');
+    if nargs < ProcGenParamCnt[gpi] then
+      Error('Nil Python: generator `' + Procs[gpi].Name + '` needs '
+            + AIntToStr(ProcGenParamCnt[gpi]) + ' argument(s), got '
+            + AIntToStr(nargs));
   end;
   argHoist := PyHoistPark;      { what the arguments queued }
   PyHoistRestore(savedHoist);   { …and the enclosing statement's own queue back }
@@ -2908,6 +2949,7 @@ end;
 
 function SLReleaseLocalsAtDone: Integer;
 var i, head, tail, stmt, lit, a1, a2, a3, relProc, varClr, strDec, act: Integer;
+    cellFree, k: Integer;
     gpiN, ifN, pairN: Integer;
 begin
   head := -1; tail := -1;
@@ -2915,6 +2957,21 @@ begin
   if relProc < 0 then begin Result := -1; Exit; end;
   varClr := FindProc('PXXVarClear');
   strDec := FindProc('PXXStrDecRef');
+  { A NilPy variant PARAMETER's slot holds the heap cell the caller made for
+    the argument (GenMakeVariantArgCell / PyGenValueArgCell), and nothing else
+    ever frees it: one 16-byte cell per generator call, plus whatever it still
+    held. The generator owns it, so its done/close path releases it. }
+  cellFree := FindProc('pycell_free_at');
+  if (cellFree >= 0) and (CurProc >= 0) and ProcIsGenerator[CurProc] then
+    for k := 1 to Procs[CurProc].ParamCount - 1 do
+    begin
+      if not PyGenArgNeedsCell(CurProc, k) then Continue;
+      i := Procs[CurProc].Params[k].SymIdx;
+      if (i < 0) or (i >= SymCount) or (SymGenSlot[i] < 0) then Continue;
+      stmt := GenMakeCall6(cellFree, tyPointer, GenMakeSlotAddr(i), -1, -1, -1, -1, -1);
+      if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
+      else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
+    end;
   for i := CurGenScopeBase to SymCount - 1 do
   begin
     if SymGenSlot[i] < 0 then Continue;

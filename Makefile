@@ -780,6 +780,27 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_fresh_object_rendered_by_str_or_an_fstring_is_released.npy $(TESTTMP)/test_nilpy_freshrender26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_freshrender26_i386 | diff -u test/test_nilpy_a_fresh_object_rendered_by_str_or_an_fstring_is_released.expected -; \
 	else echo "=== test_nilpy_freshrender: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A GENERATOR TAKES ITS DEFAULTS AND A GENERATOR METHOD IS A VALUE: `for v in
+	# g(5)` seeded omitted defaults as 0 (step 0 looped forever), list(C(1).items(6, 2))
+	# was [], and a six-parameter generator value segfaulted on x86-64.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generator_takes_its_defaults_and_a_generator_method_is_a_value.npy $(TESTTMP)/test_nilpy_gendflt_hd26
+	$(TESTTMP)/test_nilpy_gendflt_hd26 | diff -u test/test_nilpy_a_generator_takes_its_defaults_and_a_generator_method_is_a_value.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_generator_takes_its_defaults_and_a_generator_method_is_a_value.npy $(TESTTMP)/test_nilpy_gendflt26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_gendflt26_i386 | diff -u test/test_nilpy_a_generator_takes_its_defaults_and_a_generator_method_is_a_value.expected -; \
+	else echo "=== test_nilpy_gendflt: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A GENERATOR'S VARIANT ARGUMENT CELL IS FREED when the generator is done or
+	# closed (pin v452, every argument spelled out: 64113 live after 5000 passes).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generators_variant_argument_cell_is_freed.npy $(TESTTMP)/test_nilpy_gencell_hd26
+	$(TESTTMP)/test_nilpy_gencell_hd26 | diff -u test/test_nilpy_a_generators_variant_argument_cell_is_freed.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_generators_variant_argument_cell_is_freed.npy $(TESTTMP)/test_nilpy_gencell26
+	tools/assert_no_leak.sh nilpy_gen_cell 300 $(TESTTMP)/test_nilpy_gencell26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_gen_cell_control 300 $(TESTTMP)/test_nilpy_gencell26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_gen_cell control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_generators_variant_argument_cell_is_freed.npy $(TESTTMP)/test_nilpy_gencell26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_gencell26_i386 | diff -u test/test_nilpy_a_generators_variant_argument_cell_is_freed.expected -; \
+	else echo "=== test_nilpy_gencell: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

@@ -1,0 +1,94 @@
+# Three generator calls that compiled to the wrong thing.
+#
+# DEFAULTS. `for v in g(5)` over `def g(n, step=2, ...)` seeded every omitted
+# parameter as 0 -- step 0 looped forever -- and `list(g(5))` was refused
+# ("needs 6 argument(s), got 1"). Both paths now take the declared default, a
+# non-constant one (`d=acc`) included, and refuse a wrong count.
+#
+# GENERATOR METHODS AS VALUES. Only `for v in name.gen(..)` worked. Anywhere
+# else the call ran the step routine once as an ordinary method and answered
+# its Boolean: `list(C(1).items(6, 2))` was [], `for v in C(10).items(3)`
+# raised TypeError, and `list(c.items(6))` was refused because the arity count
+# started at the injected instance parameter.
+#
+# SIX PARAMETERS. A six-parameter generator used as a value segfaulted on
+# x86-64: its step takes seven words, all passed on the stack there, and the
+# cursor called it with one in a register.
+acc = []
+
+
+def g(n, step=2, tag="t", f=0.5, xs=None, d=acc):
+    i = 0
+    while i < n:
+        yield tag + str(i) + str(f) + str(xs)
+        d.append(i)
+        i += step
+
+
+class Base:
+    def __init__(self, k):
+        self.k = k
+
+    def items(self, n, step=1):
+        i = 0
+        while i < n:
+            yield self.k + i
+            i += step
+
+    def pairs(self, n):
+        for v in self.items(n):
+            yield (v, v * 2)
+
+    def total(self, n):
+        return sum(self.items(n))
+
+    def firsts(self):
+        it = self.items(10)
+        return [next(it), next(it)]
+
+
+class Kid(Base):
+    def tag(self):
+        return "kid"
+
+
+def six(n, a, b, c, e, h):
+    i = 0
+    while i < n:
+        yield i + a + b + c + e + h
+        i += 1
+
+
+def make(o: Base):
+    return o.items(2)
+
+
+for v in g(5):
+    print(v)
+for v in g(3, 1):
+    print(v)
+for v in g(2, 1, "u", 1.5, [1]):
+    print(v)
+print(list(g(5)), list(g(3, 1, "w")))
+print(len(acc))
+x = g(4)
+print(next(x), next(x))
+
+b = Base(10)
+k = Kid(100)
+print(list(b.items(3)), list(b.items(5, 2)), list(Base(1).items(2)))
+print(list(b.pairs(2)), b.total(4), b.firsts())
+print(list(k.items(2)), k.total(2))
+for v in Base(10).items(3, 1):
+    print(v)
+for v in Kid(7).items(2):
+    print(v)
+it = k.items(4, 3)
+print(next(it), next(it))
+print([q for q in b.items(3)], sorted(b.items(3), reverse=True))
+print(dict(zip(b.items(2), Kid(0).items(2))), any(v > 11 for v in b.items(3)))
+print(list(make(b)), list(make(Kid(5))))
+
+print(list(six(2, 1, 2, 3, 4, 5)), [v for v in six(1, 0, 0, 0, 0, 1)])
+for v in six(2, 1, 1, 1, 1, 1):
+    print(v)

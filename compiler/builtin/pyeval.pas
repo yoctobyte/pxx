@@ -272,6 +272,10 @@ function pycell_new: Pointer;
   the block, and `isvar` says whether the payload is a variant to release.
   bug-nilpy-shared-nonlocal-frame-cell-is-never-freed }
 function pycell_new_owned(isvar: Int64): Pointer;
+{ Release a pycell_new cell held in the word at pp, and clear the word: a
+  NilPy generator's variant ARGUMENT cell, freed when the generator is done or
+  closed (SLReleaseLocalsAtDone). nil-safe, so a close after done is a no-op. }
+procedure pycell_free_at(pp: Pointer);
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
   the discarding form, so a lifted def reached through a VALUE always answered
@@ -3378,6 +3382,17 @@ begin
   PPyRec(pv)^.VType := 0;
   PPyRec(pv)^.Payload := 0;
   pycell_new := Pointer(pv);
+end;
+
+procedure pycell_free_at(pp: Pointer);
+var c: Pointer;
+begin
+  if pp = nil then Exit;
+  c := PPointer(pp)^;
+  if c = nil then Exit;
+  PVariant(c)^ := 0;   { variant := int releases any payload }
+  FreeMem(c);
+  PPointer(pp)^ := nil;
 end;
 
 var
