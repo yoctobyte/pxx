@@ -254,3 +254,34 @@ by `runtime_sha` (0badcd665 adds no top-level symbol, so the `.map` trick
 cannot see it; the two instruments are complementary). Growth still absent,
 not a leak proven fixed. The residual -- `angular` at 47.85 bytes per vessel
 step and the 79% in uninstrumented code -- is unchanged and unowned.
+
+## 2026-10-03 (frankuser) -- the integrator, EXTRACTED, is flat at HEAD; NOT a demo measurement
+
+Not a run of the demo (it needs a GL window, and nobody was at the screen).
+What was measured: sim.py's Accumulator / State / Body.step plus math3d's
+Vec3 / Quat / Mat4, copied verbatim into one file with two test contributors
+that exercise add_force_at, add_torque, velocity_at and add_force, stepped
+under -dPXX_ALLOC_CENSUS. Compiler: the wt2 tree that became the commit
+after 413b031c5d (it carries the parameter-inference fix below).
+
+    steps     allocs    live
+      100      3376      50
+     1000     31686      56
+    10000    334160      59
+
+So the `angular` region's 47.85 bytes per vessel step does NOT reproduce in
+the integrator alone at HEAD. Whether that is because it was fixed since
+09-15 (two weeks of ownership fixes landed) or because it lives in a
+contributor this extraction does not have is NOT settled -- the demo's own
+contributors (buoyancy, drag, rig) were not copied.
+
+The extraction did find a CORRECTNESS bug, fixed in the same batch:
+`acc.add_force(v * -0.5)` inside a contributor's `accumulate(self, state,
+env, acc)` typed add_force's parameter as a float (the call-site scan could
+not see that `v` was a Vec3), so the extracted program died with
+`TypeError: expected a number, got object`. The demo itself builds and its
+`--conform` and `--starts` output is byte-identical before and after the
+fix, and `--starts` matches CPython.
+
+Next step for whoever has the screen: re-run the RSS slope on the real
+world at HEAD; the 11.5 kB/s residual is from 09-15.
