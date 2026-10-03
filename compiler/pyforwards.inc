@@ -122,6 +122,7 @@ function PyAugMulNode(left, right: Integer): Integer; forward;            { Nil 
 function PyBytesRepeatPair(a, b: Integer): Boolean; forward;             { Nil Python `bytes * n` (pyparser.inc) }
 function PyMakeBytesRepeat(a, b: Integer): Integer; forward;             { Nil Python `bytes * n` (pyparser.inc) }
 function PyNodeIsPyBytes(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyBytes? (pyparser.inc) }
+function PyNodeIsPyDeque(n: Integer): Boolean; forward;                  { Nil Python: node typed TPyDeque? (pyparser.inc) }
 function PyMakeBytesBinCall(const fname: AnsiString; a, b: Integer; retTk: TTypeKind): Integer; forward; { bytes binop helper call (pyparser.inc) }
 function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { list binop -> TPyList call (pyparser.inc) }
 function PyMakeDictBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { dict binop -> TPyDict call, PEP 584 `|` (pyparser.inc) }

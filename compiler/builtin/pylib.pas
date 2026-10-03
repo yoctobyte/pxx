@@ -1054,6 +1054,27 @@ type
     function at(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
     property Items[i: Integer]: Variant read at write put; default;
+    { The rest of CPython's deque. Each answers None where CPython's does.
+      `maxlen` bounds the deque: an append past it drops from the OPPOSITE
+      end, which is what makes `deque(maxlen=n)` the ring buffer MicroPython
+      scripts use it as (MicroPython's own deque REQUIRES maxlen). }
+    function extend(const v: Variant): Variant;
+    function extendleft(const v: Variant): Variant;
+    function rotate: Variant; overload;
+    function rotate(n: Integer): Variant; overload;
+    function remove(const v: Variant): Variant;
+    function count(const v: Variant): Integer;
+    function index(const v: Variant): Integer;
+    function reverse: Variant;
+    function copy: TPyDeque;
+    function __contains__(const v: Variant): Boolean;
+    function GetMaxLen: Variant;
+    property maxlen: Variant read GetMaxLen;
+    { the live window, front to back, as a fresh list (the caller owns it) }
+    function Window: TPyList;
+    procedure Install(l: TPyList);
+  public
+    FMaxLen: Integer;   { -1: unbounded (maxlen None) }
   end;
 
 { Python's `complex`. A CLASS rather than a new variant tag: a tag would need a
@@ -2882,8 +2903,15 @@ function all(const v: Variant): Boolean; overload;
   the same way for exactly that reason: its 1-argument overloads differ by type
   (list vs str), so the table would pick one of them silently.
   bug-n-collections-deque-is-missing }
-function deque: TPyDeque;
-function deque(l: TPyList): TPyDeque; overload;
+{ The arity-two form is declared FIRST: a keyword argument binds against the
+  first overload the name finds (PyParseStdlibCall's PyBindKwArgs runs before
+  the arity re-target), and `deque(maxlen=3)` must bind there. An omitted
+  Variant parameter arrives as None, which is CPython's default for both.
+  The iterable is a Variant, not a TPyList: typed TPyList, `deque(range(4))`
+  built an EMPTY deque and `deque("abc")` crashed. }
+function deque(const iterable: Variant = 0; const maxlen: Variant = 0): TPyDeque; overload;
+function deque: TPyDeque; overload;
+function deque(const iterable: Variant): TPyDeque; overload;
 { The same two, under a name a NilPy program cannot collide with. The QUALIFIED
   spelling `collections.deque(...)` is routed to THESE by the frontend's
   stdlib-call table, and it must be, because that table resolves its target with
@@ -2894,8 +2922,11 @@ function deque(l: TPyList): TPyDeque; overload;
   proc (`Power`) — an accident of spelling, not a guard.
   The bare `deque()` above stays shadowable, which is correct: shadowing a
   builtin by defining one is ordinary Python. }
+function pydeque_new(const iterable: Variant = 0; const maxlen: Variant = 0): TPyDeque; overload;
 function pydeque_new: TPyDeque; overload;
-function pydeque_new(l: TPyList): TPyDeque; overload;
+function pydeque_new(const iterable: Variant): TPyDeque; overload;
+function pydeque_repr(d: TPyDeque): AnsiString;
+function pydeque_eq(a, b: TPyDeque): Boolean;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -5865,6 +5896,7 @@ begin
   else if o is TPyIter then Result := pyiter_typename(TPyIter(o))
   else if o is TPyRange then Result := 'range'
   else if o is TPyComplex then Result := 'complex'
+  else if o is TPyDeque then Result := 'deque'
   else
     { spelled `TObject(obj).ClassName`, exactly as the two AttributeError sites
       above do. Written as `o.ClassName` on an already-TObject local it compiled
@@ -7351,6 +7383,10 @@ begin
         (devdocs/dev/normalise-dont-special-case.md) found it the moment `==`
         started routing here. }
       Result := pybytes_eq(TPyBytes(pl), TPyBytes(ql))
+    else if (pl is TPyDeque) and (ql is TPyDeque) then
+      { …and two DEQUES by their live windows (maxlen is not compared,
+        as in CPython) }
+      Result := pydeque_eq(TPyDeque(pl), TPyDeque(ql))
     else
       { Neither is one of this unit's containers, so they may be USER class
         instances with an `__eq__`. Identity above already settled the equal
@@ -9878,6 +9914,7 @@ constructor TPyDeque.Create;
 begin
   FBuf := TPyList.Create;
   FHead := 0;
+  FMaxLen := -1;
 end;
 
 function TPyDeque.__len__: Integer;
@@ -9903,8 +9940,11 @@ begin
 end;
 
 function TPyDeque.append(const v: Variant): Variant;
+var dropped: Variant;
 begin
+  if FMaxLen = 0 then begin Result := pynone; Exit; end;
   FBuf.append_self(v);
+  if (FMaxLen > 0) and (__len__ > FMaxLen) then dropped := popleft;
   Result := pynone;
 end;
 
@@ -9918,13 +9958,14 @@ begin
   end;
   Dec(FHead);
   FBuf.put(FHead, v);
+  if (FMaxLen >= 0) and (__len__ > FMaxLen) then FBuf.pop;
   Result := pynone;
 end;
 
 function TPyDeque.popleft: Variant;
 begin
   if FHead >= FBuf.FLen then
-    raise Exception.Create('pop from an empty deque');
+    raise IndexError.Create('pop from an empty deque');
   Result := FBuf.at(FHead);
   Inc(FHead);
   { Reclaim only when the dead prefix is at least half the buffer, which is what
@@ -9936,7 +9977,7 @@ end;
 function TPyDeque.pop: Variant;
 begin
   if FHead >= FBuf.FLen then
-    raise Exception.Create('pop from an empty deque');
+    raise IndexError.Create('pop from an empty deque');
   Result := FBuf.pop;
 end;
 
@@ -9953,7 +9994,7 @@ begin
     every sequence here does. }
   if i < 0 then i := (FBuf.FLen - FHead) + i;
   if (i < 0) or (FHead + i >= FBuf.FLen) then
-    raise Exception.Create('deque index out of range');
+    raise IndexError.Create('deque index out of range');
   Result := FBuf.at(FHead + i);
 end;
 
@@ -9961,8 +10002,151 @@ procedure TPyDeque.put(i: Integer; const v: Variant);
 begin
   if i < 0 then i := (FBuf.FLen - FHead) + i;
   if (i < 0) or (FHead + i >= FBuf.FLen) then
-    raise Exception.Create('deque index out of range');
+    raise IndexError.Create('deque index out of range');
   FBuf.put(FHead + i, v);
+end;
+
+function TPyDeque.Window: TPyList;
+var k: Integer;
+begin
+  Result := TPyList.Create;
+  for k := FHead to FBuf.FLen - 1 do Result.append_self(FBuf.at(k));
+end;
+
+procedure TPyDeque.Install(l: TPyList);
+begin
+  { the old buffer's reference is ours, as in Compact; l's becomes ours }
+  PXXObjRelease(Pointer(FBuf));
+  FBuf := l;
+  FHead := 0;
+end;
+
+function TPyDeque.extend(const v: Variant): Variant;
+var src: TPyList; k: Integer;
+begin
+  { materialised first: `d.extend(d)` must read the deque as it was }
+  src := list(v);
+  for k := 0 to src.FLen - 1 do append(src.at(k));
+  PXXObjRelease(Pointer(src));
+  Result := pynone;
+end;
+
+function TPyDeque.extendleft(const v: Variant): Variant;
+var src: TPyList; k: Integer;
+begin
+  { one appendleft per item, so the items land REVERSED -- CPython's rule }
+  src := list(v);
+  for k := 0 to src.FLen - 1 do appendleft(src.at(k));
+  PXXObjRelease(Pointer(src));
+  Result := pynone;
+end;
+
+function TPyDeque.rotate: Variant;
+begin
+  Result := rotate(1);
+end;
+
+function TPyDeque.rotate(n: Integer): Variant;
+var w, r: TPyList; len, k: Integer;
+begin
+  Result := pynone;
+  len := __len__;
+  if len <= 1 then Exit;
+  n := n mod len;
+  if n < 0 then n := n + len;
+  if n = 0 then Exit;
+  { right by n: the last n items move to the front }
+  w := Window;
+  r := TPyList.Create;
+  for k := len - n to len - 1 do r.append_self(w.at(k));
+  for k := 0 to len - n - 1 do r.append_self(w.at(k));
+  PXXObjRelease(Pointer(w));
+  Install(r);
+end;
+
+function TPyDeque.remove(const v: Variant): Variant;
+var k: Integer; w: TPyList;
+begin
+  Result := pynone;
+  for k := FHead to FBuf.FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FBuf.FItems) + k * 16), PPyVarRec(@v)) then
+    begin
+      w := Window;
+      w.pop_at(k - FHead);
+      Install(w);
+      Exit;
+    end;
+  raise ValueError.Create(pyrepr_of(v) + ' is not in deque');
+end;
+
+function TPyDeque.count(const v: Variant): Integer;
+var k: Integer;
+begin
+  Result := 0;
+  for k := FHead to FBuf.FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FBuf.FItems) + k * 16), PPyVarRec(@v)) then
+      Inc(Result);
+end;
+
+function TPyDeque.index(const v: Variant): Integer;
+var k: Integer;
+begin
+  for k := FHead to FBuf.FLen - 1 do
+    if PyVarEq(PPyVarRec(NativeInt(FBuf.FItems) + k * 16), PPyVarRec(@v)) then
+    begin
+      Result := k - FHead;
+      Exit;
+    end;
+  Result := -1;
+  raise ValueError.Create(pyrepr_of(v) + ' is not in deque');
+end;
+
+function TPyDeque.__contains__(const v: Variant): Boolean;
+begin
+  Result := count(v) > 0;
+end;
+
+function TPyDeque.reverse: Variant;
+var w, r: TPyList; k: Integer;
+begin
+  w := Window;
+  r := TPyList.Create;
+  for k := w.FLen - 1 downto 0 do r.append_self(w.at(k));
+  PXXObjRelease(Pointer(w));
+  Install(r);
+  Result := pynone;
+end;
+
+function TPyDeque.copy: TPyDeque;
+begin
+  Result := TPyDeque.Create;
+  Result.FMaxLen := FMaxLen;
+  Result.Install(Window);
+end;
+
+function TPyDeque.GetMaxLen: Variant;
+begin
+  if FMaxLen < 0 then Result := pynone else Result := FMaxLen;
+end;
+
+function pydeque_eq(a, b: TPyDeque): Boolean;
+var wa, wb: TPyList;
+begin
+  wa := a.Window;
+  wb := b.Window;
+  Result := pylist_eq(wa, wb);
+  PXXObjRelease(Pointer(wa));
+  PXXObjRelease(Pointer(wb));
+end;
+
+function pydeque_repr(d: TPyDeque): AnsiString;
+var w: TPyList;
+begin
+  w := d.Window;
+  Result := 'deque(' + pylist_repr(w);
+  if d.FMaxLen >= 0 then Result := Result + ', maxlen=' + pystr_of(Int64(d.FMaxLen));
+  Result := Result + ')';
+  PXXObjRelease(Pointer(w));
 end;
 
 function pydeque_new: TPyDeque; overload;
@@ -9970,12 +10154,29 @@ begin
   Result := TPyDeque.Create;
 end;
 
-function pydeque_new(l: TPyList): TPyDeque; overload;
-var k: Integer;
+function pydeque_new(const iterable: Variant; const maxlen: Variant): TPyDeque; overload;
 begin
   Result := TPyDeque.Create;
-  if l = nil then Exit;
-  for k := 0 to l.FLen - 1 do Result.append(l.at(k));
+  if pyvartag(maxlen) <> 0 then
+  begin
+    if (pyvartag(maxlen) = 1) or (pyvartag(maxlen) = 2) or (pyvartag(maxlen) = 4) then
+      Result.FMaxLen := Integer(PPyVarRec(@maxlen)^.Payload)
+    else raise TypeError.Create('an integer is required');
+    if Result.FMaxLen < 0 then
+      raise ValueError.Create('maxlen must be non-negative');
+  end;
+  if pyvartag(iterable) <> 0 then Result.extend(iterable);
+end;
+
+function deque(const iterable: Variant; const maxlen: Variant): TPyDeque; overload;
+begin
+  Result := pydeque_new(iterable, maxlen);
+end;
+
+function pydeque_new(const iterable: Variant): TPyDeque; overload;
+begin
+  Result := TPyDeque.Create;
+  if pyvartag(iterable) <> 0 then Result.extend(iterable);
 end;
 
 { One implementation, two names — see the declaration. }
@@ -9984,9 +10185,9 @@ begin
   Result := pydeque_new;
 end;
 
-function deque(l: TPyList): TPyDeque; overload;
+function deque(const iterable: Variant): TPyDeque; overload;
 begin
-  Result := pydeque_new(l);
+  Result := pydeque_new(iterable);
 end;
 
 function Counter: TPyDict;
@@ -23865,6 +24066,7 @@ begin
     if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
     { str() and repr() agree for a complex, so both rendering paths land here }
     if o is TPyComplex then begin Result := pycomplex_repr(TPyComplex(o)); Exit; end;
+    if o is TPyDeque then begin Result := pydeque_repr(TPyDeque(o)); Exit; end;
     if PyUserObjStr(o, True, us) then begin Result := us; Exit; end;
   end;
   { the scalar/string tail, INLINE rather than delegating to pyrepr_of. The two
@@ -23901,6 +24103,7 @@ begin
     if o is TPyIter then begin Result := pyiter_repr(TPyIter(o)); Exit; end;
     if o is TPyRange then begin Result := pyrange_repr(TPyRange(o)); Exit; end;
     if o is TPyComplex then begin Result := pycomplex_repr(TPyComplex(o)); Exit; end;
+    if o is TPyDeque then begin Result := pydeque_repr(TPyDeque(o)); Exit; end;
     { a bare print() of an instance prefers __str__, like CPython's str() }
     if PyUserObjStr(o, False, us) then begin Result := us; Exit; end;
   end;

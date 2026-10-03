@@ -11828,8 +11828,12 @@ begin
   if rec < REC_UCLASS_BASE then Exit;
   listCi := FindUClass('TPyList');
   dictCi := FindUClass('TPyDict');
+  { a DEQUE result too: `deque([1, 2])[1]` left the '[' unclaimed, and as an
+    assignment's right side the subscript was silently lost -- `x` got the
+    whole deque }
   Result := ((listCi >= 0) and (rec = REC_UCLASS_BASE + listCi)) or
-            ((dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi));
+            ((dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi)) or
+            PyRecIsCls(rec, 'TPyDeque');
 end;
 
 function PyDynAttrSuffix(n: Integer): Boolean;
@@ -14179,6 +14183,8 @@ begin
     already reached TPyRange.at through the named-receiver path }
   else if PyRecIsCls(rec, 'TPyRange') then
     Result := PyCallMeth1(FindUClass('TPyRange'), 'at', baseNode, idxNode)
+  else if PyRecIsCls(rec, 'TPyDeque') then
+    Result := PyCallMeth1(FindUClass('TPyDeque'), 'at', baseNode, idxNode)
   else
     Result := -1;
   if Result < 0 then Error('Nil Python: this value cannot be subscripted');
@@ -26738,6 +26744,16 @@ begin
   if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
   byCi := FindUClass('TPyBytes');
   Result := (byCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + byCi);
+end;
+
+function PyNodeIsPyDeque(n: Integer): Boolean;
+var dqCi: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyClass then Exit;
+  dqCi := FindUClass('TPyDeque');
+  Result := (dqCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + dqCi);
 end;
 
 { `bytes([...]) * n` / `n * b` — Python bytes repetition (uforth's FILL:

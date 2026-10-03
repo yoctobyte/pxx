@@ -865,6 +865,21 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 -dPXX_CYCLE_GC test/test_nilpy_reference_cycles_are_collected.npy $(TESTTMP)/test_nilpy_cyclegc26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_cyclegc26_i386 | diff -u test/test_nilpy_reference_cycles_are_collected.expected -; \
 	else echo "=== test_nilpy_cyclegc: qemu-i386 absent, i386 NOT verified ==="; fi
+	# COLLECTIONS.DEQUE MATCHES CPYTHON: maxlen (positional, keyword, None) as a
+	# ring buffer, extend/extendleft/rotate/remove/count/index/reverse/copy,
+	# repr, == (static and inside containers), `in`, IndexError on an empty pop,
+	# and a subscripted constructor result -- `deque([1, 2])[1]` used to answer
+	# the whole deque. The census row drops 3000 deques; keep holds them.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_collections_deque_matches_cpython.npy $(TESTTMP)/test_nilpy_dequecp_hd26
+	$(TESTTMP)/test_nilpy_dequecp_hd26 | diff -u test/test_nilpy_collections_deque_matches_cpython.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_collections_deque_matches_cpython.npy $(TESTTMP)/test_nilpy_dequecp26
+	tools/assert_no_leak.sh nilpy_deque 300 $(TESTTMP)/test_nilpy_dequecp26 leak 3000
+	@if tools/assert_no_leak.sh nilpy_deque_control 300 $(TESTTMP)/test_nilpy_dequecp26 keep 3000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_deque control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_collections_deque_matches_cpython.npy $(TESTTMP)/test_nilpy_dequecp26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_dequecp26_i386 | diff -u test/test_nilpy_collections_deque_matches_cpython.expected -; \
+	else echo "=== test_nilpy_deque: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame

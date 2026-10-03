@@ -1,0 +1,112 @@
+# collections.deque matches CPython: the constructor spellings (iterable of any
+# kind, maxlen positional / keyword / None), every mutator, repr, ==, `in`,
+# exceptions, a subscripted constructor result. argv: [leak|keep] [N] -- the
+# loop at the end drops (or, as the census control, keeps) each deque.
+import collections
+import sys
+from collections import deque
+
+
+def uses_a_deque():
+    q = collections.deque()
+    q.append(5)
+    return q.pop()
+
+
+print(uses_a_deque())
+q = deque([1, 2, 3])
+q.appendleft(0)
+q.append(4)
+print(list(q), len(q), q[0], q[-1])
+print(q.popleft(), q.pop(), list(q))
+for x in q:
+    print(x)
+print(2 in q, 9 in q, 9 not in q)
+print(q)
+q.extend([7, 8])
+q.extendleft([10, 11])
+print(q)
+q.rotate()
+print(q)
+q.rotate(-2)
+print(q)
+q.remove(7)
+print(q, q.count(2), q.index(3))
+q.reverse()
+print(q, repr(q), str(q))
+c = q.copy()
+c.append(99)
+print(len(q), len(c), q.maxlen)
+q[0] = 42
+print(q, bool(q), bool(deque()))
+q.clear()
+print(q, len(q))
+
+# maxlen: a ring buffer, dropping from the opposite end
+d = deque([], 3)
+for i in range(6):
+    d.append(i)
+print(d, d.maxlen, 3 in d)
+d.appendleft(-1)
+print(d)
+e = collections.deque((), 2)
+e.append("a")
+e.append("b")
+e.append("c")
+print(e, list(e))
+print(deque([1, 2, 3, 4], 2), deque(maxlen=2), deque([1], maxlen=3))
+f = collections.deque(maxlen=2)
+f.extend("xyz")
+print(f, collections.deque([1, 2], None))
+print(deque(range(4)), deque("abc"), type(f).__name__)
+
+# equality and a subscripted constructor result
+a = deque([1, 2])
+b = deque([1, 2])
+print(a == b, a != b, a == deque([2]), [a] == [b], a in [b], a == [1, 2])
+print(deque([1, 2])[1], collections.deque("xy")[-1])
+
+# exceptions
+try:
+    deque().popleft()
+except IndexError as ex:
+    print("IndexError", ex)
+try:
+    deque().pop()
+except IndexError as ex:
+    print("IndexError", ex)
+try:
+    w = deque([1])
+    y = w[5]
+except IndexError as ex:
+    print("IndexError", ex)
+try:
+    deque([1]).remove(2)
+except ValueError:
+    print("ValueError")
+try:
+    deque([], -1)
+except ValueError as ex:
+    print("ValueError", ex)
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "leak"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 500
+kept = []
+total = 0
+for i in range(n):
+    w = deque([i, i + 1], 4)
+    w.appendleft(str(i))
+    w.append([i])
+    w.extend(["x", "y"])
+    w.extendleft("ab")
+    w.rotate(3)
+    if "x" in w:
+        w.remove("x")
+    w.reverse()
+    total += len(w) + len(str(w)) + w.count("y")
+    w.popleft()
+    if w == w.copy():
+        total += 1
+    if mode == "keep":
+        kept.append(w)
+print(total)

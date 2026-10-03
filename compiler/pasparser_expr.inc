@@ -12044,6 +12044,22 @@ begin
       CurASTNode := node;
       Exit;
     end;
+    if PyExprMode and (op in [tkEq, tkNeq]) and
+       PyNodeIsPyDeque(left) and PyNodeIsPyDeque(right) then
+    begin
+      { two deques by their live windows, as bytes above: the class-pair
+        fallthrough compared POINTERS }
+      node := PyMakeBytesBinCall('pydeque_eq', left, right, tyBoolean);
+      if op = tkNeq then
+      begin
+        left := AllocNode(AN_NOT);
+        ASTLeft[left] := node;
+        ASTTk[left] := Ord(tyBoolean);
+        node := left;
+      end;
+      CurASTNode := node;
+      Exit;
+    end;
     { A user class that defines `__eq__` is compared BY IT — Python's own rule,
       and the same shape as PyStrOfValue dispatching `__str__`. Without it `==`
       fell through to a pointer compare, so `V(1) == V(1)` was False with the

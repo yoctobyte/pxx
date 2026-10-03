@@ -4,10 +4,10 @@ track: N
 prio: 70
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-12
 found-by: frankuser
-summary: "`collections.deque()` COMPILES and then SEGFAULTS at run time (rc=139), producing no output at all where CPython prints a value. Minimal: `q = collections.deque(); q.append(5); print(q.pop())` inside a function -- compiles clean, crashes. MEASURED ON BOTH SIDES of the 2026-09-12 candidate-promotion fix, with binaries built from the same tree minus that one hunk, so it is PRE-EXISTING and unrelated to it. The pin cannot serve as a control because it predates deque support entirely (`no member deque came of the qualifier collections`). A compiling program that crashes is worse than a refused one, and the crash is silent -- no diagnostic, no partial output."
+summary: "CLOSED 2026-10-03 -- no longer reproduces at HEAD, and the deque was filled in (maxlen, the missing methods, repr, ==, a subscripted constructor result); see the last section. Original: `collections.deque()` COMPILES and then SEGFAULTS at run time (rc=139), producing no output at all where CPython prints a value. Minimal: `q = collections.deque(); q.append(5); print(q.pop())` inside a function -- compiles clean, crashes. MEASURED ON BOTH SIDES of the 2026-09-12 candidate-promotion fix, with binaries built from the same tree minus that one hunk, so it is PRE-EXISTING and unrelated to it. The pin cannot serve as a control because it predates deque support entirely (`no member deque came of the qualifier collections`). A compiling program that crashes is worse than a refused one, and the crash is silent -- no diagnostic, no partial output."
 ---
 
 # `collections.deque()` compiles and segfaults
@@ -75,3 +75,31 @@ note the release must come BEFORE the field is overwritten, or the handle is
 gone. The sibling fixes landed the same day in `pylist_setslice` and the
 `pyiter_drain` family show the shape.
 
+
+## 2026-10-03 (frankuser) -- CLOSED: the segfault no longer reproduces; the deque was filled in
+
+The six-line program above prints `5` at HEAD, under `-dPXX_HEAP_DEBUG` too;
+which fix cleared it was not bisected. The second defect is gone as well:
+`Compact` releases the old buffer before overwriting `FBuf` (fixed earlier,
+with test_nilpy_a_deque_releases_its_old_buffer_and_indexes_through_a_variant).
+
+Re-probing the object for this ticket found the rest of CPython's deque
+missing or wrong, all fixed in the same commit:
+
+- `maxlen` -- positional, `maxlen=` keyword, `None` -- refused outright, and
+  MicroPython's deque REQUIRES it (`deque((), 10)`). Now a ring buffer that
+  drops from the opposite end, with `.maxlen` and a `maxlen=` repr.
+- `deque(range(4))` built an EMPTY deque silently and `deque("abc")` printed
+  nothing: the one-argument constructor was typed TPyList. Now a Variant
+  drained through `list()`.
+- `deque([1, 2])[1]` answered the WHOLE deque as an assignment's right side
+  (and was a parse error as a statement): PySubscriptableSuffix admitted only
+  str / variant / list / dict results.
+- `in`, `repr`/`print`, `==` (static and inside containers), `extend`,
+  `extendleft`, `rotate`, `remove`, `count`, `index`, `reverse`, `copy`, and
+  `type(d).__name__` all added; an empty `pop`/`popleft` and an out-of-range
+  index raise IndexError instead of a bare Exception.
+
+Test: test_nilpy_collections_deque_matches_cpython -- HD and i386
+byte-identical to CPython; census flat (145 live at 3000 deques against 146 at
+300; the keep control 13767).

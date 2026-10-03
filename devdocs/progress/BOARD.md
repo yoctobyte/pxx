@@ -332,7 +332,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (174)
+## backlog-nilpy (173)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -348,7 +348,6 @@ _none_
 | bug-n-a-class-level-method-read-off-a-class-value-as-a-value-is-refused | N | 45 | bug | > | — |
 | bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers | N | 40 | bug | > | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
-| bug-n-a-collections-deque-segfaults-at-run-time | N | 70 | bug | `collections.deque()` COMPILES and then SEGFAULTS at run time (rc=139), producing no output at all where CPython prints a value. Minimal: `q = collections.deque(); q.append(5); print(q.pop())` inside a function -- compiles clean, crashes. MEASURED ON BOTH SIDES of the 2026-09-12 candidate-promotion fix, with binaries built from the same tree minus that one hunk, so it is PRE-EXISTING and unrelated to it. The pin cannot serve as a control because it predates deque support entirely (`no member deque came of the qualifier collections`). A compiling program that crashes is worse than a refused one, and the crash is silent -- no diagnostic, no partial output. | — |
 | bug-n-a-def-in-an-imported-module-does-not-shadow-len-or-sorted | N | 55 | bug | > | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 65 | bug | RE-RANKED 45 -> 65 2026-09-20 ON A SECOND OBSERVABLE THAT REFUTES THIS TICKET'S OWN by-design ESCAPE: a conditional def with NO PRIOR DEFINITION is not a rebinding question -- there is nothing to displace -- and it is REFUSED outright, `error: unresolved forward: <name>`. That makes the standard pure-Python fallback `try: from x import f / except ImportError: def f(...)` fail, which is HALF OF PYTHON'S ONLY #ifdef: pxx supports the conditional IMPORT (the owner ruled that idiom by design, 2026-09-20) and not the conditional DEFINITION. It is NOT if-specific -- `if`/`for`/`try`/`finally` all refuse -- and NOT a visibility problem, because a call from INSIDE the same block fails identically. Original observable: `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults | N | 70 | bug | `xs[0].foo = 1` SEGFAULTS (rc 139) where CPython raises `'int' object has no attribute 'foo' and no __dict__ for setting new attributes`. pydynattr_set_v checks the CLASS-REFERENCE tag and nothing else, so a scalar-tagged variant falls through to `pydynattr_set(pyvarobj(v), ...)` and scalar bits are reinterpreted as an object address. THE MECHANISM, so this does not decay when the instance is fixed: ONE concept with TWO runtime entry points whose authors held different beliefs about the same population -- the twin `pydynattr_get_v` DOES check the tag and its own comment says why (`for any other tag (str/int/float/bool) it is scalar bits reinterpreted as an address, and ClassName on that would dereference garbage`), while set_v's comment says `Only a CLASS REFERENCE needs telling apart here`, which is the claim that is false. Found by grepping for the sibling while fixing the GETTER's compile-time twin (bug-n-an-attribute-on-a-scalar-returned-by-a-call-segfaults), not by a test. Measured 2026-09-21 at HEAD; the getter's fix does not touch this and the two are independent. compiler/builtin/pylib.pas. | — |
@@ -1119,9 +1118,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4120)
+## done (4121)
 
-4120 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4121 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1241,7 +1240,6 @@ _none_
 - [p 70] [A] feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - [p 70] [A+O] feature-opt-rtti-emit-on-use (unblocks 1)
 - [p 70] [A] bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
-- [p 70] [N] bug-n-a-collections-deque-segfaults-at-run-time
 - [p 70] [N] bug-n-a-dynamic-attribute-store-on-a-scalar-variant-segfaults
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts

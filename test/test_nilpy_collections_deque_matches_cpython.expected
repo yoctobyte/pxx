@@ -1,0 +1,30 @@
+5
+[0, 1, 2, 3, 4] 5 0 4
+0 4 [1, 2, 3]
+1
+2
+3
+True False True
+deque([1, 2, 3])
+deque([11, 10, 1, 2, 3, 7, 8])
+deque([8, 11, 10, 1, 2, 3, 7])
+deque([10, 1, 2, 3, 7, 8, 11])
+deque([10, 1, 2, 3, 8, 11]) 1 3
+deque([11, 8, 3, 2, 1, 10]) deque([11, 8, 3, 2, 1, 10]) deque([11, 8, 3, 2, 1, 10])
+6 7 None
+deque([42, 8, 3, 2, 1, 10]) True False
+deque([]) 0
+deque([3, 4, 5], maxlen=3) 3 True
+deque([-1, 3, 4], maxlen=3)
+deque(['b', 'c'], maxlen=2) ['b', 'c']
+deque([3, 4], maxlen=2) deque([], maxlen=2) deque([1], maxlen=3)
+deque(['y', 'z'], maxlen=2) deque([1, 2])
+deque([0, 1, 2, 3]) deque(['a', 'b', 'c']) deque
+True False False True True False
+2 y
+IndexError pop from an empty deque
+IndexError pop from an empty deque
+IndexError deque index out of range
+ValueError
+ValueError maxlen must be non-negative
+21782
