@@ -1,0 +1,39 @@
+# next() over an object of a user class that implements __next__.
+#
+# No overload of `next` takes a user class, so `next(it)` was "no overload of
+# next matches"; and the run-time entry it now reaches drained the object
+# into a list to answer the first element, which consumed the whole iterator.
+# One __next__ per call now, its StopIteration propagated, or turned into the
+# default by the two-argument form.
+
+
+class Count:
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.i >= self.n:
+            raise StopIteration
+        self.i += 1
+        return [self.i]
+
+
+c = Count(4)
+print(next(c), next(c))
+print(list(c))
+print(next(Count(2)), next(Count(0), "empty"))
+d = Count(1)
+print(next(d, "x"), next(d, "x"))
+try:
+    next(d)
+except StopIteration:
+    print("stop")
+e = Count(3)
+for v in e:
+    if v == [2]:
+        break
+print(next(e), next(e, None))

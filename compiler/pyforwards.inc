@@ -49,6 +49,7 @@ procedure PyParseFactorCore; forward;  { the NilPy half of ParseFactorCore, carv
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
 function PyBuildGeneratorValue(gpi: Integer): Integer; forward;  { a generator CALL in value position becomes a cursor object (pyparser.inc) }
 function PyBuildGeneratorValueAt(gpi, recvNode: Integer): Integer; forward;  { ...with the cursor on its `(`, and a generator METHOD's receiver (pyparser.inc) }
+function PyFindUClassExact(const nm: AnsiString): Integer; forward;  { the user class spelled exactly nm, or -1 (pyparser.inc) }
 function PyProgSym(const name: AnsiString): Integer; forward;  { a name in the Nil Python PROGRAM's own scope, never a unit's (pyparser.inc) }
 function PyParseSuite: Integer; forward;  { a Nil Python `: <suite>` block — the frontend tail of a for-in header (pyparser.inc) }
 function PyNodeIsCallableValue(n: Integer): Boolean; forward;  { a bound method / lambda / function value — pyparser.inc }

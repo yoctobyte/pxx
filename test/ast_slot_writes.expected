@@ -66,6 +66,7 @@ AN_ARG Left PyForceVariant(op)
 AN_ARG Left PyForceVariant(recvNode)
 AN_ARG Left PyForceVariant(rhs)
 AN_ARG Left PyForceVariant(right)
+AN_ARG Left PyForceVariant(srcNode)
 AN_ARG Left PyForceVariant(tpObjNode)
 AN_ARG Left PyForceVariant(valNode)
 AN_ARG Left PyForceVariant(xNode)
@@ -77,6 +78,7 @@ AN_ARG Left PyMakeIdent(cSym)
 AN_ARG Left PyMakeIdent(dcSyms[i])
 AN_ARG Left PyMakeIdent(dictSym)
 AN_ARG Left PyMakeIdent(dstSym)
+AN_ARG Left PyMakeIdent(itSym)
 AN_ARG Left PyMakeIdent(kwNamesSym)
 AN_ARG Left PyMakeIdent(kwValsSym)
 AN_ARG Left PyMakeIdent(lamSyms[j])
@@ -331,6 +333,7 @@ AN_ASSIGN Left PyMakeIdent(enumStartSym)
 AN_ASSIGN Left PyMakeIdent(extraSyms[xi])
 AN_ASSIGN Left PyMakeIdent(gsym)
 AN_ASSIGN Left PyMakeIdent(iSym)
+AN_ASSIGN Left PyMakeIdent(itSym)
 AN_ASSIGN Left PyMakeIdent(listSym)
 AN_ASSIGN Left PyMakeIdent(nSym)
 AN_ASSIGN Left PyMakeIdent(nfoundSym)
@@ -475,6 +478,7 @@ AN_ASSIGN Right atDflt
 AN_ASSIGN Right bNode
 AN_ASSIGN Right baseNode
 AN_ASSIGN Right caRhs
+AN_ASSIGN Right callN
 AN_ASSIGN Right callNode
 AN_ASSIGN Right charNode
 AN_ASSIGN Right clsBox
@@ -807,6 +811,7 @@ AN_CALL Right REC_UCLASS_BASE + bCi
 AN_CALL Right REC_UCLASS_BASE + bytCi
 AN_CALL Right REC_UCLASS_BASE + ci
 AN_CALL Right REC_UCLASS_BASE + dictCi
+AN_CALL Right REC_UCLASS_BASE + iterCi
 AN_CALL Right REC_UCLASS_BASE + k
 AN_CALL Right REC_UCLASS_BASE + listCi
 AN_CALL Right REC_UCLASS_BASE + listCiN
@@ -1296,6 +1301,7 @@ AN_WHILE Left condN
 AN_WHILE Left condNode
 AN_WHILE Left mnCall
 AN_WHILE Left scanCond
+AN_WHILE Right PySeqAppend(-1, yld)
 AN_WHILE Right RParseBlock
 AN_WHILE Right bHead
 AN_WHILE Right body
@@ -1310,3 +1316,4 @@ AN_WRITELN Left -1
 AN_WRITELN Left arg
 AN_YIELD Left exprNode
 AN_YIELD Left node
+AN_YIELD Left takeN

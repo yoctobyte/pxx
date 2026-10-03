@@ -1866,6 +1866,10 @@ function pyiter_gen(l: TPyList): TPyIter;
   a dict (its KEYS, as Python iterates one), bytes, or a cursor, which answers
   ITSELF because CPython's iter() is idempotent on an iterator. }
 function pyiter_v(const v: Variant): TPyIter;
+{ ...always OWNED: pyiter_v hands an ITERATOR argument back as it is,
+  borrowed, and builds a fresh cursor for everything else. `yield from`
+  stores the result in a managed local, so it needs one answer. }
+function pyiter_own_v(const v: Variant): TPyIter;
 { reversed(): a leaf cursor walking the source BACKWARDS. Its source is already
   materialised, so the only thing laziness buys here is the exhaustion rule. }
 function pyiter_rev_list(l: TPyList): TPyIter;
@@ -5933,6 +5937,10 @@ begin
   else if o is TPyRange then
     { r[i] on a range held in a variant — arithmetic, not a lookup }
     Result := pyvar_of_int(pyrange_at(TPyRange(o), PPyVarRec(@key)^.Payload))
+  else if o is TPyDeque then
+    { a deque that came back through a tuple or a container: `d[0]` raised
+      "not subscriptable" while the typed receiver indexed it fine }
+    Result := TPyDeque(o).at(PPyVarRec(@key)^.Payload)
   else if o is TPyBytes then
   begin
     { bytes/bytearray index -> the integer byte value. Missing this case made
@@ -6118,6 +6126,8 @@ begin
     way too. One mechanism, three shapes. }
   else if o is TPyBytes then
     TPyBytes(o).put(Integer(PPyVarRec(@key)^.Payload), Integer(pyvar_to_int(val)))
+  else if o is TPyDeque then
+    TPyDeque(o).put(Integer(PPyVarRec(@key)^.Payload), val)
   { A USER class arriving as a bare variant handle — the write side of the
     __getitem__ arm pyvar_getitem already carries. A statically-typed receiver
     dispatches __setitem__ in the frontend; this one has no static class, so a
@@ -9123,7 +9133,7 @@ begin
 end;
 
 function pynext_v(const v: Variant): Variant;
-var o: TObject; l: TPyList;
+var o: TObject; l: TPyList; r: Variant;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -9137,6 +9147,16 @@ begin
       pynext_v := pyiter_next(TPyIter(o));
       Exit;
     end;
+    { a USER iterator: one __next__, whose StopIteration is the caller's.
+      Draining it into a list (below) consumed every element to answer the
+      first. }
+    if PyUserObjHasDunder(o, '__next__') then
+    begin
+      if not PyUserObjNoArgDunder(o, '__next__', r) then
+        raise StopIteration.Create('next() on an exhausted iterator');
+      pynext_v := r;
+      Exit;
+    end;
   end;
   { a fresh copy -- released for the reason given in max(const v: Variant) }
   l := pylist_v(v);
@@ -9148,7 +9168,7 @@ begin
 end;
 
 function pynext_or_v(const v: Variant; const dflt: Variant): Variant;
-var o: TObject; l: TPyList;
+var o: TObject; l: TPyList; r: Variant;
 begin
   if (pyvartag(v) = 7) and (pyvarobj(v) <> nil) then
   begin
@@ -9156,6 +9176,16 @@ begin
     if o is TPyIter then
     begin
       pynext_or_v := pyiter_next_or(TPyIter(o), dflt);
+      Exit;
+    end;
+    if PyUserObjHasDunder(o, '__next__') then
+    begin
+      pynext_or_v := dflt;
+      try
+        if PyUserObjNoArgDunder(o, '__next__', r) then pynext_or_v := r;
+      except
+        on E: StopIteration do pynext_or_v := dflt;
+      end;
       Exit;
     end;
   end;
@@ -9707,6 +9737,10 @@ begin
   nb := TPyList.Create;
   for k := 0 to frontSlack - 1 do nb.append_self(pynone);
   for k := FHead to FBuf.FLen - 1 do nb.append_self(FBuf.at(k));
+  { The field store is a raw store: the old buffer's reference is ours to
+    drop. It leaked one list per deque on its first appendleft, and one per
+    compaction after a run of popleft. }
+  PXXObjRelease(Pointer(FBuf));
   FBuf := nb;
   FHead := frontSlack;
 end;
@@ -15900,6 +15934,13 @@ begin
   Result := PyIterAdoptList(TPyList.Create);
 end;
 
+function pyiter_own_v(const v: Variant): TPyIter;
+begin
+  Result := pyiter_v(v);
+  if (pyvartag(v) = 7) and (TObject(pyvarobj(v)) is TPyIter) then
+    PXXObjRetain(Pointer(Result));
+end;
+
 function pyiter_enum(const v: Variant; start: Int64): TPyIter;
 begin
   Result := TPyIter.Create;
@@ -20425,7 +20466,7 @@ begin
 end;
 
 function pyseq_of_obj(o: TObject): TPyList;
-var it: TPyIter;
+var it: TPyIter; k: Integer;
 begin
   Result := nil;
   if o = nil then Exit;
@@ -20441,6 +20482,14 @@ begin
     header is the cursor loop in PyParseForIn, which never reaches this. }
   if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
   if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
+  { a DEQUE yields its live window of the buffer, front to back. }
+  if o is TPyDeque then
+  begin
+    Result := TPyList.Create;
+    for k := TPyDeque(o).FHead to TPyDeque(o).FBuf.FLen - 1 do
+      Result.append_self(TPyDeque(o).FBuf.at(k));
+    Exit;
+  end;
   { a FILE yields its remaining lines -- what `for line in f` does on a name
     the frontend can see is a TPyFile. Through a VARIANT (a file handed to an
     unannotated parameter, `def count(f): for line in f`) it reached this chain

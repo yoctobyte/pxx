@@ -815,6 +815,50 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_extend_takes_any_iterable_and_a_raising_drain_is_released.npy $(TESTTMP)/test_nilpy_extiter26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_extiter26_i386 | diff -u test/test_nilpy_extend_takes_any_iterable_and_a_raising_drain_is_released.expected -; \
 	else echo "=== test_nilpy_extiter: qemu-i386 absent, i386 NOT verified ==="; fi
+	# NEXT ON A USER ITERATOR CALLS ITS __next__: refused at compile time (pin
+	# v452), then answered by draining the whole object.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_next_on_a_user_iterator_calls_its_dunder_next.npy $(TESTTMP)/test_nilpy_nextuser_hd26
+	$(TESTTMP)/test_nilpy_nextuser_hd26 | diff -u test/test_nilpy_next_on_a_user_iterator_calls_its_dunder_next.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_next_on_a_user_iterator_calls_its_dunder_next.npy $(TESTTMP)/test_nilpy_nextuser26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_nextuser26_i386 | diff -u test/test_nilpy_next_on_a_user_iterator_calls_its_dunder_next.expected -; \
+	else echo "=== test_nilpy_nextuser: qemu-i386 absent, i386 NOT verified ==="; fi
+	# YIELD FROM delegates: a generator, a list, a str, a range, nested, and a
+	# delegation abandoned by break or by dropping a stepped generator. A parse
+	# error at pin v452.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_yield_from_delegates_and_an_abandoned_delegation_is_released.npy $(TESTTMP)/test_nilpy_yfrom_hd26
+	$(TESTTMP)/test_nilpy_yfrom_hd26 | diff -u test/test_nilpy_yield_from_delegates_and_an_abandoned_delegation_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_yield_from_delegates_and_an_abandoned_delegation_is_released.npy $(TESTTMP)/test_nilpy_yfrom26
+	tools/assert_no_leak.sh nilpy_yield_from 300 $(TESTTMP)/test_nilpy_yfrom26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_yield_from_control 300 $(TESTTMP)/test_nilpy_yfrom26 keep 5000 >/dev/null 2>&1; then 	  echo "FAIL: nilpy_yield_from control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then 	  ./$(COMPILER) --target=i386 test/test_nilpy_yield_from_delegates_and_an_abandoned_delegation_is_released.npy $(TESTTMP)/test_nilpy_yfrom26_i386 && 	  qemu-i386 $(TESTTMP)/test_nilpy_yfrom26_i386 | diff -u test/test_nilpy_yield_from_delegates_and_an_abandoned_delegation_is_released.expected -; 	else echo "=== test_nilpy_yfrom: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A DEQUE RELEASES ITS OLD BUFFER on compaction (one list per deque leaked
+	# on its first appendleft at pin v452), and a deque held in a variant
+	# indexes, assigns and iterates.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_deque_releases_its_old_buffer_and_indexes_through_a_variant.npy $(TESTTMP)/test_nilpy_dequebuf_hd26
+	$(TESTTMP)/test_nilpy_dequebuf_hd26 | diff -u test/test_nilpy_a_deque_releases_its_old_buffer_and_indexes_through_a_variant.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_deque_releases_its_old_buffer_and_indexes_through_a_variant.npy $(TESTTMP)/test_nilpy_dequebuf26
+	tools/assert_no_leak.sh nilpy_deque_buffer 300 $(TESTTMP)/test_nilpy_dequebuf26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_deque_buffer_control 300 $(TESTTMP)/test_nilpy_dequebuf26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_deque_buffer control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_deque_releases_its_old_buffer_and_indexes_through_a_variant.npy $(TESTTMP)/test_nilpy_dequebuf26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_dequebuf26_i386 | diff -u test/test_nilpy_a_deque_releases_its_old_buffer_and_indexes_through_a_variant.expected -; \
+	else echo "=== test_nilpy_dequebuf: qemu-i386 absent, i386 NOT verified ==="; fi
+	# FOUR LEAK TICKETS FOUND FLAT at 2026-10-03 HEAD with no fix of their own:
+	# a discarded call result, a result read only for truth, a slice or concat
+	# through a variant receiver, and eval() building a container. This keeps
+	# them closed.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_discarded_or_variant_routed_result_is_released.npy $(TESTTMP)/test_nilpy_discvar_hd26
+	$(TESTTMP)/test_nilpy_discvar_hd26 | diff -u test/test_nilpy_a_discarded_or_variant_routed_result_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_discarded_or_variant_routed_result_is_released.npy $(TESTTMP)/test_nilpy_discvar26
+	tools/assert_no_leak.sh nilpy_discarded_result 300 $(TESTTMP)/test_nilpy_discvar26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_discarded_result_control 300 $(TESTTMP)/test_nilpy_discvar26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_discarded_result control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_discarded_or_variant_routed_result_is_released.npy $(TESTTMP)/test_nilpy_discvar26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_discvar26_i386 | diff -u test/test_nilpy_a_discarded_or_variant_routed_result_is_released.expected -; \
+	else echo "=== test_nilpy_discvar: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

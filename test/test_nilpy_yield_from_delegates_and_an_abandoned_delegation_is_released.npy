@@ -1,0 +1,100 @@
+# `yield from E` was a parse error: NilPy generators had no delegation at all.
+# It desugars to the loop it means for a consumer that only iterates --
+# `it = iter(E); while it has more: yield next(it)` -- with the cursor a hidden
+# local, so a generator abandoned in the middle releases it with its others.
+# send() into the delegate and the delegate's return value do not exist in
+# NilPy generators, so nothing a plain loop cannot express is lost.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG.
+# `leak N` / `keep N` drive the census: each pass delegates to a generator,
+# a list of objects, a str and a range, and abandons one delegation halfway.
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "P(%d)" % self.v
+
+
+def inner(n):
+    for i in range(n):
+        yield i * 10
+
+
+def objs(n):
+    for i in range(n):
+        yield P(i)
+
+
+def outer(n):
+    yield -1
+    yield from inner(n)
+    yield from [7, 8]
+    yield from "ab"
+    yield from range(2)
+    yield 99
+
+
+def deep(n):
+    yield from objs(n)
+    yield from [P(100), P(101)]
+
+
+def twice(n):
+    yield from deep(n)
+    yield from deep(1)
+
+
+class C:
+    def items(self, n, k):
+        for i in range(n):
+            yield i + k
+
+    def again(self, n):
+        yield from self.items(n, 2)
+        yield from range(3)
+
+
+def show():
+    print(list(outer(3)))
+    for v in outer(1):
+        print(v)
+    print(list(C().again(2)))
+    g = outer(5)
+    print(next(g), next(g), next(g))
+    print(list(twice(2)))
+    t = 0
+    for p in deep(3):
+        t += p.v
+        if p.v == 1:
+            break
+    print(t)
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        for v in outer(2):
+            t += len(str(v))
+        for p in twice(2):
+            t += p.v
+            if keep is not None:
+                keep.append(p)
+        for p in deep(3):
+            if p.v == 1:
+                break
+        g = twice(3)
+        t += next(g).v + next(g).v
+        t += sum(C().again(3))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

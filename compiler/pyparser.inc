@@ -29825,6 +29825,20 @@ begin
     if (si >= 0) and (Syms[si].TypeKind = tyClass) and
        PyRecIsCls(Syms[si].RecName, 'TPyList') then
       Result := True;
+    { ...or an object of a USER class that declares __next__ -- a name of
+      that class, or a construction of it. No overload of `next` takes a user
+      class, so `next(it)` over a hand-written iterator was "no overload of
+      next matches"; the run-time entry calls its __next__. }
+    if (si >= 0) and (Syms[si].TypeKind = tyClass) and
+       (Syms[si].RecName >= REC_UCLASS_BASE) and
+       (FindUMeth(Syms[si].RecName - REC_UCLASS_BASE, '__next__') >= 0) then
+      Result := True;
+    if (si < 0) and (TokPos + 2 < TokCount) and
+       (Tokens[TokPos + 2].Kind = tkLParen) then
+    begin
+      si := PyFindUClassExact(GetTokenStr(TokPos + 1));
+      if (si >= 0) and (FindUMeth(si, '__next__') >= 0) then Result := True;
+    end;
   end;
 end;
 
@@ -35495,6 +35509,31 @@ begin
   Result := seq;
 end;
 
+{ `yield from E` as statements (see the yield arm of the statement parser). }
+function PyYieldFromLoop(srcNode: Integer): Integer;
+var itSym, ownPi, hasPi, takePi, iterCi, asg, callN, argN, cnd, yld, takeN: Integer;
+begin
+  ownPi := FindProc('pyiter_own_v');
+  hasPi := FindProc('pyiter_has');
+  takePi := FindProc('pyiter_take');
+  iterCi := FindUClass('TPyIter');
+  if (ownPi < 0) or (hasPi < 0) or (takePi < 0) or (iterCi < 0) then
+    Error('Nil Python: `yield from` needs pylib (pyiter_own_v) in scope');
+  itSym := AllocVar(PyHiddenName('yfrom'), tyClass);
+  Syms[itSym].RecName := REC_UCLASS_BASE + iterCi;
+  argN := AllocNode(AN_ARG); ASTLeft[argN] := PyForceVariant(srcNode); ASTRight[argN] := -1;
+  callN := AllocNode(AN_CALL); ASTIVal[callN] := ownPi; ASTLeft[callN] := argN;
+  ASTTk[callN] := Ord(tyClass); ASTRight[callN] := REC_UCLASS_BASE + iterCi;
+  asg := AllocNode(AN_ASSIGN); ASTLeft[asg] := PyMakeIdent(itSym); ASTRight[asg] := callN;
+  argN := AllocNode(AN_ARG); ASTLeft[argN] := PyMakeIdent(itSym); ASTRight[argN] := -1;
+  cnd := AllocNode(AN_CALL); ASTIVal[cnd] := hasPi; ASTLeft[cnd] := argN; ASTTk[cnd] := Ord(tyBoolean);
+  argN := AllocNode(AN_ARG); ASTLeft[argN] := PyMakeIdent(itSym); ASTRight[argN] := -1;
+  takeN := AllocNode(AN_CALL); ASTIVal[takeN] := takePi; ASTLeft[takeN] := argN; ASTTk[takeN] := Ord(tyVariant);
+  yld := AllocNode(AN_YIELD); ASTLeft[yld] := takeN; ASTIVal[yld] := -1;
+  Result := AllocNode(AN_WHILE); ASTLeft[Result] := cnd; ASTRight[Result] := PySeqAppend(-1, yld);
+  Result := PySeqAppend(PySeqAppend(-1, asg), Result);
+end;
+
 function PyParseStatement: Integer;
 var chainN: Integer;   { targets in a chained assignment `a = b = v` }
     name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
@@ -35678,6 +35717,20 @@ begin
     if not CurProcIsStackless then
       Error('Nil Python: yield outside a function body');
     Next;
+    { `yield from E` -- delegation, as the loop it means for a consumer that
+      only iterates: `it = iter(E); while it has more: yield next(it)`. The
+      cursor is a hidden managed local, so a generator closed in the middle
+      releases it with its other locals. What a plain loop cannot express --
+      send() into the delegate, and the delegate's return value -- NilPy
+      generators do not have either. bug-n-yield-from-is-not-implemented }
+    if PyIsIdent('from') then
+    begin
+      Next;
+      PyParseBoolExpr;
+      Result := PyYieldFromLoop(CurASTNode);
+      CurGenSeenYield := True;
+      Exit;
+    end;
     { A bare `yield` yields None. }
     if CurTok.Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon] then
       node := PyMakeNone

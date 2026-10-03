@@ -1,0 +1,67 @@
+# A deque leaked its whole old buffer list on every Compact: once per deque on
+# its first appendleft, and again on each compaction after a run of popleft.
+# TPyDeque.Compact replaced FBuf with a raw field store and never released the
+# list it replaced.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG (an
+# over-release of the old buffer shows as a freed read). `leak N` / `keep N`
+# drive the census.
+import collections
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "P(%d)" % self.v
+
+
+def work(i):
+    d = collections.deque()
+    d.appendleft([i])
+    d.appendleft(P(i))
+    d.append(i)
+    for k in range(40):
+        d.appendleft(k)
+    for k in range(70):
+        d.append(P(k))
+    t = 0
+    while len(d) > 3:
+        x = d.popleft()
+        t += 1
+    return d, t
+
+
+def show():
+    d, t = work(1)
+    print(t, len(d), d[0], d[-1], list(d))
+    q = collections.deque([1, 2, 3])
+    q.appendleft(0)
+    d[1] = "x"
+    print(d[1], d[-2])
+    for x in d:
+        print(x)
+    print(len(d), bool(d), sorted([x for x in d if isinstance(x, P)], key=lambda p: -p.v))
+    d.append(1)
+    print(d.pop(), d.popleft(), len(d))
+    print(q.popleft(), q.pop(), list(q))
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        d, c = work(i)
+        t += c + len(d)
+        if keep is not None:
+            keep.append(d[0])
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

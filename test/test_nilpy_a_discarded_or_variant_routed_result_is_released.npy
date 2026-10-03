@@ -1,0 +1,122 @@
+# Four leak tickets, each found leaking one object (or more) per evaluation,
+# re-measured 2026-10-03 and found flat at HEAD with no fix of their own --
+# closed by the ownership work around them. This test is what keeps them
+# closed, one arm per ticket:
+#   - a discarded call result: a method returning self, a field, a fresh
+#     object, a fresh list, a fresh str
+#     (bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released)
+#   - a call result read only for truth: if / while / and / or / not
+#     (bug-n-a-call-result-discarded-in-a-boolean-context-is-never-released)
+#   - a slice or concat through a VARIANT receiver
+#     (bug-n-a-variant-call-result-that-returns-a-fresh-object-is-retained-by-the-caller)
+#   - eval() building a container
+#     (bug-n-pyeval-boxes-a-freshly-built-container-into-a-variant-and-retains-it)
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG (an
+# over-release shows as a freed read). `leak N` / `keep N` drive the census;
+# `keep` holds one fresh object per pass and must trip the bound.
+import re
+import sys
+
+
+class Q:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "Q(%d)" % self.v
+
+
+class H:
+    def __init__(self):
+        self.q = Q(1)
+
+    def num(self):
+        return 3
+
+    def me(self):
+        return self
+
+    def give(self):
+        return self.q
+
+    def fresh(self):
+        return Q(2)
+
+    def bump(self):
+        return H()
+
+
+def quad(i):
+    return [i, i + 1, [i]]
+
+
+def note(x):
+    return "n%s" % x
+
+
+def one_pass(i, v, keep):
+    t = 0
+    h = H()
+    h.num()
+    h.me()
+    h.give()
+    h.fresh()
+    h.bump()
+    h.bump().fresh()
+    quad(i)
+    note(12.3)
+    "a,b".split(",")
+    if re.match("b", "banana"):
+        t += 1
+    if "b,a".split(","):
+        t += 1
+    if re.findall("a", "banana"):
+        t += 1
+    while quad(i) and t < 0:
+        t += 1
+    if quad(i) or quad(i + 1):
+        t += 1
+    if not quad(i):
+        t += 1
+    t += len(quad(i)) if quad(i) else 0
+    t += len(v[0:2])
+    x = v[0:2]
+    x = None
+    y = v + [4]
+    t += len(y)
+    if v[1:]:
+        t += 1
+    t += len(eval("[1, 2, 3]")) + len(eval("{'a': 1}")) + len(eval("{1, 2}"))
+    t += len(eval("(1, 2)")) + len(eval("range(3)")) + len(eval("'ab'.encode()"))
+    if keep is not None:
+        keep.append(h.fresh())
+    return t
+
+
+def show():
+    v = [1, 2, 3]
+    if len(sys.argv) > 5:
+        v = None
+    print(one_pass(4, v, None))
+    h = H()
+    print(h.me() is h, h.give(), h.fresh(), quad(2), note(1), v[0:2], v + [4])
+    print(eval("[1, 2, 3]"), eval("{'a': 1}"), eval("(1, 2)"), eval("'ab'.encode()"))
+
+
+def passes(n, keep):
+    v = [1, 2, 3]
+    if n < 0:
+        v = None
+    t = 0
+    for i in range(n):
+        t += one_pass(i, v, keep)
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])
