@@ -801,6 +801,20 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_generators_variant_argument_cell_is_freed.npy $(TESTTMP)/test_nilpy_gencell26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_gencell26_i386 | diff -u test/test_nilpy_a_generators_variant_argument_cell_is_freed.expected -; \
 	else echo "=== test_nilpy_gencell: qemu-i386 absent, i386 NOT verified ==="; fi
+	# EXTEND TAKES ANY ITERABLE AND A RAISING DRAIN IS RELEASED: xs.extend(g()) was
+	# refused (pin v452) and, on a variant receiver, read a range as a list or
+	# segfaulted; the overload probe's trial parse made a second generator
+	# instance; list(g()) over a generator that raises dropped its partial list.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_extend_takes_any_iterable_and_a_raising_drain_is_released.npy $(TESTTMP)/test_nilpy_extiter_hd26
+	$(TESTTMP)/test_nilpy_extiter_hd26 | diff -u test/test_nilpy_extend_takes_any_iterable_and_a_raising_drain_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_extend_takes_any_iterable_and_a_raising_drain_is_released.npy $(TESTTMP)/test_nilpy_extiter26
+	tools/assert_no_leak.sh nilpy_extend_iter 300 $(TESTTMP)/test_nilpy_extiter26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_extend_iter_control 300 $(TESTTMP)/test_nilpy_extiter26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_extend_iter control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_extend_takes_any_iterable_and_a_raising_drain_is_released.npy $(TESTTMP)/test_nilpy_extiter26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_extiter26_i386 | diff -u test/test_nilpy_extend_takes_any_iterable_and_a_raising_drain_is_released.expected -; \
+	else echo "=== test_nilpy_extiter: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

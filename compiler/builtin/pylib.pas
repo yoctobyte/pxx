@@ -289,7 +289,10 @@ type
     { Python's `xs += ys` / xs.extend(ys): IN-PLACE, appending ys's elements.
       `+` on two lists would add the two class HANDLES
       (bug-a-nilpy-list-augmented-add-segfaults). }
-    function extend(other: TPyList): Variant;
+    function extend(other: TPyList): Variant; overload;
+    { ...and any other iterable -- a generator, range(), iter(..), a str,
+      a dict's keys: `xs.extend(g())` was "no overload of extend matches". }
+    function extend(const v: Variant): Variant; overload;
     procedure clear;
     { list.reverse() -- IN PLACE, unlike reversed()/[::-1] which both return a
       NEW sequence. Returns Self so the statement lowering can use it as a
@@ -6497,6 +6500,29 @@ begin
     dst := PPyVarRec(NativeInt(FItems) + FLen * 16);
     PyVarSlotSet(dst, src);
     FLen := FLen + 1;
+  end;
+end;
+
+function TPyList.extend(const v: Variant): Variant;
+var it: TPyIter; borrowed: Boolean;
+begin
+  Result := pynone;
+  { a list held in a variant takes the snapshot path above, so `xs.extend(xs)`
+    still terminates }
+  if (pyvartag(v) = 7) and (TObject(pyvarobj(v)) is TPyList) then
+  begin
+    Result := extend(TPyList(pyvarobj(v)));
+    Exit;
+  end;
+  { pyiter_v hands back an ITERATOR argument itself, borrowed, and builds a
+    fresh cursor for everything else }
+  borrowed := (pyvartag(v) = 7) and (TObject(pyvarobj(v)) is TPyIter);
+  it := pyiter_v(v);
+  try
+    while pyiter_has(it) do
+      append(pyiter_take(it));
+  finally
+    if not borrowed then PXXObjRelease(Pointer(it));
   end;
 end;
 
@@ -16438,11 +16464,22 @@ begin
 end;
 
 function pyiter_drain(it: TPyIter): TPyList;
+var r: TPyList; done: Boolean;
 begin
-  Result := TPyList.Create;
+  r := TPyList.Create;
+  pyiter_drain := r;
   if it = nil then Exit;
-  while pyiter_has(it) do
-    Result.append(pyiter_take(it));
+  { A generator that RAISES mid-drain -- `list(g())` where g raises after its
+    first yield -- unwound past this frame with the partial list and every
+    element in it unowned: two objects per call under a caller's `except`. }
+  done := False;
+  try
+    while pyiter_has(it) do
+      r.append(pyiter_take(it));
+    done := True;
+  finally
+    if not done then PXXObjRelease(Pointer(r));
+  end;
 end;
 
 function pystar_as_list(const v: Variant): TPyList;

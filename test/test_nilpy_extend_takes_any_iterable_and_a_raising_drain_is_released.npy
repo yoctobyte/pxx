@@ -1,0 +1,91 @@
+# Two things about consuming an iterable.
+#
+# xs.extend(<not a list>) -- a generator, range(), iter(..), a str, a dict --
+# was "no overload of extend matches" on a typed list, and on a VARIANT
+# receiver (a list first bound inside a block) it bound extend(TPyList)
+# anyway and read the argument as a list: nothing appended for a range,
+# a segfault for a generator. The overload scorer now refuses a known class
+# that is not the parameter's, and a scalar passed to a class parameter.
+#
+# list(g()) / tuple / sorted over a generator that RAISES part-way dropped
+# the partially built list and every element in it.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG.
+# `leak N` / `keep N` drive the census.
+import sys
+
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+    def __repr__(self):
+        return "P(%d)" % self.v
+
+
+def g(n):
+    for i in range(n):
+        yield [i]
+
+
+def gerr(n):
+    for i in range(n):
+        if i == 1:
+            raise ValueError("stop")
+        yield P(i)
+
+
+def show():
+    xs = [0]
+    xs.extend(g(2))
+    xs.extend(range(2))
+    xs.extend(iter([P(5)]))
+    xs.extend("ab")
+    xs.extend({"k": 1})
+    xs.extend((7, 8))
+    gg = g(3)
+    xs.extend(gg)
+    print(xs, list(gg))
+    for k in range(2):
+        ys = [9]
+        ys.extend(range(2))
+        ys.extend(g(1))
+        ys.extend("c")
+        ys.extend(ys)
+        print(ys)
+    try:
+        print(list(gerr(3)))
+    except ValueError as e:
+        print("caught", e)
+    try:
+        print(tuple(gerr(3)))
+    except ValueError as e:
+        print("caught", e)
+    try:
+        print(sorted(gerr(3), key=lambda q: q.v))
+    except ValueError as e:
+        print("caught", e)
+
+
+def passes(n, keep):
+    t = 0
+    for k in range(n):
+        ys = [k]
+        ys.extend(g(2))
+        ys.extend(range(2))
+        t += len(ys)
+        try:
+            t += len(list(gerr(3)))
+        except ValueError:
+            t += 1
+        if keep is not None:
+            keep.append(P(k))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

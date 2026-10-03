@@ -4007,6 +4007,7 @@ var
   bmask: LongWord;
   ok, okBr, okVR, okSet, vetoed, okAny: Boolean;
   lo, name2: AnsiString;
+  probeHoist: Integer;   { the NilPy hoist queue, parked across the probe }
 begin
   Result := -1;
   varNote := '';
@@ -4281,6 +4282,12 @@ begin
   nArgs := 0;
   for i := 0 to MAX_PROC_PARAMS - 1 do argIsNil[i] := False;
   for i := 0 to MAX_PROC_PARAMS - 1 do argKwTok[i] := -1;
+  { The probe is a TRIAL parse, so it must not leave statements behind: a NilPy
+    argument can hoist setup (a generator value allocates and seeds its
+    instance, a list literal is built by statements), and those were queued
+    once by the probe and again by the real parse -- `ys.extend(g(2))` made two
+    generator instances and leaked the first. Parked here, dropped after. }
+  if isNilPy then probeHoist := PyHoistPark;
   if (lp >= 0) and (nExplicitArgs > 0) then
   begin
     TokPos := lp + 1;
@@ -4337,6 +4344,7 @@ begin
   end;
   TokPos := savedCurIdx;
   Next;
+  if isNilPy then PyHoistRestore(probeHoist);
 
   if nArgs <> nExplicitArgs then
   begin

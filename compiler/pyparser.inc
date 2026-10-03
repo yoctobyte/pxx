@@ -19804,9 +19804,24 @@ begin
       begin
         argRec := ResolveNodeRec(ASTLeft[an]);
         parRec := ProcParamRecId[pIdx * MAX_PROC_PARAMS + j];
-        if (argRec >= REC_UCLASS_BASE) and (argRec = parRec) then Inc(Result, 2);
+        if (argRec >= REC_UCLASS_BASE) and (argRec = parRec) then Inc(Result, 2)
+        { ...and a KNOWN class that is neither the parameter's nor derived
+          from it does not fit at all: the call would hand it over unchecked.
+          `ys.extend(range(2))` on a variant receiver took extend(TPyList)
+          over extend(const Variant) on the kind point alone, read the range
+          as a list and appended nothing (a cursor argument segfaulted). }
+        else if (tk = Ord(tyClass)) and (argRec >= REC_UCLASS_BASE) and
+                (parRec >= REC_UCLASS_BASE) and
+                not IsSubclassOf(argRec - REC_UCLASS_BASE, parRec - REC_UCLASS_BASE) then
+          Dec(Result, 2);
       end;
-    end;
+    end
+    { A CLASS parameter handed a scalar -- a str, an int -- is the same
+      unchecked reinterpretation; a sibling that takes it (a Variant) wins. }
+    else if (Procs[pIdx].Params[j].TypeKind = tyClass) and
+            (tk <> Ord(tyClass)) and (tk <> Ord(tyVariant)) and
+            (tk <> Ord(tyPointer)) and (tk <> Ord(tyUnknown)) then
+      Dec(Result);
     an := ASTRight[an];
     Inc(j);
   end;

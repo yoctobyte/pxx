@@ -5161,8 +5161,12 @@ begin
           else res := li.pop(pyvar_to_int(args.at(0)));
         end
         else if mname = 'clear' then begin li.clear; res := MakeNone; end
+        { any iterable, as the static call takes it (TPyList.extend's Variant
+          overload): an unchecked TPyList cast read a range or a cursor as a
+          list -- `ys.extend(range(2))` on a variant receiver appended nothing,
+          and a generator argument segfaulted }
         else if mname = 'extend' then
-          begin li.extend(TPyList(pyvarobj(args.at(0)))); res := MakeNone; end
+          begin li.extend(args.at(0)); res := MakeNone; end
         else
           EvalError('list method not supported: ' + mname);
         Exit;
