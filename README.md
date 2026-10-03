@@ -20,8 +20,9 @@ direction is a multi-language native compiler sharing one IR and backend.
 
 ## Looking for sponsors
 
-**Active development is paused after the first beta, `0.1` "Blaise"
-(September 2026). We are looking for sponsors to continue it.** What exists
+**Development is ongoing.** The first beta, `0.1` "Blaise", is
+[published](https://github.com/yoctobyte/pxx/releases/tag/v0.1.0-beta.1); work continues on master. We are looking for sponsors to
+help sustain it. What exists
 today: a self-hosting Pascal compiler, mostly on par with Free Pascal's
 dialect, for the common Linux CPU targets and the ESP32, with C and Nil Python
 frontends alongside. What continued development would bring: memory-leak

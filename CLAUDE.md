@@ -2,7 +2,7 @@
 
 **Start with `AGENTS.md`** at the repository root. It covers what PXX is, how to
 build it from nothing, how to test it, how to check for memory leaks, the ESP32
-tooling, where things are, and the known issues at beta 0.1 "Blaise" (pin v441).
+tooling, where things are, and the known issues at beta 0.1 "Blaise" (pin v452).
 
 Active development paused after that beta (September 2026), and the project
 is looking for sponsors (see `README.md`). Nobody watches this repository day

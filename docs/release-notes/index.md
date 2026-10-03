@@ -1,18 +1,17 @@
 ---
-title: Beta 0.1 release notes (draft)
+title: Beta 0.1 release notes
 order: 95
 ---
 
-# Beta 0.1 release notes — draft
+# Beta 0.1 release notes
 
-> **Draft. The release has not been tagged or published yet.** Beta 0.1
-> "Blaise" is pin v441. Where it will be published and whether it ships as
-> source, as binaries or both are not decided yet, so nothing below assumes
-> either. Until then, the way to get PXX is a clone of the repository; see
-> [Install](../install/index.md).
+> Beta 0.1 "Blaise" is pin v452, published as
+> [v0.1.0-beta.1 on GitHub](https://github.com/yoctobyte/pxx/releases/tag/v0.1.0-beta.1) (source and
+> prebuilt binaries in one tarball). **Development is ongoing**: the
+> repository's master branch has moved on since this snapshot.
 
-This page describes **pin v441**: commit `5c1696ca79`, compiler binary sha256
-`4ebfa2d047a2…`. That is the compiler `./pxx` runs in a checkout of that
+This page describes **pin v452**: commit `53dbb01c15`, compiler binary sha256
+`7ff6198e28a1…`. That is the compiler `./pxx` runs in a checkout of that
 commit. Figures were measured with v441 on an x86-64 Linux host on 2026-09-26
 and 2026-09-27, unless a figure names another compiler; figures kept from
 the draft pin v425 (commit `4fbf33f69`, sha256 `426b2fbf3f08…`) or an

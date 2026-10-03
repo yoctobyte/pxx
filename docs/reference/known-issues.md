@@ -5,8 +5,8 @@ order: 94
 
 # Known issues in beta 0.1 "Blaise"
 
-These are the problems we know about in the beta 0.1 compiler, **pin v441**
-(commit `5c1696ca79`, compiler sha256 `4ebfa2d047a2…`). Each row says which
+These are the problems we know about in the beta 0.1 compiler, **pin v452**
+(commit `53dbb01c15`, compiler sha256 `7ff6198e28a1…`). Each row says which
 compiler it was measured with. Rows measured on the earlier draft pin v425 say
 so; nothing in this release is known to have changed them.
 
