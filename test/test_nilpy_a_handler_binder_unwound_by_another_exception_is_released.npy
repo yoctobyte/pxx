@@ -1,0 +1,123 @@
+# An `except V as e:` handler whose body is left by a DIFFERENT exception --
+# a callee raises, or the handler raises something new -- leaked the object
+# bound to `e`, ~3.6 blocks per trip: the frame's landing pad skips every
+# binder, because on a RE-RAISE the binder holds the object still in flight
+# and releasing it there is a use-after-free. The handler body now has its own
+# unwind arm that asks the runtime which case it is: release `e` only when the
+# object in flight is not the one it holds.
+#
+# The HEAP_DEBUG run is the half that matters most: every re-raise spelling
+# (bare `raise`, `raise e`, raising it from a callee, rebinding `e` first, and
+# a `return` out of the handler) must still deliver an intact object to the
+# outer handler. `leak N` / `keep N` drive the census.
+import sys
+
+
+class MyErr(Exception):
+    def __init__(self, k):
+        super().__init__("my" + str(k))
+        self.k = k
+
+
+def boom(k):
+    raise KeyError("k" + str(k))
+
+
+def other(k):
+    try:
+        raise ValueError("old" + str(k))
+    except ValueError as e:
+        boom(k)
+
+
+def raises_new(k):
+    try:
+        raise ValueError("old" + str(k))
+    except ValueError as e:
+        raise MyErr(k)
+
+
+def bare(k):
+    try:
+        raise ValueError("bare" + str(k))
+    except ValueError as e:
+        raise
+
+
+def named(k):
+    try:
+        raise ValueError("named" + str(k))
+    except ValueError as e:
+        raise e
+
+
+def via(e):
+    raise e
+
+
+def through_callee(k):
+    try:
+        raise MyErr(k)
+    except MyErr as e:
+        via(e)
+
+
+def rebound(k):
+    try:
+        raise ValueError("r" + str(k))
+    except ValueError as e:
+        e = MyErr(k + 100)
+        raise e
+
+
+def returns(k):
+    for i in range(3):
+        try:
+            raise ValueError("x" + str(i))
+        except ValueError as e:
+            if i == 1:
+                return str(e) + "/" + str(k)
+    return "none"
+
+
+SHAPES = (other, raises_new, bare, named, through_callee, rebound)
+
+
+def one(f, k):
+    try:
+        f(k)
+    except KeyError as e:
+        return "K" + str(e)
+    except MyErr as e:
+        return "M" + str(e.k) + ":" + str(e)
+    except ValueError as e:
+        return "V" + str(e)
+    return "-"
+
+
+def show():
+    for f in SHAPES:
+        print(one(f, 7))
+    print(returns(7))
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        for f in SHAPES:
+            t += len(one(f, i))
+        t += len(returns(i))
+        if keep is not None:
+            try:
+                raise MyErr(i)
+            except MyErr as e:
+                keep.append(e)
+    print(t)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

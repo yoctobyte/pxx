@@ -754,6 +754,19 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.npy $(TESTTMP)/test_nilpy_cellfree26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_cellfree26_i386 | diff -u test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.expected -; \
 	else echo "=== test_nilpy_cellfree: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A HANDLER BINDER UNWOUND BY ANOTHER EXCEPTION IS RELEASED: `except V as e:`
+	# left by a different exception leaked e's object (pin v452: 36313 live after
+	# 5000 passes); every re-raise spelling must still deliver an intact object.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.npy $(TESTTMP)/test_nilpy_binderunw_hd26
+	$(TESTTMP)/test_nilpy_binderunw_hd26 | diff -u test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.npy $(TESTTMP)/test_nilpy_binderunw26
+	tools/assert_no_leak.sh nilpy_binder_unwound 300 $(TESTTMP)/test_nilpy_binderunw26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_binder_unwound_control 300 $(TESTTMP)/test_nilpy_binderunw26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_binder_unwound control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.npy $(TESTTMP)/test_nilpy_binderunw26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_binderunw26_i386 | diff -u test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.expected -; \
+	else echo "=== test_nilpy_binderunw: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

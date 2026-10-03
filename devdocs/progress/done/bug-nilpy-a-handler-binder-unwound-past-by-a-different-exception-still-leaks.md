@@ -168,3 +168,28 @@ before and 585 after**, byte-identical, because for a bound `except V as e:`
 handler `excOwnTmp` is never allocated and no pad is emitted at all. So this row
 is untouched and still open; what changed is that its blocking premise is now
 known to be false.
+
+## Fixed 2026-10-03 -- Option A, in the IR, once
+
+The runtime identity test, but not in the seven landing-pad copies: the bound
+handler BODY gets its own unwind region, the same one the Pascal and the bare
+NilPy handler already have (IR_EXC_ENTER / EXC_LEAVE on both exits, a re-raise
+at the end of the unwind arm). Its unwind arm re-reads what is in flight and
+releases the binder only when it is a different object, then nils the slot
+with a raw store, so the module body's pre-try release cannot drop it a second
+time (IREmitBinderUnwindRelease, ir.inc). The region is registered with no
+owner temp, so `return` / `break` out of the handler leave the binder to its
+own scope exit as before. SymSkipScopeExitRelease arm 2 stays: the frame's pad
+still must not release a binder, and now it never needs to.
+
+Being IR, it covers every backend that lowers try/except through IR_EXC_*
+without touching any of them; the wasm32 blocker named above was about adding
+an eighth emitter copy, which this does not do.
+
+Measured: the repro above, 2000 -> 8000 trips, 7536 -> 29435 live before,
+8 -> 7 after. Regression test
+test/test_nilpy_a_handler_binder_unwound_by_another_exception_is_released.npy:
+pin v452 36313 live after 5000 passes, now 33; under HEAP_DEBUG every re-raise
+spelling (bare `raise`, `raise e`, raised by a callee, `e` rebound then raised,
+`return` out of the handler) delivers an intact object, identical to CPython,
+and the same on i386, aarch64, arm32 and riscv32.

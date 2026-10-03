@@ -1283,6 +1283,51 @@ begin
   end;
 end;
 
+{ The NilPy `except V as e:` twin of IREmitCaughtExcFree's unwind arm. A bound
+  handler has no parked owner temp -- the BINDER local is the owner, and its
+  scope exit is the drop on the normal path -- so when the handler body is
+  left through the exception path nothing released it: the frame's landing pad
+  skips every binder (SymSkipScopeExitRelease arm 2), because on a re-raise the
+  binder holds the object still IN FLIGHT. 3.6 blocks per trip, the object
+  plus what it owns.
+
+  The pad cannot tell the two apart statically, and does not need to: the same
+  runtime identity test the Pascal arm uses does it exactly. Re-read what is in
+  flight NOW; a `raise Other(..)` or a callee's raise overwrote it, a bare
+  `raise` / `raise e` did not. Release only when they differ, and NIL the slot
+  afterwards with a raw store, so neither the frame's pad (which skips it
+  anyway) nor the module body's pre-try release (which does not) can drop it a
+  second time.
+  bug-nilpy-a-handler-binder-unwound-past-by-a-different-exception-still-leaks }
+procedure IREmitBinderUnwindRelease(binderSym: Integer);
+var skipLabel, curTmp, relPi, last: Integer;
+begin
+  if binderSym < 0 then Exit;
+  relPi := FindProc('PXXObjFree');
+  if relPi < 0 then Exit;
+  skipLabel := IRNewLabel;
+  curTmp := AllocVar('', tyPointer);
+  last := IRAppend(IR_EXC_STORE, curTmp, -1, -1, 0, 0);
+  last := IRAppend(IR_JUMP_IF_FALSE, skipLabel,
+            IRAppend(IR_BINOP,
+              IRAppend(IR_LOAD_SYM, curTmp, -1, -1, 0, Ord(tyPointer)),
+              IRAppend(IR_LOAD_SYM, binderSym, -1, -1, 0, Ord(tyPointer)),
+              Ord(tkNeq), 0, Ord(tyBoolean)),
+            -1, 0, 0);
+  last := IRAppendCall(relPi,
+            IRAppend(IR_ARG,
+              IRAppend(IR_LOAD_SYM, binderSym, -1, -1, 0, Ord(tyPointer)),
+              -1, -1, 0, Ord(tyPointer)),
+            -1, Ord(tyUnknown));
+  IRIVal[last] := 1;   { statement: emit for effect }
+  IRMarkStatementNode(last);
+  last := IRAppend(IR_STORE_SYM, binderSym,
+            IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+            -1, 0, Ord(tyPointer));
+  IRMarkStatementNode(last);
+  last := IRAppend(IR_LABEL, -1, -1, -1, skipLabel, 0);
+end;
+
 { Run the finally bodies between here and targetDepth -- the path an `exit`,
   `break` or `continue` takes OUT of one or more try/finally blocks.
 
@@ -10801,6 +10846,7 @@ var foaSym, foaSave: Integer;
     excObjSym, excMatched, excSkipLabel, excOwnTmp, excReleaseProc: Integer;
     excUnwindLabel: Integer;   { the handler BODY's own unwind pad -- see IREmitCaughtExcFree }
     excClsTmp: Integer;
+    excBinderSym: Integer;   { a NilPy `as e:` handler's binder -- IREmitBinderUnwindRelease }
     excRelProc, excRelArg, excRelCall: Integer;
     eaSym: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
@@ -19332,7 +19378,10 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           1000 trips, the object plus its message string.
           bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object }
         excUnwindLabel := -1;
-        if excOwnTmp >= 0 then
+        excBinderSym := -1;
+        if NilPyUserCode and (excOwnTmp < 0) and (ASTSOffset[handlerNode] >= 0) then
+          excBinderSym := ASTSOffset[handlerNode];
+        if (excOwnTmp >= 0) or (excBinderSym >= 0) then
         begin
           excUnwindLabel := IRNewLabel;
           last := IRAppend(IR_EXC_ENTER, excUnwindLabel, -1, -1, ExceptionCodegenDepth, 0);
@@ -19347,7 +19396,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         last := IRDropManagedResult(ASTLeft[handlerNode], IRLowerAST(ASTLeft[handlerNode]));
         IRMarkStatementNode(last);
         IRFlushPostCallIntf(pcBase);
-        if excOwnTmp >= 0 then
+        if (excOwnTmp >= 0) or (excBinderSym >= 0) then
         begin
           Dec(ExceptionCodegenDepth);
           last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
@@ -19355,13 +19404,16 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         IREmitCaughtExcFree(excOwnTmp, excClsTmp, False);
         last := IRAppend(IR_EXC_CLEAR, -1, -1, -1, 0, 0);
         last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
-        if excOwnTmp >= 0 then
+        if (excOwnTmp >= 0) or (excBinderSym >= 0) then
         begin
           { The handler body left through the exception path. NO EXC_CLEAR on
             this arm: an exception is in flight and the slots belong to it. }
           last := IRAppend(IR_LABEL, -1, -1, -1, excUnwindLabel, 0);
           last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
-          IREmitCaughtExcFree(excOwnTmp, excClsTmp, True);
+          if excOwnTmp >= 0 then
+            IREmitCaughtExcFree(excOwnTmp, excClsTmp, True)
+          else
+            IREmitBinderUnwindRelease(excBinderSym);
           last := IRAppend(IR_RAISE, -1, -1, -1, REC_NONE, 0);
         end;
         if handlerNextLabel >= 0 then
