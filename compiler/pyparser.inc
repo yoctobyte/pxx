@@ -30374,7 +30374,8 @@ end;
 
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
                        forTokIdx: Integer): Integer;
-var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, nSym: Integer;
+var ownTail: Integer;   { the value of a fold in the for header }
+    contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, nSym: Integer;
     enumStartNode, enumStartSym: Integer;   { `enumerate(xs, START)` }
     sym2, vSym, vListNode, itemsDot: Integer;   { two-name target: `for k, v in d.items()` }
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
@@ -30707,7 +30708,19 @@ begin
       { A FRESH instance (`for x in Cls(...)`) is the loop's to release, and
         the loop holds only the cursor -- the _owned entry drops the
         construction's reference once the cursor has taken its own. }
-      if PyCallYieldsOwnedObj(contNode) then
+      { ...but ONLY a construction. An owned CALL result -- `for x in mk(k)`,
+        `for row in db.execute(..)`, `for x in r.again()` -- is already spilled
+        to an owning temp by IRLowerCallArg (an object-returning proc call is
+        spilled even at position 0), so the _owned entry released it a SECOND
+        time: "RELEASE of a FREED object" once per loop under HEAP_DEBUG, and
+        under --threadsafe a sqlite loader thread corrupting the main thread's
+        objects (lekkerzeilen, 4 crashes in 8 runs). A construction is the one
+        owned value that spill leaves alone at position 0 (the receiver
+        guard). Read through a fold: its value is its last element. }
+      ownTail := contNode;
+      while (ownTail >= 0) and (ASTKind[ownTail] = AN_COMMA) do ownTail := ASTRight[ownTail];
+      if PyCallYieldsOwnedObj(contNode) and (ownTail >= 0) and
+         (ASTKind[ownTail] = AN_CALL) and (Integer(ASTIVal[ownTail]) = -Ord(tkGetMem)) then
         contNode := PyCallProc1('pyiter_of_userobj_owned', contNode)
       else
         contNode := PyCallProc1('pyiter_of_userobj', contNode);

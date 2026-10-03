@@ -285,3 +285,42 @@ fix, and `--starts` matches CPython.
 
 Next step for whoever has the screen: re-run the RSS slope on the real
 world at HEAD; the 11.5 kB/s residual is from 09-15.
+
+## 2026-10-03 (later, frankuser) -- the DEMO, headless, at HEAD: the sim path is flat; it crashed until today
+
+Measured on the demo itself this time, not an extraction: Xvfb (never the
+owner's display), HOME pointed at a scratch dir so no session file was read or
+written, `--region rijn --shot <png> --for T --quiet`, built with
+-dPXX_ALLOC_CENSUS. `--shot` steps env/boat/traffic/water/camera/wake/frames/
+weather at a fixed rate and renders once at the end, so it measures the
+simulation path the render-path section above left open. Instrument: census
+`live=` at exit, T=20 against T=120 simulated seconds. CPython reference on the
+same command: 82006 against 82038 pymalloc blocks, flat.
+
+FIRST FINDING, AND IT IS NOT A LEAK: the compiled demo CRASHED in about half
+its runs (IndexError, "object is not subscriptable", `_admit_foliage()` called
+with garbage arguments). Bisected in a scratch copy to the tile loader thread's
+`for row in db.execute(..)`: a for loop over a fresh call result released the
+result twice, and the loader thread's double release landed on a block the
+main thread had already been handed again. Fixed in the compiler --
+done/bug-n-a-for-loop-over-a-fresh-call-result-is-released-twice. The
+unmodified demo built at the fix: 8 clean runs of 8.
+
+THE SLOPE, at the fix, both runs per row:
+
+| arm | T=20 live | T=120 live |
+| --- | --- | --- |
+| loader thread on, gauges thread off | 731642 / 833114 | 833413 / 833488 |
+| tiles loaded synchronously, gauges off, compiler BEFORE the fix | 1148669 | 1148993 |
+| same, compiler AFTER the fix | 1148669 | 1148993 |
+
+About 3 objects per simulated second, against the ~920 per second the
+pre-fix threaded runs with the gauges thread on showed (1146675 -> 1238809).
+T=20 varies with how many tiles the loader got through before settle()
+returned; T=120 is past that.
+
+So, at HEAD: neither the render path (above) nor the simulation path leaks.
+NOT measured: the gauges thread (it fetches water levels over the network
+every period, and was switched off in the scratch copy for exactly that
+reason) and a real interactive session. If the demo still grows on the owner's
+screen, those two are what is left.

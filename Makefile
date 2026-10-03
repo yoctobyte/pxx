@@ -754,6 +754,27 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released.npy $(TESTTMP)/test_nilpy_callinst26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_callinst26_i386 | diff -u test/test_nilpy_a_called_instance_and_a_folded_dunder_result_are_released.expected -; \
 	else echo "=== test_nilpy_callinst: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A FOR LOOP OVER A FRESH CALL RESULT RELEASES IT ONCE: `for x in mk(k)`,
+	# `for x in r.again()`, `[x for x in mk(k)]` took the _owned cursor entry AND
+	# the IR's owning spill -- two releases. b2bf8a845f: "RELEASE of a FREED
+	# object" 21 times in the no-argument run.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_for_loop_over_a_fresh_call_result_releases_it_once.npy $(TESTTMP)/test_nilpy_forfresh_hd26
+	$(TESTTMP)/test_nilpy_forfresh_hd26 | diff -u test/test_nilpy_a_for_loop_over_a_fresh_call_result_releases_it_once.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_for_loop_over_a_fresh_call_result_releases_it_once.npy $(TESTTMP)/test_nilpy_forfresh26
+	tools/assert_no_leak.sh nilpy_for_fresh 300 $(TESTTMP)/test_nilpy_forfresh26 leak 3000
+	@if tools/assert_no_leak.sh nilpy_for_fresh_control 300 $(TESTTMP)/test_nilpy_forfresh26 keep 3000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_for_fresh control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_for_loop_over_a_fresh_call_result_releases_it_once.npy $(TESTTMP)/test_nilpy_forfresh26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_forfresh26_i386 | diff -u test/test_nilpy_a_for_loop_over_a_fresh_call_result_releases_it_once.expected -; \
+	else echo "=== test_nilpy_forfresh: qemu-i386 absent, i386 NOT verified ==="; fi
+	# ...AND ITS THREAD-SIDE TWIN: a sqlite loader thread walking a fresh cursor
+	# (lekkerzeilen's tile loader) -- b2bf8a845f failed 10 runs of 10. Three
+	# runs, then once under -dPXX_HEAP_DEBUG.
+	./$(COMPILER) --threadsafe test/test_nilpy_a_cursor_loop_in_a_thread_releases_each_row_cursor_once.npy $(TESTTMP)/test_nilpy_curthr26
+	for i in 1 2 3; do $(TESTTMP)/test_nilpy_curthr26 $(TESTTMP)/test_nilpy_curthr26.db | diff -u test/test_nilpy_a_cursor_loop_in_a_thread_releases_each_row_cursor_once.expected - || exit 1; done
+	./$(COMPILER) --threadsafe -dPXX_HEAP_DEBUG test/test_nilpy_a_cursor_loop_in_a_thread_releases_each_row_cursor_once.npy $(TESTTMP)/test_nilpy_curthr_hd26
+	$(TESTTMP)/test_nilpy_curthr_hd26 $(TESTTMP)/test_nilpy_curthr_hd26.db | diff -u test/test_nilpy_a_cursor_loop_in_a_thread_releases_each_row_cursor_once.expected -
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame

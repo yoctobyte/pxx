@@ -1,0 +1,85 @@
+# `for x in <a fresh CALL result>` released the result TWICE: the loop took
+# pylib's _owned cursor entry, which drops the reference, and IRLowerCallArg
+# had already spilled the same object-returning call to an owning temp that
+# drops it again at scope exit. Only a construction (`for x in Rows(k)`) was
+# right -- the spill leaves a construction alone in position 0. Under
+# -dPXX_HEAP_DEBUG: "RELEASE of a FREED object" once per loop; under
+# --threadsafe, a second thread then corrupted the first's objects
+# (lekkerzeilen's sqlite tile loader, 4 crashes in 8 runs).
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG. `leak N`
+# / `keep N` drive the census.
+import sys
+
+
+class Rows:
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+        self.tag = [n]
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.i >= self.n:
+            raise StopIteration
+        self.i += 1
+        return self.i
+
+    def again(self):
+        return Rows(self.n + 1)
+
+    def __add__(self, k):
+        return Rows(self.n + k)
+
+
+class Seq:
+    def __init__(self, n):
+        self.n = n
+
+    def __getitem__(self, i):
+        if i >= self.n:
+            raise IndexError
+        return i * 2
+
+
+def mk(n):
+    return Rows(n)
+
+
+def f(k):
+    t = 0
+    for x in Rows(k):
+        t += x
+    for x in mk(k):
+        t += x
+    r = Rows(1)
+    for x in r.again():
+        t += x
+    for x in mk(k).again():
+        t += x
+    for x in Seq(k):
+        t += x
+    for x in Rows(k) + 1:
+        t += x
+    t += sum([x for x in mk(k)]) + sum(x for x in r.again())
+    t += len([x for x in Rows(k) + 2])
+    return t
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += f(i % 5)
+        if keep is not None:
+            keep.append(mk(i))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    print(f(3), f(4), f(0))
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

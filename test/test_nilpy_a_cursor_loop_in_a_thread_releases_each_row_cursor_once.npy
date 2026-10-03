@@ -1,0 +1,90 @@
+# The thread-side twin of
+# test_nilpy_a_for_loop_over_a_fresh_call_result_releases_it_once: a loader
+# thread that walks `for row in db.execute(..)` inside a def -- lekkerzeilen's
+# tile loader -- double-released each cursor, and with a second thread
+# allocating meanwhile the freed block was handed out again before the second
+# release landed. Before the fix 12 runs of 12 failed: SIGSEGV, IndexError, or
+# "too many values to unpack (expected 2, got 6)" -- the main thread unpacking
+# one of the loader's rows. Build with --threadsafe.
+#
+# argv[1]: a scratch database path (created here).
+import os
+import queue
+import sqlite3
+import sys
+import threading
+import time
+
+PATH = sys.argv[1] if len(sys.argv) > 1 else "cursor_thread.db"
+orders = queue.Queue()
+ready = queue.Queue(maxsize=2)
+
+
+def build():
+    if os.path.exists(PATH):
+        os.remove(PATH)
+    db = sqlite3.connect(PATH)
+    db.execute("CREATE TABLE meshes (name, kind, stride, vertices)")
+    db.execute("CREATE TABLE instances (kind, x, y, z, rot, scale)")
+    for i in range(4):
+        db.execute("INSERT INTO meshes VALUES (?, ?, ?, ?)",
+                   ("m%d" % i, "k", 6, bytes(20000 + i)))
+    for j in range(1500):
+        db.execute("INSERT INTO instances VALUES (?, ?, ?, ?, ?, ?)",
+                   ("oak" if j % 2 else "elm", j * 1.0, 2.0, 3.0, 0.1, 1.0))
+    db.commit()
+    db.close()
+
+
+def load(key):
+    buffers = {}
+    instances = {}
+    db = sqlite3.connect(PATH)
+    try:
+        for name, kind, stride, verts in db.execute(
+                "SELECT name, kind, stride, vertices FROM meshes"):
+            buffers[name] = (kind, stride, verts)
+        for kind, x, y, z, rot, scale in db.execute(
+                "SELECT kind, x, y, z, rot, scale FROM instances"):
+            instances.setdefault(kind, []).append((x, y, z, rot, scale))
+    finally:
+        db.close()
+    return buffers, instances
+
+
+def loader():
+    while True:
+        key = orders.get()
+        if key is None:
+            return
+        ready.put((key, load(key)))
+
+
+def churn(k):
+    out = []
+    for i in range(200):
+        f = lambda a, b, n=i: (a, b, n, [n] * 3)
+        out.append(f(k, "x%d" % i))
+    return len(out) + out[-1][2]
+
+
+build()
+N = 60
+t = threading.Thread(target=loader, daemon=True)
+t.start()
+for k in range(N):
+    orders.put(k)
+total = 0
+got = 0
+while got < N:
+    try:
+        key, (bufs, inst) = ready.get_nowait()
+        got += 1
+        total += len(bufs["m3"][2]) + len(inst["oak"]) + len(inst["elm"])
+    except queue.Empty:
+        churn(got)
+        time.sleep(0.001)
+orders.put(None)
+t.join()
+os.remove(PATH)
+print("loaded", got, "total", total)
