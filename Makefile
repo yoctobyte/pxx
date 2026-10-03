@@ -839,6 +839,23 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_an_operator_on_a_class_parameter_types_the_callees_parameter.npy $(TESTTMP)/test_nilpy_opparam26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_opparam26_i386 | diff -u test/test_nilpy_an_operator_on_a_class_parameter_types_the_callees_parameter.expected -; \
 	else echo "=== test_nilpy_opparam: qemu-i386 absent, i386 NOT verified ==="; fi
+	# ITERTOOLS through the plain-Python shim lib/rtl/mimic_itertools.py. At pin
+	# v452 `import itertools` bound nothing but `count`.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_mimic_itertools.npy $(TESTTMP)/test_nilpy_itools_hd26
+	$(TESTTMP)/test_nilpy_itools_hd26 | diff -u test/test_nilpy_mimic_itertools.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_mimic_itertools.npy $(TESTTMP)/test_nilpy_itools26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_itools26_i386 | diff -u test/test_nilpy_mimic_itertools.expected -; \
+	else echo "=== test_nilpy_itools: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A GENERATOR OUTLIVES ITS CALLER AND ITS ARGUMENTS: an infinite generator
+	# through a parameter hung, a def returning one answered False, and a list
+	# or str argument was freed under it, at pin v452.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generator_outlives_its_caller_and_its_arguments.npy $(TESTTMP)/test_nilpy_genout_hd26
+	$(TESTTMP)/test_nilpy_genout_hd26 | diff -u test/test_nilpy_a_generator_outlives_its_caller_and_its_arguments.expected -
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_generator_outlives_its_caller_and_its_arguments.npy $(TESTTMP)/test_nilpy_genout26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_genout26_i386 | diff -u test/test_nilpy_a_generator_outlives_its_caller_and_its_arguments.expected -; \
+	else echo "=== test_nilpy_genout: qemu-i386 absent, i386 NOT verified ==="; fi
 	# YIELD FROM delegates: a generator, a list, a str, a range, nested, and a
 	# delegation abandoned by break or by dropping a stepped generator. A parse
 	# error at pin v452.

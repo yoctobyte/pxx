@@ -218,6 +218,9 @@ var
     attempt at this did, and test_nilpy_fallback_import_try_wins caught it. }
   PyAliasNameId: array[0..255] of Integer;
   PyAliasNameUnit: array[0..255] of Integer;
+  { ...and, when the alias names a stackless GENERATOR, that proc (else -1):
+    see PyImportAliasGenProc. }
+  PyAliasNameGen: array[0..255] of Integer;
   PyAliasNameCount: Integer;
   PyTypingChanged: Boolean;
   PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
@@ -1063,6 +1066,26 @@ begin
     if (PyAliasNameId[i] = ni) and (PyAliasNameUnit[i] = CurrentUnitIdx) then
     begin
       Result := True;
+      Exit;
+    end;
+end;
+
+{ The GENERATOR an import alias names in the unit being parsed, or -1.
+  `from itertools import count as _count` binds `_count = count`, a variable
+  holding the function's address -- and a generator's proc is its STEP
+  routine, so `_count(1)` called the step with the user's argument as its
+  instance and segfaulted. The bare-name generator arm asks this before it
+  gives up on a name the program binds. }
+function PyImportAliasGenProc(const nm: AnsiString): Integer;
+var i, ni: Integer;
+begin
+  Result := -1;
+  if (nm = '') or (PyAliasNameCount = 0) then Exit;
+  ni := InternStr(LowerCase(nm));
+  for i := 0 to PyAliasNameCount - 1 do
+    if (PyAliasNameId[i] = ni) and (PyAliasNameUnit[i] = CurrentUnitIdx) then
+    begin
+      Result := PyAliasNameGen[i];
       Exit;
     end;
 end;
@@ -6962,6 +6985,21 @@ begin
                not ((i - 2 >= startIdx) and (Tokens[i - 1].Kind = tkDot)) then
               procIdx := FindProc(name);
             if procIdx >= 0 then tk := Procs[procIdx].RetType;
+            { A GENERATOR's proc is its STEP routine, whose Boolean result is
+              "produced one more"; the CALL's value is a cursor
+              (PyBuildGeneratorValueAt). Read as the proc's own type, `def
+              w(x): return g(x)` was typed bool, and the cursor came back as
+              False -- `list(w(xs))` answered [] and `type()` said bool. That
+              is every itertools wrapper that hands its tuple of arguments to
+              a private generator.
+              bug-n-a-def-returning-a-generator-call-is-typed-bool }
+            if (procIdx >= 0) and ProcIsGenerator[procIdx] and
+               ProcIsStackless[procIdx] and (FindUClass('TPyIter') >= 0) then
+            begin
+              tk := tyClass;
+              PyInferLastCi := FindUClass('TPyIter');
+            end
+            else
             { A call returning a CLASS has to record WHICH class, or the
               inferred local/field carries tyClass with no identity and
               overload resolution mis-picks — `len(bytearray(n))` chose the
@@ -29914,6 +29952,31 @@ begin
       if (si >= 0) and (FindUMeth(si, '__next__') >= 0) then Result := True;
     end;
   end;
+  if Result then Exit;
+  { ...and EVERYTHING ELSE whose type is not statically a cursor: a subscript,
+    an attribute, a call answering a variant. Left to overload resolution, an
+    untyped argument bound `next(c: TPyCounter)` -- the old itertools.count
+    advance -- and read a generator cursor as a counter: `d = {"a": fin(3)};
+    next(d["a"])` answered 11, as did `K.ctr = gen(5); next(K.ctr)`. The
+    run-time entry dispatches on what the value actually is. Kept on the
+    static path: a NAME already typed as a cursor or a counter, and a direct
+    call of a generator, both of which the TPyIter overload serves exactly. }
+  i := TokPos + 1;
+  if (i + 1 < TokCount) and (Tokens[i].Kind = tkIdent) and
+     (Tokens[i + 1].Kind in [tkRParen, tkComma]) then
+  begin
+    si := PyProgSym(GetTokenStr(i));
+    if (si >= 0) and (Syms[si].TypeKind = tyClass) and
+       (PyRecIsCls(Syms[si].RecName, 'TPyIter') or
+        PyRecIsCls(Syms[si].RecName, 'TPyCounter')) then Exit;
+  end;
+  if (i + 1 < TokCount) and (Tokens[i].Kind = tkIdent) and
+     (Tokens[i + 1].Kind = tkLParen) then
+  begin
+    si := FindProc(GetTokenStr(i));
+    if (si >= 0) and ProcIsGenerator[si] and ProcIsStackless[si] then Exit;
+  end;
+  Result := True;
 end;
 
 function PyIsDictCompAhead: Boolean;
@@ -30318,17 +30381,35 @@ begin
       dict or str (got something untyped)". pylist_v decides at run time and
       raises if the value is not a sequence, which is the honest answer when
       the type genuinely is not known until then. }
-    vSym := FindProc('pylist_v');
-    if vSym < 0 then Error('Nil Python: pylib (pylist_v) not loaded');
-    vListNode := AllocNode(AN_ARG);
-    ASTLeft[vListNode] := contNode;
-    ASTRight[vListNode] := -1;
-    contNode := AllocNode(AN_CALL);
-    ASTIVal[contNode] := vSym;
-    ASTTk[contNode] := Ord(tyClass);
-    ASTLeft[contNode] := vListNode;
-    ASTRight[contNode] := REC_UCLASS_BASE + listCi;
-    contTk := tyClass;
+    { ...and walked through a CURSOR, not unboxed to a list. pylist_v DRAINS
+      whatever the variant holds, so a generator passed in as a parameter
+      (`def take(it, k): for v in it: ... break`, which is how every itertools
+      consumer is written) was run to exhaustion before the first iteration,
+      and an infinite one never returned. pyiter_v walks a list or a str in
+      place and hands an iterator back as itself, so the loop draws exactly
+      what it uses, as CPython's does.
+      bug-n-a-for-over-a-variant-drains-a-generator-before-the-first-iteration }
+    if iterCi >= 0 then
+    begin
+      contNode := PyCallProc1('pyiter_v', contNode);
+      if contNode < 0 then Error('Nil Python: pylib (pyiter_v) not loaded');
+      ASTRight[contNode] := REC_UCLASS_BASE + iterCi;
+      contTk := tyClass;
+    end
+    else
+    begin
+      vSym := FindProc('pylist_v');
+      if vSym < 0 then Error('Nil Python: pylib (pylist_v) not loaded');
+      vListNode := AllocNode(AN_ARG);
+      ASTLeft[vListNode] := contNode;
+      ASTRight[vListNode] := -1;
+      contNode := AllocNode(AN_CALL);
+      ASTIVal[contNode] := vSym;
+      ASTTk[contNode] := Ord(tyClass);
+      ASTLeft[contNode] := vListNode;
+      ASTRight[contNode] := REC_UCLASS_BASE + listCi;
+      contTk := tyClass;
+    end;
   end;
   ci := -1;
   if not isStr then
@@ -39859,6 +39940,16 @@ begin
       ParseUsesUnit('slgen');
       Exit;
     end;
+  { ...or when an IMPORTED module does: a generator VALUE built here from a
+    module's generator (`list(islice(count(5), 4))` over mimic_itertools)
+    allocates the instance with SlNew in THIS scope, and a unit's own `uses`
+    does not carry over to its importer. The imports are registered by now. }
+  for i := 0 to ProcCount - 1 do
+    if ProcIsGenerator[i] and ProcIsStackless[i] then
+    begin
+      ParseUsesUnit('slgen');
+      Exit;
+    end;
 end;
 
 function PyShellForDefTok(const nm: AnsiString; tok: Integer): Integer;
@@ -48077,9 +48168,13 @@ begin
   seq := PySeqAppend(-1, PyMakeAssignNode(GenMakeIdent(gIdx, tyPointer), allocCall));
   { `self` is the generator's first DECLARED parameter, so it is slot 0 — the
     numbering the state-machine transform assigns and the for-in desugar uses. }
-  seq := PySeqAppend(seq, GenMakeCall6(FindProc('SlSet'), tyInt64,
-           GenMakeIdent(gIdx, tyPointer), GenMakeIntLit(SL_OFF_SLOTS),
-           PyMakeIdent(Procs[procIdx].Params[0].SymIdx), -1, -1, -1));
+  { GenSeedArg rather than a raw SlSet: it takes the instance's reference to
+    `self`, which the generator's done/close path releases like any other
+    class-typed parameter (bug-n-a-generator-does-not-hold-a-reference-to-
+    its-object-arguments). A raw store here was released without ever being
+    retained. }
+  seq := PySeqAppend(seq, GenSeedArg(gIdx, SL_OFF_SLOTS, tyClass,
+           PyMakeIdent(Procs[procIdx].Params[0].SymIdx)));
   stepNode := AllocNode(AN_PROCADDR);
   ASTIVal[stepNode] := genPi;
   ASTTk[stepNode] := Ord(tyPointer);
@@ -49721,8 +49816,11 @@ function PyImportRootHasNoBackingUnit(const root: AnsiString): Boolean;
 begin
   Result := CaseEqual(root, 'sys') or CaseEqual(root, 'os') or
             CaseEqual(root, 'textwrap') or CaseEqual(root, 'select') or
-            CaseEqual(root, 'typing') or CaseEqual(root, 'itertools') or
+            CaseEqual(root, 'typing') or
             CaseEqual(root, 'dataclasses') or CaseEqual(root, '__future__');
+  { `itertools` left this list on 2026-10-03: it is lib/rtl/mimic_itertools.py
+    now, so every name in it resolves (it was consumed here and then every name
+    but `count` was `undefined variable`). }
 end;
 
 function PyImportIsConsumedOnly(const root, dotted: AnsiString): Boolean;
@@ -50466,6 +50564,10 @@ begin
                 begin
                   PyAliasNameId[PyAliasNameCount] := InternStr(LowerCase(impAlias));
                   PyAliasNameUnit[PyAliasNameCount] := CurrentUnitIdx;
+                  PyAliasNameGen[PyAliasNameCount] := -1;
+                  if (aliasRealProc >= 0) and ProcIsGenerator[aliasRealProc] and
+                     ProcIsStackless[aliasRealProc] then
+                    PyAliasNameGen[PyAliasNameCount] := aliasRealProc;
                   Inc(PyAliasNameCount);
                 end;
                 PyImpAliasSym[PyImpAliasCount] := aliasSym;
@@ -58589,6 +58691,14 @@ begin
         through to be CALLED, while the same generator named `gen` worked. The
         question this guard asks is whether the PROGRAM binds the name to
         something else, and only the program's own scope can answer it. }
+      { ...and a name an import ALIAS binds to a generator -- see
+        PyImportAliasGenProc. }
+      if (Tokens[TokPos].Kind = tkLParen) and (PyImportAliasGenProc(name) >= 0) then
+      begin
+        CurASTNode := PyBuildGeneratorValue(PyImportAliasGenProc(name));
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end;
       if (Tokens[TokPos].Kind = tkLParen) and
          (PyProgSym(name) < 0) then
       begin
@@ -64218,6 +64328,20 @@ begin
             + '() for a recursive call, or Result to read the result');
         Next;
         CurASTNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+      end
+      { A MODULE-QUALIFIED generator call -- `itertools.count()`, `gm.g(1)`.
+        The bare spelling is claimed far above, before the name resolves to a
+        proc (PyBuildGeneratorValue); the qualified one reached the ordinary call
+        below and was CALLED, which is the step routine with its injected
+        instance parameter: an omitted default answered "no overload of g
+        matches" while `from gm import g; g(1)` worked. Same cursor build, with
+        the qualifier already consumed into qUnit.
+        bug-n-a-module-qualified-generator-call-is-called-not-built }
+      else if (procIdx >= 0) and (qUnit >= 0) and (Tokens[TokPos].Kind = tkLParen) and
+              ProcIsStackless[procIdx] and ProcIsGenerator[procIdx] then
+      begin
+        CurASTNode := PyBuildGeneratorValue(procIdx);
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
       end
       { NilPy: a `-> None` def is a procedure; its call statement flows through

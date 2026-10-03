@@ -15938,6 +15938,14 @@ begin
       Result := pyiter_of_userobj(o);
       Exit;
     end;
+    { ...and anything else pyseq_of_obj can MATERIALISE -- a deque today.
+      This chain and that one are two lists of the same kinds; a `for` over
+      a variant used to unbox through pylist_v (pyseq_of_obj) and now walks
+      this cursor, so a kind only that chain knew became "expected an
+      iterable, got object" (a deque handed back from a def). The fresh list
+      is adopted, as the bytes and file arms above adopt theirs. }
+    dks := pyseq_of_obj(o);
+    if dks <> nil then begin Result := PyIterAdoptList(dks); Exit; end;
   end;
   PyTypeError(pyvartag(v), 'an iterable');
   Result := PyIterAdoptList(TPyList.Create);

@@ -1,0 +1,104 @@
+# A generator VALUE handed out of the def that made it, or into a def that
+# walks it. Four defects, each answered wrongly at pin v452:
+#  - `for v in it` over an untyped parameter drained it to a list first, so
+#    an infinite generator hung;
+#  - `def w(x): return g(x)` was typed bool and handed back False;
+#  - a list or str argument made in the caller's statement was freed while
+#    the generator still read it;
+#  - (module-qualified generator calls: see test_nilpy_mimic_itertools).
+
+class P:
+    def __init__(self, v):
+        self.v = v
+
+class Bag:
+    def __init__(self):
+        self.xs = [7, 8]
+    def __iter__(self):
+        return iter(self.xs)
+
+def naturals(start=0, step=1):
+    n = start
+    while True:
+        yield n
+        n += step
+
+def take(it, k):
+    out = []
+    for v in it:
+        out.append(v)
+        if len(out) >= k:
+            break
+    return out
+
+def walk(it):
+    out = []
+    for v in it:
+        out.append(v)
+    return out
+
+def first(it):
+    for v in it:
+        return v
+    return None
+
+def fin(n):
+    i = 0
+    while i < n:
+        yield i
+        i += 1
+
+def g(xs, k):
+    for x in xs:
+        yield x + k
+
+def gp(p):
+    yield p.v
+    yield p.v + 1
+
+def gs(s):
+    s = s + "+"
+    yield s
+    s = s + "-"
+    yield s
+
+def wrap(it):
+    return g(list(it), 1)
+
+def wrap_local():
+    loc = [3, 4]
+    return g(loc, 0)
+
+def wrap_str(a):
+    return gs(a + "!")
+
+def boom(it):
+    try:
+        for v in it:
+            pass
+    except TypeError as e:
+        return "TypeError"
+    return "none"
+
+print(take(naturals(), 3), take(naturals(10, 5), 2))
+print(walk([1, 2, 3]), walk((4, 5)), walk("abc"), walk({"a": 1, "b": 2}))
+print(sorted(walk({3, 1, 2})), walk(range(3)), walk(b"hi"), walk(Bag()))
+print(walk(fin(4)), walk(map(lambda x: x * 10, [1, 2])), walk([]))
+xs = [1, 2]
+n = 0
+for v in xs:
+    n += 1
+    if n < 4:
+        xs.append(v)
+print(n, xs)
+print(first(fin(100)), first([]), boom(5))
+h = fin(5)
+print(first(h), first(h), walk(h))
+print(list(wrap((7, 8))), list(wrap_local()), list(wrap_str("ab")))
+print(type(wrap_local()) == type(fin(1)))
+print(list(gp(P(3))), next(gp(P(4))), sum(gp(P(5))))
+print(list(gs("a" + "b")))
+y = "k"
+print(list(gs(y)), y)
+a = g([9], 0)
+print(next(a))

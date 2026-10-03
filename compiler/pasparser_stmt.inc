@@ -301,6 +301,27 @@ begin
   if nb = 0 then
   begin
     Result := GenSlSetStmt2(gIdx, off, valNode);
+    { A NilPy CLASS-typed argument (a list, a dict, an instance -- typed from
+      the call sites) is a raw object word in the slot, and the instance
+      reads it again at every resume, long after the caller's statement and
+      often after the caller itself has returned. Without a reference of its
+      own the generator read a freed object: `def combinations(it, r): return
+      _comb(list(it), r)` freed the fresh list when the statement ended, and
+      `list(combinations(...))` answered []. The instance holds a reference
+      from here, and SLReleaseLocalsAtDone drops it at done or close.
+      bug-n-a-generator-does-not-hold-a-reference-to-its-object-arguments }
+    if PyExprMode and (ptk = tyClass) and (FindProc('PXXObjRetain') >= 0) then
+      Result := GenMakeSeq(Result, GenMakeSeq(
+                  GenMakeCall6(FindProc('PXXObjRetain'), tyPointer,
+                    GenSlGet(gIdx, off), -1, -1, -1, -1, -1), -1))
+    { ...and a STRING argument, for the same reason: the slot holds the raw
+      handle of a caller-side temporary (PasGenArgNeedsStrTemp), which the
+      caller's scope drops. `def w(a): return g(a + "!", 2)` yielded
+      whatever reused the freed block. }
+    else if PyExprMode and (ptk = tyAnsiString) and (FindProc('PXXStrIncRef') >= 0) then
+      Result := GenMakeSeq(Result, GenMakeSeq(
+                  GenMakeCall6(FindProc('PXXStrIncRef'), tyPointer,
+                    GenSlGet(gIdx, off), -1, -1, -1, -1, -1), -1));
     Exit;
   end;
   ft := AllocVar('', ptk);
@@ -2969,6 +2990,22 @@ begin
       i := Procs[CurProc].Params[k].SymIdx;
       if (i < 0) or (i >= SymCount) or (SymGenSlot[i] < 0) then Continue;
       stmt := GenMakeCall6(cellFree, tyPointer, GenMakeSlotAddr(i), -1, -1, -1, -1, -1);
+      if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
+      else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
+    end;
+  { ...and a CLASS- or STRING-typed parameter's value, retained when it was seeded
+    (GenSeedArg). The frame copy was just restored from the slot. }
+  if PyExprMode and (CurProc >= 0) and ProcIsGenerator[CurProc] then
+    for k := 1 to Procs[CurProc].ParamCount - 1 do
+    begin
+      if Procs[CurProc].Params[k].IsRef then Continue;
+      i := Procs[CurProc].Params[k].SymIdx;
+      if (i < 0) or (i >= SymCount) or (SymGenSlot[i] < 0) then Continue;
+      if ParamStoredKind(CurProc, k) = tyClass then
+        stmt := GenMakeCall6(relProc, tyPointer, GenMakeIdent(i, tyPointer), -1, -1, -1, -1, -1)
+      else if (ParamStoredKind(CurProc, k) = tyAnsiString) and (strDec >= 0) then
+        stmt := GenMakeCall6(strDec, tyPointer, GenMakeSlotWord(i), -1, -1, -1, -1, -1)
+      else Continue;
       if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
       else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
     end;

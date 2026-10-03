@@ -1,0 +1,28 @@
+# itertools through the plain-Python shim lib/rtl/mimic_itertools.py: every
+# function, both import spellings, values compared against CPython.
+import itertools
+from itertools import chain, islice, count
+
+
+print(list(itertools.chain([1, 2], "ab", range(2))))
+print(list(chain([1], [2, 3])))
+print(list(islice(count(5), 4)), list(islice(count(1, 3), 2, 6)), list(islice("abcdefg", 1, None, 2)))
+print(list(itertools.repeat("x", 3)), list(islice(itertools.repeat(7), 2)))
+print(list(islice(itertools.cycle("ab"), 5)))
+print(list(itertools.accumulate([1, 2, 3, 4])), list(itertools.accumulate([1, 2, 3], lambda a, b: a * b)))
+print(list(itertools.accumulate([1, 2], initial=10)))
+print(list(itertools.compress("abcdef", [1, 0, 1, 0, 1, 1])))
+print(list(itertools.dropwhile(lambda x: x < 3, [1, 2, 3, 1])), list(itertools.takewhile(lambda x: x < 3, [1, 2, 3, 1])))
+print(list(itertools.filterfalse(lambda x: x % 2, range(6))), list(itertools.filterfalse(None, [0, 1, "", "a"])))
+print([(k, list(g)) for k, g in itertools.groupby("aabbbc")])
+print([(k, len(list(g))) for k, g in itertools.groupby([1, 3, 2, 4, 5], key=lambda x: x % 2)])
+print(list(itertools.starmap(pow, [(2, 3), (3, 2)])))
+a, b = itertools.tee([1, 2, 3])
+print(list(a), list(b))
+print(list(itertools.zip_longest([1, 2, 3], "ab")), list(itertools.zip_longest([1], [], fillvalue=0)))
+print(list(itertools.pairwise([1, 2, 3, 4])))
+print(list(itertools.product([1, 2], "ab")), list(itertools.product([0, 1], repeat=2)))
+print(list(itertools.permutations([1, 2, 3])), list(itertools.permutations("abc", 2)))
+print(list(itertools.combinations([1, 2, 3, 4], 2)), list(itertools.combinations_with_replacement("ab", 2)))
+print(sum(1 for _ in itertools.combinations(range(6), 3)))
+print(list(islice(count(), 3)), list(islice(itertools.count(), 2)))
