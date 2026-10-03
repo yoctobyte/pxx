@@ -1,0 +1,69 @@
+# A STARRED unpack target inside a function holds a live list. The target was
+# built as mark_list(slice(..)): the slice was a fresh argument the call site
+# released after the call, and mark_list handed the same object back, so every
+# `a, *rest = xs` in a def stored a FREED list -- "RETAIN of a FREED object"
+# under -dPXX_HEAP_DEBUG, silent heap corruption without it (pin v452). Module
+# level was unaffected.
+#
+# No argument: prints the shapes (diffed against CPython). `leak N`: runs
+# them N times and keeps nothing. `keep N`: keeps one result per pass, the
+# positive control for the census bound.
+import sys
+
+
+def head_tail(xs):
+    first, *rest = xs
+    return first, rest
+
+
+def init_last(xs):
+    *init, last = xs
+    return init, last
+
+
+def middle(xs):
+    a, *mid, z = xs
+    return mid
+
+
+def from_tuple():
+    a, *b = (1, 2, 3)
+    return b
+
+
+def from_call():
+    x, *ys = list(range(5))
+    return ys
+
+
+def printed(xs):
+    p, *q = xs
+    print(p, q, type(q).__name__)
+
+
+def show():
+    print(head_tail([1, 2, 3]), head_tail("abc"), head_tail(range(4)))
+    print(init_last([1, 2, 3]), init_last("xy"))
+    print(middle([1, 2, 3, 4]), middle([1, 2]))
+    print(from_tuple(), from_call())
+    printed((7, 8, 9))
+    try:
+        a, *b, c = [1]
+    except ValueError as e:
+        print("VE", e)
+
+
+def passes(n, held):
+    for k in range(n):
+        r = [head_tail([k, 2, 3]), init_last((k, 1)), middle([1, k, 2, 3]),
+             from_tuple(), from_call()]
+        if held is not None:
+            held.append(r)
+
+
+if len(sys.argv) < 2:
+    show()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

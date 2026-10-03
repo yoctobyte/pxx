@@ -168,6 +168,10 @@ var
     is a TPyList (which is how NilPy represents a set) and elements go in through
     `add`, the duplicate-skipping insert, so len() matches Python's. }
   PyCompIsSet: Boolean;
+  { Set while a comprehension FILTER is parsed (PyParseCompFilter). Its grammar
+    is an or-test, not a conditional expression, so a second `if` there opens
+    the next filter clause rather than a ternary missing its else. }
+  PyCompFilterActive: Boolean;
   { Statement HOISTING, for expression-position comprehensions/genexprs. A
     comprehension used inside an expression (`"\n".join(x for x in it)`, or a
     bracketed one as a call argument) cannot be an expression on its own — the
@@ -4528,6 +4532,62 @@ begin
   Result := node;
 end;
 
+{ CurTok is an `if` inside an expression. Is there an `else` for it at the same
+  bracket depth before the expression ends? Asked only inside a comprehension
+  filter, where an `if` with no else ahead is the NEXT filter clause --
+  `[x for x in xs if p(x) if q(x)]` -- and a ternary with its else ahead is
+  still a ternary, `[x for x in xs if (a if b else c)]` or without the parens. }
+function PyTernaryElseAhead: Boolean;
+var k, depth: Integer;
+begin
+  Result := False;
+  k := TokPos;                            { the token after the `if` }
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth < 0 then Exit;
+    end
+    else if depth = 0 then
+    begin
+      if Tokens[k].Kind = tkElse then begin Result := True; Exit; end;
+      if Tokens[k].Kind in [tkIf, tkNewline, tkEOF] then Exit;
+      if (Tokens[k].Kind = tkIdent) and TokenCaseEqual(k, 'for') then Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ A comprehension's filter run, CurTok on its first `if`: one or more
+  `if COND` clauses, ANDed, as CPython reads `[x for x in xs if a if b]`.
+  Each condition is an or-test; PyCompFilterActive keeps the ternary arm from
+  claiming the next clause's `if` as a then-arm missing its else. Answers the
+  combined condition, already truthy. }
+function PyParseCompFilter: Integer;
+var saved: Boolean; node: Integer;
+begin
+  saved := PyCompFilterActive;
+  PyCompFilterActive := True;
+  Next;                                   { the `if` }
+  PyParseBoolExpr;
+  Result := PyMakeTruthy(CurASTNode);
+  while CurTok.Kind = tkIf do
+  begin
+    Next;
+    PyParseBoolExpr;
+    node := AllocNode(AN_BINOP);
+    ASTIVal[node] := Ord(tkAnd);
+    ASTLeft[node] := Result;
+    ASTRight[node] := PyMakeTruthy(CurASTNode);
+    ASTTk[node] := Ord(tyBoolean);
+    Result := node;
+  end;
+  PyCompFilterActive := saved;
+end;
+
 procedure PyParseBoolExpr;
 var left, right, node, condNode, elseNode, pairNode, hSave: Integer;
     thenSave, elseSave: Integer;
@@ -4580,7 +4640,8 @@ begin
     Right = AN_PAIR(then, else)) with only the selected arm evaluated. The
     result type is taken from the THEN arm; the two arms having different
     types is a NilPy question the corpus does not raise. }
-  if CurTok.Kind = tkIf then
+  if (CurTok.Kind = tkIf) and
+     not (PyCompFilterActive and not PyTernaryElseAhead) then
   begin
     { FOLD THE THEN-ARM'S HOISTED SETUP INTO THE THEN ARM, before the condition
       is parsed -- at this point the only thing queued since thenSave is the
@@ -14114,6 +14175,10 @@ begin
     Result := PyCallMeth1(listCi, 'at', baseNode, idxNode)
   else if (dictCi >= 0) and (rec = REC_UCLASS_BASE + dictCi) then
     Result := PyCallMeth1(dictCi, 'fetch', baseNode, idxNode)
+  { `range(5)[2]` / `range(a, b)[-1]` -- a range VALUE; a range held in a name
+    already reached TPyRange.at through the named-receiver path }
+  else if PyRecIsCls(rec, 'TPyRange') then
+    Result := PyCallMeth1(FindUClass('TPyRange'), 'at', baseNode, idxNode)
   else
     Result := -1;
   if Result < 0 then Error('Nil Python: this value cannot be subscripted');
@@ -31137,10 +31202,8 @@ begin
         bug-n-a-hoisted-argument-temp-escapes-a-conditional-that-lives-inside-an-expression }
       elemHoist := PyHoistHead;
       PyHoistHead := -1;
-      Next;
-      PyParseBoolExpr;
       filtN := AllocNode(AN_IF);
-      ASTLeft[filtN] := PyMakeTruthy(CurASTNode);
+      ASTLeft[filtN] := PyParseCompFilter;
       thenSeq := -1;
       while elemHoist >= 0 do
       begin
@@ -32440,11 +32503,7 @@ begin
         INSIDE the AN_IF. bug-nilpy-a-filter-between-two-for-clauses-is-not-supported }
       ifCondStart := -1;
       if CurTok.Kind = tkIf then
-      begin
-        Next;
-        PyParseBoolExpr;
-        ifCondStart := CurASTNode;
-      end;
+        ifCondStart := PyParseCompFilter;
       { `PyParseFor()`, WITH the parentheses — a bare own-function name in this
         dialect reads the RESULT variable, it does not recurse. That is why the
         08-12 attempt measured "the recursive call leaves the cursor where it
@@ -32533,10 +32592,8 @@ begin
       already renamed above; just parse. }
     if CurTok.Kind = tkIf then
     begin
-      Next;
-      PyParseBoolExpr;
       node := AllocNode(AN_IF);
-      ASTLeft[node] := PyMakeTruthy(CurASTNode);
+      ASTLeft[node] := PyParseCompFilter;
       pair1 := AllocNode(AN_PAIR);
       ASTLeft[pair1] := bodyNode;
       ASTRight[pair1] := -1;
@@ -34938,7 +34995,9 @@ var names: array of AnsiString;
     starAt, unpCnt, unpHi, unpTrail: Integer;   { `a, *rest = xs` }
     nestOwner: Integer;   { this target list's nested groups (PyNestEmit) }
     tupleTarget, oneTupleParen: Boolean;
+    unpFromIter: Boolean;   { the source is not SIZED in CPython's sense (a str) }
 begin
+  unpFromIter := False;
   cap := 8;
   SetLength(names, cap); SetLength(flds, cap); SetLength(tmps, cap);
   SetLength(subBase, cap); SetLength(subIdx, cap); SetLength(vals, cap);
@@ -35065,6 +35124,12 @@ begin
     if (IntToTypeKind(ASTTk[vals[0]]) = tyClass) and (FindUClass('TPyRange') >= 0) and
        (ResolveNodeRec(vals[0]) = REC_UCLASS_BASE + FindUClass('TPyRange')) then
       vals[0] := PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_range', vals[0]));
+    { `a, b = "xy"`, `first, *rest = word` -- a STR unpacks into its
+      characters. Same materialisation, through the one exploder (so a
+      multi-byte character is one element, as list() makes it). }
+    unpFromIter := PyIsStrBaseTk(IntToTypeKind(ASTTk[vals[0]]));
+    if unpFromIter then
+      vals[0] := PyCallProc1('pystr_charlist', vals[0]);
     vals[0] := PyDrainIfCursor(vals[0]);
   end;
   for i := 0 to nValues - 1 do
@@ -35097,6 +35162,35 @@ begin
       `*init, last = xs` -> init = xs[0:len-1], last = xs[len-1].
       unpTrail is how many fixed targets follow the star. }
     unpTrail := 0;
+    { WITHOUT a star the count must match exactly: three values into two
+      names silently dropped the third, and one value raised IndexError where
+      CPython raises ValueError, so an `except ValueError` round the unpack
+      did not catch it. }
+    if starAt < 0 then
+    begin
+      unpCnt := FindProc('pyunpack_exact');
+      if unpCnt < 0 then Error('Nil Python: pylib (pyunpack_exact) not loaded');
+      unpHi := AllocNode(AN_INT_LIT);
+      ASTIVal[unpHi] := nTargets;
+      ASTTk[unpHi] := Ord(tyInteger);
+      unpIdx := AllocNode(AN_ARG);
+      ASTLeft[unpIdx] := unpHi;
+      unpTrail := AllocNode(AN_ARG);
+      ASTLeft[unpTrail] := AllocNode(AN_BOOL_LIT);
+      ASTIVal[ASTLeft[unpTrail]] := Ord(not unpFromIter);
+      ASTTk[ASTLeft[unpTrail]] := Ord(tyBoolean);
+      ASTRight[unpTrail] := -1;
+      ASTRight[unpIdx] := unpTrail;
+      unpTrail := 0;
+      unpElem := AllocNode(AN_ARG);
+      ASTLeft[unpElem] := PyMakeLenOf(PyMakeIdent(tmps[0]), unpCi);
+      ASTRight[unpElem] := unpIdx;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := unpCnt;
+      ASTLeft[node] := unpElem;
+      ASTTk[node] := Ord(tyInteger);
+      seq := PySeqAppend(seq, node);
+    end;
     if starAt >= 0 then
     begin
       unpTrail := nTargets - starAt - 1;
@@ -35144,22 +35238,21 @@ begin
           ASTRight[unpHi] := unpElem;
           ASTTk[unpHi] := Ord(tyInteger);
         end;
+        { ...as a LIST. A slice copies the source's kind, which is right for an
+          ordinary slice (a slice of a tuple is a tuple) and wrong here:
+          `a, *b = (1,2,3)` gives b == [2, 3] in CPython, a list. ONE call that
+          mints the list, not mark_list wrapped round the slice: the slice was
+          a fresh argument the call site released after the call while
+          mark_list handed the same object back, so inside a function every
+          starred target held a FREED list (RETAIN of a FREED object under
+          -dPXX_HEAP_DEBUG; silent heap corruption without it). }
         unpElem := PyMakeSliceOf(PyMakeIdent(tmps[0]), unpIdx, unpHi, unpCi);
-        { ...and force it to a LIST. The slice copies the source's kind, which
-          is right for an ordinary slice (a slice of a tuple is a tuple) and
-          wrong here: `a, *b = (1,2,3)` gives b == [2, 3] in CPython, a list. }
-        if unpCi >= 0 then unpCnt := FindProc('pylist_mark_list')
-        else unpCnt := FindProc('pyvar_mark_list');
-        if unpCnt < 0 then Error('Nil Python: pylib (mark_list) not loaded');
-        unpHi := AllocNode(AN_ARG);
-        ASTLeft[unpHi] := unpElem;
-        ASTRight[unpHi] := -1;
-        unpIdx := AllocNode(AN_CALL);
-        ASTIVal[unpIdx] := unpCnt;
-        ASTLeft[unpIdx] := unpHi;
-        ASTTk[unpIdx] := Ord(Procs[unpCnt].RetType);
-        ASTRight[unpIdx] := ProcRetRecId[unpCnt];
-        unpElem := unpIdx;
+        if unpCi >= 0 then unpCnt := FindProc('pylist_slice_aslist')
+        else unpCnt := FindProc('pyvar_slice_aslist');
+        if unpCnt < 0 then Error('Nil Python: pylib (slice_aslist) not loaded');
+        ASTIVal[unpElem] := unpCnt;
+        ASTTk[unpElem] := Ord(Procs[unpCnt].RetType);
+        ASTRight[unpElem] := ProcRetRecId[unpCnt];
         if subIdx[i] >= 0 then
           node := PyMakeSubscriptStore(subBase[i], subIdx[i], unpElem)
         else

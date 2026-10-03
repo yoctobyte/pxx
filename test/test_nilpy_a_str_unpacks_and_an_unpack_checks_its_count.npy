@@ -1,0 +1,48 @@
+# A str unpacks into its characters, plain or starred, at module level and in
+# a def; and an unstarred unpack checks its count -- too many values raise
+# ValueError (with "got N" only for a sized source, as CPython words it), too
+# few raise ValueError rather than IndexError. At pin v452 a str was refused
+# ("not a list, tuple or variant"), three values into two names silently
+# dropped the third, and len() of a range or deque held in a variant raised.
+a, b = "xy"
+print(a, b)
+a, *b = "xyz"
+print(a, b)
+*a, b = "xyz"
+print(a, b)
+a, *b, c = "wxyz"
+print(a, b, c)
+h, m = "9:5".split(":")[0], "é"
+print(h, m)
+x, y = "éa"
+print(x, y)
+def f(w):
+    first, *rest = w
+    return first, rest
+print(f("hello"))
+for p, q in ["ab", "cd"]:
+    print(q, p)
+try:
+    a, b = "xyz"
+except ValueError as e:
+    print("VE", e)
+try:
+    a, b = [1, 2, 3]
+    print("no error", a, b)
+except ValueError as e:
+    print("VE", e)
+try:
+    a, b = [1]
+except ValueError as e:
+    print("VE", e)
+def f():
+    return 1, 2, 3
+try:
+    x, y = f()
+    print("no error", x, y)
+except ValueError as e:
+    print("VE", e)
+from collections import deque
+def f(x):
+    return len(x), x[1], list(x)[-1]
+print(f(range(4)), f(deque([5, 6, 7])), f(range(10, 0, -3)))

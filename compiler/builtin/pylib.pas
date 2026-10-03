@@ -1136,11 +1136,21 @@ function repr(o: TObject): AnsiString; overload;
   feature-nilpy-starred-and-nested-unpacking }
 function pylist_mark_list(l: TPyList): TPyList;
 function pyvar_mark_list(const v: Variant): Variant;
+{ The STARRED unpack target, `a, *rest = xs`: xs[lo:hi] as a LIST whatever
+  kind xs is, minted here. Not mark_list(slice(..)): the slice is a fresh
+  argument the call site releases after the call, and mark_list hands the same
+  object back, so the target held a freed list. }
+function pylist_slice_aslist(l: TPyList; lo, hi: Integer): TPyList;
+function pyvar_slice_aslist(const v: Variant; lo, hi: Integer): Variant;
 { `a, b, *c = xs` with too FEW values raises ValueError in CPython, naming how
   many were expected. Without the check the indexed stores raise IndexError
   instead — a different exception type, so an `except ValueError` around the
   unpack does not catch it. }
 function pyunpack_check(have, need: Integer): Integer;
+{ ...and the EXACT count an unstarred unpack needs: `a, b = xs` with three
+  values raises ValueError in CPython rather than dropping the third, and with
+  one value raises ValueError rather than IndexError. }
+function pyunpack_exact(have, need: Integer; sized: Boolean): Integer;
 function pylist_mark_tuple(l: TPyList): TPyList;
 function pylist_mark_set(l: TPyList): TPyList;
 function pylist_mark_frozenset(l: TPyList): TPyList;   { ...and the frozenset stamp }
@@ -10791,6 +10801,12 @@ begin
     if o is TPyList then Result := TPyList(o).count
     else if o is TPyDict then Result := TPyDict(o).count
     else if o is TPyBytes then Result := TPyBytes(o).count
+    { a RANGE or a DEQUE through a variant -- `def f(xs): len(xs)` handed
+      range(4) raised "expected an object with a length", and so did unpacking
+      one there, which measures the source first. pyvar_getitem already had
+      both arms. }
+    else if o is TPyRange then Result := pyrange_len(TPyRange(o))
+    else if o is TPyDeque then Result := TPyDeque(o).__len__
     { A user or RTL-shim class declaring `__len__`. This is the helper len()
       reaches whenever the value is a VARIANT -- an unannotated parameter, a
       field the frontend could not type -- so `len(h.values)` for an
@@ -23846,6 +23862,38 @@ begin
   Result := l;
 end;
 
+function pylist_slice_aslist(l: TPyList; lo, hi: Integer): TPyList;
+begin
+  Result := pylist_slice(l, lo, hi);
+  if Result <> nil then Result.FKind := PYSEQ_LIST;
+end;
+
+function pyvar_slice_aslist(const v: Variant; lo, hi: Integer): Variant;
+var o: TObject; l, sl: TPyList;
+begin
+  o := nil;
+  if pyvartag(v) = 7 then o := TObject(pyvarobj(v));
+  if (o <> nil) and (o is TPyList) then
+  begin
+    Result := pyvar_slice(v, lo, hi);
+    if pyvartag(Result) <> 7 then Exit;
+    o := TObject(pyvarobj(Result));
+    if (o <> nil) and (o is TPyList) then TPyList(o).FKind := PYSEQ_LIST;
+    Exit;
+  end;
+  { any other source -- a str, a range, a deque, a user iterable -- has its
+    elements listed first; a slice of a str is a str and a range has no slice
+    here, and the starred target is a LIST either way }
+  l := pylist_v(v);
+  sl := pylist_slice(l, lo, hi);
+  if sl <> nil then sl.FKind := PYSEQ_LIST;
+  PXXObjRelease(Pointer(l));
+  { boxed INLINE, and the box takes the slice's own reference: PyObjAsVar is
+    not declared above this point (see the note on repr(TObject)) }
+  PPyVarRec(@Result)^.VType := 7;
+  PPyVarRec(@Result)^.Payload := Int64(NativeInt(Pointer(sl)));
+end;
+
 function pyvar_mark_list(const v: Variant): Variant;
 var o: TObject;
 begin
@@ -23859,6 +23907,23 @@ function pyunpack_check(have, need: Integer): Integer;
 begin
   if have < need then
     raise ValueError.Create('not enough values to unpack (expected at least '
+      + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
+  Result := have;
+end;
+
+function pyunpack_exact(have, need: Integer; sized: Boolean): Integer;
+begin
+  { CPython names the count it got only for a SIZED source (a list or tuple);
+    unpacking any other iterable -- a str among them -- stops at need+1 and
+    says just what it expected }
+  if (have > need) and not sized then
+    raise ValueError.Create('too many values to unpack (expected '
+      + pystr_of(Int64(need)) + ')');
+  if have > need then
+    raise ValueError.Create('too many values to unpack (expected '
+      + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
+  if have < need then
+    raise ValueError.Create('not enough values to unpack (expected '
       + pystr_of(Int64(need)) + ', got ' + pystr_of(Int64(have)) + ')');
   Result := have;
 end;

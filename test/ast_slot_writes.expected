@@ -26,6 +26,7 @@ AN_ARG Left ASTLeft[lastArg]
 AN_ARG Left ASTLeft[n]
 AN_ARG Left ASTLeft[src]
 AN_ARG Left ASTRight[node]
+AN_ARG Left AllocNode(AN_BOOL_LIT)
 AN_ARG Left AllocNode(AN_IDENT)
 AN_ARG Left AllocNode(AN_INT_LIT)
 AN_ARG Left AllocNode(AN_STR_LIT)
@@ -254,7 +255,6 @@ AN_ARG Left target
 AN_ARG Left tkNode
 AN_ARG Left tpObjNode
 AN_ARG Left unboxCall
-AN_ARG Left unpElem
 AN_ARG Left unpHi
 AN_ARG Left vRecv
 AN_ARG Left valNode
@@ -626,6 +626,7 @@ AN_BINOP Right ParseSetLiteralAST
 AN_BINOP Right PyMakeIdent(cbN)
 AN_BINOP Right PyMakeIdent(nSym)
 AN_BINOP Right PyMakeIdent(rngStopSym)
+AN_BINOP Right PyMakeTruthy(CurASTNode)
 AN_BINOP Right PyMakeTruthy(right)
 AN_BINOP Right TwoTo63
 AN_BINOP Right WsMkInt(0)
@@ -783,7 +784,6 @@ AN_CALL Left tpBlobNode
 AN_CALL Left tpCallNode
 AN_CALL Left unboxArg
 AN_CALL Left unpElem
-AN_CALL Left unpHi
 AN_CALL Left vListNode
 AN_CALL Left vrArg1
 AN_CALL Left vtArg1
@@ -804,7 +804,6 @@ AN_CALL Right ProcRetRecId[ppPi]
 AN_CALL Right ProcRetRecId[procIdx]
 AN_CALL Right ProcRetRecId[realProcIdx]
 AN_CALL Right ProcRetRecId[smNameTok]
-AN_CALL Right ProcRetRecId[unpCnt]
 AN_CALL Right REC_UCLASS_BASE + FindUClass('TPyFile')
 AN_CALL Right REC_UCLASS_BASE + FindUClass('TPyList')
 AN_CALL Right REC_UCLASS_BASE + bCi
@@ -969,6 +968,7 @@ AN_IF Left GenMakeCmp(Ord(tkLt), GenMakeIdent(tmp, tyInteger), GenMakeIntLit(0))
 AN_IF Left PyMakeIdent(elseFlag)
 AN_IF Left PyMakeTruthy(CurASTNode)
 AN_IF Left PyMakeTruthy(ifCondStart)
+AN_IF Left PyParseCompFilter
 AN_IF Left PyStarKwHas(procIdx, firstSlot, k, listSym, dictSym)
 AN_IF Left RTagTest(scrutSym, vi)
 AN_IF Left RTagTest(tempSym, errVi)

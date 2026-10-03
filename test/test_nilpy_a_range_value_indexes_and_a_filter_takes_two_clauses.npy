@@ -1,0 +1,22 @@
+# Two small parse gaps. A range VALUE is subscriptable -- `range(5)[2]`,
+# `range(10, 0, -3)[-1]` -- as a range held in a name already was ("this value
+# cannot be subscripted" at pin v452). And a comprehension filter takes
+# several `if` clauses, ANDed: `[x for x in xs if a if b]` failed with "a
+# conditional expression needs an else", the second `if` read as a ternary.
+# A real ternary inside a filter stays a ternary.
+print(range(5)[2], range(10, 0, -3)[-1], range(2, 9)[0], len(range(0, 10, 3)))
+try:
+    range(3)[5]
+except IndexError as e:
+    print("IE", e)
+xs = list(range(20))
+print([i for i in xs if i % 2 if i > 9])
+print([i for i in range(20) if i % 3 == 0 if i % 2 == 0 if i])
+print({i for i in xs if i > 15 if i != 17}, {i: i * i for i in xs if i < 4 if i})
+print(sum(i for i in xs if i % 5 == 0 if i))
+print([i if i > 2 else -i for i in range(5) if i != 1])
+print([i for i in range(6) if (i if i > 3 else 0)])
+print([(a, b) for a in range(4) if a % 2 if a for b in range(a) if b != 0 if b < 3])
+def evens(n):
+    return [k for k in range(n) if k % 2 == 0 if k > 0]
+print(evens(9))

@@ -884,6 +884,21 @@ test-nilpy: $(COMPILER)
 	# "unsupported format spec" at pin v452.
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_str_format_nests_a_field_in_its_spec.npy $(TESTTMP)/test_nilpy_fmtnest_hd26
 	$(TESTTMP)/test_nilpy_fmtnest_hd26 | diff -u test/test_nilpy_str_format_nests_a_field_in_its_spec.expected -
+	# A STARRED UNPACK TARGET INSIDE A FUNCTION IS NOT FREED: mark_list wrapped
+	# round a slice the call site released handed back a freed list (RETAIN of a
+	# FREED object at pin v452). `keep` is the positive control for the census.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_starred_unpack_target_inside_a_function_is_not_freed.npy $(TESTTMP)/test_nilpy_starfn_hd26
+	$(TESTTMP)/test_nilpy_starfn_hd26 | diff -u test/test_nilpy_a_starred_unpack_target_inside_a_function_is_not_freed.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_starred_unpack_target_inside_a_function_is_not_freed.npy $(TESTTMP)/test_nilpy_starfn26
+	tools/assert_no_leak.sh nilpy_starfn 300 $(TESTTMP)/test_nilpy_starfn26 leak 3000
+	@if tools/assert_no_leak.sh nilpy_starfn_control 300 $(TESTTMP)/test_nilpy_starfn26 keep 3000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_starfn control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	# A STR UNPACKS, AND AN UNPACK CHECKS ITS COUNT (ValueError both ways).
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_str_unpacks_and_an_unpack_checks_its_count.npy $(TESTTMP)/test_nilpy_strunp_hd26
+	$(TESTTMP)/test_nilpy_strunp_hd26 | diff -u test/test_nilpy_a_str_unpacks_and_an_unpack_checks_its_count.expected -
+	# A RANGE VALUE INDEXES, AND A FILTER TAKES TWO `if` CLAUSES.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_range_value_indexes_and_a_filter_takes_two_clauses.npy $(TESTTMP)/test_nilpy_rngfilt_hd26
+	$(TESTTMP)/test_nilpy_rngfilt_hd26 | diff -u test/test_nilpy_a_range_value_indexes_and_a_filter_takes_two_clauses.expected -
 	# YIELD FROM delegates: a generator, a list, a str, a range, nested, and a
 	# delegation abandoned by break or by dropping a stepped generator. A parse
 	# error at pin v452.
