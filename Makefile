@@ -848,6 +848,23 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_from_a_shim_package_import_a_submodule.npy $(TESTTMP)/test_nilpy_shimsubmod26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_shimsubmod26_i386 | diff -u test/test_nilpy_from_a_shim_package_import_a_submodule.expected -; \
 	else echo "=== test_nilpy_shimsubmod: qemu-i386 absent, i386 NOT verified ==="; fi
+	# REFERENCE CYCLES ARE COLLECTED (-dPXX_CYCLE_GC, opt-in): trial deletion over
+	# a tracked-object list (builtinheap), automatic once the tracked count
+	# passes 2 x survivors + 10000. Without it the leak row below holds ~131k
+	# live -- what the keep control holds. GC_STRESS collects every 97th
+	# allocation, so a traverse that visits an uncounted reference crashes here.
+	./$(COMPILER) -dPXX_CYCLE_GC -dPXX_HEAP_DEBUG test/test_nilpy_reference_cycles_are_collected.npy $(TESTTMP)/test_nilpy_cyclegc_hd26
+	$(TESTTMP)/test_nilpy_cyclegc_hd26 | diff -u test/test_nilpy_reference_cycles_are_collected.expected -
+	./$(COMPILER) -dPXX_CYCLE_GC -dPXX_GC_STRESS -dPXX_HEAP_DEBUG test/test_nilpy_reference_cycles_are_collected.npy $(TESTTMP)/test_nilpy_cyclegc_st26
+	$(TESTTMP)/test_nilpy_cyclegc_st26 | diff -u test/test_nilpy_reference_cycles_are_collected.expected -
+	./$(COMPILER) -dPXX_CYCLE_GC -dPXX_ALLOC_CENSUS test/test_nilpy_reference_cycles_are_collected.npy $(TESTTMP)/test_nilpy_cyclegc26
+	tools/assert_no_leak.sh nilpy_cycle_gc 30000 $(TESTTMP)/test_nilpy_cyclegc26 leak 20000
+	@if tools/assert_no_leak.sh nilpy_cycle_gc_control 30000 $(TESTTMP)/test_nilpy_cyclegc26 keep 20000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_cycle_gc control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 -dPXX_CYCLE_GC test/test_nilpy_reference_cycles_are_collected.npy $(TESTTMP)/test_nilpy_cyclegc26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_cyclegc26_i386 | diff -u test/test_nilpy_reference_cycles_are_collected.expected -; \
+	else echo "=== test_nilpy_cyclegc: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame

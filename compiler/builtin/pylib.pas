@@ -17952,6 +17952,74 @@ begin
   PXXClassFinalize(objp);
 end;
 
+{$ifdef PXX_CYCLE_GC}
+{ The cycle collector's TRAVERSE (builtinheap PXXGcCollect): the references
+  PyObjFinalize RELEASES, arm for arm, visited instead of released. Mode 0/1
+  only read; mode 2 releases each child and empties its slot, which leaves the
+  object exactly as the finalizer would and makes the later real finalize a
+  no-op over it. Arms that are NOT visited, deliberately (the safe direction --
+  a cycle through them is simply not found): a pyeval closure's captures
+  (rawKind 2; they live in pyeval's side table), a generator's persistent
+  locals (no map of which slots are managed), and TPyBytes data. }
+procedure PyGcTraverse(objp: Pointer; rawKind: NativeInt; mode: NativeInt);
+var
+  k: Integer;
+  l: TPyList;
+  d: TPyDict;
+  by: TPyBytes;
+  it: TPyIter;
+  o: TObject;
+begin
+  if objp = nil then Exit;
+  if rawKind = 2 then Exit;
+  if (rawKind <> 0) and (rawKind <> 3) then
+  begin
+    PXXGcVisitObj(@PPyBoundRec(objp)^.Code, mode);
+    PXXGcVisitObj(@PPyBoundRec(objp)^.Recv, mode);
+    Exit;
+  end;
+  o := TObject(objp);
+  if o is TPyList then
+  begin
+    l := TPyList(objp);
+    for k := 0 to l.FLen - 1 do
+      PXXGcVisitVar(Pointer(NativeInt(l.FItems) + k * 16), mode);
+    Exit;
+  end;
+  if o is TPyDict then
+  begin
+    d := TPyDict(objp);
+    for k := 0 to d.FLen - 1 do
+    begin
+      PXXGcVisitVar(Pointer(NativeInt(d.FKeys) + k * 16), mode);
+      PXXGcVisitVar(Pointer(NativeInt(d.FVals) + k * 16), mode);
+    end;
+    if d.FHasFactory then PXXGcVisitVar(@d.FDefFactory, mode);
+    Exit;
+  end;
+  if o is TPyBytes then
+  begin
+    by := TPyBytes(objp);
+    PXXGcVisitObj(@by.FViewOf, mode);
+    Exit;
+  end;
+  if o is TPyIter then
+  begin
+    it := TPyIter(objp);
+    PXXGcVisitObj(@it.FSrc, mode);
+    PXXGcVisitObj(@it.FUp, mode);
+    PXXGcVisitObj(@it.FUp2, mode);
+    PXXGcVisitObj(@it.FUp3, mode);
+    PXXGcVisitObj(@it.FUp4, mode);
+    PXXGcVisitObj(@it.FBox, mode);
+    PXXGcVisitObj(@it.FObj, mode);
+    PXXGcVisitObj(@it.FKey, mode);
+    Exit;
+  end;
+  PXXGcWalkFields(objp, mode);
+end;
+{$endif}
+
 function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
 begin
   pybound_new := pybound_new_star(code, recv, isFunc, -1);
@@ -24174,6 +24242,9 @@ initialization
     initialization does not run.
     feature-nilpy-object-reclamation }
   PXXObjFinalizeHook := @PyObjFinalize;
+{$ifdef PXX_CYCLE_GC}
+  PXXGcTraverseHook := @PyGcTraverse;
+{$endif}
 
   { Seed `random` from entropy, the way CPython seeds it at `import random`.
     Unconditional rather than lazy-on-first-draw: CPython does not make it

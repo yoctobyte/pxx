@@ -5,12 +5,17 @@ unit mimic_gc;
   calls: `import gc; gc.collect(); print(gc.mem_free())`. Resolves through the
   NilPy import resolver's `mimic_` fallback, like mimic_time.
 
-  THERE IS NO COLLECTOR. PXX frees by reference counting, so acyclic garbage
-  is already gone by the time collect() would look for it, and collect() has
-  nothing to do: it returns 0. A REFERENCE CYCLE IS NOT COLLECTED -- not here,
-  not ever -- and that is the one thing a MicroPython program can see differ:
+  BY DEFAULT THERE IS NO COLLECTOR. PXX frees by reference counting, so
+  acyclic garbage is already gone by the time collect() would look for it,
+  and collect() has nothing to do: it returns 0. A REFERENCE CYCLE IS NOT
+  COLLECTED, and that is the one thing a MicroPython program can see differ:
   a cycle it drops stays allocated. Break the cycle (set a back-reference to
-  None) before dropping it.
+  None) before dropping it -- or build with -dPXX_CYCLE_GC, which links every
+  object into a tracked list and collects cycles by trial deletion
+  (builtinheap, PXXGcCollect): collect() then frees them and answers how many,
+  automatic runs happen from the allocators, and enable()/disable()/
+  isenabled() switch those runs. Not in a threadsafe build, where collect()
+  stays 0.
 
   mem_free() and mem_alloc() are real figures. On the host they are this
   runtime's own heap, GetFPCHeapStatus: mem_alloc the live payload bytes,
@@ -23,8 +28,9 @@ unit mimic_gc;
   ifdef, not a second file in lib/rtl/platform/esp: ESP builds pass -Fulib/rtl
   before the platform dir, so a same-named unit there would lose.
 
-  enable(), disable(), isenabled() and threshold() are accepted and change
-  nothing; threshold() answers -1, MicroPython's "not set". }
+  Without -dPXX_CYCLE_GC, enable(), disable(), isenabled() and threshold()
+  are accepted and change nothing; threshold() answers -1, MicroPython's
+  "not set" (and does with the collector too). }
 
 interface
 
@@ -74,20 +80,37 @@ end;
 
 function collect: Integer;
 begin
+{$ifdef PXX_CYCLE_GC}
+  { -dPXX_CYCLE_GC: the trial-deletion collector in builtinheap. Answers the
+    number of objects freed, as CPython's does. 0 in a threadsafe build, where
+    it does not run (see PXXGcCollect). }
+  collect := Integer(PXXGcCollect);
+{$else}
   collect := 0;
+{$endif}
 end;
 
 procedure enable;
 begin
+{$ifdef PXX_CYCLE_GC}
+  PXXGcEnable(True);
+{$endif}
 end;
 
 procedure disable;
 begin
+{$ifdef PXX_CYCLE_GC}
+  PXXGcEnable(False);
+{$endif}
 end;
 
 function isenabled: Boolean;
 begin
+{$ifdef PXX_CYCLE_GC}
+  isenabled := PXXGcEnabled;
+{$else}
   isenabled := True;
+{$endif}
 end;
 
 function threshold: Integer;

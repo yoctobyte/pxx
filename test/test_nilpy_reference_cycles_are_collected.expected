@@ -1,0 +1,8 @@
+pairs 2000
+enabled after disable False
+enabled after enable True
+freed some True
+nothing left 0
+['c7', 'c8'] ['p7', 'p7']
+2 1 True
+1 2 True 3

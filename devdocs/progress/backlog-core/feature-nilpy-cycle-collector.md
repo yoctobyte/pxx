@@ -109,3 +109,47 @@ assertion is the gate, not a nicety.
 - The cpyext extension runtime is a SEPARATE object model with its own,
   much smaller version of this: [[feature-nilpy-cpyext-cycle-collector]].
   Do not conflate them; cpyext never routes through pxx's ARC.
+
+## Landed 2026-10-03: opt-in, `-dPXX_CYCLE_GC`
+
+The design above, built. Still in backlog only because it is OPT-IN: making it
+the NilPy default is a decision (every object grows 24 bytes, and a heap that
+only grows pays a traverse per doubling), not a code step.
+
+- **Tracked list.** The first option above: every object block from the three
+  `PXXObjAlloc*` gets a 24-byte prefix `[prev][next][gcrefs]` linking it into
+  one list (`PXXGcLinkNew`/`PXXGcUnlink`, `builtinheap.pas`). The header code
+  never sees it -- the block base is raw + 24.
+- **Traverse.** `PXXGcTraverseHook`, installed by pylib (`PyGcTraverse`),
+  mirrors `PyObjFinalize` arm for arm: list items, dict keys/values/factory,
+  bytes views, iterator sources, bound pairs (code + receiver), and class
+  instances through the field descriptors (`PXXGcWalkFields`, kinds 3/5/6).
+  Visiting only COUNTED references is what makes it safe: a missed edge keeps
+  a cycle alive, never frees a live object.
+- **Collect.** CPython's trial deletion: copy counts, subtract internal
+  references, mark from what is left, then hold / clear / release the rest.
+  DONE (destroyed) objects are pinned as roots.
+- **When.** `gc.collect()` always; automatically from the allocators once the
+  tracked count reaches 2 x survivors + 10000 (amortised O(1) per
+  allocation). `gc.disable()`/`enable()`/`isenabled()` switch the automatic
+  runs. A collection never sees a half-built object of its own allocator (the
+  check runs before the new block is linked).
+- **Proof.** `-dPXX_GC_STRESS` collects every 97th allocation -- inside pylib
+  routines, mid-construction. A HEAP_DEBUG + STRESS sweep of every
+  `test_nilpy_*.npy` showed nothing new against the baseline.
+  `test_nilpy_reference_cycles_are_collected`: 20000 dropped parent/child
+  pairs hold 8852 live with the collector, 131460 without (the keep control's
+  figure); HD, stress and i386 byte-identical to CPython.
+  The case that started this, `xml.dom.minidom` (a node holds its parent):
+  3000 documents built and dropped left 75218 objects live without the
+  collector, 14013 with it; 30000 documents end at 3184 -- bounded.
+- **Cost measured.** 200k dropped pairs: 1.73 s vs 1.06 s without (which
+  leaks them all). 200k KEPT pairs: 2.78 s vs 1.25 s -- the growing-heap case
+  pays one full traverse per doubling; there is no generational split.
+
+Not covered, each a cycle that is SAFELY not collected (the edge is unseen,
+so the target looks externally held):
+- closures and their captured cells (rawKind 2 is not traversed), generator
+  frames;
+- threadsafe builds: `PXXGcCollect` answers 0 there -- trial deletion reads
+  every container while other threads mutate it, and nothing stops them.

@@ -1,0 +1,81 @@
+# Reference cycles are collected (-dPXX_CYCLE_GC): refcounting frees nothing
+# that holds itself, so without the collector every dropped parent/child pair
+# below stays allocated. argv: [leak|keep] [N] -- "keep" holds every pair, the
+# census control.
+import gc
+import sys
+
+
+class Node:
+    def __init__(self, name):
+        self.name = name
+        self.parent = None
+        self.kids = []
+
+    def add(self, kid):
+        kid.parent = self
+        self.kids.append(kid)
+        return kid
+
+
+class Ring:
+    def __init__(self, v):
+        self.v = v
+        self.next = self
+
+
+def pair(k):
+    p = Node("p" + str(k))
+    p.add(Node("c" + str(k)))
+    return p
+
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "leak"
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 2000
+
+# 1. dropped cycles, automatic runs only: the census is the assertion.
+kept = []
+total = 0
+for i in range(n):
+    p = pair(i)
+    total += len(p.kids)
+    if mode == "keep":
+        kept.append(p)
+print("pairs", total)
+
+# 2. switching the automatic runs
+gc.disable()
+print("enabled after disable", gc.isenabled())
+gc.enable()
+print("enabled after enable", gc.isenabled())
+
+# 3. an explicit run frees dropped cycles of every shape and answers a count
+gc.collect()
+for i in range(10):
+    pair(i)
+    r = Ring(i)
+    a = Ring(i + 100)
+    a.next = r
+    r.next = a
+    l = [i]
+    l.append(l)
+    d = {"k": i}
+    d["self"] = d
+    h = Node("h")
+    h.cb = h.add
+print("freed some", gc.collect() > 0)
+print("nothing left", gc.collect())
+
+# 4. live cycles survive a run intact
+root = pair(7)
+root.add(Node("c8"))
+ring = Ring(1)
+two = Ring(2)
+ring.next = two
+two.next = ring
+selfl = [1, 2]
+selfl.append(selfl)
+gc.collect()
+print([k.name for k in root.kids], [k.parent.name for k in root.kids])
+print(ring.next.v, ring.next.next.v, ring.next.next is ring)
+print(selfl[0], selfl[1], selfl[2] is selfl, len(selfl[2][2]))
