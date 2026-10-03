@@ -162,6 +162,7 @@ function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;  
   self-hosts cleanly and breaks the bootstrap seed -- caught only by
   gate.sh's FPC seed canary, never by `make compiler/pascal26`. }
 procedure PyHoistDictMergeAny(dstSym, srcNode: Integer); forward;
+function PyEatKwSpreadStars(mpi: Integer): Boolean; forward;
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
 {$endif}

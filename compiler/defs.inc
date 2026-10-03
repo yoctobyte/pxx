@@ -180,6 +180,7 @@ const
     immediately after the argument loop that sets it, so the marker never
     outlives one call's parse. }
   PY_ARG_SPLICE = 1000000;
+  PY_ARG_KWSPREAD = 1000001;  { `**mapping` into a callee collecting *args AND **kwargs }
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;

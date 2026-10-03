@@ -1,0 +1,45 @@
+# A CALLABLE INSTANCE in a callback slot -- `sorted(xs, key=KeyOf())` -- is
+# called through its __call__. Its value is the object pointer, and coerced
+# into the slot as a code address the program jumped into the instance and
+# segfaulted. It is now the bound method `obj.__call__`, which the key
+# dispatcher already calls.
+import sys
+
+
+class KeyOf:
+    def __init__(self, sign):
+        self.sign = sign
+
+    def __call__(self, obj):
+        return obj * self.sign
+
+
+class Len:
+    def __call__(self, s):
+        return len(s)
+
+
+neg = KeyOf(-1)
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += sorted([3, 1, i], key=KeyOf(-1))[0]
+        t += max([1, i, 2], key=neg) + min([4, i], key=KeyOf(1))
+        t += sorted(["ccc", "a", "bb"], key=Len())[0].__len__()
+        if keep is not None:
+            keep.append(sorted([i, 1], key=neg))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    print(sorted([3, 1, 2], key=KeyOf(-1)))
+    print(sorted([3, 1, 2], key=neg), sorted([3, 1, 2], key=KeyOf(1)))
+    print(max([3, 1, 2], key=neg), min([3, 1, 2], key=neg))
+    print(sorted(["ccc", "a", "bb"], key=Len()))
+    print(sorted(["ccc", "a", "bb"], key=Len(), reverse=True))
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

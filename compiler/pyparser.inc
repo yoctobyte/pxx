@@ -17035,16 +17035,16 @@ end;
   '(' (a parse error today — there is no other legitimate reading). CurTok is
   the '('; arbitrary arity, unlike PyCallMeth1/2's fixed 0/1/2 args. }
 function PyMakeCallDunder(baseNode: Integer): Integer;
-var ci, mmi, mpi, selfArg, lastArg, argNode, notCallablePi, hoistTail: Integer;
+var ci, mmi, notCallablePi, hoistTail: Integer;
     ownRecv: Boolean;
 begin
   Result := baseNode;
   ci := ResolveNodeRec(baseNode);
   if ci < REC_UCLASS_BASE then Exit;
   mmi := FindUMeth(ci - REC_UCLASS_BASE, '__call__');
-  Expect(tkLParen, '(');
   if mmi < 0 then
   begin
+    Expect(tkLParen, '(');
     { No `__call__`: consume the argument list (still evaluated, matching
       Python's own left-to-right argument evaluation before the TypeError)
       and raise a genuine runtime error -- a `try/except` around this must
@@ -17064,7 +17064,6 @@ begin
     ASTLeft[Result] := -1;
     Exit;
   end;
-  mpi := UMthProc_[mmi];
   { A CONSTRUCTION or fresh result as the callee -- `V(k)('z')` -- is the
     receiver PyCallMeth1 binds for every other dunder: nothing else owns it,
     so pin v452 leaked one instance per call. Same binding, same fold. }
@@ -17075,24 +17074,13 @@ begin
     hoistTail := PyHoistTail;
     baseNode := PyEvalOnce(baseNode);
   end;
-  selfArg := AllocNode(AN_ARG);
-  ASTLeft[selfArg] := baseNode; ASTRight[selfArg] := -1;
-  lastArg := selfArg;
-  while CurTok.Kind <> tkRParen do
-  begin
-    PyParseBoolExpr;
-    argNode := AllocNode(AN_ARG);
-    ASTLeft[argNode] := CurASTNode; ASTRight[argNode] := -1;
-    ASTRight[lastArg] := argNode;
-    lastArg := argNode;
-    if not Eat(tkComma) then Break;
-  end;
-  Expect(tkRParen, ')');
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := mpi;
-  ASTTk[Result] := Ord(Procs[mpi].RetType);
-  ASTRight[Result] := ProcRetRecId[mpi];
-  ASTLeft[Result] := selfArg;
+  { The argument list is the ordinary METHOD call's: `obj(...)` IS
+    `obj.__call__(...)`. This routine used to read the arguments itself, one
+    plain slot each, so a `__call__(self, *args)` collector was handed loose
+    arguments instead of its packed tuple and the program SEGFAULTED -- and a
+    keyword, a default or a `*seq` at the call site was not understood either.
+    Every one of those is the method path's already. }
+  Result := PyParseClassMethodCall(baseNode, ci - REC_UCLASS_BASE, '__call__');
   if ownRecv then Result := PyFoldHoistSince(hoistTail, Result);
 end;
 
@@ -19501,6 +19489,18 @@ var j, ri, rlo, rhi: Integer;
 begin
   Result := False;
   if nm = '' then Exit;
+  { `__call__` is reached as a value WITHOUT its name being spelled: an instance
+    handed to a callback slot -- `sorted(xs, key=KeyOf())` -- becomes the bound
+    pair `obj.__call__` (PyCoerceCallableArgsIn), and the dispatcher calls it
+    back through the function-object ABI. No token scan can see that, so a
+    native `__call__(self, s)` was called with variant arguments and crashed on
+    the first `len(s)`. Always normalised; the cost is boxing, paid only by a
+    class that defines `__call__`. }
+  if CaseEqual(nm, '__call__') then
+  begin
+    Result := True;
+    Exit;
+  end;
   { A COMPUTED getattr reads a method by a name no token spells, so the scan
     below cannot see it — and the pair it hands back must still be callable
     through the function-object ABI. Normalise every method in a module that
@@ -20520,6 +20520,22 @@ end;
   constructor and method paths refused a keyword before `**`, because the
   mapping filled a contiguous run of slots that the keyword's own slot sat in.
   A positional argument here is Python's own syntax error, refused as such. }
+{ `**` at an argument of a callee that collects BOTH `*args` and `**kwargs`:
+  eat the two stars, leaving the mapping expression for the caller to parse
+  and mark PY_ARG_KWSPREAD. A callee without a `*args` collector takes a
+  mapping by its own routes (the forwarding desugaring, PyStarExpandCallArgs),
+  which bind its declared slots by name; one with `*args` cannot have its
+  positionals reached by a mapping, so every key goes to the collector. }
+function PyEatKwSpreadStars(mpi: Integer): Boolean;
+begin
+  Result := (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind = tkStar) and (mpi >= 0) and
+            (ProcPyStarIdx[mpi] >= 0) and (ProcPyKwIdx[mpi] >= 0);
+  if not Result then Exit;
+  Next;                                  { the first '*' }
+  Next;                                  { the second }
+end;
+
 procedure PyParseKwTailIntoMapping(dictSym: Integer; const callee: AnsiString);
 var kwLit: Integer; kwName: AnsiString;
 begin
@@ -21697,6 +21713,21 @@ begin
         `expected ')' before ','` -- a syntax error naming neither the star nor
         the callee, for an argument list that is plain Python. }
       n := kwCap - 1;
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
+    { `**mapping` into a method that collects BOTH `*args` and `**kwargs`:
+      merged into the kwargs dict in source order (PyPackStarArgs). }
+    if PyEatKwSpreadStars(mpi) then
+    begin
+      ParseArgExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      ASTIVal[argNode] := PY_ARG_KWSPREAD;
+      ASTRight[argNode] := -1;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(n);
       if CurTok.Kind = tkComma then Next else Break;
       Continue;
     end;
@@ -23193,6 +23224,19 @@ begin
       { as the statically-bound path above: the keyword arguments are bound by
         this loop, not swallowed by the star }
       i := starKwCap - 1;
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
+    if PyEatKwSpreadStars(hitPi) then
+    begin
+      ParseArgExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      ASTIVal[argNode] := PY_ARG_KWSPREAD;
+      ASTRight[argNode] := -1;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(i);
       if CurTok.Kind = tkComma then Next else Break;
       Continue;
     end;
@@ -25124,8 +25168,11 @@ begin
     begin
       Next;
       kwIdx := PY_ARG_SPLICE;
-    end;
-    if (kwIdx <> 0) and (kwIdx <> PY_ARG_SPLICE) then sawKw := True;
+    end
+    else if PyEatKwSpreadStars(mpi) then
+      kwIdx := PY_ARG_KWSPREAD;
+    if (kwIdx <> 0) and (kwIdx <> PY_ARG_SPLICE) and
+       (kwIdx <> PY_ARG_KWSPREAD) then sawKw := True;
     ParseArgExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
@@ -25244,6 +25291,11 @@ begin
       if dictSym < 0 then dictSym := PyNewContainerTemp('TPyDict', 'kwargs');
       keyNode := (-ASTIVal[n]) - 1;
       PyContainerCall1(dictSym, 'TPyDict', 'setitem', keyNode, ASTLeft[n]);
+    end
+    else if ASTIVal[n] = PY_ARG_KWSPREAD then
+    begin
+      if dictSym < 0 then dictSym := PyNewContainerTemp('TPyDict', 'kwargs');
+      PyHoistDictMergeAny(dictSym, ASTLeft[n]);
     end
     else if ASTIVal[n] = PY_ARG_SPLICE then
     begin
@@ -29390,6 +29442,7 @@ function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean;
 var currArg, i, capSym, identNode, argSeq, tailArg, exprNode: Integer;
     btPi, argN, code, wrapPi, thunkPi: Integer;
     lstCi, bytCi, cpaPi, tmpSym, asgn: Integer;
+    callCi, callMi: Integer;
 begin
   Result := False;
   if not isNilPy then Exit;
@@ -29402,6 +29455,27 @@ begin
   i := 0;
   while (currArg <> -1) and (i < Procs[procIdx].ParamCount) do
   begin
+    { A CALLABLE INSTANCE in the slot -- `sorted(xs, key=KeyOf())`. Its value
+      is the object pointer, and coerced into the code slot the program jumped
+      into the instance and SEGFAULTED. `obj(x)` IS `obj.__call__(x)`, so the
+      slot gets the bound method `obj.__call__`, a shape the dispatcher on the
+      other side (PyCallKey1) already calls; the variant arm below then hands
+      over its pair. Not for an EXTERNAL callee, whose Pointer is a data
+      pointer, and only for a class that has a `__call__`. }
+    if (i < MAX_PROC_PARAMS) and
+       (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+       not ((procIdx < ProcCount) and ProcExternal[procIdx]) and
+       (ASTLeft[currArg] >= 0) and
+       (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyClass) then
+    begin
+      callCi := ResolveNodeRec(ASTLeft[currArg]);
+      if callCi >= REC_UCLASS_BASE then
+      begin
+        callMi := FindUMeth(callCi - REC_UCLASS_BASE, '__call__');
+        if callMi >= 0 then
+          ASTLeft[currArg] := PyMakeBoundMethod(UMthProc_[callMi], ASTLeft[currArg]);
+      end;
+    end;
     { A builtin TYPE in the slot — `xs.sort(key=str)`. It is the `pybtype(code)`
       call the frontend itself builds, and its payload is a small CODE, not an
       address: coerced into the pointer slot the program jumps to 5. Rewritten
@@ -64762,6 +64836,27 @@ begin
             operand SPLICED into the packing instead — `extend` where a written
             argument `append`s — which PyPackStarArgs does with the marker set
             here. bug-nilpy-star-unpack-into-a-star-args-callee }
+          { `**mapping` into a def that collects BOTH `*args` and
+            `**kwargs` -- `va(1, **d)` on `def va(*a, **kw)`. Neither arm
+            took it: the forwarding desugaring is for a callee WITHOUT a star
+            collector, and the splice below is for a single `*`, so the second
+            '*' reached the expression parse as "expected expression". The
+            mapping is merged into the kwargs dict, in source order with any
+            `name=value` beside it (PyPackStarArgs). }
+          if PyEatKwSpreadStars(procIdx) then
+          begin
+            ParseArgExpr;
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := CurASTNode;
+            ASTIVal[argSeq] := PY_ARG_KWSPREAD;
+            if argsHead = -1 then argsHead := argSeq else ASTRight[lastArg] := argSeq;
+            lastArg := argSeq;
+            Inc(nArgs);
+            if CurTok.Kind = tkComma then Next
+            else if CurTok.Kind <> tkRParen then
+              Error('expected comma or close parenthesis');
+            Continue;
+          end;
           if (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] >= 0) and
              (TokPos < TokCount) and (Tokens[TokPos].Kind <> tkStar) then
           begin

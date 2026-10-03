@@ -1,0 +1,47 @@
+# `**mapping` into a callee that collects BOTH `*args` and `**kwargs` --
+# `va(1, **d)` on `def va(*a, **kw)`. Neither existing arm took it (the
+# forwarding desugaring is for a callee without a star collector, the splice
+# is for a single `*`), so the second '*' reached the expression parse and
+# the program did not compile. The mapping is merged into the kwargs dict, in
+# source order with any `name=value` beside it.
+import sys
+
+
+def va(*a, **kw):
+    return [len(a), sorted(kw.items())]
+
+
+def head(x, *rest, **opts):
+    return [x, list(rest), sorted(opts)]
+
+
+class Box:
+    def m(self, *a, **kw):
+        return len(a) * 100 + len(kw)
+
+
+d = {"q": 2}
+
+
+def passes(n, keep):
+    t = 0
+    b = Box()
+    for i in range(n):
+        t += len(va(i, **d)) + len(va(**{"r": i, "s": 1})[1])
+        t += b.m(i, i, **{"z": i}) + len(head(i, 1, **d, w=i)[2])
+        if keep is not None:
+            keep.append(va(**{"k": [i]}))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    print(va(1, **d))
+    print(va(1, **{"q": 2}))
+    print(va(**{"a": 1, "b": 2}))
+    print(va(1, 2, x=0, **{"q": 2}, z=9))
+    print(head(1, 2, 3, **{"w": 4}))
+    print(Box().m(1, **{"q": 2}), Box().m(**d, r=3))
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

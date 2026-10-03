@@ -787,6 +787,44 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_a_user_decorator_rebinds_the_def.npy $(TESTTMP)/test_nilpy_userdeco26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_userdeco26_i386 | diff -u test/test_nilpy_a_user_decorator_rebinds_the_def.expected -; \
 	else echo "=== test_nilpy_userdeco: qemu-i386 absent, i386 NOT verified ==="; fi
+	# AN INSTANCE CALL TAKES THE METHOD ARGUMENT LIST: `obj(...)` read its own
+	# arguments one plain slot each, so `__call__(self, *args)` got loose
+	# arguments and SEGFAULTED; keywords, defaults and `*seq` were not understood.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_an_instance_call_takes_the_method_argument_list.npy $(TESTTMP)/test_nilpy_instcallargs_hd26
+	$(TESTTMP)/test_nilpy_instcallargs_hd26 | diff -u test/test_nilpy_an_instance_call_takes_the_method_argument_list.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_an_instance_call_takes_the_method_argument_list.npy $(TESTTMP)/test_nilpy_instcallargs26
+	tools/assert_no_leak.sh nilpy_instance_call_args 300 $(TESTTMP)/test_nilpy_instcallargs26 leak 3000
+	@if tools/assert_no_leak.sh nilpy_instance_call_args_control 300 $(TESTTMP)/test_nilpy_instcallargs26 keep 3000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_instance_call_args control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_an_instance_call_takes_the_method_argument_list.npy $(TESTTMP)/test_nilpy_instcallargs26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_instcallargs26_i386 | diff -u test/test_nilpy_an_instance_call_takes_the_method_argument_list.expected -; \
+	else echo "=== test_nilpy_instcallargs: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A CALLABLE INSTANCE AS A KEY IS CALLED: `sorted(xs, key=KeyOf())` coerced
+	# the object pointer into the code slot and SEGFAULTED; it is the bound
+	# `obj.__call__` now, and __call__ always takes the function-object ABI.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_callable_instance_as_a_key_is_called.npy $(TESTTMP)/test_nilpy_instkey_hd26
+	$(TESTTMP)/test_nilpy_instkey_hd26 | diff -u test/test_nilpy_a_callable_instance_as_a_key_is_called.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_callable_instance_as_a_key_is_called.npy $(TESTTMP)/test_nilpy_instkey26
+	tools/assert_no_leak.sh nilpy_instance_as_key 300 $(TESTTMP)/test_nilpy_instkey26 leak 3000
+	@if tools/assert_no_leak.sh nilpy_instance_as_key_control 300 $(TESTTMP)/test_nilpy_instkey26 keep 3000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_instance_as_key control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_callable_instance_as_a_key_is_called.npy $(TESTTMP)/test_nilpy_instkey26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_instkey26_i386 | diff -u test/test_nilpy_a_callable_instance_as_a_key_is_called.expected -; \
+	else echo "=== test_nilpy_instkey: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A MAPPING SPREAD INTO A *ARGS+**KWARGS DEF IS COLLECTED: `va(1, **d)` on
+	# `def va(*a, **kw)` did not compile ("expected expression" at the 2nd '*').
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_mapping_spread_into_a_star_and_kwargs_def_is_collected.npy $(TESTTMP)/test_nilpy_kwspreadstar_hd26
+	$(TESTTMP)/test_nilpy_kwspreadstar_hd26 | diff -u test/test_nilpy_a_mapping_spread_into_a_star_and_kwargs_def_is_collected.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_mapping_spread_into_a_star_and_kwargs_def_is_collected.npy $(TESTTMP)/test_nilpy_kwspreadstar26
+	tools/assert_no_leak.sh nilpy_kwspread_star 300 $(TESTTMP)/test_nilpy_kwspreadstar26 leak 3000
+	@if tools/assert_no_leak.sh nilpy_kwspread_star_control 300 $(TESTTMP)/test_nilpy_kwspreadstar26 keep 3000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_kwspread_star control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_mapping_spread_into_a_star_and_kwargs_def_is_collected.npy $(TESTTMP)/test_nilpy_kwspreadstar26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_kwspreadstar26_i386 | diff -u test/test_nilpy_a_mapping_spread_into_a_star_and_kwargs_def_is_collected.expected -; \
+	else echo "=== test_nilpy_kwspreadstar: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame

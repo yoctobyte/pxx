@@ -1,0 +1,64 @@
+# Calling an instance, `obj(...)`, IS `obj.__call__(...)`, so it takes the
+# method call's whole argument list. The instance-call path used to read the
+# arguments itself, one plain slot each: a `__call__(self, *args)` collector
+# got loose arguments instead of its packed tuple and the program segfaulted,
+# and a keyword, a default or a `*seq` at the call site was not understood.
+import sys
+
+
+def add(a, b):
+    return a + b
+
+
+class Fwd:
+    def __init__(self, f):
+        self.f = f
+
+    def __call__(self, *args):
+        return self.f(*args)
+
+
+class Count:
+    def __call__(self, *args):
+        return len(args)
+
+
+class Opt:
+    def __init__(self, base):
+        self.base = base
+
+    def __call__(self, x, scale=10, *, bias=0):
+        return self.base + x * scale + bias
+
+
+class Pair:
+    def __call__(self, a, b):
+        return [a, b]
+
+
+fwd = Fwd(add)
+cnt = Count()
+opt = Opt(1)
+pair = Pair()
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += fwd(i, 1) + cnt(i, i, i) + cnt() + opt(i) + opt(i, 2) + opt(i, bias=3)
+        t += len(pair(*[i, i + 1])) + opt(i, scale=1)
+        if keep is not None:
+            keep.append(pair(i, [i]))
+    print(t)
+
+
+if len(sys.argv) < 2:
+    print(fwd(1, 2), fwd("a", "b"))
+    print(cnt(1, 2), cnt(), cnt(*[1, 2, 3]))
+    print(opt(2), opt(2, 3), opt(2, bias=5), opt(2, scale=1, bias=1))
+    print(pair(*[1, 2]), pair(b=4, a=3), pair([1], b="x"))
+    print(Count()(7, 8, 9), Fwd(add)(40, 2))
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])
