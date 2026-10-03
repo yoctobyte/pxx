@@ -775,6 +775,18 @@ test-nilpy: $(COMPILER)
 	for i in 1 2 3; do $(TESTTMP)/test_nilpy_curthr26 $(TESTTMP)/test_nilpy_curthr26.db | diff -u test/test_nilpy_a_cursor_loop_in_a_thread_releases_each_row_cursor_once.expected - || exit 1; done
 	./$(COMPILER) --threadsafe -dPXX_HEAP_DEBUG test/test_nilpy_a_cursor_loop_in_a_thread_releases_each_row_cursor_once.npy $(TESTTMP)/test_nilpy_curthr_hd26
 	$(TESTTMP)/test_nilpy_curthr_hd26 $(TESTTMP)/test_nilpy_curthr_hd26.db | diff -u test/test_nilpy_a_cursor_loop_in_a_thread_releases_each_row_cursor_once.expected -
+	# A USER DECORATOR REBINDS THE DEF: `@d` over `def g` is `g = d(g)`, lowered
+	# by the lexer (PyDecBindDef). Refused at parse time until f34df64085.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_user_decorator_rebinds_the_def.npy $(TESTTMP)/test_nilpy_userdeco_hd26
+	$(TESTTMP)/test_nilpy_userdeco_hd26 | diff -u test/test_nilpy_a_user_decorator_rebinds_the_def.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_user_decorator_rebinds_the_def.npy $(TESTTMP)/test_nilpy_userdeco26
+	tools/assert_no_leak.sh nilpy_user_decorator 300 $(TESTTMP)/test_nilpy_userdeco26 leak 3000
+	@if tools/assert_no_leak.sh nilpy_user_decorator_control 300 $(TESTTMP)/test_nilpy_userdeco26 keep 3000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_user_decorator control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_user_decorator_rebinds_the_def.npy $(TESTTMP)/test_nilpy_userdeco26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_userdeco26_i386 | diff -u test/test_nilpy_a_user_decorator_rebinds_the_def.expected -; \
+	else echo "=== test_nilpy_userdeco: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
 	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
 	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame

@@ -1,0 +1,132 @@
+# A USER decorator over a def -- `@d` is `g = d(g)` after the def. It was
+# refused at parse time ("unsupported decorator (only @dataclass and
+# @overload)"); the lexer now lowers it (PyDecBindDef, pylexer.inc). Covered:
+# a registry that returns f, a *args wrapper, a decorator FACTORY `@times(3)`,
+# stacking (bottom-up), memoised recursion through the decorated name, a
+# one-line def, a decorated def inside a def, a CLASS as the decorator (the
+# result is a callable instance), and a call from a def written ABOVE the
+# decorated one.
+#
+# No argument: prints, diffed against CPython under -dPXX_HEAP_DEBUG. `leak N`
+# / `keep N` drive the census.
+import sys
+
+REG = []
+calls = []
+
+
+def register(f):
+    REG.append(f)
+    return f
+
+
+def logged(f):
+    def w(*args):
+        calls.append(len(args))
+        return f(*args)
+    return w
+
+
+def times(n):
+    def deco(f):
+        def w(x):
+            r = x
+            for i in range(n):
+                r = f(r)
+            return r
+        return w
+    return deco
+
+
+def memo(f):
+    cache = {}
+
+    def w(n):
+        if n not in cache:
+            cache[n] = f(n)
+        return cache[n]
+    return w
+
+
+def early(x):
+    return add(x, 100)
+
+
+@register
+def one():
+    return 1
+
+
+@register
+def two():
+    return 2
+
+
+@logged
+def add(a, b):
+    return a + b
+
+
+@times(3)
+def double(x):
+    return x * 2
+
+
+@logged
+@times(2)
+def inc(x):
+    return x + 1
+
+
+@memo
+def fib(n):
+    return n if n < 2 else fib(n - 1) + fib(n - 2)
+
+
+@logged
+def short(x): return x * 10
+
+
+def outer(k):
+    @times(k)
+    def sq(v):
+        return v * v
+    return sq(2)
+
+
+print([f() for f in REG])
+print(add(2, 3), double(1), inc(5), short(4), early(1))
+print(fib(60), outer(1), outer(2))
+print(calls)
+
+
+class Count:
+    def __init__(self, f):
+        self.f = f
+        self.n = 0
+
+    def __call__(self, x):
+        self.n += 1
+        return self.f(x)
+
+
+@Count
+def half(x):
+    return x // 2
+
+
+def passes(n, keep):
+    t = 0
+    for i in range(n):
+        t += half(i) + add(i, 1) + double(i) + inc(i) + outer(i % 3)
+        if keep is not None:
+            keep.append([inc(i)])
+    print(t)
+
+
+if len(sys.argv) < 2:
+    print(half(10), half(7), half.n)
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

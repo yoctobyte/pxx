@@ -1022,6 +1022,156 @@ begin
   end;
 end;
 
+{ ---- user decorators (feature-nilpy-user-defined-decorators) -------------
+  `@d` over `def g(...)` IS `g = d(g)` after the def; that is the whole of
+  Python's semantics, stacking included (`@a` then `@b` is `a(b(g))`) and the
+  `@d(arg)` factory form, whose decorator expression is itself a call. So the
+  lexer lowers it: the decorator lines are held back instead of emitted, the
+  def's NAME is emitted as a hidden one, and when the DEDENT that closes the
+  body is emitted the line `g = d(<hidden>)` follows it. Everything after the
+  lexer sees an ordinary def and an ordinary assignment of a callable value;
+  inside the body a recursive `g(...)` names the DECORATED binding, exactly as
+  in CPython.
+
+  The recognised decorators keep their own lowering and are never touched
+  here (@dataclass, @overload, @property, @staticmethod, @classmethod and the
+  `.setter` family), nor is anything in a CLASS body: a method is not a name
+  that can be rebound by a later statement in this compiler. `@wraps(f)` /
+  `@functools.wraps(f)` is DROPPED: it copies metadata (`__name__`,
+  `__doc__`) and nothing a program computes with.
+
+  What the rename is visible in: `__name__` of an undecorated-through function
+  (a decorator that returns its argument) reads the hidden name. }
+
+{ The text a token carries in the shared pool (identifiers, strings, and the
+  spelled numbers), or '' for a punctuation token. }
+function PyLexTokText(i: Integer): AnsiString;
+var k: Integer;
+begin
+  Result := '';
+  for k := 0 to Tokens[i].SLen - 1 do
+    AppendChar(Result, TokChars[Tokens[i].SOffset + k]);
+end;
+
+{ The decorator line Tokens[lo] = '@' .. hi-1: 0 = leave it alone (recognised,
+  or not a dotted name at all), 1 = a general decorator to lower, 2 = a
+  `wraps(..)` to drop. Keyed on the LAST name of the dotted chain, so
+  `@dataclasses.dataclass` and `@typing.overload` stay recognised. }
+function PyLexDecoratorKind(lo, hi: Integer): Integer;
+var i: Integer; last: AnsiString;
+begin
+  Result := 0;
+  i := lo + 1;
+  if (i >= hi) or (Tokens[i].Kind <> tkIdent) then Exit;
+  last := PyLexTokText(i);
+  Inc(i);
+  while (i + 1 < hi) and (Tokens[i].Kind = tkDot) and (Tokens[i + 1].Kind = tkIdent) do
+  begin
+    last := PyLexTokText(i + 1);
+    Inc(i, 2);
+  end;
+  if (last = 'dataclass') or (last = 'overload') or (last = 'property') or
+     (last = 'staticmethod') or (last = 'classmethod') or (last = 'setter') or
+     (last = 'getter') or (last = 'deleter') then Exit;
+  if last = 'wraps' then begin Result := 2; Exit; end;
+  Result := 1;
+end;
+
+{ Does the next CODE line after position p (the end of a decorator line) start
+  with `def`, skipping blank lines, comment lines and further decorator lines?
+  Asked before a decorator is held back, so a decorated CLASS (or anything
+  else) keeps today's path and today's diagnostic. }
+function PyLexNextCodeIsDef(p: Integer): Boolean;
+var q: Integer;
+begin
+  Result := False;
+  q := p;
+  while q <= Length(Source) do
+  begin
+    while (q <= Length(Source)) and (Source[q] <> #10) do Inc(q);
+    Inc(q);
+    while (q <= Length(Source)) and ((Source[q] = ' ') or (Source[q] = #9)) do Inc(q);
+    if q > Length(Source) then Exit;
+    if (Source[q] = #10) or (Source[q] = #13) or (Source[q] = '#') or (Source[q] = '@') then
+      Continue;
+    Result := (q + 3 <= Length(Source)) and (Source[q] = 'd') and
+              (Source[q + 1] = 'e') and (Source[q + 2] = 'f') and
+              ((Source[q + 3] = ' ') or (Source[q + 3] = #9));
+    Exit;
+  end;
+end;
+
+procedure PyDecStore(k: TTokenKind; iv: Int64; const sv: AnsiString);
+begin
+  if PyDecTokCount > High(PyDecTokK) then Error('Nil Python: too many decorator tokens in one file');
+  PyDecTokK[PyDecTokCount] := k;
+  PyDecTokI[PyDecTokCount] := iv;
+  PyDecTokS[PyDecTokCount] := sv;
+  Inc(PyDecTokCount);
+end;
+
+{ Hold the decorator line Tokens[lo+1 .. hi-1] (the expression after '@'). }
+procedure PyDecHold(lo, hi: Integer);
+var i: Integer;
+begin
+  if PyDecPendCount > High(PyDecPendLo) then Error('Nil Python: too many stacked decorators');
+  PyDecPendLo[PyDecPendCount] := PyDecTokCount;
+  for i := lo + 1 to hi - 1 do
+    PyDecStore(Tokens[i].Kind, Tokens[i].IVal, PyLexTokText(i));
+  PyDecPendHi[PyDecPendCount] := PyDecTokCount;
+  Inc(PyDecPendCount);
+end;
+
+{ The def header whose name is Tokens[nameTok]: rename it, and queue
+  `name = d1(d2(..(hidden)..))` for the DEDENT that returns to `level`. }
+procedure PyDecBindDef(nameTok, level: Integer);
+var name, hidden: AnsiString; d, i, lo: Integer;
+begin
+  name := PyLexTokText(nameTok);
+  Inc(PyDecSeq);
+  hidden := '__pxxdec' + PyIntLiteralText(PyDecSeq) + '_' + name;
+  { the name token, re-pointed at the hidden spelling in the pool }
+  Tokens[nameTok].SOffset := TokCharLen;
+  Tokens[nameTok].SLen := Length(hidden);
+  if TokCharLen + Length(hidden) >= STRING_CAP then Error('token char buffer overflow');
+  for i := 1 to Length(hidden) do
+  begin
+    TokChars[TokCharLen] := hidden[i];
+    Inc(TokCharLen);
+  end;
+  if PyDecCloseCount > High(PyDecCloseLo) then Error('Nil Python: decorated defs nested too deeply');
+  lo := PyDecTokCount;
+  PyDecStore(tkIdent, 0, name);
+  PyDecStore(tkAssign, 0, '');
+  for d := 0 to PyDecPendCount - 1 do
+  begin
+    for i := PyDecPendLo[d] to PyDecPendHi[d] - 1 do
+      PyDecStore(PyDecTokK[i], PyDecTokI[i], PyDecTokS[i]);
+    PyDecStore(tkLParen, 0, '');
+  end;
+  PyDecStore(tkIdent, 0, hidden);
+  for d := 0 to PyDecPendCount - 1 do PyDecStore(tkRParen, 0, '');
+  PyDecStore(tkNewline, 0, '');
+  PyDecCloseLevel[PyDecCloseCount] := level;
+  PyDecCloseLo[PyDecCloseCount] := lo;
+  PyDecCloseHi[PyDecCloseCount] := PyDecTokCount;
+  PyDecCloseLine[PyDecCloseCount] := Tokens[nameTok].Line;
+  Inc(PyDecCloseCount);
+  PyDecPendCount := 0;
+end;
+
+{ After a DEDENT: emit every queued assignment whose def sat at `level`. }
+procedure PyDecFlush(level: Integer);
+var i: Integer;
+begin
+  while (PyDecCloseCount > 0) and (PyDecCloseLevel[PyDecCloseCount - 1] = level) do
+  begin
+    Dec(PyDecCloseCount);
+    for i := PyDecCloseLo[PyDecCloseCount] to PyDecCloseHi[PyDecCloseCount] - 1 do
+      PyEmitToken(PyDecTokK[i], PyDecTokI[i], PyDecCloseLine[PyDecCloseCount], PyDecTokS[i]);
+  end;
+end;
+
 procedure PyLexAll(SupportLineNumbers: Boolean);
 var
   P: Integer;
@@ -1078,6 +1228,11 @@ var
   hasDigit, isTriple, rawStr, bytesStr: Boolean;
   cpv: Int64;
   decText: AnsiString;   { the literal's exact decimal digits, for the over-Int64 case }
+  { user decorators -- see PyDecBindDef above }
+  lineStartTok: Integer;            { first token of the current logical line }
+  lastLineFirstKind: TTokenKind;    { ...and of the last one that ended }
+  blockIsClass: array[0..1024] of Boolean;   { per IndentStack level: a class body }
+  decKind: Integer;
 begin
   if not PyLexAppending then
   begin
@@ -1102,6 +1257,12 @@ begin
   lineIsDefClass := False;
   lineSawColon := False;
   inlineSuite := False;
+  PyDecTokCount := 0;
+  PyDecPendCount := 0;
+  PyDecCloseCount := 0;
+  blockIsClass[0] := False;
+  lineStartTok := TokCount;
+  lastLineFirstKind := tkEOF;
   HasSpaceIndent := False;
   HasTabIndent := False;
   pyTokPending := False;
@@ -1153,6 +1314,7 @@ begin
           end;
           IndentStack[IndentStackTop] := IndentWidth;
           PyEmitToken(tkIndent, 0, SrcLine, '');
+          blockIsClass[IndentStackTop] := lastLineFirstKind = tkClass;
         end
         else if IndentWidth < IndentStack[IndentStackTop] then
         begin
@@ -1160,6 +1322,7 @@ begin
           begin
             Dec(IndentStackTop);
             PyEmitToken(tkDedent, 0, SrcLine, '');
+            PyDecFlush(IndentStackTop);
           end;
           if IndentWidth <> IndentStack[IndentStackTop] then
           begin
@@ -1170,6 +1333,7 @@ begin
       end;
     end;
 
+    if (parenDepth = 0) and (not wasCont) then lineStartTok := TokCount;
     { 3. Tokenize the physical line until we hit a newline or EOF }
     IsLogicalLine := False;
     if parenDepth = 0 then
@@ -1741,7 +1905,29 @@ begin
     { 4. End of physical line: emit tkNewline if logical line and paren depth is 0 }
     if IsLogicalLine and (parenDepth = 0) and (not contLine) then
     begin
-      PyEmitToken(tkNewline, 0, SrcLine, '');
+      { a USER decorator line is held back rather than emitted, and the def it
+        decorates is bound by name -- PyDecBindDef }
+      decKind := 0;
+      if (TokCount > lineStartTok) and (Tokens[lineStartTok].Kind = tkAt) and
+         (not blockIsClass[IndentStackTop]) then
+      begin
+        decKind := PyLexDecoratorKind(lineStartTok, TokCount);
+        if (decKind <> 0) and not PyLexNextCodeIsDef(P) then decKind := 0;
+      end;
+      if decKind <> 0 then
+      begin
+        if decKind = 1 then PyDecHold(lineStartTok, TokCount);
+        TokCount := lineStartTok;
+      end
+      else
+      begin
+        if (PyDecPendCount > 0) and (TokCount > lineStartTok + 1) and
+           (Tokens[lineStartTok].Kind = tkFunction) and
+           (Tokens[lineStartTok + 1].Kind = tkIdent) then
+          PyDecBindDef(lineStartTok + 1, IndentStackTop);
+        if TokCount > lineStartTok then lastLineFirstKind := Tokens[lineStartTok].Kind;
+        PyEmitToken(tkNewline, 0, SrcLine, '');
+      end;
     end;
     { close a synthesised inline suite: the multi-line form's DEDENT comes from
       the NEXT line's indent measurement, so it sits after that newline too }
@@ -1749,6 +1935,7 @@ begin
     begin
       PyEmitToken(tkDedent, 0, SrcLine, '');
       inlineSuite := False;
+      PyDecFlush(IndentStackTop);
     end;
 
     { Consume physical newline }
@@ -1780,6 +1967,7 @@ begin
   begin
     Dec(IndentStackTop);
     PyEmitToken(tkDedent, 0, SrcLine, '');
+    PyDecFlush(IndentStackTop);
   end;
 
   PyEmitToken(tkEOF, 0, SrcLine, '');

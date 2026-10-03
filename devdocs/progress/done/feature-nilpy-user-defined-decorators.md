@@ -3,9 +3,9 @@ prio: 68
 track: N
 type: feature
 blocked-by: []
-summary: "A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it."
-status: unfinished
-owner: ""
+summary: "DONE 2026-10-03 (frankuser) for a decorated DEF outside a class body, lowered in the LEXER. Was: a user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it."
+status: done
+owner: frankuser
 ---
 
 # A decorator that is not one of the recognised names is refused
@@ -230,3 +230,40 @@ the same shape as the pass implicated in
 [[bug-nilpy-render-backend-py-compile-does-not-terminate]] (17,485 overload
 queries, 967 distinct). Probably unrelated; noted because two tickets now point
 at the same machinery.
+
+
+## DONE 2026-10-03 (frankuser) -- lowered in the LEXER, which is where the token-position rule is satisfied
+
+The 08-30 attempt found that a synthesised assignment has no token index, so
+the call-site resolution ("from its own statement onward") never saw it. The
+fix moves the desugaring one stage earlier: PyLexAll emits it as REAL tokens.
+
+- An unrecognised decorator line (the last name of its dotted chain is not
+  dataclass / overload / property / staticmethod / classmethod / setter /
+  getter / deleter), outside a class body, whose next code line is a `def`,
+  is HELD instead of emitted (PyDecHold). `@wraps(f)` / `@functools.wraps(f)`
+  is dropped: it copies metadata only.
+- The def's NAME is emitted as `__pxxdec<N>_<name>` (PyDecBindDef).
+- When the DEDENT that closes the body is emitted (a real one, an inline
+  suite's synthetic one, or end of file), the line `name = d1(d2(..(hidden)))`
+  follows it (PyDecFlush), so stacking applies bottom-up and `@d(arg)` is a
+  call of a call, both for free.
+
+This is NOT the token splicing the section above rules out: nothing has been
+indexed yet when the lexer emits, so every token keeps a stable index and the
+assignment has a real one -- which is exactly what lets `g` resolve as the
+rebound variant from that statement on, and what makes a recursive `g(...)`
+inside the body name the DECORATED binding, as in CPython.
+
+Test: test_nilpy_a_user_decorator_rebinds_the_def -- a registry returning f,
+a *args wrapper, `@times(3)`, a stacked pair, memoised recursion (`fib(60)`),
+a one-line def, a decorated def inside a def, a class as the decorator, and a
+call from a def written above the decorated one. Byte-identical to CPython
+under -dPXX_HEAP_DEBUG and on i386; census flat. A decorated def in an
+imported `.py` module works the same way (it goes through PyLexAll too).
+
+Still refused, loudly and as before: a decorated CLASS (the module-level
+message now says a def takes any decorator), and an unrecognised decorator
+on a METHOD -- a method is not a name a later statement can rebind here, so
+that one needs the class machinery rather than this. `__name__` of a function
+reached through a decorator that returns its argument reads the hidden name.

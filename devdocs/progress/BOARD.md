@@ -47,7 +47,7 @@ _none_
 | refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | TEN OF TWELVE drivers now reach their parse through EmitProgramPrologue (frontend_prologue.inc); NilPy landed 2026-09-02, verified by 24 before/after rows (12 .npy tests, plain and --threadsafe, identical program output and identical compiler messages), eleven other-frontend binaries byte-identical, and three cross targets identical under qemu. LEFT: the C driver, blocked on merging its five per-arch call-main entry chains with EmitProgramEntryForTarget; and the PASCAL driver, blocked on a question this ticket used to call pure de-duplication -- the Pascal driver does NOT call RegisterEmittedStringRuntimeForwards, it registers a larger target-conditional SUPERSET inline, and RegisterProc is not idempotent, so passing wantAnsiRuntime=True would append ~40 duplicate proc rows. Decide that before converting, not during. The drift this deletes is measured, not felt: adding ONE new stub in 187a372a6 required four hand-written call sites, one per unconverted driver. | — |
 | refactor-p-five-dispatch-sites-for-one-named-type-cast | P | 35 | refactor | Five dispatch sites decide what `SomeName(expr)` casts to — FOUR since `1df943481` | — |
 
-## unfinished (18)
+## unfinished (17)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,7 +63,6 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-enum-class | N | 62 | feature | `from enum import Enum` — enum classes are not supported | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
-| feature-nilpy-user-defined-decorators | N | 68 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | feature-target-wasm | A+B | 25 | feature | Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. The `wasm` branch MERGED into master and is gone — verified 2026-08-31, `origin/wasm` is an ancestor of `origin/master` with an empty diff — so this is dispatchable on master like anything else, and the previous NOT-DISPATCHABLE/do-not-claim imperative was false and being obeyed by the ranker. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 30 | perf | RE-MEASURED at HEAD -O2 (frankZ, 2026-09-04): the share has NOT dropped (9.92/9.94/10.35% over three runs vs the original 9.44%), so 440c822e6 did not remove it — but the premise is refuted for a THIRD time and the ticket is now mostly in the wrong lane. Disassembled, ParseFactorCore is 1,146,385 bytes of which 84% is managed-local TEARDOWN: exactly 150 runs of exactly 532 AnsiString releases (532 locals x 150 return points), carrying 36.1% of the function's samples. The 92-arm walk this ticket is NAMED for is 114 CaseEqual call sites carrying 3.2% of the function's samples = ~0.32% of a compile; a perfect hash dispatch has a generous ceiling of ~3% only if it also took all of CaseEqual's 3.1% body, and it carries the three documented hazards (name reassigned at 8 points, 25 duplicate names, the arms are not a ladder). The teardown is bigger, is Track A codegen, and is filed as perf-a-every-return-releases-every-managed-local-even-the-untouched-ones. WHAT IS LEFT FOR P is the ~0.3-3% dispatch question, ranked below its own hazards — not the 9.4% this ticket was opened for. | — |
@@ -1120,9 +1119,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4117)
+## done (4118)
 
-4117 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4118 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1300,7 +1299,6 @@ _none_
 - [p 70] [T] regression-tools-devtest-00-4
 - [p 70] [T] regression-tools-devtest-sh-00-2
 - [p 68] [N] bug-nilpy-a-python-override-of-a-virtual-pascal-method-segfaults-when-called-back-from-the-pascal-side (unblocks 1)
-- [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [U] decide-t-the-full-suite-hook-refuses-prose-about-the-suite (unblocks 5)
 - [p 65] [A] bug-a-a-hand-built-com-interface-cannot-be-called (unblocks 1)
 - [p 65] [A] bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it

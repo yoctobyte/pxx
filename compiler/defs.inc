@@ -9707,6 +9707,26 @@ var
     import) rather than lexing the main program: it must not reset TokCount or
     the shared token-char buffer (feature-nilpy-py-module-loader). }
   PyLexAppending: Boolean;
+  { A USER decorator, `@d` over `def g(...)`, is lowered by the lexer as
+    `def <hidden>(...)` followed by `g = d(<hidden>)` after the body -- which
+    is all a decorator IS in Python. PyDecTok* is one store for both halves:
+    the decorator lines held back until their def arrives (PyDecPend*), and
+    the finished assignment lines waiting for the DEDENT that closes each body
+    (PyDecClose*, a stack, so a decorated def inside a decorated def closes
+    innermost first). See PyLexAll. feature-nilpy-user-defined-decorators }
+  PyDecTokK: array[0..4095] of TTokenKind;
+  PyDecTokI: array[0..4095] of Int64;
+  PyDecTokS: array[0..4095] of AnsiString;
+  PyDecTokCount: Integer;
+  PyDecPendLo: array[0..15] of Integer;   { each held decorator's first token }
+  PyDecPendHi: array[0..15] of Integer;   { ...and one past its last }
+  PyDecPendCount: Integer;
+  PyDecCloseLevel: array[0..255] of Integer;   { IndentStackTop at the def }
+  PyDecCloseLo: array[0..255] of Integer;
+  PyDecCloseHi: array[0..255] of Integer;
+  PyDecCloseLine: array[0..255] of Integer;
+  PyDecCloseCount: Integer;
+  PyDecSeq: Integer;   { hidden-name counter, never reset: names stay unique across modules }
   { First token of the NilPy compilation unit being parsed. 0 for the main
     program; the module's first token while a `.py` import is parsed, so the
     top-level pre-passes (def shells, class fields, imports) scan that module

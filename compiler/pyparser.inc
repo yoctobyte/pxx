@@ -52287,7 +52287,7 @@ begin
         Continue;
       end;
       if not PyIsIdent('dataclass') then
-        Error('Nil Python: unsupported decorator (only @dataclass and @overload)');
+        Error('Nil Python: unsupported decorator here -- a class takes only @dataclass; a def takes any decorator');
       Next;
       PyParseDataclassArgs;
       Expect(tkNewline, 'newline');
@@ -52833,7 +52833,7 @@ begin
         Continue;
       end;
       if not PyIsIdent('dataclass') then
-        Error('Nil Python: unsupported decorator (only @dataclass and @overload)');
+        Error('Nil Python: unsupported decorator here -- a class takes only @dataclass; a def takes any decorator');
       Next;
       PyParseDataclassArgs;
       Expect(tkNewline, 'newline');
