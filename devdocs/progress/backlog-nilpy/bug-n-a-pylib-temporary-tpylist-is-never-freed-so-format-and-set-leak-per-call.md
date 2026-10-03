@@ -408,3 +408,36 @@ Compile gaps the probe met (compatibility, not leaks; no tickets filed):
 
 Four older leak tickets were re-measured on the way and found flat at HEAD,
 closed with test_nilpy_a_discarded_or_variant_routed_result_is_released.
+
+## 2026-10-03 (late) -- a static audit of the remaining temporaries
+
+A walk over pylib.pas for `TPyList.Create` / `pyseq_of_obj` / `list(..)`
+results bound to a Pascal local and never released, each hit census-checked
+(N=300 against N=3000) before it was touched:
+
+- TPyList.setintersect (`&=`, intersection_update): the Self snapshot.
+- TPyList.setsymdiff (`^=`, symmetric_difference_update): BOTH snapshots.
+- TPyList.setdiff (`-=`, difference_update): the other-side snapshot.
+- TPyList.isdisjoint: built pyset_and's whole intersection to read its
+  count; now a membership walk that allocates nothing (298 vs 2783 live).
+- min()/max() of a DICT (pyeval): `max(d.keylist, key)` passed the fresh key
+  list straight into the list overload; 555 vs 5862 live. The other 23
+  keylist/vallist/itemlist locals in pylib and pyeval were checked: all
+  released.
+- TPyFile.writelines: the materialised argument (pyseq_of_obj is fresh on
+  every arm, a copy even for a list).
+
+`s &= t` went from 555 to 5861 live (300 vs 3000 calls), `^=` from 1181 to
+11120, the three *_update methods together from 2401 to 22551, writelines
+from 554 to 5860; all flat now. test_nilpy_a_pylib_temporary_list_is_released_
+after_the_call: 124492 live after 5000 passes of its
+loop on the old compiler, 69 now; its HEAP_DEBUG row covers `s ^= s` and
+`s -= s` on the same object, which is what the snapshots are for.
+
+Found earlier the same day and fixed with the collections batch: the
+type-call builtins `set()`/`tuple()`/`frozenset()` (pybtype_call0) and
+`list(x)`/`dict(x)`/`set(x)` reached through a type value (pybtype_call1)
+kept the construction's reference after PyObjAsVar had taken its own.
+
+Measured flat and left alone: `sort(key=..)` (keys.Free), `sorted(t, key=..)`
+over a tuple (13 vs 24 at N=300/3000, constant).

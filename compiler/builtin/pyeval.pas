@@ -6732,15 +6732,27 @@ end;
   plain arms. Delegating to the TPyList routine rather than re-walking keeps the
   empty-sequence ValueError and the first-wins tie rule in ONE place. }
 function min(d: TPyDict; key: Pointer): Variant; overload;
+var kl: TPyList;
 begin
   if d = nil then raise ValueError.Create('min() iterable argument is empty');
-  Result := min(d.keylist, key);
+  kl := d.keylist;   { fresh, only read -- passed straight through it leaked }
+  try
+    Result := min(kl, key);
+  finally
+    PXXObjRelease(Pointer(kl));
+  end;
 end;
 
 function max(d: TPyDict; key: Pointer): Variant; overload;
+var kl: TPyList;
 begin
   if d = nil then raise ValueError.Create('max() iterable argument is empty');
-  Result := max(d.keylist, key);
+  kl := d.keylist;   { fresh, only read -- passed straight through it leaked }
+  try
+    Result := max(kl, key);
+  finally
+    PXXObjRelease(Pointer(kl));
+  end;
 end;
 
 { pystr_charlist, not a private byte walk: it is the one exploder, so a

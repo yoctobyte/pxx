@@ -871,6 +871,19 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_an_fstring_conversion_takes_a_format_spec.npy $(TESTTMP)/test_nilpy_fsconv26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_fsconv26_i386 | diff -u test/test_nilpy_an_fstring_conversion_takes_a_format_spec.expected -; \
 	else echo "=== test_nilpy_fsconv: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A KEYWORD AFTER A PARENTHESISED FIRST ARGUMENT BINDS: `max((x for x in xs),
+	# key=len)` was refused at pin v452 -- the keyword scan took the argument's
+	# own '(' for the call's and never saw `key=`.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_keyword_after_a_parenthesised_first_argument_binds.npy $(TESTTMP)/test_nilpy_kwparen_hd26
+	$(TESTTMP)/test_nilpy_kwparen_hd26 | diff -u test/test_nilpy_a_keyword_after_a_parenthesised_first_argument_binds.expected -
+	# BUILTIN AND STR-METHOD KEYWORDS BIND BY NAME (split maxsplit=, splitlines
+	# keepends=, int base=, round ndigits=), and splitlines() splits CRLF.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_builtin_and_str_method_keywords_bind_by_name.npy $(TESTTMP)/test_nilpy_splitkw_hd26
+	$(TESTTMP)/test_nilpy_splitkw_hd26 | diff -u test/test_nilpy_builtin_and_str_method_keywords_bind_by_name.expected -
+	# STR.FORMAT NESTS A FIELD IN ITS SPEC, and !r keeps its spec: ValueError
+	# "unsupported format spec" at pin v452.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_str_format_nests_a_field_in_its_spec.npy $(TESTTMP)/test_nilpy_fmtnest_hd26
+	$(TESTTMP)/test_nilpy_fmtnest_hd26 | diff -u test/test_nilpy_str_format_nests_a_field_in_its_spec.expected -
 	# YIELD FROM delegates: a generator, a list, a str, a range, nested, and a
 	# delegation abandoned by break or by dropping a stepped generator. A parse
 	# error at pin v452.
@@ -920,17 +933,18 @@ test-nilpy: $(COMPILER)
 	  echo "FAIL: nilpy_generator_close control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.npy $(TESTTMP)/test_nilpy_genclose_hd26
 	$(TESTTMP)/test_nilpy_genclose_hd26 | diff -u test/test_nilpy_a_generator_closed_early_or_exhausted_does_not_leak.expected -
-	# THE IN-PLACE SET OPERATORS AND writelines() RELEASE THEIR TEMPORARIES:
-	# `&=` `^=` `-=` and the *_update methods snapshot a side before mutating,
-	# and writelines() materialises its argument; none of those lists were
-	# released (pin v452: ~124k live after this loop). `keep` is the positive
-	# control; the HEAP_DEBUG row covers `s ^= s` / `s -= s` (same object).
-	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_in_place_set_operators_and_writelines_release_their_temporaries.npy $(TESTTMP)/test_nilpy_setsnap26
+	# A PYLIB TEMPORARY LIST IS RELEASED AFTER THE CALL: `&=` `^=` `-=` and
+	# the *_update methods snapshot a side before mutating, writelines()
+	# materialises its argument, isdisjoint() built an intersection and
+	# min()/max() of a dict a key list; none of those lists were released
+	# (pin v452: ~124k live after this loop). `keep` is the positive control;
+	# the HEAP_DEBUG row covers `s ^= s` / `s -= s` (same object).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_pylib_temporary_list_is_released_after_the_call.npy $(TESTTMP)/test_nilpy_setsnap26
 	tools/assert_no_leak.sh nilpy_setsnap 300 $(TESTTMP)/test_nilpy_setsnap26 leak 5000
 	@if tools/assert_no_leak.sh nilpy_setsnap_control 300 $(TESTTMP)/test_nilpy_setsnap26 keep 5000 >/dev/null 2>&1; then \
 	  echo "FAIL: nilpy_setsnap control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
-	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_in_place_set_operators_and_writelines_release_their_temporaries.npy $(TESTTMP)/test_nilpy_setsnap_hd26
-	$(TESTTMP)/test_nilpy_setsnap_hd26 | diff -u test/test_nilpy_in_place_set_operators_and_writelines_release_their_temporaries.expected -
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_pylib_temporary_list_is_released_after_the_call.npy $(TESTTMP)/test_nilpy_setsnap_hd26
+	$(TESTTMP)/test_nilpy_setsnap_hd26 | diff -u test/test_nilpy_a_pylib_temporary_list_is_released_after_the_call.expected -
 	# A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS RELEASED after the call --
 	# sorted/min key=, a method's Variant parameter. Nothing owned the fresh
 	# closure object (pin v438: ~6 live per iteration of this loop); `keep` is

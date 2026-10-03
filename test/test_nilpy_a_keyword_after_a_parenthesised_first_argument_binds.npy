@@ -1,0 +1,26 @@
+# A keyword argument after a first argument that OPENS WITH '(' -- a
+# parenthesised generator expression, a parenthesised name or sum, a tuple --
+# binds like any other. The '(' scan that finds the call's keyword names took
+# the first argument's own paren for the call's, never saw `key=`, and left the
+# call on the first-declared overload: `max((x for x in xs), key=len)` was
+# refused with "max has no parameter named 'key' in the overload taking 2".
+
+
+def longest(words):
+    return max((w.strip() for w in words), key=len)
+
+
+def shortest(words):
+    return min((w for w in words if w), key=lambda w: (len(w), w))
+
+
+words = ["bb", "a", "cccc", "ddd", ""]
+print(longest(words))
+print(shortest(words))
+print(max((words), key=len))
+print(min((words + ["zzzzz"]), key=lambda w: -len(w)))
+print(sorted((w.upper() for w in words if w), key=len, reverse=True))
+print(max(((1, "x"), (3, "a"), (2, "q")), key=lambda t: t[1]))
+print(" ".join(sorted((w for w in words), key=len)).strip())
+nums = [3, -7, 5]
+print(max((abs(n) for n in nums), default=0), max((n for n in []), default=-1))

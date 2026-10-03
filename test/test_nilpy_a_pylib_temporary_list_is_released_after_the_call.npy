@@ -1,10 +1,12 @@
 # The in-place set operators snapshot one or both sides before they mutate
 # (removing renumbers the backing list, and `s ^= s` / `s -= s` must see the
 # sets as they were), and file.writelines() materialises its argument into a
-# list first; isdisjoint() built the whole intersection to read its count.
+# list first; isdisjoint() built the whole intersection to read its count;
+# min()/max() over a dict passed the dict's fresh key list straight into the
+# list overload.
 # Those temporaries were never released: pin v452 left ~2 objects live per
 # call of `&=`, `-=` and writelines, ~4 per `^=`, ~7 per round of the three
-# *_update methods, and one per isdisjoint().
+# *_update methods, one per isdisjoint(), ~2 per min()/max() of a dict.
 #
 # No argument: prints the shapes (diffed against CPython). `leak N`: runs
 # them N times and keeps nothing. `keep N`: keeps one result per pass, the
@@ -32,6 +34,8 @@ def shapes(k):
     out.writelines(("c", "d"))
     out.close()
     g = [a.isdisjoint({99}), a.isdisjoint([3, 4]), f.isdisjoint(a)]
+    m = {"b": k, "a": 1, "c": 2}
+    g.append(max(m) + min(m) + max(m, key=m.get))
     return [sorted(a), sorted(b), sorted(c), sorted(d), sorted(e), sorted(f), g]
 
 

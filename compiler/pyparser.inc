@@ -4993,7 +4993,8 @@ begin
       from the arg count, like split. }
     begin pname := 'pystr_rjust'; wantArgs := -2; end
   else if CaseEqual(mname, 'splitlines') then
-    begin pname := 'pystr_splitlines'; retTk := tyClass; end
+    { no argument, or keepends -- the -10 zero-or-one form, like expandtabs }
+    begin pname := 'pystr_splitlines'; retTk := tyClass; wantArgs := -10; end
   else if CaseEqual(mname, 'replace') then
     { .replace(old, new) and .replace(old, new, count) — see the -7 case in
       PyParseStrMethod. Its absence is what made songformatter's
@@ -11184,11 +11185,35 @@ end;
 
   The `!r` / `:spec` tail is preserved untouched — only the NAME part in front
   of it is rewritten — and `{{` / `}}` escapes are stepped over. }
+{ One field NAME as PyFormatRenumber rewrites it: '' takes the next automatic
+  index, digits stay, a keyword name becomes the slot its value landed in. }
+function PyFormatRenumberName(const nm: AnsiString; var names: array of AnsiString;
+                              nNames, nPos: Integer; var autoIdx: Integer): AnsiString;
+var k: Integer; allDigits: Boolean;
+begin
+  if nm = '' then
+  begin
+    Result := AIntToStr(autoIdx);
+    Inc(autoIdx);
+    Exit;
+  end;
+  allDigits := True;
+  for k := 1 to Length(nm) do
+    if (nm[k] < '0') or (nm[k] > '9') then allDigits := False;
+  if allDigits then begin Result := nm; Exit; end;
+  for k := 0 to nNames - 1 do
+    if names[k] = nm then
+    begin
+      Result := AIntToStr(nPos + k);
+      Exit;
+    end;
+  Error('Nil Python: .format() has no keyword argument named ' + nm);
+end;
+
 function PyFormatRenumber(const fmt: AnsiString; var names: array of AnsiString;
                           nNames, nPos: Integer): AnsiString;
-var i, j, k, fieldStart, autoIdx: Integer;
-    nm, tail, ob, cb: AnsiString;
-    allDigits, found: Boolean;
+var i, j, fieldStart, autoIdx, depth, ns: Integer;
+    nm, tail, ob, cb, outer, nested: AnsiString;
 begin
   { The braces are Chr(123)/Chr(125), never quoted characters: THIS DIALECT
     NESTS BRACE COMMENTS, so a quoted brace opens one and the file stops
@@ -11225,36 +11250,42 @@ begin
           (fmt[i] <> ':') do
       Inc(i);
     nm := Copy(fmt, fieldStart, i - fieldStart);
-    tail := '';
+    { the !conv:spec TAIL, brace-balanced: a spec may hold NESTED fields (a
+      width taken from an argument, say), and stopping at the first close
+      brace cut the spec in half and left a stray brace behind }
     j := i;
-    while (j <= Length(fmt)) and (fmt[j] <> cb) do Inc(j);
+    depth := 0;
+    while (j <= Length(fmt)) and ((fmt[j] <> cb) or (depth > 0)) do
+    begin
+      if fmt[j] = ob then Inc(depth)
+      else if fmt[j] = cb then Dec(depth);
+      Inc(j);
+    end;
     tail := Copy(fmt, i, j - i);
     if j <= Length(fmt) then Inc(j);        { step over the close brace }
     i := j;
-    if nm = '' then
+    { the OUTER field is numbered first, then the nested ones left to right --
+      CPython's order, so an automatic outer field and an automatic nested
+      width take indices 0 and 1 in that order }
+    outer := PyFormatRenumberName(nm, names, nNames, nPos, autoIdx);
+    nested := '';
+    j := 1;
+    while j <= Length(tail) do
     begin
-      Result := Result + ob + AIntToStr(autoIdx) + tail + cb;
-      Inc(autoIdx);
-      Continue;
-    end;
-    allDigits := True;
-    for k := 1 to Length(nm) do
-      if (nm[k] < '0') or (nm[k] > '9') then allDigits := False;
-    if allDigits then
-    begin
-      Result := Result + ob + nm + tail + cb;
-      Continue;
-    end;
-    found := False;
-    for k := 0 to nNames - 1 do
-      if names[k] = nm then
+      if tail[j] = ob then
       begin
-        Result := Result + ob + AIntToStr(nPos + k) + tail + cb;
-        found := True;
-        Break;
+        ns := j + 1;
+        while (j <= Length(tail)) and (tail[j] <> cb) do Inc(j);
+        nested := nested + ob +
+                  PyFormatRenumberName(Copy(tail, ns, j - ns), names, nNames,
+                                       nPos, autoIdx) + cb;
+        Inc(j);
+        Continue;
       end;
-    if not found then
-      Error('Nil Python: .format() has no keyword argument named ' + nm);
+      nested := nested + tail[j];
+      Inc(j);
+    end;
+    Result := Result + ob + outer + nested + cb;
   end;
 end;
 
@@ -11332,6 +11363,47 @@ begin
     begin
       Next;
       Next;
+    end;
+    { the one-argument rows' keyword spellings: `expandtabs(tabsize=4)`,
+      `splitlines(keepends=True)` }
+    if wantArgs = -10 then
+    begin
+      if CaseEqual(mname, 'splitlines') then PyEatKwNamed('keepends')
+      else PyEatKwNamed('tabsize');
+    end;
+    { `s.split(",", maxsplit=1)`, `s.split(maxsplit=1)`, `s.split(sep=",")` --
+      CPython's signature is `split(sep=None, maxsplit=-1)`, and both names were
+      parsed as expressions ("undefined variable (maxsplit)"). In declaration
+      order the name is simply consumed; a `maxsplit=` with no separator before
+      it gets the DEFAULT one, an explicit None, which the arity logic in
+      PyStrMethodFinish already maps to the whitespace-with-limit form. }
+    if ((wantArgs = -1) or (wantArgs = -8)) and (CurTok.Kind = tkIdent) and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      if PyIsIdent('sep') then
+      begin
+        if i <> 0 then
+          Error('Nil Python: str.' + mname + '() takes sep= before maxsplit=, '
+                + 'and only once');
+      end
+      else if PyIsIdent('maxsplit') then
+      begin
+        if i = 0 then
+        begin
+          callNode := AllocNode(AN_ARG);
+          ASTLeft[callNode] := PyMakeNone;
+          ASTRight[lastArg] := callNode;
+          lastArg := callNode;
+          Inc(i);
+        end
+        else if i <> 1 then
+          Error('Nil Python: str.' + mname + '() got maxsplit twice');
+      end
+      else
+        Error('Nil Python: str.' + mname + '() got an unexpected keyword '
+              + 'argument ''' + CurTok.SVal + '''');
+      Next;                              { the name }
+      Next;                              { the '=' }
     end;
     { `"{k}".format(k=3)` — a NAMED field. The name is recorded and the `k=`
       consumed, so the VALUE lands in the positional slot the renumbering below
@@ -11588,8 +11660,9 @@ begin
   end
   else if wantArgs = -10 then
   begin
-    { no argument, or one INT argument — expandtabs. Distinct proc NAMES per
-      arity, like every other multi-arity row: FindProc is not arity-aware. }
+    { no argument, or one argument — expandtabs(tabsize), splitlines(keepends).
+      Distinct proc NAMES per arity, like every other multi-arity row: FindProc
+      is not arity-aware. }
     if i = 1 then pname := pname + '_n'
     else if i <> 0 then
       Error('Nil Python: str method .' + mname + '() takes at most one argument');
@@ -13653,14 +13726,19 @@ end;
 
   CurTok is the token after enumerate's comma. Answers nothing and changes
   nothing when the argument is positional. }
-procedure PyEatEnumerateStartKw;
+procedure PyEatKwNamed(const nm: AnsiString);
 begin
-  if PyIsIdent('start') and (TokPos < TokCount) and
+  if PyIsIdent(nm) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkAssign) then
   begin
-    Next;                              { 'start' }
+    Next;                              { the name }
     Next;                              { '=' }
   end;
+end;
+
+procedure PyEatEnumerateStartKw;
+begin
+  PyEatKwNamed('start');
 end;
 
 function PyStarIsIterableForm(const nm: AnsiString): Boolean;
@@ -19626,10 +19704,16 @@ end;
   unconditionally instead of re-deriving parser state by hand at each site. }
 function PyKwNamesTokPos: Integer;
 begin
-  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
-    Result := TokPos
-  else if CurTok.Kind = tkLParen then
+  { CurTok FIRST: when the call's '(' is already current, the NEXT token is the
+    first argument's own first token, and a first argument that opens with '('
+    -- `max((x for x in xs), key=len)`, `max((a), key=f)` -- answered that
+    inner paren. The keyword scan then covered only the argument and never saw
+    `key=`, so the call stayed on the first-declared overload and was refused.
+    A current '(' cannot be a callee name, so it is always the call's own. }
+  if CurTok.Kind = tkLParen then
     Result := TokPos - 1
+  else if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+    Result := TokPos
   else
     Result := -1;
 end;
@@ -21932,6 +22016,57 @@ begin
   Result := PyClassLevelCarrier(nm, outMmi, anyInst) and (not anyInst);
 end;
 
+{ The keyword names a str method row consumes itself (PyParseStrMethod):
+  CPython's own spellings for the rows that take one. }
+function PyStrRowTakesKw(const mname, kw: AnsiString): Boolean;
+begin
+  if CaseEqual(mname, 'split') or CaseEqual(mname, 'rsplit') then
+    Result := CaseEqual(kw, 'sep') or CaseEqual(kw, 'maxsplit')
+  else if CaseEqual(mname, 'splitlines') then Result := CaseEqual(kw, 'keepends')
+  else if CaseEqual(mname, 'expandtabs') then Result := CaseEqual(kw, 'tabsize')
+  else Result := False;
+end;
+
+{ Does the call at parenTok write keywords that ONLY the str method takes --
+  every one in the str row's signature, and no class's same-named method
+  declaring any of them? Then a variant receiver can only mean the str method.
+  TPyBytes declares split/rsplit/splitlines without maxsplit or keepends, which
+  sent `v.split(maxsplit=1)` down the class dispatcher; the keyword bound
+  against no candidate and the call fell to the open-world getattr, raising
+  "'str' object has no attribute 'split'" for a str receiver. A user class
+  whose own split takes `maxsplit=` keeps the dispatcher, keyword and all. }
+function PyStrKwCallOnlyStrTakes(const mname: AnsiString; parenTok: Integer): Boolean;
+var k, depth, ci, di, cand: Integer; kw: AnsiString; anyKw: Boolean;
+begin
+  Result := False;
+  anyKw := False;
+  if (parenTok < 0) or (parenTok >= TokCount) or
+     (Tokens[parenTok].Kind <> tkLParen) then Exit;
+  k := parenTok + 1; depth := 1;
+  while (k < TokCount) and (depth > 0) do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack] then Dec(depth)
+    else if (depth = 1) and (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
+            (Tokens[k + 1].Kind = tkAssign) then
+    begin
+      kw := GetTokenStr(k);
+      if not PyStrRowTakesKw(mname, kw) then Exit;
+      for ci := 0 to UClsCount - 1 do
+        if not UClsIsRecord[ci] then
+          for di := 0 to UClsMCount[ci] - 1 do
+          begin
+            cand := UClsMBase[ci] + di;
+            if UMemberNameMatch(UMthNOff[cand], UMthNLen[cand], ci, mname, ULower(mname)) and
+               PyProcParamNamed(UMthProc_[cand], kw) then Exit;
+          end;
+      anyKw := True;
+    end;
+    Inc(k);
+  end;
+  Result := anyKw;
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -22005,7 +22140,8 @@ begin
     (once for the tag guard, once for the str conversion) and may not be
     side-effect-free (`d.get(k).upper()`). }
   if PyStrMethodInfo(mname, smPName, smTk, smArgs) and
-     not PyStrMethodLosesToClass(mname) then
+     ((not PyStrMethodLosesToClass(mname)) or
+      PyStrKwCallOnlyStrTakes(mname, PyKwNamesTokPos)) then
   begin
     smTmpSym := AllocVar(PyHiddenName('sm'), tyVariant);
     smAsgn := AllocNode(AN_ASSIGN);
@@ -59409,6 +59545,7 @@ begin
         begin
           intBaseArg := CurASTNode;
           Next;
+          PyEatKwNamed('base');          { `int(s, base=16)` }
           ParseArgExpr;
           node := AllocNode(AN_CALL);
           ASTIVal[node] := FindProc('pyint_parse');
@@ -60837,6 +60974,7 @@ begin
         if CaseEqual(name, 'round') and (CurTok.Kind = tkComma) then
         begin
           Next;
+          PyEatKwNamed('ndigits');       { `round(x, ndigits=2)` }
           rndArg := CurASTNode;
           { CPython's `round(x, n)` keeps x's TYPE: an int in, an int out,
             whatever n is. `round(6, 2)` is 6, not 6.0, and a report that

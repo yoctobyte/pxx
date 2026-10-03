@@ -1,0 +1,19 @@
+# str.format() nests a replacement field inside a format spec -- a width,
+# precision or fill taken from an argument, automatic, numbered or named -- and
+# applies a spec after a !r conversion. At pin v452 the spec scan stopped at the
+# first close brace (ValueError: unsupported format spec ">{1"), and `!r`
+# dropped its spec. The outer field is numbered before the nested ones, as in
+# CPython.
+print("{:>{w}}|".format("a", w=4))
+print("{:>{}}|".format("ab", 5))
+print("{0:{1}.{2}f}|".format(3.14159, 8, 2))
+print("{:{fill}^{width}}|".format("x", fill="*", width=7))
+print("{v:>{w}}|{v}".format(v="q", w=3))
+print("{!r:>8}|{!r}|{!s:<4}|".format("a", "b", "c"))
+print("{name!r:>{w}}|".format(name="z", w=6))
+w = 5
+print(f"{'a':>{w}}|", "{{}}{}".format(1))
+rows = [("apple", 3.5), ("kiwi", 12.25)]
+wn = max(len(n) for n, p in rows)
+for n, p in rows:
+    print("{:<{}} {:>{}.{}f}".format(n, wn, p, 8, 2))

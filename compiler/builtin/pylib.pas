@@ -3243,6 +3243,7 @@ function pystr_rsplit_sep_max(const s: AnsiString; const sep: AnsiString; maxspl
 function pystr_partition(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_rpartition(const s: AnsiString; const sep: AnsiString): TPyList;
 function pystr_splitlines(const s: AnsiString): TPyList;
+function pystr_splitlines_n(const s: AnsiString; keepends: Boolean): TPyList;
 { str.replace(old, new[, count]) — CPython semantics: non-overlapping, left to
   right, a NEGATIVE count means "every occurrence", and an EMPTY pattern inserts
   the replacement between every character and at both ends
@@ -4444,7 +4445,18 @@ end;
   final empty field — "a\n".splitlines() is ["a"], not ["a",""]. "" is []. That
   trailing rule is what separates it from split("\n"). }
 function pystr_splitlines(const s: AnsiString): TPyList;
-var i, n, st: Integer;
+begin
+  Result := pystr_splitlines_n(s, False);
+end;
+
+{ CPython's line boundaries, not just LF: CR LF and a lone CR, VT, FF, the
+  three separators \x1c-\x1e, and -- as UTF-8 sequences, since a str here is
+  its UTF-8 bytes -- NEL (C2 85), LINE SEPARATOR (E2 80 A8) and PARAGRAPH
+  SEPARATOR (E2 80 A9). LF alone answered ['a\r', 'b'] for CRLF text, silently,
+  which is every file written on Windows. keepends keeps each terminator,
+  CR LF as one. }
+function pystr_splitlines_n(const s: AnsiString; keepends: Boolean): TPyList;
+var i, n, st, w: Integer; c: Char;
 begin
   Result := TPyList.Create;
   n := Length(s);
@@ -4452,12 +4464,26 @@ begin
   i := 1;
   while i <= n do
   begin
-    if s[i] = Chr(10) then
+    c := s[i];
+    w := 0;
+    if c = Chr(13) then
     begin
-      Result.append(Copy(s, st, i - st));
-      st := i + 1;
-    end;
-    Inc(i);
+      if (i < n) and (s[i + 1] = Chr(10)) then w := 2 else w := 1;
+    end
+    else if (c = Chr(10)) or (c = Chr(11)) or (c = Chr(12)) or
+            (c = Chr(28)) or (c = Chr(29)) or (c = Chr(30)) then w := 1
+    else if (c = Chr($C2)) and (i < n) and (s[i + 1] = Chr($85)) then w := 2
+    else if (c = Chr($E2)) and (i + 2 <= n) and (s[i + 1] = Chr($80)) and
+            ((s[i + 2] = Chr($A8)) or (s[i + 2] = Chr($A9))) then w := 3;
+    if w > 0 then
+    begin
+      if keepends then Result.append(Copy(s, st, i + w - st))
+      else Result.append(Copy(s, st, i - st));
+      i := i + w;
+      st := i;
+    end
+    else
+      Inc(i);
   end;
   if st <= n then Result.append(Copy(s, st, n - st + 1));
 end;
@@ -19005,8 +19031,51 @@ end;
 { The placeholder walk. Two variants rather than an open array: an open array
   of Variant is not marshalled correctly here and crashed on the second
   argument. }
+{ A format SPEC's nested fields, `{:>{w}}` / `{:{}.{}f}`: each `{n}` / `{}` in
+  the spec is replaced by that argument's text before the spec is applied.
+  argi is the automatic counter, already past the outer field -- CPython
+  numbers the outer field first. }
+function PyFormatExpandSpec(const spec: AnsiString; args: TPyList;
+                            var argi: Integer): AnsiString;
+var j, ns, idx, k: Integer; nf: AnsiString;
+begin
+  Result := '';
+  j := 1;
+  while j <= Length(spec) do
+  begin
+    if spec[j] = Chr(123) then
+    begin
+      ns := j + 1;
+      while (j <= Length(spec)) and (spec[j] <> Chr(125)) do Inc(j);
+      nf := Copy(spec, ns, j - ns);
+      idx := -1;
+      if nf <> '' then
+      begin
+        idx := 0;
+        for k := 1 to Length(nf) do
+          if (nf[k] >= '0') and (nf[k] <= '9') then
+            idx := idx * 10 + (Ord(nf[k]) - Ord('0'))
+          else
+          begin idx := -1; Break; end;
+      end;
+      if idx < 0 then
+      begin
+        idx := argi;
+        Inc(argi);
+      end;
+      if (args = nil) or (idx >= args.count) then
+        raise Exception.Create('str.format: more placeholders than arguments');
+      Result := Result + pyvar_print_of(args.at(idx));
+      Inc(j);
+      Continue;
+    end;
+    Result := Result + spec[j];
+    Inc(j);
+  end;
+end;
+
 function PyFormatApply(const fmt: AnsiString; args: TPyList): AnsiString;
-var i, j, argi, useIdx, k, nArgs: Integer; spec, fld, outS: AnsiString;
+var i, j, argi, useIdx, k, nArgs, depth: Integer; spec, fld, outS: AnsiString;
     conv: Char;
 begin
   outS := '';
@@ -19055,8 +19124,15 @@ begin
       if (j <= Length(fmt)) and (fmt[j] = ':') then
       begin
         Inc(j);
-        while (j <= Length(fmt)) and (fmt[j] <> '}') do
-        begin spec := spec + fmt[j]; Inc(j); end;
+        { brace-balanced: a spec may nest fields, `{:>{w}}` }
+        depth := 0;
+        while (j <= Length(fmt)) and ((fmt[j] <> '}') or (depth > 0)) do
+        begin
+          if fmt[j] = '{' then Inc(depth)
+          else if fmt[j] = '}' then Dec(depth);
+          spec := spec + fmt[j];
+          Inc(j);
+        end;
       end;
       { An all-digits field is an explicit index and does NOT advance the
         automatic counter — Python numbers `{}` and `{N}` independently, which
@@ -19080,11 +19156,16 @@ begin
       end;
       if useIdx >= nArgs then
         raise Exception.Create('str.format: more placeholders than arguments');
+      if Pos('{', spec) > 0 then spec := PyFormatExpandSpec(spec, args, argi);
       { pyvar_print_of, NOT pystr_of: pystr_of answers '' for a CONTAINER
         payload, so `"{}".format([1, 2])` produced an EMPTY string — silent, and
         the value vanished rather than looking wrong. pyvar_print_of is the same
         rendering print() uses, which is what str() means here. }
-      if conv = 'r' then outS := outS + pyvar_repr(args.at(useIdx))
+      { a conversion WITH a spec, `{!r:>8}`: the spec applies to the repr, as
+        CPython does it -- the conversion arm used to drop the spec }
+      if (conv = 'r') and (spec <> '') then
+        outS := outS + pyformat_of(pyvar_repr(args.at(useIdx)), spec)
+      else if conv = 'r' then outS := outS + pyvar_repr(args.at(useIdx))
       else if spec = '' then outS := outS + pyvar_print_of(args.at(useIdx))
       else outS := outS + pyformat_of(args.at(useIdx), spec);
       i := j + 1;

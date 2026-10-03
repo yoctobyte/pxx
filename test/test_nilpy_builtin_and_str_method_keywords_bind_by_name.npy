@@ -1,0 +1,30 @@
+# CPython's keyword spellings bind by name: str.split / rsplit `sep=` and
+# `maxsplit=`, splitlines `keepends=`, expandtabs `tabsize=`, int `base=`,
+# round `ndigits=` -- on a typed str, a variant (whose method name TPyBytes
+# also declares, without those parameters) and a dict value. A user class's own
+# `split` keeps its keyword parameters. At pin v452 each name was parsed as an
+# expression ("undefined variable (maxsplit)"), `splitlines(True)` was refused,
+# and splitlines() broke only on LF, so CRLF text kept its '\r' silently.
+s = "a,b,c,d"
+w = "  x  y z  "
+print(s.split(",", maxsplit=1), s.split(sep=","), s.split(sep=",", maxsplit=2))
+print(w.split(maxsplit=1), w.split(None, maxsplit=1), w.rsplit(maxsplit=1))
+print(s.rsplit(",", maxsplit=1), s.rsplit(sep=",", maxsplit=2), s.split(",", 1))
+print(s.split(maxsplit=-1), w.split(maxsplit=0))
+def f(t):
+    return t.split(":", maxsplit=1)
+print(f("k:v:w"))
+class P:
+    def split(self, sep=None, maxsplit=-1):
+        return ["P", sep, maxsplit]
+row = [1, "k:v:w"]
+x = row[1]
+print(x.split(":", maxsplit=1))
+print(P().split(",", maxsplit=3), P().split(maxsplit=2))
+d = {"line": "a b c"}
+print(d["line"].split(maxsplit=1))
+t = "a\r\nb\rc\n\nd\x0be\n"
+print(t.splitlines(), t.splitlines(True), t.splitlines(keepends=True))
+print(row[1].splitlines(keepends=True), x.split(maxsplit=1), x.rsplit(sep=":", maxsplit=1))
+print("a\tb".expandtabs(tabsize=4), int("ff", base=16), int("-101", base=2))
+print(round(2.567, ndigits=1), round(1234, ndigits=-2), round(2.5))
