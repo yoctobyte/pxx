@@ -97,3 +97,36 @@ Not started for that reason. The suggested `BK_CELLREF` ownership kind from the
 original write-up is still right for the CLOSURE half — that half is easy, since
 the per-slot ownership map already exists — but it only pays off once the frame
 half has a safe release site, because until then the count never reaches zero.
+
+## Fixed 2026-10-03
+
+The frame half got its release site without a new mechanism: the cell is a
+refcounted RAW2 block (`pycell_new_owned`), and the FRAME's reference lives in
+a hidden class local, the ordinary ARC local every NilPy class value gets. So
+it is released at scope exit on exactly the paths any other class local is,
+an exception unwind included, and the pointer local the reads go through
+stays a plain copy that owns nothing. Every cell read and write is unchanged,
+because the payload stays at offset 0. A marker at offset 16 lets the RAW2
+finalizer recognise the block, asked after the bound-fn and closure magic.
+A variant cell releases its payload when it dies.
+
+The closure half needed no new ownership kind either: a closure binds the
+cell through `pyboundfn_bind_obj` (retain, released as BK_OBJ by the existing
+finalizer). PXXObjRelease is magic-guarded, so a cell made by the remaining
+plain-GetMem users (generator variant arguments) is left alone as before.
+
+Gate, as this ticket set it: RSS over 20k and 320k closures from the repro
+above went from 1.2 MB -> 8.2 MB to 648 KB -> 648 KB; a list-valued cell from
+5.0 MB -> 70.7 MB to 648 KB -> 648 KB. Under -dPXX_HEAP_DEBUG,
+test_nilpy_closure_lifetime matches its .expected and
+test_nilpy_nonlocal_escaping_closure (which has no .expected) matches CPython
+byte for byte; a HEAP_DEBUG sweep over every NilPy test shows no new
+divergence. Regression test:
+test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.npy --
+census through the list-valued cell (a scalar cell is a raw block the census
+does not count), 28957 live after 5000 passes before, 31 after; a counter
+outliving its frame, two closures over one cell, a generator's helper.
+
+NOT verified on the lekkerzeilen demo (no display here); it is the program
+where the last ownership change to closure state crashed, so it is the first
+thing to run.

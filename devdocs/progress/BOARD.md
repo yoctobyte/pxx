@@ -47,13 +47,12 @@ _none_
 | refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | TEN OF TWELVE drivers now reach their parse through EmitProgramPrologue (frontend_prologue.inc); NilPy landed 2026-09-02, verified by 24 before/after rows (12 .npy tests, plain and --threadsafe, identical program output and identical compiler messages), eleven other-frontend binaries byte-identical, and three cross targets identical under qemu. LEFT: the C driver, blocked on merging its five per-arch call-main entry chains with EmitProgramEntryForTarget; and the PASCAL driver, blocked on a question this ticket used to call pure de-duplication -- the Pascal driver does NOT call RegisterEmittedStringRuntimeForwards, it registers a larger target-conditional SUPERSET inline, and RegisterProc is not idempotent, so passing wantAnsiRuntime=True would append ~40 duplicate proc rows. Decide that before converting, not during. The drift this deletes is measured, not felt: adding ONE new stub in 187a372a6 required four hand-written call sites, one per unconverted driver. | — |
 | refactor-p-five-dispatch-sites-for-one-named-type-cast | P | 35 | refactor | Five dispatch sites decide what `SomeName(expr)` casts to — FOUR since `1df943481` | — |
 
-## unfinished (19)
+## unfinished (18)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-n-a-local-named-after-its-own-def-aliases-the-function-result | N | 60 | bug | A NilPy local whose name equals its enclosing def's name aliases the function result instead of being an ordinary local: `def mode(label): tonic, mode = label.split(' '); return tonic, mode` returns ('C', None) where CPython returns ('C', 'minor'). Silent wrong value, no diagnostic. | — |
-| bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 25 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 25 | feature | Build-time selection of frontends and targets. Thirteen omission defines ship. PXX_NO_NILPY now has its INCLUDE GUARDS, driver refusal, `.py`-module refusal and ParseArgExpr fallback landed (byte-identical in the default build) but DOES NOT BUILD YET and is deliberately not advertised. The carve campaign it was parked behind has LANDED and did not finish the job: re-measured 2026-08-31, 134 symbols / 279 sites remain, down from 176/426 -- concentrated in five routines of the shared Pascal expression chain, as NilPy arms inside the shared ARGUMENT LOOPS (guarded by isNilPy, BELOW the PyParseFactorCore hook, which is why that hook did not close them). Parked again behind refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops. Also, unchanged and still the headline: omitting frontends is NOT the size lever -- nine frontends buy 4.4%, three host backends buy 20.7%. | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops |
@@ -1128,9 +1127,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (4095)
+## done (4096)
 
-4095 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+4096 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (89)
 
@@ -1557,7 +1556,6 @@ _none_
 - [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling
 - [p 40] [N] bug-nilpy-a-generator-returned-from-a-def-yields-nothing
 - [p 40] [N] bug-nilpy-a-handler-binder-unwound-past-by-a-different-exception-still-leaks
-- [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-bodiless-procedure-declaration-is-accepted-and-swallows-the-next-routine
 - [p 40] [T] bug-t-a-restart-converts-owned-scratch-into-unowned-scratch-and-nothing-observes-it
 - [p 40] [T] bug-t-check-has-no-aperture-for-a-ticket-slug-cited-in-source-and-195-of-them-resolve-to-nothing

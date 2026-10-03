@@ -12534,10 +12534,12 @@ end;
   caller falls back to the plain address. }
 function PyMakeBoundFnValue(procIdx: Integer): Integer;
 var j, symIdx, node, argA, argB, argC, pi, bindPi, varBindPi, dblBindPi, vNode: Integer;
+    objBindPi: Integer;
     nm: AnsiString;
 begin
   Result := -1;
   pi := FindProc('pyboundfn_new');
+  objBindPi := FindProc('pyboundfn_bind_obj');
   bindPi := FindProc('pyboundfn_bind');
   varBindPi := FindProc('pyboundfn_bind_var');
   dblBindPi := FindProc('pyboundfn_bind_dbl');
@@ -12587,7 +12589,11 @@ begin
       ASTLeft[argC] := PyMakeIdent(symIdx);
     ASTRight[argB] := argC;
     node := AllocNode(AN_CALL);
-    if (Syms[symIdx].TypeKind = tyVariant) and (SymCellPtr[symIdx] < 0) then
+    { the frame cell is a refcounted block (pycell_new_owned): the closure
+      takes its own reference, released by its finalizer as BK_OBJ }
+    if (SymCellPtr[symIdx] >= 0) and (objBindPi >= 0) then
+      ASTIVal[node] := objBindPi
+    else if (Syms[symIdx].TypeKind = tyVariant) and (SymCellPtr[symIdx] < 0) then
       ASTIVal[node] := varBindPi
     else if (Syms[symIdx].TypeKind = tyDouble) and (SymCellPtr[symIdx] < 0) and
             (dblBindPi >= 0) then
@@ -13062,8 +13068,14 @@ begin
       callee's parameter is by-ref, which is exactly what a cell address wants.
       pyboundfn_bind_cell (a fresh copy per closure) is the OLD answer, kept for
       the shapes PyCellPromotable refuses. }
+    { ...through the RETAINING binder: the cell is a refcounted block now
+      (pycell_new_owned), owned by the frame and by every closure over it, and
+      freed with the last of them (bug-nilpy-shared-nonlocal-frame-cell-is-
+      never-freed). The finalizer releases a BK_OBJ slot; PXXObjRelease is
+      magic-guarded, so a cell some other path made with plain GetMem is left
+      alone exactly as before. }
     if SymCellPtr[symIdx] >= 0 then
-      ChainBind(PyMakeCellPtr(symIdx), False, False, False)
+      ChainBind(PyMakeCellPtr(symIdx), False, True, False)
     else
       ChainBind(PyMakeIdent(symIdx), BoundParamIsVariant(bindIdx),
                 Syms[symIdx].TypeKind = tyClass, BoundParamIsRef(bindIdx));
@@ -18943,6 +18955,17 @@ begin
   begin
     Next; Next; Next;                           { `str` `.` name }
   end;
+end;
+
+{ A call -- static or virtual -- or a fold whose VALUE is one: PyCallMeth1
+  folds a construction receiver's binding in front of the call as
+  `(recv := C(..), recv.m())`, and that comma is still a call result as far as
+  the chain hoist is concerned. Without it `(V(1) + w).x` leaked the sum. }
+function PyNodeEndsInCall(node: Integer): Boolean;
+begin
+  while (node >= 0) and (ASTKind[node] = AN_COMMA) do node := ASTRight[node];
+  Result := (node >= 0) and
+    ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL));
 end;
 
 function PyEvalOnce(node: Integer): Integer;
@@ -25963,6 +25986,8 @@ end;
   (PyBindOwnedOperand), so the two cannot disagree about what is owned. }
 function PyCallYieldsOwnedObj(n: Integer): Boolean;
 begin
+  { A fold's value is its last element -- see PyNodeEndsInCall. }
+  while (n >= 0) and (ASTKind[n] = AN_COMMA) do n := ASTRight[n];
   { AN_VIRTUAL_CALL too: it keeps the proc index in IVal, and a method with an
     override returns owned exactly as a static one does. Without it
     `Kid(k).clone().v` / `b.clone().get()` leaked the clone whenever the class
@@ -28628,12 +28653,36 @@ end;
 
 function PyCallMeth1(ci: Integer; const mname: AnsiString;
                      selfNode, argNode: Integer): Integer;
-var mmi, mpi, selfArg, valArg: Integer;
+var mmi, mpi, selfArg, valArg, hoistTail: Integer;
+    ownRecv: Boolean;
 begin
   Result := -1;
   mmi := FindUMeth(ci, mname);
   if mmi < 0 then Exit;
   mpi := UMthProc_[mmi];
+  { A CONSTRUCTION as the receiver -- `V(1) + w`, `-V(k)`, `V(1)[i]`,
+    `1 in V(1)`, `len(V(1))`, `str(P(1))` -- had no owner: the IR spills an
+    owned argument to a releasing temp from position 1 on, and an owned CALL
+    result at position 0 too, but not a construction there (the receiver
+    guard in IRLowerCallArg). Pin v452: one instance per evaluation. Bound
+    here to an owning local, the way the parsed `C(...).m()` spelling is, and
+    folded back into the expression (PyFoldHoistSince) so the binding runs
+    where the operand is evaluated and survives the hoist-queue parking the
+    len()/f-string trial parses do. }
+  ownRecv := (selfNode >= 0) and
+    (((ASTKind[selfNode] = AN_CALL) and
+      (Integer(ASTIVal[selfNode]) = -Ord(tkGetMem)) and
+      (Integer(ASTRight[selfNode]) >= REC_UCLASS_BASE)) or
+     { ...and an owned result that is already such a FOLD (`V(1) * 3 + w`:
+       the product is a comma, which the IR's owned-call spill does not
+       recognise as a call) }
+     ((ASTKind[selfNode] = AN_COMMA) and PyCallYieldsOwnedObj(selfNode)));
+  hoistTail := -1;
+  if ownRecv then
+  begin
+    hoistTail := PyHoistTail;
+    selfNode := PyEvalOnce(selfNode);
+  end;
   selfArg := AllocNode(AN_ARG);
   ASTLeft[selfArg] := selfNode;
   if argNode >= 0 then
@@ -28644,6 +28693,7 @@ begin
   end;
   Result := PyAllocMethCallNode(ci, mmi, mpi);
   ASTLeft[Result] := selfArg;
+  if ownRecv then Result := PyFoldHoistSince(hoistTail, Result);
 end;
 
 { A one-argument call to a plain pylib FUNCTION (not a method) — the shape the
@@ -33082,11 +33132,11 @@ end;
   promotes symbols it has in hand (every variant LOCAL of a generator body)
   rather than names it read out of the source. }
 function PyPromoteCellSym(si, seq: Integer): Integer;
-var ps, newPi, callNode, asgn, rawNode, derefNode: Integer;
+var ps, newPi, callNode, asgn, rawNode, derefNode, owner, argN, litN: Integer;
 begin
   Result := seq;
   if not PyCellPromotable(si) then Exit;
-  newPi := FindProc('pycell_new');
+  newPi := FindProc('pycell_new_owned');
   if newPi < 0 then Exit;
   ps := AllocVar('', tyPointer);
   { the cell holds si's own type; SetSymPointerTo declines the depth when that
@@ -33095,13 +33145,37 @@ begin
   SetSymPointerTo(ps, Syms[si].TypeKind, REC_NONE);
   SymCellPtr[si] := ps;
 
+  { THE CELL HAS AN OWNER. It was a plain GetMem that nothing ever freed, ~23
+    bytes per call of any def whose nested def declares `nonlocal` (plus
+    whatever a variant cell held). It is a refcounted block now, and the
+    FRAME's reference lives in a hidden class local -- the ordinary ARC local
+    every NilPy class value gets, so it is released at scope exit on the same
+    paths any other is. The pointer local the reads go through is a plain copy
+    and owns nothing; each closure bound over the cell retains its own
+    reference (pyboundfn_bind_obj). Either one outliving the other keeps it.
+    bug-nilpy-shared-nonlocal-frame-cell-is-never-freed }
+  owner := AllocVar(PyHiddenName('cell'), tyClass);
+  Syms[owner].RecName := REC_NONE;
+  SymSyncTypeRef(owner);
+  litN := AllocNode(AN_INT_LIT);
+  if Syms[si].TypeKind = tyVariant then ASTIVal[litN] := 1 else ASTIVal[litN] := 0;
+  ASTTk[litN] := Ord(tyInt64);
+  argN := AllocNode(AN_ARG);
+  ASTLeft[argN] := litN;
+  ASTRight[argN] := -1;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := newPi;
-  ASTLeft[callNode] := -1;
-  ASTTk[callNode] := Ord(tyPointer);
+  ASTLeft[callNode] := argN;
+  ASTTk[callNode] := Ord(tyClass);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(owner);
+  ASTRight[asgn] := callNode;
+  Result := PySeqAppend(Result, asgn);
+  rawNode := PyMakeIdent(owner);
+  ASTTk[rawNode] := Ord(tyPointer);
   asgn := AllocNode(AN_ASSIGN);
   ASTLeft[asgn] := PyMakeCellPtr(si);
-  ASTRight[asgn] := callNode;
+  ASTRight[asgn] := rawNode;
   Result := PySeqAppend(Result, asgn);
 
   if Syms[si].Kind = skParam then
@@ -52332,8 +52406,7 @@ begin
     A VIRTUAL call too (a method some subclass overrides): left unbound, its
     owned result had no owner and leaked one object per link --
     `Kid(k).clone().v` -- while the same chain on a leaf class was clean. }
-  if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL)) and
-     (CurTok.Kind in [tkDot, tkLBrack]) then
+  if (CurTok.Kind in [tkDot, tkLBrack]) and PyNodeEndsInCall(node) then
     node := PyEvalOnce(node);
   while CurTok.Kind in [tkDot, tkLBrack] do
   begin
@@ -53078,6 +53151,10 @@ begin
           continue;
         end;
         node := PyCallMeth1(ci, '__getitem__', node, margIdx);
+        { bound once when a further selector reads it -- see the twin in the
+          named-receiver subscript arm below }
+        if (CurTok.Kind in [tkDot, tkLBrack]) and PyCallYieldsOwnedObj(node) then
+          node := PyEvalOnce(node);
         tk := IntToTypeKind(ASTTk[node]);
         recId := ResolveNodeRec(node);
         CurASTNode := node;
@@ -54996,6 +55073,12 @@ begin
               continue;
             end;
             node := PyCallMeth1(mci, '__getitem__', node, keyNode);
+            { `x[i].v` leaked the object __getitem__ returned, one per
+              evaluation: a NilPy method's class result is owned, and as the
+              base of a further selector nothing released it. Bound once, as
+              a method-call link is (bug-nilpy-method-chaining-on-a-call-result). }
+            if (CurTok.Kind in [tkDot, tkLBrack]) and PyCallYieldsOwnedObj(node) then
+              node := PyEvalOnce(node);
             tk := IntToTypeKind(ASTTk[node]); recName := ResolveNodeRec(node);
             continue;   { allow further postfix on the getter result }
           end;
@@ -57109,6 +57192,14 @@ begin
     CurASTNode := PyClassCreateExpr;
     PyCtorQualUnit := -1;
     LastExprTk := tyClass;
+    { `io.StringIO(s).read()` leaked the instance per evaluation: the bare-name
+      twin above hoists a construction consumed as a method receiver into an
+      owning local, and this arm did not -- the same gap the bare arm closed in
+      bug-n-a-construction-consumed-as-a-method-receiver-leaks, through a
+      qualifier. }
+    if (CurTok.Kind = tkDot) and
+       (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) then
+      CurASTNode := PyEvalOnce(CurASTNode);
     Exit;
   end;
   case CurTok.Kind of

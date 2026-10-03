@@ -727,6 +727,33 @@ test-nilpy: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/test_nilpy_an_owned_value_reaching_a_dunder_or_a_virtual_result_is_released.npy $(TESTTMP)/test_nilpy_ownv26_i386 && \
 	  qemu-i386 $(TESTTMP)/test_nilpy_ownv26_i386 | diff -u test/test_nilpy_an_owned_value_reaching_a_dunder_or_a_virtual_result_is_released.expected -; \
 	else echo "=== test_nilpy_ownv: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A CONSTRUCTION OR RESULT AS A DUNDER RECEIVER IS RELEASED: V(1) + w, -V(k),
+	# V(1)[i], len(V(1)), 1 in V(1), (V(1) + w).x, w[i].x, io.StringIO(s).read()
+	# -- position 0 had no owner. Pin v452: 38547 live after 5000 passes.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_construction_or_result_as_a_dunder_receiver_is_released.npy $(TESTTMP)/test_nilpy_dunrecv_hd26
+	$(TESTTMP)/test_nilpy_dunrecv_hd26 | diff -u test/test_nilpy_a_construction_or_result_as_a_dunder_receiver_is_released.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_construction_or_result_as_a_dunder_receiver_is_released.npy $(TESTTMP)/test_nilpy_dunrecv26
+	tools/assert_no_leak.sh nilpy_dunder_receiver 300 $(TESTTMP)/test_nilpy_dunrecv26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_dunder_receiver_control 300 $(TESTTMP)/test_nilpy_dunrecv26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_dunder_receiver control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_construction_or_result_as_a_dunder_receiver_is_released.npy $(TESTTMP)/test_nilpy_dunrecv26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_dunrecv26_i386 | diff -u test/test_nilpy_a_construction_or_result_as_a_dunder_receiver_is_released.expected -; \
+	else echo "=== test_nilpy_dunrecv: qemu-i386 absent, i386 NOT verified ==="; fi
+	# A NONLOCAL FRAME CELL IS FREED WITH ITS LAST OWNER: the cell a frame shares
+	# with its closures was never freed (99f63a1cba: 28957 live after 5000 passes
+	# through a list-valued cell; v452 crashed on it). Refcounted now -- the frame
+	# and each bound closure hold one reference.
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.npy $(TESTTMP)/test_nilpy_cellfree_hd26
+	$(TESTTMP)/test_nilpy_cellfree_hd26 | diff -u test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.expected -
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.npy $(TESTTMP)/test_nilpy_cellfree26
+	tools/assert_no_leak.sh nilpy_frame_cell 300 $(TESTTMP)/test_nilpy_cellfree26 leak 5000
+	@if tools/assert_no_leak.sh nilpy_frame_cell_control 300 $(TESTTMP)/test_nilpy_cellfree26 keep 5000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_frame_cell control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.npy $(TESTTMP)/test_nilpy_cellfree26_i386 && \
+	  qemu-i386 $(TESTTMP)/test_nilpy_cellfree26_i386 | diff -u test/test_nilpy_a_nonlocal_frame_cell_is_freed_with_its_last_owner.expected -; \
+	else echo "=== test_nilpy_cellfree: qemu-i386 absent, i386 NOT verified ==="; fi
 	# A GENERATOR FREES ITS LOCALS however it ends: exhausted, left by `break`,
 	# stepped by next() and dropped, or never started; a generator nested in
 	# another one is closed with it, and a class whose __iter__ is a generator

@@ -263,6 +263,15 @@ function pyboundfn_bind_cell(obj: Pointer; idx: Int64; v: Int64): Pointer;
   an Int64/Double. Over-allocating is free while under-allocating would
   scribble the next heap object. }
 function pycell_new: Pointer;
+{ The same cell as a REFCOUNTED block, for a frame's `nonlocal` local: the
+  frame holds one reference through a hidden class local (released at scope
+  exit like any other) and every closure bound over it holds one more
+  (pyboundfn_bind_obj), so the cell dies with the last of them instead of
+  never. The payload stays at offset 0, so every read and write through the
+  pointer is unchanged; a marker after it lets the RAW2 finalizer recognise
+  the block, and `isvar` says whether the payload is a variant to release.
+  bug-nilpy-shared-nonlocal-frame-cell-is-never-freed }
+function pycell_new_owned(isvar: Int64): Pointer;
 function pyboundfn_call_ptr(objptr: Pointer; const a0: Variant): Integer;
 { Same call, but the callee's Variant RESULT is handed back. pyvar_callv* used
   the discarding form, so a lifted def reached through a VALUE always answered
@@ -2843,6 +2852,7 @@ var
   hook, told apart by their first word. The bound-fn half is implemented below,
   next to its own type — TBoundFnObj is declared after this point. }
 procedure PyBoundFnFreeIfMine(objp: Pointer; var handled: Boolean); forward;
+procedure PyOwnedCellFreeIfMine(objp: Pointer; var handled: Boolean); forward;
 
 procedure PyEvalClosureFree(objp: Pointer);
 var c, i: Integer; wasBoundFn: Boolean;
@@ -2851,7 +2861,11 @@ begin
   wasBoundFn := False;
   PyBoundFnFreeIfMine(objp, wasBoundFn);
   if wasBoundFn then Exit;
-  if PClosureObj(objp)^.Magic <> @PyClosureMagicMarker then Exit;
+  if PClosureObj(objp)^.Magic <> @PyClosureMagicMarker then
+  begin
+    PyOwnedCellFreeIfMine(objp, wasBoundFn);
+    Exit;
+  end;
   c := Integer(PClosureObj(objp)^.Cidx);
   if (c < 0) or (c >= ClosureN) then Exit;
   Closures[c].Kinds := nil;
@@ -3364,6 +3378,47 @@ begin
   PPyRec(pv)^.VType := 0;
   PPyRec(pv)^.Payload := 0;
   pycell_new := Pointer(pv);
+end;
+
+var
+  PyCellMagicMarker: Integer;
+
+type
+  TPyOwnedCell = record
+    Payload: array[0..1] of Int64;   { the cell itself: tag + payload, or a scalar }
+    Magic:   Pointer;                { @PyCellMagicMarker }
+    IsVar:   Int64;                  { 1 = Payload is a variant to release }
+  end;
+  PPyOwnedCell = ^TPyOwnedCell;
+
+function pycell_new_owned(isvar: Int64): Pointer;
+var c: PPyOwnedCell;
+begin
+  { the RAW2 finalize path runs through these hooks; a program may make a cell
+    without ever making a closure (a nested def called in place) }
+  PXXObjFinalizeHook := @PyObjFinalize;
+  PyClosureFinalizeHook := @PyEvalClosureFree;
+  c := PPyOwnedCell(PXXObjAllocRaw2(SizeOf(TPyOwnedCell)));
+  c^.Payload[0] := 0;
+  c^.Payload[1] := 0;
+  c^.Magic := @PyCellMagicMarker;
+  c^.IsVar := isvar;
+  pycell_new_owned := Pointer(c);
+end;
+
+{ The cell half of the RAW2 finalize hook, asked LAST -- after the bound-fn and
+  closure checks have read their magic at offset 0 -- because a cell's offset
+  0 is its payload and only offset 16 identifies it. }
+procedure PyOwnedCellFreeIfMine(objp: Pointer; var handled: Boolean);
+var c: PPyOwnedCell;
+begin
+  handled := False;
+  if objp = nil then Exit;
+  c := PPyOwnedCell(objp);
+  if c^.Magic <> @PyCellMagicMarker then Exit;
+  handled := True;
+  if c^.IsVar <> 0 then PVariant(objp)^ := 0;   { variant := int releases any payload }
+  c^.Magic := nil;
 end;
 
 { Call code(a0, bound...). a0 is the ONE user argument — a class/object variant

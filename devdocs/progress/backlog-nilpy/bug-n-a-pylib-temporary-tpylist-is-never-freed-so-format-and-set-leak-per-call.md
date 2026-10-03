@@ -325,3 +325,30 @@ argument into a local Variant, so ParamStays cannot prove it borrows and a
 construction at position 0 is not spilled (widening that spill to every free
 function over-released inside the generator, iterator and exception helpers:
 measured, reverted). Frame cells (`pycell_new`) are still never freed.
+
+## 2026-10-03 (later) -- receivers: a construction or a fresh result in position 0
+
+The probe's next family was not in pylib at all but in who owns a method's
+RECEIVER. The IR spills an owned argument to a releasing temp from position 1
+on, and an owned call result at position 0, but not a construction there (the
+receiver guard), and a dunder's result followed by `.` / `[` was not bound the
+way a method chain's link is. Fixed in the parser, in PyCallMeth1 (every
+desugared dunder goes through it): a construction receiver is bound to an ARC
+local and the binding FOLDED into the expression, so it survives the hoist
+queue the len()/f-string trial parses park. Covered: `V(1) + w`, `-V(k)`,
+`V(1)[i]`, `len(V(1))`, `1 in V(1)`, `str(P(1))`, `f"{P(1)}"`, `(V(1) + w).x`,
+`w[i].x`, `io.StringIO(s).read()` (the module-qualified construction lacked
+the `.` hoist its bare twin has). test_nilpy_a_construction_or_result_as_a_
+dunder_receiver_is_released: pin v452 38547 live after 5000 passes, now 33.
+
+Probed clean afterwards (~110 more shapes): try/finally, nested try, return
+from finally, sort(key=), extend/update/insert/pop/remove, set union of
+instances, dict views, nested comprehensions, property chains, BST insert and
+recursive walk, global containers, exceptions carrying objects, f-string
+format specs, class attributes, divmod/hex/chr.
+
+Still open: `repr(P(1))` (see the 2026-10-03 note above in this file's
+history: repr(o: TObject) boxes into a local Variant, so ParamStays cannot
+prove it borrows); and the compatibility gaps the probe met, which are not
+leaks -- module-qualified `itertools.*` and `collections.OrderedDict()` /
+`defaultdict(list)` / `namedtuple(..)` calls do not compile.
