@@ -189,6 +189,21 @@ function HttpPostForm(const url, formBody: AnsiString): THttpResponse;
   body. A Content-Length is added automatically when body <> ''. }
 function HttpExec(const method, url, extraHeaders, body: AnsiString): THttpResponse;
 
+{ HttpExec with CPython's socket timeout: the connect, and then every single
+  send and receive (the TLS handshake's included), gives up after timeoutMs
+  milliseconds (>= 1). It bounds each wait, not the whole request, which is
+  what CPython's `timeout` means too. Name resolution is not bounded by it.
+  `timedOut` answers HTTP_TIMEOUT_NONE, HTTP_TIMEOUT_CONNECT,
+  HTTP_TIMEOUT_IO, or HTTP_TIMEOUT_UNSUPPORTED (this platform has no socket
+  timeouts, and nothing was sent). On any of the last three, Ok is False. }
+const
+  HTTP_TIMEOUT_NONE = 0;
+  HTTP_TIMEOUT_CONNECT = 1;
+  HTTP_TIMEOUT_IO = 2;
+  HTTP_TIMEOUT_UNSUPPORTED = 3;
+function HttpExecTimeout(const method, url, extraHeaders, body: AnsiString;
+                         timeoutMs: Integer; var timedOut: Integer): THttpResponse;
+
 { GET following up to maxRedirects 3xx Location hops (absolute Location URLs).
   Returns the final response (or the last 3xx if the limit is hit). }
 function HttpGetFollow(const url: AnsiString; maxRedirects: Integer): THttpResponse;
@@ -916,14 +931,21 @@ end;
   path (Read/Write), where it is resumable on the same connection and where async
   yielding actually matters. }
 
-procedure HttpIoWait(fd: Integer; async, forRead: Boolean);
+{ False only when a blocking wait with a bound (timeoutMs >= 0) ran out. }
+function HttpIoWaitMs(fd: Integer; async, forRead: Boolean; timeoutMs: Integer): Boolean;
 begin
+  Result := True;
   if async then
   begin
     if forRead then WaitReadable(fd) else WaitWritable(fd);
   end
-  else if forRead then PalPoll(fd, PAL_POLL_IN, -1)
-  else PalPoll(fd, PAL_POLL_OUT, -1);
+  else if forRead then Result := PalPoll(fd, PAL_POLL_IN, timeoutMs) <> 0
+  else Result := PalPoll(fd, PAL_POLL_OUT, timeoutMs) <> 0;
+end;
+
+procedure HttpIoWait(fd: Integer; async, forRead: Boolean);
+begin
+  HttpIoWaitMs(fd, async, forRead, -1);
 end;
 
 { Client TLS handshake over a connected fd. Drives the seam's non-blocking
@@ -931,7 +953,7 @@ end;
   poll or async coroutine yield) and resumes. True on tlsOk; False (cleanly) when
   no backend or the handshake failed. }
 function HttpTlsConnect(fd: Integer; const host: AnsiString; async: Boolean;
-                        var tlsc: TTlsConn): Boolean;
+                        var tlsc: TTlsConn; timeoutMs: Integer = -1): Boolean;
 var r: TTlsResult;
 begin
   tlsc := nil;
@@ -940,7 +962,11 @@ begin
   r := TlsHandshake(fd, tlsClient, host, tlsc);
   while (r = tlsWantRead) or (r = tlsWantWrite) do
   begin
-    HttpIoWait(fd, async, r = tlsWantRead);
+    if not HttpIoWaitMs(fd, async, r = tlsWantRead, timeoutMs) then
+    begin
+      r := tlsError;
+      Break;
+    end;
     r := TlsHandshakeResume(tlsc);
   end;
   Result := r = tlsOk;
@@ -953,7 +979,7 @@ end;
 { Send the whole buffer. Plain path matches the old single-call behaviour; TLS
   path loops over partial writes and want-states. }
 function HttpSendAll(fd: Integer; tlsc: TTlsConn; isTls, async: Boolean;
-                     buf: Pointer; len: Integer): Boolean;
+                     buf: Pointer; len: Integer; timeoutMs: Integer = -1): Boolean;
 var off, put: Integer; r: TTlsResult; n: Int64;
 begin
   if isTls then
@@ -963,8 +989,13 @@ begin
     begin
       r := TlsWrite(tlsc, Pointer(Int64(buf) + off), len - off, put);
       if r = tlsOk then off := off + put
-      else if r = tlsWantWrite then HttpIoWait(fd, async, False)
-      else if r = tlsWantRead then HttpIoWait(fd, async, True)
+      else if (r = tlsWantWrite) or (r = tlsWantRead) then
+      begin
+        if not HttpIoWaitMs(fd, async, r = tlsWantRead, timeoutMs) then
+        begin
+          Result := False; Exit;
+        end;
+      end
       else begin Result := False; Exit; end;
     end;
     Result := True;
@@ -979,15 +1010,16 @@ end;
 { One read. Returns bytes (>0), 0 on clean close, <0 on error — same convention
   as Net/TcpRecv, so existing read loops are unchanged. }
 function HttpRecvSome(fd: Integer; tlsc: TTlsConn; isTls, async: Boolean;
-                      buf: Pointer; len: Integer): Int64;
+                      buf: Pointer; len: Integer; timeoutMs: Integer = -1): Int64;
 var got: Integer; r: TTlsResult;
 begin
   if isTls then
   begin
     repeat
       r := TlsRead(tlsc, buf, len, got);
-      if r = tlsWantRead then HttpIoWait(fd, async, True)
-      else if r = tlsWantWrite then HttpIoWait(fd, async, False);
+      if (r = tlsWantRead) or (r = tlsWantWrite) then
+        if not HttpIoWaitMs(fd, async, r = tlsWantRead, timeoutMs) then
+          r := tlsError;
     until (r <> tlsWantRead) and (r <> tlsWantWrite);
     if r = tlsOk then Result := got
     else if r = tlsClosed then Result := 0
@@ -997,7 +1029,14 @@ begin
   else Result := NetRecv(fd, buf, len);
 end;
 
-function HttpRequest(const method, url, extraHeaders, body: AnsiString): THttpResponse;
+{ timeoutMs < 0 is the unbounded request, exactly as it always was. With a
+  bound, the connect polls (NetTcpConnectTimeout), the socket carries
+  SO_RCVTIMEO/SO_SNDTIMEO so a blocking recv inside a TLS backend gives up
+  too, and every want-read/want-write wait is a bounded poll. A receive that
+  fails part-way is then a failure, not a short body; unbounded, the loop
+  below parses whatever arrived, and that is left as it was. }
+function HttpRequestMs(const method, url, extraHeaders, body: AnsiString;
+                       timeoutMs: Integer; var timedOut: Integer): THttpResponse;
 var
   host, path: AnsiString;
   port: Integer;
@@ -1008,34 +1047,53 @@ var
   req, raw: AnsiString;
   buf: array[0..4095] of Byte;
   n, old: Integer;
+  bounded: Boolean;
 const
   BUFSZ = 4096;
 begin
   Result.Ok := False; Result.Status := 0; Result.Reason := '';
   Result.Headers := ''; Result.Body := '';
+  timedOut := HTTP_TIMEOUT_NONE;
+  bounded := timeoutMs >= 0;
+  if bounded and (timeoutMs < 1) then timeoutMs := 1;
 
   tlsc := nil;
   if not HttpParseUrl(url, host, port, path, isTls) then Exit;
   if not HttpResolve(host, ip) then Exit;
 
-  sock := NetTcpConnect(NetAddress(ip, port));
-  if sock < 0 then Exit;
+  if bounded then
+  begin
+    sock := NetTcpConnectTimeout(NetAddress(ip, port), timeoutMs);
+    if sock = PAL_NET_ETIMEDOUT then timedOut := HTTP_TIMEOUT_CONNECT;
+    if sock < 0 then Exit;
+    if PalSetSocketTimeoutMs(sock, timeoutMs) < 0 then
+    begin
+      timedOut := HTTP_TIMEOUT_UNSUPPORTED;
+      NetClose(sock); Exit;
+    end;
+  end
+  else
+  begin
+    sock := NetTcpConnect(NetAddress(ip, port));
+    if sock < 0 then Exit;
+  end;
 
-  if isTls and not HttpTlsConnect(sock, host, False, tlsc) then
+  if isTls and not HttpTlsConnect(sock, host, False, tlsc, timeoutMs) then
   begin
     NetClose(sock); Exit;             { https requested but no/failed TLS backend }
   end;
 
   req := HttpBuildRequest(method, host, path, HttpWithAcceptEncoding(extraHeaders), body);
-  if not HttpSendAll(sock, tlsc, isTls, False, @req[1], Length(req)) then
+  if not HttpSendAll(sock, tlsc, isTls, False, @req[1], Length(req), timeoutMs) then
   begin
+    if bounded then timedOut := HTTP_TIMEOUT_IO;
     if isTls then TlsClose(tlsc);
     NetClose(sock); Exit;
   end;
 
   raw := '';
   repeat
-    n := HttpRecvSome(sock, tlsc, isTls, False, @buf[0], BUFSZ);
+    n := HttpRecvSome(sock, tlsc, isTls, False, @buf[0], BUFSZ, timeoutMs);
     if n > 0 then
     begin
       old := Length(raw);
@@ -1046,7 +1104,18 @@ begin
   if isTls then TlsClose(tlsc);
   NetClose(sock);
 
+  if bounded and (n < 0) then
+  begin
+    timedOut := HTTP_TIMEOUT_IO;
+    Exit;
+  end;
   HttpParseResponse(raw, Result);
+end;
+
+function HttpRequest(const method, url, extraHeaders, body: AnsiString): THttpResponse;
+var t: Integer;
+begin
+  Result := HttpRequestMs(method, url, extraHeaders, body, -1, t);
 end;
 
 function HttpGet(const url: AnsiString): THttpResponse;
@@ -1065,6 +1134,12 @@ end;
 function HttpExec(const method, url, extraHeaders, body: AnsiString): THttpResponse;
 begin
   Result := HttpRequest(method, url, extraHeaders, body);
+end;
+
+function HttpExecTimeout(const method, url, extraHeaders, body: AnsiString;
+                         timeoutMs: Integer; var timedOut: Integer): THttpResponse;
+begin
+  Result := HttpRequestMs(method, url, extraHeaders, body, timeoutMs, timedOut);
 end;
 
 function HttpHead(const url: AnsiString): THttpResponse;

@@ -42342,6 +42342,9 @@ lib-test: pxx-stable-check
 	# 1000 rounds of the soak below, 46 now); built with ./$(COMPILER) for the
 	# same reason as urequests.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/lib_mimic_urllib_request_soak.npy $(TESTTMP)/lib_urllib_soak
+	# urlopen(timeout=) is honoured (http.pas HttpExecTimeout): a listener that
+	# never answers must raise TimeoutError within the bound, as CPython does.
+	./$(COMPILER) test/lib_mimic_urllib_request_timeout.npy $(TESTTMP)/lib_urllib_timeout
 	# pathname2url / url2pathname need NO server -- they are pure string work --
 	# and their expectation is PINNED rather than diffed against the host
 	# python3. CPython's answer changed in 3.13 (an absolute path gained the
@@ -42354,7 +42357,7 @@ lib-test: pxx-stable-check
 	# The refusals have no oracle by construction (CPython does these things
 	# rather than refusing), so they run on their own, with no server needed.
 	tools/expect_same.sh lib_urllib_refusals.1 "$$($(TESTTMP)/lib_urllib_refusals | tail -n 1)" "MIMIC-URLLIB-REQUEST REFUSALS OK"
-	tools/expect_same.sh lib_urllib_refusals.2 "$$($(TESTTMP)/lib_urllib_refusals | grep -c '=ok')" "8"
+	tools/expect_same.sh lib_urllib_refusals.2 "$$($(TESTTMP)/lib_urllib_refusals | grep -c '=ok')" "7"
 	tools/expect_same.sh lib_urllib_refusals.3 "$$($(TESTTMP)/lib_urllib_refusals | grep -c 'FAIL')" "0"
 	@set -e; \
 	  rm -f $(TESTTMP)/lib_urllib_srv.log; \
@@ -42399,6 +42402,15 @@ lib-test: pxx-stable-check
 	  tools/assert_no_leak.sh lib_urequests_soak 300 $(TESTTMP)/lib_urequests_census $$uport soak 1000; \
 	  if tools/assert_no_leak.sh lib_urequests_control 300 $(TESTTMP)/lib_urequests_census $$uport keep 1000 >/dev/null 2>&1; then \
 	    echo "FAIL: lib_urequests control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi; \
+	  $(TESTTMP)/lib_urllib_timeout $$uport > $(TESTTMP)/lib_urllib_timeout_pxx.txt 2>&1; \
+	  tools/expect_same.sh lib_urllib_timeout "$$(grep -c '^bounded' $(TESTTMP)/lib_urllib_timeout_pxx.txt)" "2" \
+	    || { echo "FAIL: urlopen(timeout=) did not finish"; tail -5 $(TESTTMP)/lib_urllib_timeout_pxx.txt; exit 1; }; \
+	  if command -v python3 >/dev/null 2>&1; then \
+	    python3 test/lib_mimic_urllib_request_timeout.npy $$uport > $(TESTTMP)/lib_urllib_timeout_cpy.txt 2>&1; \
+	    diff $(TESTTMP)/lib_urllib_timeout_cpy.txt $(TESTTMP)/lib_urllib_timeout_pxx.txt >/dev/null \
+	      && echo "  lib-test: urlopen(timeout=) matches CPython" \
+	      || { echo "FAIL: urlopen(timeout=) diverges from CPython"; diff $(TESTTMP)/lib_urllib_timeout_cpy.txt $(TESTTMP)/lib_urllib_timeout_pxx.txt | head -10; exit 1; }; \
+	  fi; \
 	  tools/assert_no_leak.sh lib_urllib_soak 300 $(TESTTMP)/lib_urllib_soak $$uport $(TESTTMP)/lib_urllib_soak.out soak 1000; \
 	  if tools/assert_no_leak.sh lib_urllib_soak_control 300 $(TESTTMP)/lib_urllib_soak $$uport $(TESTTMP)/lib_urllib_soak.out keep 1000 >/dev/null 2>&1; then \
 	    echo "FAIL: lib_urllib_soak control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi; \

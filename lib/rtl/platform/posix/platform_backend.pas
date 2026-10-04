@@ -98,6 +98,7 @@ function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
 function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
+function PalBackendSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectUnix(handle: Integer; const path: string): Integer;
@@ -1476,6 +1477,23 @@ begin
   Result := Integer(__pxxrawsyscall(SYS_setsockopt, handle, level, optname,
     Int64(valPtr), valLen, 0));
 {$endif}
+end;
+
+{ struct timeval is two native words (two 32-bit fields on a 32-bit target),
+  as for itimerval above; SO_RCVTIMEO/SO_SNDTIMEO are 20/21 on every Linux
+  architecture this backend serves. The receive timeout goes first: if the
+  send one fails the socket is left with a bound on reads only, and the
+  caller is told it failed. }
+function PalBackendSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
+const SO_RCVTIMEO = 20; SO_SNDTIMEO = 21;
+var tv: array[0..1] of NativeInt;
+begin
+  if timeoutMs < 1 then timeoutMs := 1;
+  tv[0] := timeoutMs div 1000;
+  tv[1] := (timeoutMs mod 1000) * 1000;
+  Result := PalBackendSetSockOpt(handle, SOL_SOCKET, SO_RCVTIMEO, @tv[0], SizeOf(tv));
+  if Result >= 0 then
+    Result := PalBackendSetSockOpt(handle, SOL_SOCKET, SO_SNDTIMEO, @tv[0], SizeOf(tv));
 end;
 
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;

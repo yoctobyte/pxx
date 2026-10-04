@@ -128,6 +128,7 @@ function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
 function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
+function PalBackendSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectUnix(handle: Integer; const path: string): Integer;
@@ -1175,6 +1176,14 @@ begin
 end;
 
 function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ Not wired: lwIP's SO_RCVTIMEO takes a newlib struct timeval whose layout
+  has not been checked on a chip. Unsupported is honest; urlopen(timeout=)
+  refuses on it rather than ignoring the bound. }
+function PalBackendSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

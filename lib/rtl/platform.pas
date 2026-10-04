@@ -228,6 +228,11 @@ function PalSocket(domain, kind, proto: Integer): Integer;
 function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
 function PalSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
+{ Bound every blocking send and recv on the socket (SO_SNDTIMEO/SO_RCVTIMEO):
+  one that waits longer than timeoutMs fails with EAGAIN instead of blocking.
+  timeoutMs must be >= 1 (the kernel reads 0 as "never"). Answers 0, or
+  PAL_ERR_UNSUPPORTED where the backend has no socket timeouts (ESP, WASI). }
+function PalSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
 function PalBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 
@@ -776,6 +781,11 @@ end;
 function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
 begin
   Result := PalBackendSetSocketNonBlocking(handle, enabled);
+end;
+
+function PalSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
+begin
+  Result := PalBackendSetSocketTimeoutMs(handle, timeoutMs);
 end;
 
 function PalBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;

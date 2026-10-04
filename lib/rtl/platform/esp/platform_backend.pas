@@ -93,6 +93,7 @@ function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
 function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
+function PalBackendSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectUnix(handle: Integer; const path: string): Integer;
@@ -1004,6 +1005,14 @@ begin
 {$else}  { NOT COMPILED ON ESP. PXX_PAL_ESP_IDF_TARGET is defined for both CPU_XTENSA and CPU_RISCV32 -- see the top of this unit -- so on every ESP target the ifdef arm above is taken and THIS arm is dead source: it is the host-build fallback. A PAL_ERR_UNSUPPORTED below is NOT a refusal the device can reach, and must not be counted as one. }
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
+end;
+
+{ Not wired: lwIP's SO_RCVTIMEO takes a newlib struct timeval whose layout
+  has not been checked on a chip. Unsupported is honest; urlopen(timeout=)
+  refuses on it rather than ignoring the bound. }
+function PalBackendSetSocketTimeoutMs(handle, timeoutMs: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;

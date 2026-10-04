@@ -1,0 +1,49 @@
+"""urlopen(timeout=...) is honoured, against CPython.
+
+A socket that listens and never answers: the connect completes through the
+kernel's backlog, the request is sent, and the response never comes. CPython
+raises TimeoutError('timed out') from the read after `timeout` seconds; so
+must we, in about the same time. A server that answers within the bound must
+still be read in full (the lib-test server, port in argv[1]).
+
+lekkerzeilen's gauge fetch passes timeout=20.0 and was refused outright
+before http.pas had HttpExecTimeout.
+"""
+import sys
+import time
+import socket
+import urllib.request
+import urllib.error
+
+port = sys.argv[1]
+
+r = urllib.request.urlopen("http://127.0.0.1:" + port + "/hello", timeout=5.0)
+print("answered", r.status, len(r.read()) > 0)
+r.close()
+
+with urllib.request.urlopen("http://127.0.0.1:" + port + "/hello", timeout=5) as r:
+    print("int timeout", r.status)
+
+mute = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+mute.bind(("127.0.0.1", 0))
+mute.listen(4)
+mport = mute.getsockname()[1]
+
+t0 = time.time()
+try:
+    urllib.request.urlopen("http://127.0.0.1:%d/x" % mport, timeout=0.3)
+    print("no timeout")
+except TimeoutError as e:
+    print("TimeoutError", str(e))
+except urllib.error.URLError as e:
+    print("URLError", e.reason)
+took = time.time() - t0
+print("bounded", 0.25 <= took < 3.0)
+
+t0 = time.time()
+try:
+    urllib.request.urlopen("http://127.0.0.1:%d/x" % mport, timeout=0.2)
+except OSError as e:
+    print("caught as OSError", isinstance(e, TimeoutError))
+print("bounded again", time.time() - t0 < 3.0)
+mute.close()

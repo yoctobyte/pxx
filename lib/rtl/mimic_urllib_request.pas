@@ -24,11 +24,14 @@ unit mimic_urllib_request;
     urllib.parse, which is a different shim (mimic_urllib_parse).
 
   WHAT IT REFUSES, LOUDLY, and why each one refuses rather than approximates:
-    * a non-default `timeout`. http.pas has NO timeout parameter at all
-      (measured: no occurrence of the word in the unit). Accepting the argument
-      and ignoring it would turn "give up after 2 seconds" into "block
-      forever", which is the failure class this project treats as worst — the
-      caller asked for a bound and would silently not get one.
+    * `timeout=0`, which in CPython means a non-blocking socket; and any
+      timeout on a platform whose sockets have no timeouts (ESP, WASI:
+      PalSetSocketTimeoutMs answers unsupported). Accepting the argument and
+      ignoring it would turn "give up after 2 seconds" into "block forever",
+      which is the failure class this project treats as worst -- the caller
+      asked for a bound and would silently not get one. A positive timeout
+      on Linux IS honoured, through http.pas's HttpExecTimeout: the connect
+      and each send/receive give up after it, as CPython's do.
     * https:// with no TLS backend registered. http.pas ships two and
       deliberately registers NEITHER — the caller picks (tls13_native or
       tls_openssl). So the refusal names them instead of choosing one here: a
@@ -67,10 +70,10 @@ uses pylib, sysutils, http, tls, platform, mimic_urllib_error;
 const
   { The sentinel for "the caller passed no timeout". CPython's default is the
     module-level socket default, which is None = block forever — and blocking
-    forever is precisely what http.pas does, so the DEFAULT is honest and only
-    an explicit timeout has to refuse. -1 rather than 0 because `timeout=0` is a
-    real (if hostile) CPython request meaning "non-blocking", which we also
-    cannot honour and which must therefore reach the refusal.
+    forever is precisely what http.pas's HttpExec does; a positive timeout
+    goes to HttpExecTimeout instead. -1 rather than 0 because `timeout=0` is a
+    real (if hostile) CPython request meaning "non-blocking", which this
+    blocking client cannot honour and which must therefore reach the refusal.
 
     DOUBLE, not Integer. CPython's timeout is a float number of seconds and
     real code writes one: lekkerzeilen/gauges.py's fetch defaults to
@@ -78,7 +81,7 @@ const
     that call did not fail at the timeout's REFUSAL, where the reader would
     have been told why -- it failed at overload selection, `no overload of
     urlopen matches these arguments`, which says nothing about timeouts at all.
-    The test below is `< 0` rather than `= TIMEOUT_DEFAULT`, because comparing
+    The tests in urlopen are `< 0` / `>= 0` rather than `= TIMEOUT_DEFAULT`, because comparing
     a Double for equality against a sentinel is the kind of thing that works
     until somebody writes the sentinel as an expression. }
   TIMEOUT_DEFAULT = -1.0;
@@ -808,16 +811,22 @@ var
   port, hops: Integer;
   isTls, bodyIsNone, ownReq: Boolean;
   r: THttpResponse;
+  timeoutMs, timedOut: Integer;
 begin
-  { A non-default timeout cannot be honoured — see the unit header. Refusing
-    here, at the call, is the whole point: the caller asked for a bound. }
-  if timeout >= 0.0 then
+  { timeout=0 is CPython's non-blocking socket, which this blocking client
+    cannot be; refused at the call rather than read as "no timeout". }
+  if timeout = 0.0 then
     raise URLError.Create(
-      'urlopen(timeout=...) is not supported: the RTL HTTP client ' +
-      '(lib/rtl/http.pas) has no request timeout, so honouring the argument ' +
-      'is impossible and ignoring it would turn a bounded wait into an ' +
-      'unbounded one. Omit timeout to block, or file a ticket for a timeout ' +
-      'in http.pas.');
+      'urlopen(timeout=0) is not supported: it asks for a non-blocking ' +
+      'socket, and the RTL HTTP client (lib/rtl/http.pas) blocks. Pass a ' +
+      'positive timeout, or omit it to block.');
+  timeoutMs := -1;
+  if timeout >= 0.0 then
+  begin
+    if timeout > 2000000.0 then timeoutMs := 2000000000
+    else timeoutMs := Round(timeout * 1000.0);
+    if timeoutMs < 1 then timeoutMs := 1;
+  end;
 
   { `url` is a str or a Request — CPython accepts either and so does this. }
   req := nil;
@@ -869,7 +878,26 @@ begin
         'tls_openssl.OpenSslTlsRegisterEx (dlopen libssl). Call one before ' +
         'urlopen, or use an http:// url.');
 
-    r := HttpExec(method, target, extra, body);
+    if timeoutMs < 0 then
+      r := HttpExec(method, target, extra, body)
+    else
+    begin
+      r := HttpExecTimeout(method, target, extra, body, timeoutMs, timedOut);
+      { CPython's split: a connect that times out is wrapped,
+        `URLError(reason=TimeoutError('timed out'))`; a read that times out
+        once the request is sent escapes as TimeoutError itself. Both are
+        OSErrors, which is what a caller usually catches. }
+      if timedOut = HTTP_TIMEOUT_CONNECT then
+        raise URLError.Create('timed out');
+      if timedOut = HTTP_TIMEOUT_IO then
+        raise TimeoutError.Create('timed out');
+      if timedOut = HTTP_TIMEOUT_UNSUPPORTED then
+        raise URLError.Create(
+          'urlopen(timeout=...) is not supported on this platform: its ' +
+          'sockets have no timeouts (PalSetSocketTimeoutMs), and ignoring ' +
+          'the argument would turn a bounded wait into an unbounded one. ' +
+          'Omit timeout to block.');
+    end;
 
     if not r.Ok then
       raise URLError.Create('could not reach ' + host + ':' + IntToStr(port));
