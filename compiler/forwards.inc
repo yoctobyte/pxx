@@ -36,7 +36,6 @@ function MangleSuffix(n: Integer): AnsiString; forward;
 function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer; forward;
 function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer; forward;
 { NilPy frontend helpers used above their definition in pyparser.inc. }
-function PyIntLiteralText(n: Int64): AnsiString; forward;
 function PyIsPylibContainerCi(ci: Integer): Boolean; forward;
 { Materialises a cursor where a real sequence is needed. Used by `in` and the
   str-method argument path, both of which sit above its definition. }

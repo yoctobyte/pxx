@@ -100,6 +100,10 @@ function StaticArraySourceInfo(argAST: Integer; var cnt: Integer; var elemTk: TT
   Py* symbols, in five routines of pasparser_expr.inc / _lval.inc / _stmt.inc.
   That count IS the campaign's progress metric -- it is 0 when the define works.
   feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets }
+{ real body in pyparser.inc; pylexer.inc's decorator rewrite names its hidden
+  def with it, and pylexer.inc is included HERE, ahead of forwards.inc. pxx
+  prescans so it self-hosted; FPC is single-pass and the seed canary caught it. }
+{$ifndef PXX_NO_NILPY}function PyIntLiteralText(n: Int64): AnsiString; forward;{$endif}
 {$ifndef PXX_NO_NILPY}{$include pylexer.inc}{$endif}
 {$ifndef PXX_NO_RUST}{$include rlexer.inc}{$endif}
 {$ifndef PXX_NO_ADA}{$include alexer.inc}{$endif}

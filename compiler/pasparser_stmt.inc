@@ -143,6 +143,8 @@ function SLHasYield(node: Integer): Boolean; forward;  { the generator for-in de
   the Integer one sits with the stackless transform). }
 function GenMakeIntLit(v: Int64): Integer; forward;
 function GenMakeSlotAddr(i: Integer): Integer; forward;
+function GenMakeCmp(opTok, l, r: Integer): Integer; forward;   { GenSlCloseAndFree calls it ~1800 lines above its body; FPC is single-pass (seed canary) }
+function GenSlGet(selfSym, off: Integer): Integer; forward;   { GenSeedArg likewise, ~2400 lines above }
 
 function ParseIfStatementAST: Integer;
 var condNode, thenNode, elseNode, pairNode, node: Integer;
