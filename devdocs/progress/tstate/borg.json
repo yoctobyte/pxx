@@ -18034,7 +18034,7 @@
  ],
  "open_regressions": [
   {
-   "bad": "6f3a8bb04093498e93b14d695fc15cc65365b3b6",
+   "bad": "800004e7beae162ac2313fb9f2aac0aee2656c07",
    "bad_untestable": false,
    "first_seen": false,
    "good": "53dbb01c1569f3bbf8b010c306c9d6a7446a431d",
@@ -18049,11 +18049,7 @@
     "8b280b649f921ce0a629ceef868ee9ed72cbbec5",
     "c0f03b1829ce5e7deb216efc4f31f826420d551c",
     "1ed913f560c516ccef508863c423762655a78abf",
-    "800004e7beae162ac2313fb9f2aac0aee2656c07",
-    "6f9e36069b6429fee5f48b378aa634a78fbf9274",
-    "f3a314c22cf64bf223e83e3b3902a02d19efe549",
-    "18a4809904175c4cf4faba9e27d50d5e51ad2917",
-    "6f3a8bb04093498e93b14d695fc15cc65365b3b6"
+    "800004e7beae162ac2313fb9f2aac0aee2656c07"
    ],
    "range_non_causal": false,
    "src": "compiler/compiler.pas",

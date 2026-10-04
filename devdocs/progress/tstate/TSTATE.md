@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `c1a8ac339e3f` on borg, 2026-10-04T02:33:41Z (47m ago).**
+**Newest full tier in the fleet: `c1a8ac339e3f` on borg, 2026-10-04T02:33:41Z (49m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `c1a8ac339e3f` | RED | 47m | — (newest) |
+| borg | `c1a8ac339e3f` | RED | 49m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -28,4 +28,4 @@ Reading a staler host's map for a cross-target job answers a question about an O
 Two hosts with different fingerprints did not measure the same thing, and a job that disagrees between them may be disagreeing about the EMULATOR rather than about the tree. Check this before filing a cross-target red against the compiler: `bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain` is the incident that cost an afternoon for want of this row.
 
 ## Open regressions
-- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `6f3a8bb04093`, last good `53dbb01c1569`, 8 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `800004e7beae`, last good `53dbb01c1569`, 4 commit(s) in range
