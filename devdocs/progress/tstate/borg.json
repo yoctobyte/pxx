@@ -18034,7 +18034,7 @@
  ],
  "open_regressions": [
   {
-   "bad": "800004e7beae162ac2313fb9f2aac0aee2656c07",
+   "bad": "1ed913f560c516ccef508863c423762655a78abf",
    "bad_untestable": false,
    "first_seen": false,
    "good": "c0f03b1829ce5e7deb216efc4f31f826420d551c",
@@ -18046,8 +18046,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "1ed913f560c516ccef508863c423762655a78abf",
-    "800004e7beae162ac2313fb9f2aac0aee2656c07"
+    "1ed913f560c516ccef508863c423762655a78abf"
    ],
    "range_non_causal": false,
    "src": "compiler/compiler.pas",
