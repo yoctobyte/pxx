@@ -653,6 +653,7 @@ begin
         k := keys.at(i);
         Self.headers.store(CapitalizeHeader(pystr_of(k)), src.fetch(k));
       end;
+      PXXObjRelease(Pointer(keys));   { keylist is a fresh list, only read }
     end;
   end;
 end;
@@ -759,6 +760,7 @@ begin
       k := keys.at(i);
       r := r + pystr_of(k) + ': ' + pystr_of(d.fetch(k)) + #13#10;
     end;
+    PXXObjRelease(Pointer(keys));   { keylist is a fresh list, only read }
   end;
   HeaderBlock := r;
 end;
@@ -804,7 +806,7 @@ var
   o: TObject;
   target, method, body, extra, host, path, loc, reason: AnsiString;
   port, hops: Integer;
-  isTls, bodyIsNone: Boolean;
+  isTls, bodyIsNone, ownReq: Boolean;
   r: THttpResponse;
 begin
   { A non-default timeout cannot be honoured — see the unit header. Refusing
@@ -822,8 +824,14 @@ begin
   o := nil;
   if pyvar_is_objtag(url) then o := TObject(pyvarobj(url));
   if (o <> nil) and (o is Request) then req := Request(o);
-  if req = nil then
+  { A Request built here for a str url is this call's own: released at the
+    end, on every path. It used to be dropped, which kept it, its header dict
+    and its url strings once per urlopen (6 objects per call, measured with
+    -dPXX_ALLOC_CENSUS). }
+  ownReq := req = nil;
+  if ownReq then
     req := Request.Create(pystr_of(url), pynone, pynone, '');
+  try
 
   { A `data` argument to urlopen overrides the Request's, which is CPython's
     rule (the Request keeps its own only when urlopen was given none). Through
@@ -906,6 +914,9 @@ begin
                            HTTPMessage.Create(r.Headers), r.Body);
 
   urlopen := HTTPResponse.Create(target, r.Status, reason, r.Headers, r.Body);
+  finally
+    if ownReq then PXXObjRelease(Pointer(req));
+  end;
 end;
 
 function urlretrieve(const url: Variant): TPyList;
@@ -958,6 +969,7 @@ begin
   l := TPyList.Create;
   l.append(filename);
   l.append(resp.headers);
+  PXXObjRelease(Pointer(resp));   { the tuple holds the headers; the rest goes }
   urlretrieve := pylist_mark_tuple(l);   { tuple(l) would COPY and strand l }
 end;
 

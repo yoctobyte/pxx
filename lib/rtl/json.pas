@@ -103,7 +103,14 @@ type
 
 function dumps(const obj: Variant; indent: Integer = -1;
                ensure_ascii: Boolean = True; sort_keys: Boolean = False): AnsiString;
-function loads(const s: AnsiString): Variant;
+function loads(const s: AnsiString): Variant; overload;
+{ CPython's loads takes bytes and bytearray as well as str (it decodes them as
+  UTF-8; our strings are byte strings, so that is a copy). An HTTP body is
+  bytes, so `json.loads(response.read())` is the common spelling. The Variant
+  arm is the same question asked at run time: an untyped argument holding bytes
+  used to reach the AnsiString arm as its repr `b'{...}'` and fail at offset 1. }
+function loads(const b: TPyBytes): Variant; overload;
+function loads(const v: Variant): Variant; overload;
 { `f` is what pathlib's Path.open and the builtin open(path, mode) hand back. }
 procedure dump(const obj: Variant; f: TPyFile; ensure_ascii: Boolean = True;
                indent: Integer = -1; sort_keys: Boolean = False);
@@ -846,6 +853,31 @@ begin
     argument-list temp mix-up fixed with locals in JsonPyFromTree's object arm,
     and test_nilpy_json_loads_frees_its_tree pins both. }
   tree.FreeTree;
+end;
+
+function JsonBytesText(b: TPyBytes): AnsiString;
+var i: Integer;
+begin
+  SetLength(Result, b.count);
+  for i := 0 to b.count - 1 do
+    Result[i + 1] := Chr(b.at(i));
+end;
+
+function loads(const b: TPyBytes): Variant;
+begin
+  if b = nil then raise JSONDecodeError.Create('json.loads: None is not JSON');
+  loads := loads(JsonBytesText(b));
+end;
+
+function loads(const v: Variant): Variant;
+var o: TObject;
+begin
+  o := nil;
+  if pyvar_is_objtag(v) then o := TObject(pyvarobj(v));
+  if (o <> nil) and (o is TPyBytes) then
+    loads := loads(JsonBytesText(TPyBytes(o)))
+  else
+    loads := loads(pystr_of(v));
 end;
 
 procedure dump(const obj: Variant; f: TPyFile; ensure_ascii: Boolean;

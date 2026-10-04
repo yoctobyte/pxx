@@ -1,0 +1,84 @@
+# sqlite3 handed every row out with one reference too many: Cursor.RowNow and
+# fetchall built a list and stored it into their Variant result with a
+# retaining assignment, so the row, its slots and its values were never
+# freed -- 3 objects per (text, int) row, 2 per execute(...).fetchone() --
+# whether the program iterated the cursor, called fetchone() or fetchall().
+# urllib.request.Request(url, headers={...}) copied the headers through a
+# key list it never released (2 objects per Request). Pin v452: ~70k live
+# after `leak 300` of this file.
+#
+# json.loads of bytes, the other half of lekkerzeilen's gauge fetch
+# (`json.loads(response.read())`): CPython takes bytes and bytearray; there
+# was no overload for them, and an untyped argument holding bytes reached
+# loads() as its repr `b'{...}'` and failed at offset 1.
+#
+# No argument: prints the shapes (diffed against CPython). `leak N`: runs
+# them N times and keeps nothing. `keep N`: keeps one result per pass, the
+# positive control for the census bound.
+import sys
+import json
+import sqlite3
+import urllib.request
+
+
+def parse(payload):
+    if isinstance(payload, (bytes, bytearray, str)):
+        payload = json.loads(payload)
+    return payload
+
+
+def shapes(db, k):
+    out = []
+    out.append(db.execute("SELECT MAX(v) FROM t").fetchone()[0])
+    first, last = db.execute("SELECT MIN(v), MAX(v) FROM t").fetchone()
+    out.append(first + last)
+    t = 0
+    for c, v in db.execute("SELECT c, v FROM t WHERE v >= ?", (k % 3,)):
+        t += v + len(c)
+    out.append(t)
+    rows = db.execute("SELECT c, v, b FROM t ORDER BY v").fetchall()
+    out.append(len(rows))
+    out.append(rows[1][2])
+    d = {c: v for c, v in db.execute("SELECT c, v FROM t")}
+    out.append(d["k3"])
+    req = urllib.request.Request("http://127.0.0.1:9/x?k=%d" % k,
+                                 headers={"User-Agent": "t", "X-K": str(k)})
+    out.append(req.get_header("X-k"))
+    out.append(json.loads(b'{"k": [1, 2], "s": "x"}')["k"][1])
+    out.append(parse(('{"n": %d}' % k).encode())["n"])
+    out.append(parse(bytearray(b'[true, null]')))
+    out.append(parse('"café"') == json.loads(b'"caf\xc3\xa9"'))
+    return out
+
+
+def opendb():
+    db = sqlite3.connect(":memory:")
+    db.executescript("CREATE TABLE t (c TEXT PRIMARY KEY, v INTEGER, b BLOB);")
+    db.executemany("INSERT INTO t VALUES (?,?,?)",
+                   [("k%d" % i, i, bytes([i, 0, 65])) for i in range(8)])
+    db.commit()
+    return db
+
+
+def passes(n, held):
+    db = opendb()
+    for k in range(n):
+        r = shapes(db, k)
+        if held is not None:
+            held.append(r)
+    db.close()
+
+
+if len(sys.argv) < 2:
+    db = opendb()
+    print(shapes(db, 4))
+    print(shapes(db, 5))
+    try:
+        json.loads(b'{bad')
+    except json.JSONDecodeError:
+        print("JSONDecodeError")
+    db.close()
+elif sys.argv[1] == "leak":
+    passes(int(sys.argv[2]), None)
+else:
+    passes(int(sys.argv[2]), [])

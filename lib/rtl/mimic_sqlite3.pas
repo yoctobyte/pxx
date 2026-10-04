@@ -334,7 +334,7 @@ end;
   and indexing, slicing and unpacking are identical, which is what lets
   `name, kind, stride, verts, indices = row` and `row[1:]` both work. }
 function Cursor.RowNow: Variant;
-var l: TPyList; i, ct, n: Integer; b: TPyBytes; p: Pointer;
+var l: TPyList; i, ct, n: Integer; b: TPyBytes; p: Pointer; r: PPyVarRec;
 begin
   l := TPyList.Create;
   for i := 0 to FNCols - 1 do
@@ -361,11 +361,17 @@ begin
         if p <> nil then Move(p^, b.FData^, n);
       end;
       l.append(TObject(b));
+      PXXObjRelease(Pointer(b));   { the row's slot holds its own reference }
     end
     else
       l.append(pynone);
   end;
-  Result := TObject(l);
+  { The result TAKES OVER the new list's rc=1, as json's JsonPyFromTree does.
+    `Result := TObject(l)` retained it (rc=2 against the caller's one
+    release), so every row a query produced was kept with its values:
+    3 objects per row of (text, int), measured with -dPXX_ALLOC_CENSUS. }
+  r := @Result;
+  r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(l)));
 end;
 
 function Cursor.__iter__: Variant;
@@ -392,11 +398,12 @@ begin
 end;
 
 function Cursor.fetchall: Variant;
-var l: TPyList;
+var l: TPyList; r: PPyVarRec;
 begin
   l := TPyList.Create;
   while StepOne do l.append(RowNow);
-  Result := TObject(l);
+  r := @Result;              { takes over rc=1; see RowNow }
+  r^.VType := 7; r^.Payload := Int64(NativeInt(Pointer(l)));
 end;
 
 { --------------------------------------------------------------- Connection }

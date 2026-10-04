@@ -1104,6 +1104,17 @@ test-nilpy: $(COMPILER)
 	  echo "FAIL: nilpy_setsnap control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_a_pylib_temporary_list_is_released_after_the_call.npy $(TESTTMP)/test_nilpy_setsnap_hd26
 	$(TESTTMP)/test_nilpy_setsnap_hd26 | diff -u test/test_nilpy_a_pylib_temporary_list_is_released_after_the_call.expected -
+	# sqlite3 ROWS AND A Request's HEADERS ARE RELEASED: Cursor.RowNow/fetchall
+	# stored a fresh list into their Variant result with a retaining assignment
+	# (3 objects kept per (text, int) row), and Request(headers=) dropped a key
+	# list. Pin v452: 173150 live after `leak 2000`; `keep` must trip the bound.
+	# The HEAP_DEBUG row diffs against CPython, json.loads(bytes) included.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_sqlite_rows_and_a_request_s_headers_are_released.npy $(TESTTMP)/test_nilpy_sqlrows26
+	tools/assert_no_leak.sh nilpy_sqlrows 300 $(TESTTMP)/test_nilpy_sqlrows26 leak 2000
+	@if tools/assert_no_leak.sh nilpy_sqlrows_control 300 $(TESTTMP)/test_nilpy_sqlrows26 keep 2000 >/dev/null 2>&1; then \
+	  echo "FAIL: nilpy_sqlrows control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_nilpy_sqlite_rows_and_a_request_s_headers_are_released.npy $(TESTTMP)/test_nilpy_sqlrows_hd26
+	$(TESTTMP)/test_nilpy_sqlrows_hd26 | diff -u test/test_nilpy_sqlite_rows_and_a_request_s_headers_are_released.expected -
 	# A LAMBDA PASSED STRAIGHT AS AN ARGUMENT IS RELEASED after the call --
 	# sorted/min key=, a method's Variant parameter. Nothing owned the fresh
 	# closure object (pin v438: ~6 live per iteration of this loop); `keep` is
@@ -42327,6 +42338,10 @@ lib-test: pxx-stable-check
 	# bytes +, bytes growth, f(**d)), which no pin before v434 carries.
 	./$(COMPILER) test/lib_mimic_urequests.npy $(TESTTMP)/lib_urequests
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/lib_mimic_urequests.npy $(TESTTMP)/lib_urequests_census
+	# urlopen/urlretrieve release what they build (pin v452: 22970 live after
+	# 1000 rounds of the soak below, 46 now); built with ./$(COMPILER) for the
+	# same reason as urequests.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/lib_mimic_urllib_request_soak.npy $(TESTTMP)/lib_urllib_soak
 	# pathname2url / url2pathname need NO server -- they are pure string work --
 	# and their expectation is PINNED rather than diffed against the host
 	# python3. CPython's answer changed in 3.13 (an absolute path gained the
@@ -42384,6 +42399,9 @@ lib-test: pxx-stable-check
 	  tools/assert_no_leak.sh lib_urequests_soak 300 $(TESTTMP)/lib_urequests_census $$uport soak 1000; \
 	  if tools/assert_no_leak.sh lib_urequests_control 300 $(TESTTMP)/lib_urequests_census $$uport keep 1000 >/dev/null 2>&1; then \
 	    echo "FAIL: lib_urequests control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi; \
+	  tools/assert_no_leak.sh lib_urllib_soak 300 $(TESTTMP)/lib_urllib_soak $$uport $(TESTTMP)/lib_urllib_soak.out soak 1000; \
+	  if tools/assert_no_leak.sh lib_urllib_soak_control 300 $(TESTTMP)/lib_urllib_soak $$uport $(TESTTMP)/lib_urllib_soak.out keep 1000 >/dev/null 2>&1; then \
+	    echo "FAIL: lib_urllib_soak control (keep) did not trip the bound -- the census cannot see this leak"; exit 1; fi; \
 	  kill $$srv 2>/dev/null || true
 	# lib/pcl/tkhtmlview is a NilPy library, so CPython is an oracle for it the
 	# way it is for nilsh above: the SAME source, on real tkinter, must render

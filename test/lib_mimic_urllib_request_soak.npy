@@ -1,0 +1,43 @@
+"""urlopen and urlretrieve release what they build, against the lib-test server.
+
+urlopen(str) built its own Request and never released it (6 objects per
+call), HeaderBlock dropped the header dict's key list, and urlretrieve kept
+the whole response. Pin v452 kept ~5-6 objects per call of each shape below.
+
+Usage: <port> <file> soak N   -- N rounds, nothing kept
+       <port> <file> keep N   -- keeps each response: the positive control
+"""
+import sys
+import json
+import urllib.request
+
+BASE = "http://127.0.0.1:" + sys.argv[1]
+
+
+def round_(k, path):
+    r = urllib.request.urlopen(BASE + "/hello")
+    n = len(r.read())
+    r.close()
+    req = urllib.request.Request(BASE + "/echo", data=b"x=1",
+                                 headers={"User-Agent": "soak", "X-K": str(k)})
+    with urllib.request.urlopen(req) as resp:
+        n += len(resp.read())
+    name, headers = urllib.request.urlretrieve(BASE + "/hello", path)
+    n += len(headers.get_content_type())
+    return n, r
+
+
+def main():
+    path = sys.argv[2]
+    count = int(sys.argv[4])
+    held = [] if sys.argv[3] == "keep" else None
+    total = 0
+    for k in range(count):
+        n, r = round_(k, path)
+        total += n
+        if held is not None:
+            held.append(r)
+    print("soak", count, total > 0)
+
+
+main()
