@@ -17817,6 +17817,7 @@
     "48e11e4067b1f6569c1f6b134691ea0331f41013",
     "e075ef170211f6dbfb081c8004f126dfb1e53eb9"
    ],
+   "range_non_causal": false,
    "src": "compiler/compiler.pas",
    "status": "fail"
   }
