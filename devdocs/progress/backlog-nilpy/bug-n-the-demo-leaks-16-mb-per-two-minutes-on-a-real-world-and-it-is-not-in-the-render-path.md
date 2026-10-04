@@ -324,3 +324,29 @@ NOT measured: the gauges thread (it fetches water levels over the network
 every period, and was switched off in the scratch copy for exactly that
 reason) and a real interactive session. If the demo still grows on the owner's
 screen, those two are what is left.
+
+## 2026-10-04 (frankuser) -- the gauges thread, the path left open above
+
+Measured on lekkerzeilen's own gauges.py (fetch -> parse -> Archive.record
+-> Archive.latest), against a local HTTP server serving a 300-gauge feed
+shaped like waterinfo's, -dPXX_ALLOC_CENSUS, 2 rounds against 12.
+
+Before: it could not run at all. `urlopen(.., timeout=20.0)` was refused
+(http.pas had no timeout), so the thread put a URLError on the queue every
+period and the demo sailed on built levels. With the timeout removed by hand
+it then failed in parse(): `json.loads(bytes)` read the bytes' repr. With
+both worked around, ~1200 objects were kept per round: sqlite3 kept every row
+it handed out (3 per row), urlopen kept its Request (6 per call).
+
+All four fixed: 653741735d (sqlite3, urllib, json.loads bytes) and
+14694631a4 (urlopen timeout). The unmodified gauges.py now measures 114 live
+after 2 rounds and 114 after 12. The tile loader's `for row in db.execute(..)`
+went through the same sqlite3 RowNow, so every tile load kept its rows too;
+that was invisible to the settled-world slope above, which loads nothing.
+
+STILL NOT FETCHING ON A REAL RUN: the feed is https, and urllib.request
+registers no TLS backend for a NilPy program (by design: "the program
+picks", mimic_urllib_request.pas). gauges.py does not pick one, so a real
+fetch raises "https requires a TLS backend". Whether the shim should
+register one by default for Python programs (CPython always has ssl) is an
+owner decision, not taken here.
