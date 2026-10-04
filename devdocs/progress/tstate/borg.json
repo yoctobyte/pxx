@@ -17845,14 +17845,18 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-29T00:27:11Z",
+  "date": "2026-10-04T02:10:12Z",
   "red": [
-   "test-core#src:test/c_crtl_wait.c"
+   "test-core#src:test/c_crtl_wait.c",
+   "tools-devtest-sh#00"
   ],
-  "sha": "dcd5c7d351bfeb3d9549dff29e02d4d7aa227d9d",
+  "sha": "e736667eebaad982286b8edf212408c02a3651bd",
   "tier": "full",
-  "ver": "v451",
-  "verdict": "RED"
+  "ver": "v452",
+  "verdict": "RED",
+  "why": {
+   "tools-devtest-sh#00": "FAIL mismatch publish -- rc=1 ==> publish guards | release binary == pin v777 (4d3c2ac46f72) | release: working tree dirty \u2014 commit/stash first | PASS no pin present: NOT A PIN, publish refuses | rele"
+  }
  },
  "toolchain": {
   "espqemu-riscv32": "9.2.2",
