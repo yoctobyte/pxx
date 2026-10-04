@@ -18035,7 +18035,7 @@
  "open_regressions": [
   {
    "bad": "13fcd29da10bfefac2ee197ef7f72d0b8393ff0e",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "53dbb01c1569f3bbf8b010c306c9d6a7446a431d",
    "job": "fpc-bootstrap#src:compiler/compiler.pas",
