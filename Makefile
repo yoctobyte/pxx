@@ -10622,6 +10622,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Itest --emit-obj test/test_c_import_extern_vars.pas $(TESTTMP)/c_import_extern_vars26.o >/dev/null
 	gcc -no-pie -Itest test/c_import_extern_vars_def.c $(TESTTMP)/c_import_extern_vars26.o -o $(TESTTMP)/c_import_extern_vars26
 	tools/expect_same.sh c_import_extern_vars "$$($(TESTTMP)/c_import_extern_vars26)" "$$(printf '1 2 2 4 5\n77')"
+	# A prototype with an UNNAMED typedef parameter, `void *malloc(size_t);`,
+	# is a function: the redundant-parens check for `T *(name[N])` read
+	# `(size_t)` as a parenthesised name, so the import made it a 4-byte
+	# GLOBAL .bss definition and the ESP firmware link failed with "multiple
+	# definition of malloc". Nothing in the object may DEFINE them.
+	@d=$(TESTTMP)/proto_unnamed_param26; mkdir -p $$d && \
+	  printf '#include <stddef.h>\n#include <stdint.h>\nintmax_t imaxabs(intmax_t);\nvoid *malloc(size_t);\nint plainfn(int);\nextern int g_x;\n' > $$d/rg.h && \
+	  printf "program p;\nuses rg;\nfunction f: Integer; cdecl;\nbegin f := plainfn(g_x) + imaxabs(-3) + PtrInt(malloc(4)); end;\nbegin writeln(f); end.\n" > $$d/p.pas && \
+	  ./$(COMPILER) --target=riscv32 --platform=esp --no-signals --system-libs --emit-obj -I$$d $$d/p.pas $$d/p.o >/dev/null && \
+	  tools/expect_same.sh proto_unnamed_param_und "$$(nm $$d/p.o | grep -E ' (imaxabs|malloc|plainfn|g_x)$$' | sed 's/^ *//' | sort)" "$$(printf 'U g_x\nU imaxabs\nU malloc\nU plainfn')"
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union

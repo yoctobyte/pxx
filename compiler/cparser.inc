@@ -12851,7 +12851,7 @@ begin
 end;
 
 function CTopLevelIsFunc: Boolean;
-var savedPos, pe: Integer;
+var savedPos, pe: Integer; hadName: Boolean;
 begin
   savedPos := TokPos - 1;          { index of the current token }
   ParseCDeclType;
@@ -12859,13 +12859,20 @@ begin
     Result := True
   else
   begin
-    if CurTok.Kind = tkIdent then Next;
+    hadName := CurTok.Kind = tkIdent;
+    if hadName then Next;
     Result := (CurTok.Kind = tkLParen);
     { `T *(name[N]) = ...` is a VARIABLE in redundant parens; only a '('
       after the ')' makes `(name)` a function. It went to ParseCSubroutine,
       which found no name and skipped the whole declaration -- initializer
-      and all -- so every use read "undeclared identifier". }
-    if Result then
+      and all -- so every use read "undeclared identifier".
+      ONLY when no name came first: in `void *malloc(size_t);` the paren is
+      the PARAMETER LIST, and `(size_t)` -- one unnamed typedef parameter --
+      looks exactly like a parenthesised name followed by `;`. Misread, the
+      prototype became a 4-byte global, and an ESP object defined `malloc`
+      in .bss (multiple definition against IDF's heap.o).
+      regression-a-imported-c-prototypes-become-global-bss-symbols-on-esp }
+    if Result and not hadName then
     begin
       pe := CParenDeclNameEnd(TokPos - 1);
       if (pe >= 0) and ((pe + 1 >= TokCount) or (Tokens[pe + 1].Kind <> tkLParen)) then
