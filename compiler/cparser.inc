@@ -17190,7 +17190,7 @@ end;
 procedure RegisterCMacroConsts;
 var mi, vStart, vEnd, t, savedPos: Integer;
     name, valText: AnsiString;
-    firstCh: Char; ok: Boolean; v: Int64; si: Integer;
+    firstCh: Char; ok, progress: Boolean; v: Int64; si: Integer;
 begin
   mi := 0;
   while mi < CPMCount do
@@ -17251,6 +17251,37 @@ begin
     end;
     Inc(mi);
   end;
+  { ALIASES: a body that is ONE identifier naming a constant -- `#define A LIT`,
+    `#define B E_TWO` (an enumerator), `#define T true` -- is that constant.
+    The prefilter above skips every identifier-led body, so these never
+    exported: IDF's WIFI_INIT_CONFIG_DEFAULT ingredients are exactly this
+    shape (WIFI_DYNAMIC_TX_BUFFER_NUM -> CONFIG_..., SNTP_OPMODE_POLL -> an
+    enumerator). Repeated until nothing new resolves, so an alias of an alias
+    works whatever order the slots are in (a redefinition reuses its slot). }
+  repeat
+    progress := False;
+    for mi := 0 to CPMCount - 1 do
+    begin
+      if CPMFunction[mi] or (CPMNameLen[mi] <= 0) or (CPMValueLen[mi] <= 0) then Continue;
+      valText := CMacroPoolText(CPMValueOff[mi], CPMValueLen[mi]);
+      if not (valText[1] in ['A'..'Z', 'a'..'z', '_']) then Continue;
+      ok := True;
+      for t := 2 to Length(valText) do
+        if not (valText[t] in ['A'..'Z', 'a'..'z', '_', '0'..'9']) then begin ok := False; Break; end;
+      if not ok then Continue;
+      name := CMacroPoolText(CPMNameOff[mi], CPMNameLen[mi]);
+      if (name = valText) or (FindSym(name) >= 0) then Continue;
+      { C's true/false are the int 1/0 (stdbool), not Pascal's Boolean }
+      if valText = 'true' then begin AddConst(name, tyInt32, 1); progress := True; Continue; end;
+      if valText = 'false' then begin AddConst(name, tyInt32, 0); progress := True; Continue; end;
+      si := FindSym(valText);
+      if (si >= 0) and (Syms[si].Kind = skConst) and TypeIsOrdinal(Syms[si].TypeKind) then
+      begin
+        AddConst(name, Syms[si].TypeKind, Syms[si].ConstVal);
+        progress := True;
+      end;
+    end;
+  until not progress;
 end;
 
 { Conservatively decide whether a C struct/union body is laid out as a record.

@@ -10601,6 +10601,15 @@ test-core: $(COMPILER)
 	  if ./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj -I$$d $$d/und.pas $$d/und.o >$$d/und.log 2>&1; then echo "FAIL: call to an undeclared-poisoned header routine compiled"; exit 1; fi && \
 	  grep -q 'cannot call lowbit: its body calls the undeclared function' $$d/und.log \
 	  || { echo "FAIL: undeclared poison message"; cat $$d/und.log; exit 1; }
+	# An object macro whose body is one identifier naming a constant exports
+	# to Pascal as that constant: a literal's alias, an alias of an alias, an
+	# enumerator, C's true/false (int 1/0), and an alias defined BEFORE its
+	# target. IDF's WIFI_INIT_CONFIG_DEFAULT ingredients are this shape.
+	@d=$(TESTTMP)/macro_alias26; mkdir -p $$d && \
+	  printf '#include <stdbool.h>\n#define LIT 7\n#define E (LIT+1)\n#define A LIT\n#define AA A\n#define T true\n#define F false\nenum e { E_ONE = 1, E_TWO };\n#define B E_TWO\n#define ZZ BB\n#define BB 9\nint al_dummy(void);\n' > $$d/al.h && \
+	  printf "program p;\nuses al;\nbegin\n  writeln(LIT, ' ', E, ' ', A, ' ', AA, ' ', T, ' ', F, ' ', B, ' ', ZZ);\nend.\n" > $$d/p.pas && \
+	  ./$(COMPILER) -I$$d $$d/p.pas $$d/p >/dev/null && \
+	  tools/expect_same.sh macro_alias_exports "$$($$d/p)" "7 8 7 7 1 0 2 9"
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union
