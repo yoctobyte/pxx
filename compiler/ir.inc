@@ -12199,7 +12199,15 @@ begin
         Result := left;
         IRTk[Result] := Ord(tyPointer);
       end
-      else if CProgramMode and (ASTKind[node] = AN_FIELD) and
+      { NOT gated on CProgramMode, unlike the array-decay arm above: only the C
+        frontend's layout ever sets a bit width, and a record imported from a
+        header (`uses` of an ESP-IDF header, or that header's own static inline
+        C compiled in the import) is the same layout read from Pascal. Gated, a
+        Pascal write stored at bit 0 unmasked and a read returned the whole
+        storage unit -- rmt_symbol_word_t's 15/1/15/1 fields came out word 1
+        where gcc says 688131, i.e. wrong WS2811 timings with no diagnostic.
+        bug-a-c-import-bitfields-ignore-bit-offset-and-width }
+      else if (ASTKind[node] = AN_FIELD) and
               (RecFieldBitWidth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) > 0) then
         Result := IRLowerBitFieldRead(node, left,
                                       RecFieldType(ResolveNodeRec(ASTLeft[node]),
@@ -16344,7 +16352,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                              SymDynElemRowLen[i] * elemSize, Ord(tyRecord));
         end;
       end
-      else if CProgramMode and (ASTKind[ASTLeft[node]] = AN_FIELD) and
+      else if (ASTKind[ASTLeft[node]] = AN_FIELD) and   { see the read arm: not CProgramMode-gated }
               (RecFieldBitWidth(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
                                 GetASTIdentName(ASTLeft[node])) > 0) then
       begin

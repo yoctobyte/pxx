@@ -10610,6 +10610,12 @@ test-core: $(COMPILER)
 	  printf "program p;\nuses al;\nbegin\n  writeln(LIT, ' ', E, ' ', A, ' ', AA, ' ', T, ' ', F, ' ', B, ' ', ZZ);\nend.\n" > $$d/p.pas && \
 	  ./$(COMPILER) -I$$d $$d/p.pas $$d/p >/dev/null && \
 	  tools/expect_same.sh macro_alias_exports "$$($$d/p)" "7 8 7 7 1 0 2 9"
+	# Bitfields of a `uses`-imported C header: a Pascal write shifts and masks
+	# into the storage unit, a read extracts, and the header's own static
+	# inline C agrees. Gated on CProgramMode they stored at bit 0 unmasked
+	# (ESP-IDF rmt_symbol_word_t: word 1 where gcc says 688131).
+	./$(COMPILER) -Itest test/test_c_import_bitfields.pas $(TESTTMP)/test_c_import_bitfields26 >/dev/null
+	tools/expect_same.sh c_import_bitfields "$$($(TESTTMP)/test_c_import_bitfields26)" "$$(printf 'b=1      word=2  want 2\nc=5      word=20  want 20\nd=700    word=44800  want 44800\nb,c,d    word=44822  want 44822 (C says 44822)\nread back b=1 c=5 d=700  want 1 5 700\nsym word=688131  want 688131')"
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union
