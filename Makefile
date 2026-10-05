@@ -10532,6 +10532,15 @@ test-asm: $(COMPILER)
 	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
+	# 100 -I roots, the header in the LAST one: an ESP-IDF translation unit
+	# passes 81, and MAX_C_INCLUDE_DIRS / MAX_PAS_UNIT_DIRS were 64 (pin v452:
+	# "too many -I include directories"). museum_landkaart's header import.
+	@mkdir -p $(TESTTMP)/many_inc_dirs26 && \
+	  args=''; for i in $$(seq 1 100); do mkdir -p $(TESTTMP)/many_inc_dirs26/d$$i; args="$$args -I$(TESTTMP)/many_inc_dirs26/d$$i"; done; \
+	  printf 'int pxx_last_dir_val(void) { return 42; }\n' > $(TESTTMP)/many_inc_dirs26/d100/lastdir.h; \
+	  printf '#include "lastdir.h"\n#include <stdio.h>\nint main(void){ printf("%%d\\n", pxx_last_dir_val()); return 0; }\n' > $(TESTTMP)/many_inc_dirs26/m.c; \
+	  ./$(COMPILER) $$args $(TESTTMP)/many_inc_dirs26/m.c $(TESTTMP)/many_inc_dirs26/m >/dev/null && \
+	  tools/expect_same.sh many_inc_dirs "$$($(TESTTMP)/many_inc_dirs26/m)" "42"
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union

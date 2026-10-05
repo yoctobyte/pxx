@@ -406,11 +406,11 @@ const
     MAX_C_INCLUDE_DIRS = 64, which is a limit on `-I' roots and had nothing to
     do with this. }
   MAX_CRTL_PULLS = 512;
-  MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
+  MAX_C_INCLUDE_DIRS = 256;   { user `-I` C include search roots; an ESP-IDF translation unit passes 81 }
   MAX_C_SYS_INCLUDE_DIRS = 64; { host system `<>` fallback roots — the tier-4 table BuildCSysIncludeDirs fills (feature-dynamic-include-paths-config). Was sixteen copy-pasted blocks in cpreproc.inc, two of them naming a hardcoded gcc/clang VERSION that had already gone stale. }
   MAX_PXXLIB_CACHE   = 64;   { directories remembered by the pxxlib.cfg walk }
   MAX_UNIT_ALIAS     = 64;   { `unitalias` rows across all pxxlib.cfg manifests }
-  MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
+  MAX_PAS_UNIT_DIRS  = 256;   { user `-Fu`/`-I` Pascal unit search roots; an ESP-IDF header import needs the IDF TU's 81 -I }
   MAX_DIRENT         = 4096;  { entries one PxxListDir scan reports; lib/rtl is 109 }
   { The compiler's own GENERATION number, tracking the pinned-stable line. ONE
     owner: the {$IF} preset PXX_VERSION (lexer.inc) and `pxx --version` both read
