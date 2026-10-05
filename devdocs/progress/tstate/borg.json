@@ -18244,7 +18244,7 @@
    "bad": "62fc7c1e802a126b623b3219bbaf6020750733e9",
    "bad_untestable": true,
    "first_seen": false,
-   "good": "2e07225c3cd1becc67d84ac5ca13dd39e750879a",
+   "good": "885d670ba278ec08491ba65a635d19dc17dd5c07",
    "job": "test-nilpy#src:test/test_nilpy_sqlite_crud.npy",
    "name": "test-nilpy#144",
    "never_passed": false,
@@ -18253,8 +18253,6 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "e095c40734a6c490bbe306b66510c9430af7ede0",
-    "885d670ba278ec08491ba65a635d19dc17dd5c07",
     "0a21c181514219cdf57ac00c299e020e62c7c212",
     "25976991103ea1c846cdec31450130f3543255da"
    ],
