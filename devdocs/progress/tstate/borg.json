@@ -18222,7 +18222,7 @@
    "status": "fail"
   },
   {
-   "bad": "62fc7c1e802a126b623b3219bbaf6020750733e9",
+   "bad": "0a21c181514219cdf57ac00c299e020e62c7c212",
    "bad_untestable": true,
    "first_seen": false,
    "good": "885d670ba278ec08491ba65a635d19dc17dd5c07",
@@ -18234,8 +18234,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "0a21c181514219cdf57ac00c299e020e62c7c212",
-    "25976991103ea1c846cdec31450130f3543255da"
+    "0a21c181514219cdf57ac00c299e020e62c7c212"
    ],
    "range_non_causal": false,
    "src": "test/test_nilpy_import_sqlite.npy lib/rtl/zlib.pas +2",
