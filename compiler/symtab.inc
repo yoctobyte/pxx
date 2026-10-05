@@ -6426,7 +6426,11 @@ procedure StampDeclSeq(symIdx: Integer);
   the declaration pre-scan are gated; synthetic globals allocated while compiling a
   body (e.g. the string-Result slot) run with PreScanPass=False and stay visible. }
 begin
-  if PreScanPass and (Syms[symIdx].Kind = skGlobal) then
+  { NOT a C header imported by `uses`: its `extern` variables are declared
+    before the program as a unit's interface is, but the header's tokens sit
+    after the program's, so the stamp hid them from every routine body
+    ("a global declared later") while the main block could see them. }
+  if PreScanPass and (Syms[symIdx].Kind = skGlobal) and (not CHeaderMode) then
     { Record the declaration's SOffset (immutable char-pool position, monotonic in
       lex/source order), NOT the token INDEX: token indices are renumbered by pass-2
       excisions/inserts while SOffsets never move, keeping decl-order stable — see

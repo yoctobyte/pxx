@@ -18988,6 +18988,11 @@ begin
                ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
               IsBareStructDecl then
         ParseCStructDecl
+      { `extern pair_t g_pair;` is a VARIABLE: ParseCSubroutine dropped it and
+        Pascal said "undefined variable". IDF's WIFI_INIT_CONFIG_DEFAULT needs
+        g_wifi_osi_funcs and g_wifi_default_wpa_crypto_funcs by name. }
+      else if IsCTypeTok and not CTopLevelIsFunc then
+        ParseCGlobalVarDecl
       else if IsCTypeTok then
         ParseCSubroutine
       { the uses-import path: `undefined_t v;` was skipped and the import

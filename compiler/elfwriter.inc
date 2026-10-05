@@ -3038,7 +3038,12 @@ procedure ObjPlanEspSymbols(numSectionSyms: Integer;
   until the first pass has counted them. Getting it wrong aims a call at the
   wrong symbol, which the linker resolves happily -- a wild jump, not an
   error -- so ObjCallFixIsRelocatable refuses anything it cannot index. }
-procedure ObjRefuseEspDataImports; forward;
+function ObjEspImportCount: Integer; forward;
+function ObjEspImportStrLen: Integer; forward;
+function ObjEspImportSymForOff(bssOff: Integer; var addend: Integer): Integer; forward;
+function ObjDataImportOrdinal(symIdx: Integer): Integer; forward;
+function ObjDataIsImport(i: Integer): Boolean; forward;
+function ObjDataIsReferenced(i: Integer): Boolean; forward;
 function ObjEspProcIsExported(procIdx: Integer): Boolean; forward;
 
 function ObjExtBind(extIdx: Integer): Byte;
@@ -3075,6 +3080,7 @@ var
   relaTextOff, relaIramOff, relaDataOff, shstrOff, shOff, strSize: Integer;
   relaTextCount, relaIramCount, relaDataCount, appMainOff: Integer;
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
+  impStr, impK, impAdd: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -3092,12 +3098,11 @@ begin
       iramSize := iramSize + (ProcBodyEnd[i] - Procs[i].BodyAddr);
     end;
 
-  ObjRefuseEspDataImports;
   ObjRoPrepare;
   if RoSplitActive then nSecSyms := 5 else nSecSyms := 4;
   ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
-  numSyms := extSym0 + ExternalCount;
+  numSyms := extSym0 + ExternalCount + ObjEspImportCount;
 
   { Partition relocation counts by which text section their CodePos lands in. }
   relaTextCount := 0; relaIramCount := 0;
@@ -3211,6 +3216,13 @@ begin
       writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 7);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0);  { NOTYPE UNDEF, GLOBAL or WEAK }
+  impStr := strSize - ObjEspImportStrLen;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
+    begin
+      writeSym32(f, impStr, 0, 0, $10, 0);          { imported variable: GLOBAL NOTYPE UNDEF }
+      impStr := impStr + Length(Syms[i].Name) + 1;
+    end;
 
   { .strtab -- proc names in INDEX order, not symbol order (see the planner). }
   writeU8(f, 0);
@@ -3221,6 +3233,8 @@ begin
     if ObjDataStrOff[i] >= 0 then writeStrZ(f, Syms[i].Name);
   for i := 0 to ExternalCount-1 do
     writeStrZ(f, ExternalLinkName(i));
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text — only relocs whose CodePos stays in flash .text.
@@ -3231,7 +3245,13 @@ begin
                   ObjDataOff(Fixups[i].DataOff));
   for i := 0 to GlobFixCount-1 do
     if CodePosToIramOff(GlobFix[i].CodePos) < 0 then
-      writeRela32(f, GlobFix[i].CodePos, 4, 1, GlobFix[i].BSSoff);
+    begin
+      impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
+      if impK >= 0 then
+        writeRela32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+      else
+        writeRela32(f, GlobFix[i].CodePos, 4, 1, GlobFix[i].BSSoff);
+    end;
   for i := 0 to DynCallCount-1 do
     if CodePosToIramOff(DynCallCodePos[i]) < 0 then
       writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], 1, 0);
@@ -3254,7 +3274,14 @@ begin
   for i := 0 to GlobFixCount-1 do
   begin
     mapped := CodePosToIramOff(GlobFix[i].CodePos);
-    if mapped >= 0 then writeRela32(f, mapped, 4, 1, GlobFix[i].BSSoff);
+    if mapped >= 0 then
+    begin
+      impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
+      if impK >= 0 then
+        writeRela32(f, mapped, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+      else
+        writeRela32(f, mapped, 4, 1, GlobFix[i].BSSoff);
+    end;
   end;
   for i := 0 to DynCallCount-1 do
   begin
@@ -3363,6 +3390,7 @@ var
   shstrOff, shOff, strSize: Integer;
   relaTextCount, relaDataCount, appMainOff: Integer;
   rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
+  impStr, impK, impAdd: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -3403,12 +3431,11 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
-  ObjRefuseEspDataImports;
   ObjRoPrepare;
   if RoSplitActive then nSecSyms := 4 else nSecSyms := 3;
   ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
-  numSyms := extSym0 + ExternalCount;
+  numSyms := extSym0 + ExternalCount + ObjEspImportCount;
   relaTextCount := FixCount + GlobFixCount + DynCallCount;
   relaDataCount := ObjDataRelocCount(False);
   relaRoCount := ObjDataRelocCount(True);
@@ -3482,6 +3509,13 @@ begin
       writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 5);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, ObjExtBind(i), 0); { NOTYPE UNDEF, GLOBAL or WEAK }
+  impStr := strSize - ObjEspImportStrLen;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
+    begin
+      writeSym32(f, impStr, 0, 0, $10, 0);          { imported variable: GLOBAL NOTYPE UNDEF }
+      impStr := impStr + Length(Syms[i].Name) + 1;
+    end;
 
   { .strtab -- proc names in INDEX order, not symbol order (see the planner). }
   writeU8(f, 0);
@@ -3492,6 +3526,8 @@ begin
     if ObjDataStrOff[i] >= 0 then writeStrZ(f, Syms[i].Name);
   for i := 0 to ExternalCount-1 do
     writeStrZ(f, ExternalLinkName(i));
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text: literal slots -> .data / .rodata / .bss / undefined externals.
@@ -3500,7 +3536,13 @@ begin
     writeRela32(f, Fixups[i].CodePos, ObjDataSym(Fixups[i].DataOff, 2, 4), 1,
                 ObjDataOff(Fixups[i].DataOff));
   for i := 0 to GlobFixCount-1 do
-    writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
+  begin
+    impK := ObjEspImportSymForOff(GlobFix[i].BSSoff, impAdd);
+    if impK >= 0 then
+      writeRela32(f, GlobFix[i].CodePos, extSym0 + ExternalCount + ObjDataImportOrdinal(impK), 1, impAdd)
+    else
+      writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
+  end;
   for i := 0 to DynCallCount-1 do
     writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], 1, 0);
 
@@ -4597,6 +4639,7 @@ begin
     ObjExtStrOff[i] := strSize;
     strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
+  strSize := strSize + ObjEspImportStrLen;   { imported variables, after the externals }
 
   firstGlobal := 1 + numSectionSyms + numLocalProcs;
   extSym0 := firstGlobal + 1 + numExportProcs + numExportData;
@@ -4617,24 +4660,60 @@ begin
     end;
 end;
 
-procedure ObjRefuseEspDataImports;
-{ An IMPORT has no route through these writers -- every GlobFix relocates
-  against the .bss section sym -- so an `external` variable would take local
-  storage and read zero, which is the silent-wrong-value shape the whole data
-  work exists to prevent. Refused rather than emitted, until someone needs it.
-  bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable }
-var i: Integer;
+{ IMPORTED VARIABLES IN THE ESP OBJECTS. They were refused outright
+  (ObjRefuseEspDataImports) because every GlobFix relocated against this
+  object's .bss section symbol, so an `external` variable would have read a
+  private zero slot. ESP-IDF's prebuilt blobs (libnet80211.a's
+  g_wifi_osi_funcs, ...) offer no accessor to call instead, and a header
+  imported with `uses` declares them `extern`. Each REFERENCED import is now
+  an UNDEF GLOBAL symbol after the externals (names in .strtab after theirs,
+  same order), and a reference relocates against it with R_*_32 like any
+  other literal word.
+
+  CONTAINMENT, not the exact match the hosted writers use: a Pascal field read
+  `g_pair.b` folds the field offset into the slot offset, and an exact match
+  let it fall back to .bss -- the silent zero this replaces. The addend carries
+  the offset into the import. An access past the reservation (an
+  `extern T a[];` indexed beyond its one reserved element) is not found here
+  and still lands in .bss; that is the one shape left uncovered.
+  bug-b-extern-variables-from-c-headers-on-esp }
+function ObjEspImportCount: Integer;
+var k, n: Integer;
 begin
-  { Only a REFERENCED import: the hazard is a read of the private slot, and an
-    `extern int x;` nothing uses reads nothing -- gcc emits no symbol for it
-    either. c-testsuite 00094.c is exactly that declaration and nothing else,
-    and it was refused (feature-c-esp-conformance-coverage). }
-  for i := 0 to SymCount-1 do
-    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
-      ErrorNoPos('--emit-obj: an imported variable (' + Syms[i].Name
-        + ') is not supported for xtensa/riscv32 objects: the reference would '
-        + 'relocate into this object''s own .bss and read zero. Export an '
-        + 'accessor from the defining side instead');
+  n := 0;
+  for k := 0 to SymCount-1 do
+    if ObjDataIsImport(k) and ObjDataIsReferenced(k) then Inc(n);
+  ObjEspImportCount := n;
+end;
+
+function ObjEspImportStrLen: Integer;
+var k, n: Integer;
+begin
+  n := 0;
+  for k := 0 to SymCount-1 do
+    if ObjDataIsImport(k) and ObjDataIsReferenced(k) then
+      n := n + Length(Syms[k].Name) + 1;
+  ObjEspImportStrLen := n;
+end;
+
+function ObjEspImportSymForOff(bssOff: Integer; var addend: Integer): Integer;
+var k, sz: Integer;
+begin
+  ObjEspImportSymForOff := -1;
+  addend := 0;
+  for k := 0 to SymCount-1 do
+    if ObjDataIsImport(k) and ObjDataIsReferenced(k) and
+       (not SymOffIsData(Syms[k].Offset)) then
+    begin
+      sz := SymAllocSize[k];
+      if sz < 1 then sz := 1;
+      if (bssOff >= Syms[k].Offset) and (bssOff < Syms[k].Offset + sz) then
+      begin
+        addend := bssOff - Syms[k].Offset;
+        ObjEspImportSymForOff := k;
+        Exit;
+      end;
+    end;
 end;
 
 function ObjDataImportOrdinal(symIdx: Integer): Integer;

@@ -10616,6 +10616,12 @@ test-core: $(COMPILER)
 	# (ESP-IDF rmt_symbol_word_t: word 1 where gcc says 688131).
 	./$(COMPILER) -Itest test/test_c_import_bitfields.pas $(TESTTMP)/test_c_import_bitfields26 >/dev/null
 	tools/expect_same.sh c_import_bitfields "$$($(TESTTMP)/test_c_import_bitfields26)" "$$(printf 'b=1      word=2  want 2\nc=5      word=20  want 20\nd=700    word=44800  want 44800\nb,c,d    word=44822  want 44822 (C says 44822)\nread back b=1 c=5 d=700  want 1 5 700\nsym word=688131  want 688131')"
+	# `extern` variables of a uses-imported header: dropped by the import
+	# ("undefined variable"), then hidden from routine bodies as "declared
+	# later". Now imported, read/written through fields, bound by gcc's link.
+	./$(COMPILER) -Itest --emit-obj test/test_c_import_extern_vars.pas $(TESTTMP)/c_import_extern_vars26.o >/dev/null
+	gcc -no-pie -Itest test/c_import_extern_vars_def.c $(TESTTMP)/c_import_extern_vars26.o -o $(TESTTMP)/c_import_extern_vars26
+	tools/expect_same.sh c_import_extern_vars "$$($(TESTTMP)/c_import_extern_vars26)" "$$(printf '1 2 2 4 5\n77')"
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union
@@ -38896,17 +38902,22 @@ test-emit-obj: $(COMPILER)
 	#    control -- it corrupts one r_offset of the SAME object and requires a
 	#    rejection, so a checker that stopped checking cannot pass.
 	@python3 tools/reloc_structure_devtest.py || { echo "test-emit-obj: the --dce ESP objects failed the structural relocation check"; exit 1; }
-	#    AND AN IMPORT IS REFUSED, not silently given local storage. These
-	#    writers relocate every global reference against the .bss section sym, so
-	#    an `external` variable would read zero -- the exact silent-wrong-value
-	#    shape this family exists to prevent. Asserted on the message, because
-	#    any compile failure would satisfy a bare nonzero exit.
-	#    The reader must be REACHABLE: only an import something reads is refused
-	#    (an `extern int x;` nobody uses is c-testsuite 00094.c and must build),
-	#    and an uncalled f is dropped before the writer looks.
+	#    AND AN IMPORT RELOCATES AGAINST ITS OWN SYMBOL, not this object's .bss.
+	#    Until 2026-10-05 it was refused outright (every global relocated
+	#    against the .bss section sym, so it would have read zero); ESP-IDF's
+	#    blobs export variables with no accessor (g_wifi_osi_funcs), so it now
+	#    becomes an UND symbol with an R_*_32 against it. The reader must be
+	#    REACHABLE -- an uncalled f is dropped before the writer looks.
+	#    bug-b-extern-variables-from-c-headers-on-esp
 	@printf 'program eimp;\nvar Shared: Integer; external;\nfunction f: Integer; begin f := Shared; end;\nvar r: Integer;\nbegin r := f; end.\n' > $(TESTTMP)/espx_imp.pas
-	@! ./$(COMPILER) -Fulib/rtl --emit-obj --target=riscv32 --platform=esp $(TESTTMP)/espx_imp.pas $(TESTTMP)/espx_imp.o >$(TESTTMP)/espx_imp.err 2>&1 || { echo "test-emit-obj: an imported variable was ACCEPTED for an ESP object -- it reads zero"; exit 1; }
-	@grep -q 'imported variable' $(TESTTMP)/espx_imp.err || { echo "test-emit-obj: the ESP import build failed for some OTHER reason, so the row above proves nothing"; head -3 $(TESTTMP)/espx_imp.err; exit 1; }
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp $(TESTTMP)/espx_imp.pas $(TESTTMP)/espx_imp_$$t.o >$(TESTTMP)/espx_imp.err 2>&1 \
+	    || { echo "test-emit-obj: an imported variable was refused for a $$t ESP object"; head -3 $(TESTTMP)/espx_imp.err; exit 1; }; \
+	  readelf -sW $(TESTTMP)/espx_imp_$$t.o | grep -q 'GLOBAL DEFAULT  *UND Shared$$' \
+	    || { echo "test-emit-obj: $$t: no UND symbol for the imported variable"; exit 1; }; \
+	  readelf -rW $(TESTTMP)/espx_imp_$$t.o | grep -q '_32 .* Shared + 0' \
+	    || { echo "test-emit-obj: $$t: the reference does not relocate against the import (it would read this object's .bss)"; readelf -rW $(TESTTMP)/espx_imp_$$t.o | head -5; exit 1; }; \
+	done
 	# 4b-nonies. THE ADDRESS OF AN EXTERNAL ROUTINE, on every target that has an
 	#    external model at all. xtensa refused it outright -- "@ on external
 	#    routine not supported; wrap it in a local routine" -- on the recorded
