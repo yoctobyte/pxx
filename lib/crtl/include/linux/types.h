@@ -41,6 +41,10 @@ typedef long         __kernel_time_t;
 typedef long         __kernel_suseconds_t;
 typedef long         __kernel_clock_t;
 typedef unsigned int __kernel_mode_t;
+/* the kernel's home for this one is <linux/socket.h>; rtnetlink.h's struct
+   rtvia uses it, and its member was silently dropped until an unknown type
+   name became an error */
+typedef unsigned short __kernel_sa_family_t;
 
 /* __kernel_old_dev_t HAS THREE DIFFERENT WIDTHS and the name says nothing
    about which: `unsigned long' on x86-64 (asm/posix_types_64.h), `unsigned
