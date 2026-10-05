@@ -17045,6 +17045,17 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         directive is only accepted on a plain routine (pasparser_proc.inc), and
         AN_CALL_IND needs an address that the refusal below already denies.
         bug-s-a-direct-call-to-an-interrupt-routine-is-the-same-trap-return-fault-by-another-spelling }
+      if (cpi >= 0) and (cpi < Length(ProcAsmPoison)) and (ProcAsmPoison[cpi] <> '') then
+      begin
+        if CHeaderMode and (CurProc >= 0) then
+        begin
+          if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+          ProcAsmPoison[CurProc] := ProcAsmPoison[cpi];
+        end
+        else
+          ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
+                'cannot call ' + Procs[cpi].Name + ': ' + ProcAsmPoison[cpi]);
+      end;
       if (cpi >= 0) and (cpi < Length(ProcIsInterrupt)) and ProcIsInterrupt[cpi] then
         ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
               'cannot call ' + Procs[cpi].Name + ' directly: it is declared `interrupt;`, so it ' +

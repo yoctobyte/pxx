@@ -3285,6 +3285,10 @@ begin
     end;
     if DebugTrace then writeln('C preprocessor: include ', CPrepPath);
     CPFoundIdx[depth + 1] := CPLastFoundIdx;
+    { an #include_next's start index is for ITS search only: the file it found
+      is processed below, and a plain #include inside it (newlib's sys/cdefs.h
+      `<stddef.h>`) must search from the top again, not after gcc's dir }
+    CPIncNextFrom := -1;
     hdrResolved := CPrepPath;   { capture before CPProcessInclude / the auto-pull mutate CPrepPath }
     if CPIsCrtlSrcPath(CPrepPath) then
     begin

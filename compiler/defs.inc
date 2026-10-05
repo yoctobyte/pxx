@@ -5229,6 +5229,15 @@ var
   ProcIsGenerator : array of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
   ProcIsStackless : array of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }
   ProcIram        : array of Boolean;   { `; iram;` — body placed in the ELF .iram1.text section (ESP IRAM) }
+  { A C routine whose body holds inline asm this target has no reader for, or
+    calls a function nothing declares (__builtin_ffs's crtl helper with newlib
+    as the libc), met while importing a header (ESP-IDF's static inline
+    helpers): the
+    body is ACCEPTED with the asm dropped, and the refusal moves to where a call
+    to it is lowered. '' = clean, else the refusal text. A header routine that
+    calls one inherits the poison instead of failing, so only a call from code
+    that is really compiled for use refuses. }
+  ProcAsmPoison : array of AnsiString;
   ProcIsInterrupt : array of Boolean;   { `; interrupt;` — raw hardware interrupt handler. THE CODEGEN IS COMPLETE, and this
                                           comment said "reserved; full reg-save/iret not yet emitted" until 2026-09-21, which
                                           would have sent a reader to build what already works. Verified by disassembling

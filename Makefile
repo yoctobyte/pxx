@@ -10548,10 +10548,11 @@ test-core: $(COMPILER)
 	@d=$(TESTTMP)/include_next26; mkdir -p $$d/a $$d/b $$d/c && \
 	  printf '#include_next <foo.h>\n#define FOO_A 4\n' > $$d/a/foo.h && \
 	  printf '#include_next <foo.h>\n#define FOO_B 2\n' > $$d/b/foo.h && \
-	  printf 'typedef unsigned int my_t;\n#define FOO_C 1\n' > $$d/c/foo.h && \
-	  printf '#include <foo.h>\n#include <stdio.h>\nint main(void){ my_t x = FOO_A + FOO_B + FOO_C; printf("%%u\\n", x); return 0; }\n' > $$d/m.c && \
+	  printf 'typedef unsigned int my_t;\n#define FOO_C 1\n#include <bar.h>\n' > $$d/c/foo.h && \
+	  printf '#define BAR 10\n' > $$d/a/bar.h && printf '#define BAR 99\n' > $$d/c/bar.h && \
+	  printf '#include <foo.h>\n#include <stdio.h>\nint main(void){ my_t x = FOO_A + FOO_B + FOO_C + BAR; printf("%%u\\n", x); return 0; }\n' > $$d/m.c && \
 	  ./$(COMPILER) -I$$d/a -I$$d/b -I$$d/c $$d/m.c $$d/m >/dev/null && \
-	  tools/expect_same.sh include_next "$$($$d/m)" "7" && \
+	  tools/expect_same.sh include_next "$$($$d/m)" "17" && \
 	  printf '#if 0\n#not_live\n#endif\n#bogus_directive\nint main(void){return 0;}\n' > $$d/z.c && \
 	  if ./$(COMPILER) $$d/z.c $$d/z >$$d/z.log 2>&1; then echo "FAIL: #bogus_directive compiled"; exit 1; fi && \
 	  grep -q 'invalid preprocessing directive #bogus_directive' $$d/z.log \
@@ -10577,6 +10578,29 @@ test-core: $(COMPILER)
 	    "A int / long int / 7ULL / unsigned int / 1" && \
 	  tools/expect_same.sh esp_predefs_not_hosted "$$(./$(COMPILER) --target=riscv32 --dump-cpp $$d/pd.c | grep '^A')" \
 	    "A __INTPTR_TYPE__ / __INT32_TYPE__ / __UINT64_C(7) / __SIZE_TYPE__ / __XTENSA_EL__"
+	# __builtin_strrchr/strchr over a literal fold to a suffix of it, as gcc
+	# does (IDF's assert.h __FILENAME__); a non-literal stays the library call.
+	@d=$(TESTTMP)/builtin_strrchr_fold26; mkdir -p $$d && \
+	  printf '#include <stdio.h>\nint main(void){ const char *v = "x/y"; printf("%%s|%%s|%%d|%%d|%%s\\n", __builtin_strrchr("/" "dir/f.c", %s) + 1, __builtin_strchr("a/b/c", %s), __builtin_strchr("abc", %s) == 0, (int)__builtin_strlen(__builtin_strchr("abc", 0)), __builtin_strrchr(v, %s)); return 0; }\n' "'/'" "'/'" "'z'" "'/'" > $$d/m.c && \
+	  ./$(COMPILER) $$d/m.c $$d/m >/dev/null && \
+	  tools/expect_same.sh builtin_strrchr_fold "$$($$d/m)" "f.c|/b/c|1|0|/y"
+	# An imported header's static inline that holds inline asm this target
+	# cannot read, or calls an undeclared function, is accepted and POISONED:
+	# uncalled it costs nothing (IDF's riscv csr helpers), called -- directly or
+	# through another header routine, at -O0 and -O2 -- it refuses by name.
+	@d=$(TESTTMP)/header_poison26; mkdir -p $$d && \
+	  printf 'static inline unsigned rd_ms(void){ unsigned v; __asm__ volatile("csrr %%0, mstatus" : "=r"(v)); return v; }\nstatic inline unsigned wrap(void){ return rd_ms() + 1; }\nstatic inline int lowbit(int x){ return __builtin_ffs(x); }\nstatic inline int plain(int x){ return x * 2; }\n' > $$d/hp.h && \
+	  printf 'program p;\nuses hp;\nbegin\n  writeln(plain(21));\nend.\n' > $$d/ok.pas && \
+	  printf 'program p;\nuses hp;\nbegin\n  writeln(wrap);\nend.\n' > $$d/asm.pas && \
+	  printf 'program p;\nuses hp;\nbegin\n  writeln(lowbit(8));\nend.\n' > $$d/und.pas && \
+	  ./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj -I$$d $$d/ok.pas $$d/ok.o >/dev/null && \
+	  for o in -O0 -O2; do \
+	    if ./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj $$o -I$$d $$d/asm.pas $$d/asm.o >$$d/asm.log 2>&1; then echo "FAIL: call to an asm-poisoned header routine compiled ($$o)"; exit 1; fi; \
+	    grep -q 'cannot call wrap: its body holds C inline asm' $$d/asm.log || { echo "FAIL: asm poison message ($$o)"; cat $$d/asm.log; exit 1; }; \
+	  done && \
+	  if ./$(COMPILER) --target=riscv32 --platform=esp --no-signals --emit-obj -I$$d $$d/und.pas $$d/und.o >$$d/und.log 2>&1; then echo "FAIL: call to an undeclared-poisoned header routine compiled"; exit 1; fi && \
+	  grep -q 'cannot call lowbit: its body calls the undeclared function' $$d/und.log \
+	  || { echo "FAIL: undeclared poison message"; cat $$d/und.log; exit 1; }
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union

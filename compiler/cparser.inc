@@ -2594,6 +2594,45 @@ begin
           than hard-coding 64 is what keeps the cross targets right; the whole
           family was missing its `l` row until a csmith --builtins sweep asked
           for it. }
+        { __builtin_strrchr / __builtin_strchr over a string LITERAL and a
+          constant char fold, as gcc folds them: the answer is a suffix of the
+          literal (same chars, later offset), or NULL. ESP-IDF's assert.h is
+          `#define __FILENAME__ (__builtin_strrchr("/" __FILE__, '/') + 1)`,
+          reached from every IDF static inline that asserts; a Pascal `uses`
+          of such a header has no <string.h> in scope, and with newlib as the
+          libc there is no crtl prototype to pull, so the call was "undeclared
+          function: strrchr". A non-literal argument still becomes the
+          library call below. }
+        if ((name = '__builtin_strrchr') or (name = '__builtin_strchr')) and
+           (argHead >= 0) and (ASTKind[ASTLeft[argHead]] = AN_STR_LIT) and
+           (ASTRight[argHead] >= 0) and
+           (ASTKind[ASTLeft[ASTRight[argHead]]] = AN_INT_LIT) then
+        begin
+          node := ASTLeft[argHead];
+          idx := -1;
+          for vaK := 0 to ASTSLen[node] - 1 do
+            if Ord(TokChars[ASTSOffset[node] + vaK]) = (ASTIVal[ASTLeft[ASTRight[argHead]]] and 255) then
+            begin
+              idx := vaK;
+              if name = '__builtin_strchr' then Break;
+            end;
+          if (ASTIVal[ASTLeft[ASTRight[argHead]]] and 255) = 0 then
+            idx := ASTSLen[node];   { the terminator itself: an empty suffix }
+          if idx >= 0 then
+          begin
+            Result := AllocNode(AN_STR_LIT);
+            ASTSOffset[Result] := ASTSOffset[node] + idx;
+            ASTSLen[Result] := ASTSLen[node] - idx;
+            ASTTk[Result] := Ord(tyString);
+          end
+          else
+          begin
+            Result := AllocNode(AN_INT_LIT);
+            ASTIVal[Result] := 0;
+            ASTTk[Result] := Ord(tyPointer);
+          end;
+          Exit;
+        end;
         if name = '__builtin_clz' then name := '__pxx_builtin_clz32'
         else if name = '__builtin_clzll' then name := '__pxx_builtin_clz64'
         else if name = '__builtin_clzl' then name := '__pxx_builtin_clz' + CLongWidthSuffix
@@ -2770,6 +2809,18 @@ begin
             ASTIVal[node]  := SymProcSig[idx];
             ASTTk[node]    := Ord(Procs[SymProcSig[idx]].RetType);
             ASTSLen[node]  := 0;
+          end
+          else if CHeaderMode and (CurProc >= 0) then
+          begin
+            { inside a routine of an imported header (an IDF static inline
+              calling __builtin_ffs, whose crtl helper is not there when newlib
+              is the libc): accept and poison, as for inline asm -- a call to
+              the routine refuses, an uncalled one costs nothing }
+            if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+            ProcAsmPoison[CurProc] := 'its body calls the undeclared function ' + name;
+            node := AllocNode(AN_INT_LIT);
+            ASTIVal[node] := 0;
+            ASTTk[node] := Ord(tyInt32);
           end
           else
             Error('call to undeclared function: ' + name);
@@ -9740,8 +9791,22 @@ begin
         asmtext_386.inc (AttSinkText). Every other target has no reader for
         this syntax at all and says so. }
       if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
+      begin
+        { inside a routine of an IMPORTED HEADER: accept and poison (see
+          ProcAsmPoison) -- IDF's riscv helpers carry csr asm that a program
+          importing the header for its types and calls never reaches }
+        if CHeaderMode and (CurProc >= 0) then
+        begin
+          if Length(ProcAsmPoison) <= CurProc then SetLength(ProcAsmPoison, CurProc + 256);
+          ProcAsmPoison[CurProc] := 'its body holds C inline asm, which is only supported on'
+              + ' x86-64 and i386, not ' + TargetArchName(TargetArch);
+          node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
+          Result := node;
+          Exit;
+        end;
         Error('C: inline asm with a non-empty template is only supported on'
               + ' x86-64 and i386, not ' + TargetArchName(TargetArch));
+      end;
       if CAsmOpCount > 0 then
       begin
         Result := CAsmBuildBlock(asmSections > 0);
