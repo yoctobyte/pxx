@@ -830,7 +830,11 @@ begin
       if due > now then waitMs := Integer(due - now) else waitMs := 0;
     end;
   end;
-  rc := PalPollSet(@pf[0], n, waitMs);
+  { nil for an empty set: lwip_poll answers EINVAL at once for a non-NULL
+    pointer with nfds = 0, which turned "only sleepers parked" into a spin
+    (Linux poll accepts either, so the host test cannot see it). }
+  if n > 0 then rc := PalPollSet(@pf[0], n, waitMs)
+  else rc := PalPollSet(nil, 0, waitMs);
   if rc > 0 then
     for k := 0 to n - 1 do
       if pf[k].revents <> 0 then

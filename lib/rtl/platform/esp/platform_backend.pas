@@ -1303,6 +1303,16 @@ function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Int
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
 var i: Integer; ev: PSmallInt; saved: array of SmallInt;
 begin
+  { lwip_poll refuses a non-NULL fds with nfds = 0 (EINVAL, at once) and
+    sleeps for timeoutMs on NULL + 0. A set with nothing in it is a timed
+    sleep -- the scheduler's idle path when only CoSleep is parked -- so it
+    must reach lwIP as NULL, or the caller spins until the task watchdog
+    bites (museum_landkaart, Espressif QEMU esp32c3, 2026-10-05). }
+  if nfds <= 0 then
+  begin
+    Result := EspNet(lwip_poll(nil, 0, timeoutMs));
+    Exit;
+  end;
   SetLength(saved, nfds);
   for i := 0 to nfds - 1 do
   begin
