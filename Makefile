@@ -42357,7 +42357,7 @@ lib-test: pxx-stable-check
 	# The refusals have no oracle by construction (CPython does these things
 	# rather than refusing), so they run on their own, with no server needed.
 	tools/expect_same.sh lib_urllib_refusals.1 "$$($(TESTTMP)/lib_urllib_refusals | tail -n 1)" "MIMIC-URLLIB-REQUEST REFUSALS OK"
-	tools/expect_same.sh lib_urllib_refusals.2 "$$($(TESTTMP)/lib_urllib_refusals | grep -c '=ok')" "7"
+	tools/expect_same.sh lib_urllib_refusals.2 "$$($(TESTTMP)/lib_urllib_refusals | grep -c '=ok')" "6"
 	tools/expect_same.sh lib_urllib_refusals.3 "$$($(TESTTMP)/lib_urllib_refusals | grep -c 'FAIL')" "0"
 	@set -e; \
 	  rm -f $(TESTTMP)/lib_urllib_srv.log; \
@@ -44407,7 +44407,7 @@ tools-devtest-sh:
 	for f in tools/*devtest*.sh; do \
 	  case "$$f" in \
 	    *c_interop_devtest.sh|*tls_openssl_devtest.sh|*tls13_handshake_devtest.sh) continue ;; \
-	    *truststore_devtest.sh|*tls_native_seam_devtest.sh) continue ;; \
+	    *truststore_devtest.sh|*tls_native_seam_devtest.sh|*urllib_https_devtest.sh) continue ;; \
 	  esac; \
 	  printf '  tools-devtest-sh: %s\n' "$$f"; \
 	  if bash "$$f" > $(TESTTMP)/tools_devtest_sh.log 2>&1; then \
@@ -44452,3 +44452,10 @@ tls13-handshake-devtest: pxx-stable-check
 # missing trust file). Opt-in / non-hermetic; not in the lib-test gate.
 tls-native-seam-devtest: pxx-stable-check
 	tools/tls_native_seam_devtest.sh
+
+# A NilPy urlopen("https://...") with no backend registered by the program
+# installs the native TLS 1.3 backend itself: trusted chain (with and without
+# a timeout), untrusted root and hostname mismatch refused. Opt-in /
+# needs the openssl CLI; not in the lib-test gate.
+urllib-https-devtest: $(COMPILER)
+	tools/urllib_https_devtest.sh

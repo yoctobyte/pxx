@@ -16,8 +16,9 @@ unit mimic_urllib_request;
   swap costs a caller nothing. Shape precedent: mimic_codecs.pas.
 
   THE SUBSET, stated plainly — what works:
-    urlopen(url_or_Request, data=None, timeout=<default>) over http:// and,
-    with a TLS backend registered, https://; redirects followed; the response
+    urlopen(url_or_Request, data=None, timeout=<default>) over http:// and
+    https:// (TLS 1.3 only, through tls13_native unless the program
+    registered another backend first); redirects followed; the response
     object with read/readline/readlines/status/code/reason/url/headers/info/
     geturl/getcode/close and `with` support; Request with method, headers, data;
     urlretrieve to a file; quote/unquote/urlencode reachable through
@@ -32,11 +33,10 @@ unit mimic_urllib_request;
       asked for a bound and would silently not get one. A positive timeout
       on Linux IS honoured, through http.pas's HttpExecTimeout: the connect
       and each send/receive give up after it, as CPython's do.
-    * https:// with no TLS backend registered. http.pas ships two and
-      deliberately registers NEITHER — the caller picks (tls13_native or
-      tls_openssl). So the refusal names them instead of choosing one here: a
-      shim picking a TLS policy for the program is exactly the kind of quiet
-      decision that should not live in a compatibility layer.
+    * https:// to a server that does not speak TLS 1.3, or whose chain does
+      not verify against the system trust store (SSL_CERT_FILE overrides
+      it): URLError naming the handshake's reason. There is no
+      unverified-context escape hatch.
     * any scheme other than http/https — ftp://, file://, data://. CPython's
       opener handles several; this one speaks HTTP.
     * the opener/handler machinery: build_opener, install_opener,
@@ -65,7 +65,11 @@ unit mimic_urllib_request;
 
 interface
 
-uses pylib, sysutils, http, tls, platform, mimic_urllib_error;
+uses pylib, sysutils, http, tls, platform, mimic_urllib_error
+     {$ifdef PXX_PLATFORM_POSIX}, tls13_native{$endif};
+{ tls13_native only where the platform is POSIX: it is ~630 KB of code in an
+  ESP image (measured, esp32c3 object 2.07 -> 2.70 MB), and the chip's TLS is
+  mbedTLS behind ssl/urequests. On ESP, https here stays a refusal. }
 
 const
   { The sentinel for "the caller passed no timeout". CPython's default is the
@@ -870,13 +874,22 @@ begin
       raise URLError.Create('unknown url type: ' + target +
         ' (this build speaks http:// and https:// only)');
 
+    { A Python program asking for https expects ssl to be there, as it is
+      in CPython; it has no way to pick a backend. So the first https
+      urlopen installs the native TLS 1.3 backend (syscall-only, kTLS TX
+      offload where the kernel has it, the chain verified against the
+      system trust store or SSL_CERT_FILE) -- unless the program already
+      registered one, which then stays. A Pascal program using http.pas
+      directly still picks for itself. Owner, 2026-10-05: native TLS,
+      kernel TLS when available. }
+{$ifdef PXX_PLATFORM_POSIX}
+    if isTls and (not TlsAvailable) then Tls13NativeRegister;
+{$endif}
     if isTls and (not TlsAvailable) then
       raise URLError.Create(
-        'https requires a TLS backend, and none is registered. lib/rtl ships ' +
-        'two and neither installs itself — the program picks: ' +
-        'tls13_native.Tls13NativeRegister (syscall-only) or ' +
-        'tls_openssl.OpenSslTlsRegisterEx (dlopen libssl). Call one before ' +
-        'urlopen, or use an http:// url.');
+        'https through urllib.request is not available on this platform; on ' +
+        'ESP use urequests or ssl.wrap_socket (mbedTLS), or register a TLS ' +
+        'backend before urlopen.');
 
     if timeoutMs < 0 then
       r := HttpExec(method, target, extra, body)
@@ -900,7 +913,16 @@ begin
     end;
 
     if not r.Ok then
+    begin
+      { A failed handshake says why (a certificate that does not verify, a
+        server without TLS 1.3); "could not reach" would send the reader to
+        the network instead. CPython: URLError(SSLError(..)). }
+{$ifdef PXX_PLATFORM_POSIX}
+      if isTls and (Tls13NativeLastError <> '') then
+        raise URLError.Create('TLS: ' + Tls13NativeLastError);
+{$endif}
       raise URLError.Create('could not reach ' + host + ':' + IntToStr(port));
+    end;
 
     { Follow redirects the way CPython's default opener does, including the
       303/302-after-POST rewrite to GET that every real client performs. }

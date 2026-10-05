@@ -2,7 +2,7 @@
 
 Deliberately separate from test/lib_mimic_urllib_request.npy, which is diffed
 against CPython line for line. These cases CANNOT be diffed, because CPython
-does the thing rather than refusing: it honours a timeout, opens https, speaks
+does the thing rather than refusing: it honours timeout=0, speaks
 ftp:// and file://, and invents a temporary file for a one-argument
 urlretrieve. Running them under python3 would fail or reach the network.
 
@@ -44,9 +44,8 @@ refuses("scheme-ftp", lambda: urlopen("ftp://example.com/x"), "unknown url type"
 refuses("scheme-file", lambda: urlopen("file:///etc/hostname"), "unknown url type")
 refuses("scheme-none", lambda: urlopen("example.com/x"), "unknown url type")
 
-# https with no TLS backend registered: lib/rtl ships two and neither installs
-# itself, so the refusal names them instead of picking one here.
-refuses("https-no-backend", lambda: urlopen("https://example.com/"), "TLS backend")
+# https needs no backend from the program any more: urlopen installs the
+# native TLS 1.3 one (tools/urllib_https_devtest.sh, hermetic, opt-in).
 
 # urlretrieve without a filename: CPython invents a temp file, which needs a
 # policy a shim should not choose for the program.
