@@ -18226,6 +18226,7 @@
     "0a21c181514219cdf57ac00c299e020e62c7c212",
     "25976991103ea1c846cdec31450130f3543255da"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy test/test_nilpy_an_unreferenced_header_import_needs_no_library.expected +7",
    "status": "fail"
   },
@@ -18247,6 +18248,7 @@
     "0a21c181514219cdf57ac00c299e020e62c7c212",
     "25976991103ea1c846cdec31450130f3543255da"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_import_sqlite.npy lib/rtl/zlib.pas +2",
    "status": "fail"
   },
@@ -18268,6 +18270,7 @@
     "0a21c181514219cdf57ac00c299e020e62c7c212",
     "25976991103ea1c846cdec31450130f3543255da"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_sqlite_crud.npy tools/expect_same.sh +1",
    "status": "fail"
   }
