@@ -1195,3 +1195,5 @@
 2026-10-04T01:39:20Z	borg	53dbb01c1569f3bbf8b010c306c9d6a7446a431d	AUTO-PIN DECLINED — HEAD is e736667eebaa, not the tested 53dbb01c1569
 2026-10-04T02:33:41Z	borg	c1a8ac339e3ffb8380ca5b394a0d74409478f385	would NOT pin c1a8ac339e3f — 1 red(s) the current pin does not have, 1 inherited from the current pin: fpc-bootstrap#src:compiler/compiler.pas
 2026-10-05T02:24:25Z	borg	5cb4e81d65c59e860b3031d081efa545ffd44016	would-pin PENDING 5cb4e81d65c5 — qualifies, streak 1/2
+2026-10-05T03:04:17Z	borg	017656fbafffd3877636ac1834bfd7e59f06e055	WOULD PIN 017656fbafff — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 2/2
+2026-10-05T03:04:17Z	borg	017656fbafffd3877636ac1834bfd7e59f06e055	AUTO-PIN DECLINED — HEAD is a74c733e1ff3, not the tested 017656fbafff
