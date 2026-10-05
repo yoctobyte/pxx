@@ -1201,3 +1201,4 @@
 2026-10-05T03:35:27Z	borg	f1360ac3fb90d436a255a238b6adfeb5b6174811	AUTO-PIN DECLINED — HEAD is 1aaed18f9dcf, not the tested f1360ac3fb90
 2026-10-05T04:15:27Z	borg	2e07225c3cd1becc67d84ac5ca13dd39e750879a	WOULD PIN 2e07225c3cd1 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 4/2
 2026-10-05T04:15:27Z	borg	2e07225c3cd1becc67d84ac5ca13dd39e750879a	AUTO-PIN DECLINED — HEAD is f9bedc56ec85, not the tested 2e07225c3cd1
+2026-10-05T05:03:52Z	borg	62fc7c1e802a126b623b3219bbaf6020750733e9	would NOT pin 62fc7c1e802a — 9 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/test_c_define_const.pas, test-core#src:test/test_header_static_body_stdio.pas, test-core#src:test/test_sqlite_crud.pas, test-core#src:test/test_sqlite_crud_autotyped.pas, test-core#src:test/test_sqlite_crud_lazy.pas
