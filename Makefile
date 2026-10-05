@@ -10541,6 +10541,21 @@ test-core: $(COMPILER)
 	  printf '#include "lastdir.h"\n#include <stdio.h>\nint main(void){ printf("%%d\\n", pxx_last_dir_val()); return 0; }\n' > $(TESTTMP)/many_inc_dirs26/m.c; \
 	  ./$(COMPILER) $$args $(TESTTMP)/many_inc_dirs26/m.c $(TESTTMP)/many_inc_dirs26/m >/dev/null && \
 	  tools/expect_same.sh many_inc_dirs "$$($(TESTTMP)/many_inc_dirs26/m)" "42"
+	# #include_next continues the search after the dir that held the current
+	# file (two wrappers chained, as gcc's stdint.h -> newlib's), and an unknown
+	# directive is an error, not silence. It was ignored, so newlib's stdint
+	# never arrived and uint32_t members vanished (museum_landkaart census).
+	@d=$(TESTTMP)/include_next26; mkdir -p $$d/a $$d/b $$d/c && \
+	  printf '#include_next <foo.h>\n#define FOO_A 4\n' > $$d/a/foo.h && \
+	  printf '#include_next <foo.h>\n#define FOO_B 2\n' > $$d/b/foo.h && \
+	  printf 'typedef unsigned int my_t;\n#define FOO_C 1\n' > $$d/c/foo.h && \
+	  printf '#include <foo.h>\n#include <stdio.h>\nint main(void){ my_t x = FOO_A + FOO_B + FOO_C; printf("%%u\\n", x); return 0; }\n' > $$d/m.c && \
+	  ./$(COMPILER) -I$$d/a -I$$d/b -I$$d/c $$d/m.c $$d/m >/dev/null && \
+	  tools/expect_same.sh include_next "$$($$d/m)" "7" && \
+	  printf '#if 0\n#not_live\n#endif\n#bogus_directive\nint main(void){return 0;}\n' > $$d/z.c && \
+	  if ./$(COMPILER) $$d/z.c $$d/z >$$d/z.log 2>&1; then echo "FAIL: #bogus_directive compiled"; exit 1; fi && \
+	  grep -q 'invalid preprocessing directive #bogus_directive' $$d/z.log \
+	  || { echo "FAIL: no directive diagnostic"; cat $$d/z.log; exit 1; }
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union

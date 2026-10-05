@@ -67,6 +67,16 @@ var
     elsewhere. Raising the cap was the trigger, not the bug. One limit, spelled
     once. }
   CPPathAtDepth: array[0..MAX_CPREP_INCLUDES] of AnsiString;
+  { `#include_next` (the GCC extension every libc wrapper header uses: gcc's
+    own <stdint.h> is `# include_next <stdint.h>` to reach newlib's). It needs
+    WHERE on the search list each open file was found: k for -I dir k,
+    CIncludeDirCount + k for host system dir k, -1 for anything not found by
+    a list walk (the TU itself, a quoted include beside its includer, an
+    absolute path). CPIncNextFrom is the list index a search starts at, -1 for
+    an ordinary include; CPLastFoundIdx is what the last search answered. }
+  CPFoundIdx    : array[0..MAX_CPREP_INCLUDES] of Integer;
+  CPIncNextFrom : Integer;
+  CPLastFoundIdx: Integer;
   CPCurFileId  : Integer;   { .debug_line id of the file being read }
   CPCurPath    : AnsiString;
   CPCurLine    : Integer;   { line within that file — the last one CONSUMED }
@@ -2907,6 +2917,7 @@ function CPSearchInclude(const nm, baseDir: AnsiString;
                          depth: Integer; probe, angled: Boolean): Boolean;
 var k: Integer;
 begin
+  CPLastFoundIdx := -1;
   { 0. An ABSOLUTE path is already a complete path: use it, search nothing.
        `#include "/abs/x.h"` is legal C and every compiler resolves it
        directly -- and it is not an exotic spelling, it is what a generated
@@ -2941,7 +2952,7 @@ begin
        -nostdinc rule -- but not in this one, because here the standard's split
        is load-bearing rather than stylistic.
        bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback }
-  if not angled then
+  if (not angled) and (CPIncNextFrom < 0) then
   begin
     CPConcat2(baseDir, nm, CPrepPath);
     CPLoadInclude(depth);
@@ -2960,10 +2971,12 @@ begin
   { 2. User `-I` project/library roots, in order — these win over any system
        header so a project's own header (e.g. our zlib.h) is not shadowed. }
   k := 0;
+  if CPIncNextFrom > 0 then k := CPIncNextFrom;
   while (CPIncludeLength(depth) = 0) and (k < CIncludeDirCount) do
   begin
     CPConcat2(CIncludeDirs[k], nm, CPrepPath);
     CPLoadInclude(depth);
+    if CPIncludeLength(depth) > 0 then CPLastFoundIdx := k;
     Inc(k);
   end;
   { 3. Host system fallbacks. Only for a native (x86_64) build, and only when
@@ -2983,10 +2996,12 @@ begin
   begin
     BuildCSysIncludeDirs;
     k := 0;
+    if CPIncNextFrom > CIncludeDirCount then k := CPIncNextFrom - CIncludeDirCount;
     while (CPIncludeLength(depth) = 0) and (k < CSysIncludeCount) do
     begin
       CPConcat2(CSysIncludeDirs[k], nm, CPrepPath);
       CPLoadInclude(depth);
+      if CPIncludeLength(depth) > 0 then CPLastFoundIdx := CIncludeDirCount + k;
       { A header pxx has no `-I`/crtl-anchored match for fell all the way
         through to the bare host system root. Harmless for a genuinely
         host-only header (X11, GTK, ...) but silently wrong for a libc header
@@ -3084,6 +3099,7 @@ begin
       Error('C include file not found: "' + incName + '"');
     end;
     if DebugTrace then writeln('C preprocessor: include ', CPrepPath);
+    CPFoundIdx[depth + 1] := CPLastFoundIdx;
     hdrResolved := CPrepPath;   { capture before CPProcessInclude / the auto-pull mutate CPrepPath }
     if CPIsCrtlSrcPath(CPrepPath) then
     begin
@@ -3226,6 +3242,14 @@ begin
     CPUndef(line, p, last)
   else if CPActive and CPRangeIsLiteral(line, a, b, 'include') then
     CPInclude(line, p, last, depth, baseDir)
+  else if CPActive and CPRangeIsLiteral(line, a, b, 'include_next') then
+  begin
+    { continue the search AFTER the list entry that held this file; a file not
+      found by a list walk (-1) searches the whole list, as gcc does }
+    CPIncNextFrom := CPFoundIdx[depth] + 1;
+    CPInclude(line, p, last, depth, baseDir);
+    CPIncNextFrom := -1;
+  end
   else if CPActive and CPRangeIsLiteral(line, a, b, 'pragma') then
     CPPragma(line, p, last)
   { `#error` is how a C library states a precondition. Dropping it did not make
@@ -3246,7 +3270,22 @@ begin
     CPLineDirective(line, p, last)
   else if CPActive and CPRangeIsLiteral(line, a, b, 'warning') then
     writeln('pascal26:', CPCurLine, ': warning: #warning ',
-            CPDirectiveText(line, p, last), ' (', CPCurPath, ')');
+            CPDirectiveText(line, p, last), ' (', CPCurPath, ')')
+  { `# 12 "file"` is the linemarker form of #line that cpp output carries }
+  else if CPActive and (a <= b) and (line[a] in ['0'..'9']) then
+    CPLineDirective(line, a, last)
+  { An unknown directive in a live branch is an error, as in gcc. Ignoring it
+    is how `#include_next` went missing without a word and newlib's stdint
+    never arrived. #ident/#sccs/#assert/#unassert are old directives gcc still
+    takes; they carry nothing pxx needs. `#` alone (a <= b fails) is the null
+    directive. }
+  else if CPActive and (a <= b) and
+          not (CPRangeIsLiteral(line, a, b, 'ident') or
+               CPRangeIsLiteral(line, a, b, 'sccs') or
+               CPRangeIsLiteral(line, a, b, 'assert') or
+               CPRangeIsLiteral(line, a, b, 'unassert')) then
+    ErrorAt(CPCurLine, 'invalid preprocessing directive #' +
+                       Copy(line, a, b - a + 1) + ' in ' + CPCurPath);
 end;
 
 { Net parenthesis depth of a line, ignoring `"..."` / `'...'` literals. Used to
@@ -3665,7 +3704,8 @@ begin
     toolchain. Command-line -D stay visible to crtl (they are the closest thing
     to a build configuration); the program's own #define do not. }
   CPMUserBase := CPMCount;
-  CPPathAtDepth[0] := DbgSrcName;      { -g: the translation unit itself }
+  CPPathAtDepth[0] := DbgSrcName;
+  CPFoundIdx[0] := -1; CPIncNextFrom := -1;      { -g: the translation unit itself }
   CPOutLine := 1;
   CPMarkFile := -1; CPMarkPath := #1'none'; CPMarkLine := 0; CPMarkOutLine := 1;
   { `-include <file>`: run each one as a real `#include "<file>"` line of its
