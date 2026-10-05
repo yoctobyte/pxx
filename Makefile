@@ -10556,6 +10556,27 @@ test-core: $(COMPILER)
 	  if ./$(COMPILER) $$d/z.c $$d/z >$$d/z.log 2>&1; then echo "FAIL: #bogus_directive compiled"; exit 1; fi && \
 	  grep -q 'invalid preprocessing directive #bogus_directive' $$d/z.log \
 	  || { echo "FAIL: no directive diagnostic"; cat $$d/z.log; exit 1; }
+	# A redefinition reuses its macro slot: 40000 x (#define A), (#undef A /
+	# #define A) and a function-like F(x,y) redefined, beside push/pop_macro,
+	# all under MAX_CPREP_MACROS=32768. Each used to take a new slot, and
+	# ESP-IDF's FreeRTOS portmacro.h chain hit "too many C macros".
+	@d=$(TESTTMP)/macro_redef26; mkdir -p $$d && \
+	  { seq 1 40000 | sed 's/.*/#undef A\n#define A 1\n#define B 2\n#define F(x,y) ((x)+(y)+&)/'; \
+	    printf '#define G 5\n#pragma push_macro("G")\n#undef G\n#define G 7\nint g1 = G;\n#pragma pop_macro("G")\n'; \
+	    printf '#include <stdio.h>\nint main(void){ printf("%%d\\n", A + B + F(1,2) + G + g1); return 0; }\n'; } > $$d/m.c && \
+	  ./$(COMPILER) $$d/m.c $$d/m >/dev/null && \
+	  tools/expect_same.sh macro_redef_reuses_slot "$$($$d/m)" "40018"
+	# --platform=esp predefines gcc's integer type families (riscv32-esp-elf /
+	# xtensa-esp-elf -dM), which newlib's stdint/_intsup are built on, and
+	# xtensa says little-endian; a hosted riscv32 does not take them.
+	@d=$(TESTTMP)/esp_type_predefs26; mkdir -p $$d && \
+	  printf 'A __INTPTR_TYPE__ / __INT32_TYPE__ / __UINT64_C(7) / __SIZE_TYPE__ / __XTENSA_EL__\n' > $$d/pd.c && \
+	  tools/expect_same.sh esp_predefs_riscv32 "$$(./$(COMPILER) --target=riscv32 --platform=esp --dump-cpp $$d/pd.c | grep '^A')" \
+	    "A int / long int / 7ULL / unsigned int / __XTENSA_EL__" && \
+	  tools/expect_same.sh esp_predefs_xtensa "$$(./$(COMPILER) --target=xtensa --platform=esp --dump-cpp $$d/pd.c | grep '^A')" \
+	    "A int / long int / 7ULL / unsigned int / 1" && \
+	  tools/expect_same.sh esp_predefs_not_hosted "$$(./$(COMPILER) --target=riscv32 --dump-cpp $$d/pd.c | grep '^A')" \
+	    "A __INTPTR_TYPE__ / __INT32_TYPE__ / __UINT64_C(7) / __SIZE_TYPE__ / __XTENSA_EL__"
 	# An ambient unit that is Pascal over managed strings must drag builtinheap,
 	# and an empty program must still pull nothing. TWO ASSERTIONS PULLING
 	# OPPOSITE WAYS, both required: the first catches the needHeapUnit union

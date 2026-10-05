@@ -18268,6 +18268,18 @@ begin
       CEndCMember;
       end;  { close the non-fn-pointer-member else }
     end
+    { `undefined_t x;` -- an identifier that names no type, followed by a
+      declarator. Skipping it token by token (the branch below) dropped the
+      member and the struct came out SMALLER, with every later offset wrong:
+      ESP-IDF's esp_ip4_addr lost its uint32_t when newlib's stdint never
+      arrived, and the first symptom was "no member named" 150 lines on. }
+    else if (CurTok.Kind = tkIdent) and
+            ((Tokens[TokPos].Kind = tkIdent) or (Tokens[TokPos].Kind = tkStar)) and
+            (CurTok.SVal <> '__extension__') and (CurTok.SVal <> '__attribute__') and
+            (CurTok.SVal <> '__attribute') and (CurTok.SVal <> '__declspec') and
+            (CurTok.SVal <> '__restrict') and (CurTok.SVal <> '__restrict__') and
+            (CurTok.SVal <> '__volatile__') and (CurTok.SVal <> '__const') then
+      Error('unknown type name ''' + CurTok.SVal + ''' in a struct member')
     else
       Next;  { skip attributes / unknown tokens }
   end;
@@ -18847,6 +18859,12 @@ begin
       else if declsOnly then ParseCGlobalVarDecl
       else SkipCDeclToSemi;
     end
+    { `undefined_t v;` in a header a Pascal `uses` imports: the declaration was
+      skipped token by token and the import "succeeded" without it. Same rule
+      as a C program's top level, narrowed to the declaration shape. }
+    else if (CurTok.Kind = tkIdent) and not CIsTopLevelSkipIdent(CurTok.SVal) and
+            ((Tokens[TokPos].Kind = tkIdent) or (Tokens[TokPos].Kind = tkStar)) then
+      Error('unknown type name ''' + CurTok.SVal + '''')
     else
       Next;
   end;
@@ -18876,6 +18894,11 @@ begin
         ParseCStructDecl
       else if IsCTypeTok then
         ParseCSubroutine
+      { the uses-import path: `undefined_t v;` was skipped and the import
+        "succeeded" without the declaration (museum_landkaart census) }
+      else if (CurTok.Kind = tkIdent) and not CIsTopLevelSkipIdent(CurTok.SVal) and
+              ((Tokens[TokPos].Kind = tkIdent) or (Tokens[TokPos].Kind = tkStar)) then
+        Error('unknown type name ''' + CurTok.SVal + '''')
       else
         Next;
     end;

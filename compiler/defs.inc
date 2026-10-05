@@ -7160,6 +7160,7 @@ var
   StmtCallDepth : Integer;
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
+  CPMDeadLen    : array[0..MAX_CPREP_MACROS-1] of Integer;   { an #undef'd slot's name length, so a later #define of that name reuses it }
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueLen   : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMParamBase  : array[0..MAX_CPREP_MACROS-1] of Integer;

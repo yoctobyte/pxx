@@ -373,22 +373,67 @@ begin
   CPHashAddMacro(mi);
 end;
 
+{ The slot a #define of line[a..b] may overwrite in place, or -1 for a fresh one.
+
+  Every #define used to take a NEW slot, the old one left live (newest wins) or
+  tombstoned by #undef. A redefinition therefore leaked a slot each time, and
+  ESP-IDF's FreeRTOS portmacro.h chain (headers that #undef/#define the same
+  names on every inclusion) ran out of MAX_CPREP_MACROS where gcc counts 3576
+  live macros. Overwriting is only safe for the NEWEST entry of the name (the
+  first in its newest-first bucket, live or #undef'd), in the slot zone a fresh
+  entry would get (not a predefine below CPMUserBase, not inside the range a
+  crtl pull is hiding), and not one a #pragma push_macro still holds: pop
+  restores from that slot's fields. }
+function CPReusableMacroSlot(const line: AnsiString; a, b: Integer): Integer;
+var i, len, k: Integer;
+begin
+  Result := -1;
+  i := CPMHashHead[CPHashRangeSrc(line, a, b)];
+  while i >= 0 do
+  begin
+    len := CPMNameLen[i];
+    if len < 0 then len := CPMDeadLen[i];
+    if (len = b - a + 1) and CPPoolEquals(CPMNameOff[i], len, line, a, b) then
+    begin
+      if i < CPMUserBase then Exit;
+      if (CPMHideHi > CPMHideLo) and (i < CPMHideHi) then Exit;
+      for k := 0 to CPPushCount - 1 do
+        if CPPushMi[k] = i then Exit;
+      Result := i;
+      Exit;
+    end;
+    i := CPMHashNext[i];
+  end;
+end;
+
 procedure CPDefine(const line: AnsiString; p, last: Integer);
 var
   mi, nameStart, nameEnd, valueStart, valueEnd, paramStart, paramEnd, j: Integer;
+  reuse, oldBase, oldCnt: Integer;
 begin
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
   if (p > last) or not CPIsIdentStart(line[p]) then Exit;
   nameStart := p;
   while (p <= last) and CPIsIdentChar(line[p]) do Inc(p);
   nameEnd := p - 1;
-  if CPMCount >= MAX_CPREP_MACROS then Error('too many C macros');
-  mi := CPMCount;
-  Inc(CPMCount);
-  CPMNameOff[mi] := CPStoreRange(line, nameStart, nameEnd);
-  CPMNameLen[mi] := nameEnd - nameStart + 1;
+  reuse := CPReusableMacroSlot(line, nameStart, nameEnd);
+  oldBase := 0; oldCnt := 0;
+  if reuse >= 0 then
+  begin
+    mi := reuse;
+    oldBase := CPMParamBase[mi]; oldCnt := CPMParamCount[mi];
+    CPMNameLen[mi] := nameEnd - nameStart + 1;   { same name text, same bucket }
+  end
+  else
+  begin
+    if CPMCount >= MAX_CPREP_MACROS then Error('too many C macros');
+    mi := CPMCount;
+    Inc(CPMCount);
+    CPMNameOff[mi] := CPStoreRange(line, nameStart, nameEnd);
+    CPMNameLen[mi] := nameEnd - nameStart + 1;
+    CPHashAddMacro(mi);
+  end;
   CPMFromCrtl[mi] := CPDefinedInCrtlHeader;
-  CPHashAddMacro(mi);
   CPMParamBase[mi] := CPPCount;
   CPMParamCount[mi] := 0;
   CPMFunction[mi] := False;
@@ -430,6 +475,18 @@ begin
         Inc(p);
     end;
     if (p <= last) and (line[p] = ')') then Inc(p);
+    { a reused slot's parameter names go back where its old ones were, when
+      they fit, so a repeated function-like #define does not grow the pool }
+    if (reuse >= 0) and (CPMParamCount[mi] <= oldCnt) then
+    begin
+      for j := 0 to CPMParamCount[mi] - 1 do
+      begin
+        CPPNameOff[oldBase + j] := CPPNameOff[CPMParamBase[mi] + j];
+        CPPNameLen[oldBase + j] := CPPNameLen[CPMParamBase[mi] + j];
+      end;
+      CPPCount := CPMParamBase[mi];
+      CPMParamBase[mi] := oldBase;
+    end;
   end;
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
   valueStart := p;
@@ -450,6 +507,133 @@ begin
   end;
 end;
 
+{ One predefine given as a `#define` body, `NAME VALUE` or `NAME(args) VALUE`. }
+procedure CPPredefLine(const s: AnsiString);
+begin
+  CPDefine(s, 1, Length(s));
+end;
+
+{ The integer type families gcc predefines for the ESP toolchains
+  (riscv32-esp-elf and xtensa-esp-elf 15.2, ilp32: their -dM dumps agree on
+  every line here). newlib's <stdint.h>, <inttypes.h> and sys/_intsup.h are
+  built on them and #error without them ("Unable to determine type definition
+  of intptr_t"), and a Pascal `uses` of an IDF header has no way to add a
+  prefix file. Generated from `riscv32-esp-elf-gcc -mabi=ilp32 -dM -E -`,
+  minus what is set above (__SIZEOF_INT__ ...), floating point, and
+  wchar_t/long double, where the two ISAs differ and pxx's own layout is the
+  authority. Note __INT32_TYPE__ is `long int`: that is newlib-on-ilp32, and
+  why a hosted riscv32 Linux build does not take this block.
+  bug-b-riscv32-c-preprocessor-lacks-gcc-type-predefines-newlib-needs }
+procedure CPAddEspGccTypePredefs;
+begin
+  CPPredefLine('__UINT_LEAST16_MAX__ 0xffff');
+  CPPredefLine('__UINT_LEAST8_TYPE__ unsigned char');
+  CPPredefLine('__INTMAX_C(c) c ## LL');
+  CPPredefLine('__UINT8_MAX__ 0xff');
+  CPPredefLine('__WINT_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT_FAST64_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__SIG_ATOMIC_TYPE__ int');
+  CPPredefLine('__UINT_FAST8_MAX__ 0xffffffffU');
+  CPPredefLine('__INT8_C(c) c');
+  CPPredefLine('__INT_LEAST8_WIDTH__ 8');
+  CPPredefLine('__UINT_LEAST64_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__SHRT_MAX__ 0x7fff');
+  CPPredefLine('__UINT_LEAST8_MAX__ 0xff');
+  CPPredefLine('__UINTMAX_TYPE__ long long unsigned int');
+  CPPredefLine('__UINT32_MAX__ 0xffffffffUL');
+  CPPredefLine('__WINT_MIN__ 0U');
+  CPPredefLine('__INT_LEAST16_WIDTH__ 16');
+  CPPredefLine('__SCHAR_MAX__ 0x7f');
+  CPPredefLine('__INT64_C(c) c ## LL');
+  CPPredefLine('__INT_LEAST64_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__SHRT_WIDTH__ 16');
+  CPPredefLine('__CHAR8_TYPE__ unsigned char');
+  CPPredefLine('__INT_WIDTH__ 32');
+  CPPredefLine('__INT_FAST32_MAX__ 0x7fffffff');
+  CPPredefLine('__INT64_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__INTPTR_WIDTH__ 32');
+  CPPredefLine('__UINT_LEAST32_MAX__ 0xffffffffUL');
+  CPPredefLine('__INT_FAST16_TYPE__ int');
+  CPPredefLine('__PTRDIFF_MAX__ 0x7fffffff');
+  CPPredefLine('__LONG_LONG_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__SIZEOF_SIZE_T__ 4');
+  CPPredefLine('__SIZEOF_WINT_T__ 4');
+  CPPredefLine('__LONG_LONG_WIDTH__ 64');
+  CPPredefLine('__INT16_MAX__ 0x7fff');
+  CPPredefLine('__INT_FAST64_TYPE__ long long int');
+  CPPredefLine('__SIZE_TYPE__ unsigned int');
+  CPPredefLine('__UINT16_MAX__ 0xffff');
+  CPPredefLine('__UINT8_TYPE__ unsigned char');
+  CPPredefLine('__UINT64_C(c) c ## ULL');
+  CPPredefLine('__INT_LEAST32_MAX__ 0x7fffffffL');
+  CPPredefLine('__SCHAR_WIDTH__ 8');
+  CPPredefLine('__INT32_C(c) c ## L');
+  CPPredefLine('__INT_FAST32_TYPE__ int');
+  CPPredefLine('__UINT_LEAST16_TYPE__ short unsigned int');
+  CPPredefLine('__UINT64_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__INT8_TYPE__ signed char');
+  CPPredefLine('__INT_LEAST16_TYPE__ short int');
+  CPPredefLine('__UINTMAX_C(c) c ## ULL');
+  CPPredefLine('__SIG_ATOMIC_MAX__ 0x7fffffff');
+  CPPredefLine('__SIZEOF_PTRDIFF_T__ 4');
+  CPPredefLine('__INT_FAST16_MAX__ 0x7fffffff');
+  CPPredefLine('__UINT_FAST32_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT_LEAST64_TYPE__ long long unsigned int');
+  CPPredefLine('__LONG_MAX__ 0x7fffffffL');
+  CPPredefLine('__UINT_FAST16_TYPE__ unsigned int');
+  CPPredefLine('__INT_FAST32_WIDTH__ 32');
+  CPPredefLine('__CHAR16_TYPE__ short unsigned int');
+  CPPredefLine('__SIZE_WIDTH__ 32');
+  CPPredefLine('__INT_LEAST16_MAX__ 0x7fff');
+  CPPredefLine('__SIG_ATOMIC_WIDTH__ 32');
+  CPPredefLine('__INT_LEAST64_TYPE__ long long int');
+  CPPredefLine('__INT16_TYPE__ short int');
+  CPPredefLine('__INT_LEAST8_TYPE__ signed char');
+  CPPredefLine('__INT_FAST8_MAX__ 0x7fffffff');
+  CPPredefLine('__INTPTR_MAX__ 0x7fffffff');
+  CPPredefLine('__UINT16_C(c) c');
+  CPPredefLine('__PTRDIFF_WIDTH__ 32');
+  CPPredefLine('__INT_FAST16_WIDTH__ 32');
+  CPPredefLine('__SIG_ATOMIC_MIN__ (-__SIG_ATOMIC_MAX__ - 1)');
+  CPPredefLine('__INTPTR_TYPE__ int');
+  CPPredefLine('__UINT16_TYPE__ short unsigned int');
+  CPPredefLine('__UINTPTR_MAX__ 0xffffffffU');
+  CPPredefLine('__INT_FAST64_WIDTH__ 64');
+  CPPredefLine('__INT_FAST64_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__UINT_FAST64_TYPE__ long long unsigned int');
+  CPPredefLine('__INT_MAX__ 0x7fffffff');
+  CPPredefLine('__INT64_TYPE__ long long int');
+  CPPredefLine('__WINT_TYPE__ unsigned int');
+  CPPredefLine('__UINT_LEAST32_TYPE__ long unsigned int');
+  CPPredefLine('__WINT_WIDTH__ 32');
+  CPPredefLine('__INT_LEAST8_MAX__ 0x7f');
+  CPPredefLine('__INT_LEAST64_WIDTH__ 64');
+  CPPredefLine('__INT_LEAST32_TYPE__ long int');
+  CPPredefLine('__UINT8_C(c) c');
+  CPPredefLine('__UINT64_TYPE__ long long unsigned int');
+  CPPredefLine('__INTMAX_MAX__ 0x7fffffffffffffffLL');
+  CPPredefLine('__INT_FAST8_TYPE__ int');
+  CPPredefLine('__INT_FAST8_WIDTH__ 32');
+  CPPredefLine('__INTMAX_WIDTH__ 64');
+  CPPredefLine('__UINT32_C(c) c ## UL');
+  CPPredefLine('__INT8_MAX__ 0x7f');
+  CPPredefLine('__LONG_WIDTH__ 32');
+  CPPredefLine('__INT32_MAX__ 0x7fffffffL');
+  CPPredefLine('__UINT_FAST32_TYPE__ unsigned int');
+  CPPredefLine('__CHAR32_TYPE__ long unsigned int');
+  CPPredefLine('__INT32_TYPE__ long int');
+  CPPredefLine('__INT_LEAST32_WIDTH__ 32');
+  CPPredefLine('__INTMAX_TYPE__ long long int');
+  CPPredefLine('__UINTMAX_MAX__ 0xffffffffffffffffULL');
+  CPPredefLine('__INT16_C(c) c');
+  CPPredefLine('__PTRDIFF_TYPE__ int');
+  CPPredefLine('__UINT32_TYPE__ long unsigned int');
+  CPPredefLine('__UINTPTR_TYPE__ unsigned int');
+  CPPredefLine('__UINT_FAST16_MAX__ 0xffffffffU');
+  CPPredefLine('__SIZE_MAX__ 0xffffffffU');
+  CPPredefLine('__UINT_FAST8_TYPE__ unsigned int');
+end;
+
 procedure CPUndef(const line: AnsiString; p, last: Integer);
 var mi, a, b: Integer;
 begin
@@ -465,6 +649,7 @@ begin
   mi := CPFindMacro(line, a, b);
   while mi >= 0 do
   begin
+    CPMDeadLen[mi] := CPMNameLen[mi];
     CPMNameLen[mi] := -1;
     if DebugTrace then writeln('C preprocessor: undef #', mi);
     mi := CPFindMacro(line, a, b);
@@ -3541,6 +3726,10 @@ begin
   begin
     CPAddLiteral('__xtensa__', '01');
     CPAddLiteral('__XTENSA__', '01');
+    { every ESP xtensa core is little-endian (the -mdynconfig gcc of an esp32s3
+      says so); newlib's machine/ieeefp.h #errors "Endianess not declared"
+      without one of _EL_/_EB_ }
+    CPAddLiteral('__XTENSA_EL__', '1');
   end
   else if TargetArch = TARGET_WASM32 then
   begin
@@ -3635,6 +3824,9 @@ begin
   CPAddLiteral('__SIZEOF_FLOAT__', '4');
   CPAddLiteral('__SIZEOF_DOUBLE__', '8');
   CPAddLiteral('__CHAR_BIT__', '8');
+  if (TargetPlatform = PLATFORM_ESP) and
+     ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) then
+    CPAddEspGccTypePredefs;
   { Byte order: every currently-supported target (x86-64/i386/aarch64/arm32/
     riscv32/xtensa) runs little-endian in this compiler's configuration — no
     big-endian target exists to make this conditional on. __BYTE_ORDER__ gates
