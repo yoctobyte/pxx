@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `62fc7c1e802a` on borg, 2026-10-05T05:03:52Z (52m ago).**
+**Newest full tier in the fleet: `62fc7c1e802a` on borg, 2026-10-05T05:03:52Z (54m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `62fc7c1e802a` | RED | 52m | — (newest) |
+| borg | `62fc7c1e802a` | RED | 54m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -36,4 +36,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-core#src:test/test_string_to_pchar_auto.pas** — test/test_string_to_pchar_auto.pas tools/expect_same.sh (borg): bad `f33eeb316d43`, last good `9f0bfc4a4bd3`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy** — test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy test/test_nilpy_an_unreferenced_header_import_needs_no_library.expected +7 (borg): bad `0a21c1815142`, last good `885d670ba278`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_import_sqlite.npy** — test/test_nilpy_import_sqlite.npy lib/rtl/zlib.pas +2 (borg): bad `0a21c1815142`, last good `885d670ba278`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_sqlite_crud.npy** — test/test_nilpy_sqlite_crud.npy tools/expect_same.sh +1 (borg): bad `62fc7c1e802a`, last good `885d670ba278`, 2 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_sqlite_crud.npy** — test/test_nilpy_sqlite_crud.npy tools/expect_same.sh +1 (borg): bad `0a21c1815142`, last good `885d670ba278`, 1 commit(s) in range
