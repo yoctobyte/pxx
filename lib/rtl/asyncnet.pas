@@ -14,6 +14,12 @@ unit asyncnet;
   TcpConnectAddr(host, port)                     TcpConnectAddr6(addr, port, scopeId)
   TcpRecv/TcpSend   -> byte counts (0 = peer closed); -1 on error
   TcpClose(fd)
+  TcpListenAddr(host, port) -> listen on a given IPv4 address (host byte
+                       order; PAL_NET_IP_ANY = every interface), e.g. a
+                       soft-AP's 192.168.4.1 or all of them
+  UdpBind(host, port)       -> a non-blocking UDP fd bound there
+  UdpRecvFrom(fd, buf, len, var host, var port) / UdpSendTo(fd, buf, len,
+                       host, port) -> one datagram; park on EAGAIN like Tcp*
 
   TcpAccept, TcpRecv, TcpSend and TcpClose are family-agnostic — they take an
   fd, and the family was decided when it was created. Only the four that build
@@ -24,6 +30,21 @@ interface
 uses scheduler, platform, platform_types;
 
 function TcpListen(port: Integer): Integer;
+{ TcpListen on an explicit IPv4 address (host byte order). TcpListen(port) is
+  TcpListenAddr(PAL_NET_IP_LOOPBACK, port). A device serving clients, such as
+  a captive portal on a soft-AP, listens on PAL_NET_IP_ANY or its own address. }
+function TcpListenAddr(host: LongWord; port: Integer): Integer;
+{ UDP, IPv4, on the same reactor. UdpBind answers a non-blocking fd bound to
+  host:port (PAL_NET_IP_ANY for every interface, port 0 for any), or <0.
+  UdpRecvFrom parks until a datagram arrives and answers its length (a
+  datagram longer than len is truncated, as recvfrom does) with the sender's
+  address; UdpSendTo sends one datagram, parking while the socket is full.
+  Both answer <0 on an error. }
+function UdpBind(host: LongWord; port: Integer): Integer;
+function UdpRecvFrom(fd: Integer; buf: Pointer; len: Integer;
+                     var host: LongWord; var port: Integer): Int64;
+function UdpSendTo(fd: Integer; buf: Pointer; len: Integer;
+                   host: LongWord; port: Integer): Int64;
 { The port `fd` is actually bound to, or <0 if it cannot be read. Exists so a
   caller can listen on port 0 and then tell its client where to dial: a
   HARDCODED port is a shared global, and two copies of the same test on one box
@@ -53,6 +74,11 @@ const
   TCP_BACKLOG = 16;
 
 function TcpListen(port: Integer): Integer;
+begin
+  Result := TcpListenAddr(PAL_NET_IP_LOOPBACK, port);
+end;
+
+function TcpListenAddr(host: LongWord; port: Integer): Integer;
 var fd: Integer; rc: Integer;
 begin
   fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
@@ -63,7 +89,7 @@ begin
   end;
   rc := PalSetSocketNonBlocking(fd, 1);
   rc := PalSetSocketReuseAddr(fd, 1);
-  rc := PalBindIpv4(fd, PAL_NET_IP_LOOPBACK, port);
+  rc := PalBindIpv4(fd, host, port);
   if rc >= 0 then rc := PalListen(fd, TCP_BACKLOG);
   if rc < 0 then
   begin
@@ -196,6 +222,49 @@ procedure TcpClose(fd: Integer);
 var rc: Integer;
 begin
   rc := PalSocketClose(fd);
+end;
+
+function UdpBind(host: LongWord; port: Integer): Integer;
+var fd, rc: Integer;
+begin
+  fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
+  if fd < 0 then
+  begin
+    Result := fd;
+    Exit;
+  end;
+  rc := PalSetSocketNonBlocking(fd, 1);
+  rc := PalSetSocketReuseAddr(fd, 1);
+  rc := PalBindIpv4(fd, host, port);
+  if rc < 0 then
+  begin
+    TcpClose(fd);
+    Result := rc;
+    Exit;
+  end;
+  Result := fd;
+end;
+
+function UdpRecvFrom(fd: Integer; buf: Pointer; len: Integer;
+                     var host: LongWord; var port: Integer): Int64;
+var n: Int64;
+begin
+  repeat
+    n := PalRecvFromIpv4(fd, buf, len, host, port);
+    if n = PAL_NET_EAGAIN then WaitReadable(fd);
+  until n <> PAL_NET_EAGAIN;
+  Result := n;
+end;
+
+function UdpSendTo(fd: Integer; buf: Pointer; len: Integer;
+                   host: LongWord; port: Integer): Int64;
+var n: Int64;
+begin
+  repeat
+    n := PalSendToIpv4(fd, buf, len, host, port);
+    if n = PAL_NET_EAGAIN then WaitWritable(fd);
+  until n <> PAL_NET_EAGAIN;
+  Result := n;
 end;
 
 end.

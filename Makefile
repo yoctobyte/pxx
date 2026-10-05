@@ -21325,6 +21325,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_timer_pal26 "$$($(TESTTMP)/test_timer_pal26)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) -dPXX_SCHED_PAL_REACTOR test/test_async.pas $(TESTTMP)/test_async_pal26
 	tools/expect_same.sh test_async_pal26 "$$($(TESTTMP)/test_async_pal26)" "$$(printf 'a1:1\na2:1\na1:2\na2:2\ndone1=102\ndone2=202\nall done')"
+	# asyncnet UDP (a parked UdpRecvFrom) and TcpListenAddr on every interface:
+	# museum_landkaart's captive-portal DNS + HTTP. Both reactors, same output.
+	./$(COMPILER) test/test_asyncudp.pas $(TESTTMP)/test_asyncudp26
+	tools/expect_same.sh test_asyncudp26 "$$($(TESTTMP)/test_asyncudp26)" "$$(printf 'udp bound TRUE\nreply A:q1 from-responder TRUE\nreply A:q2 from-responder TRUE\nresponder done\nreply A:q3 from-responder TRUE\ntcp any listening TRUE\ntcp any got 2 bytes\ndone')"
+	./$(COMPILER) -dPXX_SCHED_PAL_REACTOR test/test_asyncudp.pas $(TESTTMP)/test_asyncudp_pal26
+	tools/expect_same.sh test_asyncudp_pal26 "$$($(TESTTMP)/test_asyncudp_pal26)" "$$(printf 'udp bound TRUE\nreply A:q1 from-responder TRUE\nreply A:q2 from-responder TRUE\nresponder done\nreply A:q3 from-responder TRUE\ntcp any listening TRUE\ntcp any got 2 bytes\ndone')"
 	./$(COMPILER) test/test_many_params.pas $(TESTTMP)/test_many_params26
 	tools/expect_same.sh test_many_params26 "$$($(TESTTMP)/test_many_params26)" "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas $(TESTTMP)/test_procaddr26
