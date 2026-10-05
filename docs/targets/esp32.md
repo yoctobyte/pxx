@@ -456,6 +456,24 @@ end;
 - The heap arena is a compile-time constant (64 KiB). Exhausting it fails
   allocation rather than corrupting neighbours.
 
+## Coroutines and async I/O (the `scheduler` unit)
+
+`Spawn`, `CoSleep`, `WaitReadable`/`WaitWritable` and `RunUntilDone` work under
+ESP-IDF. The reactor waits in `lwip_poll` on the sockets coroutines are parked
+on, with the nearest `CoSleep` deadline as its timeout, so an idle program
+blocks its FreeRTOS task (the IDLE task runs and the task watchdog stays fed)
+instead of spinning. Only lwIP socket descriptors can be waited on. The
+reactor belongs to the task that calls `RunUntilDone`; run all coroutines from
+one task.
+
+Default coroutine stacks are 32 KB from the heap (`SpawnSized` for more or
+less). On chips with the hardware stack guard (the ESP32-C3's
+`CONFIG_ESP_SYSTEM_HW_STACK_GUARD`, on by default) a coroutine's stack lies
+outside the task's stack bounds that FreeRTOS arms on every context switch,
+so the guard reports a "Stack protection fault". Turn that option off in
+`sdkconfig` for a program that uses coroutines; the scheduler's own canary
+and stack-pointer check still catch an overflow.
+
 ## Next
 
 - [ESP32 peripherals](../library/esp.md)

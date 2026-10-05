@@ -83,6 +83,18 @@ function WaitWritableTimeout(fd, ms: Integer): Boolean;
 
 implementation
 
+{ THE PAL REACTOR. On ESP every raw syscall answers -ENOSYS, so epoll,
+  timerfd and fcntl are not there; the reactor is then a per-coroutine wait
+  record (fd, events, deadline) and an idle path that blocks in PalPollSet
+  (lwip_poll on ESP-IDF) until the nearest deadline. Same interface, same
+  semantics. PXX_SCHED_PAL_REACTOR selects it on Linux too, which is how it
+  is tested off-chip (qemu-user and x86-64, against the epoll arm). }
+{$ifdef PXX_PLATFORM_ESP}{$define SCHED_PAL}{$endif}
+{$ifdef PXX_SCHED_PAL_REACTOR}{$define SCHED_PAL}{$endif}
+{$ifdef SCHED_PAL}
+uses platform;
+{$endif}
+
 const
   MAX_CO = 64;
   { Default per-coroutine heap stack. RAISED 64 KB -> 192 KB on 2026-09-01,
@@ -450,6 +462,12 @@ type
     gEntry  : TCoroEntry;                        { handoff to CoStart }
     gArg    : Pointer;
     epfd    : Integer;                           { epoll instance, 0 = not created }
+{$ifdef SCHED_PAL}
+    coFd    : array[0..MAX_CO-1] of Integer;     { fd a parked coroutine waits on, -1 = none }
+    coEv    : array[0..MAX_CO-1] of Integer;     { PAL_POLL_* bits it waits for }
+    coDue   : array[0..MAX_CO-1] of Int64;       { PalMonotonicMillis deadline, -1 = none }
+    coFired : array[0..MAX_CO-1] of Boolean;     { woken by the deadline, not the fd }
+{$endif}
     tid     : Int64;                             { owning thread id, 0 = free slot }
     used    : Integer;                           { 1 = attached to a thread }
   end;
@@ -744,8 +762,88 @@ end;
 procedure SetNonBlocking(fd: Integer);
 var rc: Int64;
 begin
+{$ifdef SCHED_PAL}
+  rc := PalSetSocketNonBlocking(fd, 1);
+{$else}
   rc := __pxxrawsyscall(SYS_fcntl, fd, F_SETFL, O_NONBLOCK, 0, 0, 0);
+{$endif}
 end;
+
+{$ifdef SCHED_PAL}
+{ Park the current coroutine on fd (fd < 0: none) and/or a deadline ms from
+  now (ms < 0: none). True when the fd readied, False when the deadline did.
+  EPOLLIN/EPOLLOUT are the Linux poll bits, which is what PAL_POLL_* are. }
+function PalPark(fd, events, ms: Integer): Boolean;
+var r: PReactor; c: Integer;
+begin
+  r := CurR;
+  c := r^.curCo;
+  r^.coFd[c] := fd;
+  r^.coEv[c] := events;
+  if ms >= 0 then r^.coDue[c] := PalMonotonicMillis + ms else r^.coDue[c] := -1;
+  r^.coFired[c] := False;
+  r^.coState[c] := 3;                          { io-blocked }
+  __pxxcoswitch(@r^.coSp[c], @r^.schedSp);     { -> scheduler }
+  r^.coFd[c] := -1;
+  PalPark := not r^.coFired[c];
+end;
+
+type
+  TSchedPollFd = record
+    fd: LongInt;
+    events: SmallInt;
+    revents: SmallInt;
+  end;
+
+{ One reactor turn: poll every parked fd (waitMs: 0 = just look, -1 = until
+  the nearest deadline or an fd), then wake what is ready or due. }
+procedure PalReactorTurn(r: PReactor; mayBlock: Boolean);
+var
+  pf: array[0..MAX_CO-1] of TSchedPollFd;
+  who: array[0..MAX_CO-1] of Integer;
+  i, n, k, rc, waitMs: Integer;
+  now, due: Int64;
+begin
+  n := 0;
+  due := -1;
+  for i := 0 to r^.coCount - 1 do
+    if r^.coState[i] = 3 then
+    begin
+      if r^.coFd[i] >= 0 then
+      begin
+        pf[n].fd := r^.coFd[i];
+        pf[n].events := SmallInt(r^.coEv[i]);
+        pf[n].revents := 0;
+        who[n] := i;
+        Inc(n);
+      end;
+      if (r^.coDue[i] >= 0) and ((due < 0) or (r^.coDue[i] < due)) then
+        due := r^.coDue[i];
+    end;
+  waitMs := 0;
+  if mayBlock then
+  begin
+    if due < 0 then waitMs := -1
+    else
+    begin
+      now := PalMonotonicMillis;
+      if due > now then waitMs := Integer(due - now) else waitMs := 0;
+    end;
+  end;
+  rc := PalPollSet(@pf[0], n, waitMs);
+  if rc > 0 then
+    for k := 0 to n - 1 do
+      if pf[k].revents <> 0 then
+        r^.coState[who[k]] := 1;
+  now := PalMonotonicMillis;
+  for i := 0 to r^.coCount - 1 do
+    if (r^.coState[i] = 3) and (r^.coDue[i] >= 0) and (now >= r^.coDue[i]) then
+    begin
+      r^.coFired[i] := True;
+      r^.coState[i] := 1;
+    end;
+end;
+{$endif}
 
 { Park the current coroutine on epoll until fd is ready for the given event,
   then yield. On resume the fd is removed from the set (one-shot add/del).
@@ -753,6 +851,10 @@ end;
 procedure WaitIO(fd, events: Integer);
 var ev: TEpollEvent; rc: Int64; r: PReactor;
 begin
+{$ifdef SCHED_PAL}
+  PalPark(fd, events, -1);
+  Exit;
+{$endif}
   r := CurR;
   if r^.epfd = 0 then
     r^.epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
@@ -806,6 +908,11 @@ end;
 procedure CoSleep(ms: Integer);
 var tfd: Integer; buf, rc: Int64;
 begin
+{$ifdef SCHED_PAL}
+  if ms < 0 then ms := 0;
+  PalPark(-1, 0, ms);
+  Exit;
+{$endif}
   tfd := ArmOneShotTimer(ms);
   WaitReadable(tfd);
   rc := __pxxrawsyscall(SYS_read, tfd, Int64(@buf), 8, 0, 0, 0);  { drain expirations }
@@ -821,6 +928,10 @@ var
   rc, got, buf: Int64;
   r: PReactor;
 begin
+{$ifdef SCHED_PAL}
+  WaitIOTimeout := PalPark(fd, events, ms);
+  Exit;
+{$endif}
   r := CurR;
   if r^.epfd = 0 then
     r^.epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
@@ -943,6 +1054,11 @@ begin
     anyBlocked := 0;
     for i := 0 to r^.coCount - 1 do
       if r^.coState[i] = 3 then anyBlocked := 1;
+{$ifdef SCHED_PAL}
+    { Runnable work: just look (a coroutine that only yields must not starve
+      the parked ones). Nothing runnable: block until an fd or a deadline. }
+    if anyBlocked = 1 then PalReactorTurn(r, anyRunnable = 0);
+{$else}
     if (anyRunnable = 0) and (anyBlocked = 1) then
     begin
       { Nothing to run but coroutines wait on I/O: block here until an fd is
@@ -976,6 +1092,7 @@ begin
         r^.coState[cid] := 1;
       end;
     end;
+{$endif}
   until (anyRunnable = 0) and (anyBlocked = 0);
   r^.curCo := -1;
 end;

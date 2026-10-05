@@ -21315,6 +21315,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_timer26 "$$($(TESTTMP)/test_timer26)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) test/test_channel.pas $(TESTTMP)/test_channel26
 	tools/expect_same.sh test_channel26 "$$($(TESTTMP)/test_channel26)" "$$(printf 'recv 1\nrecv 2\nrecv 3\nrecv 4\nrecv 5\nrecv 6\ndone')"
+	# THE PAL REACTOR (what ESP runs: lwip poll, no epoll/timerfd), selected on
+	# the host with -dPXX_SCHED_PAL_REACTOR: same rows, same expected output.
+	./$(COMPILER) -dPXX_SCHED_PAL_REACTOR test/test_reactor.pas $(TESTTMP)/test_reactor_pal26
+	tools/expect_same.sh test_reactor_pal26 "$$($(TESTTMP)/test_reactor_pal26)" "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
+	./$(COMPILER) -dPXX_SCHED_PAL_REACTOR -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_asyncecho_pal26
+	tools/expect_same.sh test_asyncecho_pal26 "$$($(TESTTMP)/test_asyncecho_pal26)" "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	./$(COMPILER) -dPXX_SCHED_PAL_REACTOR test/test_timer.pas $(TESTTMP)/test_timer_pal26
+	tools/expect_same.sh test_timer_pal26 "$$($(TESTTMP)/test_timer_pal26)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
+	./$(COMPILER) -dPXX_SCHED_PAL_REACTOR test/test_async.pas $(TESTTMP)/test_async_pal26
+	tools/expect_same.sh test_async_pal26 "$$($(TESTTMP)/test_async_pal26)" "$$(printf 'a1:1\na2:1\na1:2\na2:2\ndone1=102\ndone2=202\nall done')"
 	./$(COMPILER) test/test_many_params.pas $(TESTTMP)/test_many_params26
 	tools/expect_same.sh test_many_params26 "$$($(TESTTMP)/test_many_params26)" "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas $(TESTTMP)/test_procaddr26
