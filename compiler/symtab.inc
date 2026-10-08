@@ -7125,6 +7125,7 @@ begin
   Syms[SymCount].Kind     := skParam;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
+  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -7629,6 +7630,7 @@ begin
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
+  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -7768,6 +7770,7 @@ begin
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
+  SymObjDataExternOnly[SymCount] := False; SymIRReached[SymCount] := False;   { recycled slot: see AllocVar, and CheckUndefinedExternData }
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;

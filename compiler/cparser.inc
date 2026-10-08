@@ -15547,12 +15547,16 @@ begin
       the header registered no row of its own, and the importer then found only
       the private one and reported `f` as an undefined variable (scheduler's
       heap_caps_get_largest_free_block against idf.h, museum_landkaart).
+      ONLY the section rule, not DeclVisibleSect: that also applies `uses`
+      visibility, and a <stdio.h> prototype must keep binding to the ambient
+      runtime's rows it cannot "see" -- excluding those made the program call a
+      fresh external and segfault (hdrstatic_stdio26).
       bug-a-a-units-private-external-hides-a-c-header-function-of-the-same-name }
     for i := 0 to ProcCount - 1 do
       if (Procs[i].Name = name) and
          (Procs[i].ParamCount = nparams) and
-         not (ProcDeclImpl[i] and
-              not DeclVisibleSect(ProcUnitIdx[i], True, IMPLTAB_PROC, i)) then
+         not (ProcDeclImpl[i] and (ProcUnitIdx[i] <> CurrentUnitIdx) and
+              ImplPrivateApplies(ProcUnitIdx[i], IMPLTAB_PROC)) then
       begin
         sigMatch := True;
         for idx := 0 to nparams - 1 do
@@ -19006,8 +19010,15 @@ begin
         ParseCStructDecl
       { `extern pair_t g_pair;` is a VARIABLE: ParseCSubroutine dropped it and
         Pascal said "undefined variable". IDF's WIFI_INIT_CONFIG_DEFAULT needs
-        g_wifi_osi_funcs and g_wifi_default_wpa_crypto_funcs by name. }
-      else if IsCTypeTok and not CTopLevelIsFunc then
+        g_wifi_osi_funcs and g_wifi_default_wpa_crypto_funcs by name.
+        NOT inside a crtl `.c` a header pulled in (<stdio.h> -> stdio.c): those
+        tokens are inlined into this stream, and their DEFINITIONS -- the
+        4144-byte static FILE objects with initialisers -- became header globals
+        whose init copied past the end of .data. Every `uses` header that
+        included <stdio.h> segfaulted at the first writeln (hdrstatic_stdio26,
+        c_define_const, the sqlite_crud rows). The crtl unit owns those. }
+      else if IsCTypeTok and (CModuleOfTok(TokPos - 1) < 0) and
+              not CTopLevelIsFunc then
         ParseCGlobalVarDecl
       else if IsCTypeTok then
         ParseCSubroutine
