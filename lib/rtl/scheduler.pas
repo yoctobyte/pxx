@@ -35,6 +35,17 @@ procedure Spawn(entry: TCoroEntry; arg: Pointer);
   in little RAM). A canary word at the low end of every stack is checked when the
   coroutine finishes; an overflow that reaches the base aborts with a message. }
 procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
+{ SpawnSized that can FAIL: False, and nothing started, when the stack cannot
+  be allocated or every coroutine slot is taken -- where SpawnSized aborts the
+  program (on ESP: esp_system_abort, i.e. a reboot). For a server that would
+  rather refuse one connection than lose the device. }
+function TrySpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64): Boolean;
+{ Peak stack use, in bytes, of the CALLING coroutine so far: the distance from
+  the stack top to the deepest word ever written. Stacks start zeroed (mmap,
+  and the ESP heap's calloc), so this scans up from the base for the first
+  non-zero word -- a word written with zero is missed, so the answer can read
+  slightly LOW, never high. -1 outside a coroutine. For sizing SpawnSized. }
+function CoStackHighWater: Int64;
 procedure CoYield;
 procedure RunUntilDone;
 
@@ -453,6 +464,7 @@ type
     coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
     coStk   : array[0..MAX_CO-1] of Int64;       { usable stack base -- the canary lives here }
     coStkMap: array[0..MAX_CO-1] of Int64;       { full mmap length, 0 = GetMem'd (no guard) }
+    coStkLen: array[0..MAX_CO-1] of Int64;       { usable stack bytes above coStk }
     coState : array[0..MAX_CO-1] of Integer;     { 0=free 1=runnable 2=done 3=io-blocked }
     coEntry : array[0..MAX_CO-1] of TCoroEntry;  { body to run on first switch-in }
     coArg   : array[0..MAX_CO-1] of Pointer;
@@ -612,15 +624,25 @@ begin
   SpawnSized(entry, arg, CO_STK);
 end;
 
-procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
+{$ifdef PXX_ESP_IDF}
+function heap_caps_get_largest_free_block(caps: LongWord): NativeUInt; external;
+const
+  MALLOC_CAP_DEFAULT_SCHED = $1000;   { esp_heap_caps.h MALLOC_CAP_DEFAULT, what PXXAlloc asks for }
+  SOFT_SLACK = 4096;
+{$endif}
+
+function SpawnImpl(entry: TCoroEntry; arg: Pointer; stackBytes: Int64;
+                   soft: Boolean): Boolean;
 var id, i2: Integer; stk, top, mapLen, mapBase, usable, ignoreRc: Int64; r: PReactor;
 begin
+  Result := False;
   r := CurR;
   { reuse a freed slot (state 0) before growing — bounds coCount so a program
     that spawns per-connection over its lifetime does not exceed MAX_CO. }
   id := -1;
   for i2 := 0 to r^.coCount - 1 do
     if r^.coState[i2] = 0 then begin id := i2; Break; end;
+  if (id < 0) and soft and (r^.coCount >= MAX_CO) then Exit;
   if id < 0 then begin id := r^.coCount; Inc(r^.coCount); end;
   if id >= MAX_CO then
   begin writeln('fatal: scheduler out of coroutine slots (MAX_CO)'); Halt(216); end;
@@ -651,7 +673,20 @@ begin
       ignoreRc := __pxxrawsyscall(SYS_munmap, mapBase, usable + CO_GUARD + CO_RED,
                                   0, 0, 0, 0);
   end;
-  if stk = 0 then stk := Int64(GetMem(stackBytes));
+  if stk = 0 then
+  begin
+{$ifdef PXX_ESP_IDF}
+    { soft: ask the IDF heap FIRST, because GetMem on an exhausted ESP heap is
+      esp_system_abort -- a reboot. The largest free block, not the total: a
+      stack is one block. SOFT_SLACK covers GetMem's header and alignment plus
+      what another task (WiFi, lwip) may take between the check and the
+      allocation; it is a margin, not a guarantee. The slot stays state 0
+      (free), so nothing is half-started. }
+    if soft and (Int64(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT_SCHED))
+                 < stackBytes + SOFT_SLACK) then Exit;
+{$endif}
+    stk := Int64(GetMem(stackBytes));
+  end;
   PW(stk)^ := CO_CANARY;          { overflow guard at the low end of the stack }
   top := stk + stackBytes;
   top := top - (top mod 16);   { 16-align down }
@@ -744,9 +779,33 @@ begin
   r^.coSp[id]    := top;
   r^.coStk[id]   := stk;
   r^.coStkMap[id]:= mapLen;
+  r^.coStkLen[id]:= stackBytes;
   r^.coState[id] := 1;
   r^.coEntry[id] := entry;
   r^.coArg[id]   := arg;
+  Result := True;
+end;
+
+procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
+begin
+  SpawnImpl(entry, arg, stackBytes, False);
+end;
+
+function TrySpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64): Boolean;
+begin
+  Result := SpawnImpl(entry, arg, stackBytes, True);
+end;
+
+function CoStackHighWater: Int64;
+var r: PReactor; a, top: Int64;
+begin
+  Result := -1;
+  r := CurR;
+  if r^.curCo < 0 then Exit;
+  a := r^.coStk[r^.curCo] + SizeOf(NativeInt);    { past the canary }
+  top := r^.coStk[r^.curCo] + r^.coStkLen[r^.curCo];
+  while (a < top) and (PW(a)^ = 0) do a := a + SizeOf(NativeInt);
+  Result := top - a;
 end;
 
 { Suspend the current coroutine, returning control to the scheduler. }

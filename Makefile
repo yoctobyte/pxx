@@ -21420,6 +21420,11 @@ test-core: $(COMPILER)
 	# museum_landkaart's captive-portal DNS + HTTP. Both reactors, same output.
 	./$(COMPILER) test/test_asyncudp.pas $(TESTTMP)/test_asyncudp26
 	tools/expect_same.sh test_asyncudp26 "$$($(TESTTMP)/test_asyncudp26)" "$$(printf 'udp bound TRUE\nreply A:q1 from-responder TRUE\nreply A:q2 from-responder TRUE\nresponder done\nreply A:q3 from-responder TRUE\ntcp any listening TRUE\ntcp any got 2 bytes\ndone')"
+	# TrySpawnSized refuses (False) instead of aborting when it cannot start a
+	# coroutine, and CoStackHighWater reports a plausible peak (C3 board run:
+	# a page-load burst exhausted the heap and SpawnSized rebooted the device).
+	./$(COMPILER) test/test_try_spawn_sized.pas $(TESTTMP)/test_try_spawn_sized26
+	tools/expect_same.sh test_try_spawn_sized26 "$$($(TESTTMP)/test_try_spawn_sized26)" "$$(printf 'outside -1\nspawn TRUE\nhigh water plausible TRUE\nspawned some TRUE, then refused TRUE\nafter drain TRUE\ndone')"
 	./$(COMPILER) -dPXX_SCHED_PAL_REACTOR test/test_asyncudp.pas $(TESTTMP)/test_asyncudp_pal26
 	tools/expect_same.sh test_asyncudp_pal26 "$$($(TESTTMP)/test_asyncudp_pal26)" "$$(printf 'udp bound TRUE\nreply A:q1 from-responder TRUE\nreply A:q2 from-responder TRUE\nresponder done\nreply A:q3 from-responder TRUE\ntcp any listening TRUE\ntcp any got 2 bytes\ndone')"
 	./$(COMPILER) test/test_many_params.pas $(TESTTMP)/test_many_params26
